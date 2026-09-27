@@ -73,6 +73,8 @@ Abnahme:
 
 ## 2. Assetformate und Runtime-Contentvertrag abschließen
 
+**Status: abgeschlossen am 27. September 2026.**
+
 **Ergebnis:** Alle für Karten, UI, Lokalisierung, Modelle, Animation, Effekte, Audio und Video
 benötigten Dateitypen haben einen validierenden Reader oder eine dokumentierte, reproduzierbare
 Konvertierung. Laufzeitcode greift ausschließlich über einen stabilen Contentvertrag zu.
@@ -91,6 +93,22 @@ Umfang:
 Abgeschlossen, wenn der gesamte lokale Content ohne unbekannte benötigte Formate inventarisiert
 und aus einem frischen Import reproduzierbar aufgebaut werden kann und jede Laufzeitreferenz
 entweder auflösbar ist oder als bewusst unterstützter Fallback ausgewiesen wird.
+
+Abnahme:
+
+- `CnCNew.Formats` validiert STR, MAP/SCB/WAK, WND, DDS, ANI, WAV, MP3 und BIK; vorhandene
+  INI-, TGA- und W3D-Reader sind in denselben Vollbestandsaudit integriert.
+- 25.682/25.682 Dateien sind klassifiziert; keine Erweiterung bleibt unbekannt. Die produktiven
+  Bestandszahlen und 119 scopefremden Installationsdateien stehen in `docs/CONTENT-PIPELINE.md`.
+- Schema 2 enthält kanonische IDs und Pfade, Typ, Hash, Größe, Overlaykandidaten/-priorität,
+  Importerversion/-optionen, Runtimeartefakte, direkte Abhängigkeiten und Diagnosen.
+- 41.308 von 41.527 Referenzverwendungen werden aufgelöst; 219 Verwendungen sind als einer von
+  drei geprüften Fallbacktypen sichtbar. Echte Zyklen und untypisierte fehlende Ziele sind Fehler.
+- Zwei unabhängige Frischimporte besitzen den identischen Manifest-SHA-256
+  `ACDF0B6CF98538469AA05F62E23D2A83BD3E17A911433B4EA73373FFFB1245FF`; der Folgelauf erreicht
+  25.682/25.682 Cachetreffer.
+- Staging und Verzeichnistausch verhindern Teilveröffentlichungen. Alle Artefakte wurden danach
+  ohne BIG-Zugriff gegen Größe und SHA-256 geprüft.
 
 ## 3. Typisierte Spieldaten und Modulregistrierung
 
@@ -239,5 +257,5 @@ Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
 
 Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
 Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
-jedoch separat begründet und versioniert. Der nächste Implementierungseinstieg ist ausschließlich
-Schritt 1, beginnend mit der roten W3D-Testassertion und danach der vollständigen Materialtreue.
+jedoch separat begründet und versioniert. Der nächste Implementierungseinstieg ist Schritt 3:
+typisierte Spieldaten und Modulregistrierung auf dem abgeschlossenen Schema-2-Contentvertrag.

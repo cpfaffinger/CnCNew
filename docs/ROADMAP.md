@@ -8,12 +8,15 @@
 
 ## 1. Asset- und Dateisystem
 
+**Status: abgeschlossen am 27. September 2026.**
+
 - BIG-Archive lesen, validieren und getrennt extrahieren.
 - Virtuelles Overlay-Dateisystem mit originalgetreuer Suchpriorität bauen.
 - Overlay einmalig als normale Dateien mit Herkunfts- und SHA-256-Manifest materialisieren.
 - Laufzeitzugriff ausschließlich über das archivfreie `CnCNew.Content` bereitstellen.
 - INI-, STR-, MAP-, WND-, W3D-, DDS/TGA-, Audio- und Videoformate katalogisieren.
 - Asset-Konverter nur dort einsetzen, wo Laufzeit-Decoding nicht sinnvoll ist.
+- Schema-2-Manifest, deterministischer Abhängigkeitsgraph, atomarer inkrementeller Import und vollständiger Format-/Referenzaudit sind umgesetzt; Bestandsmatrix und Fallbacks stehen in `CONTENT-PIPELINE.md`.
 
 ## 2. Headless-Simulation
 

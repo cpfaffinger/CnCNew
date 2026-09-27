@@ -20,6 +20,9 @@ Dieses Arbeitsverzeichnis bleibt lokal. Originale Spieldateien, entpackte Assets
 - fünf bereits ausgeliefert beschädigte `UISabotr_*`-Binärdateien werden verlustarm im Speicher rekonstruiert und erneut validiert
 - eigener validierender TGA-Decoder erfolgreich über 826/826 Dateien und 100.666.368 Pixel geprüft
 - Phase 1 „W3D-Material- und Renderingtreue“ ist abgeschlossen: 64.962 Einpass- und 5.625 Zweipass-Meshes sowie 317 zweistufige Pässe sind im Vollbestand nachgewiesen
+- Phase 2 „Assetformate und Runtime-Contentvertrag“ ist abgeschlossen: 25.682/25.682 Dateien sind klassifiziert und validiert, Schema 2 enthält 41.527 auditierbare Referenzen
+- atomarer, inkrementeller Runtimeimport mit kanonischen IDs/Pfaden, SHA-256, Overlayherkunft, Importerversion, Artefakten, Abhängigkeiten und typisierten Fallbacks
+- zwei unabhängige Frischimporte sowie ein 25.682/25.682-Cachelauf erzeugten dasselbe kanonische Manifest; Details stehen in `docs/CONTENT-PIPELINE.md`
 - typisierte UV-, Environment-, Classic-Environment-, Linear-Offset- und Grid-Mapper; positive und negative Geschwindigkeiten sowie beide Stage-Slots werden deterministisch ausgewertet
 - echter Stride-/Direct3D-11-Pfad mit geordneten Mehrfachpässen, bis zu zwei Texture-Stages je Pass, DCG/SCG-Streams, animierten UV-Puffern, Alpha-Test, allen Blendfaktoren des Bestands, Depth-Compare/-Write und Two-Sided-Culling
 - case-insensitive DDS-/TGA-Auflösung, sichtbarer Magenta-Fallback mit Diagnose, Texturcache und vollständige GPU-Ressourcenfreigabe
@@ -43,9 +46,15 @@ dotnet run --project tests/CnCNew.Content.Tests
 dotnet run --project tests/CnCNew.Data.Tests
 dotnet run --project tests/CnCNew.IO.Tests
 dotnet run --project tests/CnCNew.Images.Tests
+dotnet run --project tests/CnCNew.Formats.Tests
+dotnet run --project tests/CnCNew.Import.Tests
 dotnet run --project tools/CnCNew.AssetTool -- inventory .local/game-original .local/manifests/game-original.json
 dotnet run --project tools/CnCNew.AssetTool -- extract-all .local/game-original .local/assets/by-archive
 dotnet run --project tools/CnCNew.AssetTool -- materialize .local/game-original .local/content
+dotnet run --project tools/CnCNew.AssetTool -- audit-formats .local/content
+dotnet run --project tools/CnCNew.AssetTool -- audit-dependencies .local/content
+dotnet run --project tools/CnCNew.AssetTool -- runtime-import .local/game-original .local/phase2-import-a
+dotnet run --project tools/CnCNew.AssetTool -- verify .local/phase2-import-a
 dotnet run --project tools/CnCNew.IniTool -- audit .local/content
 dotnet run --project tools/CnCNew.ImageTool -- audit-tga .local/content
 dotnet run --project tools/CnCNew.W3dTool -- audit .local/content
