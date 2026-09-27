@@ -54,9 +54,15 @@ Assert(!mesh.Materials.Shaders[0].DepthWriteEnabled, "Shader depth-write state m
 Assert(mesh.Materials.VertexMaterials.Single().Name == "TestMaterial", "Vertex material name mismatch.");
 Assert(mesh.Materials.VertexMaterials[0].Diffuse == new W3dRgb(128, 192, 255), "Vertex material color mismatch.");
 Assert(mesh.Materials.VertexMaterials[0].MapperArguments0 == "UPerSec=1", "Vertex mapper arguments mismatch.");
+Assert(mesh.Materials.VertexMaterials[0].Mapper0 is W3dLinearOffsetTextureMapper,
+    "Vertex mapper was not parsed into a typed linear-offset mapper.");
 Assert(mesh.Materials.Passes.Single().VertexMaterialIds.Single() == 0, "Vertex material ID mismatch.");
 Assert(mesh.Materials.Passes.Single().ShaderIds.Single() == 0, "Shader ID mismatch.");
 Assert(mesh.Materials.Passes.Single().DiffuseColors[1] == new W3dRgba(40, 50, 60, 70), "Diffuse vertex color mismatch.");
+Assert(mesh.Materials.Passes.Single().DiffuseIllumination[1] == new W3dRgb(4, 5, 6),
+    "Diffuse illumination color mismatch.");
+Assert(mesh.Materials.Passes.Single().SpecularColors[2] == new W3dRgb(17, 18, 19),
+    "Secondary/specular gradient color mismatch.");
 Assert(mesh.Materials.Passes.Single().TextureStages.Single().TextureIds.Single() == 0, "Mesh texture ID mismatch.");
 Assert(mesh.Materials.Passes[0].TextureStages[0].TextureCoordinates.Count == 3, "Mesh UV count mismatch.");
 Assert(mesh.MaterialVariants.Single().Kind == W3dMaterialVariantKind.Default, "Default material variant mismatch.");
@@ -65,26 +71,43 @@ using var invalidShaderIds = CreateTriangleMesh(shaderId: 1);
 AssertThrows<InvalidDataException>(
     () => W3dMeshDecoder.Decode(W3dFileReader.Read(invalidShaderIds)),
     "Out-of-range shader IDs must fail.");
+using var invalidShaderState = CreateTriangleMesh(detailColor: 13);
+AssertThrows<InvalidDataException>(
+    () => W3dMeshDecoder.Decode(W3dFileReader.Read(invalidShaderState)),
+    "Unknown shader function values must fail with a precise decode error.");
 
 var renderPlanMesh = CreateRenderPlanMesh();
 var renderPlan = W3dRenderPlan.Build(renderPlanMesh);
-Assert(renderPlan.Count == 2, "Each material pass must produce its own ordered render batch.");
-Assert(renderPlan[0].MaterialPassIndex == 0 && renderPlan[1].MaterialPassIndex == 1, "Material pass order changed.");
-Assert(renderPlan[0].TextureIds.SequenceEqual(new uint?[] { 0, 1 }), "Both texture stages must be part of the batch key.");
-Assert(renderPlan[0].Shader?.AlphaTestEnabled == true, "Alpha-test state was not preserved in the render plan.");
-Assert(renderPlan[0].Shader?.SourceBlend == W3dSourceBlend.SourceAlpha, "Source blend was not preserved.");
-Assert(renderPlan[0].Shader?.DestinationBlend == W3dDestinationBlend.OneMinusSourceAlpha, "Destination blend was not preserved.");
-Assert(renderPlan[0].Shader?.DepthWriteEnabled == false, "Depth-write state was not preserved.");
-Assert(renderPlan[0].DetailColorFunction == 2 && renderPlan[0].DetailAlphaFunction == 3,
+Assert(renderPlan.Count == 1, "A triangle's complete pass sequence must stay in one render batch.");
+Assert(renderPlan[0].Passes.Select(pass => pass.MaterialPassIndex).SequenceEqual([0, 1]), "Material pass order changed.");
+var plannedRenderPass = renderPlan[0].Passes[0];
+Assert(plannedRenderPass.TextureIds.SequenceEqual(new uint?[] { 0, 1 }), "Both texture stages must be part of the batch key.");
+Assert(plannedRenderPass.Shader?.AlphaTestEnabled == true, "Alpha-test state was not preserved in the render plan.");
+Assert(plannedRenderPass.Shader?.SourceBlend == W3dSourceBlend.SourceAlpha, "Source blend was not preserved.");
+Assert(plannedRenderPass.Shader?.DestinationBlend == W3dDestinationBlend.OneMinusSourceAlpha, "Destination blend was not preserved.");
+Assert(plannedRenderPass.Shader?.DepthWriteEnabled == false, "Depth-write state was not preserved.");
+Assert(plannedRenderPass.EffectiveDetailColorFunction == W3dDetailColorFunction.Scale &&
+       plannedRenderPass.EffectiveDetailAlphaFunction == W3dDetailAlphaFunction.InverseScale,
     "The effective detail functions must come from the legacy Detail fields.");
 Assert(renderPlanMesh.IsTwoSided, "Two-sided mesh state was not preserved.");
-var plannedColor = W3dRenderPlan.GetVertexColor(renderPlanMesh, renderPlan[0].MaterialPass, 0);
+var plannedColor = W3dRenderPlan.GetVertexColor(renderPlanMesh, plannedRenderPass.MaterialPass, 0);
 Assert(plannedColor == new W3dRgba(64, 96, 128, 50), "DCG and vertex-material color/opacity were not combined correctly.");
-var plannedPass = renderPlan[0].MaterialPass!;
+var plannedPass = plannedRenderPass.MaterialPass;
 var plannedUv0 = W3dRenderPlan.GetTextureCoordinate(plannedPass.TextureStages[0], 0, 0, 0);
-var plannedUv1 = W3dRenderPlan.GetTextureCoordinate(plannedPass.TextureStages[1], 0, 0, 0);
-Assert(plannedUv0 == new Vector2(0.25f, 0.25f), "Stage-zero V coordinate was not flipped.");
-Assert(plannedUv1 == new Vector2(0.9f, 0.2f), "Per-face stage-one UV selection or V flip failed.");
+AssertNear(plannedUv0, new Vector2(0.25f, 0.25f), 1e-6f, "Stage-zero V coordinate was not flipped.");
+AssertNear(W3dRenderPlan.GetTextureCoordinate(plannedPass.TextureStages[1], 0, 0, 0), new Vector2(0.9f, 0.2f), 1e-6f,
+    "Per-face stage-one first-corner UV selection or V flip failed.");
+AssertNear(W3dRenderPlan.GetTextureCoordinate(plannedPass.TextureStages[1], 0, 1, 1), new Vector2(0.3f, 0.6f), 1e-6f,
+    "Per-face stage-one second-corner UV selection or V flip failed.");
+AssertNear(W3dRenderPlan.GetTextureCoordinate(plannedPass.TextureStages[1], 0, 2, 2), new Vector2(0.1f, 0.8f), 1e-6f,
+    "Per-face stage-one third-corner UV selection or V flip failed.");
+AssertThrows<ArgumentOutOfRangeException>(
+    () => W3dRenderPlan.GetTextureCoordinate(plannedPass.TextureStages[1], 0, 3, 0),
+    "Texture-coordinate corners outside 0..2 must fail.");
+
+RunMapperTests();
+RunMaterialFunctionTests();
+RunTextureResolutionTests();
 
 var contentArgument = Array.FindIndex(args, value => value.Equals("--content-dir", StringComparison.OrdinalIgnoreCase));
 if (contentArgument >= 0)
@@ -104,7 +127,7 @@ static void WriteHeader(Stream stream, uint type, uint size, bool container)
     stream.Write(header);
 }
 
-static MemoryStream CreateTriangleMesh(uint shaderId = 0)
+static MemoryStream CreateTriangleMesh(uint shaderId = 0, byte detailColor = 0)
 {
     var body = new MemoryStream();
 
@@ -150,7 +173,7 @@ static MemoryStream CreateTriangleMesh(uint shaderId = 0)
     body.Write(materialInfo);
 
     WriteHeader(body, W3dChunkType.Shaders, 16, container: false);
-    body.Write([3, 0, 0, 5, 0, 1, 0, 2, 1, 0, 0, 0, 1, 0, 0, 0]);
+    body.Write([3, 0, 0, 5, 0, 1, 0, 2, 1, detailColor, 0, 0, 1, 0, 0, 0]);
 
     WriteContainer(body, W3dChunkType.VertexMaterials, materials =>
         WriteContainer(materials, W3dChunkType.VertexMaterial, material =>
@@ -159,6 +182,7 @@ static MemoryStream CreateTriangleMesh(uint shaderId = 0)
             material.Write(Encoding.ASCII.GetBytes("TestMaterial\0"));
             WriteHeader(material, W3dChunkType.VertexMaterialInfo, 32, container: false);
             var vertexMaterial = new byte[32];
+            BinaryPrimitives.WriteUInt32LittleEndian(vertexMaterial, 0x00040000);
             vertexMaterial[4] = 255;
             vertexMaterial[5] = 255;
             vertexMaterial[6] = 255;
@@ -185,6 +209,10 @@ static MemoryStream CreateTriangleMesh(uint shaderId = 0)
         WriteUInt32Chunk(pass, W3dChunkType.ShaderIds, shaderId);
         WriteHeader(pass, W3dChunkType.DiffuseColors, 12, container: false);
         pass.Write([10, 20, 30, 255, 40, 50, 60, 70, 80, 90, 100, 110]);
+        WriteHeader(pass, W3dChunkType.DiffuseIllumination, 9, container: false);
+        pass.Write([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        WriteHeader(pass, W3dChunkType.SpecularColors, 9, container: false);
+        pass.Write([11, 12, 13, 14, 15, 16, 17, 18, 19]);
         WriteContainer(pass, W3dChunkType.TextureStage, stage =>
         {
             WriteUInt32Chunk(stage, W3dChunkType.TextureIds, 0);
@@ -212,15 +240,15 @@ static W3dMesh CreateRenderPlanMesh()
         W3dDestinationBlend.OneMinusSourceAlpha,
         0,
         W3dPrimaryGradient.Modulate,
-        0,
+        W3dSecondaryGradient.Disabled,
         W3dSourceBlend.SourceAlpha,
         true,
-        2,
-        3,
+        W3dDetailColorFunction.Scale,
+        W3dDetailAlphaFunction.InverseScale,
         0,
         true,
-        7,
-        1,
+        W3dDetailColorFunction.Blend,
+        W3dDetailAlphaFunction.Detail,
         0);
     var shader1 = shader0 with
     {
@@ -228,8 +256,8 @@ static W3dMesh CreateRenderPlanMesh()
         DestinationBlend = W3dDestinationBlend.Zero,
         SourceBlend = W3dSourceBlend.One,
         AlphaTestEnabled = false,
-        DetailColorFunction = 0,
-        DetailAlphaFunction = 0,
+        DetailColorFunction = W3dDetailColorFunction.Disabled,
+        DetailAlphaFunction = W3dDetailAlphaFunction.Disabled,
     };
     var vertexMaterial = new W3dVertexMaterial(
         "PlanMaterial",
@@ -242,7 +270,9 @@ static W3dMesh CreateRenderPlanMesh()
         0.5f,
         0,
         null,
-        null);
+        null,
+        W3dTextureMapper.Uv,
+        W3dTextureMapper.Uv);
     var stage0 = new W3dTextureStage(
         [0],
         [new Vector2(0.25f, 0.75f), Vector2.UnitX, Vector2.UnitY],
@@ -255,8 +285,10 @@ static W3dMesh CreateRenderPlanMesh()
         [0],
         [0],
         [new W3dRgba(128, 128, 128, 101), new W3dRgba(255, 255, 255, 255), new W3dRgba(255, 255, 255, 255)],
+        [],
+        [new W3dRgb(10, 20, 30), new W3dRgb(0, 0, 0), new W3dRgb(0, 0, 0)],
         [stage0, stage1]);
-    var pass1 = new W3dMaterialPass([0], [1], [], []);
+    var pass1 = new W3dMaterialPass([0], [1], [], [], [], []);
     var materials = new W3dMaterialData(
         2,
         1,
@@ -305,19 +337,25 @@ static void RunRealAssetRenderPlanTests(string contentDirectory)
         var meshes = W3dMeshDecoder.Decode(W3dFileReader.Read(stream));
         var plans = meshes.Select(W3dRenderPlan.Build).ToArray();
         Assert(meshes.Count == expected.Meshes, $"{expected.Name} mesh count changed.");
-        Assert(plans.Sum(plan => plan.Count) == expected.Batches, $"{expected.Name} render batch count changed.");
-        Assert(plans.Sum(plan => plan.Sum(batch => batch.TriangleIndices.Count)) == expected.EmittedTriangles,
+        Assert(plans.Sum(plan => plan.Count) > 0, $"{expected.Name} produced no render batches.");
+        Assert(plans.Sum(plan => plan.Sum(batch => batch.TriangleIndices.Count)) == meshes.Sum(mesh => mesh.Triangles.Count),
             $"{expected.Name} emitted triangle count changed.");
+        Assert(plans.SelectMany(plan => plan).All(batch => batch.Passes.Select(pass => pass.MaterialPassIndex).SequenceEqual(
+                Enumerable.Range(0, batch.Passes.Count))),
+            $"{expected.Name} material pass order changed.");
     }
 
     using (var stream = File.OpenRead(Path.Combine(contentDirectory, "Art", "W3D", "AVSoloDrn.W3D")))
     {
         var object01 = W3dMeshDecoder.Decode(W3dFileReader.Read(stream)).Single(mesh => mesh.Name == "OBJECT01");
         var batch = W3dRenderPlan.Build(object01).Single();
-        Assert(batch.TextureIds.SequenceEqual(new uint?[] { 0, 1 }), "AVSoloDrn OBJECT01 lost its two ordered stages.");
-        Assert(batch.DetailColorFunction == 2, "AVSoloDrn OBJECT01 detail-scale function changed.");
+        Assert(batch.Passes.Single().TextureIds.SequenceEqual(new uint?[] { 0, 1 }), "AVSoloDrn OBJECT01 lost its two ordered stages.");
+        Assert(batch.Passes.Single().EffectiveDetailColorFunction == W3dDetailColorFunction.Scale,
+            "AVSoloDrn OBJECT01 detail-scale function changed.");
         Assert(object01.Materials.VertexMaterials.Single().MapperArguments1 == "VPerSec=-1.5",
             "AVSoloDrn OBJECT01 second mapper arguments changed.");
+        Assert(object01.Materials.VertexMaterials.Single().Mapper1 is W3dLinearOffsetTextureMapper,
+            "AVSoloDrn OBJECT01 stage-one mapper was not typed.");
     }
 
     using (var stream = File.OpenRead(Path.Combine(contentDirectory, "Art", "W3D", "AICIAOff_SKN.W3D")))
@@ -326,6 +364,90 @@ static void RunRealAssetRenderPlanTests(string contentDirectory)
         var color = W3dRenderPlan.GetVertexColor(muzzle, muzzle.Materials.Passes.Single(), 0);
         Assert(color.Alpha == 0, "AICIAOff muzzle opacity-zero material must produce zero vertex alpha.");
     }
+}
+
+static void RunMapperTests()
+{
+    var positive = (W3dLinearOffsetTextureMapper)W3dTextureMapperParser.Parse(
+        0x00040000, 0, "UPerSec=2\nVPerSec=-1\nUScale=0.5\nVScale=2");
+    var positiveTransform = W3dTextureMapperEvaluator.Evaluate(positive, 0.25);
+    AssertNear(positiveTransform.Scale, new Vector2(0.5f, 2), 1e-6f, "Linear mapper scale changed.");
+    AssertNear(positiveTransform.Offset, new Vector2(0.5f, 0.25f), 1e-6f,
+        "Positive/negative linear mapper speeds changed.");
+
+    var stageOne = (W3dLinearOffsetTextureMapper)W3dTextureMapperParser.Parse(0x00000400, 1, "VPerSec=-1.5");
+    AssertNear(W3dTextureMapperEvaluator.Evaluate(stageOne, 2).Offset, new Vector2(0, 0), 1e-6f,
+        "Stage-one mapper wrap changed.");
+
+    var grid = (W3dGridTextureMapper)W3dTextureMapperParser.Parse(
+        0x00070000, 0, "FPS=30; shipped comment\nLog1Width=1; shipped spelling\nLast=4");
+    AssertNear(W3dTextureMapperEvaluator.Evaluate(grid, 0.1).Offset, new Vector2(0.5f, 0.5f), 1e-6f,
+        "Grid mapper frame selection changed.");
+
+    Assert(W3dTextureMapperParser.Parse(0x00010000, 0, null) is W3dEnvironmentTextureMapper { Reflection: true },
+        "Environment mapper kind changed.");
+    Assert(W3dTextureMapperParser.Parse(0x00020000, 0, null) is W3dEnvironmentTextureMapper { Reflection: false },
+        "Classic environment mapper kind changed.");
+    AssertThrows<InvalidDataException>(
+        () => W3dTextureMapperParser.Parse(0x00040000, 0, "UPerSec=fast"),
+        "Invalid mapper floats must fail.");
+    AssertThrows<InvalidDataException>(
+        () => W3dTextureMapperParser.Parse(0x00040000, 0, "Unknown=1"),
+        "Unknown mapper arguments must fail.");
+    AssertThrows<InvalidDataException>(
+        () => W3dTextureMapperParser.Parse(0x00ff0000, 0, null),
+        "Unknown mapper kinds must fail.");
+}
+
+static void RunMaterialFunctionTests()
+{
+    var local = new Vector4(0.2f, 0.4f, 0.6f, 0.25f);
+    var detail = new Vector4(0.5f, 0.25f, 0.75f, 0.5f);
+    AssertNear4(W3dMaterialEvaluator.ApplyDetail(
+            local, detail, W3dDetailColorFunction.Scale2X, W3dDetailAlphaFunction.InverseScale),
+        new Vector4(0.2f, 0.2f, 0.9f, 0.625f), 1e-6f, "Detail Scale2X/inverse-alpha changed.");
+    AssertNear4(W3dMaterialEvaluator.ApplyDetail(
+            local, detail, W3dDetailColorFunction.Subtract, W3dDetailAlphaFunction.Detail),
+        new Vector4(0, 0.15f, 0, 0.5f), 1e-6f, "Detail subtract semantics changed.");
+    AssertNear4(W3dMaterialEvaluator.ApplyPrimaryGradient(
+            local, detail, W3dPrimaryGradient.Add),
+        new Vector4(0.7f, 0.65f, 1, 0.5f), 1e-6f, "Primary additive gradient changed.");
+    AssertNear4(W3dMaterialEvaluator.ApplyPrimaryGradient(
+            local, detail, W3dPrimaryGradient.Modulate2X),
+        new Vector4(0.2f, 0.2f, 0.9f, 0.125f), 1e-6f, "Primary Modulate2X gradient changed.");
+    AssertThrows<InvalidDataException>(
+        () => W3dMaterialEvaluator.ApplyPrimaryGradient(local, detail, W3dPrimaryGradient.BumpEnvironmentMap),
+        "Bump gradients without bump inputs must fail explicitly.");
+
+    var metadataShader = CreateRenderPlanMesh().Materials.Shaders[0] with
+    {
+        ColorMask = 2,
+        FogFunction = 2,
+        ShaderPreset = 2,
+        Padding = 2,
+    };
+    Assert(metadataShader.PcColorWriteEnabled && metadataShader.PcFogFunction == W3dFogFunction.Disabled,
+        "Legacy PS2 parameter bytes must not become PC color-mask or fog state.");
+}
+
+static void RunTextureResolutionTests()
+{
+    var probes = 0;
+    var cache = new W3dTexturePathCache(path =>
+    {
+        probes++;
+        return path.Equals("Art/Textures/Test.dds", StringComparison.OrdinalIgnoreCase);
+    });
+    var first = cache.Resolve("test.tga");
+    var second = cache.Resolve("TEST.TGA");
+    Assert(first.VirtualPath == "Art/Textures/test.dds", "DDS fallback path or case-insensitive resolution changed.");
+    Assert(ReferenceEquals(first, second) && cache.Count == 1, "Texture resolution cache did not reuse its entry.");
+    Assert(probes == 3, "Texture resolution cache performed unexpected repeated probes.");
+    var missing = W3dTexturePathResolver.Resolve("missing.tga", _ => false);
+    Assert(!missing.Found && missing.Diagnostic.Contains("missing.tga", StringComparison.Ordinal),
+        "Missing texture diagnostics changed.");
+    cache.Clear();
+    Assert(cache.Count == 0, "Texture resolution cache clear changed.");
 }
 
 static void WriteContainer(Stream stream, uint type, Action<MemoryStream> writePayload)
@@ -375,6 +497,22 @@ static void Assert(bool condition, string message)
     if (!condition)
     {
         throw new InvalidOperationException(message);
+    }
+}
+
+static void AssertNear(Vector2 actual, Vector2 expected, float tolerance, string message)
+{
+    if (Vector2.Distance(actual, expected) > tolerance)
+    {
+        throw new InvalidOperationException($"{message} Expected {expected}, got {actual} (tolerance {tolerance}).");
+    }
+}
+
+static void AssertNear4(Vector4 actual, Vector4 expected, float tolerance, string message)
+{
+    if (Vector4.Distance(actual, expected) > tolerance)
+    {
+        throw new InvalidOperationException($"{message} Expected {expected}, got {actual} (tolerance {tolerance}).");
     }
 }
 

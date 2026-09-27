@@ -62,8 +62,17 @@ try
     long vertexMaterialIds = 0;
     long shaderIds = 0;
     long diffuseColors = 0;
+    long diffuseIllumination = 0;
+    long specularColors = 0;
     long materialVariants = 0;
     long twoSidedMeshes = 0;
+    var passCountCounts = new Dictionary<int, long>();
+    var stageCountCounts = new Dictionary<int, long>();
+    var shaderStateCounts = new Dictionary<string, long>(StringComparer.Ordinal);
+    var mapperArgumentCounts = new Dictionary<string, long>(StringComparer.Ordinal);
+    var mapperKindCounts = new Dictionary<string, long>(StringComparer.Ordinal);
+    var passSequenceCounts = new Dictionary<string, long>(StringComparer.Ordinal);
+    var featureExamples = new Dictionary<string, string>(StringComparer.Ordinal);
     var repairedFiles = new List<string>();
 
     foreach (var path in paths)
@@ -97,8 +106,95 @@ try
                 vertexMaterialIds += mesh.Materials.Passes.Sum(pass => pass.VertexMaterialIds.Count);
                 shaderIds += mesh.Materials.Passes.Sum(pass => pass.ShaderIds.Count);
                 diffuseColors += mesh.Materials.Passes.Sum(pass => pass.DiffuseColors.Count);
+                diffuseIllumination += mesh.Materials.Passes.Sum(pass => pass.DiffuseIllumination.Count);
+                specularColors += mesh.Materials.Passes.Sum(pass => pass.SpecularColors.Count);
                 materialVariants += mesh.MaterialVariants.Count;
                 twoSidedMeshes += mesh.IsTwoSided ? 1 : 0;
+                if (mesh.IsTwoSided)
+                {
+                    featureExamples.TryAdd("two-sided", path);
+                }
+                Increment(passCountCounts, mesh.Materials.Passes.Count);
+                foreach (var pass in mesh.Materials.Passes)
+                {
+                    Increment(stageCountCounts, pass.TextureStages.Count);
+                    if (mesh.Materials.Passes.Count > 1)
+                    {
+                        featureExamples.TryAdd("multiple-passes", path);
+                    }
+
+                    if (pass.TextureStages.Count > 1)
+                    {
+                        featureExamples.TryAdd($"{pass.TextureStages.Count}-stages", path);
+                    }
+
+                    if (pass.TextureStages.Any(stage => stage.PerFaceTextureCoordinateIndices.Count > 0))
+                    {
+                        featureExamples.TryAdd("per-face-uv", path);
+                    }
+                }
+
+                if (mesh.Materials.Passes.Count > 1)
+                {
+                    Increment(passSequenceCounts, string.Join(" -> ", mesh.Materials.Passes.Select((pass, passIndex) =>
+                    {
+                        var shaderId = pass.ShaderIds.Count == 0 ? (uint?)null : pass.ShaderIds[0];
+                        var shader = shaderId is uint id ? mesh.Materials.Shaders[checked((int)id)] : null;
+                        return $"p{passIndex}[{shader?.SourceBlend}/{shader?.DestinationBlend},write={shader?.DepthWriteEnabled},stages={pass.TextureStages.Count}]";
+                    })));
+                }
+
+                foreach (var shader in mesh.Materials.Shaders)
+                {
+                    if (shader.AlphaTestEnabled)
+                    {
+                        featureExamples.TryAdd("alpha-test", path);
+                    }
+
+                    if (shader.SourceBlend == W3dSourceBlend.One && shader.DestinationBlend == W3dDestinationBlend.One)
+                    {
+                        featureExamples.TryAdd("additive", path);
+                    }
+
+                    if (shader.DetailColorFunction != W3dDetailColorFunction.Disabled ||
+                        shader.DetailAlphaFunction != W3dDetailAlphaFunction.Disabled)
+                    {
+                        featureExamples.TryAdd("detail-function", path);
+                    }
+                    Increment(shaderStateCounts,
+                        $"depth={shader.DepthCompare};write={shader.DepthWriteEnabled};mask={shader.ColorMask};" +
+                        $"dst={shader.DestinationBlend};fog={shader.FogFunction};primary={shader.PrimaryGradient};" +
+                        $"secondary={shader.SecondaryGradient};src={shader.SourceBlend};textured={shader.TexturingEnabled};" +
+                        $"detailColor={shader.DetailColorFunction};detailAlpha={shader.DetailAlphaFunction};" +
+                        $"preset={shader.ShaderPreset};alphaTest={shader.AlphaTestEnabled};" +
+                        $"postColor={shader.PostDetailColorFunction};postAlpha={shader.PostDetailAlphaFunction};pad={shader.Padding}");
+                }
+
+                foreach (var material in mesh.Materials.VertexMaterials)
+                {
+                    Increment(mapperKindCounts, $"slot0:{(material.Attributes >> 16) & 0xff}");
+                    Increment(mapperKindCounts, $"slot1:{(material.Attributes >> 8) & 0xff}");
+                    if (material.Mapper0 is W3dGridTextureMapper || material.Mapper1 is W3dGridTextureMapper)
+                    {
+                        featureExamples.TryAdd("grid-mapper", path);
+                    }
+
+                    if (material.Mapper0 is W3dEnvironmentTextureMapper || material.Mapper1 is W3dEnvironmentTextureMapper)
+                    {
+                        featureExamples.TryAdd("environment-mapper", path);
+                    }
+                    if (!string.IsNullOrWhiteSpace(material.MapperArguments0))
+                    {
+                        Increment(mapperArgumentCounts, $"slot0:{material.MapperArguments0}");
+                        featureExamples.TryAdd("mapper", path);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(material.MapperArguments1))
+                    {
+                        Increment(mapperArgumentCounts, $"slot1:{material.MapperArguments1}");
+                        featureExamples.TryAdd("mapper-slot1", path);
+                    }
+                }
             }
         }
         catch (Exception exception)
@@ -116,8 +212,35 @@ try
         $"Decoded {textureReferences} texture references, {materialPasses} material passes and {textureStages} texture stages.");
     Console.WriteLine(
         $"Decoded {shaders} shaders, {vertexMaterials} vertex materials, {vertexMaterialIds} vertex-material IDs, " +
-        $"{shaderIds} shader IDs and {diffuseColors} diffuse vertex colors across {materialVariants} material variants.");
+        $"{shaderIds} shader IDs, {diffuseColors} diffuse colors, {diffuseIllumination} diffuse-illumination colors and " +
+        $"{specularColors} secondary/specular colors across {materialVariants} material variants.");
     Console.WriteLine($"Found {twoSidedMeshes} two-sided meshes.");
+    Console.WriteLine($"Pass counts: {FormatCounts(passCountCounts)}");
+    Console.WriteLine($"Texture stages per pass: {FormatCounts(stageCountCounts)}");
+    Console.WriteLine("Shader states:");
+    foreach (var pair in shaderStateCounts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key))
+    {
+        Console.WriteLine($"  {pair.Value,8}  {pair.Key}");
+    }
+
+    Console.WriteLine("Mapper arguments:");
+    foreach (var pair in mapperArgumentCounts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key))
+    {
+        Console.WriteLine($"  {pair.Value,8}  {pair.Key}");
+    }
+
+    Console.WriteLine($"Mapper kinds: {FormatCounts(mapperKindCounts)}");
+    Console.WriteLine("Multiple-pass sequences:");
+    foreach (var pair in passSequenceCounts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key))
+    {
+        Console.WriteLine($"  {pair.Value,8}  {pair.Key}");
+    }
+
+    Console.WriteLine("Feature examples:");
+    foreach (var pair in featureExamples.OrderBy(pair => pair.Key))
+    {
+        Console.WriteLine($"  {pair.Key}: {pair.Value}");
+    }
     Console.WriteLine("Most frequent chunk types:");
     foreach (var pair in typeCounts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key).Take(20))
     {
@@ -136,8 +259,15 @@ try
 
     return failures.Count == 0 ? 0 : 1;
 }
+
 catch (Exception exception)
 {
     Console.Error.WriteLine($"error: {exception.Message}");
     return 1;
 }
+
+static void Increment<TKey>(Dictionary<TKey, long> counts, TKey value) where TKey : notnull
+    => counts[value] = counts.GetValueOrDefault(value) + 1;
+
+static string FormatCounts<TKey>(Dictionary<TKey, long> counts) where TKey : notnull
+    => string.Join(", ", counts.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key}={pair.Value}"));

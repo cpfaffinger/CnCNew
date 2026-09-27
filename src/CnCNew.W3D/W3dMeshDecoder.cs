@@ -241,11 +241,22 @@ public static class W3dMeshDecoder
             var primaryGradient = payload[offset + 5];
             var sourceBlend = payload[offset + 7];
             var texturing = payload[offset + 8];
+            var detailColor = payload[offset + 9];
+            var detailAlpha = payload[offset + 10];
             var alphaTest = payload[offset + 12];
+            var postDetailColor = payload[offset + 13];
+            var postDetailAlpha = payload[offset + 14];
             if (depthCompare > 7 || depthWrite > 1 || destinationBlend > 6 || primaryGradient > 5 ||
-                sourceBlend > 3 || texturing > 1 || alphaTest > 1)
+                payload[offset + 6] > 1 || sourceBlend > 3 || texturing > 1 ||
+                detailColor > 12 || detailAlpha > 3 || alphaTest > 1 ||
+                postDetailColor > 12 || postDetailAlpha > 3)
             {
-                throw new InvalidDataException($"Mesh '{meshName}' shader {index} contains an invalid render-state value.");
+                throw new InvalidDataException(
+                    $"Mesh '{meshName}' shader {index} contains an unknown render-state value " +
+                    $"(depth={depthCompare}, write={depthWrite}, destination={destinationBlend}, " +
+                    $"primary={primaryGradient}, secondary={payload[offset + 6]}, source={sourceBlend}, " +
+                    $"texturing={texturing}, detailColor={detailColor}, detailAlpha={detailAlpha}, " +
+                    $"alphaTest={alphaTest}, postColor={postDetailColor}, postAlpha={postDetailAlpha}).");
             }
 
             result[index] = new W3dShader(
@@ -255,15 +266,15 @@ public static class W3dMeshDecoder
                 (W3dDestinationBlend)destinationBlend,
                 payload[offset + 4],
                 (W3dPrimaryGradient)primaryGradient,
-                payload[offset + 6],
+                (W3dSecondaryGradient)payload[offset + 6],
                 (W3dSourceBlend)sourceBlend,
                 texturing != 0,
-                payload[offset + 9],
-                payload[offset + 10],
+                (W3dDetailColorFunction)detailColor,
+                (W3dDetailAlphaFunction)detailAlpha,
                 payload[offset + 11],
                 alphaTest != 0,
-                payload[offset + 13],
-                payload[offset + 14],
+                (W3dDetailColorFunction)postDetailColor,
+                (W3dDetailAlphaFunction)postDetailAlpha,
                 payload[offset + 15]);
         }
 
@@ -321,9 +332,12 @@ public static class W3dMeshDecoder
             throw new InvalidDataException($"Mesh '{meshName}' vertex material {index} has a non-finite scalar.");
         }
 
+        var attributes = ReadUInt32(payload, 0);
+        var mapperArguments0 = ReadOptionalString(definition, W3dChunkType.VertexMapperArgs0, data);
+        var mapperArguments1 = ReadOptionalString(definition, W3dChunkType.VertexMapperArgs1, data);
         return new W3dVertexMaterial(
             ReadFixedString(Slice(data, nameChunk)),
-            ReadUInt32(payload, 0),
+            attributes,
             ReadRgb(payload, 4),
             ReadRgb(payload, 8),
             ReadRgb(payload, 12),
@@ -331,8 +345,10 @@ public static class W3dMeshDecoder
             shininess,
             opacity,
             translucency,
-            ReadOptionalString(definition, W3dChunkType.VertexMapperArgs0, data),
-            ReadOptionalString(definition, W3dChunkType.VertexMapperArgs1, data));
+            mapperArguments0,
+            mapperArguments1,
+            W3dTextureMapperParser.Parse(attributes, 0, mapperArguments0),
+            W3dTextureMapperParser.Parse(attributes, 1, mapperArguments1));
     }
 
     private static W3dTextureReference ReadTexture(W3dChunk texture, ReadOnlySpan<byte> data, string meshName)
@@ -362,13 +378,27 @@ public static class W3dMeshDecoder
         var shaderIds = ReadOptionalIds(
             pass, W3dChunkType.ShaderIds, triangleCount, shaderCount, "shader", data, meshName);
         var diffuseColors = ReadDiffuseColors(pass, vertexCount, data, meshName);
+        var diffuseIllumination = ReadRgbColors(pass, W3dChunkType.DiffuseIllumination, vertexCount, data, meshName);
+        var specularColors = ReadRgbColors(pass, W3dChunkType.SpecularColors, vertexCount, data, meshName);
         var stages = new List<W3dTextureStage>();
         foreach (var stage in pass.Children.Where(chunk => chunk.Type == W3dChunkType.TextureStage))
         {
             stages.Add(ReadTextureStage(stage, vertexCount, triangleCount, textureCount, data, meshName));
         }
 
-        return new W3dMaterialPass(vertexMaterialIds, shaderIds, diffuseColors, stages);
+        if (stages.Count > 2)
+        {
+            throw new InvalidDataException(
+                $"Mesh '{meshName}' material pass has {stages.Count} texture stages; W3D supports at most two.");
+        }
+
+        return new W3dMaterialPass(
+            vertexMaterialIds,
+            shaderIds,
+            diffuseColors,
+            diffuseIllumination,
+            specularColors,
+            stages);
     }
 
     private static IReadOnlyList<uint> ReadOptionalIds(
@@ -426,6 +456,36 @@ public static class W3dMeshDecoder
         {
             var offset = index * 4;
             colors[index] = new W3dRgba(payload[offset], payload[offset + 1], payload[offset + 2], payload[offset + 3]);
+        }
+
+        return colors;
+    }
+
+    private static IReadOnlyList<W3dRgb> ReadRgbColors(
+        W3dChunk parent,
+        uint type,
+        int vertexCount,
+        ReadOnlySpan<byte> data,
+        string meshName)
+    {
+        var chunk = GetSingleChild(parent, type, required: false);
+        if (chunk is null)
+        {
+            return [];
+        }
+
+        var expectedSize = checked(vertexCount * 3);
+        if (chunk.Size != expectedSize)
+        {
+            throw new InvalidDataException(
+                $"Mesh '{meshName}' RGB color chunk 0x{type:X8} has {chunk.Size} bytes; expected {expectedSize}.");
+        }
+
+        var payload = Slice(data, chunk);
+        var colors = new W3dRgb[vertexCount];
+        for (var index = 0; index < colors.Length; index++)
+        {
+            colors[index] = ReadRgb(payload, index * 3);
         }
 
         return colors;

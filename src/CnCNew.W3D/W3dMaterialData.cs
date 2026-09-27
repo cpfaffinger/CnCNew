@@ -21,6 +21,8 @@ public sealed record W3dMaterialPass(
     IReadOnlyList<uint> VertexMaterialIds,
     IReadOnlyList<uint> ShaderIds,
     IReadOnlyList<W3dRgba> DiffuseColors,
+    IReadOnlyList<W3dRgb> DiffuseIllumination,
+    IReadOnlyList<W3dRgb> SpecularColors,
     IReadOnlyList<W3dTextureStage> TextureStages);
 
 public sealed record W3dTextureStage(
@@ -45,7 +47,9 @@ public sealed record W3dVertexMaterial(
     float Opacity,
     float Translucency,
     string? MapperArguments0,
-    string? MapperArguments1);
+    string? MapperArguments1,
+    W3dTextureMapper Mapper0,
+    W3dTextureMapper Mapper1);
 
 public sealed record W3dShader(
     W3dDepthCompare DepthCompare,
@@ -54,16 +58,35 @@ public sealed record W3dShader(
     W3dDestinationBlend DestinationBlend,
     byte FogFunction,
     W3dPrimaryGradient PrimaryGradient,
-    byte SecondaryGradient,
+    W3dSecondaryGradient SecondaryGradient,
     W3dSourceBlend SourceBlend,
     bool TexturingEnabled,
-    byte DetailColorFunction,
-    byte DetailAlphaFunction,
+    W3dDetailColorFunction DetailColorFunction,
+    W3dDetailAlphaFunction DetailAlphaFunction,
     byte ShaderPreset,
     bool AlphaTestEnabled,
-    byte PostDetailColorFunction,
-    byte PostDetailAlphaFunction,
-    byte Padding);
+    W3dDetailColorFunction PostDetailColorFunction,
+    W3dDetailAlphaFunction PostDetailAlphaFunction,
+    byte Padding)
+{
+    // These four bytes were repurposed as PlayStation 2 shader parameters in the shipped PC files.
+    // They are retained losslessly but are not PC color-mask/fog/preset state.
+    public W3dLegacyShaderMetadata LegacyMetadata => new(ColorMask, FogFunction, ShaderPreset, Padding);
+
+    public bool PcColorWriteEnabled => true;
+
+    public W3dFogFunction PcFogFunction => W3dFogFunction.Disabled;
+}
+
+public readonly record struct W3dLegacyShaderMetadata(byte ParameterA, byte ParameterB, byte ParameterC, byte ParameterD);
+
+public enum W3dFogFunction : byte
+{
+    Disabled = 0,
+    Enabled = 1,
+    ScaleFragment = 2,
+    White = 3,
+}
 
 public enum W3dDepthCompare : byte
 {
@@ -104,6 +127,37 @@ public enum W3dPrimaryGradient : byte
     BumpEnvironmentMap = 3,
     BumpEnvironmentMapLuminance = 4,
     Modulate2X = 5,
+}
+
+public enum W3dSecondaryGradient : byte
+{
+    Disabled = 0,
+    Enabled = 1,
+}
+
+public enum W3dDetailColorFunction : byte
+{
+    Disabled = 0,
+    Detail = 1,
+    Scale = 2,
+    InverseScale = 3,
+    Add = 4,
+    Subtract = 5,
+    ReverseSubtract = 6,
+    Blend = 7,
+    DetailBlend = 8,
+    AddSigned = 9,
+    AddSigned2X = 10,
+    Scale2X = 11,
+    ModulateAlphaAddColor = 12,
+}
+
+public enum W3dDetailAlphaFunction : byte
+{
+    Disabled = 0,
+    Detail = 1,
+    Scale = 2,
+    InverseScale = 3,
 }
 
 public enum W3dMaterialVariantKind

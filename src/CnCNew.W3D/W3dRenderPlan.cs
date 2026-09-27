@@ -2,65 +2,47 @@ using System.Numerics;
 
 namespace CnCNew.W3D;
 
-public sealed record W3dRenderBatch(
+public sealed record W3dRenderPass(
     int MaterialPassIndex,
-    W3dMaterialPass? MaterialPass,
+    W3dMaterialPass MaterialPass,
     uint? ShaderId,
     W3dShader? Shader,
-    IReadOnlyList<uint?> TextureIds,
-    IReadOnlyList<int> TriangleIndices)
+    IReadOnlyList<uint?> TextureIds)
 {
-    public byte DetailColorFunction => Shader?.DetailColorFunction ?? 0;
+    public W3dDetailColorFunction EffectiveDetailColorFunction
+        => Shader?.DetailColorFunction ?? W3dDetailColorFunction.Disabled;
 
-    public byte DetailAlphaFunction => Shader?.DetailAlphaFunction ?? 0;
+    public W3dDetailAlphaFunction EffectiveDetailAlphaFunction
+        => Shader?.DetailAlphaFunction ?? W3dDetailAlphaFunction.Disabled;
 }
+
+public sealed record W3dRenderBatch(
+    IReadOnlyList<W3dRenderPass> Passes,
+    IReadOnlyList<int> TriangleIndices);
 
 public static class W3dRenderPlan
 {
     public static IReadOnlyList<W3dRenderBatch> Build(W3dMesh mesh)
     {
         ArgumentNullException.ThrowIfNull(mesh);
-
         if (mesh.Materials.Passes.Count == 0)
         {
-            return
-            [
-                new W3dRenderBatch(
-                    -1,
-                    null,
-                    null,
-                    null,
-                    [],
-                    Enumerable.Range(0, mesh.Triangles.Count).ToArray()),
-            ];
+            return [new W3dRenderBatch([], Enumerable.Range(0, mesh.Triangles.Count).ToArray())];
         }
 
-        var batches = new List<W3dRenderBatch>();
-        for (var passIndex = 0; passIndex < mesh.Materials.Passes.Count; passIndex++)
-        {
-            var pass = mesh.Materials.Passes[passIndex];
-            var groups = Enumerable.Range(0, mesh.Triangles.Count)
-                .GroupBy(triangleIndex => new BatchKey(
-                    ResolveId(pass.ShaderIds, triangleIndex),
-                    pass.TextureStages.Select(stage => ResolveId(stage.TextureIds, triangleIndex)).ToArray()),
-                    BatchKeyComparer.Instance);
-
-            foreach (var group in groups)
-            {
-                var shader = group.Key.ShaderId is uint shaderId
-                    ? mesh.Materials.Shaders[checked((int)shaderId)]
-                    : null;
-                batches.Add(new W3dRenderBatch(
-                    passIndex,
-                    pass,
-                    group.Key.ShaderId,
-                    shader,
-                    group.Key.TextureIds,
-                    group.ToArray()));
-            }
-        }
-
-        return batches;
+        // Group by the complete ordered pass state so all passes for a triangle remain one draw
+        // unit and cannot be independently reordered by the presentation backend.
+        return Enumerable.Range(0, mesh.Triangles.Count)
+            .GroupBy(triangleIndex => CreateKey(mesh, triangleIndex), RenderBatchKeyComparer.Instance)
+            .Select(group => new W3dRenderBatch(
+                group.Key.Passes.Select(pass => new W3dRenderPass(
+                    pass.MaterialPassIndex,
+                    mesh.Materials.Passes[pass.MaterialPassIndex],
+                    pass.ShaderId,
+                    pass.ShaderId is uint shaderId ? mesh.Materials.Shaders[checked((int)shaderId)] : null,
+                    pass.TextureIds)).ToArray(),
+                group.ToArray()))
+            .ToArray();
     }
 
     public static W3dRgba GetVertexColor(W3dMesh mesh, W3dMaterialPass? pass, int vertexIndex)
@@ -91,66 +73,131 @@ public static class W3dRenderPlan
         return new W3dRgba((byte)red, (byte)green, (byte)blue, (byte)alpha);
     }
 
+    public static W3dTextureMapper GetTextureMapper(
+        W3dMesh mesh,
+        W3dMaterialPass pass,
+        int vertexIndex,
+        int textureStageIndex)
+    {
+        if (textureStageIndex is < 0 or > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(textureStageIndex));
+        }
+
+        if (pass.VertexMaterialIds.Count == 0)
+        {
+            return W3dTextureMapper.Uv;
+        }
+
+        var materialId = ResolveRequiredId(pass.VertexMaterialIds, vertexIndex);
+        var material = mesh.Materials.VertexMaterials[checked((int)materialId)];
+        return textureStageIndex == 0 ? material.Mapper0 : material.Mapper1;
+    }
+
+    public static W3dRgb GetSecondaryVertexColor(W3dMaterialPass? pass, int vertexIndex)
+        => pass?.SpecularColors.Count > vertexIndex
+            ? pass.SpecularColors[vertexIndex]
+            : new W3dRgb(0, 0, 0);
+
     public static Vector2 GetTextureCoordinate(
         W3dTextureStage? stage,
         int triangleIndex,
         int corner,
-        int vertexIndex)
+        int vertexIndex,
+        W3dTextureMapper? mapper = null,
+        double totalSeconds = 0,
+        Vector3? normal = null,
+        Vector3? viewDirection = null)
     {
-        if (stage is null || stage.TextureCoordinates.Count == 0)
+        var effectiveMapper = mapper ?? W3dTextureMapper.Uv;
+        Vector2 source;
+        if (effectiveMapper is W3dEnvironmentTextureMapper environment)
+        {
+            source = W3dTextureMapperEvaluator.EvaluateEnvironment(
+                environment,
+                normal ?? Vector3.UnitZ,
+                viewDirection ?? Vector3.UnitZ);
+        }
+        else if (stage is null || stage.TextureCoordinates.Count == 0)
+        {
+            source = Vector2.Zero;
+        }
+        else
+        {
+            var coordinateIndex = vertexIndex;
+            if (stage.PerFaceTextureCoordinateIndices.Count > 0)
+            {
+                if ((uint)triangleIndex >= stage.PerFaceTextureCoordinateIndices.Count)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(triangleIndex));
+                }
+
+                var indices = stage.PerFaceTextureCoordinateIndices[triangleIndex];
+                coordinateIndex = checked((int)(corner switch
+                {
+                    0 => indices.Index0,
+                    1 => indices.Index1,
+                    2 => indices.Index2,
+                    _ => throw new ArgumentOutOfRangeException(nameof(corner)),
+                }));
+            }
+
+            source = stage.TextureCoordinates[coordinateIndex];
+        }
+
+        if (!float.IsFinite(source.X) || !float.IsFinite(source.Y))
         {
             return Vector2.Zero;
         }
 
-        var coordinateIndex = vertexIndex;
-        if (stage.PerFaceTextureCoordinateIndices.Count > 0)
-        {
-            var indices = stage.PerFaceTextureCoordinateIndices[triangleIndex];
-            coordinateIndex = checked((int)(corner switch
-            {
-                0 => indices.Index0,
-                1 => indices.Index1,
-                2 => indices.Index2,
-                _ => throw new ArgumentOutOfRangeException(nameof(corner)),
-            }));
-        }
-
-        var source = stage.TextureCoordinates[coordinateIndex];
-        return float.IsFinite(source.X) && float.IsFinite(source.Y)
-            ? new Vector2(source.X, 1 - source.Y)
-            : Vector2.Zero;
+        var transformed = W3dTextureMapperEvaluator.Evaluate(effectiveMapper, totalSeconds).Apply(source);
+        return new Vector2(transformed.X, 1 - transformed.Y);
     }
+
+    private static RenderBatchKey CreateKey(W3dMesh mesh, int triangleIndex)
+        => new(mesh.Materials.Passes.Select((pass, passIndex) => new RenderPassKey(
+            passIndex,
+            ResolveId(pass.ShaderIds, triangleIndex),
+            pass.TextureStages.Select(stage => ResolveId(stage.TextureIds, triangleIndex)).ToArray())).ToArray());
 
     private static uint? ResolveId(IReadOnlyList<uint> ids, int elementIndex)
         => ids.Count switch
         {
             0 => null,
-            1 => ids[0],
-            _ => ids[elementIndex],
+            1 => ids[0] == uint.MaxValue ? null : ids[0],
+            _ => ids[elementIndex] == uint.MaxValue ? null : ids[elementIndex],
         };
 
     private static uint ResolveRequiredId(IReadOnlyList<uint> ids, int elementIndex)
         => ids.Count == 1 ? ids[0] : ids[elementIndex];
 
-    private sealed record BatchKey(uint? ShaderId, IReadOnlyList<uint?> TextureIds);
+    private sealed record RenderPassKey(int MaterialPassIndex, uint? ShaderId, IReadOnlyList<uint?> TextureIds);
 
-    private sealed class BatchKeyComparer : IEqualityComparer<BatchKey>
+    private sealed record RenderBatchKey(IReadOnlyList<RenderPassKey> Passes);
+
+    private sealed class RenderBatchKeyComparer : IEqualityComparer<RenderBatchKey>
     {
-        public static BatchKeyComparer Instance { get; } = new();
+        public static RenderBatchKeyComparer Instance { get; } = new();
 
-        public bool Equals(BatchKey? left, BatchKey? right)
-            => ReferenceEquals(left, right) ||
-               left is not null && right is not null &&
-               left.ShaderId == right.ShaderId &&
-               left.TextureIds.SequenceEqual(right.TextureIds);
+        public bool Equals(RenderBatchKey? left, RenderBatchKey? right)
+            => ReferenceEquals(left, right) || left is not null && right is not null &&
+                left.Passes.Count == right.Passes.Count &&
+                left.Passes.Zip(right.Passes).All(pair =>
+                    pair.First.MaterialPassIndex == pair.Second.MaterialPassIndex &&
+                    pair.First.ShaderId == pair.Second.ShaderId &&
+                    pair.First.TextureIds.SequenceEqual(pair.Second.TextureIds));
 
-        public int GetHashCode(BatchKey value)
+        public int GetHashCode(RenderBatchKey value)
         {
             var hash = new HashCode();
-            hash.Add(value.ShaderId);
-            foreach (var textureId in value.TextureIds)
+            foreach (var pass in value.Passes)
             {
-                hash.Add(textureId);
+                hash.Add(pass.MaterialPassIndex);
+                hash.Add(pass.ShaderId);
+                foreach (var textureId in pass.TextureIds)
+                {
+                    hash.Add(textureId);
+                }
             }
 
             return hash.ToHashCode();

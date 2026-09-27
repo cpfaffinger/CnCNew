@@ -27,6 +27,8 @@ public static class W3dChunkType
     public const uint VertexMaterialIds = 0x00000039;
     public const uint ShaderIds = 0x0000003a;
     public const uint DiffuseColors = 0x0000003b;
+    public const uint DiffuseIllumination = 0x0000003c;
+    public const uint SpecularColors = 0x0000003e;
     public const uint TextureStage = 0x00000048;
     public const uint TextureIds = 0x00000049;
     public const uint StageTexCoords = 0x0000004a;
