@@ -20,6 +20,10 @@ Vektoren, Farbe, Liste, Referenz und Sentinel. Zahlen werden invariant gelesen; 
 einziger numerischer Sonderfall den sichtbaren Code `shipped-double-decimal-radius` und wird als
 18.5 normalisiert.
 
+Alle übrigen verschachtelten Blöcke werden rekursiv als immutable `DefinitionSection` erhalten.
+Damit bleiben insbesondere WeaponSet, ArmorSet, Prerequisites, ConditionState sowie Unterblöcke
+von Draw-/Behavior-Konfigurationen vollständig typisiert, ohne Parserknoten öffentlich zu machen.
+
 ## Include, Bedingungen und Reihenfolge
 
 Includes werden über `IDefinitionSource` aufgelöst. Der Compiler kennt deshalb nur virtuelle
@@ -55,7 +59,8 @@ Kompatibilitätsliste.
 IDs haben die Form `<kind>://<ordinal-kleingeschriebener-name>`. Der Graph trennt Quellart und
 Zielart; damit ist ein gleichnamiges Ziel falschen Typs nicht aufgelöst. `NONE` ist ein typisierter
 Sentinel. CommandSet-Slots, TriggeredBy-/ConflictsWith-Listen und die bekannten Object-, Weapon-,
-Armor-, Science-, Upgrade-, FX-, Audio-, Locomotor- und SpecialPower-Felder erzeugen Kanten.
+Armor-, Science-, Upgrade-, FX-, Audio-, Locomotor- und SpecialPower-Felder erzeugen Kanten –
+auch rekursiv aus Definitions- und Modulsektionen.
 
 `DefinitionSnapshotWriter` schreibt Schema 1 als kanonisches UTF-8-JSON. Definitionen, Felder,
 Kanten und Kompatibilität sind ordinal sortiert; Module behalten ihre semantische Reihenfolge.

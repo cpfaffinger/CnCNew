@@ -15,16 +15,18 @@ Lies vor Änderungen vollständig `README.md`, `docs/ARCHITECTURE.md`, `docs/ROA
 ## Verbindlicher Ausgangsstand
 
 - Branch `main`, kein Remote; nichts pushen und keinen Remote anlegen.
-- Phase-3-Implementierung: Commit `07b5959` (`feat(data): compile typed game definitions`).
+- Phase-3-Implementierung: Commits `07b5959` (`feat(data): compile typed game definitions`) und
+  `a030a98` (`feat(data): retain nested definition sections`).
 - Phase 1 und 2 bleiben abgeschlossen.
 - 256/256 INI-Dateien und 66.623 Blöcke kompilieren zu 12.677 Definitionen, 16.360 Modulen und
-  204.006 Schlüsseln.
-- Der Referenzgraph löst 5.293/5.294 Verwendungen auf. Ausschließlich
-  `Boss_VehicleSentryDrone` ist als `compatibility-unresolved-reference` ausgewiesen.
+  335.592 Schlüsseln einschließlich rekursiver Konfigurationssektionen.
+- Der Referenzgraph löst 12.441/12.468 Verwendungen auf. Die 27 übrigen Verwendungen sind als
+  `compatibility-unresolved-reference` ausgewiesen: 25 Veterancy-Pseudoupgrades,
+  `DieByFireUSA` und `Boss_VehicleSentryDrone`.
 - 41 spätere Definitionsdomänen mit 2.801 Instanzen und alle 206 Bestandsmodule mit 16.360
   Verwendungen sind explizit inventarisiert.
-- Zwei Vollkompilierungen erzeugen byteidentische Snapshots mit 67.885.672 Byte und SHA-256
-  `312332B7255665F10D69567A3113CF5CBC207395F3C3470E79B6C37265E5F475`.
+- Zwei Vollkompilierungen erzeugen byteidentische Snapshots mit 112.664.082 Byte und SHA-256
+  `14154C512DED47C4AD72B651F8FCB0BA702EACBF8678C51DDAB7D125BEC675D4`.
 - Build und alle acht Testprogramme sind grün. Ausschließlich die dokumentierten transitiven
   Stride-NU1901/NU1903-Warnungen sind vorhanden.
 

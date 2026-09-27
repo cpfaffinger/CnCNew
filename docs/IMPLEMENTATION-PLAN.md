@@ -133,19 +133,20 @@ einer geprüften Kompatibilitätsliste erfasst sind.
 Abnahme:
 
 - 256/256 Dateien und unverändert 66.623 Syntaxblöcke ergeben 12.677 Definitionen, 16.360
-  Modulinstanzen und 204.006 typisierte Schlüssel.
+  Modulinstanzen und 335.592 typisierte Schlüssel einschließlich rekursiver Konfigurationssektionen.
 - Eigene unveränderliche Vertragstypen decken Objects, Weapons/WeaponSets, Armor/Damage,
   Upgrades/Sciences, Player/Factions, Commands, FX, Audio, Locomotors, Experience,
   SpecialPowers und GlobalData ab; Parserknoten bleiben compilerintern.
 - Includes werden ausschließlich über virtuelle Runtimepfade aufgelöst. Zyklen, fehlende Basen,
   falsche Conditions, ungültige Werte, Registryduplikate und unbekannte Module im strikten Modus
   sind Fehler. Overlay und Add/Remove/ReplaceModule sind deterministisch.
-- 5.293/5.294 typisierte Referenzverwendungen sind aufgelöst. Der einzige fehlende Object-Verweis
-  `Boss_VehicleSentryDrone` ist ein expliziter, nicht stiller Kompatibilitätsfall.
+- 12.441/12.468 typisierte Referenzverwendungen sind aufgelöst. Die 27 übrigen Verwendungen
+  (25 Veterancy-Pseudoupgrades, `DieByFireUSA` und `Boss_VehicleSentryDrone`) sind explizite,
+  nicht stille Kompatibilitätsfälle.
 - 41 spätere Definitionsdomänen (2.801 Instanzen) und 206 noch nicht implementierte Modultypen
   (16.360 Verwendungen) sind mit Häufigkeit, Besitzerart und Implementierungsziel inventarisiert.
-- Zwei unabhängige 67.885.672-Byte-Snapshots waren byteidentisch; SHA-256 jeweils
-  `312332B7255665F10D69567A3113CF5CBC207395F3C3470E79B6C37265E5F475`. Vertrag, Regeln,
+- Zwei unabhängige 112.664.082-Byte-Snapshots waren byteidentisch; SHA-256 jeweils
+  `14154C512DED47C4AD72B651F8FCB0BA702EACBF8678C51DDAB7D125BEC675D4`. Vertrag, Regeln,
   Kompatibilitätsliste und Befehle stehen in `TYPED-DEFINITIONS.md` und
   `PHASE3-COMPATIBILITY.md`.
 

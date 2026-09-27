@@ -81,9 +81,10 @@ WaveGuideUpdate, WeaponBonusUpdate, WeaponBonusUpgrade, WeaponSetUpgrade und Wor
 
 - `GeometryMajorRadius = 18.5.0` wird genau einmal über
   `shipped-double-decimal-radius` als 18.5 normalisiert.
-- Ein Verweis auf `Boss_VehicleSentryDrone` ist im ausgelieferten Definitionsbestand nicht
-  definiert und bleibt als `compatibility-unresolved-reference` sichtbar. Es gibt keinen
-  stillen Ersatz durch ein anderes Object.
+- 27 Referenzverwendungen bleiben als `compatibility-unresolved-reference` sichtbar: 25 Verwendungen
+  der engineinternen Veterancy-Pseudoupgrades `Upgrade_Veterancy_ELITE` beziehungsweise
+  `Upgrade_Veterancy_HEROIC`, ein fehlendes FXList-Ziel `DieByFireUSA` und das nicht definierte
+  Object `Boss_VehicleSentryDrone`. Es gibt keinen stillen Ersatz durch ein anderes Ziel.
 - Das gemeinsam ausgeführte Vollinventar kann ReplaceModule-Ziele aus voneinander unabhängigen
   Kartenoverlays nicht in jedem Aggregatzustand vorfinden. Jeder Fall erzeugt
   `compatibility-missing-replace-target`; ein einzelnes Kartenoverlay behält korrekte

@@ -22,7 +22,7 @@ Dieses Arbeitsverzeichnis bleibt lokal. Originale Spieldateien, entpackte Assets
 - Phase 1 „W3D-Material- und Renderingtreue“ ist abgeschlossen: 64.962 Einpass- und 5.625 Zweipass-Meshes sowie 317 zweistufige Pässe sind im Vollbestand nachgewiesen
 - Phase 2 „Assetformate und Runtime-Contentvertrag“ ist abgeschlossen: 25.682/25.682 Dateien sind klassifiziert und validiert, Schema 2 enthält 41.527 auditierbare Referenzen
 - Phase 3 „Typisierte Spieldaten und Modulregistrierung“ ist abgeschlossen: 256/256 INIs und 66.623 Blöcke werden zu 12.677 unveränderlichen Definitionen, 16.360 Modulen und einem typisierten Referenzgraphen kompiliert
-- zwei unabhängige, 67.885.672 Byte große Definitionssnapshots sind byteidentisch (`312332B7255665F10D69567A3113CF5CBC207395F3C3470E79B6C37265E5F475`); 5.293/5.294 Referenzen sind aufgelöst, der einzelne fehlende Object-Verweis ist ein sichtbarer Kompatibilitätsfall
+- zwei unabhängige, 112.664.082 Byte große Definitionssnapshots sind byteidentisch (`14154C512DED47C4AD72B651F8FCB0BA702EACBF8678C51DDAB7D125BEC675D4`); 12.441/12.468 Referenzen sind aufgelöst, 27 Verwendungen sind sichtbare Kompatibilitätsfälle
 - atomarer, inkrementeller Runtimeimport mit kanonischen IDs/Pfaden, SHA-256, Overlayherkunft, Importerversion, Artefakten, Abhängigkeiten und typisierten Fallbacks
 - zwei unabhängige Frischimporte sowie ein 25.682/25.682-Cachelauf erzeugten dasselbe kanonische Manifest; Details stehen in `docs/CONTENT-PIPELINE.md`
 - typisierte UV-, Environment-, Classic-Environment-, Linear-Offset- und Grid-Mapper; positive und negative Geschwindigkeiten sowie beide Stage-Slots werden deterministisch ausgewertet
