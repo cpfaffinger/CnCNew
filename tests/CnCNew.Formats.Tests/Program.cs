@@ -22,8 +22,10 @@ using (var wnd = new MemoryStream(Encoding.Latin1.GetBytes("FILE_VERSION = 2;\nW
     Assert(LegacyAssetReaders.ReadWnd(wnd).References.Single() == "Art/Textures/Test.dds", "WND reference mismatch.");
 ExpectFailure(() => LegacyAssetReaders.ReadWnd(new MemoryStream(Encoding.ASCII.GetBytes("FILE_VERSION = 3;"))), "WND version");
 
-using (var map = new MemoryStream(new byte[] { 0x45,0x41,0x52,0, 0,0,0,0, 0,0,0,0,0,0, 0x43,0x6b,0x4d,0x70, 0,0,0,0 }))
-    LegacyAssetReaders.ValidateSageMap(map);
+using (var map = new MemoryStream(CreateSageMap()))
+    Assert(LegacyAssetReaders.ReadSageMap(map).Symbols.Single().Value == "Test", "SAGE symbol mismatch.");
+var badMap = CreateSageMap().Concat(new byte[] { 1, 0, 0, 0, 1, 0, 100, 0, 0, 0 }).ToArray();
+ExpectFailure(() => LegacyAssetReaders.ValidateSageMap(new MemoryStream(badMap)), "MAP chunk bounds");
 ExpectFailure(() => LegacyAssetReaders.ValidateWak(new MemoryStream(new byte[23])), "WAK length");
 
 Assert(AssetFormat.Classify("movie.bik").ProductScope, "BIK must be in product scope.");
@@ -50,6 +52,16 @@ static byte[] CreateWave()
     BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(20), 1); BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(22), 1);
     "data"u8.CopyTo(data.AsSpan(36)); BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(40), 4);
     return data;
+}
+static byte[] CreateSageMap()
+{
+    using var stream = new MemoryStream();
+    stream.Write("CkMp"u8);
+    Span<byte> value = stackalloc byte[4];
+    BinaryPrimitives.WriteInt32LittleEndian(value, 1); stream.Write(value);
+    stream.WriteByte(4); stream.Write("Test"u8);
+    BinaryPrimitives.WriteUInt32LittleEndian(value, 1); stream.Write(value);
+    return stream.ToArray();
 }
 static void ExpectFailure(Action action, string name)
 {

@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.IO.Compression;
 
 namespace CnCNew.Formats;
 
@@ -9,6 +10,8 @@ public sealed record RiffMetadata(string FormType, IReadOnlyList<string> Chunks)
 public sealed record BinkMetadata(string Version, int Frames, int Width, int Height, int FramesPerSecondNumerator, int FramesPerSecondDenominator);
 public sealed record StrEntry(string Key, string Value);
 public sealed record TextAssetMetadata(int Version, IReadOnlyList<string> References);
+public sealed record SageChunkMetadata(string Name, ushort Version, int Bytes, long HeaderOffset);
+public sealed record SageMapMetadata(string Container, int ExpandedBytes, IReadOnlyDictionary<uint, string> Symbols, IReadOnlyList<SageChunkMetadata> Chunks);
 
 public static partial class LegacyAssetReaders
 {
@@ -190,25 +193,45 @@ public static partial class LegacyAssetReaders
         return new TextAssetMetadata(version, ExtractReferences(text));
     }
 
-    public static void ValidateSageMap(Stream stream)
+    public static SageMapMetadata ReadSageMap(Stream stream)
     {
-        var header = ReadAll(stream, 18);
-        var raw = header.AsSpan(0, 4).SequenceEqual("CkMp"u8);
-        var ear = header.AsSpan(0, 4).SequenceEqual(new byte[] { 0x45, 0x41, 0x52, 0x00 }) &&
-                  header.AsSpan(14, 4).SequenceEqual("CkMp"u8);
-        var compressed = header.AsSpan(0, 4).SequenceEqual(new byte[] { 0x5a, 0x4c, 0x35, 0x00 });
-        if (!raw && !ear && !compressed)
-            throw new InvalidDataException("MAP must use a raw CkMp, EAR-wrapped CkMp, or ZL5 container.");
-        if (stream.Length < 22) throw new InvalidDataException("MAP is truncated before its first chunk.");
+        var source = ReadWholeStream(stream, 8);
+        byte[] expanded;
+        string container;
+        if (source.AsSpan(0, 4).SequenceEqual("CkMp"u8))
+        {
+            expanded = source;
+            container = "CkMp";
+        }
+        else if (source.AsSpan(0, 4).SequenceEqual(new byte[] { 0x45, 0x41, 0x52, 0x00 }))
+        {
+            var expected = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(source.AsSpan(4)));
+            expanded = DecompressRefPack(source.AsSpan(8), expected);
+            container = "EAR";
+        }
+        else if (source.AsSpan(0, 4).SequenceEqual(new byte[] { 0x5a, 0x4c, 0x35, 0x00 }))
+        {
+            var expected = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(source.AsSpan(4)));
+            using var compressed = new MemoryStream(source, 8, source.Length - 8, writable: false);
+            using var zlib = new ZLibStream(compressed, CompressionMode.Decompress);
+            using var output = new MemoryStream(expected);
+            zlib.CopyTo(output);
+            expanded = output.ToArray();
+            if (expanded.Length != expected)
+                throw new InvalidDataException($"ZL5 expands to {expanded.Length} bytes; expected {expected}.");
+            container = "ZL5";
+        }
+        else throw new InvalidDataException("MAP must use a raw CkMp, EAR/RefPack, or ZL5/zlib container.");
+
+        var parsed = ParseSageChunks(expanded);
+        return new SageMapMetadata(container, expanded.Length, parsed.Symbols, parsed.Chunks);
     }
+
+    public static void ValidateSageMap(Stream stream) => ReadSageMap(stream);
 
     public static void ValidateScriptBinary(Stream stream)
     {
-        var header = ReadAll(stream, 8);
-        if (!header.AsSpan(0, 4).SequenceEqual("CkMp"u8))
-            throw new InvalidDataException("SCB CkMp header is invalid.");
-        var count = U32(header, 4);
-        if (count > 10_000_000) throw new InvalidDataException($"SCB object count {count} is excessive.");
+        ParseSageChunks(ReadWholeStream(stream, 8));
     }
 
     public static void ValidateWak(Stream stream)
@@ -248,6 +271,134 @@ public static partial class LegacyAssetReaders
         var data = new byte[count];
         ReadExactly(stream, data);
         return data;
+    }
+    private static byte[] ReadWholeStream(Stream stream, int minimum)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        if (!stream.CanRead || !stream.CanSeek) throw new ArgumentException("Asset stream must be readable and seekable.", nameof(stream));
+        if (stream.Length < minimum || stream.Length > int.MaxValue)
+            throw new InvalidDataException($"Asset length {stream.Length} is invalid; at least {minimum} bytes are required.");
+        var data = new byte[stream.Length];
+        ReadExactly(stream, data);
+        return data;
+    }
+
+    private static (IReadOnlyDictionary<uint, string> Symbols, IReadOnlyList<SageChunkMetadata> Chunks) ParseSageChunks(byte[] data)
+    {
+        if (data.Length < 8 || !data.AsSpan(0, 4).SequenceEqual("CkMp"u8))
+            throw new InvalidDataException("SAGE chunk table signature CkMp is missing.");
+        var count = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(4));
+        if (count <= 0 || count > 65535) throw new InvalidDataException($"SAGE symbol count {count} is invalid.");
+        var symbols = new Dictionary<uint, string>();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var offset = 8;
+        for (var index = 0; index < count; index++)
+        {
+            if (offset >= data.Length) throw new InvalidDataException($"SAGE symbol {index} is truncated at offset {offset}.");
+            var length = data[offset++];
+            if (length > data.Length - offset - 4)
+                throw new InvalidDataException($"SAGE symbol {index} has invalid length {length} at offset {offset - 1}.");
+            var name = Encoding.Latin1.GetString(data, offset, length);
+            offset += length;
+            var id = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset));
+            offset += 4;
+            if (!symbols.TryAdd(id, name) || (name.Length != 0 && !names.Add(name)))
+                throw new InvalidDataException($"SAGE symbol table contains duplicate ID {id} or name '{name}'.");
+        }
+
+        var chunks = new List<SageChunkMetadata>();
+        while (offset < data.Length)
+        {
+            var headerOffset = offset;
+            if (data.Length - offset < 10) throw new InvalidDataException($"SAGE chunk header is truncated at offset {offset}.");
+            var id = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset));
+            var version = BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(offset + 4));
+            var size = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset + 6));
+            offset += 10;
+            if (!symbols.TryGetValue(id, out var name))
+                throw new InvalidDataException($"SAGE chunk at offset {headerOffset} uses unknown symbol ID {id}.");
+            if (size < 0 || size > data.Length - offset)
+                throw new InvalidDataException($"SAGE chunk '{name}' at offset {headerOffset} has invalid size {size}.");
+            chunks.Add(new SageChunkMetadata(name, version, size, headerOffset));
+            offset += size;
+        }
+        return (symbols, chunks);
+    }
+
+    private static byte[] DecompressRefPack(ReadOnlySpan<byte> source, int expected)
+    {
+        var packed = source.ToArray();
+        if (expected <= 0 || expected > 512 * 1024 * 1024) throw new InvalidDataException($"EAR expanded size {expected} is invalid.");
+        if (packed.Length < 5 || packed[0] != 0x10 || packed[1] != 0xfb)
+            throw new InvalidDataException("EAR RefPack signature 10 FB is missing.");
+        var declared = packed[2] << 16 | packed[3] << 8 | packed[4];
+        if (declared != expected) throw new InvalidDataException($"EAR sizes disagree: wrapper {expected}, RefPack {declared}.");
+        var output = new byte[expected];
+        var input = 5;
+        var written = 0;
+        while (true)
+        {
+            if (input >= packed.Length) throw new InvalidDataException("RefPack command stream is truncated.");
+            var control = packed[input++];
+            if (control >= 0xfc)
+            {
+                CopyLiteral(control & 3);
+                break;
+            }
+            int literals, length, distance;
+            if (control >= 0xe0)
+            {
+                CopyLiteral(((control & 0x1f) << 2) + 4);
+                continue;
+            }
+            if (control >= 0xc0)
+            {
+                Require(3);
+                var b1 = packed[input++]; var b2 = packed[input++]; var b3 = packed[input++];
+                literals = control & 3;
+                length = ((control & 0x0c) << 6) + b3 + 5;
+                distance = ((control & 0x10) << 12) + (b1 << 8) + b2 + 1;
+            }
+            else if (control >= 0x80)
+            {
+                Require(2);
+                var b1 = packed[input++]; var b2 = packed[input++];
+                literals = b1 >> 6;
+                length = (control & 0x3f) + 4;
+                distance = ((b1 & 0x3f) << 8) + b2 + 1;
+            }
+            else
+            {
+                Require(1);
+                var b1 = packed[input++];
+                literals = control & 3;
+                length = ((control & 0x1c) >> 2) + 3;
+                distance = ((control & 0x60) << 3) + b1 + 1;
+            }
+            CopyLiteral(literals);
+            if (distance > written || length > output.Length - written)
+                throw new InvalidDataException($"RefPack back-reference at input {input} is outside the output window.");
+            for (var index = 0; index < length; index++)
+            {
+                output[written] = output[written - distance];
+                written++;
+            }
+        }
+        if (written != expected || input != packed.Length)
+            throw new InvalidDataException($"RefPack ended at input {input}/{packed.Length}, output {written}/{expected}.");
+        return output;
+
+        void Require(int count)
+        {
+            if (count > packed.Length - input) throw new InvalidDataException("RefPack command arguments are truncated.");
+        }
+        void CopyLiteral(int count)
+        {
+            if (count > packed.Length - input || count > output.Length - written)
+                throw new InvalidDataException("RefPack literal exceeds input or output bounds.");
+            packed.AsSpan(input, count).CopyTo(output.AsSpan(written));
+            input += count; written += count;
+        }
     }
     private static uint U32(byte[] data, int offset) => BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset));
     private static int Count(uint value, string name, int maximum)

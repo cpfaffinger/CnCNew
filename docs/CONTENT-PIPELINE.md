@@ -50,7 +50,7 @@ Invalidierung, gleiche Frischimporte und den unveränderten Bestand nach einem I
 | 6.602 | DDS | Runtime-Decoder; Header, Dimensionen, Mips, BC1/2/3 und RGB24/32 samt Payloadgröße |
 | 826 | TGA | Runtime-Decoder; 24/32 Bit, raw/RLE, Dimensionen, Orientierung und Pixelstrom |
 | 256 | INI | Runtime-Decoder; SAGE-Syntax und Dateireferenzen; typisierte Spieldaten folgen in Phase 3 |
-| 150 | MAP | Runtime-Decoder; 145 EAR/CkMp-, vier rohe CkMp- und eine ZL5-Variante |
+| 150 | MAP | Runtime-Decoder; 145 EAR/RefPack-, vier rohe CkMp- und eine ZL5/zlib-Variante; Dekompressionsgröße, Symboltabelle, Chunk-IDs, Versionen, Größen und Dateiende |
 | 104 | ANI | Runtime-Decoder; RIFF/ACON; der in allen Dateien identische Size-plus-8-Schreibfehler ist explizit zugelassen |
 | 80 | WND | Runtime-Decoder; `FILE_VERSION = 2`, Strukturklammern und Referenzen |
 | 70 | BIK | externer freier Decoderpfad (FFmpeg/libav); Version, Dateigröße, Frames, Dimensionen und Framerate |
