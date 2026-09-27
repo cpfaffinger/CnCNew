@@ -15,12 +15,15 @@ Dieses Arbeitsverzeichnis bleibt lokal. Originale Spieldateien, entpackte Assets
 - manifestbasiertes `CnCNew.Content`-Dateisystem ohne Archiv-Abhängigkeit
 - SAGE-INI-Parser erfolgreich über 256/256 INI-Dateien geprüft
 - W3D-Chunk- und Meshdecoder erfolgreich über 8.904/8.904 Dateien und 70.587 Meshes geprüft
-- W3D-Materialpässe, 77.672 Shaderzustände, 80.041 Vertexmaterialien, Material-/Shader-IDs, diffuse Vertexfarben, Texturtabellen und UV-Daten werden validiert und rendererunabhängig decodiert
+- W3D-Materialpässe, 77.672 Shaderzustände, 80.041 Vertexmaterialien, Material-/Shader-IDs, DCG/DIG/SCG-Vertexfarben, Texturtabellen und UV-Daten werden validiert und rendererunabhängig decodiert
 - alle vier Prelit-Materialwrapper werden als eigenständige Varianten erhalten; der ausgelieferte Bestand verwendet sie derzeit nicht
 - fünf bereits ausgeliefert beschädigte `UISabotr_*`-Binärdateien werden verlustarm im Speicher rekonstruiert und erneut validiert
 - eigener validierender TGA-Decoder erfolgreich über 826/826 Dateien und 100.666.368 Pixel geprüft
-- echter Stride-/Direct3D-11-Smoke-Test: `ABArFrcCmd.W3D` wird aus dem offenen Content geladen und mit 21 Meshes sowie 14 zustandsabhängigen Originaltextur-Instanzen gerendert
-- der W3D-Renderer übernimmt Vertexfarben/Opacity, Alpha-Test, Blendfaktoren, Depth-Compare/-Write und Two-Sided-Culling in Stride
+- Phase 1 „W3D-Material- und Renderingtreue“ ist abgeschlossen: 64.962 Einpass- und 5.625 Zweipass-Meshes sowie 317 zweistufige Pässe sind im Vollbestand nachgewiesen
+- typisierte UV-, Environment-, Classic-Environment-, Linear-Offset- und Grid-Mapper; positive und negative Geschwindigkeiten sowie beide Stage-Slots werden deterministisch ausgewertet
+- echter Stride-/Direct3D-11-Pfad mit geordneten Mehrfachpässen, bis zu zwei Texture-Stages je Pass, DCG/SCG-Streams, animierten UV-Puffern, Alpha-Test, allen Blendfaktoren des Bestands, Depth-Compare/-Write und Two-Sided-Culling
+- case-insensitive DDS-/TGA-Auflösung, sichtbarer Magenta-Fallback mit Diagnose, Texturcache und vollständige GPU-Ressourcenfreigabe
+- reproduzierbare lokale PNG-Regressionen für Mehrpass/Alpha/Additiv, zweistufige Detailmaterialien, Linear-/Grid-Animation und Stage-1-Animation; Baseline-Hashes stehen in `docs/W3D-MATERIALS.md`
 - Strides Standard-Shader werden reproduzierbar durch den offiziellen Assetcompiler gebaut; Game Studio ist nicht erforderlich
 
 ## Lokale Verzeichnisse
@@ -47,7 +50,9 @@ dotnet run --project tools/CnCNew.IniTool -- audit .local/content
 dotnet run --project tools/CnCNew.ImageTool -- audit-tga .local/content
 dotnet run --project tools/CnCNew.W3dTool -- audit .local/content
 dotnet run --project tools/CnCNew.W3dTool -- inspect .local/content Art/W3D/ABArFrcCmd.W3D
+dotnet run --project tests/CnCNew.W3D.Tests -- --content-dir .local/content
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir .local/content --model-path Art/W3D/ABArFrcCmd.W3D
+dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir .local/content --model-path Art/W3D/AVSoloDrn.W3D --capture .local/visual-verification/animated-stage1.png
 ```
 
 Der Stride-Assetcompiler 4.3.0.2507 bringt derzeit einige von NuGet als verwundbar gemeldete transitive **Buildwerkzeuge** mit. `NU1901` und `NU1903` bleiben beim Client-Build sichtbar, werden dort aber nicht als Fehler behandelt. Sie sind kein stillschweigend ignorierter Befund und müssen bei einem Stride-Update oder einer isolierten Content-Pipeline entfernt werden.

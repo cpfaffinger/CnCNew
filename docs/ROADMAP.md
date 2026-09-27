@@ -28,7 +28,8 @@
 - Fenster, Eingabe und Direct3D-Renderer auf aktuellem Windows-Unterbau.
 - **Erster Vertical Slice erreicht:** archivfreies W3D-Modell wird samt Materialgruppen, UVs und Original-DDS-Texturen über Stride/Direct3D 11 gerendert.
 - **W3D-Materialzustands-Slice erreicht:** Shader-/Vertexmaterialtabellen, IDs und DCG werden über den Vollbestand validiert; Alpha-Test, Blend, Depth-Zustände, Vertexfarben und Two-Sided-Culling sind im Direct3D-11-Client aktiv.
-- Noch offen für vollständige W3D-Materialtreue: alle Materialpässe und Texture-Stages gleichzeitig, animierte Mapper sowie exakte seltene Primary-/Detail-Gradient-Modi.
+- **W3D-Materialdomäne abgeschlossen:** geordnete Mehrfachpässe, beide Texture-Stages, DCG/DIG/SCG, alle Shaderfunktionen des ausgelieferten Bestands, Environment-Mapping sowie typisierte und zeitabhängige Linear-/Grid-Mapper laufen rendererunabhängig getestet und im Direct3D-11-Client.
+- Lokale deterministische PNG-Baselines decken transparente, additive, zweistufige und animierte Materialpfade ab; Originalassets und abgeleitete Bilder bleiben außerhalb von Git.
 - W3D-Modelle, Animation, Terrain, Partikel, Decals, Schatten und UI.
 - Audio-Ersatz für Miles und Video-Ersatz für Bink ohne proprietäre SDK-Abhängigkeit.
 - Auflösungsunabhängige UI unter Beibehaltung der ursprünglichen Datenformate.

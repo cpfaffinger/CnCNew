@@ -36,6 +36,8 @@ gleichzeitige Materialpässe und Texture-Stages, animierte Mapper sowie seltene 
 
 ## 1. W3D-Material- und Renderingdomäne vollenden
 
+**Status: abgeschlossen am 27. September 2026.**
+
 **Ergebnis:** Statische W3D-Meshes werden mit allen im ausgelieferten Bestand vorkommenden
 Materialvarianten rendererunabhängig korrekt beschrieben und im Stride-Client dargestellt.
 
@@ -59,6 +61,15 @@ Abgeschlossen, wenn:
 - Golden Images für transparente, additive, zweistufige und animierte Beispielmaterialien
   freigegeben sind;
 - der Smoke-Test ohne `NotSupportedException` für Daten aus dem ausgelieferten Bestand endet.
+
+Abnahme:
+
+- Solution-Build und alle sechs Testprogramme sind erfolgreich; der W3D-Test läuft zusätzlich gegen `.local/content`.
+- Der Audit verarbeitet 8.904/8.904 Dateien und 70.587 Meshes ohne unbekannten Shader- oder Mapperzustand.
+- 5.625 Zweipass-Meshes, 317 zweistufige Pässe, beide Mapper-Slots und per-face UV-Indizes sind real nachgewiesen.
+- Der Stride-Pfad verwendet geordnete Materialpass-Sequenzen und dynamische Vertexpuffer für zeitabhängige Mapper.
+- Deterministische lokale PNG-Captures und SHA-256-Baselines decken Mehrpass/Alpha/Additiv, zwei Stages sowie Linear-/Grid-Animation ab.
+- Die implementierte Semantik und bewusst außerhalb des ausgelieferten Bestands liegende Mapper-/Bumpfälle sind in `docs/W3D-MATERIALS.md` dokumentiert.
 
 ## 2. Assetformate und Runtime-Contentvertrag abschließen
 
