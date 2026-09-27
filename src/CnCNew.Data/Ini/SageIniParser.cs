@@ -82,6 +82,12 @@ public static class SageIniParser
             }
 
             var line = lines[index];
+            if (IsInclude(line.Content) || IsConditionDirective(line.Content))
+            {
+                nodes.Add(new IniStatement(line.Content, Location(source, line)));
+                index++;
+                continue;
+            }
             var equalsIndex = FindEqualsOutsideQuotes(line.Content);
             var topLevelName = equalsIndex < 0 ? line.Content : line.Content[..equalsIndex].Trim();
             var topLevelBlockWithEquals = equalsIndex >= 0
@@ -157,6 +163,16 @@ public static class SageIniParser
 
         return new IniProperty(name, line.Content[(equalsIndex + 1)..].Trim(), location);
     }
+
+    private static bool IsInclude(string value)
+        => value.StartsWith("#include ", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("include ", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsConditionDirective(string value)
+        => value.StartsWith("#if ", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("#ifdef ", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("#else", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("#endif", StringComparison.OrdinalIgnoreCase);
 
     private static List<SourceLine> ReadLines(string text, string source)
     {
