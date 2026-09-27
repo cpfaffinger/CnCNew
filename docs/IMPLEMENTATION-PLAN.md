@@ -112,6 +112,8 @@ Abnahme:
 
 ## 3. Typisierte Spieldaten und Modulregistrierung
 
+**Status: abgeschlossen am 27. September 2026.**
+
 **Ergebnis:** Die INI-Syntax wird zu unveränderlichen, validierten Spieldefinitionen kompiliert;
 Strings und lose Knoten gelangen nicht mehr in die Simulation.
 
@@ -127,6 +129,25 @@ Umfang:
 Abgeschlossen, wenn der vollständige ausgelieferte INI-Bestand zu einem deterministischen
 Definitionsgraphen kompiliert, alle Referenzen aufgelöst und unbekannte Schlüssel oder Module in
 einer geprüften Kompatibilitätsliste erfasst sind.
+
+Abnahme:
+
+- 256/256 Dateien und unverändert 66.623 Syntaxblöcke ergeben 12.677 Definitionen, 16.360
+  Modulinstanzen und 204.006 typisierte Schlüssel.
+- Eigene unveränderliche Vertragstypen decken Objects, Weapons/WeaponSets, Armor/Damage,
+  Upgrades/Sciences, Player/Factions, Commands, FX, Audio, Locomotors, Experience,
+  SpecialPowers und GlobalData ab; Parserknoten bleiben compilerintern.
+- Includes werden ausschließlich über virtuelle Runtimepfade aufgelöst. Zyklen, fehlende Basen,
+  falsche Conditions, ungültige Werte, Registryduplikate und unbekannte Module im strikten Modus
+  sind Fehler. Overlay und Add/Remove/ReplaceModule sind deterministisch.
+- 5.293/5.294 typisierte Referenzverwendungen sind aufgelöst. Der einzige fehlende Object-Verweis
+  `Boss_VehicleSentryDrone` ist ein expliziter, nicht stiller Kompatibilitätsfall.
+- 41 spätere Definitionsdomänen (2.801 Instanzen) und 206 noch nicht implementierte Modultypen
+  (16.360 Verwendungen) sind mit Häufigkeit, Besitzerart und Implementierungsziel inventarisiert.
+- Zwei unabhängige 67.885.672-Byte-Snapshots waren byteidentisch; SHA-256 jeweils
+  `312332B7255665F10D69567A3113CF5CBC207395F3C3470E79B6C37265E5F475`. Vertrag, Regeln,
+  Kompatibilitätsliste und Befehle stehen in `TYPED-DEFINITIONS.md` und
+  `PHASE3-COMPATIBILITY.md`.
 
 ## 4. Deterministischer Simulationskern
 
@@ -257,5 +278,5 @@ Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
 
 Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
 Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
-jedoch separat begründet und versioniert. Der nächste Implementierungseinstieg ist Schritt 3:
-typisierte Spieldaten und Modulregistrierung auf dem abgeschlossenen Schema-2-Contentvertrag.
+jedoch separat begründet und versioniert. Der nächste Implementierungseinstieg ist Schritt 4:
+deterministischer Simulationskern auf dem abgeschlossenen typisierten Definitionsvertrag.

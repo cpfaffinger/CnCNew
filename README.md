@@ -21,6 +21,8 @@ Dieses Arbeitsverzeichnis bleibt lokal. Originale Spieldateien, entpackte Assets
 - eigener validierender TGA-Decoder erfolgreich über 826/826 Dateien und 100.666.368 Pixel geprüft
 - Phase 1 „W3D-Material- und Renderingtreue“ ist abgeschlossen: 64.962 Einpass- und 5.625 Zweipass-Meshes sowie 317 zweistufige Pässe sind im Vollbestand nachgewiesen
 - Phase 2 „Assetformate und Runtime-Contentvertrag“ ist abgeschlossen: 25.682/25.682 Dateien sind klassifiziert und validiert, Schema 2 enthält 41.527 auditierbare Referenzen
+- Phase 3 „Typisierte Spieldaten und Modulregistrierung“ ist abgeschlossen: 256/256 INIs und 66.623 Blöcke werden zu 12.677 unveränderlichen Definitionen, 16.360 Modulen und einem typisierten Referenzgraphen kompiliert
+- zwei unabhängige, 67.885.672 Byte große Definitionssnapshots sind byteidentisch (`312332B7255665F10D69567A3113CF5CBC207395F3C3470E79B6C37265E5F475`); 5.293/5.294 Referenzen sind aufgelöst, der einzelne fehlende Object-Verweis ist ein sichtbarer Kompatibilitätsfall
 - atomarer, inkrementeller Runtimeimport mit kanonischen IDs/Pfaden, SHA-256, Overlayherkunft, Importerversion, Artefakten, Abhängigkeiten und typisierten Fallbacks
 - zwei unabhängige Frischimporte sowie ein 25.682/25.682-Cachelauf erzeugten dasselbe kanonische Manifest; Details stehen in `docs/CONTENT-PIPELINE.md`
 - typisierte UV-, Environment-, Classic-Environment-, Linear-Offset- und Grid-Mapper; positive und negative Geschwindigkeiten sowie beide Stage-Slots werden deterministisch ausgewertet
@@ -56,6 +58,7 @@ dotnet run --project tools/CnCNew.AssetTool -- audit-dependencies .local/content
 dotnet run --project tools/CnCNew.AssetTool -- runtime-import .local/game-original .local/phase2-import-a
 dotnet run --project tools/CnCNew.AssetTool -- verify .local/phase2-import-a
 dotnet run --project tools/CnCNew.IniTool -- audit .local/content
+dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a .local/phase3-definitions.json
 dotnet run --project tools/CnCNew.ImageTool -- audit-tga .local/content
 dotnet run --project tools/CnCNew.W3dTool -- audit .local/content
 dotnet run --project tools/CnCNew.W3dTool -- inspect .local/content Art/W3D/ABArFrcCmd.W3D
@@ -71,4 +74,8 @@ Der Stride-Assetcompiler 4.3.0.2507 bringt derzeit einige von NuGet als verwundb
 Der EA-Quellcode und die Community-Projekte stehen unter GPLv3 mit jeweils zu prüfenden Zusatzbedingungen. Markenrechte und Rechte an den ausgelieferten Medien/Assets werden dadurch nicht übertragen. Da dieses Projekt derzeit ausschließlich lokal verwendet wird, werden keine Original-Assets verteilt.
 
 BIG-Dateien sind ausschließlich Eingabe für den einmaligen lokalen Import. Das neue Spiel liest zur Laufzeit normale Dateien aus `.local/content`; `content-manifest.json` hält die gewählte Overlay-Quelle und alle verdrängten Varianten nachvollziehbar fest.
+
+Der typisierte Definitionsvertrag, Include-/Overlayregeln und das Snapshotformat stehen in
+`docs/TYPED-DEFINITIONS.md`; die vollständige, nicht stille Phase-3-Kompatibilitätsstufe steht in
+`docs/PHASE3-COMPATIBILITY.md`.
 

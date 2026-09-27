@@ -14,7 +14,14 @@ Importeroptionen, Artefakte, Abhängigkeiten und typisierte Fallbacks. Schema 1 
 ein sichtbarer Migrationslesepfad. Logische Pfade und Windows-sichere physische Namen bleiben
 getrennt. Der vollständige Vertrag steht in `docs/CONTENT-PIPELINE.md`.
 
-4. `CnCNew.Data` übersetzt INI-Definitionen in validierte, unveränderliche Templates.
+4. `CnCNew.Data` übersetzt INI-Syntax über einen runtimepfadbasierten `IDefinitionSource` in den
+   unveränderlichen `CompiledDefinitionGraph`. Includes, Bedingungen, Overlayvererbung und
+   Add/Remove/ReplaceModule werden vor der Vertragsgrenze ausgewertet. Definitionen besitzen
+   stabile typisierte IDs, Einheitenwerte, Modulkonfigurationen, Quellpositionen und validierte
+   Referenzkanten; `IniNode` verlässt den Compiler nicht. `ModuleRegistry` bindet Namen ohne
+   Reflection an Besitzerarten, Schema und Factory. Kanonische Snapshots und jede noch nicht
+   implementierte Semantik sind reproduzierbar auditierbar. Details stehen in
+   `docs/TYPED-DEFINITIONS.md` und `docs/PHASE3-COMPATIBILITY.md`.
 5. `CnCNew.W3D` validiert Chunkbäume und decodiert Meshgeometrie, Shaderzustände, Vertexmaterialien, Material-/Shader-IDs, DCG/DIG/SCG-Vertexfarben, Prelit-Varianten, Texturtabellen und UV-Zuordnungen unabhängig vom Renderer. Ein Renderplan gruppiert Dreiecke anhand ihrer vollständigen, geordneten Passzustände. Mapper werden aus Attributbits und streng validierten Argumenten zu rendererunabhängigen Typen kompiliert und aus expliziter Zeit deterministisch ausgewertet. Reparaturen bekannter Auslieferungsschäden erfolgen ausschließlich im Arbeitsspeicher und werden anschließend erneut vollständig validiert.
 6. `CnCNew.Images` decodiert Legacy-Bildformate, die Stride nicht direkt unterstützt. Der TGA-Pfad verarbeitet die ausgelieferten unkomprimierten und RLE-komprimierten 24-/32-Bit-Dateien zu normalisiertem RGBA.
 7. `CnCNew.Simulation` verwaltet Welt, Objekte, Behaviors, Befehle und festen Tick.
