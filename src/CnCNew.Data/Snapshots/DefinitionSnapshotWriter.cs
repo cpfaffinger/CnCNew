@@ -28,10 +28,12 @@ public static class DefinitionSnapshotWriter
                     field.Name, kind = field.Value.Kind.ToString(), value = CanonicalValue(field.Value), original = field.Value.OriginalText,
                     source = new { path = field.Location.Source.Replace('\\', '/'), field.Location.Line, field.Location.Column }
                 }),
+                sections = value.Sections.Select(CanonicalSection),
                 modules = value.Modules.Select(module => new
                 {
                     module.Name, module.Tag, owner = module.OwnerKind.ToString(),
-                    fields = module.Fields.OrderBy(field => field.Name, StringComparer.Ordinal).Select(field => new { field.Name, kind = field.Value.Kind.ToString(), value = CanonicalValue(field.Value), original = field.Value.OriginalText })
+                    fields = module.Fields.OrderBy(field => field.Name, StringComparer.Ordinal).Select(field => new { field.Name, kind = field.Value.Kind.ToString(), value = CanonicalValue(field.Value), original = field.Value.OriginalText }),
+                    sections = module.Sections.IsDefault ? [] : module.Sections.Select(CanonicalSection)
                 })
             }),
             references = graph.References.Select(edge => new { source = edge.Source.ToString(), edge.Field, targetKind = edge.Target.Kind.ToString(), edge.Target.Name, edge.Resolved, edge.Fallback }),
@@ -39,6 +41,14 @@ public static class DefinitionSnapshotWriter
         };
         return JsonSerializer.SerializeToUtf8Bytes(model, Options);
     }
+
+    private static object CanonicalSection(DefinitionSection section) => new
+    {
+        section.Declaration,
+        fields = section.Fields.OrderBy(field => field.Name, StringComparer.Ordinal).Select(field => new { field.Name, kind = field.Value.Kind.ToString(), value = CanonicalValue(field.Value), original = field.Value.OriginalText }),
+        children = section.Children.Select(CanonicalSection),
+        source = new { path = section.Location.Source.Replace('\\', '/'), section.Location.Line, section.Location.Column },
+    };
 
     private static object CanonicalValue(DefinitionValue value) => value.Value switch
     {

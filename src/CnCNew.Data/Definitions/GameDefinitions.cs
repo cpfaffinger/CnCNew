@@ -9,7 +9,16 @@ public abstract record GameDefinition(
     string OriginalName,
     IniSourceLocation Location,
     ImmutableArray<DefinitionField> Fields,
-    ImmutableArray<ModuleConfiguration> Modules);
+    ImmutableArray<ModuleConfiguration> Modules)
+{
+    public ImmutableArray<DefinitionSection> Sections { get; init; } = [];
+}
+
+public sealed record DefinitionSection(
+    string Declaration,
+    ImmutableArray<DefinitionField> Fields,
+    ImmutableArray<DefinitionSection> Children,
+    IniSourceLocation Location);
 
 public sealed record ObjectDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);

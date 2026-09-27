@@ -79,6 +79,7 @@ public static class DefinitionCompiler
                 var inherited = ResolveBase(states, kind, declaration, block.Location);
                 var fields = inherited?.Fields.ToList() ?? [];
                 var configs = inherited?.Modules.ToList() ?? [];
+                var sections = inherited?.Sections.ToList() ?? [];
                 var children = SelectActive(block.Children, options.Conditions, document.Source).ToArray();
 
                 foreach (var property in children.OfType<IniProperty>())
@@ -92,7 +93,9 @@ public static class DefinitionCompiler
                 }
 
                 ApplyModules(children, kind, configs, modules, options, unknownModules, diagnostics, ref keyCount, ref moduleCount);
-                states[id] = new DefinitionState(kind, name, block.Location, fields.ToImmutableArray(), configs.ToImmutableArray());
+                foreach (var sectionBlock in children.OfType<IniBlock>().Where(value => !IsDefinitionControlBlock(ParseDeclaration(value.Declaration, value.Location).Type)))
+                    sections.Add(CompileSection(sectionBlock, options.Conditions, ref keyCount));
+                states[id] = new DefinitionState(kind, name, block.Location, fields.ToImmutableArray(), configs.ToImmutableArray(), sections.ToImmutableArray());
             }
         }
 
@@ -101,7 +104,7 @@ public static class DefinitionCompiler
         var byId = definitions.ToDictionary(value => value.Id);
         var references = new List<DefinitionReferenceEdge>();
         foreach (var definition in definitions)
-        foreach (var field in definition.Fields)
+        foreach (var (fieldPath, field) in EnumerateFields(definition))
         {
             if (field.Value.Kind != DefinitionValueKind.Reference) continue;
             var fieldReferences = field.Value.Value switch
@@ -118,7 +121,7 @@ public static class DefinitionCompiler
                 var fallback = resolved ? null : "compatibility-unresolved-reference";
                 if (!resolved && options.StrictReferences)
                     throw new DefinitionCompileException($"Missing {reference.Kind} reference '{reference.Name}' in '{definition.Id}'.", field.Location);
-                references.Add(new DefinitionReferenceEdge(definition.Id, field.Name, reference, field.Location, resolved, fallback));
+                references.Add(new DefinitionReferenceEdge(definition.Id, fieldPath, reference, field.Location, resolved, fallback));
             }
         }
 
@@ -274,6 +277,10 @@ public static class DefinitionCompiler
             fieldBuilder.Add(new DefinitionField(property.Name, DefinitionValueParser.Parse(property.Name, property.Value, property.Location), property.Location));
         }
         var fields = fieldBuilder.ToImmutable();
+        var sectionBuilder = ImmutableArray.CreateBuilder<DefinitionSection>();
+        foreach (var child in block.Children.OfType<IniBlock>())
+            sectionBuilder.Add(CompileSection(child, options.Conditions, ref keyCount));
+        var sections = sectionBuilder.ToImmutable();
         if (!registry.TryGet(declaration.Name, out var descriptor))
         {
             CountCompatibility(compatibility, declaration.Name, owner.ToString(), "Phase 4/5 simulation module implementation");
@@ -295,7 +302,7 @@ public static class DefinitionCompiler
                     throw new DefinitionCompileException($"Module field '{field.Name}' expects {schema.Kind}, got {field.Value.Kind}.", field.Location);
             }
         }
-        return new ModuleConfiguration(declaration.Name, declaration.Tag, owner, fields, block.Location);
+        return new ModuleConfiguration(declaration.Name, declaration.Tag, owner, fields, block.Location, sections);
     }
 
     private static DefinitionState? ResolveBase(Dictionary<DefinitionId, DefinitionState> states, DefinitionKind kind, Declaration declaration, IniSourceLocation location)
@@ -313,7 +320,7 @@ public static class DefinitionCompiler
     private static GameDefinition CreateDefinition(DefinitionState state)
     {
         var id = new DefinitionId(state.Kind, state.Name);
-        return state.Kind switch
+        GameDefinition definition = state.Kind switch
         {
             DefinitionKind.Object => new ObjectDefinition(id, state.Name, state.Location, state.Fields, state.Modules),
             DefinitionKind.Weapon => new WeaponDefinition(id, state.Name, state.Location, state.Fields, state.Modules),
@@ -338,6 +345,45 @@ public static class DefinitionCompiler
             DefinitionKind.GameData or DefinitionKind.GlobalData => new GlobalDataDefinition(id, state.Name, state.Location, state.Fields, state.Modules),
             _ => new CompatibilityDefinition(id, state.Name, state.Location, state.Fields, state.Modules),
         };
+        return definition with { Sections = state.Sections };
+    }
+
+    private static DefinitionSection CompileSection(IniBlock block, ImmutableHashSet<string> conditions, ref int keyCount)
+    {
+        var active = SelectActive(block.Children, conditions, block.Location.Source).ToArray();
+        var fields = ImmutableArray.CreateBuilder<DefinitionField>();
+        foreach (var property in active.OfType<IniProperty>())
+        {
+            keyCount++;
+            fields.Add(new DefinitionField(property.Name, DefinitionValueParser.Parse(property.Name, property.Value, property.Location), property.Location));
+        }
+        var children = ImmutableArray.CreateBuilder<DefinitionSection>();
+        foreach (var nested in active.OfType<IniBlock>()) children.Add(CompileSection(nested, conditions, ref keyCount));
+        return new DefinitionSection(block.Declaration, fields.ToImmutable(), children.ToImmutable(), block.Location);
+    }
+
+    private static IEnumerable<(string Path, DefinitionField Field)> EnumerateFields(GameDefinition definition)
+    {
+        foreach (var field in definition.Fields) yield return (field.Name, field);
+        for (var index = 0; index < definition.Sections.Length; index++)
+            foreach (var result in EnumerateSectionFields(definition.Sections[index], $"section[{index}]")) yield return result;
+        for (var moduleIndex = 0; moduleIndex < definition.Modules.Length; moduleIndex++)
+        {
+            var module = definition.Modules[moduleIndex];
+            var prefix = $"module[{moduleIndex}]:{module.Tag}";
+            foreach (var field in module.Fields) yield return ($"{prefix}/{field.Name}", field);
+            if (module.Sections.IsDefault) continue;
+            for (var sectionIndex = 0; sectionIndex < module.Sections.Length; sectionIndex++)
+                foreach (var result in EnumerateSectionFields(module.Sections[sectionIndex], $"{prefix}/section[{sectionIndex}]")) yield return result;
+        }
+    }
+
+    private static IEnumerable<(string Path, DefinitionField Field)> EnumerateSectionFields(DefinitionSection section, string prefix)
+    {
+        var path = $"{prefix}:{section.Declaration}";
+        foreach (var field in section.Fields) yield return ($"{path}/{field.Name}", field);
+        for (var index = 0; index < section.Children.Length; index++)
+            foreach (var result in EnumerateSectionFields(section.Children[index], $"{path}/section[{index}]")) yield return result;
     }
 
     private static bool TryMapKind(string type, out DefinitionKind kind)
@@ -385,6 +431,10 @@ public static class DefinitionCompiler
     private static bool IsModuleBlock(string type) => type.Equals("Behavior", StringComparison.OrdinalIgnoreCase)
         || type.Equals("Draw", StringComparison.OrdinalIgnoreCase) || type.Equals("Body", StringComparison.OrdinalIgnoreCase)
         || type.Equals("ClientUpdate", StringComparison.OrdinalIgnoreCase) || type.Equals("InheritableModule", StringComparison.OrdinalIgnoreCase);
+    private static bool IsDefinitionControlBlock(string type) => IsModuleBlock(type)
+        || type.Equals("AddModule", StringComparison.OrdinalIgnoreCase)
+        || type.Equals("ReplaceModule", StringComparison.OrdinalIgnoreCase)
+        || type.Equals("RemoveModule", StringComparison.OrdinalIgnoreCase);
     private static bool IsInclude(string text) => text.StartsWith("#include ", StringComparison.OrdinalIgnoreCase) || text.StartsWith("include ", StringComparison.OrdinalIgnoreCase);
     private static string ParseInclude(string text, IniSourceLocation location)
     {
@@ -415,6 +465,6 @@ public static class DefinitionCompiler
     private static CompatibilityEntry ToEntry(string category, KeyValuePair<string, CompatibilityCounter> pair)
         => new(category, pair.Key, pair.Value.Count, pair.Value.Owners.Order(StringComparer.Ordinal).ToImmutableArray(), pair.Value.Target);
     private sealed record Declaration(string Type, string? Name, string? Parent);
-    private sealed record DefinitionState(DefinitionKind Kind, string Name, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules);
+    private sealed record DefinitionState(DefinitionKind Kind, string Name, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules, ImmutableArray<DefinitionSection> Sections);
     private sealed class CompatibilityCounter(string target) { public int Count { get; set; } public HashSet<string> Owners { get; } = new(StringComparer.Ordinal); public string Target { get; } = target; }
 }

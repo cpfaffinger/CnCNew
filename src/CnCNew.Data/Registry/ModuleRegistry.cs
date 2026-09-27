@@ -6,7 +6,13 @@ namespace CnCNew.Data.Registry;
 
 public enum ModuleOwnerKind { Object, Fx, Global }
 public sealed record ModuleFieldSchema(string Name, DefinitionValueKind Kind, bool Required = false);
-public sealed record ModuleConfiguration(string Name, string Tag, ModuleOwnerKind OwnerKind, ImmutableArray<DefinitionField> Fields, IniSourceLocation Location);
+public sealed record ModuleConfiguration(
+    string Name,
+    string Tag,
+    ModuleOwnerKind OwnerKind,
+    ImmutableArray<DefinitionField> Fields,
+    IniSourceLocation Location,
+    ImmutableArray<DefinitionSection> Sections = default);
 public sealed record ModuleDescriptor(
     string Name,
     ImmutableHashSet<ModuleOwnerKind> AllowedOwners,

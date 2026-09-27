@@ -128,7 +128,7 @@ public static class DefinitionValueParser
             "locomotor" => DefinitionKind.Locomotor,
             "experiencelevel" => DefinitionKind.ExperienceLevel,
             "specialpower" or "specialpowertemplate" => DefinitionKind.SpecialPower,
-            "playertemplate" => DefinitionKind.Player,
+            "playertemplate" => DefinitionKind.Faction,
             _ => DefinitionKind.Compatibility,
         };
         return kind != DefinitionKind.Compatibility;

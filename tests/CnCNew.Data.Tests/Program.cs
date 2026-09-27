@@ -69,6 +69,10 @@ static void InheritanceOverridesAndModuleMutations()
     End
     Object Child : Base
       Cost = 20
+      WeaponSet
+        Conditions = None
+        Weapon = PRIMARY DemoGun
+      End
       RemoveModule RemoveMe
       ReplaceModule Keep
         Behavior = ActiveBody Replaced
@@ -86,6 +90,7 @@ static void InheritanceOverridesAndModuleMutations()
     var child = graph.Definitions.OfType<ObjectDefinition>().Single(value => value.OriginalName == "Child");
     Assert(((Money)child.Fields.Single().Value.Value).Value == 20, "Inherited field override failed.");
     Assert(child.Modules.Select(value => value.Tag).SequenceEqual(["Replaced", "Added"]), "Module mutation order failed.");
+    Assert(child.Sections.Single().Declaration == "WeaponSet" && child.Sections.Single().Fields.Length == 2, "Nested typed section was not retained.");
 }
 
 static void ConditionsSelectDeterministically()
