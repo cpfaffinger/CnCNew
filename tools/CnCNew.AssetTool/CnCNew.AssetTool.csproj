@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/CnCNew.Archives/CnCNew.Archives.csproj" />
+    <ProjectReference Include="../../src/CnCNew.IO/CnCNew.IO.csproj" />
+  </ItemGroup>
+</Project>
+

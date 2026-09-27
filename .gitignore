@@ -1,0 +1,10 @@
+.local/
+references/
+artifacts/
+bin/
+obj/
+.idea/
+.vs/
+*.user
+*.suo
+

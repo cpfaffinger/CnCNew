@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "stride.cli": {
+      "version": "1.0.3",
+      "commands": [
+        "stride"
+      ],
+      "rollForward": false
+    }
+  }
+}
+

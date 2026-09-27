@@ -1,0 +1,26 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CnCNew.Archives/CnCNew.Archives.csproj" />
+    <Project Path="src/CnCNew.Client.Stride/CnCNew.Client.Stride.csproj" />
+    <Project Path="src/CnCNew.Content/CnCNew.Content.csproj" />
+    <Project Path="src/CnCNew.Data/CnCNew.Data.csproj" />
+    <Project Path="src/CnCNew.IO/CnCNew.IO.csproj" />
+    <Project Path="src/CnCNew.Images/CnCNew.Images.csproj" />
+    <Project Path="src/CnCNew.W3D/CnCNew.W3D.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/CnCNew.AssetTool/CnCNew.AssetTool.csproj" />
+    <Project Path="tools/CnCNew.IniTool/CnCNew.IniTool.csproj" />
+    <Project Path="tools/CnCNew.ImageTool/CnCNew.ImageTool.csproj" />
+    <Project Path="tools/CnCNew.W3dTool/CnCNew.W3dTool.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CnCNew.Archives.Tests/CnCNew.Archives.Tests.csproj" />
+    <Project Path="tests/CnCNew.Content.Tests/CnCNew.Content.Tests.csproj" />
+    <Project Path="tests/CnCNew.Data.Tests/CnCNew.Data.Tests.csproj" />
+    <Project Path="tests/CnCNew.IO.Tests/CnCNew.IO.Tests.csproj" />
+    <Project Path="tests/CnCNew.Images.Tests/CnCNew.Images.Tests.csproj" />
+    <Project Path="tests/CnCNew.W3D.Tests/CnCNew.W3D.Tests.csproj" />
+  </Folder>
+</Solution>
+
