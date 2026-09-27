@@ -5,6 +5,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Archives/CnCNew.Archives.csproj" />
     <ProjectReference Include="../../src/CnCNew.IO/CnCNew.IO.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Import/CnCNew.Import.csproj" />
   </ItemGroup>
 </Project>
 

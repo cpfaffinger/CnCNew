@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using CnCNew.Archives;
 using CnCNew.IO;
+using CnCNew.Import;
+using CnCNew.Content;
 
 return await AssetTool.RunAsync(args);
 
@@ -19,6 +21,10 @@ internal static class AssetTool
                 ["extract-all", var source, var destination] => await ExtractAllAsync(source, destination),
                 ["inventory", var source, var output] => await InventoryAsync(source, output),
                 ["materialize", var source, var destination] => await MaterializeAsync(source, destination),
+                ["runtime-import", var source, var destination] => await RuntimeImportAsync(source, destination),
+                ["verify", var content] => await VerifyAsync(content),
+                ["audit-formats", var content] => AuditFormats(content),
+                ["audit-dependencies", var content] => AuditDependencies(content),
                 _ => PrintUsage(),
             };
         }
@@ -153,6 +159,63 @@ internal static class AssetTool
         return 0;
     }
 
+    private static async Task<int> RuntimeImportAsync(string sourceDirectory, string destinationDirectory)
+    {
+        var lastReported = -1;
+        var progress = new Progress<ImportProgress>(value =>
+        {
+            var percent = value.Total == 0 ? 100 : value.Processed * 100 / value.Total;
+            if (percent != lastReported && percent % 5 == 0)
+            {
+                lastReported = percent;
+                Console.WriteLine($"import: {percent,3}% ({value.Processed}/{value.Total}) {value.VirtualPath}");
+            }
+        });
+        var result = await RuntimeContentImporter.ImportAsync(sourceDirectory, destinationDirectory, progress);
+        Console.WriteLine($"Published schema {result.Manifest.SchemaVersion} with {result.Manifest.Assets.Count} assets; " +
+                          $"cache hits {result.CacheHits}, written {result.WrittenFiles}.");
+        foreach (var group in result.TypeCounts.OrderBy(value => value.Key, StringComparer.Ordinal))
+            Console.WriteLine($"{group.Value,7}  {group.Key}");
+        return 0;
+    }
+
+    private static async Task<int> VerifyAsync(string contentDirectory)
+    {
+        var content = ContentFileSystem.Open(contentDirectory);
+        await content.VerifyIntegrityAsync();
+        Console.WriteLine($"Verified {content.FileCount} runtime files against size and SHA-256 metadata.");
+        return 0;
+    }
+
+    private static int AuditFormats(string contentDirectory)
+    {
+        var content = ContentFileSystem.Open(contentDirectory);
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var processed = 0;
+        foreach (var path in content.EnumerateFiles())
+        {
+            using var stream = content.OpenRead(path);
+            RuntimeContentImporter.ValidateAsset(path, stream);
+            var type = CnCNew.Formats.AssetFormat.Classify(path).Type;
+            counts[type] = counts.GetValueOrDefault(type) + 1;
+            processed++;
+        }
+        foreach (var group in counts.OrderBy(value => value.Key, StringComparer.Ordinal))
+            Console.WriteLine($"{group.Value,7}  {group.Key}");
+        Console.WriteLine($"Validated {processed} materialized assets.");
+        return 0;
+    }
+
+    private static int AuditDependencies(string contentDirectory)
+    {
+        var content = ContentFileSystem.Open(contentDirectory);
+        var result = RuntimeContentImporter.AuditDependencies(content);
+        Console.WriteLine($"Audited {result.AssetCount} assets: {result.Resolved} resolved references, {result.Fallbacks} explicit fallbacks.");
+        foreach (var fallback in result.FallbackCounts.OrderBy(value => value.Key, StringComparer.Ordinal))
+            Console.WriteLine($"{fallback.Value,7}  fallback:{fallback.Key}");
+        return 0;
+    }
+
     private static async Task<(long Bytes, string Sha256)> CopyAndHashAsync(Stream input, Stream output)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -224,6 +287,10 @@ internal static class AssetTool
         Console.Error.WriteLine("  CnCNew.AssetTool extract-all <game-directory> <destination>");
         Console.Error.WriteLine("  CnCNew.AssetTool inventory <directory> <manifest.json>");
         Console.Error.WriteLine("  CnCNew.AssetTool materialize <game-directory> <content-directory>");
+        Console.Error.WriteLine("  CnCNew.AssetTool runtime-import <game-directory> <content-directory>");
+        Console.Error.WriteLine("  CnCNew.AssetTool verify <content-directory>");
+        Console.Error.WriteLine("  CnCNew.AssetTool audit-formats <content-directory>");
+        Console.Error.WriteLine("  CnCNew.AssetTool audit-dependencies <content-directory>");
         return 2;
     }
 

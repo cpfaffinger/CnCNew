@@ -4,8 +4,10 @@
     <Project Path="src/CnCNew.Client.Stride/CnCNew.Client.Stride.csproj" />
     <Project Path="src/CnCNew.Content/CnCNew.Content.csproj" />
     <Project Path="src/CnCNew.Data/CnCNew.Data.csproj" />
+    <Project Path="src/CnCNew.Formats/CnCNew.Formats.csproj" />
     <Project Path="src/CnCNew.IO/CnCNew.IO.csproj" />
     <Project Path="src/CnCNew.Images/CnCNew.Images.csproj" />
+    <Project Path="src/CnCNew.Import/CnCNew.Import.csproj" />
     <Project Path="src/CnCNew.W3D/CnCNew.W3D.csproj" />
   </Folder>
   <Folder Name="/tools/">
@@ -20,6 +22,8 @@
     <Project Path="tests/CnCNew.Data.Tests/CnCNew.Data.Tests.csproj" />
     <Project Path="tests/CnCNew.IO.Tests/CnCNew.IO.Tests.csproj" />
     <Project Path="tests/CnCNew.Images.Tests/CnCNew.Images.Tests.csproj" />
+    <Project Path="tests/CnCNew.Formats.Tests/CnCNew.Formats.Tests.csproj" />
+    <Project Path="tests/CnCNew.Import.Tests/CnCNew.Import.Tests.csproj" />
     <Project Path="tests/CnCNew.W3D.Tests/CnCNew.W3D.Tests.csproj" />
   </Folder>
 </Solution>

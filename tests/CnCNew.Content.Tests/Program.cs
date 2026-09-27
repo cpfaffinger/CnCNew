@@ -33,6 +33,24 @@ try
     using var reader = new StreamReader(stream, Encoding.UTF8);
     Assert(await reader.ReadToEndAsync() == "value", "Materialized payload mismatch.");
 
+    var runtimeAsset = new RuntimeAsset(
+        ContentPath.ToAssetId("Data/INI/GameData.ini"), "Data/INI/GameData.ini", "sage/ini", new string('a', 64), bytes,
+        new RuntimeOrigin("big:INI.big", 0, [new RuntimeCandidate(0, "big:INI.big", bytes)]),
+        [new RuntimeDependency("asset://art/textures/test.dds", "direct", "fallback", "visible-magenta-texture")],
+        [new RuntimeArtifact("Data/INI/GameData.ini", new string('a', 64), bytes)], []);
+    var versioned = new RuntimeContentManifest(2, new RuntimeImporter("test", "1", new Dictionary<string, string> { ["z"] = "2", ["a"] = "1" }), [runtimeAsset]);
+    var canonical1 = RuntimeManifestSerializer.WriteCanonical(versioned);
+    var canonical2 = RuntimeManifestSerializer.WriteCanonical(versioned with
+    {
+        Importer = versioned.Importer with { Options = new Dictionary<string, string> { ["a"] = "1", ["z"] = "2" } },
+    });
+    Assert(canonical1.SequenceEqual(canonical2), "Canonical serialization depends on dictionary insertion order.");
+    ExpectInvalid(() => RuntimeManifestSerializer.WriteCanonical(versioned with { SchemaVersion = 99 }), "Unknown schema accepted.");
+    ExpectInvalid(() => RuntimeManifestSerializer.WriteCanonical(versioned with
+    {
+        Assets = [runtimeAsset, runtimeAsset with { VirtualPath = "data/ini/gamedata.ini", Id = ContentPath.ToAssetId("data/ini/gamedata.ini") }],
+    }), "Case collision accepted.");
+
     Console.WriteLine("All direct content file-system tests passed.");
     return 0;
 }
@@ -47,4 +65,10 @@ static void Assert(bool condition, string message)
     {
         throw new InvalidOperationException(message);
     }
+}
+
+static void ExpectInvalid(Action action, string message)
+{
+    try { action(); throw new InvalidOperationException(message); }
+    catch (InvalidDataException) { }
 }
