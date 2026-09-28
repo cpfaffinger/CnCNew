@@ -4781,7 +4781,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 7210,
+      "count": 7001,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5685,15 +5685,6 @@
       "category": "module",
       "name": "FireWeaponWhenDamagedBehavior",
       "count": 8,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "FireWeaponWhenDeadBehavior",
-      "count": 209,
       "owners": [
         "Object"
       ],

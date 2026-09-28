@@ -289,6 +289,13 @@ public static class ModuleCatalog
             new("FlingPitch", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
             new("FlingPitchVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
         ]);
+        Add("FireWeaponWhenDeadBehavior",
+        [
+            ..DieMux(),
+            ..UpgradeMux(),
+            new("StartsActive", FieldType.Bool, Source: "FireWeaponWhenDeadBehavior.h"),
+            new("DeathWeapon", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDeadBehavior.h"),
+        ]);
 
         return builder.ToImmutable();
     }
