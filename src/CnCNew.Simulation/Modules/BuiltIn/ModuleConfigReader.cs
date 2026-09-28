@@ -21,6 +21,7 @@ internal static class ModuleConfigReader
             decimal number => Fixed.FromDecimal(number),
             long integer => Fixed.FromInt(integer),
             Distance distance => Fixed.FromDecimal(distance.Value),
+            Percentage percentage => Fixed.FromDecimal(percentage.Ratio),
             Money money => Fixed.FromInt(money.Value),
             CompatibilityValue compatibility => Fixed.FromDecimal(decimal.Parse(compatibility.NormalizedValue, System.Globalization.CultureInfo.InvariantCulture)),
             _ => throw Unexpected(configuration, field),
