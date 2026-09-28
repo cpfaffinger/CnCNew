@@ -117,6 +117,37 @@ ausgeführt, neue Module (`StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade
   Original synchron bleibt (Test: `Tests.Phase5FearSoundRng`, vergleicht den Rohzustand des `logic`-Streams vor/nach).
 - **Bekannte Lücken:** keine Erfahrungs-/Veteranenvergabe aus Treffern, keine `IS_FIRING_WEAPON`/Retaliate-Logik.
 
+### Schadenszustände, Brand, Gift und Tod (die nächsten Blockermodule)
+
+- **Schadenszustände** (`ActiveBody.CalcDamageState`): `PRISTINE`/`DAMAGED`/`REALLYDAMAGED`/`RUBBLE` nach dem
+  Gesundheitsverhältnis gegen `GameData.ini`s `UnitDamagedThreshold`/`UnitReallyDamagedThreshold` (Retail-Standard
+  0,7/0,35 ohne `GameData`-Block). `TransitionDamageFX` fordert beim Wechsel in einen **schlechteren** Zustand die
+  passende `DamagedOCL`/`ReallyDamagedOCL`/`RubbleOCL` an (`CreationListRequested`-Event), aber nur mit auflösbarer
+  Schadensquelle (`DamageInfo.Source` gültig) – die zugehörigen FX-Listen und Partikelsysteme sind reine Präsentation.
+- **`FlammableUpdate`:** Flammenschaden (`DAMAGE_FLAME`/`DAMAGE_PARTICLE_BEAM`) sammelt sich gegen `FlameDamageLimit`
+  (verfällt nach `FlameDamageExpiration` ohne neuen Treffer); ist das Limit erreicht, setzt `AFLAME`, schädigt
+  periodisch (`AflameDamageDelay`/`AflameDamageAmount`), wird nach `BurnedDelay` dauerhaft `BURNED` und löscht sich
+  nach `AflameDuration` (außer es ist bereits `BURNED` – dann bleibt es aus, kann aber nicht neu entzündet werden).
+- **`PoisonedBehavior`:** ein `DAMAGE_POISON`-Treffer merkt sich den tatsächlich zugefügten Schaden
+  (`IDamageModule.OnDamage`s `actualDamageDealt`) und wendet ihn alle `PoisonDamageInterval` erneut an (als
+  `DAMAGE_UNRESISTABLE`, nicht wieder `DAMAGE_POISON` – sonst würde jeder Tick die Vergiftung neu starten), bis
+  `PoisonDuration` abgelaufen ist. Eine erneute Vergiftung während des Zyklus verlängert die Dauer, verschiebt den
+  nächsten Tick aber nur nach vorne, nie nach hinten. Heilung (`IDamageModule.OnHealing`, neu: feuert nur, wenn die
+  Gesundheit tatsächlich gestiegen ist, wortgetreu zu `ActiveBody::attemptHealing`) heilt die Vergiftung vollständig.
+- **`SlowDeathBehavior`:** beim passenden Tod treten alle zutreffenden Geschwister-Module (bis zu sieben pro Objekt in
+  echten Daten) in eine gewichtete Lotterie (`ProbabilityModifier`, mindestens 1); nur das Gewinnermodul plant die
+  verzögerte Zerstörung (`DestructionDelay`/`-Variance`). `Entity.SlowDeathStarted` verallgemeinert die
+  Original-Sperre (die dort ein `AIUpdateInterface` voraussetzt) auf jede Entität. Absichtlich nicht modelliert:
+  Überkill-Bonus (braucht den tatsächlichen Schaden am Todesschlag, noch nicht durch `OnDie` durchgereicht), Physik
+  beim Wegschleudern, LOD-Zeitskalierung, die 3-Phasen-Zufallseffektlisten.
+- **`FireWeaponWhenDeadBehavior`:** feuert `DeathWeapon` beim passenden Tod, sobald aktiv (`StartsActive` oder ein
+  passendes `TriggeredBy`-Upgrade). Einzigartig unter den Upgrade-Modulen: `ConflictsWith` wird beim Tod noch einmal
+  geprüft, weil der `StartsActive`-Pfad nie durch die Aktivierungs-Konfliktprüfung lief (so funktionieren
+  ChemicalGenerals sich gegenseitig ausschließende Sprengsatz-Upgrades: der Standard startet aktiv, ein späteres
+  Konflikt-Upgrade bringt ihn zum Schweigen). Das Feuern selbst löst nur ein `WeaponFireRequested`-Event aus – echter
+  Flächenschaden an Umstehenden ist die bereits bestehende, projektweite Vereinfachung (`WeaponCatalog`: nur
+  Volltreffer, siehe oben).
+
 ## 4. Einfache Bewegung
 
 - `SetMoveTargetCommand` setzt `Entity.HasMoveTarget`/`MoveTargetX`/`MoveTargetY`; nur Objekte mit `AIUpdateInterface`
@@ -160,6 +191,14 @@ ausgeführt, neue Module (`StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade
   `ForbiddenKindOf`-Filter, `Radius` oder (`AffectsWholePlayer`) ohne Entfernungsprüfung, `SkipSelfForHealing`. Die
   Fähigkeit startet aktiv (`StartsActive`) oder wird durch ein Upgrade freigeschaltet (`IUpgradeModule`, derselbe
   `UpgradeMuxState` wie die `*Upgrade`-Module).
+- `StealthDetectorUpdate` durchsucht periodisch (`DetectionRate`) alle anderen Objekte nach einem gerade `STEALTHED`en,
+  gegnerischen, zum `KindOf`-Filter passenden Objekt innerhalb `DetectionRange` (Standard: `VisionRange` des eigenen
+  Templates) und markiert es `DETECTED` (`StealthUpdate.MarkDetected`: setzt das Bit, verlängert nie verkürzt seine
+  Ablaufzeit). `DETECTED` besteht neben `STEALTHED` (enttarnt es, ohne die Tarnung selbst aufzuheben) und läuft von
+  selbst ab, sobald nichts mehr nachmarkiert. **Bewusste Vereinfachung, projektweit vorbestehend:** ohne Team-/
+  Diplomatiesystem (§7) gilt „gleicher Besitzer = Verbündeter" statt einer echten Beziehungsprüfung; ohne
+  Garrison/Transport-System (`CanDetectWhileGarrisoned`/`CanDetectWhileContained` sind typisiert, aber wirkungslos,
+  ein Objekt ist nie „enthalten").
 
 ## 7. Sieg und Niederlage
 
@@ -175,9 +214,13 @@ Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle
 
 ## 9. Modulabdeckung
 
-Siehe `docs/SIMULATION-CORE.md` §11: 623 von 2.115 Objekten sind heute instanziierbar (29,5 %, gegenüber 26/2.113 in
-Phase 4); die verbleibenden Blocker (`FlammableUpdate`, `PhysicsBehavior`, `TransitionDamageFX`, `SlowDeathBehavior`,
-`GarrisonContain`, `CreateCrateDie`, `SquishCollide`, `PoisonedBehavior`, …) sind der Reststoff der Phase-5-Fortsetzung.
+Siehe `docs/SIMULATION-CORE.md` §11: 694 von 2.115 Objekten sind heute instanziierbar (32,8 %, gegenüber 26/2.113 in
+Phase 4 und 623/2.115 vor diesem Block). Nach einer frischen `audit-coverage`-Messung sind die größten verbleibenden
+Blocker nach Objekten, die **ausschließlich** noch an ihnen hängen: `GarrisonContain` (167 – braucht ein komplettes
+Containment-Subsystem), `PhysicsBehavior` (119 – braucht Terrain-/Kollisionsphysik, Phase 6), `SquishCollide` (2 –
+braucht dieselbe Physik), `TransportContain` (2 – dasselbe Containment-Subsystem). `CreateCrateDie` (0 allein –
+bräuchte einen neuen `Crate`-Katalog und eine Beziehungs-/Diplomatie-Prüfung für 0 sofortigen Nutzen) bleibt bewusst
+zurückgestellt; die Begründung steht in `Phase5BlockerModules`s Doc-Kommentar und `docs/HANDOFF-PHASE5.md`.
 
 ## 10. Bekannte Grenzen (Zusammenfassung)
 
@@ -188,7 +231,8 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
 - Keine Erfahrungs-/Veteranenvergabe aus Kämpfen (§3). Das Furchtsignal (Block 0.3) ist implementiert.
 - Keine drehratenbegrenzte Ausrichtung, kein Terrain, keine Pfadsuche, keine Kollision (§4).
 - Kein Energie-Verlangsamungsfaktor, keine Bauplatzprüfung, kein Rallypunkt (§5).
-- Der `STEALTHED`-Statusbit hat noch keinen Verbraucher (kein Sicht-/Zielsystem, §6).
+- Der `STEALTHED`-Statusbit hat noch keinen Verbraucher außer `StealthDetectorUpdate`s `DETECTED`-Markierung (kein
+  Zielsystem, das `DETECTED` auswertet, §6).
 - Keine Teams/Allianzen/Diplomatie als Datenmodell, keine `CommandSet`/`CommandButton`-Wirkung (reine Präsentation),
   kein Garrison/Transport/Supply/Radar/Reparatur/Verkauf (Rest von HANDOFF-PHASE5.md Punkt „Vollständiger Umfang").
   Sciences (Kauf, Voraussetzungen) sind implementiert; „Science Purchase Points" werden mangels Rang-/

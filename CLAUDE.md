@@ -92,15 +92,14 @@ Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern �
 Diesen Stil beibehalten. Für schnelle Wiederholung nach einem Build: `dotnet run --no-build`.
 
 Referenzwerte (Stand Phase 5, in Arbeit; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene INI-Dateien (28
-nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 15.508/17.054
-Referenzen aufgelöst (1.546 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 143.339.947 Byte, SHA-256
-`4741EDDF6F528AFB239E1644211332D4AE86915878E6E59C20EDF0B8C15E20C7`; Retail-Basisdaten (`--maps exclude`) 12.550
-Definitionen, 2.115 Objekte, SHA-256 `3F7F51B70CB161E8920051371A87D6A4641EFD53043956E5822E2A54FAED59C3` (Objektzahl
-geändert gegenüber Phase 4 durch eine Phase-5-Parserkorrektur, siehe `docs/PHASE3-COMPATIBILITY.md`).
-Modulkatalog 205 Typen (27 implementiert: 12 aus Phase 4, 15 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
-461 Einträge, Instanziierbarkeit 623 von 2.115 Objekten (29,5 %). Asset-Runtimebestand: 25.682 Dateien.
-Stresstest (216.000 Ticks, `SimTool stress`, mit allen 27 Modulen): Endhash `C75FD6C190386265`, Kettenhash
-`9C18E378454CB82C`.
+nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 15.724/17.270
+Referenzen aufgelöst (1.546 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 143.781.645 Byte, SHA-256
+`522CC08D0B4001D5B1398CAAA344849504509439E45435C2B014C347DA0E2DCC`; Retail-Basisdaten (`--maps exclude`) 12.550
+Definitionen, 2.115 Objekte, SHA-256 `BFFA27023F6F8FCB75FCEDCABB60A88DE11135C1750D9D2E686057DFFE41F9E9`.
+Modulkatalog 205 Typen (33 implementiert: 12 aus Phase 4, 21 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
+766 Einträge, Instanziierbarkeit 694 von 2.115 Objekten (32,8 %). Asset-Runtimebestand: 25.682 Dateien.
+Stresstest (216.000 Ticks, `SimTool stress`, mit allen 33 Modulen): Endhash `C75FD6C190386265`, Kettenhash
+`B9E345E0584BED48`.
 
 ## Code- und Dokumentationsstil
 

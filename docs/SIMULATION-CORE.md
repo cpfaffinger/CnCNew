@@ -136,9 +136,11 @@ Regeln:
 `CnCNew.Data` führt Deskriptoren ohne Factory (`ModuleDescriptor`: Name, Blockart, Interfacemaske, Besitzerarten,
 Feldschema, `CompatibilityOnly`, Zielphase, Kategorie); der Katalog enthält alle **205** Modultypen des Bestands (eine
 frühere Zählung von 206 enthielt das Phantommodul `ArmorSet`, entstanden aus einem in `Maps/MD_CHI03/map.ini` nie
-geschlossenen `AddModule`, dessen Felder das Original auf das Objekt anwendet). Phase 5 hat **27** dieser 205 Typen
-implementiert (12 aus Phase 4 plus 15 neue: `StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade`-Module,
-`AIUpdateInterface`, `ProductionUpdate` – siehe `docs/GAME-RULES.md` §3). `CnCNew.Simulation` besitzt die
+geschlossenen `AddModule`, dessen Felder das Original auf das Objekt anwendet). Phase 5 hat **33** dieser 205 Typen
+implementiert (12 aus Phase 4 plus 21 neue: `StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade`-Module,
+`AIUpdateInterface`, `ProductionUpdate`, `FlammableUpdate`, `TransitionDamageFX`, `SlowDeathBehavior`,
+`FireWeaponWhenDeadBehavior`, `StealthDetectorUpdate`, `PoisonedBehavior` – siehe `docs/GAME-RULES.md` §3/§6).
+`CnCNew.Simulation` besitzt die
 explizite, ordinal sortierte, reflexionsfreie Bindungstabelle `BuiltInModules.Bindings` (Name → `ModuleBinding<TData>` mit
 Parser und Factory) und `ModuleBindingTable` prüft sie beim Erzeugen gegen die Deskriptoren:
 
@@ -179,8 +181,9 @@ Grundlage: alle Moduleinträge der Basisobjekte im Retail-Bestand einschließlic
 
 Kriterium: höchste Häufigkeit unter den Modulen, die ohne weiteres Subsystem (Waffen, Bewegung, KI, Upgrades, Spieler)
 auskommen und Erzeugen, Ticken, Ereignisse, Sterben und Zerstören vollständig abdecken. `SlowDeathBehavior` (1.623) und
-`FlammableUpdate` (843) sind häufiger, brauchen aber Physik, Schaden über Zeit beziehungsweise Feuer und folgen mit
-Phase 5.
+`FlammableUpdate` (843) waren zu diesem Zeitpunkt häufiger, brauchten aber jeweils ein eigenes mechanisches Modell
+(gewichtete Sterbelotterie beziehungsweise Brand-/Schaden-über-Zeit-Zustandsmaschine) und folgten mit Phase 5 (siehe
+`docs/GAME-RULES.md` §3, Unterabschnitt „Schadenszustände, Brand, Gift und Tod").
 
 ### Semantik der implementierten Module
 
@@ -340,16 +343,22 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
-- **2.115 Objekte, 623 vollständig instanziierbar (29,5 %)**, 1.492 blockiert. Gegenüber Phase 4 (26/2.113, 1,2 %) ein
-  Sprung um den Faktor ~24, getragen von Block 0.2 (`StealthUpdate`, `AutoHealBehavior` – beide vom `DefaultThingTemplate`
-  geerbt und fast immer ruhend) und den elf `*Upgrade`-Modulen, `AIUpdateInterface` und `ProductionUpdate`.
-- Alle 623 instanziierbaren Objekte werden in einer Welt erzeugt, ticken 216.000 Ticks im Stresstest ohne Leck oder
+- **2.115 Objekte, 694 vollständig instanziierbar (32,8 %)**, 1.421 blockiert. Gegenüber Phase 4 (26/2.113, 1,2 %) ein
+  Sprung um den Faktor ~27, getragen von Block 0.2 (`StealthUpdate`, `AutoHealBehavior` – beide vom `DefaultThingTemplate`
+  geerbt und fast immer ruhend), den elf `*Upgrade`-Modulen, `AIUpdateInterface`, `ProductionUpdate` und den sechs
+  weiteren Blockermodulen dieses Abschnitts (`FlammableUpdate`, `TransitionDamageFX`, `SlowDeathBehavior`,
+  `FireWeaponWhenDeadBehavior` +3, `StealthDetectorUpdate` +9, `PoisonedBehavior` +0).
+- Alle 694 instanziierbaren Objekte werden in einer Welt erzeugt, ticken 216.000 Ticks im Stresstest ohne Leck oder
   Nichtdeterminismus (`SimTool stress`, §10) und laufen im Realdatentest identisch zweimal durch (Test `--content-dir`).
-- Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert): `FlammableUpdate` 845/15,
-  `PhysicsBehavior` 739/13, `TransitionDamageFX` 708/7, `SlowDeathBehavior` 616/13, `GarrisonContain` 200/2,
-  `CreateCrateDie` 184/0, `SquishCollide` 170/2, `PoisonedBehavior` 168/0, `FireWeaponWhenDeadBehavior` 127/1,
-  `StealthDetectorUpdate` 103/9. Die vollständige, tagesaktuelle Liste liefert das Werkzeug; sie ist die Reihenfolge für
-  die Fortsetzung von Phase 5 (siehe `docs/HANDOFF-PHASE5.md`).
+- Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert, nach einer frischen Messung):
+  `PhysicsBehavior` 739/119, `GarrisonContain` 200/167, `CreateCrateDie` 184/0, `SquishCollide` 170/2,
+  `SpecialAbility` 88/0, `TransportContain` 85/2, `CommandButtonHuntUpdate` 79/0, `ToppleUpdate` 76/66.
+  `GarrisonContain`/`TransportContain` brauchen ein komplettes Containment-Subsystem (Kapazität, Ein-/Aussteigen,
+  Garnisonspunkte); `PhysicsBehavior`/`SquishCollide` brauchen Terrain-/Kollisionsphysik (Phase 6); `CreateCrateDie`
+  bräuchte einen neuen `Crate`-Katalog und eine Beziehungs-/Diplomatieprüfung für 0 sofortigen Nutzen – alle drei sind
+  bewusst zurückgestellt (Begründung: `Phase5BlockerModules`-Doc-Kommentar, `docs/HANDOFF-PHASE5.md`). `ToppleUpdate`
+  (66 allein) ist frisch sichtbar geworden und noch nicht bewertet. Die vollständige, tagesaktuelle Liste liefert das
+  Werkzeug.
 
 ## 12. Bekannte Grenzen und technische Schulden
 
