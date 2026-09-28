@@ -74,6 +74,18 @@ public sealed class UpgradeMuxState(UpgradeMuxData data)
         return true;
     }
 
+    /// <summary>
+    /// <c>UpgradeMux::giveSelfUpgrade</c>: the constructor-time <c>StartsActive</c> path. Unlike <see cref="AttemptUpgrade"/>,
+    /// it bypasses the activation-mask gate entirely (there is no triggering upgrade yet) and unconditionally marks the
+    /// module executed. Idempotent: a module that is already executed is left alone.
+    /// </summary>
+    public void GiveSelfUpgrade(IWorldServices world, Action<IWorldServices> implementation)
+    {
+        if (Executed) return;
+        implementation(world);
+        Executed = true;
+    }
+
     public void Describe(IStateWriter writer) => writer.Bool("executed", Executed);
     public void Load(IStateReader reader) => Executed = reader.Bool("executed");
 }

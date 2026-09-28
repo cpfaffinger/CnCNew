@@ -6,6 +6,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -13,7 +14,12 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 
 /// <summary>
 /// The next wave of phase-5 blocker modules by frequency (<c>docs/HANDOFF-PHASE5.md</c>): <c>FlammableUpdate</c>,
-/// each verified against every real occurrence in <c>.local/phase2-import-a</c>.
+/// each verified against every real occurrence in <c>.local/phase2-import-a</c>. <c>FireWeaponWhenDeadBehavior</c> was
+/// reprioritized ahead of the originally listed <c>CreateCrateDie</c>/<c>PoisonedBehavior</c> after a fresh
+/// <c>audit-coverage</c> run showed both of those unlock zero currently-blocked objects on their own (every occurrence
+/// is also blocked by a still-missing module), while <c>GarrisonContain</c> (166 alone) and <c>PhysicsBehavior</c> (113
+/// alone) each require a substantial new subsystem (object containment; rigid-body/terrain physics) out of scope for a
+/// single blocker fix — see docs/HANDOFF-PHASE5.md for the updated ordering and rationale.
 /// </summary>
 internal static class Phase5BlockerModules
 {
@@ -22,6 +28,7 @@ internal static class Phase5BlockerModules
         new ModuleBinding<FlammableData>("FlammableUpdate", ModuleOwnerKind.Object, (configuration, _) => FlammableData.Parse(configuration), data => new FlammableUpdate(data)),
         new ModuleBinding<TransitionDamageFXData>("TransitionDamageFX", ModuleOwnerKind.Object, (configuration, _) => TransitionDamageFXData.Parse(configuration), data => new TransitionDamageFX(data)),
         new ModuleBinding<SlowDeathData>("SlowDeathBehavior", ModuleOwnerKind.Object, (configuration, _) => SlowDeathData.Parse(configuration), data => new SlowDeathBehavior(data)),
+        new ModuleBinding<FireWeaponWhenDeadData>("FireWeaponWhenDeadBehavior", ModuleOwnerKind.Object, FireWeaponWhenDeadData.Parse, data => new FireWeaponWhenDeadBehavior(data)),
     ];
 }
 
@@ -309,4 +316,61 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         _destructionTick = reader.Int("destructionTick");
         _nextWake = reader.Int("nextWake");
     }
+}
+
+// ===================================================================================== FireWeaponWhenDeadBehavior
+
+/// <summary>
+/// <c>FireWeaponWhenDeadBehavior.h</c>'s fields: the shared <c>DieMuxData</c> filter, the shared <c>UpgradeMuxData</c>
+/// activation state machine (<c>TriggeredBy</c>/<c>ConflictsWith</c>/<c>RemovesUpgrades</c>/<c>RequiresAllTriggers</c>),
+/// <c>StartsActive</c> and the single <c>DeathWeapon</c> reference. <c>FXListUpgrade</c> (shared with every upgrade-mux
+/// module) is presentation-only.
+/// </summary>
+public sealed record FireWeaponWhenDeadData(DieMuxData DieMux, UpgradeMuxData UpgradeMux, bool StartsActive, string DeathWeapon) : ModuleData
+{
+    public static FireWeaponWhenDeadData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
+        DieMuxData.Parse(configuration),
+        UpgradeMuxData.Parse(configuration, upgrades),
+        ModuleConfigReader.Bool(configuration, "StartsActive", false),
+        ModuleConfigReader.Text(configuration, "DeathWeapon"));
+}
+
+/// <summary>
+/// <c>FireWeaponWhenDeadBehavior::onDie</c>: once active (either <see cref="FireWeaponWhenDeadData.StartsActive"/> from
+/// construction — <c>giveSelfUpgrade</c>, bypassing the activation-mask gate — or a later matching <c>TriggeredBy</c>
+/// upgrade), a matching death requests <see cref="FireWeaponWhenDeadData.DeathWeapon"/> fire. Three reference guards are
+/// ported exactly: never while <c>UNDER_CONSTRUCTION</c> (cancelling construction, or killing a one-hitpoint building
+/// under construction, must not set it off); never if a conflicting upgrade has completed since — checked again here,
+/// not just at activation time, because the <c>StartsActive</c> path never went through the conflict check at all (this
+/// is how mutually exclusive "pick one detonation weapon" upgrade families such as ChemicalGeneral.ini's demo-trap
+/// modules work: the default starts active, a conflicting upgrade silences it and its own sibling fires instead).
+/// Firing itself only requests the weapon (<see cref="SimEventKind.WeaponFireRequested"/>, the same event
+/// <see cref="InstantDeathBehavior"/> already uses): actually resolving splash damage to bystanders is a known,
+/// project-wide simplification (see <c>WeaponCatalog</c>'s doc comment — phase 5's combat model is direct-target only).
+/// </summary>
+public sealed class FireWeaponWhenDeadBehavior(FireWeaponWhenDeadData data) : SimModule, IUpgradeModule, IDieModule
+{
+    private readonly UpgradeMuxState _mux = new(data.UpgradeMux);
+
+    public override string ModuleName => "FireWeaponWhenDeadBehavior";
+
+    public override void OnSpawn(IWorldServices world)
+    {
+        if (data.StartsActive) _mux.GiveSelfUpgrade(world, _ => { });
+    }
+
+    public void TryActivate(IWorldServices world, UpgradeMask keyMask) => _mux.AttemptUpgrade(world, Entity, keyMask, _ => { });
+    public void TryReset(IWorldServices world, UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
+
+    public void OnDie(IWorldServices world, in DamageInfo info)
+    {
+        if (!_mux.Executed || !data.DieMux.IsApplicable(Entity, info)) return;
+        if (Entity.HasStatus(ObjectStatusBits.UnderConstruction)) return;
+        var conflicting = data.UpgradeMux.Conflicting;
+        if (Entity.CompletedUpgrades.TestForAny(conflicting) || world.PlayerUpgrades(Entity.Owner).TestForAny(conflicting)) return;
+        if (data.DeathWeapon.Length != 0) world.Emit(SimEventKind.WeaponFireRequested, Entity.Id, info.Source, data.DeathWeapon, 0);
+    }
+
+    public override void Describe(IStateWriter writer) => _mux.Describe(writer);
+    public override void Load(IStateReader reader) => _mux.Load(reader);
 }
