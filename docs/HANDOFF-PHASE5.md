@@ -7,8 +7,9 @@ Du arbeitest autonom am lokalen Projekt `C:\Users\cp\RiderProjects\CnCNew`.
 Über mehrere Durchläufe wurden Block 0 (0.1–0.3), ein erster funktionierender Kern des Hauptumfangs (Wirtschaft,
 Sciences, Upgrades, direkter Kampf, einfache Bewegung, Produktion, Sieg/Niederlage), sechs weitere Blockermodule
 (Schadenszustände/`TransitionDamageFX`, `FlammableUpdate`, `SlowDeathBehavior`, `FireWeaponWhenDeadBehavior`,
-`StealthDetectorUpdate`, `PoisonedBehavior`) sowie die Containment-Grundinfrastruktur mit `GarrisonContain` (der bisher
-größte Einzelsprung: +167 instanziierbare Objekte) umgesetzt, getestet und dokumentiert (Commits siehe unten). Der
+`StealthDetectorUpdate`, `PoisonedBehavior`) sowie das komplette Containment-Subsystem (`GarrisonContain`, der bisher
+größte Einzelsprung mit +167 instanziierbaren Objekten, und `TransportContain`, +2) umgesetzt, getestet und
+dokumentiert (Commits siehe unten). Der
 volle Umfang von `docs/GAME-RULES.md`s Zielbild – Teams/Diplomatie, Supply/Transport, Reparatur/Verkauf, Radarwirkung,
 Spezialfähigkeiten, volle Rüstungs-/Waffen-Bestauswahl, ein headless Referenzmatch aller Fraktionen und
 Golden-Master-Szenarien – ist **nicht** erreicht. Das war von Anfang an als möglich benannt: „Falls Phase 5 nicht
@@ -36,6 +37,8 @@ Simulationsimplementierung, Tests (Ausnahme: `GarrisonContain` hat vier, siehe u
 7. `GarrisonContain` (`5a16c3c` Schema+Baseline, `784cb22` ein eigenständiger Fix — `ModuleConfigReader.Real` kannte
    `Percentage`-typisierte Werte noch nicht, aufgedeckt durch `DamagePercentToUnits` —, `d3f0a9a` Containment-
    Infrastruktur + Modul, `0e77be1` Tests) — größter Einzelsprung dieser Phase, siehe unten.
+8. `TransportContain` (`515c7a0` Schema+Baseline, `64965d3` `ContainModuleBase`-Extraktion + Modul, `52fe5e7` Tests) —
+   zweiter Implementierer der Containment-Infrastruktur, rechtfertigte die `ContainModuleBase`-Extraktion.
 
 **Wichtige Neupriorisierung gegenüber dem vorigen Handoff:** Die ursprüngliche Reihenfolge „nach Häufigkeit“
 wurde durchgehend durch frische `audit-coverage`-Messungen ersetzt. `CreateCrateDie` schaltet **0 Objekte allein**
@@ -51,33 +54,29 @@ allein) stellte sich als der mit Abstand größte Einzelblocker heraus, obwohl e
 - `dotnet build CnCNew.slnx`: 0 Fehler, 10 bekannte NU1901/NU1903-Warnungen.
 - Alle acht Testprogramme grün, einschließlich `CnCNew.Simulation.Tests` mit `--content-dir .local/phase2-import-a`
   und `-c Release -- stress` (216.000 Ticks, identische Hashes über drei frische Läufe und Snapshotfortsetzung).
-- Modulkatalog: 205 Typen, **34 implementiert** (12 aus Phase 4, 22 aus Phase 5).
-- Kompatibilitätsbasislinie: **771 Einträge**, `compat-check` besteht.
+- Modulkatalog: 205 Typen, **35 implementiert** (12 aus Phase 4, 23 aus Phase 5).
+- Kompatibilitätsbasislinie: **787 Einträge**, `compat-check` besteht.
 - Vollinventar: 228 geladene Dateien, 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel,
-  15.724/17.270 Referenzen aufgelöst (1.546 sichtbare Fallbacks), Snapshot 143.781.645 Byte, SHA-256
-  `522CC08D0B4001D5B1398CAAA344849504509439E45435C2B014C347DA0E2DCC` (unverändert seit `StealthDetectorUpdate` —
-  `GarrisonContain` fügt keine neuen typisierten Referenzen hinzu, nur Flags/Bool/Percent).
+  15.724/17.270 Referenzen aufgelöst (1.546 sichtbare Fallbacks), Snapshot 143.796.691 Byte, SHA-256
+  `4F8F00A41F7F5365DCEDD6191A5CE7BE0FCD8DC25E7D5635B06E76908813ED32` (Hash geändert gegenüber der letzten Messung:
+  `GarrisonContain`/`TransportContain` typisieren vorher generische Kompatibilitätswerte jetzt strikt).
 - Retail-Basisdaten (`--maps exclude`): 2.115 Objekte, SHA-256
-  `BFFA27023F6F8FCB75FCEDCABB60A88DE11135C1750D9D2E686057DFFE41F9E9`.
-- Instanziierbarkeit: **861 von 2.115 Objekten (40,7 %)**, gegenüber 26/2.113 am Ende von Phase 4 und 694/2.115 vor
-  `GarrisonContain`.
-- Stresstest (`SimTool stress`, mit allen 34 Modulen): 216.000 Ticks, Endhash `9D6E0BDCECE43569`, Kettenhash
-  `393F17B2DCF76EC2` (beide geändert gegenüber der letzten Messung: `Entity.ContainedBy` ist jetzt Teil jeder Entität
-  im Snapshot/Hash, auch wenn sie kein `GarrisonContain` nutzt), drei frische Läufe und Snapshotfortsetzung identisch,
-  alle Tabellen kehren auf null zurück.
+  `738F132C53F1A0EC82DC5DB8B518D72682D27C95C4E374D15A61247D87466332`.
+- Instanziierbarkeit: **863 von 2.115 Objekten (40,8 %)**, gegenüber 26/2.113 am Ende von Phase 4 und 694/2.115 vor
+  dem Containment-Subsystem.
+- Stresstest (`SimTool stress`, mit allen 35 Modulen): 216.000 Ticks, Endhash `9D6E0BDCECE43569`, Kettenhash
+  `393F17B2DCF76EC2` (unverändert seit `GarrisonContain` — `TransportContain` fügt keine neuen Entity-weiten Felder
+  hinzu), drei frische Läufe und Snapshotfortsetzung identisch, alle Tabellen kehren auf null zurück.
 - `CommandTypes.Version = 4` (16 Befehlstypen; `EnterContainerCommand`/`ExitContainerCommand` neu).
 
 **Verbleibende Blocker nach Objekten, die ausschließlich noch an ihnen hängen** (frisch gemessen,
-`SimTool audit-coverage`): `PhysicsBehavior` 119, `ToppleUpdate` 66, `SquishCollide` 2, `TransportContain` 2,
+`SimTool audit-coverage`): `PhysicsBehavior` 120, `ToppleUpdate` 66, `SquishCollide` 2,
 `CreateCrateDie`/`SpecialAbility`/`CommandButtonHuntUpdate`/`SpecialAbilityUpdate` je 0. `PhysicsBehavior`/
 `SquishCollide`/`ToppleUpdate` brauchen alle drei echte Kollisionserkennung (`ToppleUpdate::onCollide` löst nur bei
 echtem Geometrie-Overlap eines Fahrzeugs aus, geprüft per Referenzstudium; die einzigen anderen Aufrufer von
 `applyTopplingForce` im Original — `NeutronMissileSlowDeathUpdate`, `TensileFormationUpdate`, `WaveGuideUpdate` —
 sind selbst unimplementierte Phase-6-Module) — ausdrücklich Phase 6 (`ModuleCatalog.PlannedTarget` klassifiziert alle
-drei bereits so). `TransportContain` kann die neue `IContainerModule`-Infrastruktur wiederverwenden, braucht aber ein
-pro-Template-Slotkosten-Feld (`TransportSlotCount`, `ThingTemplate::getTransportSlotCount`) und gewichtete statt
-einfache Kapazitätsrechnung (`m_extraSlotsInUse + containCount + transportSlotCount <= containMax`) — für nur 2
-Objekte allein zurückgestellt, aber ein kleiner Folgeauftrag, kein neues Subsystem mehr.
+drei bereits so).
 
 **Implementiert** (Details, Numerik und jede bewusste Vereinfachung mit Quellverweis in `docs/GAME-RULES.md`):
 
@@ -93,11 +92,12 @@ Objekte allein zurückgestellt, aber ein kleiner Folgeauftrag, kein neues Subsys
   `ObjectTemplate.VisionRange` als Fallback für `DetectionRange`.
 - `PoisonedBehavior`: periodischer Gift-Nachschaden mit dem tatsächlich zugefügten Betrag, Verlängerung bei
   erneuter Vergiftung, Heilung beendet den Zyklus (neuer `IDamageModule.OnHealing`-Hook).
-- **Containment (`docs/GAME-RULES.md` §6a):** `Entity.ContainedBy`/`Entity.Container`, `IContainerModule` (bewusst
-  schmal gehalten, bis `TransportContain` ihn tatsächlich erweitert), `EnterContainerCommand`/`ExitContainerCommand`.
+- **Containment (`docs/GAME-RULES.md` §6a), komplett:** `Entity.ContainedBy`/`Entity.Container`, `IContainerModule`,
+  `ContainModuleBase` (geteilte Gating-/Ein-/Austritts-/Todeslogik), `EnterContainerCommand`/`ExitContainerCommand`.
   `GarrisonContain`: Kapazität, `KindOf`/Beziehungsfilter (gleicher Besitzer = Verbündeter, keine Teams), Sperre und
   Sofortauswurf bei `REALLYDAMAGED` (außer `GARRISONABLE_UNTIL_DESTROYED`), periodische Heilung, Tod wendet
-  `DamagePercentToUnits` an und wirft Überlebende aus (tötet sie nicht).
+  `DamagePercentToUnits` an und wirft Überlebende aus (tötet sie nicht). `TransportContain`: gewichtete Kapazität
+  (`ObjectTemplate.TransportSlotCount`), kontinuierliche `HealthRegen%PerSec`-Heilung statt Rampe.
 - Block 0.1 (Weapon/Armor/Upgrade/Science/Locomotor/Faction), 0.2 (`StealthUpdate`/`AutoHealBehavior`) und 0.3
   (Furchtsignal) vollständig, unverändert seit dem letzten Handoff.
 
@@ -112,10 +112,10 @@ Objekte allein zurückgestellt, aber ein kleiner Folgeauftrag, kein neues Subsys
 - Volle veteranenbasierte `ArmorSet`/`WeaponSet`-Bestauswahl (`SparseMatchFinder`).
 - Erfahrungs-/Veteranenvergabe aus Kämpfen; Rang-/`SciencePurchasePoints`-Vergabe aus Erfahrung.
 - Energie-Verlangsamungsfaktor bei der Produktion (`ProductionUpdate::calcTimeToBuild`).
-- `TransportContain` (siehe oben — kleiner Folgeauftrag), `InitialRoster`/`InitialPayload` (synchrones verschachteltes
-  Erzeugen beim Konstruieren), Feuern aus dem Container heraus, Garnisonspunkte (art-abgeleitet), Eroberungshandling.
-  Supply (`SupplyCenter*`, `SupplyTruckAIUpdate`, `SupplyWarehouse*`), Bau (`DozerAIUpdate`, `BuildAssistant`),
-  Reparatur, Verkauf, Radarwirkung — alle weiterhin komplett offen.
+- `InitialRoster`/`InitialPayload` (synchrones verschachteltes Erzeugen beim Konstruieren), Feuern aus dem Container
+  heraus, Garnisonspunkte (art-abgeleitet), Eroberungshandling. Supply (`SupplyCenter*`, `SupplyTruckAIUpdate`,
+  `SupplyWarehouse*`), Bau (`DozerAIUpdate`, `BuildAssistant`), Reparatur, Verkauf, Radarwirkung — alle weiterhin
+  komplett offen.
 - `CreateCrateDie` (bräuchte einen neuen `Crate`-Katalog und eine Beziehungsprüfung, siehe oben).
 - `PhysicsBehavior`/`SquishCollide`/`ToppleUpdate` (echte Kollisionserkennung, ausdrücklich Phase 6 — für
   `ToppleUpdate` per Referenzstudium verifiziert, siehe oben).
@@ -129,23 +129,18 @@ Doku-Nachführung, wie in `CLAUDE.md` „Ablauf einer Phase“ beschrieben). Mis
 Modul wie viele Objekte **allein** freischaltet (`SimTool audit-coverage .local/phase2-import-a`) — verlass dich nicht
 auf die obige Liste, sie ist bereits eine Momentaufnahme:
 
-1. **`TransportContain`** (2 Objekte allein, kleiner Folgeauftrag auf der bestehenden `IContainerModule`-
-   Infrastruktur): `ThingTemplate::getTransportSlotCount`/`TransportSlotCount` auf `ObjectTemplate` ergänzen (wie
-   `VisionRange`), gewichtete Kapazitätsrechnung statt einfacher Zählung, `HealthRegen`/`ExitDelay` falls sinnvoll
-   eigenständig umsetzbar. `InitialPayload`, Feuern aus dem Container, Eroberungshandling bleiben wie bei
-   `GarrisonContain` zurückgestellt.
-2. **`CreateCrateDie`**, sobald ein `Crate`-Katalog und eine (und sei es nur rudimentäre, dokumentierte) Beziehungs-
-   /beziehungsweise Besitzer-Prüfung existieren (siehe `StealthDetectorUpdate`/`GarrisonContain`s „gleicher Besitzer =
-   Verbündeter"-Präzedenzfall).
-3. **Spezialfähigkeiten mit echter `ObjectCreationList`-Ausführung**: `ObjectCreationList` ist noch keine eigene
+1. **`CreateCrateDie`**, jetzt mit zwei Präzedenzfällen für die Beziehungs-/Besitzer-Prüfung
+   (`StealthDetectorUpdate`, `GarrisonContain`/`TransportContain`s „gleicher Besitzer = Verbündeter"); es fehlt noch
+   ein neuer `Crate`-Katalog (Definitionsart oder zumindest ein typisiertes Compatibility-Schema für `Crate.ini`).
+2. **Spezialfähigkeiten mit echter `ObjectCreationList`-Ausführung**: `ObjectCreationList` ist noch keine eigene
    Definitionsart (bleibt `Compatibility`) — das ist eine Voraussetzung, kein Teil dieses Punkts; typisiere sie zuerst.
-4. **Teams/Diplomatie als Datenmodell**, falls für den Referenzmatch (Punkt 5) nötig — sonst zurückstellen und im
+3. **Teams/Diplomatie als Datenmodell**, falls für den Referenzmatch (Punkt 4) nötig — sonst zurückstellen und im
    headless Referenzmatch bei „letzter Überlebender ohne Teams" bleiben (dokumentierte Vereinfachung).
-5. **Ein headless Referenzmatch aller Fraktionen** (synthetische Karte im Speicher, scriptlos) von Start bis Sieg,
+4. **Ein headless Referenzmatch aller Fraktionen** (synthetische Karte im Speicher, scriptlos) von Start bis Sieg,
    als Replay aufgezeichnet, ≥ 216.000-Tick-fähig, zwei frische Läufe plus Snapshotfortsetzung hashgleich.
-6. **Golden-Master-Szenarien** für zentrale Kampf- und Wirtschaftsabläufe (Schadenskette mit Rüstung, Produktionszeit,
+5. **Golden-Master-Szenarien** für zentrale Kampf- und Wirtschaftsabläufe (Schadenskette mit Rüstung, Produktionszeit,
    Supply-Einnahmen, Erfahrung) gegen bekannte Originalwerte, mit unabhängiger Nachrechnung und Quellverweis.
-7. **Doku**: `docs/GAME-RULES.md`, `SIMULATION-CORE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, README,
+6. **Doku**: `docs/GAME-RULES.md`, `SIMULATION-CORE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, README,
    ARCHITECTURE, ROADMAP, IMPLEMENTATION-PLAN, CLAUDE.md nachführen; frische Zahlen, keine übernommenen.
 
 Bleibt Phase 5 danach immer noch nicht vollständig, schreibe erneut einen präzisen Fortsetzungsprompt statt eines

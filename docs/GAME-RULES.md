@@ -226,8 +226,14 @@ bewusst schmal, bis ein zweiter Implementierer, `TransportContain`, ihn tatsäch
   Konstruieren, eine größere Änderung an der Spawn-Pipeline, als dieser erste Zuschnitt rechtfertigt), Feuern aus dem
   Container heraus, Garnisonspunkte/-positionen (art-abgeleitet, keine INI-Daten), das
   Apparent-Controlling-Player-/Team-Tausch-System (kein Teamsystem), Eroberungsbehandlung (kein Eroberungssystem).
-  `TransportContain` (2 Objekte allein blockiert) ist zurückgestellt: es bräuchte ein pro-Template-Feld
-  (`TransportSlotCount`) und gewichtete statt einfache Kapazitätsrechnung.
+- **`TransportContain`** (der zweite Implementierer, der `ContainModuleBase` gerechtfertigt hat – geteilte
+  Gating-/Ein-/Austritts-/Todeslogik, siehe die Klassenkommentare): Kapazität ist **gewichtet**
+  (`ObjectTemplate.TransportSlotCount`, nicht einfach gezählt) – ein Objekt mit 0 Plätzen (der Standard) ist nie
+  transportierbar, und die Summe der Platzkosten aller Insassen plus der Bewerber darf `Slots` nicht überschreiten.
+  `HealthRegen%PerSec` heilt kontinuierlich (`MaxHealth · Prozent / 100` pro Sekunde), nicht rampenartig wie
+  `GarrisonContain`s `HealObjects`. Kein `REALLYDAMAGED`-Sonderfall (die Referenz hat dafür auch keinen). Bewusst
+  nicht modelliert: `InitialPayload`, Feuern aus dem Container, Austrittspfade/-verzögerung/-streuung (Präsentation
+  oder brauchen echte Bewegung/Positionierung), Eroberungsbehandlung.
 
 ## 7. Sieg und Niederlage
 
@@ -243,13 +249,14 @@ Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle
 
 ## 9. Modulabdeckung
 
-Siehe `docs/SIMULATION-CORE.md` §11: 861 von 2.115 Objekten sind heute instanziierbar (40,7 %, gegenüber 26/2.113 in
+Siehe `docs/SIMULATION-CORE.md` §11: 863 von 2.115 Objekten sind heute instanziierbar (40,8 %, gegenüber 26/2.113 in
 Phase 4 und 623/2.115 vor dem in §3/§6/§6a beschriebenen Block). Nach einer frischen `audit-coverage`-Messung sind die
-größten verbleibenden Blocker nach Objekten, die **ausschließlich** noch an ihnen hängen: `PhysicsBehavior` (119 –
+größten verbleibenden Blocker nach Objekten, die **ausschließlich** noch an ihnen hängen: `PhysicsBehavior` (120 –
 braucht Terrain-/Kollisionsphysik, Phase 6), `ToppleUpdate` (66 – dieselbe Physik, per Referenzstudium verifiziert),
-`SquishCollide` (2 – dieselbe Physik), `TransportContain` (2 – braucht ein pro-Template-Slotkosten-Feld). `CreateCrateDie`
-(0 allein – bräuchte einen neuen `Crate`-Katalog und eine Beziehungs-/Diplomatie-Prüfung für 0 sofortigen Nutzen) bleibt
-bewusst zurückgestellt; die Begründung steht in `Phase5BlockerModules`s Doc-Kommentar und `docs/HANDOFF-PHASE5.md`.
+`SquishCollide` (2 – dieselbe Physik). `CreateCrateDie` (0 allein – bräuchte einen neuen `Crate`-Katalog und eine
+Beziehungs-/Diplomatie-Prüfung, für die jetzt mit `GarrisonContain`/`TransportContain`s „gleicher Besitzer =
+Verbündeter"-Näherung ein zweiter Präzedenzfall existiert) bleibt bewusst zurückgestellt; die Begründung steht in
+`Phase5BlockerModules`s Doc-Kommentar und `docs/HANDOFF-PHASE5.md`.
 
 ## 10. Bekannte Grenzen (Zusammenfassung)
 

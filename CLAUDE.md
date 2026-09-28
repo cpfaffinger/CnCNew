@@ -93,14 +93,15 @@ Diesen Stil beibehalten. Für schnelle Wiederholung nach einem Build: `dotnet ru
 
 Referenzwerte (Stand Phase 5, in Arbeit; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene INI-Dateien (28
 nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 15.724/17.270
-Referenzen aufgelöst (1.546 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 143.781.645 Byte, SHA-256
-`522CC08D0B4001D5B1398CAAA344849504509439E45435C2B014C347DA0E2DCC`; Retail-Basisdaten (`--maps exclude`) 12.550
-Definitionen, 2.115 Objekte, SHA-256 `BFFA27023F6F8FCB75FCEDCABB60A88DE11135C1750D9D2E686057DFFE41F9E9`.
-Modulkatalog 205 Typen (34 implementiert: 12 aus Phase 4, 22 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
-771 Einträge, Instanziierbarkeit 861 von 2.115 Objekten (40,7 %). Asset-Runtimebestand: 25.682 Dateien.
-Stresstest (216.000 Ticks, `SimTool stress`, mit allen 34 Modulen): Endhash `9D6E0BDCECE43569`, Kettenhash
-`393F17B2DCF76EC2` (Hash geändert gegenüber der vorigen Messung: `Entity.ContainedBy` ist jetzt Teil jeder Entität im
-Snapshot/Hash, auch wenn sie kein `GarrisonContain` nutzt).
+Referenzen aufgelöst (1.546 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 143.796.691 Byte, SHA-256
+`4F8F00A41F7F5365DCEDD6191A5CE7BE0FCD8DC25E7D5635B06E76908813ED32`; Retail-Basisdaten (`--maps exclude`) 12.550
+Definitionen, 2.115 Objekte, SHA-256 `738F132C53F1A0EC82DC5DB8B518D72682D27C95C4E374D15A61247D87466332` (beide Hashes
+geändert gegenüber der vorigen Messung: `GarrisonContain`/`TransportContain` typisieren vorher generische
+Kompatibilitätswerte jetzt strikt, was die Serialisierung ändert, ohne die Referenzzahlen zu verändern).
+Modulkatalog 205 Typen (35 implementiert: 12 aus Phase 4, 23 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
+787 Einträge, Instanziierbarkeit 863 von 2.115 Objekten (40,8 %). Asset-Runtimebestand: 25.682 Dateien.
+Stresstest (216.000 Ticks, `SimTool stress`, mit allen 35 Modulen): Endhash `9D6E0BDCECE43569`, Kettenhash
+`393F17B2DCF76EC2` (unverändert seit `GarrisonContain` — `TransportContain` fügt keine neuen Entity-weiten Felder hinzu).
 
 ## Code- und Dokumentationsstil
 

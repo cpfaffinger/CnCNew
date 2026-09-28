@@ -136,11 +136,11 @@ Regeln:
 `CnCNew.Data` führt Deskriptoren ohne Factory (`ModuleDescriptor`: Name, Blockart, Interfacemaske, Besitzerarten,
 Feldschema, `CompatibilityOnly`, Zielphase, Kategorie); der Katalog enthält alle **205** Modultypen des Bestands (eine
 frühere Zählung von 206 enthielt das Phantommodul `ArmorSet`, entstanden aus einem in `Maps/MD_CHI03/map.ini` nie
-geschlossenen `AddModule`, dessen Felder das Original auf das Objekt anwendet). Phase 5 hat **34** dieser 205 Typen
-implementiert (12 aus Phase 4 plus 22 neue: `StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade`-Module,
+geschlossenen `AddModule`, dessen Felder das Original auf das Objekt anwendet). Phase 5 hat **35** dieser 205 Typen
+implementiert (12 aus Phase 4 plus 23 neue: `StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade`-Module,
 `AIUpdateInterface`, `ProductionUpdate`, `FlammableUpdate`, `TransitionDamageFX`, `SlowDeathBehavior`,
-`FireWeaponWhenDeadBehavior`, `StealthDetectorUpdate`, `PoisonedBehavior`, `GarrisonContain` – siehe
-`docs/GAME-RULES.md` §3/§6/§6a). `CnCNew.Simulation` besitzt die
+`FireWeaponWhenDeadBehavior`, `StealthDetectorUpdate`, `PoisonedBehavior`, `GarrisonContain`, `TransportContain` –
+siehe `docs/GAME-RULES.md` §3/§6/§6a). `CnCNew.Simulation` besitzt die
 explizite, ordinal sortierte, reflexionsfreie Bindungstabelle `BuiltInModules.Bindings` (Name → `ModuleBinding<TData>` mit
 Parser und Factory) und `ModuleBindingTable` prüft sie beim Erzeugen gegen die Deskriptoren:
 
@@ -346,21 +346,19 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
-- **2.115 Objekte, 861 vollständig instanziierbar (40,7 %)**, 1.254 blockiert. Gegenüber Phase 4 (26/2.113, 1,2 %) ein
+- **2.115 Objekte, 863 vollständig instanziierbar (40,8 %)**, 1.252 blockiert. Gegenüber Phase 4 (26/2.113, 1,2 %) ein
   Sprung um den Faktor ~33, getragen von Block 0.2, den elf `*Upgrade`-Modulen, `AIUpdateInterface`, `ProductionUpdate`,
-  den sechs Blockermodulen aus §6/§6a und zuletzt `GarrisonContain` allein (+167 – der größte Einzelsprung dieser Phase).
-- Alle 861 instanziierbaren Objekte werden in einer Welt erzeugt, ticken 216.000 Ticks im Stresstest ohne Leck oder
+  den sechs Blockermodulen aus §6/§6a und zuletzt dem Containment-Paar `GarrisonContain` (+167 — der größte Einzelsprung
+  dieser Phase) und `TransportContain` (+2).
+- Alle 863 instanziierbaren Objekte werden in einer Welt erzeugt, ticken 216.000 Ticks im Stresstest ohne Leck oder
   Nichtdeterminismus (`SimTool stress`, §10) und laufen im Realdatentest identisch zweimal durch (Test `--content-dir`).
 - Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert, nach einer frischen Messung):
-  `PhysicsBehavior` 739/119, `CreateCrateDie` 184/0, `SquishCollide` 170/2, `SpecialAbility` 88/0,
-  `TransportContain` 85/2, `CommandButtonHuntUpdate` 79/0, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/0.
-  `PhysicsBehavior`/`SquishCollide`/`ToppleUpdate` all need real collision detection (verified for `ToppleUpdate` by
-  reading its reference source, not assumed — see `docs/HANDOFF-PHASE5.md`) and are ausdrücklich Phase 6.
-  `TransportContain` can reuse the new `IContainerModule` infrastructure but needs a per-template slot-cost field
-  (`TransportSlotCount`) and weighted capacity math, unlike `GarrisonContain`'s simple count — deferred for its small
-  measured yield (2 objects). `CreateCrateDie` would need a new `Crate` catalog and a relationship/ownership check for
-  0 immediate payoff — bewusst zurückgestellt (Begründung: `Phase5BlockerModules`-Doc-Kommentar, `docs/HANDOFF-PHASE5.md`).
-  Die vollständige, tagesaktuelle Liste liefert das Werkzeug.
+  `PhysicsBehavior` 739/120, `CreateCrateDie` 184/0, `SquishCollide` 170/2, `SpecialAbility` 88/0,
+  `CommandButtonHuntUpdate` 79/0, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/0. `PhysicsBehavior`/`SquishCollide`/
+  `ToppleUpdate` all need real collision detection (verified for `ToppleUpdate` by reading its reference source, not
+  assumed — see `docs/HANDOFF-PHASE5.md`) and are ausdrücklich Phase 6. `CreateCrateDie` would need a new `Crate`
+  catalog and a relationship/ownership check — bewusst zurückgestellt (Begründung: `Phase5BlockerModules`-Doc-Kommentar,
+  `docs/HANDOFF-PHASE5.md`). Die vollständige, tagesaktuelle Liste liefert das Werkzeug.
 
 ## 12. Bekannte Grenzen und technische Schulden
 
