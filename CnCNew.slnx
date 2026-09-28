@@ -8,12 +8,14 @@
     <Project Path="src/CnCNew.IO/CnCNew.IO.csproj" />
     <Project Path="src/CnCNew.Images/CnCNew.Images.csproj" />
     <Project Path="src/CnCNew.Import/CnCNew.Import.csproj" />
+    <Project Path="src/CnCNew.Simulation/CnCNew.Simulation.csproj" />
     <Project Path="src/CnCNew.W3D/CnCNew.W3D.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/CnCNew.AssetTool/CnCNew.AssetTool.csproj" />
     <Project Path="tools/CnCNew.IniTool/CnCNew.IniTool.csproj" />
     <Project Path="tools/CnCNew.ImageTool/CnCNew.ImageTool.csproj" />
+    <Project Path="tools/CnCNew.SimTool/CnCNew.SimTool.csproj" />
     <Project Path="tools/CnCNew.W3dTool/CnCNew.W3dTool.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -24,6 +26,7 @@
     <Project Path="tests/CnCNew.Images.Tests/CnCNew.Images.Tests.csproj" />
     <Project Path="tests/CnCNew.Formats.Tests/CnCNew.Formats.Tests.csproj" />
     <Project Path="tests/CnCNew.Import.Tests/CnCNew.Import.Tests.csproj" />
+    <Project Path="tests/CnCNew.Simulation.Tests/CnCNew.Simulation.Tests.csproj" />
     <Project Path="tests/CnCNew.W3D.Tests/CnCNew.W3D.Tests.csproj" />
   </Folder>
 </Solution>
