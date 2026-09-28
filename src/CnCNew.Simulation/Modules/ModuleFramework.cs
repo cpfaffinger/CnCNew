@@ -135,6 +135,12 @@ public interface IEventReceiver
     void OnEvent(IWorldServices world, in SimEvent simEvent);
 }
 
+/// <summary><c>DamageModuleInterface::onDamage</c>: called for every damage application that actually lowers health, before the fear-sound check and before the death check (so it runs even on a killing blow).</summary>
+public interface IDamageModule
+{
+    void OnDamage(IWorldServices world, in DamageInfo info, Fixed actualDamageDealt);
+}
+
 /// <summary>Bit positions of the object status table (<c>ObjectStatusMaskType::s_bitNameList</c>).</summary>
 public static class ObjectStatusBits
 {

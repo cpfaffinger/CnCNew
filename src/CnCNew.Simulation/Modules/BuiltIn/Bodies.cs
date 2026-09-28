@@ -75,8 +75,14 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
 
         if (info.Kill) amount = Health;
         InternalChangeHealth(-amount);
+        var actualDamageDealt = PreviousHealth - Health;
         if (Health < PreviousHealth)
-            world.Emit(SimEventKind.EntityDamaged, Entity.Id, info.Source, string.Empty, (PreviousHealth - Health).Raw);
+        {
+            world.Emit(SimEventKind.EntityDamaged, Entity.Id, info.Source, string.Empty, actualDamageDealt.Raw);
+            // ActiveBody.cpp attemptDamage: "if health went down, run the damage module callback" — before the
+            // fear-sound and death checks below, so it runs even on a killing blow.
+            foreach (var module in Entity.DamageModules) module.OnDamage(world, info, actualDamageDealt);
+        }
         // ActiveBody.cpp attemptDamage (block 0.3): crossing the 25% threshold has a 25% chance of a fear sound. The
         // random draw itself is simulation state — it must consume the same LogicRandom value the reference does,
         // win or lose, for replay/golden-master parity — the sound is presentation, so only a successful roll emits.

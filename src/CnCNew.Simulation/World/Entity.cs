@@ -84,6 +84,7 @@ public sealed class Entity
     internal IDieModule[] Dies { get; set; } = [];
     internal IEventReceiver[] Receivers { get; set; } = [];
     internal IUpgradeModule[] UpgradeModules { get; set; } = [];
+    internal IDamageModule[] DamageModules { get; set; } = [];
     internal UpdateNode[] Updates { get; set; } = [];
     internal List<Timers.SimTimer>? Timers { get; set; }
     internal bool Registered { get; set; }

@@ -861,6 +861,7 @@ public sealed partial class SimulationWorld : IWorldServices
         var receivers = new List<IEventReceiver>();
         var updates = new List<UpdateNode>();
         var upgrades = new List<IUpgradeModule>();
+        var damages = new List<IDamageModule>();
         for (var index = 0; index < modules.Length; index++)
         {
             var spec = template.Modules[index];
@@ -874,8 +875,10 @@ public sealed partial class SimulationWorld : IWorldServices
             if (module is IEventReceiver receiver) receivers.Add(receiver);
             if (module is IUpdateModule update) updates.Add(new UpdateNode(entity, module, update));
             if (module is IUpgradeModule upgrade) upgrades.Add(upgrade);
+            if (module is IDamageModule damage) damages.Add(damage);
         }
         entity.ModuleArray = modules;
+        entity.DamageModules = [..damages];
         entity.Dies = [..dies];
         entity.Receivers = [..receivers];
         entity.Updates = [..updates];
