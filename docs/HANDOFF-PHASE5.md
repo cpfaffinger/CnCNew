@@ -65,10 +65,12 @@ den Freischaltungsgewinn.
 `TransportContain` 2, `CreateCrateDie`/`PoisonedBehavior` (jetzt erledigt)/`SpecialAbility`/`CommandButtonHuntUpdate` je
 0. `GarrisonContain`/`TransportContain` brauchen ein komplettes Containment-Subsystem (Kapazität, Ein-/Aussteigen,
 Garnisonspunkte, Ausgangs-Türen) — keine reine Modul-Portierung, sondern eine neue Teilarchitektur, vergleichbar im
-Umfang mit dem Player/Faction/Science-Block. `PhysicsBehavior`/`SquishCollide` brauchen Terrain-/Kollisionsphysik
-(3D-Gravitation, Bodenhöhe, Geometrieüberlappung) — das ist ausdrücklich Phase 6 (`ModuleCatalog.PlannedTarget`
-klassifiziert `PhysicsBehavior` bereits so). `ToppleUpdate` ist neu sichtbar geworden (durch die anderen Module nicht
-mehr verdeckt) und noch nicht untersucht.
+Umfang mit dem Player/Faction/Science-Block. `PhysicsBehavior`/`SquishCollide`/`ToppleUpdate` brauchen alle drei
+echte Kollisionserkennung (`ToppleUpdate::onCollide` löst nur bei echtem Geometrie-Overlap eines Fahrzeugs aus, geprüft
+per Referenzstudium; die einzigen anderen Aufrufer von `applyTopplingForce` im Original —
+`NeutronMissileSlowDeathUpdate`, `TensileFormationUpdate`, `WaveGuideUpdate` — sind selbst unimplementierte
+Phase-6-Module) — das ist ausdrücklich Phase 6 (`ModuleCatalog.PlannedTarget` klassifiziert alle drei bereits so;
+für `ToppleUpdate` wurde das in diesem Durchlauf verifiziert, nicht nur übernommen).
 
 **Implementiert** (Details, Numerik und jede bewusste Vereinfachung mit Quellverweis in `docs/GAME-RULES.md`):
 
@@ -102,8 +104,8 @@ mehr verdeckt) und noch nicht untersucht.
   Supply (`SupplyCenter*`, `SupplyTruckAIUpdate`, `SupplyWarehouse*`), Bau (`DozerAIUpdate`, `BuildAssistant`),
   Reparatur, Verkauf, Radarwirkung.
 - `CreateCrateDie` (bräuchte einen neuen `Crate`-Katalog und eine Beziehungsprüfung, siehe oben).
-- `PhysicsBehavior`/`SquishCollide` (Terrain-/Kollisionsphysik, ausdrücklich Phase 6).
-- `ToppleUpdate` (66 Objekte allein blockiert, noch nicht untersucht — Kandidat für den nächsten Durchlauf).
+- `PhysicsBehavior`/`SquishCollide`/`ToppleUpdate` (echte Kollisionserkennung, ausdrücklich Phase 6 — für
+  `ToppleUpdate` in diesem Durchlauf per Referenzstudium verifiziert, siehe oben).
 - Ein headless Referenzmatch aller Fraktionen vom Start bis zum Sieg (Punkt 5 unten).
 - Golden-Master-Szenarien gegen bekannte Originalwerte mit Quellverweis (Punkt 6 unten).
 
@@ -114,26 +116,23 @@ Doku-Nachführung, wie in `CLAUDE.md` „Ablauf einer Phase“ beschrieben). Mis
 Modul wie viele Objekte **allein** freischaltet (`SimTool audit-coverage .local/phase2-import-a`) — verlass dich nicht
 auf die obige Liste, sie ist bereits eine Momentaufnahme:
 
-1. **`ToppleUpdate`** untersuchen: ist es (wie die meisten Blockermodule bisher) eigenständig umsetzbar, oder hängt es
-   an Terrain-/Physikinfrastruktur? Falls eigenständig: umsetzen, testen, Baseline neu erzeugen, Instanziierungsquote
-   messen.
-2. **Containment-Subsystem** (`GarrisonContain`/`TransportContain`, 167+2 Objekte allein): das ist kein einzelnes
+1. **Containment-Subsystem** (`GarrisonContain`/`TransportContain`, 167+2 Objekte allein): das ist kein einzelnes
    Blockermodul, sondern eine neue Teilarchitektur (Kapazität, Enthalten-Liste, Ein-/Ausstiegsbefehle, Heilung
    enthaltener Objekte, Auswurf bei `REALLYDAMAGED` über den bereits vorhandenen `OnBodyDamageStateChange`-Hook).
    Plane sie wie einen eigenen Unterabschnitt (vergleichbar mit dem Player/Faction/Science-Block): Datenschema,
    Entity-Erweiterung, Befehle, Tests, Doku — bevor du mit der Modul-Implementierung beginnst.
-3. **`CreateCrateDie`**, sobald ein `Crate`-Katalog und eine (und sei es nur rudimentäre, dokumentierte) Beziehungs-
+2. **`CreateCrateDie`**, sobald ein `Crate`-Katalog und eine (und sei es nur rudimentäre, dokumentierte) Beziehungs-
    /beziehungsweise Besitzer-Prüfung existieren (siehe `StealthDetectorUpdate`s „gleicher Besitzer = Verbündeter"-
    Präzedenzfall).
-4. **Spezialfähigkeiten mit echter `ObjectCreationList`-Ausführung**: `ObjectCreationList` ist noch keine eigene
+3. **Spezialfähigkeiten mit echter `ObjectCreationList`-Ausführung**: `ObjectCreationList` ist noch keine eigene
    Definitionsart (bleibt `Compatibility`) — das ist eine Voraussetzung, kein Teil dieses Punkts; typisiere sie zuerst.
-5. **Teams/Diplomatie als Datenmodell**, falls für den Referenzmatch (Punkt 6) nötig — sonst zurückstellen und im
+4. **Teams/Diplomatie als Datenmodell**, falls für den Referenzmatch (Punkt 5) nötig — sonst zurückstellen und im
    headless Referenzmatch bei „letzter Überlebender ohne Teams" bleiben (dokumentierte Vereinfachung).
-6. **Ein headless Referenzmatch aller Fraktionen** (synthetische Karte im Speicher, scriptlos) von Start bis Sieg,
+5. **Ein headless Referenzmatch aller Fraktionen** (synthetische Karte im Speicher, scriptlos) von Start bis Sieg,
    als Replay aufgezeichnet, ≥ 216.000-Tick-fähig, zwei frische Läufe plus Snapshotfortsetzung hashgleich.
-7. **Golden-Master-Szenarien** für zentrale Kampf- und Wirtschaftsabläufe (Schadenskette mit Rüstung, Produktionszeit,
+6. **Golden-Master-Szenarien** für zentrale Kampf- und Wirtschaftsabläufe (Schadenskette mit Rüstung, Produktionszeit,
    Supply-Einnahmen, Erfahrung) gegen bekannte Originalwerte, mit unabhängiger Nachrechnung und Quellverweis.
-8. **Doku**: `docs/GAME-RULES.md`, `SIMULATION-CORE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, README,
+7. **Doku**: `docs/GAME-RULES.md`, `SIMULATION-CORE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, README,
    ARCHITECTURE, ROADMAP, IMPLEMENTATION-PLAN, CLAUDE.md nachführen; frische Zahlen, keine übernommenen.
 
 Bleibt Phase 5 danach immer noch nicht vollständig, schreibe erneut einen präzisen Fortsetzungsprompt statt eines
