@@ -12,6 +12,8 @@ namespace CnCNew.Data.Registry;
 /// </summary>
 public static class ModuleCatalog
 {
+    private sealed record ImplementedModuleSpec(ImmutableArray<FieldSchema> Schema, bool AllowsNestedSections = false);
+
     private static IEnumerable<ModuleDescriptor> Build()
     {
         var implemented = ImplementedSchemas();
@@ -20,8 +22,8 @@ public static class ModuleCatalog
             var interfaces = ParseCodes(codes);
             var category = block is ModuleBlockKind.Draw or ModuleBlockKind.ClientUpdate ? ModuleCategory.Presentation : ModuleCategory.Simulation;
             var owners = ImmutableHashSet.Create(ModuleOwnerKind.Object);
-            if (implemented.TryGetValue(name, out var schema))
-                yield return new ModuleDescriptor(name, block, interfaces, owners, schema, false, null, category);
+            if (implemented.TryGetValue(name, out var spec))
+                yield return new ModuleDescriptor(name, block, interfaces, owners, spec.Schema, false, null, category, spec.AllowsNestedSections);
             else
                 yield return new ModuleDescriptor(name, block, interfaces, owners, [], true, PlannedTarget(name, category), category);
         }
@@ -53,16 +55,17 @@ public static class ModuleCatalog
         return result;
     }
 
-    // Strict schemas of the simulation modules implemented in phase 4. Field lists come from the reference
-    // FieldParse tables (ActiveBody.cpp, DieModule.cpp, LifetimeUpdate.h, DeletionUpdate.h, FXListDie.cpp, ...) and were
-    // verified against every occurrence in the shipped INIs (see docs/SIMULATION-CORE.md).
-    private static ImmutableDictionary<string, ImmutableArray<FieldSchema>> ImplementedSchemas()
+    // Strict schemas of the implemented simulation modules. Field lists come from the reference FieldParse tables
+    // (ActiveBody.cpp, DieModule.cpp, LifetimeUpdate.h, DeletionUpdate.h, FXListDie.cpp, StealthUpdate.cpp/.h,
+    // AutoHealBehavior.h, Module.cpp UpgradeMuxData, the eleven *Upgrade.cpp modules, ProductionUpdate.h) and were
+    // verified against every occurrence in the shipped INIs (see docs/SIMULATION-CORE.md and docs/GAME-RULES.md).
+    private static ImmutableDictionary<string, ImplementedModuleSpec> ImplementedSchemas()
     {
-        FieldSchema Real(string name) => new(name, FieldType.Real, Source: "ActiveBody.cpp");
+        FieldSchema Real(string name, string source) => new(name, FieldType.Real, Source: source);
         ImmutableArray<FieldSchema> Body() =>
         [
-            Real("MaxHealth"), Real("InitialHealth"), Real("SubdualDamageCap"),
-            new("SubdualDamageHealRate", FieldType.DurationMs, Source: "ActiveBody.cpp"), Real("SubdualDamageHealAmount"),
+            Real("MaxHealth", "ActiveBody.cpp"), Real("InitialHealth", "ActiveBody.cpp"), Real("SubdualDamageCap", "ActiveBody.cpp"),
+            new("SubdualDamageHealRate", FieldType.DurationMs, Source: "ActiveBody.cpp"), Real("SubdualDamageHealAmount", "ActiveBody.cpp"),
         ];
         ImmutableArray<FieldSchema> DieMux() =>
         [
@@ -76,30 +79,41 @@ public static class ModuleCatalog
             new("MinLifetime", FieldType.DurationMs, Required: true, Source: "LifetimeUpdate.h / DeletionUpdate.h"),
             new("MaxLifetime", FieldType.DurationMs, Required: true, Source: "LifetimeUpdate.h / DeletionUpdate.h"),
         ];
-        var builder = ImmutableDictionary.CreateBuilder<string, ImmutableArray<FieldSchema>>(StringComparer.Ordinal);
-        builder["ActiveBody"] = Body();
-        builder["StructureBody"] = Body();
-        builder["ImmortalBody"] = Body();
-        builder["HighlanderBody"] = Body();
-        builder["InactiveBody"] = [];
-        builder["LifetimeUpdate"] = Lifetime();
-        builder["DeletionUpdate"] = Lifetime();
-        builder["DestroyDie"] = DieMux();
-        builder["KeepObjectDie"] = DieMux();
-        builder["CreateObjectDie"] =
+        // Module.cpp UpgradeMuxData: shared by AutoHealBehavior and every *Upgrade module. FXListUpgrade (presentation FX) is Opaque.
+        ImmutableArray<FieldSchema> UpgradeMux() =>
+        [
+            new("TriggeredBy", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Upgrade, Source: "Module.cpp UpgradeMuxData"),
+            new("ConflictsWith", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Upgrade, Source: "Module.cpp UpgradeMuxData"),
+            new("RemovesUpgrades", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Upgrade, Source: "Module.cpp UpgradeMuxData"),
+            new("RequiresAllTriggers", FieldType.Bool, Source: "Module.cpp UpgradeMuxData"),
+            new("FXListUpgrade", FieldType.Opaque, Source: "Module.cpp UpgradeMuxData"),
+        ];
+        var builder = ImmutableDictionary.CreateBuilder<string, ImplementedModuleSpec>(StringComparer.Ordinal);
+        void Add(string name, ImmutableArray<FieldSchema> schema, bool allowsNestedSections = false) => builder[name] = new ImplementedModuleSpec(schema, allowsNestedSections);
+
+        Add("ActiveBody", Body());
+        Add("StructureBody", Body());
+        Add("ImmortalBody", Body());
+        Add("HighlanderBody", Body());
+        Add("InactiveBody", []);
+        Add("LifetimeUpdate", Lifetime());
+        Add("DeletionUpdate", Lifetime());
+        Add("DestroyDie", DieMux());
+        Add("KeepObjectDie", DieMux());
+        Add("CreateObjectDie",
         [
             ..DieMux(),
             new("CreationList", FieldType.Text, Source: "CreateObjectDie.cpp"),
             new("TransferPreviousHealth", FieldType.Bool, Source: "CreateObjectDie.cpp"),
-        ];
-        builder["InstantDeathBehavior"] =
+        ]);
+        Add("InstantDeathBehavior",
         [
             ..DieMux(),
             new("FX", FieldType.ReferenceList, ReferenceKind: DefinitionKind.FxList, Source: "InstantDeathBehavior.cpp"),
             new("OCL", FieldType.Text, Source: "InstantDeathBehavior.cpp"),
             new("Weapon", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Weapon, Source: "InstantDeathBehavior.cpp"),
-        ];
-        builder["FXListDie"] =
+        ]);
+        Add("FXListDie",
         [
             ..DieMux(),
             new("DeathFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "FXListDie.cpp"),
@@ -107,7 +121,121 @@ public static class ModuleCatalog
             new("StartsActive", FieldType.Bool, Source: "UpgradeMux"),
             new("TriggeredBy", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Upgrade, Source: "UpgradeMux"),
             new("ConflictsWith", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Upgrade, Source: "UpgradeMux"),
-        ];
+        ]);
+
+        // ---------------------------------------------------------------------------------------------- phase 5
+
+        Add("StealthUpdate",
+        [
+            new("StealthDelay", FieldType.DurationMs, Source: "StealthUpdate.cpp"),
+            new("MoveThresholdSpeed", FieldType.Real, Source: "StealthUpdate.cpp"),
+            new("StealthForbiddenConditions", FieldType.Flags, Table: NameTablesPhase5.StealthForbiddenCondition, Source: "StealthUpdate.h TheStealthLevelNames"),
+            new("HintDetectableConditions", FieldType.Flags, Table: NameTables.ObjectStatus, Source: "StealthUpdate.cpp"),
+            new("RequiredStatus", FieldType.Flags, Table: NameTables.ObjectStatus, Source: "StealthUpdate.cpp"),
+            new("ForbiddenStatus", FieldType.Flags, Table: NameTables.ObjectStatus, Source: "StealthUpdate.cpp"),
+            new("FriendlyOpacityMin", FieldType.Percent, Source: "StealthUpdate.cpp"),
+            new("FriendlyOpacityMax", FieldType.Percent, Source: "StealthUpdate.cpp"),
+            new("PulseFrequency", FieldType.DurationMs, Source: "StealthUpdate.cpp"),
+            new("DisguisesAsTeam", FieldType.Bool, Source: "StealthUpdate.cpp"),
+            new("RevealDistanceFromTarget", FieldType.Real, Source: "StealthUpdate.cpp"),
+            new("OrderIdleEnemiesToAttackMeUponReveal", FieldType.Bool, Source: "StealthUpdate.cpp"),
+            new("DisguiseFX", FieldType.Opaque, Source: "StealthUpdate.cpp"),
+            new("DisguiseRevealFX", FieldType.Opaque, Source: "StealthUpdate.cpp"),
+            new("DisguiseTransitionTime", FieldType.DurationMs, Source: "StealthUpdate.cpp"),
+            new("DisguiseRevealTransitionTime", FieldType.DurationMs, Source: "StealthUpdate.cpp"),
+            new("InnateStealth", FieldType.Bool, Source: "StealthUpdate.cpp"),
+            new("UseRiderStealth", FieldType.Bool, Source: "StealthUpdate.cpp"),
+            new("EnemyDetectionEvaEvent", FieldType.Opaque, Source: "StealthUpdate.cpp"),
+            new("OwnDetectionEvaEvent", FieldType.Opaque, Source: "StealthUpdate.cpp"),
+            new("BlackMarketCheckDelay", FieldType.DurationMs, Source: "StealthUpdate.cpp"),
+            new("GrantedBySpecialPower", FieldType.Bool, Source: "StealthUpdate.cpp"),
+        ]);
+        Add("AutoHealBehavior",
+        [
+            ..UpgradeMux(),
+            new("StartsActive", FieldType.Bool, Source: "AutoHealBehavior.h"),
+            new("SingleBurst", FieldType.Bool, Source: "AutoHealBehavior.h"),
+            new("HealingAmount", FieldType.Integer, Source: "AutoHealBehavior.h"),
+            new("HealingDelay", FieldType.DurationMs, Source: "AutoHealBehavior.h"),
+            new("Radius", FieldType.Distance, Source: "AutoHealBehavior.h"),
+            new("KindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "AutoHealBehavior.h"),
+            new("ForbiddenKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "AutoHealBehavior.h"),
+            new("RadiusParticleSystemName", FieldType.Opaque, Source: "AutoHealBehavior.h"),
+            new("UnitHealPulseParticleSystemName", FieldType.Opaque, Source: "AutoHealBehavior.h"),
+            new("StartHealingDelay", FieldType.DurationMs, Source: "AutoHealBehavior.h"),
+            new("AffectsWholePlayer", FieldType.Bool, Source: "AutoHealBehavior.h"),
+            new("SkipSelfForHealing", FieldType.Bool, Source: "AutoHealBehavior.h"),
+        ]);
+        Add("ArmorUpgrade", UpgradeMux());
+        Add("WeaponSetUpgrade", UpgradeMux());
+        Add("WeaponBonusUpgrade", UpgradeMux());
+        Add("LocomotorSetUpgrade", UpgradeMux());
+        Add("StealthUpgrade", UpgradeMux());
+        Add("MaxHealthUpgrade",
+        [
+            ..UpgradeMux(),
+            new("AddMaxHealth", FieldType.Real, Source: "MaxHealthUpgrade.cpp"),
+            new("ChangeType", FieldType.Enum, Table: NameTablesPhase5.MaxHealthChangeType, Source: "MaxHealthUpgrade.cpp"),
+        ]);
+        Add("RadarUpgrade",
+        [
+            ..UpgradeMux(),
+            new("DisableProof", FieldType.Bool, Source: "RadarUpgrade.cpp"),
+        ]);
+        // CommandSetUpgrade.cpp: all three fields are INI::parseAsciiString (unresolved names looked up dynamically at run
+        // time, not INI-time references), so Text is the faithful typing, not Reference.
+        Add("CommandSetUpgrade",
+        [
+            ..UpgradeMux(),
+            new("CommandSet", FieldType.Text, Source: "CommandSetUpgrade.cpp"),
+            new("CommandSetAlt", FieldType.Text, Source: "CommandSetUpgrade.cpp"),
+            new("TriggerAlt", FieldType.Text, Source: "CommandSetUpgrade.cpp"),
+        ]);
+        Add("ExperienceScalarUpgrade",
+        [
+            ..UpgradeMux(),
+            new("AddXPScalar", FieldType.Real, Source: "ExperienceScalarUpgrade.cpp"),
+        ]);
+        // ModelConditionFlags::parseSingleBitFromINI needs a full ModelCondition name table (a presentation concept, not yet
+        // typed); the flag itself has no simulation consumer in phase 5, so it stays Opaque (known, counted, not mechanical).
+        Add("ModelConditionUpgrade",
+        [
+            ..UpgradeMux(),
+            new("ConditionFlag", FieldType.Opaque, Source: "ModelConditionUpgrade.cpp"),
+        ]);
+        // UpgradeObject names an ObjectCreationList, which is not yet its own typed definition domain (still Compatibility);
+        // kept as Text rather than a Reference so it does not silently misroute into the Object/Upgrade/... reference graph.
+        Add("ObjectCreationUpgrade",
+        [
+            ..UpgradeMux(),
+            new("UpgradeObject", FieldType.Text, Source: "ObjectCreationUpgrade.cpp"),
+        ]);
+        // Field list verified against every occurrence in .local/phase2-import-a (510 AIUpdateInterface blocks, 34 files):
+        // exactly these four top-level fields occur; AIUpdate.cpp's full FieldParse table is much larger (idle-scan timing,
+        // mood, etc.) but nothing else appears in the shipped data, so nothing else is typed (avoids guessing spellings for
+        // fields that cannot be checked against real usage). Turret/AltTurret are nested blocks (167/4 occurrences: aim,
+        // traverse and weapon-slot control) kept generically as DefinitionSections, not read by phase 5's straight-line
+        // movement model (see docs/GAME-RULES.md known limits) — hence AllowsNestedSections.
+        Add("AIUpdateInterface",
+        [
+            new("AutoAcquireEnemiesWhenIdle", FieldType.Bool, Source: "AIUpdate.cpp"),
+            new("MoodAttackCheckRate", FieldType.DurationMs, Source: "AIUpdate.cpp"),
+            new("ForbidPlayerCommands", FieldType.Bool, Source: "AIUpdate.cpp"),
+            new("TurretsLinked", FieldType.Bool, Source: "AIUpdate.cpp"),
+        ], allowsNestedSections: true);
+        Add("ProductionUpdate",
+        [
+            new("MaxQueueEntries", FieldType.Integer, Min: 0, Source: "ProductionUpdate.h"),
+            // parseAppendQuantityModifier: "<TemplateName> <Count=1>", push_back'd (repeatable) — not the plain integer it looks like.
+            new("QuantityModifier", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "ProductionUpdate.h"),
+            new("NumDoorAnimations", FieldType.Opaque, Source: "ProductionUpdate.h"),
+            new("DoorOpeningTime", FieldType.Opaque, Source: "ProductionUpdate.h"),
+            new("DoorWaitOpenTime", FieldType.Opaque, Source: "ProductionUpdate.h"),
+            new("DoorCloseTime", FieldType.Opaque, Source: "ProductionUpdate.h"),
+            new("ConstructionCompleteDuration", FieldType.Opaque, Source: "ProductionUpdate.h"),
+            new("DisabledTypesToProcess", FieldType.Opaque, Source: "ProductionUpdate.h"),
+        ]);
+
         return builder.ToImmutable();
     }
 

@@ -70,11 +70,25 @@ public sealed record FlagsValue(string Table, ImmutableArray<string> Names, bool
 /// <summary>A set-tagged list of references such as <c>Locomotor = SET_NORMAL A B</c>.</summary>
 public sealed record TaggedReferenceList(string Tag, ImmutableArray<DefinitionReference> References);
 
+/// <summary>
+/// One <c>&lt;Default|EnumName&gt; &lt;value&gt;</c> line of a repeatable coefficient key (<c>Armor.cpp ArmorTemplate::parseArmorCoefficients</c>,
+/// <c>DamageFX.cpp</c> <c>AmountForMajorFX</c>/<c>ThrottleTime</c>). <c>EnumName</c> is <c>null</c> for the reference's <c>Default</c> token, which
+/// fills every table entry unless a later, more specific line overrides it. <see cref="Value"/> keeps the nested <see cref="DefinitionValue"/> so the
+/// caller can tell a <c>Percentage</c> (Armor) from a <c>Time</c>/<c>Number</c> (DamageFX) coefficient.
+/// </summary>
+public sealed record CoefficientValue(string? EnumName, DefinitionValue Value)
+{
+    public string RepeatPolicyKey => EnumName ?? "Default";
+}
+
+/// <summary><c>WeaponTemplate::parseShotDelay</c>: a milliseconds range (<c>Min == Max</c> for the plain single-value form).</summary>
+public readonly record struct ShotDelayValue(GameTime Min, GameTime Max);
+
 public enum DefinitionValueKind
 {
     Text, Boolean, Integer, Number, Time, Distance, Speed, Angle, Percentage, Money,
     Vector2, Vector3, Color, Enum, Flags, List, Reference, Sentinel, Compatibility,
-    IntegerList, ColorKeyframe
+    IntegerList, ColorKeyframe, Coefficient, ShotDelay
 }
 
 public sealed record DefinitionValue(DefinitionValueKind Kind, object Value, string OriginalText);
@@ -334,7 +348,7 @@ public static class DefinitionValueParser
             "object" or "objectname" or "buildvariation" or "buildvariations" => DefinitionKind.Object,
             "weapon" or "primaryweapon" or "secondaryweapon" or "tertiaryweapon" => DefinitionKind.Weapon,
             "weaponset" => DefinitionKind.WeaponSet,
-            "armorset" => DefinitionKind.Armor,
+            "armorset" or "armor" => DefinitionKind.Armor,
             "upgrade" or "triggeredby" or "conflictswith" => DefinitionKind.Upgrade,
             "science" or "sciences" or "prerequisitescience" => DefinitionKind.Science,
             "commandset" => DefinitionKind.CommandSet,

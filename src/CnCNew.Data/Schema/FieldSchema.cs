@@ -9,7 +9,11 @@ namespace CnCNew.Data.Schema;
 public enum FieldType
 {
     Text, Bool, Integer, Money, Real, Distance, Angle, Percent, DurationMs,
-    Enum, Flags, AllNoneDeltaFlags, ColorInt, IntegerList, Reference, ReferenceList, LocomotorSet, Opaque
+    Enum, Flags, AllNoneDeltaFlags, ColorInt, IntegerList, Reference, ReferenceList, LocomotorSet, Opaque,
+    /// <summary>The repeatable <c>&lt;Default|EnumName&gt; &lt;percent&gt;</c> pair of <c>Armor</c>/<c>AmountForMajorFX</c>-style keys.</summary>
+    CoefficientByEnum,
+    /// <summary><c>WeaponTemplate::parseShotDelay</c>: a plain millisecond duration (min == max) or <c>Min:x Max:y</c>.</summary>
+    ShotDelayMs,
 }
 
 /// <summary>What a repeated key inside one definition means (derived from the reference parse functions).</summary>
@@ -35,7 +39,9 @@ public sealed record FieldSchema(
     long Min = long.MinValue,
     long Max = long.MaxValue,
     int Count = 0,
-    string? Source = null)
+    string? Source = null,
+    /// <summary>For <see cref="FieldType.CoefficientByEnum"/>: how the value token after the enum name/<c>Default</c> is parsed.</summary>
+    FieldType? InnerType = null)
 {
     /// <summary>
     /// Number of trailing tokens the reference parser reads past and ignores: single-token types read one token
@@ -93,10 +99,7 @@ public sealed record FieldSchema(
                 if (!value.EndsWith('%')) throw ValueGrammar.Error($"'{Name}' expects a percentage such as 50%, got '{value}'.", location);
                 return new(DefinitionValueKind.Percentage, new Percentage(ParseRealStrict(value[..^1], location) / 100m), value);
             case FieldType.DurationMs:
-                // INI::scanUnsignedInt is sscanf("%u"): negative numbers wrap modulo 2^32 (shipped MD_GLA01 uses -1).
-                if (!long.TryParse(value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var ms) || ms < int.MinValue || ms > uint.MaxValue)
-                    throw ValueGrammar.Error($"'{Name}' expects an unsigned integer duration in milliseconds, got '{value}'.", location);
-                return new(DefinitionValueKind.Time, new GameTime(ms < 0 ? ms + 4294967296L : ms), value);
+                return new(DefinitionValueKind.Time, new GameTime(ParseUnsignedMs(value, location)), value);
             case FieldType.Enum:
                 return ValueGrammar.ParseEnum(Table ?? throw new InvalidOperationException($"Schema '{Name}' has no table."), value, location);
             case FieldType.Flags:
@@ -124,6 +127,30 @@ public sealed record FieldSchema(
                     names.Select(name => name.Equals("NONE", StringComparison.OrdinalIgnoreCase)
                         ? new DefinitionReference(ReferenceKind!.Value, "NONE", true)
                         : new DefinitionReference(ReferenceKind!.Value, name)).ToImmutableArray(), value);
+            case FieldType.ShotDelayMs:
+                decimal minMs, maxMs;
+                if (ValueGrammar.TryLabeled(value, ["Min", "Max"], [], out var delayValues, out var delayRest) && delayRest.Length == 0)
+                {
+                    minMs = ParseMsReal(delayValues[0], location);
+                    maxMs = ParseMsReal(delayValues[1], location);
+                }
+                else
+                    minMs = maxMs = ParseMsReal(value, location);
+                return new(DefinitionValueKind.ShotDelay, new ShotDelayValue(new GameTime(minMs), new GameTime(maxMs)), value);
+            case FieldType.CoefficientByEnum:
+                var coefficientTokens = ValueGrammar.Tokenize(value);
+                if (coefficientTokens.Length != 2) throw ValueGrammar.Error($"'{Name}' expects '<Default|name> <value>', got '{value}'.", location);
+                var table = Table ?? throw new InvalidOperationException($"Schema '{Name}' has no table.");
+                string? enumName = null;
+                if (!coefficientTokens[0].Equals("Default", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!table.TryIndexOf(coefficientTokens[0], out var enumIndex))
+                        throw ValueGrammar.Error($"'{coefficientTokens[0]}' in '{value}' is neither 'Default' nor a member of {table.Name} ({table.Source}).", location);
+                    enumName = table.Canonical(enumIndex);
+                }
+                var innerSchema = this with { Type = InnerType ?? throw new InvalidOperationException($"Schema '{Name}' has no InnerType."), Table = null };
+                var inner = innerSchema.ParseCore(coefficientTokens[1], location);
+                return new(DefinitionValueKind.Coefficient, new CoefficientValue(enumName, inner), value);
             case FieldType.LocomotorSet:
                 var tokens = ValueGrammar.Tokenize(value);
                 if (tokens.Length == 0 || !NameTables.LocomotorSet.TryIndexOf(tokens[0], out var setIndex))
@@ -135,6 +162,19 @@ public sealed record FieldSchema(
                 throw new InvalidOperationException($"Unhandled field type {Type}.");
         }
     }
+
+    // INI::scanUnsignedInt is sscanf("%u"): negative numbers wrap modulo 2^32 (shipped MD_GLA01 uses MinLifetime = -1).
+    private long ParseUnsignedMs(string value, IniSourceLocation location)
+    {
+        if (!long.TryParse(value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var ms) || ms < int.MinValue || ms > uint.MaxValue)
+            throw ValueGrammar.Error($"'{Name}' expects an unsigned integer duration in milliseconds, got '{value}'.", location);
+        return ms < 0 ? ms + 4294967296L : ms;
+    }
+
+    private decimal ParseMsReal(string value, IniSourceLocation location)
+        => ValueGrammar.TryReal(value, out var result) && result >= 0m
+            ? result
+            : throw ValueGrammar.Error($"'{Name}' expects a non-negative duration in milliseconds, got '{value}'.", location);
 
     private long ParseInteger(string value, IniSourceLocation location)
     {

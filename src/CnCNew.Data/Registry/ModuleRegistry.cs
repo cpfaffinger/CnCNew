@@ -42,7 +42,9 @@ public sealed record ModuleDescriptor(
     ImmutableArray<FieldSchema> Schema,
     bool CompatibilityOnly,
     string? PlannedTarget,
-    ModuleCategory Category)
+    ModuleCategory Category,
+    /// <summary>Whether an implemented module may carry nested blocks (generic <c>DefinitionSection</c>s), e.g. AIUpdateInterface's <c>Turret</c> block.</summary>
+    bool AllowsNestedSections = false)
 {
     public bool IsImplementedSimulationModule => !CompatibilityOnly && Category == ModuleCategory.Simulation;
 }

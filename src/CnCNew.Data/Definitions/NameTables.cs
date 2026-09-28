@@ -60,5 +60,10 @@ public static class NameTables
     /// <summary>AIUpdate.h TheLocomotorSetNames (8 entries).</summary>
     public static NameTable LocomotorSet { get; } = new("LocomotorSet", "AIUpdate.h TheLocomotorSetNames", "SET_NORMAL", "SET_NORMAL_UPGRADED", "SET_FREEFALL", "SET_WANDER", "SET_PANIC", "SET_TAXIING", "SET_SUPERSONIC", "SET_SLUGGISH");
 
-    public static ImmutableArray<NameTable> All { get; } = [KindOf, ObjectStatus, DamageType, DeathType, Veterancy, Geometry, RadarPriority, BuildableStatus, BuildCompletion, EditorSorting, Shadow, LocomotorSet];
+    public static ImmutableArray<NameTable> All { get; } =
+    [
+        KindOf, ObjectStatus, DamageType, DeathType, Veterancy, Geometry, RadarPriority, BuildableStatus, BuildCompletion, EditorSorting, Shadow, LocomotorSet,
+        NameTablesPhase5.StealthForbiddenCondition, NameTablesPhase5.ArmorSetCondition, NameTablesPhase5.WeaponSetCondition,
+        NameTablesPhase5.UpgradeType, NameTablesPhase5.MaxHealthChangeType,
+    ];
 }

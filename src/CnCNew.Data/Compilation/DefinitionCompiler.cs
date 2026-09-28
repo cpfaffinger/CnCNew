@@ -281,12 +281,25 @@ public static class DefinitionCompiler
                 value = DefinitionValueParser.Parse(key, property.Value, property.Location);
             }
         }
+        else if (DomainSchemas.For(state.Kind) is { } domainSchema && domainSchema.TryGet(key, out var domainField))
+        {
+            if (domainField.Type == FieldType.Opaque)
+                CountCompat(c.DeferredFields, $"{domainSchema.Name}/{domainField.Name}", domainSchema.Name, "phase-5-domain-field-typing");
+            value = domainField.Parse(property.Value, property.Location);
+            repeat = domainField.Repeat;
+            if (domainField.IgnoredTokenCount(property.Value) is > 0 and var ignoredDomainTokens)
+                c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-ignored-tokens",
+                    $"'{key}' = '{property.Value.Trim()}' has {ignoredDomainTokens} trailing token(s) that the reference parser reads past and ignores.", property.Location));
+        }
         else
         {
             repeat = RepeatableKeys.Lookup(state.DeclarationType, key);
             value = state.Kind == DefinitionKind.CommandSet && int.TryParse(key, out _)
                 ? new DefinitionValue(DefinitionValueKind.Reference, new DefinitionReference(DefinitionKind.CommandButton, property.Value.Trim()), property.Value)
                 : DefinitionValueParser.Parse(key, property.Value, property.Location);
+            // A domain that has a (partial) typed schema but doesn't know this particular key: visible, not silent.
+            if (DomainSchemas.For(state.Kind) is not null)
+                CountCompat(c.DeferredFields, $"{state.DeclarationType}/{key}", state.DeclarationType, "phase-5-domain-field-typing");
         }
 
         if (value.Value is CompatibilityValue compatibility)
@@ -413,6 +426,8 @@ public static class DefinitionCompiler
                 if (!seen.Add(property.Name) && schema.Repeat == RepeatPolicy.Overwrite)
                     throw new DefinitionCompileException($"Field '{property.Name}' of module '{declaration.Name}' is set twice.", property.Location);
                 var parsed = schema.Parse(property.Value, property.Location);
+                if (schema.Type == FieldType.Opaque)
+                    CountCompat(c.DeferredFields, $"{declaration.Name}/{schema.Name}", declaration.Name, "phase-5-module-field-typing");
                 if (schema.Type == FieldType.DurationMs && property.Value.TrimStart().StartsWith('-'))
                     c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-unsigned-wrap",
                         $"'{property.Name}' = '{property.Value.Trim()}' wraps modulo 2^32 like sscanf(\"%u\") in the reference parser.", property.Location));
@@ -449,7 +464,7 @@ public static class DefinitionCompiler
                 foreach (var required in descriptor.Schema.Where(value => value.Required))
                     if (!fields.Any(field => field.Name.Equals(required.Name, StringComparison.OrdinalIgnoreCase)))
                         throw new DefinitionCompileException($"Module '{declaration.Name}' requires field '{required.Name}'.", block.Location);
-                if (sections.Length > 0)
+                if (sections.Length > 0 && !descriptor.AllowsNestedSections)
                     throw new DefinitionCompileException($"Module '{declaration.Name}' does not allow nested blocks.", sections[0].Location);
             }
         }
