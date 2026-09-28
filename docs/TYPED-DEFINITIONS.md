@@ -1,6 +1,7 @@
 # Typisierter Definitionsvertrag
 
-Stand: 28. September 2026 (Phase 3 gehärtet durch Block 0 der Phase 4)
+Stand: 28. September 2026 (Phase 3 gehärtet durch Block 0 der Phase 4; Weapon/Armor/Upgrade/Science/Locomotor
+domänentypisiert in Block 0.1 der Phase 5, siehe letzten Abschnitt)
 
 ## Schicht und öffentlicher Vertrag
 
@@ -185,7 +186,7 @@ kategorien erweitert. Werteverteilung ohne die geerbten Defaultkopien: von 333.0
 135.215 von 335.592) und 74.128 `List` (vorher 89.511); neu getypt sind 388 Farben, 8.696 Farbschlüsselbilder, 6.316 Vektoren,
 5.134 Flags, 5.044 Enums und 908 Ganzzahllisten. Alle Werte einschließlich Vererbung: 412.756 (159.030 `Text`, 75.138 `List`).
 
-## Bekannte Grenzen (nach Block 0)
+## Bekannte Grenzen (nach Block 0 der Phase 4)
 
 - Die Definitionstypen außer Object (`WeaponDefinition`, …) haben weiter keine domänenspezifischen Eigenschaften, Pflichtfelder
   oder Schlüsselschemata; ihre 30.000 Kopfwerte sind zu einem großen Teil noch heuristisch typisiert. Schuld für Phase 5, mit
@@ -198,3 +199,36 @@ kategorien erweitert. Werteverteilung ohne die geerbten Defaultkopien: von 333.0
 - Die Reihenfolge der GameClient-Subsysteme untereinander ist nicht aus dem Quelltext belegt; der Bericht weist nach, dass
   daraus kein Gewinnerwechsel folgt.
 - Eine inkrementelle oder gecachte Kompilierung existiert nicht.
+
+*(Die oben aufgeführte Schuld für Armor, Weapon, Upgrade, Science und Locomotor ist inzwischen abgetragen – siehe unten.)*
+
+## Block 0.1 der Phase 5: Domänenschemata für Weapon, Armor, Upgrade, Science, Locomotor
+
+`DomainSchemas.For(DefinitionKind)` (`src/CnCNew.Data/Compilation/DomainSchemas.cs`) hängt an `DefinitionCompiler.ApplyProperty`
+zwischen der Object-Schemaprüfung und dem generischen Fallback: Je Definitionskopf ein `SchemaSet` mit den mechanisch
+relevanten Feldern; nicht mechanisch benötigte, aber reale Schlüssel bleiben `Opaque` (gezählt als `deferred-field`,
+Kategorie `phase-5-domain-field-typing`, nie stillschweigend verworfen).
+
+- **`WeaponSchema`** (`Weapon.cpp TheWeaponTemplateFieldParseTable`): 15 mechanisch relevante Felder typisiert
+  (`PrimaryDamage`, `PrimaryDamageRadius`, `SecondaryDamage`, `SecondaryDamageRadius`, `AttackRange`,
+  `MinimumAttackRange`, `DamageType`, `DeathType`, `WeaponSpeed`, `MinWeaponSpeed`, `ClipSize`, `ClipReloadTime`,
+  `DelayBetweenShots`, `AutoReloadsClip`); ~60 verbleibende Schlüssel bleiben deferred. Neue Wertarten:
+  **`ShotDelayValue`** (`FieldType.ShotDelayMs`) für `DelayBetweenShots` – akzeptiert sowohl die einfache Form (auch mit
+  Nachkommastellen, `WeaponTemplate::parseShotDelay` liest real, nicht nur ganzzahlig) als auch die vier im Bestand
+  vorkommenden `Min:x Max:y`-Fälle (z. B. `ScudStormMissile`).
+- **`ArmorSchema`**: ein Feld, `Armor = <Default|Schadensart> <Prozent>`, wiederholbar und nach erstem Token indiziert
+  (`RepeatPolicy.IndexedByFirstToken` – ohne diese Angabe hätte jede Wiederholung fälschlich als `duplicate-key`
+  gezählt). Neue Wertart **`CoefficientValue`** (`FieldType.CoefficientByEnum`, parametrisiert über `InnerType`, damit
+  derselbe Mechanismus später auch `DamageFX`-Beträge tragen kann).
+- **`UpgradeSchema`/`ScienceSchema`/`LocomotorSchema`**: analog, Felder und Quellen im Katalog kommentiert.
+- **Wichtige Nebenkorrektur:** Der generische Referenz-Erkenner (`DefinitionValueParser.TryReferenceKind`) kannte das
+  Feld `ArmorSet` (→ `DefinitionKind.Armor`), aber **nicht** das gleichnamige Feld `Armor` innerhalb eines
+  `ArmorSet`-Blocks (`ArmorSet { Armor = <Name> End }`) – ein bis dahin unbemerkter Fehler, weil Phase 4 `ArmorSet`-Inhalte
+  nie auswertete. Ohne die Ergänzung `"armor" => DefinitionKind.Armor` blieb der Wert unaufgelöster Text, und
+  `ObjectTemplate.ResolveArmor` fiel für jedes Objekt auf den Alle-Koeffizienten-1,0-Standard zurück (entdeckt durch den
+  neuen Phase-5-Kampf-Integrationstest, nicht durch den Realdatentest – die 100 %-Koeffizienten von `NoArmor` verdeckten
+  den Fehler zufällig). Nach der Korrektur lösen 2.260 zusätzliche Referenzen auf (alle erfolgreich,
+  13.207/14.753 → 15.467/17.013 im Vollinventar).
+- **Zahlen** (`IniTool debt-report`, Vollinventar): Armor 884 Kopffelder, **0 unbenannt**; Weapon 6.248 Kopffelder,
+  1.738 unbenannt (vorher 2.449); Upgrade 427/228 (vorher 263); Science 456/168 (vorher 254); Locomotor 3.599/552
+  (unverändert – die 552 sind bewusst deferred, siehe `LocomotorSchema`-Kommentar).

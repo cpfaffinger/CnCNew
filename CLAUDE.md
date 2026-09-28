@@ -91,13 +91,16 @@ Tests sind eigenständige Konsolenprogramme (`tests/<Projekt>.Tests/Program.cs`,
 Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern – kein xUnit/NUnit.
 Diesen Stil beibehalten. Für schnelle Wiederholung nach einem Build: `dotnet run --no-build`.
 
-Referenzwerte (Stand Phase 4, neu messen): Vollinventar mit allen Kartenoverlays 228 geladene INI-Dateien (28 nach Ladeplan
-ausgeschlossen), 65.873 Blöcke, 12.573 Definitionen, 16.360 Module, 333.061 Schlüssel, 13.134/14.679 Referenzen aufgelöst
-(1.545 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 142.302.102 Byte, SHA-256
-`131ED730F2AD4DB85D6F50CE91A7059358CA32D6728F8EB6E91E6CF8775E58A4`; Retail-Basisdaten (`--maps exclude`) 12.548 Definitionen,
-2.113 Objekte, SHA-256 `9B49E9DD1EE403C6797B32AD66F63CF3C0E538CEB510A84CEFF4AD5257FCCD38`. Modulkatalog 205 Typen (12
-implementiert), Kompatibilitätsbasislinie 344 Einträge, Instanziierbarkeit 26 von 2.113 Objekten. Asset-Runtimebestand: 25.682 Dateien.
-Stresstest (216.000 Ticks, `SimTool stress`): Endhash `A299C38BFE07681D`, Kettenhash `E230DA5F04821478`.
+Referenzwerte (Stand Phase 5, in Arbeit; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene INI-Dateien (28
+nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 15.467/17.013
+Referenzen aufgelöst (1.546 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 142.618.645 Byte, SHA-256
+`A2B7859EC9C026F5EE4C898BD74482E73ED15C4CF11395B5BD80D8E35E9581B8`; Retail-Basisdaten (`--maps exclude`) 12.550
+Definitionen, 2.115 Objekte, SHA-256 `128B244283C1D7466194E105FAED92A326500788C585D44191EF2DDDB3E1E378` (Objektzahl und
+Fingerabdruck geändert gegenüber Phase 4 durch eine Phase-5-Parserkorrektur, siehe `docs/PHASE3-COMPATIBILITY.md`).
+Modulkatalog 205 Typen (27 implementiert: 12 aus Phase 4, 15 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
+437 Einträge, Instanziierbarkeit 623 von 2.115 Objekten (29,5 %). Asset-Runtimebestand: 25.682 Dateien.
+Stresstest (216.000 Ticks, `SimTool stress`, mit allen 27 Modulen): Endhash `21BEAB4C15053FC0`, Kettenhash
+`3B4777772E900E0C`.
 
 ## Code- und Dokumentationsstil
 

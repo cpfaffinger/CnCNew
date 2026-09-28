@@ -222,7 +222,9 @@ Objekten sind instanziierbar, weil vom Default geerbte Module (`StealthUpdate`, 
 
 ## 5. Spielregeln, Kampf, Wirtschaft und Produktion
 
-**Ergebnis:** Die vollständige Kernschleife eines RTS-Matches funktioniert headless:
+**Status: in Arbeit (Stand 28. September 2026); Fortsetzungsauftrag in `docs/HANDOFF-PHASE5.md`.**
+
+**Ergebnis (Ziel):** Die vollständige Kernschleife eines RTS-Matches funktioniert headless:
 Ressourcen sammeln, bauen, produzieren, bewegen, angreifen, Schaden anwenden und gewinnen.
 
 Umfang:
@@ -236,6 +238,25 @@ Umfang:
 Abgeschlossen, wenn ein headless Referenzmatch aller Fraktionen vom Start bis zum Sieg ohne
 Sonderpfade durchläuft und zentrale Kampf- und Wirtschaftsabläufe durch Golden-Master-Szenarien
 gegen bekannte Originalwerte abgesichert sind.
+
+**Bisher umgesetzt** (Block 0 vollständig bis auf 0.3/0.4, Hauptumfang teilweise; Details, Numerik und bewusste
+Vereinfachungen in `docs/GAME-RULES.md`):
+
+- Block 0.1: Domänenschemata für Weapon, Armor, Upgrade, Science, Locomotor (`docs/TYPED-DEFINITIONS.md`); als
+  Nebenfund ein INI-Parser-Fehler behoben (`End`-Erkennung nur erstes Token, wie das Original).
+- Block 0.2: `StealthUpdate` und `AutoHealBehavior` mit echten Feldern und Upgrade-Aktivierung implementiert.
+- Block 0.3 (Furchtsignal-`GameLogicRandomValue`) und 0.4 (RNG-Abgleich mit kompiliertem Original) **noch offen**.
+- Wirtschaft (Guthaben, Energiebilanz), das Upgrade-System (128-Bit-Maske, `UpgradeMux`-Zustandsmaschine, elf
+  `*Upgrade`-Module), direkter Kampf (Waffen, Rüstungskoeffizienten, Magazin/Nachladen, keine Flächenwirkung), einfache
+  geradlinige Bewegung (`AIUpdateInterface`, kein Terrain/Pfadsuche/Drehrate), eine Produktionswarteschlange
+  (`ProductionUpdate`) und „letzter Überlebender" als Sieg.
+- 27 von 205 Modultypen implementiert; 623 von 2.115 Retail-Objekten vollständig instanziierbar (29,5 %, vorher 26 von
+  2.113); der 216.000-Tick-Stresstest läuft mit allen neuen Modulen deterministisch, ohne Leck.
+- **Noch offen:** Spieler/Teams/Diplomatie/Fraktionen als Datenmodell, Sciences, Command-Set-Wirkung,
+  Supply/Garrison/Transport, Reparatur/Verkauf, Radarwirkung, Spezialfähigkeiten mit `ObjectCreationList`-Ausführung,
+  volle veteranenbasierte `ArmorSet`/`WeaponSet`-Auswahl, Erfahrungsvergabe, headless Referenzmatch aller Fraktionen,
+  Golden-Master-Szenarien gegen Originalwerte. Die verbleibende Blockerliste (nach Häufigkeit) steht in
+  `docs/SIMULATION-CORE.md` §11.
 
 ## 6. Welt, Terrain, Bewegung, Sicht und Skirmish-KI
 

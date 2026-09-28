@@ -1,6 +1,7 @@
-# Deterministischer Simulationskern (Phase 4)
+# Deterministischer Simulationskern (Phase 4, erweitert in Phase 5)
 
-Stand: 28. September 2026
+Stand: 28. September 2026 (Phase 5 in Arbeit, siehe `docs/GAME-RULES.md` für die Phase-5-Regeln:
+Wirtschaft, Upgrades, Kampf, einfache Bewegung, Produktion, Sieg/Niederlage)
 
 `CnCNew.Simulation` ist die headless laufende, deterministische Welt: fester Tick, stabile IDs,
 reproduzierbare Zufallszahlen, Befehlsqueue, Objekt-/Modul-Lebenszyklus, Timer, Events,
@@ -135,7 +136,9 @@ Regeln:
 `CnCNew.Data` führt Deskriptoren ohne Factory (`ModuleDescriptor`: Name, Blockart, Interfacemaske, Besitzerarten,
 Feldschema, `CompatibilityOnly`, Zielphase, Kategorie); der Katalog enthält alle **205** Modultypen des Bestands (eine
 frühere Zählung von 206 enthielt das Phantommodul `ArmorSet`, entstanden aus einem in `Maps/MD_CHI03/map.ini` nie
-geschlossenen `AddModule`, dessen Felder das Original auf das Objekt anwendet). `CnCNew.Simulation` besitzt die
+geschlossenen `AddModule`, dessen Felder das Original auf das Objekt anwendet). Phase 5 hat **27** dieser 205 Typen
+implementiert (12 aus Phase 4 plus 15 neue: `StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade`-Module,
+`AIUpdateInterface`, `ProductionUpdate` – siehe `docs/GAME-RULES.md` §3). `CnCNew.Simulation` besitzt die
 explizite, ordinal sortierte, reflexionsfreie Bindungstabelle `BuiltInModules.Bindings` (Name → `ModuleBinding<TData>` mit
 Parser und Factory) und `ModuleBindingTable` prüft sie beim Erzeugen gegen die Deskriptoren:
 
@@ -207,7 +210,8 @@ Subdual-Typen wirken nicht auf Gesundheit), `KILLPILOT`/`KILL_GARRISONED`/`STATU
 
 ## 6. Befehle
 
-Typisiert, tick-adressiert, versionierte Typtabelle (`CommandTypes.Version = 1`):
+Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 2` (Phase 5 hat sechs Typen ergänzt;
+bestehende Codes ändern sich nie):
 
 | Code | Typ | Zweck | nur System |
 |---:|---|---|:-:|
@@ -217,13 +221,23 @@ Typisiert, tick-adressiert, versionierte Typtabelle (`CommandTypes.Version = 1`)
 | 4 | `KillCommand` | wie `Object::kill` | ✔ |
 | 5 | `SetTimerCommand` | Timer am Entity oder an der Welt (Welttimer nur Notify) | ✔ |
 | 6 | `CancelTimerCommand` | Timer löschen | ✔ |
+| 7 | `GiveMoneyCommand` | Guthaben eines Spielers direkt gutschreiben (Szenario-/Testwerkzeug) | ✔ |
+| 8 | `PurchaseUpgradeCommand` | Upgrade kaufen (spieler- oder objektgebunden), Kosten sofort abgebucht | |
+| 9 | `QueueProductionCommand` | Einheit in die Produktionswarteschlange eines Entity einreihen | |
+| 10 | `CancelProductionCommand` | Warteschlangenplatz stornieren, volle Rückerstattung | |
+| 11 | `SetMoveTargetCommand` | Geradlinigen Bewegungsauftrag setzen (Phase-5-Bewegungsmodell) | |
+| 12 | `FireWeaponCommand` | Direkter Waffenschuss auf ein Ziel (kein Auto-Ziel, keine Sichtlinie) | |
 
 `Submit` prüft sofort und lehnt **explizit, gezählt und als `CommandRejected`-Event** ab: `Late` (Tick liegt zurück),
 `Duplicate` (gleiche (Spieler, Sequenz) wie die zuletzt akzeptierte), `OutOfOrder` (kleinere Sequenz), `UnknownPlayer`,
 `NotPermitted`, `InvalidArguments` (Sequenz 0, negative Werte, ungültige Typen), `UnknownTemplate` (unbekannt oder nicht
-instanziierbar). Zur Ausführungszeit folgen `UnknownEntity`, `NotPermitted` (fremdes Entity) und `UnknownTimer`. Sequenzen
-sind pro Spieler streng aufsteigend; Befehle desselben Ticks laufen nach (Spieler-ID, Sequenz), unabhängig von der
-Einreihreihenfolge. Die Zähler je Grund gehören zum Zustand.
+instanziierbar). Zur Ausführungszeit folgen `UnknownEntity`, `NotPermitted` (fremdes Entity) und `UnknownTimer`; Phase 5
+ergänzt `InsufficientFunds`, `AlreadyOwned`, `UnknownUpgrade`, `NoWeapon`, `WeaponNotReady`, `OutOfRange`, `QueueFull`,
+`CannotMove`, `CannotProduce` (Details und Numerik: `docs/GAME-RULES.md` §4). Sequenzen sind pro Spieler streng
+aufsteigend; Befehle desselben Ticks laufen nach (Spieler-ID, Sequenz), unabhängig von der Einreihreihenfolge. Die Zähler
+je Grund gehören zum Zustand. **Wichtig:** `Validate()` prüft beim `Submit()` gegen den *aktuellen* Weltzustand, nicht
+gegen den Zustand nach zuvor im selben Tick eingereihten Befehlen – ein `GiveMoneyCommand` und ein darauf aufbauender
+`PurchaseUpgradeCommand` im selben Tick sehen die Gutschrift erst, wenn dazwischen ein `Step()` ausgeführt wurde.
 
 ## 7. Snapshots und Hashes
 
@@ -319,32 +333,45 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 
 ## 11. Modulabdeckung des Bestands
 
-`SimTool audit-coverage` kompiliert den Retail-Basisbestand (ohne Kartenoverlays, 12.548 Definitionen, Fingerabdruck
-`9B49E9DD…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
+`SimTool audit-coverage` kompiliert den Retail-Basisbestand (ohne Kartenoverlays; Phase 5 hat den INI-Parser korrigiert –
+siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
+Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
-- **2.113 Objekte, 26 vollständig instanziierbar (1,2 %)**, 2.087 blockiert (jedes Objekt besitzt mindestens ein
-  Simulationsmodul, meist über das geerbte `DefaultThingTemplate`).
-- Die 26 instanziierbaren Objekte werden in einer Welt erzeugt, ticken, werden getötet und bilden zweimal dieselben Hashes
-  (Test `--content-dir`).
-- Häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert): `StealthUpdate` 1.128 / 141 (fast durchgehend das
-  vom Default geerbte überschreibbare Modul), `FlammableUpdate` 843 / 14, `AutoHealBehavior` 774 / 3 (ebenfalls Default),
-  `PhysicsBehavior` 737 / 5, `TransitionDamageFX` 706 / 0, `SlowDeathBehavior` 614 / 13, `AIUpdateInterface` 534 / 7,
-  `ProductionUpdate` 236 / 0, `GarrisonContain` 200 / 2, `CreateCrateDie` 182 / 0, `SquishCollide` 170 / 0,
-  `PoisonedBehavior` 168 / 0. Die vollständige Liste liefert das Werkzeug.
-- Wer Phase 5 nach Wirkung ordnen will: `StealthUpdate` und `AutoHealBehavior` (beide vom Default geerbt und im Regelfall
-  ruhend) heben allein 144 Objekte an; zusammen mit `FlammableUpdate`, `PhysicsBehavior` und `SlowDeathBehavior` sind es die
-  ersten Meilensteine der Instanziierungsquote.
+- **2.115 Objekte, 623 vollständig instanziierbar (29,5 %)**, 1.492 blockiert. Gegenüber Phase 4 (26/2.113, 1,2 %) ein
+  Sprung um den Faktor ~24, getragen von Block 0.2 (`StealthUpdate`, `AutoHealBehavior` – beide vom `DefaultThingTemplate`
+  geerbt und fast immer ruhend) und den elf `*Upgrade`-Modulen, `AIUpdateInterface` und `ProductionUpdate`.
+- Alle 623 instanziierbaren Objekte werden in einer Welt erzeugt, ticken 216.000 Ticks im Stresstest ohne Leck oder
+  Nichtdeterminismus (`SimTool stress`, §10) und laufen im Realdatentest identisch zweimal durch (Test `--content-dir`).
+- Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert): `FlammableUpdate` 845/15,
+  `PhysicsBehavior` 739/13, `TransitionDamageFX` 708/7, `SlowDeathBehavior` 616/13, `GarrisonContain` 200/2,
+  `CreateCrateDie` 184/0, `SquishCollide` 170/2, `PoisonedBehavior` 168/0, `FireWeaponWhenDeadBehavior` 127/1,
+  `StealthDetectorUpdate` 103/9. Die vollständige, tagesaktuelle Liste liefert das Werkzeug; sie ist die Reihenfolge für
+  die Fortsetzung von Phase 5 (siehe `docs/HANDOFF-PHASE5.md`).
 
 ## 12. Bekannte Grenzen und technische Schulden
 
-- Kein Bewegungs-, Waffen-, Rüstungs-, Produktions- oder Spielerregelwerk (Phase 5/6); Positionen und Winkel sind
-  Zustand und Hash-Teil, aber nichts bewegt sich.
+- **Phase 5 (aktueller Stand)**: Wirtschaft, Upgrades, direkter Kampf, einfache Bewegung, Produktion und
+  Sieg/Niederlage sind implementiert (`docs/GAME-RULES.md`), aber bewusst vereinfacht: kein Terrain/Pfadsuche, kein
+  Flächenschaden (nur Volltreffer), keine `WeaponBonus`-Multiplikatoren, nur zwei `ArmorSet`/`WeaponSet`-Bedingungen
+  (`None`, `PLAYER_UPGRADE`), kein Sciences-/Tech-Baum, keine Teams/Diplomatie, kein Garrison/Transport/Supply, keine
+  Reparatur/Verkauf/Radar-Wirkung, keine Erfahrungs-/Veteranenvergabe aus Kämpfen. Jede Vereinfachung steht mit
+  Quellverweis im Modul- oder Katalog-Kommentar.
+- Ein INI-Parser-Fehler wurde in Phase 5 behoben: `SageIniParser` verglich das `End`-Schlüsselwort gegen die *gesamte*
+  Zeile statt (wie das Original, `INI::initFromINIMulti`, `strtok`) nur gegen ihr erstes Token; zwei Objekte
+  (`AmericaVehicle.ini`, `BossGeneral.ini`) tragen einen Tippfehler `End Upgrade_AmericaHallfireDrone`, den das Original
+  toleriert, der alte Parser aber als offenen Block fortsetzte. Dadurch ändert sich die Objektzahl leicht (2.113 → 2.115)
+  und der Definitionsfingerabdruck.
 - Die Update-Phasen des Originals (`SleepyUpdatePhase`) sind nicht modelliert.
-- Die Zufallsverbräuche des Originals außerhalb von `LifetimeUpdate`/`DeletionUpdate` (etwa Furchtsignal) fehlen noch.
+- Der Fear-Sound-Zufallsverbrauch (`ActiveBody::attemptDamage`, `GameLogicRandomValue(0,99)` bei Unterschreiten der
+  25-%-Schwelle) ist noch nicht portiert (Block 0.3 unvollständig – siehe `docs/HANDOFF-PHASE5.md`).
 - Der Abgleich des RNG mit einem kompilierten Original steht aus (kein Compiler verfügbar); die Handrechnung ist unabhängig
   und reicht als Beleg für Algorithmusgleichheit, nicht als Beleg für die Weiterverwendung in Netzwerkspielen.
 - `Restore` ist intern; Vorwärts-/Rückwärtskompatibilität von Snapshots (Version 1) ist erst Thema von Phase 9.
 - Der Zustands-Hash ist nicht kryptographisch und die Snapshot-JSON-Größe (≈ 485 Byte je Entity) ist nicht optimiert.
 - Vom Kern erzeugte Anforderungen (`FxRequested`, `CreationListRequested`, `WeaponFireRequested`) werden nirgends
-  ausgeführt; sie sind Verträge für Präsentation und Phase 5.
-- Die Definitionsdomänen außer Object sind weiterhin flach typisiert (Zahlen in `TYPED-DEFINITIONS.md`).
+  ausgeführt; sie sind Verträge für Präsentation.
+- Die Definitionsdomänen außer Object, Weapon, Armor, Upgrade, Science und Locomotor sind weiterhin flach typisiert
+  (Zahlen in `TYPED-DEFINITIONS.md`): CommandButton, SpecialPower, Faction, GameData, ObjectCreationList.
+- Kein headless Referenzmatch aller Fraktionen und keine Golden-Master-Szenarien gegen Originalwerte (Phase-5-Punkte 7/8
+  aus `docs/HANDOFF-PHASE5.md` stehen noch aus); die neuen Phase-5-Mechaniken sind stattdessen durch gezielte
+  Integrationstests (`Tests.Phase5.cs`) und den 216.000-Tick-Stresstest mit realen Objekten abgesichert.
