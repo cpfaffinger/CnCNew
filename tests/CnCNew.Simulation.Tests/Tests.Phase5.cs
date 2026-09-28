@@ -278,6 +278,33 @@ static partial class Tests
           End
         End
 
+        Object Spotter
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = StealthDetectorUpdate Detector01
+            DetectionRate = 500
+            DetectionRange = 50.0
+          End
+        End
+
+        Object Cloaked
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 30.0
+            InitialHealth = 30.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = StealthUpdate Stealth01
+            InnateStealth = Yes
+          End
+        End
+
         Science SCIENCE_Intrinsic
           IsGrantable = Yes
         End
@@ -782,6 +809,43 @@ static partial class Tests
         var result3 = world3.Step();
         Check.That(!result3.Events.Any(value => value.Kind == SimEventKind.WeaponFireRequested),
             "A conflicting upgrade purchased after construction silences the StartsActive sibling at death time; the TriggeredBy sibling was never triggered either.");
+    }
+
+    /// <summary>
+    /// The next self-contained blocker by measured impact (9 objects unlocked alone): <c>StealthDetectorUpdate</c>
+    /// periodically marks nearby enemy <c>STEALTHED</c> objects <c>DETECTED</c> (<see cref="StealthUpdate.MarkDetected"/>),
+    /// excludes the detector's own owner (no team/diplomacy system: same owner = ally, see the module's doc comment), and
+    /// the mark expires once nothing re-marks it.
+    /// </summary>
+    public static void Phase5StealthDetector()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        var detectedBit = ObjectStatusBits.Index("DETECTED");
+        var stealthedBit = ObjectStatusBits.Index("STEALTHED");
+
+        // Commands execute in (Player, Sequence) order regardless of submission order (ExecuteCommands), so the same-owner
+        // "ally" (player 1, like the detector) always allocates entity id 2 and the enemy (player 2) always id 3.
+        feeder.Spawn(1, "Spotter", x: 0, y: 0);
+        feeder.Spawn(2, "Cloaked", x: 10, y: 0); // enemy, well within DetectionRange (50).
+        feeder.Spawn(1, "Cloaked", x: 10, y: 0); // same owner as the detector: an "ally" under the no-diplomacy approximation.
+        world.Step();
+        var ally = world.FindEntity(new EntityId(2))!;
+        var enemy = world.FindEntity(new EntityId(3))!;
+        Check.That(enemy.HasStatus(stealthedBit) && ally.HasStatus(stealthedBit), "InnateStealth cloaks both immediately at spawn.");
+
+        for (var i = 0; i < 20; i++) world.Step(); // DetectionRate = 500ms = 15 ticks, plus the random initial phasing (1..15).
+        Check.That(enemy.HasStatus(detectedBit), "The enemy stealthed unit is DETECTED once the detector's periodic scan reaches it.");
+        Check.That(enemy.HasStatus(stealthedBit), "DETECTED coexists with STEALTHED: it reveals the unit but does not un-cloak it.");
+        Check.That(!ally.HasStatus(detectedBit), "A stealthed unit owned by the detector itself is never marked DETECTED.");
+
+        // Destroying the detector stops the periodic re-marking; the DETECTED mark then expires on its own (its duration
+        // is UpdateRateTicks + 1, StealthDetectorUpdate.cpp's "updateRate PLUS 1... 'till we are called again").
+        feeder.Destroy(1);
+        var expiry = world.Tick + 16;
+        while (world.Tick <= expiry) world.Step();
+        Check.That(!enemy.HasStatus(detectedBit), "DETECTED expires once nothing re-marks it before its duration elapses.");
     }
 
     public static void Phase5Victory()
