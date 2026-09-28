@@ -3505,6 +3505,87 @@
     },
     {
       "category": "deferred-field",
+      "name": "SlowDeathBehavior/FX",
+      "count": 1401,
+      "owners": [
+        "SlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlowDeathBehavior/FlingForce",
+      "count": 150,
+      "owners": [
+        "SlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlowDeathBehavior/FlingForceVariance",
+      "count": 150,
+      "owners": [
+        "SlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlowDeathBehavior/FlingPitch",
+      "count": 150,
+      "owners": [
+        "SlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlowDeathBehavior/FlingPitchVariance",
+      "count": 150,
+      "owners": [
+        "SlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlowDeathBehavior/ModifierBonusPerOverkillPercent",
+      "count": 27,
+      "owners": [
+        "SlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlowDeathBehavior/OCL",
+      "count": 945,
+      "owners": [
+        "SlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlowDeathBehavior/SinkRate",
+      "count": 614,
+      "owners": [
+        "SlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlowDeathBehavior/Weapon",
+      "count": 49,
+      "owners": [
+        "SlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "StealthUpdate/DisguiseFX",
       "count": 6,
       "owners": [
@@ -4700,7 +4781,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 8704,
+      "count": 7210,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6229,15 +6310,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "SlowDeathBehavior",
-      "count": 1494,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",

@@ -269,6 +269,26 @@ public static class ModuleCatalog
                 ..Slots("DamagedParticleSystem", FieldType.Opaque), ..Slots("ReallyDamagedParticleSystem", FieldType.Opaque), ..Slots("RubbleParticleSystem", FieldType.Opaque),
             ]);
         }
+        Add("SlowDeathBehavior",
+        [
+            ..DieMux(),
+            new("SinkRate", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("ProbabilityModifier", FieldType.Integer, Source: "SlowDeathBehavior.cpp"),
+            // Needs the actual damage dealt at the killing blow, not yet threaded through OnDie (see the simulation-layer doc comment).
+            new("ModifierBonusPerOverkillPercent", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionAltitude", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FX", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("OCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("Weapon", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForce", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForceVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitch", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitchVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+        ]);
 
         return builder.ToImmutable();
     }
