@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
@@ -157,6 +158,23 @@ static partial class Tests
             Radius = 100.0
             AffectsWholePlayer = Yes
           End
+        End
+
+        Science SCIENCE_Intrinsic
+          IsGrantable = Yes
+        End
+        Science SCIENCE_Basic
+          SciencePurchasePointCost = 3
+        End
+        Science SCIENCE_Advanced
+          PrerequisiteSciences = SCIENCE_Basic
+          SciencePurchasePointCost = 5
+        End
+
+        PlayerTemplate TestFaction
+          Side = Test
+          StartMoney = 500
+          IntrinsicSciences = SCIENCE_Intrinsic
         End
         """,
     };
@@ -419,6 +437,53 @@ static partial class Tests
         feeder2.Damage(1, 80);
         world2.Step();
         Check.That(LogicState(world2).SequenceEqual(afterCross), "The same seed and command sequence draws the identical RNG value (determinism).");
+    }
+
+    /// <summary>Player/faction data model and science purchase (block 0.1 continuation): <c>PlayerTemplate</c> credits start money and intrinsic sciences once at construction; <c>PurchaseScienceCommand</c> ports <c>Player::attemptToPurchaseScience</c>'s gate order.</summary>
+    public static void Phase5Sciences()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha", "TestFaction"), new(new PlayerId(2), "Beta")];
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var feeder = new Feeder(world);
+
+        Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(500), "PlayerTemplate.StartMoney is credited once at construction.");
+        Check.That(world.PlayerSciences(new PlayerId(1)).Any() && world.Sciences.TryGet("SCIENCE_Intrinsic", out var intrinsic) && world.PlayerSciences(new PlayerId(1)).Has(intrinsic.Index),
+            "PlayerTemplate.IntrinsicSciences is granted once at construction.");
+        Check.That(world.MoneyOf(new PlayerId(2)) == Fixed.Zero && !world.PlayerSciences(new PlayerId(2)).Any(), "A player without a faction starts with nothing.");
+
+        // SCIENCE_Intrinsic has no purchase cost (0): not directly purchasable, even though it is already owned.
+        feeder.PurchaseScience(1, "SCIENCE_Intrinsic");
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.AlreadyOwned] == 1, "Repurchasing an already-owned (here: intrinsic) science is rejected.");
+
+        // SCIENCE_Advanced requires SCIENCE_Basic first.
+        feeder.GiveSciencePoints(1, 10);
+        world.Step();
+        feeder.PurchaseScience(1, "SCIENCE_Advanced");
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.MissingPrerequisite] == 1, "A science whose prerequisite is not yet owned is rejected.");
+
+        feeder.PurchaseScience(1, "SCIENCE_Basic");
+        world.Step();
+        Check.That(world.SciencePointsOf(new PlayerId(1)) == 7 && world.Sciences.TryGet("SCIENCE_Basic", out var basic) && world.PlayerSciences(new PlayerId(1)).Has(basic.Index),
+            "Purchasing SCIENCE_Basic (cost 3) withdraws the points and grants it.");
+
+        feeder.PurchaseScience(1, "SCIENCE_Advanced");
+        world.Step();
+        Check.That(world.SciencePointsOf(new PlayerId(1)) == 2 && world.Sciences.TryGet("SCIENCE_Advanced", out var advanced) && world.PlayerSciences(new PlayerId(1)).Has(advanced.Index),
+            "With its prerequisite owned, SCIENCE_Advanced (cost 5) now purchases successfully.");
+
+        // Now out of points for a second SCIENCE_Advanced-costed purchase (there is only one, so reuse the insufficient-funds path directly).
+        feeder.GiveSciencePoints(2, 1);
+        world.Step();
+        feeder.PurchaseScience(2, "SCIENCE_Basic");
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.InsufficientSciencePurchasePoints] == 1, "Too few science purchase points is rejected.");
+
+        feeder.PurchaseScience(1, "SCIENCE_DoesNotExist");
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.UnknownScience] == 1, "An unknown science name is rejected.");
     }
 
     public static void Phase5Victory()
