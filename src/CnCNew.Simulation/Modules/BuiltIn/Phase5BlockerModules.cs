@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Linq;
 using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Events;
@@ -20,6 +21,7 @@ internal static class Phase5BlockerModules
     [
         new ModuleBinding<FlammableData>("FlammableUpdate", ModuleOwnerKind.Object, (configuration, _) => FlammableData.Parse(configuration), data => new FlammableUpdate(data)),
         new ModuleBinding<TransitionDamageFXData>("TransitionDamageFX", ModuleOwnerKind.Object, (configuration, _) => TransitionDamageFXData.Parse(configuration), data => new TransitionDamageFX(data)),
+        new ModuleBinding<SlowDeathData>("SlowDeathBehavior", ModuleOwnerKind.Object, (configuration, _) => SlowDeathData.Parse(configuration), data => new SlowDeathBehavior(data)),
     ];
 }
 
@@ -210,4 +212,101 @@ public sealed class TransitionDamageFX(TransitionDamageFXData data) : SimModule,
 
     public override void Describe(IStateWriter writer) { }
     public override void Load(IStateReader reader) { }
+}
+
+// ================================================================================================ SlowDeathBehavior
+
+/// <summary>
+/// <c>SlowDeathBehavior.h</c>'s 13 keys. Mechanically modeled: the shared <c>DieMuxData</c> filter, the weighted
+/// sibling lottery (<c>ProbabilityModifier</c>) and the sink/destruction delay timers that end in an actual
+/// <c>RequestDestroy</c>. Not modeled (typed but Opaque/unapplied — all presentation or physics):
+/// <c>SinkRate</c>/<c>DestructionAltitude</c> (the visual sinking-into-ground animation), <c>FX</c>/<c>OCL</c>/<c>Weapon</c>
+/// (three more RNG-drawn, per-phase effect lists — <c>doPhaseStuff</c>), <c>FlingForce</c>/<c>FlingPitch</c> and their
+/// variances (a physics impulse on death — no <c>PhysicsBehavior</c> yet). <c>ModifierBonusPerOverkillPercent</c> needs
+/// the actual damage dealt at the killing blow, which <see cref="IWorldServices.OnEntityDied"/> does not carry yet
+/// (phase 4's <c>IDieModule.OnDie</c> was never wired for it) — a further, explicitly deferred refinement.
+/// </summary>
+public sealed record SlowDeathData(DieMuxData Mux, int ProbabilityModifier, long SinkDelayTicks, long SinkDelayVarianceTicks, long DestructionDelayTicks, long DestructionDelayVarianceTicks) : DieData(Mux)
+{
+    public static SlowDeathData Parse(ModuleConfiguration configuration) => new(
+        DieMuxData.Parse(configuration),
+        checked((int)ModuleConfigReader.Int(configuration, "ProbabilityModifier", 0)),
+        ModuleConfigReader.Ticks(configuration, "SinkDelay", 0),
+        ModuleConfigReader.Ticks(configuration, "SinkDelayVariance", 0),
+        ModuleConfigReader.Ticks(configuration, "DestructionDelay", 0),
+        ModuleConfigReader.Ticks(configuration, "DestructionDelayVariance", 0));
+}
+
+/// <summary>
+/// <c>SlowDeathBehavior</c>: on a matching death, every sibling <c>SlowDeathBehavior</c> module on the same object
+/// (real data has up to seven, one per death "flavor") enters a weighted lottery keyed by
+/// <see cref="ProbabilityWeight"/> (<c>UndeadBody.cpp</c>/<c>SlowDeathBehavior.cpp</c>: <c>total</c> is the sum of every
+/// applicable sibling's weight, the draw is <c>GameLogicRandomValue(1, total)</c>, walked cumulatively); the winner
+/// alone schedules its destruction, guarded by <see cref="Entity.SlowDeathStarted"/> so the lottery runs at most once
+/// (the reference guards this per-object via "is my AI already in a dead state", which only works when the object has
+/// an <c>AIUpdateInterface</c> — the entity-level flag here is deliberately more robust, not a silent behavior gap).
+/// Both random delay draws happen unconditionally, even at zero variance, to keep logic-RNG consumption aligned with
+/// the reference's own unconditional <c>GameLogicRandomValue(0, variance)</c> calls.
+/// </summary>
+public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.Mux), IUpdateModule
+{
+    private bool _activated;
+    private long _destructionTick;
+    private long _nextWake = -1;
+
+    public override string ModuleName => "SlowDeathBehavior";
+    public long NextWake { get => _nextWake; set => _nextWake = value; }
+
+    public bool IsApplicable(in DamageInfo info) => Mux.IsApplicable(Entity, info);
+    public int ProbabilityWeight => Math.Max(data.ProbabilityModifier, 1);
+
+    public override void OnDie(IWorldServices world, in DamageInfo info)
+    {
+        if (!IsApplicable(info) || Entity.SlowDeathStarted) return;
+        var deathInfo = info; // 'in' parameters cannot be captured by a lambda.
+        var siblings = Entity.Modules.OfType<SlowDeathBehavior>().Where(candidate => candidate.IsApplicable(deathInfo)).ToArray();
+        var total = siblings.Sum(candidate => candidate.ProbabilityWeight);
+        if (total <= 0) return;
+        var roll = world.LogicRandom.Range(1, total);
+        var cumulative = 0;
+        foreach (var candidate in siblings)
+        {
+            cumulative += candidate.ProbabilityWeight;
+            if (roll > cumulative) continue;
+            Entity.SlowDeathStarted = true;
+            candidate.BeginSlowDeath(world);
+            return;
+        }
+    }
+
+    private void BeginSlowDeath(IWorldServices world)
+    {
+        _activated = true;
+        // Both draws happen every time, matching the reference's unconditional GameLogicRandomValue(0, variance) calls.
+        var sink = data.SinkDelayTicks + world.LogicRandom.Range(0, checked((int)data.SinkDelayVarianceTicks));
+        var destruction = data.DestructionDelayTicks + world.LogicRandom.Range(0, checked((int)data.DestructionDelayVarianceTicks));
+        _ = sink; // the sinking-into-ground animation is presentation only; only the destruction timer is modeled.
+        _destructionTick = world.Tick + Math.Max(destruction, SimulationTiming.SleepNone);
+        world.WakeAt(Entity, this, _destructionTick);
+    }
+
+    public long Update(IWorldServices world)
+    {
+        if (_activated && world.Tick >= _destructionTick) world.RequestDestroy(Entity.Id);
+        return SimulationTiming.SleepForever;
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        writer.Bool("activated", _activated);
+        writer.Int("destructionTick", _destructionTick);
+        writer.Int("nextWake", _nextWake);
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        _activated = reader.Bool("activated");
+        _destructionTick = reader.Int("destructionTick");
+        _nextWake = reader.Int("nextWake");
+    }
 }

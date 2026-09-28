@@ -108,6 +108,7 @@ public sealed partial class SimulationWorld
             Status = reader.UInt("status"),
             VeterancyLevel = checked((int)reader.Int("veterancy")),
             EffectivelyDead = reader.Bool("dead"),
+            SlowDeathStarted = reader.Bool("slowDeathStarted"),
             DestroyRequested = reader.Bool("destroyRequested"),
             CompletedUpgrades = UpgradeMask.Load(reader, "completedUpgrades"),
             Speed = reader.Fixed("speed"),

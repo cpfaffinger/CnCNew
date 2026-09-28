@@ -75,6 +75,9 @@ public sealed class Entity
     /// <summary><c>EFFECTIVELY_DEAD</c>: set by bodies when health reaches zero (always for inactive bodies).</summary>
     public bool EffectivelyDead { get; set; }
 
+    /// <summary><c>SlowDeathBehavior::onDie</c>'s "another AI already handled us" guard, generalized to the entity (not tied to <c>AIUpdateInterface</c>): the weighted sibling lottery runs at most once per death.</summary>
+    public bool SlowDeathStarted { get; internal set; }
+
     public bool DestroyRequested { get; internal set; }
     public long SpawnTick { get; }
 
@@ -107,6 +110,7 @@ public sealed class Entity
         writer.UInt("status", Status);
         writer.Int("veterancy", VeterancyLevel);
         writer.Bool("dead", EffectivelyDead);
+        writer.Bool("slowDeathStarted", SlowDeathStarted);
         writer.Bool("destroyRequested", DestroyRequested);
         writer.Int("spawnTick", SpawnTick);
         CompletedUpgrades.Describe(writer, "completedUpgrades");
