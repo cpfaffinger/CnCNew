@@ -356,6 +356,46 @@ public static class ModuleCatalog
             new("ImmuneToClearBuildingAttacks", FieldType.Opaque, Source: "GarrisonContain.h"),
             new("IsEnclosingContainer", FieldType.Opaque, Source: "GarrisonContain.h"),
         ]);
+        Add("TransportContain",
+        [
+            // OpenContainModuleData shared fields (see GarrisonContain's schema comment for the rationale behind each
+            // Opaque choice). ContainMax is inherited but unused: TransportContain::getContainMax only ever reads its
+            // own Slots field, but ContainMax is still parseable, so it must still be typed.
+            ..DieMux(),
+            new("ContainMax", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("EnterSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("ExitSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DamagePercentToUnits", FieldType.Percent, Source: "OpenContain.cpp"),
+            new("BurnedDeathToUnits", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("ForbidInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("PassengersAllowedToFire", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("PassengersInTurret", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("NumberOfExitPaths", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DoorOpenTime", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("WeaponBonusPassedToPassengers", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowAlliesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowEnemiesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowNeutralInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            // TransportContainModuleData's own fields. Slots and HealthRegen%PerSec are mechanically modeled (see the
+            // simulation-layer doc comment); the rest need real movement/positioning, a capture system or a WeaponBonus
+            // system this engine does not have, and are therefore Opaque.
+            new("Slots", FieldType.Integer, Source: "TransportContain.h"),
+            new("ScatterNearbyOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("OrientLikeContainerOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("KeepContainerVelocityOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("GoAggressiveOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ResetMoodCheckTimeOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("DestroyRidersWhoAreNotFreeToExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ExitBone", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ExitPitchRate", FieldType.Opaque, Source: "TransportContain.h"),
+            new("InitialPayload", FieldType.Opaque, Source: "TransportContain.h"),
+            new("HealthRegen%PerSec", FieldType.Real, Source: "TransportContain.h"),
+            new("ExitDelay", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ArmedRidersUpgradeMyWeaponSet", FieldType.Opaque, Source: "TransportContain.h"),
+            // DemoGeneral.ini sets this key twice (identical values, a copy-paste artifact in the shipped data).
+            new("DelayExitInAir", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "TransportContain.h"),
+        ]);
 
         return builder.ToImmutable();
     }

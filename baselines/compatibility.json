@@ -3955,6 +3955,159 @@
     },
     {
       "category": "deferred-field",
+      "name": "TransportContain/ArmedRidersUpgradeMyWeaponSet",
+      "count": 8,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/DelayExitInAir",
+      "count": 7,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/DestroyRidersWhoAreNotFreeToExit",
+      "count": 23,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/DoorOpenTime",
+      "count": 24,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/EnterSound",
+      "count": 6,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/ExitBone",
+      "count": 23,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/ExitDelay",
+      "count": 33,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/ExitPitchRate",
+      "count": 23,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/ExitSound",
+      "count": 6,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/GoAggressiveOnExit",
+      "count": 36,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/InitialPayload",
+      "count": 8,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/KeepContainerVelocityOnExit",
+      "count": 23,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/NumberOfExitPaths",
+      "count": 56,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/OrientLikeContainerOnExit",
+      "count": 23,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/PassengersAllowedToFire",
+      "count": 26,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/ScatterNearbyOnExit",
+      "count": 32,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransportContain/WeaponBonusPassedToPassengers",
+      "count": 6,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Upgrade/AcademyClassify",
       "count": 3,
       "owners": [
@@ -4898,7 +5051,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 6528,
+      "count": 6455,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6652,15 +6805,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "TransportContain",
-      "count": 73,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
