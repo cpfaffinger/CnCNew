@@ -314,6 +314,11 @@ public static class ModuleCatalog
             new("CanDetectWhileGarrisoned", FieldType.Bool, Source: "StealthDetectorUpdate.cpp"),
             new("CanDetectWhileContained", FieldType.Bool, Source: "StealthDetectorUpdate.cpp"),
         ]);
+        Add("PoisonedBehavior",
+        [
+            new("PoisonDamageInterval", FieldType.DurationMs, Source: "PoisonedBehavior.cpp"),
+            new("PoisonDuration", FieldType.DurationMs, Source: "PoisonedBehavior.cpp"),
+        ]);
 
         return builder.ToImmutable();
     }

@@ -4844,7 +4844,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 6897,
+      "count": 6741,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6117,15 +6117,6 @@
       "category": "module",
       "name": "PointDefenseLaserUpdate",
       "count": 23,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "PoisonedBehavior",
-      "count": 156,
       "owners": [
         "Object"
       ],
