@@ -236,6 +236,18 @@ public static class ModuleCatalog
             new("DisabledTypesToProcess", FieldType.Opaque, Source: "ProductionUpdate.h"),
         ]);
 
+        // ------------------------------------------------------------------------------------------ next blockers
+        Add("FlammableUpdate",
+        [
+            new("BurnedDelay", FieldType.DurationMs, Source: "FlammableUpdate.cpp"),
+            new("AflameDuration", FieldType.DurationMs, Source: "FlammableUpdate.cpp"),
+            new("AflameDamageDelay", FieldType.DurationMs, Source: "FlammableUpdate.cpp"),
+            new("AflameDamageAmount", FieldType.Integer, Source: "FlammableUpdate.cpp"),
+            new("BurningSoundName", FieldType.Opaque, Source: "FlammableUpdate.cpp"),
+            new("FlameDamageLimit", FieldType.Real, Source: "FlammableUpdate.cpp"),
+            new("FlameDamageExpiration", FieldType.DurationMs, Source: "FlammableUpdate.cpp"),
+        ]);
+
         return builder.ToImmutable();
     }
 

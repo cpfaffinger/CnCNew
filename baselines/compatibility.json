@@ -4,6 +4,15 @@
   "entries": [
     {
       "category": "deferred-field",
+      "name": "FlammableUpdate/BurningSoundName",
+      "count": 4,
+      "owners": [
+        "FlammableUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Locomotor/AccelerationPitchLimit",
       "count": 101,
       "owners": [
@@ -2045,7 +2054,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 10229,
+      "count": 9402,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -2967,15 +2976,6 @@
       "category": "module",
       "name": "FirestormDynamicGeometryInfoUpdate",
       "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "FlammableUpdate",
-      "count": 827,
       "owners": [
         "Object"
       ],
