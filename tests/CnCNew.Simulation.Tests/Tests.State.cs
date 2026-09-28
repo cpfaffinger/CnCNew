@@ -296,6 +296,39 @@ static partial class Tests
         Check.That(again.FinalHash == result.FinalHash, "The stress replay is deterministic.");
     }
 
+    public static void DefinitionOrderIndependence()
+    {
+        var original = new SyntheticFixture();
+        var reversedFiles = SyntheticFixture.Files.Reverse().ToDictionary(pair => pair.Key, pair => pair.Value);
+        var permuted = new SyntheticFixture(files: reversedFiles);
+        Check.That(original.Fingerprint == permuted.Fingerprint, "The definition fingerprint must not depend on file enumeration order.");
+        Check.That(original.Templates.Templates.Select(value => value.Name).SequenceEqual(permuted.Templates.Templates.Select(value => value.Name)), "Template indices must not depend on file enumeration order.");
+        var scenario = new StressScenario(ShortOptions);
+        var replay = scenario.Record(original);
+        var a = ReplayRunner.Run(replay, original.Templates, original.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
+        var b = ReplayRunner.Run(replay, permuted.Templates, permuted.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
+        Check.That(a.TickHashes.AsSpan().SequenceEqual(b.TickHashes), "Permuted definition insertion order must give identical simulation hashes.");
+    }
+
+    public static void LongRun()
+    {
+        // The full acceptance run of the phase: 216,000 ticks (two hours of game time), two fresh runs, snapshot continuation.
+        var options = StressOptions.Standard;
+        var fixture = new SyntheticFixture();
+        var scenario = new StressScenario(options);
+        var replay = scenario.Record(fixture);
+        Check.That(scenario.PeakAlive >= 10_000, $"At least 10,000 simultaneously living entities (peak {scenario.PeakAlive}).");
+        var first = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 10_000 });
+        var second = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
+        Check.That(first.TickHashes.Length == 216_000 && first.TickHashes.AsSpan().SequenceEqual(second.TickHashes), "Two fresh 216,000-tick runs are identical tick by tick.");
+        var head = ReplayRunner.CreateWorld(replay.Header, fixture.Templates);
+        var headRun = ReplayRunner.Run(replay, head, new ReplayRunOptions { StopTick = 108_000, RecordTickHashes = true });
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(head), fixture.Templates, fixture.Fingerprint);
+        var tail = ReplayRunner.Run(replay, restored, new ReplayRunOptions { RecordTickHashes = true });
+        Check.That(headRun.TickHashes.Concat(tail.TickHashes).SequenceEqual(first.TickHashes), "The snapshot continuation is identical over 216,000 ticks.");
+        Check.That(restored.Metrics.SpawnedTotal >= 100_000 && restored.Metrics.Entities == 0 && restored.Metrics.Timers == 0 && restored.Metrics.ScheduledUpdates == 0, "Over 100,000 spawns and everything back at baseline.");
+    }
+
     public static void IdleAllocation()
     {
         var fixture = new SyntheticFixture();

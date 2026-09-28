@@ -43,9 +43,11 @@ run.Test("Corrupt, truncated and foreign snapshots are rejected", Tests.Snapshot
 run.Test("Replay format round trip and rejection", Tests.ReplayFormatTests);
 run.Test("Replay equality, divergence detection and continuation", Tests.ReplayRuns);
 run.Test("Stress scenario returns to baseline (short run)", Tests.ShortStress);
+run.Test("Definition insertion order does not change the simulation", Tests.DefinitionOrderIndependence);
 run.Test("Idle ticks do not allocate", Tests.IdleAllocation);
 run.Test("Determinism rules hold in the simulation sources", Tests.SourceRules);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
+if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
 return run.Finish();
 

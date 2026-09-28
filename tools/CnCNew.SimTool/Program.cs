@@ -19,7 +19,7 @@ using CnCNew.Simulation.World;
 
 const string Usage = """
     Usage: CnCNew.SimTool <command> [arguments]
-      audit-modules                                        bindings vs catalog: implemented, bound, planned targets
+      audit-modules [content-dir]                          bindings vs catalog; with a content directory also module use counts
       audit-coverage <content-dir>                         module coverage of the compiled shipped objects (retail base data)
       replay-record <replay.bin> [--ticks N] [--population N]
                                                            record the synthetic stress scenario as a replay with checkpoints
@@ -39,7 +39,7 @@ try
 {
     return args[0] switch
     {
-        "audit-modules" => AuditModules(),
+        "audit-modules" => AuditModules(args.Length >= 2 ? args[1] : null),
         "audit-coverage" when args.Length >= 2 => AuditCoverage(args[1]),
         "replay-record" when args.Length >= 2 => RecordReplay(args[1], Options(args)),
         "replay-run" when args.Length >= 2 => RunReplay(args[1]),
@@ -75,7 +75,7 @@ static StressOptions Options(string[] args)
     return options;
 }
 
-static int AuditModules()
+static int AuditModules(string? directory)
 {
     var registry = ModuleRegistry.Default;
     var table = ModuleBindingTable.Default;
@@ -84,6 +84,29 @@ static int AuditModules()
     Console.WriteLine($"Implemented and bound: {table.Bindings.Length} ({string.Join(", ", table.Bindings.Select(value => value.Name))}).");
     foreach (var group in descriptors.Where(value => value.CompatibilityOnly).GroupBy(value => value.PlannedTarget).OrderBy(value => value.Key, StringComparer.Ordinal))
         Console.WriteLine($"Not implemented, planned for {group.Key}: {group.Count()}");
+    if (directory is null) return 0;
+
+    var (graph, _, _) = CompileShipped(directory);
+    var uses = new Dictionary<string, int>(StringComparer.Ordinal);
+    var objects = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+    foreach (var definition in graph.Definitions.OfType<ObjectDefinition>())
+        foreach (var module in definition.Modules)
+        {
+            uses[module.Name] = uses.GetValueOrDefault(module.Name) + 1;
+            if (!objects.TryGetValue(module.Name, out var set)) objects[module.Name] = set = [];
+            set.Add(definition.OriginalName);
+        }
+    var totalUses = uses.Values.Sum();
+    var implementedUses = table.Bindings.Sum(value => uses.GetValueOrDefault(value.Name));
+    Console.WriteLine();
+    Console.WriteLine($"Module uses in the retail base objects (inherited default modules included): {totalUses}; implemented modules cover {implementedUses} ({100.0 * implementedUses / totalUses:F1}%).");
+    Console.WriteLine($"  {"module",-36} {"uses",6} {"objects",8}  status");
+    foreach (var (name, count) in uses.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal))
+    {
+        var descriptor = registry.GetRequired(name);
+        var status = !descriptor.CompatibilityOnly ? "IMPLEMENTED" : descriptor.Category == ModuleCategory.Presentation ? "presentation" : descriptor.PlannedTarget;
+        Console.WriteLine($"  {name,-36} {count,6} {objects[name].Count,8}  {status}");
+    }
     return 0;
 }
 
