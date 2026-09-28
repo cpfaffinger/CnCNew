@@ -54,6 +54,7 @@ run.Test("Phase 5: straight-line movement and arrival", Tests.Phase5Movement);
 run.Test("Phase 5: production queue, spawn, cancel and refund", Tests.Phase5Production);
 run.Test("Phase 5: stealth cloaking and auto-heal", Tests.Phase5StealthAndHeal);
 run.Test("Phase 5: FlammableUpdate ignite/burn/damage cycle", Tests.Phase5Flammable);
+run.Test("Phase 5: body damage states and TransitionDamageFX", Tests.Phase5DamageStateTransitions);
 run.Test("Phase 5: player/faction setup and science purchase", Tests.Phase5Sciences);
 run.Test("Phase 5: last player standing wins", Tests.Phase5Victory);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();

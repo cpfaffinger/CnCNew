@@ -5,6 +5,7 @@ using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
@@ -175,6 +176,41 @@ static partial class Tests
             AflameDamageAmount = 5
             BurnedDelay = 200
             FlameDamageExpiration = 1000
+          End
+        End
+
+        Weapon BurnGun
+          PrimaryDamage = 35
+          AttackRange = 50.0
+          DamageType = EXPLOSION
+          ClipSize = 0
+          DelayBetweenShots = 0
+        End
+        Object Shooter
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY BurnGun
+          End
+        End
+        Object Transitioning
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = TransitionDamageFX Fx01
+            DamagedOCL1 = OCL_Damaged
+            ReallyDamagedOCL1 = OCL_ReallyDamaged
+            RubbleOCL1 = OCL_Rubble
           End
         End
 
@@ -545,6 +581,42 @@ static partial class Tests
         world.Step();
         Check.That(!target.HasStatus(aflameBit) && body.Health == healthBeforeReignite - Fixed.FromInt(20),
             "Once BURNED, further flame damage applies normally but never reignites.");
+    }
+
+    /// <summary>
+    /// Body damage states (<c>ActiveBody::calcDamageState</c>, retail default thresholds 0.7/0.35 — no <c>GameData</c>
+    /// block in this fixture) and <c>TransitionDamageFX</c> (<c>onBodyDamageStateChange</c>: only fires when getting
+    /// worse, only with a resolvable damage source).
+    /// </summary>
+    public static void Phase5DamageStateTransitions()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Shooter", x: 0, y: 0);
+        feeder.Spawn(2, "Transitioning", x: 10, y: 0);
+        world.Step();
+        var target = world.FindEntity(new EntityId(2))!;
+        var body = (ActiveBody)target.Body!;
+        Check.That(body.DamageState == BodyDamageStates.Pristine, "A full-health object starts PRISTINE.");
+
+        // No damage source (DamageCommand): the health still drops and the state still transitions...
+        feeder.Damage(2, 35);
+        var result = world.Step();
+        Check.That(body.DamageState == BodyDamageStates.Damaged, "Health 65% (<= 0.7) is DAMAGED.");
+        Check.That(!result.Events.Any(value => value.Kind == SimEventKind.CreationListRequested), "...but TransitionDamageFX requests nothing without a resolvable damage source.");
+
+        // FireWeaponCommand: a real source entity, so the OCL now fires.
+        feeder.FireWeapon(1, 1, 2);
+        result = world.Step();
+        Check.That(body.DamageState == BodyDamageStates.ReallyDamaged, "Health 30% (<= 0.35) is REALLYDAMAGED.");
+        Check.That(result.Events.Any(value => value.Kind == SimEventKind.CreationListRequested && value.Text == "OCL_ReallyDamaged"), "The REALLYDAMAGED OCL fires with a real damage source.");
+
+        feeder.FireWeapon(1, 1, 2);
+        result = world.Step();
+        Check.That(body.Health == Fixed.Zero && body.DamageState == BodyDamageStates.Rubble, "Overkill clamps health to 0 (RUBBLE), not negative.");
+        Check.That(result.Events.Any(value => value.Kind == SimEventKind.CreationListRequested && value.Text == "OCL_Rubble"), "The RUBBLE OCL fires.");
+        Check.That(result.Events.Any(value => value.Kind == SimEventKind.EntityDied), "onBodyDamageStateChange runs before the death check, in the same tick as the killing blow.");
     }
 
     public static void Phase5Victory()
