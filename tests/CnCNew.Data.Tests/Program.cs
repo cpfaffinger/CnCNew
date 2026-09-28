@@ -216,13 +216,13 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // phase 4 (12)
         "ActiveBody", "CreateObjectDie", "DeletionUpdate", "DestroyDie", "FXListDie", "HighlanderBody", "ImmortalBody",
         "InactiveBody", "InstantDeathBehavior", "KeepObjectDie", "LifetimeUpdate", "StructureBody",
-        // phase 5 (22): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
+        // phase 5 (23): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
         // + the next blocker modules by measured instantiability impact (docs/HANDOFF-PHASE5.md)
         "AIUpdateInterface", "ArmorUpgrade", "AutoHealBehavior", "CommandSetUpgrade", "ExperienceScalarUpgrade",
         "FireWeaponWhenDeadBehavior", "FlammableUpdate", "GarrisonContain", "LocomotorSetUpgrade", "MaxHealthUpgrade",
         "ModelConditionUpgrade", "ObjectCreationUpgrade", "PoisonedBehavior", "ProductionUpdate", "RadarUpgrade",
         "SlowDeathBehavior", "StealthDetectorUpdate", "StealthUpdate", "StealthUpgrade", "TransitionDamageFX",
-        "WeaponBonusUpgrade", "WeaponSetUpgrade",
+        "TransportContain", "WeaponBonusUpgrade", "WeaponSetUpgrade",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

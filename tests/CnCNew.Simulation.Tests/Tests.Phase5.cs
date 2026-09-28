@@ -355,6 +355,32 @@ static partial class Tests
           End
         End
 
+        Object Chinook
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = TransportContain Transport01
+            Slots = 3
+            HealthRegen%PerSec = 30
+            AllowInsideKindOf = INFANTRY
+          End
+        End
+
+        Object Trooper
+          KindOf = SELECTABLE INFANTRY
+          TransportSlotCount = 2
+          Body = ActiveBody Body01
+            MaxHealth = 60.0
+            InitialHealth = 60.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+
         Science SCIENCE_Intrinsic
           IsGrantable = Yes
         End
@@ -1046,6 +1072,52 @@ static partial class Tests
         Check.That(!rebel2.ContainedBy.IsValid && bunker2.Container.ContainCount == 0, "Crossing into REALLYDAMAGED ejects every occupant immediately.");
 
         _ = tank;
+    }
+
+    /// <summary>
+    /// The containment subsystem's second implementor (2 objects unlocked alone — small, but the reason
+    /// <c>IContainerModule</c>/<c>ContainModuleBase</c> were worth extracting now): <c>TransportContain</c>'s
+    /// slot-weighted capacity (<see cref="Templates.ObjectTemplate.TransportSlotCount"/>, not a simple headcount) and
+    /// continuous <c>HealthRegen%PerSec</c> healing (unlike <c>GarrisonContain</c>'s ramp-to-full-over-a-duration).
+    /// </summary>
+    public static void Phase5Transport()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Chinook", x: 0, y: 0);
+        feeder.Spawn(1, "Trooper", x: 5, y: 5);
+        feeder.Spawn(1, "Rebel", x: 5, y: 5); // TransportSlotCount defaults to 0: never transportable.
+        world.Step();
+        var chinook = world.FindEntity(new EntityId(1))!;
+        var trooper1 = world.FindEntity(new EntityId(2))!;
+
+        feeder.Damage(2, 30); // Trooper1: 60 -> 30, so the later regen check is observable.
+        world.Step();
+
+        feeder.EnterContainer(1, 3, 1);
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.CannotEnterContainer] == 1, "An object with TransportSlotCount 0 (Rebel, the default) can never board a transport.");
+
+        feeder.EnterContainer(1, 2, 1);
+        world.Step();
+        Check.That(chinook.Container!.ContainCount == 1, "Trooper (TransportSlotCount 2) boards, using 2 of the Chinook's 3 slots.");
+
+        feeder.Spawn(1, "Trooper", x: 5, y: 5);
+        world.Step();
+        feeder.EnterContainer(1, 4, 1);
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.CannotEnterContainer] == 2,
+            "A second Trooper (needs 2 more slots) is rejected: only 1 of 3 slots remain (weighted capacity, not a simple headcount).");
+
+        // HealthRegen%PerSec = 30: MaxHealth 60 heals continuously at 60*30/100 = 18/sec = 0.6/tick, every tick (unlike
+        // GarrisonContain's ramp-to-full-over-a-fixed-duration).
+        for (var i = 0; i < 10; i++) world.Step();
+        Check.That(trooper1.Body!.Health > Fixed.FromInt(30) && trooper1.Body.Health < Fixed.FromInt(60), "HealthRegen%PerSec heals a contained occupant continuously, not all at once.");
+
+        feeder.Kill(1);
+        world.Step();
+        Check.That(!trooper1.ContainedBy.IsValid, "The transport's death ejects its occupant.");
     }
 
     public static void Phase5Victory()
