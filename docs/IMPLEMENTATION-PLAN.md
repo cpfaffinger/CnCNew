@@ -245,7 +245,8 @@ Vereinfachungen in `docs/GAME-RULES.md`):
 - Block 0.1: Domänenschemata für Weapon, Armor, Upgrade, Science, Locomotor (`docs/TYPED-DEFINITIONS.md`); als
   Nebenfund ein INI-Parser-Fehler behoben (`End`-Erkennung nur erstes Token, wie das Original).
 - Block 0.2: `StealthUpdate` und `AutoHealBehavior` mit echten Feldern und Upgrade-Aktivierung implementiert.
-- Block 0.3 (Furchtsignal-`GameLogicRandomValue`) und 0.4 (RNG-Abgleich mit kompiliertem Original) **noch offen**.
+- Block 0.3 (Furchtsignal-`GameLogicRandomValue`) ist abgeschlossen; 0.4 (RNG-Abgleich mit kompiliertem Original)
+  bleibt **offen** (kein Compiler verfügbar).
 - Wirtschaft (Guthaben, Energiebilanz), das Upgrade-System (128-Bit-Maske, `UpgradeMux`-Zustandsmaschine, elf
   `*Upgrade`-Module), direkter Kampf (Waffen, Rüstungskoeffizienten, Magazin/Nachladen, keine Flächenwirkung), einfache
   geradlinige Bewegung (`AIUpdateInterface`, kein Terrain/Pfadsuche/Drehrate), eine Produktionswarteschlange

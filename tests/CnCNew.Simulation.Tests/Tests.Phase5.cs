@@ -380,6 +380,47 @@ static partial class Tests
         Check.That(ninja.Body.Health > Fixed.FromInt(20), "AutoHealBehavior (AffectsWholePlayer) heals the damaged ally over time.");
     }
 
+    /// <summary>Block 0.3: <c>ActiveBody::attemptDamage</c>'s fear-sound roll (<c>GameLogicRandomValue(0,99) &lt; 25</c> when crossing 25% health) must consume the logic RNG exactly when the reference would, or golden-master comparisons desync.</summary>
+    public static void Phase5FearSoundRng()
+    {
+        static uint[] LogicState(SimulationWorld world)
+        {
+            var state = new uint[6];
+            world.Streams.Logic.CopyState(state);
+            return state;
+        }
+
+        var fixture = new SyntheticFixture();
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Barrel"); // ActiveBody MaxHealth=100, no OnSpawn RNG draw (no LifetimeUpdate).
+        world.Step();
+        var before = LogicState(world);
+
+        feeder.Damage(1, 10); // 100 -> 90: stays above 25%.
+        world.Step();
+        Check.That(LogicState(world).SequenceEqual(before), "Damage that stays above the 25% threshold draws no logic RNG.");
+
+        feeder.Damage(1, 80); // 90 -> 10: crosses 25% (threshold 25).
+        world.Step();
+        var afterCross = LogicState(world);
+        Check.That(!afterCross.SequenceEqual(before), "Crossing the 25% health threshold consumes exactly one logic RNG draw (the fear-sound roll).");
+
+        feeder.Damage(1, 5); // 10 -> 5: already below the threshold, must not roll again.
+        world.Step();
+        Check.That(LogicState(world).SequenceEqual(afterCross), "Damage while already below the threshold does not draw again.");
+
+        var world2 = NewWorld(fixture);
+        var feeder2 = new Feeder(world2);
+        feeder2.Spawn(1, "Barrel");
+        world2.Step();
+        feeder2.Damage(1, 10);
+        world2.Step();
+        feeder2.Damage(1, 80);
+        world2.Step();
+        Check.That(LogicState(world2).SequenceEqual(afterCross), "The same seed and command sequence draws the identical RNG value (determinism).");
+    }
+
     public static void Phase5Victory()
     {
         var fixture = new SyntheticFixture(files: Phase5Files());

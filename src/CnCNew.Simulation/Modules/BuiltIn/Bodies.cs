@@ -25,11 +25,14 @@ public sealed record BodyData(Fixed MaxHealth, Fixed InitialHealth, Fixed Subdua
 /// <summary>
 /// <c>ActiveBody</c>: health with damage, healing and death. A death is the transition from positive health to zero
 /// (<c>currentHealth &lt;= 0 &amp;&amp; prevHealth &gt; 0</c>), which triggers the die modules exactly once.
-/// Armor coefficients (coefficient 1 here), damage multipliers, damage states, damage FX and the fear-sound random draw
-/// of the reference are phase-5 rules and are not applied.
+/// Armor coefficients are applied by the caller (<see cref="Templates.ArmorInfo"/>/<c>SimulationWorld</c>'s combat
+/// resolution), not here; damage multipliers, damage states and damage FX remain unmodeled (phase 6+).
 /// </summary>
 public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
 {
+    // ActiveBody.cpp: #define YELLOW_DAMAGE_PERCENT (0.25f)
+    private static readonly Fixed YellowDamagePercent = Fixed.FromDecimal(0.25m);
+
     private readonly string _name;
 
     public ActiveBody(BodyData data, string name = "ActiveBody")
@@ -74,6 +77,12 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
         InternalChangeHealth(-amount);
         if (Health < PreviousHealth)
             world.Emit(SimEventKind.EntityDamaged, Entity.Id, info.Source, string.Empty, (PreviousHealth - Health).Raw);
+        // ActiveBody.cpp attemptDamage (block 0.3): crossing the 25% threshold has a 25% chance of a fear sound. The
+        // random draw itself is simulation state — it must consume the same LogicRandom value the reference does,
+        // win or lose, for replay/golden-master parity — the sound is presentation, so only a successful roll emits.
+        if (MaxHealth > Fixed.Zero && PreviousHealth / MaxHealth > YellowDamagePercent && Health / MaxHealth < YellowDamagePercent && Health > Fixed.Zero)
+            if (world.LogicRandom.Range(0, 99) < 25)
+                world.Emit(SimEventKind.VoiceFearRequested, Entity.Id, info.Source, string.Empty, 0);
         if (Health <= Fixed.Zero && PreviousHealth > Fixed.Zero)
         {
             world.OnEntityDied(Entity, info);

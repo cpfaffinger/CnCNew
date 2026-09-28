@@ -363,13 +363,13 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   und der Definitionsfingerabdruck.
 - Die Update-Phasen des Originals (`SleepyUpdatePhase`) sind nicht modelliert.
 - Der Fear-Sound-Zufallsverbrauch (`ActiveBody::attemptDamage`, `GameLogicRandomValue(0,99)` bei Unterschreiten der
-  25-%-Schwelle) ist noch nicht portiert (Block 0.3 unvollständig – siehe `docs/HANDOFF-PHASE5.md`).
+  25-%-Schwelle) ist portiert (Block 0.3 abgeschlossen, `VoiceFearRequested`-Event, Test `Phase5FearSoundRng`).
 - Der Abgleich des RNG mit einem kompilierten Original steht aus (kein Compiler verfügbar); die Handrechnung ist unabhängig
   und reicht als Beleg für Algorithmusgleichheit, nicht als Beleg für die Weiterverwendung in Netzwerkspielen.
 - `Restore` ist intern; Vorwärts-/Rückwärtskompatibilität von Snapshots (Version 1) ist erst Thema von Phase 9.
 - Der Zustands-Hash ist nicht kryptographisch und die Snapshot-JSON-Größe (≈ 485 Byte je Entity) ist nicht optimiert.
-- Vom Kern erzeugte Anforderungen (`FxRequested`, `CreationListRequested`, `WeaponFireRequested`) werden nirgends
-  ausgeführt; sie sind Verträge für Präsentation.
+- Vom Kern erzeugte Anforderungen (`FxRequested`, `CreationListRequested`, `WeaponFireRequested`, `VoiceFearRequested`)
+  werden nirgends ausgeführt; sie sind Verträge für Präsentation.
 - Die Definitionsdomänen außer Object, Weapon, Armor, Upgrade, Science und Locomotor sind weiterhin flach typisiert
   (Zahlen in `TYPED-DEFINITIONS.md`): CommandButton, SpecialPower, Faction, GameData, ObjectCreationList.
 - Kein headless Referenzmatch aller Fraktionen und keine Golden-Master-Szenarien gegen Originalwerte (Phase-5-Punkte 7/8

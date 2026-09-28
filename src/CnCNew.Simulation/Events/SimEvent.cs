@@ -30,6 +30,8 @@ public enum SimEventKind : byte
     ProductionCompleted = 13,
     /// <summary>The last player without any remaining objects was defeated (<c>Player</c>: the defeated player).</summary>
     PlayerDefeated = 14,
+    /// <summary><c>ActiveBody::attemptDamage</c>'s fear-sound roll succeeded when crossing the 25% health threshold; presentation-only (the roll itself, win or lose, is already consumed from <c>LogicRandom</c>).</summary>
+    VoiceFearRequested = 15,
 }
 
 /// <summary>

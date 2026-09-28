@@ -44,8 +44,8 @@ Commits dieses Durchlaufs (in dieser Reihenfolge, `git log`):
 - Retail-Basisdaten (`--maps exclude`): 2.115 Objekte, SHA-256
   `128B244283C1D7466194E105FAED92A326500788C585D44191EF2DDDB3E1E378`.
 - Instanziierbarkeit: **623 von 2.115 Objekten (29,5 %)**, gegenüber 26/2.113 am Ende von Phase 4.
-- Stresstest (`SimTool stress`, mit allen 27 Modulen): 216.000 Ticks, Endhash `21BEAB4C15053FC0`, Kettenhash
-  `3B4777772E900E0C`, drei frische Läufe und Snapshotfortsetzung identisch, alle Tabellen kehren auf null zurück.
+- Stresstest (`SimTool stress`, mit allen 27 Modulen): 216.000 Ticks, Endhash `CED062EE0D6EBEEC`, Kettenhash
+  `66D70651FD405581`, drei frische Läufe und Snapshotfortsetzung identisch, alle Tabellen kehren auf null zurück.
 
 **Implementiert** (Details, Numerik und jede bewusste Vereinfachung mit Quellverweis in `docs/GAME-RULES.md`):
 
@@ -63,9 +63,8 @@ Commits dieses Durchlaufs (in dieser Reihenfolge, `git log`):
 
 **Nicht erledigt / bewusst zurückgestellt** (siehe `docs/GAME-RULES.md` §10 und `docs/IMPLEMENTATION-PLAN.md` §5):
 
-- Block 0.3 (Furchtsignal-`GameLogicRandomValue`-Zug in `ActiveBody::attemptDamage`) — **wichtig für Golden-Master-
-  Vergleiche**, sollte vor den Golden-Master-Szenarien nachgeholt werden.
 - Block 0.4 (RNG-Abgleich mit kompiliertem Original) — weiterhin kein Compiler verfügbar, bleibt dokumentierte Schuld.
+  (Block 0.3, das Furchtsignal, ist inzwischen erledigt: `VoiceFearRequested`, Test `Phase5FearSoundRng`.)
 - Spieler/Teams/Diplomatie/Fraktionen als eigenes Datenmodell (`PlayerTemplate`/`Faction` sind noch flach typisiert).
 - Sciences (Kauf, Voraussetzungen, `SciencePurchasePointCost`).
 - `CommandSet`/`CommandButton` als echtes Datenmodell (bisher nur `CommandSetUpgrade`s Zustandsmaschine, keine Wirkung).

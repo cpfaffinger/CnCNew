@@ -88,9 +88,12 @@ ausgeführt, neue Module (`StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade
   | `ADD_CURRENT_HEALTH_TOO` | steigt um denselben Betrag wie die Obergrenze |
   | `FULLY_HEAL` | wird auf die neue Obergrenze gesetzt |
 
-- **Bekannte Lücken:** kein Furchtsignal (`ActiveBody::attemptDamage`s `GameLogicRandomValue(0,99)` bei
-  Unterschreiten von 25 % Gesundheit – Block 0.3 unvollständig), keine Erfahrungs-/Veteranenvergabe aus Treffern,
-  keine `IS_FIRING_WEAPON`/Retaliate-Logik.
+- **Furchtsignal (Block 0.3):** `ActiveBody::attemptDamage`s Zufallsverbrauch ist portiert – beim Übergang von über
+  25 % auf unter 25 % Gesundheit (und noch am Leben) zieht die Simulation `GameLogicRandomValue(0,99)`; bei < 25 wird
+  ein `VoiceFearRequested`-Event ausgelöst (reine Präsentationsanforderung, der Tonabspielung obliegt Phase 7). Der
+  Zug selbst erfolgt immer bei Schwellenüberschreitung, unabhängig vom Ergebnis, damit der Zufallsstrom mit dem
+  Original synchron bleibt (Test: `Tests.Phase5FearSoundRng`, vergleicht den Rohzustand des `logic`-Streams vor/nach).
+- **Bekannte Lücken:** keine Erfahrungs-/Veteranenvergabe aus Treffern, keine `IS_FIRING_WEAPON`/Retaliate-Logik.
 
 ## 4. Einfache Bewegung
 
@@ -160,7 +163,7 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
 
 - Kein Flächenschaden, keine Projektil-Flugzeit, keine `WeaponBonus`-Multiplikatoren (§3).
 - Nur zwei `ArmorSet`/`WeaponSet`-Bedingungen statt der vollen veteranenbasierten Bestauswahl (§3).
-- Kein Furchtsignal-Zufallsverbrauch, keine Erfahrungs-/Veteranenvergabe aus Kämpfen (§3, Block 0.3 unvollständig).
+- Keine Erfahrungs-/Veteranenvergabe aus Kämpfen (§3). Das Furchtsignal (Block 0.3) ist implementiert.
 - Keine drehratenbegrenzte Ausrichtung, kein Terrain, keine Pfadsuche, keine Kollision (§4).
 - Kein Energie-Verlangsamungsfaktor, keine Bauplatzprüfung, kein Rallypunkt (§5).
 - Der `STEALTHED`-Statusbit hat noch keinen Verbraucher (kein Sicht-/Zielsystem, §6).

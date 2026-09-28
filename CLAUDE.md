@@ -99,8 +99,8 @@ Definitionen, 2.115 Objekte, SHA-256 `128B244283C1D7466194E105FAED92A326500788C5
 Fingerabdruck geändert gegenüber Phase 4 durch eine Phase-5-Parserkorrektur, siehe `docs/PHASE3-COMPATIBILITY.md`).
 Modulkatalog 205 Typen (27 implementiert: 12 aus Phase 4, 15 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
 437 Einträge, Instanziierbarkeit 623 von 2.115 Objekten (29,5 %). Asset-Runtimebestand: 25.682 Dateien.
-Stresstest (216.000 Ticks, `SimTool stress`, mit allen 27 Modulen): Endhash `21BEAB4C15053FC0`, Kettenhash
-`3B4777772E900E0C`.
+Stresstest (216.000 Ticks, `SimTool stress`, mit allen 27 Modulen): Endhash `CED062EE0D6EBEEC`, Kettenhash
+`66D70651FD405581`.
 
 ## Code- und Dokumentationsstil
 
