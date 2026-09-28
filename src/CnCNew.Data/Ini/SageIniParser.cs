@@ -77,7 +77,7 @@ public static class SageIniParser
         var index = 0;
         while (index < lines.Count)
         {
-            if (lines[index].Content.Equals("End", StringComparison.OrdinalIgnoreCase))
+            if (IsEndLine(lines[index].Content))
             {
                 throw Error("Unexpected End token.", source, lines[index]);
             }
@@ -116,7 +116,7 @@ public static class SageIniParser
         while (index < lines.Count)
         {
             var line = lines[index];
-            if (line.Content.Equals("End", StringComparison.OrdinalIgnoreCase))
+            if (IsEndLine(line.Content))
             {
                 index++;
                 return new IniBlock(header.Content, children, Location(source, header));
@@ -236,12 +236,20 @@ public static class SageIniParser
         return separator < 0 ? line : line[..separator];
     }
 
+    /// <summary>
+    /// <c>INI::initFromINIMulti</c> (INI.cpp) reads the block-end token via <c>strtok(m_buffer, INI::getSeps())</c>: only the
+    /// first whitespace-delimited token is compared against <c>"End"</c>, and anything after it on the line is discarded.
+    /// A handful of shipped files rely on this (e.g. "End Upgrade_AmericaHallfireDrone", a trailing-token typo in
+    /// AmericaVehicle.ini) — matching the full line would treat the block as unterminated and misparse everything after it.
+    /// </summary>
+    private static bool IsEndLine(string content) => FirstToken(content).Equals("End", StringComparison.OrdinalIgnoreCase);
+
     private static bool HasClosingEndAtIndent(IReadOnlyList<SourceLine> lines, int startIndex, int indent)
     {
         for (var index = startIndex; index < lines.Count; index++)
         {
             var line = lines[index];
-            if (!line.Content.Equals("End", StringComparison.OrdinalIgnoreCase) || line.Indent > indent)
+            if (!IsEndLine(line.Content) || line.Indent > indent)
             {
                 continue;
             }
