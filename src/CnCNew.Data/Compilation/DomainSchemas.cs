@@ -18,6 +18,7 @@ internal static class DomainSchemas
         DefinitionKind.Upgrade => UpgradeSchema.Upgrade,
         DefinitionKind.Science => ScienceSchema.Science,
         DefinitionKind.Locomotor => LocomotorSchema.Locomotor,
+        DefinitionKind.Faction => FactionSchema.Faction,
         _ => null,
     };
 }

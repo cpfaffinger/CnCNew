@@ -769,6 +769,222 @@
     },
     {
       "category": "deferred-field",
+      "name": "PlayerTemplate/ArmyTooltip",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/BaseSide",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/BeaconName",
+      "count": 14,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/DisplayName",
+      "count": 15,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/EnabledImage",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/Features",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/FlagWaterMark",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/GeneralImage",
+      "count": 12,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/LoadScreenImage",
+      "count": 14,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/LoadScreenMusic",
+      "count": 14,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/MedallionHilite",
+      "count": 12,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/MedallionRegular",
+      "count": 12,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/MedallionSelect",
+      "count": 12,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/OldFaction",
+      "count": 15,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/PreferredColor",
+      "count": 15,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/PurchaseScienceCommandSetRank1",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/PurchaseScienceCommandSetRank3",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/PurchaseScienceCommandSetRank8",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/ScoreScreenImage",
+      "count": 15,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/ScoreScreenMusic",
+      "count": 15,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/SideIconImage",
+      "count": 14,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/SpecialPowerShortcutButtonCount",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/SpecialPowerShortcutCommandSet",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "PlayerTemplate/SpecialPowerShortcutWinName",
+      "count": 13,
+      "owners": [
+        "PlayerTemplate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "ProductionUpdate/ConstructionCompleteDuration",
       "count": 35,
       "owners": [
