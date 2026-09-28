@@ -22,11 +22,20 @@ public sealed record BodyData(Fixed MaxHealth, Fixed InitialHealth, Fixed Subdua
         ModuleConfigReader.Real(configuration, "SubdualDamageHealAmount", Fixed.Zero));
 }
 
+/// <summary><c>BodyDamageType</c> (<c>BodyModule.h</c>): PRISTINE &lt; DAMAGED &lt; REALLYDAMAGED &lt; RUBBLE, in ascending "worseness" order (values compare directly, matching the reference's <c>IS_CONDITION_WORSE(a, b) = a &gt; b</c>).</summary>
+public static class BodyDamageStates
+{
+    public const int Pristine = 0;
+    public const int Damaged = 1;
+    public const int ReallyDamaged = 2;
+    public const int Rubble = 3;
+}
+
 /// <summary>
 /// <c>ActiveBody</c>: health with damage, healing and death. A death is the transition from positive health to zero
 /// (<c>currentHealth &lt;= 0 &amp;&amp; prevHealth &gt; 0</c>), which triggers the die modules exactly once.
 /// Armor coefficients are applied by the caller (<see cref="Templates.ArmorInfo"/>/<c>SimulationWorld</c>'s combat
-/// resolution), not here; damage multipliers, damage states and damage FX remain unmodeled (phase 6+).
+/// resolution), not here; damage multipliers remain unmodeled (phase 6+).
 /// </summary>
 public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
 {
@@ -48,14 +57,30 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
     public Fixed MaxHealth { get; protected set; }
     public Fixed PreviousHealth { get; protected set; }
 
-    /// <summary><c>ActiveBody::internalChangeHealth</c>: applies the delta, caps at max and floors at zero.</summary>
-    protected virtual void InternalChangeHealth(Fixed delta)
+    /// <summary><c>ActiveBody::calcDamageState</c>'s result, kept current by <see cref="InternalChangeHealth"/> exactly like the reference's <c>setCorrectDamageState</c> call inside <c>internalChangeHealth</c>.</summary>
+    public int DamageState { get; private set; }
+
+    public override void OnSpawn(IWorldServices world) => DamageState = CalcDamageState(world);
+
+    private int CalcDamageState(IWorldServices world)
+    {
+        if (MaxHealth <= Fixed.Zero) return BodyDamageStates.Pristine; // calcDamageState: no GlobalData / no max health both fall back to PRISTINE.
+        var ratio = Health / MaxHealth;
+        if (ratio > world.UnitDamagedThreshold) return BodyDamageStates.Pristine;
+        if (ratio > world.UnitReallyDamagedThreshold) return BodyDamageStates.Damaged;
+        if (ratio > Fixed.Zero) return BodyDamageStates.ReallyDamaged;
+        return BodyDamageStates.Rubble;
+    }
+
+    /// <summary><c>ActiveBody::internalChangeHealth</c>: applies the delta, caps at max and floors at zero, recomputes the damage state.</summary>
+    protected virtual void InternalChangeHealth(IWorldServices world, Fixed delta)
     {
         PreviousHealth = Health;
         var health = Health + delta;
         if (health > MaxHealth) health = MaxHealth;
         if (health < Fixed.Zero) health = Fixed.Zero;
         Health = health;
+        DamageState = CalcDamageState(world);
         Entity.EffectivelyDead = Health <= Fixed.Zero;
     }
 
@@ -66,7 +91,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
         if (info.DamageType == DamageTypes.Healing && !info.Kill)
         {
             if (amount <= Fixed.Zero) return DamageOutcome.NoEffect;
-            InternalChangeHealth(amount);
+            InternalChangeHealth(world, amount);
             return Health != PreviousHealth ? DamageOutcome.Applied : DamageOutcome.NoEffect;
         }
         if (DamageTypes.IsSubdual(info.DamageType) || info.DamageType is DamageTypes.KillPilot or DamageTypes.KillGarrisoned or DamageTypes.Status)
@@ -74,7 +99,8 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
         if (amount <= Fixed.Zero && !info.Kill) return DamageOutcome.NoEffect;
 
         if (info.Kill) amount = Health;
-        InternalChangeHealth(-amount);
+        var oldDamageState = DamageState;
+        InternalChangeHealth(world, -amount);
         var actualDamageDealt = PreviousHealth - Health;
         if (Health < PreviousHealth)
         {
@@ -83,6 +109,8 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
             // fear-sound and death checks below, so it runs even on a killing blow.
             foreach (var module in Entity.DamageModules) module.OnDamage(world, info, actualDamageDealt);
         }
+        if (DamageState != oldDamageState)
+            foreach (var module in Entity.DamageModules) module.OnBodyDamageStateChange(world, info, oldDamageState, DamageState);
         // ActiveBody.cpp attemptDamage (block 0.3): crossing the 25% threshold has a 25% chance of a fear sound. The
         // random draw itself is simulation state — it must consume the same LogicRandom value the reference does,
         // win or lose, for replay/golden-master parity — the sound is presentation, so only a successful roll emits.
@@ -98,7 +126,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
     }
 
     /// <summary><c>MaxHealthUpgrade.cpp</c>: raises (or lowers) the cap; <paramref name="changeType"/> is one of <c>NameTablesPhase5.MaxHealthChangeType</c>, compared case-insensitively (unrecognized text falls back to the default, matching the reference's zero-based enum default).</summary>
-    public virtual void AdjustMaxHealth(Fixed delta, string changeType)
+    public virtual void AdjustMaxHealth(IWorldServices world, Fixed delta, string changeType)
     {
         var oldMax = MaxHealth;
         var newMax = Fixed.Max(Fixed.Zero, MaxHealth + delta);
@@ -110,6 +138,9 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
             "FULLY_HEAL" => newMax,
             _ => Fixed.Min(Health, newMax), // SAME_CURRENTHEALTH
         };
+        // setMaxHealth never dispatches onBodyDamageStateChange (it does not go through attemptDamage); it only ever
+        // keeps the state itself current, exactly as far as the reference goes.
+        DamageState = CalcDamageState(world);
         Entity.EffectivelyDead = Health <= Fixed.Zero;
     }
 
@@ -118,6 +149,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
         writer.Fixed("health", Health);
         writer.Fixed("maxHealth", MaxHealth);
         writer.Fixed("previousHealth", PreviousHealth);
+        writer.Int("damageState", DamageState);
     }
 
     public override void Load(IStateReader reader)
@@ -125,6 +157,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
         Health = reader.Fixed("health");
         MaxHealth = reader.Fixed("maxHealth");
         PreviousHealth = reader.Fixed("previousHealth");
+        DamageState = checked((int)reader.Int("damageState"));
     }
 }
 
@@ -134,10 +167,10 @@ public sealed class StructureBody(BodyData data) : ActiveBody(data, "StructureBo
 /// <summary><c>ImmortalBody</c>: health can never drop below one hit point, so the entity is never marked dead.</summary>
 public sealed class ImmortalBody(BodyData data) : ActiveBody(data, "ImmortalBody")
 {
-    protected override void InternalChangeHealth(Fixed delta)
+    protected override void InternalChangeHealth(IWorldServices world, Fixed delta)
     {
         delta = Fixed.Max(delta, -Health + Fixed.One);
-        base.InternalChangeHealth(delta);
+        base.InternalChangeHealth(world, delta);
     }
 }
 

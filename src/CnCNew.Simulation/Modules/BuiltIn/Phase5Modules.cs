@@ -336,7 +336,7 @@ public sealed class MaxHealthUpgrade(MaxHealthUpgradeData data) : UpgradeMuxModu
     public override string ModuleName => "MaxHealthUpgrade";
     protected override void Activate(IWorldServices world)
     {
-        if (Entity.Body is IMaxHealthAdjustable adjustable) adjustable.AdjustMaxHealth(data.AddMaxHealth, data.ChangeType);
+        if (Entity.Body is IMaxHealthAdjustable adjustable) adjustable.AdjustMaxHealth(world, data.AddMaxHealth, data.ChangeType);
     }
 }
 

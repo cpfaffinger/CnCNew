@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
+using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
@@ -17,6 +19,7 @@ internal static class Phase5BlockerModules
     public static ImmutableArray<IModuleBinding> Bindings { get; } =
     [
         new ModuleBinding<FlammableData>("FlammableUpdate", ModuleOwnerKind.Object, (configuration, _) => FlammableData.Parse(configuration), data => new FlammableUpdate(data)),
+        new ModuleBinding<TransitionDamageFXData>("TransitionDamageFX", ModuleOwnerKind.Object, (configuration, _) => TransitionDamageFXData.Parse(configuration), data => new TransitionDamageFX(data)),
     ];
 }
 
@@ -147,4 +150,64 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
         _lastFlameDamageTick = reader.Int("lastFlameDamageTick");
         _nextWake = reader.Int("nextWake");
     }
+}
+
+// ============================================================================================ TransitionDamageFX
+
+/// <summary>
+/// <c>TransitionDamageFX.h</c>'s field table is ~111 keys (3 damage-type flag fields, then 12 slots × 3 body-damage-
+/// states × 3 effect kinds: FX list, object creation list, particle system). Only <c>DamageOCLTypes</c> and the 36 OCL
+/// name slots are mechanically relevant: FX lists and particle systems are pure presentation. The OCL names are kept as
+/// text, not resolved references — <c>ObjectCreationList</c> is not yet its own typed definition domain (still
+/// <c>Compatibility</c>, see docs/TYPED-DEFINITIONS.md), the same simplification <c>ObjectCreationUpgrade</c> already
+/// documents.
+/// </summary>
+public sealed record TransitionDamageFXData(ulong DamageOclTypesMask, ImmutableArray<string> DamagedOcl, ImmutableArray<string> ReallyDamagedOcl, ImmutableArray<string> RubbleOcl) : ModuleData
+{
+    public static TransitionDamageFXData Parse(ModuleConfiguration configuration)
+    {
+        ImmutableArray<string> Slots(string prefix)
+        {
+            var builder = ImmutableArray.CreateBuilder<string>();
+            for (var slot = 1; slot <= 12; slot++)
+            {
+                var name = ModuleConfigReader.Text(configuration, $"{prefix}{slot}");
+                if (name.Length > 0) builder.Add(name);
+            }
+            return builder.ToImmutable();
+        }
+        // AllNoneDeltaFlags default ALL, matching TransitionDamageFXModuleData's constructor (DAMAGE_TYPE_FLAGS_ALL).
+        var flags = ModuleConfigReader.Flags(configuration, "DamageOCLTypes");
+        var mask = flags is null ? ulong.MaxValue : ObjectStatusBits.Mask(flags, NameTables.DamageType);
+        return new TransitionDamageFXData(mask, Slots("DamagedOCL"), Slots("ReallyDamagedOCL"), Slots("RubbleOCL"));
+    }
+}
+
+/// <summary>
+/// <c>TransitionDamageFX::onBodyDamageStateChange</c>: requests the object creation lists configured for the object's
+/// new, worse body-damage state (<c>IS_CONDITION_WORSE(new, old) = new &gt; old</c> — healing back to a better state
+/// requests nothing), gated by <see cref="TransitionDamageFXData.DamageOclTypesMask"/> and requiring a resolvable
+/// damage source (the reference: <c>if (damageSource && ...)</c> — self-inflicted or sourceless damage never spawns
+/// an OCL here either). Execution of the requested list is a phase-6 concern (same event as <c>CreateObjectDie</c>).
+/// </summary>
+public sealed class TransitionDamageFX(TransitionDamageFXData data) : SimModule, IDamageModule
+{
+    public override string ModuleName => "TransitionDamageFX";
+
+    public void OnBodyDamageStateChange(IWorldServices world, in DamageInfo info, int oldState, int newState)
+    {
+        if (newState <= oldState || !info.Source.IsValid) return;
+        if ((data.DamageOclTypesMask & (1UL << info.DamageType)) == 0) return;
+        var slots = newState switch
+        {
+            BodyDamageStates.Damaged => data.DamagedOcl,
+            BodyDamageStates.ReallyDamaged => data.ReallyDamagedOcl,
+            BodyDamageStates.Rubble => data.RubbleOcl,
+            _ => ImmutableArray<string>.Empty,
+        };
+        foreach (var ocl in slots) world.Emit(SimEventKind.CreationListRequested, Entity.Id, info.Source, ocl, 0);
+    }
+
+    public override void Describe(IStateWriter writer) { }
+    public override void Load(IStateReader reader) { }
 }

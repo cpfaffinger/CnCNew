@@ -172,6 +172,8 @@ public sealed partial class SimulationWorld : IWorldServices
     public UpgradeCatalog Upgrades => _templates.Upgrades;
     public WeaponCatalog Weapons => _templates.Weapons;
     public ScienceCatalog Sciences => _templates.Sciences;
+    public Fixed UnitDamagedThreshold => _templates.UnitDamagedThreshold;
+    public Fixed UnitReallyDamagedThreshold => _templates.UnitReallyDamagedThreshold;
 
     public ScienceMask PlayerSciences(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.CompletedSciences : ScienceMask.Empty;
     public int SciencePointsOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.SciencePurchasePoints : 0;

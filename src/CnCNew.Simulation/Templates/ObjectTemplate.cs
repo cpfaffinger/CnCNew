@@ -114,13 +114,16 @@ public sealed class TemplateCatalog
 {
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
-    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, FactionCatalog factions)
+    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences,
+        FactionCatalog factions, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold)
     {
         Templates = templates;
         Upgrades = upgrades;
         Weapons = weapons;
         Sciences = sciences;
         Factions = factions;
+        UnitDamagedThreshold = unitDamagedThreshold;
+        UnitReallyDamagedThreshold = unitReallyDamagedThreshold;
         var builder = ImmutableDictionary.CreateBuilder<string, ObjectTemplate>(StringComparer.OrdinalIgnoreCase);
         foreach (var template in templates) builder[template.Name] = template;
         _byName = builder.ToImmutable();
@@ -131,6 +134,9 @@ public sealed class TemplateCatalog
     public WeaponCatalog Weapons { get; }
     public ScienceCatalog Sciences { get; }
     public FactionCatalog Factions { get; }
+    /// <summary><c>GlobalData::m_unitDamagedThresh</c>/<c>m_unitReallyDamagedThresh</c> (<c>GameData.ini</c> <c>UnitDamagedThreshold</c>/<c>UnitReallyDamagedThreshold</c>).</summary>
+    public Fixed UnitDamagedThreshold { get; }
+    public Fixed UnitReallyDamagedThreshold { get; }
     public ObjectTemplate this[int index] => Templates[index];
     public bool TryGet(string name, out ObjectTemplate template) => _byName.TryGetValue(name, out template!);
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);
@@ -145,6 +151,7 @@ public sealed class TemplateCatalog
         var locomotors = BuildLocomotors(graph);
         var sciences = ScienceCatalog.Build(graph);
         var factions = FactionCatalog.Build(graph, sciences);
+        var (unitDamagedThreshold, unitReallyDamagedThreshold) = ResolveDamageThresholds(graph);
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
         var index = 0;
         foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
@@ -186,7 +193,24 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        return new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions);
+        return new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, unitDamagedThreshold, unitReallyDamagedThreshold);
+    }
+
+    /// <summary>
+    /// <c>calcDamageState</c> falls back to <c>BODY_PRISTINE</c> when <c>TheGlobalData</c> is unavailable; the closest
+    /// equivalent here is the retail default (<c>GameData.ini</c>: 0.7/0.35) when the single <c>GameData</c> definition,
+    /// or these two specific fields, are absent — never observed in the shipped data, but keeps a synthetic fixture
+    /// without a <c>GameData</c> block working instead of throwing.
+    /// </summary>
+    private static (Fixed Damaged, Fixed ReallyDamaged) ResolveDamageThresholds(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        Fixed Get(string name, decimal fallback)
+        {
+            var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value;
+            return value is decimal real ? Fixed.FromDecimal(real) : Fixed.FromDecimal(fallback);
+        }
+        return (Get("UnitDamagedThreshold", 0.7m), Get("UnitReallyDamagedThreshold", 0.35m));
     }
 
     private static ImmutableArray<string> ConditionTokens(DefinitionSection set)

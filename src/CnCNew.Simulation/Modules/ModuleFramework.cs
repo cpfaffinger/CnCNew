@@ -74,6 +74,10 @@ public interface IWorldServices
     ScienceCatalog Sciences { get; }
     ScienceMask PlayerSciences(PlayerId player);
 
+    /// <summary><c>GlobalData::m_unitDamagedThresh</c>/<c>m_unitReallyDamagedThresh</c> (<c>GameData.ini</c>): health-ratio thresholds <see cref="BuiltIn.BodyDamageStates"/> is computed from.</summary>
+    Fixed UnitDamagedThreshold { get; }
+    Fixed UnitReallyDamagedThreshold { get; }
+
     /// <summary>"Science Purchase Points" earned via rank/experience in the reference (not modeled); a scenario/system command credits them directly instead — see <c>docs/GAME-RULES.md</c>.</summary>
     int SciencePointsOf(PlayerId player);
     void AddSciencePoints(PlayerId player, int amount);
@@ -89,7 +93,7 @@ public interface IUpgradeModule
 /// <summary>A body that can change its maximum health at run time (<c>MaxHealthUpgrade.cpp</c>). Not every body supports this (<c>InactiveBody</c> has no health).</summary>
 public interface IMaxHealthAdjustable
 {
-    void AdjustMaxHealth(Fixed delta, string changeType);
+    void AdjustMaxHealth(IWorldServices world, Fixed delta, string changeType);
 }
 
 public abstract class SimModule
@@ -135,10 +139,17 @@ public interface IEventReceiver
     void OnEvent(IWorldServices world, in SimEvent simEvent);
 }
 
-/// <summary><c>DamageModuleInterface::onDamage</c>: called for every damage application that actually lowers health, before the fear-sound check and before the death check (so it runs even on a killing blow).</summary>
+/// <summary>
+/// <c>DamageModuleInterface</c>: called for every damage application that actually lowers health, before the
+/// fear-sound check and before the death check (so both run even on a killing blow). Either callback may be left at
+/// its no-op default (the reference's own <c>DamageModuleInterface</c> subclasses routinely implement only one).
+/// </summary>
 public interface IDamageModule
 {
-    void OnDamage(IWorldServices world, in DamageInfo info, Fixed actualDamageDealt);
+    void OnDamage(IWorldServices world, in DamageInfo info, Fixed actualDamageDealt) { }
+
+    /// <summary><c>oldState</c>/<c>newState</c> are <see cref="BuiltIn.BodyDamageStates"/> values; <paramref name="info"/> is the damage that caused the transition (matches <c>getLastDamageInfo()</c> in a synchronous, single-threaded model).</summary>
+    void OnBodyDamageStateChange(IWorldServices world, in DamageInfo info, int oldState, int newState) { }
 }
 
 /// <summary>Bit positions of the object status table (<c>ObjectStatusMaskType::s_bitNameList</c>).</summary>
