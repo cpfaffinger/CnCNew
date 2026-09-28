@@ -232,3 +232,19 @@ Kategorie `phase-5-domain-field-typing`, nie stillschweigend verworfen).
 - **Zahlen** (`IniTool debt-report`, Vollinventar): Armor 884 Kopffelder, **0 unbenannt**; Weapon 6.248 Kopffelder,
   1.738 unbenannt (vorher 2.449); Upgrade 427/228 (vorher 263); Science 456/168 (vorher 254); Locomotor 3.599/552
   (unverändert – die 552 sind bewusst deferred, siehe `LocomotorSchema`-Kommentar).
+
+## Block 0.1 fortgesetzt: `FactionSchema` (Spieler/Fraktionen)
+
+`PlayerTemplate.cpp TheFieldParseTable` (~35 Schlüssel) liefert zwölf mechanisch relevante Felder für den headless
+Referenzlauf: `Side`, `PlayableSide`, `IsObserver`, `StartMoney` (`PlayerTemplate::parseStartMoney`: ein einfacher
+Geldbetrag, `Money::setStartingCash`), `IntrinsicSciences` (Referenzliste auf `Science`),
+`IntrinsicSciencePurchasePoints`, `StartingBuilding` sowie `StartingUnit0`–`StartingUnit9` (je eine `Object`-Referenz).
+Die übrigen ~23 Schlüssel (Kommandoleisten-Zuordnung, Bildschirm-/Audio-Ressourcen, Tooltips, Medaillons) bleiben
+deferred – reine Präsentation. Zahlen: 409 Kopffelder über 15 Fraktionen, 294 unbenannt (vorher 333; 41 zusätzliche
+Referenzen lösen alle auf).
+
+`CnCNew.Simulation.Templates.FactionCatalog` liest `StartingBuilding`/`StartingUnit0-9` bewusst als **Namen**, nicht als
+aufgelöste `ObjectTemplate`-Indizes: Spawnen läuft ohnehin über `SpawnCommand`, das einen Namen nimmt und ihn beim
+Einreihen validiert, sodass der Fraktionskatalog nicht in derselben Reihenfolge wie die Objektvorlagenliste gebaut
+werden muss. `SimulationWorld` schreibt `StartMoney`/`IntrinsicSciences` einmalig bei der Konstruktion in den
+Spielerzustand (`Player::Player()`), sofern `PlayerConfiguration.Faction` gesetzt ist.

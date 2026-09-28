@@ -210,7 +210,7 @@ Subdual-Typen wirken nicht auf Gesundheit), `KILLPILOT`/`KILL_GARRISONED`/`STATU
 
 ## 6. Befehle
 
-Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 2` (Phase 5 hat sechs Typen ergänzt;
+Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 3` (Phase 5 hat acht Typen ergänzt;
 bestehende Codes ändern sich nie):
 
 | Code | Typ | Zweck | nur System |
@@ -227,13 +227,16 @@ bestehende Codes ändern sich nie):
 | 10 | `CancelProductionCommand` | Warteschlangenplatz stornieren, volle Rückerstattung | |
 | 11 | `SetMoveTargetCommand` | Geradlinigen Bewegungsauftrag setzen (Phase-5-Bewegungsmodell) | |
 | 12 | `FireWeaponCommand` | Direkter Waffenschuss auf ein Ziel (kein Auto-Ziel, keine Sichtlinie) | |
+| 13 | `GiveSciencePointsCommand` | "Science Purchase Points" eines Spielers direkt gutschreiben (kein Rang-/Erfahrungssystem) | ✔ |
+| 14 | `PurchaseScienceCommand` | Science kaufen (`Player::attemptToPurchaseScience`), sofort abgeschlossen | |
 
 `Submit` prüft sofort und lehnt **explizit, gezählt und als `CommandRejected`-Event** ab: `Late` (Tick liegt zurück),
 `Duplicate` (gleiche (Spieler, Sequenz) wie die zuletzt akzeptierte), `OutOfOrder` (kleinere Sequenz), `UnknownPlayer`,
 `NotPermitted`, `InvalidArguments` (Sequenz 0, negative Werte, ungültige Typen), `UnknownTemplate` (unbekannt oder nicht
 instanziierbar). Zur Ausführungszeit folgen `UnknownEntity`, `NotPermitted` (fremdes Entity) und `UnknownTimer`; Phase 5
 ergänzt `InsufficientFunds`, `AlreadyOwned`, `UnknownUpgrade`, `NoWeapon`, `WeaponNotReady`, `OutOfRange`, `QueueFull`,
-`CannotMove`, `CannotProduce` (Details und Numerik: `docs/GAME-RULES.md` §4). Sequenzen sind pro Spieler streng
+`CannotMove`, `CannotProduce`, `UnknownScience`, `ScienceNotPurchasable`, `InsufficientSciencePurchasePoints`,
+`MissingPrerequisite` (Details und Numerik: `docs/GAME-RULES.md` §4/§1a). Sequenzen sind pro Spieler streng
 aufsteigend; Befehle desselben Ticks laufen nach (Spieler-ID, Sequenz), unabhängig von der Einreihreihenfolge. Die Zähler
 je Grund gehören zum Zustand. **Wichtig:** `Validate()` prüft beim `Submit()` gegen den *aktuellen* Weltzustand, nicht
 gegen den Zustand nach zuvor im selben Tick eingereihten Befehlen – ein `GiveMoneyCommand` und ein darauf aufbauender

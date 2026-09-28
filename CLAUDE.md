@@ -92,15 +92,15 @@ Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern �
 Diesen Stil beibehalten. Für schnelle Wiederholung nach einem Build: `dotnet run --no-build`.
 
 Referenzwerte (Stand Phase 5, in Arbeit; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene INI-Dateien (28
-nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 15.467/17.013
-Referenzen aufgelöst (1.546 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 142.618.645 Byte, SHA-256
-`A2B7859EC9C026F5EE4C898BD74482E73ED15C4CF11395B5BD80D8E35E9581B8`; Retail-Basisdaten (`--maps exclude`) 12.550
-Definitionen, 2.115 Objekte, SHA-256 `128B244283C1D7466194E105FAED92A326500788C585D44191EF2DDDB3E1E378` (Objektzahl und
-Fingerabdruck geändert gegenüber Phase 4 durch eine Phase-5-Parserkorrektur, siehe `docs/PHASE3-COMPATIBILITY.md`).
+nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 15.508/17.054
+Referenzen aufgelöst (1.546 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 143.339.947 Byte, SHA-256
+`4741EDDF6F528AFB239E1644211332D4AE86915878E6E59C20EDF0B8C15E20C7`; Retail-Basisdaten (`--maps exclude`) 12.550
+Definitionen, 2.115 Objekte, SHA-256 `3F7F51B70CB161E8920051371A87D6A4641EFD53043956E5822E2A54FAED59C3` (Objektzahl
+geändert gegenüber Phase 4 durch eine Phase-5-Parserkorrektur, siehe `docs/PHASE3-COMPATIBILITY.md`).
 Modulkatalog 205 Typen (27 implementiert: 12 aus Phase 4, 15 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
-437 Einträge, Instanziierbarkeit 623 von 2.115 Objekten (29,5 %). Asset-Runtimebestand: 25.682 Dateien.
-Stresstest (216.000 Ticks, `SimTool stress`, mit allen 27 Modulen): Endhash `CED062EE0D6EBEEC`, Kettenhash
-`66D70651FD405581`.
+461 Einträge, Instanziierbarkeit 623 von 2.115 Objekten (29,5 %). Asset-Runtimebestand: 25.682 Dateien.
+Stresstest (216.000 Ticks, `SimTool stress`, mit allen 27 Modulen): Endhash `C75FD6C190386265`, Kettenhash
+`9C18E378454CB82C`.
 
 ## Code- und Dokumentationsstil
 

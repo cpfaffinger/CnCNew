@@ -21,6 +21,28 @@ ausgeführt, neue Module (`StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade
 - **Bekannte Lücke:** Energie hat noch keinen Verbrauchseffekt (z. B. Produktionsverlangsamung bei Energiemangel,
   `ProductionUpdate::calcTimeToBuild`); die Bilanz wird geführt, aber nirgends gelesen.
 
+### Spieler, Fraktionen und Sciences
+
+- `PlayerConfiguration.Faction` benennt einen `PlayerTemplate` (`FactionCatalog`, Block 0.1 fortgesetzt); ist er gesetzt,
+  schreibt `SimulationWorld` einmalig bei der Konstruktion `StartMoney` und `IntrinsicSciences` in den Spielerzustand
+  (`Player::Player()`). `StartingBuilding`/`StartingUnit0`–`9` bleiben Namen (keine aufgelösten Indizes): ein
+  Referenzmatch spawnt sie über gewöhnliche `SpawnCommand`s, statt den Fraktionskatalog an die Objektvorlagenliste zu
+  koppeln.
+- `ScienceCatalog` gibt jeder `Science`-Definition einen stabilen Bitindex (128-Bit-`ScienceMask`, strukturell wie
+  `UpgradeMask`, aber ein getrennter Indexraum – Sciences und Upgrades sind getrennte Referenzdomänen im Original).
+  `PurchaseScienceCommand` portiert `Player::attemptToPurchaseScience`/`isCapableOfPurchasingScience` in dieser
+  Reihenfolge: bereits im Besitz (`AlreadyOwned`) → fehlende direkte Voraussetzung (`MissingPrerequisite`,
+  `Player::hasPrereqsForScience`) → Kaufpreis 0 bedeutet **nicht direkt kaufbar** (`ScienceNotPurchasable` – das
+  Original nutzt denselben Sentinelwert für „nur per `grantScience` vergebbar“, z. B. intrinsische Fraktionssciences)
+  → zu wenig Punkte (`InsufficientSciencePurchasePoints`). Bei Erfolg werden die Punkte abgebucht und die Maske gesetzt.
+- **Bewusste Vereinfachung:** „Science Purchase Points“ sind im Original an Rang/Erfahrung gekoppelt
+  (`Player::resetRank`, `RankInfo::m_sciencePurchasePointsGranted`) – ein Fortschrittssystem, das Phase 5 nicht
+  modelliert. `GiveSciencePointsCommand` (nur System) schreibt Punkte direkt gut, analog zu `GiveMoneyCommand`.
+  `IsGrantable` ist typisiert, aber ungenutzt (kein `grantScience`-Aufrufer existiert außer der intrinsischen
+  Fraktionsvergabe, die die Maske direkt setzt statt über `grantScience` zu prüfen — wie im Original).
+- **Bekannte Lücke:** keine Teams/Allianzen/Diplomatie als Datenmodell (siehe §7); `CommandSet`/`CommandButton` bleiben
+  reine Präsentation ohne Simulationswirkung.
+
 ## 2. Upgrades
 
 - `UpgradeCatalog` (`src/CnCNew.Simulation/Templates/UpgradeCatalog.cs`) vergibt jedem `Upgrade`-Definitionseintrag
@@ -167,8 +189,10 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
 - Keine drehratenbegrenzte Ausrichtung, kein Terrain, keine Pfadsuche, keine Kollision (§4).
 - Kein Energie-Verlangsamungsfaktor, keine Bauplatzprüfung, kein Rallypunkt (§5).
 - Der `STEALTHED`-Statusbit hat noch keinen Verbraucher (kein Sicht-/Zielsystem, §6).
-- Keine Teams/Allianzen, keine Sciences, keine `CommandSet`/`CommandButton`-Wirkung (reine Präsentation), kein
-  Garrison/Transport/Supply/Radar/Reparatur/Verkauf (Rest von HANDOFF-PHASE5.md Punkt „Vollständiger Umfang").
+- Keine Teams/Allianzen/Diplomatie als Datenmodell, keine `CommandSet`/`CommandButton`-Wirkung (reine Präsentation),
+  kein Garrison/Transport/Supply/Radar/Reparatur/Verkauf (Rest von HANDOFF-PHASE5.md Punkt „Vollständiger Umfang").
+  Sciences (Kauf, Voraussetzungen) sind implementiert; „Science Purchase Points" werden mangels Rang-/
+  Erfahrungssystem nur per Systembefehl gutgeschrieben (§1a).
 - Kein headless Referenzmatch aller Fraktionen, keine Golden-Master-Szenarien gegen Originalwerte (HANDOFF-PHASE5.md
   Punkte 7/8 stehen aus); die hier beschriebenen Mechaniken sind stattdessen durch `tests/CnCNew.Simulation.Tests/
   Tests.Phase5.cs` (gezielte Integrationstests: Wirtschaft, Kampf, Upgrade-Effekte, Bewegung, Produktion, Stealth/Heilung,

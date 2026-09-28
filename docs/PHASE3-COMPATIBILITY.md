@@ -6,8 +6,8 @@ Der Compiler ignoriert unbekannte Semantik nie. Nicht benötigte Definitionen, n
 implementierte Simulations-/Präsentationsmodule, zurückgestellte Objekt-/Modulschlüssel, wiederholte
 Skalarschlüssel, Diagnosecodes und ausgeschlossene Dateien werden als `CompatibilityEntry` mit Kategorie,
 Name, Häufigkeit, Besitzerart und geplantem Ziel in jedem kanonischen Snapshot geführt. Seit Phase 4 ist die
-Liste als **geprüfte Basislinie** eingecheckt (`baselines/compatibility.json`); Phase 5 hat sie bewusst zweimal
-neu erzeugt, sobald sich getypte Felder verschoben haben (zuletzt **437 Einträge**, keine Assetinhalte), und
+Liste als **geprüfte Basislinie** eingecheckt (`baselines/compatibility.json`); Phase 5 hat sie bewusst mehrfach
+neu erzeugt, sobald sich getypte Felder verschoben haben (zuletzt **461 Einträge**, keine Assetinhalte), und
 prüft sie gegen Drift:
 
 ```powershell
@@ -20,9 +20,10 @@ erzeugt `IniTool compat-baseline`; jede Änderung ist Review-Gegenstand (Vollinv
 Modulkatalog, Retail-Ladeplan).
 
 Kategorien (frisch gemessen, Vollinventar): `definition` (38 Typen, 2.899 Verwendungen), `module` (178 Modultypen,
-10.229 Verwendungen – 27 Typen sind inzwischen implementiert, siehe unten), `deferred-field` (160 Schlüssel, davon 37
-Objektschlüssel und 123 neue Phase-5-Modul-/Domänenfelder, 12.599 Verwendungen), `duplicate-key` (24 Schlüssel, 120),
-`diagnostic` (9 Codes, 10.567 Verwendungen) und `excluded-file` (28 Dateien).
+10.229 Verwendungen – 27 Typen sind inzwischen implementiert, siehe unten), `deferred-field` (184 Schlüssel, davon 37
+Objektschlüssel und 147 neue Phase-5-Modul-/Domänenfelder — Weapon/Armor/Upgrade/Science/Locomotor/**Faction**,
+12.921 Verwendungen), `duplicate-key` (24 Schlüssel, 120), `diagnostic` (9 Codes, 10.567 Verwendungen) und
+`excluded-file` (28 Dateien).
 
 ## Definitionsdomänen außerhalb des Typvertrags
 
