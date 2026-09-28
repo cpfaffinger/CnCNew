@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CnCNew.Data.Definitions;
@@ -6,6 +8,8 @@ namespace CnCNew.Data.Snapshots;
 
 public static class DefinitionSnapshotWriter
 {
+    public const int SchemaVersion = 2;
+
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -16,31 +20,68 @@ public static class DefinitionSnapshotWriter
     public static byte[] WriteCanonical(CompiledDefinitionGraph graph)
     {
         ArgumentNullException.ThrowIfNull(graph);
-        var model = new
-        {
-            schemaVersion = 1,
-            definitions = graph.Definitions.OrderBy(value => value.Id.ToString(), StringComparer.Ordinal).Select(value => new
-            {
-                id = value.Id.ToString(), kind = value.Id.Kind.ToString(), name = value.OriginalName,
-                source = new { path = value.Location.Source.Replace('\\', '/'), value.Location.Line, value.Location.Column },
-                fields = value.Fields.OrderBy(field => field.Name, StringComparer.Ordinal).Select(field => new
-                {
-                    field.Name, kind = field.Value.Kind.ToString(), value = CanonicalValue(field.Value), original = field.Value.OriginalText,
-                    source = new { path = field.Location.Source.Replace('\\', '/'), field.Location.Line, field.Location.Column }
-                }),
-                sections = value.Sections.Select(CanonicalSection),
-                modules = value.Modules.Select(module => new
-                {
-                    module.Name, module.Tag, owner = module.OwnerKind.ToString(),
-                    fields = module.Fields.OrderBy(field => field.Name, StringComparer.Ordinal).Select(field => new { field.Name, kind = field.Value.Kind.ToString(), value = CanonicalValue(field.Value), original = field.Value.OriginalText }),
-                    sections = module.Sections.IsDefault ? [] : module.Sections.Select(CanonicalSection)
-                })
-            }),
-            references = graph.References.Select(edge => new { source = edge.Source.ToString(), edge.Field, targetKind = edge.Target.Kind.ToString(), edge.Target.Name, edge.Resolved, edge.Fallback }),
-            compatibility = graph.Audit.Compatibility.Select(value => new { value.Category, value.Name, value.Count, owners = value.OwnerKinds, value.PlannedTarget }),
-        };
-        return JsonSerializer.SerializeToUtf8Bytes(model, Options);
+        return JsonSerializer.SerializeToUtf8Bytes(BuildModel(graph), Options);
     }
+
+    /// <summary>Streams the canonical snapshot; the bytes are identical to <see cref="WriteCanonical"/>.</summary>
+    public static void WriteCanonical(CompiledDefinitionGraph graph, Stream destination)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(destination);
+        JsonSerializer.Serialize(destination, BuildModel(graph), Options);
+    }
+
+    /// <summary>
+    /// SHA-256 of the canonical snapshot computed while streaming (no full copy in memory). This is the definition
+    /// fingerprint stored in replay headers.
+    /// </summary>
+    public static (string Sha256, long Length) ComputeFingerprint(CompiledDefinitionGraph graph)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        using var stream = new HashingStream(hash);
+        WriteCanonical(graph, stream);
+        return (Convert.ToHexString(hash.GetHashAndReset()), stream.Length);
+    }
+
+    private sealed class HashingStream(IncrementalHash hash) : Stream
+    {
+        private long _length;
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => _length;
+        public override long Position { get => _length; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
+        public override void Write(ReadOnlySpan<byte> buffer) { hash.AppendData(buffer); _length += buffer.Length; }
+    }
+
+    private static object BuildModel(CompiledDefinitionGraph graph) => new
+    {
+        schemaVersion = SchemaVersion,
+        definitions = graph.Definitions.OrderBy(value => value.Id.ToString(), StringComparer.Ordinal).Select(value => new
+        {
+            id = value.Id.ToString(), kind = value.Id.Kind.ToString(), name = value.OriginalName,
+            source = new { path = value.Location.Source.Replace('\\', '/'), value.Location.Line, value.Location.Column },
+            fields = value.Fields.OrderBy(field => field.Name, StringComparer.Ordinal).Select(field => new
+            {
+                field.Name, kind = field.Value.Kind.ToString(), value = CanonicalValue(field.Value), original = field.Value.OriginalText,
+                source = new { path = field.Location.Source.Replace('\\', '/'), field.Location.Line, field.Location.Column }
+            }),
+            sections = value.Sections.Select(CanonicalSection),
+            modules = value.Modules.Select(module => new
+            {
+                module.Name, module.Tag, owner = module.OwnerKind.ToString(), block = module.BlockKind.ToString(),
+                fields = module.Fields.OrderBy(field => field.Name, StringComparer.Ordinal).Select(field => new { field.Name, kind = field.Value.Kind.ToString(), value = CanonicalValue(field.Value), original = field.Value.OriginalText }),
+                sections = module.Sections.IsDefault ? [] : module.Sections.Select(CanonicalSection)
+            })
+        }),
+        references = graph.References.Select(edge => new { source = edge.Source.ToString(), edge.Field, targetKind = edge.Target.Kind.ToString(), edge.Target.Name, edge.Resolved, edge.Fallback }),
+        compatibility = graph.Audit.Compatibility.Select(value => new { value.Category, value.Name, value.Count, owners = value.OwnerKinds, value.PlannedTarget }),
+    };
 
     private static object CanonicalSection(DefinitionSection section) => new
     {
@@ -50,19 +91,25 @@ public static class DefinitionSnapshotWriter
         source = new { path = section.Location.Source.Replace('\\', '/'), section.Location.Line, section.Location.Column },
     };
 
+    private static string Invariant(decimal value) => value.ToString(CultureInfo.InvariantCulture);
+
     private static object CanonicalValue(DefinitionValue value) => value.Value switch
     {
-        decimal number => number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        GameTime time => new { milliseconds = time.Milliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) },
-        Distance distance => new { value = distance.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) },
-        Speed speed => new { value = speed.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) },
-        Angle angle => new { degrees = angle.Degrees.ToString(System.Globalization.CultureInfo.InvariantCulture) },
-        Percentage percentage => new { ratio = percentage.Ratio.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+        decimal number => Invariant(number),
+        GameTime time => new { milliseconds = Invariant(time.Milliseconds) },
+        Distance distance => new { value = Invariant(distance.Value) },
+        Speed speed => new { value = Invariant(speed.Value) },
+        Angle angle => new { degrees = Invariant(angle.Degrees) },
+        Percentage percentage => new { ratio = Invariant(percentage.Ratio) },
         Money money => money.Value,
-        Vector2Value vector => new { x = vector.X.ToString(System.Globalization.CultureInfo.InvariantCulture), y = vector.Y.ToString(System.Globalization.CultureInfo.InvariantCulture) },
-        Vector3Value vector => new { x = vector.X.ToString(System.Globalization.CultureInfo.InvariantCulture), y = vector.Y.ToString(System.Globalization.CultureInfo.InvariantCulture), z = vector.Z.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+        Vector2Value vector => new { x = Invariant(vector.X), y = Invariant(vector.Y) },
+        Vector3Value vector => new { x = Invariant(vector.X), y = Invariant(vector.Y), z = Invariant(vector.Z) },
         ColorValue color => new { color.Red, color.Green, color.Blue, color.Alpha },
+        ColorKeyframeValue keyframe => new { keyframe.Color.Red, keyframe.Color.Green, keyframe.Color.Blue, keyframe.Color.Alpha, keyframe.Frame },
+        EnumValue enumeration => new { table = enumeration.Table, name = enumeration.Name },
+        FlagsValue flags => new { table = flags.Table, names = flags.Names, relative = flags.IsRelative ? true : (bool?)null, removed = flags.IsRelative ? (object)flags.RemovedNames : null },
         DefinitionReference reference => new { kind = reference.Kind.ToString(), reference.Name, reference.IsNone },
+        TaggedReferenceList tagged => new { tag = tagged.Tag, references = tagged.References.Select(reference => new { kind = reference.Kind.ToString(), reference.Name, reference.IsNone }) },
         _ => value.Value,
     };
 }

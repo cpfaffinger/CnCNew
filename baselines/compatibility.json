@@ -1,0 +1,3084 @@
+{
+  "schemaVersion": 1,
+  "mode": "full inventory (all map overlays), strict module catalog, retail load plan",
+  "entries": [
+    {
+      "category": "deferred-field",
+      "name": "Object/ButtonImage",
+      "count": 672,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/MaxSimultaneousOfType",
+      "count": 53,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SelectPortrait",
+      "count": 682,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundAmbient",
+      "count": 321,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundAmbientDamaged",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundAmbientReallyDamaged",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundAmbientRubble",
+      "count": 78,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundCreated",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundEnter",
+      "count": 65,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundExit",
+      "count": 61,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundFallingFromPlane",
+      "count": 8,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundMoveLoop",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundMoveStart",
+      "count": 280,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundMoveStartDamaged",
+      "count": 178,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundOnDamaged",
+      "count": 387,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundOnReallyDamaged",
+      "count": 387,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundStealthOff",
+      "count": 47,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/SoundStealthOn",
+      "count": 47,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/UpgradeCameo1",
+      "count": 378,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/UpgradeCameo2",
+      "count": 220,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/UpgradeCameo3",
+      "count": 106,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/UpgradeCameo4",
+      "count": 60,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/UpgradeCameo5",
+      "count": 48,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceAttack",
+      "count": 383,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceAttackAir",
+      "count": 51,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceCreated",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceEnter",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceFear",
+      "count": 109,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceGarrison",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceGroupSelect",
+      "count": 11,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceGuard",
+      "count": 295,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceMeetEnemy",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceMove",
+      "count": 389,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceSelect",
+      "count": 623,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceSelectElite",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceTaskComplete",
+      "count": 54,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Object/VoiceTaskUnable",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "definition",
+      "name": "AIData",
+      "count": 27,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Animation",
+      "count": 14,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "AudioSettings",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Bridge",
+      "count": 27,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Campaign",
+      "count": 17,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "ChallengeGenerals",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "CommandMap",
+      "count": 96,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "ControlBarResizer",
+      "count": 86,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "ControlBarScheme",
+      "count": 15,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "CrateData",
+      "count": 10,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Credits",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "DrawGroupInfo",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "DynamicGameLOD",
+      "count": 4,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "EvaEvent",
+      "count": 49,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "HeaderTemplate",
+      "count": 19,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "InGameUI",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Language",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "MapCache",
+      "count": 150,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "MappedImage",
+      "count": 1486,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "MiscAudio",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Mouse",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "MouseCursor",
+      "count": 37,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "MultiplayerColor",
+      "count": 8,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "MultiplayerSettings",
+      "count": 2,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "MultiplayerStartingMoneyChoice",
+      "count": 4,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "ObjectCreationList",
+      "count": 299,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "OnlineChatColors",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Rank",
+      "count": 5,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Road",
+      "count": 63,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "ShellMenuScheme",
+      "count": 1,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "StaticGameLOD",
+      "count": 3,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Terrain",
+      "count": 292,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Video",
+      "count": 41,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "WaterSet",
+      "count": 4,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "WaterTransparency",
+      "count": 56,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "Weather",
+      "count": 13,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "WebpageURL",
+      "count": 6,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "definition",
+      "name": "WindowTransition",
+      "count": 56,
+      "owners": [
+        "top-level"
+      ],
+      "plannedTarget": "phase-specific typed definition compiler"
+    },
+    {
+      "category": "diagnostic",
+      "name": "compatibility-add-module-without-module",
+      "count": 4,
+      "owners": [],
+      "plannedTarget": "explained-in-docs"
+    },
+    {
+      "category": "diagnostic",
+      "name": "compatibility-duplicate-key",
+      "count": 171,
+      "owners": [],
+      "plannedTarget": "explained-in-docs"
+    },
+    {
+      "category": "diagnostic",
+      "name": "compatibility-duplicate-module-tag",
+      "count": 113,
+      "owners": [],
+      "plannedTarget": "explained-in-docs"
+    },
+    {
+      "category": "diagnostic",
+      "name": "compatibility-ignored-tokens",
+      "count": 3,
+      "owners": [],
+      "plannedTarget": "explained-in-docs"
+    },
+    {
+      "category": "diagnostic",
+      "name": "compatibility-missing-remove-target",
+      "count": 52,
+      "owners": [],
+      "plannedTarget": "explained-in-docs"
+    },
+    {
+      "category": "diagnostic",
+      "name": "compatibility-missing-replace-target",
+      "count": 52,
+      "owners": [],
+      "plannedTarget": "explained-in-docs"
+    },
+    {
+      "category": "diagnostic",
+      "name": "compatibility-module",
+      "count": 12037,
+      "owners": [],
+      "plannedTarget": "explained-in-docs"
+    },
+    {
+      "category": "diagnostic",
+      "name": "compatibility-unsigned-wrap",
+      "count": 10,
+      "owners": [],
+      "plannedTarget": "explained-in-docs"
+    },
+    {
+      "category": "diagnostic",
+      "name": "compatibility-value",
+      "count": 2,
+      "owners": [],
+      "plannedTarget": "explained-in-docs"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "AudioEvent/Attack",
+      "count": 1,
+      "owners": [
+        "AudioEvent"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "AudioEvent/Control",
+      "count": 1,
+      "owners": [
+        "AudioEvent"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "AudioEvent/Priority",
+      "count": 12,
+      "owners": [
+        "AudioEvent"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "CommandButton/CursorName",
+      "count": 5,
+      "owners": [
+        "CommandButton"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "CommandSet/1",
+      "count": 1,
+      "owners": [
+        "CommandSet"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/BuildCost",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/BuildTime",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/ButtonImage",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/CommandSet",
+      "count": 12,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/CrushableLevel",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/CrusherLevel",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/DisplayName",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/EditorSorting",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/ExperienceRequired",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/ExperienceValue",
+      "count": 12,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/IsTrainable",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/KindOf",
+      "count": 9,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/PlacementViewAngle",
+      "count": 9,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/RadarPriority",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/SelectPortrait",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/Shadow",
+      "count": 13,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/ShroudClearingRange",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/Side",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/SoundAmbient",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/SoundMoveStart",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/SoundMoveStartDamaged",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/TransportSlotCount",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/UpgradeCameo1",
+      "count": 8,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/UpgradeCameo2",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/VisionRange",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/VoiceAttack",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/VoiceFear",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/VoiceGuard",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/VoiceMove",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Object/VoiceSelect",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Upgrade/ResearchSound",
+      "count": 1,
+      "owners": [
+        "Upgrade"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Weapon/AntiAirborneVehicle",
+      "count": 8,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Weapon/DelayBetweenShots",
+      "count": 1,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "duplicate-key",
+      "name": "Weapon/ProjectileDetonationFX",
+      "count": 4,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "last-wins"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Brazilian/HeaderTemplate.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Brazilian\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Brazilian/Language.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Brazilian\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Chinese/HeaderTemplate.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Chinese\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Chinese/HeaderTemplate9x.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "Windows 9x variant, not loaded on a current Windows"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Chinese/Language.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Chinese\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Chinese/Language9x.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "Windows 9x variant, not loaded on a current Windows"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/French/HeaderTemplate.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027French\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/French/Language.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027French\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/German/HeaderTemplate.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027German\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/German/Language.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027German\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/INI/CommandMapDebug.ini",
+      "count": 1,
+      "owners": [
+        "DebugOnly"
+      ],
+      "plannedTarget": "GameEngine.cpp loads it only #if _DEBUG || _INTERNAL"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/INI/CommandMapDemo.ini",
+      "count": 1,
+      "owners": [
+        "DebugOnly"
+      ],
+      "plannedTarget": "GameEngine.cpp loads it only #if _ALLOW_DEBUG_CHEATS_IN_RELEASE"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/INI/Default/ButtonSets.ini",
+      "count": 1,
+      "owners": [
+        "Unreferenced"
+      ],
+      "plannedTarget": "no loader in the reference sources"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/INI/Default/Webpages.ini",
+      "count": 1,
+      "owners": [
+        "Unreferenced"
+      ],
+      "plannedTarget": "no loader in the reference sources"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/INI/GameDataDebug.ini",
+      "count": 1,
+      "owners": [
+        "DebugOnly"
+      ],
+      "plannedTarget": "GameEngine.cpp loads it only #if _DEBUG || _INTERNAL"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/INI/MemoryPools.ini",
+      "count": 1,
+      "owners": [
+        "Unreferenced"
+      ],
+      "plannedTarget": "read by the memory pool initialiser (MemoryInit.cpp), not an INI definition file"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Italian/HeaderTemplate.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Italian\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Italian/Language.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Italian\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Korean/HeaderTemplate.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Korean\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Korean/HeaderTemplate9x.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "Windows 9x variant, not loaded on a current Windows"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Korean/Language.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Korean\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Korean/Language9x.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "Windows 9x variant, not loaded on a current Windows"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Polish/HeaderTemplate.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Polish\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Polish/Language.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Polish\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Scripts/Scripts.ini",
+      "count": 1,
+      "owners": [
+        "ToolOnly"
+      ],
+      "plannedTarget": "loaded only by the WorldBuilder tool (WorldBuilder.cpp)"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Spanish/HeaderTemplate.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Spanish\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "Data/Spanish/Language.ini",
+      "count": 1,
+      "owners": [
+        "LanguageVariant"
+      ],
+      "plannedTarget": "language \u0027Spanish\u0027 is not the selected language \u0027English\u0027"
+    },
+    {
+      "category": "excluded-file",
+      "name": "RedistInstallers/Options_Helper/Options.ini",
+      "count": 1,
+      "owners": [
+        "Unreferenced"
+      ],
+      "plannedTarget": "installer helper options file, not game definitions"
+    },
+    {
+      "category": "module",
+      "name": "AIUpdateInterface",
+      "count": 511,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "AnimatedParticleSysBoneClientUpdate",
+      "count": 32,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "AnimationSteeringUpdate",
+      "count": 11,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ArmorUpgrade",
+      "count": 154,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "AssaultTransportAIUpdate",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "AssistedTargetingUpdate",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "AutoDepositUpdate",
+      "count": 15,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "AutoFindHealingUpdate",
+      "count": 34,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "AutoHealBehavior",
+      "count": 90,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "BaikonurLaunchPower",
+      "count": 23,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "BaseRegenerateUpdate",
+      "count": 55,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "BattleBusSlowDeathBehavior",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "BattlePlanUpdate",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "BeaconClientUpdate",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "BoneFXDamage",
+      "count": 10,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "BoneFXUpdate",
+      "count": 10,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "BridgeBehavior",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "BridgeScaffoldBehavior",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "BridgeTowerBehavior",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "BunkerBusterBehavior",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CashBountyPower",
+      "count": 21,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CashHackSpecialPower",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CheckpointUpdate",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ChinookAIUpdate",
+      "count": 11,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "CleanupAreaPower",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CleanupHazardUpdate",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CommandButtonHuntUpdate",
+      "count": 85,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CommandSetUpgrade",
+      "count": 124,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ConvertToCarBombCrateCollide",
+      "count": 8,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ConvertToHijackedVehicleCrateCollide",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CostModifierUpgrade",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CountermeasuresBehavior",
+      "count": 40,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CreateCrateDie",
+      "count": 264,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "CrushDie",
+      "count": 42,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "DamDie",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "DefaultProductionExitUpdate",
+      "count": 42,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "DeliverPayloadAIUpdate",
+      "count": 29,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "DemoTrapUpdate",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "DeployStyleAIUpdate",
+      "count": 10,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "DozerAIUpdate",
+      "count": 10,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "DumbProjectileBehavior",
+      "count": 16,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "DynamicShroudClearingRangeUpdate",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "EMPUpdate",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "EjectPilotDie",
+      "count": 46,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "EnemyNearUpdate",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ExperienceScalarUpgrade",
+      "count": 85,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FireOCLAfterWeaponCooldownUpdate",
+      "count": 12,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FireSpreadUpdate",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FireWeaponCollide",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FireWeaponPower",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FireWeaponUpdate",
+      "count": 63,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FireWeaponWhenDamagedBehavior",
+      "count": 8,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FireWeaponWhenDeadBehavior",
+      "count": 209,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FirestormDynamicGeometryInfoUpdate",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FlammableUpdate",
+      "count": 825,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "FlightDeckBehavior",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "FloatUpdate",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "GarrisonContain",
+      "count": 213,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "GenerateMinefieldBehavior",
+      "count": 63,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "GrantScienceUpgrade",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "GrantStealthBehavior",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "GrantUpgradeCreate",
+      "count": 58,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "HackInternetAIUpdate",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "HealContain",
+      "count": 15,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "HeightDieUpdate",
+      "count": 32,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "HelicopterSlowDeathBehavior",
+      "count": 18,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "HelixContain",
+      "count": 13,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "HijackerUpdate",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "HiveStructureBody",
+      "count": 15,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "HordeUpdate",
+      "count": 13,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "InternetHackContain",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "JetAIUpdate",
+      "count": 34,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "JetSlowDeathBehavior",
+      "count": 59,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "LaserUpdate",
+      "count": 24,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "LeafletDropBehavior",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "LockWeaponCreate",
+      "count": 11,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "LocomotorSetUpgrade",
+      "count": 18,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "MaxHealthUpgrade",
+      "count": 50,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "MinefieldBehavior",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "MissileAIUpdate",
+      "count": 42,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "MissileLauncherBuildingUpdate",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "MobMemberSlavedUpdate",
+      "count": 15,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "ModelConditionUpgrade",
+      "count": 55,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "MoneyCrateCollide",
+      "count": 18,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "NeutronBlastBehavior",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "NeutronMissileSlowDeathBehavior",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "NeutronMissileUpdate",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "OCLSpecialPower",
+      "count": 200,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "OCLUpdate",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ObjectCreationUpgrade",
+      "count": 132,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "OverchargeBehavior",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "OverlordContain",
+      "count": 10,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ParachuteContain",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ParkingPlaceBehavior",
+      "count": 9,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "ParticleUplinkCannonUpdate",
+      "count": 8,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "PassengersFireUpgrade",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "PhysicsBehavior",
+      "count": 708,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "PilotFindVehicleUpdate",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "PointDefenseLaserUpdate",
+      "count": 23,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "PoisonedBehavior",
+      "count": 156,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "PowerPlantUpdate",
+      "count": 9,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "PowerPlantUpgrade",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "PreorderCreate",
+      "count": 19,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ProductionUpdate",
+      "count": 243,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ProjectileStreamUpdate",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "PropagandaTowerBehavior",
+      "count": 14,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "QueueProductionExitUpdate",
+      "count": 11,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "RadarUpdate",
+      "count": 9,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "RadarUpgrade",
+      "count": 15,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "RadiusDecalUpdate",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "RailedTransportAIUpdate",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "RailedTransportContain",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "RailedTransportDockUpdate",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "RailroadBehavior",
+      "count": 28,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "RebuildHoleBehavior",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "RebuildHoleExposeDie",
+      "count": 61,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "RepairDockUpdate",
+      "count": 17,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "ReplaceObjectUpgrade",
+      "count": 20,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "RiderChangeContain",
+      "count": 11,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SabotageCommandCenterCrateCollide",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SabotageFakeBuildingCrateCollide",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SabotageInternetCenterCrateCollide",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SabotageMilitaryFactoryCrateCollide",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SabotagePowerPlantCrateCollide",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SabotageSuperweaponCrateCollide",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SabotageSupplyCenterCrateCollide",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SalvageCrateCollide",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SlavedUpdate",
+      "count": 20,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "SlowDeathBehavior",
+      "count": 1494,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SmartBombTargetHomingUpdate",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpawnBehavior",
+      "count": 35,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpawnPointProductionExitUpdate",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpecialAbility",
+      "count": 115,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpecialAbilityUpdate",
+      "count": 100,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpecialPowerCompletionDie",
+      "count": 22,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpecialPowerCreate",
+      "count": 22,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpectreGunshipDeploymentUpdate",
+      "count": 9,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpectreGunshipUpdate",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpyVisionSpecialPower",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SpyVisionUpdate",
+      "count": 12,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SquishCollide",
+      "count": 153,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "StealthDetectorUpdate",
+      "count": 104,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "StealthUpdate",
+      "count": 133,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "StealthUpgrade",
+      "count": 25,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "StickyBombUpdate",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "StructureCollapseUpdate",
+      "count": 10,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "StructureToppleUpdate",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "SubObjectsUpgrade",
+      "count": 17,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SupplyCenterCreate",
+      "count": 15,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SupplyCenterDockUpdate",
+      "count": 15,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SupplyCenterProductionExitUpdate",
+      "count": 15,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SupplyTruckAIUpdate",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "SupplyWarehouseCreate",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SupplyWarehouseCripplingBehavior",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SupplyWarehouseDockUpdate",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "SwayClientUpdate",
+      "count": 4,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "TechBuildingBehavior",
+      "count": 12,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "TensileFormationUpdate",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "ToppleUpdate",
+      "count": 48,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "TransitionDamageFX",
+      "count": 696,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "TransportAIUpdate",
+      "count": 24,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "TransportContain",
+      "count": 73,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "TunnelContain",
+      "count": 12,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "UndeadBody",
+      "count": 6,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "UnitCrateCollide",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "UnpauseSpecialPowerUpgrade",
+      "count": 38,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "UpgradeDie",
+      "count": 13,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "VeterancyCrateCollide",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "VeterancyGainCreate",
+      "count": 51,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "W3DDebrisDraw",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DDefaultDraw",
+      "count": 150,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DDependencyModelDraw",
+      "count": 26,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DLaserDraw",
+      "count": 25,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DModelDraw",
+      "count": 2342,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DOverlordAircraftDraw",
+      "count": 12,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DOverlordTankDraw",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DOverlordTruckDraw",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DPoliceCarDraw",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DProjectileStreamDraw",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DRopeDraw",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DScienceModelDraw",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DSupplyDraw",
+      "count": 5,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DTankDraw",
+      "count": 75,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DTankTruckDraw",
+      "count": 7,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DTracerDraw",
+      "count": 1,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DTreeDraw",
+      "count": 128,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "W3DTruckDraw",
+      "count": 118,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-7-presentation"
+    },
+    {
+      "category": "module",
+      "name": "WanderAIUpdate",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "WaveGuideUpdate",
+      "count": 2,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    },
+    {
+      "category": "module",
+      "name": "WeaponBonusUpdate",
+      "count": 3,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "WeaponBonusUpgrade",
+      "count": 62,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "WeaponSetUpgrade",
+      "count": 119,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-5-rules-combat-economy"
+    },
+    {
+      "category": "module",
+      "name": "WorkerAIUpdate",
+      "count": 8,
+      "owners": [
+        "Object"
+      ],
+      "plannedTarget": "phase-6-world-movement-ai"
+    }
+  ]
+}

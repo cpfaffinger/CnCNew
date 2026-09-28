@@ -66,6 +66,13 @@ public sealed record CompatibilityDefinition(DefinitionId Id, string OriginalNam
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 
 public sealed record DefinitionReferenceEdge(DefinitionId Source, string Field, DefinitionReference Target, IniSourceLocation Location, bool Resolved, string? Fallback);
+
+/// <summary>
+/// One inventoried compatibility case. Categories: <c>definition</c> (top-level type without typed contract),
+/// <c>module</c> (catalogued but not implemented module type), <c>deferred-field</c> (known key that keeps heuristic typing),
+/// <c>duplicate-key</c> (scalar key repeated in one block, last wins), <c>diagnostic</c> (compiler diagnostics by code) and
+/// <c>excluded-file</c> (INI file that the retail load plan does not load).
+/// </summary>
 public sealed record CompatibilityEntry(string Category, string Name, int Count, ImmutableArray<string> OwnerKinds, string PlannedTarget);
 public sealed record DefinitionDiagnostic(string Severity, string Code, string Message, IniSourceLocation Location);
 public sealed record DefinitionAudit(
@@ -74,8 +81,16 @@ public sealed record DefinitionAudit(
     ImmutableDictionary<string, int> DefinitionKinds,
     ImmutableArray<CompatibilityEntry> Compatibility);
 
+/// <summary>A definition that occurs in more than one INI file; <see cref="Files"/> is in load order, the last one wins.</summary>
+public sealed record MultiFileDefinition(DefinitionId Id, ImmutableArray<string> Files, string Winner, bool OrderSourced);
+
 public sealed record CompiledDefinitionGraph(
     ImmutableArray<GameDefinition> Definitions,
     ImmutableArray<DefinitionReferenceEdge> References,
     ImmutableArray<DefinitionDiagnostic> Diagnostics,
-    DefinitionAudit Audit);
+    DefinitionAudit Audit)
+{
+    public ImmutableArray<Compilation.PlannedFile> LoadedFiles { get; init; } = [];
+    public ImmutableArray<Compilation.PlannedFile> ExcludedFiles { get; init; } = [];
+    public ImmutableArray<MultiFileDefinition> MultiFileDefinitions { get; init; } = [];
+}

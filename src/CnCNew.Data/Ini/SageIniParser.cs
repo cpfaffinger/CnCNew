@@ -31,6 +31,7 @@ public static class SageIniParser
         "InheritableModule",
         "LightPulse",
         "Mission",
+        "OverrideableByLikeKind",
         "ParticleSystem",
         "Prerequisites",
         "RayEffect",
