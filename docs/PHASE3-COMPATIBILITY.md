@@ -1,93 +1,71 @@
-# Phase-3-Kompatibilitätsliste
+# Kompatibilitätsliste (Phase 3, als Basislinie abgesichert in Phase 4)
 
-Stand: 27. September 2026
+Stand: 28. September 2026
 
-Der Compiler ignoriert unbekannte Semantik nie. Nicht für Phase 3 benötigte Definitionen und
-noch nicht implementierte Simulations-/Präsentationsmodule werden als `CompatibilityEntry` mit
-Name, Häufigkeit, Besitzerart und geplantem Ziel in jedem kanonischen Snapshot geführt. Ein
-strikter Compilerlauf kann unbekannte Definitionen, Module oder Referenzen als Fehler behandeln.
+Der Compiler ignoriert unbekannte Semantik nie. Nicht benötigte Definitionen, noch nicht
+implementierte Simulations-/Präsentationsmodule, zurückgestellte Objektschlüssel, wiederholte
+Skalarschlüssel, Diagnosecodes und ausgeschlossene Dateien werden als `CompatibilityEntry` mit Kategorie,
+Name, Häufigkeit, Besitzerart und geplantem Ziel in jedem kanonischen Snapshot geführt. Seit Phase 4 ist die
+Liste als **geprüfte Basislinie** eingecheckt (`baselines/compatibility.json`, 344 Einträge, keine Assetinhalte) und
+wird gegen Drift geprüft:
 
-## Definitionsdomänen außerhalb des Phase-3-Vertrags
+```powershell
+dotnet run --project tools/CnCNew.IniTool -- compat-check .local/phase2-import-a baselines/compatibility.json
+```
 
-41 Typen mit 2.801 Definitionen sind vollständig syntaktisch und werttypisiert erhalten, ihre
-fachspezifischen Verträge folgen in den angegebenen späteren Phasen:
+Der Befehl endet bei jedem neuen (`NEW`), fehlenden (`MISSING`) oder in Häufigkeit, Besitzerart oder Ziel geänderten
+(`CHANGED`) Eintrag mit Exitcode 1; der Realdatentest von `CnCNew.Data.Tests --content-dir` prüft dasselbe. Die Basislinie
+erzeugt `IniTool compat-baseline`; jede Änderung ist Review-Gegenstand (Vollinventarmodus: alle Kartenoverlays, strikter
+Modulkatalog, Retail-Ladeplan).
 
-- Simulation/Welt/KI (Phase 4–6): AIData, Bridge, Campaign, ChallengeGenerals, CrateData,
-  MapCache, ObjectCreationList, Rank, Road, ScriptAction, ScriptCondition, Terrain, WaterSet,
-  WaterTransparency und Weather.
-- Präsentation/UI (Phase 7–8): Animation, AudioSettings, ButtonSet, CommandMap,
-  ControlBarResizer, ControlBarScheme, Credits, DrawGroupInfo, DynamicGameLOD, EvaEvent,
-  HeaderTemplate, InGameUI, Language, MappedImage, MiscAudio, Mouse, MouseCursor,
-  MultiplayerColor, MultiplayerSettings, MultiplayerStartingMoneyChoice, OnlineChatColors,
-  ShellMenuScheme, StaticGameLOD, Video, WebpageURL und WindowTransition.
+Kategorien: `definition` (38 Typen, 2.899 Verwendungen), `module` (193 Modultypen, 12.037 Verwendungen), `deferred-field`
+(37 Objektschlüssel, 6.021), `duplicate-key` (39 Schlüssel, 171), `diagnostic` (9 Codes) und `excluded-file` (28 Dateien).
+
+## Definitionsdomänen außerhalb des Typvertrags
+
+38 Typen (2.899 Verwendungen) sind vollständig syntaktisch und werttypisiert erhalten, ihre fachspezifischen Verträge folgen in
+den angegebenen späteren Phasen:
+
+- Simulation/Welt/KI (Phase 4–6): AIData, Bridge, Campaign, ChallengeGenerals, CrateData, MapCache, ObjectCreationList, Rank,
+  Road, Terrain, WaterSet, WaterTransparency und Weather (ScriptAction/ScriptCondition gehören zu `Scripts.ini`, die nur das
+  WorldBuilder-Werkzeug lädt und daher ausgeschlossen ist).
+- Präsentation/UI (Phase 7–8): Animation, AudioSettings, CommandMap, ControlBarResizer, ControlBarScheme, Credits,
+  DrawGroupInfo, DynamicGameLOD, EvaEvent, HeaderTemplate, InGameUI, Language, MappedImage, MiscAudio, Mouse, MouseCursor,
+  MultiplayerColor, MultiplayerSettings, MultiplayerStartingMoneyChoice, OnlineChatColors, ShellMenuScheme, StaticGameLOD,
+  Video, WebpageURL und WindowTransition.
+
+Compat-Definitionen haben IDs der Form `compatibility://<typ>/<name>`; sechs gleichnamige Definitionen verschiedener
+Typen verschmelzen damit nicht mehr.
 
 ## Modul-/Behaviorbestand
 
-Der Bestand enthält 206 eindeutige Modultypen in 16.360 Verwendungen. Alle gehören derzeit zur
-expliziten Kompatibilitätsstufe und tragen als Implementierungsziel Phase 4/5 (Simulation und
-Spielregeln). Die maschinenlesbare Liste im Snapshot enthält die exakte Häufigkeit und Besitzerart.
-Sie umfasst:
-
-ActiveBody, AIUpdateInterface, AnimatedParticleSysBoneClientUpdate, AnimationSteeringUpdate,
-ArmorSet, ArmorUpgrade, AssaultTransportAIUpdate, AssistedTargetingUpdate, AutoDepositUpdate,
-AutoFindHealingUpdate, AutoHealBehavior, BaikonurLaunchPower, BaseRegenerateUpdate,
-BattleBusSlowDeathBehavior, BattlePlanUpdate, BeaconClientUpdate, BoneFXDamage, BoneFXUpdate,
-BridgeBehavior, BridgeScaffoldBehavior, BridgeTowerBehavior, BunkerBusterBehavior,
-CashBountyPower, CashHackSpecialPower, CheckpointUpdate, ChinookAIUpdate, CleanupAreaPower,
-CleanupHazardUpdate, CommandButtonHuntUpdate, CommandSetUpgrade, ConvertToCarBombCrateCollide,
-ConvertToHijackedVehicleCrateCollide, CostModifierUpgrade, CountermeasuresBehavior,
-CreateCrateDie, CreateObjectDie, CrushDie, DamDie, DefaultProductionExitUpdate, DeletionUpdate,
-DeliverPayloadAIUpdate, DemoTrapUpdate, DeployStyleAIUpdate, DestroyDie, DozerAIUpdate,
-DumbProjectileBehavior, DynamicShroudClearingRangeUpdate, EjectPilotDie, EMPUpdate,
-EnemyNearUpdate, ExperienceScalarUpgrade, FireOCLAfterWeaponCooldownUpdate, FireSpreadUpdate,
-FirestormDynamicGeometryInfoUpdate, FireWeaponCollide, FireWeaponPower, FireWeaponUpdate,
-FireWeaponWhenDamagedBehavior, FireWeaponWhenDeadBehavior, FlammableUpdate, FlightDeckBehavior,
-FloatUpdate, FXListDie, GarrisonContain, GenerateMinefieldBehavior, GrantScienceUpgrade,
-GrantStealthBehavior, GrantUpgradeCreate, HackInternetAIUpdate, HealContain, HeightDieUpdate,
-HelicopterSlowDeathBehavior, HelixContain, HighlanderBody, HijackerUpdate, HiveStructureBody,
-HordeUpdate, ImmortalBody, InactiveBody, InstantDeathBehavior, InternetHackContain, JetAIUpdate,
-JetSlowDeathBehavior, KeepObjectDie, LaserUpdate, LeafletDropBehavior, LifetimeUpdate,
-LockWeaponCreate, LocomotorSetUpgrade, MaxHealthUpgrade, MinefieldBehavior, MissileAIUpdate,
-MissileLauncherBuildingUpdate, MobMemberSlavedUpdate, ModelConditionUpgrade, MoneyCrateCollide,
-NeutronBlastBehavior, NeutronMissileSlowDeathBehavior, NeutronMissileUpdate,
-ObjectCreationUpgrade, OCLSpecialPower, OCLUpdate, OverchargeBehavior, OverlordContain,
-ParachuteContain, ParkingPlaceBehavior, ParticleUplinkCannonUpdate, PassengersFireUpgrade,
-PhysicsBehavior, PilotFindVehicleUpdate, PointDefenseLaserUpdate, PoisonedBehavior,
-PowerPlantUpdate, PowerPlantUpgrade, PreorderCreate, ProductionUpdate, ProjectileStreamUpdate,
-PropagandaTowerBehavior, QueueProductionExitUpdate, RadarUpdate, RadarUpgrade, RadiusDecalUpdate,
-RailedTransportAIUpdate, RailedTransportContain, RailedTransportDockUpdate, RailroadBehavior,
-RebuildHoleBehavior, RebuildHoleExposeDie, RepairDockUpdate, ReplaceObjectUpgrade,
-RiderChangeContain, SabotageCommandCenterCrateCollide, SabotageFakeBuildingCrateCollide,
-SabotageInternetCenterCrateCollide, SabotageMilitaryFactoryCrateCollide,
-SabotagePowerPlantCrateCollide, SabotageSuperweaponCrateCollide,
-SabotageSupplyCenterCrateCollide, SalvageCrateCollide, SlavedUpdate, SlowDeathBehavior,
-SmartBombTargetHomingUpdate, SpawnBehavior, SpawnPointProductionExitUpdate, SpecialAbility,
-SpecialAbilityUpdate, SpecialPowerCompletionDie, SpecialPowerCreate,
-SpectreGunshipDeploymentUpdate, SpectreGunshipUpdate, SpyVisionSpecialPower, SpyVisionUpdate,
-SquishCollide, StealthDetectorUpdate, StealthUpdate, StealthUpgrade, StickyBombUpdate,
-StructureBody, StructureCollapseUpdate, StructureToppleUpdate, SubObjectsUpgrade,
-SupplyCenterCreate, SupplyCenterDockUpdate, SupplyCenterProductionExitUpdate,
-SupplyTruckAIUpdate, SupplyWarehouseCreate, SupplyWarehouseCripplingBehavior,
-SupplyWarehouseDockUpdate, SwayClientUpdate, TechBuildingBehavior, TensileFormationUpdate,
-ToppleUpdate, TransitionDamageFX, TransportAIUpdate, TransportContain, TunnelContain, UndeadBody,
-UnitCrateCollide, UnpauseSpecialPowerUpgrade, UpgradeDie, VeterancyCrateCollide,
-VeterancyGainCreate, W3DDebrisDraw, W3DDefaultDraw, W3DDependencyModelDraw, W3DLaserDraw,
-W3DModelDraw, W3DOverlordAircraftDraw, W3DOverlordTankDraw, W3DOverlordTruckDraw,
-W3DPoliceCarDraw, W3DProjectileStreamDraw, W3DRopeDraw, W3DScienceModelDraw, W3DSupplyDraw,
-W3DTankDraw, W3DTankTruckDraw, W3DTracerDraw, W3DTreeDraw, W3DTruckDraw, WanderAIUpdate,
-WaveGuideUpdate, WeaponBonusUpdate, WeaponBonusUpgrade, WeaponSetUpgrade und WorkerAIUpdate.
+Der Katalog `ModuleCatalog` führt alle **205** Modultypen des ausgelieferten Bestands (eine frühere Zählung von 206 enthielt
+das Phantommodul `ArmorSet`). 12 sind seit Phase 4 implementiert (`ActiveBody`, `CreateObjectDie`, `DeletionUpdate`,
+`DestroyDie`, `FXListDie`, `HighlanderBody`, `ImmortalBody`, `InactiveBody`, `InstantDeathBehavior`, `KeepObjectDie`,
+`LifetimeUpdate`, `StructureBody`). Die übrigen 193 stehen in der Basislinie mit Häufigkeit, Besitzerart und Ziel:
+137 für Phase 5 (Spielregeln), 34 für Phase 6 (Welt, Bewegung, KI), 22 Präsentationsmodule für Phase 7 (Draw/ClientUpdate,
+nie in der Simulation). Zieleinteilung, Blockart und Interfacemaske jedes Moduls stehen im Katalog; eine Liste der
+Verwendungen je Modul liefert `SimTool audit-modules <content-dir>`. `StrictUnknownModules` scheitert an jedem Namen außerhalb
+des Katalogs, sodass ein Tippfehler von einem bekannten, noch nicht implementierten Modul unterscheidbar ist.
 
 ## Sichtbare Sonderfälle
 
-- `GeometryMajorRadius = 18.5.0` wird genau einmal über
-  `shipped-double-decimal-radius` als 18.5 normalisiert.
-- 27 Referenzverwendungen bleiben als `compatibility-unresolved-reference` sichtbar: 25 Verwendungen
-  der engineinternen Veterancy-Pseudoupgrades `Upgrade_Veterancy_ELITE` beziehungsweise
-  `Upgrade_Veterancy_HEROIC`, ein fehlendes FXList-Ziel `DieByFireUSA` und das nicht definierte
-  Object `Boss_VehicleSentryDrone`. Es gibt keinen stillen Ersatz durch ein anderes Ziel.
-- Das gemeinsam ausgeführte Vollinventar kann ReplaceModule-Ziele aus voneinander unabhängigen
-  Kartenoverlays nicht in jedem Aggregatzustand vorfinden. Jeder Fall erzeugt
-  `compatibility-missing-replace-target`; ein einzelnes Kartenoverlay behält korrekte
-  Replace-Semantik.
-- Das ausgelieferte `Maps/MD_GLA03_CINE/map.ini` enthält ein leeres `AddModule` mit nur
-  `BuildTime`. Es wird als `compatibility-empty-add-module` diagnostiziert.
+- `GeometryMajorRadius = 18.5.0` und `GeometryHeight = 40v.0` sind explizite Compat-Werte (`shipped-double-decimal-radius`,
+  `shipped-real-trailing-text`, beide wie `sscanf("%f")` gelesen) und in `compatibility-value` gezählt (2).
+- Negative Dauern (`MinLifetime = -1`) wickeln modulo 2^32 wie `sscanf("%u")` (`compatibility-unsigned-wrap`, 10).
+- Überzählige Token hinter Einzelwerten (`compatibility-ignored-tokens`, 3).
+- Wiederholte Skalarschlüssel im selben Block: der letzte gewinnt (`compatibility-duplicate-key`, 171 Verwendungen in 39
+  Schlüsseln; wiederholbare Schlüssel wie `Armor` oder `Locomotor` behalten ihre Vielfachheit und stehen nicht hier).
+- Referenzen: 1.545 Verwendungen sind sichtbare Fallbacks – 1.541 `compatibility-engine-veterancy-upgrade`
+  (`Upgrade_Veterancy_ELITE`/`_HEROIC`, engineinterne Namen ohne INI-Definition, davon 1.518 über das vom
+  `DefaultThingTemplate` geerbte `AutoHealBehavior`) und 4 `compatibility-unresolved-reference` (`DieByFireUSA`,
+  `Boss_VehicleSentryDrone`); kein stiller Ersatz durch ein anderes Ziel.
+- Das Vollinventar wendet alle Kartenoverlays gemeinsam an. Dadurch fehlen Ziele von `ReplaceModule` (52,
+  `compatibility-missing-replace-target`) und `RemoveModule` (52, `compatibility-missing-remove-target`), und wiederholte Tags
+  aus mehreren Overlays treten auf (`compatibility-duplicate-module-tag`, 113; 18 davon in den Basisdaten). Ein einzelnes
+  Overlay behält korrekte Semantik; `--maps exclude` liefert die Basisdaten ohne diese Aggregatartefakte.
+- Vier `AddModule`-Blöcke enthalten kein Modul (`compatibility-add-module-without-module`); ihre Felder wirken auf das
+  Objekt, wie im Original.
+- Ausgeschlossene Dateien (28) stehen mit Grund in der Liste: Debug-Dateien (`GameDataDebug.ini`, `CommandMapDebug.ini`,
+  `CommandMapDemo.ini`), die WorldBuilder-Datei `Scripts.ini`, nicht referenzierte Dateien (`MemoryPools.ini`,
+  `Default/ButtonSets.ini`, `Default/Webpages.ini`, Installer-`Options.ini`) und 20 Sprachvarianten.

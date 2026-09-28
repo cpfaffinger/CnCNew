@@ -1,6 +1,6 @@
 # Typisierter Definitionsvertrag
 
-Stand: 27. September 2026
+Stand: 28. September 2026 (Phase 3 gehärtet durch Block 0 der Phase 4)
 
 ## Schicht und öffentlicher Vertrag
 
@@ -15,97 +15,186 @@ Player, Faction, CommandButton, CommandSet, FXList/FX, AudioEvent, DialogEvent, 
 AmbientStream, Locomotor, ExperienceLevel, SpecialPower sowie GameData/GlobalData. Name,
 Originalschreibweise und virtuelle Quellposition bleiben erhalten. `DefinitionValue` trennt
 Boolean, Integer, endliche Dezimalzahl, Zeit, Distanz, Geschwindigkeit, Winkel, Prozent, Geld,
-Vektoren, Farbe, Liste, Referenz und Sentinel. Zahlen werden invariant gelesen; NaN, Infinity und
-Überläufe sind Fehler. Der ausgelieferte Tippfehler `GeometryMajorRadius = 18.5.0` besitzt als
-einziger numerischer Sonderfall den sichtbaren Code `shipped-double-decimal-radius` und wird als
-18.5 normalisiert.
+Vektoren, Farbe, Farbschlüsselbild, Ganzzahlliste, Enum, Flags, Liste, Referenz und Sentinel.
+Zahlen werden invariant gelesen; NaN, Infinity und Überläufe sind Fehler.
 
-Alle übrigen verschachtelten Blöcke werden rekursiv als immutable `DefinitionSection` erhalten.
-Damit bleiben insbesondere WeaponSet, ArmorSet, Prerequisites, ConditionState sowie Unterblöcke
-von Draw-/Behavior-Konfigurationen vollständig typisiert, ohne Parserknoten öffentlich zu machen.
+Alle übrigen verschachtelten Blöcke werden rekursiv als immutable `DefinitionSection` erhalten
+(WeaponSet, ArmorSet, Prerequisites, ConditionState, …).
 
-## Include, Bedingungen und Reihenfolge
+## Wertgrammatik (Block 0.3)
 
-Includes werden über `IDefinitionSource` aufgelöst. Der Compiler kennt deshalb nur virtuelle
-Runtimepfade. Suchreihenfolge ist Besitzerverzeichnis, exakter Runtimepfad, danach die expliziten
-Suchwurzeln (standardmäßig `Data/INI`). Der erste Treffer gewinnt; ein fehlendes Ziel und ein
-Include-Zyklus sind Fehler. Derselbe virtuelle Include wird pro Lauf einmal verarbeitet.
+Unbekannte Token sind Fehler, nie `Text`.
 
-`#if`/`#ifdef`, `#else` und `#endif` werden gegen eine explizite, case-insensitive Symbolmenge
-ausgewertet. Nicht geschlossene oder falsch verschachtelte Bedingungen sind Fehler. Ohne
-Direktiven ist die Ladeordnung: `Data/INI/Default`, übriges `Data/INI`, `Maps`, sonstige Pfade;
-innerhalb einer Stufe ordinal case-insensitive. Includes stehen vor ihrem Besitzer. Spätere
-Definitionen desselben typisierten Namens überschreiben nur angegebene Felder und erben den Rest.
-`ObjectReskin Child Parent` und `Object Child : Parent` verwenden eine explizite Basis; fehlende
-Basen und Vererbungszyklen werden abgewiesen.
+- **Farben** `R:n G:n B:n [A:n]` und **Vektoren** `X:n Y:n [Z:n]` werden schlüsselunabhängig streng geparst
+  (Labels ohne Groß-/Kleinschreibung, `:` wirkt wie ein Trenner wie bei `INI::getNextSubToken`, daher sind auch
+  `X: 60.0  Y:  35.0   Z:0.0`, `X:-30 Y:15: Z:10` und `X:.071` im Bestand gültig). Farbkomponenten sind
+  0–255; ein `//`-Kommentar hinter einer Farbe ist erlaubt; `R:n G:n B:n <frame>` (Partikel-Farbschlüsselbilder) ist der
+  eigene Wert `ColorKeyframe`. Fehlerhafte Formen scheitern.
+- **Enums und Flags** hängen an **strikten Namenstabellen**, mechanisch aus den Referenzquellen übernommen
+  (`NameTables`, Reihenfolge = Bitindex): `KindOf` (120, `KindOf.cpp`), `ObjectStatus` (45), `DamageType` (38), `DeathType`
+  (21), `Veterancy` (4), `Geometry` (3), `RadarPriority`, `BuildableStatus`, `BuildCompletion`, `EditorSorting`, `Shadow`,
+  `LocomotorSet`. Flags haben die Semantik von `BitFlags::parse`: einfache Listen, `NONE`, `+`/`−`-Deltas (nicht
+  mischbar); relative Deltas werden gegen den geerbten Wert aufgelöst. `DeathTypes`/`VeterancyLevels` folgen
+  `INI::parseDeathTypeFlags` (Start immer `ALL`, `ALL`/`NONE`/`+X`/`−X`).
+- **Einzeltoken-Typen** lesen wie das Original nur das erste Token; überzählige Token werden als
+  `compatibility-ignored-tokens` sichtbar (3 Fälle im Bestand, etwa `ExperienceRequired` mit fünf Werten,
+  `EditorSorting = MISC_MAN_MADE CLEARED_BY_BUILD`). Ein vereinzeltes `=` im Wert verschwindet wie bei `INI::m_seps`.
+- **Reelle Zahlen** folgen `sscanf("%f")`: exakte Zahlen sind getypt, Zahlen mit Resttext (die zwei ausgelieferten Tippfehler
+  `GeometryMajorRadius = 18.5.0` und `GeometryHeight = 40v.0`) sind explizite `Compatibility`-Werte
+  (`shipped-double-decimal-radius`, `shipped-real-trailing-text`), gar keine Zahl ist ein Fehler.
+- **Dauern** (`FieldType.DurationMs`) folgen `sscanf("%u")`: negative Zahlen wickeln modulo 2^32 und werden als
+  `compatibility-unsigned-wrap` gemeldet (10 Fälle in Kartenoverlays).
 
-## Module und Behaviors
+## Schlüsselschemata (Block 0.3)
 
-Behavior, Draw, Body, ClientUpdate und InheritableModule werden zu `ModuleConfiguration`
-kompiliert. `ModuleRegistry` bindet einen Namen deterministisch an erlaubte Besitzerarten,
-Feldschema und optional eine Factory. Doppelte Registryeinträge, falsche Besitzer, fehlende
-Pflichtfelder, unbekannte Schemaschlüssel und falsche Wertarten sind Fehler. Reflection und
-Engine-Typen werden nicht verwendet.
+- **Object-Kopf:** `ObjectSchema` enthält alle Schlüssel von `ThingTemplate::s_objectFieldParseTable` (96 Schlüssel, davon 43 `Opaque`). Typisiert:
+  `KindOf`, `Geometry*`, `Shadow`, `RadarPriority`, `Buildable`, `BuildCompletion`, `EditorSorting` (Enums/Flags),
+  Sichtweiten/Radien (Distanz), `BuildCost`/`RefundValue` (Geld, 0–65535), `BuildTime` (Sekunden – vorher als Millisekunden
+  fehlgetypt), `PlacementViewAngle` (Winkel), `DisplayColor` (Farbe), `Experience*`/`SkillPointValue` (4 Ganzzahlen),
+  Booleans (`Yes`/`No` ohne Groß-/Kleinschreibung), `CommandSet`, `BuildVariations` (Referenzen), `Locomotor`
+  (`TaggedReferenceList`: Setname + Locomotor-Referenzen, je Setname genau eine Liste). Ein **unbekannter Objektschlüssel ist
+  ein Fehler**; Audio-/Portrait-/Cameo-Schlüssel sind bekannt, aber `Opaque` und stehen mit Häufigkeit in der
+  Kompatibilitätsliste (`deferred-field`, 37 Schlüssel, 6.021 Verwendungen). `ObjectReskin` darf nur die Schlüssel der
+  Reskin-Tabelle setzen.
+- **Module:** Jeder implementierte Modultyp hat ein strenges Feldschema (Schlüssel, Wertart, Pflicht, Herkunft); der Compiler
+  prüft Blockart (`Behavior`/`Body`/`Draw`/`ClientUpdate`) gegen den Katalog, unbekannte und doppelte Schlüssel, falsche
+  Wertarten und Pflichtfelder.
+- **Übrige Definitionsdomänen** bleiben flach (Phase 5), siehe „Bekannte Grenzen“.
 
-`AddModule` erhält die Reihenfolge eines oder mehrerer Module. `RemoveModule` entfernt per Tag.
-`ReplaceModule` ersetzt am vorhandenen Index. Der Vollbestandsmodus diagnostiziert einen
-fehlenden Replace-Tag sichtbar, weil alle Kartenoverlays gemeinsam inventarisiert werden, während
-zur Laufzeit genau ein Kartenoverlay auf die Basis angewendet wird. Die Runtime darf unbekannte
-Module nicht instanziieren; alle derzeit noch nicht simulierten Bestandsmodule stehen in der
-Kompatibilitätsliste.
+## Ladereihenfolge (Block 0.4)
+
+`OriginalLoadPlan` bildet die Retail-Ladereihenfolge von `GameEngine.cpp` (`initSubsystem`: Default-Datei, Hauptdatei,
+Verzeichnis), `GameAudio.cpp`, `GameLOD.cpp`, `Image.cpp` und `GameLogic.cpp` ab. Verzeichnisse laden zuerst die Dateien
+direkt im Verzeichnis, danach die Unterverzeichnisse, jeweils sortiert (`INI::loadDirectory`). Jede INI-Datei ist klassifiziert
+(`Retail`, `MapOverlay`, `DebugOnly`, `ToolOnly`, `Unreferenced`, `LanguageVariant`, `Unclassified`); ausgeschlossene Dateien stehen
+mit Grund in der Kompatibilitätsliste (28 Dateien: `GameDataDebug.ini`, `CommandMapDebug.ini`, `CommandMapDemo.ini`, `Scripts.ini`
+(nur WorldBuilder), `MemoryPools.ini`, zwei unreferenzierte Default-Dateien, `Options.ini` des Installers und 20 Sprachvarianten
+(16 anderer Sprachen, 4 Windows-9x)). Die Sprache ist wählbar (`English`). Ein strikter Lauf schließt unklassifizierte Dateien aus
+und meldet sie.
+
+`IniTool load-order-report` listet alle Definitionen mit mehr als einem Vorkommen (478, davon 431 über mehrere Dateien) mit
+Dateireihenfolge und Gewinner. **Ergebnis:** 18 Gewinner ändern sich gegenüber der Phase-3-Reihenfolge – 16 `MappedImage`-Namen
+(`HandCreated` lädt nach `TextureSize_512`, `Image.cpp`; Phase 3 sortierte umgekehrt) und 2 Upgrades zwischen Kartenoverlays
+(`MD_USA03_END`/`MD_USA03_END1`, im Aggregat ohne Original-Entsprechung). Bei keinem Paar hängt die relative Dateireihenfolge
+von einer nicht belegten Annahme ab (Bericht: 0 „ORDER-NOT-SOURCED“); die nicht durch Quelltext geordneten GameClient-Dateien
+definieren keine gemeinsamen Namen. Ohne Kartenoverlays gibt es keinen doppelten Objektnamen: Doppelte `Object`-Namen kommen nur in
+Karten-`map.ini` vor (`INI_LOAD_CREATE_OVERRIDES`); in den Basisdaten betreffen Mehrfachdefinitionen die Paare Default-/Hauptdatei
+(GameData, AIData, Multiplayer), die `MappedImage`-Paare und Wiederholungen innerhalb einer Datei (Terrain, FXList, Upgrade,
+ObjectCreationList).
+
+Kartenoverlays: `MapOverlayMode.Include` wendet alle 27 Karten nach den Basisdaten in Pfadreihenfolge an (Vollinventar,
+Aggregat); `Exclude` liefert die Retail-Basisdaten. Zur Laufzeit gilt genau ein Overlay pro Karte
+(`GameLogic::startNewGame`); die Simulation verwendet den Basisbestand.
+
+**Compat-IDs** tragen jetzt den Deklarationstyp (`compatibility://<typ>/<name>`), weil gleichnamige Definitionen
+verschiedener Typen (sechs im Bestand, etwa `MappedImage`/`EvaEvent`) vorher zu einer verschmolzen.
+
+## Objektvererbung (Block 0.4)
+
+Wie `ThingFactory::newTemplate` kopiert jedes neue `Object` das `DefaultThingTemplate` (Felder, Module, WeaponSet/ArmorSet).
+Danach gilt `ThingTemplate::parseModuleName`/`ModuleInfo::clearCopiedFromDefaultEntries` mit den **Interfacemasken** aus dem
+Modulkatalog: Ein explizites Modul entfernt alle geerbten Defaultmodule, die ein Interface mit ihm teilen (z. B. ersetzt
+`ActiveBody` den `InactiveBody`, ein Todesmodul das Default-`DestroyDie`); als `InheritableModule` markierte Module bleiben (das
+Default-`AutoHealBehavior` nur, wenn das Objekt trainierbar ist), als `OverrideableByLikeKind` markierte
+(`StealthUpdate`) nur für Vehikel/Infanterie/Score/tragbare Strukturen und nicht für Luftfahrzeuge, Gebäude usw.
+Die Auswertung ist wie im Original **reihenfolgeabhängig** (sie liest `KindOf`/`IsTrainable` zum Zeitpunkt der
+Moduldeklaration). Die erste explizite `WeaponSet`/`ArmorSet` ersetzt die geerbten einmalig; `UnitSpecificSounds/-FX` ersetzen
+vorhandene. `ObjectReskin Kind Eltern` kopiert die Eltern, erlaubt nur Erscheinungsschlüssel und ersetzt geerbte Draw-Module.
+`AddModule`/`RemoveModule`/`ReplaceModule`/`InheritableModule`/`OverrideableByLikeKind` wenden ihre Kinder mit den Feldern des
+Objekts an – auch **nicht geschlossene `AddModule`-Blöcke** (`MD_CHI03`, `GLAStatue`) setzen Felder und Sektionen des Objekts, statt
+ein Phantommodul `ArmorSet` zu erzeugen. `ReplaceModule` entfernt und hängt den Ersatz **am Ende** an, verlangt denselben
+Modultyp und ein neues Tag; `RemoveModule` auf ein fehlendes Tag wird im Aggregat als Diagnose gezählt. Wiederholte Modultags
+im selben Objekt bleiben beide erhalten (Retail; nur der Debug-Build bricht ab) und sind als
+`compatibility-duplicate-module-tag` gezählt (18 Fälle in den Basisdaten). Die Syntax `Object Kind : Eltern` gibt es im
+Original nicht; sie bleibt als Erweiterung für Tests erhalten und wird gezählt (im Bestand 0).
+
+## Wiederholte Schlüssel (Block 0.4)
+
+Im Bestand kommen Schlüssel innerhalb eines Kopfes mehrfach vor (`Armor = …` 860 Wiederholungen, `Locomotor` 343, `ScatterTarget` 51,
+`MapCache supplyPosition` 1.472 u. a.). Phase 3 überschrieb sie still (`RemoveAll`), wodurch etwa alle `Armor`-Koeffizienten
+bis auf den letzten verloren gingen. Jetzt gilt eine begründete Tabelle (`RepeatableKeys`, je Eintrag mit der Parserfunktion
+des Originals): **Accumulate** (jedes Vorkommen bleibt, Reihenfolge erhalten) für `ScatterTarget`, `StandardPublicBone`,
+`supplyPosition`, `techPosition`, `Animation Image`, `Credits Text/Style`, `CrateObject`, `TransitionToFX/OCL`;
+**indiziert** (ein Vorkommen ersetzt das gleichindizierte an Ort und Stelle, sonst angehängt) für `Armor` (Schadenstyp),
+`MajorFX`/`MinorFX` (Schadenstyp), `VeterancyMajorFX/MinorFX`, `WeaponBonus` (Bedingung + Feld) und `Object Locomotor`
+(Setname). Alle übrigen wiederholten Schlüssel sind Skalare: der letzte gewinnt, jede Wiederholung im selben Block ist
+gezählt (`duplicate-key`, 39 Schlüssel, 171 Verwendungen im Vollinventar).
+
+## Modulregistrierung (Block 0.2)
+
+`ModuleDescriptor` enthält Name, Blockart, Interfacemaske (aus den Referenz-Headern, `getInterfaceMask()`), Besitzerarten,
+Feldschema, `CompatibilityOnly` und Zielphase und **keine Factory**. Der Katalog `ModuleCatalog` führt alle 205 Modultypen des
+Bestands: 12 implementiert (siehe `SIMULATION-CORE.md`), 137 Simulationsmodule für Phase 5, 34 für Phase 6, 22
+Präsentationsmodule (Draw/ClientUpdate) für Phase 7. Die Bindung an Implementierungen liegt in `CnCNew.Simulation`.
+`StrictUnknownModules` scheitert an jedem Namen, der nicht im Katalog steht; ein Tippfehler im Namen ist damit von einem
+bekannten, noch nicht implementierten Modul unterscheidbar.
+
+## Kompatibilitätsbasislinie (Block 0.1)
+
+`baselines/compatibility.json` (344 Einträge: Kategorie, Name, Besitzerarten, Häufigkeit, Zielphase; keine Assetinhalte) hält
+die geprüfte Liste fest: Definitionstypen ohne Vertrag, nicht implementierte Module, zurückgestellte Objektschlüssel,
+Doppelschlüssel, Diagnosecodes und ausgeschlossene Dateien. `IniTool compat-check <dir> <baseline>` beendet sich bei jedem
+neuen, fehlenden oder in Häufigkeit oder Ziel geänderten Eintrag mit Exitcode 1; der Realdatentest der Datentests prüft
+dasselbe. Neu erzeugen: `IniTool compat-baseline`. Änderungen an der Datei sind Review-Gegenstand.
 
 ## Referenzen und Snapshots
 
-IDs haben die Form `<kind>://<ordinal-kleingeschriebener-name>`. Der Graph trennt Quellart und
-Zielart; damit ist ein gleichnamiges Ziel falschen Typs nicht aufgelöst. `NONE` ist ein typisierter
-Sentinel. CommandSet-Slots, TriggeredBy-/ConflictsWith-Listen und die bekannten Object-, Weapon-,
-Armor-, Science-, Upgrade-, FX-, Audio-, Locomotor- und SpecialPower-Felder erzeugen Kanten –
-auch rekursiv aus Definitions- und Modulsektionen.
+IDs haben die Form `<kind>://<ordinal-kleingeschriebener-name>`. Der Graph trennt Quellart und Zielart; ein gleichnamiges Ziel
+falschen Typs ist nicht aufgelöst. `NONE` ist ein typisierter Sentinel. CommandSet-Slots, TriggeredBy-/ConflictsWith-Listen,
+`Locomotor`-Sets und die bekannten Object-, Weapon-, Armor-, Science-, Upgrade-, FX-, Audio-, Locomotor- und
+SpecialPower-Felder erzeugen Kanten – auch rekursiv aus Definitions- und Modulsektionen. Die engineinternen Namen
+`Upgrade_Veterancy_ELITE`/`_HEROIC` haben keine INI-Definition und tragen den eigenen Fallback
+`compatibility-engine-veterancy-upgrade`.
 
-`DefinitionSnapshotWriter` schreibt Schema 1 als kanonisches UTF-8-JSON. Definitionen, Felder,
-Kanten und Kompatibilität sind ordinal sortiert; Module behalten ihre semantische Reihenfolge.
-Absolute Pfade, Zeitstempel und nicht
-deterministische Dictionaryreihenfolgen fehlen. Originaltext bleibt ausschließlich für Audit und
-Diagnose erhalten.
+`DefinitionSnapshotWriter` schreibt Schema 2 als kanonisches UTF-8-JSON (Schema 1 hatte keine Modulblockart und keine
+neuen Wertarten); `ComputeFingerprint` streamt denselben Snapshot in SHA-256 (Replay-Fingerabdruck). Definitionen, Felder,
+Kanten und Kompatibilität sind ordinal sortiert; Module und wiederholte Schlüssel behalten ihre Reihenfolge. Absolute Pfade,
+Zeitstempel und nicht deterministische Dictionaryreihenfolgen fehlen.
 
-## Reproduzierbarkeit
+## Reproduzierbarkeit und Zahlen
 
 ```powershell
-dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a .local/phase3-a.json
-dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a .local/phase3-b.json
-Get-FileHash -Algorithm SHA256 .local/phase3-a.json,.local/phase3-b.json
+dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a .local/phase4-a.json
+dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a .local/phase4-b.json
+Get-FileHash -Algorithm SHA256 .local/phase4-a.json,.local/phase4-b.json
 ```
 
-Die lokalen Snapshots sind generierte Laufzeitdaten und werden nicht committed.
+Referenzwerte (28. September 2026, Vollinventar mit allen Kartenoverlays, zwei unabhängige Läufe byteidentisch):
 
-## Bekannte Grenzen (Verifikation vom 28. September 2026)
+| | Phase 3 (Ende) | nach Block 0 |
+|---|---:|---:|
+| geladene INI-Dateien | 256 | 228 (28 ausgeschlossen) |
+| Syntaxblöcke | 66.623 | 65.873 |
+| Definitionen | 12.677 | 12.573 (typisiert unverändert 9.876; Compat 2.801 → 2.697) |
+| Moduleinträge / Schlüssel | 16.360 / 335.592 | 16.360 / 333.061 |
+| Referenzen aufgelöst | 12.441 von 12.468 | 13.134 von 14.679 |
+| sichtbare Fallbacks | 27 | 1.545 (1.541 Veterancy-Pseudoupgrades, davon 1.518 aus dem geerbten Default-`AutoHealBehavior`; 4 echte Lücken) |
+| Modulkatalog | 206 beobachtete Namen (mit Phantom) | 205 (12 implementiert) |
+| Snapshot | 112.664.082 Byte | 142.302.102 Byte |
+| SHA-256 | `14154C51…C675D4` | `131ED730F2AD4DB85D6F50CE91A7059358CA32D6728F8EB6E91E6CF8775E58A4` |
 
-Eine unabhängige Nachprüfung bestätigte Build, alle acht Testprogramme, 256/256 INIs, die
-Bestandszahlen und den Snapshot-SHA-256 (frische Kompilierung ergibt denselben Hash). Zugleich
-zeigte sie, dass der Vertrag strukturell vollständig, fachlich aber noch flach ist:
+Retail-Basisdaten ohne Kartenoverlays (`--maps exclude`): 146 Dateien, 63.745 Blöcke, 12.548 Definitionen (2.113 Objekte),
+16.045 Module, 327.293 Schlüssel, 12.902 von 14.420 Referenzen aufgelöst, Snapshot 141.720.050 Byte, SHA-256
+`9B49E9DD1EE403C6797B32AD66F63CF3C0E538CEB510A84CEFF4AD5257FCCD38`.
 
-- Die Definitionstypen (`ObjectDefinition`, `WeaponDefinition`, …) sind leere Unterklassen von
-  `GameDefinition`; alle Werte liegen in `Fields`/`Sections` als `DefinitionValue`. Es gibt keine
-  domänenspezifischen Eigenschaften, keine Pflichtfelder und keine Schlüsselschemata für
-  Definitionen – unbekannte Schlüssel an Definitionen werden nicht gemeldet. Schemas existieren nur
-  für registrierte Module.
-- Die Werttypisierung der Einheiten (Zeit, Distanz, Geschwindigkeit, Winkel, Geld) erfolgt
-  heuristisch über Teilstrings des Schlüsselnamens. Es gibt keine Umrechnung in Ticks, Distanz pro
-  Tick oder Bogenmaß.
-- `Enum`, `Flags`, `Color`, `Vector2` und `Vector3` werden im Vollbestand nie erzeugt. Die realen
-  Formen `R:255 G:0 B:0` (9.150 Verwendungen), `X:0 Y:0 Z:0` (6.161) und Bitflag-Listen wie
-  `KindOf` (1.964) landen als `List`/`Text`. Von 335.592 Werten sind 135.215 `Text` und 89.511
-  `List`.
-- Die produktive `ModuleRegistry` ist leer. Alle 206 Bestandsmodule stehen nur deshalb in der
-  Kompatibilitätsliste, weil der Compiler jeden unregistrierten Namen automatisch zählt. Die Liste
-  ist nicht als geprüfte Basislinie eingecheckt; ein Tippfehler im Modulnamen wäre ununterscheidbar
-  von einem bekannten, noch nicht implementierten Modul.
-- Die Ladereihenfolge (Stufen `Default`, `Data/INI`, `Maps`, danach ordinal) ist nicht gegen die
-  subsystemweise Reihenfolge und die Ladearten (`INI_LOAD_OVERWRITE`, `CREATE_OVERRIDES`,
-  `MULTIFILE`) in `GameEngine.cpp` der Referenz abgeglichen. Wiederholte Schlüssel innerhalb eines
-  Definitionskopfs überschreiben einander; ob dies für alle wiederholbaren Schlüssel des Originals
-  zutrifft, ist nicht geprüft.
+Erklärung der Abweichungen des Hashes: (1) 28 Dateien ausgeschlossen (Debug, Werkzeug, andere Sprachen); (2) Compat-IDs mit
+Typpräfix; (3) neue Wertarten (Farbe, Farbschlüsselbild, Vektor, Enum, Flags, Ganzzahllisten, gebundene Locomotorlisten);
+(4) wiederholte Schlüssel behalten Vielfachheit (die 53 `Armor`-Definitionen behalten 884 Koeffizientenzeilen statt eines Wertes je Schadenstyp-Überschreibung); (5) `DefaultThingTemplate` wird in jedes
+Objekt kopiert (mehr Felder und Module, +1.518 geerbte Pseudoupgrade-Referenzen); (6) Modulblockart im Snapshot; (7) Kompatibilitäts-
+kategorien erweitert. Werteverteilung ohne die geerbten Defaultkopien: von 333.053 typisierten Werten sind 128.006 `Text` (vorher
+135.215 von 335.592) und 74.128 `List` (vorher 89.511); neu getypt sind 388 Farben, 8.696 Farbschlüsselbilder, 6.316 Vektoren,
+5.134 Flags, 5.044 Enums und 908 Ganzzahllisten. Alle Werte einschließlich Vererbung: 412.756 (159.030 `Text`, 75.138 `List`).
+
+## Bekannte Grenzen (nach Block 0)
+
+- Die Definitionstypen außer Object (`WeaponDefinition`, …) haben weiter keine domänenspezifischen Eigenschaften, Pflichtfelder
+  oder Schlüsselschemata; ihre 30.000 Kopfwerte sind zu einem großen Teil noch heuristisch typisiert. Schuld für Phase 5, mit
+  Zahlen aus `IniTool debt-report`: Armor 884 Kopffelder (alle `List`), Weapon 6.248 (2.449 `Text`/`List`), Locomotor 3.599
+  (552), AudioEvent 8.442 (5.006), Fx 58.459 (27.623), CommandButton 5.240 (4.413), Upgrade 427 (263), Science 456 (254),
+  SpecialPower 542 (193), Faction 409 (333), GameData 323 (85).
+- Die Einheitentypisierung dieser Domänen erfolgt weiter heuristisch über Teilstrings des Schlüsselnamens; die Umrechnung in
+  Ticks und Distanz pro Tick leistet die Simulation nur für die Felder der implementierten Module.
+- Zwei Compat-Gruppen sind bewusst grob: Definitionen ohne Vertrag (Kompatibilitätsliste, 38 Typen) und `Opaque`-Objektschlüssel.
+- Die Reihenfolge der GameClient-Subsysteme untereinander ist nicht aus dem Quelltext belegt; der Bericht weist nach, dass
+  daraus kein Gewinnerwechsel folgt.
 - Eine inkrementelle oder gecachte Kompilierung existiert nicht.
-
-Diese Punkte sind als Block 0 sowie als Vorleistung für Phase 5 im Handoff
-`HANDOFF-PHASE4.md` erfasst.

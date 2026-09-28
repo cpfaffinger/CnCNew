@@ -159,9 +159,12 @@ Definitionen; heuristische Einheitentypisierung ohne Tickumrechnung; `Enum`/`Fla
 sind `List`); produktive `ModuleRegistry` ist leer und die Kompatibilitätsliste nicht als
 Basislinie abgesichert; Ladereihenfolge nicht gegen `GameEngine.cpp` abgeglichen; keine
 inkrementelle Kompilierung. Details in `TYPED-DEFINITIONS.md` („Bekannte Grenzen“). Der
-notwendige Teil wird in Phase 4 als Block 0 nachgezogen, der Rest ist Vorleistung für Phase 5.
+notwendige Teil wurde in Phase 4 als Block 0 nachgezogen (siehe unten und `TYPED-DEFINITIONS.md`), der Rest ist Vorleistung
+für Phase 5.
 
 ## 4. Deterministischer Simulationskern
+
+**Status: abgeschlossen am 28. September 2026 (einschließlich Block 0, Härtung der Phase 3).**
 
 **Ergebnis:** Eine headless laufende Welt besitzt festen Tick, deterministische IDs und
 Zufallszahlen, Befehlsqueue, Objektlebenszyklus und reproduzierbare Snapshots.
@@ -176,6 +179,46 @@ Umfang:
 
 Abgeschlossen, wenn identische Definitionen, Karte, Seed und Befehlsfolge über lange Läufe
 bitidentische Zustands-Hashes liefern und Speichervalidierung sowie Headless-Stresstest bestehen.
+
+Abnahme Block 0 (Härtung der Phase 3):
+
+- Retail-Ladeplan der Original-Engine (Reihenfolge, Ausschluss von Debug-/Werkzeug-/Fremdsprachdateien); `IniTool load-order-report`
+  weist 478 mehrfach definierte Namen mit Gewinnern aus; 18 Gewinner änderten sich (16 `MappedImage`, 2 Kartenoverlays), bei
+  keinem hängt die Ordnung von einer nicht belegten Annahme ab.
+- `DefaultThingTemplate`-Vererbung, `Add/Remove/ReplaceModule`, `ObjectReskin` und nicht geschlossene `AddModule`-Blöcke wie im
+  Original; wiederholbare Schlüssel behalten Vielfachheit (Tabelle mit Parserquelle).
+- Object-Köpfe und Modulfelder streng typisiert (96 Schlüssel, 43 davon bewusst `Opaque` und gezählt); Farben, Vektoren, Enums und
+  Flags über Namenstabellen aus der Referenz; kein Token fällt auf `Text` zurück.
+- Modulkatalog mit 205 Typen ohne Factories (die frühere Zahl 206 enthielt ein Phantommodul); Bindungstabelle in der Simulation,
+  beim Start gegen die Deskriptoren geprüft; `StrictUnknownModules` besteht auf dem Bestand; `compat-check` besteht gegen die
+  eingecheckte Basislinie (344 Einträge); neuer Referenzhash `131ED730F2AD4DB85D6F50CE91A7059358CA32D6728F8EB6E91E6CF8775E58A4`
+  (zwei Läufe byteidentisch, Erklärung der Abweichung in `TYPED-DEFINITIONS.md`).
+
+Abnahme Phase 4:
+
+- Solution-Build und alle neun Testprogramme sind grün (Warnungen: nur die zehn bekannten NU1901/NU1903); die Simulationstests
+  laufen zusätzlich mit `--content-dir` und `--long`.
+- 30-Hz-Tick, exakte Zeitumrechnung, Q47.16-Festkomma mit dokumentierter Rundung und Grenzwerten; die binary32-Abweichung des
+  Originals ist gemessen (6.310 von 5.000.001 Dauern, frühestens ab 66 Minuten) und dokumentiert.
+- Original-RNG mit `logic`/`cosmetic`/`audio`-Streams, Golden-Sequenzen aus einer unabhängigen Transkription (kein Compiler
+  verfügbar), Zustand nach einer Million Züge, Übertragsketten.
+- Monotone IDs (0 ungültig), kanonische Reihenfolgen, Sleepy-Update-Modell mit dokumentierten Abweichungen, acht Tickphasen,
+  Mutationsqueues, definierte Eventzustellung vor der Entfernung.
+- Zwölf Lebenszyklusmodule mit strengen Schemata; Auswahl mit Zahlen belegt (28,1 % der 19.529 Modulverwendungen der
+  Basisobjekte); Modulabdeckungsaudit: 26 von 2.113 Objekten vollständig instanziierbar, Blockerliste je Modul.
+- Versionierte Befehlstypen, Ablehnungsgründe (`Late`, `Duplicate`, `OutOfOrder`, `UnknownPlayer`, `NotPermitted`,
+  `InvalidArguments`, `UnknownTemplate`, `UnknownEntity`, `UnknownTimer`) gezählt und als Events protokolliert.
+- Kanonische Snapshots (SHA-256), inkrementeller 64-Bit-Zustands-Hash (Prüfung gegen die volle Neuberechnung), Replay-Format mit
+  Fingerabdruck, Checkpoints und Integritätshash; beschädigte, abgeschnittene, versions- und definitionsfremde Dateien werden
+  abgewiesen.
+- Stresstest über 216.000 Ticks: bis zu 15.774 gleichzeitige Entities, 401.229 Spawn-/Destroy-Vorgänge, 914.771 Befehle,
+  7.099 Timer; drei frische Läufe und die Snapshot-Fortsetzung sind über alle Ticks identisch; alle Tabellen kehren auf null zurück;
+  22 s je Lauf, 532 MiB Peak; Budgets und Hardware in `SIMULATION-CORE.md`.
+
+Bekannte Grenzen der Phase: kein Bewegungs-/Waffen-/Rüstungs-/Produktionsregelwerk (Phase 5/6); Update-Phasen des Originals nicht
+modelliert; Zufallsverbräuche des Originals außerhalb der Lebensdauermodule fehlen; RNG-Abgleich mit kompiliertem Original steht
+aus; `Restore` ist intern; Definitionsdomänen außer Object bleiben flach typisiert (Zahlen in `TYPED-DEFINITIONS.md`); 26 von 2.113
+Objekten sind instanziierbar, weil vom Default geerbte Module (`StealthUpdate`, `AutoHealBehavior`) noch fehlen.
 
 ## 5. Spielregeln, Kampf, Wirtschaft und Produktion
 
@@ -290,5 +333,6 @@ Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
 
 Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
 Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
-jedoch separat begründet und versioniert. Der nächste Implementierungseinstieg ist Schritt 4:
-deterministischer Simulationskern auf dem abgeschlossenen typisierten Definitionsvertrag.
+jedoch separat begründet und versioniert. Der nächste Implementierungseinstieg ist Schritt 5:
+Spielregeln, Kampf, Wirtschaft und Produktion auf dem deterministischen Simulationskern (Handoff:
+`docs/HANDOFF-PHASE5.md`).

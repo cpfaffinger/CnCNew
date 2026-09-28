@@ -23,8 +23,13 @@
 - **Datengrundlage abgeschlossen am 27. September 2026:** 256 INI-Dateien werden deterministisch
   zu unveränderlichen Definitionen, expliziten Moduldeskriptoren und einem typisierten
   Referenzgraphen kompiliert; lose Parserknoten überschreiten die Daten-/Simulationsgrenze nicht.
-- deterministischen Simulations-Tick und reproduzierbare Zufallszahlen implementieren.
-- den registrierten Template-/Module-/Behavior-Vertrag im Simulationskern instanziieren.
+- **Simulationskern abgeschlossen am 28. September 2026:** deterministischer 30-Hz-Tick, Festkomma-Numerik, Original-RNG mit
+  benannten Streams, monotone IDs, Befehlsqueue, Objekt-/Modul-/Timer-/Eventlebenszyklus, kanonische Snapshots, inkrementeller
+  Zustands-Hash und Replay-Harness; über 216.000 Ticks bitidentisch, auch nach Snapshot-Fortsetzung (`docs/SIMULATION-CORE.md`).
+- **Phase-3-Härtung (Block 0) abgeschlossen:** Retail-Ladeplan, Default-Vererbung, strikte Wertgrammatik, Modulkatalog ohne
+  Factories, Kompatibilitätsbasislinie.
+- den registrierten Template-/Module-/Behavior-Vertrag im Simulationskern instanziieren: zwölf Lebenszyklusmodule sind
+  implementiert (26 von 2.113 Retail-Objekten vollständig instanziierbar); die übrigen Module folgen mit Phase 5/6.
 - Spieler, Fraktionen, Upgrades, Sciences, Waffen, Schaden, Produktion und Wirtschaft.
 - Terrain, Navigation, Sichtweite, Shroud/Fog, Zielwahl und Skirmish-KI.
 - Golden-Master- und Replay-basierte Vergleichstests gegen das Original.

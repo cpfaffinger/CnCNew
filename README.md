@@ -21,8 +21,10 @@ Dieses Arbeitsverzeichnis bleibt lokal. Originale Spieldateien, entpackte Assets
 - eigener validierender TGA-Decoder erfolgreich über 826/826 Dateien und 100.666.368 Pixel geprüft
 - Phase 1 „W3D-Material- und Renderingtreue“ ist abgeschlossen: 64.962 Einpass- und 5.625 Zweipass-Meshes sowie 317 zweistufige Pässe sind im Vollbestand nachgewiesen
 - Phase 2 „Assetformate und Runtime-Contentvertrag“ ist abgeschlossen: 25.682/25.682 Dateien sind klassifiziert und validiert, Schema 2 enthält 41.527 auditierbare Referenzen
-- Phase 3 „Typisierte Spieldaten und Modulregistrierung“ ist abgeschlossen: 256/256 INIs und 66.623 Blöcke werden zu 12.677 unveränderlichen Definitionen, 16.360 Modulen und einem typisierten Referenzgraphen kompiliert
-- zwei unabhängige, 112.664.082 Byte große Definitionssnapshots sind byteidentisch (`14154C512DED47C4AD72B651F8FCB0BA702EACBF8678C51DDAB7D125BEC675D4`); 12.441/12.468 Referenzen sind aufgelöst, 27 Verwendungen sind sichtbare Kompatibilitätsfälle
+- Phase 3 „Typisierte Spieldaten und Modulregistrierung“ ist abgeschlossen und wurde durch Block 0 der Phase 4 gehärtet: Retail-Ladeplan der Original-Engine, `DefaultThingTemplate`-Vererbung mit Interfacemasken, wiederholbare Schlüssel mit Vielfachheit, schemagetypte Object-Köpfe und Modulfelder, strikte Farb-/Vektor-/Enum-/Flags-Grammatik über Referenz-Namenstabellen, Modulkatalog mit 205 Modultypen ohne Factories und eine eingecheckte Kompatibilitätsbasislinie (`baselines/compatibility.json`, `IniTool compat-check`)
+- Vollinventar nach Block 0: 228 geladene INI-Dateien (28 als nicht Retail ausgeschlossen), 65.873 Blöcke, 12.573 Definitionen, 16.360 Module, 333.061 Schlüssel, 13.134/14.679 Referenzen aufgelöst (1.545 sichtbare Fallbacks); zwei unabhängige 142.302.102-Byte-Snapshots sind byteidentisch (`131ED730F2AD4DB85D6F50CE91A7059358CA32D6728F8EB6E91E6CF8775E58A4`); Details in `docs/TYPED-DEFINITIONS.md`
+- Phase 4 „Deterministischer Simulationskern“ ist abgeschlossen: `CnCNew.Simulation` (nur von `CnCNew.Data` abhängig) mit Festkomma-Numerik, 30-Hz-Tick, Original-RNG mit benannten Streams, monotonen IDs, Sleepy-Update-Scheduler, Objekt-/Modul-Lebenszyklus, tick-adressierten Befehlen, Timern, Events, kanonischen Snapshots mit inkrementellem Zustands-Hash und einem versionierten Replay-Format; zwölf Lebenszyklusmodule sind implementiert, 26 der 2.113 Retail-Objekte sind heute vollständig instanziierbar (`docs/SIMULATION-CORE.md`)
+- 216.000 Ticks (zwei Stunden Spielzeit) mit bis zu 15.774 gleichzeitigen Entities, 401.229 Spawn-/Destroy-Vorgängen und 914.771 Befehlen liefern in drei frischen Läufen und nach Snapshot-Fortsetzung identische Tickhashes; alle Tabellen kehren auf null zurück
 - atomarer, inkrementeller Runtimeimport mit kanonischen IDs/Pfaden, SHA-256, Overlayherkunft, Importerversion, Artefakten, Abhängigkeiten und typisierten Fallbacks
 - zwei unabhängige Frischimporte sowie ein 25.682/25.682-Cachelauf erzeugten dasselbe kanonische Manifest; Details stehen in `docs/CONTENT-PIPELINE.md`
 - typisierte UV-, Environment-, Classic-Environment-, Linear-Offset- und Grid-Mapper; positive und negative Geschwindigkeiten sowie beide Stage-Slots werden deterministisch ausgewertet
@@ -50,6 +52,7 @@ dotnet run --project tests/CnCNew.IO.Tests
 dotnet run --project tests/CnCNew.Images.Tests
 dotnet run --project tests/CnCNew.Formats.Tests
 dotnet run --project tests/CnCNew.Import.Tests
+dotnet run --project tests/CnCNew.Simulation.Tests
 dotnet run --project tools/CnCNew.AssetTool -- inventory .local/game-original .local/manifests/game-original.json
 dotnet run --project tools/CnCNew.AssetTool -- extract-all .local/game-original .local/assets/by-archive
 dotnet run --project tools/CnCNew.AssetTool -- materialize .local/game-original .local/content
@@ -59,6 +62,10 @@ dotnet run --project tools/CnCNew.AssetTool -- runtime-import .local/game-origin
 dotnet run --project tools/CnCNew.AssetTool -- verify .local/phase2-import-a
 dotnet run --project tools/CnCNew.IniTool -- audit .local/content
 dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a .local/phase3-definitions.json
+dotnet run --project tools/CnCNew.IniTool -- compat-check .local/phase2-import-a baselines/compatibility.json
+dotnet run --project tools/CnCNew.IniTool -- load-order-report .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.SimTool -- stress
+dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage .local/phase2-import-a
 dotnet run --project tools/CnCNew.ImageTool -- audit-tga .local/content
 dotnet run --project tools/CnCNew.W3dTool -- audit .local/content
 dotnet run --project tools/CnCNew.W3dTool -- inspect .local/content Art/W3D/ABArFrcCmd.W3D
@@ -76,6 +83,7 @@ Der EA-Quellcode und die Community-Projekte stehen unter GPLv3 mit jeweils zu pr
 BIG-Dateien sind ausschließlich Eingabe für den einmaligen lokalen Import. Das neue Spiel liest zur Laufzeit normale Dateien aus `.local/content`; `content-manifest.json` hält die gewählte Overlay-Quelle und alle verdrängten Varianten nachvollziehbar fest.
 
 Der typisierte Definitionsvertrag, Include-/Overlayregeln und das Snapshotformat stehen in
-`docs/TYPED-DEFINITIONS.md`; die vollständige, nicht stille Phase-3-Kompatibilitätsstufe steht in
-`docs/PHASE3-COMPATIBILITY.md`.
+`docs/TYPED-DEFINITIONS.md`; die vollständige, nicht stille Kompatibilitätsstufe steht in
+`docs/PHASE3-COMPATIBILITY.md`. Tickphasen, Numerik, RNG, Snapshot- und Replayformat, Modulbindung,
+Budgets und Modulabdeckung des Simulationskerns stehen in `docs/SIMULATION-CORE.md`.
 

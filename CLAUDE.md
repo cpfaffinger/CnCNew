@@ -6,10 +6,10 @@ Singleplayer, Skirmish und Kampagne. Nicht im Scope: Multiplayer, binäre Kompat
 Mods und Savegames. Das Repo ist rein lokal (Branch `main`, **kein Remote**).
 
 Die Gesamtplanung steht in `docs/IMPLEMENTATION-PLAN.md`. Die aktuell zu bearbeitende Phase steht
-als vollständiger Auftrag in `docs/HANDOFF-PHASE4.md` (Handoff-Datei der jeweils nächsten Phase).
+als vollständiger Auftrag in `docs/HANDOFF-PHASE5.md` (Handoff-Datei der jeweils nächsten Phase).
 Lies vor jeder Phase `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
 `docs/IMPLEMENTATION-PLAN.md` sowie die Fachdokumente der berührten Domäne
-(`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `W3D-MATERIALS.md`).
+(`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `SIMULATION-CORE.md`, `W3D-MATERIALS.md`).
 
 ## Schichten und harte Abhängigkeitsregeln
 
@@ -21,7 +21,7 @@ Import → Runtime-Content → Datenmodelle → Simulation → Präsentation. Sc
 - `CnCNew.Import` ist die einzige Verbindung zwischen Import-VFS, Formaten und Runtimevertrag.
 - `CnCNew.Data` ist renderer-, engine-, archiv- und filesystemunabhängig. `IniNode` verlässt den
   Compiler nie; Simulation und Präsentation sehen nur `CompiledDefinitionGraph`.
-- `CnCNew.Simulation` (ab Phase 4) hängt nur von `CnCNew.Data` ab: kein Stride, kein DirectX, keine
+- `CnCNew.Simulation` hängt nur von `CnCNew.Data` ab (der Test `SourceRules` erzwingt das und verbietet Wandzeit, ambiente Zufallszahlen, `float`/`double`, Threads, Datei-/Prozesszugriff und Reflection im Quelltext): kein Stride, kein DirectX, keine
   UI, kein Content-/Archiv-/Filesystemzugriff, keine Wandzeit, keine Threads im Kern,
   kein `Random.Shared`, keine Reflection-Reihenfolgeabhängigkeit.
 - Stride-Typen bleiben in `CnCNew.Client.Stride`.
@@ -30,8 +30,12 @@ Import → Runtime-Content → Datenmodelle → Simulation → Präsentation. Sc
 ## Nicht verhandelbare Qualitätsregeln
 
 - Unbekannte Schlüssel, Module, Enums, Einheiten oder Referenzen fallen **nie** still auf
-  Standardwerte zurück. Jeder Kompatibilitätsfall ist explizit, gezählt, dokumentiert und
-  (ab Phase 4) durch einen Test gegen Drift abgesichert.
+  Standardwerte zurück. Jeder Kompatibilitätsfall ist explizit, gezählt, dokumentiert und durch
+  `baselines/compatibility.json` (`IniTool compat-check`, Realdatentest der Datentests) gegen Drift abgesichert;
+  Änderungen an dieser Datei sind Review-Gegenstand.
+- Die Simulation liest nur, was `CnCNew.Data` streng typisiert liefert; nicht implementierte Module machen ein Objekt
+  nicht instanziierbar und stehen in `MissingModules`, sie werden nie stillschweigend ignoriert. Neue Simulationsmodule
+  brauchen Katalogschema, Bindung, Tests und einen Eintrag in `SIMULATION-CORE.md`.
 - Determinismus: kanonische Sortierung, keine absoluten Pfade, Zeitstempel oder
   Dictionary-/HashSet-Reihenfolgen in Artefakten. Zwei unabhängige Läufe müssen byteidentisch sein.
 - `TreatWarningsAsErrors=true`. Bekannt und erklärt sind ausschließlich `NU1901`/`NU1903` aus den
@@ -63,11 +67,21 @@ dotnet run --project tests/CnCNew.IO.Tests
 dotnet run --project tests/CnCNew.Images.Tests
 dotnet run --project tests/CnCNew.Formats.Tests
 dotnet run --project tests/CnCNew.Import.Tests
+dotnet run --project tests/CnCNew.Simulation.Tests
+dotnet run --project tests/CnCNew.Simulation.Tests -- --content-dir .local/phase2-import-a
+dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --long
+dotnet run --project tests/CnCNew.Data.Tests -- --content-dir .local/phase2-import-a
 dotnet run --project tests/CnCNew.W3D.Tests -- --content-dir .local/phase2-import-a
 
 dotnet run --project tools/CnCNew.AssetTool -- verify .local/phase2-import-a
 dotnet run --project tools/CnCNew.IniTool -- audit .local/phase2-import-a
-dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a <ausgabe.json>
+dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a <ausgabe.json> [--maps include|exclude]
+dotnet run --project tools/CnCNew.IniTool -- compat-check .local/phase2-import-a baselines/compatibility.json
+dotnet run --project tools/CnCNew.IniTool -- load-order-report .local/phase2-import-a
+dotnet run --project tools/CnCNew.IniTool -- debt-report .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.SimTool -- stress
+dotnet run -c Release --project tools/CnCNew.SimTool -- audit-modules .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage .local/phase2-import-a
 dotnet run --project tools/CnCNew.ImageTool -- audit-tga .local/phase2-import-a
 dotnet run --project tools/CnCNew.W3dTool -- audit .local/phase2-import-a
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir .local/phase2-import-a --model-path Art/W3D/ABArFrcCmd.W3D
@@ -77,10 +91,13 @@ Tests sind eigenständige Konsolenprogramme (`tests/<Projekt>.Tests/Program.cs`,
 Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern – kein xUnit/NUnit.
 Diesen Stil beibehalten. Für schnelle Wiederholung nach einem Build: `dotnet run --no-build`.
 
-Referenzwerte (Stand Phase 3, neu messen): 256 INI-Dateien, 66.623 Blöcke, 12.677 Definitionen,
-16.360 Module, 335.592 Schlüssel, 12.441/12.468 Referenzen aufgelöst, Definitionssnapshot
-112.664.082 Byte, SHA-256 `14154C512DED47C4AD72B651F8FCB0BA702EACBF8678C51DDAB7D125BEC675D4`.
-Asset-Runtimebestand: 25.682 Dateien.
+Referenzwerte (Stand Phase 4, neu messen): Vollinventar mit allen Kartenoverlays 228 geladene INI-Dateien (28 nach Ladeplan
+ausgeschlossen), 65.873 Blöcke, 12.573 Definitionen, 16.360 Module, 333.061 Schlüssel, 13.134/14.679 Referenzen aufgelöst
+(1.545 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 142.302.102 Byte, SHA-256
+`131ED730F2AD4DB85D6F50CE91A7059358CA32D6728F8EB6E91E6CF8775E58A4`; Retail-Basisdaten (`--maps exclude`) 12.548 Definitionen,
+2.113 Objekte, SHA-256 `9B49E9DD1EE403C6797B32AD66F63CF3C0E538CEB510A84CEFF4AD5257FCCD38`. Modulkatalog 205 Typen (12
+implementiert), Kompatibilitätsbasislinie 344 Einträge, Instanziierbarkeit 26 von 2.113 Objekten. Asset-Runtimebestand: 25.682 Dateien.
+Stresstest (216.000 Ticks, `SimTool stress`): Endhash `A299C38BFE07681D`, Kettenhash `E230DA5F04821478`.
 
 ## Code- und Dokumentationsstil
 

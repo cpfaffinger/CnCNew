@@ -1,5 +1,8 @@
 # N+1-Handoff: Phase 4 – Deterministischer Simulationskern
 
+> **Status: abgeschlossen am 28. September 2026** (Ergebnisse in `docs/SIMULATION-CORE.md`, `docs/TYPED-DEFINITIONS.md`,
+> `docs/IMPLEMENTATION-PLAN.md`). Der nächste Auftrag steht in `docs/HANDOFF-PHASE5.md`. Dieses Dokument bleibt als Historie erhalten.
+
 Du arbeitest autonom am lokalen Projekt `C:\Users\cp\RiderProjects\CnCNew`.
 
 ## Auftrag
