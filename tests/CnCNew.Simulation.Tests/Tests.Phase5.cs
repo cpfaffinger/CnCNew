@@ -160,6 +160,24 @@ static partial class Tests
           End
         End
 
+        Object Flammable
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = FlammableUpdate Fire01
+            FlameDamageLimit = 10
+            AflameDuration = 300
+            AflameDamageDelay = 100
+            AflameDamageAmount = 5
+            BurnedDelay = 200
+            FlameDamageExpiration = 1000
+          End
+        End
+
         Science SCIENCE_Intrinsic
           IsGrantable = Yes
         End
@@ -484,6 +502,49 @@ static partial class Tests
         feeder.PurchaseScience(1, "SCIENCE_DoesNotExist");
         world.Step();
         Check.That(world.RejectionCounts[(int)CommandRejection.UnknownScience] == 1, "An unknown science name is rejected.");
+    }
+
+    /// <summary>The next blocker module by frequency (<c>docs/HANDOFF-PHASE5.md</c>): <c>FlammableUpdate</c> ignites once accumulated flame damage exceeds its limit, burns periodically, turns permanently <c>BURNED</c> if it stays aflame long enough, and its <c>onDamage</c> hook runs through the new <see cref="IDamageModule"/> callback in <c>ActiveBody.AttemptDamage</c>.</summary>
+    public static void Phase5Flammable()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        var aflameBit = ObjectStatusBits.Index("AFLAME");
+        var burnedBit = ObjectStatusBits.Index("BURNED");
+        feeder.Spawn(1, "Flammable");
+        world.Step();
+        var target = world.FindEntity(new EntityId(1))!;
+        var body = target.Body!;
+
+        feeder.Damage(1, 5, damageType: DamageTypes.Flame);
+        world.Step();
+        Check.That(!target.HasStatus(aflameBit) && body.Health == Fixed.FromInt(95), "5 flame damage (below the 10-point limit) does not ignite.");
+
+        feeder.Damage(1, 6, damageType: DamageTypes.Flame);
+        world.Step();
+        Check.That(target.HasStatus(aflameBit) && body.Health == Fixed.FromInt(89), "Exceeding FlameDamageLimit (10) ignites the object; its own damage still applies.");
+        var igniteTick = world.Tick - 1;
+
+        // AflameDamageDelay = 100ms = 3 ticks: periodic self-damage of AflameDamageAmount (5) each time.
+        while (world.Tick <= igniteTick + 3) world.Step();
+        Check.That(body.Health == Fixed.FromInt(84), "The first periodic aflame-damage tick deals AflameDamageAmount (5).");
+
+        // BurnedDelay = 200ms = 6 ticks: BURNED sets while still AFLAME (and a second damage tick has landed by then).
+        while (world.Tick <= igniteTick + 6) world.Step();
+        Check.That(target.HasStatus(aflameBit) && target.HasStatus(burnedBit) && body.Health == Fixed.FromInt(79),
+            "BURNED sets after BurnedDelay while still AFLAME; a second periodic damage tick has also landed.");
+
+        // AflameDuration = 300ms = 9 ticks: AFLAME clears; already BURNED, so it can never ignite again.
+        while (world.Tick <= igniteTick + 9) world.Step();
+        Check.That(!target.HasStatus(aflameBit) && target.HasStatus(burnedBit) && body.Health == Fixed.FromInt(74),
+            "AFLAME clears after AflameDuration; a third periodic damage tick lands first. BURNED stays set.");
+
+        var healthBeforeReignite = body.Health;
+        feeder.Damage(1, 20, damageType: DamageTypes.Flame);
+        world.Step();
+        Check.That(!target.HasStatus(aflameBit) && body.Health == healthBeforeReignite - Fixed.FromInt(20),
+            "Once BURNED, further flame damage applies normally but never reignites.");
     }
 
     public static void Phase5Victory()

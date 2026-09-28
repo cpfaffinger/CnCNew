@@ -216,10 +216,11 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // phase 4 (12)
         "ActiveBody", "CreateObjectDie", "DeletionUpdate", "DestroyDie", "FXListDie", "HighlanderBody", "ImmortalBody",
         "InactiveBody", "InstantDeathBehavior", "KeepObjectDie", "LifetimeUpdate", "StructureBody",
-        // phase 5 (15): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
+        // phase 5 (16): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
+        // + the next blocker modules by frequency (docs/HANDOFF-PHASE5.md)
         "AIUpdateInterface", "ArmorUpgrade", "AutoHealBehavior", "CommandSetUpgrade", "ExperienceScalarUpgrade",
-        "LocomotorSetUpgrade", "MaxHealthUpgrade", "ModelConditionUpgrade", "ObjectCreationUpgrade", "ProductionUpdate",
-        "RadarUpgrade", "StealthUpdate", "StealthUpgrade", "WeaponBonusUpgrade", "WeaponSetUpgrade",
+        "FlammableUpdate", "LocomotorSetUpgrade", "MaxHealthUpgrade", "ModelConditionUpgrade", "ObjectCreationUpgrade",
+        "ProductionUpdate", "RadarUpgrade", "StealthUpdate", "StealthUpgrade", "WeaponBonusUpgrade", "WeaponSetUpgrade",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");
@@ -245,10 +246,10 @@ static void CompatibilityBaselineDetectsEveryDeviation()
     Assert(CompatibilityBaseline.Compare(baseline, changed.Audit.Compatibility).Any(value => value.StartsWith("CHANGED", StringComparison.Ordinal) && value.Contains("Terrain", StringComparison.Ordinal)),
         "A changed frequency must be reported.");
 
-    files["fixture.ini"] = "Object Tank\n  Behavior = SlowDeathBehavior A\n  End\n  Behavior = FlammableUpdate B\n  End\nEnd\n";
+    files["fixture.ini"] = "Object Tank\n  Behavior = SlowDeathBehavior A\n  End\n  Behavior = PoisonedBehavior B\n  End\nEnd\n";
     var added = DefinitionCompiler.Compile(new MemorySource(files), ModuleRegistry.Default, strict);
     var differences = CompatibilityBaseline.Compare(baseline, added.Audit.Compatibility);
-    Assert(differences.Any(value => value.StartsWith("NEW", StringComparison.Ordinal) && value.Contains("FlammableUpdate", StringComparison.Ordinal)), "A new entry must be reported.");
+    Assert(differences.Any(value => value.StartsWith("NEW", StringComparison.Ordinal) && value.Contains("PoisonedBehavior", StringComparison.Ordinal)), "A new entry must be reported.");
     Assert(differences.Any(value => value.StartsWith("MISSING", StringComparison.Ordinal) && value.Contains("Terrain", StringComparison.Ordinal)), "A vanished entry must be reported.");
     Throws<InvalidDataException>(() => CompatibilityBaseline.Compare("{\"schemaVersion\":99,\"mode\":\"x\",\"entries\":[]}", graph.Audit.Compatibility), "Unsupported");
 }
