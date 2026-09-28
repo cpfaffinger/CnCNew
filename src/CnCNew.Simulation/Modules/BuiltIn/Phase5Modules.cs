@@ -81,8 +81,10 @@ public sealed record StealthData(
 public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
 {
     private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
+    private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
     private long _nextWake = -1;
     private long _readyTick = long.MaxValue;
+    private long _detectedUntilTick = -1;
 
     public override string ModuleName => "StealthUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -93,8 +95,17 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         _nextWake = Math.Min(world.Tick + SimulationTiming.SleepNone, SimulationTiming.SleepForever);
     }
 
+    /// <summary><c>StealthUpdate::markAsDetected</c>: extends (never shortens) how long <c>DETECTED</c> stays set. Called by <c>StealthDetectorUpdate</c>.</summary>
+    public void MarkDetected(IWorldServices world, long ticks)
+    {
+        var until = world.Tick + Math.Max(ticks, SimulationTiming.SleepNone);
+        if (until > _detectedUntilTick) _detectedUntilTick = until;
+        Entity.Status |= 1UL << DetectedBit;
+    }
+
     public long Update(IWorldServices world)
     {
+        if (Entity.HasStatus(DetectedBit) && world.Tick >= _detectedUntilTick) Entity.Status &= ~(1UL << DetectedBit);
         if (!Satisfies(world, data.RequiredStatus, data.ForbiddenStatus) || AnyForbiddenCondition(world))
         {
             _readyTick = long.MaxValue;
@@ -138,12 +149,17 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         _ => false,
     };
 
-    public override void Describe(IStateWriter writer) => writer.Int("readyTick", _readyTick == long.MaxValue ? -1 : _readyTick);
+    public override void Describe(IStateWriter writer)
+    {
+        writer.Int("readyTick", _readyTick == long.MaxValue ? -1 : _readyTick);
+        writer.Int("detectedUntilTick", _detectedUntilTick);
+    }
 
     public override void Load(IStateReader reader)
     {
         var value = reader.Int("readyTick");
         _readyTick = value < 0 ? long.MaxValue : value;
+        _detectedUntilTick = reader.Int("detectedUntilTick");
     }
 }
 

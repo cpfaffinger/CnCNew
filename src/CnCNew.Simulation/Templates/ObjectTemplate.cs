@@ -50,6 +50,7 @@ public sealed class ObjectTemplate
         GeometryMajorRadius = Real(definition, "GeometryMajorRadius");
         GeometryMinorRadius = Real(definition, "GeometryMinorRadius");
         GeometryHeight = Real(definition, "GeometryHeight");
+        VisionRange = Real(definition, "VisionRange");
         BuildCost = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildCost", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money cost ? Fixed.FromInt(cost.Value) : Fixed.Zero;
         BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? SimulationTiming.SecondsToTicks(seconds) : 0;
         EnergyProduction = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyProduction", StringComparison.OrdinalIgnoreCase))?.Value.Value is long energy ? checked((int)energy) : 0;
@@ -71,6 +72,8 @@ public sealed class ObjectTemplate
     public Fixed GeometryMajorRadius { get; }
     public Fixed GeometryMinorRadius { get; }
     public Fixed GeometryHeight { get; }
+    /// <summary><c>ThingTemplate::m_visionRange</c>: <c>StealthDetectorUpdate</c>'s <c>DetectionRange</c> falls back to this when unset (the shipped default: every occurrence leaves <c>DetectionRange</c> commented out).</summary>
+    public Fixed VisionRange { get; }
     public Fixed BuildCost { get; }
     public long BuildTicks { get; }
     public int EnergyProduction { get; }

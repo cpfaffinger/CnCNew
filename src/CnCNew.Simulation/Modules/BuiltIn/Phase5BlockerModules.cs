@@ -29,6 +29,7 @@ internal static class Phase5BlockerModules
         new ModuleBinding<TransitionDamageFXData>("TransitionDamageFX", ModuleOwnerKind.Object, (configuration, _) => TransitionDamageFXData.Parse(configuration), data => new TransitionDamageFX(data)),
         new ModuleBinding<SlowDeathData>("SlowDeathBehavior", ModuleOwnerKind.Object, (configuration, _) => SlowDeathData.Parse(configuration), data => new SlowDeathBehavior(data)),
         new ModuleBinding<FireWeaponWhenDeadData>("FireWeaponWhenDeadBehavior", ModuleOwnerKind.Object, FireWeaponWhenDeadData.Parse, data => new FireWeaponWhenDeadBehavior(data)),
+        new ModuleBinding<StealthDetectorData>("StealthDetectorUpdate", ModuleOwnerKind.Object, (configuration, _) => StealthDetectorData.Parse(configuration), data => new StealthDetectorUpdate(data)),
     ];
 }
 
@@ -373,4 +374,72 @@ public sealed class FireWeaponWhenDeadBehavior(FireWeaponWhenDeadData data) : Si
 
     public override void Describe(IStateWriter writer) => _mux.Describe(writer);
     public override void Load(IStateReader reader) => _mux.Load(reader);
+}
+
+// ============================================================================================ StealthDetectorUpdate
+
+/// <summary>
+/// <c>StealthDetectorUpdate.cpp</c>'s fields. <c>DetectionRate</c> defaults to 1 tick (the reference's bare
+/// <c>m_updateRate = 1</c>, a frame count, not a duration default that needs conversion). Presentation-only:
+/// <c>PingSound</c>/<c>LoudPingSound</c>, the four <c>IR*ParticleSysName</c>/<c>IRParticleSysBone</c> fields (heat-vision
+/// FX), and every radar/audio/UI feedback call in the reference's <c>update()</c>.
+/// </summary>
+public sealed record StealthDetectorData(
+    long UpdateRateTicks, Fixed DetectionRange, bool InitiallyDisabled,
+    ImmutableArray<string> ExtraRequiredKindOf, ImmutableArray<string> ExtraForbiddenKindOf) : ModuleData
+{
+    public static StealthDetectorData Parse(ModuleConfiguration configuration) => new(
+        ModuleConfigReader.Ticks(configuration, "DetectionRate", 1),
+        ModuleConfigReader.Real(configuration, "DetectionRange", Fixed.Zero),
+        ModuleConfigReader.Bool(configuration, "InitiallyDisabled", false),
+        ModuleConfigReader.Flags(configuration, "ExtraRequiredKindOf")?.Names ?? [],
+        ModuleConfigReader.Flags(configuration, "ExtraForbiddenKindOf")?.Names ?? []);
+}
+
+/// <summary>
+/// <c>StealthDetectorUpdate::update</c>: periodically scans every other object (an O(entities) scan, same precedent as
+/// <see cref="AutoHealBehavior"/> — a spatial index is a phase-6 performance concern) for a currently <c>STEALTHED</c>
+/// object within range and calls <see cref="StealthUpdate.MarkDetected"/> on it. Two reference simplifications, both
+/// project-wide and pre-existing, not introduced by this module: no team/diplomacy system exists yet, so "ally" is
+/// approximated as same <see cref="World.Entity.Owner"/> (the reference excludes only actual allies via
+/// <c>PartitionFilterRelationship::ALLOW_ENEMIES|ALLOW_NEUTRAL</c>); and no Contain system exists yet, so
+/// <c>CanDetectWhileGarrisoned</c>/<c>CanDetectWhileContained</c> are typed but currently inert (an object is never
+/// "contained"), and garrisoned-riders' own stealth is never scanned. <c>UNDER_CONSTRUCTION</c>/<c>SOLD</c> are ported
+/// (matching every other module that checks them) even though nothing sets either status bit yet.
+/// </summary>
+public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule, IUpdateModule
+{
+    private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
+    private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
+    private long _nextWake = -1;
+
+    public override string ModuleName => "StealthDetectorUpdate";
+    public long NextWake { get => _nextWake; set => _nextWake = value; }
+
+    public override void OnSpawn(IWorldServices world)
+        => _nextWake = data.InitiallyDisabled ? SimulationTiming.SleepForever : world.Tick + world.LogicRandom.Range(1, checked((int)data.UpdateRateTicks));
+
+    public long Update(IWorldServices world)
+    {
+        if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
+        if (Entity.HasStatus(ObjectStatusBits.UnderConstruction)) return SimulationTiming.SleepNone;
+        if (Entity.HasStatus(SoldBit)) return SimulationTiming.SleepForever;
+
+        var range = data.DetectionRange > Fixed.Zero ? data.DetectionRange : Entity.Template.VisionRange;
+        foreach (var candidate in world.Entities)
+        {
+            if (candidate.Id == Entity.Id || candidate.EffectivelyDead || candidate.Owner == Entity.Owner) continue;
+            if (!candidate.HasStatus(StealthedBit)) continue;
+            if (!data.ExtraRequiredKindOf.IsEmpty && !data.ExtraRequiredKindOf.Any(candidate.Template.IsKindOf)) continue;
+            if (data.ExtraForbiddenKindOf.Any(candidate.Template.IsKindOf)) continue;
+            var dx = candidate.X - Entity.X;
+            var dy = candidate.Y - Entity.Y;
+            if (dx * dx + dy * dy > range * range) continue;
+            candidate.Modules.OfType<StealthUpdate>().FirstOrDefault()?.MarkDetected(world, data.UpdateRateTicks + 1);
+        }
+        return Math.Max(data.UpdateRateTicks, SimulationTiming.SleepNone);
+    }
+
+    public override void Describe(IStateWriter writer) { }
+    public override void Load(IStateReader reader) { }
 }
