@@ -150,6 +150,17 @@ Abnahme:
   Kompatibilitätsliste und Befehle stehen in `TYPED-DEFINITIONS.md` und
   `PHASE3-COMPATIBILITY.md`.
 
+Verifikation (28. September 2026): Build, alle acht Testprogramme, die Auditwerkzeuge und eine
+frische Vollkompilierung (identischer Snapshot-SHA-256) bestätigen die obigen Zahlen. Die
+Abnahme gilt für Struktur, Vollständigkeit und Determinismus. Fachlich flach bleiben: keine
+domänenspezifischen Definitionseigenschaften, Pflichtfelder oder Schlüsselschemata für
+Definitionen; heuristische Einheitentypisierung ohne Tickumrechnung; `Enum`/`Flags`/`Color`/
+`Vector` werden im Bestand nie erzeugt (9.150 Farben, 6.161 Koordinaten und 1.964 `KindOf`-Listen
+sind `List`); produktive `ModuleRegistry` ist leer und die Kompatibilitätsliste nicht als
+Basislinie abgesichert; Ladereihenfolge nicht gegen `GameEngine.cpp` abgeglichen; keine
+inkrementelle Kompilierung. Details in `TYPED-DEFINITIONS.md` („Bekannte Grenzen“). Der
+notwendige Teil wird in Phase 4 als Block 0 nachgezogen, der Rest ist Vorleistung für Phase 5.
+
 ## 4. Deterministischer Simulationskern
 
 **Ergebnis:** Eine headless laufende Welt besitzt festen Tick, deterministische IDs und

@@ -77,3 +77,35 @@ Get-FileHash -Algorithm SHA256 .local/phase3-a.json,.local/phase3-b.json
 ```
 
 Die lokalen Snapshots sind generierte Laufzeitdaten und werden nicht committed.
+
+## Bekannte Grenzen (Verifikation vom 28. September 2026)
+
+Eine unabhängige Nachprüfung bestätigte Build, alle acht Testprogramme, 256/256 INIs, die
+Bestandszahlen und den Snapshot-SHA-256 (frische Kompilierung ergibt denselben Hash). Zugleich
+zeigte sie, dass der Vertrag strukturell vollständig, fachlich aber noch flach ist:
+
+- Die Definitionstypen (`ObjectDefinition`, `WeaponDefinition`, …) sind leere Unterklassen von
+  `GameDefinition`; alle Werte liegen in `Fields`/`Sections` als `DefinitionValue`. Es gibt keine
+  domänenspezifischen Eigenschaften, keine Pflichtfelder und keine Schlüsselschemata für
+  Definitionen – unbekannte Schlüssel an Definitionen werden nicht gemeldet. Schemas existieren nur
+  für registrierte Module.
+- Die Werttypisierung der Einheiten (Zeit, Distanz, Geschwindigkeit, Winkel, Geld) erfolgt
+  heuristisch über Teilstrings des Schlüsselnamens. Es gibt keine Umrechnung in Ticks, Distanz pro
+  Tick oder Bogenmaß.
+- `Enum`, `Flags`, `Color`, `Vector2` und `Vector3` werden im Vollbestand nie erzeugt. Die realen
+  Formen `R:255 G:0 B:0` (9.150 Verwendungen), `X:0 Y:0 Z:0` (6.161) und Bitflag-Listen wie
+  `KindOf` (1.964) landen als `List`/`Text`. Von 335.592 Werten sind 135.215 `Text` und 89.511
+  `List`.
+- Die produktive `ModuleRegistry` ist leer. Alle 206 Bestandsmodule stehen nur deshalb in der
+  Kompatibilitätsliste, weil der Compiler jeden unregistrierten Namen automatisch zählt. Die Liste
+  ist nicht als geprüfte Basislinie eingecheckt; ein Tippfehler im Modulnamen wäre ununterscheidbar
+  von einem bekannten, noch nicht implementierten Modul.
+- Die Ladereihenfolge (Stufen `Default`, `Data/INI`, `Maps`, danach ordinal) ist nicht gegen die
+  subsystemweise Reihenfolge und die Ladearten (`INI_LOAD_OVERWRITE`, `CREATE_OVERRIDES`,
+  `MULTIFILE`) in `GameEngine.cpp` der Referenz abgeglichen. Wiederholte Schlüssel innerhalb eines
+  Definitionskopfs überschreiben einander; ob dies für alle wiederholbaren Schlüssel des Originals
+  zutrifft, ist nicht geprüft.
+- Eine inkrementelle oder gecachte Kompilierung existiert nicht.
+
+Diese Punkte sind als Block 0 sowie als Vorleistung für Phase 5 im Handoff
+`HANDOFF-PHASE4.md` erfasst.
