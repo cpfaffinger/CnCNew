@@ -232,6 +232,52 @@ static partial class Tests
           End
         End
 
+        Weapon SuicideWeapon
+          PrimaryDamage = 10
+          AttackRange = 999.0
+          DamageType = EXPLOSION
+          ClipSize = 0
+          DelayBetweenShots = 0
+        End
+        Weapon AltSuicideWeapon
+          PrimaryDamage = 5
+          AttackRange = 999.0
+          DamageType = EXPLOSION
+          ClipSize = 0
+          DelayBetweenShots = 0
+        End
+
+        Upgrade Upgrade_Detonator
+          Type = OBJECT
+          BuildCost = 10
+          BuildTime = 1
+        End
+        Upgrade Upgrade_AltDetonator
+          Type = PLAYER
+          BuildCost = 10
+          BuildTime = 1
+        End
+
+        Object Suicider
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = FireWeaponWhenDeadBehavior FireDead01
+            DeathWeapon = SuicideWeapon
+            StartsActive = Yes
+            ConflictsWith = Upgrade_AltDetonator
+          End
+          Behavior = FireWeaponWhenDeadBehavior FireDead02
+            DeathWeapon = AltSuicideWeapon
+            StartsActive = No
+            TriggeredBy = Upgrade_Detonator
+          End
+        End
+
         Science SCIENCE_Intrinsic
           IsGrantable = Yes
         End
@@ -683,6 +729,59 @@ static partial class Tests
         Check.That(world2.FindEntity(new EntityId(1)) is not null, "Determinism: still alive one tick early on a fresh, identically seeded world.");
         while (world2.Tick <= deathTick2 + 15) world2.Step();
         Check.That(world2.FindEntity(new EntityId(1)) is null, "Determinism: destroyed at the identical tick offset on a fresh, identically seeded world.");
+    }
+
+    /// <summary>
+    /// Re-prioritized ahead of <c>CreateCrateDie</c>/<c>PoisonedBehavior</c> (see <c>Phase5BlockerModules</c>'s doc
+    /// comment): <c>FireWeaponWhenDeadBehavior</c> fires its <c>DeathWeapon</c> on a matching death when active, either
+    /// from construction (<c>StartsActive</c>) or a later <c>TriggeredBy</c> upgrade — and, uniquely, re-checks
+    /// <c>ConflictsWith</c> again at death time, because the <c>StartsActive</c> path never passed through the
+    /// activation-time conflict check at all (ChemicalGeneral.ini's mutually exclusive demo-trap detonators).
+    /// </summary>
+    public static void Phase5FireWeaponWhenDead()
+    {
+        // StartsActive fires; the TriggeredBy sibling does not, since its upgrade was never purchased.
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Suicider");
+        world.Step();
+        feeder.Kill(1);
+        var result = world.Step();
+        Check.That(result.Events.Any(value => value.Kind == SimEventKind.WeaponFireRequested && value.Text == "SuicideWeapon"),
+            "StartsActive fires its DeathWeapon on a matching death.");
+        Check.That(!result.Events.Any(value => value.Kind == SimEventKind.WeaponFireRequested && value.Text == "AltSuicideWeapon"),
+            "The TriggeredBy sibling stays inactive: its upgrade was never purchased.");
+        Check.That(world.FindEntity(new EntityId(1)) is null, "DestroyDie still removes the entity (independent of FireWeaponWhenDeadBehavior).");
+
+        // TriggeredBy activates the second sibling; both fire independently (no mutual exclusion between them).
+        var world2 = NewWorld(fixture);
+        var feeder2 = new Feeder(world2);
+        feeder2.Spawn(1, "Suicider");
+        world2.Step();
+        feeder2.GiveMoney(1, 1000);
+        world2.Step();
+        feeder2.PurchaseUpgrade(1, "Upgrade_Detonator", target: 1);
+        world2.Step();
+        feeder2.Kill(1);
+        var result2 = world2.Step();
+        Check.That(result2.Events.Any(value => value.Kind == SimEventKind.WeaponFireRequested && value.Text == "SuicideWeapon"), "StartsActive still fires.");
+        Check.That(result2.Events.Any(value => value.Kind == SimEventKind.WeaponFireRequested && value.Text == "AltSuicideWeapon"), "The now-triggered sibling fires too.");
+
+        // A conflicting upgrade purchased AFTER construction silences the StartsActive sibling at death time, even though
+        // giveSelfUpgrade's construction-time activation never itself checked for a conflict.
+        var world3 = NewWorld(fixture);
+        var feeder3 = new Feeder(world3);
+        feeder3.Spawn(1, "Suicider");
+        world3.Step();
+        feeder3.GiveMoney(1, 1000);
+        world3.Step();
+        feeder3.PurchaseUpgrade(1, "Upgrade_AltDetonator");
+        world3.Step();
+        feeder3.Kill(1);
+        var result3 = world3.Step();
+        Check.That(!result3.Events.Any(value => value.Kind == SimEventKind.WeaponFireRequested),
+            "A conflicting upgrade purchased after construction silences the StartsActive sibling at death time; the TriggeredBy sibling was never triggered either.");
     }
 
     public static void Phase5Victory()
