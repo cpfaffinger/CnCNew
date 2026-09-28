@@ -56,6 +56,7 @@ run.Test("Phase 5: stealth cloaking and auto-heal", Tests.Phase5StealthAndHeal);
 run.Test("Phase 5: FlammableUpdate ignite/burn/damage cycle", Tests.Phase5Flammable);
 run.Test("Phase 5: body damage states and TransitionDamageFX", Tests.Phase5DamageStateTransitions);
 run.Test("Phase 5: player/faction setup and science purchase", Tests.Phase5Sciences);
+run.Test("Phase 5: SlowDeathBehavior weighted sibling lottery", Tests.Phase5SlowDeath);
 run.Test("Phase 5: last player standing wins", Tests.Phase5Victory);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);

@@ -214,6 +214,24 @@ static partial class Tests
           End
         End
 
+        Object Zombie
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = SlowDeathBehavior ModuleTag_Death01
+            DestructionDelay = 500
+          End
+          Behavior = SlowDeathBehavior ModuleTag_Death02
+            DestructionDelay = 500
+          End
+          Behavior = SlowDeathBehavior ModuleTag_Death03
+            DeathTypes = NONE +BURNED
+            DestructionDelay = 0
+          End
+        End
+
         Science SCIENCE_Intrinsic
           IsGrantable = Yes
         End
@@ -617,6 +635,54 @@ static partial class Tests
         Check.That(body.Health == Fixed.Zero && body.DamageState == BodyDamageStates.Rubble, "Overkill clamps health to 0 (RUBBLE), not negative.");
         Check.That(result.Events.Any(value => value.Kind == SimEventKind.CreationListRequested && value.Text == "OCL_Rubble"), "The RUBBLE OCL fires.");
         Check.That(result.Events.Any(value => value.Kind == SimEventKind.EntityDied), "onBodyDamageStateChange runs before the death check, in the same tick as the killing blow.");
+    }
+
+    /// <summary>
+    /// The third of the next blocker modules by frequency: <c>SlowDeathBehavior</c>. Multiple sibling instances on one
+    /// object (up to 7 in real data, e.g. <c>AirforceGeneral.ini</c>'s <c>ColonelBurton</c>) enter a weighted lottery on a
+    /// matching death; exactly one wins and alone schedules the delayed destruction, guarded by
+    /// <see cref="Entity.SlowDeathStarted"/> so the other siblings' own <c>OnDie</c> calls (same death event) no-op.
+    /// </summary>
+    public static void Phase5SlowDeath()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Zombie");
+        world.Step();
+        var zombie = world.FindEntity(new EntityId(1))!;
+        Check.That(!zombie.SlowDeathStarted, "SlowDeathStarted is false before death.");
+
+        var deaths = zombie.Modules.OfType<SlowDeathBehavior>().ToArray();
+        Check.That(deaths.Length == 3, "All three SlowDeathBehavior siblings are attached.");
+        Check.That(deaths.All(value => value.ProbabilityWeight == 1), "ProbabilityModifier defaults to 0, and the weight is clamped to at least 1 (Math.Max).");
+
+        feeder.Kill(1);
+        world.Step();
+        var deathTick = world.Tick - 1;
+        Check.That(zombie.SlowDeathStarted, "The weighted lottery among applicable siblings runs exactly once on a matching death.");
+        Check.That(world.FindEntity(new EntityId(1)) is not null, "Unlike DestroyDie, the object is not destroyed on the same tick as its death.");
+
+        // DestructionDelay = 500ms = 15 ticks for either applicable sibling (Death03 is inapplicable: its DeathTypes
+        // filter only matches BURNED, not the Normal death type KillCommand uses, so it never joins the lottery pool).
+        while (world.Tick <= deathTick + 14) world.Step();
+        Check.That(world.FindEntity(new EntityId(1)) is not null, "Still alive one tick before DestructionDelay elapses.");
+
+        while (world.Tick <= deathTick + 15) world.Step();
+        Check.That(world.FindEntity(new EntityId(1)) is null, "Destroyed exactly once DestructionDelay (15 ticks) has elapsed, regardless of which of the two applicable siblings won the lottery.");
+
+        // Same seed, same command sequence: the lottery roll and delay draws reproduce identically (determinism).
+        var world2 = NewWorld(fixture);
+        var feeder2 = new Feeder(world2);
+        feeder2.Spawn(1, "Zombie");
+        world2.Step();
+        feeder2.Kill(1);
+        world2.Step();
+        var deathTick2 = world2.Tick - 1;
+        while (world2.Tick <= deathTick2 + 14) world2.Step();
+        Check.That(world2.FindEntity(new EntityId(1)) is not null, "Determinism: still alive one tick early on a fresh, identically seeded world.");
+        while (world2.Tick <= deathTick2 + 15) world2.Step();
+        Check.That(world2.FindEntity(new EntityId(1)) is null, "Determinism: destroyed at the identical tick offset on a fresh, identically seeded world.");
     }
 
     public static void Phase5Victory()

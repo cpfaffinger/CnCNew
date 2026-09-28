@@ -216,11 +216,11 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // phase 4 (12)
         "ActiveBody", "CreateObjectDie", "DeletionUpdate", "DestroyDie", "FXListDie", "HighlanderBody", "ImmortalBody",
         "InactiveBody", "InstantDeathBehavior", "KeepObjectDie", "LifetimeUpdate", "StructureBody",
-        // phase 5 (17): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
+        // phase 5 (18): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
         // + the next blocker modules by frequency (docs/HANDOFF-PHASE5.md)
         "AIUpdateInterface", "ArmorUpgrade", "AutoHealBehavior", "CommandSetUpgrade", "ExperienceScalarUpgrade",
         "FlammableUpdate", "LocomotorSetUpgrade", "MaxHealthUpgrade", "ModelConditionUpgrade", "ObjectCreationUpgrade",
-        "ProductionUpdate", "RadarUpgrade", "StealthUpdate", "StealthUpgrade", "TransitionDamageFX",
+        "ProductionUpdate", "RadarUpgrade", "SlowDeathBehavior", "StealthUpdate", "StealthUpgrade", "TransitionDamageFX",
         "WeaponBonusUpgrade", "WeaponSetUpgrade",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
@@ -257,8 +257,8 @@ static void CompatibilityBaselineDetectsEveryDeviation()
 
 static void TypoInModuleNameIsDistinguishableFromKnownUnimplementedModule()
 {
-    var known = "Object Tank\n  Behavior = SlowDeathBehavior A\n  End\nEnd\n";
-    var typo = "Object Tank\n  Behavior = SlowDeathBehaviour A\n  End\nEnd\n";
+    var known = "Object Tank\n  Behavior = PoisonedBehavior A\n  End\nEnd\n";
+    var typo = "Object Tank\n  Behavior = PoisenedBehavior A\n  End\nEnd\n";
     var lenient = DefinitionCompilerOptions.Audit;
     var knownGraph = DefinitionCompiler.Compile(One(known), ModuleRegistry.Default, lenient);
     var typoGraph = DefinitionCompiler.Compile(One(typo), ModuleRegistry.Default, lenient);
