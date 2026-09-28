@@ -296,6 +296,24 @@ public static class ModuleCatalog
             new("StartsActive", FieldType.Bool, Source: "FireWeaponWhenDeadBehavior.h"),
             new("DeathWeapon", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDeadBehavior.h"),
         ]);
+        Add("StealthDetectorUpdate",
+        [
+            new("DetectionRate", FieldType.DurationMs, Source: "StealthDetectorUpdate.cpp"),
+            new("DetectionRange", FieldType.Distance, Source: "StealthDetectorUpdate.cpp"),
+            new("InitiallyDisabled", FieldType.Bool, Source: "StealthDetectorUpdate.cpp"),
+            new("PingSound", FieldType.Opaque, Source: "StealthDetectorUpdate.cpp"),
+            new("LoudPingSound", FieldType.Opaque, Source: "StealthDetectorUpdate.cpp"),
+            new("IRBeaconParticleSysName", FieldType.Opaque, Source: "StealthDetectorUpdate.cpp"),
+            new("IRParticleSysName", FieldType.Opaque, Source: "StealthDetectorUpdate.cpp"),
+            new("IRBrightParticleSysName", FieldType.Opaque, Source: "StealthDetectorUpdate.cpp"),
+            new("IRGridParticleSysName", FieldType.Opaque, Source: "StealthDetectorUpdate.cpp"),
+            new("IRParticleSysBone", FieldType.Opaque, Source: "StealthDetectorUpdate.cpp"),
+            new("ExtraRequiredKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "StealthDetectorUpdate.cpp"),
+            new("ExtraForbiddenKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "StealthDetectorUpdate.cpp"),
+            // No Contain system yet (garrisons/transports): containedBy is always null, so these are typed but currently inert.
+            new("CanDetectWhileGarrisoned", FieldType.Bool, Source: "StealthDetectorUpdate.cpp"),
+            new("CanDetectWhileContained", FieldType.Bool, Source: "StealthDetectorUpdate.cpp"),
+        ]);
 
         return builder.ToImmutable();
     }

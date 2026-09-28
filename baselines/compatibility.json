@@ -3586,6 +3586,69 @@
     },
     {
       "category": "deferred-field",
+      "name": "StealthDetectorUpdate/IRBeaconParticleSysName",
+      "count": 8,
+      "owners": [
+        "StealthDetectorUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthDetectorUpdate/IRBrightParticleSysName",
+      "count": 3,
+      "owners": [
+        "StealthDetectorUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthDetectorUpdate/IRGridParticleSysName",
+      "count": 6,
+      "owners": [
+        "StealthDetectorUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthDetectorUpdate/IRParticleSysBone",
+      "count": 8,
+      "owners": [
+        "StealthDetectorUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthDetectorUpdate/IRParticleSysName",
+      "count": 3,
+      "owners": [
+        "StealthDetectorUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthDetectorUpdate/LoudPingSound",
+      "count": 5,
+      "owners": [
+        "StealthDetectorUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthDetectorUpdate/PingSound",
+      "count": 5,
+      "owners": [
+        "StealthDetectorUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "StealthUpdate/DisguiseFX",
       "count": 6,
       "owners": [
@@ -4781,7 +4844,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 7001,
+      "count": 6897,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6405,15 +6468,6 @@
       "category": "module",
       "name": "SquishCollide",
       "count": 153,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "StealthDetectorUpdate",
-      "count": 104,
       "owners": [
         "Object"
       ],
