@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Modules.BuiltIn;
+using CnCNew.Simulation.Templates;
 
 namespace CnCNew.Simulation.Modules;
 
@@ -8,17 +9,19 @@ public interface IModuleBinding
 {
     string Name { get; }
     ModuleOwnerKind Owner { get; }
-    ModuleData ParseData(ModuleConfiguration configuration);
+
+    /// <summary><paramref name="upgrades"/> lets upgrade-activated modules resolve <c>TriggeredBy</c>/<c>ConflictsWith</c> names to mask bits once, at template-build time.</summary>
+    ModuleData ParseData(ModuleConfiguration configuration, UpgradeCatalog upgrades);
     SimModule Create(ModuleData data);
 }
 
 /// <summary>Typed binding of one module name: parses the compiled configuration into <typeparamref name="TData"/> and creates the module.</summary>
-public sealed class ModuleBinding<TData>(string name, ModuleOwnerKind owner, Func<ModuleConfiguration, TData> parse, Func<TData, SimModule> create) : IModuleBinding
+public sealed class ModuleBinding<TData>(string name, ModuleOwnerKind owner, Func<ModuleConfiguration, UpgradeCatalog, TData> parse, Func<TData, SimModule> create) : IModuleBinding
     where TData : ModuleData
 {
     public string Name { get; } = name;
     public ModuleOwnerKind Owner { get; } = owner;
-    public ModuleData ParseData(ModuleConfiguration configuration) => parse(configuration);
+    public ModuleData ParseData(ModuleConfiguration configuration, UpgradeCatalog upgrades) => parse(configuration, upgrades);
     public SimModule Create(ModuleData data) => create((TData)data);
 }
 

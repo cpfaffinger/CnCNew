@@ -61,7 +61,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[16];
+    private readonly long[] _rejections = new long[20];
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
     private long _tick;
@@ -79,6 +79,12 @@ public sealed partial class SimulationWorld : IWorldServices
         public PlayerId Id { get; } = id;
         public string Name { get; } = name;
         public ulong LastSequence { get; set; }
+
+        // ----------------------------------------------------------------------------------------- phase 5: economy
+        public Fixed Money { get; set; }
+        /// <summary>Incrementally maintained sum of owned objects' <c>EnergyProduction</c> (<c>Energy::objectEnteringInfluence</c>/<c>Leaving</c>); negative means a net consumer.</summary>
+        public int EnergyProduction { get; set; }
+        public UpgradeMask CompletedUpgrades { get; set; }
     }
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle);
@@ -146,6 +152,116 @@ public sealed partial class SimulationWorld : IWorldServices
         MarkDirty(entity);
     }
 
+    // ------------------------------------------------------------------------------------- phase 5: economy, upgrades
+
+    public UpgradeCatalog Upgrades => _templates.Upgrades;
+    public WeaponCatalog Weapons => _templates.Weapons;
+
+    public Fixed MoneyOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.Money : Fixed.Zero;
+
+    public void AddMoney(PlayerId player, Fixed amount)
+    {
+        if (amount.IsNegative) throw new ArgumentOutOfRangeException(nameof(amount));
+        if (_players.TryGetValue(player.Value, out var state)) state.Money += amount;
+    }
+
+    /// <summary><c>Money::withdraw</c>: clamps to the available balance and returns the amount actually withdrawn.</summary>
+    public Fixed WithdrawMoney(PlayerId player, Fixed amount)
+    {
+        if (amount.IsNegative) throw new ArgumentOutOfRangeException(nameof(amount));
+        if (!_players.TryGetValue(player.Value, out var state)) return Fixed.Zero;
+        var withdrawn = Fixed.Min(amount, state.Money);
+        state.Money -= withdrawn;
+        return withdrawn;
+    }
+
+    public UpgradeMask PlayerUpgrades(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.CompletedUpgrades : UpgradeMask.Empty;
+
+    public UpgradeMask UpgradeKeyMaskOf(Entity entity) => entity.CompletedUpgrades | PlayerUpgrades(entity.Owner);
+
+    public void CompleteUpgrade(PlayerId player, EntityId? objectScope, string upgradeName)
+    {
+        if (!_templates.Upgrades.TryGet(upgradeName, out var info)) throw new ArgumentException($"Unknown upgrade '{upgradeName}'.", nameof(upgradeName));
+        if (info.Scope == UpgradeScope.Player)
+        {
+            var state = _players.TryGetValue(player.Value, out var found) ? found : throw new ArgumentException($"Unknown player {player}.", nameof(player));
+            state.CompletedUpgrades = state.CompletedUpgrades.Set(info.Index);
+            Emit(SimEventKind.UpgradeCompleted, EntityId.Invalid, EntityId.Invalid, upgradeName, info.Index, player);
+            // Player-scoped upgrades (Player::onUpgradeCompleted) re-evaluate every object of that player.
+            foreach (var entity in _entities.Values) if (entity.Owner == player) ReevaluateUpgrades(entity);
+        }
+        else
+        {
+            var target = objectScope is { } id ? FindEntity(id) : null;
+            if (target is null) throw new ArgumentException("An object-scoped upgrade requires a valid target entity.", nameof(objectScope));
+            target.CompletedUpgrades = target.CompletedUpgrades.Set(info.Index);
+            Emit(SimEventKind.UpgradeCompleted, target.Id, EntityId.Invalid, upgradeName, info.Index, player);
+            ReevaluateUpgrades(target);
+        }
+    }
+
+    public void RemoveUpgradeByName(Entity entity, string upgradeName)
+    {
+        // An unresolved name is not modeled at all yet (e.g. an object creation list name mistakenly used here): a no-op,
+        // matching the reference's behaviour when the removal list names something outside the upgrade table.
+        if (!_templates.Upgrades.TryGet(upgradeName, out var info)) return;
+        if (info.Scope == UpgradeScope.Player)
+        {
+            if (_players.TryGetValue(entity.Owner.Value, out var state)) state.CompletedUpgrades = state.CompletedUpgrades.Clear(info.Index);
+        }
+        else
+        {
+            entity.CompletedUpgrades = entity.CompletedUpgrades.Clear(info.Index);
+        }
+        MarkDirty(entity);
+        ReevaluateUpgrades(entity);
+    }
+
+    private void ReevaluateUpgrades(Entity entity)
+    {
+        var mask = UpgradeKeyMaskOf(entity);
+        foreach (var module in entity.UpgradeModules) module.TryActivate(this, mask);
+        MarkDirty(entity);
+    }
+
+    public EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle)
+    {
+        if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));
+        var id = Ids.AllocateEntity();
+        _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle));
+        return id;
+    }
+
+    private static int ActiveWeaponIndex(Entity entity)
+        => entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
+
+    private static ArmorInfo ActiveArmor(Entity entity)
+        => entity.HasPlayerUpgradeArmor && entity.Template.PlayerUpgradeArmor is { } upgraded ? upgraded : entity.Template.DefaultArmor;
+
+    private static Modules.BuiltIn.ProductionUpdate? FindProductionModule(Entity entity)
+        => Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.ProductionUpdate) as Modules.BuiltIn.ProductionUpdate;
+
+    private static bool CanMove(Entity entity) => Array.Exists(entity.ModuleArray, module => module is Modules.BuiltIn.AIUpdateInterface);
+
+    /// <summary><c>VictoryConditions::hasSinglePlayerBeenDefeated</c> (default flags NOBUILDINGS|NOUNITS): zero objects at all, of any kind.</summary>
+    public bool IsPlayerDefeated(PlayerId player) => !_entities.Values.Any(entity => entity.Owner == player);
+
+    /// <summary>
+    /// "Last player standing" (phase 5 simplification: no teams/alliances). Returns the sole remaining player with at least
+    /// one object, or <see langword="null"/> while two or more players (or zero) still have objects.
+    /// </summary>
+    public PlayerId? TryGetWinner()
+    {
+        PlayerId? winner = null;
+        foreach (var player in _playerList)
+        {
+            if (player.Id.IsSystem || IsPlayerDefeated(player.Id)) continue;
+            if (winner is not null) return null;
+            winner = player.Id;
+        }
+        return winner;
+    }
+
     // ----------------------------------------------------------------------------------------------- commands
 
     /// <summary>
@@ -192,6 +308,66 @@ public sealed partial class SimulationWorld : IWorldServices
                     return CommandRejection.InvalidArguments;
                 if (!timer.Target.IsValid && timer.Action != TimerActionKind.Notify) return CommandRejection.InvalidArguments;
                 break;
+
+            // ----------------------------------------------------------------------------------------------- phase 5
+            case GiveMoneyCommand give:
+                if (!_players.ContainsKey(give.Target.Value)) return CommandRejection.UnknownPlayer;
+                if (give.Amount.IsNegative) return CommandRejection.InvalidArguments;
+                break;
+            case PurchaseUpgradeCommand purchase:
+            {
+                if (!_templates.Upgrades.TryGet(purchase.Upgrade, out var info)) return CommandRejection.UnknownUpgrade;
+                if (info.Scope == UpgradeScope.Object)
+                {
+                    if (purchase.Target is not { } targetId) return CommandRejection.InvalidArguments;
+                    if (!_entities.TryGetValue(targetId.Value, out var target) || target.DestroyRequested) return CommandRejection.UnknownEntity;
+                    if (target.Owner != command.Player) return CommandRejection.NotPermitted;
+                    if (target.CompletedUpgrades.Has(info.Index)) return CommandRejection.AlreadyOwned;
+                }
+                else if (player.CompletedUpgrades.Has(info.Index)) return CommandRejection.AlreadyOwned;
+                if (player.Money < info.BuildCost) return CommandRejection.InsufficientFunds;
+                break;
+            }
+            case QueueProductionCommand queue:
+            {
+                if (!_templates.TryGet(queue.Template, out var queueTemplate) || !queueTemplate.IsInstantiable) return CommandRejection.UnknownTemplate;
+                if (!_entities.TryGetValue(queue.Producer.Value, out var producer) || producer.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (producer.Owner != command.Player) return CommandRejection.NotPermitted;
+                var production = FindProductionModule(producer);
+                if (production is null) return CommandRejection.CannotProduce;
+                if (!production.HasRoom) return CommandRejection.QueueFull;
+                if (player.Money < queueTemplate.BuildCost) return CommandRejection.InsufficientFunds;
+                break;
+            }
+            case CancelProductionCommand cancel:
+            {
+                if (!_entities.TryGetValue(cancel.Producer.Value, out var producer) || producer.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (producer.Owner != command.Player) return CommandRejection.NotPermitted;
+                var production = FindProductionModule(producer);
+                if (production is null || !production.HasSlot(cancel.Slot)) return CommandRejection.InvalidArguments;
+                break;
+            }
+            case SetMoveTargetCommand move:
+            {
+                if (!_entities.TryGetValue(move.Target.Value, out var target) || target.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (target.Owner != command.Player) return CommandRejection.NotPermitted;
+                if (!CanMove(target)) return CommandRejection.CannotMove;
+                break;
+            }
+            case FireWeaponCommand fire:
+            {
+                if (!_entities.TryGetValue(fire.Source.Value, out var source) || source.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (source.Owner != command.Player) return CommandRejection.NotPermitted;
+                if (!_entities.TryGetValue(fire.Target.Value, out var fireTarget) || fireTarget.DestroyRequested || fireTarget.Body is null) return CommandRejection.UnknownEntity;
+                var weaponIndex = ActiveWeaponIndex(source);
+                if (weaponIndex < 0) return CommandRejection.NoWeapon;
+                if (_tick < source.WeaponReadyTick) return CommandRejection.WeaponNotReady;
+                var weapon = _templates.Weapons[weaponIndex];
+                var dx = fireTarget.X - source.X;
+                var dy = fireTarget.Y - source.Y;
+                if (dx * dx + dy * dy > weapon.AttackRange * weapon.AttackRange) return CommandRejection.OutOfRange;
+                break;
+            }
         }
         return 0;
     }
@@ -276,6 +452,98 @@ public sealed partial class SimulationWorld : IWorldServices
             {
                 if (!_timerById.TryGetValue(cancel.Timer.Value, out var timer)) { RecordRejection(command, CommandRejection.UnknownTimer); break; }
                 RemoveTimer(timer);
+                break;
+            }
+
+            // --------------------------------------------------------------------------------------------- phase 5
+            case GiveMoneyCommand give:
+                if (_players.TryGetValue(give.Target.Value, out var recipient)) recipient.Money += give.Amount;
+                break;
+            case PurchaseUpgradeCommand purchase:
+            {
+                if (!_templates.Upgrades.TryGet(purchase.Upgrade, out var info)) { RecordRejection(command, CommandRejection.UnknownUpgrade); break; }
+                var payer = _players[command.Player.Value];
+                Entity? scopeEntity = null;
+                if (info.Scope == UpgradeScope.Object)
+                {
+                    scopeEntity = purchase.Target is { } targetId ? FindEntity(targetId) : null;
+                    if (scopeEntity is null || scopeEntity.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                    if (scopeEntity.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                    if (scopeEntity.CompletedUpgrades.Has(info.Index)) { RecordRejection(command, CommandRejection.AlreadyOwned); break; }
+                }
+                else if (payer.CompletedUpgrades.Has(info.Index)) { RecordRejection(command, CommandRejection.AlreadyOwned); break; }
+                if (payer.Money < info.BuildCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }
+                payer.Money -= info.BuildCost;
+                CompleteUpgrade(command.Player, scopeEntity?.Id, purchase.Upgrade);
+                break;
+            }
+            case QueueProductionCommand queue:
+            {
+                var producer = FindEntity(queue.Producer);
+                if (producer is null || producer.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (producer.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                if (!_templates.TryGet(queue.Template, out var queueTemplate) || !queueTemplate.IsInstantiable) { RecordRejection(command, CommandRejection.UnknownTemplate); break; }
+                var production = FindProductionModule(producer);
+                if (production is null) { RecordRejection(command, CommandRejection.CannotProduce); break; }
+                if (!production.HasRoom) { RecordRejection(command, CommandRejection.QueueFull); break; }
+                var buyer = _players[producer.Owner.Value];
+                if (buyer.Money < queueTemplate.BuildCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }
+                // ProductionUpdate.h: the full cost is withdrawn immediately at queue time, refunded in full on cancel.
+                buyer.Money -= queueTemplate.BuildCost;
+                production.Enqueue(queueTemplate.Index, queueTemplate.BuildCost, queueTemplate.BuildTicks);
+                var producerNode = Array.Find(producer.Updates, node => ReferenceEquals(node.Module, production));
+                if (producerNode is not null) WakeAt(producer, producerNode.Update, _tick);
+                MarkDirty(producer);
+                break;
+            }
+            case CancelProductionCommand cancelProduction:
+            {
+                var producer = FindEntity(cancelProduction.Producer);
+                if (producer is null || producer.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (producer.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                var production = FindProductionModule(producer);
+                if (production is null || !production.TryCancel(cancelProduction.Slot, out var refund)) { RecordRejection(command, CommandRejection.InvalidArguments); break; }
+                if (_players.TryGetValue(producer.Owner.Value, out var refunded)) refunded.Money += refund;
+                MarkDirty(producer);
+                break;
+            }
+            case SetMoveTargetCommand move:
+            {
+                var target = FindEntity(move.Target);
+                if (target is null || target.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (target.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                if (!CanMove(target)) { RecordRejection(command, CommandRejection.CannotMove); break; }
+                target.HasMoveTarget = true;
+                target.MoveTargetX = move.X;
+                target.MoveTargetY = move.Y;
+                var moveNode = Array.Find(target.Updates, node => node.Module is Modules.BuiltIn.AIUpdateInterface);
+                if (moveNode is not null) WakeAt(target, moveNode.Update, _tick);
+                MarkDirty(target);
+                break;
+            }
+            case FireWeaponCommand fire:
+            {
+                var source = FindEntity(fire.Source);
+                if (source is null || source.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (source.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                var fireTarget = FindEntity(fire.Target);
+                if (fireTarget is null || fireTarget.DestroyRequested || fireTarget.Body is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                var weaponIndex = ActiveWeaponIndex(source);
+                if (weaponIndex < 0) { RecordRejection(command, CommandRejection.NoWeapon); break; }
+                if (_tick < source.WeaponReadyTick) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
+                var weapon = _templates.Weapons[weaponIndex];
+                var dx = fireTarget.X - source.X;
+                var dy = fireTarget.Y - source.Y;
+                if (dx * dx + dy * dy > weapon.AttackRange * weapon.AttackRange) { RecordRejection(command, CommandRejection.OutOfRange); break; }
+                // _tick >= WeaponReadyTick was just confirmed above: an empty clip has finished its ClipReloadTime by now.
+                if (source.WeaponClip == 0) source.WeaponClip = ClipCapacity(weapon);
+                var damage = ActiveArmor(fireTarget).Adjust(weapon.DamageType, weapon.PrimaryDamage);
+                source.LastFireTick = _tick;
+                if (source.WeaponClip != int.MaxValue) source.WeaponClip--;
+                source.WeaponReadyTick = source.WeaponClip == 0 ? _tick + weapon.ClipReloadTicks : _tick + weapon.DelayBetweenShotsTicks;
+                MarkDirty(source);
+                Damage(fireTarget.Id, new DamageInfo(source.Id, damage, weapon.DamageType, weapon.DeathType, false));
+                Emit(SimEventKind.WeaponFired, source.Id, fireTarget.Id, weapon.Name, damage.Raw, command.Player);
                 break;
             }
             default:
@@ -492,6 +760,8 @@ public sealed partial class SimulationWorld : IWorldServices
             foreach (var node in entity.Updates) _updates.Remove(node);
             if (entity.Timers is { Count: > 0 } timers)
                 foreach (var timer in timers.ToArray()) RemoveTimer(timer);
+            // Energy::objectLeavingInfluence: the mirror image of the Register() hook.
+            if (_players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction -= entity.Template.EnergyProduction;
             _entitySum = unchecked(_entitySum - entity.CachedHash);
             _entities.Remove(entity.Id.Value);
             entity.Registered = false;
@@ -515,6 +785,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 Angle = pending.Angle,
             };
             AttachModules(entity, template);
+            InitializeWeaponClip(entity);
             foreach (var module in entity.ModuleArray) module.OnSpawn(this);
             Register(entity);
             Emit(SimEventKind.EntitySpawned, entity.Id, EntityId.Invalid, template.Name, 0, pending.Owner);
@@ -529,6 +800,7 @@ public sealed partial class SimulationWorld : IWorldServices
         var dies = new List<IDieModule>();
         var receivers = new List<IEventReceiver>();
         var updates = new List<UpdateNode>();
+        var upgrades = new List<IUpgradeModule>();
         for (var index = 0; index < modules.Length; index++)
         {
             var spec = template.Modules[index];
@@ -541,12 +813,23 @@ public sealed partial class SimulationWorld : IWorldServices
             if (module is IDieModule die) dies.Add(die);
             if (module is IEventReceiver receiver) receivers.Add(receiver);
             if (module is IUpdateModule update) updates.Add(new UpdateNode(entity, module, update));
+            if (module is IUpgradeModule upgrade) upgrades.Add(upgrade);
         }
         entity.ModuleArray = modules;
         entity.Dies = [..dies];
         entity.Receivers = [..receivers];
         entity.Updates = [..updates];
+        entity.UpgradeModules = [..upgrades];
     }
+
+    /// <summary>Weapon clip starts full for whichever weapon is active (<c>WeaponSetUpgrade</c> re-initializes it if it switches later). Fresh spawns only: a restored entity already carries its saved clip.</summary>
+    private void InitializeWeaponClip(Entity entity)
+    {
+        var weaponIndex = ActiveWeaponIndex(entity);
+        entity.WeaponClip = weaponIndex < 0 ? -1 : ClipCapacity(_templates.Weapons[weaponIndex]);
+    }
+
+    private static int ClipCapacity(Templates.WeaponInfo weapon) => weapon.ClipSize == 0 ? int.MaxValue : weapon.ClipSize;
 
     /// <summary>Adds a fully built entity (fresh or restored) to the tables and schedules its update modules.</summary>
     private void Register(Entity entity)
@@ -554,6 +837,8 @@ public sealed partial class SimulationWorld : IWorldServices
         _entities.Add(entity.Id.Value, entity);
         entity.Registered = true;
         _moduleCount += entity.ModuleArray.Length;
+        // Energy::objectEnteringInfluence: incremental, not recomputed per frame.
+        if (_players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction += entity.Template.EnergyProduction;
         foreach (var node in entity.Updates)
         {
             var update = node.Update;
@@ -688,6 +973,9 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Int("id", player.Id.Value);
             writer.Text("name", player.Name);
             writer.UInt("lastSequence", player.LastSequence);
+            writer.Fixed("money", player.Money);
+            writer.Int("energyProduction", player.EnergyProduction);
+            player.CompletedUpgrades.Describe(writer, "completedUpgrades");
             writer.EndObject();
         }
         writer.EndArray();

@@ -4,6 +4,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Random;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Modules;
@@ -20,6 +21,9 @@ public interface IWorldServices
     long Tick { get; }
     SageRandom LogicRandom { get; }
     Entity? FindEntity(EntityId id);
+
+    /// <summary>Every live entity (registered, not yet destroyed). Used by area-effect modules (<c>AutoHealBehavior</c>); O(n), fine at fixture scale.</summary>
+    IReadOnlyCollection<Entity> Entities { get; }
     void Emit(SimEventKind kind, EntityId entity, EntityId other, string text, long value);
 
     /// <summary>Requests removal at the end of the tick. The entity receives no further updates, but its events are still delivered.</summary>
@@ -35,6 +39,48 @@ public interface IWorldServices
 
     /// <summary><c>friend_awakenUpdateModule</c>: moves the module's next wake tick.</summary>
     void WakeAt(Entity entity, IUpdateModule module, long tick);
+
+    // ------------------------------------------------------------------------------------ phase 5: economy, upgrades
+
+    UpgradeCatalog Upgrades { get; }
+    WeaponCatalog Weapons { get; }
+
+    /// <summary>The controlling player's current balance (0 for the system player or an unknown player).</summary>
+    Fixed MoneyOf(PlayerId player);
+    void AddMoney(PlayerId player, Fixed amount);
+
+    /// <summary><c>Money::withdraw</c>: clamps to the available balance and returns the amount actually withdrawn.</summary>
+    Fixed WithdrawMoney(PlayerId player, Fixed amount);
+
+    /// <summary>Player-scoped completed-upgrade mask (<c>Player::getCompletedUpgradeMask</c>).</summary>
+    UpgradeMask PlayerUpgrades(PlayerId player);
+
+    /// <summary>Union of the entity's own and its controlling player's completed-upgrade masks — the reference's dispatch key.</summary>
+    UpgradeMask UpgradeKeyMaskOf(Entity entity);
+
+    /// <summary>
+    /// Completes an upgrade for a player (<see cref="UpgradeScope.Player"/>) or one entity (<see cref="UpgradeScope.Object"/>),
+    /// then re-evaluates every <see cref="IUpgradeModule"/> the change can affect (<c>Player::onUpgradeCompleted</c>).
+    /// </summary>
+    void CompleteUpgrade(PlayerId player, EntityId? objectScope, string upgradeName);
+
+    void RemoveUpgradeByName(Entity entity, string upgradeName);
+
+    /// <summary>Reserves and queues the creation of a fresh entity outside the command/validation path (engine-internal spawns: production, OCLs).</summary>
+    EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle);
+}
+
+/// <summary>A module driven by the <see cref="UpgradeMux"/> state machine (<c>UpgradeModule</c> / any <c>UpgradeMux</c>-mixin module).</summary>
+public interface IUpgradeModule
+{
+    void TryActivate(IWorldServices world, UpgradeMask keyMask);
+    void TryReset(IWorldServices world, UpgradeMask keyMask);
+}
+
+/// <summary>A body that can change its maximum health at run time (<c>MaxHealthUpgrade.cpp</c>). Not every body supports this (<c>InactiveBody</c> has no health).</summary>
+public interface IMaxHealthAdjustable
+{
+    void AdjustMaxHealth(Fixed delta, string changeType);
 }
 
 public abstract class SimModule

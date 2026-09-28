@@ -35,6 +35,18 @@ internal static class ModuleConfigReader
         return field.Value.Value is GameTime time ? SimulationTiming.DurationMillisecondsToTicks(time.Milliseconds) : throw Unexpected(configuration, field);
     }
 
+    public static long Int(ModuleConfiguration configuration, string name, long fallback)
+    {
+        var field = Find(configuration, name);
+        if (field is null) return fallback;
+        return field.Value.Value switch
+        {
+            long integer => integer,
+            CompatibilityValue compatibility => long.Parse(compatibility.NormalizedValue, System.Globalization.CultureInfo.InvariantCulture),
+            _ => throw Unexpected(configuration, field),
+        };
+    }
+
     public static bool Bool(ModuleConfiguration configuration, string name, bool fallback)
     {
         var field = Find(configuration, name);

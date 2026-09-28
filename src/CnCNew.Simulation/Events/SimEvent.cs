@@ -17,6 +17,19 @@ public enum SimEventKind : byte
     /// <summary>A module asked for a weapon to be fired (phase 5).</summary>
     WeaponFireRequested = 8,
     CommandRejected = 9,
+
+    // ------------------------------------------------------------------------------------------------- phase 5
+
+    /// <summary>An upgrade module completed (<c>Value</c>: the <see cref="Templates.UpgradeInfo.Index"/>).</summary>
+    UpgradeCompleted = 10,
+    /// <summary><c>FireWeaponCommand</c> resolved (<c>Other</c>: the target, <c>Value</c>: the adjusted damage dealt).</summary>
+    WeaponFired = 11,
+    /// <summary>A move order reached its target (<c>AIUpdateInterface</c>).</summary>
+    MoveArrived = 12,
+    /// <summary><c>ProductionUpdate</c> completed a queue entry and requested a spawn (<c>Value</c>: the template index; the resulting spawn raises its own <see cref="EntitySpawned"/>).</summary>
+    ProductionCompleted = 13,
+    /// <summary>The last player without any remaining objects was defeated (<c>Player</c>: the defeated player).</summary>
+    PlayerDefeated = 14,
 }
 
 /// <summary>

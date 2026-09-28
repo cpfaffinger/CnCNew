@@ -4,6 +4,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Timers;
 
 namespace CnCNew.Simulation.World;
@@ -46,6 +47,10 @@ public sealed partial class SimulationWorld
             if (!_players.TryGetValue(id, out var known) || known.Name != player.Text("name"))
                 throw new InvalidDataException($"Snapshot player {id} does not match the world configuration.");
             known.LastSequence = player.UInt("lastSequence");
+            // Money and completed upgrades are independent scalar state (not derived from owned objects) and must round-trip
+            // explicitly; EnergyProduction is instead rebuilt below as each entity re-registers (Energy::objectEnteringInfluence).
+            known.Money = player.Fixed("money");
+            known.CompletedUpgrades = UpgradeMask.Load(player, "completedUpgrades");
         }
         var rejections = state.Array("rejections");
         if (rejections.Count != _rejections.Length) throw new InvalidDataException("Rejection table size mismatch.");
@@ -70,6 +75,7 @@ public sealed partial class SimulationWorld
         {
             var timer = SimTimer.Load(item);
             if (timer.Owner.IsValid && !_entities.ContainsKey(timer.Owner.Value)) throw new InvalidDataException("Timer owner does not exist.");
+            if (_timerById.ContainsKey(timer.Id.Value)) throw new InvalidDataException($"Duplicate timer id {timer.Id.Value}.");
             AddTimer(timer);
         }
         foreach (var item in state.Array("commandList"))
@@ -101,6 +107,17 @@ public sealed partial class SimulationWorld
             VeterancyLevel = checked((int)reader.Int("veterancy")),
             EffectivelyDead = reader.Bool("dead"),
             DestroyRequested = reader.Bool("destroyRequested"),
+            CompletedUpgrades = UpgradeMask.Load(reader, "completedUpgrades"),
+            Speed = reader.Fixed("speed"),
+            HasMoveTarget = reader.Bool("hasMoveTarget"),
+            MoveTargetX = reader.Fixed("moveTargetX"),
+            MoveTargetY = reader.Fixed("moveTargetY"),
+            WeaponClip = checked((int)reader.Int("weaponClip")),
+            WeaponReadyTick = reader.Int("weaponReadyTick"),
+            LastDamageTick = reader.Int("lastDamageTick"),
+            LastFireTick = reader.Int("lastFireTick"),
+            HasPlayerUpgradeArmor = reader.Bool("hasPlayerUpgradeArmor"),
+            HasPlayerUpgradeWeapon = reader.Bool("hasPlayerUpgradeWeapon"),
         };
         if (entity.VeterancyLevel is < 0 or > 3) throw new InvalidDataException("Veterancy level out of range.");
         AttachModules(entity, template);

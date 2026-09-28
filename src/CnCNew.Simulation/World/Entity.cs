@@ -45,6 +45,33 @@ public sealed class Entity
     /// <summary>0 regular, 1 veteran, 2 elite, 3 heroic.</summary>
     public int VeterancyLevel { get; internal set; }
 
+    /// <summary>Object-scoped completed-upgrade mask (<c>Object::getObjectCompletedUpgradeMask</c>); most objects never set a bit.</summary>
+    public UpgradeMask CompletedUpgrades { get; internal set; }
+
+    /// <summary>Current forward speed (dist/tick); moves along <see cref="Angle"/>. 0 unless the object has an active move order.</summary>
+    public Fixed Speed { get; internal set; }
+
+    public bool HasMoveTarget { get; internal set; }
+    public Fixed MoveTargetX { get; internal set; }
+    public Fixed MoveTargetY { get; internal set; }
+
+    /// <summary>Rounds remaining in the current clip of the object's single (primary) weapon; -1 if the object has none.</summary>
+    public int WeaponClip { get; internal set; } = -1;
+
+    /// <summary>Tick at which the weapon may fire again (reload or shot delay, whichever is later).</summary>
+    public long WeaponReadyTick { get; internal set; }
+
+    public long LastDamageTick { get; internal set; } = -1;
+
+    /// <summary>Tick of the object's last <c>FireWeaponCommand</c>, for phase-5's coarse "is firing" approximation (-1: never).</summary>
+    public long LastFireTick { get; internal set; } = -1;
+
+    /// <summary>Set by <c>ArmorUpgrade</c> once completed: damage resolution reads <see cref="Templates.ObjectTemplate.PlayerUpgradeArmor"/> instead of the default set.</summary>
+    public bool HasPlayerUpgradeArmor { get; internal set; }
+
+    /// <summary>Set by <c>WeaponSetUpgrade</c> once completed: combat resolution reads <see cref="Templates.ObjectTemplate.PlayerUpgradeWeapon"/> instead of the default weapon.</summary>
+    public bool HasPlayerUpgradeWeapon { get; internal set; }
+
     /// <summary><c>EFFECTIVELY_DEAD</c>: set by bodies when health reaches zero (always for inactive bodies).</summary>
     public bool EffectivelyDead { get; set; }
 
@@ -56,6 +83,7 @@ public sealed class Entity
     public IBodyModule? Body { get; internal set; }
     internal IDieModule[] Dies { get; set; } = [];
     internal IEventReceiver[] Receivers { get; set; } = [];
+    internal IUpgradeModule[] UpgradeModules { get; set; } = [];
     internal UpdateNode[] Updates { get; set; } = [];
     internal List<Timers.SimTimer>? Timers { get; set; }
     internal bool Registered { get; set; }
@@ -80,6 +108,17 @@ public sealed class Entity
         writer.Bool("dead", EffectivelyDead);
         writer.Bool("destroyRequested", DestroyRequested);
         writer.Int("spawnTick", SpawnTick);
+        CompletedUpgrades.Describe(writer, "completedUpgrades");
+        writer.Fixed("speed", Speed);
+        writer.Bool("hasMoveTarget", HasMoveTarget);
+        writer.Fixed("moveTargetX", MoveTargetX);
+        writer.Fixed("moveTargetY", MoveTargetY);
+        writer.Int("weaponClip", WeaponClip);
+        writer.Int("weaponReadyTick", WeaponReadyTick);
+        writer.Int("lastDamageTick", LastDamageTick);
+        writer.Int("lastFireTick", LastFireTick);
+        writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);
+        writer.Bool("hasPlayerUpgradeWeapon", HasPlayerUpgradeWeapon);
         writer.BeginArray("modules");
         foreach (var module in ModuleArray)
         {

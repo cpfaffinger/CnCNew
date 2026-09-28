@@ -64,6 +64,27 @@ public readonly struct Fixed : IEquatable<Fixed>, IComparable<Fixed>
     public static Fixed Min(Fixed a, Fixed b) => a._raw <= b._raw ? a : b;
     public static Fixed Max(Fixed a, Fixed b) => a._raw >= b._raw ? a : b;
 
+    /// <summary>
+    /// Deterministic integer square root (Newton's method on <see cref="Int128"/>, no floating point): avoids tying phase-5
+    /// straight-line movement's distance normalization to platform math-library transcendentals. Rounds down; throws for a
+    /// negative operand.
+    /// </summary>
+    public static Fixed Sqrt(Fixed value)
+    {
+        if (value._raw < 0) throw new ArgumentOutOfRangeException(nameof(value), "Cannot take the square root of a negative fixed-point value.");
+        if (value._raw == 0) return Zero;
+        // result_raw = floor(sqrt(raw * ScaleRaw)), see ToDecimal()/FromDecimal() round trip reasoning above.
+        var target = (Int128)value._raw * ScaleRaw;
+        var x = (Int128)value._raw > ScaleRaw ? (Int128)value._raw : ScaleRaw; // initial guess >= true root
+        while (true)
+        {
+            var next = (x + target / x) / 2;
+            if (next >= x) break;
+            x = next;
+        }
+        return new(Narrow(x));
+    }
+
     public static Fixed operator +(Fixed a, Fixed b) => new(checked(a._raw + b._raw));
     public static Fixed operator -(Fixed a, Fixed b) => new(checked(a._raw - b._raw));
     public static Fixed operator -(Fixed a) => new(checked(-a._raw));

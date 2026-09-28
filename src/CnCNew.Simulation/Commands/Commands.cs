@@ -11,7 +11,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 1;
+    public const int Version = 2;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -19,7 +19,15 @@ public static class CommandTypes
     public const ushort SetTimer = 5;
     public const ushort CancelTimer = 6;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= CancelTimer;
+    // --------------------------------------------------------------------------------------------------- phase 5
+    public const ushort GiveMoney = 7;
+    public const ushort PurchaseUpgrade = 8;
+    public const ushort QueueProduction = 9;
+    public const ushort CancelProduction = 10;
+    public const ushort SetMoveTarget = 11;
+    public const ushort FireWeapon = 12;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= FireWeapon;
 }
 
 /// <summary>
@@ -63,8 +71,97 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.SetTimer => new SetTimerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target"))), reader.Int("delay"),
                 reader.Int("repeat"), (TimerActionKind)reader.Int("action"), reader.Fixed("amount"), checked((int)reader.Int("damageType")), checked((int)reader.Int("tag"))),
             CommandTypes.CancelTimer => new CancelTimerCommand(player, sequence, tick, new TimerId(reader.UInt("timer"))),
+            CommandTypes.GiveMoney => new GiveMoneyCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target"))), reader.Fixed("amount")),
+            CommandTypes.PurchaseUpgrade => new PurchaseUpgradeCommand(player, sequence, tick, reader.Text("upgrade"),
+                reader.UInt("target") == 0 ? null : new EntityId(checked((uint)reader.UInt("target")))),
+            CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), reader.Text("template")),
+            CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), checked((int)reader.Int("slot"))),
+            CommandTypes.SetMoveTarget => new SetMoveTargetCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), new EntityId(checked((uint)reader.UInt("target")))),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
+    }
+}
+
+// ------------------------------------------------------------------------------------------------------- phase 5
+
+/// <summary>Credits a player's balance directly (fixture/scenario setup and scripted income; not a purchase).</summary>
+public sealed record GiveMoneyCommand(PlayerId Player, ulong Sequence, long Tick, PlayerId Target, Fixed Amount) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.GiveMoney;
+    public override bool RequiresSystem => true;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.Int("target", Target.Value);
+        writer.Fixed("amount", Amount);
+    }
+}
+
+/// <summary>
+/// Buys an upgrade (<c>Player::onUpgradeCompleted</c> path): withdraws <see cref="Templates.UpgradeInfo.BuildCost"/> from the
+/// issuing player and completes the upgrade immediately (build time is a phase-6 production-queue integration; phase 5
+/// treats an upgrade purchase as instantaneous once affordable, matching how it treats structure production as the only
+/// timed acquisition). <see cref="Target"/> is required for a <see cref="Templates.UpgradeScope.Object"/> upgrade and must
+/// name an object the player owns; it is ignored for a <see cref="Templates.UpgradeScope.Player"/> upgrade.
+/// </summary>
+public sealed record PurchaseUpgradeCommand(PlayerId Player, ulong Sequence, long Tick, string Upgrade, EntityId? Target) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.PurchaseUpgrade;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.Text("upgrade", Upgrade);
+        writer.UInt("target", Target?.Value ?? 0);
+    }
+}
+
+/// <summary>Appends one unit template to a producer's build queue (<c>ProductionUpdate::queueCreateUnit</c>).</summary>
+public sealed record QueueProductionCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Producer, string Template) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.QueueProduction;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("producer", Producer.Value);
+        writer.Text("template", Template);
+    }
+}
+
+/// <summary>Cancels one queue slot (0-based, head of queue first) and refunds its cost in full (<c>ProductionUpdate::cancelUnitCreate</c>).</summary>
+public sealed record CancelProductionCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Producer, int Slot) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.CancelProduction;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("producer", Producer.Value);
+        writer.Int("slot", Slot);
+    }
+}
+
+/// <summary>Orders an object to move in a straight line to (X, Y) (phase 5 "einfache Bewegung"; see <see cref="Templates.LocomotorInfo"/>).</summary>
+public sealed record SetMoveTargetCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Target, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.SetMoveTarget;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("target", Target.Value);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+    }
+}
+
+/// <summary>Direct-target weapon fire (no auto-acquire, no line of sight, no projectile travel time or splash — see <see cref="Templates.WeaponInfo"/>).</summary>
+public sealed record FireWeaponCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Source, EntityId Target) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.FireWeapon;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("source", Source.Value);
+        writer.UInt("target", Target.Value);
     }
 }
 
@@ -157,6 +254,18 @@ public enum CommandRejection : byte
     UnknownEntity = 7,
     UnknownTemplate = 8,
     UnknownTimer = 9,
+
+    // --------------------------------------------------------------------------------------------------- phase 5
+    InsufficientFunds = 10,
+    AlreadyOwned = 11,
+    MissingPrerequisite = 12,
+    UnknownUpgrade = 13,
+    NoWeapon = 14,
+    WeaponNotReady = 15,
+    OutOfRange = 16,
+    QueueFull = 17,
+    CannotMove = 18,
+    CannotProduce = 19,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

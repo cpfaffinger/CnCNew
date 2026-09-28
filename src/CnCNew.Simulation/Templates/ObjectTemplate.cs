@@ -4,11 +4,27 @@ using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.Templates;
 
 /// <summary>A simulation module of a template: its binding, its typed data, and its position in declaration order.</summary>
 public sealed record ModuleSpec(string Name, string Tag, IModuleBinding Binding, ModuleData Data);
+
+/// <summary>
+/// One alternative-satisfies-the-line requirement of a <c>Prerequisites</c> block (<c>ThingTemplate::parsePrerequisites</c>):
+/// an <c>Object</c> line names alternative built units, a <c>Science</c> line names one required science. All lines are AND'ed.
+/// </summary>
+public sealed record PrerequisiteLine(bool IsScience, ImmutableArray<string> Alternatives);
+
+/// <summary>
+/// Straight-line movement constants of one <c>Locomotor</c> selection, already converted to simulation units.
+/// <see cref="TurnRatePerTick"/> is compiled and carried but not yet applied: phase 5's "einfache Bewegung" (simple
+/// movement) turns instantly toward the goal and moves in a straight vector line (no sqrt-free trig is available without
+/// floating point — see <see cref="Fixed.Sqrt"/> — so full turn-rate-clamped heading is deferred to phase 6 alongside
+/// pathfinding, together with terrain and collision).
+/// </summary>
+public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRatePerTick, Fixed Braking, Fixed MinSpeed, Fixed CloseEnoughDist);
 
 /// <summary>
 /// The runtime view of an <c>Object</c> definition. Presentation modules (Draw, ClientUpdate) are listed but never
@@ -18,7 +34,9 @@ public sealed record ModuleSpec(string Name, string Tag, IModuleBinding Binding,
 public sealed class ObjectTemplate
 {
     internal ObjectTemplate(int index, ObjectDefinition definition, ImmutableArray<ModuleSpec> modules,
-        ImmutableArray<string> presentationModules, ImmutableArray<string> missingModules)
+        ImmutableArray<string> presentationModules, ImmutableArray<string> missingModules,
+        ArmorInfo defaultArmor, ArmorInfo? playerUpgradeArmor, int defaultWeapon, int playerUpgradeWeapon, LocomotorInfo? locomotor,
+        ImmutableArray<PrerequisiteLine> prerequisites)
     {
         Index = index;
         Id = definition.Id;
@@ -32,6 +50,15 @@ public sealed class ObjectTemplate
         GeometryMajorRadius = Real(definition, "GeometryMajorRadius");
         GeometryMinorRadius = Real(definition, "GeometryMinorRadius");
         GeometryHeight = Real(definition, "GeometryHeight");
+        BuildCost = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildCost", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money cost ? Fixed.FromInt(cost.Value) : Fixed.Zero;
+        BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? SimulationTiming.SecondsToTicks(seconds) : 0;
+        EnergyProduction = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyProduction", StringComparison.OrdinalIgnoreCase))?.Value.Value is long energy ? checked((int)energy) : 0;
+        DefaultArmor = defaultArmor;
+        PlayerUpgradeArmor = playerUpgradeArmor;
+        DefaultWeapon = defaultWeapon;
+        PlayerUpgradeWeapon = playerUpgradeWeapon;
+        Locomotor = locomotor;
+        Prerequisites = prerequisites;
     }
 
     /// <summary>Position in the ordinally sorted list of all object definitions (stable for one definition graph).</summary>
@@ -44,10 +71,24 @@ public sealed class ObjectTemplate
     public Fixed GeometryMajorRadius { get; }
     public Fixed GeometryMinorRadius { get; }
     public Fixed GeometryHeight { get; }
+    public Fixed BuildCost { get; }
+    public long BuildTicks { get; }
+    public int EnergyProduction { get; }
     public ImmutableArray<ModuleSpec> Modules { get; }
     public ImmutableArray<string> PresentationModules { get; }
     public ImmutableArray<string> MissingModules { get; }
     public bool IsInstantiable => MissingModules.IsEmpty;
+
+    /// <summary><c>ArmorSet Conditions = None</c>; every object has one (the compiled default, possibly all-1.0 coefficients).</summary>
+    public ArmorInfo DefaultArmor { get; }
+    /// <summary><c>ArmorSet Conditions = PLAYER_UPGRADE</c>, if the object declares one (selected once <c>ArmorUpgrade</c> completes).</summary>
+    public ArmorInfo? PlayerUpgradeArmor { get; }
+    /// <summary>Index into the world's <see cref="WeaponCatalog"/> of the <c>WeaponSet Conditions=None</c> primary weapon, or -1.</summary>
+    public int DefaultWeapon { get; }
+    /// <summary>Primary weapon of the <c>WeaponSet Conditions = PLAYER_UPGRADE</c> variant, if any, else -1.</summary>
+    public int PlayerUpgradeWeapon { get; }
+    public LocomotorInfo? Locomotor { get; }
+    public ImmutableArray<PrerequisiteLine> Prerequisites { get; }
 
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
 
@@ -68,20 +109,24 @@ public sealed class ObjectTemplate
 
 public sealed class TemplateBuildException(string message) : FormatException(message);
 
-/// <summary>All object templates of one compiled definition graph.</summary>
+/// <summary>All static game data resolved from one compiled definition graph: objects, upgrades, weapons and armor.</summary>
 public sealed class TemplateCatalog
 {
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
-    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates)
+    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons)
     {
         Templates = templates;
+        Upgrades = upgrades;
+        Weapons = weapons;
         var builder = ImmutableDictionary.CreateBuilder<string, ObjectTemplate>(StringComparer.OrdinalIgnoreCase);
         foreach (var template in templates) builder[template.Name] = template;
         _byName = builder.ToImmutable();
     }
 
     public ImmutableArray<ObjectTemplate> Templates { get; }
+    public UpgradeCatalog Upgrades { get; }
+    public WeaponCatalog Weapons { get; }
     public ObjectTemplate this[int index] => Templates[index];
     public bool TryGet(string name, out ObjectTemplate template) => _byName.TryGetValue(name, out template!);
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);
@@ -90,6 +135,10 @@ public sealed class TemplateCatalog
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(bindings);
+        var upgrades = UpgradeCatalog.Build(graph);
+        var weapons = WeaponCatalog.Build(graph);
+        var armors = ArmorCatalog.Build(graph);
+        var locomotors = BuildLocomotors(graph);
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
         var index = 0;
         foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
@@ -116,15 +165,118 @@ public sealed class TemplateCatalog
                 }
                 try
                 {
-                    specs.Add(new ModuleSpec(module.Name, module.Tag, binding, binding.ParseData(module)));
+                    specs.Add(new ModuleSpec(module.Name, module.Tag, binding, binding.ParseData(module, upgrades)));
                 }
                 catch (Exception exception) when (exception is InvalidDataException or OverflowException or ArgumentException)
                 {
                     throw new TemplateBuildException($"Object '{definition.OriginalName}', module '{module.Name}' ({module.Tag}): {exception.Message}");
                 }
             }
-            templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing]));
+
+            var (defaultArmor, playerUpgradeArmor) = ResolveArmor(definition, armors);
+            var (defaultWeapon, playerUpgradeWeapon) = ResolveWeapon(definition, weapons);
+            var locomotor = ResolveLocomotor(definition, locomotors);
+            var prerequisites = ResolvePrerequisites(definition);
+            templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
+                defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        return new TemplateCatalog(templates.ToImmutable());
+        return new TemplateCatalog(templates.ToImmutable(), upgrades, weapons);
+    }
+
+    private static ImmutableArray<string> ConditionTokens(DefinitionSection set)
+    {
+        var field = set.Fields.LastOrDefault(value => value.Name.Equals("Conditions", StringComparison.OrdinalIgnoreCase));
+        if (field is null) return [];
+        var text = field.Value.OriginalText.Trim();
+        return text.Equals("None", StringComparison.OrdinalIgnoreCase) ? [] : [..text.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)];
+    }
+
+    private static (ArmorInfo Default, ArmorInfo? PlayerUpgrade) ResolveArmor(ObjectDefinition definition, ImmutableDictionary<string, ArmorInfo> armors)
+    {
+        ArmorInfo? defaultArmor = null;
+        ArmorInfo? playerUpgrade = null;
+        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("ArmorSet", StringComparison.OrdinalIgnoreCase)))
+        {
+            var armorName = section.Fields.LastOrDefault(value => value.Name.Equals("Armor", StringComparison.OrdinalIgnoreCase))?.Value.Value switch
+            {
+                DefinitionReference { IsNone: false } reference => reference.Name,
+                _ => null,
+            };
+            if (armorName is null || !armors.TryGetValue(armorName, out var info)) continue;
+            var conditions = ConditionTokens(section);
+            if (conditions.Length == 0) defaultArmor ??= info;
+            else if (conditions is [var only] && only.Equals("PLAYER_UPGRADE", StringComparison.OrdinalIgnoreCase)) playerUpgrade ??= info;
+        }
+        return (defaultArmor ?? ArmorInfo.Default, playerUpgrade);
+    }
+
+    private static (int Default, int PlayerUpgrade) ResolveWeapon(ObjectDefinition definition, WeaponCatalog weapons)
+    {
+        var defaultWeapon = -1;
+        var playerUpgradeWeapon = -1;
+        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)))
+        {
+            var primary = section.Fields.Where(value => value.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault(value => value.Value.OriginalText.TrimStart().StartsWith("PRIMARY", StringComparison.OrdinalIgnoreCase));
+            var weaponName = primary?.Value.Value switch { DefinitionReference { IsNone: false } reference => reference.Name, _ => null };
+            var index = weaponName is not null && weapons.TryGet(weaponName, out var info) ? info.Index : -1;
+            var conditions = ConditionTokens(section);
+            if (conditions.Length == 0) { if (defaultWeapon < 0) defaultWeapon = index; }
+            else if (conditions is [var only] && only.Equals("PLAYER_UPGRADE", StringComparison.OrdinalIgnoreCase)) { if (playerUpgradeWeapon < 0) playerUpgradeWeapon = index; }
+        }
+        return (defaultWeapon, playerUpgradeWeapon);
+    }
+
+    private static ImmutableDictionary<string, LocomotorInfo> BuildLocomotors(CompiledDefinitionGraph graph)
+    {
+        var builder = ImmutableDictionary.CreateBuilder<string, LocomotorInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var definition in graph.Definitions.OfType<LocomotorDefinition>())
+        {
+            decimal Get(string name) => definition.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal value ? value : 0m;
+            var speed = Get("Speed");
+            var acceleration = Get("Acceleration");
+            var braking = Get("Braking");
+            var turnRate = Get("TurnRate");
+            var minSpeed = Get("MinSpeed");
+            var closeEnough = Get("CloseEnoughDist");
+            builder[definition.OriginalName] = new LocomotorInfo(
+                SimulationTiming.PerSecondToPerTick(speed), SimulationTiming.PerSecondSquaredToPerTickSquared(acceleration),
+                SimulationTiming.DegreesPerSecondToRadiansPerTick(turnRate),
+                braking > 0 ? SimulationTiming.PerSecondSquaredToPerTickSquared(braking) : SimulationTiming.PerSecondSquaredToPerTickSquared(acceleration),
+                SimulationTiming.PerSecondToPerTick(minSpeed),
+                // CloseEnoughDist is a plain distance (not a rate): no per-tick conversion. 0 falls back to one tick's travel below.
+                Fixed.FromDecimal(closeEnough));
+        }
+        return builder.ToImmutable();
+    }
+
+    private static LocomotorInfo? ResolveLocomotor(ObjectDefinition definition, ImmutableDictionary<string, LocomotorInfo> locomotors)
+    {
+        // Only the SET_NORMAL entry is used for straight-line movement (phase 5 scope); other sets (freefall, wander, taxi, panic) are phase 6.
+        foreach (var field in definition.Fields.Where(value => value.Name.Equals("Locomotor", StringComparison.OrdinalIgnoreCase)))
+            if (field.Value.Value is TaggedReferenceList { Tag: "SET_NORMAL" } tagged)
+                foreach (var reference in tagged.References)
+                    if (locomotors.TryGetValue(reference.Name, out var info)) return info;
+        return null;
+    }
+
+    private static ImmutableArray<PrerequisiteLine> ResolvePrerequisites(ObjectDefinition definition)
+    {
+        var section = definition.Sections.FirstOrDefault(value => value.Declaration.Equals("Prerequisites", StringComparison.OrdinalIgnoreCase));
+        if (section is null) return [];
+        var lines = ImmutableArray.CreateBuilder<PrerequisiteLine>();
+        foreach (var field in section.Fields)
+        {
+            var isScience = field.Name.Equals("Science", StringComparison.OrdinalIgnoreCase);
+            if (!isScience && !field.Name.Equals("Object", StringComparison.OrdinalIgnoreCase)) continue;
+            var names = field.Value.Value switch
+            {
+                DefinitionReference { IsNone: false } single => ImmutableArray.Create(single.Name),
+                ImmutableArray<DefinitionReference> many => [..many.Where(value => !value.IsNone).Select(value => value.Name)],
+                _ => ImmutableArray<string>.Empty,
+            };
+            if (!names.IsEmpty) lines.Add(new PrerequisiteLine(isScience, names));
+        }
+        return lines.ToImmutable();
     }
 }

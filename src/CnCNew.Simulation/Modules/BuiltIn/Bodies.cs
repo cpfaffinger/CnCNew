@@ -28,7 +28,7 @@ public sealed record BodyData(Fixed MaxHealth, Fixed InitialHealth, Fixed Subdua
 /// Armor coefficients (coefficient 1 here), damage multipliers, damage states, damage FX and the fear-sound random draw
 /// of the reference are phase-5 rules and are not applied.
 /// </summary>
-public class ActiveBody : SimModule, IBodyModule
+public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
 {
     private readonly string _name;
 
@@ -80,6 +80,22 @@ public class ActiveBody : SimModule, IBodyModule
             return DamageOutcome.Killed;
         }
         return Health != PreviousHealth ? DamageOutcome.Applied : DamageOutcome.NoEffect;
+    }
+
+    /// <summary><c>MaxHealthUpgrade.cpp</c>: raises (or lowers) the cap; <paramref name="changeType"/> is one of <c>NameTablesPhase5.MaxHealthChangeType</c>, compared case-insensitively (unrecognized text falls back to the default, matching the reference's zero-based enum default).</summary>
+    public virtual void AdjustMaxHealth(Fixed delta, string changeType)
+    {
+        var oldMax = MaxHealth;
+        var newMax = Fixed.Max(Fixed.Zero, MaxHealth + delta);
+        MaxHealth = newMax;
+        Health = changeType.ToUpperInvariant() switch
+        {
+            "PRESERVE_RATIO" => oldMax > Fixed.Zero ? Fixed.Min(newMax, Health * newMax / oldMax) : Health,
+            "ADD_CURRENT_HEALTH_TOO" => Fixed.Min(newMax, Health + delta),
+            "FULLY_HEAL" => newMax,
+            _ => Fixed.Min(Health, newMax), // SAME_CURRENTHEALTH
+        };
+        Entity.EffectivelyDead = Health <= Fixed.Zero;
     }
 
     public override void Describe(IStateWriter writer)
