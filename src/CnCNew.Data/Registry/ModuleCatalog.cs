@@ -247,6 +247,28 @@ public static class ModuleCatalog
             new("FlameDamageLimit", FieldType.Real, Source: "FlammableUpdate.cpp"),
             new("FlameDamageExpiration", FieldType.DurationMs, Source: "FlammableUpdate.cpp"),
         ]);
+        {
+            // TransitionDamageFX.h has 111 keys: three DamageTypeFlags fields plus 12 slots x 3 body-damage-states x
+            // 3 effect kinds (FX list, object creation list, particle system). Only DamageOCLTypes and the 36 OCL name
+            // slots are mechanically relevant (see the simulation-layer doc comment); FX lists and particle systems —
+            // pure presentation — are still typed (Opaque, an implemented module may not have unlisted keys) but
+            // deferred.
+            ImmutableArray<FieldSchema> Slots(string prefix, FieldType type)
+            {
+                var slots = ImmutableArray.CreateBuilder<FieldSchema>();
+                for (var i = 1; i <= 12; i++) slots.Add(new FieldSchema($"{prefix}{i}", type, Source: "TransitionDamageFX.h"));
+                return slots.ToImmutable();
+            }
+            Add("TransitionDamageFX",
+            [
+                new("DamageFXTypes", FieldType.Opaque, Source: "TransitionDamageFX.h"),
+                new("DamageOCLTypes", FieldType.AllNoneDeltaFlags, Table: NameTables.DamageType, Source: "TransitionDamageFX.h"),
+                new("DamageParticleTypes", FieldType.Opaque, Source: "TransitionDamageFX.h"),
+                ..Slots("DamagedFXList", FieldType.Opaque), ..Slots("ReallyDamagedFXList", FieldType.Opaque), ..Slots("RubbleFXList", FieldType.Opaque),
+                ..Slots("DamagedOCL", FieldType.Text), ..Slots("ReallyDamagedOCL", FieldType.Text), ..Slots("RubbleOCL", FieldType.Text),
+                ..Slots("DamagedParticleSystem", FieldType.Opaque), ..Slots("ReallyDamagedParticleSystem", FieldType.Opaque), ..Slots("RubbleParticleSystem", FieldType.Opaque),
+            ]);
+        }
 
         return builder.ToImmutable();
     }

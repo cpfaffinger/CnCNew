@@ -13,6 +13,2436 @@
     },
     {
       "category": "deferred-field",
+      "name": "GameData/AdjustCliffTextures",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AllowedHeightVariationForBuilding",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AmmoPipScaleFactor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AmmoPipScreenOffset",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AmmoPipWorldOffset",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AudioOn",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoAflameParticleMax",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoAflameParticlePrefix",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoAflameParticleSystem",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoFireParticleLargeMax",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoFireParticleLargePrefix",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoFireParticleLargeSystem",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoFireParticleMediumMax",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoFireParticleMediumPrefix",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoFireParticleMediumSystem",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoFireParticleSmallMax",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoFireParticleSmallPrefix",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoFireParticleSmallSystem",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoSmokeParticleLargeMax",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoSmokeParticleLargePrefix",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoSmokeParticleLargeSystem",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoSmokeParticleMediumMax",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoSmokeParticleMediumPrefix",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoSmokeParticleMediumSystem",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoSmokeParticleSmallMax",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoSmokeParticleSmallPrefix",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/AutoSmokeParticleSmallSystem",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/BaseRegenDelay",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/BaseRegenHealthPercentPerSecond",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/BilinearTerrainTex",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/BuildSpeed",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/CameraAdjustSpeed",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/CameraAudibleRadius",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/CameraHeight",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/CameraPitch",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/CameraYaw",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ChipsetType",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ClearAlpha",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/CommandCenterHealAmount",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/CommandCenterHealRange",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ContainerPipScaleFactor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ContainerPipScreenOffset",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ContainerPipWorldOffset",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/DebugAI",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/DebugAIObstacles",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/DefaultOcclusionDelay",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/DefaultStartingCash",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/DefaultStructureRubbleHeight",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/DownwindAngle",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/DrawEntireTerrain",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/DrawSkyBox",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/EnforceMaxCameraHeight",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/FogAlpha",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ForceModelsToFollowTimeOfDay",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ForceModelsToFollowWeather",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/FramesPerSecondLimit",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/GetHealedAnimationName",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/GetHealedAnimationTime",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/GetHealedAnimationZRise",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/Gravity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/GroundStiffness",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/GroupMoveClickToGatherAreaFactor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/GroupSelectMinSelectSize",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/GroupSelectVolumeBase",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/GroupSelectVolumeIncrement",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/HealthBonus_Elite",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/HealthBonus_Heroic",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/HealthBonus_Veteran",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/HideGarrisonFlags",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/HistoricDamageLimit",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/HorizontalScrollSpeedFactor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/HumanSoloPlayerHealthBonus_Easy",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/HumanSoloPlayerHealthBonus_Hard",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/HumanSoloPlayerHealthBonus_Normal",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/InfantryLightAfternoonScale",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/InfantryLightEveningScale",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/InfantryLightMorningScale",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/InfantryLightNightScale",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/KeyboardCameraRotateSpeed",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/KeyboardScrollSpeedFactor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/LevelGainAnimationName",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/LevelGainAnimationTime",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/LevelGainAnimationZRise",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/LowEnergyPenaltyModifier",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MakeTrackMarks",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MapName",
+      "count": 2,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxCameraHeight",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxFieldParticleCount",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxLineBuildObjects",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxLowEnergyProductionSpeed",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxParticleCount",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxRoadIndex",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxRoadSegments",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxRoadTypes",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxRoadVertex",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxShakeIntensity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxShakeRange",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxShellScreens",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxTerrainTracks",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxTunnelCapacity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MaxUnitSelectSounds",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MinCameraHeight",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MinDistFromEdgeOfMapForBuild",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MinLowEnergyProductionSpeed",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MoveHintName",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MovementPenaltyDamageState",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MultiPassTerrain",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MultipleFactory",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/MusicOn",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/NetworkCushionHistoryLength",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/NetworkDisconnectScreenNotifyTime",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/NetworkDisconnectTime",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/NetworkFPSHistoryLength",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/NetworkKeepAliveDelay",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/NetworkLatencyHistoryLength",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/NetworkPlayerTimeoutTime",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/NetworkRunAheadMetricsTime",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/NetworkRunAheadSlack",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/OccludedColorLuminanceScale",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ParticleScale",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/PartitionCellSize",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/RefundPercent",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/RightMouseAlwaysScrolls",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ScrollAmountCutoff",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/SelectionFlashHouseColor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/SelectionFlashSaturationFactor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/SellPercentage",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShakeCineExtremeIntensity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShakeCineInsaneIntensity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShakeNormalIntensity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShakeSevereIntensity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShakeStrongIntensity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShakeSubtleIntensity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShellMapName",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShowObjectHealth",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShroudAlpha",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ShroudColor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/SkyBoxPositionZ",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/SkyBoxScale",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/SoundsOn",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/SpecialPowerViewObject",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/SpeechOn",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/StandardMinefieldDensity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/StandardMinefieldDistance",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/StandardPublicBone",
+      "count": 30,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/StealthFriendlyOpacity",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/StretchTerrain",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/StructureStiffness",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/SupplyBuildBorder",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainHeightAtEdgeOfMap",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLOD",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLODTargetTimeMS",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingAfternoonAmbient",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingAfternoonAmbient2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingAfternoonAmbient3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingAfternoonDiffuse",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingAfternoonDiffuse2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingAfternoonDiffuse3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingAfternoonLightPos",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingAfternoonLightPos2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingAfternoonLightPos3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingEveningAmbient",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingEveningDiffuse",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingEveningLightPos",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingMorningAmbient",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingMorningDiffuse",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingMorningLightPos",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingNightAmbient",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingNightDiffuse",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainLightingNightLightPos",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingAfternoonAmbient",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingAfternoonAmbient2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingAfternoonAmbient3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingAfternoonDiffuse",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingAfternoonDiffuse2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingAfternoonDiffuse3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingAfternoonLightPos",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingAfternoonLightPos2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingAfternoonLightPos3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingEveningAmbient",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingEveningDiffuse",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingEveningLightPos",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingMorningAmbient",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingMorningDiffuse",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingMorningLightPos",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingNightAmbient",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingNightDiffuse",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TerrainObjectsLightingNightLightPos",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TextureReductionFactor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TimeOfDay",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/TrilinearTerrainTex",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UnlookPersistDuration",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/Use3WayTerrainBlends",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseBehindBuildingMarker",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseCloudMap",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseCloudPlane",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseFPSLimit",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseHalfHeightMap",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseLightMap",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseShadowDecals",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseShadowVolumes",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseTrees",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/UseWaterPlane",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/ValuePerSupplyBox",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAngle1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAngle2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAngle3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAngle4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationA1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationA2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationA3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationA4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationB1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationB2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationB3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationB4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationC1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationC2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationC3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationC4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationRange1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationRange2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationRange3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAttenuationRange4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAvailableMaps1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAvailableMaps2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAvailableMaps3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterAvailableMaps4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterGridSize1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterGridSize2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterGridSize3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterGridSize4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterHeightClampHi1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterHeightClampHi2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterHeightClampHi3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterHeightClampHi4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterHeightClampLow1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterHeightClampLow2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterHeightClampLow3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterHeightClampLow4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterXGridCells1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterXGridCells2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterXGridCells3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterXGridCells4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterXPosition1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterXPosition2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterXPosition3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterXPosition4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterYGridCells1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterYGridCells2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterYGridCells3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterYGridCells4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterYPosition1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterYPosition2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterYPosition3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterYPosition4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterZPosition1",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterZPosition2",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterZPosition3",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VertexWaterZPosition4",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VerticalScrollSpeedFactor",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/VideoOn",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/WaterExtentX",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/WaterExtentY",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/WaterPositionX",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/WaterPositionY",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/WaterPositionZ",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/WaterType",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/WeaponBonus",
+      "count": 23,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GameData/Weather",
+      "count": 1,
+      "owners": [
+        "GameData"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Locomotor/AccelerationPitchLimit",
       "count": 101,
       "owners": [
@@ -1111,6 +3541,222 @@
     },
     {
       "category": "deferred-field",
+      "name": "TransitionDamageFX/DamageFXTypes",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/DamageParticleTypes",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/DamagedFXList1",
+      "count": 31,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/DamagedParticleSystem1",
+      "count": 425,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/DamagedParticleSystem4",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/DamagedParticleSystem5",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/DamagedParticleSystem6",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/ReallyDamagedFXList1",
+      "count": 263,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/ReallyDamagedParticleSystem1",
+      "count": 654,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/ReallyDamagedParticleSystem2",
+      "count": 425,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/ReallyDamagedParticleSystem3",
+      "count": 417,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/ReallyDamagedParticleSystem4",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/ReallyDamagedParticleSystem5",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/ReallyDamagedParticleSystem6",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/ReallyDamagedParticleSystem7",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/ReallyDamagedParticleSystem8",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/RubbleFXList1",
+      "count": 1,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/RubbleParticleSystem1",
+      "count": 209,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/RubbleParticleSystem2",
+      "count": 194,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/RubbleParticleSystem3",
+      "count": 194,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/RubbleParticleSystem4",
+      "count": 194,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/RubbleParticleSystem5",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/RubbleParticleSystem6",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TransitionDamageFX/RubbleParticleSystem7",
+      "count": 2,
+      "owners": [
+        "TransitionDamageFX"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Upgrade/AcademyClassify",
       "count": 3,
       "owners": [
@@ -2054,7 +4700,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 9402,
+      "count": 8704,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -3844,15 +6490,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "TransitionDamageFX",
-      "count": 698,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
