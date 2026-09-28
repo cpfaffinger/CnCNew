@@ -4,6 +4,438 @@
   "entries": [
     {
       "category": "deferred-field",
+      "name": "Locomotor/AccelerationPitchLimit",
+      "count": 101,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/AirborneTargetingHeight",
+      "count": 45,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/AllowAirborneMotiveForce",
+      "count": 72,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/Appearance",
+      "count": 203,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/Apply2DFrictionWhenAirborne",
+      "count": 45,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/BounceAmount",
+      "count": 56,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/CanMoveBackwards",
+      "count": 34,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/CirclingRadius",
+      "count": 13,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/CloseEnoughDist3D",
+      "count": 8,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/DecelerationPitchLimit",
+      "count": 89,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/DownhillOnly",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/ElevatorCorrectionDegree",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/ElevatorCorrectionRate",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/Extra2DFriction",
+      "count": 4,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/ForwardAccelerationPitchFactor",
+      "count": 97,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/ForwardVelocityPitchFactor",
+      "count": 38,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/FrontWheelTurnAngle",
+      "count": 49,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/GroupMovementPriority",
+      "count": 28,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/HasSuspension",
+      "count": 49,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/LateralAccelerationRollFactor",
+      "count": 98,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/LateralVelocityRollFactor",
+      "count": 38,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/Lift",
+      "count": 45,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/LiftDamaged",
+      "count": 44,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/MaxThrustAngle",
+      "count": 27,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/MaximumWheelCompression",
+      "count": 49,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/MaximumWheelExtension",
+      "count": 49,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/PitchDamping",
+      "count": 143,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/PitchInDirectionOfZVelFactor",
+      "count": 13,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/PitchStiffness",
+      "count": 143,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/PreferredHeightDamping",
+      "count": 5,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/RollDamping",
+      "count": 143,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/RollStiffness",
+      "count": 143,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/RudderCorrectionDegree",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/RudderCorrectionRate",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/SlideIntoPlaceTime",
+      "count": 3,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/SpeedLimitZ",
+      "count": 7,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/Surfaces",
+      "count": 204,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/ThrustMaxWobble",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/ThrustMinWobble",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/ThrustRoll",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/ThrustWobbleRate",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/TurnPivotOffset",
+      "count": 65,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/UniformAxialDamping",
+      "count": 7,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/WanderAboutPointRadius",
+      "count": 1,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/WanderLengthFactor",
+      "count": 2,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/WanderWidthFactor",
+      "count": 2,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Locomotor/ZAxisBehavior",
+      "count": 178,
+      "owners": [
+        "Locomotor"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ModelConditionUpgrade/ConditionFlag",
+      "count": 55,
+      "owners": [
+        "ModelConditionUpgrade"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Object/ButtonImage",
       "count": 672,
       "owners": [
@@ -334,6 +766,681 @@
         "Object"
       ],
       "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ProductionUpdate/ConstructionCompleteDuration",
+      "count": 35,
+      "owners": [
+        "ProductionUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ProductionUpdate/DisabledTypesToProcess",
+      "count": 8,
+      "owners": [
+        "ProductionUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ProductionUpdate/DoorCloseTime",
+      "count": 35,
+      "owners": [
+        "ProductionUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ProductionUpdate/DoorOpeningTime",
+      "count": 35,
+      "owners": [
+        "ProductionUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ProductionUpdate/DoorWaitOpenTime",
+      "count": 35,
+      "owners": [
+        "ProductionUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ProductionUpdate/NumDoorAnimations",
+      "count": 35,
+      "owners": [
+        "ProductionUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ProductionUpdate/QuantityModifier",
+      "count": 5,
+      "owners": [
+        "ProductionUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Science/Description",
+      "count": 397,
+      "owners": [
+        "Science"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Science/DisplayName",
+      "count": 397,
+      "owners": [
+        "Science"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthUpdate/DisguiseFX",
+      "count": 6,
+      "owners": [
+        "StealthUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthUpdate/DisguiseRevealFX",
+      "count": 6,
+      "owners": [
+        "StealthUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthUpdate/EnemyDetectionEvaEvent",
+      "count": 19,
+      "owners": [
+        "StealthUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StealthUpdate/OwnDetectionEvaEvent",
+      "count": 19,
+      "owners": [
+        "StealthUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Upgrade/AcademyClassify",
+      "count": 3,
+      "owners": [
+        "Upgrade"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Upgrade/ButtonImage",
+      "count": 96,
+      "owners": [
+        "Upgrade"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Upgrade/DisplayName",
+      "count": 92,
+      "owners": [
+        "Upgrade"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Upgrade/ResearchSound",
+      "count": 63,
+      "owners": [
+        "Upgrade"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Upgrade/UnitSpecificSound",
+      "count": 11,
+      "owners": [
+        "Upgrade"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AcceptableAimDelta",
+      "count": 44,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AllowAttackGarrisonedBldgs",
+      "count": 17,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AntiAirborneInfantry",
+      "count": 85,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AntiAirborneVehicle",
+      "count": 93,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AntiBallisticMissile",
+      "count": 16,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AntiGround",
+      "count": 69,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AntiMine",
+      "count": 2,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AntiProjectile",
+      "count": 8,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AntiSmallMissile",
+      "count": 13,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/AutoReloadWhenIdle",
+      "count": 4,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/CapableOfFollowingWaypoints",
+      "count": 4,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ContinueAttackRange",
+      "count": 2,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ContinuousFireCoast",
+      "count": 17,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ContinuousFireOne",
+      "count": 8,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ContinuousFireTwo",
+      "count": 8,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/DamageDealtAtSelfPosition",
+      "count": 38,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/DamageStatusType",
+      "count": 1,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/FireFX",
+      "count": 292,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/FireOCL",
+      "count": 38,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/FireSound",
+      "count": 238,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/FireSoundLoopTime",
+      "count": 36,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/HistoricBonusCount",
+      "count": 4,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/HistoricBonusRadius",
+      "count": 4,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/HistoricBonusTime",
+      "count": 4,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/HistoricBonusWeapon",
+      "count": 4,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/LaserBoneName",
+      "count": 18,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/LaserName",
+      "count": 18,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/LeechRangeWeapon",
+      "count": 11,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/MaxTargetPitch",
+      "count": 28,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/MinTargetPitch",
+      "count": 27,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/MissileCallsOnDie",
+      "count": 6,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/PlayFXWhenStealthed",
+      "count": 4,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/PreAttackDelay",
+      "count": 32,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/PreAttackType",
+      "count": 32,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ProjectileCollidesWith",
+      "count": 150,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ProjectileDetonationFX",
+      "count": 158,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ProjectileDetonationOCL",
+      "count": 24,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ProjectileExhaust",
+      "count": 89,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ProjectileObject",
+      "count": 284,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ProjectileStreamName",
+      "count": 23,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/RadiusDamageAffects",
+      "count": 335,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/RequestAssistRange",
+      "count": 6,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ScaleWeaponSpeed",
+      "count": 4,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ScatterRadius",
+      "count": 34,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ScatterRadiusVsInfantry",
+      "count": 128,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ScatterTarget",
+      "count": 56,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ScatterTargetScalar",
+      "count": 5,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ShockWaveAmount",
+      "count": 11,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ShockWaveRadius",
+      "count": 11,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ShockWaveTaperOff",
+      "count": 11,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ShotsPerBarrel",
+      "count": 6,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/ShowsAmmoPips",
+      "count": 14,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/SuspendFXDelay",
+      "count": 1,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/VeterancyFireFX",
+      "count": 61,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/VeterancyProjectileExhaust",
+      "count": 75,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/WeaponBonus",
+      "count": 109,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "Weapon/WeaponRecoil",
+      "count": 57,
+      "owners": [
+        "Weapon"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
     },
     {
       "category": "definition",
@@ -687,28 +1794,28 @@
     {
       "category": "diagnostic",
       "name": "compatibility-duplicate-key",
-      "count": 171,
+      "count": 120,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
     {
       "category": "diagnostic",
       "name": "compatibility-duplicate-module-tag",
-      "count": 113,
+      "count": 95,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
     {
       "category": "diagnostic",
       "name": "compatibility-ignored-tokens",
-      "count": 3,
+      "count": 4,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
     {
       "category": "diagnostic",
       "name": "compatibility-missing-remove-target",
-      "count": 52,
+      "count": 51,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -722,7 +1829,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 12037,
+      "count": 10229,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -787,26 +1894,8 @@
     },
     {
       "category": "duplicate-key",
-      "name": "Object/BuildCost",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/BuildTime",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
       "name": "Object/ButtonImage",
-      "count": 7,
+      "count": 5,
       "owners": [
         "Object"
       ],
@@ -815,7 +1904,7 @@
     {
       "category": "duplicate-key",
       "name": "Object/CommandSet",
-      "count": 12,
+      "count": 10,
       "owners": [
         "Object"
       ],
@@ -824,7 +1913,7 @@
     {
       "category": "duplicate-key",
       "name": "Object/CrushableLevel",
-      "count": 3,
+      "count": 1,
       "owners": [
         "Object"
       ],
@@ -833,16 +1922,7 @@
     {
       "category": "duplicate-key",
       "name": "Object/CrusherLevel",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/DisplayName",
-      "count": 2,
+      "count": 1,
       "owners": [
         "Object"
       ],
@@ -851,16 +1931,7 @@
     {
       "category": "duplicate-key",
       "name": "Object/EditorSorting",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/ExperienceRequired",
-      "count": 2,
+      "count": 1,
       "owners": [
         "Object"
       ],
@@ -869,16 +1940,7 @@
     {
       "category": "duplicate-key",
       "name": "Object/ExperienceValue",
-      "count": 12,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/IsTrainable",
-      "count": 2,
+      "count": 10,
       "owners": [
         "Object"
       ],
@@ -887,7 +1949,7 @@
     {
       "category": "duplicate-key",
       "name": "Object/KindOf",
-      "count": 9,
+      "count": 7,
       "owners": [
         "Object"
       ],
@@ -905,7 +1967,7 @@
     {
       "category": "duplicate-key",
       "name": "Object/RadarPriority",
-      "count": 7,
+      "count": 5,
       "owners": [
         "Object"
       ],
@@ -914,7 +1976,7 @@
     {
       "category": "duplicate-key",
       "name": "Object/SelectPortrait",
-      "count": 7,
+      "count": 5,
       "owners": [
         "Object"
       ],
@@ -931,24 +1993,6 @@
     },
     {
       "category": "duplicate-key",
-      "name": "Object/ShroudClearingRange",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/Side",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
       "name": "Object/SoundAmbient",
       "count": 5,
       "owners": [
@@ -958,43 +2002,7 @@
     },
     {
       "category": "duplicate-key",
-      "name": "Object/SoundMoveStart",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/SoundMoveStartDamaged",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
       "name": "Object/TransportSlotCount",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/UpgradeCameo1",
-      "count": 8,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/UpgradeCameo2",
       "count": 1,
       "owners": [
         "Object"
@@ -1003,17 +2011,8 @@
     },
     {
       "category": "duplicate-key",
-      "name": "Object/VisionRange",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/VoiceAttack",
-      "count": 2,
+      "name": "Object/UpgradeCameo1",
+      "count": 6,
       "owners": [
         "Object"
       ],
@@ -1023,33 +2022,6 @@
       "category": "duplicate-key",
       "name": "Object/VoiceFear",
       "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/VoiceGuard",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/VoiceMove",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/VoiceSelect",
-      "count": 2,
       "owners": [
         "Object"
       ],
@@ -1345,15 +2317,6 @@
     },
     {
       "category": "module",
-      "name": "AIUpdateInterface",
-      "count": 511,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "AnimatedParticleSysBoneClientUpdate",
       "count": 32,
       "owners": [
@@ -1365,15 +2328,6 @@
       "category": "module",
       "name": "AnimationSteeringUpdate",
       "count": 11,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "ArmorUpgrade",
-      "count": 154,
       "owners": [
         "Object"
       ],
@@ -1410,15 +2364,6 @@
       "category": "module",
       "name": "AutoFindHealingUpdate",
       "count": 34,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "AutoHealBehavior",
-      "count": 90,
       "owners": [
         "Object"
       ],
@@ -1588,15 +2533,6 @@
     },
     {
       "category": "module",
-      "name": "CommandSetUpgrade",
-      "count": 124,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "ConvertToCarBombCrateCollide",
       "count": 8,
       "owners": [
@@ -1634,7 +2570,7 @@
     {
       "category": "module",
       "name": "CreateCrateDie",
-      "count": 264,
+      "count": 266,
       "owners": [
         "Object"
       ],
@@ -1733,7 +2669,7 @@
     {
       "category": "module",
       "name": "EjectPilotDie",
-      "count": 46,
+      "count": 48,
       "owners": [
         "Object"
       ],
@@ -1743,15 +2679,6 @@
       "category": "module",
       "name": "EnemyNearUpdate",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "ExperienceScalarUpgrade",
-      "count": 85,
       "owners": [
         "Object"
       ],
@@ -1832,7 +2759,7 @@
     {
       "category": "module",
       "name": "FlammableUpdate",
-      "count": 825,
+      "count": 827,
       "owners": [
         "Object"
       ],
@@ -2029,24 +2956,6 @@
     },
     {
       "category": "module",
-      "name": "LocomotorSetUpgrade",
-      "count": 18,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "MaxHealthUpgrade",
-      "count": 50,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "MinefieldBehavior",
       "count": 3,
       "owners": [
@@ -2080,15 +2989,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "ModelConditionUpgrade",
-      "count": 55,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
@@ -2139,15 +3039,6 @@
       "category": "module",
       "name": "OCLUpdate",
       "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "ObjectCreationUpgrade",
-      "count": 132,
       "owners": [
         "Object"
       ],
@@ -2272,15 +3163,6 @@
     },
     {
       "category": "module",
-      "name": "ProductionUpdate",
-      "count": 243,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "ProjectileStreamUpdate",
       "count": 7,
       "owners": [
@@ -2310,15 +3192,6 @@
       "category": "module",
       "name": "RadarUpdate",
       "count": 9,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "RadarUpgrade",
-      "count": 15,
       "owners": [
         "Object"
       ],
@@ -2623,24 +3496,6 @@
     },
     {
       "category": "module",
-      "name": "StealthUpdate",
-      "count": 133,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "StealthUpgrade",
-      "count": 25,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "StickyBombUpdate",
       "count": 4,
       "owners": [
@@ -2777,7 +3632,7 @@
     {
       "category": "module",
       "name": "TransitionDamageFX",
-      "count": 696,
+      "count": 698,
       "owners": [
         "Object"
       ],
@@ -3048,24 +3903,6 @@
       "category": "module",
       "name": "WeaponBonusUpdate",
       "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "WeaponBonusUpgrade",
-      "count": 62,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "WeaponSetUpgrade",
-      "count": 119,
       "owners": [
         "Object"
       ],
