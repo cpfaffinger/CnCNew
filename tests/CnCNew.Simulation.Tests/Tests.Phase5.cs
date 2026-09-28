@@ -305,6 +305,20 @@ static partial class Tests
           End
         End
 
+        Object Poisonable
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = PoisonedBehavior Poison01
+            PoisonDamageInterval = 100
+            PoisonDuration = 500
+          End
+        End
+
         Science SCIENCE_Intrinsic
           IsGrantable = Yes
         End
@@ -846,6 +860,72 @@ static partial class Tests
         var expiry = world.Tick + 16;
         while (world.Tick <= expiry) world.Step();
         Check.That(!enemy.HasStatus(detectedBit), "DETECTED expires once nothing re-marks it before its duration elapses.");
+    }
+
+    /// <summary>
+    /// The last of the originally named "next blocker modules by frequency" (docs/HANDOFF-PHASE5.md), even though a
+    /// fresh audit-coverage run showed it unlocks zero objects alone (every occurrence is also blocked by a still-missing
+    /// module — see Phase5BlockerModules's doc comment): <c>PoisonedBehavior</c> reapplies a poison hit's actual damage
+    /// periodically for its duration, re-poisoning extends the duration and only ever moves the next tick earlier, and
+    /// healing cures it outright.
+    /// </summary>
+    public static void Phase5Poisoned()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Poisonable");
+        world.Step();
+        var target = world.FindEntity(new EntityId(1))!;
+        var body = target.Body!;
+
+        feeder.Damage(1, 10, damageType: DamageTypes.Poison);
+        world.Step();
+        Check.That(body.Health == Fixed.FromInt(290), "The initial poison hit applies its own damage immediately.");
+        var doseTick = world.Tick - 1;
+
+        // PoisonDamageInterval = 100ms = 3 ticks: the actual damage dealt by the original hit (10) reapplies every interval.
+        while (world.Tick <= doseTick + 3) world.Step();
+        Check.That(body.Health == Fixed.FromInt(280), "The first periodic poison tick reapplies the original actual damage dealt (10).");
+
+        while (world.Tick <= doseTick + 12) world.Step();
+        Check.That(body.Health == Fixed.FromInt(250), "Four periodic ticks have landed by now (at +3, +6, +9, +12).");
+
+        // PoisonDuration = 500ms = 15 ticks: the fifth and final periodic tick lands exactly at the duration boundary,
+        // then the poison wears off (the reference: "unless the poison killed us... turn off our special effects").
+        while (world.Tick <= doseTick + 15) world.Step();
+        Check.That(body.Health == Fixed.FromInt(240), "The fifth periodic tick lands exactly at the duration boundary, then the poison wears off.");
+
+        var healthAfterWearOff = body.Health;
+        while (world.Tick <= doseTick + 18) world.Step();
+        Check.That(body.Health == healthAfterWearOff, "No further ticks land once the poison has worn off.");
+
+        // A fresh dose while not currently poisoned starts a clean cycle; a second dose shortly after, while the first
+        // cycle is still ticking, extends the duration but only ever moves the next damage tick EARLIER (the
+        // reference's min(), never later) — and the periodic tick that follows reapplies the LATEST dose's amount.
+        feeder.Damage(1, 5, damageType: DamageTypes.Poison);
+        world.Step();
+        var secondDoseTick = world.Tick - 1;
+        Check.That(body.Health == healthAfterWearOff - Fixed.FromInt(5), "A fresh poison dose applies its own damage immediately.");
+
+        feeder.Damage(1, 20, damageType: DamageTypes.Poison);
+        world.Step();
+        var healthAfterThirdDose = body.Health;
+        Check.That(healthAfterThirdDose == healthAfterWearOff - Fixed.FromInt(5) - Fixed.FromInt(20), "Re-poisoning while still ticking applies its own damage too.");
+
+        while (world.Tick <= secondDoseTick + 3) world.Step();
+        Check.That(body.Health == healthAfterThirdDose - Fixed.FromInt(20),
+            "The periodic tick lands at the FIRST dose's schedule (+3 from the second dose, not +3 from the third) but reapplies the LATEST dose's amount (20, not 5).");
+
+        // Healing cures the poison outright (IDamageModule.OnHealing).
+        var healthBeforeHeal = body.Health;
+        feeder.Damage(1, 5, damageType: DamageTypes.Healing);
+        world.Step();
+        var healTick = world.Tick - 1;
+        Check.That(body.Health == healthBeforeHeal + Fixed.FromInt(5), "Healing applies normally.");
+        var healthAfterHeal = body.Health;
+        while (world.Tick <= healTick + 20) world.Step();
+        Check.That(body.Health == healthAfterHeal, "Healing cures the poison outright: no further periodic ticks land.");
     }
 
     public static void Phase5Victory()
