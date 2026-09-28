@@ -81,9 +81,14 @@ public sealed class Entity
     public bool DestroyRequested { get; internal set; }
     public long SpawnTick { get; }
 
+    /// <summary>The container currently holding this entity, if any (<c>Object::getContainedBy</c>). <see cref="Ids.EntityId.Invalid"/> when not contained.</summary>
+    public EntityId ContainedBy { get; internal set; } = EntityId.Invalid;
+
     public IReadOnlyList<SimModule> Modules => ModuleArray;
     internal SimModule[] ModuleArray { get; set; } = [];
     public IBodyModule? Body { get; internal set; }
+    /// <summary>The entity's own container module, if it has one (<c>ContainModuleInterface::asOpenContain</c>). One per entity, matching phase 5's scope.</summary>
+    public IContainerModule? Container { get; internal set; }
     internal IDieModule[] Dies { get; set; } = [];
     internal IEventReceiver[] Receivers { get; set; } = [];
     internal IUpgradeModule[] UpgradeModules { get; set; } = [];
@@ -113,6 +118,7 @@ public sealed class Entity
         writer.Bool("slowDeathStarted", SlowDeathStarted);
         writer.Bool("destroyRequested", DestroyRequested);
         writer.Int("spawnTick", SpawnTick);
+        writer.UInt("containedBy", ContainedBy.Value);
         CompletedUpgrades.Describe(writer, "completedUpgrades");
         writer.Fixed("speed", Speed);
         writer.Bool("hasMoveTarget", HasMoveTarget);

@@ -11,7 +11,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 3;
+    public const int Version = 4;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -28,8 +28,10 @@ public static class CommandTypes
     public const ushort FireWeapon = 12;
     public const ushort GiveSciencePoints = 13;
     public const ushort PurchaseScience = 14;
+    public const ushort EnterContainer = 15;
+    public const ushort ExitContainer = 16;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= PurchaseScience;
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= ExitContainer;
 }
 
 /// <summary>
@@ -82,6 +84,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.GiveSciencePoints => new GiveSciencePointsCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target"))), checked((int)reader.Int("amount"))),
             CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, reader.Text("science")),
+            CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("container")))),
+            CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor")))),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -189,6 +193,33 @@ public sealed record PurchaseScienceCommand(PlayerId Player, ulong Sequence, lon
     protected override void DescribeBody(IStateWriter writer) => writer.Text("science", Science);
 }
 
+/// <summary>
+/// Places <see cref="Actor"/> inside <see cref="Container"/> (<c>ContainModuleInterface::addToContain</c>). Phase 5 has no
+/// pathfinding/movement-to-enter (matches the rest of phase 5's "instant, no real spatial gameplay" economy/production
+/// commands): entry succeeds immediately if <c>IsValidContainerFor</c> allows it, regardless of distance.
+/// </summary>
+public sealed record EnterContainerCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Actor, EntityId Container) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.EnterContainer;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("actor", Actor.Value);
+        writer.UInt("container", Container.Value);
+    }
+}
+
+/// <summary>
+/// Removes <see cref="Actor"/> from whatever currently contains it. Either the actor's own owner or the container's
+/// owner may order this (the reference's "Evacuate" command belongs to the container's owner; a passenger's own owner
+/// can also always leave).
+/// </summary>
+public sealed record ExitContainerCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Actor) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.ExitContainer;
+    protected override void DescribeBody(IStateWriter writer) => writer.UInt("actor", Actor.Value);
+}
+
 /// <summary>Creates an entity from a template. Owner 0 defaults to the issuing player; only the system may spawn for others.</summary>
 public sealed record SpawnCommand(PlayerId Player, ulong Sequence, long Tick, string Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle)
     : SimCommand(Player, Sequence, Tick)
@@ -294,6 +325,10 @@ public enum CommandRejection : byte
     /// <summary><c>Player::isCapableOfPurchasingScience</c>: a purchase cost of 0 means the science is not directly purchasable (only ever granted, e.g. as an intrinsic faction science).</summary>
     ScienceNotPurchasable = 21,
     InsufficientSciencePurchasePoints = 22,
+    /// <summary><c>OpenContain::isValidContainerFor</c> failed: KindOf filter, relationship (<c>AllowAlliesInside</c> etc.), capacity, or (<c>GarrisonContain</c>) the container is destroyed, dead or too damaged to garrison.</summary>
+    CannotEnterContainer = 23,
+    /// <summary>An exit was requested for an entity that is not currently contained (by anything, or not by the named container).</summary>
+    NotContained = 24,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

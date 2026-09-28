@@ -140,6 +140,25 @@ public interface IEventReceiver
 }
 
 /// <summary>
+/// A module that can hold other entities (<c>ContainModuleInterface</c>/<c>OpenContain</c>). Phase 5 models one
+/// container type (<c>GarrisonContain</c>) with a bounded feature set — capacity, <c>KindOf</c>/relationship gating,
+/// death and damage-state ejection, periodic healing — not the reference's full <c>OpenContain</c> (firepoints, exit
+/// paths, weapon-bonus passthrough, capture handling: all deferred, documented at the module).
+/// </summary>
+public interface IContainerModule
+{
+    /// <summary>-1 means unlimited (<c>CONTAIN_MAX_UNKNOWN</c>).</summary>
+    int ContainMax { get; }
+    int ContainCount { get; }
+    IReadOnlyList<EntityId> Contained { get; }
+    bool IsValidContainerFor(Entity candidate, bool checkCapacity);
+    void Add(IWorldServices world, Entity candidate);
+
+    /// <summary><paramref name="positionAtContainer"/> is false only when the container itself is gone (its position is stale/irrelevant).</summary>
+    void Remove(IWorldServices world, Entity candidate, bool positionAtContainer);
+}
+
+/// <summary>
 /// <c>DamageModuleInterface</c>: called for every damage application that actually lowers health, before the
 /// fear-sound check and before the death check (so both run even on a killing blow). Either callback may be left at
 /// its no-op default (the reference's own <c>DamageModuleInterface</c> subclasses routinely implement only one).

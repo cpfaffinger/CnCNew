@@ -110,6 +110,7 @@ public sealed partial class SimulationWorld
             EffectivelyDead = reader.Bool("dead"),
             SlowDeathStarted = reader.Bool("slowDeathStarted"),
             DestroyRequested = reader.Bool("destroyRequested"),
+            ContainedBy = new EntityId(checked((uint)reader.UInt("containedBy"))),
             CompletedUpgrades = UpgradeMask.Load(reader, "completedUpgrades"),
             Speed = reader.Fixed("speed"),
             HasMoveTarget = reader.Bool("hasMoveTarget"),

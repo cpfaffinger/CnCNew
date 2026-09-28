@@ -34,7 +34,7 @@ public static class BuiltInModules
 
     /// <summary>All implemented modules, ordinally sorted (the order <see cref="ModuleBindingTable"/> requires).</summary>
     public static ImmutableArray<IModuleBinding> Bindings { get; } =
-        [..Phase4Bindings.Concat(Phase5Modules.Bindings).Concat(Phase5BlockerModules.Bindings).OrderBy(value => value.Name, StringComparer.Ordinal)];
+        [..Phase4Bindings.Concat(Phase5Modules.Bindings).Concat(Phase5BlockerModules.Bindings).Concat(ContainModules.Bindings).OrderBy(value => value.Name, StringComparer.Ordinal)];
 }
 
 /// <summary><c>InactiveBody</c> has no fields.</summary>

@@ -62,7 +62,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[23];
+    private readonly long[] _rejections = new long[25];
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
     private long _tick;
@@ -405,6 +405,24 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!CanPurchaseScience(player, science, out var reason)) return reason;
                 break;
             }
+            case EnterContainerCommand enter:
+            {
+                if (!_entities.TryGetValue(enter.Actor.Value, out var actor) || actor.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (!command.Player.IsSystem && actor.Owner != command.Player) return CommandRejection.NotPermitted;
+                if (actor.ContainedBy.IsValid) return CommandRejection.CannotEnterContainer;
+                if (!_entities.TryGetValue(enter.Container.Value, out var container) || container.DestroyRequested || container.Container is null) return CommandRejection.UnknownEntity;
+                if (!container.Container.IsValidContainerFor(actor, true)) return CommandRejection.CannotEnterContainer;
+                break;
+            }
+            case ExitContainerCommand exit:
+            {
+                if (!_entities.TryGetValue(exit.Actor.Value, out var actor) || actor.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (!actor.ContainedBy.IsValid) return CommandRejection.NotContained;
+                var byContainer = _entities.GetValueOrDefault(actor.ContainedBy.Value);
+                if (!command.Player.IsSystem && actor.Owner != command.Player && (byContainer is null || byContainer.Owner != command.Player))
+                    return CommandRejection.NotPermitted;
+                break;
+            }
         }
         return 0;
     }
@@ -606,6 +624,36 @@ public sealed partial class SimulationWorld : IWorldServices
                 buyer.SciencePurchasePoints -= science.PurchasePointCost;
                 buyer.CompletedSciences = buyer.CompletedSciences.Set(science.Index);
                 Emit(SimEventKind.ScienceCompleted, EntityId.Invalid, EntityId.Invalid, purchaseScience.Science, science.Index, command.Player);
+                break;
+            }
+            case EnterContainerCommand enter:
+            {
+                var actor = FindEntity(enter.Actor);
+                if (actor is null || actor.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (!command.Player.IsSystem && actor.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                if (actor.ContainedBy.IsValid) { RecordRejection(command, CommandRejection.CannotEnterContainer); break; }
+                var container = FindEntity(enter.Container);
+                if (container is null || container.DestroyRequested || container.Container is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (!container.Container.IsValidContainerFor(actor, true)) { RecordRejection(command, CommandRejection.CannotEnterContainer); break; }
+                container.Container.Add(this, actor);
+                actor.ContainedBy = container.Id; // Add() also does this; kept here too so every entry path is consistent.
+                MarkDirty(actor);
+                Emit(SimEventKind.EntityContained, actor.Id, container.Id, string.Empty, 0, command.Player);
+                break;
+            }
+            case ExitContainerCommand exit:
+            {
+                var actor = FindEntity(exit.Actor);
+                if (actor is null || actor.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (!actor.ContainedBy.IsValid) { RecordRejection(command, CommandRejection.NotContained); break; }
+                var byContainer = FindEntity(actor.ContainedBy);
+                if (!command.Player.IsSystem && actor.Owner != command.Player && (byContainer is null || byContainer.Owner != command.Player))
+                { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                var previousContainer = actor.ContainedBy;
+                byContainer?.Container?.Remove(this, actor, true);
+                actor.ContainedBy = EntityId.Invalid; // Safety net: Remove() also does this; guards a dangling/missing container reference.
+                MarkDirty(actor);
+                Emit(SimEventKind.EntityUncontained, actor.Id, previousContainer, string.Empty, 0, command.Player);
                 break;
             }
             default:
@@ -873,6 +921,7 @@ public sealed partial class SimulationWorld : IWorldServices
             module.Tag = spec.Tag;
             modules[index] = module;
             if (module is IBodyModule body && entity.Body is null) entity.Body = body;
+            if (module is IContainerModule container && entity.Container is null) entity.Container = container;
             if (module is IDieModule die) dies.Add(die);
             if (module is IEventReceiver receiver) receivers.Add(receiver);
             if (module is IUpdateModule update) updates.Add(new UpdateNode(entity, module, update));

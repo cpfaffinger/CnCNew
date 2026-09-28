@@ -34,6 +34,10 @@ public enum SimEventKind : byte
     VoiceFearRequested = 15,
     /// <summary><c>PurchaseScienceCommand</c> completed (<c>Value</c>: the <see cref="Templates.ScienceInfo.Index"/>).</summary>
     ScienceCompleted = 16,
+    /// <summary><c>ContainModuleInterface::addToContain</c> (<c>Entity</c>: the entity that entered, <c>Other</c>: the container).</summary>
+    EntityContained = 17,
+    /// <summary><c>ContainModuleInterface::removeFromContain</c> (<c>Entity</c>: the entity that left, <c>Other</c>: the container it left).</summary>
+    EntityUncontained = 18,
 }
 
 /// <summary>
