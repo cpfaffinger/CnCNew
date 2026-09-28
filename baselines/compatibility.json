@@ -2443,6 +2443,60 @@
     },
     {
       "category": "deferred-field",
+      "name": "GarrisonContain/EnterSound",
+      "count": 212,
+      "owners": [
+        "GarrisonContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GarrisonContain/ExitSound",
+      "count": 212,
+      "owners": [
+        "GarrisonContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GarrisonContain/ImmuneToClearBuildingAttacks",
+      "count": 15,
+      "owners": [
+        "GarrisonContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GarrisonContain/InitialRoster",
+      "count": 2,
+      "owners": [
+        "GarrisonContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GarrisonContain/IsEnclosingContainer",
+      "count": 4,
+      "owners": [
+        "GarrisonContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "GarrisonContain/MobileGarrison",
+      "count": 3,
+      "owners": [
+        "GarrisonContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Locomotor/AccelerationPitchLimit",
       "count": 101,
       "owners": [
@@ -4844,7 +4898,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 6741,
+      "count": 6528,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5779,15 +5833,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "GarrisonContain",
-      "count": 213,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",

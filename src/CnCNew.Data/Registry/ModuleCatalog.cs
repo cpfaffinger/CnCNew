@@ -319,6 +319,43 @@ public static class ModuleCatalog
             new("PoisonDamageInterval", FieldType.DurationMs, Source: "PoisonedBehavior.cpp"),
             new("PoisonDuration", FieldType.DurationMs, Source: "PoisonedBehavior.cpp"),
         ]);
+        Add("GarrisonContain",
+        [
+            // OpenContainModuleData (OpenContain.cpp): the shared contain fields. Mechanically modeled: DieMux (for
+            // onDie), ContainMax, DamagePercentToUnits, Allow/ForbidInsideKindOf, AllowAlliesInside/AllowEnemiesInside/
+            // AllowNeutralInside (using the same "same owner = ally, no neutral" approximation as StealthDetectorUpdate
+            // — no team/diplomacy system yet). Presentation or not-yet-built-subsystem, all Opaque: EnterSound/ExitSound,
+            // BurnedDeathToUnits, PassengersAllowedToFire/PassengersInTurret (no firing-from-container), NumberOfExitPaths/
+            // DoorOpenTime (no exit-path/door animation), WeaponBonusPassedToPassengers (no WeaponBonus system at all,
+            // project-wide).
+            ..DieMux(),
+            new("ContainMax", FieldType.Integer, Source: "OpenContain.cpp"),
+            new("EnterSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("ExitSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DamagePercentToUnits", FieldType.Percent, Source: "OpenContain.cpp"),
+            new("BurnedDeathToUnits", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("ForbidInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("PassengersAllowedToFire", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("PassengersInTurret", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("NumberOfExitPaths", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DoorOpenTime", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("WeaponBonusPassedToPassengers", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowAlliesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowEnemiesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowNeutralInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            // GarrisonContainModuleData (GarrisonContain.cpp): HealObjects/TimeForFullHeal are mechanically modeled.
+            // MobileGarrison, ImmuneToClearBuildingAttacks (no ClearBuilding weapon effect) and IsEnclosingContainer are
+            // presentation/not-yet-built-subsystem (Opaque); InitialRoster (starting occupants) is deferred — it needs
+            // synchronous nested spawning at construction time, a bigger change to the spawn pipeline than this first
+            // cut of the containment subsystem justifies (see the simulation-layer doc comment).
+            new("MobileGarrison", FieldType.Opaque, Source: "GarrisonContain.h"),
+            new("HealObjects", FieldType.Bool, Source: "GarrisonContain.h"),
+            new("TimeForFullHeal", FieldType.DurationMs, Source: "GarrisonContain.h"),
+            new("InitialRoster", FieldType.Opaque, Source: "GarrisonContain.h"),
+            new("ImmuneToClearBuildingAttacks", FieldType.Opaque, Source: "GarrisonContain.h"),
+            new("IsEnclosingContainer", FieldType.Opaque, Source: "GarrisonContain.h"),
+        ]);
 
         return builder.ToImmutable();
     }
