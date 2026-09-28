@@ -96,10 +96,11 @@ nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Modul
 Referenzen aufgelöst (1.546 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 143.781.645 Byte, SHA-256
 `522CC08D0B4001D5B1398CAAA344849504509439E45435C2B014C347DA0E2DCC`; Retail-Basisdaten (`--maps exclude`) 12.550
 Definitionen, 2.115 Objekte, SHA-256 `BFFA27023F6F8FCB75FCEDCABB60A88DE11135C1750D9D2E686057DFFE41F9E9`.
-Modulkatalog 205 Typen (33 implementiert: 12 aus Phase 4, 21 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
-766 Einträge, Instanziierbarkeit 694 von 2.115 Objekten (32,8 %). Asset-Runtimebestand: 25.682 Dateien.
-Stresstest (216.000 Ticks, `SimTool stress`, mit allen 33 Modulen): Endhash `C75FD6C190386265`, Kettenhash
-`B9E345E0584BED48`.
+Modulkatalog 205 Typen (34 implementiert: 12 aus Phase 4, 22 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
+771 Einträge, Instanziierbarkeit 861 von 2.115 Objekten (40,7 %). Asset-Runtimebestand: 25.682 Dateien.
+Stresstest (216.000 Ticks, `SimTool stress`, mit allen 34 Modulen): Endhash `9D6E0BDCECE43569`, Kettenhash
+`393F17B2DCF76EC2` (Hash geändert gegenüber der vorigen Messung: `Entity.ContainedBy` ist jetzt Teil jeder Entität im
+Snapshot/Hash, auch wenn sie kein `GarrisonContain` nutzt).
 
 ## Code- und Dokumentationsstil
 

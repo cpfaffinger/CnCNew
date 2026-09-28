@@ -1,13 +1,13 @@
 # Spielregeln (Phase 5, in Arbeit)
 
-Stand: 28. September 2026. Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
+Stand: 29. September 2026. Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
 (`docs/SIMULATION-CORE.md`) aufsetzenden Spielregeln, die Phase 5 bisher implementiert hat: Wirtschaft, Upgrades,
-direkter Kampf, einfache Bewegung, Produktion und Sieg/Niederlage. Phase 5 ist **nicht abgeschlossen** – der
+direkter Kampf, einfache Bewegung, Produktion, Sieg/Niederlage sowie die Blockermodule aus §3/§6/§6a (Schadenszustände,
+Brand, Gift, Tod, Stealth-Erkennung, Garnison-Containment). Phase 5 ist **nicht abgeschlossen** – der
 Fortsetzungsauftrag mit dem vollständigen Restumfang steht in `docs/HANDOFF-PHASE5.md`.
 
 Alle Regeln laufen innerhalb der bestehenden Tickphasen (`SIMULATION-CORE.md` §4): neue Befehle werden in Phase 1
-ausgeführt, neue Module (`StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade`-Module, `AIUpdateInterface`,
-`ProductionUpdate`) ticken in Phase 3 wie jedes andere Updatemodul. Es gibt keine zusätzliche Tickphase.
+ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt keine zusätzliche Tickphase.
 
 ## 1. Spieler und Wirtschaft
 
@@ -200,6 +200,35 @@ ausgeführt, neue Module (`StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade
   Garrison/Transport-System (`CanDetectWhileGarrisoned`/`CanDetectWhileContained` sind typisiert, aber wirkungslos,
   ein Objekt ist nie „enthalten").
 
+### 6a. Containment (Garrison)
+
+Der größte Einzelblocker nach gemessenem Freischaltungsgewinn (167 von 200 Objekten mit `GarrisonContain` hingen nur
+noch an diesem Modul, siehe `docs/HANDOFF-PHASE5.md`). Neue Basisinfrastruktur, nicht nur ein weiteres Modul:
+`Entity.ContainedBy`/`Entity.Container` (ein Container pro Entität, absichtlich eng gehalten – `IContainerModule` ist
+bewusst schmal, bis ein zweiter Implementierer, `TransportContain`, ihn tatsächlich erweitert) sowie
+`EnterContainerCommand`/`ExitContainerCommand` (`CommandTypes.Version` 3 → 4).
+
+- **Eintritt/Austritt:** sofort, ohne Pfadsuche/Distanzprüfung (dieselbe „sofort, keine echte räumliche Prüfung"-
+  Vereinfachung wie Wirtschaft/Produktion). Eintritt erfordert `IsValidContainerFor`; Austritt kann vom Besitzer der
+  Passagiereinheit oder vom Besitzer des Containers angeordnet werden.
+- **`GarrisonContain`:** `ContainMax` (Kapazität), `AllowInsideKindOf`/`ForbidInsideKindOf` (Standard: nur `INFANTRY`,
+  `GarrisonContainModuleData`s eigener, engerer Standard gegenüber `OpenContain`s generischem „alles erlaubt"),
+  `AllowAlliesInside`/`AllowEnemiesInside` (beide Standard `Yes` – **bewusste Vereinfachung**: ohne Team-/
+  Diplomatiesystem gilt „gleicher Besitzer = Verbündeter", dieselbe Näherung wie bei `StealthDetectorUpdate`; es gibt
+  kein „neutral"). Ein Gebäude in `REALLYDAMAGED` kann nicht mehr betreten werden und wirft beim Übergang **in**
+  diesen Zustand sofort alle Insassen aus (beides entfällt bei `KindOf = GARRISONABLE_UNTIL_DESTROYED`).
+- **Heilung** (`HealObjects`): ein Splitter `MaxHealth / TimeForFullHeal` pro Tick, ab der vollen Verweildauer ein
+  harter Sprung auf volle Gesundheit (`GarrisonContain::healSingleObject`).
+- **Tod des Containers:** `DamagePercentToUnits` wird auf die aktuelle Gesundheit jedes Insassen angewendet, danach
+  werden Überlebende ausgeworfen (nicht getötet – `OpenContain::onDie` ruft `removeAllContained`, nie
+  `killAllContained`, solange `killRidersWhoAreNotFreeToExit` beim Basisverhalten bleibt, wie bei `GarrisonContain`).
+- **Bewusst nicht modelliert:** `InitialRoster` (Startbesatzung – bräuchte synchrones verschachteltes Erzeugen beim
+  Konstruieren, eine größere Änderung an der Spawn-Pipeline, als dieser erste Zuschnitt rechtfertigt), Feuern aus dem
+  Container heraus, Garnisonspunkte/-positionen (art-abgeleitet, keine INI-Daten), das
+  Apparent-Controlling-Player-/Team-Tausch-System (kein Teamsystem), Eroberungsbehandlung (kein Eroberungssystem).
+  `TransportContain` (2 Objekte allein blockiert) ist zurückgestellt: es bräuchte ein pro-Template-Feld
+  (`TransportSlotCount`) und gewichtete statt einfache Kapazitätsrechnung.
+
 ## 7. Sieg und Niederlage
 
 - `SimulationWorld.IsPlayerDefeated(player)` entspricht `VictoryConditions::hasSinglePlayerBeenDefeated` mit den
@@ -214,13 +243,13 @@ Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle
 
 ## 9. Modulabdeckung
 
-Siehe `docs/SIMULATION-CORE.md` §11: 694 von 2.115 Objekten sind heute instanziierbar (32,8 %, gegenüber 26/2.113 in
-Phase 4 und 623/2.115 vor diesem Block). Nach einer frischen `audit-coverage`-Messung sind die größten verbleibenden
-Blocker nach Objekten, die **ausschließlich** noch an ihnen hängen: `GarrisonContain` (167 – braucht ein komplettes
-Containment-Subsystem), `PhysicsBehavior` (119 – braucht Terrain-/Kollisionsphysik, Phase 6), `SquishCollide` (2 –
-braucht dieselbe Physik), `TransportContain` (2 – dasselbe Containment-Subsystem). `CreateCrateDie` (0 allein –
-bräuchte einen neuen `Crate`-Katalog und eine Beziehungs-/Diplomatie-Prüfung für 0 sofortigen Nutzen) bleibt bewusst
-zurückgestellt; die Begründung steht in `Phase5BlockerModules`s Doc-Kommentar und `docs/HANDOFF-PHASE5.md`.
+Siehe `docs/SIMULATION-CORE.md` §11: 861 von 2.115 Objekten sind heute instanziierbar (40,7 %, gegenüber 26/2.113 in
+Phase 4 und 623/2.115 vor dem in §3/§6/§6a beschriebenen Block). Nach einer frischen `audit-coverage`-Messung sind die
+größten verbleibenden Blocker nach Objekten, die **ausschließlich** noch an ihnen hängen: `PhysicsBehavior` (119 –
+braucht Terrain-/Kollisionsphysik, Phase 6), `ToppleUpdate` (66 – dieselbe Physik, per Referenzstudium verifiziert),
+`SquishCollide` (2 – dieselbe Physik), `TransportContain` (2 – braucht ein pro-Template-Slotkosten-Feld). `CreateCrateDie`
+(0 allein – bräuchte einen neuen `Crate`-Katalog und eine Beziehungs-/Diplomatie-Prüfung für 0 sofortigen Nutzen) bleibt
+bewusst zurückgestellt; die Begründung steht in `Phase5BlockerModules`s Doc-Kommentar und `docs/HANDOFF-PHASE5.md`.
 
 ## 10. Bekannte Grenzen (Zusammenfassung)
 
@@ -233,10 +262,11 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
 - Kein Energie-Verlangsamungsfaktor, keine Bauplatzprüfung, kein Rallypunkt (§5).
 - Der `STEALTHED`-Statusbit hat noch keinen Verbraucher außer `StealthDetectorUpdate`s `DETECTED`-Markierung (kein
   Zielsystem, das `DETECTED` auswertet, §6).
-- Keine Teams/Allianzen/Diplomatie als Datenmodell, keine `CommandSet`/`CommandButton`-Wirkung (reine Präsentation),
-  kein Garrison/Transport/Supply/Radar/Reparatur/Verkauf (Rest von HANDOFF-PHASE5.md Punkt „Vollständiger Umfang").
-  Sciences (Kauf, Voraussetzungen) sind implementiert; „Science Purchase Points" werden mangels Rang-/
-  Erfahrungssystem nur per Systembefehl gutgeschrieben (§1a).
+- Keine Teams/Allianzen/Diplomatie als Datenmodell (`GarrisonContain`/`StealthDetectorUpdate` behelfen sich mit
+  „gleicher Besitzer = Verbündeter"), keine `CommandSet`/`CommandButton`-Wirkung (reine Präsentation), kein
+  Transport/Supply/Radar/Reparatur/Verkauf/Bau (Rest von HANDOFF-PHASE5.md Punkt „Vollständiger Umfang"). Garrison
+  (§6a) ist implementiert. Sciences (Kauf, Voraussetzungen) sind implementiert; „Science Purchase Points" werden
+  mangels Rang-/Erfahrungssystem nur per Systembefehl gutgeschrieben (§1a).
 - Kein headless Referenzmatch aller Fraktionen, keine Golden-Master-Szenarien gegen Originalwerte (HANDOFF-PHASE5.md
   Punkte 7/8 stehen aus); die hier beschriebenen Mechaniken sind stattdessen durch `tests/CnCNew.Simulation.Tests/
   Tests.Phase5.cs` (gezielte Integrationstests: Wirtschaft, Kampf, Upgrade-Effekte, Bewegung, Produktion, Stealth/Heilung,
