@@ -12,7 +12,8 @@ using CnCNew.Simulation.Timers;
 
 namespace CnCNew.Simulation.World;
 
-public sealed record PlayerConfiguration(PlayerId Id, string Name);
+/// <summary><paramref name="Faction"/> names a <c>PlayerTemplate</c> (<see cref="Templates.FactionCatalog"/>); when set, the world credits its <c>StartMoney</c> and <c>IntrinsicSciences</c> once at construction (<c>Player::Player()</c>). <see langword="null"/>: no faction, starts with nothing (fixtures/tests that set up money and sciences explicitly).</summary>
+public sealed record PlayerConfiguration(PlayerId Id, string Name, string? Faction = null);
 
 /// <summary>Everything that identifies a run apart from the definitions and the command stream.</summary>
 public sealed record WorldConfiguration(WorldId Id, uint Seed, ImmutableArray<PlayerConfiguration> Players, string FixtureId, string DefinitionFingerprint);
@@ -61,7 +62,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[20];
+    private readonly long[] _rejections = new long[23];
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
     private long _tick;
@@ -85,6 +86,11 @@ public sealed partial class SimulationWorld : IWorldServices
         /// <summary>Incrementally maintained sum of owned objects' <c>EnergyProduction</c> (<c>Energy::objectEnteringInfluence</c>/<c>Leaving</c>); negative means a net consumer.</summary>
         public int EnergyProduction { get; set; }
         public UpgradeMask CompletedUpgrades { get; set; }
+
+        // ------------------------------------------------------------------------------------- phase 5: sciences
+        public ScienceMask CompletedSciences { get; set; }
+        /// <summary>"Science Purchase Points" (<c>Player::getSciencePurchasePoints</c>): a currency separate from money, normally earned via rank/experience (not modeled — see <see cref="IWorldServices.AddSciencePoints"/>).</summary>
+        public int SciencePurchasePoints { get; set; }
     }
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle);
@@ -100,7 +106,16 @@ public sealed partial class SimulationWorld : IWorldServices
         foreach (var player in configuration.Players)
         {
             if (player.Id.IsSystem) throw new ArgumentException("Player 0 is the built-in system authority.", nameof(configuration));
-            if (!_players.TryAdd(player.Id.Value, new PlayerState(player.Id, player.Name)))
+            var state = new PlayerState(player.Id, player.Name);
+            if (player.Faction is { } factionName)
+            {
+                // Player::Player(): starting cash and intrinsic sciences are credited once, at construction.
+                if (!templates.Factions.TryGet(factionName, out var faction))
+                    throw new ArgumentException($"Unknown faction '{factionName}' for player {player.Id}.", nameof(configuration));
+                state.Money = faction.StartMoney;
+                state.CompletedSciences = faction.IntrinsicSciences;
+            }
+            if (!_players.TryAdd(player.Id.Value, state))
                 throw new ArgumentException($"Duplicate player id {player.Id}.", nameof(configuration));
         }
         _players.Add(0, new PlayerState(PlayerId.System, "System"));
@@ -156,6 +171,16 @@ public sealed partial class SimulationWorld : IWorldServices
 
     public UpgradeCatalog Upgrades => _templates.Upgrades;
     public WeaponCatalog Weapons => _templates.Weapons;
+    public ScienceCatalog Sciences => _templates.Sciences;
+
+    public ScienceMask PlayerSciences(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.CompletedSciences : ScienceMask.Empty;
+    public int SciencePointsOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.SciencePurchasePoints : 0;
+
+    public void AddSciencePoints(PlayerId player, int amount)
+    {
+        if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
+        if (_players.TryGetValue(player.Value, out var state)) state.SciencePurchasePoints += amount;
+    }
 
     public Fixed MoneyOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.Money : Fixed.Zero;
 
@@ -368,8 +393,29 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (dx * dx + dy * dy > weapon.AttackRange * weapon.AttackRange) return CommandRejection.OutOfRange;
                 break;
             }
+            case GiveSciencePointsCommand giveScience:
+                if (!_players.ContainsKey(giveScience.Target.Value)) return CommandRejection.UnknownPlayer;
+                if (giveScience.Amount < 0) return CommandRejection.InvalidArguments;
+                break;
+            case PurchaseScienceCommand purchaseScience:
+            {
+                if (!_templates.Sciences.TryGet(purchaseScience.Science, out var science)) return CommandRejection.UnknownScience;
+                if (!CanPurchaseScience(player, science, out var reason)) return reason;
+                break;
+            }
         }
         return 0;
+    }
+
+    /// <summary><c>Player::isCapableOfPurchasingScience</c>.</summary>
+    private bool CanPurchaseScience(PlayerState player, Templates.ScienceInfo science, out CommandRejection reason)
+    {
+        if (player.CompletedSciences.Has(science.Index)) { reason = CommandRejection.AlreadyOwned; return false; }
+        if (!_templates.Sciences.PrerequisitesSatisfied(player.CompletedSciences, science)) { reason = CommandRejection.MissingPrerequisite; return false; }
+        if (science.PurchasePointCost <= 0) { reason = CommandRejection.ScienceNotPurchasable; return false; }
+        if (player.SciencePurchasePoints < science.PurchasePointCost) { reason = CommandRejection.InsufficientSciencePurchasePoints; return false; }
+        reason = 0;
+        return true;
     }
 
     private void RecordRejection(SimCommand command, CommandRejection reason)
@@ -544,6 +590,20 @@ public sealed partial class SimulationWorld : IWorldServices
                 MarkDirty(source);
                 Damage(fireTarget.Id, new DamageInfo(source.Id, damage, weapon.DamageType, weapon.DeathType, false));
                 Emit(SimEventKind.WeaponFired, source.Id, fireTarget.Id, weapon.Name, damage.Raw, command.Player);
+                break;
+            }
+            case GiveSciencePointsCommand giveScience:
+                if (_players.TryGetValue(giveScience.Target.Value, out var scienceRecipient)) scienceRecipient.SciencePurchasePoints += giveScience.Amount;
+                break;
+            case PurchaseScienceCommand purchaseScience:
+            {
+                if (!_templates.Sciences.TryGet(purchaseScience.Science, out var science)) { RecordRejection(command, CommandRejection.UnknownScience); break; }
+                var buyer = _players[command.Player.Value];
+                if (!CanPurchaseScience(buyer, science, out var reason)) { RecordRejection(command, reason); break; }
+                // Player::attemptToPurchaseScience: withdraw the cost, then grant the science.
+                buyer.SciencePurchasePoints -= science.PurchasePointCost;
+                buyer.CompletedSciences = buyer.CompletedSciences.Set(science.Index);
+                Emit(SimEventKind.ScienceCompleted, EntityId.Invalid, EntityId.Invalid, purchaseScience.Science, science.Index, command.Player);
                 break;
             }
             default:
@@ -976,6 +1036,8 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Fixed("money", player.Money);
             writer.Int("energyProduction", player.EnergyProduction);
             player.CompletedUpgrades.Describe(writer, "completedUpgrades");
+            player.CompletedSciences.Describe(writer, "completedSciences");
+            writer.Int("sciencePurchasePoints", player.SciencePurchasePoints);
             writer.EndObject();
         }
         writer.EndArray();

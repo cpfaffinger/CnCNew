@@ -11,7 +11,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 2;
+    public const int Version = 3;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -26,8 +26,10 @@ public static class CommandTypes
     public const ushort CancelProduction = 10;
     public const ushort SetMoveTarget = 11;
     public const ushort FireWeapon = 12;
+    public const ushort GiveSciencePoints = 13;
+    public const ushort PurchaseScience = 14;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= FireWeapon;
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= PurchaseScience;
 }
 
 /// <summary>
@@ -78,6 +80,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), checked((int)reader.Int("slot"))),
             CommandTypes.SetMoveTarget => new SetMoveTargetCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), new EntityId(checked((uint)reader.UInt("target")))),
+            CommandTypes.GiveSciencePoints => new GiveSciencePointsCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target"))), checked((int)reader.Int("amount"))),
+            CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, reader.Text("science")),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -163,6 +167,26 @@ public sealed record FireWeaponCommand(PlayerId Player, ulong Sequence, long Tic
         writer.UInt("source", Source.Value);
         writer.UInt("target", Target.Value);
     }
+}
+
+/// <summary>Credits "Science Purchase Points" directly (nothing yet earns them automatically — no rank/experience system; see <c>docs/GAME-RULES.md</c>).</summary>
+public sealed record GiveSciencePointsCommand(PlayerId Player, ulong Sequence, long Tick, PlayerId Target, int Amount) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.GiveSciencePoints;
+    public override bool RequiresSystem => true;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.Int("target", Target.Value);
+        writer.Int("amount", Amount);
+    }
+}
+
+/// <summary><c>Player::attemptToPurchaseScience</c>: always player-scoped, requires all direct prerequisites already owned and enough purchase points; instantaneous (no build time — sciences are not queued anywhere in the reference either).</summary>
+public sealed record PurchaseScienceCommand(PlayerId Player, ulong Sequence, long Tick, string Science) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.PurchaseScience;
+    protected override void DescribeBody(IStateWriter writer) => writer.Text("science", Science);
 }
 
 /// <summary>Creates an entity from a template. Owner 0 defaults to the issuing player; only the system may spawn for others.</summary>
@@ -266,6 +290,10 @@ public enum CommandRejection : byte
     QueueFull = 17,
     CannotMove = 18,
     CannotProduce = 19,
+    UnknownScience = 20,
+    /// <summary><c>Player::isCapableOfPurchasingScience</c>: a purchase cost of 0 means the science is not directly purchasable (only ever granted, e.g. as an intrinsic faction science).</summary>
+    ScienceNotPurchasable = 21,
+    InsufficientSciencePurchasePoints = 22,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

@@ -32,6 +32,8 @@ public enum SimEventKind : byte
     PlayerDefeated = 14,
     /// <summary><c>ActiveBody::attemptDamage</c>'s fear-sound roll succeeded when crossing the 25% health threshold; presentation-only (the roll itself, win or lose, is already consumed from <c>LogicRandom</c>).</summary>
     VoiceFearRequested = 15,
+    /// <summary><c>PurchaseScienceCommand</c> completed (<c>Value</c>: the <see cref="Templates.ScienceInfo.Index"/>).</summary>
+    ScienceCompleted = 16,
 }
 
 /// <summary>

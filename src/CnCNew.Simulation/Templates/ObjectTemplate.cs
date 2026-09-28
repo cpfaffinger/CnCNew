@@ -114,11 +114,13 @@ public sealed class TemplateCatalog
 {
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
-    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons)
+    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, FactionCatalog factions)
     {
         Templates = templates;
         Upgrades = upgrades;
         Weapons = weapons;
+        Sciences = sciences;
+        Factions = factions;
         var builder = ImmutableDictionary.CreateBuilder<string, ObjectTemplate>(StringComparer.OrdinalIgnoreCase);
         foreach (var template in templates) builder[template.Name] = template;
         _byName = builder.ToImmutable();
@@ -127,6 +129,8 @@ public sealed class TemplateCatalog
     public ImmutableArray<ObjectTemplate> Templates { get; }
     public UpgradeCatalog Upgrades { get; }
     public WeaponCatalog Weapons { get; }
+    public ScienceCatalog Sciences { get; }
+    public FactionCatalog Factions { get; }
     public ObjectTemplate this[int index] => Templates[index];
     public bool TryGet(string name, out ObjectTemplate template) => _byName.TryGetValue(name, out template!);
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);
@@ -139,6 +143,8 @@ public sealed class TemplateCatalog
         var weapons = WeaponCatalog.Build(graph);
         var armors = ArmorCatalog.Build(graph);
         var locomotors = BuildLocomotors(graph);
+        var sciences = ScienceCatalog.Build(graph);
+        var factions = FactionCatalog.Build(graph, sciences);
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
         var index = 0;
         foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
@@ -180,7 +186,7 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        return new TemplateCatalog(templates.ToImmutable(), upgrades, weapons);
+        return new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions);
     }
 
     private static ImmutableArray<string> ConditionTokens(DefinitionSection set)

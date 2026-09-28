@@ -68,6 +68,15 @@ public interface IWorldServices
 
     /// <summary>Reserves and queues the creation of a fresh entity outside the command/validation path (engine-internal spawns: production, OCLs).</summary>
     EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle);
+
+    // ------------------------------------------------------------------------------------------- phase 5: sciences
+
+    ScienceCatalog Sciences { get; }
+    ScienceMask PlayerSciences(PlayerId player);
+
+    /// <summary>"Science Purchase Points" earned via rank/experience in the reference (not modeled); a scenario/system command credits them directly instead — see <c>docs/GAME-RULES.md</c>.</summary>
+    int SciencePointsOf(PlayerId player);
+    void AddSciencePoints(PlayerId player, int amount);
 }
 
 /// <summary>A module driven by the <see cref="UpgradeMux"/> state machine (<c>UpgradeModule</c> / any <c>UpgradeMux</c>-mixin module).</summary>

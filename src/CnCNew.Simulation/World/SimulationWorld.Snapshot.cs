@@ -51,6 +51,8 @@ public sealed partial class SimulationWorld
             // explicitly; EnergyProduction is instead rebuilt below as each entity re-registers (Energy::objectEnteringInfluence).
             known.Money = player.Fixed("money");
             known.CompletedUpgrades = UpgradeMask.Load(player, "completedUpgrades");
+            known.CompletedSciences = ScienceMask.Load(player, "completedSciences");
+            known.SciencePurchasePoints = checked((int)player.Int("sciencePurchasePoints"));
         }
         var rejections = state.Array("rejections");
         if (rejections.Count != _rejections.Length) throw new InvalidDataException("Rejection table size mismatch.");
