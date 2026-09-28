@@ -216,7 +216,7 @@ static partial class Tests
 
         // Refusal at run time: definitions, command table and tick rate.
         Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(replay, fixture.Templates, new string('A', 64)), "fingerprint");
-        var foreignTable = replay with { Header = replay.Header with { CommandTableVersion = 2 } };
+        var foreignTable = replay with { Header = replay.Header with { CommandTableVersion = CnCNew.Simulation.Commands.CommandTypes.Version + 1 } };
         Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(ReplayFormat.Read(ReplayFormat.Write(foreignTable)), fixture.Templates, fixture.Fingerprint), "command table");
         var foreignRate = replay with { Header = replay.Header with { TickRate = 60 } };
         Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(ReplayFormat.Read(ReplayFormat.Write(foreignRate)), fixture.Templates, fixture.Fingerprint), "60 Hz");

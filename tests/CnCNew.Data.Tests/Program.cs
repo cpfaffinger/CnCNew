@@ -213,10 +213,15 @@ static void ModuleCatalogIsExplicitAndConsistent()
     var implemented = catalog.Where(value => !value.CompatibilityOnly).Select(value => value.Name).Order(StringComparer.Ordinal).ToArray();
     string[] expected =
     [
+        // phase 4 (12)
         "ActiveBody", "CreateObjectDie", "DeletionUpdate", "DestroyDie", "FXListDie", "HighlanderBody", "ImmortalBody",
         "InactiveBody", "InstantDeathBehavior", "KeepObjectDie", "LifetimeUpdate", "StructureBody",
+        // phase 5 (15): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
+        "AIUpdateInterface", "ArmorUpgrade", "AutoHealBehavior", "CommandSetUpgrade", "ExperienceScalarUpgrade",
+        "LocomotorSetUpgrade", "MaxHealthUpgrade", "ModelConditionUpgrade", "ObjectCreationUpgrade", "ProductionUpdate",
+        "RadarUpgrade", "StealthUpdate", "StealthUpgrade", "WeaponBonusUpgrade", "WeaponSetUpgrade",
     ];
-    Assert(implemented.SequenceEqual(expected), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
+    Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");
     Assert(ModuleRegistry.Default.GetRequired("W3DModelDraw").Category == ModuleCategory.Presentation, "Draw modules are presentation.");
     Assert(ModuleRegistry.Default.GetRequired("LaserUpdate").BlockKind == ModuleBlockKind.ClientUpdate, "LaserUpdate is a ClientUpdate module in the reference.");

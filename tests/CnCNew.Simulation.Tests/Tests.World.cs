@@ -37,6 +37,26 @@ sealed class Feeder(SimulationWorld world)
 
     public SubmitResult CancelTimer(ulong id, long? tick = null)
         => world.Submit(new CancelTimerCommand(PlayerId.System, Next(0), tick ?? world.Tick, new TimerId(id)));
+
+    // ----------------------------------------------------------------------------------------------------- phase 5
+
+    public SubmitResult GiveMoney(int target, decimal amount, long? tick = null)
+        => world.Submit(new GiveMoneyCommand(PlayerId.System, Next(0), tick ?? world.Tick, new PlayerId(target), Fixed.FromDecimal(amount)));
+
+    public SubmitResult PurchaseUpgrade(int player, string upgrade, uint? target = null, long? tick = null)
+        => world.Submit(new PurchaseUpgradeCommand(new PlayerId(player), Next(player), tick ?? world.Tick, upgrade, target is { } id ? new EntityId(id) : null));
+
+    public SubmitResult QueueProduction(int player, uint producer, string template, long? tick = null)
+        => world.Submit(new QueueProductionCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(producer), template));
+
+    public SubmitResult CancelProduction(int player, uint producer, int slot, long? tick = null)
+        => world.Submit(new CancelProductionCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(producer), slot));
+
+    public SubmitResult SetMoveTarget(int player, uint target, int x, int y, long? tick = null)
+        => world.Submit(new SetMoveTargetCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(target), Fixed.FromInt(x), Fixed.FromInt(y)));
+
+    public SubmitResult FireWeapon(int player, uint source, uint target, long? tick = null)
+        => world.Submit(new FireWeaponCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(source), new EntityId(target)));
 }
 
 static partial class Tests
@@ -222,7 +242,7 @@ static partial class Tests
         static long Field(ModuleConfiguration configuration, string name, long fallback)
             => configuration.Fields.FirstOrDefault(field => field.Name == name)?.Value.Value is long value ? value : fallback;
         var probe = new ModuleBinding<ProbeData>("ProbeModule", ModuleOwnerKind.Object,
-            configuration => new ProbeData(Field(configuration, "FirstWake", 0), Field(configuration, "Sleep", CnCNew.Simulation.Time.SimulationTiming.SleepForever),
+            (configuration, _) => new ProbeData(Field(configuration, "FirstWake", 0), Field(configuration, "Sleep", CnCNew.Simulation.Time.SimulationTiming.SleepForever),
                 (uint)Field(configuration, "DestroyTarget", 0), Field(configuration, "DestroyAtTick", -1), Field(configuration, "EmitAtTick", -1)),
             data => new ProbeModule(log, data));
         var bindings = new ModuleBindingTable(ModuleBindingTable.Default.Bindings.Append(probe).OrderBy(value => value.Name, StringComparer.Ordinal), registry);

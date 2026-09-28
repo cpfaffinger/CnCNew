@@ -233,26 +233,27 @@ static partial class Tests
         var registry = ModuleRegistry.Default;
         ModuleBindingTable Build(IEnumerable<IModuleBinding> bindings, ModuleRegistry? custom = null) => new(bindings, custom ?? registry);
         var all = BuiltInModules.Bindings;
-        Check.That(Build(all).Bindings.Length == 12, "The production table binds twelve modules.");
+        Check.That(Build(all).Bindings.Length == 27, "The production table binds twenty-seven modules (twelve phase-4, fifteen phase-5).");
         Check.That(all.Select(value => value.Name).SequenceEqual(all.Select(value => value.Name).Order(StringComparer.Ordinal)), "The built-in list is sorted ordinally.");
         Check.That(ModuleBindingTable.Default.TryGet("destroydie", out var binding) && binding.Name == "DestroyDie", "Lookup is case-insensitive.");
 
         // Factory produces a working, typed module.
+        var upgrades = new SyntheticFixture().Templates.Upgrades;
         var body = all.Single(value => value.Name == "ActiveBody");
-        var data = body.ParseData(new ModuleConfiguration("ActiveBody", "T", ModuleOwnerKind.Object, [], new("x", 1, 1)));
+        var data = body.ParseData(new ModuleConfiguration("ActiveBody", "T", ModuleOwnerKind.Object, [], new("x", 1, 1)), upgrades);
         Check.That(body.Create(data) is ActiveBody, "The ActiveBody binding creates an ActiveBody.");
 
         Check.Throws<ModuleBindingException>(() => Build(all.Concat([all[0]]).OrderBy(value => value.Name, StringComparer.Ordinal)), "Duplicate");
         Check.Throws<ModuleBindingException>(() => Build(all.Reverse()), "sorted");
         Check.Throws<ModuleBindingException>(() => Build(all.Take(all.Length - 1)), "no binding");
-        var unknown = new ModuleBinding<InactiveBodyData>("ZZZUnknownModule", ModuleOwnerKind.Object, _ => InactiveBodyData.Instance, _ => new InactiveBody());
+        var unknown = new ModuleBinding<InactiveBodyData>("ZZZUnknownModule", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
         Check.Throws<ModuleBindingException>(() => Build(all.Append(unknown)), "unknown module name");
-        var unimplemented = new ModuleBinding<InactiveBodyData>("SlowDeathBehavior", ModuleOwnerKind.Object, _ => InactiveBodyData.Instance, _ => new InactiveBody());
+        var unimplemented = new ModuleBinding<InactiveBodyData>("SlowDeathBehavior", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
         Check.Throws<ModuleBindingException>(() => Build(all.Append(unimplemented).OrderBy(value => value.Name, StringComparer.Ordinal)), "not implemented");
-        var presentation = new ModuleBinding<InactiveBodyData>("W3DModelDraw", ModuleOwnerKind.Object, _ => InactiveBodyData.Instance, _ => new InactiveBody());
+        var presentation = new ModuleBinding<InactiveBodyData>("W3DModelDraw", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
         Check.Throws<ModuleBindingException>(() => Build(all.Append(presentation).OrderBy(value => value.Name, StringComparer.Ordinal)), "");
         var wrongOwner = all.Select(value => value.Name == "KeepObjectDie"
-            ? new ModuleBinding<PlainDieData>("KeepObjectDie", ModuleOwnerKind.Fx, PlainDieData.Parse, data => new KeepObjectDie(data))
+            ? new ModuleBinding<PlainDieData>("KeepObjectDie", ModuleOwnerKind.Fx, (configuration, _) => PlainDieData.Parse(configuration), data => new KeepObjectDie(data))
             : value);
         Check.Throws<ModuleBindingException>(() => Build(wrongOwner), "owner");
     }
