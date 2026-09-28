@@ -319,6 +319,42 @@ static partial class Tests
           End
         End
 
+        Object Bunker
+          KindOf = STRUCTURE
+          Body = StructureBody Body01
+            MaxHealth = 200.0
+            InitialHealth = 200.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = GarrisonContain Garrison01
+            ContainMax = 2
+            HealObjects = Yes
+            TimeForFullHeal = 300
+            DamagePercentToUnits = 50%
+          End
+        End
+
+        Object Rebel
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+
+        Object Tankish
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+
         Science SCIENCE_Intrinsic
           IsGrantable = Yes
         End
@@ -926,6 +962,90 @@ static partial class Tests
         var healthAfterHeal = body.Health;
         while (world.Tick <= healTick + 20) world.Step();
         Check.That(body.Health == healthAfterHeal, "Healing cures the poison outright: no further periodic ticks land.");
+    }
+
+    /// <summary>
+    /// The containment subsystem's first module (167 objects unlocked alone, the largest single blocker by measured
+    /// impact — see <c>docs/HANDOFF-PHASE5.md</c>): <c>GarrisonContain</c> capacity, <c>KindOf</c> gating, allied/enemy
+    /// entry (no team/diplomacy system: both are allowed by default, matching <c>StealthDetectorUpdate</c>'s
+    /// approximation), periodic healing, death ejection with <c>DamagePercentToUnits</c>, and immediate ejection on
+    /// crossing into <c>REALLYDAMAGED</c>.
+    /// </summary>
+    public static void Phase5Garrison()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Bunker", x: 0, y: 0);
+        feeder.Spawn(1, "Rebel", x: 5, y: 5);
+        feeder.Spawn(2, "Rebel", x: 5, y: 5);
+        feeder.Spawn(2, "Tankish", x: 5, y: 5);
+        world.Step();
+        var bunker = world.FindEntity(new EntityId(1))!;
+        var allyRebel = world.FindEntity(new EntityId(2))!;
+        var enemyRebel = world.FindEntity(new EntityId(3))!;
+        var tank = world.FindEntity(new EntityId(4))!;
+
+        feeder.Damage(3, 20); // enemyRebel: 50 -> 30, so the later healing check is observable.
+        world.Step();
+
+        feeder.EnterContainer(2, 4, 1);
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.CannotEnterContainer] == 1, "A vehicle cannot enter a Garrison: AllowInsideKindOf defaults to INFANTRY only.");
+
+        feeder.EnterContainer(1, 2, 1);
+        feeder.EnterContainer(2, 3, 1);
+        world.Step();
+        Check.That(bunker.Container!.ContainCount == 2 && allyRebel.ContainedBy == bunker.Id && enemyRebel.ContainedBy == bunker.Id,
+            "Both an ally and an enemy infantry unit enter: no team/diplomacy system, so AllowAlliesInside/AllowEnemiesInside default to true for both.");
+        Check.That(allyRebel.X == bunker.X && allyRebel.Y == bunker.Y, "A contained entity snaps to the container's position.");
+
+        feeder.Spawn(1, "Rebel", x: 5, y: 5);
+        world.Step();
+        var thirdRebel = world.FindEntity(new EntityId(5))!;
+        feeder.EnterContainer(1, 5, 1);
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.CannotEnterContainer] == 2, "A full Garrison (ContainMax = 2) rejects further entry.");
+
+        // HealObjects: TimeForFullHeal = 300ms = 9 ticks; MaxHealth 50 heals in slivers of 50/9 per tick.
+        for (var i = 0; i < 9; i++) world.Step();
+        Check.That(enemyRebel.Body!.Health == Fixed.FromInt(50), "HealObjects heals a contained occupant back to full within TimeForFullHeal.");
+
+        feeder.ExitContainer(1, 2);
+        world.Step();
+        Check.That(!allyRebel.ContainedBy.IsValid && bunker.Container.ContainCount == 1, "Exiting clears ContainedBy and frees a slot.");
+        feeder.EnterContainer(1, 5, 1);
+        world.Step();
+        Check.That(bunker.Container.ContainCount == 2, "The freed slot admits the previously rejected unit.");
+
+        // Death: DamagePercentToUnits applies to each occupant's current health, then survivors are ejected (not killed) -
+        // OpenContain::onDie calls removeAllContained, never killAllContained, for a container like GarrisonContain
+        // whose killRidersWhoAreNotFreeToExit is a no-op.
+        feeder.Kill(1);
+        world.Step();
+        Check.That(!enemyRebel.ContainedBy.IsValid && !thirdRebel.ContainedBy.IsValid, "The container's death ejects every occupant.");
+        Check.That(enemyRebel.Body!.Health == Fixed.FromInt(25), "DamagePercentToUnits (50%) applies to each occupant's current health before ejection.");
+        Check.That(!enemyRebel.EffectivelyDead, "Ejected occupants survive unless the damage percentage alone kills them.");
+
+        // A separate scenario: crossing into REALLYDAMAGED ejects everyone immediately, independent of death.
+        var world2 = NewWorld(fixture);
+        var feeder2 = new Feeder(world2);
+        feeder2.Spawn(1, "Bunker", x: 0, y: 0);
+        feeder2.Spawn(2, "Rebel", x: 0, y: 0);
+        world2.Step();
+        var bunker2 = world2.FindEntity(new EntityId(1))!;
+        var rebel2 = world2.FindEntity(new EntityId(2))!;
+        feeder2.EnterContainer(2, 2, 1);
+        world2.Step();
+        Check.That(bunker2.Container!.ContainCount == 1, "Setup: the occupant entered.");
+        // Retail default thresholds (no GameData block): REALLYDAMAGED at a ratio in (0, 0.35]. MaxHealth 200, so 170
+        // damage leaves 30 (ratio 0.15).
+        feeder2.Damage(1, 170);
+        world2.Step();
+        Check.That(((ActiveBody)bunker2.Body!).DamageState == BodyDamageStates.ReallyDamaged, "Setup: the bunker is now REALLYDAMAGED.");
+        Check.That(!rebel2.ContainedBy.IsValid && bunker2.Container.ContainCount == 0, "Crossing into REALLYDAMAGED ejects every occupant immediately.");
+
+        _ = tank;
     }
 
     public static void Phase5Victory()

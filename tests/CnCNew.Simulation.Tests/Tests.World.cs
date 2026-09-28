@@ -63,6 +63,12 @@ sealed class Feeder(SimulationWorld world)
 
     public SubmitResult PurchaseScience(int player, string science, long? tick = null)
         => world.Submit(new PurchaseScienceCommand(new PlayerId(player), Next(player), tick ?? world.Tick, science));
+
+    public SubmitResult EnterContainer(int player, uint actor, uint container, long? tick = null)
+        => world.Submit(new EnterContainerCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor), new EntityId(container)));
+
+    public SubmitResult ExitContainer(int player, uint actor, long? tick = null)
+        => world.Submit(new ExitContainerCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor)));
 }
 
 static partial class Tests

@@ -60,6 +60,7 @@ run.Test("Phase 5: SlowDeathBehavior weighted sibling lottery", Tests.Phase5Slow
 run.Test("Phase 5: FireWeaponWhenDeadBehavior activation and conflict re-check", Tests.Phase5FireWeaponWhenDead);
 run.Test("Phase 5: StealthDetectorUpdate marks and expires DETECTED", Tests.Phase5StealthDetector);
 run.Test("Phase 5: PoisonedBehavior periodic damage, re-poison and healing", Tests.Phase5Poisoned);
+run.Test("Phase 5: GarrisonContain capacity, entry, healing and ejection", Tests.Phase5Garrison);
 run.Test("Phase 5: last player standing wins", Tests.Phase5Victory);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
