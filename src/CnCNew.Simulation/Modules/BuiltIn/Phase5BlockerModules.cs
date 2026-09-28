@@ -30,6 +30,7 @@ internal static class Phase5BlockerModules
         new ModuleBinding<SlowDeathData>("SlowDeathBehavior", ModuleOwnerKind.Object, (configuration, _) => SlowDeathData.Parse(configuration), data => new SlowDeathBehavior(data)),
         new ModuleBinding<FireWeaponWhenDeadData>("FireWeaponWhenDeadBehavior", ModuleOwnerKind.Object, FireWeaponWhenDeadData.Parse, data => new FireWeaponWhenDeadBehavior(data)),
         new ModuleBinding<StealthDetectorData>("StealthDetectorUpdate", ModuleOwnerKind.Object, (configuration, _) => StealthDetectorData.Parse(configuration), data => new StealthDetectorUpdate(data)),
+        new ModuleBinding<PoisonedData>("PoisonedBehavior", ModuleOwnerKind.Object, (configuration, _) => PoisonedData.Parse(configuration), data => new PoisonedBehavior(data)),
     ];
 }
 
@@ -442,4 +443,99 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
 
     public override void Describe(IStateWriter writer) { }
     public override void Load(IStateReader reader) { }
+}
+
+// =================================================================================== PoisonedBehavior
+
+/// <summary><c>PoisonedBehavior.h</c>'s two keys.</summary>
+public sealed record PoisonedData(long PoisonDamageIntervalTicks, long PoisonDurationTicks) : ModuleData
+{
+    public static PoisonedData Parse(ModuleConfiguration configuration) => new(
+        ModuleConfigReader.Ticks(configuration, "PoisonDamageInterval", 0),
+        ModuleConfigReader.Ticks(configuration, "PoisonDuration", 0));
+}
+
+/// <summary>
+/// <c>PoisonedBehavior.cpp</c>: a <c>DAMAGE_POISON</c> hit starts (or, on a fresh dose while still poisoned, extends) a
+/// periodic self-damage cycle that reapplies the <em>actual</em> damage dealt by the original poison hit
+/// (<see cref="IDamageModule.OnDamage"/>'s <c>actualDamageDealt</c>) as <c>DAMAGE_UNRESISTABLE</c> — deliberately not
+/// <c>DAMAGE_POISON</c> again, so the periodic ticks never re-trigger <see cref="OnDamage"/> and restart the cycle.
+/// A fresh dose while already poisoned always extends <see cref="PoisonedData.PoisonDurationTicks"/> from now, but only
+/// ever moves the next damage tick <em>earlier</em> (the reference's <c>min()</c>, never resets it later). Healing cures
+/// the poison outright (<see cref="IDamageModule.OnHealing"/>), matching the reference exactly. Presentation-only:
+/// the drawable tint status.
+/// </summary>
+public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModule, IDamageModule
+{
+    private long _nextWake = -1;
+    /// <summary>Absolute tick of the next self-damage application; <see cref="long.MaxValue"/> means "not scheduled" (the reference's frame 0 sentinel, avoided here since tick 0 is a real tick).</summary>
+    private long _poisonDamageTick = long.MaxValue;
+    /// <summary>Absolute tick after which the poison wears off (unless it killed us); <see cref="long.MaxValue"/> means "not poisoned".</summary>
+    private long _poisonStopTick = long.MaxValue;
+    private Fixed _poisonDamageAmount = Fixed.Zero;
+    private int _deathType = DeathTypes.Poisoned;
+
+    public override string ModuleName => "PoisonedBehavior";
+    public long NextWake { get => _nextWake; set => _nextWake = value; }
+
+    public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
+
+    public void OnDamage(IWorldServices world, in DamageInfo info, Fixed actualDamageDealt)
+    {
+        if (info.DamageType != DamageTypes.Poison) return;
+        _poisonDamageAmount = actualDamageDealt;
+        _poisonStopTick = world.Tick + Math.Max(data.PoisonDurationTicks, SimulationTiming.SleepNone);
+        var freshDamageTick = world.Tick + Math.Max(data.PoisonDamageIntervalTicks, SimulationTiming.SleepNone);
+        _poisonDamageTick = _poisonDamageTick == long.MaxValue ? freshDamageTick : Math.Min(_poisonDamageTick, freshDamageTick);
+        _deathType = info.DeathType;
+        world.WakeAt(Entity, this, Math.Min(_poisonDamageTick, _poisonStopTick));
+    }
+
+    public void OnHealing(IWorldServices world, in DamageInfo info)
+    {
+        _ = info;
+        StopPoisonedEffects();
+        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepForever);
+    }
+
+    public long Update(IWorldServices world)
+    {
+        if (_poisonStopTick == long.MaxValue) return SimulationTiming.SleepForever; // not poisoned (guards the reference's "hmm, this should not happen").
+
+        if (_poisonDamageTick != long.MaxValue && world.Tick >= _poisonDamageTick)
+        {
+            world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, _poisonDamageAmount, DamageTypes.Unresistable, _deathType, false));
+            _poisonDamageTick = world.Tick + Math.Max(data.PoisonDamageIntervalTicks, SimulationTiming.SleepNone);
+        }
+        // Unless the poison killed us: then we stay a pulsating toxic pus ball forever (no more ticks to schedule).
+        if (world.Tick >= _poisonStopTick && !Entity.EffectivelyDead) StopPoisonedEffects();
+
+        return CalcSleepTime(world);
+    }
+
+    private long CalcSleepTime(IWorldServices world)
+        => _poisonStopTick == long.MaxValue ? SimulationTiming.SleepForever : Math.Min(_poisonDamageTick, _poisonStopTick) - world.Tick;
+
+    private void StopPoisonedEffects()
+    {
+        _poisonDamageTick = long.MaxValue;
+        _poisonStopTick = long.MaxValue;
+        _poisonDamageAmount = Fixed.Zero;
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        writer.Int("poisonDamageTick", _poisonDamageTick);
+        writer.Int("poisonStopTick", _poisonStopTick);
+        writer.Fixed("poisonDamageAmount", _poisonDamageAmount);
+        writer.Int("deathType", _deathType);
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        _poisonDamageTick = reader.Int("poisonDamageTick");
+        _poisonStopTick = reader.Int("poisonStopTick");
+        _poisonDamageAmount = reader.Fixed("poisonDamageAmount");
+        _deathType = checked((int)reader.Int("deathType"));
+    }
 }

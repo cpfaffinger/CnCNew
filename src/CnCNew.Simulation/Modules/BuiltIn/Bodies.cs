@@ -91,8 +91,14 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
         if (info.DamageType == DamageTypes.Healing && !info.Kill)
         {
             if (amount <= Fixed.Zero) return DamageOutcome.NoEffect;
+            var oldHealState = DamageState;
             InternalChangeHealth(world, amount);
-            return Health != PreviousHealth ? DamageOutcome.Applied : DamageOutcome.NoEffect;
+            if (Health <= PreviousHealth) return DamageOutcome.NoEffect;
+            // ActiveBody.cpp attemptHealing: both callbacks only run once health actually rose.
+            foreach (var module in Entity.DamageModules) module.OnHealing(world, info);
+            if (DamageState != oldHealState)
+                foreach (var module in Entity.DamageModules) module.OnBodyDamageStateChange(world, info, oldHealState, DamageState);
+            return DamageOutcome.Applied;
         }
         if (DamageTypes.IsSubdual(info.DamageType) || info.DamageType is DamageTypes.KillPilot or DamageTypes.KillGarrisoned or DamageTypes.Status)
             return DamageOutcome.NoEffect;

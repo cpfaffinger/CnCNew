@@ -9,6 +9,7 @@ public static class DamageTypes
 {
     public const int Explosion = 0;
     public const int Flame = 6;
+    public const int Poison = 9;
     public const int Healing = 10;
     public const int Unresistable = 11;
     public const int KillPilot = 16;
@@ -32,6 +33,7 @@ public static class DeathTypes
     public const int None = 1;
     public const int Crushed = 2;
     public const int Burned = 3;
+    public const int Poisoned = 5;
 
     public static int Count => NameTables.DeathType.Count;
     public static bool IsValid(int type) => type >= 0 && type < Count;

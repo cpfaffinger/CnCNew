@@ -150,6 +150,9 @@ public interface IDamageModule
 
     /// <summary><c>oldState</c>/<c>newState</c> are <see cref="BuiltIn.BodyDamageStates"/> values; <paramref name="info"/> is the damage that caused the transition (matches <c>getLastDamageInfo()</c> in a synchronous, single-threaded model).</summary>
     void OnBodyDamageStateChange(IWorldServices world, in DamageInfo info, int oldState, int newState) { }
+
+    /// <summary><c>ActiveBody::attemptHealing</c>: fires only when health actually rose (mirrors <see cref="OnDamage"/>'s "health actually dropped" gate).</summary>
+    void OnHealing(IWorldServices world, in DamageInfo info) { }
 }
 
 /// <summary>Bit positions of the object status table (<c>ObjectStatusMaskType::s_bitNameList</c>).</summary>
