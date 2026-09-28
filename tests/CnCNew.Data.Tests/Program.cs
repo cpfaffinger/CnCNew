@@ -639,6 +639,9 @@ static void ReskinAndModuleEditsFollowTheReference()
     """), ModuleRegistry.Default);
     Assert(edited.Definitions.OfType<ObjectDefinition>().Single().Modules.Select(value => value.Tag).SequenceEqual(["B2"]), "Replace appends at the end; remove drops by tag.");
     Assert(edited.Diagnostics.Any(value => value.Code == "compatibility-missing-remove-target"), "A missing remove target is diagnosed.");
+    var repeatedTag = DefinitionCompiler.Compile(One("Object Twin\n  Behavior = FlammableUpdate T\n  End\n  Draw = W3DModelDraw T\n  End\nEnd\n"), ModuleRegistry.Default);
+    Assert(repeatedTag.Definitions.OfType<ObjectDefinition>().Single().Modules.Length == 2 && repeatedTag.Diagnostics.Any(value => value.Code == "compatibility-duplicate-module-tag"),
+        "A repeated module tag keeps both modules (retail behaviour) and is diagnosed.");
     var unclosed = DefinitionCompiler.Compile(One("Object Glitch\n  AddModule\n    Behavior = FlammableUpdate F1\n    End\n    Side = GLA\n    ArmorSet\n      Conditions = None\n    End\n  End\nEnd\n"), ModuleRegistry.Default);
     var glitch = unclosed.Definitions.OfType<ObjectDefinition>().Single();
     Assert(glitch.Modules.Length == 1 && glitch.Sections.Any(value => value.Declaration == "ArmorSet") && glitch.Fields.Any(field => field.Name == "Side"),
@@ -741,6 +744,16 @@ static void RealDataCatalogMatchesObservedModules(string directory)
         + string.Join(",", catalog.Except(observed).Concat(observed.Except(catalog))));
     Assert(graph.Audit.Compatibility.All(value => !(value.Category == "module" && value.PlannedTarget == "unknown-module-not-in-catalog")), "No module may be uncatalogued.");
     Console.WriteLine($"Real data: catalog == observed module set ({observed.Length} module types).");
+
+    // Drift guard: the compatibility inventory must equal the reviewed, checked-in baseline.
+    var root = AppContext.BaseDirectory;
+    while (root is not null && !File.Exists(Path.Combine(root, "CnCNew.slnx"))) root = Path.GetDirectoryName(root);
+    if (root is not null && File.Exists(Path.Combine(root, "baselines", "compatibility.json")))
+    {
+        var differences = CompatibilityBaseline.Compare(File.ReadAllText(Path.Combine(root, "baselines", "compatibility.json")), graph.Audit.Compatibility);
+        Assert(differences.Count == 0, "The compatibility inventory drifted from baselines/compatibility.json:\n  " + string.Join("\n  ", differences.Take(20)));
+        Console.WriteLine($"Real data: compatibility inventory equals the baseline ({graph.Audit.Compatibility.Length} entries).");
+    }
 }
 
 static MemorySource One(string text) => new(new Dictionary<string, string> { ["fixture.ini"] = text }, ["fixture.ini"]);

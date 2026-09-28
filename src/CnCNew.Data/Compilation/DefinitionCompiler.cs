@@ -358,14 +358,12 @@ public static class DefinitionCompiler
             Inheritable = mode == ModuleParseMode.Inheritable,
             OverrideableByLikeKind = mode == ModuleParseMode.OverrideableByLikeKind,
         };
-        var duplicate = state.Modules.FindIndex(value => value.Config.Tag.Equals(declaration.Tag, StringComparison.OrdinalIgnoreCase));
-        if (duplicate >= 0)
-        {
+        // The retail build keeps modules with a repeated tag (only the debug build asserts and throws), so both stay; the
+        // repeat is diagnosed and counted because Remove/ReplaceModule by tag becomes ambiguous.
+        if (state.Modules.Any(value => value.Config.Tag.Equals(declaration.Tag, StringComparison.OrdinalIgnoreCase)))
             c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-duplicate-module-tag",
-                $"Module tag '{declaration.Tag}' is used twice; the later module replaces the earlier one in place.", block.Location));
-            state.Modules[duplicate] = slot;
-        }
-        else state.Modules.Add(slot);
+                $"Module tag '{declaration.Tag}' is used twice in one object; both modules are kept like the retail build does.", block.Location));
+        state.Modules.Add(slot);
         c.ModuleCount++;
     }
 

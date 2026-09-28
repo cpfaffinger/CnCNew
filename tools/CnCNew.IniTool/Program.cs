@@ -200,6 +200,26 @@ static int DebtReport(IDefinitionSource source)
         Console.WriteLine($"{group.Key}: {group.Count()} definitions, {fieldCount} header fields, {flat} untyped (Text/List): " + string.Join(", ", histogram.Select(pair => $"{pair.Key}={pair.Value}")));
     }
     Console.WriteLine($"Total header fields: {total}");
+
+    // Every typed value of the graph (header fields, module fields, nested sections at any depth).
+    var all = new SortedDictionary<string, int>(StringComparer.Ordinal);
+    void Count(DefinitionValue value) => all[value.Kind.ToString()] = all.GetValueOrDefault(value.Kind.ToString()) + 1;
+    void CountSection(DefinitionSection section)
+    {
+        foreach (var field in section.Fields) Count(field.Value);
+        foreach (var child in section.Children) CountSection(child);
+    }
+    foreach (var definition in graph.Definitions)
+    {
+        foreach (var field in definition.Fields) Count(field.Value);
+        foreach (var section in definition.Sections) CountSection(section);
+        foreach (var module in definition.Modules)
+        {
+            foreach (var field in module.Fields) Count(field.Value);
+            if (!module.Sections.IsDefault) foreach (var section in module.Sections) CountSection(section);
+        }
+    }
+    Console.WriteLine($"All typed values: {all.Values.Sum()}; Text={all.GetValueOrDefault("Text")}, List={all.GetValueOrDefault("List")}: " + string.Join(", ", all.Select(pair => $"{pair.Key}={pair.Value}")));
     return 0;
 }
 
