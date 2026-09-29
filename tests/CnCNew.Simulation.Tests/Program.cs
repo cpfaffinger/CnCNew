@@ -82,6 +82,10 @@ run.Test("Special powers: snapshot continuation and replay round-trip", Tests.Sp
 run.Test("Phase 5 golden master: damage chain with armor, clip and reload", Tests.Phase5GoldenDamageChain);
 run.Test("Phase 5 golden master: production clock and ledger", Tests.Phase5GoldenProduction);
 run.Test("Supply economy golden master: independent trip recomputation, ledger and determinism", Tests.SupplyEconomyGoldenMaster);
+run.Test("Veterancy golden master: experience, levels and health scaling", Tests.VeterancyExperienceAndHealthGoldenMaster);
+run.Test("Veterancy: no experience for non-trainable killers and IGNORED_IN_GUI victims", Tests.VeterancyGrantRules);
+run.Test("Veterancy golden master: weapon bonus damage, range and rate of fire per level", Tests.VeterancyWeaponBonusGoldenMaster);
+run.Test("Veterancy: experience scalar, weapon bonus upgrade, starting level and snapshot", Tests.VeterancyUpgradesAndStartingLevel);
 run.Test("Supply economy: an unordered hauler stays idle", Tests.SupplyIdleHaulerEarnsNothing);
 run.Test("Supply economy: warehouse queue and DeleteWhenEmpty", Tests.SupplyQueueAndDeleteWhenEmpty);
 run.Test("Supply economy: DockCommand validation", Tests.SupplyDockCommandValidation);
