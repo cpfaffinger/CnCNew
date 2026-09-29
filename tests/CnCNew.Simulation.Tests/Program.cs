@@ -68,6 +68,8 @@ run.Test("Phase 5: ObjectCreationList determinism and snapshot", Tests.Phase5Cre
 run.Test("Fixed-point Sin/Cos accuracy", Tests.FixedTrigAccuracy);
 run.Test("Phase 5: last player standing wins", Tests.Phase5Victory);
 run.Test("Phase 5: reference match scenario, replay v2 factions, determinism", Tests.ReferenceMatch);
+run.Test("Phase 5 golden master: damage chain with armor, clip and reload", Tests.Phase5GoldenDamageChain);
+run.Test("Phase 5 golden master: production clock and ledger", Tests.Phase5GoldenProduction);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
