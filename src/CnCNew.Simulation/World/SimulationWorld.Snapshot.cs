@@ -1,3 +1,4 @@
+using CnCNew.Data.Definitions;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -114,6 +115,9 @@ public sealed partial class SimulationWorld
             Angle = reader.Fixed("angle"),
             Status = reader.UInt("status"),
             VeterancyLevel = checked((int)reader.Int("veterancy")),
+            Experience = checked((int)reader.Int("experience")),
+            ExperienceScalar = reader.Fixed("experienceScalar"),
+            WeaponBonusConditions = checked((uint)reader.UInt("weaponBonusConditions")),
             EffectivelyDead = reader.Bool("dead"),
             SlowDeathStarted = reader.Bool("slowDeathStarted"),
             DestroyRequested = reader.Bool("destroyRequested"),
@@ -131,6 +135,7 @@ public sealed partial class SimulationWorld
             HasPlayerUpgradeWeapon = reader.Bool("hasPlayerUpgradeWeapon"),
         };
         if (entity.VeterancyLevel is < 0 or > 3) throw new InvalidDataException("Veterancy level out of range.");
+        if (entity.WeaponBonusConditions >> NameTablesPhase5.WeaponBonusCondition.Count != 0) throw new InvalidDataException("Weapon bonus condition mask out of range.");
         AttachModules(entity, template);
         var modules = reader.Array("modules");
         if (modules.Count != entity.ModuleArray.Length) throw new InvalidDataException($"Entity {entity.Id} has {modules.Count} module states but its template has {entity.ModuleArray.Length}.");

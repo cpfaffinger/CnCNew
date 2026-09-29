@@ -72,6 +72,9 @@ public interface IWorldServices
 
     void RemoveUpgradeByName(Entity entity, string upgradeName);
 
+    /// <summary><c>ExperienceTracker::setMinVeterancyLevel</c>: raises the entity's veterancy level to at least <paramref name="level"/> and runs the level-change effects (also valid during <c>OnSpawn</c>).</summary>
+    void SetMinVeterancyLevel(Entity entity, int level);
+
     /// <summary>Reserves and queues the creation of a fresh entity outside the command/validation path (engine-internal spawns: production, OCLs).</summary>
     EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle);
 

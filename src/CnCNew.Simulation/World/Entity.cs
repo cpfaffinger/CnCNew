@@ -45,6 +45,15 @@ public sealed class Entity
     /// <summary>0 regular, 1 veteran, 2 elite, 3 heroic.</summary>
     public int VeterancyLevel { get; internal set; }
 
+    /// <summary><c>ExperienceTracker::m_currentExperience</c>: raised by enemy kills of trainable objects, set to the level's requirement by explicit level changes.</summary>
+    public int Experience { get; internal set; }
+
+    /// <summary><c>ExperienceTracker::m_experienceScalar</c>: multiplier of every experience gain (raised by <c>ExperienceScalarUpgrade</c>).</summary>
+    public Fixed ExperienceScalar { get; internal set; } = Fixed.One;
+
+    /// <summary>The set <c>WeaponBonusCondition</c> bits (<c>Object::m_weaponBonusCondition</c>): the veterancy level and <c>PLAYER_UPGRADE</c> are modeled.</summary>
+    public uint WeaponBonusConditions { get; internal set; }
+
     /// <summary>Object-scoped completed-upgrade mask (<c>Object::getObjectCompletedUpgradeMask</c>); most objects never set a bit.</summary>
     public UpgradeMask CompletedUpgrades { get; internal set; }
 
@@ -114,6 +123,9 @@ public sealed class Entity
         writer.Fixed("angle", Angle);
         writer.UInt("status", Status);
         writer.Int("veterancy", VeterancyLevel);
+        writer.Int("experience", Experience);
+        writer.Fixed("experienceScalar", ExperienceScalar);
+        writer.UInt("weaponBonusConditions", WeaponBonusConditions);
         writer.Bool("dead", EffectivelyDead);
         writer.Bool("slowDeathStarted", SlowDeathStarted);
         writer.Bool("destroyRequested", DestroyRequested);

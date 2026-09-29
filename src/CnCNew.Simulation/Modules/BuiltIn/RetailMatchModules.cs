@@ -155,8 +155,8 @@ public sealed record VeterancyGainCreateData(int StartingLevel, string ScienceRe
 
 /// <summary>
 /// <c>VeterancyGainCreate::onCreate</c>: an owner that holds the required science (or none is required) gets a trainable object at
-/// <c>StartingLevel</c>. The reference stores it as the object's <em>minimum</em> level, so later experience cannot lower it; the
-/// experience system is not modeled, so the level is set once at creation.
+/// <c>StartingLevel</c>. The reference stores it as the object's <em>minimum</em> level (<c>setMinVeterancyLevel</c>): experience is set to
+/// that level's requirement, so later experience can only raise it.
 /// </summary>
 public sealed class VeterancyGainCreate(VeterancyGainCreateData data) : SimModule
 {
@@ -169,7 +169,7 @@ public sealed class VeterancyGainCreate(VeterancyGainCreateData data) : SimModul
         {
             if (!world.Sciences.TryGet(data.ScienceRequired, out var science) || !world.PlayerSciences(Entity.Owner).Has(science.Index)) return;
         }
-        Entity.VeterancyLevel = Math.Max(Entity.VeterancyLevel, data.StartingLevel);
+        world.SetMinVeterancyLevel(Entity, data.StartingLevel);
     }
 
     public override void Describe(IStateWriter writer) { }

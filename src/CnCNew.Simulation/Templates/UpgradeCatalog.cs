@@ -13,8 +13,10 @@ public enum UpgradeScope { Player, Object }
 /// <summary>
 /// One <c>Upgrade</c> definition with a stable bit index. The reference gives every <c>UpgradeTemplate</c> a single-bit
 /// <c>UpgradeMaskType</c> (<c>Player::addUpgrade</c>); we do the same with an ordinal index into <see cref="UpgradeMask"/>.
+/// <c>IsEngine</c> marks the upgrades the engine itself creates (<c>UpgradeCenter</c> makes <c>Upgrade_Veterancy_VETERAN/ELITE/HEROIC</c>; no INI defines
+/// them): they are granted by the veterancy system and can never be bought.
 /// </summary>
-public sealed record UpgradeInfo(int Index, string Name, UpgradeScope Scope, Fixed BuildCost, long BuildTicks);
+public sealed record UpgradeInfo(int Index, string Name, UpgradeScope Scope, Fixed BuildCost, long BuildTicks, bool IsEngine = false);
 
 /// <summary>
 /// A fixed-size bitset of upgrades, one bit per <see cref="UpgradeInfo.Index"/> (128 bits: the shipped 82 upgrades fit
@@ -71,6 +73,12 @@ public sealed class UpgradeCatalog
     }
 
     public ImmutableArray<UpgradeInfo> Upgrades { get; }
+
+    /// <summary>The engine-made upgrade of veterancy level 1..3 (<c>Upgrade_Veterancy_VETERAN/ELITE/HEROIC</c>, <c>UpgradeCenter::UpgradeCenter</c>).</summary>
+    public UpgradeInfo VeterancyUpgrade(int level) => _byName[VeterancyUpgradeNames[level - 1]];
+
+    public static ImmutableArray<string> VeterancyUpgradeNames { get; } = ["Upgrade_Veterancy_VETERAN", "Upgrade_Veterancy_ELITE", "Upgrade_Veterancy_HEROIC"];
+
     public bool TryGet(string name, out UpgradeInfo info) => _byName.TryGetValue(name, out info!);
 
     /// <summary>Resolves a set of upgrade names into a mask. Unknown names are ignored (module data may reference "None"/empty).</summary>
@@ -97,6 +105,13 @@ public sealed class UpgradeCatalog
             var buildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds
                 ? SimulationTiming.SecondsToTicks(seconds) : 0;
             upgrades.Add(new UpgradeInfo(index++, definition.OriginalName, scope, cost, buildTicks));
+        }
+        foreach (var name in VeterancyUpgradeNames)
+        {
+            if (index >= 128) throw new InvalidOperationException("The upgrade catalog exceeds the 128-bit UpgradeMask capacity.");
+            if (upgrades.Any(existing => existing.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException($"The engine-made upgrade {name} is also defined by data.");
+            upgrades.Add(new UpgradeInfo(index++, name, UpgradeScope.Object, Fixed.Zero, 0, IsEngine: true));
         }
         return new UpgradeCatalog(upgrades.ToImmutable());
     }

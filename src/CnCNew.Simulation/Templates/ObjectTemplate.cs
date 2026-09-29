@@ -56,6 +56,8 @@ public sealed class ObjectTemplate
         BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? SimulationTiming.SecondsToTicks(seconds) : 0;
         EnergyProduction = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyProduction", StringComparison.OrdinalIgnoreCase))?.Value.Value is long energy ? checked((int)energy) : 0;
         IsTrainable = definition.Fields.LastOrDefault(field => field.Name.Equals("IsTrainable", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
+        ExperienceValue = IntegerArray(definition, "ExperienceValue");
+        ExperienceRequired = IntegerArray(definition, "ExperienceRequired");
         DefaultArmor = defaultArmor;
         PlayerUpgradeArmor = playerUpgradeArmor;
         DefaultWeapon = defaultWeapon;
@@ -83,6 +85,10 @@ public sealed class ObjectTemplate
     public int EnergyProduction { get; }
     /// <summary><c>ThingTemplate::m_isTrainable</c>: only trainable objects take over a veterancy level from an object creation list.</summary>
     public bool IsTrainable { get; }
+    /// <summary><c>ThingTemplate::m_experienceValue</c>: the experience a killer earns for destroying this object, by the victim's own veterancy level (absent key: all zero, the reference default).</summary>
+    public ImmutableArray<int> ExperienceValue { get; }
+    /// <summary><c>ThingTemplate::m_experienceRequired</c>: the experience at which this object reaches level 0..3 (absent key: all zero).</summary>
+    public ImmutableArray<int> ExperienceRequired { get; }
     public ImmutableArray<ModuleSpec> Modules { get; }
     public ImmutableArray<string> PresentationModules { get; }
     public ImmutableArray<string> MissingModules { get; }
@@ -104,6 +110,12 @@ public sealed class ObjectTemplate
     private static string Text(ObjectDefinition definition, string name)
         => definition.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty;
 
+    private static ImmutableArray<int> IntegerArray(ObjectDefinition definition, string name)
+    {
+        var value = definition.Fields.LastOrDefault(item => item.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value;
+        return value is ImmutableArray<long> list ? [..list.Select(item => checked((int)item))] : [0, 0, 0, 0];
+    }
+
     private static Fixed Real(ObjectDefinition definition, string name)
     {
         var field = definition.Fields.LastOrDefault(item => item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -124,8 +136,10 @@ public sealed class TemplateCatalog
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
     private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, SpecialPowerCatalog specialPowers,
-        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance, int valuePerSupplyBox)
+        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance, int valuePerSupplyBox, ImmutableArray<Fixed> healthBonus, WeaponBonusTable globalWeaponBonus)
     {
+        HealthBonus = healthBonus;
+        GlobalWeaponBonus = globalWeaponBonus;
         ValuePerSupplyBox = valuePerSupplyBox;
         StandardMinefieldDistance = standardMinefieldDistance;
         BaseRegenHealthPercentPerSecond = baseRegenHealthPercentPerSecond;
@@ -167,6 +181,10 @@ public sealed class TemplateCatalog
     public Fixed StandardMinefieldDistance { get; }
     /// <summary><c>GlobalData::m_baseValuePerSupplyBox</c> (<c>GameData.ini ValuePerSupplyBox = 75</c>): what one carried box pays at a supply center.</summary>
     public int ValuePerSupplyBox { get; }
+    /// <summary><c>GlobalData::m_healthBonus[level]</c>: the max-health multiplier of veterancy level 0..3 (<c>GameData.ini HealthBonus_Veteran/Elite/Heroic</c>; every absent value is the reference default 1.0, level 0 is always 1.0).</summary>
+    public ImmutableArray<Fixed> HealthBonus { get; }
+    /// <summary><c>GlobalData::m_weaponBonusSet</c>: the <c>WeaponBonus</c> lines of <c>GameData.ini</c>, applied to every weapon before its own set.</summary>
+    public WeaponBonusTable GlobalWeaponBonus { get; }
     public ObjectTemplate this[int index] => Templates[index];
     public bool TryGet(string name, out ObjectTemplate template) => _byName.TryGetValue(name, out template!);
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);
@@ -189,6 +207,8 @@ public sealed class TemplateCatalog
         var (baseRegen, baseRegenDelay) = ResolveBaseRegen(graph);
         var minefieldDistance = ResolveMinefieldDistance(graph);
         var valuePerSupplyBox = ResolveValuePerSupplyBox(graph);
+        var healthBonus = ResolveHealthBonus(graph);
+        var globalWeaponBonus = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault() is { } globalData ? WeaponBonusTable.From(globalData) : WeaponBonusTable.Empty;
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
         var index = 0;
         foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
@@ -234,7 +254,7 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, healthBonus, globalWeaponBonus);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))
@@ -291,6 +311,15 @@ public sealed class TemplateCatalog
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
         var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("ValuePerSupplyBox", StringComparison.OrdinalIgnoreCase))?.Value.Value;
         return value is long integer ? checked((int)integer) : 100;
+    }
+
+    /// <summary>GlobalData.cpp: every <c>m_healthBonus[i]</c> starts at 1.0, so an absent key (or an absent GameData) changes nothing.</summary>
+    private static ImmutableArray<Fixed> ResolveHealthBonus(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        Fixed Get(string name) => gameData?.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value is Percentage percentage
+            ? Fixed.FromDecimal(percentage.Ratio) : Fixed.One;
+        return [Fixed.One, Get("HealthBonus_Veteran"), Get("HealthBonus_Elite"), Get("HealthBonus_Heroic")];
     }
 
     private static ImmutableArray<string> ConditionTokens(DefinitionSection set)

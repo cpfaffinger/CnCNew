@@ -307,15 +307,13 @@ public sealed class WeaponSetUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule
 }
 
 /// <summary>
-/// <c>WeaponBonusUpgrade</c>: phase 5 has no <c>WeaponBonus</c> condition/multiplier system (<see cref="Templates.WeaponInfo"/>
-/// always resolves at coefficient 1.0), so this module runs the real trigger/conflict/removal state machine — other modules
-/// keying off the same upgrade name still see correct <c>TriggeredBy</c>/<c>RemovesUpgrades</c> behaviour — but its own
-/// effect is a documented no-op, deferred to phase 6.
+/// <c>WeaponBonusUpgrade.cpp upgradeImplementation</c>: sets the <c>PLAYER_UPGRADE</c> weapon bonus condition, which the object's
+/// weapons then apply through their <c>WeaponBonus PLAYER_UPGRADE ...</c> lines. Like the reference it never clears the condition again.
 /// </summary>
 public sealed class WeaponBonusUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(data.Mux)
 {
     public override string ModuleName => "WeaponBonusUpgrade";
-    protected override void Activate(IWorldServices world) { }
+    protected override void Activate(IWorldServices world) => Entity.WeaponBonusConditions |= 1u << WeaponBonusTable.PlayerUpgradeCondition;
 }
 
 /// <summary>
@@ -389,7 +387,7 @@ public sealed class CommandSetUpgrade(CommandSetUpgradeData data) : UpgradeMuxMo
     protected override void Activate(IWorldServices world) { }
 }
 
-/// <summary><c>ExperienceScalarUpgrade.cpp</c>: phase 5 has no experience/kill-XP system (<c>VeterancyLevel</c> is only set directly via <c>SimulationWorld.SetVeterancy</c>), so the scalar is compiled but unapplied; deferred to phase 6.</summary>
+/// <summary><c>ExperienceScalarUpgrade.cpp upgradeImplementation</c>: adds <c>AddXPScalar</c> to the object's experience gain scalar (never undone, like the reference).</summary>
 public sealed record ExperienceScalarUpgradeData(UpgradeMuxData Mux, Fixed AddXpScalar) : ModuleData
 {
     public static ExperienceScalarUpgradeData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog)
@@ -399,7 +397,7 @@ public sealed record ExperienceScalarUpgradeData(UpgradeMuxData Mux, Fixed AddXp
 public sealed class ExperienceScalarUpgrade(ExperienceScalarUpgradeData data) : UpgradeMuxModule(data.Mux)
 {
     public override string ModuleName => "ExperienceScalarUpgrade";
-    protected override void Activate(IWorldServices world) { }
+    protected override void Activate(IWorldServices world) => Entity.ExperienceScalar += data.AddXpScalar;
 }
 
 /// <summary><c>ModelConditionUpgrade.cpp</c>: sets a draw-time model condition flag — pure presentation, not modeled in the simulation.</summary>

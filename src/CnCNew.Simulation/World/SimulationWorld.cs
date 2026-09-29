@@ -175,13 +175,60 @@ public sealed partial class SimulationWorld : IWorldServices
         MarkDirty(entity);
     }
 
-    /// <summary>Sets the veterancy level (0 regular ... 3 heroic).</summary>
+    /// <summary>Sets the veterancy level (0 regular ... 3 heroic); <c>ExperienceTracker::setVeterancyLevel</c>: the experience becomes the level's requirement and the level-change effects run.</summary>
     public void SetVeterancy(EntityId id, int level)
     {
         if (level is < 0 or > 3) throw new ArgumentOutOfRangeException(nameof(level));
         var entity = FindEntity(id) ?? throw new ArgumentException($"Unknown entity {id}.", nameof(id));
-        entity.VeterancyLevel = level;
+        SetVeterancyLevel(entity, level);
+    }
+
+    /// <summary><c>ExperienceTracker::setMinVeterancyLevel</c>: raises the level to at least <paramref name="level"/> (works on an entity that is not registered yet).</summary>
+    public void SetMinVeterancyLevel(Entity entity, int level)
+    {
+        if (level is < 0 or > 3) throw new ArgumentOutOfRangeException(nameof(level));
+        if (entity.VeterancyLevel < level) SetVeterancyLevel(entity, level);
+    }
+
+    private void SetVeterancyLevel(Entity entity, int level)
+    {
+        if (entity.VeterancyLevel == level) return;
+        entity.Experience = entity.Template.ExperienceRequired[level];
+        OnVeterancyLevelChanged(entity, level);
+    }
+
+    /// <summary><c>ExperienceTracker::addExperiencePoints</c>: a trainable object gains <c>(int)(amount * scalar)</c> and takes the highest level whose requirement it meets.</summary>
+    private void AddExperience(Entity entity, int amount)
+    {
+        if (!entity.Template.IsTrainable) return;
+        entity.Experience = checked(entity.Experience + (int)(Fixed.FromInt(amount) * entity.ExperienceScalar).Floor());
+        var level = 0;
+        while (level + 1 < 4 && entity.Experience >= entity.Template.ExperienceRequired[level + 1]) level++;
         MarkDirty(entity);
+        if (level != entity.VeterancyLevel) OnVeterancyLevelChanged(entity, level);
+    }
+
+    /// <summary>
+    /// <c>Object::onVeterancyLevelChanged</c>: the body's max health is scaled by the ratio of the GameData health bonuses (health keeps its
+    /// ratio), the VETERAN/ELITE/HERO weapon bonus condition follows the level, and the engine-made <c>Upgrade_Veterancy_*</c> of the new
+    /// level is granted (none for level 0). Armor/weapon set selection by veterancy is not modeled: no shipped set asks for it.
+    /// </summary>
+    private void OnVeterancyLevelChanged(Entity entity, int newLevel)
+    {
+        var oldLevel = entity.VeterancyLevel;
+        entity.VeterancyLevel = newLevel;
+        var bonus = _templates.HealthBonus;
+        if (entity.Body is IMaxHealthAdjustable adjustable && bonus[oldLevel] > Fixed.Zero && bonus[newLevel] != bonus[oldLevel])
+        {
+            var maxHealth = entity.Body.MaxHealth;
+            adjustable.AdjustMaxHealth(this, maxHealth * bonus[newLevel] / bonus[oldLevel] - maxHealth, "PRESERVE_RATIO");
+        }
+        var conditions = entity.WeaponBonusConditions & ~WeaponBonusTable.VeterancyConditions;
+        if (newLevel > 0) conditions |= 1u << (WeaponBonusTable.VeteranCondition + newLevel - 1);
+        entity.WeaponBonusConditions = conditions;
+        MarkDirty(entity);
+        if (newLevel > 0 && _templates.Upgrades.VeterancyUpgrade(newLevel) is var upgrade && !entity.CompletedUpgrades.Has(upgrade.Index))
+            CompleteObjectUpgrade(entity, upgrade, entity.Owner);
     }
 
     // ------------------------------------------------------------------------------------- phase 5: economy, upgrades
@@ -291,10 +338,15 @@ public sealed partial class SimulationWorld : IWorldServices
         {
             var target = objectScope is { } id ? FindEntity(id) : null;
             if (target is null) throw new ArgumentException("An object-scoped upgrade requires a valid target entity.", nameof(objectScope));
-            target.CompletedUpgrades = target.CompletedUpgrades.Set(info.Index);
-            Emit(SimEventKind.UpgradeCompleted, target.Id, EntityId.Invalid, upgradeName, info.Index, player);
-            ReevaluateUpgrades(target);
+            CompleteObjectUpgrade(target, info, player);
         }
+    }
+
+    private void CompleteObjectUpgrade(Entity target, UpgradeInfo info, PlayerId player)
+    {
+        target.CompletedUpgrades = target.CompletedUpgrades.Set(info.Index);
+        Emit(SimEventKind.UpgradeCompleted, target.Id, EntityId.Invalid, info.Name, info.Index, player);
+        ReevaluateUpgrades(target);
     }
 
     public void RemoveUpgradeByName(Entity entity, string upgradeName)
@@ -434,6 +486,7 @@ public sealed partial class SimulationWorld : IWorldServices
             case PurchaseUpgradeCommand purchase:
             {
                 if (!_templates.Upgrades.TryGet(purchase.Upgrade, out var info)) return CommandRejection.UnknownUpgrade;
+                if (info.IsEngine) return CommandRejection.NotPermitted;
                 if (info.Scope == UpgradeScope.Object)
                 {
                     if (purchase.Target is not { } targetId) return CommandRejection.InvalidArguments;
@@ -482,7 +535,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 var weapon = _templates.Weapons[weaponIndex];
                 var dx = fireTarget.X - source.X;
                 var dy = fireTarget.Y - source.Y;
-                if (dx * dx + dy * dy > weapon.AttackRange * weapon.AttackRange) return CommandRejection.OutOfRange;
+                var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
+                if (dx * dx + dy * dy > reach * reach) return CommandRejection.OutOfRange;
                 break;
             }
             case GiveSciencePointsCommand giveScience:
@@ -729,13 +783,17 @@ public sealed partial class SimulationWorld : IWorldServices
                 var weapon = _templates.Weapons[weaponIndex];
                 var dx = fireTarget.X - source.X;
                 var dy = fireTarget.Y - source.Y;
-                if (dx * dx + dy * dy > weapon.AttackRange * weapon.AttackRange) { RecordRejection(command, CommandRejection.OutOfRange); break; }
+                var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
+                if (dx * dx + dy * dy > reach * reach) { RecordRejection(command, CommandRejection.OutOfRange); break; }
                 // _tick >= WeaponReadyTick was just confirmed above: an empty clip has finished its ClipReloadTime by now.
                 if (source.WeaponClip == 0) source.WeaponClip = ClipCapacity(weapon);
-                var damage = ActiveArmor(fireTarget).Adjust(weapon.DamageType, weapon.PrimaryDamage);
+                var bonuses = _templates.GlobalWeaponBonus;
+                var damage = ActiveArmor(fireTarget).Adjust(weapon.DamageType, weapon.DamageWith(bonuses, source.WeaponBonusConditions, weapon.PrimaryDamage));
                 source.LastFireTick = _tick;
                 if (source.WeaponClip != int.MaxValue) source.WeaponClip--;
-                source.WeaponReadyTick = source.WeaponClip == 0 ? _tick + weapon.ClipReloadTicks : _tick + weapon.DelayBetweenShotsTicks;
+                source.WeaponReadyTick = source.WeaponClip == 0
+                    ? _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
+                    : _tick + weapon.DelayBetweenShotsWith(bonuses, source.WeaponBonusConditions);
                 MarkDirty(source);
                 Damage(fireTarget.Id, new DamageInfo(source.Id, damage, weapon.DamageType, weapon.DeathType, false));
                 Emit(SimEventKind.WeaponFired, source.Id, fireTarget.Id, weapon.Name, damage.Raw, command.Player);
@@ -959,13 +1017,18 @@ public sealed partial class SimulationWorld : IWorldServices
         }
     }
 
-    /// <summary><c>Object::scoreTheKill</c> + <c>Player::doBountyForKill</c>: an enemy kill pays the killer's owner a share of the victim's cost (<c>CashBountyPower</c>).</summary>
+    /// <summary>
+    /// <c>Object::scoreTheKill</c>: an enemy kill (not of a structure under construction, not of an <c>IGNORED_IN_GUI</c> object) gives the killer
+    /// the victim's <c>ExperienceValue</c> for the victim's level and pays the killer's owner a share of the victim's cost
+    /// (<c>Player::doBountyForKill</c>, <c>CashBountyPower</c>). Skill points and experience sinks are not modeled.
+    /// </summary>
     private void ScoreTheKill(Entity victim, in DamageInfo info)
     {
         if (!info.Source.IsValid || victim.Owner.IsSystem) return;
         var killer = FindEntity(info.Source);
         if (killer is null || killer.Owner.IsSystem || killer.Owner == victim.Owner) return;
         if (victim.Template.IsKindOf("IGNORED_IN_GUI") || victim.HasStatus(ObjectStatusBits.UnderConstruction)) return;
+        if (AreEnemies(killer.Owner, victim.Owner)) AddExperience(killer, victim.Template.ExperienceValue[victim.VeterancyLevel]);
         if (!_players.TryGetValue(killer.Owner.Value, out var payee) || payee.CashBounty.Raw == 0) return;
         var bounty = (victim.Template.BuildCost * payee.CashBounty).Ceiling();
         if (bounty > 0) payee.Money += Fixed.FromInt(bounty);
@@ -1055,8 +1118,8 @@ public sealed partial class SimulationWorld : IWorldServices
             Z = pending.Z,
             Angle = pending.Angle,
         };
-        if (setup.HasVeterancy && template.IsTrainable) entity.VeterancyLevel = setup.Veterancy;
         AttachModules(entity, template);
+        if (setup.HasVeterancy && template.IsTrainable) SetVeterancyLevel(entity, setup.Veterancy);
         InitializeWeaponClip(entity);
         if (setup.MaxLifetimeTicks > 0)
             foreach (var module in entity.ModuleArray)
