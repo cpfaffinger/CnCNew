@@ -32,6 +32,9 @@ public interface IWorldServices
 
     DamageOutcome Damage(EntityId target, in DamageInfo info);
 
+    /// <summary>One resolved shot of <paramref name="weapon"/> from <paramref name="source"/> at a victim or a position, including radius damage (see <c>SimulationWorld.DealWeaponDamage</c>); returns the damage the primary victim took.</summary>
+    Fixed DealWeaponDamage(Entity source, WeaponInfo weapon, Entity? primaryVictim, Fixed x, Fixed y, Fixed z);
+
     /// <summary><c>Object::kill</c>: unresistable damage with the kill flag, so that die modules run.</summary>
     void Kill(EntityId target);
 

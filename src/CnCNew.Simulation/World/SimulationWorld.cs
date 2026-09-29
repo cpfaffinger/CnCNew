@@ -847,14 +847,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 // _tick >= WeaponReadyTick was just confirmed above: an empty clip has finished its ClipReloadTime by now.
                 if (source.WeaponClip == 0) source.WeaponClip = ClipCapacity(weapon);
                 var bonuses = _templates.GlobalWeaponBonus;
-                var damage = ActiveArmor(fireTarget).Adjust(weapon.DamageType, weapon.DamageWith(bonuses, source.WeaponBonusConditions, weapon.PrimaryDamage));
                 source.LastFireTick = _tick;
                 if (source.WeaponClip != int.MaxValue) source.WeaponClip--;
                 source.WeaponReadyTick = source.WeaponClip == 0
                     ? _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
                     : _tick + weapon.DelayBetweenShotsWith(bonuses, source.WeaponBonusConditions);
                 MarkDirty(source);
-                Damage(fireTarget.Id, new DamageInfo(source.Id, damage, weapon.DamageType, weapon.DeathType, false));
+                var damage = DealWeaponDamage(source, weapon, fireTarget, fireTarget.X, fireTarget.Y, fireTarget.Z);
                 Emit(SimEventKind.WeaponFired, source.Id, fireTarget.Id, weapon.Name, damage.Raw, command.Player);
                 break;
             }

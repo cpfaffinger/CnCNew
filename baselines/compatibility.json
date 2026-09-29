@@ -4495,15 +4495,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "Weapon/RadiusDamageAffects",
-      "count": 335,
-      "owners": [
-        "Weapon"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Weapon/RequestAssistRange",
       "count": 6,
       "owners": [
@@ -5015,7 +5006,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 4276,
+      "count": 4193,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5827,15 +5818,6 @@
     },
     {
       "category": "module",
-      "name": "FireWeaponUpdate",
-      "count": 63,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "FireWeaponWhenDamagedBehavior",
       "count": 8,
       "owners": [
@@ -6229,15 +6211,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "ReplaceObjectUpgrade",
-      "count": 20,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",

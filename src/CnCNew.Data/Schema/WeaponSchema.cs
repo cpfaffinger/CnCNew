@@ -21,6 +21,7 @@ public static class WeaponSchema
         [
             Real("PrimaryDamage"),
             new("PrimaryDamageRadius", FieldType.Distance, Source: Table),
+            new("RadiusDamageAffects", FieldType.Flags, Table: NameTablesPhase5.WeaponAffectsMask, Source: Table),
             Real("SecondaryDamage"),
             new("SecondaryDamageRadius", FieldType.Distance, Source: Table),
             new("AttackRange", FieldType.Distance, Source: Table),

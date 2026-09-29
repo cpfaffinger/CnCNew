@@ -38,6 +38,9 @@ public static class NameTablesPhase5
     /// <summary>Weapon.h TheWeaponReloadNames (3 entries).</summary>
     public static NameTable WeaponReloadType { get; } = new("WeaponReloadType", "Weapon.h TheWeaponReloadNames", "YES", "NO", "RETURN_TO_BASE");
 
+    /// <summary>Weapon.h TheWeaponAffectsMaskNames (7 entries; the bit order is the <c>WeaponAffectsMaskType</c> enum: SUICIDE is <c>WEAPON_KILLS_SELF</c>).</summary>
+    public static NameTable WeaponAffectsMask { get; } = new("WeaponAffectsMask", "Weapon.h TheWeaponAffectsMaskNames", "SELF", "ALLIES", "ENEMIES", "NEUTRALS", "SUICIDE", "NOT_SIMILAR", "NOT_AIRBORNE");
+
     /// <summary>ObjectCreationList.cpp DebrisDispositionNames (9 entries).</summary>
     public static NameTable DebrisDisposition { get; } = new("DebrisDisposition", "ObjectCreationList.cpp DebrisDispositionNames",
         "LIKE_EXISTING", "ON_GROUND_ALIGNED", "SEND_IT_FLYING", "SEND_IT_UP", "SEND_IT_OUT", "RANDOM_FORCE", "FLOATING", "INHERIT_VELOCITY", "WHIRLING");

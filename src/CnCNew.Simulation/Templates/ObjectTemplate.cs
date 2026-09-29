@@ -76,6 +76,27 @@ public sealed class ObjectTemplate
     public Fixed GeometryMajorRadius { get; }
     public Fixed GeometryMinorRadius { get; }
     public Fixed GeometryHeight { get; }
+
+    private bool IsBox => Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
+    private bool IsSphere => Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary><c>GeometryInfo::getBoundingCircleRadius</c> (<c>calcBoundingStuff</c>): the corner distance of a box, the major radius of a cylinder or sphere.</summary>
+    public Fixed BoundingCircleRadius => IsBox ? Fixed.Sqrt(GeometryMajorRadius * GeometryMajorRadius + GeometryMinorRadius * GeometryMinorRadius) : GeometryMajorRadius;
+
+    /// <summary><c>GeometryInfo::getBoundingSphereRadius</c>: a sphere its radius, a cylinder half its height (at least the radius), a box the half-diagonal.</summary>
+    public Fixed BoundingSphereRadius
+    {
+        get
+        {
+            var halfHeight = GeometryHeight / Fixed.FromInt(2);
+            if (IsBox) return Fixed.Sqrt(GeometryMajorRadius * GeometryMajorRadius + GeometryMinorRadius * GeometryMinorRadius + halfHeight * halfHeight);
+            if (IsSphere) return GeometryMajorRadius;
+            return halfHeight < GeometryMajorRadius ? GeometryMajorRadius : halfHeight;
+        }
+    }
+
+    /// <summary><c>GeometryInfo::getZDeltaToCenterPosition</c>: how far above the object position the geometry centre lies (a sphere is centred on its position).</summary>
+    public Fixed CenterZDelta => IsSphere ? Fixed.Zero : GeometryHeight / Fixed.FromInt(2);
     /// <summary><c>ThingTemplate::m_visionRange</c>: <c>StealthDetectorUpdate</c>'s <c>DetectionRange</c> falls back to this when unset (the shipped default: every occurrence leaves <c>DetectionRange</c> commented out).</summary>
     public Fixed VisionRange { get; }
     /// <summary><c>ThingTemplate::getTransportSlotCount</c>: how many <c>TransportContain</c> slots this object occupies (0 = not transportable).</summary>

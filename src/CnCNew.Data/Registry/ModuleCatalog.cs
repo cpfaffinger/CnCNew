@@ -292,6 +292,17 @@ public static class ModuleCatalog
             new("NeverHeal", FieldType.Real, Source: "AutoFindHealingUpdate.cpp"),
             new("AlwaysHeal", FieldType.Real, Source: "AutoFindHealingUpdate.cpp"),
         ]);
+        Add("FireWeaponUpdate",
+        [
+            new("Weapon", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponUpdate.cpp"),
+            new("InitialDelay", FieldType.DurationMs, Source: "FireWeaponUpdate.cpp"),
+            new("ExclusiveWeaponDelay", FieldType.DurationMs, Source: "FireWeaponUpdate.cpp"),
+        ]);
+        Add("ReplaceObjectUpgrade",
+        [
+            ..UpgradeMux(),
+            new("ReplaceObject", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "ReplaceObjectUpgrade.cpp"),
+        ]);
         Add("SupplyCenterCreate", []);
         Add("SupplyWarehouseCreate", []);
         // UpgradedBoost is "UpgradeType:<name> Boost:<int>", repeatable (parseUpgradePair): a token pair the generic typer cannot read, so

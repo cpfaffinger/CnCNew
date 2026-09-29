@@ -131,13 +131,7 @@ public sealed class GenerateMinefieldBehavior(GenerateMinefieldData data) : SimM
     private UpgradeMask UpgradedMask(IWorldServices world)
         => _upgradedMask ??= data.UpgradedTrigger.Length == 0 ? UpgradeMask.Empty : world.Upgrades.MaskOf([data.UpgradedTrigger]);
 
-    private static bool IsBox(ObjectTemplate template) => template.Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary><c>GeometryInfo::getBoundingCircleRadius</c>: the corner distance of a box, the major radius of a cylinder or sphere.</summary>
-    private static Fixed BoundingRadius(ObjectTemplate template)
-        => IsBox(template)
-            ? Fixed.Sqrt(template.GeometryMajorRadius * template.GeometryMajorRadius + template.GeometryMinorRadius * template.GeometryMinorRadius)
-            : template.GeometryMajorRadius;
+    private static Fixed BoundingRadius(ObjectTemplate template) => template.BoundingCircleRadius;
 
     private void PlaceMines(IWorldServices world)
     {
@@ -151,7 +145,7 @@ public sealed class GenerateMinefieldBehavior(GenerateMinefieldData data) : SimM
             return;
         }
 
-        if (!data.SmartBorder || (!data.AlwaysCircular && IsBox(Entity.Template)))
+        if (!data.SmartBorder || (!data.AlwaysCircular && Entity.Template.Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase)))
         {
             world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid,
                 data.SmartBorder ? "GenerateMinefieldBehavior rectangular border" : data.BorderOnly ? "GenerateMinefieldBehavior plain border" : "GenerateMinefieldBehavior footprint fill",

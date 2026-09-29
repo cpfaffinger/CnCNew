@@ -7,16 +7,24 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Templates;
 
 /// <summary>
-/// A typed <c>Weapon</c> definition, resolved to simulation units. Phase 5 scope: direct-target hitscan damage only — no
-/// projectile travel time (<c>WeaponSpeed</c> is kept for audit but the shot resolves the instant it is fired) and no area
-/// splash to bystanders (<c>PrimaryDamageRadius</c>/<c>SecondaryDamage</c> stay in the compiled definition, unused here).
+/// A typed <c>Weapon</c> definition, resolved to simulation units. Phase 5 scope: hitscan damage — no projectile travel time
+/// (<c>WeaponSpeed</c> is kept for audit but the shot resolves the instant it is fired). Radius damage follows
+/// <c>WeaponTemplate::dealDamageInternal</c> (primary/secondary radius and damage, <c>RadiusDamageAffects</c>); the directional cone
+/// (<c>RadiusDamageAngle</c>), shockwaves and status damage stay in the compiled definition, unused here.
 /// <c>WeaponBonus</c> is modeled through <see cref="Bonuses"/> and the world-wide <see cref="WeaponBonusTable"/> (GameData); the
 /// unmodified values are the base fields. These are documented simplifications, not silent gaps: <c>GAME-RULES.md</c> names them.
 /// </summary>
 public sealed record WeaponInfo(
     int Index, string Name, Fixed PrimaryDamage, int DamageType, int DeathType, Fixed AttackRange,
-    int ClipSize, long ClipReloadTicks, long DelayBetweenShotsTicks, WeaponBonusTable Bonuses)
+    int ClipSize, long ClipReloadTicks, long DelayBetweenShotsTicks, WeaponBonusTable Bonuses,
+    Fixed PrimaryRadius, Fixed SecondaryDamage, Fixed SecondaryRadius, int AffectsMask)
 {
+    public const int AffectsSelf = 1, AffectsAllies = 2, AffectsEnemies = 4, AffectsNeutrals = 8, KillsSelf = 16, NotSimilar = 32, NotAirborne = 64;
+    // WeaponTemplate ctor default (Weapon.cpp): ALLIES | ENEMIES | NEUTRALS.
+    public const int DefaultAffects = AffectsAllies | AffectsEnemies | AffectsNeutrals;
+
+    public Fixed RadiusWith(WeaponBonusTable global, uint conditions, Fixed baseRadius) => baseRadius * Multiplier(global, conditions, WeaponBonusTable.Radius);
+
     // Weapon.cpp Weapon::computeBonus: the multiplier of a field is 1 plus the sum of the (entry - 1) deltas of every set condition,
     // first the GameData global set, then the weapon's own set.
     private Fixed Multiplier(WeaponBonusTable global, uint conditions, int field) => Fixed.One + global.Sum(conditions, field) + Bonuses.Sum(conditions, field);
@@ -119,7 +127,18 @@ public sealed class WeaponCatalog
             var reload = Field("ClipReloadTime")?.Value.Value is GameTime reloadTime ? SimulationTiming.DurationMillisecondsToTicks(reloadTime.Milliseconds) : 0;
             var delay = Field("DelayBetweenShots")?.Value.Value is ShotDelayValue shotDelay
                 ? SimulationTiming.DurationMillisecondsToTicks(shotDelay.Min.Milliseconds) : SimulationTiming.SleepNone;
-            weapons.Add(new WeaponInfo(index++, definition.OriginalName, damage, damageType, deathType, range, clipSize, reload, Math.Max(SimulationTiming.SleepNone, delay), WeaponBonusTable.From(definition)));
+            var primaryRadius = Field("PrimaryDamageRadius")?.Value.Value is Distance primaryRadiusValue ? Fixed.FromDecimal(primaryRadiusValue.Value) : Fixed.Zero;
+            var secondaryRadius = Field("SecondaryDamageRadius")?.Value.Value is Distance secondaryRadiusValue ? Fixed.FromDecimal(secondaryRadiusValue.Value) : Fixed.Zero;
+            var secondaryDamage = Field("SecondaryDamage")?.Value.Value is decimal secondary ? Fixed.FromDecimal(secondary) : Fixed.Zero;
+            var affects = WeaponInfo.DefaultAffects;
+            if (Field("RadiusDamageAffects")?.Value.Value is FlagsValue affectsFlags)
+            {
+                affects = 0;
+                foreach (var name in affectsFlags.Names)
+                    affects |= 1 << (NameTablesPhase5.WeaponAffectsMask.TryIndexOf(name, out var bit) ? bit : throw new InvalidDataException($"{definition.OriginalName}: unknown RadiusDamageAffects {name}."));
+            }
+            weapons.Add(new WeaponInfo(index++, definition.OriginalName, damage, damageType, deathType, range, clipSize, reload, Math.Max(SimulationTiming.SleepNone, delay), WeaponBonusTable.From(definition),
+                primaryRadius, secondaryDamage, secondaryRadius, affects));
         }
         return new WeaponCatalog(weapons.ToImmutable());
     }
