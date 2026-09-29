@@ -16,6 +16,7 @@ public sealed partial class SimulationWorld
     internal void DescribeFull(IStateWriter writer)
     {
         DescribeGlobal(writer);
+        DescribeVision(writer);
         writer.BeginArray("entityList");
         foreach (var entity in _entities.Values.OrderBy(value => value.Id.Value)) entity.Describe(writer);
         writer.EndArray();
@@ -106,6 +107,7 @@ public sealed partial class SimulationWorld
         }
         if (state.Int("pendingCommands") != _pendingCommandCount || state.Int("entities") != _entities.Count || state.Int("timers") != _timerById.Count)
             throw new InvalidDataException("Snapshot table sizes do not match their contents.");
+        LoadVision(state);
         ComputeFullHash();
     }
 

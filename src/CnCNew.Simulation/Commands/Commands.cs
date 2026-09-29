@@ -422,6 +422,14 @@ public enum CommandRejection : byte
     SpecialPowerHandlerMissing = 29,
     /// <summary>The dock order names an object without a dock module, or an actor that cannot dock (no AI module).</summary>
     CannotDock = 30,
+
+    // --------------------------------------------------------------------------------------------------- phase 6
+    /// <summary>The target lies in a cell the issuing player cannot see and is not an ally's object, or it is stealthed and undetected (<c>Object::getShroudedStatus</c>, <c>ActionManager::canAttack</c>).</summary>
+    TargetNotVisible = 31,
+    /// <summary>A structure placement failed: off the map, on a cliff or water, overlapping another footprint, or inside the shroud.</summary>
+    InvalidPlacement = 32,
+    /// <summary>The builder is not a dozer/worker that can build the template, or the template is not a buildable structure.</summary>
+    CannotConstruct = 33,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

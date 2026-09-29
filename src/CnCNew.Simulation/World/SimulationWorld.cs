@@ -63,7 +63,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[(int)CommandRejection.CannotDock + 1];
+    private readonly long[] _rejections = new long[(int)CommandRejection.CannotConstruct + 1];
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
     private long _tick;
@@ -151,6 +151,7 @@ public sealed partial class SimulationWorld : IWorldServices
         _playerList = [.._players.Values];
         _updates = new IndexedHeap<UpdateNode>(CompareUpdates, node => node.HeapIndex, (node, index) => node.HeapIndex = index);
         _timers = new IndexedHeap<SimTimer>(CompareTimers, timer => timer.HeapIndex, (timer, index) => timer.HeapIndex = index);
+        if (terrain is not null) InitializeVision();
         ComputeFullHash();
     }
 
@@ -597,6 +598,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 var dy = fireTarget.Y - source.Y;
                 var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
                 if (dx * dx + dy * dy > reach * reach) return CommandRejection.OutOfRange;
+                if (!CanPlayerSee(command.Player, fireTarget)) return CommandRejection.TargetNotVisible;
                 break;
             }
             case GiveSciencePointsCommand giveScience:
@@ -1309,6 +1311,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ProcessDestroys();
         ProcessSpawns();
         DeliverEvents();
+        if (_vision is not null && tick % VisionIntervalTicks == 0) RefreshVision();
         _tick = tick + 1;
         return new TickResult(tick, ComputeIncrementalHash(), _tickEvents);
     }
@@ -1405,6 +1408,7 @@ public sealed partial class SimulationWorld : IWorldServices
         writer.Int("pendingCommands", _pendingCommandCount);
         writer.Int("spawnedTotal", _spawnedTotal);
         writer.Int("destroyedTotal", _destroyedTotal);
+        if (_vision is not null) writer.UInt("visionHash", _visionHash);
         writer.BeginArray("players");
         foreach (var player in _playerList)
         {

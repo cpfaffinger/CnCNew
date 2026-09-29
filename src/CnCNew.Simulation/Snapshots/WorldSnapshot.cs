@@ -21,7 +21,7 @@ public sealed class SnapshotFormatException(string message, Exception? inner = n
 public static class WorldSnapshot
 {
     public const string Format = "cncnew-world-snapshot";
-    public const int Version = 4;
+    public const int Version = 5;
 
     public static byte[] Write(SimulationWorld world)
     {

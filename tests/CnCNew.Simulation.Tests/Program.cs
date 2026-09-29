@@ -114,7 +114,7 @@ run.Test("Combat: ReplaceObjectUpgrade swaps the template", Tests.ReplaceObjectU
 run.Test("Combat: CrushDie binds and stays inert", Tests.CrushDieIsInert);
 run.Test("Terrain: height sampling, border and clamping", Tests.TerrainHeightSampling);
 run.Test("Terrain: cliff and water cell classification, overlapping water", Tests.TerrainCellClassification);
-run.Test("Terrain: world placement, snapshot v4 and replay v5 carry the fingerprint", Tests.TerrainInWorldSnapshotAndReplay);
+run.Test("Terrain: world placement, snapshot v5 and replay v5 carry the fingerprint", Tests.TerrainInWorldSnapshotAndReplay);
 run.Test("Terrain: start positions, waypoints, fingerprint and boundary validation", Tests.TerrainStartsAndFingerprint);
 run.Test("Navigation: integer Atan2, angle difference and normalization", Tests.NavigationAtan2);
 run.Test("Navigation: surface priorities, footprints and the obstacle sum", Tests.NavigationGridRules);
@@ -123,6 +123,10 @@ run.Test("Navigation: path following, turn rate, terrain height and legacy locom
 run.Test("Navigation: water, cliffs, air and unreachable goals", Tests.NavigationSurfacesAndUnreachableGoals);
 run.Test("Navigation: re-planning after a structure is built or destroyed", Tests.NavigationRepathsAfterConstruction);
 run.Test("Navigation: snapshot restore with paths in flight and two-run determinism", Tests.NavigationSnapshotsAndDeterminism);
+run.Test("Vision: circular reveal, exploration memory and shroud clearing range", Tests.VisionRevealsACircleAndKeepsExploration);
+run.Test("Vision: allies, construction sites and reveal-to-all", Tests.VisionAlliesSharingAndConstruction);
+run.Test("Vision: targeting is gated by visibility and stealth", Tests.VisionGatesTargeting);
+run.Test("Vision: snapshot v5 round trip and two-run determinism", Tests.VisionSnapshotAndDeterminism);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

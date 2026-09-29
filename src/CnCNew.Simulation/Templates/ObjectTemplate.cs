@@ -63,6 +63,7 @@ public sealed class ObjectTemplate
         GeometryHeight = Real(definition, "GeometryHeight");
         GeometryIsSmall = definition.Fields.LastOrDefault(field => field.Name.Equals("GeometryIsSmall", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         VisionRange = Real(definition, "VisionRange");
+        ShroudClearingRange = definition.Fields.Any(field => field.Name.Equals("ShroudClearingRange", StringComparison.OrdinalIgnoreCase)) ? Real(definition, "ShroudClearingRange") : VisionRange;
         TransportSlotCount = definition.Fields.LastOrDefault(field => field.Name.Equals("TransportSlotCount", StringComparison.OrdinalIgnoreCase))?.Value.Value is long slots ? checked((int)slots) : 0;
         BuildCost = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildCost", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money cost ? Fixed.FromInt(cost.Value) : Fixed.Zero;
         BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? SimulationTiming.SecondsToTicks(seconds) : 0;
@@ -113,6 +114,8 @@ public sealed class ObjectTemplate
     public bool GeometryIsSmall { get; }
     /// <summary><c>ThingTemplate::m_visionRange</c>: <c>StealthDetectorUpdate</c>'s <c>DetectionRange</c> falls back to this when unset (the shipped default: every occurrence leaves <c>DetectionRange</c> commented out).</summary>
     public Fixed VisionRange { get; }
+    /// <summary><c>ThingTemplate::m_shroudClearingRange</c>: how far the object reveals the shroud; the reference default (-1) means <see cref="VisionRange"/> (Object.cpp, <c>Object::Object</c>).</summary>
+    public Fixed ShroudClearingRange { get; }
     /// <summary><c>ThingTemplate::getTransportSlotCount</c>: how many <c>TransportContain</c> slots this object occupies (0 = not transportable).</summary>
     public int TransportSlotCount { get; }
     public Fixed BuildCost { get; }
