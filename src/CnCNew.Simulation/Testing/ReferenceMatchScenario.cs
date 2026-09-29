@@ -266,6 +266,24 @@ public sealed class ReferenceMatchScenario
                 .OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).Select(group => $"{group.Key} {group.Count()}/{templates.Length}"));
     }
 
+    /// <summary>Per side: the match units and producer structures with the fewest missing modules, i.e. the cheapest ones to unlock.</summary>
+    public static ImmutableArray<string> DescribeClosest(TemplateCatalog catalog, int take)
+    {
+        var lines = ImmutableArray.CreateBuilder<string>();
+        foreach (var side in catalog.Factions.Factions.Where(value => value.PlayableSide && !value.IsObserver)
+                     .Select(value => catalog.TryGet(value.StartingBuilding, out var building) ? building.Side : null).OfType<string>()
+                     .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.Ordinal))
+        {
+            var units = catalog.Templates.Where(template => !template.IsInstantiable && IsRosterCandidate(template) && string.Equals(template.Side, side, StringComparison.OrdinalIgnoreCase));
+            var producers = catalog.Templates.Where(template => !template.IsInstantiable && template.IsKindOf("STRUCTURE") && template.Modules.Any(module => module.Name == "ProductionUpdate")
+                && string.Equals(template.Side, side, StringComparison.OrdinalIgnoreCase));
+            foreach (var (label, set) in new[] { ("unit", units), ("producer", producers) })
+                foreach (var template in set.OrderBy(value => value.MissingModules.Length).ThenBy(value => value.Name, StringComparer.Ordinal).Take(take))
+                    lines.Add($"side {side} {label} {template.Name}: {string.Join(", ", template.MissingModules)}");
+        }
+        return lines.ToImmutable();
+    }
+
     private void Generate(SimulationWorld world, TemplateCatalog catalog, long tick)
     {
         if (tick == 0) return;

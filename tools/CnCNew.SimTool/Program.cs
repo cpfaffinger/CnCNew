@@ -172,6 +172,8 @@ static int ReferenceMatch(string directory, string[] args)
         foreach (var line in ReferenceMatchScenario.DescribeCoverage(catalog)) Console.WriteLine($"  {line}");
         Console.WriteLine("Blocking modules per side (objects blocked / objects not instantiable):");
         foreach (var line in ReferenceMatchScenario.DescribeBlockers(catalog)) Console.WriteLine($"  {line}");
+        Console.WriteLine("Cheapest candidates per side (object: missing modules):");
+        foreach (var line in ReferenceMatchScenario.DescribeClosest(catalog, 5)) Console.WriteLine($"  {line}");
         return 3;
     }
 
