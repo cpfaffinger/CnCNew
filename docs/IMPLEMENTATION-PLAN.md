@@ -222,7 +222,7 @@ Objekten sind instanziierbar, weil vom Default geerbte Module (`StealthUpdate`, 
 
 ## 5. Spielregeln, Kampf, Wirtschaft und Produktion
 
-**Status: in Arbeit (Stand 28. September 2026); Fortsetzungsauftrag in `docs/HANDOFF-PHASE5.md`.**
+**Status: in Arbeit (Stand 29. September 2026); der Hauptumfang ist umgesetzt, die Abnahmekriterien sind noch nicht vollständig erfüllt (siehe „Noch offen“); Fortsetzungsauftrag in `docs/HANDOFF-PHASE6.md`.**
 
 **Ergebnis (Ziel):** Die vollständige Kernschleife eines RTS-Matches funktioniert headless:
 Ressourcen sammeln, bauen, produzieren, bewegen, angreifen, Schaden anwenden und gewinnen.
@@ -253,17 +253,19 @@ Vereinfachungen in `docs/GAME-RULES.md`):
   geradlinige Bewegung (`AIUpdateInterface`, kein Terrain/Pfadsuche/Drehrate), eine Produktionswarteschlange
   (`ProductionUpdate`), „letzter Überlebender" als Sieg, ein Spieler-/Fraktionsdatenmodell (`FactionCatalog`: Startgeld,
   intrinsische Sciences) und ein Science-Kaufsystem (`ScienceCatalog`, `PurchaseScienceCommand`).
-- Referenzmatch-Szenario (`ReferenceMatchScenario`, `SimTool reference-match`) mit Replay-Format v2 (Fraktionen, alle 16
+- Referenzmatch-Szenario (`ReferenceMatchScenario`, `SimTool reference-match`) mit Replay-Format v2 (Fraktionen, alle 17
   Befehlstypen), auf synthetischen **und** Retail-Daten deterministisch nachgewiesen (Sieger, Replay-Runde,
-  Snapshot-Fortsetzung); auf Retail-Daten nehmen alle 13 Fraktionen mit Kasernen als protokolliertem Ersatz für die
-  Kommandozentralen teil (Sieger bei Tick 7.320, `docs/GAME-RULES.md` §7a). Golden-Master
+  Snapshot-Fortsetzung); auf Retail-Daten nehmen alle 13 Fraktionen mit ihren echten Kommandozentralen teil
+  (Sieger bei Tick 11.385, `docs/GAME-RULES.md` §7a). Golden-Master
   für Schadenskette und Produktionsuhr (unabhängiges Modell, Quellverweise) sind vorhanden; Supply/Erfahrung fehlen.
-- 50 von 205 Modultypen implementiert; 1.199 von 2.115 Retail-Objekten vollständig instanziierbar (56,7 %, vorher 26 von
-  2.113), 74,8 % der Modulverwendungen abgedeckt; Erzeugungslisten werden ausgeführt und `CreateCrateDie` ist implementiert (`docs/GAME-RULES.md` §6b); der 216.000-Tick-Stresstest läuft mit allen neuen Modulen deterministisch, ohne Leck.
+- Spezialkräfte (`docs/GAME-RULES.md` §6d): typisierte `SpecialPower`-Definition, Bereitschaftsmaschine mit geteilten Timern,
+  `UseSpecialPowerCommand`, zehn Module, Kopfgeld beim Kill, Science-Wecker.
+- 60 von 205 Modultypen implementiert; 1.224 von 2.115 Retail-Objekten vollständig instanziierbar (57,9 %, vorher 26 von
+  2.113), 77,1 % der Modulverwendungen abgedeckt; Erzeugungslisten werden ausgeführt und `CreateCrateDie` ist implementiert (`docs/GAME-RULES.md` §6b); der 216.000-Tick-Stresstest läuft mit allen neuen Modulen deterministisch, ohne Leck.
 - **Noch offen:** Teams/Diplomatie als Datenmodell, Command-Set-Wirkung, Supply, Reparatur/Verkauf,
   Radarwirkung, Spezialfähigkeiten (nur die Listenausführung existiert; `CreateDebris`/`DeliverPayload` brauchen Physik), volle veteranenbasierte
-  `ArmorSet`/`WeaponSet`-Auswahl, Erfahrungsvergabe, Spezialkraft-Subsystem (blockiert die echten Kommandozentralen im Referenzmatch,
-  `docs/GAME-RULES.md` §7a/§9), Dozer-/Arbeiter-KI, Golden-Master-Szenarien für Supply und Erfahrung. Die verbleibende Blockerliste (nach Häufigkeit) steht in
+  `ArmorSet`/`WeaponSet`-Auswahl, Erfahrungsvergabe, die Handler der Einheitenfähigkeiten (`SpecialAbilityUpdate`,
+  Kanonenboot-Anflug), Dozer-/Arbeiter-KI, Golden-Master-Szenarien für Supply und Erfahrung. Die verbleibende Blockerliste (nach Häufigkeit) steht in
   `docs/SIMULATION-CORE.md` §11.
 
 ## 6. Welt, Terrain, Bewegung, Sicht und Skirmish-KI

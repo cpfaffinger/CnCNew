@@ -1,5 +1,9 @@
 # N+1-Handoff: Phase 5 – Fortsetzung (Spielregeln, Kampf, Wirtschaft und Produktion)
 
+> **Abgelöst durch `docs/HANDOFF-PHASE6.md`** (29. September 2026, nach dem Spezialkraft-Subsystem). Dieses Dokument bleibt als
+> Verlauf der Phase-5-Blöcke erhalten; die Zahlen unten sind der Stand *vor* dem Spezialkraft-Block und wurden nicht mitgeführt –
+> aktuelle Werte stehen im neuen Handoff und in `CLAUDE.md`.
+
 Du arbeitest autonom am lokalen Projekt `C:\Users\cp\RiderProjects\CnCNew`.
 
 ## Warum ein Fortsetzungsauftrag statt Phase 6
@@ -51,7 +55,10 @@ Simulationsimplementierung, Tests (Ausnahme: `GarrisonContain` hat vier, siehe u
     der synthetischen Fixture.
 12. Retail-Match (`2bb18e2` und die Commits davor, `git log` ab `6712faf`): vierzehn Module (`docs/GAME-RULES.md` §6c),
     `--diagnose` für `SimTool reference-match`, Realdatentest `Tests.RealReferenceMatch` und die Niederlagenregel
-    `Team::hasAnyObjects` (§7). Das Match läuft jetzt auf Retail-Daten mit 13 Fraktionen (Kasernen als Ersatz, siehe unten).
+    `Team::hasAnyObjects` (§7). Das Match lief danach auf Retail-Daten mit 13 Fraktionen (zunächst mit Kasernen als Ersatz).
+13. Spezialkraft-Subsystem (`5f34b41` Schema/Katalog/Baseline, `9efbf2c` Module, Befehl, Science-Wecker und Kopfgeld, `1de0b6c`
+    Tests): zehn Module, `UseSpecialPowerCommand` (Code 17, `CommandTypes.Version = 5`), die echten Kommandozentralen aller 13
+    Fraktionen sind instanziierbar und im Referenzmatch (`docs/GAME-RULES.md` §6d/§7a).
 
 **Wichtige Neupriorisierung gegenüber dem vorigen Handoff:** Die ursprüngliche Reihenfolge „nach Häufigkeit“
 wurde durchgehend durch frische `audit-coverage`-Messungen ersetzt. `CreateCrateDie` schaltet **0 Objekte allein**
@@ -166,7 +173,7 @@ auf die obige Liste, sie ist bereits eine Momentaufnahme:
 2. ~~Erzeugungslisten typisieren und ausführen~~ – erledigt (Punkt 10 oben).
 3. **Teams/Diplomatie als Datenmodell**, falls für den Referenzmatch (Punkt 4) nötig — sonst zurückstellen und im
    headless Referenzmatch bei „letzter Überlebender ohne Teams" bleiben (dokumentierte Vereinfachung).
-4. ~~**Referenzmatch auf Retail-Daten ermöglichen.**~~ Erledigt mit Ersatzbasen (siehe oben); echte Kommandozentralen offen.
+4. ~~**Referenzmatch auf Retail-Daten ermöglichen.**~~ Erledigt; die echten Kommandozentralen folgten mit dem Spezialkraft-Subsystem (Punkt 13).
    Ursprünglicher Auftrag: Die Maschinerie steht (`ReferenceMatchScenario`, `SimTool
    reference-match`); es fehlen instanziierbare bewaffnete Einheiten und Produktionsgebäude. Vorgehen: Zuerst
    `reference-match` und `audit-coverage` neu messen, dann je Seite gezielt die Module freischalten, die das kleinste

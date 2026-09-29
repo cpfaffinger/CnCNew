@@ -215,7 +215,7 @@ Subdual-Typen wirken nicht auf Gesundheit), `KILLPILOT`/`KILL_GARRISONED`/`STATU
 
 ## 6. Befehle
 
-Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 4` (Phase 5 hat zehn Typen ergänzt;
+Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 5` (Phase 5 hat elf Typen ergänzt;
 bestehende Codes ändern sich nie):
 
 | Code | Typ | Zweck | nur System |
@@ -236,6 +236,7 @@ bestehende Codes ändern sich nie):
 | 14 | `PurchaseScienceCommand` | Science kaufen (`Player::attemptToPurchaseScience`), sofort abgeschlossen | |
 | 15 | `EnterContainerCommand` | Entity in einen Container stellen (`ContainModuleInterface::addToContain`), sofort, keine Pfadsuche | |
 | 16 | `ExitContainerCommand` | Entity aus seinem Container entfernen (Besitzer der Einheit oder des Containers) | |
+| 17 | `UseSpecialPowerCommand` | Spezialkraft eines Objekts auslösen (`ActionManager::canDoSpecialPower`, Ziel: keines, Objekt oder Ort) | |
 
 `Submit` prüft sofort und lehnt **explizit, gezählt und als `CommandRejected`-Event** ab: `Late` (Tick liegt zurück),
 `Duplicate` (gleiche (Spieler, Sequenz) wie die zuletzt akzeptierte), `OutOfOrder` (kleinere Sequenz), `UnknownPlayer`,
@@ -244,7 +245,8 @@ instanziierbar). Zur Ausführungszeit folgen `UnknownEntity`, `NotPermitted` (fr
 ergänzt `InsufficientFunds`, `AlreadyOwned`, `UnknownUpgrade`, `NoWeapon`, `WeaponNotReady`, `OutOfRange`, `QueueFull`,
 `CannotMove`, `CannotProduce`, `UnknownScience`, `ScienceNotPurchasable`, `InsufficientSciencePurchasePoints`,
 `MissingPrerequisite`, `CannotEnterContainer` (KindOf-/Beziehungsfilter, Kapazität oder ein zu stark beschädigter/toter
-Container), `NotContained` (Details und Numerik: `docs/GAME-RULES.md` §4/§1a/§6a). Sequenzen sind pro Spieler streng
+Container), `NotContained` sowie für Spezialkräfte `UnknownSpecialPower`, `MissingScience`, `SpecialPowerNotReady`,
+`InvalidSpecialPowerTarget` und `SpecialPowerHandlerMissing` (Details und Numerik: `docs/GAME-RULES.md` §4/§1a/§6a/§6d). Sequenzen sind pro Spieler streng
 aufsteigend; Befehle desselben Ticks laufen nach (Spieler-ID, Sequenz), unabhängig von der Einreihreihenfolge. Die Zähler
 je Grund gehören zum Zustand. **Wichtig:** `Validate()` prüft beim `Submit()` gegen den *aktuellen* Weltzustand, nicht
 gegen den Zustand nach zuvor im selben Tick eingereihten Befehlen – ein `GiveMoneyCommand` und ein darauf aufbauender
@@ -289,9 +291,9 @@ denselben Runner und beginnt beim Tick der Welt.
 
 **Format v2 (Phase 5).** Die Spielertabelle trägt zusätzlich den Fraktionsnamen (leer = keine Fraktion), damit ein Replay
 ohne Nebeninformation einem Fraktionsmatch zugeordnet werden kann; Version 1 wird mit klarer Meldung abgewiesen. Außerdem
-kodiert das Format jetzt **alle 16 Befehlstypen** (zuvor nur die sechs aus Phase 4): `GiveMoney`, `PurchaseUpgrade`,
+kodiert das Format jetzt **alle 17 Befehlstypen** (zuvor nur die sechs aus Phase 4): `GiveMoney`, `PurchaseUpgrade`,
 `QueueProduction`, `CancelProduction`, `SetMoveTarget`, `FireWeapon`, `GiveSciencePoints`, `PurchaseScience`,
-`EnterContainer` und `ExitContainer` sind hinzugekommen. `Tests.ReferenceMatch` schreibt und liest jeden Typ zurück und
+`EnterContainer`, `ExitContainer` und `UseSpecialPower` sind hinzugekommen. `Tests.ReferenceMatch` schreibt und liest jeden Typ zurück und
 vergleicht die Befehle; ein unbekannter Typ im Schreiber ist ein Fehler, keine stille Auslassung.
 
 ## 9. Abnahmebefehle
@@ -350,6 +352,13 @@ geändert, weil `CreateObjectDie`/`InstantDeathBehavior` jetzt Zufallszüge verb
 bei Tick 108.000: 10.262.399 Byte. Alle Läufe (unabhängig wiederholt, mit Snapshotfortsetzung) stimmen tickweise überein. Die
 Befehls-, Entity- und Fehlerzahlen sowie Snapshotgröße der Tabelle sind ebenfalls neu gemessen (Replay v2); die übrigen Größen nicht.
 
+**Neumessung nach dem Spezialkraft-Subsystem** (29. September 2026, zehn weitere Module; die synthetische Fixture ist
+unverändert, aber Spielerzustand und Snapshot tragen jetzt Kopfgeldrate und geteilte Bereitschaftsframes): Kettenhash
+`76A8FCEEEE625672`, Endhash `4A99EE46FD623A09`, 914.394 Befehle, Spitze 15.775 Entities, Snapshot bei Tick 108.000:
+10.262.573 Byte (SHA-256 `A14A06E08A3C05796FF59E5B94E9AC1F0E31F45A5CABE4E1285C3A578AC896A0`), Hash nach Restore
+`1D2E96E0BB12303A`; drei frische Läufe und die Snapshotfortsetzung stimmen tickweise überein, Stresslauf 1.950 Byte je Tick,
+ruhender Tick 0 Byte (der Bereitschaftszustand nutzt eine Indexschleife über die sortierte Liste, keine Enumeratorallokation).
+
 **Budgets** (mit Messwert als Grundlage, etwa 2,7-facher Spielraum): 216.000-Tick-Lauf dieses Szenarios ≤ 60 s;
 Ø ≤ 300 µs je Tick; langsamster Tick ≤ 100 ms (echtes Echtzeitbudget, 33,3 ms bei 30 Hz, wird erst mit den Regeln der
 Phase 5 unter realer Last festgelegt); Working Set ≤ 1 GiB; ruhender Tick 0 Byte, Churn ≤ 4 KiB je Tick; Snapshot ≤ 1 KiB
@@ -361,22 +370,22 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
-- **2.115 Objekte, 1.199 vollständig instanziierbar (56,7 %)**, 916 blockiert; 50 von 205 Modultypen sind implementiert
-  (12 aus Phase 4, 38 aus Phase 5), sie decken 14.624 von 19.553 Modulverwendungen (74,8 %). Gegenüber Phase 4 (26/2.113,
+- **2.115 Objekte, 1.224 vollständig instanziierbar (57,9 %)**, 891 blockiert; 60 von 205 Modultypen sind implementiert
+  (12 aus Phase 4, 48 aus Phase 5), sie decken 15.078 von 19.553 Modulverwendungen (77,1 %). Gegenüber Phase 4 (26/2.113,
   1,2 %) ein Sprung um den Faktor ~46, getragen von Block 0.2, den elf `*Upgrade`-Modulen, `AIUpdateInterface`,
   `ProductionUpdate`, den sechs Blockermodulen aus §6/§6a, dem Containment-Paar `GarrisonContain`/`TransportContain` und den
   vierzehn Modulen aus `docs/GAME-RULES.md` §6c (`PhysicsBehavior`, `SquishCollide`, die drei Produktionsausgänge,
-  `BaseRegenerateUpdate`, `GenerateMinefieldBehavior`, `HealContain`, Lochmodule usw. – zusammen +336 Objekte).
+  `BaseRegenerateUpdate`, `GenerateMinefieldBehavior`, `HealContain`, Lochmodule usw. – zusammen +336 Objekte) sowie den
+  zehn Spezialkraftmodulen aus `docs/GAME-RULES.md` §6d (+25 Objekte, darunter die 13 Kommandozentralen der Fraktionen).
   `CreateCrateDie` und die Erzeugungslistenausführung (`docs/GAME-RULES.md` §6b) schalten allein kein Objekt frei.
-- Alle 1.199 instanziierbaren Objekte werden in einer Welt erzeugt und laufen im Realdatentest identisch zweimal durch
+- Alle 1.224 instanziierbaren Objekte werden in einer Welt erzeugt und laufen im Realdatentest identisch zweimal durch
   (Test `--content-dir`); der Stresstest (`SimTool stress`, §10) nutzt eine synthetische Fixture und ist von den neuen
-  Modulen unberührt (Hashes unverändert). Der Referenzmatch auf Retail-Daten (`docs/GAME-RULES.md` §7a) instanziiert reale
-  Einheiten und Produktionsgebäude aller 13 Fraktionen.
+  Modulen bis auf den Zustandsumfang unberührt (Hashes neu gemessen, §10). Der Referenzmatch auf Retail-Daten
+  (`docs/GAME-RULES.md` §7a) instanziiert reale Einheiten, Produktionsgebäude und Kommandozentralen aller 13 Fraktionen.
 - Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert, frische Messung vom 29. September):
-  `SpecialAbility` 88/0, `CommandButtonHuntUpdate` 79/10, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/0,
-  `OCLSpecialPower` 60/1, `JetSlowDeathBehavior` 59/0, `MissileAIUpdate` 44/26, `CrushDie` 42/39,
-  `CountermeasuresBehavior` 40/0, `FireWeaponUpdate` 36/26, `SpawnBehavior` 35/6, `AutoFindHealingUpdate` 34/10,
-  `JetAIUpdate` 34/2, `UnpauseSpecialPowerUpgrade` 32/0. `ToppleUpdate` braucht echte Kollisionserkennung (durch Lesen der
+  `CommandButtonHuntUpdate` 79/10, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/2, `JetSlowDeathBehavior` 59/0,
+  `MissileAIUpdate` 44/29, `CrushDie` 42/39, `CountermeasuresBehavior` 40/0, `FireWeaponUpdate` 36/26, `SpawnBehavior` 35/6,
+  `AutoFindHealingUpdate` 34/10, `JetAIUpdate` 34/2. `ToppleUpdate` braucht echte Kollisionserkennung (durch Lesen der
   Referenzquelle verifiziert, siehe `docs/HANDOFF-PHASE5.md`) und ist Phase 6. Die vollständige, tagesaktuelle Liste liefert
   das Werkzeug.
 - **Regel für Aktualisierungsmodule:** jedes Modul, das `IUpdateModule` implementiert, speichert und lädt seinen Weckzeitpunkt
@@ -411,10 +420,10 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   wegen verzögertem Spawn, flaches Terrain, `FixedTrig` statt binary32, einmaliger `LifetimeUpdate`-Zug) stehen in
   `docs/GAME-RULES.md` §6b.
 - Die Definitionsdomänen außer Object, Weapon, Armor, Upgrade, Science und Locomotor sind weiterhin flach typisiert
-  (Zahlen in `TYPED-DEFINITIONS.md`): CommandButton, SpecialPower, Faction, GameData. `ObjectCreationList`, `CrateData` und
+  (Zahlen in `TYPED-DEFINITIONS.md`): CommandButton, Faction, GameData; `SpecialPower` ist seit Phase 5 streng typisiert. `ObjectCreationList`, `CrateData` und
   `GameData/Gravity` sind typisiert.
 - Der Referenzmatch (`ReferenceMatchScenario`, `SimTool reference-match`) läuft auf synthetischen und auf Retail-Daten
-  deterministisch und replaybar (13 von 13 Fraktionen, aber mit Kasernen als Ersatz für die Kommandozentralen, ohne
-  Dozer/Arbeiter und Supply; Messung in `docs/GAME-RULES.md` §7a). Golden-Master-
+  deterministisch und replaybar (13 von 13 Fraktionen mit ihren echten Kommandozentralen, ohne
+  Dozer/Arbeiter, Supply und Spezialkräfte im Befehlsstrom; Messung in `docs/GAME-RULES.md` §7a). Golden-Master-
   Szenarien existieren für die Schadenskette und die Produktionsuhr; Supply und Erfahrung stehen aus. Übrige Mechaniken sind
   durch gezielte Integrationstests (`Tests.Phase5.cs`) und den 216.000-Tick-Stresstest mit realen Objekten abgesichert.

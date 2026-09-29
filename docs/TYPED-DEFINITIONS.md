@@ -269,3 +269,16 @@ Spielerzustand (`Player::Player()`), sofern `PlayerConfiguration.Faction` gesetz
 - **`GameData/Gravity`** ist typisiert und aus der Kompatibilitätsbasislinie entfernt; die Simulation braucht es für
   `Thing::isSignificantlyAboveTerrain` (`docs/GAME-RULES.md` §6b).
 - Die Kompatibilitätsbasislinie hat danach **784 Einträge** (vorher 787).
+
+## Block 0.1 abgeschlossen: `SpecialPower`
+
+`SpecialPowerSchema` (`SpecialPower.cpp SpecialPowerTemplate::m_specialPowerFieldParse`) typisiert die Definitionsart `SpecialPower`
+streng: `ReloadTime` (Dauer), `RequiredScience` (Referenz auf `Science`, im Vollinventar aufgelöst), `PublicTimer`, `Enum`
+(Namenstabelle `SpecialPowerType`, 67 Einträge inklusive `EARLY_*`-, `AIRF_*`-Varianten), `DetectionTime`, `SharedSyncedTimer`,
+`ViewObjectDuration`, `ViewObjectRange`, `RadiusCursorRadius`, `ShortcutPower`. `InitiateSound`, `InitiateAtLocationSound` und
+`AcademyClassify` bleiben als `deferred-field` (Präsentation/Statistik, 79 Verwendungen). Die zehn Spezialkraftmodule
+(`SpecialAbility`, `OCLSpecialPower`, `CashBountyPower`, `CashHackSpecialPower`, `SpecialPowerCreate`, `GrantUpgradeCreate`,
+`GrantScienceUpgrade`, `UnpauseSpecialPowerUpgrade`, `SpecialPowerCompletionDie`, `SpectreGunshipDeploymentUpdate`) haben Katalogschemata
+und Bindungen (`docs/GAME-RULES.md` §6d); `SpecialAbility/InitiateSound` (85 Verwendungen) ist ebenfalls ein gezählter Kompatibilitätsfall.
+Die Referenzauflösung steigt dadurch im Vollinventar auf 18.050/19.600, die Kompatibilitätsbasislinie sinkt auf **761 Einträge**, der
+Definitionssnapshot (Schema 2) hat 144.745.050 Byte (SHA-256 `D0C06A2B06CD7065474A3EB729E36B87E1815DAE2D461E564D023EAA019295CF`).

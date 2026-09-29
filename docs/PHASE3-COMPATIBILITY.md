@@ -7,7 +7,7 @@ implementierte Simulations-/Präsentationsmodule, zurückgestellte Objekt-/Modul
 Skalarschlüssel, Diagnosecodes und ausgeschlossene Dateien werden als `CompatibilityEntry` mit Kategorie,
 Name, Häufigkeit, Besitzerart und geplantem Ziel in jedem kanonischen Snapshot geführt. Seit Phase 4 ist die
 Liste als **geprüfte Basislinie** eingecheckt (`baselines/compatibility.json`); Phase 5 hat sie bewusst mehrfach
-neu erzeugt, sobald sich getypte Felder verschoben haben (zuletzt **784 Einträge**, keine Assetinhalte), und
+neu erzeugt, sobald sich getypte Felder verschoben haben (zuletzt **761 Einträge**, keine Assetinhalte), und
 prüft sie gegen Drift:
 
 ```powershell

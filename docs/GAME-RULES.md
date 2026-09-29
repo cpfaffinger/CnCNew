@@ -1,9 +1,9 @@
 # Spielregeln (Phase 5, in Arbeit)
 
-Stand: 29. September 2026 (nach §6c). Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
+Stand: 29. September 2026 (nach §6d). Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
 (`docs/SIMULATION-CORE.md`) aufsetzenden Spielregeln, die Phase 5 bisher implementiert hat: Wirtschaft, Upgrades,
 direkter Kampf, einfache Bewegung, Produktion, Sieg/Niederlage sowie die Blockermodule aus §3/§6/§6a (Schadenszustände,
-Brand, Gift, Tod, Stealth-Erkennung, Garnison-Containment). Phase 5 ist **nicht abgeschlossen** – der
+Brand, Gift, Tod, Stealth-Erkennung, Garnison-Containment) sowie das Spezialkraft-Subsystem (§6d). Phase 5 ist **nicht abgeschlossen** – der
 Fortsetzungsauftrag mit dem vollständigen Restumfang steht in `docs/HANDOFF-PHASE5.md`.
 
 Alle Regeln laufen innerhalb der bestehenden Tickphasen (`SIMULATION-CORE.md` §4): neue Befehle werden in Phase 1
@@ -319,6 +319,69 @@ Welt-Dienste `IsSignificantlyAboveTerrain` und `BaseRegen*`.
 `TransferAttackers`, Arbeiter-/Wiederaufbau-KI, dauerhafte Mindest-Veteranenstufe, Radarsystem, Vorbestellungen,
 `InvulnerableTime` von `EjectPilotDie`.
 
+## 6d. Spezialkräfte
+
+Zehn Module und ein Befehl bilden das Spezialkraft-Subsystem. Es schaltet die **echten Kommandozentralen aller 13
+Fraktionen** frei (vorher Kasernen als Ersatz, §7a). Referenz: `SpecialPower.cpp` (`SpecialPowerTemplate`, Feldtabelle),
+`SpecialPowerModule.cpp`, `OCLSpecialPower.cpp`, `CashBountyPower.cpp`, `CashHackSpecialPower.cpp`,
+`SpectreGunshipDeploymentUpdate.cpp`, `Player.cpp` (`addScience`, `grantScience`, `getOrStartSpecialPowerReadyFrame`,
+`expressSpecialPowerReadyFrame`), `ActionManager.cpp` (`canDoSpecialPower`) und `Object.cpp` (`scoreTheKill`).
+
+**Definition und Katalog.** `SpecialPower` ist streng typisiert (`SpecialPowerSchema`): `ReloadTime`, `RequiredScience`
+(Referenz auf `Science`), `PublicTimer`, `Enum` (Namenstabelle `SpecialPowerType`, 67 Einträge), `SharedSyncedTimer`,
+`DetectionTime`, `ViewObject*`, `RadiusCursorRadius`, `ShortcutPower`; `InitiateSound`, `InitiateAtLocationSound` und
+`AcademyClassify` sind Präsentation bzw. Statistik und stehen als `deferred-field` in der Kompatibilitätsbasislinie (79
+Verwendungen). Der `SpecialPowerCatalog` der Simulation vergibt dichte Indizes (Datenreihenfolge) und rechnet `ReloadTime` in
+Ticks um; ohne `ReloadTime` gilt der Standard des Originals (1 s = 30 Ticks, 3 von 80 Definitionen, ausdrücklich gezählt).
+Bestand: 80 Definitionen, davon 36 mit `SharedSyncedTimer`.
+
+**Bereitschaftsmaschine** (`SpecialPowerModuleBase`, portiert wie geschrieben): `availableOnFrame`, `pausedCount`,
+`pausedOnFrame`. Eine Kraft ist bereit, wenn sie nicht pausiert ist und `Tick >= availableOnFrame` gilt; ein Befehl in Tick
+N sieht also die Bereitschaft von Tick N (ein bei Tick 0 erzeugter Träger mit 300 Ticks Nachladezeit ist bei Tick 300 bereit,
+nicht früher). Beim Erzeugen (`OnSpawn`, nicht im Bau) startet das Nachladen, `StartsPaused` pausiert zusätzlich. Eine
+`SharedSyncedTimer`-Kraft ignoriert ihre eigene Pause und liest den geteilten Bereitschaftsframe des Spielers
+(`PlayerState.SharedReadyFrames`, sortiert, Teil von Snapshot und Hash); ein noch nicht vorhandener Timer beginnt beim ersten
+Zugriff. `SpecialPowerCreate` (am Ende des Baus, im Tick nach dem Spawn) meldet die Kraft als „entstanden“
+(`onSpecialPowerCreation`: Nachladen neu starten, geteilte Kraft sofort bereit, `StartsPaused` erneut pausieren – die
+doppelte Pause bei `StartsPaused` + `SpecialPowerCreate` ist wie im Original portiert und wird von
+`UnpauseSpecialPowerUpgrade` einzeln aufgehoben).
+
+**Befehl.** `UseSpecialPowerCommand` (Code 17, `CommandTypes.Version = 5`, im Replay kodiert): Quellobjekt, Kraftname,
+Zielart (`None`, `Object`, `Location`), Zielobjekt, Koordinaten. Die Prüfung (`CheckSpecialPower`, gleiche Regeln bei Einreichung
+und Ausführung, weil sich die Bereitschaft dazwischen ändert) lehnt explizit ab: `UnknownEntity`, `NotPermitted`,
+`UnknownSpecialPower` (25; Kraft unbekannt oder das Objekt trägt kein Modul dafür), `MissingScience` (26),
+`SpecialPowerNotReady` (27; pausiert, nachladend oder im Bau), `InvalidSpecialPowerTarget` (28; Zielart passt nicht oder das
+Zielobjekt existiert nicht) und `SpecialPowerHandlerMissing` (29; `UpdateModuleStartsAttack` verlangt einen Handler im
+Updatemodul, der fehlt – die Kraft wird verweigert statt still nichts zu tun). Ausgeführt emittiert der Befehl
+`SpecialPowerUsed`, ruft den ersten passenden Handler (`ISpecialPowerHandler`, Modulreihenfolge), startet das Nachladen
+(sofern nicht `StartsAttack`) und wendet die kraftspezifische Wirkung an.
+
+| Modul | Verhalten |
+| --- | --- |
+| `SpecialAbility` | Reine Kraft, deren Wirkung ein Handler trägt (Einheitenfähigkeiten, Kanonenboote). Ohne Handler und mit `UpdateModuleStartsAttack` wird abgelehnt (29). |
+| `OCLSpecialPower` | Erzeugt eine `ObjectCreationList` (§6b): die erste `UpgradeOCL`, deren Science der Besitzer hat, sonst `OCL`. `CREATE_AT_LOCATION`/`USE_OWNER_OBJECT` erzeugen am Ziel (ohne Ziel am Quellobjekt), `CREATE_ABOVE_LOCATION` 300 Einheiten darüber (`ON_GROUND_ALIGNED` setzt z wieder auf 0, `LIKE_EXISTING` behält es). Die drei Kartenrand-Orte brauchen Terrain: die Kraft löst aus und lädt nach, die fehlende Lieferung meldet `CreationSkipped(NoTerrainEdge)`. |
+| `CashBountyPower` | Hebt die Kopfgeldrate des Besitzers auf `Bounty` (nur wenn er die Science der Kraft hat, beim Erscheinen und bei Science-Erwerb). Auszahlung: `ScoreTheKill` (`Object::scoreTheKill`/`Player::doBountyForKill`) zahlt dem Besitzer des Töters `ceil(BuildCost · Rate)` für den Kill eines fremden Objekts (nicht `IGNORED_IN_GUI`, nicht im Bau, kein Systemspieler). |
+| `CashHackSpecialPower` | Stiehlt `min(Betrag, Guthaben des Opfers)` vom Besitzer des Zielobjekts; Betrag = erste `UpgradeMoneyAmount`, deren Science der Dieb hat, sonst `MoneyAmount`. Ein Ortsziel bewirkt wie im Original nichts. |
+| `SpecialPowerCreate` | Meldet die Kräfte des Objekts als entstanden (siehe oben). |
+| `GrantUpgradeCreate` | Schließt das benannte Upgrade (spieler- oder objektgebunden) einmal ab, wenn das Objekt fertig ist. |
+| `GrantScienceUpgrade` | Vergibt eine Science (`Player::grantScience`; eine nicht vergebbare Science, `IsGrantable = No`, wird verweigert). |
+| `UnpauseSpecialPowerUpgrade` | Hebt eine Pause der benannten Kraft am Objekt auf. |
+| `SpecialPowerCompletionDie` | Meldet dem Skript-System das Ende des Trägers; Skripte gibt es nicht, das Modul ist ausdrücklich inert. |
+| `SpectreGunshipDeploymentUpdate` | Handler der Gunship-Kraft (erster Treffer nach Modulreihenfolge, `RequiredScience`). Das Kanonenboot ist eine fliegende Einheit mit eigener KI, die vom Kartenrand einfliegt; beides fehlt, daher `CreationSkipped(NoTerrainEdge)` und nur der Nachladestart des Trägers. |
+
+**Science-Vergabe** (`SimulationWorld.AddScience`, gemeinsam für Kauf und `GrantScienceUpgrade`): nach dem Eintragen werden
+alle Kräfte der Objekte des Spielers, die diese Science verlangen, geweckt (`onSpecialPowerCreation` und sofort bereit,
+`Player::addScience`).
+
+**Nicht modelliert (bewusst, nicht still):** kein Bauvorgang (jedes Objekt ohne `UnderConstruction` ist im Tick nach dem Spawn
+fertig, `onBuildComplete`), kein Deaktiviert-Zustand (`isDisabled`-Prüfung), `createOwner = false` (der Besitzerwechsel von
+`CreateFromList`), `OCLAdjustPositionToPassable`, Kanonenboot-KI und Kanteneinflug, Sichtobjekte (`ViewObject*`), EVA-Ansagen,
+Sounds, öffentliche Timer und Skript-Benachrichtigungen; die Kopfgeldbeziehung ist „anderer Besitzer“ (kein Teammodell). Die
+Referenzmatch-Erzeugung setzt keine Spezialkräfte ein (der Befehlsgenerator erzeugt kein `UseSpecialPowerCommand`); die Module
+laufen an den echten Kommandozentralen mit (Nachladeuhren, Science-Wecker), ihre Wirkung ist durch `Tests.SpecialPower.cs` belegt
+(Fixture mit neun Kräften: Ablehnungen, Nachladen, OCL-Ursprünge, Science-Umschaltung, Pause/Unpause, geteilte Timer,
+Kopfgeld/Cash-Hack-Beträge, Snapshotfortsetzung, Replay-Rundlauf des Befehls; Realdatenprüfung der 80 Definitionen).
+
 ## 7. Sieg und Niederlage
 
 - `SimulationWorld.IsPlayerDefeated(player)` entspricht `VictoryConditions::hasSinglePlayerBeenDefeated` mit den
@@ -353,19 +416,17 @@ Ersatzgebäude, weil ihre Startbasis ein ungebundenes Modul enthält), einer weg
 unspielbaren Fraktion. Das Match endet mit einem Sieger, das Replay läuft durch Datei, zwei Läufe und Snapshot identisch.
 
 **Retail-Daten.** Neu gemessen (`SimTool reference-match .local/phase2-import-a`, Basisdaten ohne Kartenoverlays,
-Fingerabdruck `63639A608923B2B4`): **alle 13 spielbaren Fraktionen nehmen teil**, der Match läuft deterministisch. Die
-Startbasis ist bei allen 13 ein protokollierter **Ersatz** (Kaserne bzw. bei ChinaInfantryGeneral der Gatling-Turm):
-die echten Kommandozentralen brauchen das Spezialkraft-Subsystem (`OCLSpecialPower`, `CashBountyPower`,
-`CashHackSpecialPower`, `SpecialAbility`, `GrantUpgradeCreate`, `GrantScienceUpgrade`,
-`SpectreGunshipDeploymentUpdate`). Übersprungen werden 13 Startobjekte (9 Bauarbeiter-Fahrzeuge, 4 GLA-Arbeiter; Dozer-/
-Arbeiter-KI fehlt). Ergebnis mit `GraceTicks` 300: Sieger Spieler 1 (FactionAmerica) bei Tick 7.320 (4,1 Spielminuten),
-Replay 7.621 Ticks, 5.604 Befehle, alle Checkpoints verifiziert, keine Ablehnung außer 20 `UnknownEntity` (Befehle an
-inzwischen zerstörte Objekte), Endhash `73135C0BF7144ED6`, Kettenhash `9750442F1EE8CCFB`; ein zweiter frischer Lauf und
-der Lauf ab Snapshot bei Tick 3.810 sind tickweise identisch. Überlebende: 14 Objekte (10 America, je 1 der vier GLA-Seiten).
-Der Realdatentest `Tests.RealReferenceMatch` prüft Teilnehmerzahl, Sieger, Determinismus und Snapshotfortsetzung. Die
-Abdeckungslage je Seite liefert `--diagnose` (z. B. America 5 von 41 bewaffneten Einheiten instanziierbar, China 10 von 26,
-GLA 12 von 33); die Aufgabe „Referenzmatch aller Fraktionen auf Retail-Daten“ ist damit **erfüllt mit Ersatzbasen** – echte
-Kommandozentralen stehen als nächster Block aus.
+Fingerabdruck `7110C5BA69917279`): **alle 13 spielbaren Fraktionen nehmen teil**, jede mit ihrer **echten Kommandozentrale**
+(`AmericaCommandCenter`, `Infa_ChinaCommandCenter`, `GLACommandCenter`, …; seit §6d gibt es keinen protokollierten Ersatz mehr),
+der Match läuft deterministisch. Übersprungen werden 13 Startobjekte (9 Bauarbeiter-Fahrzeuge, 4 GLA-Arbeiter; Dozer-/
+Arbeiter-KI fehlt). Ergebnis mit `GraceTicks` 300: Sieger Spieler 1 (FactionAmerica) bei Tick 11.385 (6,3 Spielminuten),
+Replay 11.686 Ticks (462.194 Byte, 11 Checkpoints), 13.978 Befehle (625 Produktions-, 2.153 Bewegungsaufträge, 10.875 Schüsse), alle
+Checkpoints verifiziert, keine Ablehnung außer 43 `UnknownEntity` (Befehle an inzwischen zerstörte Objekte), Endhash
+`83EBD54549BB1DB5`, Kettenhash `928D78E6DD172836`; ein zweiter frischer Lauf und der Lauf ab Snapshot bei Tick 5.843 sind
+tickweise identisch. Endzustand: 25 Objekte, 382 erzeugt, 357 zerstört; Überlebende: 21 America, je 1 der vier GLA-Seiten. Der Realdatentest `Tests.RealReferenceMatch` prüft Teilnehmerzahl,
+Sieger, Determinismus und Snapshotfortsetzung. Die Abdeckungslage je Seite liefert `--diagnose`; die Aufgabe „Referenzmatch
+aller Fraktionen auf Retail-Daten“ ist damit **erfüllt, mit echten Kommandozentralen**. Grenzen: kein Dozer/Arbeiter, kein Supply
+(Einkommen per `GiveMoneyCommand`), keine Spezialkräfte im Befehlsstrom (§6d).
 
 **Golden Master** (`tests/CnCNew.Simulation.Tests/Tests.GoldenMaster.cs`): die erwarteten Werte berechnet ein unabhängiges
 Modell im Test, sie werden nicht aus der Simulation zurückgelesen.
@@ -383,19 +444,20 @@ Modell im Test, sie werden nicht aus der Simulation zurückgelesen.
 
 ## 8. Befehlstabelle
 
-Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (16 Befehlscodes) und die Ablehnungsgründe; das Replay-Format v2 (`docs/SIMULATION-CORE.md` §8) kodiert alle 16.
+Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (17 Befehlscodes, `CommandTypes.Version = 5`) und die Ablehnungsgründe (Codes 25–29 für Spezialkräfte, §6d); das Replay-Format v2 (`docs/SIMULATION-CORE.md` §8) kodiert alle 17.
 
 ## 9. Modulabdeckung
 
-Siehe `docs/SIMULATION-CORE.md` §11: 1.199 von 2.115 Objekten sind heute instanziierbar (56,7 %, gegenüber 26/2.113 in
-Phase 4 und 863/2.115 vor §6c); 50 von 205 Modultypen sind implementiert und decken 14.624 von 19.553 Modulverwendungen
-(74,8 %). Nach einer frischen `audit-coverage`-Messung sind die größten verbleibenden Blocker nach Objekten (davon nur
-durch dieses Modul blockiert): `SpecialAbility` 88/0, `CommandButtonHuntUpdate` 79/10, `ToppleUpdate` 76/66 (braucht
-Kollisionsphysik, Phase 6), `SpecialAbilityUpdate` 64/0, `OCLSpecialPower` 60/1, `JetSlowDeathBehavior` 59/0,
-`MissileAIUpdate` 44/26, `CrushDie` 42/39, `CountermeasuresBehavior` 40/0, `FireWeaponUpdate` 36/26, `SpawnBehavior` 35/6,
-`AutoFindHealingUpdate` 34/10, `JetAIUpdate` 34/2, `UnpauseSpecialPowerUpgrade` 32/0. Das Spezialkraft-Subsystem
-(`SpecialPower*`, `OCLSpecialPower`, `SpecialAbility*`, `CashBountyPower`, `CashHackSpecialPower`, `GrantUpgradeCreate`)
-blockiert die Kommandozentralen aller Fraktionen und ist der nächste Block.
+Siehe `docs/SIMULATION-CORE.md` §11: 1.224 von 2.115 Objekten sind heute instanziierbar (57,9 %, gegenüber 26/2.113 in
+Phase 4, 863/2.115 vor §6c und 1.199 vor §6d); 60 von 205 Modultypen sind implementiert und decken 15.078 von 19.553
+Modulverwendungen (77,1 %). Nach einer frischen `audit-coverage`-Messung sind die größten verbleibenden Blocker nach Objekten
+(davon nur durch dieses Modul blockiert): `CommandButtonHuntUpdate` 79/10, `ToppleUpdate` 76/66 (braucht Kollisionsphysik,
+Phase 6), `SpecialAbilityUpdate` 64/2, `JetSlowDeathBehavior` 59/0, `MissileAIUpdate` 44/29, `CrushDie` 42/39,
+`CountermeasuresBehavior` 40/0, `FireWeaponUpdate` 36/26, `SpawnBehavior` 35/6, `AutoFindHealingUpdate` 34/10,
+`JetAIUpdate` 34/2, `HeightDieUpdate` 31/15, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27,
+`RailroadBehavior` 25/25, `BaikonurLaunchPower` 23/23, `ReplaceObjectUpgrade` 20/16, `RepairDockUpdate` 17/16. Das
+Spezialkraft-Subsystem (§6d) ist damit vollständig; die Fähigkeiten selbst (`SpecialAbilityUpdate` und die Handler der
+Einheitenfähigkeiten) fehlen noch.
 
 ## 10. Bekannte Grenzen (Zusammenfassung)
 
@@ -414,8 +476,10 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
   Transport/Supply/Radar/Reparatur/Verkauf/Bau (Rest von HANDOFF-PHASE5.md Punkt „Vollständiger Umfang"). Garrison
   (§6a) ist implementiert. Sciences (Kauf, Voraussetzungen) sind implementiert; „Science Purchase Points" werden
   mangels Rang-/Erfahrungssystem nur per Systembefehl gutgeschrieben (§1a).
-- Referenzmatch auf Retail-Daten mit Ersatzbasen (Kasernen statt Kommandozentralen, ohne Dozer/Arbeiter, ohne Supply;
-  Einkommen per `GiveMoneyCommand`), 13 von 13 Fraktionen (§7a); Golden-Master nur für
+- Spezialkräfte (§6d): kein Bauvorgang, kein Deaktiviert-Zustand, keine Kartenrand-Lieferung (Kanonenboote, Randerzeugung nur als
+  `CreationSkipped`), keine Kanonenboot-KI, keine Sichtobjekte/EVA/Skriptmeldungen, Kopfgeld ohne Teammodell.
+- Referenzmatch auf Retail-Daten mit den echten Kommandozentralen (ohne Dozer/Arbeiter, ohne Supply, ohne Spezialkräfte im
+  Befehlsstrom; Einkommen per `GiveMoneyCommand`), 13 von 13 Fraktionen (§7a); Golden-Master nur für
   Schadenskette und Produktionsuhr, nicht für Supply und Erfahrung. Die hier beschriebenen Mechaniken sind zusätzlich durch
   `tests/CnCNew.Simulation.Tests/Tests.Phase5.cs` (gezielte Integrationstests: Wirtschaft, Kampf, Upgrade-Effekte, Bewegung,
   Produktion, Stealth/Heilung, Sieg) und den 216.000-Tick-Stresstest mit den neuen Modulen an echten Objekten abgesichert.

@@ -6,7 +6,7 @@ Singleplayer, Skirmish und Kampagne. Nicht im Scope: Multiplayer, binäre Kompat
 Mods und Savegames. Das Repo ist rein lokal (Branch `main`, **kein Remote**).
 
 Die Gesamtplanung steht in `docs/IMPLEMENTATION-PLAN.md`. Die aktuell zu bearbeitende Phase steht
-als vollständiger Auftrag in `docs/HANDOFF-PHASE5.md` (Handoff-Datei der jeweils nächsten Phase).
+als vollständiger Auftrag in `docs/HANDOFF-PHASE6.md` (Handoff-Datei der jeweils nächsten Phase).
 Lies vor jeder Phase `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
 `docs/IMPLEMENTATION-PLAN.md` sowie die Fachdokumente der berührten Domäne
 (`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `SIMULATION-CORE.md`, `W3D-MATERIALS.md`).
@@ -91,19 +91,19 @@ Tests sind eigenständige Konsolenprogramme (`tests/<Projekt>.Tests/Program.cs`,
 Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern – kein xUnit/NUnit.
 Diesen Stil beibehalten. Für schnelle Wiederholung nach einem Build: `dotnet run --no-build`.
 
-Referenzwerte (Stand Phase 5, in Arbeit; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene INI-Dateien (28
-nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 17.291/18.841
-Referenzen aufgelöst (1.550 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 144.432.181 Byte, SHA-256
-`A1BB5D3464024113750A338C9DE97D9454CA718595EFD6DBB5395F6B5AB2170B`; Retail-Basisdaten (`--maps exclude`) 12.550
-Definitionen, 2.115 Objekte, SHA-256 `45E6802750BFBAB72B20EBAA1EBC2ED54C555BBB86B50C586F3BCD6F536C3606` (die Hashes
-ändern sich, sobald ein Feld strikt typisiert statt als Kompatibilitätswert geführt wird – zuletzt `ObjectCreationList`,
-`CrateData`, `GameData/Gravity`, `CreateCrateDie`).
-Modulkatalog 205 Typen (50 implementiert: 12 aus Phase 4, 38 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
-767 Einträge, Instanziierbarkeit 1.199 von 2.115 Objekten (56,7 %), Modulverwendungen abgedeckt 14.624 von 19.553 (74,8 %).
-Retail-Referenzmatch (`SimTool reference-match`): 13 Fraktionen mit Ersatzbasen, Sieger bei Tick 7.320, Endhash `73135C0BF7144ED6`.
+Referenzwerte (Stand Phase 5 nach dem Spezialkraft-Subsystem; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene
+INI-Dateien (28 nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 18.050/19.600
+Referenzen aufgelöst (1.550 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 144.745.050 Byte, SHA-256
+`D0C06A2B06CD7065474A3EB729E36B87E1815DAE2D461E564D023EAA019295CF`; Retail-Basisdaten (`--maps exclude`) 12.550
+Definitionen, 2.115 Objekte, SHA-256 `7110C5BA69917279ADD6B0270754AA081ADEF2DC37166FFB598CAF2313F979DA` (die Hashes
+ändern sich, sobald ein Feld strikt typisiert statt als Kompatibilitätswert geführt wird – zuletzt `SpecialPower`,
+`ObjectCreationList`, `CrateData`, `GameData/Gravity`, `CreateCrateDie`).
+Modulkatalog 205 Typen (60 implementiert: 12 aus Phase 4, 48 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
+761 Einträge, Instanziierbarkeit 1.224 von 2.115 Objekten (57,9 %), Modulverwendungen abgedeckt 15.078 von 19.553 (77,1 %).
+Retail-Referenzmatch (`SimTool reference-match`): 13 Fraktionen mit echten Kommandozentralen, Sieger bei Tick 11.385, Endhash `83EBD54549BB1DB5`.
 Jedes `IUpdateModule` muss `nextWake` speichern (Test `SourceRules`).
 Asset-Runtimebestand: 25.682 Dateien. Stresstest (216.000 Ticks, `SimTool stress`, synthetische Fixture, mit den Modulen der Phase 5 und
-Erzeugungslistenausführung): Endhash `9E4AF85CBFBB84C6`, Kettenhash `36211DD938214B9C`.
+Erzeugungslistenausführung): Endhash `4A99EE46FD623A09`, Kettenhash `76A8FCEEEE625672`.
 ## Code- und Dokumentationsstil
 
 - Bezeichner, Commitmessages und Code-Kommentare englisch; Dokumentation (`docs/`, README) deutsch.
