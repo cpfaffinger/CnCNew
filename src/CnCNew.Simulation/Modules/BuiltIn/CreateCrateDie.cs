@@ -40,7 +40,7 @@ public sealed class CreateCrateDie(CreateCrateDieData data) : DieModuleBase(data
     {
         if (!Mux.IsApplicable(Entity, info)) return;
         var killer = world.FindEntity(info.Source);
-        if (killer is not null && killer.Owner == Entity.Owner) return; // Relationship ALLIES: no crate for killing an ally.
+        if (killer is not null && world.RelationshipOf(killer.Owner, Entity.Owner) == Relationship.Allies) return; // no crate for killing an ally.
 
         foreach (var name in data.CrateNames)
         {

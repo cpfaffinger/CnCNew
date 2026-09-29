@@ -27,14 +27,14 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// <summary>
 /// Binary replay container, little endian:
 /// <c>"CNCRPLAY"</c>, u32 format version, u32 command table version, u32 tick rate, 32 bytes definition fingerprint, string fixture id,
-/// u32 seed, u32 world id, u16 player count (i32 id, string name, string faction; empty = none), i64 end tick, u32 checkpoint interval,
+/// u32 seed, u32 world id, u16 player count (i32 id, string name, string faction; empty = none, i32 team), i64 end tick, u32 checkpoint interval,
 /// u32 command count (i64 tick, u16 type, i32 player, u64 sequence, type-specific payload), u32 checkpoint count (i64 tick, u64 hash),
 /// and a trailing SHA-256 over everything before it. Strings are u16-length-prefixed UTF-8.
 /// Commands are stored ordered by (tick, player, sequence). Truncated, corrupted (hash mismatch) and version-foreign files are rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -59,6 +59,7 @@ public static class ReplayFormat
                 writer.Write(player.Id.Value);
                 WriteString(writer, player.Name);
                 WriteString(writer, player.Faction ?? string.Empty);
+                writer.Write(player.Team);
             }
             writer.Write(header.EndTick);
             writer.Write((uint)header.CheckpointInterval);
@@ -107,7 +108,8 @@ public static class ReplayFormat
                 var playerId = new PlayerId(reader.ReadInt32());
                 var playerName = ReadString(reader);
                 var faction = ReadString(reader);
-                players.Add(new PlayerConfiguration(playerId, playerName, faction.Length == 0 ? null : faction));
+                var team = reader.ReadInt32();
+                players.Add(new PlayerConfiguration(playerId, playerName, faction.Length == 0 ? null : faction, team));
             }
             var endTick = reader.ReadInt64();
             var interval = (int)reader.ReadUInt32();
@@ -252,6 +254,11 @@ public static class ReplayFormat
                 writer.Write(dock.Actor.Value);
                 writer.Write(dock.Dock.Value);
                 break;
+            case SetRelationshipCommand relation:
+                writer.Write(relation.From.Value);
+                writer.Write(relation.To.Value);
+                writer.Write((int)relation.Relationship);
+                break;
             default:
                 throw new ReplayFormatException($"Command type {command.GetType().Name} has no replay encoding.");
         }
@@ -285,6 +292,7 @@ public static class ReplayFormat
             CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             CommandTypes.UseSpecialPower => ReadUseSpecialPower(reader, player, sequence, tick),
             CommandTypes.Dock => new DockCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
+            CommandTypes.SetRelationship => new SetRelationshipCommand(player, sequence, tick, new PlayerId(reader.ReadInt32()), new PlayerId(reader.ReadInt32()), (Relationship)reader.ReadInt32()),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
     }

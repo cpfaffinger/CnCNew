@@ -57,8 +57,8 @@ public sealed class HealContain(HealContainData data) : ContainModuleBase(data.B
 
     public override void OnSpawn(IWorldServices world) => NextWake = SimulationTiming.SleepForever;
 
-    public override bool IsValidContainerFor(Entity candidate, bool checkCapacity)
-        => !Entity.EffectivelyDead && PassesKindOfAndRelationship(candidate) && (!checkCapacity || data.ContainMax < 0 || ContainCount < data.ContainMax);
+    public override bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
+        => !Entity.EffectivelyDead && PassesKindOfAndRelationship(world, candidate) && (!checkCapacity || data.ContainMax < 0 || ContainCount < data.ContainMax);
 
     public override void Add(IWorldServices world, Entity candidate)
     {

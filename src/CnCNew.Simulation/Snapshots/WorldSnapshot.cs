@@ -20,7 +20,7 @@ public sealed class SnapshotFormatException(string message, Exception? inner = n
 public static class WorldSnapshot
 {
     public const string Format = "cncnew-world-snapshot";
-    public const int Version = 1;
+    public const int Version = 2;
 
     public static byte[] Write(SimulationWorld world)
     {
@@ -71,7 +71,7 @@ public static class WorldSnapshot
             foreach (var player in state.Array("players"))
             {
                 var id = checked((int)player.Int("id"));
-                if (id != 0) players.Add(new PlayerConfiguration(new PlayerId(id), player.Text("name")));
+                if (id != 0) players.Add(new PlayerConfiguration(new PlayerId(id), player.Text("name"), Team: checked((int)player.Int("team"))));
             }
             var configuration = new WorldConfiguration(new WorldId(checked((uint)root.UInt("worldId"))), checked((uint)root.UInt("seed")),
                 players.ToImmutable(), root.Text("fixture"), root.Text("definitionFingerprint"));

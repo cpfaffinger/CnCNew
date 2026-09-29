@@ -429,7 +429,7 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
         var range = data.DetectionRange > Fixed.Zero ? data.DetectionRange : Entity.Template.VisionRange;
         foreach (var candidate in world.Entities)
         {
-            if (candidate.Id == Entity.Id || candidate.EffectivelyDead || candidate.Owner == Entity.Owner) continue;
+            if (candidate.Id == Entity.Id || candidate.EffectivelyDead || world.RelationshipOf(Entity.Owner, candidate.Owner) == Relationship.Allies) continue;
             if (!candidate.HasStatus(StealthedBit)) continue;
             if (!data.ExtraRequiredKindOf.IsEmpty && !data.ExtraRequiredKindOf.Any(candidate.Template.IsKindOf)) continue;
             if (data.ExtraForbiddenKindOf.Any(candidate.Template.IsKindOf)) continue;

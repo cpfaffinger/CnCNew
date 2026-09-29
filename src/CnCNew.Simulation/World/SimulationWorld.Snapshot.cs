@@ -47,7 +47,15 @@ public sealed partial class SimulationWorld
             var id = checked((int)player.Int("id"));
             if (!_players.TryGetValue(id, out var known) || known.Name != player.Text("name"))
                 throw new InvalidDataException($"Snapshot player {id} does not match the world configuration.");
+            if (player.Int("team") != known.Team) throw new InvalidDataException($"Snapshot player {id} belongs to another team than the world configuration.");
             known.LastSequence = player.UInt("lastSequence");
+            known.Relations.Clear();
+            foreach (var relation in player.Array("relations"))
+            {
+                var relationship = checked((int)relation.Int("relationship"));
+                if (!Enum.IsDefined((Relationship)relationship)) throw new InvalidDataException("Unknown relationship in snapshot.");
+                known.Relations[checked((int)relation.Int("player"))] = (Relationship)relationship;
+            }
             // Money and completed upgrades are independent scalar state (not derived from owned objects) and must round-trip
             // explicitly; EnergyProduction is instead rebuilt below as each entity re-registers (Energy::objectEnteringInfluence).
             known.Money = player.Fixed("money");

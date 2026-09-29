@@ -12,8 +12,8 @@ using CnCNew.Simulation.Timers;
 
 namespace CnCNew.Simulation.World;
 
-/// <summary><paramref name="Faction"/> names a <c>PlayerTemplate</c> (<see cref="Templates.FactionCatalog"/>); when set, the world credits its <c>StartMoney</c> and <c>IntrinsicSciences</c> once at construction (<c>Player::Player()</c>). <see langword="null"/>: no faction, starts with nothing (fixtures/tests that set up money and sciences explicitly).</summary>
-public sealed record PlayerConfiguration(PlayerId Id, string Name, string? Faction = null);
+/// <summary><paramref name="Team"/> groups players into an alliance (same non-zero team: mutual <see cref="Relationship.Allies"/>; 0: no team, everybody else is an enemy); <see cref="SetRelationshipCommand"/> overrides single directed relations afterwards. <paramref name="Faction"/> names a <c>PlayerTemplate</c> (<see cref="Templates.FactionCatalog"/>); when set, the world credits its <c>StartMoney</c> and <c>IntrinsicSciences</c> once at construction (<c>Player::Player()</c>). <see langword="null"/>: no faction, starts with nothing (fixtures/tests that set up money and sciences explicitly).</summary>
+public sealed record PlayerConfiguration(PlayerId Id, string Name, string? Faction = null, int Team = 0);
 
 /// <summary>Everything that identifies a run apart from the definitions and the command stream.</summary>
 public sealed record WorldConfiguration(WorldId Id, uint Seed, ImmutableArray<PlayerConfiguration> Players, string FixtureId, string DefinitionFingerprint);
@@ -75,11 +75,16 @@ public sealed partial class SimulationWorld : IWorldServices
     private ulong _commandSum;
     private UpdateNode? _currentUpdate;
 
-    private sealed class PlayerState(PlayerId id, string name)
+    private sealed class PlayerState(PlayerId id, string name, int team)
     {
         public PlayerId Id { get; } = id;
         public string Name { get; } = name;
+        public int Team { get; } = team;
         public ulong LastSequence { get; set; }
+
+        // ------------------------------------------------------------------------------------- teams and diplomacy
+        /// <summary>Directed relation overrides by other player id (<c>Player::setPlayerRelationship</c>); absent entries fall back to the team default.</summary>
+        public SortedList<int, Relationship> Relations { get; } = [];
 
         // ----------------------------------------------------------------------------------------- phase 5: economy
         public Fixed Money { get; set; }
@@ -123,7 +128,8 @@ public sealed partial class SimulationWorld : IWorldServices
         foreach (var player in configuration.Players)
         {
             if (player.Id.IsSystem) throw new ArgumentException("Player 0 is the built-in system authority.", nameof(configuration));
-            var state = new PlayerState(player.Id, player.Name);
+            if (player.Team < 0) throw new ArgumentException($"Negative team for player {player.Id}.", nameof(configuration));
+            var state = new PlayerState(player.Id, player.Name, player.Team);
             if (player.Faction is { } factionName)
             {
                 // Player::Player(): starting cash and intrinsic sciences are credited once, at construction.
@@ -135,7 +141,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (!_players.TryAdd(player.Id.Value, state))
                 throw new ArgumentException($"Duplicate player id {player.Id}.", nameof(configuration));
         }
-        _players.Add(0, new PlayerState(PlayerId.System, "System"));
+        _players.Add(0, new PlayerState(PlayerId.System, "System", 0));
         _playerList = [.._players.Values];
         _updates = new IndexedHeap<UpdateNode>(CompareUpdates, node => node.HeapIndex, (node, index) => node.HeapIndex = index);
         _timers = new IndexedHeap<SimTimer>(CompareTimers, timer => timer.HeapIndex, (timer, index) => timer.HeapIndex = index);
@@ -243,7 +249,25 @@ public sealed partial class SimulationWorld : IWorldServices
     public Fixed BaseRegenHealthPercentPerSecond => _templates.BaseRegenHealthPercentPerSecond;
     public long BaseRegenDelayTicks => _templates.BaseRegenDelayTicks;
     public int ValuePerSupplyBox => _templates.ValuePerSupplyBox;
-    public bool AreEnemies(PlayerId a, PlayerId b) => a != b && !a.IsSystem && !b.IsSystem;
+
+    /// <summary>
+    /// <c>Player::getRelationship</c> from <paramref name="from"/>'s point of view: a player is its own ally, the system authority (neutral
+    /// objects) is neutral to everybody, an explicit directed override wins, otherwise the team decides. The reference defaults to NEUTRAL
+    /// and relies on the skirmish setup to write every relation; this world has no such setup step, so "no team, no relation" means enemies.
+    /// </summary>
+    public Relationship RelationshipOf(PlayerId from, PlayerId to)
+    {
+        if (from == to) return Relationship.Allies;
+        if (from.IsSystem || to.IsSystem) return Relationship.Neutral;
+        if (!_players.TryGetValue(from.Value, out var state) || !_players.ContainsKey(to.Value)) return Relationship.Neutral;
+        if (state.Relations.TryGetValue(to.Value, out var explicitRelation)) return explicitRelation;
+        return state.Team != 0 && _players[to.Value].Team == state.Team ? Relationship.Allies : Relationship.Enemies;
+    }
+
+    public bool AreEnemies(PlayerId a, PlayerId b) => a != b && RelationshipOf(a, b) == Relationship.Enemies;
+
+    /// <summary><c>VictoryConditions::areAllies</c>: two distinct players that are allies of each other, in both directions.</summary>
+    public bool AreAllies(PlayerId a, PlayerId b) => a != b && RelationshipOf(a, b) == Relationship.Allies && RelationshipOf(b, a) == Relationship.Allies;
 
     public ScienceMask PlayerSciences(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.CompletedSciences : ScienceMask.Empty;
     public int SciencePointsOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.SciencePurchasePoints : 0;
@@ -416,19 +440,27 @@ public sealed partial class SimulationWorld : IWorldServices
            && !entity.Template.IsKindOf("PROJECTILE") && !entity.Template.IsKindOf("INERT") && !entity.Template.IsKindOf("MINE");
 
     /// <summary>
-    /// "Last player standing" (phase 5 simplification: no teams/alliances). Returns the sole remaining player with at least
-    /// one object, or <see langword="null"/> while two or more players (or zero) still have objects.
+    /// <c>VictoryConditions::update</c> for a skirmish without a "last alliance" opt-out: the match is decided once every player that still has
+    /// objects is an ally of the first one (the reference compares each survivor against the first survivor only, so a non-transitive
+    /// relation matrix is judged the same way). Returns those survivors in ascending id order; empty while enemies remain or nobody is left.
     /// </summary>
-    public PlayerId? TryGetWinner()
+    public ImmutableArray<PlayerId> TryGetWinningAlliance()
     {
-        PlayerId? winner = null;
+        var survivors = ImmutableArray.CreateBuilder<PlayerId>();
         foreach (var player in _playerList)
         {
             if (player.Id.IsSystem || IsPlayerDefeated(player.Id)) continue;
-            if (winner is not null) return null;
-            winner = player.Id;
+            if (survivors.Count > 0 && !AreAllies(survivors[0], player.Id)) return [];
+            survivors.Add(player.Id);
         }
-        return winner;
+        return survivors.ToImmutable();
+    }
+
+    /// <summary>The lowest-id member of the winning alliance (the sole survivor without teams), or <see langword="null"/> while the match is undecided.</summary>
+    public PlayerId? TryGetWinner()
+    {
+        var alliance = TryGetWinningAlliance();
+        return alliance.IsEmpty ? null : alliance[0];
     }
 
     // ----------------------------------------------------------------------------------------------- commands
@@ -555,7 +587,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!command.Player.IsSystem && actor.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (actor.ContainedBy.IsValid) return CommandRejection.CannotEnterContainer;
                 if (!_entities.TryGetValue(enter.Container.Value, out var container) || container.DestroyRequested || container.Container is null) return CommandRejection.UnknownEntity;
-                if (!container.Container.IsValidContainerFor(actor, true)) return CommandRejection.CannotEnterContainer;
+                if (!container.Container.IsValidContainerFor(this, actor, true)) return CommandRejection.CannotEnterContainer;
                 break;
             }
             case ExitContainerCommand exit:
@@ -567,6 +599,11 @@ public sealed partial class SimulationWorld : IWorldServices
                     return CommandRejection.NotPermitted;
                 break;
             }
+            case SetRelationshipCommand relation:
+                if (relation.From.IsSystem || relation.To.IsSystem || relation.From == relation.To) return CommandRejection.InvalidArguments;
+                if (!_players.ContainsKey(relation.From.Value) || !_players.ContainsKey(relation.To.Value)) return CommandRejection.UnknownPlayer;
+                if (!Enum.IsDefined(relation.Relationship)) return CommandRejection.InvalidArguments;
+                break;
             case DockCommand dock:
             {
                 if (!_entities.TryGetValue(dock.Actor.Value, out var actor) || actor.DestroyRequested) return CommandRejection.UnknownEntity;
@@ -758,6 +795,9 @@ public sealed partial class SimulationWorld : IWorldServices
                 AiOf(target)!.OrderMove(this, move.X, move.Y, true);
                 break;
             }
+            case SetRelationshipCommand relationOrder:
+                _players[relationOrder.From.Value].Relations[relationOrder.To.Value] = relationOrder.Relationship;
+                break;
             case DockCommand dockOrder:
             {
                 var actor = FindEntity(dockOrder.Actor);
@@ -821,7 +861,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (actor.ContainedBy.IsValid) { RecordRejection(command, CommandRejection.CannotEnterContainer); break; }
                 var container = FindEntity(enter.Container);
                 if (container is null || container.DestroyRequested || container.Container is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
-                if (!container.Container.IsValidContainerFor(actor, true)) { RecordRejection(command, CommandRejection.CannotEnterContainer); break; }
+                if (!container.Container.IsValidContainerFor(this, actor, true)) { RecordRejection(command, CommandRejection.CannotEnterContainer); break; }
                 container.Container.Add(this, actor);
                 actor.ContainedBy = container.Id; // Add() also does this; kept here too so every entry path is consistent.
                 MarkDirty(actor);
@@ -1020,15 +1060,16 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <summary>
     /// <c>Object::scoreTheKill</c>: an enemy kill (not of a structure under construction, not of an <c>IGNORED_IN_GUI</c> object) gives the killer
     /// the victim's <c>ExperienceValue</c> for the victim's level and pays the killer's owner a share of the victim's cost
-    /// (<c>Player::doBountyForKill</c>, <c>CashBountyPower</c>). Skill points and experience sinks are not modeled.
+    /// (<c>Player::doBountyForKill</c>, <c>CashBountyPower</c>); neutral and allied kills score nothing. Skill points and experience sinks are not modeled.
     /// </summary>
     private void ScoreTheKill(Entity victim, in DamageInfo info)
     {
         if (!info.Source.IsValid || victim.Owner.IsSystem) return;
         var killer = FindEntity(info.Source);
         if (killer is null || killer.Owner.IsSystem || killer.Owner == victim.Owner) return;
+        if (!AreEnemies(killer.Owner, victim.Owner)) return;
         if (victim.Template.IsKindOf("IGNORED_IN_GUI") || victim.HasStatus(ObjectStatusBits.UnderConstruction)) return;
-        if (AreEnemies(killer.Owner, victim.Owner)) AddExperience(killer, victim.Template.ExperienceValue[victim.VeterancyLevel]);
+        AddExperience(killer, victim.Template.ExperienceValue[victim.VeterancyLevel]);
         if (!_players.TryGetValue(killer.Owner.Value, out var payee) || payee.CashBounty.Raw == 0) return;
         var bounty = (victim.Template.BuildCost * payee.CashBounty).Ceiling();
         if (bounty > 0) payee.Money += Fixed.FromInt(bounty);
@@ -1139,7 +1180,7 @@ public sealed partial class SimulationWorld : IWorldServices
         _spawnedTotal++;
 
         if (setup.Container.IsValid && FindEntity(setup.Container) is { Container: { } group } holder && !holder.DestroyRequested
-            && group.IsValidContainerFor(entity, true))
+            && group.IsValidContainerFor(this, entity, true))
         {
             group.Add(this, entity);
             Emit(SimEventKind.EntityContained, entity.Id, holder.Id, string.Empty, 0, pending.Owner);
@@ -1147,7 +1188,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (setup.ContainInSource.IsValid)
         {
             var source = FindEntity(setup.ContainInSource);
-            if (source is { DestroyRequested: false, Container: { } sourceGroup } && sourceGroup.IsValidContainerFor(entity, true))
+            if (source is { DestroyRequested: false, Container: { } sourceGroup } && sourceGroup.IsValidContainerFor(this, entity, true))
             {
                 sourceGroup.Add(this, entity);
                 Emit(SimEventKind.EntityContained, entity.Id, source.Id, string.Empty, 0, pending.Owner);
@@ -1340,7 +1381,17 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.BeginObject(null);
             writer.Int("id", player.Id.Value);
             writer.Text("name", player.Name);
+            writer.Int("team", player.Team);
             writer.UInt("lastSequence", player.LastSequence);
+            writer.BeginArray("relations");
+            for (var index = 0; index < player.Relations.Count; index++)
+            {
+                writer.BeginObject(null);
+                writer.Int("player", player.Relations.Keys[index]);
+                writer.Int("relationship", (int)player.Relations.Values[index]);
+                writer.EndObject();
+            }
+            writer.EndArray();
             writer.Fixed("money", player.Money);
             writer.Int("energyProduction", player.EnergyProduction);
             player.CompletedUpgrades.Describe(writer, "completedUpgrades");

@@ -113,7 +113,10 @@ public interface IWorldServices
     /// <summary><c>GlobalData::m_baseValuePerSupplyBox</c>: the payout of one supply box at a supply center.</summary>
     int ValuePerSupplyBox { get; }
 
-    /// <summary><c>Player::getRelationship</c> == ENEMIES between two controlling players (no team model yet: any two distinct real players are enemies).</summary>
+    /// <summary><c>Player::getRelationship</c>: <paramref name="from"/>'s directed view of <paramref name="to"/> (teams plus explicit overrides; self = allies, neutral objects = neutral).</summary>
+    Relationship RelationshipOf(PlayerId from, PlayerId to);
+
+    /// <summary><see cref="RelationshipOf"/> == enemies.</summary>
     bool AreEnemies(PlayerId a, PlayerId b);
 
     /// <summary>"Science Purchase Points" earned via rank/experience in the reference (not modeled); a scenario/system command credits them directly instead — see <c>docs/GAME-RULES.md</c>.</summary>
@@ -297,7 +300,7 @@ public interface IContainerModule
     int ContainMax { get; }
     int ContainCount { get; }
     IReadOnlyList<EntityId> Contained { get; }
-    bool IsValidContainerFor(Entity candidate, bool checkCapacity);
+    bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity);
     void Add(IWorldServices world, Entity candidate);
 
     /// <summary><paramref name="positionAtContainer"/> is false only when the container itself is gone (its position is stale/irrelevant).</summary>

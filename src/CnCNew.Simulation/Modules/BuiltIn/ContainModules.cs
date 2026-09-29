@@ -52,8 +52,7 @@ public sealed record OpenContainData(
 }
 
 /// <summary>
-/// Shared <c>OpenContain</c> behavior: <c>KindOf</c>/relationship gating (no team/diplomacy system yet — same owner =
-/// ally, no neutral concept, the same approximation as <c>StealthDetectorUpdate</c>), entering/leaving (position snap
+/// Shared <c>OpenContain</c> behavior: <c>KindOf</c>/relationship gating (<c>Relationship</c> of the container's owner towards the candidate's), entering/leaving (position snap
 /// to the container, clearing a pending move order), and death handling. <c>OpenContain::onDie</c> applies
 /// <c>DamagePercentToUnits</c> to each occupant's current health, then calls <c>removeAllContained</c> — never
 /// <c>killAllContained</c> — for every container whose <c>killRidersWhoAreNotFreeToExit</c> ends up a no-op in this
@@ -73,14 +72,18 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     public int ContainCount => Riders.Count;
     public IReadOnlyList<EntityId> Contained => Riders;
 
-    public abstract bool IsValidContainerFor(Entity candidate, bool checkCapacity);
+    public abstract bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity);
 
-    protected bool PassesKindOfAndRelationship(Entity candidate)
+    protected bool PassesKindOfAndRelationship(IWorldServices world, Entity candidate)
     {
         if (!data.AllowInsideKindOf.IsEmpty && !data.AllowInsideKindOf.Any(candidate.Template.IsKindOf)) return false;
         if (data.ForbidInsideKindOf.Any(candidate.Template.IsKindOf)) return false;
-        var isAlly = candidate.Owner == Entity.Owner;
-        return isAlly ? data.AllowAlliesInside : data.AllowEnemiesInside;
+        return world.RelationshipOf(Entity.Owner, candidate.Owner) switch
+        {
+            Relationship.Allies => data.AllowAlliesInside,
+            Relationship.Enemies => data.AllowEnemiesInside,
+            _ => data.AllowNeutralInside,
+        };
     }
 
     public virtual void Add(IWorldServices world, Entity candidate)
@@ -195,9 +198,9 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     public override void OnSpawn(IWorldServices world)
         => NextWake = data.HealObjects ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
 
-    public override bool IsValidContainerFor(Entity candidate, bool checkCapacity)
+    public override bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
     {
-        if (Entity.EffectivelyDead || !PassesKindOfAndRelationship(candidate)) return false;
+        if (Entity.EffectivelyDead || !PassesKindOfAndRelationship(world, candidate)) return false;
         if (Entity.Body is ActiveBody body && body.DamageState == BodyDamageStates.ReallyDamaged && !Entity.Template.IsKindOf("GARRISONABLE_UNTIL_DESTROYED"))
             return false;
         return !checkCapacity || data.ContainMax < 0 || ContainCount < data.ContainMax;
@@ -313,9 +316,9 @@ public sealed class TransportContain(TransportContainData data) : ContainModuleB
     public override void OnSpawn(IWorldServices world)
         => NextWake = data.HealthRegenPercentPerSecond > Fixed.Zero ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
 
-    public override bool IsValidContainerFor(Entity candidate, bool checkCapacity)
+    public override bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
     {
-        if (Entity.EffectivelyDead || candidate.Template.TransportSlotCount <= 0 || !PassesKindOfAndRelationship(candidate)) return false;
+        if (Entity.EffectivelyDead || candidate.Template.TransportSlotCount <= 0 || !PassesKindOfAndRelationship(world, candidate)) return false;
         return !checkCapacity || _usedSlots + candidate.Template.TransportSlotCount <= data.Slots;
     }
 

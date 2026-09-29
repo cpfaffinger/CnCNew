@@ -394,7 +394,7 @@ public sealed class ReferenceMatchScenario
             var best = Fixed.MaxValue;
             foreach (var candidate in targets)
             {
-                if (candidate.Owner == unit.Owner) continue;
+                if (!world.AreEnemies(unit.Owner, candidate.Owner)) continue;
                 var dx = candidate.X - unit.X;
                 var dy = candidate.Y - unit.Y;
                 var distance = dx * dx + dy * dy;

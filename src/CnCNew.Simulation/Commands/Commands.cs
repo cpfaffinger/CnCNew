@@ -2,6 +2,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Timers;
+using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Commands;
 
@@ -11,7 +12,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 6;
+    public const int Version = 7;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -37,7 +38,10 @@ public static class CommandTypes
     // --------------------------------------------------------------------------------------------------- supply economy
     public const ushort Dock = 18;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= Dock;
+    // --------------------------------------------------------------------------------------------------- teams and diplomacy
+    public const ushort SetRelationship = 19;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= SetRelationship;
 }
 
 /// <summary>
@@ -94,6 +98,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor")))),
             CommandTypes.UseSpecialPower => new UseSpecialPowerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), reader.Text("power"),
                 (SpecialPowerTargetKind)checked((byte)reader.Int("targetKind")), new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.SetRelationship => new SetRelationshipCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("from"))), new PlayerId(checked((int)reader.Int("to"))),
+                (Relationship)checked((int)reader.Int("relationship"))),
             CommandTypes.Dock => new DockCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("dock")))),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
@@ -275,6 +281,23 @@ public sealed record DockCommand(PlayerId Player, ulong Sequence, long Tick, Ent
     {
         writer.UInt("actor", Actor.Value);
         writer.UInt("dock", Dock.Value);
+    }
+}
+
+/// <summary>
+/// <c>Player::setPlayerRelationship</c> (the script action behind "set relationship"): <see cref="From"/> sees <see cref="To"/> as
+/// <see cref="Relationship"/> from now on. Directed — the reverse relation is a separate command. System-only, both players must be real and distinct.
+/// </summary>
+public sealed record SetRelationshipCommand(PlayerId Player, ulong Sequence, long Tick, PlayerId From, PlayerId To, Relationship Relationship) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.SetRelationship;
+    public override bool RequiresSystem => true;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.Int("from", From.Value);
+        writer.Int("to", To.Value);
+        writer.Int("relationship", (int)Relationship);
     }
 }
 
