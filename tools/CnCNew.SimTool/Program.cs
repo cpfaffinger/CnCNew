@@ -170,6 +170,8 @@ static int ReferenceMatch(string directory, string[] args)
     {
         Console.WriteLine("The retail reference match cannot run yet: fewer than two factions can field a base and an armed unit. Simulation coverage by side:");
         foreach (var line in ReferenceMatchScenario.DescribeCoverage(catalog)) Console.WriteLine($"  {line}");
+        Console.WriteLine("Blocking modules per side (objects blocked / objects not instantiable):");
+        foreach (var line in ReferenceMatchScenario.DescribeBlockers(catalog)) Console.WriteLine($"  {line}");
         return 3;
     }
 

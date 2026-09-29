@@ -245,6 +245,27 @@ public sealed class ReferenceMatchScenario
         return lines.ToImmutable();
     }
 
+    /// <summary>Per side: the modules that keep match units and producer structures from being instantiable, with the number of objects each one blocks.</summary>
+    public static ImmutableArray<string> DescribeBlockers(TemplateCatalog catalog)
+    {
+        var lines = ImmutableArray.CreateBuilder<string>();
+        foreach (var side in catalog.Factions.Factions.Where(value => value.PlayableSide && !value.IsObserver)
+                     .Select(value => catalog.TryGet(value.StartingBuilding, out var building) ? building.Side : null).OfType<string>()
+                     .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.Ordinal))
+        {
+            var units = catalog.Templates.Where(template => !template.IsInstantiable && IsRosterCandidate(template) && string.Equals(template.Side, side, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var producers = catalog.Templates.Where(template => !template.IsInstantiable && template.IsKindOf("STRUCTURE") && template.Modules.Any(module => module.Name == "ProductionUpdate")
+                && string.Equals(template.Side, side, StringComparison.OrdinalIgnoreCase)).ToArray();
+            lines.Add($"side {side} units: {Tally(units)}");
+            lines.Add($"side {side} producers: {Tally(producers)}");
+        }
+        return lines.ToImmutable();
+
+        static string Tally(ObjectTemplate[] templates)
+            => templates.Length == 0 ? "-" : string.Join(", ", templates.SelectMany(value => value.MissingModules).GroupBy(value => value, StringComparer.Ordinal)
+                .OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).Select(group => $"{group.Key} {group.Count()}/{templates.Length}"));
+    }
+
     private void Generate(SimulationWorld world, TemplateCatalog catalog, long tick)
     {
         if (tick == 0) return;
