@@ -48,6 +48,7 @@ public sealed class SyntheticFixture
         """,
         ["Data/INI/FXList.ini"] = "FXList FX_Test\nEnd\nFXList FX_Other\nEnd\n",
         ["Data/INI/Weapon.ini"] = "Weapon TestWeapon\n  PrimaryDamage = 10\nEnd\n",
+        ["Data/INI/ObjectCreationList.ini"] = "ObjectCreationList OCL_BarrelDebris\nEnd\nObjectCreationList OCL_Wreck\nEnd\nObjectCreationList OCL_Damaged\nEnd\nObjectCreationList OCL_ReallyDamaged\nEnd\nObjectCreationList OCL_Rubble\nEnd\n",
         ["Data/INI/Object/Fixture.ini"] = """
         Object Barrel
           KindOf = SELECTABLE STRUCTURE

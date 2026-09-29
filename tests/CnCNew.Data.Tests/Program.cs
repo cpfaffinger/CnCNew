@@ -36,6 +36,7 @@ IdsAndSnapshotsIgnoreEnumerationOrder();
 TruncatedInputsAreRejected();
 FullCompilationsAreByteIdentical();
 FingerprintStreamingMatchesBuffer();
+ObjectCreationListsAreTypedNuggets();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -764,6 +765,45 @@ static void RealDataCatalogMatchesObservedModules(string directory)
     }
 }
 
+static void ObjectCreationListsAreTypedNuggets()
+{
+    const string valid = """
+    Object Bit
+    End
+    FXList FX_Final
+    End
+    ObjectCreationList OCL_Test
+      CreateObject
+        ObjectNames = Bit
+        Count = 3
+        Offset = X:0 Y:0 Z:5
+        DispositionIntensity = 0.1 End
+      End
+      CreateDebris
+        ModelNames = ModelA ignoredA ModelB ignoredB
+        FXFinal = FX_Final
+      End
+      DeliverPayload
+        Payload = Bit 2
+        Transport = Bit
+      End
+    End
+    """;
+    var options = DefinitionCompilerOptions.Audit with { StrictReferences = true };
+    var graph = DefinitionCompiler.Compile(One(valid), options: options);
+    var list = graph.Definitions.OfType<ObjectCreationListDefinition>().Single();
+    Assert(list.Sections.Length == 3 && list.Sections[0].Declaration == "CreateObject", "Nuggets must be kept in order.");
+    Assert(graph.Diagnostics.Any(value => value.Code == "compatibility-ignored-tokens"), "The retail name-pair quirk must be a counted compatibility case.");
+    Assert(graph.References.Any(edge => edge.Target.Name == "Bit" && edge.Field.EndsWith("Payload", StringComparison.Ordinal) && edge.Resolved), "A counted payload must produce a reference edge.");
+
+    var redefined = DefinitionCompiler.Compile(One(valid + "\nObjectCreationList OCL_Test\n  FireWeapon\n  End\nEnd\n".Replace("FireWeapon", "ApplyRandomForce")), options: options);
+    Assert(redefined.Definitions.OfType<ObjectCreationListDefinition>().Single().Sections.Length == 1, "A repeated definition must replace the earlier nuggets.");
+
+    Throws<IniParseException>(() => DefinitionCompiler.Compile(One("ObjectCreationList A\n  CreateSomething\n  End\nEnd\n")), "Unexpected End");
+    Throws<DefinitionCompileException>(() => DefinitionCompiler.Compile(One("ObjectCreationList A\n  CreateObject\n    Bogus = 1\n  End\nEnd\n")), "Unknown key");
+    Throws<DefinitionCompileException>(() => DefinitionCompiler.Compile(One("ObjectCreationList A\n  Foo = 1\nEnd\n")), "nugget blocks only");
+}
+
 static MemorySource One(string text) => new(new Dictionary<string, string> { ["fixture.ini"] = text }, ["fixture.ini"]);
 
 static void Assert(bool condition, string message)
@@ -799,3 +839,4 @@ file sealed class ContentSource(ContentFileSystem content) : IDefinitionSource
     public Stream OpenRead(string virtualPath) => content.OpenRead(virtualPath);
     public bool Exists(string virtualPath) => content.Exists(virtualPath);
 }
+
