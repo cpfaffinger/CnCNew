@@ -12,8 +12,8 @@ using CnCNew.Simulation.Timers;
 
 namespace CnCNew.Simulation.World;
 
-/// <summary><paramref name="Team"/> groups players into an alliance (same non-zero team: mutual <see cref="Relationship.Allies"/>; 0: no team, everybody else is an enemy); <see cref="SetRelationshipCommand"/> overrides single directed relations afterwards. <paramref name="Faction"/> names a <c>PlayerTemplate</c> (<see cref="Templates.FactionCatalog"/>); when set, the world credits its <c>StartMoney</c> and <c>IntrinsicSciences</c> once at construction (<c>Player::Player()</c>). <see langword="null"/>: no faction, starts with nothing (fixtures/tests that set up money and sciences explicitly).</summary>
-public sealed record PlayerConfiguration(PlayerId Id, string Name, string? Faction = null, int Team = 0);
+/// <summary><paramref name="IsComputer"/> is <c>PLAYER_COMPUTER</c> (the AI-driven modules such as <c>AutoFindHealingUpdate</c> only act for computer players); <see langword="false"/> is <c>PLAYER_HUMAN</c>. <paramref name="Team"/> groups players into an alliance (same non-zero team: mutual <see cref="Relationship.Allies"/>; 0: no team, everybody else is an enemy); <see cref="SetRelationshipCommand"/> overrides single directed relations afterwards. <paramref name="Faction"/> names a <c>PlayerTemplate</c> (<see cref="Templates.FactionCatalog"/>); when set, the world credits its <c>StartMoney</c> and <c>IntrinsicSciences</c> once at construction (<c>Player::Player()</c>). <see langword="null"/>: no faction, starts with nothing (fixtures/tests that set up money and sciences explicitly).</summary>
+public sealed record PlayerConfiguration(PlayerId Id, string Name, string? Faction = null, int Team = 0, bool IsComputer = false);
 
 /// <summary>Everything that identifies a run apart from the definitions and the command stream.</summary>
 public sealed record WorldConfiguration(WorldId Id, uint Seed, ImmutableArray<PlayerConfiguration> Players, string FixtureId, string DefinitionFingerprint);
@@ -75,11 +75,12 @@ public sealed partial class SimulationWorld : IWorldServices
     private ulong _commandSum;
     private UpdateNode? _currentUpdate;
 
-    private sealed class PlayerState(PlayerId id, string name, int team)
+    private sealed class PlayerState(PlayerId id, string name, int team, bool isComputer)
     {
         public PlayerId Id { get; } = id;
         public string Name { get; } = name;
         public int Team { get; } = team;
+        public bool IsComputer { get; } = isComputer;
         public ulong LastSequence { get; set; }
 
         // ------------------------------------------------------------------------------------- teams and diplomacy
@@ -129,7 +130,7 @@ public sealed partial class SimulationWorld : IWorldServices
         {
             if (player.Id.IsSystem) throw new ArgumentException("Player 0 is the built-in system authority.", nameof(configuration));
             if (player.Team < 0) throw new ArgumentException($"Negative team for player {player.Id}.", nameof(configuration));
-            var state = new PlayerState(player.Id, player.Name, player.Team);
+            var state = new PlayerState(player.Id, player.Name, player.Team, player.IsComputer);
             if (player.Faction is { } factionName)
             {
                 // Player::Player(): starting cash and intrinsic sciences are credited once, at construction.
@@ -141,7 +142,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (!_players.TryAdd(player.Id.Value, state))
                 throw new ArgumentException($"Duplicate player id {player.Id}.", nameof(configuration));
         }
-        _players.Add(0, new PlayerState(PlayerId.System, "System", 0));
+        _players.Add(0, new PlayerState(PlayerId.System, "System", 0, false));
         _playerList = [.._players.Values];
         _updates = new IndexedHeap<UpdateNode>(CompareUpdates, node => node.HeapIndex, (node, index) => node.HeapIndex = index);
         _timers = new IndexedHeap<SimTimer>(CompareTimers, timer => timer.HeapIndex, (timer, index) => timer.HeapIndex = index);
@@ -263,6 +264,24 @@ public sealed partial class SimulationWorld : IWorldServices
         if (state.Relations.TryGetValue(to.Value, out var explicitRelation)) return explicitRelation;
         return state.Team != 0 && _players[to.Value].Team == state.Team ? Relationship.Allies : Relationship.Enemies;
     }
+
+    public bool TryEnterContainer(Entity actor, Entity container)
+    {
+        if (actor.DestroyRequested || actor.ContainedBy.IsValid || container.DestroyRequested || container.Container is null) return false;
+        if (!container.Container.IsValidContainerFor(this, actor, true)) return false;
+        PutIntoContainer(actor, container, actor.Owner);
+        return true;
+    }
+
+    private void PutIntoContainer(Entity actor, Entity container, PlayerId player)
+    {
+        container.Container!.Add(this, actor);
+        actor.ContainedBy = container.Id; // Add() also does this; kept here too so every entry path is consistent.
+        MarkDirty(actor);
+        Emit(SimEventKind.EntityContained, actor.Id, container.Id, string.Empty, 0, player);
+    }
+
+    public bool IsComputerPlayer(PlayerId player) => _players.TryGetValue(player.Value, out var state) && state.IsComputer;
 
     public bool AreEnemies(PlayerId a, PlayerId b) => a != b && RelationshipOf(a, b) == Relationship.Enemies;
 
@@ -862,10 +881,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 var container = FindEntity(enter.Container);
                 if (container is null || container.DestroyRequested || container.Container is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
                 if (!container.Container.IsValidContainerFor(this, actor, true)) { RecordRejection(command, CommandRejection.CannotEnterContainer); break; }
-                container.Container.Add(this, actor);
-                actor.ContainedBy = container.Id; // Add() also does this; kept here too so every entry path is consistent.
-                MarkDirty(actor);
-                Emit(SimEventKind.EntityContained, actor.Id, container.Id, string.Empty, 0, command.Player);
+                PutIntoContainer(actor, container, command.Player);
                 break;
             }
             case ExitContainerCommand exit:
@@ -1382,6 +1398,7 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Int("id", player.Id.Value);
             writer.Text("name", player.Name);
             writer.Int("team", player.Team);
+            writer.Bool("computer", player.IsComputer);
             writer.UInt("lastSequence", player.LastSequence);
             writer.BeginArray("relations");
             for (var index = 0; index < player.Relations.Count; index++)

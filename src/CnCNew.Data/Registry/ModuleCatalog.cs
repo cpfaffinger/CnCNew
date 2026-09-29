@@ -284,6 +284,14 @@ public static class ModuleCatalog
             new("StartingBoxes", FieldType.Integer, Min: 0, Source: "SupplyWarehouseDockUpdate.cpp"),
             new("DeleteWhenEmpty", FieldType.Bool, Source: "SupplyWarehouseDockUpdate.cpp"),
         ]);
+        Add("RepairDockUpdate", [..DockBase("DockUpdate.cpp"), new("TimeForFullHeal", FieldType.DurationMs, Source: "RepairDockUpdate.cpp")]);
+        Add("AutoFindHealingUpdate",
+        [
+            new("ScanRate", FieldType.DurationMs, Source: "AutoFindHealingUpdate.cpp"),
+            new("ScanRange", FieldType.Distance, Source: "AutoFindHealingUpdate.cpp"),
+            new("NeverHeal", FieldType.Real, Source: "AutoFindHealingUpdate.cpp"),
+            new("AlwaysHeal", FieldType.Real, Source: "AutoFindHealingUpdate.cpp"),
+        ]);
         Add("SupplyCenterCreate", []);
         Add("SupplyWarehouseCreate", []);
         // UpgradedBoost is "UpgradeType:<name> Boost:<int>", repeatable (parseUpgradePair): a token pair the generic typer cannot read, so

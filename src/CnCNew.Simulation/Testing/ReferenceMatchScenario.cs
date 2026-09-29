@@ -128,7 +128,7 @@ public sealed class ReferenceMatchScenario
     {
         var factions = Participants(catalog, out _);
         if (factions.Length < 2) throw new InvalidOperationException("A match needs at least two playable factions.");
-        Players = [..factions.Select((participant, index) => new PlayerConfiguration(new PlayerId(index + 1), participant.Faction.Name, participant.Faction.Name))];
+        Players = [..factions.Select((participant, index) => new PlayerConfiguration(new PlayerId(index + 1), participant.Faction.Name, participant.Faction.Name, IsComputer: true))];
         _sequence = new ulong[Players.Length + 1];
         _sides = [..factions.Select(participant => participant.Side)];
         var provisional = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, SimulationTiming.LogicFramesPerSecond, fingerprint,

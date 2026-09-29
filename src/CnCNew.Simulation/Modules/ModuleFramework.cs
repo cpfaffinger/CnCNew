@@ -116,6 +116,12 @@ public interface IWorldServices
     /// <summary><c>Player::getRelationship</c>: <paramref name="from"/>'s directed view of <paramref name="to"/> (teams plus explicit overrides; self = allies, neutral objects = neutral).</summary>
     Relationship RelationshipOf(PlayerId from, PlayerId to);
 
+    /// <summary>The arrival half of <c>aiEnter</c>: puts <paramref name="actor"/> into <paramref name="container"/> when the container accepts it; false leaves both untouched.</summary>
+    bool TryEnterContainer(Entity actor, Entity container);
+
+    /// <summary><c>Player::getPlayerType() == PLAYER_COMPUTER</c>.</summary>
+    bool IsComputerPlayer(PlayerId player);
+
     /// <summary><see cref="RelationshipOf"/> == enemies.</summary>
     bool AreEnemies(PlayerId a, PlayerId b);
 

@@ -48,6 +48,7 @@ public sealed partial class SimulationWorld
             if (!_players.TryGetValue(id, out var known) || known.Name != player.Text("name"))
                 throw new InvalidDataException($"Snapshot player {id} does not match the world configuration.");
             if (player.Int("team") != known.Team) throw new InvalidDataException($"Snapshot player {id} belongs to another team than the world configuration.");
+            if (player.Bool("computer") != known.IsComputer) throw new InvalidDataException($"Snapshot player {id} has another player type than the world configuration.");
             known.LastSequence = player.UInt("lastSequence");
             known.Relations.Clear();
             foreach (var relation in player.Array("relations"))

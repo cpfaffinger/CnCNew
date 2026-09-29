@@ -27,14 +27,14 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// <summary>
 /// Binary replay container, little endian:
 /// <c>"CNCRPLAY"</c>, u32 format version, u32 command table version, u32 tick rate, 32 bytes definition fingerprint, string fixture id,
-/// u32 seed, u32 world id, u16 player count (i32 id, string name, string faction; empty = none, i32 team), i64 end tick, u32 checkpoint interval,
+/// u32 seed, u32 world id, u16 player count (i32 id, string name, string faction; empty = none, i32 team, u8 computer flag), i64 end tick, u32 checkpoint interval,
 /// u32 command count (i64 tick, u16 type, i32 player, u64 sequence, type-specific payload), u32 checkpoint count (i64 tick, u64 hash),
 /// and a trailing SHA-256 over everything before it. Strings are u16-length-prefixed UTF-8.
 /// Commands are stored ordered by (tick, player, sequence). Truncated, corrupted (hash mismatch) and version-foreign files are rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -60,6 +60,7 @@ public static class ReplayFormat
                 WriteString(writer, player.Name);
                 WriteString(writer, player.Faction ?? string.Empty);
                 writer.Write(player.Team);
+                writer.Write(player.IsComputer);
             }
             writer.Write(header.EndTick);
             writer.Write((uint)header.CheckpointInterval);
@@ -109,7 +110,8 @@ public static class ReplayFormat
                 var playerName = ReadString(reader);
                 var faction = ReadString(reader);
                 var team = reader.ReadInt32();
-                players.Add(new PlayerConfiguration(playerId, playerName, faction.Length == 0 ? null : faction, team));
+                var isComputer = reader.ReadBoolean();
+                players.Add(new PlayerConfiguration(playerId, playerName, faction.Length == 0 ? null : faction, team, isComputer));
             }
             var endTick = reader.ReadInt64();
             var interval = (int)reader.ReadUInt32();

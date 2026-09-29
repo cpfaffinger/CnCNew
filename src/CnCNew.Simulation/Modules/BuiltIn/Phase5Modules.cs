@@ -461,6 +461,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private long _nextWake = -1;
     private DockMachine? _dock;
     private bool _lastCommandFromPlayer;
+    private EntityId _enterTarget;
+    private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
 
     public override string ModuleName => "AIUpdateInterface";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -480,6 +482,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
     {
         CancelDock(world);
+        _enterTarget = EntityId.Invalid;
         _lastCommandFromPlayer = fromPlayer;
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
@@ -488,10 +491,37 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         world.MarkDirty(Entity);
     }
 
+    /// <summary>
+    /// <c>aiEnter</c> (<c>AI_ENTER</c>): moves to the container and enters it on arrival if it still accepts the object. An immobile object
+    /// or a missing container ignores the order, as <c>privateEnter</c> does.
+    /// </summary>
+    public void OrderEnter(IWorldServices world, Entity container, bool fromPlayer)
+    {
+        if (Entity.Template.Locomotor is null) return;
+        OrderMove(world, container.X, container.Y, fromPlayer);
+        _enterTarget = container.Id;
+    }
+
+    /// <summary>
+    /// <c>aiGetHealed</c> (<c>privateGetHealed</c>): <c>ActionManager::canGetHealedAt</c> — the object is hurt infantry, the pad is a living, complete,
+    /// unsold ally with <c>HEAL_PAD</c> — then <see cref="OrderEnter"/>. The shroud check has no counterpart (no fog of war).
+    /// </summary>
+    public void OrderGetHealed(IWorldServices world, Entity pad, bool fromPlayer)
+    {
+        if (world.RelationshipOf(Entity.Owner, pad.Owner) != Relationship.Allies) return;
+        if (pad.EffectivelyDead) return;
+        if (Entity.HasStatus(ObjectStatusBits.UnderConstruction) || pad.HasStatus(ObjectStatusBits.UnderConstruction)) return;
+        if (pad.HasStatus(SoldBit)) return;
+        if (!Entity.Template.IsKindOf("INFANTRY") || !pad.Template.IsKindOf("HEAL_PAD")) return;
+        if (Entity.Body is { } body && body.Health == body.MaxHealth) return;
+        OrderEnter(world, pad, fromPlayer);
+    }
+
     /// <summary><c>aiDock</c>: replaces the current state with <c>AI_DOCK</c>; a dock that cannot be entered ends at once and leaves the object idle.</summary>
     public virtual void OrderDock(IWorldServices world, Entity dock, bool fromPlayer)
     {
         CancelDock(world);
+        _enterTarget = EntityId.Invalid;
         _lastCommandFromPlayer = fromPlayer;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
@@ -543,7 +573,22 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             }
             else Move(world, locomotor);
         }
+        if (_enterTarget.IsValid) UpdateEnter(world);
         return _dock is not null || Entity.HasMoveTarget ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+    }
+
+    private void UpdateEnter(IWorldServices world)
+    {
+        var container = world.FindEntity(_enterTarget);
+        if (container is null || container.DestroyRequested || container.EffectivelyDead)
+        {
+            _enterTarget = EntityId.Invalid;
+            StopInternalMove();
+            return;
+        }
+        if (Entity.HasMoveTarget) return;
+        _enterTarget = EntityId.Invalid;
+        world.TryEnterContainer(Entity, container);
     }
 
     private void Move(IWorldServices world, LocomotorInfo locomotor)
@@ -579,6 +624,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         writer.Int("nextWake", _nextWake);
         writer.Bool("lastCommandFromPlayer", _lastCommandFromPlayer);
         writer.Bool("docking", _dock is not null);
+        writer.UInt("enterTarget", _enterTarget.Value);
         _dock?.Describe(writer);
     }
 
@@ -586,6 +632,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     {
         _nextWake = reader.Int("nextWake");
         _lastCommandFromPlayer = reader.Bool("lastCommandFromPlayer");
+        _enterTarget = new EntityId(checked((uint)reader.UInt("enterTarget")));
         _dock = reader.Bool("docking") ? DockMachine.Load(reader) : null;
     }
 }

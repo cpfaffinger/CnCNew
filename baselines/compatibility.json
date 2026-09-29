@@ -5015,7 +5015,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 4327,
+      "count": 4276,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5532,15 +5532,6 @@
       "category": "module",
       "name": "AssistedTargetingUpdate",
       "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "AutoFindHealingUpdate",
-      "count": 34,
       "owners": [
         "Object"
       ],
@@ -6238,15 +6229,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "RepairDockUpdate",
-      "count": 17,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
