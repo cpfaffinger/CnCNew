@@ -61,6 +61,8 @@ run.Test("Phase 5: FireWeaponWhenDeadBehavior activation and conflict re-check",
 run.Test("Phase 5: StealthDetectorUpdate marks and expires DETECTED", Tests.Phase5StealthDetector);
 run.Test("Phase 5: PoisonedBehavior periodic damage, re-poison and healing", Tests.Phase5Poisoned);
 run.Test("Phase 5: BaseRegenerateUpdate delay, bursts and stop at full health", Tests.Phase5BaseRegenerate);
+run.Test("Phase 5: PhysicsBehavior, SquishCollide and GenerateMinefieldBehavior", Tests.MatchMinefieldAndPhysics);
+run.Test("Phase 5: BaseRegenerateUpdate wake tick survives a snapshot", Tests.MatchBaseRegenerateSnapshot);
 run.Test("Phase 5: GarrisonContain capacity, entry, healing and ejection", Tests.Phase5Garrison);
 run.Test("Phase 5: TransportContain slot-weighted capacity and health regen", Tests.Phase5Transport);
 run.Test("Phase 5: CreateCrateDie conditions, draw order and requests", Tests.Phase5CreateCrateDie);

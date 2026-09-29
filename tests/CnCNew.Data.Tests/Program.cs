@@ -225,7 +225,7 @@ static void ModuleCatalogIsExplicitAndConsistent()
         "SlowDeathBehavior", "StealthDetectorUpdate", "StealthUpdate", "StealthUpgrade", "TransitionDamageFX",
         "TransportContain", "WeaponBonusUpgrade", "WeaponSetUpgrade",
         // reference-match unlock batch (docs/GAME-RULES.md §7a)
-        "BaseRegenerateUpdate",
+        "BaseRegenerateUpdate", "GenerateMinefieldBehavior", "PhysicsBehavior", "SquishCollide",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

@@ -18,6 +18,13 @@ using CnCNew.Simulation.World;
 sealed class Feeder(SimulationWorld world)
 {
     private readonly Dictionary<int, ulong> _sequence = [];
+    public Feeder ForkTo(SimulationWorld other)
+    {
+        var fork = new Feeder(other);
+        foreach (var pair in _sequence) fork._sequence[pair.Key] = pair.Value;
+        return fork;
+    }
+
     private ulong Next(int player) => _sequence[player] = _sequence.GetValueOrDefault(player) + 1;
 
     public SubmitResult Spawn(int player, string template, long? tick = null, int owner = 0, int x = 0, int y = 0)
