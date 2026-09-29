@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -6,6 +7,7 @@ using CnCNew.Content;
 using CnCNew.Data.Compilation;
 using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
+using CnCNew.Formats;
 using CnCNew.Data.Snapshots;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
@@ -14,6 +16,7 @@ using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.World;
 
@@ -27,6 +30,8 @@ const string Usage = """
       hash <replay.bin>                                    run a replay and print final hash and hash-chain digest
       reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--out replay.bin] [--diagnose]
                                                            headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
+      ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin]
+                                                           skirmish AIs on a real map: record, two fresh runs, snapshot continuation
       stress [--ticks N] [--population N] [--out replay.bin]
                                                            record + two fresh runs + snapshot continuation, leak and budget checks
     """;
@@ -48,6 +53,7 @@ try
         "hash" when args.Length >= 2 => HashReplay(args[1]),
         "stress" => Stress(Options(args), Arg(args, "--out")),
         "reference-match" when args.Length >= 2 => ReferenceMatch(args[1], args),
+        "ai-match" when args.Length >= 2 => AiMatch(args[1], args),
         _ => Fail(Usage),
     };
 }
@@ -216,6 +222,72 @@ static int ReferenceMatch(string directory, string[] args)
     Console.WriteLine($"End state: {world.Metrics}; survivors by owner: {string.Join(", ", survivors)}.");
     if (args.Contains("--diagnose"))
         Console.WriteLine($"Survivors by template: {string.Join(", ", world.Entities.Where(value => !value.Owner.IsSystem).GroupBy(value => value.Template.Name).OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).Take(12).Select(group => $"{group.Key}={group.Count()}"))}.");
+    Console.WriteLine($"Rejections by reason: {string.Join(", ", Enum.GetValues<CommandRejection>().Where(reason => world.RejectionCounts[(int)reason] > 0).Select(reason => $"{reason}={world.RejectionCounts[(int)reason]}"))}.");
+    return identical && continued && first.FinalHash == second.FinalHash ? 0 : 1;
+}
+
+static int AiMatch(string directory, string[] args)
+{
+    var mapPath = Arg(args, "--map") ?? throw new ArgumentException("--map <virtual-map-path> is required.");
+    var options = SkirmishMatchOptions.Standard;
+    if (Arg(args, "--max-ticks") is { } maxTicks) options = options with { MaxTicks = long.Parse(maxTicks, CultureInfo.InvariantCulture) };
+    if (Arg(args, "--seed") is { } seed) options = options with { AiSeed = uint.Parse(seed, CultureInfo.InvariantCulture), WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) ^ 0xC0FFEE06 };
+    var watch = Stopwatch.StartNew();
+    var (_, catalog, fingerprint) = CompileShipped(directory);
+    var content = ContentFileSystem.Open(directory);
+    using var mapStream = content.OpenRead(mapPath);
+    var map = SageMapDecoder.Decode(mapStream);
+    var terrain = TerrainMap.Build(map, mapPath);
+    var everyone = ReferenceMatchScenario.Participants(catalog, out _);
+    var wanted = Arg(args, "--factions")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var chosen = wanted is null
+        ? everyone.Take(int.Parse(Arg(args, "--players") ?? "2", CultureInfo.InvariantCulture)).ToImmutableArray()
+        : [..wanted.Select(name => everyone.FirstOrDefault(value => value.Faction.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ?? throw new ArgumentException($"Unknown or unplayable faction {name}."))];
+    Console.WriteLine($"AI match on {mapPath} ({terrain.CellsX}x{terrain.CellsY} cells, {terrain.StartPositions.Length} start positions, terrain {terrain.Fingerprint[..16]}), definitions {fingerprint[..16]}.");
+    foreach (var participant in chosen)
+        Console.WriteLine($"  {participant.Faction.Name} (side {participant.Side}): base {participant.BaseBuilding}{(participant.Substitution is null ? "" : $" [stand-in, {participant.Substitution}]")}");
+
+    var scenario = new SkirmishMatchScenario(options);
+    var recorded = scenario.Record(catalog, fingerprint, terrain, map.Objects, chosen);
+    Console.WriteLine($"Recorded {recorded.Commands.Length} commands over {recorded.Header.EndTick} ticks in {watch.Elapsed.TotalSeconds:F1} s; {scenario.WarehousesSpawned} map warehouses spawned.");
+    foreach (var note in scenario.Notes) Console.WriteLine($"  note: {note}");
+    for (var index = 0; index < scenario.Ais.Length; index++)
+    {
+        var stats = scenario.Ais[index].Stats;
+        var final = scenario.Finals[index];
+        Console.WriteLine($"  {final.Faction}: {(final.Defeated ? "defeated" : "alive")}, {final.Objects} objects, {final.Money} money; commands {stats.Commands} (rejected {stats.Rejected}), built {stats.Constructions} (resumed {stats.Resumes}, cancelled {stats.CancelledSites}), produced {stats.Productions}, shots {stats.Shots}, waves {stats.Waves}, powers {stats.PowerUses}, sciences {stats.SciencePurchases}, repairs {stats.Repairs}, docks {stats.DockOrders}, idle thinks {stats.IdleThinks}");
+        if (stats.RejectionsByReason.Count > 0) Console.WriteLine($"    rejections: {string.Join(", ", stats.RejectionsByReason.Select(pair => $"{pair.Key}={pair.Value}"))}");
+    }
+    Console.WriteLine(scenario.Winner is null
+        ? $"No winner within {recorded.Header.EndTick} ticks (stalemate)."
+        : $"Winner: player {scenario.Winner.Value.Value} ({scenario.Players.First(value => value.Id == scenario.Winner.Value).Faction}) at tick {scenario.VictoryTick} ({scenario.VictoryTick / 30 / 60.0:F1} game minutes).");
+
+    var checkpointRun = ReplayRunner.Run(recorded, catalog, fingerprint, new ReplayRunOptions { RecordCheckpointInterval = options.CheckpointInterval }, terrain);
+    var replay = recorded with { Checkpoints = checkpointRun.Checkpoints };
+    var bytes = ReplayFormat.Write(replay);
+    Console.WriteLine($"Replay file: {bytes.Length} bytes, {replay.Checkpoints.Length} checkpoints, SHA-256 {Convert.ToHexString(SHA256.HashData(bytes))}.");
+    if (Arg(args, "--out") is { } path) File.WriteAllBytes(Path.GetFullPath(path), bytes);
+    replay = ReplayFormat.Read(bytes);
+
+    watch.Restart();
+    var first = ReplayRunner.Run(replay, catalog, fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 5_000 }, terrain);
+    Console.WriteLine($"Run 1 (checkpoints verified {first.VerifiedCheckpoints}/{replay.Checkpoints.Length}): {watch.Elapsed.TotalSeconds:F1} s, {first.SubmittedCommands} commands, {first.RejectedCommands} rejected, final hash {first.FinalHash:X16}.");
+    var second = ReplayRunner.Run(replay, catalog, fingerprint, new ReplayRunOptions { RecordTickHashes = true }, terrain);
+    var identical = first.TickHashes.AsSpan().SequenceEqual(second.TickHashes);
+    Console.WriteLine($"Run 2 (fresh): tick hashes identical over {second.TickHashes.Length} ticks: {identical}; chain {Chain(second.TickHashes):X16}.");
+    var half = replay.Header.EndTick / 2;
+    var head = ReplayRunner.CreateWorld(replay.Header, catalog, terrain);
+    var headRun = ReplayRunner.Run(replay, head, new ReplayRunOptions { StopTick = half, RecordTickHashes = true });
+    var restored = WorldSnapshot.Restore(WorldSnapshot.Write(head), catalog, fingerprint, terrain);
+    var tail = ReplayRunner.Run(replay, restored, new ReplayRunOptions { RecordTickHashes = true });
+    var continued = headRun.TickHashes.Concat(tail.TickHashes).SequenceEqual(second.TickHashes);
+    Console.WriteLine($"Snapshot continuation at tick {half}: identical over {headRun.TickHashes.Length + tail.TickHashes.Length} ticks: {continued}.");
+
+    var world = ReplayRunner.CreateWorld(replay.Header, catalog, terrain);
+    ReplayRunner.Run(replay, world);
+    Console.WriteLine($"End state: {world.Metrics}.");
+    foreach (var player in scenario.Players)
+        Console.WriteLine($"  {player.Faction}: {string.Join(", ", world.Entities.Where(value => value.Owner == player.Id && !value.EffectivelyDead).GroupBy(value => value.Template.Name).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => $"{group.Key}={group.Count()}"))}");
     Console.WriteLine($"Rejections by reason: {string.Join(", ", Enum.GetValues<CommandRejection>().Where(reason => world.RejectionCounts[(int)reason] > 0).Select(reason => $"{reason}={world.RejectionCounts[(int)reason]}"))}.");
     return identical && continued && first.FinalHash == second.FinalHash ? 0 : 1;
 }
