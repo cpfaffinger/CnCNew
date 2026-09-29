@@ -420,6 +420,42 @@ static partial class Tests
     }
 }
 
+static partial class Tests
+{
+    /// <summary>The retail reference match: at least two factions play a full match on the shipped data, twice, plus a mid-match snapshot continuation.</summary>
+    public static void RealReferenceMatch(string directory)
+    {
+        var content = ContentFileSystem.Open(directory);
+        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
+        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        var participants = ReferenceMatchScenario.Participants(catalog, out _);
+        Check.That(participants.Length >= 2, $"At least two retail factions can field a base and an armed unit ({participants.Length}).");
+
+        var scenario = new ReferenceMatchScenario(ReferenceMatchOptions.Standard);
+        var recorded = scenario.Record(catalog, fingerprint);
+        Check.That(scenario.Winner is not null && scenario.VictoryTick > 0, $"The retail match ends with a winner (orders {scenario.Orders}, shots {scenario.Shots}, production {scenario.ProductionOrders}).");
+        Check.That(scenario.ProductionOrders > 10 && scenario.Shots > 100, "The generator plays a real match.");
+        Console.WriteLine($"       retail match: {participants.Length} factions, {recorded.Commands.Length} commands, peak {scenario.PeakAlive} objects, winner {scenario.WinnerFaction} at tick {scenario.VictoryTick}");
+
+        var checkpoints = ReplayRunner.Run(recorded, catalog, fingerprint, new ReplayRunOptions { RecordCheckpointInterval = ReferenceMatchOptions.Standard.CheckpointInterval }).Checkpoints;
+        var replay = ReplayFormat.Read(ReplayFormat.Write(recorded with { Checkpoints = checkpoints }));
+        var first = ReplayRunner.Run(replay, catalog, fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 5_000 });
+        Check.That(first.VerifiedCheckpoints == replay.Checkpoints.Length && first.RejectedCommands == 0, $"Every checkpoint verifies and no command is rejected ({first.RejectedCommands}).");
+        var second = ReplayRunner.Run(replay, catalog, fingerprint, new ReplayRunOptions { RecordTickHashes = true });
+        Check.That(first.TickHashes.AsSpan().SequenceEqual(second.TickHashes) && first.FinalHash == second.FinalHash, "Two fresh runs are hash identical on every tick.");
+
+        var half = replay.Header.EndTick / 2;
+        var head = ReplayRunner.CreateWorld(replay.Header, catalog);
+        var headRun = ReplayRunner.Run(replay, head, new ReplayRunOptions { StopTick = half, RecordTickHashes = true });
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(head), catalog, fingerprint);
+        var tail = ReplayRunner.Run(replay, restored, new ReplayRunOptions { RecordTickHashes = true });
+        Check.That(headRun.TickHashes.Concat(tail.TickHashes).SequenceEqual(second.TickHashes), "A snapshot taken mid-match continues hash identically.");
+    }
+}
+
+
 file sealed class RealSource(ContentFileSystem content) : IDefinitionSource
 {
     public IEnumerable<string> EnumerateIniFiles() => content.EnumerateFiles().Where(path => path.EndsWith(".ini", StringComparison.OrdinalIgnoreCase));

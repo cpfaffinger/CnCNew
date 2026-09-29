@@ -76,6 +76,7 @@ run.Test("Phase 5 golden master: production clock and ledger", Tests.Phase5Golde
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 return run.Finish();
 
 sealed class Runner
