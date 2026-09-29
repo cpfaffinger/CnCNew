@@ -17,14 +17,25 @@ public sealed record ModuleSpec(string Name, string Tag, IModuleBinding Binding,
 /// </summary>
 public sealed record PrerequisiteLine(bool IsScience, ImmutableArray<string> Alternatives);
 
+/// <summary>The terrain classes a locomotor may cross (<c>Locomotor::Surfaces</c>, <c>LocomotorSurfaceType</c>).</summary>
+[Flags]
+public enum LocomotorSurfaces
+{
+    None = 0,
+    Ground = 1,
+    Water = 2,
+    Cliff = 4,
+    Air = 8,
+    Rubble = 16,
+}
+
 /// <summary>
-/// Straight-line movement constants of one <c>Locomotor</c> selection, already converted to simulation units.
-/// <see cref="TurnRatePerTick"/> is compiled and carried but not yet applied: phase 5's "einfache Bewegung" (simple
-/// movement) turns instantly toward the goal and moves in a straight vector line (no sqrt-free trig is available without
-/// floating point — see <see cref="Fixed.Sqrt"/> — so full turn-rate-clamped heading is deferred to phase 6 alongside
-/// pathfinding, together with terrain and collision).
+/// Movement constants of one <c>Locomotor</c> selection, already converted to simulation units. Without a terrain the object
+/// moves in a straight line and turns instantly (the phase 5 mode, kept for terrain-free worlds); with a terrain it follows
+/// a path over the navigation grid, limited by <see cref="TurnRatePerTick"/> and by the <see cref="Surfaces"/> it can cross.
 /// </summary>
-public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRatePerTick, Fixed Braking, Fixed MinSpeed, Fixed CloseEnoughDist);
+public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRatePerTick, Fixed Braking, Fixed MinSpeed, Fixed CloseEnoughDist,
+    LocomotorSurfaces Surfaces = LocomotorSurfaces.None);
 
 /// <summary>
 /// The runtime view of an <c>Object</c> definition. Presentation modules (Draw, ClientUpdate) are listed but never
@@ -50,6 +61,7 @@ public sealed class ObjectTemplate
         GeometryMajorRadius = Real(definition, "GeometryMajorRadius");
         GeometryMinorRadius = Real(definition, "GeometryMinorRadius");
         GeometryHeight = Real(definition, "GeometryHeight");
+        GeometryIsSmall = definition.Fields.LastOrDefault(field => field.Name.Equals("GeometryIsSmall", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         VisionRange = Real(definition, "VisionRange");
         TransportSlotCount = definition.Fields.LastOrDefault(field => field.Name.Equals("TransportSlotCount", StringComparison.OrdinalIgnoreCase))?.Value.Value is long slots ? checked((int)slots) : 0;
         BuildCost = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildCost", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money cost ? Fixed.FromInt(cost.Value) : Fixed.Zero;
@@ -97,6 +109,8 @@ public sealed class ObjectTemplate
 
     /// <summary><c>GeometryInfo::getZDeltaToCenterPosition</c>: how far above the object position the geometry centre lies (a sphere is centred on its position).</summary>
     public Fixed CenterZDelta => IsSphere ? Fixed.Zero : GeometryHeight / Fixed.FromInt(2);
+    /// <summary><c>ThingTemplate::m_isGeometrySmall</c>: small geometry never blocks the pathfinding grid.</summary>
+    public bool GeometryIsSmall { get; }
     /// <summary><c>ThingTemplate::m_visionRange</c>: <c>StealthDetectorUpdate</c>'s <c>DetectionRange</c> falls back to this when unset (the shipped default: every occurrence leaves <c>DetectionRange</c> commented out).</summary>
     public Fixed VisionRange { get; }
     /// <summary><c>ThingTemplate::getTransportSlotCount</c>: how many <c>TransportContain</c> slots this object occupies (0 = not transportable).</summary>
@@ -399,13 +413,17 @@ public sealed class TemplateCatalog
             var turnRate = Get("TurnRate");
             var minSpeed = Get("MinSpeed");
             var closeEnough = Get("CloseEnoughDist");
+            var surfaces = LocomotorSurfaces.None;
+            if (definition.Fields.LastOrDefault(field => field.Name.Equals("Surfaces", StringComparison.OrdinalIgnoreCase))?.Value.Value is FlagsValue surfaceFlags)
+                foreach (var name in surfaceFlags.Names)
+                    surfaces |= Enum.Parse<LocomotorSurfaces>(name, ignoreCase: true);
             builder[definition.OriginalName] = new LocomotorInfo(
                 SimulationTiming.PerSecondToPerTick(speed), SimulationTiming.PerSecondSquaredToPerTickSquared(acceleration),
                 SimulationTiming.DegreesPerSecondToRadiansPerTick(turnRate),
                 braking > 0 ? SimulationTiming.PerSecondSquaredToPerTickSquared(braking) : SimulationTiming.PerSecondSquaredToPerTickSquared(acceleration),
                 SimulationTiming.PerSecondToPerTick(minSpeed),
                 // CloseEnoughDist is a plain distance (not a rate): no per-tick conversion. 0 falls back to one tick's travel below.
-                Fixed.FromDecimal(closeEnough));
+                Fixed.FromDecimal(closeEnough), surfaces);
         }
         return builder.ToImmutable();
     }

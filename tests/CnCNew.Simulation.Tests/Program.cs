@@ -116,6 +116,13 @@ run.Test("Terrain: height sampling, border and clamping", Tests.TerrainHeightSam
 run.Test("Terrain: cliff and water cell classification, overlapping water", Tests.TerrainCellClassification);
 run.Test("Terrain: world placement, snapshot v4 and replay v5 carry the fingerprint", Tests.TerrainInWorldSnapshotAndReplay);
 run.Test("Terrain: start positions, waypoints, fingerprint and boundary validation", Tests.TerrainStartsAndFingerprint);
+run.Test("Navigation: integer Atan2, angle difference and normalization", Tests.NavigationAtan2);
+run.Test("Navigation: surface priorities, footprints and the obstacle sum", Tests.NavigationGridRules);
+run.Test("Navigation: A* around walls, smoothing, partial and blocked paths", Tests.NavigationPathfinding);
+run.Test("Navigation: path following, turn rate, terrain height and legacy locomotors", Tests.NavigationMovement);
+run.Test("Navigation: water, cliffs, air and unreachable goals", Tests.NavigationSurfacesAndUnreachableGoals);
+run.Test("Navigation: re-planning after a structure is built or destroyed", Tests.NavigationRepathsAfterConstruction);
+run.Test("Navigation: snapshot restore with paths in flight and two-run determinism", Tests.NavigationSnapshotsAndDeterminism);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

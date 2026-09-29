@@ -127,6 +127,7 @@ public sealed partial class SimulationWorld : IWorldServices
             throw new ArgumentException("The configured terrain fingerprint does not match the supplied terrain.", nameof(terrain));
         Configuration = configuration;
         Terrain = terrain;
+        Navigation = terrain is null ? null : new NavigationGrid(terrain);
         _templates = templates;
         Ids = new IdCounters();
         Streams = new RandomStreams(configuration.Seed);
@@ -158,6 +159,7 @@ public sealed partial class SimulationWorld : IWorldServices
     public RandomStreams Streams { get; }
     public TemplateCatalog Templates => _templates;
     public TerrainMap? Terrain { get; }
+    public NavigationGrid? Navigation { get; }
 
     public Fixed GroundHeightAt(Fixed x, Fixed y) => Terrain is { } terrain ? terrain.HeightAt(x, y) : Fixed.Zero;
 
@@ -1151,6 +1153,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 foreach (var timer in timers.ToArray()) RemoveTimer(timer);
             // Energy::objectLeavingInfluence: the mirror image of the Register() hook.
             if (_players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction -= entity.Template.EnergyProduction;
+            if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
+                navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
             _entitySum = unchecked(_entitySum - entity.CachedHash);
             _entities.Remove(entity.Id.Value);
             entity.Registered = false;
@@ -1272,6 +1276,8 @@ public sealed partial class SimulationWorld : IWorldServices
         _moduleCount += entity.ModuleArray.Length;
         // Energy::objectEnteringInfluence: incremental, not recomputed per frame.
         if (_players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction += entity.Template.EnergyProduction;
+        if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
+            navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
         foreach (var node in entity.Updates)
         {
             var update = node.Update;

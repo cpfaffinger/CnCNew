@@ -5,6 +5,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -449,9 +450,10 @@ public sealed record AIUpdateData(bool AutoAcquireEnemiesWhenIdle) : ModuleData
 }
 
 /// <summary>
-/// <c>AIUpdateInterface</c>: moves the object toward <see cref="Entity.MoveTargetX"/>/<see cref="Entity.MoveTargetY"/> in a
-/// straight vector line (no terrain, no pathfinding, no turn-rate-clamped heading — <see cref="Templates.LocomotorInfo"/>
-/// documents exactly which locomotor fields phase 5 applies). Sleeps while idle; <c>SimulationWorld</c> wakes it the instant
+/// <c>AIUpdateInterface</c>: moves the object toward <see cref="Entity.MoveTargetX"/>/<see cref="Entity.MoveTargetY"/>. In a world
+/// with a terrain it follows an A* path over the <see cref="Terrain.NavigationGrid"/> (recomputed when the set of structure
+/// footprints changes), turns at the locomotor's turn rate, slows for sharp corners and the final approach, and stays on the ground.
+/// Without a terrain it moves in a straight line and turns instantly (the phase 5 mode). Sleeps while idle; <c>SimulationWorld</c> wakes it the instant
 /// a <c>SetMoveTargetCommand</c> is accepted. The dock state (<c>AI_DOCK</c> with its <see cref="DockMachine"/>) is the one other
 /// state of the main machine that exists here: an order (<see cref="OrderMove"/>, <see cref="OrderDock"/>) cancels it, exactly as any
 /// new AI command replaces the current state in the reference. The supply-truck, worker and dozer modules derive from this class.
@@ -462,6 +464,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private DockMachine? _dock;
     private bool _lastCommandFromPlayer;
     private EntityId _enterTarget;
+    private readonly List<PathPoint> _path = [];
+    private int _pathIndex;
+    private bool _pathValid;
+    private bool _pathComplete;
+    private ulong _pathObstacles;
+    private static readonly Fixed MisalignedAngle = Fixed.FromRaw(34315); // π/6
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
 
     public override string ModuleName => "AIUpdateInterface";
@@ -487,6 +495,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
+        InvalidatePath();
         world.WakeAt(Entity, this, world.Tick);
         world.MarkDirty(Entity);
     }
@@ -525,6 +534,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _lastCommandFromPlayer = fromPlayer;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
+        InvalidatePath();
         _dock = new DockMachine(dock.Id);
         if (_dock.Enter(world, this) != DockStatus.Continue) EndDock(world);
         world.WakeAt(Entity, this, world.Tick);
@@ -538,6 +548,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
+        InvalidatePath();
         return true;
     }
 
@@ -546,6 +557,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (!Entity.HasMoveTarget) return;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
+        InvalidatePath();
+    }
+
+    private void InvalidatePath()
+    {
+        _pathValid = false;
+        _pathComplete = false;
+        _pathIndex = 0;
+        _path.Clear();
     }
 
     private void CancelDock(IWorldServices world)
@@ -570,6 +590,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             {
                 // No locomotor resolved (e.g. only a non-SET_NORMAL set is defined): drop the stale order rather than spin forever.
                 Entity.HasMoveTarget = false;
+                InvalidatePath();
             }
             else Move(world, locomotor);
         }
@@ -592,6 +613,102 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     }
 
     private void Move(IWorldServices world, LocomotorInfo locomotor)
+    {
+        if (world.Navigation is not { } navigation)
+        {
+            MoveStraight(world, locomotor);
+            return;
+        }
+        var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
+        if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum)) PlanPath(navigation, locomotor, air);
+        if (_path.Count == 0)
+        {
+            // Blocked: no cell next to the object can be entered. The order ends without an arrival.
+            Entity.HasMoveTarget = false;
+            Entity.Speed = Fixed.Zero;
+            InvalidatePath();
+            return;
+        }
+
+        var arrivalRadius = Fixed.Max(locomotor.CloseEnoughDist, locomotor.Speed);
+        while (true)
+        {
+            var waypoint = _path[_pathIndex];
+            var last = _pathIndex == _path.Count - 1;
+            var reach = last ? arrivalRadius : locomotor.Speed;
+            var toX = waypoint.X - Entity.X;
+            var toY = waypoint.Y - Entity.Y;
+            if (toX * toX + toY * toY > reach * reach) break;
+            if (!last) { _pathIndex++; continue; }
+            Entity.X = waypoint.X;
+            Entity.Y = waypoint.Y;
+            if (!air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            var complete = _pathComplete;
+            Entity.HasMoveTarget = false;
+            Entity.Speed = Fixed.Zero;
+            InvalidatePath();
+            if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
+            return;
+        }
+
+        var target = _path[_pathIndex];
+        var dx = target.X - Entity.X;
+        var dy = target.Y - Entity.Y;
+        var distance = Fixed.Sqrt(dx * dx + dy * dy);
+        var desired = FixedTrig.Atan2(dy, dx);
+        var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
+        var turnRate = locomotor.TurnRatePerTick;
+        Entity.Angle = turnRate > Fixed.Zero && difference.Abs() > turnRate
+            ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turnRate : turnRate))
+            : desired;
+
+        var brakingDistance = locomotor.Braking > Fixed.Zero ? Entity.Speed * Entity.Speed / (locomotor.Braking * Fixed.FromInt(2)) : Fixed.Zero;
+        var remaining = distance;
+        if (distance <= brakingDistance && _pathIndex < _path.Count - 1) remaining += TailLength();
+        var goalSpeed = remaining <= brakingDistance ? locomotor.MinSpeed : locomotor.Speed;
+        if (FixedTrig.AngleDifference(Entity.Angle, desired).Abs() > MisalignedAngle)
+        {
+            goalSpeed = Fixed.Min(goalSpeed, locomotor.MinSpeed);
+            // Inside the turning circle a moving object would orbit the waypoint: stop and turn on the spot instead.
+            if (turnRate > Fixed.Zero && distance < locomotor.Speed / turnRate * Fixed.FromInt(2)) goalSpeed = Fixed.Zero;
+        }
+        Entity.Speed = Entity.Speed < goalSpeed
+            ? Fixed.Min(goalSpeed, Entity.Speed + locomotor.Acceleration)
+            : Fixed.Max(goalSpeed, Entity.Speed - locomotor.Braking);
+        Entity.X += FixedTrig.Cos(Entity.Angle) * Entity.Speed;
+        Entity.Y += FixedTrig.Sin(Entity.Angle) * Entity.Speed;
+        if (!air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+    }
+
+    private void PlanPath(NavigationGrid navigation, LocomotorInfo locomotor, bool air)
+    {
+        InvalidatePath();
+        _pathValid = true;
+        _pathObstacles = navigation.ObstacleSum;
+        if (air)
+        {
+            _path.Add(new PathPoint(Entity.MoveTargetX, Entity.MoveTargetY));
+            _pathComplete = true;
+            return;
+        }
+        var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces);
+        _pathComplete = result.Status == PathStatus.Found;
+        _path.AddRange(result.Points);
+    }
+
+    private Fixed TailLength()
+    {
+        var total = Fixed.Zero;
+        for (var index = _pathIndex; index < _path.Count - 1; index++)
+        {
+            var dx = _path[index + 1].X - _path[index].X;
+            var dy = _path[index + 1].Y - _path[index].Y;
+            total += Fixed.Sqrt(dx * dx + dy * dy);
+        }
+        return total;
+    }
+
+    private void MoveStraight(IWorldServices world, LocomotorInfo locomotor)
     {
         var dx = Entity.MoveTargetX - Entity.X;
         var dy = Entity.MoveTargetY - Entity.Y;
@@ -625,6 +742,22 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         writer.Bool("lastCommandFromPlayer", _lastCommandFromPlayer);
         writer.Bool("docking", _dock is not null);
         writer.UInt("enterTarget", _enterTarget.Value);
+        if (_pathValid)
+        {
+            writer.Bool("pathValid", true);
+            writer.Bool("pathComplete", _pathComplete);
+            writer.Int("pathIndex", _pathIndex);
+            writer.UInt("pathObstacles", _pathObstacles);
+            writer.BeginArray("path");
+            foreach (var point in _path)
+            {
+                writer.BeginObject(null);
+                writer.Fixed("x", point.X);
+                writer.Fixed("y", point.Y);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
         _dock?.Describe(writer);
     }
 
@@ -633,6 +766,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _nextWake = reader.Int("nextWake");
         _lastCommandFromPlayer = reader.Bool("lastCommandFromPlayer");
         _enterTarget = new EntityId(checked((uint)reader.UInt("enterTarget")));
+        InvalidatePath();
+        if (reader.Has("pathValid"))
+        {
+            _pathValid = true;
+            _pathComplete = reader.Bool("pathComplete");
+            _pathIndex = checked((int)reader.Int("pathIndex"));
+            _pathObstacles = reader.UInt("pathObstacles");
+            foreach (var item in reader.Array("path")) _path.Add(new PathPoint(item.Fixed("x"), item.Fixed("y")));
+        }
         _dock = reader.Bool("docking") ? DockMachine.Load(reader) : null;
     }
 }

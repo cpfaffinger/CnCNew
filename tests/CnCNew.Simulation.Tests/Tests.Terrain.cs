@@ -155,9 +155,15 @@ static partial class Tests
         Check.That(terrain.Fingerprint != changed.Fingerprint, "A single height byte changes the fingerprint.");
         Check.That(terrain.Fingerprint.Length == 64, "The fingerprint is a SHA-256 hex string.");
 
+        var oversized = TerrainMap.Build(SyntheticMaps.Build(4, 4, 1) with
+        {
+            HeightField = new MapHeightField(6, 6, 1, [new MapBoundary(9, 4)], [..Enumerable.Range(0, 36).Select(i => (byte)(i % 6 * 10))]),
+        }, "oversized");
+        Check.That(oversized.CellsX == 9 && oversized.CellsY == 4, "A boundary larger than the height field keeps its declared extent.");
+        Check.That(oversized.HeightAt(Fixed.FromInt(85), Fixed.FromInt(5)) == oversized.HeightAt(Fixed.FromInt(45), Fixed.FromInt(5)) && oversized.HeightAt(Fixed.FromInt(45), Fixed.FromInt(5)) > oversized.HeightAt(Fixed.FromInt(5), Fixed.FromInt(5)), "Cells beyond the height field read the clamped edge height.");
         Check.Throws<InvalidDataException>(() => TerrainMap.Build(SyntheticMaps.Build(4, 4, 1) with
         {
-            HeightField = new MapHeightField(6, 6, 1, [new MapBoundary(9, 4)], [..new byte[36]]),
-        }, "bad"), "does not fit");
+            HeightField = new MapHeightField(6, 6, 1, [new MapBoundary(0, 4)], [..new byte[36]]),
+        }, "empty"), "empty");
     }
 }

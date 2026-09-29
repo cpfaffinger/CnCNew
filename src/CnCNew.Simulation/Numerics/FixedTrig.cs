@@ -11,6 +11,52 @@ public static class FixedTrig
     public static readonly Fixed TwoPi = Fixed.FromRaw(411775);
     public static readonly Fixed HalfPi = Fixed.FromRaw(102944);
 
+    // atan(2^-i) in raw Q16.16, i = 0..15
+    private static readonly long[] AtanTable = [51472, 30386, 16055, 8150, 4091, 2047, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2];
+
+    /// <summary>
+    /// Integer CORDIC in vectoring mode: the angle of (x, y) in (-π, π], 0 for the zero vector. The result deviates from the exact
+    /// value by less than 1e-3 rad (a raw error below 70 units), which is far below the resolution any heading needs.
+    /// </summary>
+    public static Fixed Atan2(Fixed y, Fixed x)
+    {
+        var vx = x.Raw;
+        var vy = y.Raw;
+        if (vx == 0 && vy == 0) return Fixed.Zero;
+        long offset = 0;
+        if (vx < 0)
+        {
+            offset = vy >= 0 ? Pi.Raw : -Pi.Raw;
+            vx = -vx;
+            vy = -vy;
+        }
+        // Extra fractional bits keep the shifted terms from vanishing for small vectors.
+        vx <<= 16;
+        vy <<= 16;
+        long angle = 0;
+        for (var i = 0; i < AtanTable.Length; i++)
+        {
+            var nx = vy > 0 ? vx + (vy >> i) : vx - (vy >> i);
+            var ny = vy > 0 ? vy - (vx >> i) : vy + (vx >> i);
+            angle += vy > 0 ? AtanTable[i] : -AtanTable[i];
+            vx = nx;
+            vy = ny;
+        }
+        return Fixed.FromRaw(angle + offset);
+    }
+
+    /// <summary>The signed shortest turn from <paramref name="from"/> to <paramref name="to"/>, in (-π, π].</summary>
+    public static Fixed AngleDifference(Fixed from, Fixed to)
+    {
+        var raw = (to.Raw - from.Raw) % TwoPi.Raw;
+        if (raw > Pi.Raw) raw -= TwoPi.Raw;
+        else if (raw <= -Pi.Raw) raw += TwoPi.Raw;
+        return Fixed.FromRaw(raw);
+    }
+
+    /// <summary>An angle wrapped into (-π, π].</summary>
+    public static Fixed Normalize(Fixed radians) => AngleDifference(Fixed.Zero, radians);
+
     public static Fixed Sin(Fixed radians)
     {
         var raw = radians.Raw % TwoPi.Raw;

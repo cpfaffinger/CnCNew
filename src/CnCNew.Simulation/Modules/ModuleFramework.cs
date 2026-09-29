@@ -25,6 +25,9 @@ public interface IWorldServices
     /// <summary>The loaded map's terrain; <see langword="null"/> in fixture worlds (flat ground at height 0, no boundaries).</summary>
     TerrainMap? Terrain { get; }
 
+    /// <summary>Passability grid and path search over <see cref="Terrain"/>; <see langword="null"/> exactly when there is no terrain (objects then move in straight lines).</summary>
+    NavigationGrid? Navigation { get; }
+
     /// <summary>Terrain height at (x, y); 0 without terrain.</summary>
     Fixed GroundHeightAt(Fixed x, Fixed y);
     SageRandom LogicRandom { get; }

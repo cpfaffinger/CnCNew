@@ -111,9 +111,9 @@ public sealed class TerrainMap
             cellsX = Math.Max(cellsX, boundary.X);
             cellsY = Math.Max(cellsY, boundary.Y);
         }
-        // A boundary larger than the height field would address vertices that do not exist; that is a corrupt map, not something to clamp.
-        if (cellsX <= 0 || cellsY <= 0 || cellsX + field.Border > field.Width || cellsY + field.Border > field.Height)
-            throw new InvalidDataException($"Map boundary {cellsX}x{cellsY} does not fit the {field.Width}x{field.Height} height field with border {field.Border}.");
+        if (cellsX <= 0 || cellsY <= 0) throw new InvalidDataException($"Map boundary {cellsX}x{cellsY} is empty.");
+        // Two shipped maps declare a boundary larger than their height field; the reference then reads the clamped edge height for
+        // the cells beyond it (getExtent uses the boundary, WorldHeightMap clamps the sample position), and so does this model.
 
         var water = ImmutableArray.CreateBuilder<WaterArea>();
         foreach (var trigger in map.Triggers)
