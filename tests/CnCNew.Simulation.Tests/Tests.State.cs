@@ -452,7 +452,9 @@ static partial class Tests
         var recorded = scenario.Record(catalog, fingerprint);
         Check.That(scenario.Winner is not null && scenario.VictoryTick > 0, $"The retail match ends with a winner (orders {scenario.Orders}, shots {scenario.Shots}, production {scenario.ProductionOrders}).");
         Check.That(scenario.ProductionOrders > 10 && scenario.Shots > 100, "The generator plays a real match.");
-        Console.WriteLine($"       retail match: {participants.Length} factions, {recorded.Commands.Length} commands, peak {scenario.PeakAlive} objects, winner {scenario.WinnerFaction} at tick {scenario.VictoryTick}");
+        Check.That(scenario.StartObjectsSkipped == 0, $"Every start object of every faction is instantiable ({scenario.StartObjectsSkipped} skipped).");
+        Check.That(scenario.SupplyDeliveries > 0, $"Trucks deliver supplies to the supply centers ({scenario.SupplyDeliveries} deliveries, {scenario.SupplyDeliveryMoney} money).");
+        Console.WriteLine($"       retail match: {participants.Length} factions, {recorded.Commands.Length} commands, peak {scenario.PeakAlive} objects, winner {scenario.WinnerFaction} at tick {scenario.VictoryTick}, {scenario.SupplyDeliveries} supply deliveries");
 
         var checkpoints = ReplayRunner.Run(recorded, catalog, fingerprint, new ReplayRunOptions { RecordCheckpointInterval = ReferenceMatchOptions.Standard.CheckpointInterval }).Checkpoints;
         var replay = ReplayFormat.Read(ReplayFormat.Write(recorded with { Checkpoints = checkpoints }));
