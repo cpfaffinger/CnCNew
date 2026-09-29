@@ -991,6 +991,67 @@ static partial class Tests
     }
 
     /// <summary>
+    /// <c>BaseRegenerateUpdate</c> (the reference-match unlock batch): structures stay idle at full health, wake
+    /// <c>BaseRegenDelay</c> after every hit, then heal <c>BaseRegenHealthPercentPerSecond</c> of their maximum health in
+    /// bursts of three ticks' worth every three ticks, and a fresh hit restarts the delay.
+    /// </summary>
+    public static void Phase5BaseRegenerate()
+    {
+        var files = new Dictionary<string, string>(Phase5Files())
+        {
+            ["Data/INI/GameData.ini"] = "GameData\n  BaseRegenHealthPercentPerSecond = 12.5%\n  BaseRegenDelay = 1000\nEnd\n",
+            ["Data/INI/Object/BaseRegen.ini"] = """
+            Object Regenerator
+              KindOf = STRUCTURE
+              Body = StructureBody Body01
+                MaxHealth = 1000.0
+                InitialHealth = 1000.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+              Behavior = BaseRegenerateUpdate Regen01
+              End
+            End
+            """,
+        };
+        var world = NewWorld(new SyntheticFixture(files: files));
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Regenerator");
+        world.Step();
+        var body = world.FindEntity(new EntityId(1))!.Body!;
+        Check.That(world.Metrics.ScheduledUpdates == 0 || body.Health == Fixed.FromInt(1000), "A structure at full health does not regenerate.");
+
+        feeder.Damage(1, 300);
+        world.Step();
+        var hitTick = world.Tick - 1;
+        Check.That(body.Health == Fixed.FromInt(700), "The hit lands immediately.");
+
+        // BaseRegenDelay = 1000 ms = 30 ticks: nothing heals before the delay has elapsed.
+        while (world.Tick <= hitTick + 29) world.Step();
+        Check.That(body.Health == Fixed.FromInt(700), "No healing before BaseRegenDelay has elapsed.");
+
+        // 1000 * 12.5% * 3 / 30 = 12.5 per burst (12.5% is exact in fixed point), one burst every three ticks.
+        while (world.Tick <= hitTick + 30) world.Step();
+        Check.That(body.Health == Fixed.FromDecimal(712.5m), "The first burst heals three ticks' worth once the delay elapsed.");
+        while (world.Tick <= hitTick + 33) world.Step();
+        Check.That(body.Health == Fixed.FromInt(725), "One burst every three ticks.");
+
+        // A fresh hit restarts the delay.
+        feeder.Damage(1, 50);
+        world.Step();
+        var secondHit = world.Tick - 1;
+        var afterSecondHit = body.Health;
+        Check.That(afterSecondHit == Fixed.FromInt(675), "The second hit lands immediately.");
+        while (world.Tick <= secondHit + 29) world.Step();
+        Check.That(body.Health == afterSecondHit, "The second hit restarted the delay.");
+
+        // Heals up to the maximum, then sleeps for good until damaged again.
+        while (world.Tick <= secondHit + 30 + 3 * 40) world.Step();
+        Check.That(body.Health == Fixed.FromInt(1000), "Regeneration stops at the maximum health.");
+        Check.That(world.Metrics.ScheduledUpdates == 0, "A fully healed structure has no scheduled update left.");
+    }
+
+    /// <summary>
     /// The containment subsystem's first module (167 objects unlocked alone, the largest single blocker by measured
     /// impact — see <c>docs/HANDOFF-PHASE5.md</c>): <c>GarrisonContain</c> capacity, <c>KindOf</c> gating, allied/enemy
     /// entry (no team/diplomacy system: both are allowed by default, matching <c>StealthDetectorUpdate</c>'s

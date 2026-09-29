@@ -90,6 +90,10 @@ public interface IWorldServices
     Fixed UnitDamagedThreshold { get; }
     Fixed UnitReallyDamagedThreshold { get; }
 
+    /// <summary><c>GlobalData::m_baseRegenHealthPercentPerSecond</c> (ratio) and <c>m_baseRegenDelay</c> (ticks), read by <c>BaseRegenerateUpdate</c>.</summary>
+    Fixed BaseRegenHealthPercentPerSecond { get; }
+    long BaseRegenDelayTicks { get; }
+
     /// <summary>"Science Purchase Points" earned via rank/experience in the reference (not modeled); a scenario/system command credits them directly instead — see <c>docs/GAME-RULES.md</c>.</summary>
     int SciencePointsOf(PlayerId player);
     void AddSciencePoints(PlayerId player, int amount);

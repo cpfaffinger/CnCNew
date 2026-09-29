@@ -124,8 +124,10 @@ public sealed class TemplateCatalog
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
     private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences,
-        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity)
+        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks)
     {
+        BaseRegenHealthPercentPerSecond = baseRegenHealthPercentPerSecond;
+        BaseRegenDelayTicks = baseRegenDelayTicks;
         Templates = templates;
         Upgrades = upgrades;
         Weapons = weapons;
@@ -153,6 +155,10 @@ public sealed class TemplateCatalog
     /// <summary><c>GlobalData::m_unitDamagedThresh</c>/<c>m_unitReallyDamagedThresh</c> (<c>GameData.ini</c> <c>UnitDamagedThreshold</c>/<c>UnitReallyDamagedThreshold</c>).</summary>
     public Fixed UnitDamagedThreshold { get; }
     public Fixed UnitReallyDamagedThreshold { get; }
+    /// <summary><c>GlobalData::m_baseRegenHealthPercentPerSecond</c> as a ratio (<c>GameData.ini BaseRegenHealthPercentPerSecond = 0.3%</c> is 0.003).</summary>
+    public Fixed BaseRegenHealthPercentPerSecond { get; }
+    /// <summary><c>GlobalData::m_baseRegenDelay</c> in ticks: how long a structure must stay undamaged before base regeneration resumes.</summary>
+    public long BaseRegenDelayTicks { get; }
     public ObjectTemplate this[int index] => Templates[index];
     public bool TryGet(string name, out ObjectTemplate template) => _byName.TryGetValue(name, out template!);
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);
@@ -171,6 +177,7 @@ public sealed class TemplateCatalog
         var creationLists = ObjectCreationListCatalog.Build(graph);
         var (unitDamagedThreshold, unitReallyDamagedThreshold) = ResolveDamageThresholds(graph);
         var gravity = ResolveGravity(graph);
+        var (baseRegen, baseRegenDelay) = ResolveBaseRegen(graph);
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
         var index = 0;
         foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
@@ -212,7 +219,7 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))
@@ -243,6 +250,16 @@ public sealed class TemplateCatalog
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
         var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("Gravity", StringComparison.OrdinalIgnoreCase))?.Value.Value;
         return value is decimal real ? real : -64m;
+    }
+
+    /// <summary>Absent keys mean "no base regeneration" (the reference default is 0, which parks every <c>BaseRegenerateUpdate</c>).</summary>
+    private static (Fixed PerSecond, long DelayTicks) ResolveBaseRegen(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        object? Get(string name) => gameData?.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value;
+        var perSecond = Get("BaseRegenHealthPercentPerSecond") is Percentage percentage ? Fixed.FromDecimal(percentage.Ratio) : Fixed.Zero;
+        var delay = Get("BaseRegenDelay") is GameTime time ? SimulationTiming.DurationMillisecondsToTicks(time.Milliseconds) : 0;
+        return (perSecond, delay);
     }
 
     private static ImmutableArray<string> ConditionTokens(DefinitionSection set)

@@ -186,6 +186,8 @@ public sealed partial class SimulationWorld : IWorldServices
     public ObjectCreationListCatalog CreationLists => _templates.CreationLists;
     public Fixed UnitDamagedThreshold => _templates.UnitDamagedThreshold;
     public Fixed UnitReallyDamagedThreshold => _templates.UnitReallyDamagedThreshold;
+    public Fixed BaseRegenHealthPercentPerSecond => _templates.BaseRegenHealthPercentPerSecond;
+    public long BaseRegenDelayTicks => _templates.BaseRegenDelayTicks;
 
     public ScienceMask PlayerSciences(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.CompletedSciences : ScienceMask.Empty;
     public int SciencePointsOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.SciencePurchasePoints : 0;

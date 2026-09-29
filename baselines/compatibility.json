@@ -265,24 +265,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GameData/BaseRegenDelay",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/BaseRegenHealthPercentPerSecond",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GameData/BilinearTerrainTex",
       "count": 1,
       "owners": [
@@ -5033,7 +5015,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 6189,
+      "count": 6134,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5577,15 +5559,6 @@
       "category": "module",
       "name": "BaikonurLaunchPower",
       "count": 23,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "BaseRegenerateUpdate",
-      "count": 55,
       "owners": [
         "Object"
       ],
