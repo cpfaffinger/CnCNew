@@ -94,6 +94,12 @@ public interface IWorldServices
     /// <summary><see cref="RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed)"/> with the adjustments an engine-internal spawner applies to the fresh object (<see cref="SpawnExtras"/>).</summary>
     EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle, in SpawnExtras extras);
 
+    /// <summary>
+    /// One tick of construction work on a site (<c>DozerAIUpdate::update</c> in <c>DOZER_TASK_BUILD</c>): health rises, and the last tick completes the structure
+    /// (clears <c>UNDER_CONSTRUCTION</c>, starts its power production and create modules). True when the structure is complete.
+    /// </summary>
+    bool AdvanceConstruction(Entity site);
+
     /// <summary><c>Thing::isSignificantlyAboveTerrain</c>: higher than three frames of free fall (the terrain is flat at height 0 until a terrain model exists).</summary>
     bool IsSignificantlyAboveTerrain(Entity entity);
 
@@ -222,9 +228,10 @@ public static class SpecialPowerRouting
 /// Adjustments an engine-internal spawner applies to a fresh object: <see cref="MaxHealth"/> (positive = replace the template's maximum
 /// health keeping the current health, as <c>RebuildHoleExposeDie</c> does) and <see cref="OriginTemplate"/> (index of the template the
 /// object stands in for, or -1; delivered to <see cref="ISpawnOriginReceiver"/> modules) and <see cref="ForceSupplyWanting"/> (the
-/// supply-center exit tells a fresh truck to start supplying at once, <c>SupplyTruckAIUpdate::privateWanting</c>).
+/// supply-center exit tells a fresh truck to start supplying at once, <c>SupplyTruckAIUpdate::privateWanting</c>) and the rally point
+/// (<c>ProductionUpdate::setRallyPoint</c>): a mobile object walks there right after it appears.
 /// </summary>
-public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false);
+public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default);
 
 /// <summary>A module told which template its object replaces when it is created by <see cref="IWorldServices.RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed, in SpawnExtras)"/>.</summary>
 public interface ISpawnOriginReceiver
@@ -293,6 +300,12 @@ public interface IUpdateModule
 public interface IDieModule
 {
     void OnDie(IWorldServices world, in DamageInfo info);
+}
+
+/// <summary>A body whose health rises with construction progress independently of damage and healing (<c>Object::setConstructionPercent</c> healing of the body).</summary>
+public interface IConstructionBody
+{
+    void ChangeHealthForConstruction(IWorldServices world, Fixed delta);
 }
 
 public interface IBodyModule

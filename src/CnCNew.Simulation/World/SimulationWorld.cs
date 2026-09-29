@@ -63,7 +63,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[(int)CommandRejection.CannotConstruct + 1];
+    private readonly long[] _rejections = new long[(int)CommandRejection.CannotSell + 1];
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
     private long _tick;
@@ -115,7 +115,8 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <see cref="MaxHealth"/> and <see cref="OriginTemplate"/> carry <see cref="SpawnExtras"/>.
     /// </summary>
     private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
-        EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false);
+        EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
+        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default);
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
 
@@ -354,6 +355,8 @@ public sealed partial class SimulationWorld : IWorldServices
         return true;
     }
 
+    public int EnergyProductionOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.EnergyProduction : 0;
+
     public Fixed MoneyOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.Money : Fixed.Zero;
 
     public void AddMoney(PlayerId player, Fixed amount)
@@ -439,7 +442,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));
         var id = Ids.AllocateEntity();
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
-            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting);
+            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }
@@ -565,7 +568,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_entities.TryGetValue(queue.Producer.Value, out var producer) || producer.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (producer.Owner != command.Player) return CommandRejection.NotPermitted;
                 var production = FindProductionModule(producer);
-                if (production is null) return CommandRejection.CannotProduce;
+                if (production is null || !CanProduceNow(producer)) return CommandRejection.CannotProduce;
                 if (!production.HasRoom) return CommandRejection.QueueFull;
                 if (player.Money < queueTemplate.BuildCost) return CommandRejection.InsufficientFunds;
                 break;
@@ -645,6 +648,18 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             case UseSpecialPowerCommand useSpecialPower:
                 return CheckSpecialPower(player, command.Player, useSpecialPower, out _, out _, out _);
+            case ConstructCommand construct:
+                return CheckConstruct(command.Player, construct, out _, out _);
+            case SellCommand sell:
+                return CheckSell(command.Player, sell, out _);
+            case SetRallyPointCommand rally:
+                return CheckRally(command.Player, rally, out _, out _);
+            case ResumeConstructCommand resume:
+                return CheckResume(command.Player, resume, out _, out _);
+            case CancelConstructCommand cancelConstruct:
+                return CheckCancelConstruct(command.Player, cancelConstruct, out _);
+            case RepairCommand repair:
+                return CheckRepair(command.Player, repair, out _, out _);
         }
         return 0;
     }
@@ -793,7 +808,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (producer.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
                 if (!_templates.TryGet(queue.Template, out var queueTemplate) || !queueTemplate.IsInstantiable) { RecordRejection(command, CommandRejection.UnknownTemplate); break; }
                 var production = FindProductionModule(producer);
-                if (production is null) { RecordRejection(command, CommandRejection.CannotProduce); break; }
+                if (production is null || !CanProduceNow(producer)) { RecordRejection(command, CommandRejection.CannotProduce); break; }
                 if (!production.HasRoom) { RecordRejection(command, CommandRejection.QueueFull); break; }
                 var buyer = _players[producer.Owner.Value];
                 if (buyer.Money < queueTemplate.BuildCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }
@@ -916,6 +931,51 @@ public sealed partial class SimulationWorld : IWorldServices
                 MarkDirty(source!);
                 Emit(SimEventKind.SpecialPowerUsed, source!.Id, use.TargetKind == SpecialPowerTargetKind.Object ? use.Target : EntityId.Invalid, info!.Name, info.Index, command.Player);
                 module!.Use(this, use.AsTarget);
+                break;
+            }
+            case ConstructCommand construct:
+            {
+                var reason = CheckConstruct(command.Player, construct, out var builder, out var template);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                StartConstruction(command.Player, builder!, template!, construct);
+                break;
+            }
+            case SellCommand sell:
+            {
+                var reason = CheckSell(command.Player, sell, out var target);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                BeginSale(target!);
+                break;
+            }
+            case SetRallyPointCommand rally:
+            {
+                var reason = CheckRally(command.Player, rally, out var producer, out var production);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                production!.SetRally(rally.X, rally.Y);
+                MarkDirty(producer!);
+                break;
+            }
+            case ResumeConstructCommand resume:
+            {
+                var reason = CheckResume(command.Player, resume, out var builder, out var site);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                site!.BuilderId = builder!.Id;
+                MarkDirty(site);
+                BuilderOf(builder)!.OrderConstruct(this, site);
+                break;
+            }
+            case CancelConstructCommand cancelConstruct:
+            {
+                var reason = CheckCancelConstruct(command.Player, cancelConstruct, out var site);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                CancelConstruction(site!);
+                break;
+            }
+            case RepairCommand repair:
+            {
+                var reason = CheckRepair(command.Player, repair, out var builder, out var target);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                AiOf(builder!)!.OrderRepair(this, target!);
                 break;
             }
             default:
@@ -1154,7 +1214,8 @@ public sealed partial class SimulationWorld : IWorldServices
             if (entity.Timers is { Count: > 0 } timers)
                 foreach (var timer in timers.ToArray()) RemoveTimer(timer);
             // Energy::objectLeavingInfluence: the mirror image of the Register() hook.
-            if (_players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction -= entity.Template.EnergyProduction;
+            if (!entity.HasStatus(ObjectStatusBits.UnderConstruction) && _players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction -= entity.Template.EnergyProduction;
+            if (entity.SellCompleteTick >= 0) _sales.Remove((entity.SellCompleteTick, entity.Id.Value));
             if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
                 navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
             _entitySum = unchecked(_entitySum - entity.CachedHash);
@@ -1176,7 +1237,7 @@ public sealed partial class SimulationWorld : IWorldServices
         foreach (var pending in batch) SpawnEntity(pending);
     }
 
-    private void SpawnEntity(in PendingSpawn pending)
+    private Entity SpawnEntity(in PendingSpawn pending, EntityId builder = default)
     {
         var template = _templates[pending.Template];
         var setup = pending.Setup;
@@ -1189,6 +1250,11 @@ public sealed partial class SimulationWorld : IWorldServices
             Z = Terrain is not null && !IsSignificantlyAbove(pending.Z, ground) ? ground : pending.Z,
             Angle = pending.Angle,
         };
+        if (builder.IsValid)
+        {
+            entity.Status |= 1UL << ObjectStatusBits.UnderConstruction;
+            entity.BuilderId = builder;
+        }
         AttachModules(entity, template);
         if (setup.HasVeterancy && template.IsTrainable) SetVeterancyLevel(entity, setup.Veterancy);
         InitializeWeaponClip(entity);
@@ -1205,6 +1271,8 @@ public sealed partial class SimulationWorld : IWorldServices
         if (setup.MaxHealth > Fixed.Zero && entity.Body is IMaxHealthAdjustable adjustable)
             adjustable.AdjustMaxHealth(this, setup.MaxHealth - entity.Body.MaxHealth, "SAME_CURRENTHEALTH");
         if (setup.HasHealth && entity.Body is IInitialHealthSettable health) health.SetInitialHealth(this, setup.HealthPercent);
+        if (builder.IsValid && entity.Body is IConstructionBody site)
+            site.ChangeHealthForConstruction(this, Fixed.One - entity.Body.Health);
         Register(entity);
         Emit(SimEventKind.EntitySpawned, entity.Id, EntityId.Invalid, template.Name, 0, pending.Owner);
         _spawnedTotal++;
@@ -1227,6 +1295,8 @@ public sealed partial class SimulationWorld : IWorldServices
         }
         if (setup.TransferDamage > Fixed.Zero)
             Damage(entity.Id, new DamageInfo(setup.TransferSource, setup.TransferDamage, DamageTypes.Unresistable, DeathTypes.Normal, false));
+        if (setup.HasRally && template.Locomotor is not null && AiOf(entity) is { } rallyAi) rallyAi.OrderMove(this, setup.RallyX, setup.RallyY, false);
+        return entity;
     }
 
     private void AttachModules(Entity entity, ObjectTemplate template)
@@ -1277,7 +1347,8 @@ public sealed partial class SimulationWorld : IWorldServices
         entity.Registered = true;
         _moduleCount += entity.ModuleArray.Length;
         // Energy::objectEnteringInfluence: incremental, not recomputed per frame.
-        if (_players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction += entity.Template.EnergyProduction;
+        if (!entity.HasStatus(ObjectStatusBits.UnderConstruction) && _players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction += entity.Template.EnergyProduction;
+        if (entity.SellCompleteTick >= 0) _sales.Add((entity.SellCompleteTick, entity.Id.Value));
         if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
             navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
         foreach (var node in entity.Updates)
@@ -1308,6 +1379,7 @@ public sealed partial class SimulationWorld : IWorldServices
         FireTimers(tick);
         RunUpdates(tick);
         DeliverEvents();
+        ProcessSales(tick);
         ProcessDestroys();
         ProcessSpawns();
         DeliverEvents();
@@ -1480,6 +1552,9 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Bool("hasOrigin", setup.HasOrigin);
             writer.Int("originTemplate", setup.OriginTemplate);
             writer.Bool("forceSupplyWanting", setup.ForceSupplyWanting);
+            writer.Bool("hasRally", setup.HasRally);
+            writer.Fixed("rallyX", setup.RallyX);
+            writer.Fixed("rallyY", setup.RallyY);
             writer.EndObject();
         }
         writer.EndArray();

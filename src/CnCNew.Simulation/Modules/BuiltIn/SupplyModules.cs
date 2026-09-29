@@ -56,10 +56,11 @@ public sealed record SupplyCarrierData(AIUpdateData Ai, int MaxBoxes, long Cente
         checked((int)ModuleConfigReader.Int(configuration, "UpgradedSupplyBoost", 0)));
 }
 
-/// <summary><c>DozerAIUpdate</c>: movement only. Construction, repair and mine tasks (the dozer's own state machine) are not modelled, so a dozer never builds; it is instantiable so start objects and production lists containing dozers work.</summary>
+/// <summary><c>DozerAIUpdate</c>: builds and repairs structures (see <see cref="AIUpdateInterface.OrderConstruct"/>). Mine clearing and the autonomous "bored" behaviour are not modelled.</summary>
 public sealed class DozerAIUpdate(AIUpdateData data) : AIUpdateInterface(data)
 {
     public override string ModuleName => "DozerAIUpdate";
+    public override bool CanBuild => true;
 }
 
 internal enum SupplyState { Busy, Idle, Wanting, Regrouping, Docking }
@@ -77,7 +78,7 @@ internal sealed class SupplyMachine
     private bool _forceWanting;
 
     public SupplyState State => _state;
-    public bool Sleeps => _state == SupplyState.Idle;
+    public bool Sleeps => _state == SupplyState.Idle && !_forceWanting;
 
     public void SetForceWanting() => _forceWanting = true;
 
@@ -273,9 +274,11 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
         base.OrderDock(world, dock, fromPlayer);
     }
 
+    protected override void OnBuilderTaskEnded(IWorldServices world) => _machine.SetForceWanting();
+
     public override long Update(IWorldServices world)
     {
-        _machine.Update(world, this);
+        if (!IsBuilding) _machine.Update(world, this);
         var baseSleep = base.Update(world);
         return _machine.Sleeps ? baseSleep : Math.Min(baseSleep, SimulationTiming.SleepNone);
     }
@@ -311,6 +314,7 @@ internal sealed class SupplyTruckAIUpdate(SupplyCarrierData data) : SupplyCarrie
 internal sealed class WorkerAIUpdate(SupplyCarrierData data) : SupplyCarrierAI(data)
 {
     public override string ModuleName => "WorkerAIUpdate";
+    public override bool CanBuild => true;
     public override long UpgradedSupplyBoost(IWorldServices world) => BoostIfUpgraded(world, "Upgrade_GLAWorkerShoes");
 }
 

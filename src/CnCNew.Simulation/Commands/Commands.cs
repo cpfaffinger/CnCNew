@@ -12,7 +12,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 7;
+    public const int Version = 8;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -41,7 +41,15 @@ public static class CommandTypes
     // --------------------------------------------------------------------------------------------------- teams and diplomacy
     public const ushort SetRelationship = 19;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= SetRelationship;
+    // --------------------------------------------------------------------------------------------------- construction
+    public const ushort Construct = 20;
+    public const ushort Sell = 21;
+    public const ushort SetRallyPoint = 22;
+    public const ushort ResumeConstruct = 23;
+    public const ushort CancelConstruct = 24;
+    public const ushort Repair = 25;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= Repair;
 }
 
 /// <summary>
@@ -101,6 +109,13 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.SetRelationship => new SetRelationshipCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("from"))), new PlayerId(checked((int)reader.Int("to"))),
                 (Relationship)checked((int)reader.Int("relationship"))),
             CommandTypes.Dock => new DockCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("dock")))),
+            CommandTypes.Construct => new ConstructCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("builder"))), reader.Text("template"),
+                reader.Fixed("x"), reader.Fixed("y"), reader.Fixed("angle")),
+            CommandTypes.Sell => new SellCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target")))),
+            CommandTypes.SetRallyPoint => new SetRallyPointCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.ResumeConstruct => new ResumeConstructCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("builder"))), new EntityId(checked((uint)reader.UInt("site")))),
+            CommandTypes.CancelConstruct => new CancelConstructCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("site")))),
+            CommandTypes.Repair => new RepairCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("builder"))), new EntityId(checked((uint)reader.UInt("target")))),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -284,6 +299,78 @@ public sealed record DockCommand(PlayerId Player, ulong Sequence, long Tick, Ent
     }
 }
 
+// ------------------------------------------------------------------------------------------------------- construction
+
+/// <summary>
+/// <c>MSG_DOZER_CONSTRUCT</c>: <see cref="Builder"/> (a dozer or worker) places a new structure of <see cref="Template"/> at (X, Y) with <see cref="Angle"/>
+/// (<c>Player::canBuild</c>, <c>BuildAssistant::isLocationLegalToBuild</c>, <c>DozerAIUpdate::construct</c>): the cost is paid at placement, the site appears
+/// at once and the builder walks over and builds it.
+/// </summary>
+public sealed record ConstructCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Builder, string Template, Fixed X, Fixed Y, Fixed Angle) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Construct;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("builder", Builder.Value);
+        writer.Text("template", Template);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+        writer.Fixed("angle", Angle);
+    }
+}
+
+/// <summary><c>MSG_SELL</c>: starts the selling of an owned structure (<c>BuildAssistant::sellObject</c>).</summary>
+public sealed record SellCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Target) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Sell;
+    protected override void DescribeBody(IStateWriter writer) => writer.UInt("target", Target.Value);
+}
+
+/// <summary><c>MSG_SET_RALLY_POINT</c>: units the producer builds from now on walk to (X, Y) after leaving it.</summary>
+public sealed record SetRallyPointCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Producer, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.SetRallyPoint;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("producer", Producer.Value);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+    }
+}
+
+/// <summary><c>DozerAIUpdate::resumeConstruction</c> (<c>MSG_RESUME_CONSTRUCTION</c>): <see cref="Builder"/> continues an interrupted construction site.</summary>
+public sealed record ResumeConstructCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Builder, EntityId Site) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.ResumeConstruct;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("builder", Builder.Value);
+        writer.UInt("site", Site.Value);
+    }
+}
+
+/// <summary><c>MSG_DOZER_CANCEL_CONSTRUCT</c>: cancels an unfinished structure, refunds its full cost and destroys the site.</summary>
+public sealed record CancelConstructCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Site) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.CancelConstruct;
+    protected override void DescribeBody(IStateWriter writer) => writer.UInt("site", Site.Value);
+}
+
+/// <summary><c>MSG_REPAIR</c> (<c>DozerAIUpdate::newTask(DOZER_TASK_REPAIR)</c>): <see cref="Builder"/> walks to a damaged owned structure and repairs it.</summary>
+public sealed record RepairCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Builder, EntityId Target) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Repair;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("builder", Builder.Value);
+        writer.UInt("target", Target.Value);
+    }
+}
+
 /// <summary>
 /// <c>Player::setPlayerRelationship</c> (the script action behind "set relationship"): <see cref="From"/> sees <see cref="To"/> as
 /// <see cref="Relationship"/> from now on. Directed — the reverse relation is a separate command. System-only, both players must be real and distinct.
@@ -430,6 +517,8 @@ public enum CommandRejection : byte
     InvalidPlacement = 32,
     /// <summary>The builder is not a dozer/worker that can build the template, or the template is not a buildable structure.</summary>
     CannotConstruct = 33,
+    /// <summary>The structure cannot be sold: not a structure, still under construction, or already being sold (<c>BuildAssistant::sellObject</c>).</summary>
+    CannotSell = 34,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

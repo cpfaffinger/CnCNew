@@ -83,6 +83,24 @@ sealed class Feeder(SimulationWorld world)
     public SubmitResult ExitContainer(int player, uint actor, long? tick = null)
         => world.Submit(new ExitContainerCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor)));
 
+    public SubmitResult Construct(int player, uint builder, string template, int x, int y, long? tick = null)
+        => world.Submit(new ConstructCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(builder), template, Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero));
+
+    public SubmitResult Sell(int player, uint target, long? tick = null)
+        => world.Submit(new SellCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(target)));
+
+    public SubmitResult SetRallyPoint(int player, uint producer, int x, int y, long? tick = null)
+        => world.Submit(new SetRallyPointCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(producer), Fixed.FromInt(x), Fixed.FromInt(y)));
+
+    public SubmitResult ResumeConstruct(int player, uint builder, uint site, long? tick = null)
+        => world.Submit(new ResumeConstructCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(builder), new EntityId(site)));
+
+    public SubmitResult CancelConstruct(int player, uint site, long? tick = null)
+        => world.Submit(new CancelConstructCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(site)));
+
+    public SubmitResult Repair(int player, uint builder, uint target, long? tick = null)
+        => world.Submit(new RepairCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(builder), new EntityId(target)));
+
     public SubmitResult SetRelationship(int from, int to, Relationship relationship, long? tick = null)
         => world.Submit(new SetRelationshipCommand(PlayerId.System, Next(0), tick ?? world.Tick, new PlayerId(from), new PlayerId(to), relationship));
 }

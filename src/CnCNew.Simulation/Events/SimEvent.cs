@@ -57,6 +57,18 @@ public enum SimEventKind : byte
     /// amount as a plain integer).
     /// </summary>
     SupplyDeposited = 22,
+
+    /// <summary>A construction site appeared (<c>Entity</c>: the site, <c>Other</c>: the builder, <c>Value</c>: the paid cost as a plain integer).</summary>
+    ConstructionStarted = 23,
+
+    /// <summary>The last unit of construction work was done and the structure is complete (<c>Entity</c>: the structure, <c>Other</c>: the builder).</summary>
+    ConstructionCompleted = 24,
+
+    /// <summary>A sale finished and the structure is gone (<c>Entity</c>: the structure, <c>Value</c>: the credited amount as a plain integer).</summary>
+    StructureSold = 25,
+
+    /// <summary>An unfinished structure was cancelled and its full cost refunded (<c>Entity</c>: the site, <c>Value</c>: the refunded amount as a plain integer).</summary>
+    ConstructionCancelled = 26,
 }
 
 /// <summary>

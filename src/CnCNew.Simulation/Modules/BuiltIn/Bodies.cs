@@ -37,7 +37,7 @@ public static class BodyDamageStates
 /// Armor coefficients are applied by the caller (<see cref="Templates.ArmorInfo"/>/<c>SimulationWorld</c>'s combat
 /// resolution), not here; damage multipliers remain unmodeled (phase 6+).
 /// </summary>
-public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitialHealthSettable
+public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitialHealthSettable, IConstructionBody
 {
     // ActiveBody.cpp: #define YELLOW_DAMAGE_PERCENT (0.25f)
     private static readonly Fixed YellowDamagePercent = Fixed.FromDecimal(0.25m);
@@ -139,6 +139,8 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
     /// </summary>
     public void SetInitialHealth(IWorldServices world, int percent)
         => InternalChangeHealth(world, _initialHealth * Fixed.FromInt(percent) / Fixed.FromInt(100) - Health);
+
+    public void ChangeHealthForConstruction(IWorldServices world, Fixed delta) => InternalChangeHealth(world, delta);
 
     /// <summary><c>MaxHealthUpgrade.cpp</c>: raises (or lowers) the cap; <paramref name="changeType"/> is one of <c>NameTablesPhase5.MaxHealthChangeType</c>, compared case-insensitively (unrecognized text falls back to the default, matching the reference's zero-based enum default).</summary>
     public virtual void AdjustMaxHealth(IWorldServices world, Fixed delta, string changeType)

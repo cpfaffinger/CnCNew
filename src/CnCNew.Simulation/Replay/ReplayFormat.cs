@@ -34,7 +34,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -263,6 +263,32 @@ public static class ReplayFormat
                 writer.Write(relation.To.Value);
                 writer.Write((int)relation.Relationship);
                 break;
+            case ConstructCommand construct:
+                writer.Write(construct.Builder.Value);
+                WriteString(writer, construct.Template);
+                writer.Write(construct.X.Raw);
+                writer.Write(construct.Y.Raw);
+                writer.Write(construct.Angle.Raw);
+                break;
+            case SellCommand sell:
+                writer.Write(sell.Target.Value);
+                break;
+            case SetRallyPointCommand rally:
+                writer.Write(rally.Producer.Value);
+                writer.Write(rally.X.Raw);
+                writer.Write(rally.Y.Raw);
+                break;
+            case ResumeConstructCommand resume:
+                writer.Write(resume.Builder.Value);
+                writer.Write(resume.Site.Value);
+                break;
+            case CancelConstructCommand cancelConstruct:
+                writer.Write(cancelConstruct.Site.Value);
+                break;
+            case RepairCommand repair:
+                writer.Write(repair.Builder.Value);
+                writer.Write(repair.Target.Value);
+                break;
             default:
                 throw new ReplayFormatException($"Command type {command.GetType().Name} has no replay encoding.");
         }
@@ -297,6 +323,13 @@ public static class ReplayFormat
             CommandTypes.UseSpecialPower => ReadUseSpecialPower(reader, player, sequence, tick),
             CommandTypes.Dock => new DockCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.SetRelationship => new SetRelationshipCommand(player, sequence, tick, new PlayerId(reader.ReadInt32()), new PlayerId(reader.ReadInt32()), (Relationship)reader.ReadInt32()),
+            CommandTypes.Construct => new ConstructCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), ReadString(reader),
+                Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.Sell => new SellCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
+            CommandTypes.SetRallyPoint => new SetRallyPointCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.ResumeConstruct => new ResumeConstructCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
+            CommandTypes.CancelConstruct => new CancelConstructCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
+            CommandTypes.Repair => new RepairCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
     }

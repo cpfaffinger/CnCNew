@@ -49,6 +49,7 @@ public sealed class ObjectTemplate
         ArmorInfo defaultArmor, ArmorInfo? playerUpgradeArmor, int defaultWeapon, int playerUpgradeWeapon, LocomotorInfo? locomotor,
         ImmutableArray<PrerequisiteLine> prerequisites)
     {
+        Buildable = definition.Fields.LastOrDefault(field => field.Name.Equals("Buildable", StringComparison.OrdinalIgnoreCase))?.Value.Value is EnumValue buildable ? buildable.Name : "Yes";
         Index = index;
         Id = definition.Id;
         Name = definition.OriginalName;
@@ -143,6 +144,9 @@ public sealed class ObjectTemplate
     public LocomotorInfo? Locomotor { get; }
     public ImmutableArray<PrerequisiteLine> Prerequisites { get; }
 
+    /// <summary><c>ThingTemplate::m_buildable</c> (<c>BuildableStatus</c>: <c>Yes</c>, <c>Ignore_Prerequisites</c>, <c>No</c>, <c>Only_By_AI</c>); absent key: <c>Yes</c>, the reference default.</summary>
+    public string Buildable { get; }
+
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
 
     private static string Text(ObjectDefinition definition, string name)
@@ -174,11 +178,12 @@ public sealed class TemplateCatalog
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
     private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, SpecialPowerCatalog specialPowers,
-        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance, int valuePerSupplyBox, ImmutableArray<Fixed> healthBonus, WeaponBonusTable globalWeaponBonus)
+        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance, int valuePerSupplyBox, Fixed sellPercentage, ImmutableArray<Fixed> healthBonus, WeaponBonusTable globalWeaponBonus)
     {
         HealthBonus = healthBonus;
         GlobalWeaponBonus = globalWeaponBonus;
         ValuePerSupplyBox = valuePerSupplyBox;
+        SellPercentage = sellPercentage;
         StandardMinefieldDistance = standardMinefieldDistance;
         BaseRegenHealthPercentPerSecond = baseRegenHealthPercentPerSecond;
         BaseRegenDelayTicks = baseRegenDelayTicks;
@@ -219,6 +224,8 @@ public sealed class TemplateCatalog
     public Fixed StandardMinefieldDistance { get; }
     /// <summary><c>GlobalData::m_baseValuePerSupplyBox</c> (<c>GameData.ini ValuePerSupplyBox = 75</c>): what one carried box pays at a supply center.</summary>
     public int ValuePerSupplyBox { get; }
+    /// <summary><c>GlobalData::m_sellPercentage</c> as a ratio (<c>GameData.ini SellPercentage = 50%</c>): the share of a structure's cost a sale refunds; the reference default is 1.0.</summary>
+    public Fixed SellPercentage { get; }
     /// <summary><c>GlobalData::m_healthBonus[level]</c>: the max-health multiplier of veterancy level 0..3 (<c>GameData.ini HealthBonus_Veteran/Elite/Heroic</c>; every absent value is the reference default 1.0, level 0 is always 1.0).</summary>
     public ImmutableArray<Fixed> HealthBonus { get; }
     /// <summary><c>GlobalData::m_weaponBonusSet</c>: the <c>WeaponBonus</c> lines of <c>GameData.ini</c>, applied to every weapon before its own set.</summary>
@@ -245,6 +252,7 @@ public sealed class TemplateCatalog
         var (baseRegen, baseRegenDelay) = ResolveBaseRegen(graph);
         var minefieldDistance = ResolveMinefieldDistance(graph);
         var valuePerSupplyBox = ResolveValuePerSupplyBox(graph);
+        var sellPercentage = ResolveSellPercentage(graph);
         var healthBonus = ResolveHealthBonus(graph);
         var globalWeaponBonus = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault() is { } globalData ? WeaponBonusTable.From(globalData) : WeaponBonusTable.Empty;
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
@@ -292,7 +300,7 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, healthBonus, globalWeaponBonus);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))
@@ -349,6 +357,14 @@ public sealed class TemplateCatalog
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
         var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("ValuePerSupplyBox", StringComparison.OrdinalIgnoreCase))?.Value.Value;
         return value is long integer ? checked((int)integer) : 100;
+    }
+
+    /// <summary>Absent key: the reference default of <c>GlobalData</c> (<c>m_sellPercentage = 1.0f</c>).</summary>
+    private static Fixed ResolveSellPercentage(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("SellPercentage", StringComparison.OrdinalIgnoreCase))?.Value.Value;
+        return value is Percentage percentage ? Fixed.FromDecimal(percentage.Ratio) : Fixed.One;
     }
 
     /// <summary>GlobalData.cpp: every <c>m_healthBonus[i]</c> starts at 1.0, so an absent key (or an absent GameData) changes nothing.</summary>

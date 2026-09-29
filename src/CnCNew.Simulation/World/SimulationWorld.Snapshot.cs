@@ -81,7 +81,8 @@ public sealed partial class SimulationWorld
                 new SpawnSetup(pending.Bool("hasHealth"), checked((int)pending.Int("healthPercent")), pending.Bool("hasVeterancy"), checked((int)pending.Int("veterancy")),
                     pending.Int("minLifetime"), pending.Int("maxLifetime"), new EntityId(checked((uint)pending.UInt("container"))),
                     new EntityId(checked((uint)pending.UInt("containInSource"))), pending.Fixed("transferDamage"), new EntityId(checked((uint)pending.UInt("transferSource"))),
-                    pending.Fixed("maxHealth"), pending.Bool("hasOrigin"), checked((int)pending.Int("originTemplate")), pending.Bool("forceSupplyWanting"))));
+                    pending.Fixed("maxHealth"), pending.Bool("hasOrigin"), checked((int)pending.Int("originTemplate")), pending.Bool("forceSupplyWanting"),
+                    pending.Bool("hasRally"), pending.Fixed("rallyX"), pending.Fixed("rallyY"))));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
 
@@ -144,6 +145,9 @@ public sealed partial class SimulationWorld
             LastFireTick = reader.Int("lastFireTick"),
             HasPlayerUpgradeArmor = reader.Bool("hasPlayerUpgradeArmor"),
             HasPlayerUpgradeWeapon = reader.Bool("hasPlayerUpgradeWeapon"),
+            ConstructionWork = checked((int)reader.Int("constructionWork")),
+            BuilderId = new EntityId(checked((uint)reader.UInt("builder"))),
+            SellCompleteTick = reader.Int("sellCompleteTick"),
         };
         if (entity.VeterancyLevel is < 0 or > 3) throw new InvalidDataException("Veterancy level out of range.");
         if (entity.WeaponBonusConditions >> NameTablesPhase5.WeaponBonusCondition.Count != 0) throw new InvalidDataException("Weapon bonus condition mask out of range.");

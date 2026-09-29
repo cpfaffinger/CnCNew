@@ -444,9 +444,11 @@ public sealed class ObjectCreationUpgrade(ObjectCreationUpgradeData data) : Upgr
 /// (<c>MoodAttackCheckRate</c>, idle scan timing/angles, <c>ForbidPlayerCommands</c>, <c>MembersGetHealedAtLifeRatio</c>,
 /// <c>VoiceRapidFire</c>) is typed but not consumed — AI moods and squad healing are phase-6 scope.
 /// </summary>
-public sealed record AIUpdateData(bool AutoAcquireEnemiesWhenIdle) : ModuleData
+public sealed record AIUpdateData(bool AutoAcquireEnemiesWhenIdle, Fixed RepairRatePerSecond = default) : ModuleData
 {
-    public static AIUpdateData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Bool(configuration, "AutoAcquireEnemiesWhenIdle", false));
+    public static AIUpdateData Parse(ModuleConfiguration configuration) => new(
+        ModuleConfigReader.Bool(configuration, "AutoAcquireEnemiesWhenIdle", false),
+        ModuleConfigReader.Real(configuration, "RepairHealthPercentPerSecond", Fixed.Zero));
 }
 
 /// <summary>
@@ -469,14 +471,32 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private bool _pathValid;
     private bool _pathComplete;
     private ulong _pathObstacles;
+    private BuilderTask _task;
+    private EntityId _taskTarget;
+    private bool _approaching;
     private static readonly Fixed MisalignedAngle = Fixed.FromRaw(34315); // π/6
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
 
     public override string ModuleName => "AIUpdateInterface";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
-    /// <summary><c>AIUpdateInterface::isIdle</c>: no move order and not docking.</summary>
-    public bool IsIdle => _dock is null && !Entity.HasMoveTarget;
+    private enum BuilderTask : byte { None, Construct, Repair }
+
+    /// <summary><c>AIUpdateInterface::isIdle</c>: no move order, not docking and no builder task.</summary>
+    public bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None;
+
+    /// <summary>Dozers and workers can raise structures (<c>DozerAIInterface</c>); every other AI cannot.</summary>
+    public virtual bool CanBuild => false;
+
+    /// <summary>The object is busy constructing or repairing (<c>DozerPrimaryStateMachine</c> outside its idle state).</summary>
+    public bool IsBuilding => _task != BuilderTask.None;
+
+    public bool CanRepair => CanBuild && data.RepairRatePerSecond > Fixed.Zero;
+
+    /// <summary><c>ActionManager::canRepairObject</c>, reduced to the rules that exist here: a complete, unsold structure that is hurt.</summary>
+    public static bool IsRepairable(Entity target)
+        => target.Template.IsKindOf("STRUCTURE") && !target.EffectivelyDead && !target.HasStatus(ObjectStatusBits.UnderConstruction)
+           && !target.HasStatus(SoldBit) && target.Body is { } body && body.Health < body.MaxHealth;
 
     /// <summary>The main machine is in <c>AI_DOCK</c>.</summary>
     public bool IsDocking => _dock is not null;
@@ -490,6 +510,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
     {
         CancelDock(world);
+        ClearTask();
         _enterTarget = EntityId.Invalid;
         _lastCommandFromPlayer = fromPlayer;
         Entity.HasMoveTarget = true;
@@ -530,6 +551,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public virtual void OrderDock(IWorldServices world, Entity dock, bool fromPlayer)
     {
         CancelDock(world);
+        ClearTask();
         _enterTarget = EntityId.Invalid;
         _lastCommandFromPlayer = fromPlayer;
         Entity.HasMoveTarget = false;
@@ -539,6 +561,73 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (_dock.Enter(world, this) != DockStatus.Continue) EndDock(world);
         world.WakeAt(Entity, this, world.Tick);
         world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>DozerAIInterface::construct</c>: walk to the site and add work to it every tick until it is complete.</summary>
+    public void OrderConstruct(IWorldServices world, Entity site) => StartTask(world, BuilderTask.Construct, site);
+
+    /// <summary><c>DozerAIInterface::newTask(DOZER_TASK_REPAIR)</c>: walk to the structure and heal it until it is at full health.</summary>
+    public void OrderRepair(IWorldServices world, Entity target) => StartTask(world, BuilderTask.Repair, target);
+
+    private void StartTask(IWorldServices world, BuilderTask task, Entity target)
+    {
+        CancelDock(world);
+        _enterTarget = EntityId.Invalid;
+        StopInternalMove();
+        InvalidatePath();
+        _task = task;
+        _taskTarget = target.Id;
+        _approaching = false;
+        _lastCommandFromPlayer = true;
+        world.WakeAt(Entity, this, world.Tick);
+        world.MarkDirty(Entity);
+    }
+
+    private void ClearTask()
+    {
+        _task = BuilderTask.None;
+        _taskTarget = EntityId.Invalid;
+        _approaching = false;
+    }
+
+    private void EndTask(IWorldServices world)
+    {
+        ClearTask();
+        StopInternalMove();
+        OnBuilderTaskEnded(world);
+    }
+
+    /// <summary>Called when a task finishes by itself (never when a new order replaces it).</summary>
+    protected virtual void OnBuilderTaskEnded(IWorldServices world) { }
+
+    private void UpdateTask(IWorldServices world)
+    {
+        var target = world.FindEntity(_taskTarget);
+        if (target is null || target.DestroyRequested || target.EffectivelyDead) { EndTask(world); return; }
+        if (_task == BuilderTask.Construct && (!target.HasStatus(ObjectStatusBits.UnderConstruction) || target.BuilderId != Entity.Id)) { EndTask(world); return; }
+        if (_task == BuilderTask.Repair && !IsRepairable(target)) { EndTask(world); return; }
+
+        var reach = target.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
+        var dx = target.X - Entity.X;
+        var dy = target.Y - Entity.Y;
+        if (dx * dx + dy * dy > reach * reach)
+        {
+            if (Entity.HasMoveTarget) { _approaching = true; return; }
+            // The approach ended (blocked or as close as the grid allows) without getting within reach: give up.
+            if (_approaching || !StartInternalMove(target.X, target.Y)) { EndTask(world); return; }
+            _approaching = true;
+            return;
+        }
+        StopInternalMove();
+        _approaching = false;
+        if (_task == BuilderTask.Construct)
+        {
+            if (world.AdvanceConstruction(target)) EndTask(world);
+            return;
+        }
+        var body = target.Body!;
+        var amount = body.MaxHealth * data.RepairRatePerSecond / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+        world.Damage(target.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
     }
 
     /// <summary>The internal move of a state (approach, advance): false when the object has no locomotor.</summary>
@@ -582,8 +671,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     public virtual long Update(IWorldServices world)
     {
-        _ = data; // AutoAcquireEnemiesWhenIdle: see type doc comment — no auto-targeting in phase 5.
         if (_dock is not null && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
+        if (_task != BuilderTask.None) UpdateTask(world);
         if (Entity.HasMoveTarget)
         {
             if (Entity.Template.Locomotor is not { } locomotor)
@@ -595,7 +684,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             else Move(world, locomotor);
         }
         if (_enterTarget.IsValid) UpdateEnter(world);
-        return _dock is not null || Entity.HasMoveTarget ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     private void UpdateEnter(IWorldServices world)
@@ -742,6 +831,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         writer.Bool("lastCommandFromPlayer", _lastCommandFromPlayer);
         writer.Bool("docking", _dock is not null);
         writer.UInt("enterTarget", _enterTarget.Value);
+        writer.Int("task", (int)_task);
+        writer.UInt("taskTarget", _taskTarget.Value);
+        writer.Bool("approaching", _approaching);
         if (_pathValid)
         {
             writer.Bool("pathValid", true);
@@ -766,6 +858,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _nextWake = reader.Int("nextWake");
         _lastCommandFromPlayer = reader.Bool("lastCommandFromPlayer");
         _enterTarget = new EntityId(checked((uint)reader.UInt("enterTarget")));
+        var task = reader.Int("task");
+        if (task < 0 || task > (int)BuilderTask.Repair) throw new InvalidDataException("Builder task out of range.");
+        _task = (BuilderTask)task;
+        _taskTarget = new EntityId(checked((uint)reader.UInt("taskTarget")));
+        _approaching = reader.Bool("approaching");
         InvalidatePath();
         if (reader.Has("pathValid"))
         {
@@ -805,6 +902,9 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
 {
     private readonly List<ProductionEntry> _queue = [];
     private long _nextWake = -1;
+    private bool _hasRally;
+    private Fixed _rallyX;
+    private Fixed _rallyY;
 
     public override string ModuleName => "ProductionUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -824,6 +924,22 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         return true;
     }
 
+    /// <summary>Sale of the producer: every queued entry is dropped and its cost handed back at once.</summary>
+    public void CancelAll(out Fixed refund)
+    {
+        refund = Fixed.Zero;
+        foreach (var entry in _queue) refund += entry.Cost;
+        _queue.Clear();
+    }
+
+    /// <summary>Units leaving the producer walk there.</summary>
+    public void SetRally(Fixed x, Fixed y)
+    {
+        _hasRally = true;
+        _rallyX = x;
+        _rallyY = y;
+    }
+
     public long Update(IWorldServices world)
     {
         if (_queue.Count == 0) return SimulationTiming.SleepForever;
@@ -838,13 +954,13 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         else if (remaining <= 0)
         {
             _queue.RemoveAt(0);
-            if (exit is null) world.RequestSpawn(head.TemplateIndex, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
-            else
-            {
-                var (x, y, z, angle) = exit.ClaimExit(world);
-                if (exit.ForcesSupplyWanting) world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle, new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true));
-                else world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle);
-            }
+            var forcesSupplyWanting = exit is { ForcesSupplyWanting: true };
+            var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
+                : _hasRally ? new SpawnExtras(Fixed.Zero, HasRally: true, RallyX: _rallyX, RallyY: _rallyY)
+                : default(SpawnExtras?);
+            var (x, y, z, angle) = exit is null ? (Entity.X, Entity.Y, Entity.Z, Entity.Angle) : exit.ClaimExit(world);
+            if (extras is { } value) world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle, value);
+            else world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle);
             world.Emit(SimEventKind.ProductionCompleted, Entity.Id, EntityId.Invalid, string.Empty, head.TemplateIndex);
         }
         else _queue[0] = head with { RemainingTicks = remaining };
@@ -854,6 +970,9 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public override void Describe(IStateWriter writer)
     {
         writer.Int("nextWake", _nextWake);
+        writer.Bool("hasRally", _hasRally);
+        writer.Fixed("rallyX", _rallyX);
+        writer.Fixed("rallyY", _rallyY);
         writer.BeginArray("queue");
         foreach (var entry in _queue)
         {
@@ -869,6 +988,9 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public override void Load(IStateReader reader)
     {
         _nextWake = reader.Int("nextWake");
+        _hasRally = reader.Bool("hasRally");
+        _rallyX = reader.Fixed("rallyX");
+        _rallyY = reader.Fixed("rallyY");
         _queue.Clear();
         foreach (var entry in reader.Array("queue"))
             _queue.Add(new ProductionEntry(checked((int)entry.Int("template")), entry.Fixed("cost"), entry.Int("remaining")));

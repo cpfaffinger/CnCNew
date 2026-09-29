@@ -126,7 +126,17 @@ run.Test("Navigation: snapshot restore with paths in flight and two-run determin
 run.Test("Vision: circular reveal, exploration memory and shroud clearing range", Tests.VisionRevealsACircleAndKeepsExploration);
 run.Test("Vision: allies, construction sites and reveal-to-all", Tests.VisionAlliesSharingAndConstruction);
 run.Test("Vision: targeting is gated by visibility and stealth", Tests.VisionGatesTargeting);
-run.Test("Vision: snapshot v5 round trip and two-run determinism", Tests.VisionSnapshotAndDeterminism);
+run.Test("Vision: snapshot round trip and two-run determinism", Tests.VisionSnapshotAndDeterminism);
+run.Test("Construction: a dozer builds a structure over BuildTime ticks", Tests.ConstructionBuildsAStructure);
+run.Test("Construction: cancelling a site refunds it in full", Tests.ConstructionCancelRefunds);
+run.Test("Construction: sale takes 179 ticks and pays SellPercentage", Tests.ConstructionSellTimingAndPayout);
+run.Test("Construction: selling a producer refunds its queue", Tests.ConstructionSellCancelsProduction);
+run.Test("Construction: produced units walk to the rally point", Tests.ConstructionRallyPoint);
+run.Test("Construction: dozers repair damaged structures", Tests.ConstructionRepair);
+run.Test("Construction: a second builder resumes an unfinished site", Tests.ConstructionResumeWithAnotherBuilder);
+run.Test("Construction: rejections for permission, prerequisites, funds and kind", Tests.ConstructionRejections);
+run.Test("Construction: placement on terrain", Tests.ConstructionPlacementRules);
+run.Test("Construction: snapshot mid-construction and mid-sale, replay round trip", Tests.ConstructionSnapshotAndReplay);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

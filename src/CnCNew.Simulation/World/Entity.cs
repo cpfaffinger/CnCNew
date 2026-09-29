@@ -90,6 +90,15 @@ public sealed class Entity
     public bool DestroyRequested { get; internal set; }
     public long SpawnTick { get; }
 
+    /// <summary>Build ticks already invested while the object is <c>UNDER_CONSTRUCTION</c> (<c>Object::m_constructionPercent</c>, in ticks of its build time).</summary>
+    public int ConstructionWork { get; internal set; }
+
+    /// <summary>The dozer or worker that placed this construction site (<c>Object::m_builderID</c>); invalid for everything else.</summary>
+    public EntityId BuilderId { get; internal set; } = EntityId.Invalid;
+
+    /// <summary>Tick at which a sale completes (<c>BuildAssistant::update</c> sell countdown); -1 while the object is not being sold.</summary>
+    public long SellCompleteTick { get; internal set; } = -1;
+
     /// <summary>The container currently holding this entity, if any (<c>Object::getContainedBy</c>). <see cref="Ids.EntityId.Invalid"/> when not contained.</summary>
     public EntityId ContainedBy { get; internal set; } = EntityId.Invalid;
 
@@ -142,6 +151,9 @@ public sealed class Entity
         writer.Int("lastFireTick", LastFireTick);
         writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);
         writer.Bool("hasPlayerUpgradeWeapon", HasPlayerUpgradeWeapon);
+        writer.Int("constructionWork", ConstructionWork);
+        writer.UInt("builder", BuilderId.Value);
+        writer.Int("sellCompleteTick", SellCompleteTick);
         writer.BeginArray("modules");
         foreach (var module in ModuleArray)
         {
