@@ -35,7 +35,9 @@
   Überlebender“ sind implementiert, ebenso Sciences, Garnison/Transport-Containment, Erzeugungslisten und Kisten; 36 Module
   gebunden, 863 von 2.115 Retail-Objekten vollständig instanziierbar (40,8 %, `docs/GAME-RULES.md`). Offen:
   Teams/Diplomatie, Supply, Reparatur/Verkauf, Radarwirkung, Flächenschaden, volle Veteranen-Bestauswahl bei
-  Rüstung/Waffen, headless Referenzmatch aller Fraktionen und Golden-Master-Szenarien gegen Originalwerte
+  Rüstung/Waffen, Referenzmatch aller Fraktionen auf Retail-Daten (Szenario, Replay v2 und synthetischer Nachweis
+  vorhanden, blockiert durch fehlende Module) sowie Golden-Master-Szenarien für Supply und Erfahrung (Schadenskette und
+  Produktionsuhr sind abgedeckt)
   (`docs/HANDOFF-PHASE5.md`).
 - Terrain, Navigation, Sichtweite, Shroud/Fog, Zielwahl und Skirmish-KI (Phase 6).
 - Golden-Master- und Replay-basierte Vergleichstests gegen das Original.

@@ -287,6 +287,13 @@ lehnt ein Replay ab, dessen Fingerabdruck, Befehlstabellenversion oder Tickrate 
 Checkpoints als `ReplayDivergenceException` mit Tick und Hashes. Die Fortsetzung (Snapshot → Restore → Weiterlauf) nutzt
 denselben Runner und beginnt beim Tick der Welt.
 
+**Format v2 (Phase 5).** Die Spielertabelle trägt zusätzlich den Fraktionsnamen (leer = keine Fraktion), damit ein Replay
+ohne Nebeninformation einem Fraktionsmatch zugeordnet werden kann; Version 1 wird mit klarer Meldung abgewiesen. Außerdem
+kodiert das Format jetzt **alle 16 Befehlstypen** (zuvor nur die sechs aus Phase 4): `GiveMoney`, `PurchaseUpgrade`,
+`QueueProduction`, `CancelProduction`, `SetMoveTarget`, `FireWeapon`, `GiveSciencePoints`, `PurchaseScience`,
+`EnterContainer` und `ExitContainer` sind hinzugekommen. `Tests.ReferenceMatch` schreibt und liest jeden Typ zurück und
+vergleicht die Befehle; ein unbekannter Typ im Schreiber ist ein Fehler, keine stille Auslassung.
+
 ## 9. Abnahmebefehle
 
 ```powershell
@@ -320,16 +327,16 @@ Gemessen am 28. September 2026 (Release, `dotnet run -c Release`) auf: AMD64 Fam
 | Größe | Messwert |
 |---|---|
 | Ticks | 216.000 (zwei Stunden Spielzeit) |
-| Befehle | 914.771 (Replay-Datei 47.118.372 Byte, 216 Checkpoints) |
-| Spawn/Destroy | 401.229 / 401.229 |
-| gleichzeitig lebende Entities | Spitze 15.774 (Ziel ≥ 10.000) |
+| Befehle | 914.394 (Replay-Datei 47.094.803 Byte im Format v2, 216 Checkpoints) |
+| Spawn/Destroy | 401.237 / 401.237 |
+| gleichzeitig lebende Entities | Spitze 15.775 (Ziel ≥ 10.000) |
 | Module / Timer / geplante Updates (Spitze) | 42.105 / 7.099 / 30 |
 | Laufzeit je 216.000-Tick-Lauf | 22 s (Ø 102 µs je Tick), langsamster Tick 30,7 ms |
 | Aufnahme des Szenarios (Treiber + Welt) | 37 s |
 | Allokation `Step()` im Beharrungszustand | Ø 1.350 Byte je Tick unter Churn (Entity- und Modulobjekte der Spawns); **0 Byte** bei ruhender Welt (Test) |
-| Snapshot bei Tick 108.000 | 6.418.840 Byte für 13.220 Entities (≈ 485 Byte je Entity), Restore 0,7 s |
+| Snapshot bei Tick 108.000 | 10.262.399 Byte für 13.220 Entities (≈ 776 Byte je Entity), Restore 0,7 s (Restore-Zeit nicht neu gemessen) |
 | Peak Working Set des Prozesses | 532 MiB (einschließlich der 915.000 Befehlsobjekte des Aufnehmers) |
-| Fehlerbefehle | 2.166 `UnknownEntity`-Ablehnungen, in jedem Lauf identisch |
+| Fehlerbefehle | 2.170 `UnknownEntity`-Ablehnungen, in jedem Lauf identisch |
 
 Ergebnisse: drei frische Läufe liefern identische Tickhashes über alle 216.000 Ticks (Kettenhash `E230DA5F04821478`,
 Endhash `A299C38BFE07681D`); der Lauf mit Snapshot bei Tick 108.000 und Fortsetzung liefert dieselben 216.000 Hashes;
@@ -341,7 +348,7 @@ Neuberechnung überein.
 geändert, weil `CreateObjectDie`/`InstantDeathBehavior` jetzt Zufallszüge verbrauchen und Objekte erzeugen): Kettenhash
 `36211DD938214B9C`, Endhash `9E4AF85CBFBB84C6`, 401.237 Spawns und ebenso viele Destroys, Ø 54,7 µs je Tick, Snapshot
 bei Tick 108.000: 10.262.399 Byte. Alle Läufe (unabhängig wiederholt, mit Snapshotfortsetzung) stimmen tickweise überein. Die
-übrigen Größen der Tabelle wurden nicht neu gemessen.
+Befehls-, Entity- und Fehlerzahlen sowie Snapshotgröße der Tabelle sind ebenfalls neu gemessen (Replay v2); die übrigen Größen nicht.
 
 **Budgets** (mit Messwert als Grundlage, etwa 2,7-facher Spielraum): 216.000-Tick-Lauf dieses Szenarios ≤ 60 s;
 Ø ≤ 300 µs je Tick; langsamster Tick ≤ 100 ms (echtes Echtzeitbudget, 33,3 ms bei 30 Hz, wird erst mit den Regeln der
@@ -398,6 +405,8 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
 - Die Definitionsdomänen außer Object, Weapon, Armor, Upgrade, Science und Locomotor sind weiterhin flach typisiert
   (Zahlen in `TYPED-DEFINITIONS.md`): CommandButton, SpecialPower, Faction, GameData. `ObjectCreationList`, `CrateData` und
   `GameData/Gravity` sind typisiert.
-- Kein headless Referenzmatch aller Fraktionen und keine Golden-Master-Szenarien gegen Originalwerte (Phase-5-Punkte 7/8
-  aus `docs/HANDOFF-PHASE5.md` stehen noch aus); die neuen Phase-5-Mechaniken sind stattdessen durch gezielte
-  Integrationstests (`Tests.Phase5.cs`) und den 216.000-Tick-Stresstest mit realen Objekten abgesichert.
+- Der Referenzmatch (`ReferenceMatchScenario`, `SimTool reference-match`) läuft auf einer synthetischen Fixture
+  deterministisch und replaybar, auf den Retail-Daten aber noch nicht: dort ist heute keine einzige bewaffnete Einheit und
+  kein einziges Produktionsgebäude instanziierbar (Messung und Blocker in `docs/GAME-RULES.md` §7a). Golden-Master-
+  Szenarien existieren für die Schadenskette und die Produktionsuhr; Supply und Erfahrung stehen aus. Übrige Mechaniken sind
+  durch gezielte Integrationstests (`Tests.Phase5.cs`) und den 216.000-Tick-Stresstest mit realen Objekten abgesichert.

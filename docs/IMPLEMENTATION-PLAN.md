@@ -253,12 +253,16 @@ Vereinfachungen in `docs/GAME-RULES.md`):
   geradlinige Bewegung (`AIUpdateInterface`, kein Terrain/Pfadsuche/Drehrate), eine Produktionswarteschlange
   (`ProductionUpdate`), „letzter Überlebender" als Sieg, ein Spieler-/Fraktionsdatenmodell (`FactionCatalog`: Startgeld,
   intrinsische Sciences) und ein Science-Kaufsystem (`ScienceCatalog`, `PurchaseScienceCommand`).
+- Referenzmatch-Szenario (`ReferenceMatchScenario`, `SimTool reference-match`) mit Replay-Format v2 (Fraktionen, alle 16
+  Befehlstypen), auf synthetischen Daten deterministisch nachgewiesen (Sieger, Replay-Runde, Snapshot-Fortsetzung); auf
+  Retail-Daten läuft es nicht, weil keine bewaffnete Einheit und kein Produktionsgebäude instanziierbar ist. Golden-Master
+  für Schadenskette und Produktionsuhr (unabhängiges Modell, Quellverweise) sind vorhanden; Supply/Erfahrung fehlen.
 - 36 von 205 Modultypen implementiert; 863 von 2.115 Retail-Objekten vollständig instanziierbar (40,8 %, vorher 26 von
   2.113); Erzeugungslisten werden ausgeführt und `CreateCrateDie` ist implementiert (`docs/GAME-RULES.md` §6b); der 216.000-Tick-Stresstest läuft mit allen neuen Modulen deterministisch, ohne Leck.
 - **Noch offen:** Teams/Diplomatie als Datenmodell, Command-Set-Wirkung, Supply, Reparatur/Verkauf,
   Radarwirkung, Spezialfähigkeiten (nur die Listenausführung existiert; `CreateDebris`/`DeliverPayload` brauchen Physik), volle veteranenbasierte
-  `ArmorSet`/`WeaponSet`-Auswahl, Erfahrungsvergabe, headless Referenzmatch aller Fraktionen, Golden-Master-Szenarien
-  gegen Originalwerte. Die verbleibende Blockerliste (nach Häufigkeit) steht in
+  `ArmorSet`/`WeaponSet`-Auswahl, Erfahrungsvergabe, Referenzmatch aller Fraktionen auf Retail-Daten (0 von 13 Fraktionen
+  spielbar, Blocker in `docs/GAME-RULES.md` §7a), Golden-Master-Szenarien für Supply und Erfahrung. Die verbleibende Blockerliste (nach Häufigkeit) steht in
   `docs/SIMULATION-CORE.md` §11.
 
 ## 6. Welt, Terrain, Bewegung, Sicht und Skirmish-KI

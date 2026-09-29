@@ -296,9 +296,54 @@ gemeldet, das Objekt aber nur erzeugt, wenn es instanziierbar ist. Kein Teamsyst
   Phase 5 – ein Team-Sieg im Original zählt mehrere Spieler als eine Einheit): genau ein Nicht-System-Spieler mit
   mindestens einem Objekt, sonst `null`.
 
+## 7a. Referenzmatch und Golden-Master-Szenarien
+
+**Szenario** (`src/CnCNew.Simulation/Testing/ReferenceMatchScenario.cs`, Aufruf `SimTool reference-match <Inhalt>`): ein
+scriptloser, seedbasierter Befehlsgenerator spielt alle teilnahmefähigen Fraktionen gegeneinander auf einer hindernisfreien
+Karte, die nur als Koordinaten existiert, und zeichnet die Befehle als Replay (Format v2, mit Fraktionen und Checkpoints) auf.
+Das Match endet mit dem Sieg (§7) plus `GraceTicks` Nachlauf, spätestens bei `MaxTicks` (Standard 216.000); `MinTicks`
+füllt das Replay bei Bedarf mit Leerticks auf. Der Generator schreibt ausschließlich typisierte Befehle: Startobjekte per
+`SpawnCommand`, Einkommen per `GiveMoneyCommand` (Ersatz für Supply, das es noch nicht gibt), Produktion per
+`QueueProductionCommand`, Bewegung per `SetMoveTargetCommand`, Feuer per `FireWeaponCommand`.
+
+- Teilnehmer ist jede spielbare Fraktion (`PlayableSide`), deren Seite mindestens eine instanziierbare, bewaffnete,
+  baubare Einheit stellt und die ein instanziierbares Startgebäude oder einen **ausdrücklich protokollierten Ersatz** hat
+  (ein instanziierbares Gebäude derselben Seite mit `ProductionUpdate`; der Grund steht in `MatchParticipant.Substitution`).
+- Ausgeschlossene Fraktionen erscheinen mit Begründung im Bericht; nichts wird still übergangen. Bei weniger als zwei
+  Teilnehmern verweigert `Record` die Aufnahme, `SimTool reference-match` liefert Exitcode 3 und den Abdeckungsbericht.
+- Zwei Aufnahmen desselben Szenarios liefern byteidentische Replays; zwei frische Läufe und ein Lauf mit Snapshot bei einem
+  Viertel der Länge sind tickweise hashgleich; alle Checkpoints verifizieren; kein aufgezeichneter Befehl wird abgelehnt.
+
+**Nachweis** (`Tests.ReferenceMatch`): synthetische Fixture mit zwei Seiten, drei teilnehmenden Fraktionen (eine mit
+Ersatzgebäude, weil ihre Startbasis ein ungebundenes Modul enthält), einer wegen fehlender Einheit ausgeschlossenen und einer
+unspielbaren Fraktion. Das Match endet mit einem Sieger, das Replay läuft durch Datei, zwei Läufe und Snapshot identisch.
+
+**Grenze – nicht erreicht auf Retail-Daten.** Neu gemessen (`SimTool reference-match .local/phase2-import-a`, Basisdaten
+ohne Kartenoverlays, Fingerabdruck `45E6802750BFBAB7`): 0 von 13 spielbaren Fraktionen, Exitcode 3. Instanziierbar sind je
+Seite 0 der bewaffneten Einheiten und 0 der Produktionsgebäude (America 0/41 und 0/10, China 0/26 und 0/13, GLA 0/33 und
+0/14, die Generalsseiten entsprechend, Civilian 0/1 und 0/1). Die häufigsten Blocker stehen in §9 und in der Ausgabe von
+`SimTool audit-coverage` (`PhysicsBehavior` 739 Objekte, `SquishCollide` 170, `SpecialAbility` 88,
+`CommandButtonHuntUpdate` 79, `ToppleUpdate` 76, `OCLSpecialPower` 60, `BaseRegenerateUpdate` 55,
+`DefaultProductionExitUpdate` 42 …). Die Lücke ist nur mit Phase-6-Physik/Kollision und einem Spezialkraft-Subsystem sowie
+einer Reihe kleinerer Module zu schließen; die Aufgabe „Referenzmatch aller Fraktionen auf Retail-Daten“ bleibt **offen**.
+
+**Golden Master** (`tests/CnCNew.Simulation.Tests/Tests.GoldenMaster.cs`): die erwarteten Werte berechnet ein unabhängiges
+Modell im Test, sie werden nicht aus der Simulation zurückgelesen.
+
+- Schadenskette: `Armor.cpp ArmorTemplate::adjustDamage` (Schaden · Koeffizient, unter 0 auf 0, `UNRESISTABLE` umgeht die
+  Rüstung), `Weapon.cpp Weapon::privateFireWeapon` (nächster Schuss nach `DelayBetweenShots`, nach leerem Magazin nach
+  `ClipReloadTime`), `ActiveBody.cpp attemptDamage` (Tod bei 0 Lebenspunkten). Geprüft werden die Schussticks und der Tod
+  mit und ohne Rüstung; Millisekunden werden mit 30 Ticks je Sekunde umgerechnet.
+- Produktionsuhr: `ThingTemplate::calcTimeToBuild` = `BuildTime · LOGICFRAMES_PER_SECOND`; aufeinanderfolgende Einheiten der
+  Warteschlange werden genau eine Bauzeit nacheinander fertig; die Kosten verlassen das Konto beim Einreihen.
+- Die Koeffizienten der Tests (100 %, 50 %) sind in Fließkomma und Festkomma exakt; die dokumentierte Abweichung
+  (Festkomma statt `Real`) wird dadurch nicht maskiert, aber auch nicht gegen das Original gemessen – es gibt keine
+  Originalläufe als Referenz, nur die aus dem Quelltext abgeleitete Rechnung.
+- **Nicht erreicht:** Supply-Einnahmen und Erfahrung (kein Supply-/Erfahrungssystem, §10).
+
 ## 8. Befehlstabelle
 
-Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (Codes 1–12) und die Ablehnungsgründe.
+Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (16 Befehlscodes) und die Ablehnungsgründe; das Replay-Format v2 (`docs/SIMULATION-CORE.md` §8) kodiert alle 16.
 
 ## 9. Modulabdeckung
 
@@ -326,7 +371,7 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
   Transport/Supply/Radar/Reparatur/Verkauf/Bau (Rest von HANDOFF-PHASE5.md Punkt „Vollständiger Umfang"). Garrison
   (§6a) ist implementiert. Sciences (Kauf, Voraussetzungen) sind implementiert; „Science Purchase Points" werden
   mangels Rang-/Erfahrungssystem nur per Systembefehl gutgeschrieben (§1a).
-- Kein headless Referenzmatch aller Fraktionen, keine Golden-Master-Szenarien gegen Originalwerte (HANDOFF-PHASE5.md
-  Punkte 7/8 stehen aus); die hier beschriebenen Mechaniken sind stattdessen durch `tests/CnCNew.Simulation.Tests/
-  Tests.Phase5.cs` (gezielte Integrationstests: Wirtschaft, Kampf, Upgrade-Effekte, Bewegung, Produktion, Stealth/Heilung,
-  Sieg) und den 216.000-Tick-Stresstest mit den neuen Modulen an echten Objekten abgesichert.
+- Referenzmatch nur auf synthetischen Daten lauffähig, auf Retail-Daten 0 spielbare Fraktionen (§7a); Golden-Master nur für
+  Schadenskette und Produktionsuhr, nicht für Supply und Erfahrung. Die hier beschriebenen Mechaniken sind zusätzlich durch
+  `tests/CnCNew.Simulation.Tests/Tests.Phase5.cs` (gezielte Integrationstests: Wirtschaft, Kampf, Upgrade-Effekte, Bewegung,
+  Produktion, Stealth/Heilung, Sieg) und den 216.000-Tick-Stresstest mit den neuen Modulen an echten Objekten abgesichert.
