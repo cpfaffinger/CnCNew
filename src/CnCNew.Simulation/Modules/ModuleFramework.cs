@@ -1,4 +1,5 @@
 using CnCNew.Data.Definitions;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
@@ -85,6 +86,9 @@ public interface IWorldServices
     /// </summary>
     EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth);
 
+    /// <summary><see cref="CreateFromList(Entity, string, EntityId, bool)"/> with the creation origin an <c>OCLSpecialPower</c> chooses (<c>ObjectCreationList::create(ocl, primary, &creationCoord, …)</c>) instead of the source's position.</summary>
+    EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth, Fixed originX, Fixed originY, Fixed originZ);
+
     ObjectCreationListCatalog CreationLists { get; }
 
     // ------------------------------------------------------------------------------------------- phase 5: sciences
@@ -103,6 +107,81 @@ public interface IWorldServices
     /// <summary>"Science Purchase Points" earned via rank/experience in the reference (not modeled); a scenario/system command credits them directly instead — see <c>docs/GAME-RULES.md</c>.</summary>
     int SciencePointsOf(PlayerId player);
     void AddSciencePoints(PlayerId player, int amount);
+
+    /// <summary><c>Player::grantScience</c>: adds a science without paying (no prerequisite or purchasability check beyond <c>isScienceGrantable</c>), then re-arms the special powers it gates. False when it was already owned.</summary>
+    bool GrantScience(PlayerId player, string scienceName);
+
+    // ------------------------------------------------------------------------------------------- special powers
+
+    SpecialPowerCatalog SpecialPowers { get; }
+
+    /// <summary><c>SpecialPowerStore</c> shared timer (<c>SharedSyncedTimer</c>): the ready frame all of a player's modules for one power share; false when none was recorded yet.</summary>
+    bool TryGetSharedReadyFrame(PlayerId player, int powerIndex, out long readyFrame);
+    void SetSharedReadyFrame(PlayerId player, int powerIndex, long readyFrame);
+
+    /// <summary><c>Player::m_cashBountyPercent</c> as a ratio (0: no bounty); <c>CashBountyPower</c> only ever raises it.</summary>
+    Fixed CashBountyOf(PlayerId player);
+    void RaiseCashBounty(PlayerId player, Fixed ratio);
+}
+
+/// <summary>
+/// A module that carries one special power (<c>SpecialPowerModuleInterface</c>): the recharge state machine of <c>SpecialPowerModule</c>
+/// (<c>availableOnFrame</c>, pause counter) plus the power-specific effect of the derived module.
+/// </summary>
+public interface ISpecialPowerModule
+{
+    int PowerIndex { get; }
+
+    /// <summary><c>UpdateModuleStartsAttack</c>: the power is triggered (recharge started) by an update-module handler, not by the use itself.</summary>
+    bool StartsAttack { get; }
+    bool IsPaused { get; }
+
+    /// <summary>Whether a use of this power with the given target kind is meaningful (an object power without an object is not).</summary>
+    bool AcceptsTarget(SpecialPowerTargetKind kind);
+
+    /// <summary><c>SpecialPowerModule::isReady</c>: recharged (<c>availableOnFrame &lt;= now</c>) and not paused.</summary>
+    bool IsReady(IWorldServices world);
+
+    /// <summary><c>SpecialPowerModule::onSpecialPowerCreation</c>: restarts the recharge (shared timers: syncs to the shared frame) and re-applies <c>StartsPaused</c>.</summary>
+    void OnSpecialPowerCreation(IWorldServices world);
+
+    /// <summary><c>SpecialPowerModule::setReadyFrame</c>.</summary>
+    void SetReadyFrame(long frame);
+
+    /// <summary><c>SpecialPowerModule::pauseCountdown</c>.</summary>
+    void PauseCountdown(IWorldServices world, bool pause);
+
+    /// <summary><c>SpecialPowerModule::triggerSpecialPower</c>: starts the recharge.</summary>
+    void Trigger(IWorldServices world);
+
+    /// <summary><c>doSpecialPower*</c>: initiates via the entity's handlers, triggers unless <see cref="StartsAttack"/>, then applies the module's own effect.</summary>
+    void Use(IWorldServices world, in SpecialPowerTarget target);
+}
+
+/// <summary>An update module that carries out a power's effect (<c>SpecialPowerUpdateInterface::initiateIntentToDoSpecialPower</c>); implemented by <c>SpectreGunshipDeploymentUpdate</c>.</summary>
+public interface ISpecialPowerHandler
+{
+    /// <summary>True when this module serves the power for its entity's owner right now (matching template and, where configured, owned science).</summary>
+    bool Handles(IWorldServices world, int powerIndex);
+    void Initiate(IWorldServices world, int powerIndex, in SpecialPowerTarget target);
+}
+
+public static class SpecialPowerRouting
+{
+    /// <summary>The first handler on <paramref name="entity"/> serving the power (module order: the reference lists the highest technology level first).</summary>
+    public static ISpecialPowerHandler? FindHandler(Entity entity, IWorldServices world, int powerIndex)
+    {
+        foreach (var module in entity.Modules)
+            if (module is ISpecialPowerHandler handler && handler.Handles(world, powerIndex)) return handler;
+        return null;
+    }
+
+    public static ISpecialPowerModule? FindModule(Entity entity, int powerIndex)
+    {
+        foreach (var module in entity.Modules)
+            if (module is ISpecialPowerModule power && power.PowerIndex == powerIndex) return power;
+        return null;
+    }
 }
 
 /// <summary>

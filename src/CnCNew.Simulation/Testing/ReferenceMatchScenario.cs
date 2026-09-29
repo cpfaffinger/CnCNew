@@ -79,8 +79,7 @@ public sealed class ReferenceMatchScenario
 
     /// <summary>
     /// Every playable faction that can field a base, in ordinal name order. A faction starts with its own <c>StartingBuilding</c> when the
-    /// simulation can instantiate it; otherwise (the retail command centers need special powers, radar and production exits, which the
-    /// simulation does not have yet) it starts with a stand-in: the ordinally first instantiable structure of the same side that has a
+    /// simulation can instantiate it; otherwise (a starting building with a module the simulation lacks) it starts with a stand-in: the ordinally first instantiable structure of the same side that has a
     /// <c>ProductionUpdate</c>. The substitution is recorded in <see cref="MatchParticipant.Substitution"/>, never silent. Factions
     /// without any usable producer are listed in <paramref name="excluded"/>.
     /// </summary>

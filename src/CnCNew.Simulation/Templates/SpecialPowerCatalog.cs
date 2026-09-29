@@ -1,0 +1,64 @@
+using System.Collections.Immutable;
+using CnCNew.Data.Definitions;
+using CnCNew.Simulation.Time;
+
+namespace CnCNew.Simulation.Templates;
+
+/// <summary>
+/// One <c>SpecialPower</c> definition (<c>SpecialPowerTemplate</c>): <see cref="ReloadTicks"/> is <c>ReloadTime</c>, <see cref="RequiredScience"/>
+/// the <see cref="ScienceInfo.Index"/> the controlling player must own (-1: none), <see cref="SharedSynced"/> the <c>SharedSyncedTimer</c> flag.
+/// </summary>
+public sealed record SpecialPowerInfo(int Index, string Name, string Type, long ReloadTicks, int RequiredScience, bool SharedSynced, bool PublicTimer);
+
+/// <summary>
+/// <c>SpecialPowerStore</c> equivalent: every <c>SpecialPower</c> definition with a stable ordinal index (ordinal name order).
+/// An absent <c>ReloadTime</c> uses the 1000 ms of <c>Default/SpecialPower.ini</c> (<c>DefaultSpecialPower</c>): the compiler has no
+/// default-inheritance for this definition kind, so the value is carried here and counted by the real-data test.
+/// </summary>
+public sealed class SpecialPowerCatalog
+{
+    private const long DefaultReloadMilliseconds = 1000;
+    private readonly ImmutableDictionary<string, SpecialPowerInfo> _byName;
+
+    private SpecialPowerCatalog(ImmutableArray<SpecialPowerInfo> powers, int defaultedReload)
+    {
+        Powers = powers;
+        DefaultedReloadCount = defaultedReload;
+        _byName = powers.ToImmutableDictionary(value => value.Name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public ImmutableArray<SpecialPowerInfo> Powers { get; }
+
+    /// <summary>How many definitions took the <c>DefaultSpecialPower</c> reload time because they declare none.</summary>
+    public int DefaultedReloadCount { get; }
+
+    public SpecialPowerInfo this[int index] => Powers[index];
+    public bool TryGet(string name, out SpecialPowerInfo info) => _byName.TryGetValue(name, out info!);
+
+    public static SpecialPowerCatalog Build(CompiledDefinitionGraph graph, ScienceCatalog sciences)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(sciences);
+        var powers = ImmutableArray.CreateBuilder<SpecialPowerInfo>();
+        var defaulted = 0;
+        foreach (var definition in graph.Definitions.OfType<SpecialPowerDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
+        {
+            DefinitionField? Field(string name) => definition.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            var reload = Field("ReloadTime")?.Value.Value;
+            if (reload is null) defaulted++;
+            var reloadTicks = SimulationTiming.DurationMillisecondsToTicks(reload is GameTime time ? time.Milliseconds : DefaultReloadMilliseconds);
+            var science = -1;
+            if (Field("RequiredScience")?.Value.Value is DefinitionReference { IsNone: false } reference)
+            {
+                if (!sciences.TryGet(reference.Name, out var info))
+                    throw new TemplateBuildException($"SpecialPower '{definition.OriginalName}': RequiredScience '{reference.Name}' is not a Science definition.");
+                science = info.Index;
+            }
+            var sharedSynced = Field("SharedSyncedTimer")?.Value.Value is true;
+            var publicTimer = Field("PublicTimer")?.Value.Value is true;
+            var type = Field("Enum")?.Value.OriginalText.Trim() ?? string.Empty;
+            powers.Add(new SpecialPowerInfo(powers.Count, definition.OriginalName, type, reloadTicks, science, sharedSynced, publicTimer));
+        }
+        return new SpecialPowerCatalog(powers.ToImmutable(), defaulted);
+    }
+}

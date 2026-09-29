@@ -240,6 +240,14 @@ public static class ReplayFormat
             case ExitContainerCommand exit:
                 writer.Write(exit.Actor.Value);
                 break;
+            case UseSpecialPowerCommand power:
+                writer.Write(power.Source.Value);
+                WriteString(writer, power.SpecialPower);
+                writer.Write((byte)power.TargetKind);
+                writer.Write(power.Target.Value);
+                writer.Write(power.X.Raw);
+                writer.Write(power.Y.Raw);
+                break;
             default:
                 throw new ReplayFormatException($"Command type {command.GetType().Name} has no replay encoding.");
         }
@@ -271,8 +279,18 @@ public static class ReplayFormat
             CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, ReadString(reader)),
             CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
+            CommandTypes.UseSpecialPower => ReadUseSpecialPower(reader, player, sequence, tick),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
+    }
+
+    private static UseSpecialPowerCommand ReadUseSpecialPower(BinaryReader reader, PlayerId player, ulong sequence, long tick)
+    {
+        var source = new EntityId(reader.ReadUInt32());
+        var power = ReadString(reader);
+        var kind = (SpecialPowerTargetKind)reader.ReadByte();
+        return new UseSpecialPowerCommand(player, sequence, tick, source, power, kind, new EntityId(reader.ReadUInt32()),
+            Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()));
     }
 
     private static PurchaseUpgradeCommand ReadPurchaseUpgrade(BinaryReader reader, PlayerId player, ulong sequence, long tick)

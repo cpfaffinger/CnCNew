@@ -62,7 +62,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[25];
+    private readonly long[] _rejections = new long[30];
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
     private long _tick;
@@ -91,6 +91,12 @@ public sealed partial class SimulationWorld : IWorldServices
         public ScienceMask CompletedSciences { get; set; }
         /// <summary>"Science Purchase Points" (<c>Player::getSciencePurchasePoints</c>): a currency separate from money, normally earned via rank/experience (not modeled — see <see cref="IWorldServices.AddSciencePoints"/>).</summary>
         public int SciencePurchasePoints { get; set; }
+
+        // ------------------------------------------------------------------------------------- special powers
+        /// <summary>Power index to shared ready frame (<c>SharedSyncedTimer</c> powers), ordered for deterministic output.</summary>
+        public SortedList<int, long> SharedReadyFrames { get; } = [];
+        /// <summary><c>Player::m_cashBountyPercent</c> as a ratio.</summary>
+        public Fixed CashBounty { get; set; }
     }
 
     /// <summary>
@@ -197,6 +203,53 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
         if (_players.TryGetValue(player.Value, out var state)) state.SciencePurchasePoints += amount;
+    }
+
+    public SpecialPowerCatalog SpecialPowers => _templates.SpecialPowers;
+
+    public bool TryGetSharedReadyFrame(PlayerId player, int powerIndex, out long readyFrame)
+    {
+        readyFrame = 0;
+        return _players.TryGetValue(player.Value, out var state) && state.SharedReadyFrames.TryGetValue(powerIndex, out readyFrame);
+    }
+
+    public void SetSharedReadyFrame(PlayerId player, int powerIndex, long readyFrame)
+    {
+        if (_players.TryGetValue(player.Value, out var state)) state.SharedReadyFrames[powerIndex] = readyFrame;
+    }
+
+    public Fixed CashBountyOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.CashBounty : Fixed.Zero;
+
+    public void RaiseCashBounty(PlayerId player, Fixed ratio)
+    {
+        if (_players.TryGetValue(player.Value, out var state) && ratio > state.CashBounty) state.CashBounty = ratio;
+    }
+
+    public bool GrantScience(PlayerId player, string scienceName)
+    {
+        if (!_players.TryGetValue(player.Value, out var state)) return false;
+        if (!_templates.Sciences.TryGet(scienceName, out var science)) throw new InvalidOperationException($"GrantScience: '{scienceName}' is not a Science definition.");
+        // Player::grantScience: a non-grantable science is refused (the reference asserts and returns false).
+        return science.IsGrantable && AddScience(state, science);
+    }
+
+    /// <summary><c>Player::addScience</c>: records the science, then wakes every special power of the player's objects that requires it (<c>onSpecialPowerCreation</c> + instantly ready).</summary>
+    private bool AddScience(PlayerState player, Templates.ScienceInfo science)
+    {
+        if (player.CompletedSciences.Has(science.Index)) return false;
+        player.CompletedSciences = player.CompletedSciences.Set(science.Index);
+        foreach (var entity in _entities.Values.OrderBy(value => value.Id.Value))
+        {
+            if (entity.Owner != player.Id) continue;
+            foreach (var module in entity.Modules)
+            {
+                if (module is not ISpecialPowerModule power || _templates.SpecialPowers[power.PowerIndex].RequiredScience != science.Index) continue;
+                MarkDirty(entity);
+                power.OnSpecialPowerCreation(this);
+                power.SetReadyFrame(_tick);
+            }
+        }
+        return true;
     }
 
     public Fixed MoneyOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.Money : Fixed.Zero;
@@ -455,7 +508,30 @@ public sealed partial class SimulationWorld : IWorldServices
                     return CommandRejection.NotPermitted;
                 break;
             }
+            case UseSpecialPowerCommand useSpecialPower:
+                return CheckSpecialPower(player, command.Player, useSpecialPower, out _, out _, out _);
         }
+        return 0;
+    }
+
+    /// <summary><c>ActionManager::canDoSpecialPower</c>: shared by submission and execution, because readiness changes between the two.</summary>
+    private CommandRejection CheckSpecialPower(PlayerState player, PlayerId issuer, UseSpecialPowerCommand use, out Entity? source, out ISpecialPowerModule? module, out SpecialPowerInfo? info)
+    {
+        module = null;
+        info = null;
+        source = FindEntity(use.Source);
+        if (source is null || source.DestroyRequested) return CommandRejection.UnknownEntity;
+        if (!issuer.IsSystem && source.Owner != issuer) return CommandRejection.NotPermitted;
+        if (!_templates.SpecialPowers.TryGet(use.SpecialPower, out var found)) return CommandRejection.UnknownSpecialPower;
+        info = found;
+        module = SpecialPowerRouting.FindModule(source, found.Index);
+        if (module is null) return CommandRejection.UnknownSpecialPower;
+        if (!Enum.IsDefined(use.TargetKind) || !module.AcceptsTarget(use.TargetKind)) return CommandRejection.InvalidSpecialPowerTarget;
+        if (use.TargetKind == SpecialPowerTargetKind.Object && FindEntity(use.Target) is not { DestroyRequested: false }) return CommandRejection.InvalidSpecialPowerTarget;
+        var owner = _players.GetValueOrDefault(source.Owner.Value) ?? player;
+        if (found.RequiredScience >= 0 && !owner.CompletedSciences.Has(found.RequiredScience)) return CommandRejection.MissingScience;
+        if (source.HasStatus(ObjectStatusBits.UnderConstruction) || !module.IsReady(this)) return CommandRejection.SpecialPowerNotReady;
+        if (module.StartsAttack && SpecialPowerRouting.FindHandler(source, this, found.Index) is null) return CommandRejection.SpecialPowerHandlerMissing;
         return 0;
     }
 
@@ -654,7 +730,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!CanPurchaseScience(buyer, science, out var reason)) { RecordRejection(command, reason); break; }
                 // Player::attemptToPurchaseScience: withdraw the cost, then grant the science.
                 buyer.SciencePurchasePoints -= science.PurchasePointCost;
-                buyer.CompletedSciences = buyer.CompletedSciences.Set(science.Index);
+                AddScience(buyer, science);
                 Emit(SimEventKind.ScienceCompleted, EntityId.Invalid, EntityId.Invalid, purchaseScience.Science, science.Index, command.Player);
                 break;
             }
@@ -686,6 +762,15 @@ public sealed partial class SimulationWorld : IWorldServices
                 actor.ContainedBy = EntityId.Invalid; // Safety net: Remove() also does this; guards a dangling/missing container reference.
                 MarkDirty(actor);
                 Emit(SimEventKind.EntityUncontained, actor.Id, previousContainer, string.Empty, 0, command.Player);
+                break;
+            }
+            case UseSpecialPowerCommand use:
+            {
+                var reason = CheckSpecialPower(_players[command.Player.Value], command.Player, use, out var source, out var module, out var info);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                MarkDirty(source!);
+                Emit(SimEventKind.SpecialPowerUsed, source!.Id, use.TargetKind == SpecialPowerTargetKind.Object ? use.Target : EntityId.Invalid, info!.Name, info.Index, command.Player);
+                module!.Use(this, use.AsTarget);
                 break;
             }
             default:
@@ -845,11 +930,24 @@ public sealed partial class SimulationWorld : IWorldServices
     public void OnEntityDied(Entity entity, in DamageInfo info)
     {
         Emit(SimEventKind.EntityDied, entity.Id, info.Source, string.Empty, info.DeathType);
+        ScoreTheKill(entity, info);
         foreach (var die in entity.Dies)
         {
             MarkDirty(entity);
             die.OnDie(this, info);
         }
+    }
+
+    /// <summary><c>Object::scoreTheKill</c> + <c>Player::doBountyForKill</c>: an enemy kill pays the killer's owner a share of the victim's cost (<c>CashBountyPower</c>).</summary>
+    private void ScoreTheKill(Entity victim, in DamageInfo info)
+    {
+        if (!info.Source.IsValid || victim.Owner.IsSystem) return;
+        var killer = FindEntity(info.Source);
+        if (killer is null || killer.Owner.IsSystem || killer.Owner == victim.Owner) return;
+        if (victim.Template.IsKindOf("IGNORED_IN_GUI") || victim.HasStatus(ObjectStatusBits.UnderConstruction)) return;
+        if (!_players.TryGetValue(killer.Owner.Value, out var payee) || payee.CashBounty.Raw == 0) return;
+        var bounty = (victim.Template.BuildCost * payee.CashBounty).Ceiling();
+        if (bounty > 0) payee.Money += Fixed.FromInt(bounty);
     }
 
     public void RequestDestroy(EntityId id)
@@ -1159,6 +1257,17 @@ public sealed partial class SimulationWorld : IWorldServices
             player.CompletedUpgrades.Describe(writer, "completedUpgrades");
             player.CompletedSciences.Describe(writer, "completedSciences");
             writer.Int("sciencePurchasePoints", player.SciencePurchasePoints);
+            writer.Fixed("cashBounty", player.CashBounty);
+            writer.BeginArray("sharedReadyFrames");
+            // Indexed: SortedList's foreach boxes its enumerator, and this runs every tick.
+            for (var index = 0; index < player.SharedReadyFrames.Count; index++)
+            {
+                writer.BeginObject(null);
+                writer.Int("power", player.SharedReadyFrames.Keys[index]);
+                writer.Int("frame", player.SharedReadyFrames.Values[index]);
+                writer.EndObject();
+            }
+            writer.EndArray();
             writer.EndObject();
         }
         writer.EndArray();

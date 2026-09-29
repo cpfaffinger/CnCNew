@@ -123,7 +123,7 @@ public sealed class TemplateCatalog
 {
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
-    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences,
+    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, SpecialPowerCatalog specialPowers,
         FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance)
     {
         StandardMinefieldDistance = standardMinefieldDistance;
@@ -133,6 +133,7 @@ public sealed class TemplateCatalog
         Upgrades = upgrades;
         Weapons = weapons;
         Sciences = sciences;
+        SpecialPowers = specialPowers;
         Factions = factions;
         Crates = crates;
         CreationLists = creationLists;
@@ -148,6 +149,7 @@ public sealed class TemplateCatalog
     public UpgradeCatalog Upgrades { get; }
     public WeaponCatalog Weapons { get; }
     public ScienceCatalog Sciences { get; }
+    public SpecialPowerCatalog SpecialPowers { get; }
     public FactionCatalog Factions { get; }
     public CrateCatalog Crates { get; }
     public ObjectCreationListCatalog CreationLists { get; }
@@ -175,6 +177,7 @@ public sealed class TemplateCatalog
         var armors = ArmorCatalog.Build(graph);
         var locomotors = BuildLocomotors(graph);
         var sciences = ScienceCatalog.Build(graph);
+        var specialPowers = SpecialPowerCatalog.Build(graph, sciences);
         var factions = FactionCatalog.Build(graph, sciences);
         var crates = CrateCatalog.Build(graph, sciences);
         var creationLists = ObjectCreationListCatalog.Build(graph);
@@ -223,7 +226,7 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))

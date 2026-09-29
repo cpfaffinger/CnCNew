@@ -53,6 +53,9 @@ public sealed partial class SimulationWorld
             known.CompletedUpgrades = UpgradeMask.Load(player, "completedUpgrades");
             known.CompletedSciences = ScienceMask.Load(player, "completedSciences");
             known.SciencePurchasePoints = checked((int)player.Int("sciencePurchasePoints"));
+            known.CashBounty = player.Fixed("cashBounty");
+            known.SharedReadyFrames.Clear();
+            foreach (var shared in player.Array("sharedReadyFrames")) known.SharedReadyFrames[checked((int)shared.Int("power"))] = shared.Int("frame");
         }
         var rejections = state.Array("rejections");
         if (rejections.Count != _rejections.Length) throw new InvalidDataException("Rejection table size mismatch.");

@@ -11,7 +11,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 4;
+    public const int Version = 5;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -31,7 +31,10 @@ public static class CommandTypes
     public const ushort EnterContainer = 15;
     public const ushort ExitContainer = 16;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= ExitContainer;
+    // --------------------------------------------------------------------------------------------------- special powers
+    public const ushort UseSpecialPower = 17;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= UseSpecialPower;
 }
 
 /// <summary>
@@ -86,6 +89,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, reader.Text("science")),
             CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("container")))),
             CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor")))),
+            CommandTypes.UseSpecialPower => new UseSpecialPowerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), reader.Text("power"),
+                (SpecialPowerTargetKind)checked((byte)reader.Int("targetKind")), new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -220,6 +225,40 @@ public sealed record ExitContainerCommand(PlayerId Player, ulong Sequence, long 
     protected override void DescribeBody(IStateWriter writer) => writer.UInt("actor", Actor.Value);
 }
 
+/// <summary>What a special power is aimed at (<c>doSpecialPower</c> / <c>doSpecialPowerAtObject</c> / <c>doSpecialPowerAtLocation</c>).</summary>
+public enum SpecialPowerTargetKind : byte
+{
+    None = 0,
+    Object = 1,
+    Location = 2,
+}
+
+/// <summary>The target of a special power use: <see cref="Entity"/> for <see cref="SpecialPowerTargetKind.Object"/>, (<see cref="X"/>, <see cref="Y"/>) for <see cref="SpecialPowerTargetKind.Location"/>.</summary>
+public readonly record struct SpecialPowerTarget(SpecialPowerTargetKind Kind, EntityId Entity, Fixed X, Fixed Y);
+
+/// <summary>
+/// Fires the special power named <see cref="SpecialPower"/> (a <c>SpecialPower</c> definition) from the module of <see cref="Source"/> that
+/// carries it (<c>ActionManager::canDoSpecialPower</c> + <c>SpecialPowerModule::doSpecialPower*</c>). The power must be ready, unpaused, its
+/// required science owned, and — for powers whose effect lives in an update module (<c>UpdateModuleStartsAttack</c>) — a handler must exist.
+/// </summary>
+public sealed record UseSpecialPowerCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Source, string SpecialPower, SpecialPowerTargetKind TargetKind,
+    EntityId Target, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.UseSpecialPower;
+
+    public SpecialPowerTarget AsTarget => new(TargetKind, Target, X, Y);
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("source", Source.Value);
+        writer.Text("power", SpecialPower);
+        writer.Int("targetKind", (byte)TargetKind);
+        writer.UInt("target", Target.Value);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+    }
+}
+
 /// <summary>Creates an entity from a template. Owner 0 defaults to the issuing player; only the system may spawn for others.</summary>
 public sealed record SpawnCommand(PlayerId Player, ulong Sequence, long Tick, string Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle)
     : SimCommand(Player, Sequence, Tick)
@@ -329,6 +368,16 @@ public enum CommandRejection : byte
     CannotEnterContainer = 23,
     /// <summary>An exit was requested for an entity that is not currently contained (by anything, or not by the named container).</summary>
     NotContained = 24,
+    /// <summary>The special power is not defined, or the source entity has no module carrying it.</summary>
+    UnknownSpecialPower = 25,
+    /// <summary>The special power's <c>RequiredScience</c> is not owned by the issuing player.</summary>
+    MissingScience = 26,
+    /// <summary>The power is paused (<c>UnpauseSpecialPowerUpgrade</c> not yet applied) or still recharging.</summary>
+    SpecialPowerNotReady = 27,
+    /// <summary>The target kind does not fit the power (an object power without an object, an OCL power with an object that does not exist).</summary>
+    InvalidSpecialPowerTarget = 28,
+    /// <summary>The effect of the power lives in an update module (<c>UpdateModuleStartsAttack</c>) that is not implemented; the use is refused instead of silently doing nothing.</summary>
+    SpecialPowerHandlerMissing = 29,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

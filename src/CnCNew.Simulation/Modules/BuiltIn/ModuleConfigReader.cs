@@ -12,6 +12,14 @@ internal static class ModuleConfigReader
     public static DefinitionField? Find(ModuleConfiguration configuration, string name)
         => configuration.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Every occurrence of an accumulating key, in file order (<c>UpgradeOCL</c>, <c>UpgradeMoneyAmount</c>).</summary>
+    public static IEnumerable<DefinitionField> All(ModuleConfiguration configuration, string name)
+        => configuration.Fields.Where(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The <c>SCIENCE VALUE</c> pairs of an accumulating two-token key.</summary>
+    public static ImmutableArray<(string First, string Second)> Pairs(ModuleConfiguration configuration, string name)
+        => [..All(configuration, name).Select(field => field.Value.Value is ImmutableArray<string> { Length: 2 } tokens ? (tokens[0], tokens[1]) : throw Unexpected(configuration, field))];
+
     public static Fixed Real(ModuleConfiguration configuration, string name, Fixed fallback)
     {
         var field = Find(configuration, name);

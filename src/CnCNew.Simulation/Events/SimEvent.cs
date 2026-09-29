@@ -45,6 +45,12 @@ public enum SimEventKind : byte
     /// <c>Value</c>: <see cref="CreationSkipReasons"/>). Never a silent drop: every skipped nugget or member raises exactly one event.
     /// </summary>
     CreationSkipped = 20,
+
+    /// <summary>
+    /// A special power was used (<c>Entity</c>: the entity holding the power module, <c>Other</c>: the target object or invalid,
+    /// <c>Text</c>: the <c>SpecialPower</c> name, <c>Value</c>: the special-power index).
+    /// </summary>
+    SpecialPowerUsed = 21,
 }
 
 /// <summary>
@@ -94,4 +100,6 @@ public static class CreationSkipReasons
     public const int NoObjectNamed = 6;
     /// <summary>A nugget setting (<c>InvulnerableTime</c>, <c>DiesOnBadLand</c>) has no simulation model yet and was ignored; <c>Text</c> is the setting name.</summary>
     public const int SettingNotSimulated = 7;
+    /// <summary>An <c>OCLSpecialPower</c> creates its list at a map edge (<c>EDGE_NEAR_SOURCE</c>/<c>EDGE_NEAR_TARGET</c>/<c>EDGE_FARTHEST_FROM_TARGET</c>, or a gunship's edge approach) and no terrain model exists; <c>Text</c> is the create location.</summary>
+    public const int NoTerrainEdge = 8;
 }

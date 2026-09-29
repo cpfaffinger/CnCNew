@@ -12,8 +12,12 @@ namespace CnCNew.Simulation.World;
 public sealed partial class SimulationWorld
 {
     public EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth)
+        => CreateFromList(source, listName, requester, transferPreviousHealth, source.X, source.Y, source.Z);
+
+    public EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth, Fixed originX, Fixed originY, Fixed originZ)
     {
         ArgumentNullException.ThrowIfNull(source);
+        var origin = (X: originX, Y: originY, Z: originZ);
         Emit(SimEventKind.CreationListRequested, source.Id, requester, listName, transferPreviousHealth ? 1 : 0);
         if (!_templates.CreationLists.TryGet(listName, out var list))
         {
@@ -24,7 +28,7 @@ public sealed partial class SimulationWorld
         var first = EntityId.Invalid;
         foreach (var nugget in list.Nuggets)
         {
-            var created = ExecuteNugget(source, nugget);
+            var created = ExecuteNugget(source, nugget, origin);
             if (!first.IsValid) first = created;
         }
 
@@ -47,7 +51,7 @@ public sealed partial class SimulationWorld
         throw new InvalidOperationException($"Spawn {id.Value} is not queued.");
     }
 
-    private EntityId ExecuteNugget(Entity source, CreationNugget nugget)
+    private EntityId ExecuteNugget(Entity source, CreationNugget nugget, (Fixed X, Fixed Y, Fixed Z) origin)
     {
         if (nugget.Kind != CreationNuggetKind.CreateObject)
         {
@@ -78,7 +82,7 @@ public sealed partial class SimulationWorld
             else
             {
                 // The container is created before its contents (newObject) but positioned last (doStuffToObj), so its slot is filled in below.
-                container = RequestSpawn(containerTemplate.Index, owner, source.X, source.Y, source.Z, Fixed.Zero);
+                container = RequestSpawn(containerTemplate.Index, owner, origin.X, origin.Y, origin.Z, Fixed.Zero);
                 first = container;
             }
         }
@@ -99,7 +103,7 @@ public sealed partial class SimulationWorld
                 continue;
             }
 
-            var (x, y) = (source.X, source.Y);
+            var (x, y) = (origin.X, origin.Y);
             if (nugget.SpreadFormation)
             {
                 // findPositionAround without terrain or obstacles accepts the innermost ring: one random start angle, minRadius away.
@@ -111,13 +115,13 @@ public sealed partial class SimulationWorld
                     y += minRadius * FixedTrig.Sin(start);
                 }
             }
-            var id = PlaceAndQueue(source, nugget, template, owner, x, y, container);
+            var id = PlaceAndQueue(source, nugget, template, owner, x, y, origin.Z, container);
             if (!first.IsValid) first = id;
         }
 
         if (container.IsValid)
         {
-            var (setup, placement) = Configure(source, nugget, _templates[QueuedTemplate(container)], source.X, source.Y);
+            var (setup, placement) = Configure(source, nugget, _templates[QueuedTemplate(container)], origin.X, origin.Y, origin.Z);
             UpdateSetup(container, _ => setup);
             UpdatePlacement(container, placement);
         }
@@ -141,19 +145,19 @@ public sealed partial class SimulationWorld
         }
     }
 
-    private EntityId PlaceAndQueue(Entity source, CreationNugget nugget, ObjectTemplate template, PlayerId owner, Fixed x, Fixed y, EntityId container)
+    private EntityId PlaceAndQueue(Entity source, CreationNugget nugget, ObjectTemplate template, PlayerId owner, Fixed x, Fixed y, Fixed z, EntityId container)
     {
-        var (setup, placement) = Configure(source, nugget, template, x, y);
+        var (setup, placement) = Configure(source, nugget, template, x, y, z);
         var id = RequestSpawn(template.Index, owner, placement.X, placement.Y, placement.Z, placement.Angle);
         UpdateSetup(id, _ => setup with { Container = container });
         return id;
     }
 
     /// <summary>The part of <c>doStuffToObj</c> that can be modeled: health, lifetime, veterancy, containment and placement.</summary>
-    private (SpawnSetup Setup, (Fixed X, Fixed Y, Fixed Z, Fixed Angle) Placement) Configure(Entity source, CreationNugget nugget, ObjectTemplate template, Fixed baseX, Fixed baseY)
+    private (SpawnSetup Setup, (Fixed X, Fixed Y, Fixed Z, Fixed Angle) Placement) Configure(Entity source, CreationNugget nugget, ObjectTemplate template, Fixed baseX, Fixed baseY, Fixed baseZ)
     {
         var offset = Rotate(nugget.OffsetX, nugget.OffsetY, source.Angle);
-        var (x, y, z) = (baseX + offset.X, baseY + offset.Y, source.Z + nugget.OffsetZ);
+        var (x, y, z) = (baseX + offset.X, baseY + offset.Y, baseZ + nugget.OffsetZ);
         var angle = Fixed.Zero;
         var disposition = nugget.Disposition;
         var healthPercent = LogicRandom.Range(nugget.MinHealth, nugget.MaxHealth);
