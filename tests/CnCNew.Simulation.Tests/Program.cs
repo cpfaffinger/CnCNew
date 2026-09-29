@@ -104,6 +104,13 @@ run.Test("Repair: AutoFindHealingUpdate walks a hurt computer unit into a pad", 
 run.Test("Repair: AutoFindHealingUpdate refusals", Tests.AutoFindHealingRefusals);
 run.Test("Repair: AutoFindHealingUpdate picks the closest pad", Tests.AutoFindHealingPicksClosestPad);
 run.Test("Repair: computer flag in the replay header", Tests.RepairPlayerTypeReplayHeader);
+run.Test("Combat: radius damage rings and the enemies-only filter", Tests.RadiusDamageRings);
+run.Test("Combat: default affects mask and bounding sphere", Tests.RadiusDamageDefaultsAndBoundingSphere);
+run.Test("Combat: FireWeaponUpdate initial delay, cadence and SELF filter", Tests.FireWeaponUpdateCadence);
+run.Test("Combat: FireWeaponUpdate clip and reload", Tests.FireWeaponUpdateClip);
+run.Test("Combat: FireWeaponUpdate ExclusiveWeaponDelay", Tests.FireWeaponUpdateExclusiveDelay);
+run.Test("Combat: FireWeaponUpdate snapshot", Tests.FireWeaponUpdateSnapshot);
+run.Test("Combat: ReplaceObjectUpgrade swaps the template", Tests.ReplaceObjectUpgradeSwapsTemplate);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
