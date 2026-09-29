@@ -27,14 +27,14 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// <summary>
 /// Binary replay container, little endian:
 /// <c>"CNCRPLAY"</c>, u32 format version, u32 command table version, u32 tick rate, 32 bytes definition fingerprint, string fixture id,
-/// u32 seed, u32 world id, u16 player count (i32 id, string name), i64 end tick, u32 checkpoint interval,
+/// u32 seed, u32 world id, u16 player count (i32 id, string name, string faction; empty = none), i64 end tick, u32 checkpoint interval,
 /// u32 command count (i64 tick, u16 type, i32 player, u64 sequence, type-specific payload), u32 checkpoint count (i64 tick, u64 hash),
 /// and a trailing SHA-256 over everything before it. Strings are u16-length-prefixed UTF-8.
 /// Commands are stored ordered by (tick, player, sequence). Truncated, corrupted (hash mismatch) and version-foreign files are rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -58,6 +58,7 @@ public static class ReplayFormat
             {
                 writer.Write(player.Id.Value);
                 WriteString(writer, player.Name);
+                WriteString(writer, player.Faction ?? string.Empty);
             }
             writer.Write(header.EndTick);
             writer.Write((uint)header.CheckpointInterval);
@@ -101,7 +102,13 @@ public static class ReplayFormat
             var worldId = new WorldId(reader.ReadUInt32());
             var playerCount = reader.ReadUInt16();
             var players = ImmutableArray.CreateBuilder<PlayerConfiguration>();
-            for (var index = 0; index < playerCount; index++) players.Add(new PlayerConfiguration(new PlayerId(reader.ReadInt32()), ReadString(reader)));
+            for (var index = 0; index < playerCount; index++)
+            {
+                var playerId = new PlayerId(reader.ReadInt32());
+                var playerName = ReadString(reader);
+                var faction = ReadString(reader);
+                players.Add(new PlayerConfiguration(playerId, playerName, faction.Length == 0 ? null : faction));
+            }
             var endTick = reader.ReadInt64();
             var interval = (int)reader.ReadUInt32();
             var commandCount = reader.ReadUInt32();
@@ -194,6 +201,45 @@ public static class ReplayFormat
             case CancelTimerCommand cancel:
                 writer.Write(cancel.Timer.Value);
                 break;
+            case GiveMoneyCommand giveMoney:
+                writer.Write(giveMoney.Target.Value);
+                writer.Write(giveMoney.Amount.Raw);
+                break;
+            case PurchaseUpgradeCommand upgrade:
+                WriteString(writer, upgrade.Upgrade);
+                writer.Write(upgrade.Target?.Value ?? 0u);
+                break;
+            case QueueProductionCommand queue:
+                writer.Write(queue.Producer.Value);
+                WriteString(writer, queue.Template);
+                break;
+            case CancelProductionCommand cancelProduction:
+                writer.Write(cancelProduction.Producer.Value);
+                writer.Write(cancelProduction.Slot);
+                break;
+            case SetMoveTargetCommand move:
+                writer.Write(move.Target.Value);
+                writer.Write(move.X.Raw);
+                writer.Write(move.Y.Raw);
+                break;
+            case FireWeaponCommand fire:
+                writer.Write(fire.Source.Value);
+                writer.Write(fire.Target.Value);
+                break;
+            case GiveSciencePointsCommand givePoints:
+                writer.Write(givePoints.Target.Value);
+                writer.Write(givePoints.Amount);
+                break;
+            case PurchaseScienceCommand science:
+                WriteString(writer, science.Science);
+                break;
+            case EnterContainerCommand enter:
+                writer.Write(enter.Actor.Value);
+                writer.Write(enter.Container.Value);
+                break;
+            case ExitContainerCommand exit:
+                writer.Write(exit.Actor.Value);
+                break;
             default:
                 throw new ReplayFormatException($"Command type {command.GetType().Name} has no replay encoding.");
         }
@@ -215,8 +261,25 @@ public static class ReplayFormat
             CommandTypes.Kill => new KillCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             CommandTypes.SetTimer => ReadSetTimer(reader, player, sequence, tick),
             CommandTypes.CancelTimer => new CancelTimerCommand(player, sequence, tick, new TimerId(reader.ReadUInt64())),
+            CommandTypes.GiveMoney => new GiveMoneyCommand(player, sequence, tick, new PlayerId(reader.ReadInt32()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.PurchaseUpgrade => ReadPurchaseUpgrade(reader, player, sequence, tick),
+            CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), ReadString(reader)),
+            CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), reader.ReadInt32()),
+            CommandTypes.SetMoveTarget => new SetMoveTargetCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
+            CommandTypes.GiveSciencePoints => new GiveSciencePointsCommand(player, sequence, tick, new PlayerId(reader.ReadInt32()), reader.ReadInt32()),
+            CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, ReadString(reader)),
+            CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
+            CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
+    }
+
+    private static PurchaseUpgradeCommand ReadPurchaseUpgrade(BinaryReader reader, PlayerId player, ulong sequence, long tick)
+    {
+        var upgrade = ReadString(reader);
+        var target = reader.ReadUInt32();
+        return new PurchaseUpgradeCommand(player, sequence, tick, upgrade, target == 0 ? null : new EntityId(target));
     }
 
     private static SetTimerCommand ReadSetTimer(BinaryReader reader, PlayerId player, ulong sequence, long tick)

@@ -210,7 +210,7 @@ static partial class Tests
         badMagic[0] = (byte)'X';
         Rejected(badMagic, "bad magic");
         var futureVersion = (byte[])bytes.Clone();
-        futureVersion[8] = 2;
+        futureVersion[8] = 3;
         try { ReplayFormat.Read(futureVersion); throw new InvalidOperationException("A foreign version was accepted."); }
         catch (ReplayFormatException exception) { Check.That(exception.Message.Contains("Unsupported", StringComparison.Ordinal), "Version errors are named: " + exception.Message); }
 
