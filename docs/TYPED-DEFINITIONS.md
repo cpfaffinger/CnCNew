@@ -282,3 +282,25 @@ streng: `ReloadTime` (Dauer), `RequiredScience` (Referenz auf `Science`, im Voll
 und Bindungen (`docs/GAME-RULES.md` §6d); `SpecialAbility/InitiateSound` (85 Verwendungen) ist ebenfalls ein gezählter Kompatibilitätsfall.
 Die Referenzauflösung steigt dadurch im Vollinventar auf 18.050/19.600, die Kompatibilitätsbasislinie sinkt auf **761 Einträge**, der
 Definitionssnapshot (Schema 2) hat 144.745.050 Byte (SHA-256 `D0C06A2B06CD7065474A3EB729E36B87E1815DAE2D461E564D023EAA019295CF`).
+## Abschluss von Phase 5: weitere Schemata und Zahlen
+
+Nach dem Spezialkraft-Subsystem sind folgende Felder und Module streng typisiert worden (jeweils mit Neuerzeugung der
+Kompatibilitätsbasislinie; Details der Semantik in `docs/GAME-RULES.md`):
+
+- **Versorgung** (§6e): `SupplyCenterDockUpdate`, `SupplyWarehouseDockUpdate`, `SupplyTruckAIUpdate`, `WorkerAIUpdate`,
+  `DozerAIUpdate`, `AutoDepositUpdate` als Katalogschemata sowie `GameData/ValuePerSupplyBox` (`Player::getSupplyBoxValue`).
+- **`WeaponBonus`** (Weapon und GameData) ist ein strenger Eintrag `<Bedingung> <Feld> <Prozent>` auf den Namenstabellen der
+  Referenz (`WeaponBonusConditionType`, `WeaponBonusField`); die `HealthBonus_*`-Felder von `GameData` sind typisierte Prozentwerte (§6h).
+- **Reparatur** (§6f): `RepairDockUpdate` und `AutoFindHealingUpdate`.
+- **Kampf** (§6g): `FireWeaponUpdate` und `ReplaceObjectUpgrade` als Katalogschemata; `CrushDie` als Todesmodul mit dem gemeinsamen
+  Todesfilter (`DieMuxData`) ohne eigene Felder.
+
+Neu gemessen (`IniTool compile .local/phase2-import-a`, Vollinventar mit allen Kartenoverlays): 228 geladene INI-Dateien (28 nach
+Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 18.138/19.688 Referenzen aufgelöst
+(1.550 sichtbare Fallbacks); Kompatibilität: 518 `deferred-field`-Einträge (20.606 Verwendungen), 36 `definition` (2.590), 9
+`diagnostic` (4.617), 24 `duplicate-key` (120), 28 `excluded-file` (28), 131 `module` (4.151); die Basislinie hat **746 Einträge**.
+Kanonischer Definitionssnapshot (Schema 2): 144.813.963 Byte, SHA-256 `D98CE0154ADF721DC58E9FF1FE769ADA646A058CE7B9AA9A8F0AC99254E5AB67`;
+zwei unabhängige Läufe sind byteidentisch. Retail-Basisdaten (`--maps exclude`): 146 geladene INI-Dateien (110 ausgeschlossen), 63.747
+Blöcke, 12.550 Definitionen (2.115 Objekte), 16.065 Module, 327.293 Schlüssel, 17.748/19.271 Referenzen aufgelöst (1.523 Fallbacks),
+144.203.312 Byte, SHA-256 `9F5307957A55CD4683E8A79CBEB079320BE69400802DA38D2FFDDB200713E264` (Fingerabdruck `9F5307957A55CD46`). Die früheren
+Zahlen oben (`761 Einträge`, `144.745.050 Byte`) sind überholt.

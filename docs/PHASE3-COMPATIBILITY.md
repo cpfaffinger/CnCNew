@@ -7,7 +7,7 @@ implementierte Simulations-/Präsentationsmodule, zurückgestellte Objekt-/Modul
 Skalarschlüssel, Diagnosecodes und ausgeschlossene Dateien werden als `CompatibilityEntry` mit Kategorie,
 Name, Häufigkeit, Besitzerart und geplantem Ziel in jedem kanonischen Snapshot geführt. Seit Phase 4 ist die
 Liste als **geprüfte Basislinie** eingecheckt (`baselines/compatibility.json`); Phase 5 hat sie bewusst mehrfach
-neu erzeugt, sobald sich getypte Felder verschoben haben (zuletzt **761 Einträge**, keine Assetinhalte), und
+neu erzeugt, sobald sich getypte Felder verschoben haben (zuletzt **746 Einträge**, keine Assetinhalte), und
 prüft sie gegen Drift:
 
 ```powershell
@@ -44,13 +44,9 @@ Typen verschmelzen damit nicht mehr.
 ## Modul-/Behaviorbestand
 
 Der Katalog `ModuleCatalog` führt alle **205** Modultypen des ausgelieferten Bestands (eine frühere Zählung von 206 enthielt
-das Phantommodul `ArmorSet`). **27** sind implementiert: die 12 aus Phase 4 (`ActiveBody`, `CreateObjectDie`,
-`DeletionUpdate`, `DestroyDie`, `FXListDie`, `HighlanderBody`, `ImmortalBody`, `InactiveBody`, `InstantDeathBehavior`,
-`KeepObjectDie`, `LifetimeUpdate`, `StructureBody`) plus 15 neue aus Phase 5 (`AIUpdateInterface`, `ArmorUpgrade`,
-`AutoHealBehavior`, `CommandSetUpgrade`, `ExperienceScalarUpgrade`, `LocomotorSetUpgrade`, `MaxHealthUpgrade`,
-`ModelConditionUpgrade`, `ObjectCreationUpgrade`, `ProductionUpdate`, `RadarUpgrade`, `StealthUpdate`, `StealthUpgrade`,
-`WeaponBonusUpgrade`, `WeaponSetUpgrade` — Details und Vereinfachungen in `docs/GAME-RULES.md`). Die übrigen 178 stehen
-in der Basislinie mit Häufigkeit, Besitzerart und Ziel; eine Liste der Verwendungen je Modul liefert
+das Phantommodul `ArmorSet`). **74** sind implementiert (Stand Abschluss Phase 5): die 12 aus Phase 4 plus 62 aus Phase 5 – die
+vollständige Liste gibt `SimTool audit-modules <content-dir>` aus, Details und Vereinfachungen stehen in `docs/GAME-RULES.md`. Die übrigen
+131 stehen in der Basislinie (davon 22 reine Präsentationsmodule ohne Simulationsbezug) mit Häufigkeit, Besitzerart und Ziel; eine Liste der Verwendungen je Modul liefert
 `SimTool audit-modules <content-dir>`. `StrictUnknownModules` scheitert an jedem Namen außerhalb des Katalogs, sodass ein
 Tippfehler von einem bekannten, noch nicht implementierten Modul unterscheidbar ist.
 
@@ -62,7 +58,7 @@ Tippfehler von einem bekannten, noch nicht implementierten Modul unterscheidbar 
 - Überzählige Token hinter Einzelwerten (`compatibility-ignored-tokens`, 3).
 - Wiederholte Skalarschlüssel im selben Block: der letzte gewinnt (`compatibility-duplicate-key`, 120 Verwendungen in 24
   Schlüsseln; wiederholbare Schlüssel wie `Armor` oder `Locomotor` behalten ihre Vielfachheit und stehen nicht hier).
-- Referenzen: 1.546 Verwendungen sind sichtbare Fallbacks (neu gemessen; die zusätzlichen echten Referenzen aus der
+- Referenzen: 1.550 Verwendungen sind sichtbare Fallbacks im Vollinventar (1.523 in den Basisdaten; neu gemessen; die zusätzlichen echten Referenzen aus der
   Phase-5-Domänentypisierung, siehe `TYPED-DEFINITIONS.md`, lösen alle auf und ändern diese Zahl nicht) – ganz
   überwiegend `compatibility-engine-veterancy-upgrade` (`Upgrade_Veterancy_ELITE`/`_HEROIC`, engineinterne Namen ohne
   INI-Definition, über das vom `DefaultThingTemplate` geerbte `AutoHealBehavior`) und eine kleine Zahl
