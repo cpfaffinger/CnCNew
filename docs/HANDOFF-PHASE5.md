@@ -1,6 +1,6 @@
 # N+1-Handoff: Phase 5 – Fortsetzung (Spielregeln, Kampf, Wirtschaft und Produktion)
 
-> **Abgelöst durch `docs/HANDOFF-PHASE6.md`** (29. September 2026, nach dem Spezialkraft-Subsystem). Dieses Dokument bleibt als
+> **Abgelöst durch `docs/HANDOFF-PHASE6.md` und `docs/HANDOFF-PHASE7.md`** (29. September 2026, nach dem Spezialkraft-Subsystem). Dieses Dokument bleibt als
 > Verlauf der Phase-5-Blöcke erhalten; die Zahlen unten sind der Stand *vor* dem Spezialkraft-Block und wurden nicht mitgeführt –
 > aktuelle Werte stehen im neuen Handoff und in `CLAUDE.md`.
 

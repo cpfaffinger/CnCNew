@@ -1,5 +1,9 @@
 # N+1-Handoff: Phase 5 – Restumfang, danach Phase 6 (Welt, Terrain, Bewegung, Sicht, Skirmish-KI)
 
+> **Abgelöst durch `docs/HANDOFF-PHASE7.md`** (29. September 2026, Abschluss von Phase 5). Teil A dieses Dokuments ist erledigt (Supply,
+> Erfahrung, Teams, Reparatur, Flächenschaden, weitere Modulfreischaltungen); offen blieben Block 0.4, Bauvorgang, Radar-/Command-Set-Wirkung und Terrain.
+> Das Dokument bleibt als Verlauf erhalten; die Zahlen unten sind veraltet, aktuelle stehen in `CLAUDE.md` und im neuen Handoff.
+
 Du arbeitest autonom am lokalen Projekt `C:\Users\cp\RiderProjects\CnCNew`. Lies zuerst `CLAUDE.md`, `README.md`,
 `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, `docs/GAME-RULES.md` und `docs/SIMULATION-CORE.md`.
 `docs/HANDOFF-PHASE5.md` bleibt als Verlauf der Phase-5-Blöcke erhalten (Zahlen dort sind veraltet).
