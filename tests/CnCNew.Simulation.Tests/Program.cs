@@ -63,6 +63,9 @@ run.Test("Phase 5: PoisonedBehavior periodic damage, re-poison and healing", Tes
 run.Test("Phase 5: GarrisonContain capacity, entry, healing and ejection", Tests.Phase5Garrison);
 run.Test("Phase 5: TransportContain slot-weighted capacity and health regen", Tests.Phase5Transport);
 run.Test("Phase 5: CreateCrateDie conditions, draw order and requests", Tests.Phase5CreateCrateDie);
+run.Test("Phase 5: ObjectCreationList execution and skip events", Tests.Phase5CreationLists);
+run.Test("Phase 5: ObjectCreationList determinism and snapshot", Tests.Phase5CreationListDeterminism);
+run.Test("Fixed-point Sin/Cos accuracy", Tests.FixedTrigAccuracy);
 run.Test("Phase 5: last player standing wins", Tests.Phase5Victory);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);

@@ -131,9 +131,11 @@ static partial class Tests
 
         var tankId = IdOf("Tank");
         var tank = Events(() => feeder.Damage(tankId, 300));
-        Check.That(tank.SequenceEqual([$"EntityDamaged:{tankId}::{Fixed.FromInt(300).Raw}", $"EntityDied:{tankId}::0", $"FxRequested:{tankId}:FX_Test:0",
-            $"FxRequested:{tankId}:FX_Other:0", $"CreationListRequested:{tankId}:OCL_Wreck:0", $"WeaponFireRequested:{tankId}:TestWeapon:0", $"EntityDestroyed:{tankId}:Tank:0"]),
-            "InstantDeathBehavior: effects, creation lists, weapons, then removal: " + string.Join(" | ", tank));
+        var pickedFx = tank.Single(value => value.StartsWith($"FxRequested:{tankId}:", StringComparison.Ordinal));
+        Check.That(pickedFx == $"FxRequested:{tankId}:FX_Test:0" || pickedFx == $"FxRequested:{tankId}:FX_Other:0", "InstantDeathBehavior requests exactly one entry of its effect list: " + pickedFx);
+        Check.That(tank.SequenceEqual([$"EntityDamaged:{tankId}::{Fixed.FromInt(300).Raw}", $"EntityDied:{tankId}::0", pickedFx,
+            $"CreationListRequested:{tankId}:OCL_Wreck:0", $"WeaponFireRequested:{tankId}:TestWeapon:0", $"EntityDestroyed:{tankId}:Tank:0"]),
+            "InstantDeathBehavior: one effect, one creation list, one weapon, then removal: " + string.Join(" | ", tank));
 
         var buildingId = IdOf("Building");
         var building = Events(() => feeder.Kill(buildingId));
@@ -154,7 +156,7 @@ static partial class Tests
         Check.That(ghost.Body!.Health == Fixed.One && !ghost.EffectivelyDead, "ImmortalBody never drops below one hit point and is never dead, even when killed.");
 
         var highlanderId = IdOf("Highlander");
-        Check.That(Events(() => feeder.Damage(highlanderId, 1000)).Length == 1 && world.FindEntity(new EntityId(highlanderId))!.Body!.Health == Fixed.One, "HighlanderBody leaves one hit point against normal damage.");
+        Check.That(Events(() => feeder.Damage(highlanderId, 1000)).Count(value => !value.StartsWith("VoiceFearRequested", StringComparison.Ordinal)) == 1 && world.FindEntity(new EntityId(highlanderId))!.Body!.Health == Fixed.One, "HighlanderBody leaves one hit point against normal damage.");
         var unresistable = Events(() => feeder.Damage(highlanderId, 1, DamageTypes.Unresistable));
         Check.That(unresistable.Any(value => value.StartsWith("EntityDied", StringComparison.Ordinal)) && world.FindEntity(new EntityId(highlanderId)) is null, "Unresistable damage kills a highlander and its DestroyDie removes it.");
 
