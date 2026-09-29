@@ -137,6 +137,12 @@ run.Test("Construction: a second builder resumes an unfinished site", Tests.Cons
 run.Test("Construction: rejections for permission, prerequisites, funds and kind", Tests.ConstructionRejections);
 run.Test("Construction: placement on terrain", Tests.ConstructionPlacementRules);
 run.Test("Construction: snapshot mid-construction and mid-sale, replay round trip", Tests.ConstructionSnapshotAndReplay);
+run.Test("Navigation: escape from and goal inside a footprint", Tests.NavigationFootprintEscape);
+run.Test("Power: PowerPlantUpgrade adds and removes the energy bonus", Tests.PowerPlantUpgradeAddsAndRemovesTheBonus);
+run.Test("Power: OverchargeBehavior toggles, drains and switches itself off", Tests.OverchargeTogglesDrainsAndSwitchesItselfOff);
+run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
+run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
+run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

@@ -141,6 +141,21 @@ static partial class Tests
             StealthDelay = 1000
             MoveThresholdSpeed = 1.0
             StealthForbiddenConditions = MOVING
+            InnateStealth = Yes
+          End
+        End
+
+        Object Visible
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = StealthUpdate Stealth01
+            StealthDelay = 1000
+            InnateStealth = No
           End
         End
 
@@ -611,6 +626,11 @@ static partial class Tests
         for (var i = 0; i < 35; i++) world.Step();
         Check.That(ninja.HasStatus(stealthedBit), "The object cloaks after StealthDelay (1000ms = 30 ticks) of no forbidden condition.");
 
+        feeder.Spawn(1, "Visible", x: 50, y: 0);
+        for (var i = 0; i < 90; i++) world.Step();
+        var visible = world.Entities.First(entity => entity.Template.Name == "Visible");
+        Check.That(!visible.HasStatus(stealthedBit), "A StealthUpdate without InnateStealth or a granted CAN_STEALTH never cloaks (the default module every object carries).");
+
         feeder.Spawn(1, "Medic", x: 0, y: 0);
         feeder.Damage(1, 30);
         world.Step();
@@ -909,7 +929,9 @@ static partial class Tests
         world.Step();
         var ally = world.FindEntity(new EntityId(2))!;
         var enemy = world.FindEntity(new EntityId(3))!;
-        Check.That(enemy.HasStatus(stealthedBit) && ally.HasStatus(stealthedBit), "InnateStealth cloaks both immediately at spawn.");
+        Check.That(enemy.HasStatus(ObjectStatusBits.Index("CAN_STEALTH")), "InnateStealth grants CAN_STEALTH at spawn.");
+        for (var i = 0; i < 3; i++) world.Step();
+        Check.That(enemy.HasStatus(stealthedBit) && ally.HasStatus(stealthedBit), "InnateStealth cloaks both within a few ticks (StealthDelay 0).");
 
         for (var i = 0; i < 20; i++) world.Step(); // DetectionRate = 500ms = 15 ticks, plus the random initial phasing (1..15).
         Check.That(enemy.HasStatus(detectedBit), "The enemy stealthed unit is DETECTED once the detector's periodic scan reaches it.");
