@@ -118,6 +118,21 @@ public static class ModuleCatalog
             new("OCL", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "InstantDeathBehavior.cpp"),
             new("Weapon", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Weapon, Source: "InstantDeathBehavior.cpp"),
         ]);
+        Add("SpawnBehavior",
+        [
+            ..DieMux(),
+            new("SpawnNumber", FieldType.Integer, Min: 0, Source: "SpawnBehavior.cpp"),
+            new("SpawnReplaceDelay", FieldType.DurationMs, Source: "SpawnBehavior.cpp"),
+            new("OneShot", FieldType.Bool, Source: "SpawnBehavior.cpp"),
+            new("CanReclaimOrphans", FieldType.Bool, Source: "SpawnBehavior.cpp"),
+            new("AggregateHealth", FieldType.Bool, Source: "SpawnBehavior.cpp"),
+            new("ExitByBudding", FieldType.Bool, Source: "SpawnBehavior.cpp"),
+            new("SpawnTemplateName", FieldType.ReferenceList, Repeat: RepeatPolicy.Accumulate, ReferenceKind: DefinitionKind.Object, Source: "SpawnBehavior.cpp"),
+            new("SpawnedRequireSpawner", FieldType.Bool, Source: "SpawnBehavior.cpp"),
+            new("PropagateDamageTypesToSlavesWhenExisting", FieldType.AllNoneDeltaFlags, Table: NameTables.DamageType, Source: "SpawnBehavior.cpp"),
+            new("InitialBurst", FieldType.Integer, Min: 0, Source: "SpawnBehavior.cpp"),
+            new("SlavesHaveFreeWill", FieldType.Bool, Source: "SpawnBehavior.cpp"),
+        ]);
         Add("FXListDie",
         [
             ..DieMux(),
@@ -226,6 +241,61 @@ public static class ModuleCatalog
             new("ForbidPlayerCommands", FieldType.Bool, Source: "AIUpdate.cpp"),
             new("TurretsLinked", FieldType.Bool, Source: "AIUpdate.cpp"),
         ], allowsNestedSections: true);
+        // ------------------------------------------------------------------------- supply economy (docks, gatherers, deposits)
+        // Field lists verified against every occurrence in .local/phase2-import-a (docs/GAME-RULES.md 6e). The AI-derived modules
+        // carry the AIUpdateInterface base fields (AIUpdate.cpp) plus their own table.
+        ImmutableArray<FieldSchema> AiBase(string source) =>
+        [
+            new("AutoAcquireEnemiesWhenIdle", FieldType.Bool, Source: source),
+            new("MoodAttackCheckRate", FieldType.DurationMs, Source: source),
+            new("ForbidPlayerCommands", FieldType.Bool, Source: source),
+            new("TurretsLinked", FieldType.Bool, Source: source),
+        ];
+        ImmutableArray<FieldSchema> DozerFields(string source) =>
+        [
+            new("RepairHealthPercentPerSecond", FieldType.Percent, Source: source),
+            new("BoredTime", FieldType.DurationMs, Source: source),
+            new("BoredRange", FieldType.Distance, Source: source),
+        ];
+        ImmutableArray<FieldSchema> TruckFields(string source) =>
+        [
+            new("MaxBoxes", FieldType.Integer, Min: 0, Source: source),
+            new("SupplyCenterActionDelay", FieldType.DurationMs, Source: source),
+            new("SupplyWarehouseActionDelay", FieldType.DurationMs, Source: source),
+            new("SupplyWarehouseScanDistance", FieldType.Distance, Source: source),
+            new("SuppliesDepletedVoice", FieldType.Opaque, Source: source),
+        ];
+        Add("SupplyTruckAIUpdate", [..AiBase("SupplyTruckAIUpdate.cpp"), ..TruckFields("SupplyTruckAIUpdate.cpp")], allowsNestedSections: true);
+        Add("WorkerAIUpdate",
+        [
+            ..AiBase("WorkerAIUpdate.cpp"), ..DozerFields("WorkerAIUpdate.cpp"), ..TruckFields("WorkerAIUpdate.cpp"),
+            new("UpgradedSupplyBoost", FieldType.Integer, Source: "WorkerAIUpdate.cpp"),
+        ], allowsNestedSections: true);
+        Add("DozerAIUpdate", [..AiBase("DozerAIUpdate.cpp"), ..DozerFields("DozerAIUpdate.cpp")], allowsNestedSections: true);
+        ImmutableArray<FieldSchema> DockBase(string source) =>
+        [
+            new("NumberApproachPositions", FieldType.Integer, Min: -1, Source: source),
+            new("AllowsPassthrough", FieldType.Bool, Source: source),
+        ];
+        Add("SupplyCenterDockUpdate", [..DockBase("DockUpdate.cpp"), new("GrantTemporaryStealth", FieldType.DurationMs, Source: "SupplyCenterDockUpdate.cpp")]);
+        Add("SupplyWarehouseDockUpdate",
+        [
+            ..DockBase("DockUpdate.cpp"),
+            new("StartingBoxes", FieldType.Integer, Min: 0, Source: "SupplyWarehouseDockUpdate.cpp"),
+            new("DeleteWhenEmpty", FieldType.Bool, Source: "SupplyWarehouseDockUpdate.cpp"),
+        ]);
+        Add("SupplyCenterCreate", []);
+        Add("SupplyWarehouseCreate", []);
+        // UpgradedBoost is "UpgradeType:<name> Boost:<int>", repeatable (parseUpgradePair): a token pair the generic typer cannot read, so
+        // it stays a counted deferred-field entry that the binding parses from the original text.
+        Add("AutoDepositUpdate",
+        [
+            new("DepositTiming", FieldType.DurationMs, Source: "AutoDepositUpdate.cpp"),
+            new("DepositAmount", FieldType.Integer, Source: "AutoDepositUpdate.cpp"),
+            new("InitialCaptureBonus", FieldType.Integer, Source: "AutoDepositUpdate.cpp"),
+            new("ActualMoney", FieldType.Bool, Source: "AutoDepositUpdate.cpp"),
+            new("UpgradedBoost", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "AutoDepositUpdate.cpp"),
+        ]);
         Add("ProductionUpdate",
         [
             new("MaxQueueEntries", FieldType.Integer, Min: 0, Source: "ProductionUpdate.h"),

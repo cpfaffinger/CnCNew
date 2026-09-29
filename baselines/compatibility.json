@@ -4,6 +4,15 @@
   "entries": [
     {
       "category": "deferred-field",
+      "name": "AutoDepositUpdate/UpgradedBoost",
+      "count": 1,
+      "owners": [
+        "AutoDepositUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Crate/CrateObject",
       "count": 11,
       "owners": [
@@ -1805,15 +1814,6 @@
     {
       "category": "deferred-field",
       "name": "GameData/UseWaterPlane",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/ValuePerSupplyBox",
       "count": 1,
       "owners": [
         "GameData"
@@ -3748,6 +3748,15 @@
     },
     {
       "category": "deferred-field",
+      "name": "SupplyTruckAIUpdate/SuppliesDepletedVoice",
+      "count": 6,
+      "owners": [
+        "SupplyTruckAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "TransitionDamageFX/DamageFXTypes",
       "count": 2,
       "owners": [
@@ -4674,6 +4683,15 @@
       "plannedTarget": "phase-5-domain-field-typing"
     },
     {
+      "category": "deferred-field",
+      "name": "WorkerAIUpdate/SuppliesDepletedVoice",
+      "count": 8,
+      "owners": [
+        "WorkerAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
       "category": "definition",
       "name": "AIData",
       "count": 27,
@@ -5042,7 +5060,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 4441,
+      "count": 4327,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5566,15 +5584,6 @@
     },
     {
       "category": "module",
-      "name": "AutoDepositUpdate",
-      "count": 15,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "AutoFindHealingUpdate",
       "count": 34,
       "owners": [
@@ -5792,15 +5801,6 @@
     {
       "category": "module",
       "name": "DeployStyleAIUpdate",
-      "count": 10,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "DozerAIUpdate",
       "count": 10,
       "owners": [
         "Object"
@@ -6403,15 +6403,6 @@
     },
     {
       "category": "module",
-      "name": "SpawnBehavior",
-      "count": 35,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "SpawnPointProductionExitUpdate",
       "count": 7,
       "owners": [
@@ -6493,53 +6484,8 @@
     },
     {
       "category": "module",
-      "name": "SupplyCenterCreate",
-      "count": 15,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SupplyCenterDockUpdate",
-      "count": 15,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SupplyTruckAIUpdate",
-      "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "SupplyWarehouseCreate",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "SupplyWarehouseCripplingBehavior",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SupplyWarehouseDockUpdate",
-      "count": 5,
       "owners": [
         "Object"
       ],
@@ -6823,15 +6769,6 @@
         "Object"
       ],
       "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "WorkerAIUpdate",
-      "count": 8,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
     }
   ]
 }
