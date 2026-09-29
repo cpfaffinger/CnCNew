@@ -44,6 +44,8 @@ public interface IWorldServices
 
     UpgradeCatalog Upgrades { get; }
     WeaponCatalog Weapons { get; }
+    CrateCatalog Crates { get; }
+    TemplateCatalog Templates { get; }
 
     /// <summary>The controlling player's current balance (0 for the system player or an unknown player).</summary>
     Fixed MoneyOf(PlayerId player);

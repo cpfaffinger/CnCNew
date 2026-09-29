@@ -131,6 +131,9 @@ static int AuditCoverage(string directory)
     Console.WriteLine("Blocking modules (objects blocked / objects blocked only by this module):");
     foreach (var blocker in report.Blockers) Console.WriteLine($"  {blocker.Module,-42} {blocker.ObjectsBlocked,5} {blocker.ObjectsBlockedOnlyByThisModule,5}");
     Console.WriteLine();
+    Console.WriteLine("Greedy plan (fractional-credit ranking; gain = objects freed by this step, cumulative = instantiable after it):");
+    foreach (var step in report.Plan) Console.WriteLine($"  {step.Module,-42} +{step.Gain,4} -> {step.Cumulative,5}");
+    Console.WriteLine();
     Console.WriteLine("Presentation modules (never instantiated by the simulation), objects using them:");
     foreach (var (module, objects) in report.PresentationOnly.Take(12)) Console.WriteLine($"  {module,-42} {objects,5}");
 

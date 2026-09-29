@@ -172,6 +172,7 @@ public sealed partial class SimulationWorld : IWorldServices
     public UpgradeCatalog Upgrades => _templates.Upgrades;
     public WeaponCatalog Weapons => _templates.Weapons;
     public ScienceCatalog Sciences => _templates.Sciences;
+    public CrateCatalog Crates => _templates.Crates;
     public Fixed UnitDamagedThreshold => _templates.UnitDamagedThreshold;
     public Fixed UnitReallyDamagedThreshold => _templates.UnitReallyDamagedThreshold;
 

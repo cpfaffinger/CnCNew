@@ -233,7 +233,7 @@ static partial class Tests
         var registry = ModuleRegistry.Default;
         ModuleBindingTable Build(IEnumerable<IModuleBinding> bindings, ModuleRegistry? custom = null) => new(bindings, custom ?? registry);
         var all = BuiltInModules.Bindings;
-        Check.That(Build(all).Bindings.Length == 35, "The production table binds thirty-five modules (twelve phase-4, twenty-three phase-5).");
+        Check.That(Build(all).Bindings.Length == 36, "The production table binds thirty-six modules (twelve phase-4, twenty-four phase-5).");
         Check.That(all.Select(value => value.Name).SequenceEqual(all.Select(value => value.Name).Order(StringComparer.Ordinal)), "The built-in list is sorted ordinally.");
         Check.That(ModuleBindingTable.Default.TryGet("destroydie", out var binding) && binding.Name == "DestroyDie", "Lookup is case-insensitive.");
 
@@ -248,7 +248,7 @@ static partial class Tests
         Check.Throws<ModuleBindingException>(() => Build(all.Take(all.Length - 1)), "no binding");
         var unknown = new ModuleBinding<InactiveBodyData>("ZZZUnknownModule", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
         Check.Throws<ModuleBindingException>(() => Build(all.Append(unknown)), "unknown module name");
-        var unimplemented = new ModuleBinding<InactiveBodyData>("CreateCrateDie", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
+        var unimplemented = new ModuleBinding<InactiveBodyData>("DamDie", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
         Check.Throws<ModuleBindingException>(() => Build(all.Append(unimplemented).OrderBy(value => value.Name, StringComparer.Ordinal)), "not implemented");
         var presentation = new ModuleBinding<InactiveBodyData>("W3DModelDraw", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
         Check.Throws<ModuleBindingException>(() => Build(all.Append(presentation).OrderBy(value => value.Name, StringComparer.Ordinal)), "");

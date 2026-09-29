@@ -38,6 +38,8 @@ public enum SimEventKind : byte
     EntityContained = 17,
     /// <summary><c>ContainModuleInterface::removeFromContain</c> (<c>Entity</c>: the entity that left, <c>Other</c>: the container it left).</summary>
     EntityUncontained = 18,
+    /// <summary><c>CreateCrateDie</c> chose a crate object (<c>Entity</c>: the dead object, <c>Text</c>: the crate template, <c>Value</c>: the owning player id, 0 = neutral). Raised whether or not the crate template is instantiable yet.</summary>
+    CrateRequested = 19,
 }
 
 /// <summary>

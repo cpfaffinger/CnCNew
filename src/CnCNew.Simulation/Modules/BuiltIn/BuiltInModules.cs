@@ -19,6 +19,7 @@ public static class BuiltInModules
     private static ImmutableArray<IModuleBinding> Phase4Bindings { get; } =
     [
         Bind<BodyData>("ActiveBody", ModuleOwnerKind.Object, BodyData.Parse, data => new ActiveBody(data)),
+        Bind<CreateCrateDieData>("CreateCrateDie", ModuleOwnerKind.Object, CreateCrateDieData.Parse, data => new CreateCrateDie(data)),
         Bind<CreateObjectDieData>("CreateObjectDie", ModuleOwnerKind.Object, CreateObjectDieData.Parse, data => new CreateObjectDie(data)),
         Bind<LifetimeData>("DeletionUpdate", ModuleOwnerKind.Object, LifetimeData.Parse, data => new DeletionUpdate(data)),
         Bind<PlainDieData>("DestroyDie", ModuleOwnerKind.Object, PlainDieData.Parse, data => new DestroyDie(data)),

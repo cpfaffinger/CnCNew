@@ -121,13 +121,14 @@ public sealed class TemplateCatalog
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
     private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences,
-        FactionCatalog factions, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold)
+        FactionCatalog factions, CrateCatalog crates, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold)
     {
         Templates = templates;
         Upgrades = upgrades;
         Weapons = weapons;
         Sciences = sciences;
         Factions = factions;
+        Crates = crates;
         UnitDamagedThreshold = unitDamagedThreshold;
         UnitReallyDamagedThreshold = unitReallyDamagedThreshold;
         var builder = ImmutableDictionary.CreateBuilder<string, ObjectTemplate>(StringComparer.OrdinalIgnoreCase);
@@ -140,6 +141,7 @@ public sealed class TemplateCatalog
     public WeaponCatalog Weapons { get; }
     public ScienceCatalog Sciences { get; }
     public FactionCatalog Factions { get; }
+    public CrateCatalog Crates { get; }
     /// <summary><c>GlobalData::m_unitDamagedThresh</c>/<c>m_unitReallyDamagedThresh</c> (<c>GameData.ini</c> <c>UnitDamagedThreshold</c>/<c>UnitReallyDamagedThreshold</c>).</summary>
     public Fixed UnitDamagedThreshold { get; }
     public Fixed UnitReallyDamagedThreshold { get; }
@@ -157,6 +159,7 @@ public sealed class TemplateCatalog
         var locomotors = BuildLocomotors(graph);
         var sciences = ScienceCatalog.Build(graph);
         var factions = FactionCatalog.Build(graph, sciences);
+        var crates = CrateCatalog.Build(graph, sciences);
         var (unitDamagedThreshold, unitReallyDamagedThreshold) = ResolveDamageThresholds(graph);
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
         var index = 0;
@@ -199,7 +202,12 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        return new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, unitDamagedThreshold, unitReallyDamagedThreshold);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, crates, unitDamagedThreshold, unitReallyDamagedThreshold);
+        foreach (var crate in crates.Crates)
+            foreach (var entry in crate.Objects)
+                if (!catalog.TryGet(entry.ObjectName, out _))
+                    throw new TemplateBuildException($"Crate '{crate.Name}': CrateObject '{entry.ObjectName}' is not an Object definition.");
+        return catalog;
     }
 
     /// <summary>
