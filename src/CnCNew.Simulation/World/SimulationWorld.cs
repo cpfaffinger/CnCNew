@@ -365,6 +365,11 @@ public sealed partial class SimulationWorld : IWorldServices
         if (_players.TryGetValue(player.Value, out var state)) state.Money += amount;
     }
 
+    public void AddEnergyProduction(PlayerId player, int amount)
+    {
+        if (_players.TryGetValue(player.Value, out var state)) state.EnergyProduction += amount;
+    }
+
     /// <summary><c>Money::withdraw</c>: clamps to the available balance and returns the amount actually withdrawn.</summary>
     public Fixed WithdrawMoney(PlayerId player, Fixed amount)
     {

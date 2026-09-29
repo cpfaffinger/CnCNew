@@ -59,7 +59,8 @@ public sealed partial class SimulationWorld
                 known.Relations[checked((int)relation.Int("player"))] = (Relationship)relationship;
             }
             // Money and completed upgrades are independent scalar state (not derived from owned objects) and must round-trip
-            // explicitly; EnergyProduction is instead rebuilt below as each entity re-registers (Energy::objectEnteringInfluence).
+            // explicitly. EnergyProduction is restored after the entities have re-registered: registration only re-adds the template
+            // value, while PowerPlantUpgrade and OverchargeBehavior add bonuses that live in module state.
             known.Money = player.Fixed("money");
             known.CompletedUpgrades = UpgradeMask.Load(player, "completedUpgrades");
             known.CompletedSciences = ScienceMask.Load(player, "completedSciences");
@@ -87,6 +88,7 @@ public sealed partial class SimulationWorld
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
 
         foreach (var item in state.Array("entityList")) LoadEntity(item);
+        foreach (var player in state.Array("players")) _players[checked((int)player.Int("id"))].EnergyProduction = checked((int)player.Int("energyProduction"));
         foreach (var item in state.Array("destroyQueue"))
         {
             var entity = FindEntity(new EntityId(checked((uint)item.UInt("id")))) ?? throw new InvalidDataException("Destroy queue references an unknown entity.");

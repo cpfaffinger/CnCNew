@@ -13,6 +13,7 @@ public static class DamageTypes
     public const int Healing = 10;
     public const int Unresistable = 11;
     public const int KillPilot = 16;
+    public const int Penalty = 17;
     public const int ParticleBeam = 22;
     public const int SubdualMissile = 31;
     public const int SubdualVehicle = 32;

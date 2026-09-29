@@ -39,6 +39,7 @@ internal static class Phase5Modules
         BindUpgrade<UpgradeMuxOnlyData>("StealthUpgrade", ModuleOwnerKind.Object, UpgradeMuxOnlyData.Parse, data => new StealthUpgrade(data)),
         BindUpgrade<MaxHealthUpgradeData>("MaxHealthUpgrade", ModuleOwnerKind.Object, MaxHealthUpgradeData.Parse, data => new MaxHealthUpgrade(data)),
         BindUpgrade<RadarUpgradeData>("RadarUpgrade", ModuleOwnerKind.Object, RadarUpgradeData.Parse, data => new RadarUpgrade(data)),
+        BindUpgrade<UpgradeMuxOnlyData>("PowerPlantUpgrade", ModuleOwnerKind.Object, UpgradeMuxOnlyData.Parse, data => new PowerPlantUpgrade(data)),
         BindUpgrade<CommandSetUpgradeData>("CommandSetUpgrade", ModuleOwnerKind.Object, CommandSetUpgradeData.Parse, data => new CommandSetUpgrade(data)),
         BindUpgrade<ExperienceScalarUpgradeData>("ExperienceScalarUpgrade", ModuleOwnerKind.Object, ExperienceScalarUpgradeData.Parse, data => new ExperienceScalarUpgrade(data)),
         BindUpgrade<ModelConditionUpgradeData>("ModelConditionUpgrade", ModuleOwnerKind.Object, ModelConditionUpgradeData.Parse, data => new ModelConditionUpgrade(data)),
@@ -83,6 +84,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
 {
     private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
     private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
+    private static readonly int CanStealthBit = ObjectStatusBits.Index("CAN_STEALTH");
     private long _nextWake = -1;
     private long _readyTick = long.MaxValue;
     private long _detectedUntilTick = -1;
@@ -92,7 +94,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
 
     public override void OnSpawn(IWorldServices world)
     {
-        if (data.InnateStealth && !AnyForbiddenCondition(world)) Entity.Status |= 1UL << StealthedBit;
+        if (data.InnateStealth) Entity.Status |= 1UL << CanStealthBit;
         _nextWake = Math.Min(world.Tick + SimulationTiming.SleepNone, SimulationTiming.SleepForever);
     }
 
@@ -107,6 +109,8 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     public long Update(IWorldServices world)
     {
         if (Entity.HasStatus(DetectedBit) && world.Tick >= _detectedUntilTick) Entity.Status &= ~(1UL << DetectedBit);
+        // StealthUpdate::update: without CAN_STEALTH (innate, or granted by StealthUpgrade) the module does nothing.
+        if (!Entity.HasStatus(CanStealthBit)) return SimulationTiming.SleepNone;
         if (!Satisfies(world, data.RequiredStatus, data.ForbiddenStatus) || AnyForbiddenCondition(world))
         {
             _readyTick = long.MaxValue;
@@ -272,9 +276,10 @@ public abstract class UpgradeMuxModule(UpgradeMuxData data) : SimModule, IUpgrad
     protected UpgradeMuxState Mux { get; } = new(data);
 
     public void TryActivate(IWorldServices world, UpgradeMask keyMask) => Mux.AttemptUpgrade(world, Entity, keyMask, Activate);
-    public void TryReset(IWorldServices world, UpgradeMask keyMask) { if (Mux.ResetUpgrade(keyMask)) Deactivate(); }
+    public void TryReset(IWorldServices world, UpgradeMask keyMask) { if (Mux.ResetUpgrade(keyMask)) Deactivate(world); }
 
     protected abstract void Activate(IWorldServices world);
+    protected virtual void Deactivate(IWorldServices world) => Deactivate();
     protected virtual void Deactivate() { }
 
     public override void Describe(IStateWriter writer) => Mux.Describe(writer);
@@ -373,6 +378,33 @@ public sealed class RadarUpgrade(RadarUpgradeData data) : UpgradeMuxModule(data.
 {
     public override string ModuleName => "RadarUpgrade";
     protected override void Activate(IWorldServices world) => Entity.Modules.OfType<RadarUpdate>().FirstOrDefault()?.ExtendRadar(world);
+}
+
+/// <summary>
+/// <c>PowerPlantUpgrade.cpp</c>: <c>upgradeImplementation</c> adds the template's <c>EnergyBonus</c> to the owner (<c>Player::addPowerBonus</c>) and
+/// extends the rods; <c>onDelete</c> takes the bonus away again. Not modeled: <c>onCapture</c> (no capture); un-upgrading (<c>TryReset</c>) is not in
+/// the reference either, but here it also removes the bonus so that re-activation cannot count it twice.
+/// </summary>
+public sealed class PowerPlantUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(data.Mux)
+{
+    public override string ModuleName => "PowerPlantUpgrade";
+
+    protected override void Activate(IWorldServices world)
+    {
+        world.AddEnergyProduction(Entity.Owner, Entity.Template.EnergyBonus);
+        Entity.Modules.OfType<PowerPlantUpdate>().FirstOrDefault()?.ExtendRods(world, true);
+    }
+
+    protected override void Deactivate(IWorldServices world)
+    {
+        world.AddEnergyProduction(Entity.Owner, -Entity.Template.EnergyBonus);
+        Entity.Modules.OfType<PowerPlantUpdate>().FirstOrDefault()?.ExtendRods(world, false);
+    }
+
+    public override void OnRemove(IWorldServices world)
+    {
+        if (Mux.Executed) world.AddEnergyProduction(Entity.Owner, -Entity.Template.EnergyBonus);
+    }
 }
 
 /// <summary><c>CommandSetUpgrade.cpp</c>: swaps which <c>CommandSet</c> (UI button layout) is active — a presentation concern the headless simulation does not model; upgrade state machine only.</summary>

@@ -47,8 +47,9 @@ public sealed class ObjectTemplate
     internal ObjectTemplate(int index, ObjectDefinition definition, ImmutableArray<ModuleSpec> modules,
         ImmutableArray<string> presentationModules, ImmutableArray<string> missingModules,
         ArmorInfo defaultArmor, ArmorInfo? playerUpgradeArmor, int defaultWeapon, int playerUpgradeWeapon, LocomotorInfo? locomotor,
-        ImmutableArray<PrerequisiteLine> prerequisites)
+        ImmutableArray<PrerequisiteLine> prerequisites, ImmutableArray<string> commandSets)
     {
+        CommandSets = commandSets;
         Buildable = definition.Fields.LastOrDefault(field => field.Name.Equals("Buildable", StringComparison.OrdinalIgnoreCase))?.Value.Value is EnumValue buildable ? buildable.Name : "Yes";
         Index = index;
         Id = definition.Id;
@@ -69,6 +70,7 @@ public sealed class ObjectTemplate
         BuildCost = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildCost", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money cost ? Fixed.FromInt(cost.Value) : Fixed.Zero;
         BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? SimulationTiming.SecondsToTicks(seconds) : 0;
         EnergyProduction = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyProduction", StringComparison.OrdinalIgnoreCase))?.Value.Value is long energy ? checked((int)energy) : 0;
+        EnergyBonus = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyBonus", StringComparison.OrdinalIgnoreCase))?.Value.Value is long bonus ? checked((int)bonus) : 0;
         IsTrainable = definition.Fields.LastOrDefault(field => field.Name.Equals("IsTrainable", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         ExperienceValue = IntegerArray(definition, "ExperienceValue");
         ExperienceRequired = IntegerArray(definition, "ExperienceRequired");
@@ -122,6 +124,10 @@ public sealed class ObjectTemplate
     public Fixed BuildCost { get; }
     public long BuildTicks { get; }
     public int EnergyProduction { get; }
+    /// <summary>The object's own <c>CommandSet</c> plus every set a <c>CommandSetUpgrade</c> module can switch to (all of them, whatever the upgrade state).</summary>
+    public ImmutableArray<string> CommandSets { get; }
+    /// <summary><c>ThingTemplate::getEnergyBonus</c>: extra production a <c>PowerPlantUpgrade</c> adds to the owner.</summary>
+    public int EnergyBonus { get; }
     /// <summary><c>ThingTemplate::m_isTrainable</c>: only trainable objects take over a veterancy level from an object creation list.</summary>
     public bool IsTrainable { get; }
     /// <summary><c>ThingTemplate::m_experienceValue</c>: the experience a killer earns for destroying this object, by the victim's own veterancy level (absent key: all zero, the reference default).</summary>
@@ -177,7 +183,7 @@ public sealed class TemplateCatalog
 {
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
-    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, SpecialPowerCatalog specialPowers,
+    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, CommandCatalog commands, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, SpecialPowerCatalog specialPowers,
         FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance, int valuePerSupplyBox, Fixed sellPercentage, ImmutableArray<Fixed> healthBonus, WeaponBonusTable globalWeaponBonus)
     {
         HealthBonus = healthBonus;
@@ -188,6 +194,7 @@ public sealed class TemplateCatalog
         BaseRegenHealthPercentPerSecond = baseRegenHealthPercentPerSecond;
         BaseRegenDelayTicks = baseRegenDelayTicks;
         Templates = templates;
+        Commands = commands;
         Upgrades = upgrades;
         Weapons = weapons;
         Sciences = sciences;
@@ -204,6 +211,7 @@ public sealed class TemplateCatalog
     }
 
     public ImmutableArray<ObjectTemplate> Templates { get; }
+    public CommandCatalog Commands { get; }
     public UpgradeCatalog Upgrades { get; }
     public WeaponCatalog Weapons { get; }
     public ScienceCatalog Sciences { get; }
@@ -232,6 +240,15 @@ public sealed class TemplateCatalog
     public WeaponBonusTable GlobalWeaponBonus { get; }
     public ObjectTemplate this[int index] => Templates[index];
     public bool TryGet(string name, out ObjectTemplate template) => _byName.TryGetValue(name, out template!);
+
+    /// <summary>Whether one of the template's command sets carries a build or construct button for <paramref name="objectName"/>.</summary>
+    public bool OffersBuild(ObjectTemplate builder, string objectName)
+    {
+        foreach (var set in builder.CommandSets)
+            foreach (var name in Commands.BuildsOf(set))
+                if (name.Equals(objectName, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);
 
     public static TemplateCatalog Build(CompiledDefinitionGraph graph, ModuleBindingTable bindings)
@@ -297,10 +314,16 @@ public sealed class TemplateCatalog
             var (defaultWeapon, playerUpgradeWeapon) = ResolveWeapon(definition, weapons);
             var locomotor = ResolveLocomotor(definition, locomotors);
             var prerequisites = ResolvePrerequisites(definition);
+            var commandSets = ImmutableArray.CreateBuilder<string>();
+            if (definition.Fields.LastOrDefault(field => field.Name.Equals("CommandSet", StringComparison.OrdinalIgnoreCase)) is { } ownSet) commandSets.Add(ownSet.Value.OriginalText.Trim());
+            foreach (var module in definition.Modules.Where(value => value.Name.Equals("CommandSetUpgrade", StringComparison.Ordinal)))
+                foreach (var field in module.Fields.Where(value => value.Name.Equals("CommandSet", StringComparison.OrdinalIgnoreCase) || value.Name.Equals("CommandSetAlt", StringComparison.OrdinalIgnoreCase)))
+                    if (field.Value.OriginalText.Trim() is { Length: > 0 } name && !commandSets.Contains(name)) commandSets.Add(name);
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
-                defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
+                defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites, commandSets.ToImmutable()));
         }
-        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus);
+        var commands = CommandCatalog.Build(graph);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))

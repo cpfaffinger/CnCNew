@@ -338,7 +338,7 @@ internal static class SupplyNetwork
     {
         if (dest.EffectivelyDead || dest.DestroyRequested || dest.HasStatus(ObjectStatusBits.UnderConstruction) || dest.HasStatus(SoldBit)) return null;
         var dock = DockModules.DockOf(dest);
-        if (dock is null || (dock is SupplyWarehouseDockUpdate) != warehouse) return null;
+        if (dock is null || (warehouse ? dock is not SupplyWarehouseDockUpdate : dock is not SupplyCenterDockUpdate)) return null;
         if (warehouse)
         {
             if (((SupplyWarehouseDockUpdate)dock).Boxes == 0 || world.AreEnemies(truck.Owner, dest.Owner)) return null;

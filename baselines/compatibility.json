@@ -5015,7 +5015,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 4151,
+      "count": 4133,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6061,15 +6061,6 @@
     },
     {
       "category": "module",
-      "name": "OverchargeBehavior",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "OverlordContain",
       "count": 10,
       "owners": [
@@ -6126,24 +6117,6 @@
       "category": "module",
       "name": "PointDefenseLaserUpdate",
       "count": 23,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "PowerPlantUpdate",
-      "count": 9,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "PowerPlantUpgrade",
-      "count": 5,
       "owners": [
         "Object"
       ],

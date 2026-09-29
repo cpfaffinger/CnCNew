@@ -502,6 +502,13 @@ public static class ModuleCatalog
             new("ScienceRequired", FieldType.Reference, ReferenceKind: DefinitionKind.Science, Source: "VeterancyGainCreate.cpp"),
         ]);
         Add("PreorderCreate", []);
+        Add("PowerPlantUpdate", [new("RodsExtendTime", FieldType.DurationMs, Source: "PowerPlantUpdate.cpp")]);
+        Add("PowerPlantUpgrade", [..UpgradeMux()]);
+        Add("OverchargeBehavior",
+        [
+            new("HealthPercentToDrainPerSecond", FieldType.Percent, Source: "OverchargeBehavior.cpp"),
+            new("NotAllowedWhenHealthBelowPercent", FieldType.Percent, Source: "OverchargeBehavior.cpp"),
+        ]);
         Add("RadarUpdate", [new("RadarExtendTime", FieldType.DurationMs, Source: "RadarUpdate.cpp")]);
         Add("RebuildHoleExposeDie",
         [

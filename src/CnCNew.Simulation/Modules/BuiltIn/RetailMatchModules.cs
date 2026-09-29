@@ -27,6 +27,8 @@ internal static class RetailMatchModules
         new ModuleBinding<VeterancyGainCreateData>("VeterancyGainCreate", ModuleOwnerKind.Object, (configuration, _) => VeterancyGainCreateData.Parse(configuration), data => new VeterancyGainCreate(data)),
         new ModuleBinding<NoFieldsData>("PreorderCreate", ModuleOwnerKind.Object, (_, _) => NoFieldsData.Instance, _ => new PreorderCreate()),
         new ModuleBinding<RadarUpdateData>("RadarUpdate", ModuleOwnerKind.Object, (configuration, _) => RadarUpdateData.Parse(configuration), data => new RadarUpdate(data)),
+        new ModuleBinding<PowerPlantUpdateData>("PowerPlantUpdate", ModuleOwnerKind.Object, (configuration, _) => PowerPlantUpdateData.Parse(configuration), data => new PowerPlantUpdate(data)),
+        new ModuleBinding<OverchargeData>("OverchargeBehavior", ModuleOwnerKind.Object, (configuration, _) => OverchargeData.Parse(configuration), data => new OverchargeBehavior(data)),
         new ModuleBinding<RebuildHoleExposeDieData>("RebuildHoleExposeDie", ModuleOwnerKind.Object, (configuration, _) => RebuildHoleExposeDieData.Parse(configuration), data => new RebuildHoleExposeDie(data)),
         new ModuleBinding<RebuildHoleBehaviorData>("RebuildHoleBehavior", ModuleOwnerKind.Object, (configuration, _) => RebuildHoleBehaviorData.Parse(configuration), data => new RebuildHoleBehavior(data)),
     ];
@@ -222,6 +224,121 @@ public sealed class RadarUpdate(RadarUpdateData data) : SimModule
     {
         _extendDoneTick = reader.Int("extendDoneTick");
         _radarActive = reader.Bool("radarActive");
+    }
+}
+
+// ============================================================================================================ PowerPlantUpdate
+
+public sealed record PowerPlantUpdateData(long ExtendTicks) : ModuleData
+{
+    public static PowerPlantUpdateData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "RodsExtendTime", 0));
+}
+
+/// <summary>
+/// <c>PowerPlantUpdate.cpp</c>: passive like <see cref="RadarUpdate"/>. <see cref="ExtendRods"/> (called by <c>PowerPlantUpgrade</c>) starts the
+/// extension animation timer; <c>update()</c> then only flips the model condition, which the simulation does not have, so only the extended
+/// flag is kept. Retracting is instant.
+/// </summary>
+public sealed class PowerPlantUpdate(PowerPlantUpdateData data) : SimModule
+{
+    private bool _extended;
+    private long _extendDoneTick;
+
+    public override string ModuleName => "PowerPlantUpdate";
+    public bool Extended => _extended;
+    public bool IsExtendComplete(long tick) => _extended && tick >= _extendDoneTick;
+
+    public void ExtendRods(IWorldServices world, bool extend)
+    {
+        if (!extend) { _extended = false; return; }
+        if (_extended) return;
+        _extended = true;
+        _extendDoneTick = world.Tick + data.ExtendTicks;
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        writer.Bool("extended", _extended);
+        writer.Int("extendDoneTick", _extendDoneTick);
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        _extended = reader.Bool("extended");
+        _extendDoneTick = reader.Int("extendDoneTick");
+    }
+}
+
+// ============================================================================================================ OverchargeBehavior
+
+public sealed record OverchargeData(Fixed HealthDrainRatioPerSecond, Fixed NotAllowedBelowRatio) : ModuleData
+{
+    public static OverchargeData Parse(ModuleConfiguration configuration) => new(
+        ModuleConfigReader.Real(configuration, "HealthPercentToDrainPerSecond", Fixed.Zero),
+        ModuleConfigReader.Real(configuration, "NotAllowedWhenHealthBelowPercent", Fixed.Zero));
+}
+
+/// <summary>
+/// <c>OverchargeBehavior.cpp</c>: while enabled the owner gets the object's <c>EnergyBonus</c> (<c>Player::addPowerBonus</c>), the rods of a
+/// <see cref="PowerPlantUpdate"/> are extended, and every tick <c>MaxHealth * HealthPercentToDrainPerSecond / 30</c> is taken as
+/// <c>DAMAGE_PENALTY</c>; below <c>NotAllowedWhenHealthBelowPercent</c> it switches itself off. Deleting the object removes the bonus.
+/// Not modeled: the <c>TOGGLE_OVERCHARGE</c> command (there is no command for it, so <see cref="Toggle"/>/<see cref="Enable"/> are reachable
+/// from code and tests only), the local-player message and radar event, and <c>onCapture</c> (no capture).
+/// </summary>
+public sealed class OverchargeBehavior(OverchargeData data) : SimModule, IUpdateModule
+{
+    private long _nextWake = -1;
+    private bool _active;
+
+    public override string ModuleName => "OverchargeBehavior";
+    public long NextWake { get => _nextWake; set => _nextWake = value; }
+    public bool Active => _active;
+
+    public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
+
+    public void Toggle(IWorldServices world) => Enable(world, !_active);
+
+    public void Enable(IWorldServices world, bool enable)
+    {
+        if (enable == _active) return;
+        var plant = Entity.Modules.OfType<PowerPlantUpdate>().FirstOrDefault();
+        plant?.ExtendRods(world, enable);
+        world.AddEnergyProduction(Entity.Owner, enable ? Entity.Template.EnergyBonus : -Entity.Template.EnergyBonus);
+        _active = enable;
+        world.WakeAt(Entity, this, enable ? world.Tick + SimulationTiming.SleepNone : world.Tick + SimulationTiming.SleepForever);
+    }
+
+    public long Update(IWorldServices world)
+    {
+        if (!_active || Entity.Body is not { } body) return SimulationTiming.SleepForever;
+        var amount = body.MaxHealth * data.HealthDrainRatioPerSecond / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+        world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Penalty, DeathTypes.Normal, false));
+        if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
+        if (body.Health < body.MaxHealth * data.NotAllowedBelowRatio)
+        {
+            Enable(world, false);
+            return SimulationTiming.SleepForever;
+        }
+        return SimulationTiming.SleepNone;
+    }
+
+    public override void OnRemove(IWorldServices world)
+    {
+        if (!_active) return;
+        world.AddEnergyProduction(Entity.Owner, -Entity.Template.EnergyBonus);
+        _active = false;
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        writer.Int("nextWake", _nextWake);
+        writer.Bool("active", _active);
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        _nextWake = reader.Int("nextWake");
+        _active = reader.Bool("active");
     }
 }
 

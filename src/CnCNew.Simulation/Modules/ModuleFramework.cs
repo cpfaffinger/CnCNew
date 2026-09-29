@@ -68,6 +68,9 @@ public interface IWorldServices
     Fixed MoneyOf(PlayerId player);
     void AddMoney(PlayerId player, Fixed amount);
 
+    /// <summary><c>Energy::addProduction</c> (through <c>addPowerBonus</c>/<c>removePowerBonus</c>): changes the player's production by a signed amount; unknown players are ignored.</summary>
+    void AddEnergyProduction(PlayerId player, int amount);
+
     /// <summary><c>Money::withdraw</c>: clamps to the available balance and returns the amount actually withdrawn.</summary>
     Fixed WithdrawMoney(PlayerId player, Fixed amount);
 

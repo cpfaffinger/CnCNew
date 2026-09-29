@@ -35,6 +35,9 @@ public sealed class NavigationGrid
     private const int StraightCost = 10;
     private const int DiagonalCost = 14;
     private const int ExpansionBudget = 200_000;
+    private const int EscapeRadius = 12;
+    private const int GoalEscapeRadius = 8;
+    private const int EscapePenalty = 4;
     private static readonly Fixed Inflate = Fixed.FromDecimal(TerrainMap.CellSize / 4m);
 
     private static readonly int[] StepX = [0, 1, 0, -1, 1, 1, -1, -1];
@@ -46,6 +49,7 @@ public sealed class NavigationGrid
     private readonly int[] _stamp;
     private readonly int[] _closedStamp;
     private int _currentStamp;
+    private readonly HashSet<int> _escape = [];
     private long[] _heap = new long[256];
     private int _heapCount;
 
@@ -181,6 +185,37 @@ public sealed class NavigationGrid
         return SurfaceAllows(Terrain.CellAt(cx, cy), surfaces);
     }
 
+    private bool IsOpen(int cx, int cy, LocomotorSurfaces surfaces)
+        => IsPassable(cx, cy, surfaces) || (_escape.Count > 0 && Terrain.IsInside(cx, cy) && _escape.Contains(cy * Terrain.CellsX + cx));
+
+    /// <summary>
+    /// An object that stands inside a footprint (a unit that just left a factory whose approximated footprint covers its exit), or
+    /// that is sent to a point inside one (a dock position of a supply center), may pass through the obstacle cells connected to that
+    /// cell, within <paramref name="radius"/> cells, at a penalty per cell so that free ground is preferred. The reference lets such
+    /// objects in and out because exits and dock points lie on the real geometry's edge, which the footprint approximation overshoots.
+    /// </summary>
+    private void CollectEscapeCells(int startX, int startY, int radius, LocomotorSurfaces surfaces)
+    {
+        var cellsX = Terrain.CellsX;
+        if (!Terrain.IsInside(startX, startY) || _obstacles[startY * cellsX + startX] == 0) return;
+        var queue = new Queue<(int X, int Y)>();
+        _escape.Add(startY * cellsX + startX);
+        queue.Enqueue((startX, startY));
+        while (queue.Count > 0)
+        {
+            var (x, y) = queue.Dequeue();
+            for (var direction = 0; direction < 8; direction++)
+            {
+                var nx = x + StepX[direction];
+                var ny = y + StepY[direction];
+                if (Math.Abs(nx - startX) > radius || Math.Abs(ny - startY) > radius || !Terrain.IsInside(nx, ny)) continue;
+                var index = ny * cellsX + nx;
+                if (_obstacles[index] == 0 || !SurfaceAllows(Terrain.CellAt(nx, ny), surfaces) || !_escape.Add(index)) continue;
+                queue.Enqueue((nx, ny));
+            }
+        }
+    }
+
     /// <summary>Priority cliff, then water, then clear: a cliff cell that is also under water is still a cliff.</summary>
     public static bool SurfaceAllows(CellFlags flags, LocomotorSurfaces surfaces)
     {
@@ -212,6 +247,9 @@ public sealed class NavigationGrid
             _currentStamp = 1;
         }
         _heapCount = 0;
+        _escape.Clear();
+        CollectEscapeCells(start.X, start.Y, EscapeRadius, surfaces);
+        CollectEscapeCells(goal.X, goal.Y, GoalEscapeRadius, surfaces);
         _cost[startIndex] = 0;
         _parent[startIndex] = -1;
         _stamp[startIndex] = _currentStamp;
@@ -238,12 +276,12 @@ public sealed class NavigationGrid
             {
                 var nx = cx + StepX[direction];
                 var ny = cy + StepY[direction];
-                if (!IsPassable(nx, ny, surfaces)) continue;
+                if (!IsOpen(nx, ny, surfaces)) continue;
                 var diagonal = direction >= 4;
-                if (diagonal && (!IsPassable(cx + StepX[direction], cy, surfaces) || !IsPassable(cx, cy + StepY[direction], surfaces))) continue;
+                if (diagonal && (!IsOpen(cx + StepX[direction], cy, surfaces) || !IsOpen(cx, cy + StepY[direction], surfaces))) continue;
                 var next = ny * cellsX + nx;
                 if (_closedStamp[next] == _currentStamp) continue;
-                var cost = _cost[current] + (diagonal ? DiagonalCost : StraightCost);
+                var cost = _cost[current] + (diagonal ? DiagonalCost : StraightCost) * (_escape.Contains(next) ? EscapePenalty : 1);
                 if (_stamp[next] == _currentStamp && _cost[next] <= cost) continue;
                 _stamp[next] = _currentStamp;
                 _cost[next] = cost;
@@ -300,14 +338,14 @@ public sealed class NavigationGrid
             var stepY = doubled < dx;
             if (stepX && stepY)
             {
-                if (!IsPassable(x + sx, y, surfaces) || !IsPassable(x, y + sy, surfaces)) return false;
+                if (!IsOpen(x + sx, y, surfaces) || !IsOpen(x, y + sy, surfaces)) return false;
                 error += dx - dy;
                 x += sx;
                 y += sy;
             }
             else if (stepX) { error -= dy; x += sx; }
             else { error += dx; y += sy; }
-            if (!IsPassable(x, y, surfaces)) return false;
+            if (!IsOpen(x, y, surfaces)) return false;
         }
         return true;
     }
