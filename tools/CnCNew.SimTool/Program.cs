@@ -25,6 +25,8 @@ const string Usage = """
                                                            record the synthetic stress scenario as a replay with checkpoints
       replay-run <replay.bin>                              run a replay, verifying its checkpoints
       hash <replay.bin>                                    run a replay and print final hash and hash-chain digest
+      reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--out replay.bin]
+                                                           headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
       stress [--ticks N] [--population N] [--out replay.bin]
                                                            record + two fresh runs + snapshot continuation, leak and budget checks
     """;
@@ -45,6 +47,7 @@ try
         "replay-run" when args.Length >= 2 => RunReplay(args[1]),
         "hash" when args.Length >= 2 => HashReplay(args[1]),
         "stress" => Stress(Options(args), Arg(args, "--out")),
+        "reference-match" when args.Length >= 2 => ReferenceMatch(args[1], args),
         _ => Fail(Usage),
     };
 }
@@ -148,6 +151,64 @@ static int AuditCoverage(string directory)
     Console.WriteLine();
     Console.WriteLine($"Spawned {world.Metrics.Entities} of {report.Instantiable} instantiable objects ({world.Metrics.Modules} modules).");
     return world.Metrics.Entities == report.Instantiable ? 0 : 1;
+}
+
+static int ReferenceMatch(string directory, string[] args)
+{
+    var options = ReferenceMatchOptions.Standard;
+    if (Arg(args, "--max-ticks") is { } maxTicks) options = options with { MaxTicks = long.Parse(maxTicks, CultureInfo.InvariantCulture) };
+    if (Arg(args, "--min-ticks") is { } minTicks) options = options with { MinTicks = long.Parse(minTicks, CultureInfo.InvariantCulture) };
+    var watch = Stopwatch.StartNew();
+    var (_, catalog, fingerprint) = CompileShipped(directory);
+    var factions = ReferenceMatchScenario.Participants(catalog, out var excluded);
+    Console.WriteLine($"Reference match on retail base data {fingerprint[..16]}: {factions.Length} playable factions.");
+    foreach (var participant in factions)
+        Console.WriteLine($"  {participant.Faction.Name} (side {participant.Side}): base {participant.BaseBuilding}{(participant.Substitution is null ? "" : $" [stand-in, {participant.Substitution}]")}");
+    foreach (var line in excluded) Console.WriteLine($"  excluded: {line}");
+
+    if (factions.Length < 2)
+    {
+        Console.WriteLine("The retail reference match cannot run yet: fewer than two factions can field a base and an armed unit. Simulation coverage by side:");
+        foreach (var line in ReferenceMatchScenario.DescribeCoverage(catalog)) Console.WriteLine($"  {line}");
+        return 3;
+    }
+
+    var scenario = new ReferenceMatchScenario(options);
+    watch.Restart();
+    var recorded = scenario.Record(catalog, fingerprint);
+    Console.WriteLine($"Recorded {recorded.Commands.Length} commands ({scenario.ProductionOrders} production orders, {scenario.Orders} move orders, {scenario.Shots} shots) in {watch.Elapsed.TotalSeconds:F1} s; peak {scenario.PeakAlive} living objects; {scenario.StartObjectsSkipped} starting objects skipped.");
+    foreach (var line in scenario.SkippedStartObjects) Console.WriteLine($"  skipped start object: {line}");
+    Console.WriteLine(scenario.Winner is null
+        ? $"No winner within {recorded.Header.EndTick} ticks."
+        : $"Winner: player {scenario.Winner.Value.Value} ({scenario.WinnerFaction}) at tick {scenario.VictoryTick} ({scenario.VictoryTick / 30 / 60.0:F1} game minutes); replay length {recorded.Header.EndTick} ticks.");
+
+    var checkpointRun = ReplayRunner.Run(recorded, catalog, fingerprint, new ReplayRunOptions { RecordCheckpointInterval = options.CheckpointInterval });
+    var replay = recorded with { Checkpoints = checkpointRun.Checkpoints };
+    var bytes = ReplayFormat.Write(replay);
+    Console.WriteLine($"Replay file: {bytes.Length} bytes, {replay.Checkpoints.Length} checkpoints, SHA-256 {Convert.ToHexString(SHA256.HashData(bytes))}.");
+    if (Arg(args, "--out") is { } path) File.WriteAllBytes(Path.GetFullPath(path), bytes);
+    replay = ReplayFormat.Read(bytes);
+
+    watch.Restart();
+    var first = ReplayRunner.Run(replay, catalog, fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 5_000 });
+    Console.WriteLine($"Run 1 (checkpoints verified {first.VerifiedCheckpoints}/{replay.Checkpoints.Length}): {watch.Elapsed.TotalSeconds:F1} s, {first.SubmittedCommands} commands, {first.RejectedCommands} rejected, final hash {first.FinalHash:X16}.");
+    var second = ReplayRunner.Run(replay, catalog, fingerprint, new ReplayRunOptions { RecordTickHashes = true });
+    var identical = first.TickHashes.AsSpan().SequenceEqual(second.TickHashes);
+    Console.WriteLine($"Run 2 (fresh): tick hashes identical over {second.TickHashes.Length} ticks: {identical}; chain {Chain(second.TickHashes):X16}.");
+    var half = replay.Header.EndTick / 2;
+    var head = ReplayRunner.CreateWorld(replay.Header, catalog);
+    var headRun = ReplayRunner.Run(replay, head, new ReplayRunOptions { StopTick = half, RecordTickHashes = true });
+    var restored = WorldSnapshot.Restore(WorldSnapshot.Write(head), catalog, fingerprint);
+    var tail = ReplayRunner.Run(replay, restored, new ReplayRunOptions { RecordTickHashes = true });
+    var continued = headRun.TickHashes.Concat(tail.TickHashes).SequenceEqual(second.TickHashes);
+    Console.WriteLine($"Snapshot continuation at tick {half}: identical over {headRun.TickHashes.Length + tail.TickHashes.Length} ticks: {continued}.");
+
+    var world = ReplayRunner.CreateWorld(replay.Header, catalog);
+    ReplayRunner.Run(replay, world);
+    var survivors = world.Entities.Where(value => !value.Owner.IsSystem).GroupBy(value => value.Owner.Value).OrderBy(group => group.Key).Select(group => $"{replay.Header.Players.First(player => player.Id.Value == group.Key).Name}={group.Count()}");
+    Console.WriteLine($"End state: {world.Metrics}; survivors by owner: {string.Join(", ", survivors)}.");
+    Console.WriteLine($"Rejections by reason: {string.Join(", ", Enum.GetValues<CommandRejection>().Where(reason => world.RejectionCounts[(int)reason] > 0).Select(reason => $"{reason}={world.RejectionCounts[(int)reason]}"))}.");
+    return identical && continued && first.FinalHash == second.FinalHash ? 0 : 1;
 }
 
 static int RecordReplay(string path, StressOptions options)
