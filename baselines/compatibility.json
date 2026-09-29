@@ -4,6 +4,15 @@
   "entries": [
     {
       "category": "deferred-field",
+      "name": "Crate/CrateObject",
+      "count": 11,
+      "owners": [
+        "Crate"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "FlammableUpdate/BurningSoundName",
       "count": 4,
       "owners": [
@@ -4747,15 +4756,6 @@
     },
     {
       "category": "definition",
-      "name": "CrateData",
-      "count": 10,
-      "owners": [
-        "top-level"
-      ],
-      "plannedTarget": "phase-specific typed definition compiler"
-    },
-    {
-      "category": "definition",
       "name": "Credits",
       "count": 1,
       "owners": [
@@ -5051,7 +5051,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 6455,
+      "count": 6189,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5784,15 +5784,6 @@
       "category": "module",
       "name": "CountermeasuresBehavior",
       "count": 40,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "CreateCrateDie",
-      "count": 266,
       "owners": [
         "Object"
       ],

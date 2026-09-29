@@ -106,6 +106,11 @@ public static class ModuleCatalog
             new("CreationList", FieldType.Text, Source: "CreateObjectDie.cpp"),
             new("TransferPreviousHealth", FieldType.Bool, Source: "CreateObjectDie.cpp"),
         ]);
+        Add("CreateCrateDie",
+        [
+            ..DieMux(),
+            new("CrateData", FieldType.ReferenceList, Repeat: RepeatPolicy.Accumulate, ReferenceKind: DefinitionKind.Crate, Source: "CreateCrateDie.cpp"),
+        ]);
         Add("InstantDeathBehavior",
         [
             ..DieMux(),

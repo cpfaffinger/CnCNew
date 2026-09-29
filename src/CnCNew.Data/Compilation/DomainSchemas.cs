@@ -19,6 +19,7 @@ internal static class DomainSchemas
         DefinitionKind.Science => ScienceSchema.Science,
         DefinitionKind.Locomotor => LocomotorSchema.Locomotor,
         DefinitionKind.Faction => FactionSchema.Faction,
+        DefinitionKind.Crate => CrateSchema.Crate,
         DefinitionKind.GameData or DefinitionKind.GlobalData => GameDataSchema.GameData,
         _ => null,
     };

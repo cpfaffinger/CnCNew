@@ -22,7 +22,7 @@ public enum DefinitionKind
 {
     Object, Weapon, WeaponSet, Armor, Damage, Upgrade, Science, Player, Faction,
     CommandButton, CommandSet, FxList, Fx, AudioEvent, DialogEvent, MusicTrack,
-    AmbientStream, Locomotor, ExperienceLevel, SpecialPower, GameData, GlobalData,
+    AmbientStream, Locomotor, ExperienceLevel, SpecialPower, GameData, GlobalData, Crate,
     Compatibility
 }
 
@@ -359,6 +359,7 @@ public static class DefinitionValueParser
             "experiencelevel" => DefinitionKind.ExperienceLevel,
             "specialpower" or "specialpowertemplate" => DefinitionKind.SpecialPower,
             "playertemplate" => DefinitionKind.Faction,
+            "cratedata" => DefinitionKind.Crate,
             _ => DefinitionKind.Compatibility,
         };
         return kind != DefinitionKind.Compatibility;

@@ -600,6 +600,7 @@ public static class DefinitionCompiler
             DefinitionKind.Locomotor => new LocomotorDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.ExperienceLevel => new ExperienceLevelDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.SpecialPower => new SpecialPowerDefinition(id, state.Name, state.Location, fields, modules),
+            DefinitionKind.Crate => new CrateDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.GameData or DefinitionKind.GlobalData => new GlobalDataDefinition(id, state.Name, state.Location, fields, modules),
             _ => new CompatibilityDefinition(id, state.Name, state.Location, fields, modules),
         };
@@ -701,7 +702,7 @@ public static class DefinitionCompiler
             "musictrack" => DefinitionKind.MusicTrack, "ambientstream" => DefinitionKind.AmbientStream,
             "locomotor" => DefinitionKind.Locomotor, "experiencelevel" => DefinitionKind.ExperienceLevel,
             "specialpower" or "specialpowertemplate" => DefinitionKind.SpecialPower,
-            "gamedata" => DefinitionKind.GameData, "globaldata" => DefinitionKind.GlobalData,
+            "gamedata" => DefinitionKind.GameData, "globaldata" => DefinitionKind.GlobalData, "cratedata" => DefinitionKind.Crate,
             _ => DefinitionKind.Compatibility,
         };
         return kind != DefinitionKind.Compatibility;

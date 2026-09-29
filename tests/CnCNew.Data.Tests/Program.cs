@@ -216,9 +216,9 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // phase 4 (12)
         "ActiveBody", "CreateObjectDie", "DeletionUpdate", "DestroyDie", "FXListDie", "HighlanderBody", "ImmortalBody",
         "InactiveBody", "InstantDeathBehavior", "KeepObjectDie", "LifetimeUpdate", "StructureBody",
-        // phase 5 (23): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
+        // phase 5 (24): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
         // + the next blocker modules by measured instantiability impact (docs/HANDOFF-PHASE5.md)
-        "AIUpdateInterface", "ArmorUpgrade", "AutoHealBehavior", "CommandSetUpgrade", "ExperienceScalarUpgrade",
+        "AIUpdateInterface", "ArmorUpgrade", "AutoHealBehavior", "CommandSetUpgrade", "CreateCrateDie", "ExperienceScalarUpgrade",
         "FireWeaponWhenDeadBehavior", "FlammableUpdate", "GarrisonContain", "LocomotorSetUpgrade", "MaxHealthUpgrade",
         "ModelConditionUpgrade", "ObjectCreationUpgrade", "PoisonedBehavior", "ProductionUpdate", "RadarUpgrade",
         "SlowDeathBehavior", "StealthDetectorUpdate", "StealthUpdate", "StealthUpgrade", "TransitionDamageFX",
@@ -248,17 +248,17 @@ static void CompatibilityBaselineDetectsEveryDeviation()
     Assert(CompatibilityBaseline.Compare(baseline, changed.Audit.Compatibility).Any(value => value.StartsWith("CHANGED", StringComparison.Ordinal) && value.Contains("Terrain", StringComparison.Ordinal)),
         "A changed frequency must be reported.");
 
-    files["fixture.ini"] = "Object Tank\n  Behavior = SlowDeathBehavior A\n  End\n  Behavior = CreateCrateDie B\n  End\nEnd\n";
+    files["fixture.ini"] = "Object Tank\n  Behavior = SlowDeathBehavior A\n  End\n  Behavior = DamDie B\n  End\nEnd\n";
     var added = DefinitionCompiler.Compile(new MemorySource(files), ModuleRegistry.Default, strict);
     var differences = CompatibilityBaseline.Compare(baseline, added.Audit.Compatibility);
-    Assert(differences.Any(value => value.StartsWith("NEW", StringComparison.Ordinal) && value.Contains("CreateCrateDie", StringComparison.Ordinal)), "A new entry must be reported.");
+    Assert(differences.Any(value => value.StartsWith("NEW", StringComparison.Ordinal) && value.Contains("DamDie", StringComparison.Ordinal)), "A new entry must be reported.");
     Assert(differences.Any(value => value.StartsWith("MISSING", StringComparison.Ordinal) && value.Contains("Terrain", StringComparison.Ordinal)), "A vanished entry must be reported.");
     Throws<InvalidDataException>(() => CompatibilityBaseline.Compare("{\"schemaVersion\":99,\"mode\":\"x\",\"entries\":[]}", graph.Audit.Compatibility), "Unsupported");
 }
 
 static void TypoInModuleNameIsDistinguishableFromKnownUnimplementedModule()
 {
-    var known = "Object Tank\n  Behavior = CreateCrateDie A\n  End\nEnd\n";
+    var known = "Object Tank\n  Behavior = DamDie A\n  End\nEnd\n";
     var typo = "Object Tank\n  Behavior = CreateCrateDei A\n  End\nEnd\n";
     var lenient = DefinitionCompilerOptions.Audit;
     var knownGraph = DefinitionCompiler.Compile(One(known), ModuleRegistry.Default, lenient);
