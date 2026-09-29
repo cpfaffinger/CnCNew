@@ -1,6 +1,6 @@
 # Spielregeln (Phase 5, in Arbeit)
 
-Stand: 29. September 2026. Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
+Stand: 29. September 2026 (nach §6c). Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
 (`docs/SIMULATION-CORE.md`) aufsetzenden Spielregeln, die Phase 5 bisher implementiert hat: Wirtschaft, Upgrades,
 direkter Kampf, einfache Bewegung, Produktion, Sieg/Niederlage sowie die Blockermodule aus §3/§6/§6a (Schadenszustände,
 Brand, Gift, Tod, Stealth-Erkennung, Garnison-Containment). Phase 5 ist **nicht abgeschlossen** – der
@@ -288,10 +288,44 @@ des Bestands nutzen `*CrateCollide`-Module, die nicht implementiert sind: die An
 gemeldet, das Objekt aber nur erzeugt, wenn es instanziierbar ist. Kein Teamsystem: „Verbündeter" ist „gleicher Besitzer"
 (Präzedenzfall `GarrisonContain`), der KI-Hook `notifyCrate` fehlt.
 
+## 6c. Module für das Retail-Match
+
+Vierzehn Module schalten Retail-Objekte frei, die das Referenzmatch braucht. Alle sind streng typisiert, im Katalog mit
+Schema geführt und in `Tests.RetailModules.cs` geprüft; Aktualisierungsmodule speichern ihren Weckzeitpunkt
+(`nextWake`, vom `SourceRules`-Test erzwungen), weil `SimulationWorld.Register` sonst nach einem Restore ein neues
+Intervall beginnt und die Snapshotfortsetzung divergiert.
+
+| Modul | Referenz | Verhalten |
+| --- | --- | --- |
+| `BaseRegenerateUpdate` | `BaseRegenerateUpdate.cpp` | Strukturen heilen `BaseRegenHealthPercentPerSecond` (`GameData`) ihrer Maximalgesundheit je Sekunde, sobald sie `BaseRegenDelay` unbeschädigt waren (Schub aus drei Ticks alle drei Ticks wie im Original; schläft bei voller Gesundheit, endet bei `SOLD`). |
+| `PhysicsBehavior` | `PhysicsUpdate.cpp` | Ruhezustand des Originals: reagiert nur auf Kräfte und Terrainkontakt, schläft für immer. Beides gibt es noch nicht (Phase 6); das Modul verschiebt nie ein Objekt. |
+| `SquishCollide` | `SquishCollide.cpp` | Ohne Kollisionserkennung wird `onCollide` nie gerufen; zustandslos. |
+| `GenerateMinefieldBehavior` | `GenerateMinefieldBehavior.cpp` | Legt Minenfelder bei Tod/Upgrade (`placeMines`, `SmartBorder`, kreisförmig) mit Zugreihenfolge des Logikstroms; Geländeveto, `setScootParms` und Rechteckränder werden als `CreationSkipped` gemeldet. |
+| `DefaultProductionExitUpdate`, `SupplyCenterProductionExitUpdate` | gleichnamige `.cpp` | Ausgang immer frei; kein Tor, kein Rallypunkt, keine Tarnungsvergabe (`GrantTemporaryStealth`). |
+| `QueueProductionExitUpdate` | `QueueProductionExitUpdate.cpp` | Burst-Ausgang: `InitialBurst` Einheiten in Folge, danach `ExitDelay` Sperrzeit; der Produzent hält fertige Einheiten zurück, bis der Ausgang frei ist. |
+| `HealContain` | `HealContain.cpp` | Insassen heilen je Tick `MaxHealth / TimeForFullHeal`, danach voll geheilt entlassen (ohne KI am Container platziert). |
+| `EjectPilotDie` | `EjectPilotDie.cpp` | Erzeugt bei Tod die Boden- bzw. Luftliste (`IsSignificantlyAboveTerrain`); `InvulnerableTime` ist nicht modelliert. |
+| `VeterancyGainCreate` | `VeterancyGainCreate.cpp` | Setzt bei Erzeugung `StartingLevel`, wenn die geforderte Science vorhanden ist. Das Original speichert es als Mindeststufe; ohne Erfahrungssystem wird es einmal gesetzt. |
+| `PreorderCreate` | `PreorderCreate.cpp` | Zeigt nur eine Vorbestellerdekoration; inerter Platzhalter ohne Schlüssel. |
+| `RadarUpdate` | `RadarUpdate.cpp` | Passiv; `RadarUpgrade` startet die Ausfahranimation (`RadarExtendTime`). Es gibt kein Radar/keine Minikarte in der Simulation. |
+| `RebuildHoleExposeDie` | `RebuildHoleExposeDie.cpp` | Sterbende GLA-Strukturen hinterlassen ein Loch (Besitzer, Position, Ausrichtung, `HoleMaxHealth`); nicht für neutrale oder im Bau befindliche. Ausgelassen: `isPlayerActive`, Geometrieübernahme, `TransferAttackers`. |
+| `RebuildHoleBehavior` | `RebuildHoleBehavior.cpp` | Das Loch regeneriert `HoleHealthRegen%PerSecond`; nach `WorkerRespawnDelay` würde ein Arbeiter neu bauen – Arbeiter und Bauauftrag sind KI (Phase 6), daher `CreationSkipped` und Ende des Countdowns. |
+
+`HealContain` gehört zu den Containern (§6a); `ProductionUpdate` fragt den Ausgang über die Schnittstelle
+`IProductionExit` ab. `ModuleFramework.cs` kennt zusätzlich `ISpawnOriginReceiver` (Lochursprung) und die
+Welt-Dienste `IsSignificantlyAboveTerrain` und `BaseRegen*`.
+
+**Nicht modelliert (bewusst, nicht still):** Rallypunkte und `UseSpawnRallyPoint`, `GrantTemporaryStealth`, Lochgeometrie,
+`TransferAttackers`, Arbeiter-/Wiederaufbau-KI, dauerhafte Mindest-Veteranenstufe, Radarsystem, Vorbestellungen,
+`InvulnerableTime` von `EjectPilotDie`.
+
 ## 7. Sieg und Niederlage
 
 - `SimulationWorld.IsPlayerDefeated(player)` entspricht `VictoryConditions::hasSinglePlayerBeenDefeated` mit den
-  Standardflaggen `NOBUILDINGS|NOUNITS`: ein Spieler ohne ein einziges Objekt ist besiegt.
+  Standardflaggen `NOBUILDINGS|NOUNITS` = `!Player::hasAnyObjects`. `Team::hasAnyObjects` (`Team.cpp`) überspringt
+  effektiv tote oder zur Zerstörung angemeldete Objekte sowie Projektile, `INERT`- und `MINE`-Objekte; genau diese
+  Ausnahmen gelten hier (`CountsForSurvival`). Ohne sie überlebt jede Fraktion durch Minen, Trümmer und Projektile ewig –
+  der Referenzmatch endete dann nie.
 - `SimulationWorld.TryGetWinner()` ist „letzter Überlebender" (**bewusste Vereinfachung**: keine Teams/Allianzen in
   Phase 5 – ein Team-Sieg im Original zählt mehrere Spieler als eine Einheit): genau ein Nicht-System-Spieler mit
   mindestens einem Objekt, sonst `null`.
@@ -318,14 +352,20 @@ füllt das Replay bei Bedarf mit Leerticks auf. Der Generator schreibt ausschlie
 Ersatzgebäude, weil ihre Startbasis ein ungebundenes Modul enthält), einer wegen fehlender Einheit ausgeschlossenen und einer
 unspielbaren Fraktion. Das Match endet mit einem Sieger, das Replay läuft durch Datei, zwei Läufe und Snapshot identisch.
 
-**Grenze – nicht erreicht auf Retail-Daten.** Neu gemessen (`SimTool reference-match .local/phase2-import-a`, Basisdaten
-ohne Kartenoverlays, Fingerabdruck `45E6802750BFBAB7`): 0 von 13 spielbaren Fraktionen, Exitcode 3. Instanziierbar sind je
-Seite 0 der bewaffneten Einheiten und 0 der Produktionsgebäude (America 0/41 und 0/10, China 0/26 und 0/13, GLA 0/33 und
-0/14, die Generalsseiten entsprechend, Civilian 0/1 und 0/1). Die häufigsten Blocker stehen in §9 und in der Ausgabe von
-`SimTool audit-coverage` (`PhysicsBehavior` 739 Objekte, `SquishCollide` 170, `SpecialAbility` 88,
-`CommandButtonHuntUpdate` 79, `ToppleUpdate` 76, `OCLSpecialPower` 60, `BaseRegenerateUpdate` 55,
-`DefaultProductionExitUpdate` 42 …). Die Lücke ist nur mit Phase-6-Physik/Kollision und einem Spezialkraft-Subsystem sowie
-einer Reihe kleinerer Module zu schließen; die Aufgabe „Referenzmatch aller Fraktionen auf Retail-Daten“ bleibt **offen**.
+**Retail-Daten.** Neu gemessen (`SimTool reference-match .local/phase2-import-a`, Basisdaten ohne Kartenoverlays,
+Fingerabdruck `63639A608923B2B4`): **alle 13 spielbaren Fraktionen nehmen teil**, der Match läuft deterministisch. Die
+Startbasis ist bei allen 13 ein protokollierter **Ersatz** (Kaserne bzw. bei ChinaInfantryGeneral der Gatling-Turm):
+die echten Kommandozentralen brauchen das Spezialkraft-Subsystem (`OCLSpecialPower`, `CashBountyPower`,
+`CashHackSpecialPower`, `SpecialAbility`, `GrantUpgradeCreate`, `GrantScienceUpgrade`,
+`SpectreGunshipDeploymentUpdate`). Übersprungen werden 13 Startobjekte (9 Bauarbeiter-Fahrzeuge, 4 GLA-Arbeiter; Dozer-/
+Arbeiter-KI fehlt). Ergebnis mit `GraceTicks` 300: Sieger Spieler 1 (FactionAmerica) bei Tick 7.320 (4,1 Spielminuten),
+Replay 7.621 Ticks, 5.604 Befehle, alle Checkpoints verifiziert, keine Ablehnung außer 20 `UnknownEntity` (Befehle an
+inzwischen zerstörte Objekte), Endhash `73135C0BF7144ED6`, Kettenhash `9750442F1EE8CCFB`; ein zweiter frischer Lauf und
+der Lauf ab Snapshot bei Tick 3.810 sind tickweise identisch. Überlebende: 14 Objekte (10 America, je 1 der vier GLA-Seiten).
+Der Realdatentest `Tests.RealReferenceMatch` prüft Teilnehmerzahl, Sieger, Determinismus und Snapshotfortsetzung. Die
+Abdeckungslage je Seite liefert `--diagnose` (z. B. America 5 von 41 bewaffneten Einheiten instanziierbar, China 10 von 26,
+GLA 12 von 33); die Aufgabe „Referenzmatch aller Fraktionen auf Retail-Daten“ ist damit **erfüllt mit Ersatzbasen** – echte
+Kommandozentralen stehen als nächster Block aus.
 
 **Golden Master** (`tests/CnCNew.Simulation.Tests/Tests.GoldenMaster.cs`): die erwarteten Werte berechnet ein unabhängiges
 Modell im Test, sie werden nicht aus der Simulation zurückgelesen.
@@ -347,14 +387,16 @@ Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle
 
 ## 9. Modulabdeckung
 
-Siehe `docs/SIMULATION-CORE.md` §11: 863 von 2.115 Objekten sind heute instanziierbar (40,8 %, gegenüber 26/2.113 in
-Phase 4 und 623/2.115 vor dem in §3/§6/§6a beschriebenen Block). Nach einer frischen `audit-coverage`-Messung sind die
-größten verbleibenden Blocker nach Objekten, die **ausschließlich** noch an ihnen hängen: `PhysicsBehavior` (158 –
-braucht Terrain-/Kollisionsphysik, Phase 6), `ToppleUpdate` (66 – dieselbe Physik, per Referenzstudium verifiziert),
-`RebuildHoleBehavior` (57), `RailroadBehavior` (25), `BaikonurLaunchPower` (23), `GenerateMinefieldBehavior` (13),
-`ReplaceObjectUpgrade` (12), `VeterancyGainCreate` (8), `SquishCollide` (2). `CreateCrateDie` ist seit §6b implementiert
-(die Kisten selbst brauchen noch `*CrateCollide`); die Anzahl der instanziierbaren Objekte ändert sich dadurch nicht,
-weil jedes Objekt mit diesem Modul noch an anderen Blockern hängt.
+Siehe `docs/SIMULATION-CORE.md` §11: 1.199 von 2.115 Objekten sind heute instanziierbar (56,7 %, gegenüber 26/2.113 in
+Phase 4 und 863/2.115 vor §6c); 50 von 205 Modultypen sind implementiert und decken 14.624 von 19.553 Modulverwendungen
+(74,8 %). Nach einer frischen `audit-coverage`-Messung sind die größten verbleibenden Blocker nach Objekten (davon nur
+durch dieses Modul blockiert): `SpecialAbility` 88/0, `CommandButtonHuntUpdate` 79/10, `ToppleUpdate` 76/66 (braucht
+Kollisionsphysik, Phase 6), `SpecialAbilityUpdate` 64/0, `OCLSpecialPower` 60/1, `JetSlowDeathBehavior` 59/0,
+`MissileAIUpdate` 44/26, `CrushDie` 42/39, `CountermeasuresBehavior` 40/0, `FireWeaponUpdate` 36/26, `SpawnBehavior` 35/6,
+`AutoFindHealingUpdate` 34/10, `JetAIUpdate` 34/2, `UnpauseSpecialPowerUpgrade` 32/0. Das Spezialkraft-Subsystem
+(`SpecialPower*`, `OCLSpecialPower`, `SpecialAbility*`, `CashBountyPower`, `CashHackSpecialPower`, `GrantUpgradeCreate`)
+blockiert die Kommandozentralen aller Fraktionen und ist der nächste Block.
+
 ## 10. Bekannte Grenzen (Zusammenfassung)
 
 Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
@@ -363,7 +405,8 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
 - Nur zwei `ArmorSet`/`WeaponSet`-Bedingungen statt der vollen veteranenbasierten Bestauswahl (§3).
 - Keine Erfahrungs-/Veteranenvergabe aus Kämpfen (§3). Das Furchtsignal (Block 0.3) ist implementiert.
 - Keine drehratenbegrenzte Ausrichtung, kein Terrain, keine Pfadsuche, keine Kollision (§4).
-- Kein Energie-Verlangsamungsfaktor, keine Bauplatzprüfung, kein Rallypunkt (§5).
+- Kein Energie-Verlangsamungsfaktor, keine Bauplatzprüfung, kein Rallypunkt (§5); Kollision, Kräfte und Terrain fehlen,
+  die Module `PhysicsBehavior`/`SquishCollide` sind daher Ruhezustand (§6c).
 - Der `STEALTHED`-Statusbit hat noch keinen Verbraucher außer `StealthDetectorUpdate`s `DETECTED`-Markierung (kein
   Zielsystem, das `DETECTED` auswertet, §6).
 - Keine Teams/Allianzen/Diplomatie als Datenmodell (`GarrisonContain`/`StealthDetectorUpdate` behelfen sich mit
@@ -371,7 +414,8 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
   Transport/Supply/Radar/Reparatur/Verkauf/Bau (Rest von HANDOFF-PHASE5.md Punkt „Vollständiger Umfang"). Garrison
   (§6a) ist implementiert. Sciences (Kauf, Voraussetzungen) sind implementiert; „Science Purchase Points" werden
   mangels Rang-/Erfahrungssystem nur per Systembefehl gutgeschrieben (§1a).
-- Referenzmatch nur auf synthetischen Daten lauffähig, auf Retail-Daten 0 spielbare Fraktionen (§7a); Golden-Master nur für
+- Referenzmatch auf Retail-Daten mit Ersatzbasen (Kasernen statt Kommandozentralen, ohne Dozer/Arbeiter, ohne Supply;
+  Einkommen per `GiveMoneyCommand`), 13 von 13 Fraktionen (§7a); Golden-Master nur für
   Schadenskette und Produktionsuhr, nicht für Supply und Erfahrung. Die hier beschriebenen Mechaniken sind zusätzlich durch
   `tests/CnCNew.Simulation.Tests/Tests.Phase5.cs` (gezielte Integrationstests: Wirtschaft, Kampf, Upgrade-Effekte, Bewegung,
   Produktion, Stealth/Heilung, Sieg) und den 216.000-Tick-Stresstest mit den neuen Modulen an echten Objekten abgesichert.

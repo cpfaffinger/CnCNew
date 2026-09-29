@@ -98,9 +98,11 @@ Referenzen aufgelöst (1.550 sichtbare Fallbacks), Definitionssnapshot (Schema 2
 Definitionen, 2.115 Objekte, SHA-256 `45E6802750BFBAB72B20EBAA1EBC2ED54C555BBB86B50C586F3BCD6F536C3606` (die Hashes
 ändern sich, sobald ein Feld strikt typisiert statt als Kompatibilitätswert geführt wird – zuletzt `ObjectCreationList`,
 `CrateData`, `GameData/Gravity`, `CreateCrateDie`).
-Modulkatalog 205 Typen (36 implementiert: 12 aus Phase 4, 24 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
-784 Einträge, Instanziierbarkeit 863 von 2.115 Objekten (40,8 %), Modulverwendungen abgedeckt 13.261 von 19.553 (67,8 %).
-Asset-Runtimebestand: 25.682 Dateien. Stresstest (216.000 Ticks, `SimTool stress`, mit allen 36 Modulen und
+Modulkatalog 205 Typen (50 implementiert: 12 aus Phase 4, 38 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
+767 Einträge, Instanziierbarkeit 1.199 von 2.115 Objekten (56,7 %), Modulverwendungen abgedeckt 14.624 von 19.553 (74,8 %).
+Retail-Referenzmatch (`SimTool reference-match`): 13 Fraktionen mit Ersatzbasen, Sieger bei Tick 7.320, Endhash `73135C0BF7144ED6`.
+Jedes `IUpdateModule` muss `nextWake` speichern (Test `SourceRules`).
+Asset-Runtimebestand: 25.682 Dateien. Stresstest (216.000 Ticks, `SimTool stress`, synthetische Fixture, mit den Modulen der Phase 5 und
 Erzeugungslistenausführung): Endhash `9E4AF85CBFBB84C6`, Kettenhash `36211DD938214B9C`.
 ## Code- und Dokumentationsstil
 

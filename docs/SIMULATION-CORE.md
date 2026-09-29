@@ -361,21 +361,29 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
-- **2.115 Objekte, 863 vollständig instanziierbar (40,8 %)**, 1.252 blockiert; 36 von 205 Modultypen sind implementiert
-  (12 aus Phase 4, 24 aus Phase 5), sie decken 13.261 von 19.553 Modulverwendungen (67,8 %). Gegenüber Phase 4 (26/2.113,
-  1,2 %) ein Sprung um den Faktor ~33, getragen von Block 0.2, den elf `*Upgrade`-Modulen, `AIUpdateInterface`,
-  `ProductionUpdate`, den sechs Blockermodulen aus §6/§6a, dem Containment-Paar `GarrisonContain` (+167 – der größte
-  Einzelsprung dieser Phase) und `TransportContain` (+2). `CreateCrateDie` und die Erzeugungslistenausführung
-  (`docs/GAME-RULES.md` §6b) schalten allein kein Objekt frei, weil deren Träger an anderen Modulen hängen.
-- Alle 863 instanziierbaren Objekte werden in einer Welt erzeugt, ticken 216.000 Ticks im Stresstest ohne Leck oder
-  Nichtdeterminismus (`SimTool stress`, §10) und laufen im Realdatentest identisch zweimal durch (Test `--content-dir`).
+- **2.115 Objekte, 1.199 vollständig instanziierbar (56,7 %)**, 916 blockiert; 50 von 205 Modultypen sind implementiert
+  (12 aus Phase 4, 38 aus Phase 5), sie decken 14.624 von 19.553 Modulverwendungen (74,8 %). Gegenüber Phase 4 (26/2.113,
+  1,2 %) ein Sprung um den Faktor ~46, getragen von Block 0.2, den elf `*Upgrade`-Modulen, `AIUpdateInterface`,
+  `ProductionUpdate`, den sechs Blockermodulen aus §6/§6a, dem Containment-Paar `GarrisonContain`/`TransportContain` und den
+  vierzehn Modulen aus `docs/GAME-RULES.md` §6c (`PhysicsBehavior`, `SquishCollide`, die drei Produktionsausgänge,
+  `BaseRegenerateUpdate`, `GenerateMinefieldBehavior`, `HealContain`, Lochmodule usw. – zusammen +336 Objekte).
+  `CreateCrateDie` und die Erzeugungslistenausführung (`docs/GAME-RULES.md` §6b) schalten allein kein Objekt frei.
+- Alle 1.199 instanziierbaren Objekte werden in einer Welt erzeugt und laufen im Realdatentest identisch zweimal durch
+  (Test `--content-dir`); der Stresstest (`SimTool stress`, §10) nutzt eine synthetische Fixture und ist von den neuen
+  Modulen unberührt (Hashes unverändert). Der Referenzmatch auf Retail-Daten (`docs/GAME-RULES.md` §7a) instanziiert reale
+  Einheiten und Produktionsgebäude aller 13 Fraktionen.
 - Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert, frische Messung vom 29. September):
-  `PhysicsBehavior` 739/158, `SquishCollide` 170/2, `SpecialAbility` 88/0, `CommandButtonHuntUpdate` 79/0,
-  `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/0, `GenerateMinefieldBehavior` 63/13, `VeterancyGainCreate` 61/8,
-  `OCLSpecialPower` 60/0, `JetSlowDeathBehavior` 59/0, `RebuildHoleBehavior` 57/57, `RailroadBehavior` 25/25,
-  `BaikonurLaunchPower` 23/23, `ReplaceObjectUpgrade` 20/12. `PhysicsBehavior`/`SquishCollide`/`ToppleUpdate` brauchen
-  echte Kollisionserkennung (für `ToppleUpdate` durch Lesen der Referenzquelle verifiziert, siehe
-  `docs/HANDOFF-PHASE5.md`) und sind ausdrücklich Phase 6. Die vollständige, tagesaktuelle Liste liefert das Werkzeug.
+  `SpecialAbility` 88/0, `CommandButtonHuntUpdate` 79/10, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/0,
+  `OCLSpecialPower` 60/1, `JetSlowDeathBehavior` 59/0, `MissileAIUpdate` 44/26, `CrushDie` 42/39,
+  `CountermeasuresBehavior` 40/0, `FireWeaponUpdate` 36/26, `SpawnBehavior` 35/6, `AutoFindHealingUpdate` 34/10,
+  `JetAIUpdate` 34/2, `UnpauseSpecialPowerUpgrade` 32/0. `ToppleUpdate` braucht echte Kollisionserkennung (durch Lesen der
+  Referenzquelle verifiziert, siehe `docs/HANDOFF-PHASE5.md`) und ist Phase 6. Die vollständige, tagesaktuelle Liste liefert
+  das Werkzeug.
+- **Regel für Aktualisierungsmodule:** jedes Modul, das `IUpdateModule` implementiert, speichert und lädt seinen Weckzeitpunkt
+  (`nextWake`). `SimulationWorld.Register` weckt wiederhergestellte Module mit negativem Weckzeitpunkt sonst ab dem
+  Wiederherstellungstick neu (`_tick + SleepNone`), was die Fortsetzung nach einem Snapshot vom Originallauf abweichen lässt.
+  Der `SourceRules`-Test erzwingt die Zeichenkette `"nextWake"` in jeder solchen Klasse.
+
 ## 12. Bekannte Grenzen und technische Schulden
 
 - **Phase 5 (aktueller Stand)**: Wirtschaft, Upgrades, direkter Kampf, einfache Bewegung, Produktion und
@@ -405,8 +413,8 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
 - Die Definitionsdomänen außer Object, Weapon, Armor, Upgrade, Science und Locomotor sind weiterhin flach typisiert
   (Zahlen in `TYPED-DEFINITIONS.md`): CommandButton, SpecialPower, Faction, GameData. `ObjectCreationList`, `CrateData` und
   `GameData/Gravity` sind typisiert.
-- Der Referenzmatch (`ReferenceMatchScenario`, `SimTool reference-match`) läuft auf einer synthetischen Fixture
-  deterministisch und replaybar, auf den Retail-Daten aber noch nicht: dort ist heute keine einzige bewaffnete Einheit und
-  kein einziges Produktionsgebäude instanziierbar (Messung und Blocker in `docs/GAME-RULES.md` §7a). Golden-Master-
+- Der Referenzmatch (`ReferenceMatchScenario`, `SimTool reference-match`) läuft auf synthetischen und auf Retail-Daten
+  deterministisch und replaybar (13 von 13 Fraktionen, aber mit Kasernen als Ersatz für die Kommandozentralen, ohne
+  Dozer/Arbeiter und Supply; Messung in `docs/GAME-RULES.md` §7a). Golden-Master-
   Szenarien existieren für die Schadenskette und die Produktionsuhr; Supply und Erfahrung stehen aus. Übrige Mechaniken sind
   durch gezielte Integrationstests (`Tests.Phase5.cs`) und den 216.000-Tick-Stresstest mit realen Objekten abgesichert.

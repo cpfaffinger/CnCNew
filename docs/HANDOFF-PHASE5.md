@@ -47,8 +47,11 @@ Simulationsimplementierung, Tests (Ausnahme: `GarrisonContain` hat vier, siehe u
 
 11. Referenzmatch und Golden Master (`19b2df4` Replay-Format v2 mit Fraktionen und allen 16 Befehlstypen, `e5bf4cf`
     `ReferenceMatchScenario` + `SimTool reference-match` + synthetischer Nachweis, `dd3e6df` Golden Master für
-    Schadenskette und Produktionsuhr, `9959b49` Doku) — `docs/GAME-RULES.md` §7a. Das Match läuft auf der
-    synthetischen Fixture, **nicht** auf Retail-Daten (siehe unten).
+    Schadenskette und Produktionsuhr, `9959b49` Doku) — `docs/GAME-RULES.md` §7a. Das Match lief zunächst nur auf
+    der synthetischen Fixture.
+12. Retail-Match (`2bb18e2` und die Commits davor, `git log` ab `6712faf`): vierzehn Module (`docs/GAME-RULES.md` §6c),
+    `--diagnose` für `SimTool reference-match`, Realdatentest `Tests.RealReferenceMatch` und die Niederlagenregel
+    `Team::hasAnyObjects` (§7). Das Match läuft jetzt auf Retail-Daten mit 13 Fraktionen (Kasernen als Ersatz, siehe unten).
 
 **Wichtige Neupriorisierung gegenüber dem vorigen Handoff:** Die ursprüngliche Reihenfolge „nach Häufigkeit“
 wurde durchgehend durch frische `audit-coverage`-Messungen ersetzt. `CreateCrateDie` schaltet **0 Objekte allein**
@@ -64,17 +67,18 @@ allein) stellte sich als der mit Abstand größte Einzelblocker heraus, obwohl e
 - `dotnet build CnCNew.slnx`: 0 Fehler, 10 bekannte NU1901/NU1903-Warnungen.
 - Alle acht Testprogramme grün, einschließlich `CnCNew.Simulation.Tests` mit `--content-dir .local/phase2-import-a`
   und `-c Release -- stress` (216.000 Ticks, identische Hashes über drei frische Läufe und Snapshotfortsetzung).
-- Modulkatalog: 205 Typen, **36 implementiert** (12 aus Phase 4, 24 aus Phase 5).
-- Kompatibilitätsbasislinie: **784 Einträge**, `compat-check` besteht.
+- Modulkatalog: 205 Typen, **50 implementiert** (12 aus Phase 4, 38 aus Phase 5).
+- Kompatibilitätsbasislinie: **767 Einträge**, `compat-check` besteht.
 - Vollinventar: 228 geladene Dateien, 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel,
   17.291/18.841 Referenzen aufgelöst (1.550 sichtbare Fallbacks), Snapshot 144.432.181 Byte, SHA-256
   `A1BB5D3464024113750A338C9DE97D9454CA718595EFD6DBB5395F6B5AB2170B` (Hash geändert gegenüber der letzten Messung:
   `ObjectCreationList`, `CrateData`, `GameData/Gravity` sind jetzt strikt typisiert).
 - Retail-Basisdaten (`--maps exclude`): 2.115 Objekte, SHA-256
   `45E6802750BFBAB72B20EBAA1EBC2ED54C555BBB86B50C586F3BCD6F536C3606`.
-- Instanziierbarkeit: **863 von 2.115 Objekten (40,8 %)**, gegenüber 26/2.113 am Ende von Phase 4 und 694/2.115 vor
-  dem Containment-Subsystem.
-- Stresstest (`SimTool stress`, mit allen 36 Modulen): 216.000 Ticks, Endhash `9E4AF85CBFBB84C6`, Kettenhash
+- Instanziierbarkeit: **1.199 von 2.115 Objekten (56,7 %)**, Modulverwendungen 14.624 von 19.553 (74,8 %); gegenüber
+  26/2.113 am Ende von Phase 4 und 863/2.115 vor den Retail-Match-Modulen. Retail-Basisfingerabdruck `63639A608923B2B4`
+  (Kurzform; die Snapshot-Hashes oben stammen von einer früheren Messung und sind neu zu bestimmen).
+- Stresstest (`SimTool stress`, synthetische Fixture, unverändert gegenüber der Messung mit 36 Modulen): 216.000 Ticks, Endhash `9E4AF85CBFBB84C6`, Kettenhash
   `36211DD938214B9C` (Erzeugungslisten verbrauchen jetzt Zufallszüge), Läufe und Snapshotfortsetzung identisch, alle
   Tabellen kehren auf null zurück.
 - `CommandTypes.Version = 4` (16 Befehlstypen; `EnterContainerCommand`/`ExitContainerCommand` neu); Replay-Format
@@ -84,14 +88,16 @@ allein) stellte sich als der mit Abstand größte Einzelblocker heraus, obwohl e
   2.170 `UnknownEntity`-Ablehnungen, Snapshot bei Tick 108.000: 10.262.399 Byte.
 
 **Verbleibende Blocker nach Objekten, die ausschließlich noch an ihnen hängen** (frisch gemessen,
-`SimTool audit-coverage`, 29. September): `PhysicsBehavior` 158, `ToppleUpdate` 66, `RebuildHoleBehavior` 57,
-`RailroadBehavior` 25, `BaikonurLaunchPower` 23, `GenerateMinefieldBehavior` 13, `ReplaceObjectUpgrade` 12,
-`VeterancyGainCreate` 8, `SquishCollide` 2, `SpecialAbility`/`CommandButtonHuntUpdate`/`SpecialAbilityUpdate` je 0. `PhysicsBehavior`/
-`SquishCollide`/`ToppleUpdate` brauchen alle drei echte Kollisionserkennung (`ToppleUpdate::onCollide` löst nur bei
-echtem Geometrie-Overlap eines Fahrzeugs aus, geprüft per Referenzstudium; die einzigen anderen Aufrufer von
+`SimTool audit-coverage`, 29. September, nach den Retail-Match-Modulen): `ToppleUpdate` 66, `CrushDie` 39,
+`MissileAIUpdate` 26, `FireWeaponUpdate` 26, `MobMemberSlavedUpdate` 27, `RailroadBehavior` 25, `BaikonurLaunchPower` 23,
+`ReplaceObjectUpdate`-Familie (`ReplaceObjectUpgrade` 16), `RepairDockUpdate` 15, `TransportAIUpdate` 13, `PropagandaTowerBehavior` 11,
+`CommandButtonHuntUpdate` 10, `AutoFindHealingUpdate` 10, `DozerAIUpdate` 10; `SpecialAbility` (88 Objekte),
+`SpecialAbilityUpdate` (64) und `OCLSpecialPower` (60) hängen nur gemeinsam am Spezialkraft-Subsystem, das die echten
+Kommandozentralen aller Fraktionen freischaltet. `ToppleUpdate` braucht echte Kollisionserkennung (`ToppleUpdate::onCollide` löst nur
+bei echtem Geometrie-Overlap eines Fahrzeugs aus, geprüft per Referenzstudium; die einzigen anderen Aufrufer von
 `applyTopplingForce` im Original — `NeutronMissileSlowDeathUpdate`, `TensileFormationUpdate`, `WaveGuideUpdate` —
-sind selbst unimplementierte Phase-6-Module) — ausdrücklich Phase 6 (`ModuleCatalog.PlannedTarget` klassifiziert alle
-drei bereits so).
+sind selbst unimplementierte Phase-6-Module) — ausdrücklich Phase 6. `PhysicsBehavior`/`SquishCollide` sind als
+Ruhezustand implementiert (§6c in `docs/GAME-RULES.md`).
 
 **Implementiert** (Details, Numerik und jede bewusste Vereinfachung mit Quellverweis in `docs/GAME-RULES.md`):
 
@@ -133,16 +139,18 @@ drei bereits so).
   `SupplyWarehouse*`), Bau (`DozerAIUpdate`, `BuildAssistant`), Reparatur, Verkauf, Radarwirkung — alle weiterhin
   komplett offen.
 - `*CrateCollide`-Module (die Kisten selbst).
-- `PhysicsBehavior`/`SquishCollide`/`ToppleUpdate` (echte Kollisionserkennung, ausdrücklich Phase 6 — für
+- `ToppleUpdate` und echte Kräfte/Kollision für `PhysicsBehavior`/`SquishCollide` (ausdrücklich Phase 6 — für
   `ToppleUpdate` per Referenzstudium verifiziert, siehe oben).
-- **Referenzmatch aller Fraktionen auf Retail-Daten:** Szenario, Aufnahme, Replay und Snapshotfortsetzung sind fertig und
-  mit einer synthetischen Fixture bewiesen. `SimTool reference-match .local/phase2-import-a` meldet jedoch 0 von 13
-  spielbaren Fraktionen (Exitcode 3): 0 von 41 (America), 26 (China), 33 (GLA) usw. bewaffneten Einheiten und 0
-  Produktionsgebäuden je Seite sind instanziierbar. Größte Blocker: `PhysicsBehavior` (739 Objekte), `SquishCollide` (170),
-  `SpecialAbility` (88), `CommandButtonHuntUpdate` (79), `ToppleUpdate` (76), `OCLSpecialPower` (60),
-  `BaseRegenerateUpdate` (55), `DefaultProductionExitUpdate` (42). Ohne Phase-6-Physik und ein Spezialkraft-Subsystem ist
-  der Retail-Match nicht erreichbar; Ersatzobjekte (`MatchParticipant.Substitution`) helfen erst, wenn wenigstens ein
-  bewaffneter Einheitentyp je Seite instanziierbar ist.
+- **Referenzmatch auf Retail-Daten:** läuft (`SimTool reference-match .local/phase2-import-a`): 13 von 13 Fraktionen,
+  Sieger Spieler 1 bei Tick 7.320, Replay 7.621 Ticks, Endhash `73135C0BF7144ED6`, Läufe und Snapshotfortsetzung
+  identisch (`docs/GAME-RULES.md` §7a). **Ersatzbasen:** alle 13 Startbasen sind Kasernen bzw. ein Gatling-Turm, weil die
+  Kommandozentralen `OCLSpecialPower`, `CashBountyPower`, `CashHackSpecialPower`, `SpecialAbility`,
+  `GrantUpgradeCreate`, `GrantScienceUpgrade` und `SpectreGunshipDeploymentUpdate` brauchen; 13 Startobjekte (9 Dozer,
+  4 GLA-Arbeiter) werden übersprungen. Nächster Block: das Spezialkraft-Subsystem (typisierte `SpecialPower`-Definition,
+  `SpecialPowerCatalog`, pro Spieler geteilte Bereitschaftsframes, `UseSpecialPower`-Befehl mit `CommandTypes.Version`-Anhebung,
+  Module `OCLSpecialPower`, `CashBountyPower`, `CashHackSpecialPower`, `SpecialAbility` mit ausdrücklicher Ablehnung ohne
+  Handler, `SpecialPowerCreate`, `GrantUpgradeCreate`, `GrantScienceUpgrade`, `UnpauseSpecialPowerUpgrade`,
+  `SpecialPowerCompletionDie`, `SpectreGunshipDeploymentUpdate`), danach die echten Kommandozentralen im Match.
 - **Golden Master:** Schadenskette und Produktionsuhr sind mit unabhängigem Modell abgesichert (`Tests.GoldenMaster.cs`),
   Supply-Einnahmen und Erfahrung fehlen mangels Implementierung. Es gibt keine Originalläufe als Referenz, nur aus dem
   Quelltext abgeleitete Rechnungen.
@@ -158,7 +166,8 @@ auf die obige Liste, sie ist bereits eine Momentaufnahme:
 2. ~~Erzeugungslisten typisieren und ausführen~~ – erledigt (Punkt 10 oben).
 3. **Teams/Diplomatie als Datenmodell**, falls für den Referenzmatch (Punkt 4) nötig — sonst zurückstellen und im
    headless Referenzmatch bei „letzter Überlebender ohne Teams" bleiben (dokumentierte Vereinfachung).
-4. **Referenzmatch auf Retail-Daten ermöglichen.** Die Maschinerie steht (`ReferenceMatchScenario`, `SimTool
+4. ~~**Referenzmatch auf Retail-Daten ermöglichen.**~~ Erledigt mit Ersatzbasen (siehe oben); echte Kommandozentralen offen.
+   Ursprünglicher Auftrag: Die Maschinerie steht (`ReferenceMatchScenario`, `SimTool
    reference-match`); es fehlen instanziierbare bewaffnete Einheiten und Produktionsgebäude. Vorgehen: Zuerst
    `reference-match` und `audit-coverage` neu messen, dann je Seite gezielt die Module freischalten, die das kleinste
    Set an Einheiten plus Kommandozentrale/Kaserne/Waffenfabrik instanziierbar machen (Kandidaten: `DefaultProductionExitUpdate`,
