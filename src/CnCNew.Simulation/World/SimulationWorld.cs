@@ -98,10 +98,11 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <see cref="HealthPercent"/> is <c>setInitialHealth</c>'s integer percentage; <see cref="Veterancy"/> only applies to trainable templates;
     /// lifetime ticks override a <c>LifetimeUpdate</c> range when the maximum is positive; <see cref="Container"/> is a
     /// <c>PutInContainer</c> entity spawned earlier in the same queue; <see cref="ContainInSource"/> makes the entity enter the source's
-    /// container or be destroyed; <see cref="TransferDamage"/> is unresistable damage dealt right after creation (<c>TransferPreviousHealth</c>).
+    /// container or be destroyed; <see cref="TransferDamage"/> is unresistable damage dealt right after creation (<c>TransferPreviousHealth</c>);
+    /// <see cref="MaxHealth"/> and <see cref="OriginTemplate"/> carry <see cref="SpawnExtras"/>.
     /// </summary>
     private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
-        EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource);
+        EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0);
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
 
@@ -273,6 +274,16 @@ public sealed partial class SimulationWorld : IWorldServices
         return id;
     }
 
+    public EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle, in SpawnExtras extras)
+    {
+        if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));
+        var id = Ids.AllocateEntity();
+        var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
+            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0));
+        _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
+        return id;
+    }
+
     private static int ActiveWeaponIndex(Entity entity)
         => entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
 
@@ -284,8 +295,15 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private static bool CanMove(Entity entity) => Array.Exists(entity.ModuleArray, module => module is Modules.BuiltIn.AIUpdateInterface);
 
-    /// <summary><c>VictoryConditions::hasSinglePlayerBeenDefeated</c> (default flags NOBUILDINGS|NOUNITS): zero objects at all, of any kind.</summary>
-    public bool IsPlayerDefeated(PlayerId player) => !_entities.Values.Any(entity => entity.Owner == player);
+    /// <summary>
+    /// <c>VictoryConditions::hasSinglePlayerBeenDefeated</c> (default flags NOBUILDINGS|NOUNITS) = <c>!Player::hasAnyObjects</c>:
+    /// <c>Team::hasAnyObjects</c> skips effectively dead or destroyed objects, projectiles, inert objects and mines.
+    /// </summary>
+    public bool IsPlayerDefeated(PlayerId player) => !_entities.Values.Any(entity => entity.Owner == player && CountsForSurvival(entity));
+
+    private static bool CountsForSurvival(Entity entity)
+        => !entity.EffectivelyDead && !entity.DestroyRequested
+           && !entity.Template.IsKindOf("PROJECTILE") && !entity.Template.IsKindOf("INERT") && !entity.Template.IsKindOf("MINE");
 
     /// <summary>
     /// "Last player standing" (phase 5 simplification: no teams/alliances). Returns the sole remaining player with at least
@@ -923,6 +941,11 @@ public sealed partial class SimulationWorld : IWorldServices
             foreach (var module in entity.ModuleArray)
                 if (module is Modules.BuiltIn.LifetimeUpdate lifetime) lifetime.OverrideRange(setup.MinLifetimeTicks, setup.MaxLifetimeTicks);
         foreach (var module in entity.ModuleArray) module.OnSpawn(this);
+        if (setup.HasOrigin)
+            foreach (var module in entity.ModuleArray)
+                if (module is ISpawnOriginReceiver receiver) receiver.OnSpawnedFrom(this, setup.OriginTemplate);
+        if (setup.MaxHealth > Fixed.Zero && entity.Body is IMaxHealthAdjustable adjustable)
+            adjustable.AdjustMaxHealth(this, setup.MaxHealth - entity.Body.MaxHealth, "SAME_CURRENTHEALTH");
         if (setup.HasHealth && entity.Body is IInitialHealthSettable health) health.SetInitialHealth(this, setup.HealthPercent);
         Register(entity);
         Emit(SimEventKind.EntitySpawned, entity.Id, EntityId.Invalid, template.Name, 0, pending.Owner);
@@ -1169,6 +1192,9 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.UInt("containInSource", setup.ContainInSource.Value);
             writer.Fixed("transferDamage", setup.TransferDamage);
             writer.UInt("transferSource", setup.TransferSource.Value);
+            writer.Fixed("maxHealth", setup.MaxHealth);
+            writer.Bool("hasOrigin", setup.HasOrigin);
+            writer.Int("originTemplate", setup.OriginTemplate);
             writer.EndObject();
         }
         writer.EndArray();

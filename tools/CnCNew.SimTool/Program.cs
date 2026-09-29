@@ -212,6 +212,8 @@ static int ReferenceMatch(string directory, string[] args)
     ReplayRunner.Run(replay, world);
     var survivors = world.Entities.Where(value => !value.Owner.IsSystem).GroupBy(value => value.Owner.Value).OrderBy(group => group.Key).Select(group => $"{replay.Header.Players.First(player => player.Id.Value == group.Key).Name}={group.Count()}");
     Console.WriteLine($"End state: {world.Metrics}; survivors by owner: {string.Join(", ", survivors)}.");
+    if (args.Contains("--diagnose"))
+        Console.WriteLine($"Survivors by template: {string.Join(", ", world.Entities.Where(value => !value.Owner.IsSystem).GroupBy(value => value.Template.Name).OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).Take(12).Select(group => $"{group.Key}={group.Count()}"))}.");
     Console.WriteLine($"Rejections by reason: {string.Join(", ", Enum.GetValues<CommandRejection>().Where(reason => world.RejectionCounts[(int)reason] > 0).Select(reason => $"{reason}={world.RejectionCounts[(int)reason]}"))}.");
     return identical && continued && first.FinalHash == second.FinalHash ? 0 : 1;
 }

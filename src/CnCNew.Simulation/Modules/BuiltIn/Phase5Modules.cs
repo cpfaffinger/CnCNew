@@ -151,12 +151,14 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
 
     public override void Describe(IStateWriter writer)
     {
+        writer.Int("nextWake", _nextWake);
         writer.Int("readyTick", _readyTick == long.MaxValue ? -1 : _readyTick);
         writer.Int("detectedUntilTick", _detectedUntilTick);
     }
 
     public override void Load(IStateReader reader)
     {
+        _nextWake = reader.Int("nextWake");
         var value = reader.Int("readyTick");
         _readyTick = value < 0 ? long.MaxValue : value;
         _detectedUntilTick = reader.Int("detectedUntilTick");
@@ -242,12 +244,14 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
 
     public override void Describe(IStateWriter writer)
     {
+        writer.Int("nextWake", _nextWake);
         writer.Bool("active", _active);
         _mux.Describe(writer);
     }
 
     public override void Load(IStateReader reader)
     {
+        _nextWake = reader.Int("nextWake");
         _active = reader.Bool("active");
         _mux.Load(reader);
     }
@@ -369,7 +373,7 @@ public sealed record RadarUpgradeData(UpgradeMuxData Mux, bool DisableProof) : M
 public sealed class RadarUpgrade(RadarUpgradeData data) : UpgradeMuxModule(data.Mux)
 {
     public override string ModuleName => "RadarUpgrade";
-    protected override void Activate(IWorldServices world) { }
+    protected override void Activate(IWorldServices world) => Entity.Modules.OfType<RadarUpdate>().FirstOrDefault()?.ExtendRadar(world);
 }
 
 /// <summary><c>CommandSetUpgrade.cpp</c>: swaps which <c>CommandSet</c> (UI button layout) is active — a presentation concern the headless simulation does not model; upgrade state machine only.</summary>
@@ -556,11 +560,22 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     {
         if (_queue.Count == 0) return SimulationTiming.SleepForever;
         var head = _queue[0];
+        var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
         var remaining = head.RemainingTicks - 1;
-        if (remaining <= 0)
+        if (remaining <= 0 && exit is { IsFreeToExit: false })
+        {
+            // The door is closed (QueueProductionExitUpdate delay): the finished unit waits at the head of the queue.
+            _queue[0] = head with { RemainingTicks = 1 };
+        }
+        else if (remaining <= 0)
         {
             _queue.RemoveAt(0);
-            world.RequestSpawn(head.TemplateIndex, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
+            if (exit is null) world.RequestSpawn(head.TemplateIndex, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
+            else
+            {
+                var (x, y, z, angle) = exit.ClaimExit(world);
+                world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle);
+            }
             world.Emit(SimEventKind.ProductionCompleted, Entity.Id, EntityId.Invalid, string.Empty, head.TemplateIndex);
         }
         else _queue[0] = head with { RemainingTicks = remaining };

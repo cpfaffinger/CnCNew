@@ -35,7 +35,7 @@ public static class ModuleCatalog
         var phase6 = name.EndsWith("AIUpdate", StringComparison.Ordinal) || name == "AIUpdateInterface"
             || name.StartsWith("Bridge", StringComparison.Ordinal) || name.StartsWith("Railroad", StringComparison.Ordinal)
             || name.StartsWith("RailedTransport", StringComparison.Ordinal)
-            || name is "PhysicsBehavior" or "ToppleUpdate" or "StructureToppleUpdate" or "StructureCollapseUpdate" or "FloatUpdate"
+            || name is "ToppleUpdate" or "StructureToppleUpdate" or "StructureCollapseUpdate" or "FloatUpdate"
                 or "ParkingPlaceBehavior" or "FlightDeckBehavior" or "WaveGuideUpdate" or "TensileFormationUpdate" or "HordeUpdate"
                 or "SlavedUpdate" or "MobMemberSlavedUpdate" or "DynamicShroudClearingRangeUpdate" or "HeightDieUpdate";
         return phase6 ? "phase-6-world-movement-ai" : "phase-5-rules-combat-economy";
@@ -351,6 +351,70 @@ public static class ModuleCatalog
             new("Upgradable", FieldType.Bool, Source: "GenerateMinefieldBehavior.cpp"),
             new("RandomJitter", FieldType.Percent, Source: "GenerateMinefieldBehavior.cpp"),
             new("SkipIfThisMuchUnderStructure", FieldType.Percent, Source: "GenerateMinefieldBehavior.cpp"),
+        ]);
+        // ------------------------------------------------------------------------- retail match, batch 2
+        // The production exits (Default/SupplyCenter/QueueProductionExitUpdate.cpp). Rally points and stealth only steer the produced unit's AI or
+        // stealth (phase 6), so they are typed and have no consumer.
+        ImmutableArray<FieldSchema> ProductionExit(string source) =>
+        [
+            new("UnitCreatePoint", FieldType.Vector3, Source: source),
+            new("NaturalRallyPoint", FieldType.Vector3, Source: source),
+        ];
+        Add("DefaultProductionExitUpdate", [..ProductionExit("DefaultProductionExitUpdate.cpp"), new("UseSpawnRallyPoint", FieldType.Bool, Source: "DefaultProductionExitUpdate.cpp")]);
+        Add("SupplyCenterProductionExitUpdate", [..ProductionExit("SupplyCenterProductionExitUpdate.cpp"), new("GrantTemporaryStealth", FieldType.DurationMs, Source: "SupplyCenterProductionExitUpdate.cpp")]);
+        Add("QueueProductionExitUpdate",
+        [
+            ..ProductionExit("QueueProductionExitUpdate.cpp"),
+            new("ExitDelay", FieldType.DurationMs, Source: "QueueProductionExitUpdate.cpp"),
+            new("InitialBurst", FieldType.Integer, Source: "QueueProductionExitUpdate.cpp"),
+        ]);
+        // HealContainModuleData = OpenContainModuleData (see GarrisonContain for the Opaque rationale) + TimeForFullHeal.
+        Add("HealContain",
+        [
+            ..DieMux(),
+            new("ContainMax", FieldType.Integer, Source: "OpenContain.cpp"),
+            new("EnterSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("ExitSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DamagePercentToUnits", FieldType.Percent, Source: "OpenContain.cpp"),
+            new("BurnedDeathToUnits", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("ForbidInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("PassengersAllowedToFire", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("PassengersInTurret", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("NumberOfExitPaths", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DoorOpenTime", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("WeaponBonusPassedToPassengers", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowAlliesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowEnemiesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowNeutralInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("TimeForFullHeal", FieldType.DurationMs, Source: "HealContain.cpp"),
+        ]);
+        Add("EjectPilotDie",
+        [
+            ..DieMux(),
+            new("GroundCreationList", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "EjectPilotDie.cpp"),
+            new("AirCreationList", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "EjectPilotDie.cpp"),
+            new("InvulnerableTime", FieldType.DurationMs, Source: "EjectPilotDie.cpp"),
+        ]);
+        Add("VeterancyGainCreate",
+        [
+            new("StartingLevel", FieldType.Enum, Table: NameTables.Veterancy, Source: "VeterancyGainCreate.cpp"),
+            new("ScienceRequired", FieldType.Reference, ReferenceKind: DefinitionKind.Science, Source: "VeterancyGainCreate.cpp"),
+        ]);
+        Add("PreorderCreate", []);
+        Add("RadarUpdate", [new("RadarExtendTime", FieldType.DurationMs, Source: "RadarUpdate.cpp")]);
+        Add("RebuildHoleExposeDie",
+        [
+            ..DieMux(),
+            new("HoleName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "RebuildHoleExposeDie.cpp"),
+            Real("HoleMaxHealth", "RebuildHoleExposeDie.cpp"),
+            new("TransferAttackers", FieldType.Bool, Source: "RebuildHoleExposeDie.cpp"),
+        ]);
+        Add("RebuildHoleBehavior",
+        [
+            new("WorkerObjectName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "RebuildHoleBehavior.cpp"),
+            new("WorkerRespawnDelay", FieldType.DurationMs, Source: "RebuildHoleBehavior.cpp"),
+            new("HoleHealthRegen%PerSecond", FieldType.Percent, Source: "RebuildHoleBehavior.cpp"),
         ]);
         Add("PoisonedBehavior",
         [

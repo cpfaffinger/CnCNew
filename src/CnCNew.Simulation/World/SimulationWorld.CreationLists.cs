@@ -194,6 +194,6 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary><c>Thing::isSignificantlyAboveTerrain</c>: higher than three frames of free fall. The terrain is flat at height 0 until the terrain model exists.</summary>
-    private bool IsSignificantlyAboveTerrain(Entity entity)
+    public bool IsSignificantlyAboveTerrain(Entity entity)
         => entity.Z > Fixed.FromDecimal(-9m * _templates.Gravity / 900m);
 }

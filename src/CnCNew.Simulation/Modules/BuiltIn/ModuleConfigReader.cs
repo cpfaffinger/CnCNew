@@ -83,6 +83,15 @@ internal static class ModuleConfigReader
         };
     }
 
+    public static Point3 Vector(ModuleConfiguration configuration, string name)
+    {
+        var field = Find(configuration, name);
+        if (field is null) return default;
+        return field.Value.Value is Vector3Value vector
+            ? new Point3(Fixed.FromDecimal(vector.X), Fixed.FromDecimal(vector.Y), Fixed.FromDecimal(vector.Z))
+            : throw Unexpected(configuration, field);
+    }
+
     public static FlagsValue? Flags(ModuleConfiguration configuration, string name)
         => Find(configuration, name)?.Value.Value as FlagsValue;
 

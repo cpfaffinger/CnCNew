@@ -441,8 +441,8 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
         return Math.Max(data.UpdateRateTicks, SimulationTiming.SleepNone);
     }
 
-    public override void Describe(IStateWriter writer) { }
-    public override void Load(IStateReader reader) { }
+    public override void Describe(IStateWriter writer) => writer.Int("nextWake", _nextWake);
+    public override void Load(IStateReader reader) => _nextWake = reader.Int("nextWake");
 }
 
 // =================================================================================== PoisonedBehavior
@@ -525,6 +525,7 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
 
     public override void Describe(IStateWriter writer)
     {
+        writer.Int("nextWake", _nextWake);
         writer.Int("poisonDamageTick", _poisonDamageTick);
         writer.Int("poisonStopTick", _poisonStopTick);
         writer.Fixed("poisonDamageAmount", _poisonDamageAmount);
@@ -533,6 +534,7 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
 
     public override void Load(IStateReader reader)
     {
+        _nextWake = reader.Int("nextWake");
         _poisonDamageTick = reader.Int("poisonDamageTick");
         _poisonStopTick = reader.Int("poisonStopTick");
         _poisonDamageAmount = reader.Fixed("poisonDamageAmount");

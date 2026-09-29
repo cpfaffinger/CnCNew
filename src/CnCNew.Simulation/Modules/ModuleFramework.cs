@@ -71,6 +71,12 @@ public interface IWorldServices
     /// <summary>Reserves and queues the creation of a fresh entity outside the command/validation path (engine-internal spawns: production, OCLs).</summary>
     EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle);
 
+    /// <summary><see cref="RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed)"/> with the adjustments an engine-internal spawner applies to the fresh object (<see cref="SpawnExtras"/>).</summary>
+    EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle, in SpawnExtras extras);
+
+    /// <summary><c>Thing::isSignificantlyAboveTerrain</c>: higher than three frames of free fall (the terrain is flat at height 0 until a terrain model exists).</summary>
+    bool IsSignificantlyAboveTerrain(Entity entity);
+
     /// <summary>
     /// <c>ObjectCreationList::create</c> with <paramref name="source"/> as primary object: queues the spawns the list describes and returns
     /// the first created entity (<see cref="EntityId.Invalid"/> when none). Emits <see cref="SimEventKind.CreationListRequested"/> for the
@@ -97,6 +103,29 @@ public interface IWorldServices
     /// <summary>"Science Purchase Points" earned via rank/experience in the reference (not modeled); a scenario/system command credits them directly instead — see <c>docs/GAME-RULES.md</c>.</summary>
     int SciencePointsOf(PlayerId player);
     void AddSciencePoints(PlayerId player, int amount);
+}
+
+/// <summary>
+/// Adjustments an engine-internal spawner applies to a fresh object: <see cref="MaxHealth"/> (positive = replace the template's maximum
+/// health keeping the current health, as <c>RebuildHoleExposeDie</c> does) and <see cref="OriginTemplate"/> (index of the template the
+/// object stands in for, or -1; delivered to <see cref="ISpawnOriginReceiver"/> modules).
+/// </summary>
+public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1);
+
+/// <summary>A module told which template its object replaces when it is created by <see cref="IWorldServices.RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed, in SpawnExtras)"/>.</summary>
+public interface ISpawnOriginReceiver
+{
+    void OnSpawnedFrom(IWorldServices world, int originTemplate);
+}
+
+/// <summary>A module that owns the door/exit geometry a producer's new units leave through (<c>ExitInterface</c>).</summary>
+public interface IProductionExit
+{
+    /// <summary><c>ExitInterface::reserveDoorForExit</c>: true when a unit may leave right now.</summary>
+    bool IsFreeToExit { get; }
+
+    /// <summary><c>ExitInterface::exitObjectViaDoor</c>, position part: where the unit appears (world space) and which way it faces; the exit's delay/burst state advances.</summary>
+    (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world);
 }
 
 /// <summary>A module driven by the <see cref="UpgradeMux"/> state machine (<c>UpgradeModule</c> / any <c>UpgradeMux</c>-mixin module).</summary>

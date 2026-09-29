@@ -376,6 +376,20 @@ static partial class Tests
         }
         Check.That(violations.Count == 0, "Forbidden constructs in the simulation:\n  " + string.Join("\n  ", violations));
 
+        // A restored update module without its saved wake tick would be re-armed one tick late (World.Register) and the run would drift from the live one.
+        var missingWake = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(source, "Modules"), "*.cs", SearchOption.AllDirectories))
+        {
+            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
+            foreach (var chunk in Regex.Split(File.ReadAllText(file), @"(?m)^(?=(?:public |internal )?(?:sealed |abstract )*class )").Skip(1))
+            {
+                var header = chunk[..Math.Max(chunk.IndexOf('\n'), 0)];
+                if (header.Contains("IUpdateModule", StringComparison.Ordinal) && !chunk.Contains("\"nextWake\"", StringComparison.Ordinal))
+                    missingWake.Add($"{Path.GetRelativePath(root!, file)}: {header.Trim()}");
+            }
+        }
+        Check.That(missingWake.Count == 0, "Update modules must save and restore their wake tick (\"nextWake\"):\n  " + string.Join("\n  ", missingWake));
+
         var references = typeof(SimulationWorld).Assembly.GetReferencedAssemblies().Select(value => value.Name!).ToArray();
         var allowed = references.Where(name => name == "CnCNew.Data" || name.StartsWith("System", StringComparison.Ordinal) || name is "netstandard" or "mscorlib").ToArray();
         Check.That(references.Except(allowed).Count() == 0, "The simulation may only reference CnCNew.Data and the BCL, found: " + string.Join(", ", references.Except(allowed)));

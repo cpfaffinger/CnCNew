@@ -5006,7 +5006,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 5210,
+      "count": 4935,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5755,15 +5755,6 @@
     },
     {
       "category": "module",
-      "name": "DefaultProductionExitUpdate",
-      "count": 42,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "DeliverPayloadAIUpdate",
       "count": 29,
       "owners": [
@@ -5820,15 +5811,6 @@
       "category": "module",
       "name": "EMPUpdate",
       "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "EjectPilotDie",
-      "count": 48,
       "owners": [
         "Object"
       ],
@@ -5959,15 +5941,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "HealContain",
-      "count": 15,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
@@ -6259,15 +6232,6 @@
     },
     {
       "category": "module",
-      "name": "PreorderCreate",
-      "count": 19,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "ProjectileStreamUpdate",
       "count": 7,
       "owners": [
@@ -6279,24 +6243,6 @@
       "category": "module",
       "name": "PropagandaTowerBehavior",
       "count": 14,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "QueueProductionExitUpdate",
-      "count": 11,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "RadarUpdate",
-      "count": 9,
       "owners": [
         "Object"
       ],
@@ -6346,24 +6292,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "RebuildHoleBehavior",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "RebuildHoleExposeDie",
-      "count": 61,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
@@ -6628,15 +6556,6 @@
     },
     {
       "category": "module",
-      "name": "SupplyCenterProductionExitUpdate",
-      "count": 15,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "SupplyTruckAIUpdate",
       "count": 6,
       "owners": [
@@ -6765,15 +6684,6 @@
       "category": "module",
       "name": "VeterancyCrateCollide",
       "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "VeterancyGainCreate",
-      "count": 51,
       "owners": [
         "Object"
       ],
