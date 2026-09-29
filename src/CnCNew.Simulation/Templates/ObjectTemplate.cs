@@ -124,8 +124,9 @@ public sealed class TemplateCatalog
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
     private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences,
-        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks)
+        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance)
     {
+        StandardMinefieldDistance = standardMinefieldDistance;
         BaseRegenHealthPercentPerSecond = baseRegenHealthPercentPerSecond;
         BaseRegenDelayTicks = baseRegenDelayTicks;
         Templates = templates;
@@ -159,6 +160,8 @@ public sealed class TemplateCatalog
     public Fixed BaseRegenHealthPercentPerSecond { get; }
     /// <summary><c>GlobalData::m_baseRegenDelay</c> in ticks: how long a structure must stay undamaged before base regeneration resumes.</summary>
     public long BaseRegenDelayTicks { get; }
+    /// <summary><c>GlobalData::m_standardMinefieldDistance</c>: the default <c>DistanceAroundObject</c> of <c>GenerateMinefieldBehavior</c> (<c>GameData.ini StandardMinefieldDistance = 40</c>).</summary>
+    public Fixed StandardMinefieldDistance { get; }
     public ObjectTemplate this[int index] => Templates[index];
     public bool TryGet(string name, out ObjectTemplate template) => _byName.TryGetValue(name, out template!);
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);
@@ -178,6 +181,7 @@ public sealed class TemplateCatalog
         var (unitDamagedThreshold, unitReallyDamagedThreshold) = ResolveDamageThresholds(graph);
         var gravity = ResolveGravity(graph);
         var (baseRegen, baseRegenDelay) = ResolveBaseRegen(graph);
+        var minefieldDistance = ResolveMinefieldDistance(graph);
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
         var index = 0;
         foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
@@ -219,7 +223,7 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))
@@ -260,6 +264,14 @@ public sealed class TemplateCatalog
         var perSecond = Get("BaseRegenHealthPercentPerSecond") is Percentage percentage ? Fixed.FromDecimal(percentage.Ratio) : Fixed.Zero;
         var delay = Get("BaseRegenDelay") is GameTime time ? SimulationTiming.DurationMillisecondsToTicks(time.Milliseconds) : 0;
         return (perSecond, delay);
+    }
+
+    /// <summary>Absent key: the reference default of <c>GlobalData</c> (<c>m_standardMinefieldDistance = 40</c>).</summary>
+    private static Fixed ResolveMinefieldDistance(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("StandardMinefieldDistance", StringComparison.OrdinalIgnoreCase))?.Value.Value;
+        return value is Distance distance ? Fixed.FromDecimal(distance.Value) : Fixed.FromInt(40);
     }
 
     private static ImmutableArray<string> ConditionTokens(DefinitionSection set)

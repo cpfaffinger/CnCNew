@@ -19,6 +19,9 @@ internal static class MatchModules
     public static ImmutableArray<IModuleBinding> Bindings { get; } =
     [
         new ModuleBinding<NoFieldsData>("BaseRegenerateUpdate", ModuleOwnerKind.Object, (_, _) => NoFieldsData.Instance, _ => new BaseRegenerateUpdate()),
+        new ModuleBinding<GenerateMinefieldData>("GenerateMinefieldBehavior", ModuleOwnerKind.Object, GenerateMinefieldData.Parse, data => new GenerateMinefieldBehavior(data)),
+        new ModuleBinding<PhysicsData>("PhysicsBehavior", ModuleOwnerKind.Object, (configuration, _) => PhysicsData.Parse(configuration), data => new PhysicsBehavior(data)),
+        new ModuleBinding<NoFieldsData>("SquishCollide", ModuleOwnerKind.Object, (_, _) => NoFieldsData.Instance, _ => new SquishCollide()),
     ];
 }
 
@@ -68,6 +71,6 @@ public sealed class BaseRegenerateUpdate : SimModule, IUpdateModule, IDamageModu
         return HealRate;
     }
 
-    public override void Describe(IStateWriter writer) { }
-    public override void Load(IStateReader reader) { }
+    public override void Describe(IStateWriter writer) => writer.Int("nextWake", _nextWake);
+    public override void Load(IStateReader reader) => _nextWake = reader.Int("nextWake");
 }

@@ -318,6 +318,40 @@ public static class ModuleCatalog
             new("CanDetectWhileContained", FieldType.Bool, Source: "StealthDetectorUpdate.cpp"),
         ]);
         Add("BaseRegenerateUpdate", []);
+        // PhysicsUpdate.cpp PhysicsBehaviorModuleData::buildFieldParse. The frictions are per-second values in the INI (parseFrictionPerSec).
+        Add("PhysicsBehavior",
+        [
+            Real("Mass", "PhysicsUpdate.cpp"), Real("ShockResistance", "PhysicsUpdate.cpp"), Real("ShockMaxYaw", "PhysicsUpdate.cpp"),
+            Real("ShockMaxPitch", "PhysicsUpdate.cpp"), Real("ShockMaxRoll", "PhysicsUpdate.cpp"),
+            Real("ForwardFriction", "PhysicsUpdate.cpp"), Real("LateralFriction", "PhysicsUpdate.cpp"), Real("ZFriction", "PhysicsUpdate.cpp"),
+            Real("AerodynamicFriction", "PhysicsUpdate.cpp"), Real("CenterOfMassOffset", "PhysicsUpdate.cpp"),
+            new("AllowBouncing", FieldType.Bool, Source: "PhysicsUpdate.cpp"),
+            new("AllowCollideForce", FieldType.Bool, Source: "PhysicsUpdate.cpp"),
+            new("KillWhenRestingOnGround", FieldType.Bool, Source: "PhysicsUpdate.cpp"),
+            Real("MinFallHeightForDamage", "PhysicsUpdate.cpp"), Real("FallHeightDamageFactor", "PhysicsUpdate.cpp"), Real("PitchRollYawFactor", "PhysicsUpdate.cpp"),
+            new("VehicleCrashesIntoBuildingWeaponTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "PhysicsUpdate.cpp"),
+            new("VehicleCrashesIntoNonBuildingWeaponTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "PhysicsUpdate.cpp"),
+        ]);
+        Add("SquishCollide", []);
+        // GenerateMinefieldBehavior.cpp buildFieldParse + the UpgradeMuxData; the die filter is not part of it (a plain BehaviorModuleData).
+        Add("GenerateMinefieldBehavior",
+        [
+            ..UpgradeMux(),
+            new("MineName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "GenerateMinefieldBehavior.cpp"),
+            new("UpgradedMineName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "GenerateMinefieldBehavior.cpp"),
+            new("UpgradedTriggeredBy", FieldType.Reference, ReferenceKind: DefinitionKind.Upgrade, Source: "GenerateMinefieldBehavior.cpp"),
+            new("GenerationFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "GenerateMinefieldBehavior.cpp"),
+            new("DistanceAroundObject", FieldType.Distance, Source: "GenerateMinefieldBehavior.cpp"),
+            Real("MinesPerSquareFoot", "GenerateMinefieldBehavior.cpp"),
+            new("GenerateOnlyOnDeath", FieldType.Bool, Source: "GenerateMinefieldBehavior.cpp"),
+            new("BorderOnly", FieldType.Bool, Source: "GenerateMinefieldBehavior.cpp"),
+            new("SmartBorder", FieldType.Bool, Source: "GenerateMinefieldBehavior.cpp"),
+            new("SmartBorderSkipInterior", FieldType.Bool, Source: "GenerateMinefieldBehavior.cpp"),
+            new("AlwaysCircular", FieldType.Bool, Source: "GenerateMinefieldBehavior.cpp"),
+            new("Upgradable", FieldType.Bool, Source: "GenerateMinefieldBehavior.cpp"),
+            new("RandomJitter", FieldType.Percent, Source: "GenerateMinefieldBehavior.cpp"),
+            new("SkipIfThisMuchUnderStructure", FieldType.Percent, Source: "GenerateMinefieldBehavior.cpp"),
+        ]);
         Add("PoisonedBehavior",
         [
             new("PoisonDamageInterval", FieldType.DurationMs, Source: "PoisonedBehavior.cpp"),

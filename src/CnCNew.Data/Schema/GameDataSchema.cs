@@ -17,5 +17,6 @@ public static class GameDataSchema
         new FieldSchema("Gravity", FieldType.Real, Source: Table),
         new FieldSchema("BaseRegenHealthPercentPerSecond", FieldType.Percent, Source: Table),
         new FieldSchema("BaseRegenDelay", FieldType.DurationMs, Source: Table),
+        new FieldSchema("StandardMinefieldDistance", FieldType.Distance, Source: Table),
     ]);
 }

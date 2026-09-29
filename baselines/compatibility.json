@@ -1282,15 +1282,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GameData/StandardMinefieldDistance",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GameData/StandardPublicBone",
       "count": 30,
       "owners": [
@@ -5015,7 +5006,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 6134,
+      "count": 5210,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5935,15 +5926,6 @@
     },
     {
       "category": "module",
-      "name": "GenerateMinefieldBehavior",
-      "count": 63,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "GrantScienceUpgrade",
       "count": 4,
       "owners": [
@@ -6238,15 +6220,6 @@
         "Object"
       ],
       "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "PhysicsBehavior",
-      "count": 708,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
     },
     {
       "category": "module",
@@ -6594,15 +6567,6 @@
       "category": "module",
       "name": "SpyVisionUpdate",
       "count": 12,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SquishCollide",
-      "count": 153,
       "owners": [
         "Object"
       ],
