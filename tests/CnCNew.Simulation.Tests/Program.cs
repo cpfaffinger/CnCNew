@@ -111,6 +111,7 @@ run.Test("Combat: FireWeaponUpdate clip and reload", Tests.FireWeaponUpdateClip)
 run.Test("Combat: FireWeaponUpdate ExclusiveWeaponDelay", Tests.FireWeaponUpdateExclusiveDelay);
 run.Test("Combat: FireWeaponUpdate snapshot", Tests.FireWeaponUpdateSnapshot);
 run.Test("Combat: ReplaceObjectUpgrade swaps the template", Tests.ReplaceObjectUpgradeSwapsTemplate);
+run.Test("Combat: CrushDie binds and stays inert", Tests.CrushDieIsInert);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

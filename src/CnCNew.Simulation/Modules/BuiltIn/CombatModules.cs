@@ -22,6 +22,7 @@ internal static class CombatModules
     [
         new ModuleBinding<FireWeaponUpdateData>("FireWeaponUpdate", ModuleOwnerKind.Object, (configuration, _) => FireWeaponUpdateData.Parse(configuration), data => new FireWeaponUpdate(data)),
         new ModuleBinding<ReplaceObjectUpgradeData>("ReplaceObjectUpgrade", ModuleOwnerKind.Object, ReplaceObjectUpgradeData.Parse, data => new ReplaceObjectUpgrade(data)),
+        new ModuleBinding<PlainDieData>("CrushDie", ModuleOwnerKind.Object, (configuration, _) => PlainDieData.Parse(configuration), data => new CrushDie(data)),
     ];
 }
 
@@ -96,6 +97,18 @@ internal sealed class FireWeaponUpdate(FireWeaponUpdateData data) : SimModule, I
         _readyTick = reader.Int("ready");
         _clip = checked((int)reader.Int("clip"));
     }
+}
+
+/// <summary>
+/// <c>CrushDie::onDie</c> only reacts to <c>DAMAGE_CRUSH</c> dealt by a crusher: it picks the crushed end (front, back or total), plays a
+/// crush sound and sets the FRONTCRUSHED/BACKCRUSHED body and model-condition flags. Crush damage comes from <c>PhysicsCollide</c>, and
+/// the simulation has no collision detection, so the callback never fires; the crushed flags and the sounds are presentation. The
+/// module keeps no state and exists so the units that have it can be instantiated. Collisions and crushing are phase 6.
+/// </summary>
+internal sealed class CrushDie(PlainDieData data) : DieModuleBase(data.Mux)
+{
+    public override string ModuleName => "CrushDie";
+    public override void OnDie(IWorldServices world, in DamageInfo info) { }
 }
 
 public sealed record ReplaceObjectUpgradeData(UpgradeMuxData Mux, string ReplaceObject) : ModuleData

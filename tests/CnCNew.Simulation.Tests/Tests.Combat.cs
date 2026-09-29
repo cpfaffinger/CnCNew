@@ -194,6 +194,21 @@ static partial class Tests
           End
         End
 
+        Object Crushable
+          KindOf = INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = CrushDie Crush01
+            DeathTypes = NONE +CRUSHED +SPLATTED
+            TotalCrushSound = CarAlarm
+            TotalCrushSoundPercent = 50
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+
         Object Fortress
           KindOf = STRUCTURE
           Body = StructureBody Body01
@@ -354,6 +369,19 @@ static partial class Tests
         world.Step();
         for (var i = 0; i < 20; i++) world.Step();
         SnapshotContinues(world, fixture);
+    }
+
+    /// <summary>CrushDie is inert without collisions: it binds strictly, keeps the object instantiable and does not disturb an ordinary death.</summary>
+    public static void CrushDieIsInert()
+    {
+        var world = CombatWorld(out _, out var feeder);
+        feeder.Spawn(1, "Crushable", x: 0, y: 0);
+        world.Step();
+        var unit = Get(world, "Crushable");
+        Check.That(unit.Template.IsInstantiable, "A unit with CrushDie is instantiable.");
+        feeder.Kill(unit.Id.Value);
+        for (var i = 0; i < 3; i++) world.Step();
+        Check.That(!world.Entities.Any(value => value.Template.Name == "Crushable"), "The unit dies normally; the crush callback never fires without collisions.");
     }
 
     /// <summary>ReplaceObjectUpgrade: the object is swapped for a fresh one of the replacement template at the same place and owner.</summary>

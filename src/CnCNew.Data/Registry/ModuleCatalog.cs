@@ -303,6 +303,17 @@ public static class ModuleCatalog
             ..UpgradeMux(),
             new("ReplaceObject", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "ReplaceObjectUpgrade.cpp"),
         ]);
+        // CrushDie.h buildFieldParse; the sounds are presentation (Opaque), the percentages are parseInt.
+        Add("CrushDie",
+        [
+            ..DieMux(),
+            new("TotalCrushSound", FieldType.Opaque, Source: "CrushDie.h"),
+            new("BackEndCrushSound", FieldType.Opaque, Source: "CrushDie.h"),
+            new("FrontEndCrushSound", FieldType.Opaque, Source: "CrushDie.h"),
+            new("TotalCrushSoundPercent", FieldType.Integer, Source: "CrushDie.h"),
+            new("BackEndCrushSoundPercent", FieldType.Integer, Source: "CrushDie.h"),
+            new("FrontEndCrushSoundPercent", FieldType.Integer, Source: "CrushDie.h"),
+        ]);
         Add("SupplyCenterCreate", []);
         Add("SupplyWarehouseCreate", []);
         // UpgradedBoost is "UpgradeType:<name> Boost:<int>", repeatable (parseUpgradePair): a token pair the generic typer cannot read, so

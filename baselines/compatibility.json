@@ -22,6 +22,33 @@
     },
     {
       "category": "deferred-field",
+      "name": "CrushDie/BackEndCrushSound",
+      "count": 42,
+      "owners": [
+        "CrushDie"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "CrushDie/FrontEndCrushSound",
+      "count": 42,
+      "owners": [
+        "CrushDie"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "CrushDie/TotalCrushSound",
+      "count": 42,
+      "owners": [
+        "CrushDie"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "FlammableUpdate/BurningSoundName",
       "count": 4,
       "owners": [
@@ -5006,7 +5033,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 4193,
+      "count": 4151,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5694,15 +5721,6 @@
       "category": "module",
       "name": "CountermeasuresBehavior",
       "count": 40,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "CrushDie",
-      "count": 42,
       "owners": [
         "Object"
       ],
