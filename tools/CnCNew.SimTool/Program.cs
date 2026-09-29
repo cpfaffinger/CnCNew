@@ -25,7 +25,7 @@ const string Usage = """
                                                            record the synthetic stress scenario as a replay with checkpoints
       replay-run <replay.bin>                              run a replay, verifying its checkpoints
       hash <replay.bin>                                    run a replay and print final hash and hash-chain digest
-      reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--out replay.bin]
+      reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--out replay.bin] [--diagnose]
                                                            headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
       stress [--ticks N] [--population N] [--out replay.bin]
                                                            record + two fresh runs + snapshot continuation, leak and budget checks
@@ -166,15 +166,16 @@ static int ReferenceMatch(string directory, string[] args)
         Console.WriteLine($"  {participant.Faction.Name} (side {participant.Side}): base {participant.BaseBuilding}{(participant.Substitution is null ? "" : $" [stand-in, {participant.Substitution}]")}");
     foreach (var line in excluded) Console.WriteLine($"  excluded: {line}");
 
-    if (factions.Length < 2)
+    if (factions.Length < 2 || args.Contains("--diagnose"))
     {
-        Console.WriteLine("The retail reference match cannot run yet: fewer than two factions can field a base and an armed unit. Simulation coverage by side:");
+        if (factions.Length >= 2) Console.WriteLine("Diagnosis (--diagnose):");
+        else Console.WriteLine("The retail reference match cannot run yet: fewer than two factions can field a base and an armed unit. Simulation coverage by side:");
         foreach (var line in ReferenceMatchScenario.DescribeCoverage(catalog)) Console.WriteLine($"  {line}");
         Console.WriteLine("Blocking modules per side (objects blocked / objects not instantiable):");
         foreach (var line in ReferenceMatchScenario.DescribeBlockers(catalog)) Console.WriteLine($"  {line}");
         Console.WriteLine("Cheapest candidates per side (object: missing modules):");
         foreach (var line in ReferenceMatchScenario.DescribeClosest(catalog, 5)) Console.WriteLine($"  {line}");
-        return 3;
+        if (factions.Length < 2) return 3;
     }
 
     var scenario = new ReferenceMatchScenario(options);
