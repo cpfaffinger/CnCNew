@@ -406,6 +406,7 @@ static partial class Tests
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(source, ModuleRegistry.Default, options);
         var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        SpecialPowerRealData(catalog);
         var report = ModuleCoverage.Compute(catalog);
         Console.WriteLine($"       real data: {report.Objects} objects, {report.Instantiable} instantiable, {report.Blocked} blocked, {report.WithoutSimulationModules} without simulation modules");
         foreach (var blocker in report.Blockers.Take(8)) Console.WriteLine($"         blocker {blocker.Module}: {blocker.ObjectsBlocked} objects ({blocker.ObjectsBlockedOnlyByThisModule} only by it)");

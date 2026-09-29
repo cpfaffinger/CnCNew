@@ -75,6 +75,10 @@ run.Test("Phase 5: ObjectCreationList determinism and snapshot", Tests.Phase5Cre
 run.Test("Fixed-point Sin/Cos accuracy", Tests.FixedTrigAccuracy);
 run.Test("Phase 5: last player standing wins", Tests.Phase5Victory);
 run.Test("Phase 5: reference match scenario, replay v2 factions, determinism", Tests.ReferenceMatch);
+run.Test("Special powers: use command, recharge, OCL origins, pause and science gating", Tests.SpecialPowerUse);
+run.Test("Special powers: shared timers, create hooks, science grant and gunship handler", Tests.SpecialPowerWiring);
+run.Test("Special powers: cash hack and cash bounty", Tests.SpecialPowerCash);
+run.Test("Special powers: snapshot continuation and replay round-trip", Tests.SpecialPowerSnapshot);
 run.Test("Phase 5 golden master: damage chain with armor, clip and reload", Tests.Phase5GoldenDamageChain);
 run.Test("Phase 5 golden master: production clock and ledger", Tests.Phase5GoldenProduction);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
