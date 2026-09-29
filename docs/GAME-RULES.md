@@ -1,10 +1,12 @@
-# Spielregeln (Phase 5, in Arbeit)
+# Spielregeln (Phase 5, abgeschlossen)
 
-Stand: 29. September 2026 (nach §6d). Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
-(`docs/SIMULATION-CORE.md`) aufsetzenden Spielregeln, die Phase 5 bisher implementiert hat: Wirtschaft, Upgrades,
-direkter Kampf, einfache Bewegung, Produktion, Sieg/Niederlage sowie die Blockermodule aus §3/§6/§6a (Schadenszustände,
-Brand, Gift, Tod, Stealth-Erkennung, Garnison-Containment) sowie das Spezialkraft-Subsystem (§6d). Phase 5 ist **nicht abgeschlossen** – der
-Fortsetzungsauftrag mit dem vollständigen Restumfang steht in `docs/HANDOFF-PHASE5.md`.
+Stand: 29. September 2026 (Abschluss von Phase 5). Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
+(`docs/SIMULATION-CORE.md`) aufsetzenden Spielregeln, die Phase 5 implementiert hat: Wirtschaft, Upgrades, direkter Kampf
+mit Flächenschaden, einfache Bewegung, Produktion, die Blockermodule aus §3/§6/§6a (Schadenszustände, Brand, Gift, Tod,
+Stealth-Erkennung, Garnison-Containment), das Spezialkraft-Subsystem (§6d), die Versorgungswirtschaft mit Andockmaschine
+und Spawnern (§6e), Reparatur (§6f), Erfahrung und Veteranenstufen (§6h) sowie Teams und Diplomatie (§7). Phase 5 gilt als
+abgeschlossen, weil Supply, Erfahrung und Teams stehen und der Referenzmatch auf Retail-Daten mit 0 übersprungenen
+Startobjekten läuft (§7a); die bewussten Grenzen stehen in §10, der Folgeauftrag in `docs/HANDOFF-PHASE7.md`.
 
 Alle Regeln laufen innerhalb der bestehenden Tickphasen (`SIMULATION-CORE.md` §4): neue Befehle werden in Phase 1
 ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt keine zusätzliche Tickphase.
@@ -16,8 +18,8 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   Energiebilanz (`PlayerState.EnergyProduction`, Summe von `ObjectTemplate.EnergyProduction` aller eigenen Objekte,
   analog zu `Energy::objectEnteringInfluence`/`objectLeavingInfluence` – bei Spawn/Zerstörung fortgeschrieben, nie pro
   Frame neu berechnet). Negative Werte sind Nettoverbraucher.
-- `GiveMoneyCommand` (nur System) schreibt Guthaben direkt gut; für ein Referenzmatch/Szenario mit Startkapital, nicht
-  für reguläres Spielergeschehen.
+- `GiveMoneyCommand` (nur System) schreibt Guthaben direkt gut, für Szenarien mit Startkapital und für Tests; das Einkommen des
+  Referenzmatches kommt seit §6e aus der Versorgungswirtschaft.
 - **Bekannte Lücke:** Energie hat noch keinen Verbrauchseffekt (z. B. Produktionsverlangsamung bei Energiemangel,
   `ProductionUpdate::calcTimeToBuild`); die Bilanz wird geführt, aber nirgends gelesen.
 
@@ -40,8 +42,8 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   modelliert. `GiveSciencePointsCommand` (nur System) schreibt Punkte direkt gut, analog zu `GiveMoneyCommand`.
   `IsGrantable` ist typisiert, aber ungenutzt (kein `grantScience`-Aufrufer existiert außer der intrinsischen
   Fraktionsvergabe, die die Maske direkt setzt statt über `grantScience` zu prüfen — wie im Original).
-- **Bekannte Lücke:** keine Teams/Allianzen/Diplomatie als Datenmodell (siehe §7); `CommandSet`/`CommandButton` bleiben
-  reine Präsentation ohne Simulationswirkung.
+- Teams und Diplomatie stehen seit §7 als Datenmodell; **Bekannte Lücke:** `CommandSet`/`CommandButton` bleiben reine Präsentation
+  ohne Simulationswirkung (auch `CommandSetUpgrade` ist ein No-Op).
 
 ## 2. Upgrades
 
@@ -67,13 +69,13 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   |---|---|---|
   | `ArmorUpgrade` | schaltet Schadensauflösung auf `ArmorSet Conditions=PLAYER_UPGRADE` um | `ArmorUpgrade.cpp` |
   | `WeaponSetUpgrade` | schaltet auf `WeaponSet Conditions=PLAYER_UPGRADE` um, füllt das Magazin neu | `WeaponSetUpgrade.cpp` |
-  | `WeaponBonusUpgrade` | Zustandsmaschine läuft, Effekt bewusst No-Op (kein `WeaponBonus`-System) | `WeaponBonusUpgrade.cpp` |
+  | `WeaponBonusUpgrade` | setzt die Waffenbonusbedingung `PLAYER_UPGRADE` (§6h) | `WeaponBonusUpgrade.cpp` |
   | `LocomotorSetUpgrade` | Zustandsmaschine läuft, Effekt bewusst No-Op (nur `SET_NORMAL` modelliert) | – |
   | `StealthUpgrade` | setzt den `CAN_STEALTH`-Statusbit | `StealthUpgrade.cpp` |
   | `MaxHealthUpgrade` | hebt `MaxHealth` um `AddMaxHealth`, vier `ChangeType`-Varianten (§3) | `MaxHealthUpgrade.cpp`, `ActiveBody.cpp::setMaxHealth` |
   | `RadarUpgrade` | Zustandsmaschine läuft, Effekt bewusst No-Op (kein Radar/Shroud) | `RadarUpgrade.cpp` |
   | `CommandSetUpgrade` | Zustandsmaschine läuft, Effekt bewusst No-Op (UI-Präsentation) | `CommandSetUpgrade.cpp` |
-  | `ExperienceScalarUpgrade` | Zustandsmaschine läuft, Effekt bewusst No-Op (kein XP-System) | `ExperienceScalarUpgrade.cpp` |
+  | `ExperienceScalarUpgrade` | erhöht den Erfahrungsskalar des Objekts (§6h) | `ExperienceScalarUpgrade.cpp` |
   | `ModelConditionUpgrade` | Zustandsmaschine läuft, Effekt bewusst No-Op (reine Präsentation) | `ModelConditionUpgrade.cpp` |
   | `ObjectCreationUpgrade` | fordert die Erzeugungsliste per Event an (wie `CreateObjectDie` in Phase 4) | `ObjectCreationUpgrade.cpp` |
 
@@ -84,16 +86,16 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
 ## 3. Waffen, Schaden, Rüstung
 
 - `WeaponCatalog`/`ArmorCatalog` (`src/CnCNew.Simulation/Templates/WeaponCatalog.cs`) lösen `Weapon`- und
-  `Armor`-Definitionen in Simulationswerte auf. **Bewusste Phase-5-Vereinfachung:** nur Volltreffer auf ein
-  explizites Ziel (`PrimaryDamage`), keine Flächenwirkung (`PrimaryDamageRadius`/`SecondaryDamage` bleiben kompiliert,
-  aber ungenutzt), keine Projektil-Flugzeit (`WeaponSpeed` ungenutzt), keine `WeaponBonus`-Multiplikatoren.
+  `Armor`-Definitionen in Simulationswerte auf. Die Waffe trifft sofort (**bewusste Vereinfachung:** keine Projektil-Flugzeit,
+  `WeaponSpeed` ungenutzt); Flächenschaden (`PrimaryDamageRadius`, `SecondaryDamage`, `RadiusDamageAffects`) steht seit §6g, die
+  `WeaponBonus`-Multiplikatoren seit §6h.
 - `ArmorInfo.Adjust` portiert `ArmorTemplate::adjustDamage`: `Schaden *= Koeffizient[Schadensart]`, außer bei
   `DAMAGE_UNRESISTABLE`/`DAMAGE_SUBDUAL_UNRESISTABLE` (umgehen die Rüstung vollständig), Ergebnis nie negativ.
 - **`ArmorSet`/`WeaponSet`-Auswahl:** Das Original wählt über einen `SparseMatchFinder` die beste zu den aktuellen
   Bedingungen (Veteranenstufe, Upgrades, Second-Life, Kistenupgrades, …) passende Menge. Phase 5 modelliert nur zwei
   Bedingungen: `Conditions = None` (Standard) und `Conditions = PLAYER_UPGRADE` (die einzige Bedingung, die
-  `ArmorUpgrade`/`WeaponSetUpgrade` tatsächlich setzen); die volle veteranenbasierte Bestauswahl ist eine
-  Fortsetzungsaufgabe.
+  `ArmorUpgrade`/`WeaponSetUpgrade` tatsächlich setzen). Die Veteranenstufe wirkt über Waffenbonus und Gesundheit (§6h), nicht über die
+  Satzauswahl: kein ausgelieferter Satz verlangt sie; die volle Bestauswahl bleibt eine Fortsetzungsaufgabe.
 - **`FireWeaponCommand`:** direkter, expliziter Schuss (kein automatisches Zielsuchen, keine Sichtlinie). Ablehnungen:
   `NoWeapon` (kein `DefaultWeapon`/`PlayerUpgradeWeapon`), `WeaponNotReady` (Tick < `WeaponReadyTick` – Nachladezeit
   oder Schusspause), `OutOfRange` (quadrierte Distanz > quadrierte `AttackRange`, damit keine Wurzel nötig ist).
@@ -115,7 +117,8 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   ein `VoiceFearRequested`-Event ausgelöst (reine Präsentationsanforderung, der Tonabspielung obliegt Phase 7). Der
   Zug selbst erfolgt immer bei Schwellenüberschreitung, unabhängig vom Ergebnis, damit der Zufallsstrom mit dem
   Original synchron bleibt (Test: `Tests.Phase5FearSoundRng`, vergleicht den Rohzustand des `logic`-Streams vor/nach).
-- **Bekannte Lücken:** keine Erfahrungs-/Veteranenvergabe aus Treffern, keine `IS_FIRING_WEAPON`/Retaliate-Logik.
+- Erfahrung und Veteranenstufen aus Abschüssen stehen seit §6h. **Bekannte Lücken:** keine `IS_FIRING_WEAPON`/Retaliate-Logik, keine
+  Projektil-Flugzeit.
 
 ### Schadenszustände, Brand, Gift und Tod (die nächsten Blockermodule)
 
@@ -144,9 +147,8 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   passendes `TriggeredBy`-Upgrade). Einzigartig unter den Upgrade-Modulen: `ConflictsWith` wird beim Tod noch einmal
   geprüft, weil der `StartsActive`-Pfad nie durch die Aktivierungs-Konfliktprüfung lief (so funktionieren
   ChemicalGenerals sich gegenseitig ausschließende Sprengsatz-Upgrades: der Standard startet aktiv, ein späteres
-  Konflikt-Upgrade bringt ihn zum Schweigen). Das Feuern selbst löst nur ein `WeaponFireRequested`-Event aus – echter
-  Flächenschaden an Umstehenden ist die bereits bestehende, projektweite Vereinfachung (`WeaponCatalog`: nur
-  Volltreffer, siehe oben).
+  Konflikt-Upgrade bringt ihn zum Schweigen). Das Feuern selbst löst nur ein `WeaponFireRequested`-Event aus – der Radiusschaden von §6g
+  wird für diesen Todesschuss noch nicht ausgeführt (bekannte Lücke).
 
 ## 4. Einfache Bewegung
 
@@ -195,8 +197,8 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   gegnerischen, zum `KindOf`-Filter passenden Objekt innerhalb `DetectionRange` (Standard: `VisionRange` des eigenen
   Templates) und markiert es `DETECTED` (`StealthUpdate.MarkDetected`: setzt das Bit, verlängert nie verkürzt seine
   Ablaufzeit). `DETECTED` besteht neben `STEALTHED` (enttarnt es, ohne die Tarnung selbst aufzuheben) und läuft von
-  selbst ab, sobald nichts mehr nachmarkiert. **Bewusste Vereinfachung, projektweit vorbestehend:** ohne Team-/
-  Diplomatiesystem (§7) gilt „gleicher Besitzer = Verbündeter" statt einer echten Beziehungsprüfung; ohne
+  selbst ab, sobald nichts mehr nachmarkiert. **Beziehungsprüfung:** seit §7 über das Beziehungsmodell (nur Feinde
+  werden markiert); ohne
   Garrison/Transport-System (`CanDetectWhileGarrisoned`/`CanDetectWhileContained` sind typisiert, aber wirkungslos,
   ein Objekt ist nie „enthalten").
 
@@ -213,9 +215,8 @@ bewusst schmal, bis ein zweiter Implementierer, `TransportContain`, ihn tatsäch
   Passagiereinheit oder vom Besitzer des Containers angeordnet werden.
 - **`GarrisonContain`:** `ContainMax` (Kapazität), `AllowInsideKindOf`/`ForbidInsideKindOf` (Standard: nur `INFANTRY`,
   `GarrisonContainModuleData`s eigener, engerer Standard gegenüber `OpenContain`s generischem „alles erlaubt"),
-  `AllowAlliesInside`/`AllowEnemiesInside` (beide Standard `Yes` – **bewusste Vereinfachung**: ohne Team-/
-  Diplomatiesystem gilt „gleicher Besitzer = Verbündeter", dieselbe Näherung wie bei `StealthDetectorUpdate`; es gibt
-  kein „neutral"). Ein Gebäude in `REALLYDAMAGED` kann nicht mehr betreten werden und wirft beim Übergang **in**
+  `AllowAlliesInside`/`AllowEnemiesInside` (beide Standard `Yes`; seit §7 nach der Beziehung des Besitzers des Bewerbers zum
+  Besitzer des Containers geprüft, ein neutraler Bewerber zählt weder als Verbündeter noch als Feind). Ein Gebäude in `REALLYDAMAGED` kann nicht mehr betreten werden und wirft beim Übergang **in**
   diesen Zustand sofort alle Insassen aus (beides entfällt bei `KindOf = GARRISONABLE_UNTIL_DESTROYED`).
 - **Heilung** (`HealObjects`): ein Splitter `MaxHealth / TimeForFullHeal` pro Tick, ab der vollen Verweildauer ein
   harter Sprung auf volle Gesundheit (`GarrisonContain::healSingleObject`).
@@ -225,7 +226,7 @@ bewusst schmal, bis ein zweiter Implementierer, `TransportContain`, ihn tatsäch
 - **Bewusst nicht modelliert:** `InitialRoster` (Startbesatzung – bräuchte synchrones verschachteltes Erzeugen beim
   Konstruieren, eine größere Änderung an der Spawn-Pipeline, als dieser erste Zuschnitt rechtfertigt), Feuern aus dem
   Container heraus, Garnisonspunkte/-positionen (art-abgeleitet, keine INI-Daten), das
-  Apparent-Controlling-Player-/Team-Tausch-System (kein Teamsystem), Eroberungsbehandlung (kein Eroberungssystem).
+  Apparent-Controlling-Player-Tausch-System, Eroberungsbehandlung (kein Eroberungssystem).
 - **`TransportContain`** (der zweite Implementierer, der `ContainModuleBase` gerechtfertigt hat – geteilte
   Gating-/Ein-/Austritts-/Todeslogik, siehe die Klassenkommentare): Kapazität ist **gewichtet**
   (`ObjectTemplate.TransportSlotCount`, nicht einfach gezählt) – ein Objekt mit 0 Plätzen (der Standard) ist nie
@@ -285,8 +286,8 @@ ein `Range(0,1)`-Zug gegen `CreationChance`, dann `VeterancyLevel`, `KilledByTyp
 (Summe < Zug → keine Kiste, wie im Original), ein letzter zieht die Ausrichtung. Die Kiste erscheint mangels Terrain am Ort
 des Opfers (`findPositionAround` ist Phase 6); Besitzer ist der Verursacher (`OwnedByMaker`) oder neutral. Alle Kistenobjekte
 des Bestands nutzen `*CrateCollide`-Module, die nicht implementiert sind: die Anforderung wird immer als `CrateRequested`
-gemeldet, das Objekt aber nur erzeugt, wenn es instanziierbar ist. Kein Teamsystem: „Verbündeter" ist „gleicher Besitzer"
-(Präzedenzfall `GarrisonContain`), der KI-Hook `notifyCrate` fehlt.
+gemeldet, das Objekt aber nur erzeugt, wenn es instanziierbar ist. „Verbündeter" folgt seit §7 dem Beziehungsmodell; der
+KI-Hook `notifyCrate` fehlt.
 
 ## 6c. Module für das Retail-Match
 
@@ -360,7 +361,7 @@ Updatemodul, der fehlt – die Kraft wird verweigert statt still nichts zu tun).
 | --- | --- |
 | `SpecialAbility` | Reine Kraft, deren Wirkung ein Handler trägt (Einheitenfähigkeiten, Kanonenboote). Ohne Handler und mit `UpdateModuleStartsAttack` wird abgelehnt (29). |
 | `OCLSpecialPower` | Erzeugt eine `ObjectCreationList` (§6b): die erste `UpgradeOCL`, deren Science der Besitzer hat, sonst `OCL`. `CREATE_AT_LOCATION`/`USE_OWNER_OBJECT` erzeugen am Ziel (ohne Ziel am Quellobjekt), `CREATE_ABOVE_LOCATION` 300 Einheiten darüber (`ON_GROUND_ALIGNED` setzt z wieder auf 0, `LIKE_EXISTING` behält es). Die drei Kartenrand-Orte brauchen Terrain: die Kraft löst aus und lädt nach, die fehlende Lieferung meldet `CreationSkipped(NoTerrainEdge)`. |
-| `CashBountyPower` | Hebt die Kopfgeldrate des Besitzers auf `Bounty` (nur wenn er die Science der Kraft hat, beim Erscheinen und bei Science-Erwerb). Auszahlung: `ScoreTheKill` (`Object::scoreTheKill`/`Player::doBountyForKill`) zahlt dem Besitzer des Töters `ceil(BuildCost · Rate)` für den Kill eines fremden Objekts (nicht `IGNORED_IN_GUI`, nicht im Bau, kein Systemspieler). |
+| `CashBountyPower` | Hebt die Kopfgeldrate des Besitzers auf `Bounty` (nur wenn er die Science der Kraft hat, beim Erscheinen und bei Science-Erwerb). Auszahlung: `ScoreTheKill` (`Object::scoreTheKill`/`Player::doBountyForKill`) zahlt dem Besitzer des Töters `ceil(BuildCost · Rate)` für den Kill eines feindlichen Objekts (§7; nicht `IGNORED_IN_GUI`, nicht im Bau, kein Systemspieler). |
 | `CashHackSpecialPower` | Stiehlt `min(Betrag, Guthaben des Opfers)` vom Besitzer des Zielobjekts; Betrag = erste `UpgradeMoneyAmount`, deren Science der Dieb hat, sonst `MoneyAmount`. Ein Ortsziel bewirkt wie im Original nichts. |
 | `SpecialPowerCreate` | Meldet die Kräfte des Objekts als entstanden (siehe oben). |
 | `GrantUpgradeCreate` | Schließt das benannte Upgrade (spieler- oder objektgebunden) einmal ab, wenn das Objekt fertig ist. |
@@ -376,32 +377,202 @@ alle Kräfte der Objekte des Spielers, die diese Science verlangen, geweckt (`on
 **Nicht modelliert (bewusst, nicht still):** kein Bauvorgang (jedes Objekt ohne `UnderConstruction` ist im Tick nach dem Spawn
 fertig, `onBuildComplete`), kein Deaktiviert-Zustand (`isDisabled`-Prüfung), `createOwner = false` (der Besitzerwechsel von
 `CreateFromList`), `OCLAdjustPositionToPassable`, Kanonenboot-KI und Kanteneinflug, Sichtobjekte (`ViewObject*`), EVA-Ansagen,
-Sounds, öffentliche Timer und Skript-Benachrichtigungen; die Kopfgeldbeziehung ist „anderer Besitzer“ (kein Teammodell). Die
+Sounds, öffentliche Timer und Skript-Benachrichtigungen. Die
 Referenzmatch-Erzeugung setzt keine Spezialkräfte ein (der Befehlsgenerator erzeugt kein `UseSpecialPowerCommand`); die Module
 laufen an den echten Kommandozentralen mit (Nachladeuhren, Science-Wecker), ihre Wirkung ist durch `Tests.SpecialPower.cs` belegt
 (Fixture mit neun Kräften: Ablehnungen, Nachladen, OCL-Ursprünge, Science-Umschaltung, Pause/Unpause, geteilte Timer,
 Kopfgeld/Cash-Hack-Beträge, Snapshotfortsetzung, Replay-Rundlauf des Befehls; Realdatenprüfung der 80 Definitionen).
 
-## 7. Sieg und Niederlage
+## 6e. Versorgungswirtschaft, Andockmaschine und Spawner
 
+Die Wirtschaft ersetzt den Übergangsbehelf `GiveMoneyCommand`: Versorgungszentren, Lager, Lastwagen und Arbeiter laufen auf den
+echten Definitionen. Referenz: `DockUpdate.cpp`, `AIDock.cpp` (`AIDockMachine`), `StateMachine.cpp`
+(`internalSetState`, `friend_checkForTransitions`), `SupplyCenterDockUpdate.cpp`, `SupplyWarehouseDockUpdate.cpp`,
+`SupplyCenterCreate.cpp`, `SupplyWarehouseCreate.cpp`, `AutoDepositUpdate.cpp`, `SupplyTruckAIUpdate.cpp`, `WorkerAIUpdate.cpp`,
+`ResourceGatheringManager.cpp`, `SpawnBehavior.cpp`. Die Schemas der neun Module sind streng typisiert (Katalog, `ModuleCatalog.cs`);
+`ValuePerSupplyBox` (`GameData`) ist als ganze Zahl typisiert (Standard des Originals 100 ohne Eintrag, ausdrücklich gezählt).
+
+**Andockmaschine** (`DockMachine.cs`, `AIDockMachine`). Zustände wie im Original (Approach, Enter, Dock, Exit, Rally); die
+Übergangssemantik von `StateMachine` ist portiert: ein Zustand, der beim Betreten sofort Erfolg oder Misserfolg meldet, führt im selben
+Aufruf weiter (bis zu 20 Ebenen). Die Andockpositionen tragen keine Geometrie (keine Knochen, kein Terrain): Eintritt, Dock, Ausgang und
+Rallypunkt liegen an der Position des Andockenden, diese vier Zustände melden daher beim Betreten Erfolg; nur die Anfahrtsposition ist
+eine echte Bewegung. Die Maschinensperre des Originals während der Dockbewegung entfällt (nichts setzt von außen einen Zustand).
+
+**`DockUpdate`** (Basis der Andockmodule): Anfahrtsplätze (`NumberApproachPositions`, dynamisch bei −1 bzw. `HasApproachPositions =
+No`), Freigabe (`isClearToApproach`), Platzreservierung und Vorrücken (`reserveApproachPosition`, `advanceApproachPosition`) und der
+eine aktive Andockende. Ohne Knochengeometrie liegt jeder Anfahrtspunkt in der Mitte des Docks, um `majorRadius / 2` zum Andockenden
+hin verschoben (der knochenlose Zweig von `computeApproachPosition`, ohne `findPositionAround`). `update()` macht den Besitzer des ersten
+erreichten Platzes zum aktiven Andockenden, solange keiner aktiv ist. Plätze und Andockende, deren Entität gestorben ist, werden
+freigegeben (das Original verlässt sich darauf, dass die Maschine des Andockenden das selbst tut). Das Dock schläft, solange kein Platz
+und kein Andockender belegt ist, und wird durch die erste Reservierung geweckt.
+
+| Modul | Verhalten |
+| --- | --- |
+| `SupplyCenterDockUpdate` | Der Andockende entlädt alle Kisten zu je `ValuePerSupplyBox` (`Player::getSupplyBoxValue`) plus seinem Upgrade-Bonus auf einmal; die Summe geht an den steuernden Spieler des Zentrums (`SupplyDeposited`-Ereignis mit Betrag). Nicht modelliert: `GrantTemporaryStealth`, Punktezähler, Schwebetext. |
+| `SupplyWarehouseDockUpdate` | Gibt je Aktion eine Kiste ab, solange Vorrat da ist; ein `DeleteWhenEmpty`-Lager verschwindet mit der letzten Kiste. Die Nähe-Prüfung (der Andockende zuckt zufällig nach) entfällt; `setDockCrippled` (Kraft „Lager lähmen“) ist nicht modelliert. |
+| `SupplyCenterCreate`, `SupplyWarehouseCreate` | Melden Zentrum bzw. Lager beim `ResourceGatheringManager` an; hier wird das Netz aus den Entitäten abgeleitet, daher bleibt nichts zu tun (bewusst zustandslos). |
+| `AutoDepositUpdate` | Alle `DepositTiming` Ticks erhält der Besitzer `DepositAmount` plus den ersten Bonus, dessen Upgrade er besitzt. Neutrale und im Bau befindliche Objekte verdienen nichts (der Zähler läuft weiter). `InitialCaptureBonus` ist typisiert, aber ohne Wirkung (keine Eroberung). |
+| `SupplyTruckAIUpdate` | `SupplyTruckStateMachine` (Warten, Sammeln, Abliefern, Zurückziehen), Übergangssemantik wie die Andockmaschine. Die Supply-Maschine läuft vor der Basis-KI, der Schlaf ist der kürzere beider Werte; ein untätiger Lastwagen schläft, bis ein Befehl oder ein Erzeugungshaken ihn weckt. Ohne Upgrade-Bonus. Das `forcedBusy` des Originals (vom Halt-Befehl gesetzt) entfällt. |
+| `WorkerAIUpdate` | Wie der Lastwagen, mit Bonus nach `Upgrade_GLAWorkerShoes`; da Bau nicht modelliert ist, läuft immer das Versorgungshirn. |
+| `DozerAIUpdate` | Nur Bewegung; Bau, Reparatur und Minen (die eigene Maschine des Dozers) fehlen, ein Dozer baut nie. Er ist instanziierbar, damit Startobjekte und Produktionslisten mit Dozern funktionieren. |
+
+**Versorgungsnetz** (`ResourceGatheringManager`): jedes Lager und jedes Zentrum ist für jeden Spieler sichtbar. Der Lastwagen wählt nach
+quadrierter 3D-Distanz; Kandidaten werden in Entitäts-ID-Reihenfolge gescannt, damit Gleichstände deterministisch brechen (das Original
+nutzt die Registrierungsreihenfolge). Das gemerkte Dock eines Spielerbefehls gewinnt bedingungslos (`findBestSupplyWarehouse`,
+`findBestSupplyCenter`); sonst zählt das nächste Lager innerhalb der Suchdistanz, beim Zentrum ohne Distanzgrenze. Nach der Ablieferung
+läuft der Lastwagen bei Bedarf zurück (`SupplyTruckRegroupingState`: nächster eigener Geldgenerator, sonst Kommandozentrale, sonst
+irgendein Gebäude).
+
+**`DockCommand`** (Code 18, `CommandTypes.Version = 6`): der Spieler schickt einen Andockenden zu einem Dock (`aiDock`); das Ziel wird als
+bevorzugtes Dock gemerkt (ein Gedächtnis für Lager und Zentrum). Ablehnung `CannotDock` (30): das Ziel hat kein Dockmodul oder der
+Akteur keine KI.
+
+**`SpawnBehavior`** (`SpawnBehavior.cpp`; Schema mit allen Feldern typisiert): ein Erzeuger, der `SpawnNumber` Objekte am Leben hält und
+seine Vorlagenliste der Reihe nach durchläuft. Er arbeitet alle `SPAWN_UPDATE_RATE` (15) Ticks, beginnend mit dem ersten Update; jeder
+Spawn verlässt das Objekt über dessen `IProductionExit` (ohne Ausgangsmodul entsteht nichts, einmal gemeldet als `NoExitInterface`).
+`SpawnReplaceDelay` verzögert den Ersatz; `OneShot` und `SpawnedRequireSpawner` sind portiert. Abweichungen (alle bewusst):
+der Tod eines Spawns wird im 15-Tick-Rhythmus abgefragt statt über `onSpawnDeath` (Ersatz `SpawnReplaceDelay` nach dem Fund); der
+Anfangsschub staffelt nicht (das Original berechnet einen Geburtsframe und benutzt ihn nie); Spawns sind nicht an eine Erzeuger-ID oder
+ein `SlavedUpdate` gebunden (die Familie fehlt); eine nicht instanziierbare Vorlage wird als `CreationSkipped` gemeldet, verbraucht
+ihren Platz und wird nie wiederholt. `AggregateHealth`, `ExitByBudding`, `CanReclaimOrphans` (ohne `OneShot`) und
+`PropagateDamageTypesToSlavesWhenExisting` brauchen die Slaved-Familie (Mobs, Brutstätten): ein Objekt, das sie verlangt, behält das
+Modul in `MissingModules`, statt falsch simuliert zu werden. `SlavesHaveFreeWill` ist gelesen, aber ohne Wirkung.
+
+**Referenzmatch** (`ReferenceMatchScenario`): als Ersatz für den Bau setzt jede Basis ein Versorgungszentrum und einen Lastwagen (bzw.
+Arbeiter) der eigenen Seite sowie ein neutrales Lager (`SpawnSupplyInfrastructure`); in Tick 1 schickt der Generator jeden Träger per
+`DockCommand` zum nächsten Lager, danach läuft die Trägermaschine selbst. Eine Seite ohne eines der drei Elemente wird in
+`SupplyNotes` vermerkt. Der Generator schreibt kein `GiveMoneyCommand` mehr. Gezählt werden `SupplyDeliveries` und
+`SupplyDeliveryMoney`.
+
+**Nachweis** (`Tests.Supply.cs`): Golden Master mit unabhängiger Nachrechnung (Anfahrt, Ladung, Ablieferung, Betrag), Warteschlange
+mehrerer Träger an einem Lager, Befehlsprüfung, Snapshot- und Replayfortsetzung, die `SpawnBehavior`-Varianten und Realdatenprüfung; das
+Realmatch verlangt null übersprungene Startobjekte und Lieferungen.
+
+**Nicht modelliert (bewusst, nicht still):** Geometrie (Knochen, Terrain, Wege), `GrantTemporaryStealth`, Bau/Dozer/Reparatur durch
+Arbeiter, Lager-Lähmung, Eroberungsbonus, Slaved-/Mob-Spawner.
+
+## 6f. Reparatur und Heilung
+
+Referenz: `RepairDockUpdate.cpp` (`action`), `AutoFindHealingUpdate.cpp` (`update`, `scanClosestTarget`), `ActionManager.cpp`
+(`canGetHealedAt`), `AIUpdate.cpp` (`privateGetHealed`).
+
+- **`RepairDockUpdate`** (Reparaturdock): die erste Aktion für einen neuen Andockenden legt den Betrag je Tick fest als
+  `(Max − Gesundheit) / framesForFullHeal`; jede Aktion heilt diesen Betrag (Quelle: das Dock, `DAMAGE_HEALING`), und das Andocken endet,
+  sobald der Andockende volle Gesundheit hat. `TimeForFullHeal` ist `parseDurationReal` (Bruchteile von Frames, Standard des Originals ein
+  Frame). Nicht modelliert: die Drohnenheilung (die Kampfdrohne des Andockenden wird bei jeder Aktion voll geheilt; Drohnen gibt es nicht).
+- **`AutoFindHealingUpdate`**: nur für Computerspieler (neu: `PlayerConfiguration.IsComputer`, Standard Mensch; Teil von Zustand,
+  Snapshot v3 und Replay v4). Zwischen zwei Suchläufen liegen `ScanRate` Ticks; übersprungen wird, wenn das Objekt gesünder als
+  `NeverHeal` ist oder beschäftigt. Der Zweig „bleib dran über `AlwaysHeal`“ liegt im Original hinter einem frühen Return: `AlwaysHeal` ist
+  gelesen, aber wirkungslos. Der Lauf nimmt das nächste Objekt mit `KINDOF_HEAL_PAD` innerhalb `ScanRange` (Mittelpunktdistanz, Gleichstand
+  nach ID, gleichgültig wem es gehört) und ruft `AIUpdateInterface.OrderGetHealed`; das geht nur zu einem verbündeten, fertigen,
+  lebenden Pad und für verletzte Infanterie.
+- **Neuer KI-Zustand `Enter`** (`OrderEnter`, `TryEnterContainer`): erst Bewegung, bei Ankunft der Eintritt in den Container bzw. das Dock.
+
+**Nicht modelliert:** Verkauf (`Sell`), Reparaturaufträge des Dozers, Kranfahrzeuge, Drohnenheilung, `AlwaysHeal`.
+
+## 6g. Flächenschaden, `FireWeaponUpdate`, `ReplaceObjectUpgrade`, `CrushDie`
+
+**Flächenschaden** (`SimulationWorld.DealWeaponDamage`, `SimulationWorld.Combat.cs`; Referenz: `Weapon.cpp`
+`WeaponTemplate::dealDamageInternal`). Jede Waffe ohne Projektil (`FireWeaponCommand`, `FireWeaponUpdate`) verteilt jetzt ihren Schaden über einen Radius,
+statt nur das Ziel zu treffen (`FireWeaponWhenDeadBehavior` meldet den Schuss weiter nur als `WeaponFireRequested`, §3):
+
+- Abstand nach `DAMAGE_RANGE_CALC_TYPE = FROM_BOUNDINGSPHERE_3D`: Mittelpunktdistanz minus Begrenzungskugel des Opfers, nicht unter 0. Wer
+  innerhalb `PrimaryDamageRadius` liegt, erhält `PrimaryDamage`, wer weiter außen (bis zum größeren der beiden Radien) liegt,
+  `SecondaryDamage`. Ohne jeden Radius wird nur das Primärziel getroffen.
+- **`RadiusDamageAffects`** (typisierte Bitmaske: `SELF`, `ALLIES`, `ENEMIES`, `NEUTRALS`, `SUICIDE`, `NOT_SIMILAR`, `NOT_AIRBORNE`;
+  Standard `ALLIES|ENEMIES|NEUTRALS`, also ohne den Schützen). Das Primärziel umgeht alle Filter; jedes andere Opfer wird nach Selbst,
+  `NOT_SIMILAR` (gleiche Vorlage und verbündet), `NOT_AIRBORNE` und der Beziehung (§7) gefiltert. `SUICIDE` tötet den Schützen mit
+  `HUGE_DAMAGE_AMOUNT`.
+- Opfer werden in Entitäts-ID-Reihenfolge besucht (das Original iteriert die Partitionszellen); Insassen von Containern zählen nicht (außer
+  als Primärziel). Der Rüstungsfaktor gilt je Opfer (`ActiveArmor`), der Rückgabewert ist der rüstungsbereinigte Schaden am Primärziel.
+- **Nicht modelliert:** `RadiusDamageAngle`-Kegel, Schockwellen, `DamageStatusType`, historischer Schaden, die Erzeugerausnahme des
+  Selbstfilters, Projektilflugzeit.
+
+| Modul | Referenz | Verhalten |
+| --- | --- | --- |
+| `FireWeaponUpdate` | `FireWeaponUpdate.cpp` `update`, `isOkayToFire` | Nach `InitialDelay` detoniert die private Waffe des Moduls (eigenes Magazin und Nachladen, nie das Waffenset) an der Position des Objekts, sobald bereit; `forceFireWeapon` ignoriert Reichweite und Ziel, der Radius entscheidet. Nicht im Bau und nicht innerhalb `ExclusiveWeaponDelay` Ticks nach einem Schuss des Objekts (`getLastShotFiredFrame` betrachtet nur das Waffenset, die eigene Waffe unterdrückt sich also nie). |
+| `ReplaceObjectUpgrade` | `ReplaceObjectUpgrade.cpp` `upgradeImplementation` | Das Objekt wird zerstört, ein frisches der Ersatzvorlage übernimmt Besitzer, Position und Ausrichtung (volle Gesundheit, kein Rang, keine Warteschlange). Eine unbekannte oder nicht instanziierbare Vorlage ergibt nur ein `CreationSkipped`-Ereignis (die Referenz bricht vor dem Zerstören ab). Nicht modelliert: Wegekartenpflege, `Player::onStructureConstructionComplete`. |
+| `CrushDie` | `CrushDie.cpp` | Reagiert nur auf `DAMAGE_CRUSH` eines Überrollers (Vorder-/Hinterende, Ton, Modellbedingungs-Flags); Überrollschaden entsteht durch `PhysicsCollide`, und es gibt keine Kollisionserkennung. Zustandslos und inert (Präzedenzfall `SquishCollide`); Kollision ist Phase 6. |
+
+Nachweis: `Tests.Combat.cs` (Ringe und Enemies-Filter, Standardmaske und Begrenzungskugel, `FireWeaponUpdate`-Takt, Magazin,
+`ExclusiveWeaponDelay`, Snapshot, `ReplaceObjectUpgrade`, `CrushDie`). **Ausdrücklich nicht freigeschaltet** sind die verbleibenden
+Blocker aus §9: sie brauchen Terrain, Kollision oder KI (Phase 6) oder schalten allein kein Objekt frei.
+
+## 6h. Erfahrung und Veteranenstufen
+
+Referenz: `ExperienceTracker.cpp`, `Object.cpp` (`onVeterancyLevelChanged`, `scoreTheKill`), `Weapon.cpp` (`WeaponBonusSet`,
+`Weapon::getDamage/Range/DelayBetweenShots/ClipReloadTime`), `WeaponBonusUpgrade.cpp`, `ExperienceScalarUpgrade.cpp`,
+`VeterancyGainCreate.cpp`, `GameData.ini` (`WeaponBonus`, `HealthBonus_*`).
+
+- **Erfahrungswert.** Ein Tod gegen einen Feind (§7; nicht neutral, nicht verbündet, nicht im Bau, nicht `IGNORED_IN_GUI`, kein
+  Systemobjekt) gibt dem Töter `ExperienceValue[Stufe des Opfers]`, multipliziert mit seinem `ExperienceScalar` (`(int)(Betrag · Skalar)`,
+  abgerundet). Nur trainierbare Objekte (`IsTrainable`) sammeln Erfahrung. Die Stufe folgt `ExperienceRequired[…]` (4 Stufen: 0 normal,
+  1 Veteran, 2 Elite, 3 Held); mehrere Stufen auf einmal sind möglich.
+- **`SetVeterancyLevel`** setzt die Erfahrung auf die Mindestmenge der Stufe (`ExperienceTracker::setVeterancyLevel`).
+  `SetMinVeterancyLevel` hebt nur an (`VeterancyGainCreate`, `InheritsVeterancy` einer Erzeugungsliste).
+- **Stufenwechsel** (`OnVeterancyLevelChanged`): die Maximalgesundheit wird mit dem Verhältnis der `GameData`-Werte `HealthBonus_*`
+  skaliert (`PRESERVE_RATIO`, die Gesundheit behält ihr Verhältnis), der Waffenbonuszustand VETERAN/ELITE/HERO folgt der Stufe, und das
+  von der Engine erzeugte `Upgrade_Veterancy_*` der neuen Stufe wird vergeben (nicht kaufbar). Rüstungs- und Waffensatzauswahl nach Stufe
+  ist nicht modelliert: kein ausgelieferter Satz verlangt sie.
+- **`WeaponBonus`** (`GameData` global und je Waffe; streng typisiert als `<Bedingung> <Feld> <Prozent>`, gestützt auf die
+  Namenstabellen des Originals, `WeaponBonusTable`): jede Zeile ergibt ein Delta (`Verhältnis − 1`), Zeilen einer aktiven Bedingung werden
+  addiert; eine wiederholte Zeile (Bedingung, Feld) überschreibt (`parseWeaponBonusSet`). Felder: Schaden, Radius, Reichweite,
+  Schussrate, Vorlaufzeit (`PreAttack` ist typisiert, aber ohne Verbraucher); Bedingungen u. a. `PLAYER_UPGRADE` (5), `VETERAN` (9), `ELITE` (10), `HERO` (11). Schaden, Radius, Reichweite,
+  Schussverzögerung und Magazinnachladen (`DamageWith`, `RadiusWith`, `DelayBetweenShotsWith`, `ClipReloadWith`) wenden Bonus der
+  Waffe und globalen Bonus an.
+- **`WeaponBonusUpgrade`** setzt die Bedingung `PLAYER_UPGRADE` am Objekt (wie im Original wird sie nie wieder gelöscht), die `WeaponBonus
+  PLAYER_UPGRADE …`-Zeilen der Waffen wirken damit (vorher No-Op). **`ExperienceScalarUpgrade`** erhöht den `ExperienceScalar` des
+  Objekts um `AddXPScalar` (vorher No-Op). **`VeterancyGainCreate`** setzt bei Erzeugung `StartingLevel`, wenn die Science vorhanden ist.
+- **Nachweis** (`Tests.Veterancy.cs`): Golden Master mit unabhängiger Nachrechnung von Erfahrung, Stufen, skalierter Gesundheit,
+  Schussticks, Schaden und Reichweite je Stufe; Vergaberegeln, `ExperienceScalarUpgrade`, `WeaponBonusUpgrade`,
+  `VeterancyGainCreate`, Snapshotfortsetzung.
+- **Nicht modelliert:** Rang und „Science Purchase Points“ aus Erfahrung (Punkte kommen weiter per `GiveSciencePointsCommand`), dauerhafte
+  Mindeststufe (`VeterancyGainCreate` setzt sie einmal), Erfahrungssenken (Heilung, Reparatur, Ausbildung durch Gebäude), Statistik/Skill Points.
+
+## 7. Teams, Diplomatie, Sieg und Niederlage
+
+**Beziehungsmodell** (`SimulationWorld.RelationshipOf`, `Relationship.cs`; Referenz: `Player::getRelationship`, `Player::setPlayerRelationship`).
+`Relationship` trägt die Indizes des Originals (`Enemies = 0`, `Neutral = 1`, `Allies = 2`; Teil von Replay und Snapshot). Die Beziehung ist
+**gerichtet** (`von` sieht `zu`). Auflösung in dieser Reihenfolge: ein Spieler ist sein eigener Verbündeter; das Systemobjekt (neutrale
+Objekte) ist für alle neutral; eine ausdrückliche gerichtete Überschreibung gewinnt; sonst entscheidet das Team – gleiches Team ungleich 0
+bedeutet Verbündete, alles andere Feinde. Das Original startet mit NEUTRAL und schreibt jede Beziehung im Skirmish-Aufbau; diese Welt hat
+keinen solchen Aufbauschritt, „kein Team, keine Beziehung“ heißt daher Feind (bewusste Abweichung).
+`PlayerConfiguration(Id, Name, Faction, Team, IsComputer)` liefert das Team; `SetRelationshipCommand` (Code 19, nur System,
+`CommandTypes.Version = 7`, im Replay kodiert; beide Spieler echt und verschieden) setzt eine gerichtete Überschreibung, die Gegenrichtung
+ist ein eigener Befehl. Zustand: Team, Überschreibungen (sortiert) und Computerkennzeichen sind Teil von Snapshot (v3) und Hash; das
+Replay-Format ist Version 4.
+
+**Verbraucher** (vorher überall „gleicher Besitzer = Verbündeter“): Abschussverbuchung (`ScoreTheKill`: Erfahrung und Kopfgeld nur für
+Feinde), Container (`GarrisonContain`/`TransportContain`: `AllowAlliesInside`/`AllowEnemiesInside`, neutral zählt weder als Verbündeter noch als
+Feind), Kistenabwurf (`CreateCrateDie`: ein Abschuss durch einen Verbündeten belohnt nicht), Stealth-Erkennung (`StealthDetectorUpdate`
+markiert Feinde), `RadiusDamageAffects` (§6g), Ziel- und Padwahl (`AutoFindHealingUpdate`, Referenzmatch-Zielwahl).
+
+**Sieg** (`VictoryConditions::update` für ein Skirmish ohne „letzte Allianz“-Abwahl):
 - `SimulationWorld.IsPlayerDefeated(player)` entspricht `VictoryConditions::hasSinglePlayerBeenDefeated` mit den
   Standardflaggen `NOBUILDINGS|NOUNITS` = `!Player::hasAnyObjects`. `Team::hasAnyObjects` (`Team.cpp`) überspringt
   effektiv tote oder zur Zerstörung angemeldete Objekte sowie Projektile, `INERT`- und `MINE`-Objekte; genau diese
   Ausnahmen gelten hier (`CountsForSurvival`). Ohne sie überlebt jede Fraktion durch Minen, Trümmer und Projektile ewig –
   der Referenzmatch endete dann nie.
-- `SimulationWorld.TryGetWinner()` ist „letzter Überlebender" (**bewusste Vereinfachung**: keine Teams/Allianzen in
-  Phase 5 – ein Team-Sieg im Original zählt mehrere Spieler als eine Einheit): genau ein Nicht-System-Spieler mit
-  mindestens einem Objekt, sonst `null`.
+- `SimulationWorld.TryGetWinningAlliance()` liefert die überlebenden Spieler in aufsteigender ID-Reihenfolge, sobald jeder Überlebende ein
+  Verbündeter des ersten ist (das Original vergleicht jeden Überlebenden nur mit dem ersten; eine nicht transitive Matrix wird genauso
+  beurteilt); leer, solange Feinde übrig sind oder niemand mehr lebt. `TryGetWinner()` ist das Mitglied mit der kleinsten ID (ohne Teams der
+  letzte Überlebende).
+- **Nicht modelliert:** Skript-/Missionssiege, Kapitulation, Beobachter, die „letzte Allianz“-Abwahl (`LastAlliance`).
 
 ## 7a. Referenzmatch und Golden-Master-Szenarien
 
 **Szenario** (`src/CnCNew.Simulation/Testing/ReferenceMatchScenario.cs`, Aufruf `SimTool reference-match <Inhalt>`): ein
 scriptloser, seedbasierter Befehlsgenerator spielt alle teilnahmefähigen Fraktionen gegeneinander auf einer hindernisfreien
-Karte, die nur als Koordinaten existiert, und zeichnet die Befehle als Replay (Format v2, mit Fraktionen und Checkpoints) auf.
+Karte, die nur als Koordinaten existiert, und zeichnet die Befehle als Replay (Format v4, mit Spielern, Teams und Checkpoints) auf.
 Das Match endet mit dem Sieg (§7) plus `GraceTicks` Nachlauf, spätestens bei `MaxTicks` (Standard 216.000); `MinTicks`
 füllt das Replay bei Bedarf mit Leerticks auf. Der Generator schreibt ausschließlich typisierte Befehle: Startobjekte per
-`SpawnCommand`, Einkommen per `GiveMoneyCommand` (Ersatz für Supply, das es noch nicht gibt), Produktion per
-`QueueProductionCommand`, Bewegung per `SetMoveTargetCommand`, Feuer per `FireWeaponCommand`.
+`SpawnCommand`, Produktion per `QueueProductionCommand`, Bewegung per `SetMoveTargetCommand`, Feuer per `FireWeaponCommand`
+und – neu – Versorgungsaufträge per `DockCommand`. Alle Spieler sind Computerspieler (`IsComputer: true`, damit
+`AutoFindHealingUpdate` läuft). Der frühere Geldersatz `GiveMoneyCommand` wird nicht mehr geschrieben: Jede Basis erhält
+zusätzlich zur Kommandozentrale ein Versorgungszentrum, einen Nachschubträger der eigenen Seite und ein neutrales Lager
+(`SpawnSupplyInfrastructure`, ein protokollierter Ersatz für den noch fehlenden Bauvorgang), der Träger fährt im ersten Tick per
+`DockCommand` zum Lager und arbeitet danach mit seiner eigenen Zustandsmaschine (§6e). Fehlt einer Seite Zentrum, Träger oder
+Lager, steht das als `supply note` im Bericht; der Generator zählt `SupplyDeliveries` und `SupplyDeliveryMoney`.
 
 - Teilnehmer ist jede spielbare Fraktion (`PlayableSide`), deren Seite mindestens eine instanziierbare, bewaffnete,
   baubare Einheit stellt und die ein instanziierbares Startgebäude oder einen **ausdrücklich protokollierten Ersatz** hat
@@ -416,17 +587,22 @@ Ersatzgebäude, weil ihre Startbasis ein ungebundenes Modul enthält), einer weg
 unspielbaren Fraktion. Das Match endet mit einem Sieger, das Replay läuft durch Datei, zwei Läufe und Snapshot identisch.
 
 **Retail-Daten.** Neu gemessen (`SimTool reference-match .local/phase2-import-a`, Basisdaten ohne Kartenoverlays,
-Fingerabdruck `7110C5BA69917279`): **alle 13 spielbaren Fraktionen nehmen teil**, jede mit ihrer **echten Kommandozentrale**
-(`AmericaCommandCenter`, `Infa_ChinaCommandCenter`, `GLACommandCenter`, …; seit §6d gibt es keinen protokollierten Ersatz mehr),
-der Match läuft deterministisch. Übersprungen werden 13 Startobjekte (9 Bauarbeiter-Fahrzeuge, 4 GLA-Arbeiter; Dozer-/
-Arbeiter-KI fehlt). Ergebnis mit `GraceTicks` 300: Sieger Spieler 1 (FactionAmerica) bei Tick 11.385 (6,3 Spielminuten),
-Replay 11.686 Ticks (462.194 Byte, 11 Checkpoints), 13.978 Befehle (625 Produktions-, 2.153 Bewegungsaufträge, 10.875 Schüsse), alle
-Checkpoints verifiziert, keine Ablehnung außer 43 `UnknownEntity` (Befehle an inzwischen zerstörte Objekte), Endhash
-`83EBD54549BB1DB5`, Kettenhash `928D78E6DD172836`; ein zweiter frischer Lauf und der Lauf ab Snapshot bei Tick 5.843 sind
-tickweise identisch. Endzustand: 25 Objekte, 382 erzeugt, 357 zerstört; Überlebende: 21 America, je 1 der vier GLA-Seiten. Der Realdatentest `Tests.RealReferenceMatch` prüft Teilnehmerzahl,
-Sieger, Determinismus und Snapshotfortsetzung. Die Abdeckungslage je Seite liefert `--diagnose`; die Aufgabe „Referenzmatch
-aller Fraktionen auf Retail-Daten“ ist damit **erfüllt, mit echten Kommandozentralen**. Grenzen: kein Dozer/Arbeiter, kein Supply
-(Einkommen per `GiveMoneyCommand`), keine Spezialkräfte im Befehlsstrom (§6d).
+Fingerabdruck `9F5307957A55CD46`): **alle 13 spielbaren Fraktionen nehmen teil**, jede mit ihrer **echten Kommandozentrale**
+(`AmericaCommandCenter`, `Infa_ChinaCommandCenter`, `GLACommandCenter`, …), und **kein Startobjekt wird übersprungen**
+(`StartObjectsSkipped` = 0, vom Realdatentest erzwungen; die früheren 13 Bauarbeiter-Fahrzeuge und GLA-Arbeiter sind seit `DozerAIUpdate`/`WorkerAIUpdate` instanziierbar).
+Ergebnis mit `GraceTicks` 300: Sieger Spieler 12 (FactionGLAStealthGeneral) bei Tick 26.880 (14,9 Spielminuten), Replay 27.181 Ticks
+(949.191 Byte, 27 Checkpoints, SHA-256 `208BD746B5F4059422B72705F9723B7187AAAC9D6CA76DF8DDA3EBB52C52A5A8`), 27.607 Befehle (1.240
+Produktions-, 7.194 Bewegungsaufträge, 13 Dock-Befehle, 18.591 Schüsse), alle Checkpoints verifiziert, keine Ablehnung außer 16
+`UnknownEntity` (Befehle an inzwischen zerstörte Objekte), Endhash `B6E0CDECA3168EFC`, Kettenhash `BE21F2345E87EF24`; ein zweiter
+frischer Lauf und der Lauf ab Snapshot bei Tick 13.590 sind tickweise identisch. Höchststand 135 lebende Objekte; Endzustand: 62
+Objekte, 984 erzeugt, 922 zerstört; Überlebende: 47 FactionGLAStealthGeneral, je 2 FactionGLA, FactionGLADemolitionGeneral und
+FactionGLAToxinGeneral. Die Wirtschaft läuft echt: **707 Lieferungen** an Versorgungszentren zahlten **93.075** Guthaben aus. Die vier
+amerikanischen Fraktionen haben in dieser Messung keine Versorgungswirtschaft (`supply note`: Ihr Nachschubträger ist der Chinook, dessen
+`ChinookAIUpdate` noch fehlt), ihr Einkommen ist das Startkapital. Der Realdatentest `Tests.RealReferenceMatch` prüft Teilnehmerzahl,
+Sieger, Lieferungen, Determinismus und Snapshotfortsetzung. Die Abdeckungslage je Seite liefert `--diagnose`; die Aufgabe „Referenzmatch
+aller Fraktionen auf Retail-Daten“ ist **erfüllt**. Grenzen: kein Bauvorgang (Dozer bauen nichts, Basen sind Startobjekte plus Ersatzinfrastruktur),
+keine Spezialkräfte im Befehlsstrom (es gibt keinen `UseSpecialPowerCommand`-Generator, §6d), keine Kollision/kein Terrain/keine Pfadsuche (§4);
+dass GLA-Stealth gewinnt, ist ein Effekt dieser Vereinfachungen (Stealth hat keine Wirkung auf Zielwahl), keine Aussage über Spielbalance.
 
 **Golden Master** (`tests/CnCNew.Simulation.Tests/Tests.GoldenMaster.cs`): die erwarteten Werte berechnet ein unabhängiges
 Modell im Test, sie werden nicht aus der Simulation zurückgelesen.
@@ -440,46 +616,63 @@ Modell im Test, sie werden nicht aus der Simulation zurückgelesen.
 - Die Koeffizienten der Tests (100 %, 50 %) sind in Fließkomma und Festkomma exakt; die dokumentierte Abweichung
   (Festkomma statt `Real`) wird dadurch nicht maskiert, aber auch nicht gegen das Original gemessen – es gibt keine
   Originalläufe als Referenz, nur die aus dem Quelltext abgeleitete Rechnung.
-- **Nicht erreicht:** Supply-Einnahmen und Erfahrung (kein Supply-/Erfahrungssystem, §10).
+- Supply und Erfahrung haben eigene Golden-Master-Tests mit unabhängigem Modell im Test (`SupplyEconomyGoldenMaster` in
+  `Tests.Supply.cs`, `VeterancyExperienceAndHealthGoldenMaster` und `VeterancyWeaponBonusGoldenMaster` in `Tests.Veterancy.cs`).
+  Sie sind aus dem Quelltext abgeleitet, nicht gegen Originalläufe gemessen.
+- **Offen bleibt Block 0.4** des Handoffs (Vergleich der RNG-Folge mit einem kompilierten Original): es gibt keinen Compiler und keine
+  Originalläufe in dieser Umgebung; der Wert wird nicht geraten.
 
 ## 8. Befehlstabelle
 
-Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (17 Befehlscodes, `CommandTypes.Version = 5`) und die Ablehnungsgründe (Codes 25–29 für Spezialkräfte, §6d); das Replay-Format v2 (`docs/SIMULATION-CORE.md` §8) kodiert alle 17.
+Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (19 Befehlscodes, `CommandTypes.Version = 7`; neu seit dem
+Spezialkraft-Stand: `DockCommand` = 18, `SetRelationshipCommand` = 19) und die Ablehnungsgründe (Codes 25–29 für Spezialkräfte, §6d;
+Code 30 `CannotDock`, §6e); das Replay-Format v4 (`docs/SIMULATION-CORE.md` §8) kodiert alle 19, der Snapshot ist Version 3.
 
 ## 9. Modulabdeckung
 
-Siehe `docs/SIMULATION-CORE.md` §11: 1.224 von 2.115 Objekten sind heute instanziierbar (57,9 %, gegenüber 26/2.113 in
-Phase 4, 863/2.115 vor §6c und 1.199 vor §6d); 60 von 205 Modultypen sind implementiert und decken 15.078 von 19.553
-Modulverwendungen (77,1 %). Nach einer frischen `audit-coverage`-Messung sind die größten verbleibenden Blocker nach Objekten
-(davon nur durch dieses Modul blockiert): `CommandButtonHuntUpdate` 79/10, `ToppleUpdate` 76/66 (braucht Kollisionsphysik,
-Phase 6), `SpecialAbilityUpdate` 64/2, `JetSlowDeathBehavior` 59/0, `MissileAIUpdate` 44/29, `CrushDie` 42/39,
-`CountermeasuresBehavior` 40/0, `FireWeaponUpdate` 36/26, `SpawnBehavior` 35/6, `AutoFindHealingUpdate` 34/10,
-`JetAIUpdate` 34/2, `HeightDieUpdate` 31/15, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27,
-`RailroadBehavior` 25/25, `BaikonurLaunchPower` 23/23, `ReplaceObjectUpgrade` 20/16, `RepairDockUpdate` 17/16. Das
-Spezialkraft-Subsystem (§6d) ist damit vollständig; die Fähigkeiten selbst (`SpecialAbilityUpdate` und die Handler der
-Einheitenfähigkeiten) fehlen noch.
+Siehe `docs/SIMULATION-CORE.md` §11: 1.384 von 2.115 Objekten sind heute instanziierbar (65,4 %, gegenüber 26/2.113 in
+Phase 4 und 1.224 vor Supply, Erfahrung, Reparatur, Flächenschaden und `CrushDie`); 74 von 205 Modultypen sind implementiert (183
+Simulationsmodule, 22 Präsentationsmodule) und decken 15.364 von 19.553 Modulverwendungen (78,6 %). Nicht implementiert sind 80
+Module, die der Katalog der Kategorie „Phase 5“ zuordnet und die noch offen sind,
+29 der Phase 6 und 22 der Phase 7 (Präsentation). Nach einer frischen `audit-coverage`-Messung sind die größten verbleibenden Blocker
+nach Objekten (davon nur durch dieses Modul blockiert): `CommandButtonHuntUpdate` 79/18, `ToppleUpdate` 76/66 (braucht Kollisionsphysik),
+`SpecialAbilityUpdate` 64/3, `JetSlowDeathBehavior` 59/0, `MissileAIUpdate` 44/29, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/2,
+`HeightDieUpdate` 31/15, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `TransportAIUpdate` 24/13,
+`BaikonurLaunchPower` 23/23, `SlavedUpdate` 20/7, `HelicopterSlowDeathBehavior` 18/0, `PointDefenseLaserUpdate` 17/4,
+`DumbProjectileBehavior` 16/12, `PropagandaTowerBehavior` 14/11, `HelixContain` 13/1, `HordeUpdate` 13/3, `UpgradeDie` 13/0,
+`TunnelContain` 12/12, `AnimationSteeringUpdate` 11/0, `ChinookAIUpdate` 11/0, `HiveStructureBody` 11/3. Fast alle brauchen Terrain,
+Kollision, Flugphysik, Zielwahl oder KI und gehören zu Phase 6; ein einzelnes Modul schaltet keine große Objektgruppe mehr frei.
 
 ## 10. Bekannte Grenzen (Zusammenfassung)
 
 Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
 
-- Kein Flächenschaden, keine Projektil-Flugzeit, keine `WeaponBonus`-Multiplikatoren (§3).
-- Nur zwei `ArmorSet`/`WeaponSet`-Bedingungen statt der vollen veteranenbasierten Bestauswahl (§3).
-- Keine Erfahrungs-/Veteranenvergabe aus Kämpfen (§3). Das Furchtsignal (Block 0.3) ist implementiert.
-- Keine drehratenbegrenzte Ausrichtung, kein Terrain, keine Pfadsuche, keine Kollision (§4).
-- Kein Energie-Verlangsamungsfaktor, keine Bauplatzprüfung, kein Rallypunkt (§5); Kollision, Kräfte und Terrain fehlen,
-  die Module `PhysicsBehavior`/`SquishCollide` sind daher Ruhezustand (§6c).
-- Der `STEALTHED`-Statusbit hat noch keinen Verbraucher außer `StealthDetectorUpdate`s `DETECTED`-Markierung (kein
-  Zielsystem, das `DETECTED` auswertet, §6).
-- Keine Teams/Allianzen/Diplomatie als Datenmodell (`GarrisonContain`/`StealthDetectorUpdate` behelfen sich mit
-  „gleicher Besitzer = Verbündeter"), keine `CommandSet`/`CommandButton`-Wirkung (reine Präsentation), kein
-  Transport/Supply/Radar/Reparatur/Verkauf/Bau (Rest von HANDOFF-PHASE5.md Punkt „Vollständiger Umfang"). Garrison
-  (§6a) ist implementiert. Sciences (Kauf, Voraussetzungen) sind implementiert; „Science Purchase Points" werden
-  mangels Rang-/Erfahrungssystem nur per Systembefehl gutgeschrieben (§1a).
+- **Block 0.4 offen:** die RNG-Folge wurde nicht gegen ein kompiliertes Original verglichen (kein Compiler, keine Originalläufe). Die
+  Golden-Master-Tests (§7a) sind aus dem Quelltext abgeleitet, nicht gegen Originalläufe gemessen; Festkomma statt `Real` ist eine
+  dokumentierte Abweichung.
+- Keine Projektil-Flugzeit (Schaden greift beim Schuss, §3); Flächenschaden (§6g) läuft nur für `FireWeaponCommand` und
+  `FireWeaponUpdate`, `FireWeaponWhenDeadBehavior` meldet weiterhin nur `WeaponFireRequested`.
+- Erfahrung, Stufen, Gesundheits- und Waffenboni sind implementiert (§6h); die Rüstungs-/Waffensatzauswahl nach Stufe ist nicht
+  modelliert, weil kein ausgelieferter Satz sie verlangt. Rang und „Science Purchase Points“ aus Erfahrung fehlen. Das Furchtsignal
+  (Block 0.3) ist implementiert.
+- Keine drehratenbegrenzte Ausrichtung, kein Terrain, keine Pfadsuche, keine Kollision (§4). `PhysicsBehavior`, `SquishCollide` und
+  `CrushDie` sind daher Ruhezustand (§6c, §6g); Zerquetschen und Umstürzen (`ToppleUpdate`) folgen mit der Kollision.
+- Kein Energie-Verlangsamungsfaktor, keine Bauplatzprüfung, kein Rallypunkt (§5). **Kein Bauvorgang:** `DozerAIUpdate` und
+  `WorkerAIUpdate` bewegen und liefern, bauen aber nicht; Reparatur durch Dozer, Verkauf und Konstruktion fehlen.
+- Der `STEALTHED`-Statusbit hat noch keinen Verbraucher außer `StealthDetectorUpdate`s `DETECTED`-Markierung (kein Zielsystem, das
+  `DETECTED` auswertet, §6).
+- Teams und Diplomatie sind ein Datenmodell (§7). Die **Wirkung** von `CommandSet`/`CommandButton` (Kommandoleisten) und der
+  **Radareffekt** (`RadarUpdate`/`RadarUpgrade` führen nur den Zustand) sind nicht implementiert. Garnison (§6a), Sciences (§1a) und
+  `TransportContain` sind implementiert; `TunnelContain`, `HelixContain`, `TransportAIUpdate` und `ChinookAIUpdate` fehlen (die amerikanischen
+  Nachschubträger sind Chinooks, deshalb hat FactionAmerica im Referenzmatch keine Versorgungswirtschaft). „Science Purchase Points“ werden
+  nur per Systembefehl gutgeschrieben (§1a).
+- Versorgung (§6e): die Maschinensperre während der Dockbewegung, die Nähe-Prüfung der Lager, `setDockCrippled` und die Bindung von
+  Spawns an einen `SlavedUpdate` fehlen; die Dockbewegung ist eine einfache geradlinige Bewegung ohne Geometrie.
 - Spezialkräfte (§6d): kein Bauvorgang, kein Deaktiviert-Zustand, keine Kartenrand-Lieferung (Kanonenboote, Randerzeugung nur als
-  `CreationSkipped`), keine Kanonenboot-KI, keine Sichtobjekte/EVA/Skriptmeldungen, Kopfgeld ohne Teammodell.
-- Referenzmatch auf Retail-Daten mit den echten Kommandozentralen (ohne Dozer/Arbeiter, ohne Supply, ohne Spezialkräfte im
-  Befehlsstrom; Einkommen per `GiveMoneyCommand`), 13 von 13 Fraktionen (§7a); Golden-Master nur für
-  Schadenskette und Produktionsuhr, nicht für Supply und Erfahrung. Die hier beschriebenen Mechaniken sind zusätzlich durch
-  `tests/CnCNew.Simulation.Tests/Tests.Phase5.cs` (gezielte Integrationstests: Wirtschaft, Kampf, Upgrade-Effekte, Bewegung,
-  Produktion, Stealth/Heilung, Sieg) und den 216.000-Tick-Stresstest mit den neuen Modulen an echten Objekten abgesichert.
+  `CreationSkipped`), keine Kanonenboot-KI, keine Sichtobjekte/EVA/Skriptmeldungen, Kopfgeld nur für Feinde (§7). Es gibt keinen
+  Generator für `UseSpecialPowerCommand` im Referenzmatch.
+- Referenzmatch auf Retail-Daten: 13 von 13 Fraktionen mit echten Kommandozentralen, 0 übersprungene Startobjekte, echte Lieferungen
+  (§7a), aber ohne Bauvorgang, Spezialkräfte und Kollision; Sieger und Dauer sind ein Effekt dieser Vereinfachungen. Golden Masters
+  decken Schadenskette, Produktionsuhr, Supply und Erfahrung. Die Mechaniken sind zusätzlich durch `Tests.Phase5.cs`, `Tests.Supply.cs`,
+  `Tests.Veterancy.cs`, `Tests.Teams.cs`, `Tests.Repair.cs`, `Tests.Combat.cs` und den 216.000-Tick-Stresstest mit den neuen Modulen an
+  echten Objekten abgesichert.

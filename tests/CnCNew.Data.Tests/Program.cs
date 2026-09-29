@@ -232,7 +232,7 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // special-power unlock batch (docs/GAME-RULES.md §6d)
         "SpecialAbility", "OCLSpecialPower", "CashBountyPower", "CashHackSpecialPower", "SpecialPowerCreate", "GrantUpgradeCreate",
         "GrantScienceUpgrade", "UnpauseSpecialPowerUpgrade", "SpecialPowerCompletionDie", "SpectreGunshipDeploymentUpdate",
-        // supply economy batch (docs/GAME-RULES.md §7b)
+        // supply economy batch (docs/GAME-RULES.md §6e)
         "SupplyCenterCreate", "SupplyWarehouseCreate", "SupplyCenterDockUpdate", "SupplyWarehouseDockUpdate", "SupplyTruckAIUpdate", "WorkerAIUpdate",
         "AutoDepositUpdate", "SpawnBehavior", "DozerAIUpdate",
         // repair/heal batch (docs/GAME-RULES.md §6f)
