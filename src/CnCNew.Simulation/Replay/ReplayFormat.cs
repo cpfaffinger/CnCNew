@@ -248,6 +248,10 @@ public static class ReplayFormat
                 writer.Write(power.X.Raw);
                 writer.Write(power.Y.Raw);
                 break;
+            case DockCommand dock:
+                writer.Write(dock.Actor.Value);
+                writer.Write(dock.Dock.Value);
+                break;
             default:
                 throw new ReplayFormatException($"Command type {command.GetType().Name} has no replay encoding.");
         }
@@ -280,6 +284,7 @@ public static class ReplayFormat
             CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             CommandTypes.UseSpecialPower => ReadUseSpecialPower(reader, player, sequence, tick),
+            CommandTypes.Dock => new DockCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
     }

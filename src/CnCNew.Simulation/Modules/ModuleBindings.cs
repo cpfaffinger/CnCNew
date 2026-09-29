@@ -28,6 +28,15 @@ public sealed class ModuleBinding<TData>(string name, ModuleOwnerKind owner, Fun
 public sealed class ModuleBindingException(string message) : InvalidOperationException(message);
 
 /// <summary>
+/// Thrown by a module's data parser when the configuration asks for a feature that is not simulated yet. The template builder keeps the
+/// object instantiable-checked as missing (<c>Module[Feature]</c> in <c>MissingModules</c>) instead of failing the whole catalog.
+/// </summary>
+public sealed class UnsupportedModuleConfigurationException(string feature) : Exception($"unsupported module configuration '{feature}'")
+{
+    public string Feature { get; } = feature;
+}
+
+/// <summary>
 /// Explicit, ordinally sorted, reflection-free table from module name to typed factory. It lives in the simulation, not in
 /// the data layer, and is validated against the data descriptors when it is constructed: unknown name, wrong owner,
 /// duplicate, unsorted order, a binding for a module the catalog marks as not implemented (or presentation), and an

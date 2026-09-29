@@ -454,29 +454,98 @@ public sealed record AIUpdateData(bool AutoAcquireEnemiesWhenIdle) : ModuleData
 /// <c>AIUpdateInterface</c>: moves the object toward <see cref="Entity.MoveTargetX"/>/<see cref="Entity.MoveTargetY"/> in a
 /// straight vector line (no terrain, no pathfinding, no turn-rate-clamped heading — <see cref="Templates.LocomotorInfo"/>
 /// documents exactly which locomotor fields phase 5 applies). Sleeps while idle; <c>SimulationWorld</c> wakes it the instant
-/// a <c>SetMoveTargetCommand</c> is accepted.
+/// a <c>SetMoveTargetCommand</c> is accepted. The dock state (<c>AI_DOCK</c> with its <see cref="DockMachine"/>) is the one other
+/// state of the main machine that exists here: an order (<see cref="OrderMove"/>, <see cref="OrderDock"/>) cancels it, exactly as any
+/// new AI command replaces the current state in the reference. The supply-truck, worker and dozer modules derive from this class.
 /// </summary>
-public sealed class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
+public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 {
     private long _nextWake = -1;
+    private DockMachine? _dock;
+    private bool _lastCommandFromPlayer;
 
     public override string ModuleName => "AIUpdateInterface";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
+    /// <summary><c>AIUpdateInterface::isIdle</c>: no move order and not docking.</summary>
+    public bool IsIdle => _dock is null && !Entity.HasMoveTarget;
+
+    /// <summary>The main machine is in <c>AI_DOCK</c>.</summary>
+    public bool IsDocking => _dock is not null;
+
+    /// <summary><c>getLastCommandSource() == CMD_FROM_PLAYER</c>.</summary>
+    public bool LastCommandFromPlayer => _lastCommandFromPlayer;
+
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
-    public long Update(IWorldServices world)
+    /// <summary><c>aiMoveToPosition</c>: replaces the current state with a move.</summary>
+    public void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
+    {
+        CancelDock(world);
+        _lastCommandFromPlayer = fromPlayer;
+        Entity.HasMoveTarget = true;
+        Entity.MoveTargetX = x;
+        Entity.MoveTargetY = y;
+        world.WakeAt(Entity, this, world.Tick);
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>aiDock</c>: replaces the current state with <c>AI_DOCK</c>; a dock that cannot be entered ends at once and leaves the object idle.</summary>
+    public virtual void OrderDock(IWorldServices world, Entity dock, bool fromPlayer)
+    {
+        CancelDock(world);
+        _lastCommandFromPlayer = fromPlayer;
+        Entity.HasMoveTarget = false;
+        Entity.Speed = Fixed.Zero;
+        _dock = new DockMachine(dock.Id);
+        if (_dock.Enter(world, this) != DockStatus.Continue) EndDock(world);
+        world.WakeAt(Entity, this, world.Tick);
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary>The internal move of a state (approach, advance): false when the object has no locomotor.</summary>
+    internal bool StartInternalMove(Fixed x, Fixed y)
+    {
+        if (Entity.Template.Locomotor is null) return false;
+        Entity.HasMoveTarget = true;
+        Entity.MoveTargetX = x;
+        Entity.MoveTargetY = y;
+        return true;
+    }
+
+    internal void StopInternalMove()
+    {
+        if (!Entity.HasMoveTarget) return;
+        Entity.HasMoveTarget = false;
+        Entity.Speed = Fixed.Zero;
+    }
+
+    private void CancelDock(IWorldServices world)
+    {
+        if (_dock is not null) EndDock(world);
+    }
+
+    private void EndDock(IWorldServices world)
+    {
+        var machine = _dock!;
+        _dock = null;
+        machine.Halt(world, this);
+    }
+
+    public virtual long Update(IWorldServices world)
     {
         _ = data; // AutoAcquireEnemiesWhenIdle: see type doc comment — no auto-targeting in phase 5.
-        if (!Entity.HasMoveTarget) return SimulationTiming.SleepForever;
-        if (Entity.Template.Locomotor is not { } locomotor)
+        if (_dock is not null && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
+        if (Entity.HasMoveTarget)
         {
-            // No locomotor resolved (e.g. only a non-SET_NORMAL set is defined): drop the stale order rather than spin forever.
-            Entity.HasMoveTarget = false;
-            return SimulationTiming.SleepForever;
+            if (Entity.Template.Locomotor is not { } locomotor)
+            {
+                // No locomotor resolved (e.g. only a non-SET_NORMAL set is defined): drop the stale order rather than spin forever.
+                Entity.HasMoveTarget = false;
+            }
+            else Move(world, locomotor);
         }
-        Move(world, locomotor);
-        return Entity.HasMoveTarget ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return _dock is not null || Entity.HasMoveTarget ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     private void Move(IWorldServices world, LocomotorInfo locomotor)
@@ -507,8 +576,20 @@ public sealed class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateMod
         Entity.Y += dy * step / dist;
     }
 
-    public override void Describe(IStateWriter writer) => writer.Int("nextWake", _nextWake);
-    public override void Load(IStateReader reader) => _nextWake = reader.Int("nextWake");
+    public override void Describe(IStateWriter writer)
+    {
+        writer.Int("nextWake", _nextWake);
+        writer.Bool("lastCommandFromPlayer", _lastCommandFromPlayer);
+        writer.Bool("docking", _dock is not null);
+        _dock?.Describe(writer);
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        _nextWake = reader.Int("nextWake");
+        _lastCommandFromPlayer = reader.Bool("lastCommandFromPlayer");
+        _dock = reader.Bool("docking") ? DockMachine.Load(reader) : null;
+    }
 }
 
 // ============================================================================================= ProductionUpdate
@@ -574,7 +655,8 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             else
             {
                 var (x, y, z, angle) = exit.ClaimExit(world);
-                world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle);
+                if (exit.ForcesSupplyWanting) world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle, new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true));
+                else world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle);
             }
             world.Emit(SimEventKind.ProductionCompleted, Entity.Id, EntityId.Invalid, string.Empty, head.TemplateIndex);
         }

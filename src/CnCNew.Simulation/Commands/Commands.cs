@@ -11,7 +11,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 5;
+    public const int Version = 6;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -34,7 +34,10 @@ public static class CommandTypes
     // --------------------------------------------------------------------------------------------------- special powers
     public const ushort UseSpecialPower = 17;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= UseSpecialPower;
+    // --------------------------------------------------------------------------------------------------- supply economy
+    public const ushort Dock = 18;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= Dock;
 }
 
 /// <summary>
@@ -91,6 +94,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor")))),
             CommandTypes.UseSpecialPower => new UseSpecialPowerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), reader.Text("power"),
                 (SpecialPowerTargetKind)checked((byte)reader.Int("targetKind")), new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.Dock => new DockCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("dock")))),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -259,6 +263,21 @@ public sealed record UseSpecialPowerCommand(PlayerId Player, ulong Sequence, lon
     }
 }
 
+/// <summary>
+/// Orders <see cref="Actor"/> to dock with <see cref="Dock"/> (<c>aiDock</c> from the player: supply trucks and workers drop off or collect,
+/// and remember the dock as their preferred one). The dock must carry a dock module.
+/// </summary>
+public sealed record DockCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Actor, EntityId Dock) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Dock;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("actor", Actor.Value);
+        writer.UInt("dock", Dock.Value);
+    }
+}
+
 /// <summary>Creates an entity from a template. Owner 0 defaults to the issuing player; only the system may spawn for others.</summary>
 public sealed record SpawnCommand(PlayerId Player, ulong Sequence, long Tick, string Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle)
     : SimCommand(Player, Sequence, Tick)
@@ -378,6 +397,8 @@ public enum CommandRejection : byte
     InvalidSpecialPowerTarget = 28,
     /// <summary>The effect of the power lives in an update module (<c>UpdateModuleStartsAttack</c>) that is not implemented; the use is refused instead of silently doing nothing.</summary>
     SpecialPowerHandlerMissing = 29,
+    /// <summary>The dock order names an object without a dock module, or an actor that cannot dock (no AI module).</summary>
+    CannotDock = 30,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

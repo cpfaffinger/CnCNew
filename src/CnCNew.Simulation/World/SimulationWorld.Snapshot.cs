@@ -70,7 +70,7 @@ public sealed partial class SimulationWorld
                 new SpawnSetup(pending.Bool("hasHealth"), checked((int)pending.Int("healthPercent")), pending.Bool("hasVeterancy"), checked((int)pending.Int("veterancy")),
                     pending.Int("minLifetime"), pending.Int("maxLifetime"), new EntityId(checked((uint)pending.UInt("container"))),
                     new EntityId(checked((uint)pending.UInt("containInSource"))), pending.Fixed("transferDamage"), new EntityId(checked((uint)pending.UInt("transferSource"))),
-                    pending.Fixed("maxHealth"), pending.Bool("hasOrigin"), checked((int)pending.Int("originTemplate")))));
+                    pending.Fixed("maxHealth"), pending.Bool("hasOrigin"), checked((int)pending.Int("originTemplate")), pending.Bool("forceSupplyWanting"))));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
 

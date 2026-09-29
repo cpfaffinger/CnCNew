@@ -51,6 +51,12 @@ public enum SimEventKind : byte
     /// <c>Text</c>: the <c>SpecialPower</c> name, <c>Value</c>: the special-power index).
     /// </summary>
     SpecialPowerUsed = 21,
+
+    /// <summary>
+    /// A supply truck emptied its boxes at a supply center (<c>Entity</c>: the center, <c>Other</c>: the truck, <c>Value</c>: the credited
+    /// amount as a plain integer).
+    /// </summary>
+    SupplyDeposited = 22,
 }
 
 /// <summary>
@@ -102,4 +108,6 @@ public static class CreationSkipReasons
     public const int SettingNotSimulated = 7;
     /// <summary>An <c>OCLSpecialPower</c> creates its list at a map edge (<c>EDGE_NEAR_SOURCE</c>/<c>EDGE_NEAR_TARGET</c>/<c>EDGE_FARTHEST_FROM_TARGET</c>, or a gunship's edge approach) and no terrain model exists; <c>Text</c> is the create location.</summary>
     public const int NoTerrainEdge = 8;
+    /// <summary>A <c>SpawnBehavior</c> owner has no production-exit module, so nothing can leave it; <c>Text</c> is the first spawn template.</summary>
+    public const int NoExitInterface = 9;
 }

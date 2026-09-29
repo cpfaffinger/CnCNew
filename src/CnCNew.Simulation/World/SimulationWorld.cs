@@ -62,7 +62,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[30];
+    private readonly long[] _rejections = new long[(int)CommandRejection.CannotDock + 1];
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
     private long _tick;
@@ -108,7 +108,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <see cref="MaxHealth"/> and <see cref="OriginTemplate"/> carry <see cref="SpawnExtras"/>.
     /// </summary>
     private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
-        EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0);
+        EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false);
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
 
@@ -195,6 +195,8 @@ public sealed partial class SimulationWorld : IWorldServices
     public Fixed UnitReallyDamagedThreshold => _templates.UnitReallyDamagedThreshold;
     public Fixed BaseRegenHealthPercentPerSecond => _templates.BaseRegenHealthPercentPerSecond;
     public long BaseRegenDelayTicks => _templates.BaseRegenDelayTicks;
+    public int ValuePerSupplyBox => _templates.ValuePerSupplyBox;
+    public bool AreEnemies(PlayerId a, PlayerId b) => a != b && !a.IsSystem && !b.IsSystem;
 
     public ScienceMask PlayerSciences(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.CompletedSciences : ScienceMask.Empty;
     public int SciencePointsOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.SciencePurchasePoints : 0;
@@ -332,7 +334,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));
         var id = Ids.AllocateEntity();
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
-            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0));
+            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }
@@ -346,7 +348,10 @@ public sealed partial class SimulationWorld : IWorldServices
     private static Modules.BuiltIn.ProductionUpdate? FindProductionModule(Entity entity)
         => Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.ProductionUpdate) as Modules.BuiltIn.ProductionUpdate;
 
-    private static bool CanMove(Entity entity) => Array.Exists(entity.ModuleArray, module => module is Modules.BuiltIn.AIUpdateInterface);
+    private static bool CanMove(Entity entity) => AiOf(entity) is not null;
+
+    private static Modules.BuiltIn.AIUpdateInterface? AiOf(Entity entity)
+        => Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.AIUpdateInterface) as Modules.BuiltIn.AIUpdateInterface;
 
     /// <summary>
     /// <c>VictoryConditions::hasSinglePlayerBeenDefeated</c> (default flags NOBUILDINGS|NOUNITS) = <c>!Player::hasAnyObjects</c>:
@@ -506,6 +511,15 @@ public sealed partial class SimulationWorld : IWorldServices
                 var byContainer = _entities.GetValueOrDefault(actor.ContainedBy.Value);
                 if (!command.Player.IsSystem && actor.Owner != command.Player && (byContainer is null || byContainer.Owner != command.Player))
                     return CommandRejection.NotPermitted;
+                break;
+            }
+            case DockCommand dock:
+            {
+                if (!_entities.TryGetValue(dock.Actor.Value, out var actor) || actor.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (actor.Owner != command.Player) return CommandRejection.NotPermitted;
+                if (!CanMove(actor)) return CommandRejection.CannotMove;
+                if (!_entities.TryGetValue(dock.Dock.Value, out var target) || target.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (Modules.BuiltIn.DockModules.DockOf(target) is null) return CommandRejection.CannotDock;
                 break;
             }
             case UseSpecialPowerCommand useSpecialPower:
@@ -687,12 +701,19 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (target is null || target.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
                 if (target.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
                 if (!CanMove(target)) { RecordRejection(command, CommandRejection.CannotMove); break; }
-                target.HasMoveTarget = true;
-                target.MoveTargetX = move.X;
-                target.MoveTargetY = move.Y;
-                var moveNode = Array.Find(target.Updates, node => node.Module is Modules.BuiltIn.AIUpdateInterface);
-                if (moveNode is not null) WakeAt(target, moveNode.Update, _tick);
-                MarkDirty(target);
+                AiOf(target)!.OrderMove(this, move.X, move.Y, true);
+                break;
+            }
+            case DockCommand dockOrder:
+            {
+                var actor = FindEntity(dockOrder.Actor);
+                if (actor is null || actor.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (actor.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                if (!CanMove(actor)) { RecordRejection(command, CommandRejection.CannotMove); break; }
+                var dockEntity = FindEntity(dockOrder.Dock);
+                if (dockEntity is null || dockEntity.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (Modules.BuiltIn.DockModules.DockOf(dockEntity) is null) { RecordRejection(command, CommandRejection.CannotDock); break; }
+                AiOf(actor)!.OrderDock(this, dockEntity, true);
                 break;
             }
             case FireWeaponCommand fire:
@@ -994,8 +1015,10 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         if (_destroyQueue.Count == 0) return;
         _destroyQueue.Sort(ById);
-        foreach (var entity in _destroyQueue)
+        // OnRemove hooks may request further destroys (spawner slaves); those append to the queue and are processed in the same pass.
+        for (var queued = 0; queued < _destroyQueue.Count; queued++)
         {
+            var entity = _destroyQueue[queued];
             foreach (var module in entity.ModuleArray) module.OnRemove(this);
             foreach (var node in entity.Updates) _updates.Remove(node);
             if (entity.Timers is { Count: > 0 } timers)
@@ -1042,6 +1065,9 @@ public sealed partial class SimulationWorld : IWorldServices
         if (setup.HasOrigin)
             foreach (var module in entity.ModuleArray)
                 if (module is ISpawnOriginReceiver receiver) receiver.OnSpawnedFrom(this, setup.OriginTemplate);
+        if (setup.ForceSupplyWanting)
+            foreach (var module in entity.ModuleArray)
+                if (module is Modules.BuiltIn.ISupplyCarrier carrier) carrier.ForceWanting(this);
         if (setup.MaxHealth > Fixed.Zero && entity.Body is IMaxHealthAdjustable adjustable)
             adjustable.AdjustMaxHealth(this, setup.MaxHealth - entity.Body.MaxHealth, "SAME_CURRENTHEALTH");
         if (setup.HasHealth && entity.Body is IInitialHealthSettable health) health.SetInitialHealth(this, setup.HealthPercent);
@@ -1128,7 +1154,7 @@ public sealed partial class SimulationWorld : IWorldServices
         MarkDirty(entity);
     }
 
-    private void MarkDirty(Entity entity)
+    public void MarkDirty(Entity entity)
     {
         if (entity.Dirty) return;
         entity.Dirty = true;
@@ -1304,6 +1330,7 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Fixed("maxHealth", setup.MaxHealth);
             writer.Bool("hasOrigin", setup.HasOrigin);
             writer.Int("originTemplate", setup.OriginTemplate);
+            writer.Bool("forceSupplyWanting", setup.ForceSupplyWanting);
             writer.EndObject();
         }
         writer.EndArray();

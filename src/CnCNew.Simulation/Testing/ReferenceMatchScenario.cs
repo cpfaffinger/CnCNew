@@ -73,6 +73,12 @@ public sealed class ReferenceMatchScenario
     public long VictoryTick { get; private set; } = -1;
     public int StartObjectsSkipped { get; private set; }
     public ImmutableArray<string> SkippedStartObjects { get; private set; } = [];
+    /// <summary>Supply carriers the generator ordered to a warehouse; the trucks then run their own state machine.</summary>
+    public int DockOrders { get; private set; }
+    public ImmutableArray<string> SupplyNotes { get; private set; } = [];
+    /// <summary>Deliveries a carrier made at a supply center, and the money they paid (auto-deposits and other income excluded).</summary>
+    public int SupplyDeliveries { get; private set; }
+    public long SupplyDeliveryMoney { get; private set; }
     public int ProductionOrders { get; private set; }
     public int Orders { get; private set; }
     public int Shots { get; private set; }
@@ -153,6 +159,11 @@ public sealed class ReferenceMatchScenario
     {
         foreach (var simEvent in events)
         {
+            if (simEvent.Kind == SimEventKind.SupplyDeposited && simEvent.Entity != simEvent.Other)
+            {
+                SupplyDeliveries++;
+                SupplyDeliveryMoney += simEvent.Value;
+            }
             if (simEvent.Kind == SimEventKind.EntitySpawned) _alive++;
             else if (simEvent.Kind == SimEventKind.EntityDestroyed)
             {
@@ -194,6 +205,40 @@ public sealed class ReferenceMatchScenario
         }
         SkippedStartObjects = skipped.ToImmutable();
         StartObjectsSkipped = SkippedStartObjects.Length;
+        SpawnSupplyInfrastructure(world, catalog, factions);
+    }
+
+    /// <summary>
+    /// Stand-in for construction: every base gets one supply center and one supply carrier of its side plus a neutral warehouse, so the dock
+    /// machine, the carrier state machine and the deposits run on real definitions. A side without one of the three is noted, never silent.
+    /// </summary>
+    private void SpawnSupplyInfrastructure(SimulationWorld world, TemplateCatalog catalog, ImmutableArray<MatchParticipant> factions)
+    {
+        var notes = ImmutableArray.CreateBuilder<string>();
+        var warehouse = catalog.Templates.Where(value => value.IsInstantiable && value.Modules.Any(module => module.Name == "SupplyWarehouseDockUpdate"))
+            .OrderBy(value => value.Name, StringComparer.Ordinal).FirstOrDefault();
+        if (warehouse is null) notes.Add("no instantiable supply warehouse");
+        for (var index = 0; index < factions.Length; index++)
+        {
+            var player = Players[index].Id;
+            var side = factions[index].Side;
+            var centerTemplate = catalog.Templates.Where(value => value.IsInstantiable && value.IsKindOf("STRUCTURE") && string.Equals(value.Side, side, StringComparison.OrdinalIgnoreCase)
+                    && value.Modules.Any(module => module.Name == "SupplyCenterDockUpdate")).OrderBy(value => value.Name, StringComparer.Ordinal).FirstOrDefault();
+            var carrier = catalog.Templates.Where(value => value.IsInstantiable && string.Equals(value.Side, side, StringComparison.OrdinalIgnoreCase)
+                    && value.Modules.Any(module => module.Name is "SupplyTruckAIUpdate" or "WorkerAIUpdate")).OrderBy(value => value.Name, StringComparer.Ordinal).FirstOrDefault();
+            if (centerTemplate is null || carrier is null || warehouse is null)
+            {
+                notes.Add($"{factions[index].Faction.Name}: no supply economy (center {centerTemplate?.Name ?? "-"}, carrier {carrier?.Name ?? "-"})");
+                continue;
+            }
+            var (bx, by) = BasePosition(index, factions.Length);
+            var angle = FixedTrig.TwoPi * index / Fixed.FromInt(factions.Length);
+            var inward = (X: -FixedTrig.Cos(angle), Y: -FixedTrig.Sin(angle));
+            Add(world, new SpawnCommand(player, Next(player), 0, centerTemplate.Name, player, bx + inward.X * Fixed.FromInt(90), by + inward.Y * Fixed.FromInt(90), Fixed.Zero, Fixed.Zero));
+            Add(world, new SpawnCommand(PlayerId.System, Next(PlayerId.System), 0, warehouse.Name, PlayerId.System, bx + inward.X * Fixed.FromInt(200), by + inward.Y * Fixed.FromInt(200), Fixed.Zero, Fixed.Zero));
+            Add(world, new SpawnCommand(player, Next(player), 0, carrier.Name, player, bx + inward.X * Fixed.FromInt(110), by + inward.Y * Fixed.FromInt(110), Fixed.Zero, Fixed.Zero));
+        }
+        SupplyNotes = notes.ToImmutable();
     }
 
     private (Fixed X, Fixed Y) BasePosition(int index, int count)
@@ -290,6 +335,7 @@ public sealed class ReferenceMatchScenario
             for (var index = 0; index < Players.Length; index++)
                 if (!world.IsPlayerDefeated(Players[index].Id))
                     Add(world, new GiveMoneyCommand(PlayerId.System, Next(PlayerId.System), tick, Players[index].Id, Fixed.FromInt(_options.Income)));
+        if (tick == 1) IssueDockOrders(world);
         var productionTick = tick % ProductionCadence == 0;
         var moveTick = tick % MoveCadence == 0;
         if (!productionTick && !moveTick) return;
@@ -297,6 +343,19 @@ public sealed class ReferenceMatchScenario
         var objects = world.Entities.OrderBy(value => value.Id.Value).ToArray();
         if (productionTick) QueueProduction(world, catalog, objects, tick);
         if (moveTick) IssueOrders(world, objects, tick);
+    }
+
+    private void IssueDockOrders(SimulationWorld world)
+    {
+        var objects = world.Entities.OrderBy(value => value.Id.Value).ToArray();
+        var warehouses = objects.Where(value => value.Modules.Any(module => module is SupplyWarehouseDockUpdate)).ToArray();
+        foreach (var carrier in objects.Where(value => !value.Owner.IsSystem && value.Modules.Any(module => module is ISupplyCarrier)))
+        {
+            var nearest = warehouses.OrderBy(value => (value.X - carrier.X) * (value.X - carrier.X) + (value.Y - carrier.Y) * (value.Y - carrier.Y)).ThenBy(value => value.Id.Value).FirstOrDefault();
+            if (nearest is null) continue;
+            Add(world, new DockCommand(carrier.Owner, Next(carrier.Owner), 1, carrier.Id, nearest.Id));
+            DockOrders++;
+        }
     }
 
     private void QueueProduction(SimulationWorld world, TemplateCatalog catalog, Entity[] objects, long tick)

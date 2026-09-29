@@ -38,6 +38,9 @@ public interface IWorldServices
     /// <summary>Called by a body when its entity died; emits the event and runs the die modules in module order.</summary>
     void OnEntityDied(Entity entity, in DamageInfo info);
 
+    /// <summary>Marks an entity whose state a module changed from outside that entity's own update (the world only tracks the updated entity on its own).</summary>
+    void MarkDirty(Entity entity);
+
     /// <summary><c>friend_awakenUpdateModule</c>: moves the module's next wake tick.</summary>
     void WakeAt(Entity entity, IUpdateModule module, long tick);
 
@@ -103,6 +106,12 @@ public interface IWorldServices
     /// <summary><c>GlobalData::m_baseRegenHealthPercentPerSecond</c> (ratio) and <c>m_baseRegenDelay</c> (ticks), read by <c>BaseRegenerateUpdate</c>.</summary>
     Fixed BaseRegenHealthPercentPerSecond { get; }
     long BaseRegenDelayTicks { get; }
+
+    /// <summary><c>GlobalData::m_baseValuePerSupplyBox</c>: the payout of one supply box at a supply center.</summary>
+    int ValuePerSupplyBox { get; }
+
+    /// <summary><c>Player::getRelationship</c> == ENEMIES between two controlling players (no team model yet: any two distinct real players are enemies).</summary>
+    bool AreEnemies(PlayerId a, PlayerId b);
 
     /// <summary>"Science Purchase Points" earned via rank/experience in the reference (not modeled); a scenario/system command credits them directly instead — see <c>docs/GAME-RULES.md</c>.</summary>
     int SciencePointsOf(PlayerId player);
@@ -187,9 +196,10 @@ public static class SpecialPowerRouting
 /// <summary>
 /// Adjustments an engine-internal spawner applies to a fresh object: <see cref="MaxHealth"/> (positive = replace the template's maximum
 /// health keeping the current health, as <c>RebuildHoleExposeDie</c> does) and <see cref="OriginTemplate"/> (index of the template the
-/// object stands in for, or -1; delivered to <see cref="ISpawnOriginReceiver"/> modules).
+/// object stands in for, or -1; delivered to <see cref="ISpawnOriginReceiver"/> modules) and <see cref="ForceSupplyWanting"/> (the
+/// supply-center exit tells a fresh truck to start supplying at once, <c>SupplyTruckAIUpdate::privateWanting</c>).
 /// </summary>
-public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1);
+public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false);
 
 /// <summary>A module told which template its object replaces when it is created by <see cref="IWorldServices.RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed, in SpawnExtras)"/>.</summary>
 public interface ISpawnOriginReceiver
@@ -205,6 +215,9 @@ public interface IProductionExit
 
     /// <summary><c>ExitInterface::exitObjectViaDoor</c>, position part: where the unit appears (world space) and which way it faces; the exit's delay/burst state advances.</summary>
     (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world);
+
+    /// <summary><c>SupplyCenterProductionExitUpdate::exitObjectViaDoor</c>: units leaving this exit start gathering supplies immediately.</summary>
+    bool ForcesSupplyWanting => false;
 }
 
 /// <summary>A module driven by the <see cref="UpgradeMux"/> state machine (<c>UpgradeModule</c> / any <c>UpgradeMux</c>-mixin module).</summary>
@@ -313,6 +326,8 @@ public static class ObjectStatusBits
 
     public static int Destroyed { get; } = Index("DESTROYED");
     public static int UnderConstruction { get; } = Index("UNDER_CONSTRUCTION");
+    public static int Sold { get; } = Index("SOLD");
+    public static int Reconstructing { get; } = Index("RECONSTRUCTING");
 
     public static ulong Mask(FlagsValue? flags, NameTable table)
     {

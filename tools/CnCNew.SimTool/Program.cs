@@ -181,8 +181,10 @@ static int ReferenceMatch(string directory, string[] args)
     var scenario = new ReferenceMatchScenario(options);
     watch.Restart();
     var recorded = scenario.Record(catalog, fingerprint);
-    Console.WriteLine($"Recorded {recorded.Commands.Length} commands ({scenario.ProductionOrders} production orders, {scenario.Orders} move orders, {scenario.Shots} shots) in {watch.Elapsed.TotalSeconds:F1} s; peak {scenario.PeakAlive} living objects; {scenario.StartObjectsSkipped} starting objects skipped.");
+    Console.WriteLine($"Recorded {recorded.Commands.Length} commands ({scenario.ProductionOrders} production orders, {scenario.Orders} move orders, {scenario.DockOrders} dock orders, {scenario.Shots} shots) in {watch.Elapsed.TotalSeconds:F1} s; peak {scenario.PeakAlive} living objects; {scenario.StartObjectsSkipped} starting objects skipped.");
     foreach (var line in scenario.SkippedStartObjects) Console.WriteLine($"  skipped start object: {line}");
+    foreach (var line in scenario.SupplyNotes) Console.WriteLine($"  supply note: {line}");
+    Console.WriteLine($"Supply deliveries at supply centers: {scenario.SupplyDeliveries}, paying {scenario.SupplyDeliveryMoney} in total.");
     Console.WriteLine(scenario.Winner is null
         ? $"No winner within {recorded.Header.EndTick} ticks."
         : $"Winner: player {scenario.Winner.Value.Value} ({scenario.WinnerFaction}) at tick {scenario.VictoryTick} ({scenario.VictoryTick / 30 / 60.0:F1} game minutes); replay length {recorded.Header.EndTick} ticks.");

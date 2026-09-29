@@ -32,6 +32,8 @@ public abstract class ProductionExitBase(ProductionExitData exitData) : SimModul
 
     public virtual bool IsFreeToExit => true;
 
+    public virtual bool ForcesSupplyWanting => false;
+
     public virtual (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world)
     {
         _ = world;
@@ -55,6 +57,7 @@ public sealed class DefaultProductionExitUpdate(ProductionExitData data) : Produ
 public sealed class SupplyCenterProductionExitUpdate(ProductionExitData data) : ProductionExitBase(data)
 {
     public override string ModuleName => "SupplyCenterProductionExitUpdate";
+    public override bool ForcesSupplyWanting => true;
 }
 
 /// <summary>

@@ -91,6 +91,16 @@ internal static class ModuleConfigReader
         };
     }
 
+    /// <summary>The names of every occurrence of an accumulating reference key, in file order.</summary>
+    public static ImmutableArray<string> AccumulatedNames(ModuleConfiguration configuration, string name)
+        => [..All(configuration, name).SelectMany(field => field.Value.Value switch
+        {
+            DefinitionReference { IsNone: true } => [],
+            DefinitionReference reference => [reference.Name],
+            ImmutableArray<DefinitionReference> references => references.Where(value => !value.IsNone).Select(value => value.Name),
+            _ => throw Unexpected(configuration, field),
+        })];
+
     public static Point3 Vector(ModuleConfiguration configuration, string name)
     {
         var field = Find(configuration, name);

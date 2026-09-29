@@ -124,8 +124,9 @@ public sealed class TemplateCatalog
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
     private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, SpecialPowerCatalog specialPowers,
-        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance)
+        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance, int valuePerSupplyBox)
     {
+        ValuePerSupplyBox = valuePerSupplyBox;
         StandardMinefieldDistance = standardMinefieldDistance;
         BaseRegenHealthPercentPerSecond = baseRegenHealthPercentPerSecond;
         BaseRegenDelayTicks = baseRegenDelayTicks;
@@ -164,6 +165,8 @@ public sealed class TemplateCatalog
     public long BaseRegenDelayTicks { get; }
     /// <summary><c>GlobalData::m_standardMinefieldDistance</c>: the default <c>DistanceAroundObject</c> of <c>GenerateMinefieldBehavior</c> (<c>GameData.ini StandardMinefieldDistance = 40</c>).</summary>
     public Fixed StandardMinefieldDistance { get; }
+    /// <summary><c>GlobalData::m_baseValuePerSupplyBox</c> (<c>GameData.ini ValuePerSupplyBox = 75</c>): what one carried box pays at a supply center.</summary>
+    public int ValuePerSupplyBox { get; }
     public ObjectTemplate this[int index] => Templates[index];
     public bool TryGet(string name, out ObjectTemplate template) => _byName.TryGetValue(name, out template!);
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);
@@ -185,6 +188,7 @@ public sealed class TemplateCatalog
         var gravity = ResolveGravity(graph);
         var (baseRegen, baseRegenDelay) = ResolveBaseRegen(graph);
         var minefieldDistance = ResolveMinefieldDistance(graph);
+        var valuePerSupplyBox = ResolveValuePerSupplyBox(graph);
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
         var index = 0;
         foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
@@ -213,6 +217,10 @@ public sealed class TemplateCatalog
                 {
                     specs.Add(new ModuleSpec(module.Name, module.Tag, binding, binding.ParseData(module, upgrades)));
                 }
+                catch (UnsupportedModuleConfigurationException unsupported)
+                {
+                    missing.Add($"{module.Name}[{unsupported.Feature}]");
+                }
                 catch (Exception exception) when (exception is InvalidDataException or OverflowException or ArgumentException)
                 {
                     throw new TemplateBuildException($"Object '{definition.OriginalName}', module '{module.Name}' ({module.Tag}): {exception.Message}");
@@ -226,7 +234,7 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))
@@ -275,6 +283,14 @@ public sealed class TemplateCatalog
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
         var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("StandardMinefieldDistance", StringComparison.OrdinalIgnoreCase))?.Value.Value;
         return value is Distance distance ? Fixed.FromDecimal(distance.Value) : Fixed.FromInt(40);
+    }
+
+    /// <summary>Absent key: the reference default of <c>GlobalData</c> (<c>m_baseValuePerSupplyBox = 100</c>).</summary>
+    private static int ResolveValuePerSupplyBox(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("ValuePerSupplyBox", StringComparison.OrdinalIgnoreCase))?.Value.Value;
+        return value is long integer ? checked((int)integer) : 100;
     }
 
     private static ImmutableArray<string> ConditionTokens(DefinitionSection set)
