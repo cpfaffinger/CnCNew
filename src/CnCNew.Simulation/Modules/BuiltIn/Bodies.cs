@@ -37,12 +37,13 @@ public static class BodyDamageStates
 /// Armor coefficients are applied by the caller (<see cref="Templates.ArmorInfo"/>/<c>SimulationWorld</c>'s combat
 /// resolution), not here; damage multipliers remain unmodeled (phase 6+).
 /// </summary>
-public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
+public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitialHealthSettable
 {
     // ActiveBody.cpp: #define YELLOW_DAMAGE_PERCENT (0.25f)
     private static readonly Fixed YellowDamagePercent = Fixed.FromDecimal(0.25m);
 
     private readonly string _name;
+    private readonly Fixed _initialHealth;
 
     public ActiveBody(BodyData data, string name = "ActiveBody")
     {
@@ -50,6 +51,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
         MaxHealth = data.MaxHealth;
         Health = data.InitialHealth;
         PreviousHealth = data.InitialHealth;
+        _initialHealth = data.InitialHealth;
     }
 
     public override string ModuleName => _name;
@@ -130,6 +132,13 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable
         }
         return Health != PreviousHealth ? DamageOutcome.Applied : DamageOutcome.NoEffect;
     }
+
+    /// <summary>
+    /// <c>ActiveBody::setInitialHealth</c>: sets the current health to <paramref name="percent"/> of the body's configured initial health.
+    /// Only meaningful for freshly created bodies (the reference's <c>m_initialHealth</c> follows <c>setMaxHealth</c>; here it is the configured value).
+    /// </summary>
+    public void SetInitialHealth(IWorldServices world, int percent)
+        => InternalChangeHealth(world, _initialHealth * Fixed.FromInt(percent) / Fixed.FromInt(100) - Health);
 
     /// <summary><c>MaxHealthUpgrade.cpp</c>: raises (or lowers) the cap; <paramref name="changeType"/> is one of <c>NameTablesPhase5.MaxHealthChangeType</c>, compared case-insensitively (unrecognized text falls back to the default, matching the reference's zero-based enum default).</summary>
     public virtual void AdjustMaxHealth(IWorldServices world, Fixed delta, string changeType)

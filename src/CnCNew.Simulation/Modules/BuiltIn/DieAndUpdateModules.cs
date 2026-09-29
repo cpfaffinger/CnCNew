@@ -74,9 +74,8 @@ public sealed record CreateObjectDieData(DieMuxData Mux, string CreationList, bo
 }
 
 /// <summary>
-/// <c>CreateObjectDie</c>: asks for an object creation list. Executing creation lists is a phase-5 rule, so the module emits a
-/// <see cref="SimEventKind.CreationListRequested"/> event (value 1 when the previous health is to be transferred). An absent
-/// list (shipped map overlays use this to disable the effect) requests nothing.
+/// <c>CreateObjectDie</c>: executes its object creation list (<see cref="IWorldServices.CreateFromList"/>), transferring the previous
+/// health to the first created object when configured. An absent list (shipped map overlays use this to disable the effect) does nothing.
 /// </summary>
 public sealed class CreateObjectDie(CreateObjectDieData data) : DieModuleBase(data.Mux)
 {
@@ -85,7 +84,7 @@ public sealed class CreateObjectDie(CreateObjectDieData data) : DieModuleBase(da
     public override void OnDie(IWorldServices world, in DamageInfo info)
     {
         if (!Mux.IsApplicable(Entity, info) || data.CreationList.Length == 0) return;
-        world.Emit(SimEventKind.CreationListRequested, Entity.Id, info.Source, data.CreationList, data.TransferPreviousHealth ? 1 : 0);
+        world.CreateFromList(Entity, data.CreationList, info.Source, data.TransferPreviousHealth);
     }
 }
 
@@ -125,8 +124,8 @@ public sealed record InstantDeathData(DieMuxData Mux, ImmutableArray<string> Fx,
 }
 
 /// <summary>
-/// <c>InstantDeathBehavior</c>: requests its effect lists, creation lists and weapons in that order, then removes the entity.
-/// The requests are events; executing them is presentation or phase-5 work.
+/// <c>InstantDeathBehavior</c>: picks one entry of each non-empty list (effect, creation list, weapon; one random draw per list, in that order),
+/// then removes the entity. Effects and weapons are requested as events; the creation list is executed.
 /// </summary>
 public sealed class InstantDeathBehavior(InstantDeathData data) : DieModuleBase(data.Mux)
 {
@@ -135,9 +134,9 @@ public sealed class InstantDeathBehavior(InstantDeathData data) : DieModuleBase(
     public override void OnDie(IWorldServices world, in DamageInfo info)
     {
         if (!Mux.IsApplicable(Entity, info)) return;
-        foreach (var fx in data.Fx) world.Emit(SimEventKind.FxRequested, Entity.Id, info.Source, fx, 0);
-        foreach (var list in data.CreationLists) world.Emit(SimEventKind.CreationListRequested, Entity.Id, info.Source, list, 0);
-        foreach (var weapon in data.Weapons) world.Emit(SimEventKind.WeaponFireRequested, Entity.Id, info.Source, weapon, 0);
+        if (data.Fx.Length > 0) world.Emit(SimEventKind.FxRequested, Entity.Id, info.Source, data.Fx[world.LogicRandom.Range(0, data.Fx.Length - 1)], 0);
+        if (data.CreationLists.Length > 0) world.CreateFromList(Entity, data.CreationLists[world.LogicRandom.Range(0, data.CreationLists.Length - 1)], info.Source, false);
+        if (data.Weapons.Length > 0) world.Emit(SimEventKind.WeaponFireRequested, Entity.Id, info.Source, data.Weapons[world.LogicRandom.Range(0, data.Weapons.Length - 1)], 0);
         world.RequestDestroy(Entity.Id);
     }
 }
@@ -153,6 +152,8 @@ public abstract class TimedExpiryModule(LifetimeData data) : SimModule, IUpdateM
 {
     private long _nextWake = -1;
     private long _dieTick;
+    private long _minTicks = data.MinTicks;
+    private long _maxTicks = data.MaxTicks;
 
     public long NextWake
     {
@@ -162,10 +163,17 @@ public abstract class TimedExpiryModule(LifetimeData data) : SimModule, IUpdateM
 
     public long DieTick => _dieTick;
 
+    /// <summary><c>LifetimeUpdate::setLifetimeRange</c> before the first draw: an object creation list overrides the object's own range (the reference redraws afterwards, the simulation draws once).</summary>
+    internal void OverrideRange(long minTicks, long maxTicks)
+    {
+        _minTicks = minTicks;
+        _maxTicks = maxTicks;
+    }
+
     public override void OnSpawn(IWorldServices world)
     {
         // calcSleepDelay: GameLogicRandomValue(min, max) inclusive, at least one frame.
-        var delay = world.LogicRandom.Range(checked((int)data.MinTicks), checked((int)data.MaxTicks));
+        var delay = world.LogicRandom.Range(checked((int)_minTicks), checked((int)_maxTicks));
         if (delay < 1) delay = 1;
         _dieTick = world.Tick + delay;
         _nextWake = Math.Min(world.Tick + delay, SimulationTiming.SleepForever);

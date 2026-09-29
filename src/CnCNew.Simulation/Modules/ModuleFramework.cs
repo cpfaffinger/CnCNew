@@ -71,6 +71,16 @@ public interface IWorldServices
     /// <summary>Reserves and queues the creation of a fresh entity outside the command/validation path (engine-internal spawns: production, OCLs).</summary>
     EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle);
 
+    /// <summary>
+    /// <c>ObjectCreationList::create</c> with <paramref name="source"/> as primary object: queues the spawns the list describes and returns
+    /// the first created entity (<see cref="EntityId.Invalid"/> when none). Emits <see cref="SimEventKind.CreationListRequested"/> for the
+    /// request itself and <see cref="SimEventKind.CreationSkipped"/> for everything that is not simulated. With
+    /// <paramref name="transferPreviousHealth"/> the first created entity takes the damage the source had suffered before it died.
+    /// </summary>
+    EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth);
+
+    ObjectCreationListCatalog CreationLists { get; }
+
     // ------------------------------------------------------------------------------------------- phase 5: sciences
 
     ScienceCatalog Sciences { get; }
@@ -93,6 +103,12 @@ public interface IUpgradeModule
 }
 
 /// <summary>A body that can change its maximum health at run time (<c>MaxHealthUpgrade.cpp</c>). Not every body supports this (<c>InactiveBody</c> has no health).</summary>
+/// <summary>A body whose current health can be set as a percentage of its initial health on a fresh object (<c>BodyModuleInterface::setInitialHealth</c>, used by object creation lists).</summary>
+public interface IInitialHealthSettable
+{
+    void SetInitialHealth(IWorldServices world, int percent);
+}
+
 public interface IMaxHealthAdjustable
 {
     void AdjustMaxHealth(IWorldServices world, Fixed delta, string changeType);

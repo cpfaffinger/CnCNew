@@ -63,7 +63,10 @@ public sealed partial class SimulationWorld
             var templateIndex = checked((int)pending.Int("template"));
             if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new InvalidDataException("Spawn queue references an unknown template.");
             _spawnQueue.Add(new PendingSpawn(new EntityId(checked((uint)pending.UInt("id"))), templateIndex, new PlayerId(checked((int)pending.Int("owner"))),
-                pending.Fixed("x"), pending.Fixed("y"), pending.Fixed("z"), pending.Fixed("angle")));
+                pending.Fixed("x"), pending.Fixed("y"), pending.Fixed("z"), pending.Fixed("angle"),
+                new SpawnSetup(pending.Bool("hasHealth"), checked((int)pending.Int("healthPercent")), pending.Bool("hasVeterancy"), checked((int)pending.Int("veterancy")),
+                    pending.Int("minLifetime"), pending.Int("maxLifetime"), new EntityId(checked((uint)pending.UInt("container"))),
+                    new EntityId(checked((uint)pending.UInt("containInSource"))), pending.Fixed("transferDamage"), new EntityId(checked((uint)pending.UInt("transferSource"))))));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
 

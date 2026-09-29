@@ -40,6 +40,11 @@ public enum SimEventKind : byte
     EntityUncontained = 18,
     /// <summary><c>CreateCrateDie</c> chose a crate object (<c>Entity</c>: the dead object, <c>Text</c>: the crate template, <c>Value</c>: the owning player id, 0 = neutral). Raised whether or not the crate template is instantiable yet.</summary>
     CrateRequested = 19,
+    /// <summary>
+    /// An object creation list executed only partially (<c>Entity</c>: the source, <c>Text</c>: the nugget kind, template or list name,
+    /// <c>Value</c>: <see cref="CreationSkipReasons"/>). Never a silent drop: every skipped nugget or member raises exactly one event.
+    /// </summary>
+    CreationSkipped = 20,
 }
 
 /// <summary>
@@ -70,4 +75,23 @@ public readonly record struct SimEvent(EventId Id, long Tick, SimEventKind Kind,
             new EntityId(checked((uint)reader.UInt("entity"))), new EntityId(checked((uint)reader.UInt("other"))),
             new PlayerId(checked((int)reader.Int("player"))), reader.Text("text"), reader.Int("value"));
     }
+}
+
+/// <summary>Reason codes of <see cref="SimEventKind.CreationSkipped"/>.</summary>
+public static class CreationSkipReasons
+{
+    /// <summary>The nugget kind (debris, force, delivery, attack) has no simulation model yet; <c>Text</c> is the nugget kind.</summary>
+    public const int NuggetNotSimulated = 1;
+    /// <summary>A pickable object exists but is not instantiable (unimplemented modules); <c>Text</c> is the template.</summary>
+    public const int TemplateNotInstantiable = 2;
+    /// <summary>The <c>PutInContainer</c> template is not instantiable; the whole nugget is skipped; <c>Text</c> is the template.</summary>
+    public const int ContainerNotInstantiable = 3;
+    /// <summary>The named object template does not exist; <c>Text</c> is the name.</summary>
+    public const int UnknownTemplate = 4;
+    /// <summary>The named creation list does not exist; <c>Text</c> is the name.</summary>
+    public const int UnknownList = 5;
+    /// <summary>A <c>CreateObject</c> nugget names no object at all; <c>Text</c> is the nugget kind.</summary>
+    public const int NoObjectNamed = 6;
+    /// <summary>A nugget setting (<c>InvulnerableTime</c>, <c>DiesOnBadLand</c>) has no simulation model yet and was ignored; <c>Text</c> is the setting name.</summary>
+    public const int SettingNotSimulated = 7;
 }

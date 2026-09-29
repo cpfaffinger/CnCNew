@@ -55,6 +55,7 @@ public sealed class ObjectTemplate
         BuildCost = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildCost", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money cost ? Fixed.FromInt(cost.Value) : Fixed.Zero;
         BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? SimulationTiming.SecondsToTicks(seconds) : 0;
         EnergyProduction = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyProduction", StringComparison.OrdinalIgnoreCase))?.Value.Value is long energy ? checked((int)energy) : 0;
+        IsTrainable = definition.Fields.LastOrDefault(field => field.Name.Equals("IsTrainable", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         DefaultArmor = defaultArmor;
         PlayerUpgradeArmor = playerUpgradeArmor;
         DefaultWeapon = defaultWeapon;
@@ -80,6 +81,8 @@ public sealed class ObjectTemplate
     public Fixed BuildCost { get; }
     public long BuildTicks { get; }
     public int EnergyProduction { get; }
+    /// <summary><c>ThingTemplate::m_isTrainable</c>: only trainable objects take over a veterancy level from an object creation list.</summary>
+    public bool IsTrainable { get; }
     public ImmutableArray<ModuleSpec> Modules { get; }
     public ImmutableArray<string> PresentationModules { get; }
     public ImmutableArray<string> MissingModules { get; }
@@ -121,7 +124,7 @@ public sealed class TemplateCatalog
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
     private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences,
-        FactionCatalog factions, CrateCatalog crates, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold)
+        FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity)
     {
         Templates = templates;
         Upgrades = upgrades;
@@ -129,6 +132,8 @@ public sealed class TemplateCatalog
         Sciences = sciences;
         Factions = factions;
         Crates = crates;
+        CreationLists = creationLists;
+        Gravity = gravity;
         UnitDamagedThreshold = unitDamagedThreshold;
         UnitReallyDamagedThreshold = unitReallyDamagedThreshold;
         var builder = ImmutableDictionary.CreateBuilder<string, ObjectTemplate>(StringComparer.OrdinalIgnoreCase);
@@ -142,6 +147,9 @@ public sealed class TemplateCatalog
     public ScienceCatalog Sciences { get; }
     public FactionCatalog Factions { get; }
     public CrateCatalog Crates { get; }
+    public ObjectCreationListCatalog CreationLists { get; }
+    /// <summary><c>GlobalData::m_gravity</c> in world units per second² (negative; <c>GameData.ini Gravity = -64.0</c>).</summary>
+    public decimal Gravity { get; }
     /// <summary><c>GlobalData::m_unitDamagedThresh</c>/<c>m_unitReallyDamagedThresh</c> (<c>GameData.ini</c> <c>UnitDamagedThreshold</c>/<c>UnitReallyDamagedThreshold</c>).</summary>
     public Fixed UnitDamagedThreshold { get; }
     public Fixed UnitReallyDamagedThreshold { get; }
@@ -160,7 +168,9 @@ public sealed class TemplateCatalog
         var sciences = ScienceCatalog.Build(graph);
         var factions = FactionCatalog.Build(graph, sciences);
         var crates = CrateCatalog.Build(graph, sciences);
+        var creationLists = ObjectCreationListCatalog.Build(graph);
         var (unitDamagedThreshold, unitReallyDamagedThreshold) = ResolveDamageThresholds(graph);
+        var gravity = ResolveGravity(graph);
         var templates = ImmutableArray.CreateBuilder<ObjectTemplate>();
         var index = 0;
         foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
@@ -202,7 +212,7 @@ public sealed class TemplateCatalog
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites));
         }
-        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, crates, unitDamagedThreshold, unitReallyDamagedThreshold);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), upgrades, weapons, sciences, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))
@@ -225,6 +235,14 @@ public sealed class TemplateCatalog
             return value is decimal real ? Fixed.FromDecimal(real) : Fixed.FromDecimal(fallback);
         }
         return (Get("UnitDamagedThreshold", 0.7m), Get("UnitReallyDamagedThreshold", 0.35m));
+    }
+
+    /// <summary>Same fallback rule as the damage thresholds; -64 is the retail <c>GameData.ini</c> value.</summary>
+    private static decimal ResolveGravity(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("Gravity", StringComparison.OrdinalIgnoreCase))?.Value.Value;
+        return value is decimal real ? real : -64m;
     }
 
     private static ImmutableArray<string> ConditionTokens(DefinitionSection set)

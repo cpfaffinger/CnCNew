@@ -427,7 +427,7 @@ public sealed class ObjectCreationUpgrade(ObjectCreationUpgradeData data) : Upgr
 
     protected override void Activate(IWorldServices world)
     {
-        if (data.UpgradeObject.Length > 0) world.Emit(SimEventKind.CreationListRequested, Entity.Id, EntityId.Invalid, data.UpgradeObject, 0);
+        if (data.UpgradeObject.Length > 0) world.CreateFromList(Entity, data.UpgradeObject, EntityId.Invalid, false);
     }
 }
 

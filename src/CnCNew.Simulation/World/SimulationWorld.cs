@@ -93,7 +93,17 @@ public sealed partial class SimulationWorld : IWorldServices
         public int SciencePurchasePoints { get; set; }
     }
 
-    private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle);
+    /// <summary>
+    /// Creation-list adjustments applied while an entity is being created (the default value means none).
+    /// <see cref="HealthPercent"/> is <c>setInitialHealth</c>'s integer percentage; <see cref="Veterancy"/> only applies to trainable templates;
+    /// lifetime ticks override a <c>LifetimeUpdate</c> range when the maximum is positive; <see cref="Container"/> is a
+    /// <c>PutInContainer</c> entity spawned earlier in the same queue; <see cref="ContainInSource"/> makes the entity enter the source's
+    /// container or be destroyed; <see cref="TransferDamage"/> is unresistable damage dealt right after creation (<c>TransferPreviousHealth</c>).
+    /// </summary>
+    private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
+        EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource);
+
+    private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
 
     public SimulationWorld(WorldConfiguration configuration, TemplateCatalog templates)
     {
@@ -173,6 +183,7 @@ public sealed partial class SimulationWorld : IWorldServices
     public WeaponCatalog Weapons => _templates.Weapons;
     public ScienceCatalog Sciences => _templates.Sciences;
     public CrateCatalog Crates => _templates.Crates;
+    public ObjectCreationListCatalog CreationLists => _templates.CreationLists;
     public Fixed UnitDamagedThreshold => _templates.UnitDamagedThreshold;
     public Fixed UnitReallyDamagedThreshold => _templates.UnitReallyDamagedThreshold;
 
@@ -885,24 +896,54 @@ public sealed partial class SimulationWorld : IWorldServices
     private void ProcessSpawns()
     {
         if (_spawnQueue.Count == 0) return;
-        foreach (var pending in _spawnQueue)
-        {
-            var template = _templates[pending.Template];
-            var entity = new Entity(pending.Id, template, pending.Owner, _tick)
-            {
-                X = pending.X,
-                Y = pending.Y,
-                Z = pending.Z,
-                Angle = pending.Angle,
-            };
-            AttachModules(entity, template);
-            InitializeWeaponClip(entity);
-            foreach (var module in entity.ModuleArray) module.OnSpawn(this);
-            Register(entity);
-            Emit(SimEventKind.EntitySpawned, entity.Id, EntityId.Invalid, template.Name, 0, pending.Owner);
-            _spawnedTotal++;
-        }
+        // Damage applied while an entity is created (creation-list health transfer) can run die modules that queue further spawns;
+        // those stay in the queue for the next tick.
+        var batch = _spawnQueue.ToArray();
         _spawnQueue.Clear();
+        foreach (var pending in batch) SpawnEntity(pending);
+    }
+
+    private void SpawnEntity(in PendingSpawn pending)
+    {
+        var template = _templates[pending.Template];
+        var setup = pending.Setup;
+        var entity = new Entity(pending.Id, template, pending.Owner, _tick)
+        {
+            X = pending.X,
+            Y = pending.Y,
+            Z = pending.Z,
+            Angle = pending.Angle,
+        };
+        if (setup.HasVeterancy && template.IsTrainable) entity.VeterancyLevel = setup.Veterancy;
+        AttachModules(entity, template);
+        InitializeWeaponClip(entity);
+        if (setup.MaxLifetimeTicks > 0)
+            foreach (var module in entity.ModuleArray)
+                if (module is Modules.BuiltIn.LifetimeUpdate lifetime) lifetime.OverrideRange(setup.MinLifetimeTicks, setup.MaxLifetimeTicks);
+        foreach (var module in entity.ModuleArray) module.OnSpawn(this);
+        if (setup.HasHealth && entity.Body is IInitialHealthSettable health) health.SetInitialHealth(this, setup.HealthPercent);
+        Register(entity);
+        Emit(SimEventKind.EntitySpawned, entity.Id, EntityId.Invalid, template.Name, 0, pending.Owner);
+        _spawnedTotal++;
+
+        if (setup.Container.IsValid && FindEntity(setup.Container) is { Container: { } group } holder && !holder.DestroyRequested
+            && group.IsValidContainerFor(entity, true))
+        {
+            group.Add(this, entity);
+            Emit(SimEventKind.EntityContained, entity.Id, holder.Id, string.Empty, 0, pending.Owner);
+        }
+        if (setup.ContainInSource.IsValid)
+        {
+            var source = FindEntity(setup.ContainInSource);
+            if (source is { DestroyRequested: false, Container: { } sourceGroup } && sourceGroup.IsValidContainerFor(entity, true))
+            {
+                sourceGroup.Add(this, entity);
+                Emit(SimEventKind.EntityContained, entity.Id, source.Id, string.Empty, 0, pending.Owner);
+            }
+            else RequestDestroy(entity.Id);
+        }
+        if (setup.TransferDamage > Fixed.Zero)
+            Damage(entity.Id, new DamageInfo(setup.TransferSource, setup.TransferDamage, DamageTypes.Unresistable, DeathTypes.Normal, false));
     }
 
     private void AttachModules(Entity entity, ObjectTemplate template)
@@ -1115,6 +1156,17 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Fixed("y", pending.Y);
             writer.Fixed("z", pending.Z);
             writer.Fixed("angle", pending.Angle);
+            var setup = pending.Setup;
+            writer.Bool("hasHealth", setup.HasHealth);
+            writer.Int("healthPercent", setup.HealthPercent);
+            writer.Bool("hasVeterancy", setup.HasVeterancy);
+            writer.Int("veterancy", setup.Veterancy);
+            writer.Int("minLifetime", setup.MinLifetimeTicks);
+            writer.Int("maxLifetime", setup.MaxLifetimeTicks);
+            writer.UInt("container", setup.Container.Value);
+            writer.UInt("containInSource", setup.ContainInSource.Value);
+            writer.Fixed("transferDamage", setup.TransferDamage);
+            writer.UInt("transferSource", setup.TransferSource.Value);
             writer.EndObject();
         }
         writer.EndArray();

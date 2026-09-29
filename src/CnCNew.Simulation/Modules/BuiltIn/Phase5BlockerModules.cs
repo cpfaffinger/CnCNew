@@ -216,7 +216,7 @@ public sealed class TransitionDamageFX(TransitionDamageFXData data) : SimModule,
             BodyDamageStates.Rubble => data.RubbleOcl,
             _ => ImmutableArray<string>.Empty,
         };
-        foreach (var ocl in slots) world.Emit(SimEventKind.CreationListRequested, Entity.Id, info.Source, ocl, 0);
+        foreach (var ocl in slots) world.CreateFromList(Entity, ocl, info.Source, false);
     }
 
     public override void Describe(IStateWriter writer) { }
