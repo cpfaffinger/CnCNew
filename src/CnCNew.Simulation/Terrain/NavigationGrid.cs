@@ -90,43 +90,86 @@ public sealed class NavigationGrid
     }
 
     /// <summary>
-    /// Marks the cells of the footprint: a cell counts when its centre lies inside the shape grown by a quarter cell, which makes any
+    /// The cells of a footprint: a cell counts when its centre lies inside the shape grown by a quarter cell, which makes any
     /// footprint at least one cell wide in every direction (a thinner one would let units slip between two cell centres), plus
     /// the cell that holds the object position itself. Cylinders and spheres use the major radius as a circle.
     /// </summary>
+    private readonly struct Footprint
+    {
+        private readonly Fixed _x, _y, _cos, _sin, _halfLength, _halfWidth, _radiusSquared;
+        private readonly bool _box;
+        private readonly int _ownX, _ownY;
+
+        public Footprint(ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
+        {
+            var major = template.GeometryMajorRadius;
+            var minor = template.GeometryMinorRadius;
+            _box = template.Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
+            var reach = (_box ? major + minor : major) + Inflate;
+            X0 = TerrainMap.CellOf(x - reach);
+            X1 = TerrainMap.CellOf(x + reach);
+            Y0 = TerrainMap.CellOf(y - reach);
+            Y1 = TerrainMap.CellOf(y + reach);
+            _x = x;
+            _y = y;
+            _cos = FixedTrig.Cos(angle);
+            _sin = FixedTrig.Sin(angle);
+            _halfLength = major + Inflate;
+            _halfWidth = minor + Inflate;
+            _radiusSquared = _halfLength * _halfLength;
+            _ownX = TerrainMap.CellOf(x);
+            _ownY = TerrainMap.CellOf(y);
+        }
+
+        public int X0 { get; }
+        public int X1 { get; }
+        public int Y0 { get; }
+        public int Y1 { get; }
+
+        public bool Contains(int cx, int cy)
+        {
+            if (cx == _ownX && cy == _ownY) return true;
+            var dx = TerrainMap.CellCenter(cx) - _x;
+            var dy = TerrainMap.CellCenter(cy) - _y;
+            if (!_box) return dx * dx + dy * dy <= _radiusSquared;
+            var along = dx * _cos + dy * _sin;
+            var across = dy * _cos - dx * _sin;
+            return along.Abs() <= _halfLength && across.Abs() <= _halfWidth;
+        }
+    }
+
     private void Apply(ObjectTemplate template, Fixed x, Fixed y, Fixed angle, int delta)
     {
-        var major = template.GeometryMajorRadius;
-        var minor = template.GeometryMinorRadius;
-        var box = template.Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
-        var reach = (box ? major + minor : major) + Inflate;
-        var x0 = Math.Max(0, TerrainMap.CellOf(x - reach));
-        var x1 = Math.Min(Terrain.CellsX - 1, TerrainMap.CellOf(x + reach));
-        var y0 = Math.Max(0, TerrainMap.CellOf(y - reach));
-        var y1 = Math.Min(Terrain.CellsY - 1, TerrainMap.CellOf(y + reach));
-        var cos = FixedTrig.Cos(angle);
-        var sin = FixedTrig.Sin(angle);
-        var halfLength = major + Inflate;
-        var halfWidth = minor + Inflate;
-        var radiusSquared = halfLength * halfLength;
-        var own = (X: TerrainMap.CellOf(x), Y: TerrainMap.CellOf(y));
+        var footprint = new Footprint(template, x, y, angle);
+        var x0 = Math.Max(0, footprint.X0);
+        var x1 = Math.Min(Terrain.CellsX - 1, footprint.X1);
+        var y0 = Math.Max(0, footprint.Y0);
+        var y1 = Math.Min(Terrain.CellsY - 1, footprint.Y1);
         for (var cy = y0; cy <= y1; cy++)
             for (var cx = x0; cx <= x1; cx++)
             {
-                var dx = TerrainMap.CellCenter(cx) - x;
-                var dy = TerrainMap.CellCenter(cy) - y;
-                bool inside;
-                if (box)
-                {
-                    var along = dx * cos + dy * sin;
-                    var across = dy * cos - dx * sin;
-                    inside = along.Abs() <= halfLength && across.Abs() <= halfWidth;
-                }
-                else inside = dx * dx + dy * dy <= radiusSquared;
-                if (!inside && !(cx == own.X && cy == own.Y)) continue;
+                if (!footprint.Contains(cx, cy)) continue;
                 var index = cy * Terrain.CellsX + cx;
                 _obstacles[index] = checked((ushort)(_obstacles[index] + delta));
             }
+    }
+
+    /// <summary>
+    /// <c>BuildAssistant::isLocationLegalToBuild</c>, terrain and footprint part: every cell of the footprint lies on the map, is neither
+    /// cliff nor water and is not covered by another structure's footprint.
+    /// </summary>
+    public bool IsFootprintLegal(ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
+    {
+        var footprint = new Footprint(template, x, y, angle);
+        for (var cy = footprint.Y0; cy <= footprint.Y1; cy++)
+            for (var cx = footprint.X0; cx <= footprint.X1; cx++)
+            {
+                if (!footprint.Contains(cx, cy)) continue;
+                if (!Terrain.IsInside(cx, cy)) return false;
+                if ((Terrain.CellAt(cx, cy) & (CellFlags.Cliff | CellFlags.Water)) != 0) return false;
+                if (_obstacles[cy * Terrain.CellsX + cx] > 0) return false;
+            }
+        return true;
     }
 
     public bool IsBlockedByObstacle(int cx, int cy) => Terrain.IsInside(cx, cy) && _obstacles[cy * Terrain.CellsX + cx] > 0;
