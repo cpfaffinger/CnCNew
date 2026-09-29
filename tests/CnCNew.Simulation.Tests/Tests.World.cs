@@ -79,6 +79,9 @@ sealed class Feeder(SimulationWorld world)
 
     public SubmitResult ExitContainer(int player, uint actor, long? tick = null)
         => world.Submit(new ExitContainerCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor)));
+
+    public SubmitResult SetRelationship(int from, int to, Relationship relationship, long? tick = null)
+        => world.Submit(new SetRelationshipCommand(PlayerId.System, Next(0), tick ?? world.Tick, new PlayerId(from), new PlayerId(to), relationship));
 }
 
 static partial class Tests

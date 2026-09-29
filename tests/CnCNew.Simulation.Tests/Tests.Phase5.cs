@@ -890,7 +890,7 @@ static partial class Tests
     /// <summary>
     /// The next self-contained blocker by measured impact (9 objects unlocked alone): <c>StealthDetectorUpdate</c>
     /// periodically marks nearby enemy <c>STEALTHED</c> objects <c>DETECTED</c> (<see cref="StealthUpdate.MarkDetected"/>),
-    /// excludes the detector's own owner (no team/diplomacy system: same owner = ally, see the module's doc comment), and
+    /// skips the detector owner's allies (same owner, same team or an explicit alliance), and
     /// the mark expires once nothing re-marks it.
     /// </summary>
     public static void Phase5StealthDetector()
@@ -1054,8 +1054,8 @@ static partial class Tests
     /// <summary>
     /// The containment subsystem's first module (167 objects unlocked alone, the largest single blocker by measured
     /// impact — see <c>docs/HANDOFF-PHASE5.md</c>): <c>GarrisonContain</c> capacity, <c>KindOf</c> gating, allied/enemy
-    /// entry (no team/diplomacy system: both are allowed by default, matching <c>StealthDetectorUpdate</c>'s
-    /// approximation), periodic healing, death ejection with <c>DamagePercentToUnits</c>, and immediate ejection on
+    /// entry (the schema defaults admit allies and enemies alike; the relationship gating itself is covered by the
+    /// teams tests), periodic healing, death ejection with <c>DamagePercentToUnits</c>, and immediate ejection on
     /// crossing into <c>REALLYDAMAGED</c>.
     /// </summary>
     public static void Phase5Garrison()
@@ -1084,7 +1084,7 @@ static partial class Tests
         feeder.EnterContainer(2, 3, 1);
         world.Step();
         Check.That(bunker.Container!.ContainCount == 2 && allyRebel.ContainedBy == bunker.Id && enemyRebel.ContainedBy == bunker.Id,
-            "Both an ally and an enemy infantry unit enter: no team/diplomacy system, so AllowAlliesInside/AllowEnemiesInside default to true for both.");
+            "Both an own and an enemy infantry unit enter: AllowAlliesInside and AllowEnemiesInside default to true.");
         Check.That(allyRebel.X == bunker.X && allyRebel.Y == bunker.Y, "A contained entity snaps to the container's position.");
 
         feeder.Spawn(1, "Rebel", x: 5, y: 5);

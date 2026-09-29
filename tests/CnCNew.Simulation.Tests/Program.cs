@@ -94,6 +94,10 @@ run.Test("Supply economy: snapshot continuation and DockCommand replay round tri
 run.Test("SpawnBehavior: creation, replacement delay, SpawnedRequireSpawner and snapshot", Tests.SpawnBehaviorReplaceAndRequireSpawner);
 run.Test("SpawnBehavior: OneShot, missing exit and non-instantiable templates", Tests.SpawnBehaviorOneShotAndSkips);
 run.Test("SpawnBehavior: unsupported configuration is a named missing module", Tests.SpawnBehaviorUnsupportedConfiguration);
+run.Test("Teams: relationship matrix, SetRelationshipCommand, snapshot and replay round trip", Tests.TeamsRelationshipMatrix);
+run.Test("Teams: kill scoring needs an enemy", Tests.TeamsKillScoring);
+run.Test("Teams: winning alliance", Tests.TeamsVictoryConditions);
+run.Test("Teams: container gating by relationship", Tests.TeamsContainRelationship);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

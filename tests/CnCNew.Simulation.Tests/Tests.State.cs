@@ -148,7 +148,7 @@ static partial class Tests
             Rejected(bytes[..(int)(bytes.Length * fraction)], $"truncated to {fraction:P1}");
         Rejected(bytes[..^1], "missing final byte");
         var text = Encoding.UTF8.GetString(bytes);
-        Rejected(Encoding.UTF8.GetBytes(text.Replace("\"version\":1", "\"version\":2", StringComparison.Ordinal)), "foreign version");
+        Rejected(Encoding.UTF8.GetBytes(text.Replace($"\"version\":{WorldSnapshot.Version}", $"\"version\":{WorldSnapshot.Version + 1}", StringComparison.Ordinal)), "foreign version");
         Rejected(Encoding.UTF8.GetBytes(text.Replace("cncnew-world-snapshot", "other-format", StringComparison.Ordinal)), "foreign format");
         Rejected(Encoding.UTF8.GetBytes(text.Replace("\"tickRate\":30", "\"tickRate\":60", StringComparison.Ordinal)), "foreign tick rate");
         Rejected(bytes, "definition fingerprint mismatch", new string('0', 64));
@@ -210,7 +210,7 @@ static partial class Tests
         badMagic[0] = (byte)'X';
         Rejected(badMagic, "bad magic");
         var futureVersion = (byte[])bytes.Clone();
-        futureVersion[8] = 3;
+        futureVersion[8] = (byte)(ReplayFormat.CurrentVersion + 1);
         try { ReplayFormat.Read(futureVersion); throw new InvalidOperationException("A foreign version was accepted."); }
         catch (ReplayFormatException exception) { Check.That(exception.Message.Contains("Unsupported", StringComparison.Ordinal), "Version errors are named: " + exception.Message); }
 
