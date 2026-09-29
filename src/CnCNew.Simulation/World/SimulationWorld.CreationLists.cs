@@ -197,7 +197,8 @@ public sealed partial class SimulationWorld
             Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, "DiesOnBadLand", CreationSkipReasons.SettingNotSimulated);
     }
 
-    /// <summary><c>Thing::isSignificantlyAboveTerrain</c>: higher than three frames of free fall. The terrain is flat at height 0 until the terrain model exists.</summary>
-    public bool IsSignificantlyAboveTerrain(Entity entity)
-        => entity.Z > Fixed.FromDecimal(-9m * _templates.Gravity / 900m);
+    /// <summary><c>Thing::isSignificantlyAboveTerrain</c>: higher than three frames of free fall above the terrain height (flat 0 without terrain).</summary>
+    public bool IsSignificantlyAboveTerrain(Entity entity) => IsSignificantlyAbove(entity.Z, GroundHeightAt(entity.X, entity.Y));
+
+    private bool IsSignificantlyAbove(Fixed z, Fixed ground) => z - ground > Fixed.FromDecimal(-9m * _templates.Gravity / 900m);
 }

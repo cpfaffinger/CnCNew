@@ -17,7 +17,7 @@ public sealed class ReplayFormatException(string message) : FormatException(mess
 /// </summary>
 public sealed record ReplayHeader(
     int FormatVersion, int CommandTableVersion, int TickRate, string DefinitionFingerprint, string FixtureId, uint Seed, WorldId WorldId,
-    ImmutableArray<PlayerConfiguration> Players, long EndTick, int CheckpointInterval);
+    ImmutableArray<PlayerConfiguration> Players, long EndTick, int CheckpointInterval, string TerrainFingerprint = "");
 
 /// <summary>State hash after executing <see cref="Tick"/>.</summary>
 public readonly record struct ReplayCheckpoint(long Tick, ulong Hash);
@@ -26,7 +26,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 
 /// <summary>
 /// Binary replay container, little endian:
-/// <c>"CNCRPLAY"</c>, u32 format version, u32 command table version, u32 tick rate, 32 bytes definition fingerprint, string fixture id,
+/// <c>"CNCRPLAY"</c>, u32 format version, u32 command table version, u32 tick rate, 32 bytes definition fingerprint, string fixture id, string terrain fingerprint (empty = none),
 /// u32 seed, u32 world id, u16 player count (i32 id, string name, string faction; empty = none, i32 team, u8 computer flag), i64 end tick, u32 checkpoint interval,
 /// u32 command count (i64 tick, u16 type, i32 player, u64 sequence, type-specific payload), u32 checkpoint count (i64 tick, u64 hash),
 /// and a trailing SHA-256 over everything before it. Strings are u16-length-prefixed UTF-8.
@@ -34,7 +34,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -51,6 +51,7 @@ public static class ReplayFormat
             writer.Write((uint)header.TickRate);
             writer.Write(FingerprintBytes(header.DefinitionFingerprint));
             WriteString(writer, header.FixtureId);
+            WriteString(writer, header.TerrainFingerprint);
             writer.Write(header.Seed);
             writer.Write(header.WorldId.Value);
             writer.Write(checked((ushort)header.Players.Length));
@@ -100,6 +101,7 @@ public static class ReplayFormat
             var tickRate = (int)reader.ReadUInt32();
             var fingerprint = Convert.ToHexString(reader.ReadBytes(32));
             var fixture = ReadString(reader);
+            var terrainFingerprint = ReadString(reader);
             var seed = reader.ReadUInt32();
             var worldId = new WorldId(reader.ReadUInt32());
             var playerCount = reader.ReadUInt16();
@@ -134,7 +136,7 @@ public static class ReplayFormat
                     : previous.Sequence < current.Sequence;
                 if (!ordered) throw new ReplayFormatException("Commands are not ordered by (tick, player, sequence).");
             }
-            return new ReplayFile(new ReplayHeader(formatVersion, commandTableVersion, tickRate, fingerprint, fixture, seed, worldId, players.ToImmutable(), endTick, interval),
+            return new ReplayFile(new ReplayHeader(formatVersion, commandTableVersion, tickRate, fingerprint, fixture, seed, worldId, players.ToImmutable(), endTick, interval, terrainFingerprint),
                 built, checkpoints.MoveToImmutable());
         }
         catch (EndOfStreamException exception)

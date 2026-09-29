@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -52,14 +53,18 @@ public static class ReplayRunner
             throw new ReplayRejectedException("The replay was recorded against different definitions (fingerprint mismatch); it is refused.");
     }
 
-    public static SimulationWorld CreateWorld(ReplayHeader header, TemplateCatalog templates)
-        => new(new WorldConfiguration(header.WorldId, header.Seed, header.Players, header.FixtureId, header.DefinitionFingerprint.ToUpperInvariant()), templates);
+    public static SimulationWorld CreateWorld(ReplayHeader header, TemplateCatalog templates, TerrainMap? terrain = null)
+    {
+        if (!string.Equals(header.TerrainFingerprint, terrain?.Fingerprint ?? string.Empty, StringComparison.Ordinal))
+            throw new ReplayRejectedException("The replay was recorded on a different terrain (fingerprint mismatch); it is refused.");
+        return new(new WorldConfiguration(header.WorldId, header.Seed, header.Players, header.FixtureId, header.DefinitionFingerprint.ToUpperInvariant(), header.TerrainFingerprint), templates, terrain);
+    }
 
     /// <summary>Runs the replay from a fresh world.</summary>
-    public static ReplayRunResult Run(ReplayFile replay, TemplateCatalog templates, string definitionFingerprint, ReplayRunOptions? options = null)
+    public static ReplayRunResult Run(ReplayFile replay, TemplateCatalog templates, string definitionFingerprint, ReplayRunOptions? options = null, TerrainMap? terrain = null)
     {
         CheckCompatibility(replay.Header, definitionFingerprint);
-        return Run(replay, CreateWorld(replay.Header, templates), options);
+        return Run(replay, CreateWorld(replay.Header, templates, terrain), options);
     }
 
     /// <summary>Runs (or continues) the replay on an existing world, starting at the world's current tick.</summary>

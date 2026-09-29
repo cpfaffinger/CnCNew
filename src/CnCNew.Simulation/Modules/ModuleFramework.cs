@@ -6,6 +6,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Random;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Modules;
@@ -20,6 +21,12 @@ public abstract record ModuleData;
 public interface IWorldServices
 {
     long Tick { get; }
+
+    /// <summary>The loaded map's terrain; <see langword="null"/> in fixture worlds (flat ground at height 0, no boundaries).</summary>
+    TerrainMap? Terrain { get; }
+
+    /// <summary>Terrain height at (x, y); 0 without terrain.</summary>
+    Fixed GroundHeightAt(Fixed x, Fixed y);
     SageRandom LogicRandom { get; }
     Entity? FindEntity(EntityId id);
 

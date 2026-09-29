@@ -112,6 +112,10 @@ run.Test("Combat: FireWeaponUpdate ExclusiveWeaponDelay", Tests.FireWeaponUpdate
 run.Test("Combat: FireWeaponUpdate snapshot", Tests.FireWeaponUpdateSnapshot);
 run.Test("Combat: ReplaceObjectUpgrade swaps the template", Tests.ReplaceObjectUpgradeSwapsTemplate);
 run.Test("Combat: CrushDie binds and stays inert", Tests.CrushDieIsInert);
+run.Test("Terrain: height sampling, border and clamping", Tests.TerrainHeightSampling);
+run.Test("Terrain: cliff and water cell classification, overlapping water", Tests.TerrainCellClassification);
+run.Test("Terrain: world placement, snapshot v4 and replay v5 carry the fingerprint", Tests.TerrainInWorldSnapshotAndReplay);
+run.Test("Terrain: start positions, waypoints, fingerprint and boundary validation", Tests.TerrainStartsAndFingerprint);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

@@ -4,6 +4,7 @@ using System.Text.Json;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -20,7 +21,7 @@ public sealed class SnapshotFormatException(string message, Exception? inner = n
 public static class WorldSnapshot
 {
     public const string Format = "cncnew-world-snapshot";
-    public const int Version = 3;
+    public const int Version = 4;
 
     public static byte[] Write(SimulationWorld world)
     {
@@ -36,6 +37,7 @@ public static class WorldSnapshot
             writer.Int("tickRate", SimulationTiming.LogicFramesPerSecond);
             writer.Text("definitionFingerprint", world.Configuration.DefinitionFingerprint);
             writer.Text("fixture", world.Configuration.FixtureId);
+            writer.Text("terrainFingerprint", world.Configuration.TerrainFingerprint);
             writer.UInt("worldId", world.Configuration.Id.Value);
             writer.UInt("seed", world.Configuration.Seed);
             writer.Text("stateHash", hash.ToString("X16"));
@@ -53,7 +55,7 @@ public static class WorldSnapshot
     public static string Sha256(ReadOnlySpan<byte> snapshot) => Convert.ToHexString(SHA256.HashData(snapshot));
 
     /// <summary>Rebuilds a world from a snapshot. Throws <see cref="SnapshotFormatException"/> for any defect.</summary>
-    public static SimulationWorld Restore(ReadOnlySpan<byte> snapshot, TemplateCatalog templates, string expectedDefinitionFingerprint)
+    public static SimulationWorld Restore(ReadOnlySpan<byte> snapshot, TemplateCatalog templates, string expectedDefinitionFingerprint, TerrainMap? terrain = null)
     {
         ArgumentNullException.ThrowIfNull(templates);
         try
@@ -74,8 +76,10 @@ public static class WorldSnapshot
                 if (id != 0) players.Add(new PlayerConfiguration(new PlayerId(id), player.Text("name"), Team: checked((int)player.Int("team")), IsComputer: player.Bool("computer")));
             }
             var configuration = new WorldConfiguration(new WorldId(checked((uint)root.UInt("worldId"))), checked((uint)root.UInt("seed")),
-                players.ToImmutable(), root.Text("fixture"), root.Text("definitionFingerprint"));
-            var world = new SimulationWorld(configuration, templates);
+                players.ToImmutable(), root.Text("fixture"), root.Text("definitionFingerprint"), root.Text("terrainFingerprint"));
+            if (!string.Equals(configuration.TerrainFingerprint, terrain?.Fingerprint ?? string.Empty, StringComparison.Ordinal))
+                throw new SnapshotFormatException("The snapshot was written for a different terrain (fingerprint mismatch).");
+            var world = new SimulationWorld(configuration, templates, terrain);
             world.LoadFull(state);
             world.Streams.LoadPresentation(root.Object("presentation"));
             var recorded = root.Text("stateHash");

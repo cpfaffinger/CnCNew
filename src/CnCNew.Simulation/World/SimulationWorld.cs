@@ -7,6 +7,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Random;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.Timers;
 
@@ -16,7 +17,7 @@ namespace CnCNew.Simulation.World;
 public sealed record PlayerConfiguration(PlayerId Id, string Name, string? Faction = null, int Team = 0, bool IsComputer = false);
 
 /// <summary>Everything that identifies a run apart from the definitions and the command stream.</summary>
-public sealed record WorldConfiguration(WorldId Id, uint Seed, ImmutableArray<PlayerConfiguration> Players, string FixtureId, string DefinitionFingerprint);
+public sealed record WorldConfiguration(WorldId Id, uint Seed, ImmutableArray<PlayerConfiguration> Players, string FixtureId, string DefinitionFingerprint, string TerrainFingerprint = "");
 
 /// <summary>
 /// Outcome of one tick. <see cref="Events"/> and <see cref="Rejections"/> are reused buffers: they are valid until the next
@@ -118,11 +119,14 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
 
-    public SimulationWorld(WorldConfiguration configuration, TemplateCatalog templates)
+    public SimulationWorld(WorldConfiguration configuration, TemplateCatalog templates, TerrainMap? terrain = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(templates);
+        if (!string.Equals(configuration.TerrainFingerprint, terrain?.Fingerprint ?? string.Empty, StringComparison.Ordinal))
+            throw new ArgumentException("The configured terrain fingerprint does not match the supplied terrain.", nameof(terrain));
         Configuration = configuration;
+        Terrain = terrain;
         _templates = templates;
         Ids = new IdCounters();
         Streams = new RandomStreams(configuration.Seed);
@@ -153,6 +157,9 @@ public sealed partial class SimulationWorld : IWorldServices
     public IdCounters Ids { get; }
     public RandomStreams Streams { get; }
     public TemplateCatalog Templates => _templates;
+    public TerrainMap? Terrain { get; }
+
+    public Fixed GroundHeightAt(Fixed x, Fixed y) => Terrain is { } terrain ? terrain.HeightAt(x, y) : Fixed.Zero;
 
     /// <summary>Number of executed ticks; also the number of the next tick to execute.</summary>
     public long Tick => _tick;
@@ -1167,11 +1174,13 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         var template = _templates[pending.Template];
         var setup = pending.Setup;
+        var ground = GroundHeightAt(pending.X, pending.Y);
         var entity = new Entity(pending.Id, template, pending.Owner, _tick)
         {
             X = pending.X,
             Y = pending.Y,
-            Z = pending.Z,
+            // Ground placement: anything not significantly above the terrain is put on it; airborne spawns keep their height.
+            Z = Terrain is not null && !IsSignificantlyAbove(pending.Z, ground) ? ground : pending.Z,
             Angle = pending.Angle,
         };
         AttachModules(entity, template);
