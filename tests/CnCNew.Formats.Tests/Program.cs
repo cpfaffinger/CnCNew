@@ -28,6 +28,8 @@ var badMap = CreateSageMap().Concat(new byte[] { 1, 0, 0, 0, 1, 0, 100, 0, 0, 0 
 ExpectFailure(() => LegacyAssetReaders.ValidateSageMap(new MemoryStream(badMap)), "MAP chunk bounds");
 ExpectFailure(() => LegacyAssetReaders.ValidateWak(new MemoryStream(new byte[23])), "WAK length");
 
+MapDecoderTests.Run();
+
 Assert(AssetFormat.Classify("movie.bik").ProductScope, "BIK must be in product scope.");
 Assert(AssetFormat.Classify("driver.m3d").Strategy == "out-of-scope", "Miles provider must be out of scope.");
 Console.WriteLine("All legacy asset format tests passed.");

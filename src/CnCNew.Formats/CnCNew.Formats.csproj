@@ -1,1 +1,3 @@
-<Project Sdk="Microsoft.NET.Sdk" />
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><ProjectReference Include="..\CnCNew.Data\CnCNew.Data.csproj" /></ItemGroup>
+</Project>

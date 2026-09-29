@@ -195,6 +195,14 @@ public static partial class LegacyAssetReaders
 
     public static SageMapMetadata ReadSageMap(Stream stream)
     {
+        var (container, expanded) = ExpandSageMap(stream);
+        var parsed = ParseSageChunks(expanded);
+        return new SageMapMetadata(container, expanded.Length, parsed.Symbols, parsed.Chunks);
+    }
+
+    /// <summary>Unwraps the raw, EAR/RefPack or ZL5/zlib container of a map and returns the plain chunk-table bytes.</summary>
+    public static (string Container, byte[] Bytes) ExpandSageMap(Stream stream)
+    {
         var source = ReadWholeStream(stream, 8);
         byte[] expanded;
         string container;
@@ -222,9 +230,7 @@ public static partial class LegacyAssetReaders
             container = "ZL5";
         }
         else throw new InvalidDataException("MAP must use a raw CkMp, EAR/RefPack, or ZL5/zlib container.");
-
-        var parsed = ParseSageChunks(expanded);
-        return new SageMapMetadata(container, expanded.Length, parsed.Symbols, parsed.Chunks);
+        return (container, expanded);
     }
 
     public static void ValidateSageMap(Stream stream) => ReadSageMap(stream);
@@ -283,7 +289,7 @@ public static partial class LegacyAssetReaders
         return data;
     }
 
-    private static (IReadOnlyDictionary<uint, string> Symbols, IReadOnlyList<SageChunkMetadata> Chunks) ParseSageChunks(byte[] data)
+    internal static (IReadOnlyDictionary<uint, string> Symbols, IReadOnlyList<SageChunkMetadata> Chunks) ParseSageChunks(byte[] data)
     {
         if (data.Length < 8 || !data.AsSpan(0, 4).SequenceEqual("CkMp"u8))
             throw new InvalidDataException("SAGE chunk table signature CkMp is missing.");
