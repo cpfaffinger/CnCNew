@@ -2,6 +2,9 @@ using System.Globalization;
 using CnCNew.Content;
 using CnCNew.Data.World;
 using CnCNew.Formats;
+using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 
 if (args is ["info", var infoDirectory, var infoPath])
 {
@@ -46,6 +49,12 @@ try
     long vertices = 0, objects = 0, waypoints = 0, links = 0, triggers = 0, waterAreas = 0, sides = 0, teams = 0, buildEntries = 0;
     long cliffCells = 0, cells = 0, mapsWithoutStart = 0, droppedObjects = 0;
     var maxStart = 0;
+    long terrainMaps = 0, terrainWaterCells = 0, terrainCliffCells = 0, terrainCells = 0, terrainSimStarts = 0;
+    var terrainRejected = new List<string>();
+    var terrainFingerprints = new SortedDictionary<string, string>(StringComparer.Ordinal);
+    var maxExtent = 0;
+    long pathPairs = 0, pathFound = 0, pathPartial = 0, pathBlocked = 0, pathPoints = 0;
+    var pathDigest = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
 
     foreach (var path in paths)
     {
@@ -74,6 +83,48 @@ try
                                                               && (o.Properties.GetText("waypointName") ?? "").EndsWith("_Start", StringComparison.Ordinal)).Count();
             if (starts == 0) mapsWithoutStart++;
             maxStart = Math.Max(maxStart, starts);
+            try
+            {
+                var terrain = TerrainMap.Build(map, path);
+                terrainMaps++;
+                terrainCells += (long)terrain.CellsX * terrain.CellsY;
+                for (var cy = 0; cy < terrain.CellsY; cy++)
+                    for (var cx = 0; cx < terrain.CellsX; cx++)
+                    {
+                        var flags = terrain.CellAt(cx, cy);
+                        if (flags.HasFlag(CellFlags.Water)) terrainWaterCells++;
+                        if (flags.HasFlag(CellFlags.Cliff)) terrainCliffCells++;
+                    }
+                terrainSimStarts += terrain.StartPositions.Length;
+                maxExtent = Math.Max(maxExtent, Math.Max(terrain.CellsX, terrain.CellsY));
+                terrainFingerprints[path] = terrain.Fingerprint;
+                var second = TerrainMap.Build(map, path);
+                if (second.Fingerprint != terrain.Fingerprint) terrainRejected.Add($"{path}: fingerprint differs between two builds");
+                // Ground paths between every pair of start positions on the bare terrain (no structures), twice to prove determinism.
+                var grid = new NavigationGrid(terrain);
+                var starts2 = terrain.StartPositions;
+                for (var a = 0; a < starts2.Length; a++)
+                    for (var b = a + 1; b < starts2.Length; b++)
+                    {
+                        var first = grid.FindPath(starts2[a].X, starts2[a].Y, starts2[b].X, starts2[b].Y, LocomotorSurfaces.Ground);
+                        var repeat = grid.FindPath(starts2[a].X, starts2[a].Y, starts2[b].X, starts2[b].Y, LocomotorSurfaces.Ground);
+                        if (first.Status != repeat.Status || !first.Points.SequenceEqual(repeat.Points)) terrainRejected.Add($"{path}: path {a}->{b} is not repeatable");
+                        pathPairs++;
+                        switch (first.Status)
+                        {
+                            case PathStatus.Found: pathFound++; break;
+                            case PathStatus.Partial: pathPartial++; break;
+                            default: pathBlocked++; break;
+                        }
+                        pathPoints += first.Points.Length;
+                        var record = $"{path}|{a}|{b}|{first.Status}|{string.Join(";", first.Points.Select(point => point.X.Raw + "," + point.Y.Raw))}|";
+                        pathDigest.AppendData(System.Text.Encoding.UTF8.GetBytes(record));
+                    }
+            }
+            catch (InvalidDataException exception)
+            {
+                terrainRejected.Add($"{path}: {exception.Message}");
+            }
             foreach (var skipped in map.SkippedChunks)
             {
                 if (skipped.Path.StartsWith("ObjectsList/Object[", StringComparison.Ordinal)) droppedObjects++;
@@ -94,11 +145,16 @@ try
     Console.WriteLine($"height vertices {N(vertices)}, cells {N(cells)}, cliff cells {N(cliffCells)}");
     Console.WriteLine($"objects {N(objects)} (dropped for z range {N(droppedObjects)}), waypoints {N(waypoints)}, waypoint links {N(links)}, max start waypoints {maxStart}, maps without start waypoint {mapsWithoutStart}");
     Console.WriteLine($"polygon triggers {N(triggers)} (water {N(waterAreas)}), sides {N(sides)}, teams {N(teams)}, build list entries {N(buildEntries)}");
+    Console.WriteLine($"terrain: {terrainMaps} maps built, {N(terrainCells)} path cells ({N(terrainCliffCells)} cliff, {N(terrainWaterCells)} water), {terrainSimStarts} start waypoints, largest extent {maxExtent} cells, {terrainRejected.Count} rejected");
+    var digestInput = string.Join("|", terrainFingerprints.Select(pair => pair.Key + "=" + pair.Value));
+    Console.WriteLine("terrain fingerprint digest: " + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(digestInput))));
+    Console.WriteLine($"ground paths between start positions: {pathPairs} pairs, {pathFound} complete, {pathPartial} partial, {pathBlocked} blocked, {pathPoints} waypoints, digest {Convert.ToHexString(pathDigest.GetHashAndReset())}");
+    foreach (var rejected in terrainRejected) Console.Error.WriteLine("TERRAIN " + rejected);
     Console.WriteLine("skipped chunks:");
     foreach (var (name, value) in skippedChunks)
         Console.WriteLine($"  {name}: {N(value.Count)} occurrences, {N(value.Bytes)} bytes");
     foreach (var failure in failures) Console.Error.WriteLine("FAILED " + failure);
-    return failures.Count == 0 ? 0 : 1;
+    return failures.Count == 0 && terrainRejected.Count == 0 ? 0 : 1;
 }
 catch (Exception exception)
 {
