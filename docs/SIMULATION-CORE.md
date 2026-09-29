@@ -1,6 +1,6 @@
 # Deterministischer Simulationskern (Phase 4, erweitert in Phase 5)
 
-Stand: 28. September 2026 (Phase 5 in Arbeit, siehe `docs/GAME-RULES.md` für die Phase-5-Regeln:
+Stand: 29. September 2026 (Phase 5 in Arbeit, siehe `docs/GAME-RULES.md` für die Phase-5-Regeln:
 Wirtschaft, Upgrades, Kampf, einfache Bewegung, Produktion, Sieg/Niederlage)
 
 `CnCNew.Simulation` ist die headless laufende, deterministische Welt: fester Tick, stabile IDs,
@@ -197,9 +197,11 @@ auskommen und Erzeugen, Ticken, Ereignisse, Sterben und Zerstören vollständig 
   `ExemptStatus`, `RequiredStatus` mit den Regeln aus `DieModule.cpp`.
 - **`DestroyDie`** fordert die Zerstörung an; **`KeepObjectDie`** tut nichts; **`FXListDie`** erzeugt ein
   `FxRequested`-Event (bei `StartsActive = No` ruht es – die Aktivierung gehört zum Upgradesystem); **`CreateObjectDie`**
-  ein `CreationListRequested`-Event (leere Liste, wie in Kartenoverlays zum Abschalten benutzt, fordert nichts an);
+  ein `CreationListRequested`-Event (leere Liste, wie in Kartenoverlays zum Abschalten benutzt, fordert nichts an) und
+  führt die Liste seit Phase 5 aus (`SimulationWorld.CreateFromList`, `docs/GAME-RULES.md` §6b);
   **`InstantDeathBehavior`** in der Reihenfolge Effekte → Erzeugungslisten → Waffen (`WeaponFireRequested`) und danach
-  Zerstörung. Ausführen der Anforderungen ist Präsentation beziehungsweise Phase 5.
+  Zerstörung. Erzeugungslisten werden ausgeführt (eine Liste je Modul, Zug wie im Original); `FxRequested` und
+  `WeaponFireRequested` bleiben Verträge für die Präsentation beziehungsweise spätere Phasen.
 - **`LifetimeUpdate`/`DeletionUpdate`:** beim Spawn wird einmal `logic.Range(min, max)` gezogen (mindestens 1 Tick), das
   Ablaufmodul schläft bis dahin; `LifetimeUpdate` **tötet**, `DeletionUpdate` **zerstört**.
 - **Feldschemata** stehen in `ModuleCatalog` (Quelle je Feld: `ActiveBody.cpp`, `DieModule.cpp`, `LifetimeUpdate.h`, …) und
@@ -335,6 +337,12 @@ Entity-, Modul-, Update-, Timer-, Event-, Befehls-, Spawn- und Destroy-Tabellen 
 (keine Threads, alle Schleifen begrenzt); der inkrementelle Hash stimmte in jeder Stichprobe mit der vollständigen
 Neuberechnung überein.
 
+**Neumessung am 29. September 2026** (nach Erzeugungslistenausführung und `CreateCrateDie`; Kette und Endhash haben sich
+geändert, weil `CreateObjectDie`/`InstantDeathBehavior` jetzt Zufallszüge verbrauchen und Objekte erzeugen): Kettenhash
+`36211DD938214B9C`, Endhash `9E4AF85CBFBB84C6`, 401.237 Spawns und ebenso viele Destroys, Ø 54,7 µs je Tick, Snapshot
+bei Tick 108.000: 10.262.399 Byte. Alle Läufe (unabhängig wiederholt, mit Snapshotfortsetzung) stimmen tickweise überein. Die
+übrigen Größen der Tabelle wurden nicht neu gemessen.
+
 **Budgets** (mit Messwert als Grundlage, etwa 2,7-facher Spielraum): 216.000-Tick-Lauf dieses Szenarios ≤ 60 s;
 Ø ≤ 300 µs je Tick; langsamster Tick ≤ 100 ms (echtes Echtzeitbudget, 33,3 ms bei 30 Hz, wird erst mit den Regeln der
 Phase 5 unter realer Last festgelegt); Working Set ≤ 1 GiB; ruhender Tick 0 Byte, Churn ≤ 4 KiB je Tick; Snapshot ≤ 1 KiB
@@ -346,20 +354,21 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
-- **2.115 Objekte, 863 vollständig instanziierbar (40,8 %)**, 1.252 blockiert. Gegenüber Phase 4 (26/2.113, 1,2 %) ein
-  Sprung um den Faktor ~33, getragen von Block 0.2, den elf `*Upgrade`-Modulen, `AIUpdateInterface`, `ProductionUpdate`,
-  den sechs Blockermodulen aus §6/§6a und zuletzt dem Containment-Paar `GarrisonContain` (+167 — der größte Einzelsprung
-  dieser Phase) und `TransportContain` (+2).
+- **2.115 Objekte, 863 vollständig instanziierbar (40,8 %)**, 1.252 blockiert; 36 von 205 Modultypen sind implementiert
+  (12 aus Phase 4, 24 aus Phase 5), sie decken 13.261 von 19.553 Modulverwendungen (67,8 %). Gegenüber Phase 4 (26/2.113,
+  1,2 %) ein Sprung um den Faktor ~33, getragen von Block 0.2, den elf `*Upgrade`-Modulen, `AIUpdateInterface`,
+  `ProductionUpdate`, den sechs Blockermodulen aus §6/§6a, dem Containment-Paar `GarrisonContain` (+167 – der größte
+  Einzelsprung dieser Phase) und `TransportContain` (+2). `CreateCrateDie` und die Erzeugungslistenausführung
+  (`docs/GAME-RULES.md` §6b) schalten allein kein Objekt frei, weil deren Träger an anderen Modulen hängen.
 - Alle 863 instanziierbaren Objekte werden in einer Welt erzeugt, ticken 216.000 Ticks im Stresstest ohne Leck oder
   Nichtdeterminismus (`SimTool stress`, §10) und laufen im Realdatentest identisch zweimal durch (Test `--content-dir`).
-- Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert, nach einer frischen Messung):
-  `PhysicsBehavior` 739/120, `CreateCrateDie` 184/0, `SquishCollide` 170/2, `SpecialAbility` 88/0,
-  `CommandButtonHuntUpdate` 79/0, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/0. `PhysicsBehavior`/`SquishCollide`/
-  `ToppleUpdate` all need real collision detection (verified for `ToppleUpdate` by reading its reference source, not
-  assumed — see `docs/HANDOFF-PHASE5.md`) and are ausdrücklich Phase 6. `CreateCrateDie` would need a new `Crate`
-  catalog and a relationship/ownership check — bewusst zurückgestellt (Begründung: `Phase5BlockerModules`-Doc-Kommentar,
-  `docs/HANDOFF-PHASE5.md`). Die vollständige, tagesaktuelle Liste liefert das Werkzeug.
-
+- Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert, frische Messung vom 29. September):
+  `PhysicsBehavior` 739/158, `SquishCollide` 170/2, `SpecialAbility` 88/0, `CommandButtonHuntUpdate` 79/0,
+  `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/0, `GenerateMinefieldBehavior` 63/13, `VeterancyGainCreate` 61/8,
+  `OCLSpecialPower` 60/0, `JetSlowDeathBehavior` 59/0, `RebuildHoleBehavior` 57/57, `RailroadBehavior` 25/25,
+  `BaikonurLaunchPower` 23/23, `ReplaceObjectUpgrade` 20/12. `PhysicsBehavior`/`SquishCollide`/`ToppleUpdate` brauchen
+  echte Kollisionserkennung (für `ToppleUpdate` durch Lesen der Referenzquelle verifiziert, siehe
+  `docs/HANDOFF-PHASE5.md`) und sind ausdrücklich Phase 6. Die vollständige, tagesaktuelle Liste liefert das Werkzeug.
 ## 12. Bekannte Grenzen und technische Schulden
 
 - **Phase 5 (aktueller Stand)**: Wirtschaft, Upgrades, direkter Kampf, einfache Bewegung, Produktion und
@@ -380,10 +389,15 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   und reicht als Beleg für Algorithmusgleichheit, nicht als Beleg für die Weiterverwendung in Netzwerkspielen.
 - `Restore` ist intern; Vorwärts-/Rückwärtskompatibilität von Snapshots (Version 1) ist erst Thema von Phase 9.
 - Der Zustands-Hash ist nicht kryptographisch und die Snapshot-JSON-Größe (≈ 485 Byte je Entity) ist nicht optimiert.
-- Vom Kern erzeugte Anforderungen (`FxRequested`, `CreationListRequested`, `WeaponFireRequested`, `VoiceFearRequested`)
-  werden nirgends ausgeführt; sie sind Verträge für Präsentation.
+- Vom Kern erzeugte Anforderungen (`FxRequested`, `WeaponFireRequested`, `VoiceFearRequested`, `CrateRequested`) werden
+  nicht ausgeführt; sie sind Verträge für Präsentation. `CreationListRequested` ist Protokoll: die Liste wird in der Welt
+  ausgeführt (`CreateFromList`); nicht simulierte Nuggets (`CreateDebris`, `ApplyRandomForce`, `FireWeapon`, `Attack`,
+  `DeliverPayload`) melden sich mit `CreationSkipped`. Weitere Abweichungen von `ObjectCreationList.cpp` (Zugreihenfolge
+  wegen verzögertem Spawn, flaches Terrain, `FixedTrig` statt binary32, einmaliger `LifetimeUpdate`-Zug) stehen in
+  `docs/GAME-RULES.md` §6b.
 - Die Definitionsdomänen außer Object, Weapon, Armor, Upgrade, Science und Locomotor sind weiterhin flach typisiert
-  (Zahlen in `TYPED-DEFINITIONS.md`): CommandButton, SpecialPower, Faction, GameData, ObjectCreationList.
+  (Zahlen in `TYPED-DEFINITIONS.md`): CommandButton, SpecialPower, Faction, GameData. `ObjectCreationList`, `CrateData` und
+  `GameData/Gravity` sind typisiert.
 - Kein headless Referenzmatch aller Fraktionen und keine Golden-Master-Szenarien gegen Originalwerte (Phase-5-Punkte 7/8
   aus `docs/HANDOFF-PHASE5.md` stehen noch aus); die neuen Phase-5-Mechaniken sind stattdessen durch gezielte
   Integrationstests (`Tests.Phase5.cs`) und den 216.000-Tick-Stresstest mit realen Objekten abgesichert.

@@ -248,3 +248,24 @@ aufgelöste `ObjectTemplate`-Indizes: Spawnen läuft ohnehin über `SpawnCommand
 Einreihen validiert, sodass der Fraktionskatalog nicht in derselben Reihenfolge wie die Objektvorlagenliste gebaut
 werden muss. `SimulationWorld` schreibt `StartMoney`/`IntrinsicSciences` einmalig bei der Konstruktion in den
 Spielerzustand (`Player::Player()`), sofern `PlayerConfiguration.Faction` gesetzt ist.
+
+## Block 0.1 fortgesetzt: `ObjectCreationList`, `CrateData` und `GameData/Gravity`
+
+- **`ObjectCreationList`** ist eine eigene Definitionsart (`ObjectCreationListDefinition.Sections`, 295 Definitionen im
+  Vollinventar, 294 im Retail-Bestand). `ObjectCreationListSchema` typisiert die sechs Nugget-Arten streng nach
+  `ObjectCreationList.cpp` (`CreateObject`, `CreateDebris`, `ApplyRandomForce`, `FireWeapon`, `Attack`) sowie
+  `DeliverPayload` (`DeliverPayloadAIUpdate.cpp`, `RadiusDecal.cpp`); unbekannte Schlüssel und Nugget-Arten sind Fehler.
+  Modulfelder mit Listenverweisen (`OCL`, `DamagedOCL`, `RubbleOCL`, …) sind jetzt Referenzen der Art `ObjectCreationList` und werden
+  im Vollinventar aufgelöst. Neue Wertarten: `RetailAlternatingNames` (behält die 1., 3., … Namen, siehe unten) und
+  `CountedReference` (`<Name> [Anzahl]`, `DeliverPayloadNugget::parsePayload`).
+- **Retail-Eigenheit als gezählter Kompatibilitätsfall:** `ObjectNames` (`CreateObject`, Referenzen auf `Object`) und
+  `ModelNames` (`CreateDebris`) folgen `parseDebrisObjectNames`: die Retail-Schleife speichert ein Token und liest das
+  nächste, ohne es zu speichern; es zählen nur das 1., 3., … Token (Wertart `RetailAlternatingNames`). Die verworfenen
+  Token laufen über `FieldSchema.IgnoredTokenCount` in den Kompatibilitätsbestand statt stillschweigend zu verschwinden.- **`CrateData`** (`CrateSystem.cpp`): 9 Definitionen als Definitionsart `Crate`. `CreationChance`, `VeterancyLevel`,
+  `KilledByType`, `KillerScience` und `OwnedByMaker` sind typisiert; `CrateObject <Name> <Gewicht>` bleibt als
+  `deferred-field` (11 Vorkommen, Ziel `phase-5-domain-field-typing`), weil das Namens-Gewichts-Paar erst beim Aufbau des
+  Simulationskatalogs (`CrateCatalog`) mit Fehlermeldung bei Formfehlern gelesen wird. `CreateCrateDie.CrateData` ist ein
+  Referenzlistenfeld auf `Crate`.
+- **`GameData/Gravity`** ist typisiert und aus der Kompatibilitätsbasislinie entfernt; die Simulation braucht es für
+  `Thing::isSignificantlyAboveTerrain` (`docs/GAME-RULES.md` §6b).
+- Die Kompatibilitätsbasislinie hat danach **784 Einträge** (vorher 787).

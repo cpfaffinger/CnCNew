@@ -32,10 +32,11 @@
   implementiert (26 von 2.113 Retail-Objekten vollständig instanziierbar); die übrigen Module folgen mit Phase 5/6.
 - **Phase 5 „Spielregeln“ in Arbeit:** Wirtschaft, Upgrades (elf Module, portierte `UpgradeMux`-Zustandsmaschine),
   direkter Kampf (Waffen, Rüstung, Magazin), einfache geradlinige Bewegung, Produktionswarteschlange und „letzter
-  Überlebender“ sind implementiert; 27 Module gebunden, 623 von 2.115 Retail-Objekten vollständig instanziierbar
-  (29,5 %, `docs/GAME-RULES.md`). Offen: Sciences, Teams/Diplomatie, Garrison/Transport/Supply, Reparatur/Verkauf,
-  Radarwirkung, Flächenschaden, volle Veteranen-Bestauswahl bei Rüstung/Waffen, headless Referenzmatch aller
-  Fraktionen und Golden-Master-Szenarien gegen Originalwerte (`docs/HANDOFF-PHASE5.md`).
+  Überlebender“ sind implementiert, ebenso Sciences, Garnison/Transport-Containment, Erzeugungslisten und Kisten; 36 Module
+  gebunden, 863 von 2.115 Retail-Objekten vollständig instanziierbar (40,8 %, `docs/GAME-RULES.md`). Offen:
+  Teams/Diplomatie, Supply, Reparatur/Verkauf, Radarwirkung, Flächenschaden, volle Veteranen-Bestauswahl bei
+  Rüstung/Waffen, headless Referenzmatch aller Fraktionen und Golden-Master-Szenarien gegen Originalwerte
+  (`docs/HANDOFF-PHASE5.md`).
 - Terrain, Navigation, Sichtweite, Shroud/Fog, Zielwahl und Skirmish-KI (Phase 6).
 - Golden-Master- und Replay-basierte Vergleichstests gegen das Original.
 

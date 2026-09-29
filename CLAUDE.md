@@ -92,17 +92,16 @@ Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern �
 Diesen Stil beibehalten. Für schnelle Wiederholung nach einem Build: `dotnet run --no-build`.
 
 Referenzwerte (Stand Phase 5, in Arbeit; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene INI-Dateien (28
-nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 15.724/17.270
-Referenzen aufgelöst (1.546 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 143.796.691 Byte, SHA-256
-`4F8F00A41F7F5365DCEDD6191A5CE7BE0FCD8DC25E7D5635B06E76908813ED32`; Retail-Basisdaten (`--maps exclude`) 12.550
-Definitionen, 2.115 Objekte, SHA-256 `738F132C53F1A0EC82DC5DB8B518D72682D27C95C4E374D15A61247D87466332` (beide Hashes
-geändert gegenüber der vorigen Messung: `GarrisonContain`/`TransportContain` typisieren vorher generische
-Kompatibilitätswerte jetzt strikt, was die Serialisierung ändert, ohne die Referenzzahlen zu verändern).
-Modulkatalog 205 Typen (35 implementiert: 12 aus Phase 4, 23 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
-787 Einträge, Instanziierbarkeit 863 von 2.115 Objekten (40,8 %). Asset-Runtimebestand: 25.682 Dateien.
-Stresstest (216.000 Ticks, `SimTool stress`, mit allen 35 Modulen): Endhash `9D6E0BDCECE43569`, Kettenhash
-`393F17B2DCF76EC2` (unverändert seit `GarrisonContain` — `TransportContain` fügt keine neuen Entity-weiten Felder hinzu).
-
+nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 17.291/18.841
+Referenzen aufgelöst (1.550 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 144.432.181 Byte, SHA-256
+`A1BB5D3464024113750A338C9DE97D9454CA718595EFD6DBB5395F6B5AB2170B`; Retail-Basisdaten (`--maps exclude`) 12.550
+Definitionen, 2.115 Objekte, SHA-256 `45E6802750BFBAB72B20EBAA1EBC2ED54C555BBB86B50C586F3BCD6F536C3606` (die Hashes
+ändern sich, sobald ein Feld strikt typisiert statt als Kompatibilitätswert geführt wird – zuletzt `ObjectCreationList`,
+`CrateData`, `GameData/Gravity`, `CreateCrateDie`).
+Modulkatalog 205 Typen (36 implementiert: 12 aus Phase 4, 24 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
+784 Einträge, Instanziierbarkeit 863 von 2.115 Objekten (40,8 %), Modulverwendungen abgedeckt 13.261 von 19.553 (67,8 %).
+Asset-Runtimebestand: 25.682 Dateien. Stresstest (216.000 Ticks, `SimTool stress`, mit allen 36 Modulen und
+Erzeugungslistenausführung): Endhash `9E4AF85CBFBB84C6`, Kettenhash `36211DD938214B9C`.
 ## Code- und Dokumentationsstil
 
 - Bezeichner, Commitmessages und Code-Kommentare englisch; Dokumentation (`docs/`, README) deutsch.

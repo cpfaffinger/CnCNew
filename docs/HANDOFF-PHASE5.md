@@ -39,6 +39,11 @@ Simulationsimplementierung, Tests (Ausnahme: `GarrisonContain` hat vier, siehe u
    Infrastruktur + Modul, `0e77be1` Tests) — größter Einzelsprung dieser Phase, siehe unten.
 8. `TransportContain` (`515c7a0` Schema+Baseline, `64965d3` `ContainModuleBase`-Extraktion + Modul, `52fe5e7` Tests) —
    zweiter Implementierer der Containment-Infrastruktur, rechtfertigte die `ContainModuleBase`-Extraktion.
+9. `CreateCrateDie` (`323a827` Schema+Baseline `CrateData`, `918498a` `CrateCatalog` + Modul) — Zugreihenfolge wie
+   `CreateCrateDie.cpp`; Kistenobjekte brauchen noch `*CrateCollide`.
+10. Erzeugungslisten (`0998461` `ObjectCreationList` streng typisiert, `3c097b5` Tests/Fixtures, `e2d7b0a`
+    `GameData/Gravity` typisiert, `adc2e94` `SimulationWorld.CreateFromList` mit verzögertem `SpawnSetup`,
+    `9a32488` Tests inklusive `FixedTrig`) — `docs/GAME-RULES.md` §6b.
 
 **Wichtige Neupriorisierung gegenüber dem vorigen Handoff:** Die ursprüngliche Reihenfolge „nach Häufigkeit“
 wurde durchgehend durch frische `audit-coverage`-Messungen ersetzt. `CreateCrateDie` schaltet **0 Objekte allein**
@@ -54,24 +59,25 @@ allein) stellte sich als der mit Abstand größte Einzelblocker heraus, obwohl e
 - `dotnet build CnCNew.slnx`: 0 Fehler, 10 bekannte NU1901/NU1903-Warnungen.
 - Alle acht Testprogramme grün, einschließlich `CnCNew.Simulation.Tests` mit `--content-dir .local/phase2-import-a`
   und `-c Release -- stress` (216.000 Ticks, identische Hashes über drei frische Läufe und Snapshotfortsetzung).
-- Modulkatalog: 205 Typen, **35 implementiert** (12 aus Phase 4, 23 aus Phase 5).
-- Kompatibilitätsbasislinie: **787 Einträge**, `compat-check` besteht.
+- Modulkatalog: 205 Typen, **36 implementiert** (12 aus Phase 4, 24 aus Phase 5).
+- Kompatibilitätsbasislinie: **784 Einträge**, `compat-check` besteht.
 - Vollinventar: 228 geladene Dateien, 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel,
-  15.724/17.270 Referenzen aufgelöst (1.546 sichtbare Fallbacks), Snapshot 143.796.691 Byte, SHA-256
-  `4F8F00A41F7F5365DCEDD6191A5CE7BE0FCD8DC25E7D5635B06E76908813ED32` (Hash geändert gegenüber der letzten Messung:
-  `GarrisonContain`/`TransportContain` typisieren vorher generische Kompatibilitätswerte jetzt strikt).
+  17.291/18.841 Referenzen aufgelöst (1.550 sichtbare Fallbacks), Snapshot 144.432.181 Byte, SHA-256
+  `A1BB5D3464024113750A338C9DE97D9454CA718595EFD6DBB5395F6B5AB2170B` (Hash geändert gegenüber der letzten Messung:
+  `ObjectCreationList`, `CrateData`, `GameData/Gravity` sind jetzt strikt typisiert).
 - Retail-Basisdaten (`--maps exclude`): 2.115 Objekte, SHA-256
-  `738F132C53F1A0EC82DC5DB8B518D72682D27C95C4E374D15A61247D87466332`.
+  `45E6802750BFBAB72B20EBAA1EBC2ED54C555BBB86B50C586F3BCD6F536C3606`.
 - Instanziierbarkeit: **863 von 2.115 Objekten (40,8 %)**, gegenüber 26/2.113 am Ende von Phase 4 und 694/2.115 vor
   dem Containment-Subsystem.
-- Stresstest (`SimTool stress`, mit allen 35 Modulen): 216.000 Ticks, Endhash `9D6E0BDCECE43569`, Kettenhash
-  `393F17B2DCF76EC2` (unverändert seit `GarrisonContain` — `TransportContain` fügt keine neuen Entity-weiten Felder
-  hinzu), drei frische Läufe und Snapshotfortsetzung identisch, alle Tabellen kehren auf null zurück.
+- Stresstest (`SimTool stress`, mit allen 36 Modulen): 216.000 Ticks, Endhash `9E4AF85CBFBB84C6`, Kettenhash
+  `36211DD938214B9C` (Erzeugungslisten verbrauchen jetzt Zufallszüge), Läufe und Snapshotfortsetzung identisch, alle
+  Tabellen kehren auf null zurück.
 - `CommandTypes.Version = 4` (16 Befehlstypen; `EnterContainerCommand`/`ExitContainerCommand` neu).
 
 **Verbleibende Blocker nach Objekten, die ausschließlich noch an ihnen hängen** (frisch gemessen,
-`SimTool audit-coverage`): `PhysicsBehavior` 120, `ToppleUpdate` 66, `SquishCollide` 2,
-`CreateCrateDie`/`SpecialAbility`/`CommandButtonHuntUpdate`/`SpecialAbilityUpdate` je 0. `PhysicsBehavior`/
+`SimTool audit-coverage`, 29. September): `PhysicsBehavior` 158, `ToppleUpdate` 66, `RebuildHoleBehavior` 57,
+`RailroadBehavior` 25, `BaikonurLaunchPower` 23, `GenerateMinefieldBehavior` 13, `ReplaceObjectUpgrade` 12,
+`VeterancyGainCreate` 8, `SquishCollide` 2, `SpecialAbility`/`CommandButtonHuntUpdate`/`SpecialAbilityUpdate` je 0. `PhysicsBehavior`/
 `SquishCollide`/`ToppleUpdate` brauchen alle drei echte Kollisionserkennung (`ToppleUpdate::onCollide` löst nur bei
 echtem Geometrie-Overlap eines Fahrzeugs aus, geprüft per Referenzstudium; die einzigen anderen Aufrufer von
 `applyTopplingForce` im Original — `NeutronMissileSlowDeathUpdate`, `TensileFormationUpdate`, `WaveGuideUpdate` —
@@ -107,7 +113,8 @@ drei bereits so).
 - Teams/Diplomatie/Allianzen als eigenes Datenmodell (Sieg bleibt „letzter Überlebender" ohne Teams;
   `StealthDetectorUpdate`/`GarrisonContain` behelfen sich mit „gleicher Besitzer = Verbündeter").
 - `CommandSet`/`CommandButton` als echtes Datenmodell (bisher nur `CommandSetUpgrade`s Zustandsmaschine, keine Wirkung).
-- Spezialfähigkeiten mit echter `ObjectCreationList`-Ausführung (bisher nur Event-Anforderung wie `CreateObjectDie`).
+- Spezialfähigkeiten (`SpecialAbility*`, `OCLSpecialPower`); die Listenausführung selbst existiert, `CreateDebris`,
+  `ApplyRandomForce`, `FireWeapon`, `Attack` und `DeliverPayload` werden als `CreationSkipped` gemeldet.
 - Flächenschaden, Projektil-Flugzeit, `WeaponBonus`-Multiplikatoren.
 - Volle veteranenbasierte `ArmorSet`/`WeaponSet`-Bestauswahl (`SparseMatchFinder`).
 - Erfahrungs-/Veteranenvergabe aus Kämpfen; Rang-/`SciencePurchasePoints`-Vergabe aus Erfahrung.
@@ -116,7 +123,7 @@ drei bereits so).
   heraus, Garnisonspunkte (art-abgeleitet), Eroberungshandling. Supply (`SupplyCenter*`, `SupplyTruckAIUpdate`,
   `SupplyWarehouse*`), Bau (`DozerAIUpdate`, `BuildAssistant`), Reparatur, Verkauf, Radarwirkung — alle weiterhin
   komplett offen.
-- `CreateCrateDie` (bräuchte einen neuen `Crate`-Katalog und eine Beziehungsprüfung, siehe oben).
+- `*CrateCollide`-Module (die Kisten selbst).
 - `PhysicsBehavior`/`SquishCollide`/`ToppleUpdate` (echte Kollisionserkennung, ausdrücklich Phase 6 — für
   `ToppleUpdate` per Referenzstudium verifiziert, siehe oben).
 - Ein headless Referenzmatch aller Fraktionen vom Start bis zum Sieg (Punkt 4 unten).
@@ -129,11 +136,8 @@ Doku-Nachführung, wie in `CLAUDE.md` „Ablauf einer Phase“ beschrieben). Mis
 Modul wie viele Objekte **allein** freischaltet (`SimTool audit-coverage .local/phase2-import-a`) — verlass dich nicht
 auf die obige Liste, sie ist bereits eine Momentaufnahme:
 
-1. **`CreateCrateDie`**, jetzt mit zwei Präzedenzfällen für die Beziehungs-/Besitzer-Prüfung
-   (`StealthDetectorUpdate`, `GarrisonContain`/`TransportContain`s „gleicher Besitzer = Verbündeter"); es fehlt noch
-   ein neuer `Crate`-Katalog (Definitionsart oder zumindest ein typisiertes Compatibility-Schema für `Crate.ini`).
-2. **Spezialfähigkeiten mit echter `ObjectCreationList`-Ausführung**: `ObjectCreationList` ist noch keine eigene
-   Definitionsart (bleibt `Compatibility`) — das ist eine Voraussetzung, kein Teil dieses Punkts; typisiere sie zuerst.
+1. ~~`CreateCrateDie`~~ – erledigt (Punkt 9 oben).
+2. ~~Erzeugungslisten typisieren und ausführen~~ – erledigt (Punkt 10 oben).
 3. **Teams/Diplomatie als Datenmodell**, falls für den Referenzmatch (Punkt 4) nötig — sonst zurückstellen und im
    headless Referenzmatch bei „letzter Überlebender ohne Teams" bleiben (dokumentierte Vereinfachung).
 4. **Ein headless Referenzmatch aller Fraktionen** (synthetische Karte im Speicher, scriptlos) von Start bis Sieg,

@@ -253,10 +253,10 @@ Vereinfachungen in `docs/GAME-RULES.md`):
   geradlinige Bewegung (`AIUpdateInterface`, kein Terrain/Pfadsuche/Drehrate), eine Produktionswarteschlange
   (`ProductionUpdate`), „letzter Überlebender" als Sieg, ein Spieler-/Fraktionsdatenmodell (`FactionCatalog`: Startgeld,
   intrinsische Sciences) und ein Science-Kaufsystem (`ScienceCatalog`, `PurchaseScienceCommand`).
-- 27 von 205 Modultypen implementiert; 623 von 2.115 Retail-Objekten vollständig instanziierbar (29,5 %, vorher 26 von
-  2.113); der 216.000-Tick-Stresstest läuft mit allen neuen Modulen deterministisch, ohne Leck.
-- **Noch offen:** Teams/Diplomatie als Datenmodell, Command-Set-Wirkung, Supply/Garrison/Transport, Reparatur/Verkauf,
-  Radarwirkung, Spezialfähigkeiten mit `ObjectCreationList`-Ausführung, volle veteranenbasierte
+- 36 von 205 Modultypen implementiert; 863 von 2.115 Retail-Objekten vollständig instanziierbar (40,8 %, vorher 26 von
+  2.113); Erzeugungslisten werden ausgeführt und `CreateCrateDie` ist implementiert (`docs/GAME-RULES.md` §6b); der 216.000-Tick-Stresstest läuft mit allen neuen Modulen deterministisch, ohne Leck.
+- **Noch offen:** Teams/Diplomatie als Datenmodell, Command-Set-Wirkung, Supply, Reparatur/Verkauf,
+  Radarwirkung, Spezialfähigkeiten (nur die Listenausführung existiert; `CreateDebris`/`DeliverPayload` brauchen Physik), volle veteranenbasierte
   `ArmorSet`/`WeaponSet`-Auswahl, Erfahrungsvergabe, headless Referenzmatch aller Fraktionen, Golden-Master-Szenarien
   gegen Originalwerte. Die verbleibende Blockerliste (nach Häufigkeit) steht in
   `docs/SIMULATION-CORE.md` §11.

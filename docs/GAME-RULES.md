@@ -235,6 +235,59 @@ bewusst schmal, bis ein zweiter Implementierer, `TransportContain`, ihn tatsäch
   nicht modelliert: `InitialPayload`, Feuern aus dem Container, Austrittspfade/-verzögerung/-streuung (Präsentation
   oder brauchen echte Bewegung/Positionierung), Eroberungsbehandlung.
 
+## 6b. Erzeugungslisten und Kisten
+
+**`ObjectCreationList`** (295 Definitionen, streng typisiert in `CnCNew.Data`: `ObjectCreationListDefinition.Sections`; die
+Nugget-Zahlen im Bestand: `CreateObject` 184, `CreateDebris` 473, `DeliverPayload` 46, `ApplyRandomForce` 10, `FireWeapon` 4,
+`Attack` 1) wird jetzt ausgeführt, nicht mehr nur als `CreationListRequested`-Event gemeldet.
+`SimulationWorld.CreateFromList(source, liste, anforderer, transferPreviousHealth)` entspricht
+`ObjectCreationList::create` und wird von `CreateObjectDie` und `InstantDeathBehavior` aufgerufen. Das Event bleibt als
+Protokoll bestehen. Der Katalog (`ObjectCreationListCatalog`) bindet jede Liste beim Aufbau der Vorlagen; nur ein unbekannter
+Nugget-Typ ist ein `TemplateBuildException`, alles andere wird zur Laufzeit als `CreationSkipped`-Event mit Grund gemeldet.
+
+- **`CreateObject`** (`GenericObjectCreationNugget::create/reallyCreate/doStuffToObj`): Pro `Count` wird ein Objekt aus
+  `ObjectNames` gewählt (ein `Range(0, n−1)`-Zug je Exemplar), danach – in dieser Reihenfolge – Mindestabstand und
+  Startwinkel bei `SpreadFormation`, dann Gesundheitsanteil (`Range(MinHealth, MaxHealth)`) und bei `OnGroundAligned`/
+  `SendItOut` ein Orientierungszug. `Offset` wird um die Quellausrichtung gedreht; `Disposition` `LIKE_EXISTING` übernimmt
+  die Ausrichtung. `PutInContainer` erzeugt den Container zuerst (im Original `newObject`), positioniert ihn aber erst nach
+  dem Inhalt. `ContainInsideSourceObject` steckt das neue Objekt in die Quelle, `InheritsVeterancy` überträgt den Rang
+  (nur auf trainierbare Vorlagen), `MinLifetime`/`MaxLifetime` überschreiben `LifetimeUpdate` ohne zusätzlichen Zug.
+  `SkipIfSignificantlyAirborne` prüft `Thing::isSignificantlyAboveTerrain` (`Höhe > −9·Gravity`, Gravity jetzt typisiert aus
+  `GameData`; Terrain ist bei Z = 0 flach).
+- **Verzögertes Erzeugen:** Spawns laufen weiter über die Warteschlange (`ProcessSpawns` nach `ProcessDestroys`). Alles,
+  was das Original nach `newObject` am Objekt einstellt, reist als `SpawnSetup` mit und wird in `SpawnEntity` angewandt:
+  Startgesundheit (`ActiveBody::setInitialHealth`), Rang, Lebensdauer, Container, Insasse der Quelle und
+  `TransferPreviousHealth` (`CreateObjectDie`: unresistabler Schaden `MaxHealth − PreviousHealth`). Ein in `SpawnEntity`
+  ausgelöstes `RequestDestroy` wirkt daher erst im folgenden Tick. Der Spawn-Containment meldet `EntityContained`.
+- **Zufallsreihenfolge:** Alle Züge finden zur Listenzeit statt (die Gesundheits- und Orientierungszüge des Originals liegen
+  nach `newObject`, hier nach der Auswahl, aber vor dem tatsächlichen Erzeugen). Das ist die einzige bewusste Abweichung in der
+  Zugreihenfolge; nach ihr richten sich die Golden-Master-Tests. `InstantDeathBehavior` zieht wie das Original genau eine
+  Liste pro Modul.
+- **Nicht simuliert, aber nie still verworfen:** `CreateDebris`, `ApplyRandomForce`, `FireWeapon`, `Attack` und
+  `DeliverPayload` erzeugen `CreationSkipped` (Grund `NuggetNotSimulated`), ihre Zufallszüge (Kraft, Drehung, Physik) werden
+  nicht verbraucht; `InvulnerableTime` und `DiesOnBadLand` erscheinen als `SettingNotSimulated`. Weitere Gründe:
+  `UnknownList`, `UnknownTemplate`, `TemplateNotInstantiable`, `ContainerNotInstantiable`, `NoObjectNamed`. Sichtbar ist damit,
+  welche Listen des Bestands erst mit Physik (Phase 6) vollständig werden.
+- **Positionsfindung:** `PartitionManager::findPositionAround` ohne Terrain und Hindernisse wählt den innersten Ring: ein
+  Startwinkelzug, Abstand `MinDistance`; ist `MaxDistance < MinDistance`, wird die Formationsposition übersprungen. Sinus und
+  Cosinus liefert `FixedTrig` (Taylor-Reihe, Fehler unter 2·10⁻⁵, `Cos(0)` exakt 1) statt der binary32-Funktionen des Originals.
+- **`RequiresLivePlayer`** prüft `IsPlayerDefeated` des Besitzers; da die Quelle selbst mitzählt, ist der Zweig praktisch
+  nie aktiv (im Original ebenso) und daher ungetestet. Objekte, die als nicht instanziierbar übersprungen werden, verbrauchen
+  keine `doStuff`-Züge.
+- **`LifetimeUpdate`** zieht einmal (das Original zieht nach `setLifetimeRange` erneut).
+- **Fixtures:** Die Fixture-Kompilierung ist streng referenzgeprüft, ein unbekannter Objektname in einer Erzeugungsliste ist
+  dort nicht darstellbar; `UnknownTemplate` ist nur mit Realdaten prüfbar.
+
+**`CreateCrateDie`** (`CreateCrateDie.cpp onDie`, `CrateSystem.cpp`; Katalog `CrateCatalog`, 9 `CrateData`-Definitionen):
+Nach dem Todesfilter (`DieMux`) wird ein Kill durch denselben Besitzer als „ALLIES" nicht belohnt. Je `CrateData` folgt
+ein `Range(0,1)`-Zug gegen `CreationChance`, dann `VeterancyLevel`, `KilledByType` (alle Arten müssen vorliegen) und
+`KillerScience`; erst wenn alle Bedingungen erfüllt sind, wählt ein weiterer Zug gewichtet ein `CrateObject`
+(Summe < Zug → keine Kiste, wie im Original), ein letzter zieht die Ausrichtung. Die Kiste erscheint mangels Terrain am Ort
+des Opfers (`findPositionAround` ist Phase 6); Besitzer ist der Verursacher (`OwnedByMaker`) oder neutral. Alle Kistenobjekte
+des Bestands nutzen `*CrateCollide`-Module, die nicht implementiert sind: die Anforderung wird immer als `CrateRequested`
+gemeldet, das Objekt aber nur erzeugt, wenn es instanziierbar ist. Kein Teamsystem: „Verbündeter" ist „gleicher Besitzer"
+(Präzedenzfall `GarrisonContain`), der KI-Hook `notifyCrate` fehlt.
+
 ## 7. Sieg und Niederlage
 
 - `SimulationWorld.IsPlayerDefeated(player)` entspricht `VictoryConditions::hasSinglePlayerBeenDefeated` mit den
@@ -251,13 +304,12 @@ Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle
 
 Siehe `docs/SIMULATION-CORE.md` §11: 863 von 2.115 Objekten sind heute instanziierbar (40,8 %, gegenüber 26/2.113 in
 Phase 4 und 623/2.115 vor dem in §3/§6/§6a beschriebenen Block). Nach einer frischen `audit-coverage`-Messung sind die
-größten verbleibenden Blocker nach Objekten, die **ausschließlich** noch an ihnen hängen: `PhysicsBehavior` (120 –
+größten verbleibenden Blocker nach Objekten, die **ausschließlich** noch an ihnen hängen: `PhysicsBehavior` (158 –
 braucht Terrain-/Kollisionsphysik, Phase 6), `ToppleUpdate` (66 – dieselbe Physik, per Referenzstudium verifiziert),
-`SquishCollide` (2 – dieselbe Physik). `CreateCrateDie` (0 allein – bräuchte einen neuen `Crate`-Katalog und eine
-Beziehungs-/Diplomatie-Prüfung, für die jetzt mit `GarrisonContain`/`TransportContain`s „gleicher Besitzer =
-Verbündeter"-Näherung ein zweiter Präzedenzfall existiert) bleibt bewusst zurückgestellt; die Begründung steht in
-`Phase5BlockerModules`s Doc-Kommentar und `docs/HANDOFF-PHASE5.md`.
-
+`RebuildHoleBehavior` (57), `RailroadBehavior` (25), `BaikonurLaunchPower` (23), `GenerateMinefieldBehavior` (13),
+`ReplaceObjectUpgrade` (12), `VeterancyGainCreate` (8), `SquishCollide` (2). `CreateCrateDie` ist seit §6b implementiert
+(die Kisten selbst brauchen noch `*CrateCollide`); die Anzahl der instanziierbaren Objekte ändert sich dadurch nicht,
+weil jedes Objekt mit diesem Modul noch an anderen Blockern hängt.
 ## 10. Bekannte Grenzen (Zusammenfassung)
 
 Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
