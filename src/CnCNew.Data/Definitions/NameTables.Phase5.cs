@@ -5,6 +5,10 @@ namespace CnCNew.Data.Definitions;
 /// <summary>Phase 5 additions to <see cref="NameTables"/> (kept in a separate file to avoid re-touching the Phase 4 table).</summary>
 public static class NameTablesPhase5
 {
+    /// <summary>LocomotorSet.h TheLocomotorSurfaceTypeNames (5 entries).</summary>
+    public static NameTable LocomotorSurface { get; } = new("LocomotorSurface", "LocomotorSet.h TheLocomotorSurfaceTypeNames",
+        "GROUND", "WATER", "CLIFF", "AIR", "RUBBLE");
+
     /// <summary>StealthUpdate.h TheStealthLevelNames (9 entries).</summary>
     public static NameTable StealthForbiddenCondition { get; } = new("StealthForbiddenCondition", "StealthUpdate.h TheStealthLevelNames",
         "ATTACKING", "MOVING", "USING_ABILITY", "FIRING_PRIMARY", "FIRING_SECONDARY", "FIRING_TERTIARY", "NO_BLACK_MARKET", "TAKING_DAMAGE", "RIDERS_ATTACKING");

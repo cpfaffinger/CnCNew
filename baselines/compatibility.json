@@ -2785,15 +2785,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "Locomotor/Surfaces",
-      "count": 204,
-      "owners": [
-        "Locomotor"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Locomotor/ThrustMaxWobble",
       "count": 1,
       "owners": [
