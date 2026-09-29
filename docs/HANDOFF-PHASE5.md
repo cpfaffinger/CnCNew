@@ -45,6 +45,11 @@ Simulationsimplementierung, Tests (Ausnahme: `GarrisonContain` hat vier, siehe u
     `GameData/Gravity` typisiert, `adc2e94` `SimulationWorld.CreateFromList` mit verzögertem `SpawnSetup`,
     `9a32488` Tests inklusive `FixedTrig`) — `docs/GAME-RULES.md` §6b.
 
+11. Referenzmatch und Golden Master (`19b2df4` Replay-Format v2 mit Fraktionen und allen 16 Befehlstypen, `e5bf4cf`
+    `ReferenceMatchScenario` + `SimTool reference-match` + synthetischer Nachweis, `dd3e6df` Golden Master für
+    Schadenskette und Produktionsuhr, `9959b49` Doku) — `docs/GAME-RULES.md` §7a. Das Match läuft auf der
+    synthetischen Fixture, **nicht** auf Retail-Daten (siehe unten).
+
 **Wichtige Neupriorisierung gegenüber dem vorigen Handoff:** Die ursprüngliche Reihenfolge „nach Häufigkeit“
 wurde durchgehend durch frische `audit-coverage`-Messungen ersetzt. `CreateCrateDie` schaltet **0 Objekte allein**
 frei (jedes Vorkommen hängt zusätzlich an einem anderen, noch fehlenden Modul) und bräuchte einen neuen `Crate`-
@@ -72,7 +77,11 @@ allein) stellte sich als der mit Abstand größte Einzelblocker heraus, obwohl e
 - Stresstest (`SimTool stress`, mit allen 36 Modulen): 216.000 Ticks, Endhash `9E4AF85CBFBB84C6`, Kettenhash
   `36211DD938214B9C` (Erzeugungslisten verbrauchen jetzt Zufallszüge), Läufe und Snapshotfortsetzung identisch, alle
   Tabellen kehren auf null zurück.
-- `CommandTypes.Version = 4` (16 Befehlstypen; `EnterContainerCommand`/`ExitContainerCommand` neu).
+- `CommandTypes.Version = 4` (16 Befehlstypen; `EnterContainerCommand`/`ExitContainerCommand` neu); Replay-Format
+  Version 2 (Fraktionen in der Spielertabelle, alle 16 Befehlstypen kodierbar).
+- 47 Simulationstests grün (`Tests.ReferenceMatch`, `Tests.Phase5GoldenDamageChain`, `Tests.Phase5GoldenProduction`
+  neu); Stresstest (frisch gemessen): 914.394 Befehle, Replay-Datei 47.094.803 Byte, Spitze 15.775 Entities,
+  2.170 `UnknownEntity`-Ablehnungen, Snapshot bei Tick 108.000: 10.262.399 Byte.
 
 **Verbleibende Blocker nach Objekten, die ausschließlich noch an ihnen hängen** (frisch gemessen,
 `SimTool audit-coverage`, 29. September): `PhysicsBehavior` 158, `ToppleUpdate` 66, `RebuildHoleBehavior` 57,
@@ -126,8 +135,17 @@ drei bereits so).
 - `*CrateCollide`-Module (die Kisten selbst).
 - `PhysicsBehavior`/`SquishCollide`/`ToppleUpdate` (echte Kollisionserkennung, ausdrücklich Phase 6 — für
   `ToppleUpdate` per Referenzstudium verifiziert, siehe oben).
-- Ein headless Referenzmatch aller Fraktionen vom Start bis zum Sieg (Punkt 4 unten).
-- Golden-Master-Szenarien gegen bekannte Originalwerte mit Quellverweis (Punkt 5 unten).
+- **Referenzmatch aller Fraktionen auf Retail-Daten:** Szenario, Aufnahme, Replay und Snapshotfortsetzung sind fertig und
+  mit einer synthetischen Fixture bewiesen. `SimTool reference-match .local/phase2-import-a` meldet jedoch 0 von 13
+  spielbaren Fraktionen (Exitcode 3): 0 von 41 (America), 26 (China), 33 (GLA) usw. bewaffneten Einheiten und 0
+  Produktionsgebäuden je Seite sind instanziierbar. Größte Blocker: `PhysicsBehavior` (739 Objekte), `SquishCollide` (170),
+  `SpecialAbility` (88), `CommandButtonHuntUpdate` (79), `ToppleUpdate` (76), `OCLSpecialPower` (60),
+  `BaseRegenerateUpdate` (55), `DefaultProductionExitUpdate` (42). Ohne Phase-6-Physik und ein Spezialkraft-Subsystem ist
+  der Retail-Match nicht erreichbar; Ersatzobjekte (`MatchParticipant.Substitution`) helfen erst, wenn wenigstens ein
+  bewaffneter Einheitentyp je Seite instanziierbar ist.
+- **Golden Master:** Schadenskette und Produktionsuhr sind mit unabhängigem Modell abgesichert (`Tests.GoldenMaster.cs`),
+  Supply-Einnahmen und Erfahrung fehlen mangels Implementierung. Es gibt keine Originalläufe als Referenz, nur aus dem
+  Quelltext abgeleitete Rechnungen.
 
 ## Auftrag für diesen Durchlauf
 
@@ -140,10 +158,17 @@ auf die obige Liste, sie ist bereits eine Momentaufnahme:
 2. ~~Erzeugungslisten typisieren und ausführen~~ – erledigt (Punkt 10 oben).
 3. **Teams/Diplomatie als Datenmodell**, falls für den Referenzmatch (Punkt 4) nötig — sonst zurückstellen und im
    headless Referenzmatch bei „letzter Überlebender ohne Teams" bleiben (dokumentierte Vereinfachung).
-4. **Ein headless Referenzmatch aller Fraktionen** (synthetische Karte im Speicher, scriptlos) von Start bis Sieg,
-   als Replay aufgezeichnet, ≥ 216.000-Tick-fähig, zwei frische Läufe plus Snapshotfortsetzung hashgleich.
-5. **Golden-Master-Szenarien** für zentrale Kampf- und Wirtschaftsabläufe (Schadenskette mit Rüstung, Produktionszeit,
-   Supply-Einnahmen, Erfahrung) gegen bekannte Originalwerte, mit unabhängiger Nachrechnung und Quellverweis.
+4. **Referenzmatch auf Retail-Daten ermöglichen.** Die Maschinerie steht (`ReferenceMatchScenario`, `SimTool
+   reference-match`); es fehlen instanziierbare bewaffnete Einheiten und Produktionsgebäude. Vorgehen: Zuerst
+   `reference-match` und `audit-coverage` neu messen, dann je Seite gezielt die Module freischalten, die das kleinste
+   Set an Einheiten plus Kommandozentrale/Kaserne/Waffenfabrik instanziierbar machen (Kandidaten: `DefaultProductionExitUpdate`,
+   `QueueProductionExitUpdate`, `BaseRegenerateUpdate`, `HealContain`, `RebuildHoleBehavior`/`RebuildHoleExposeDie`,
+   `GenerateMinefieldBehavior`, `PreorderCreate`, `RadarUpdate`, ein `OCLSpecialPower`-/`SpecialPower`-Subsystem, und für die
+   Einheiten `PhysicsBehavior`/`SquishCollide` als Phase-6-Vorgriff). Erst wenn mindestens zwei Fraktionen teilnehmen,
+   Match von Start bis Sieg, ≥ 216.000-Tick-fähig, zwei frische Läufe plus Snapshotfortsetzung hashgleich, in den Doku
+   und in einem Test unter `--content-dir` nachweisen.
+5. **Golden-Master-Szenarien für Supply-Einnahmen und Erfahrung**, sobald beides implementiert ist (Schadenskette und
+   Produktionsuhr sind erledigt), mit unabhängiger Nachrechnung und Quellverweis.
 6. **Doku**: `docs/GAME-RULES.md`, `SIMULATION-CORE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, README,
    ARCHITECTURE, ROADMAP, IMPLEMENTATION-PLAN, CLAUDE.md nachführen; frische Zahlen, keine übernommenen.
 
