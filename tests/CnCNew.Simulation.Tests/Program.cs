@@ -98,6 +98,12 @@ run.Test("Teams: relationship matrix, SetRelationshipCommand, snapshot and repla
 run.Test("Teams: kill scoring needs an enemy", Tests.TeamsKillScoring);
 run.Test("Teams: winning alliance", Tests.TeamsVictoryConditions);
 run.Test("Teams: container gating by relationship", Tests.TeamsContainRelationship);
+run.Test("Repair: RepairDockUpdate heals over TimeForFullHeal", Tests.RepairDockHealsOverTime);
+run.Test("Repair: RepairDockUpdate snapshot mid-repair", Tests.RepairDockSnapshot);
+run.Test("Repair: AutoFindHealingUpdate walks a hurt computer unit into a pad", Tests.AutoFindHealingWalksToPad);
+run.Test("Repair: AutoFindHealingUpdate refusals", Tests.AutoFindHealingRefusals);
+run.Test("Repair: AutoFindHealingUpdate picks the closest pad", Tests.AutoFindHealingPicksClosestPad);
+run.Test("Repair: computer flag in the replay header", Tests.RepairPlayerTypeReplayHeader);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

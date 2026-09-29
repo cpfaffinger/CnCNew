@@ -71,6 +71,9 @@ sealed class Feeder(SimulationWorld world)
     public SubmitResult PurchaseScience(int player, string science, long? tick = null)
         => world.Submit(new PurchaseScienceCommand(new PlayerId(player), Next(player), tick ?? world.Tick, science));
 
+    public SubmitResult Dock(int player, uint actor, uint dock, long? tick = null)
+        => world.Submit(new DockCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor), new EntityId(dock)));
+
     public SubmitResult EnterContainer(int player, uint actor, uint container, long? tick = null)
         => world.Submit(new EnterContainerCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor), new EntityId(container)));
 

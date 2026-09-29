@@ -235,6 +235,8 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // supply economy batch (docs/GAME-RULES.md §7b)
         "SupplyCenterCreate", "SupplyWarehouseCreate", "SupplyCenterDockUpdate", "SupplyWarehouseDockUpdate", "SupplyTruckAIUpdate", "WorkerAIUpdate",
         "AutoDepositUpdate", "SpawnBehavior", "DozerAIUpdate",
+        // repair/heal batch (docs/GAME-RULES.md §6f)
+        "RepairDockUpdate", "AutoFindHealingUpdate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");
