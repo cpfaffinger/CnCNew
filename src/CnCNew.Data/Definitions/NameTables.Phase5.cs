@@ -18,6 +18,16 @@ public static class NameTablesPhase5
         "VETERAN", "ELITE", "HERO", "PLAYER_UPGRADE", "CRATEUPGRADE_ONE", "CRATEUPGRADE_TWO", "VEHICLE_HIJACK", "CARBOMB", "MINE_CLEARING_DETAIL",
         "WEAPON_RIDER1", "WEAPON_RIDER2", "WEAPON_RIDER3", "WEAPON_RIDER4", "WEAPON_RIDER5", "WEAPON_RIDER6", "WEAPON_RIDER7", "WEAPON_RIDER8");
 
+    /// <summary>Weapon.h TheWeaponBonusNames (27 entries; the obsolete demoralize slot keeps its index).</summary>
+    public static NameTable WeaponBonusCondition { get; } = new("WeaponBonusCondition", "Weapon.h TheWeaponBonusNames",
+        "GARRISONED", "HORDE", "CONTINUOUS_FIRE_MEAN", "CONTINUOUS_FIRE_FAST", "NATIONALISM", "PLAYER_UPGRADE", "DRONE_SPOTTING", "DEMORALIZED_OBSOLETE",
+        "ENTHUSIASTIC", "VETERAN", "ELITE", "HERO", "BATTLEPLAN_BOMBARDMENT", "BATTLEPLAN_HOLDTHELINE", "BATTLEPLAN_SEARCHANDDESTROY", "SUBLIMINAL",
+        "SOLO_HUMAN_EASY", "SOLO_HUMAN_NORMAL", "SOLO_HUMAN_HARD", "SOLO_AI_EASY", "SOLO_AI_NORMAL", "SOLO_AI_HARD", "TARGET_FAERIE_FIRE", "FANATICISM",
+        "FRENZY_ONE", "FRENZY_TWO", "FRENZY_THREE");
+
+    /// <summary>Weapon.h TheWeaponBonusFieldNames (5 entries).</summary>
+    public static NameTable WeaponBonusField { get; } = new("WeaponBonusField", "Weapon.h TheWeaponBonusFieldNames", "DAMAGE", "RADIUS", "RANGE", "RATE_OF_FIRE", "PRE_ATTACK");
+
     /// <summary>Upgrade.cpp TheUpgradeTypeNames (2 entries).</summary>
     public static NameTable UpgradeType { get; } = new("UpgradeType", "Upgrade.cpp TheUpgradeTypeNames", "PLAYER", "OBJECT");
 

@@ -25,6 +25,8 @@ public enum FieldType
     RetailAlternatingNames,
     /// <summary><c>&lt;Name&gt; [count]</c> with the count defaulting to 1 (<c>DeliverPayloadNugget::parsePayload</c>).</summary>
     CountedReference,
+    /// <summary><c>WeaponBonusSet::parseWeaponBonusSet</c>: <c>&lt;condition&gt; &lt;field&gt; &lt;percent&gt;</c>, both names from the reference tables.</summary>
+    WeaponBonusEntry,
 }
 
 /// <summary>What a repeated key inside one definition means (derived from the reference parse functions).</summary>
@@ -68,6 +70,7 @@ public sealed record FieldSchema(
             FieldType.IntegerList or FieldType.TextList => Math.Max(0, count - Count),
             FieldType.RetailAlternatingNames => count / 2,
             FieldType.CountedReference => Math.Max(0, count - 2),
+            FieldType.WeaponBonusEntry => Math.Max(0, count - 3),
             _ => 0,
         };
     }
@@ -76,7 +79,7 @@ public sealed record FieldSchema(
     {
         var value = text.Trim();
         var full = value;
-        var readsWholeText = Type is FieldType.IntegerList or FieldType.TextList or FieldType.RetailAlternatingNames or FieldType.CountedReference;
+        var readsWholeText = Type is FieldType.IntegerList or FieldType.TextList or FieldType.RetailAlternatingNames or FieldType.CountedReference or FieldType.WeaponBonusEntry;
         if (IgnoredTokenCount(value) > 0 && !readsWholeText)
             value = ValueGrammar.Tokenize(value)[0];
         var result = ParseCore(value, location);
@@ -174,6 +177,16 @@ public sealed record FieldSchema(
                 var pairCount = pairTokens.Length > 1 ? ParseInteger(pairTokens[1], location) : 1;
                 return new(DefinitionValueKind.Reference,
                     new CountedReference(new DefinitionReference(ReferenceKind!.Value, pairTokens[0]), checked((int)pairCount)), value);
+            case FieldType.WeaponBonusEntry:
+                var bonusTokens = ValueGrammar.Tokenize(value);
+                if (bonusTokens.Length < 3) throw ValueGrammar.Error($"'{Name}' expects '<condition> <field> <percent>', got '{value}'.", location);
+                if (!NameTablesPhase5.WeaponBonusCondition.TryIndexOf(bonusTokens[0], out var bonusCondition))
+                    throw ValueGrammar.Error($"'{bonusTokens[0]}' is not a member of {NameTablesPhase5.WeaponBonusCondition.Name} ({NameTablesPhase5.WeaponBonusCondition.Source}).", location);
+                if (!NameTablesPhase5.WeaponBonusField.TryIndexOf(bonusTokens[1], out var bonusField))
+                    throw ValueGrammar.Error($"'{bonusTokens[1]}' is not a member of {NameTablesPhase5.WeaponBonusField.Name} ({NameTablesPhase5.WeaponBonusField.Source}).", location);
+                if (!bonusTokens[2].EndsWith('%')) throw ValueGrammar.Error($"'{Name}' expects a percentage such as 125%, got '{bonusTokens[2]}'.", location);
+                return new(DefinitionValueKind.WeaponBonus, new WeaponBonusValue(NameTablesPhase5.WeaponBonusCondition.Canonical(bonusCondition),
+                    NameTablesPhase5.WeaponBonusField.Canonical(bonusField), ParseRealStrict(bonusTokens[2][..^1], location) / 100m), value);
             case FieldType.CoefficientByEnum:
                 var coefficientTokens = ValueGrammar.Tokenize(value);
                 if (coefficientTokens.Length != 2) throw ValueGrammar.Error($"'{Name}' expects '<Default|name> <value>', got '{value}'.", location);

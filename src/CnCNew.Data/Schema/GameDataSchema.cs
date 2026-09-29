@@ -19,5 +19,9 @@ public static class GameDataSchema
         new FieldSchema("BaseRegenDelay", FieldType.DurationMs, Source: Table),
         new FieldSchema("StandardMinefieldDistance", FieldType.Distance, Source: Table),
         new FieldSchema("ValuePerSupplyBox", FieldType.Integer, Source: Table),
+        new FieldSchema("HealthBonus_Veteran", FieldType.Percent, Source: Table),
+        new FieldSchema("HealthBonus_Elite", FieldType.Percent, Source: Table),
+        new FieldSchema("HealthBonus_Heroic", FieldType.Percent, Source: Table),
+        new FieldSchema("WeaponBonus", FieldType.WeaponBonusEntry, Repeat: RepeatPolicy.IndexedByFirstTwoTokens, Source: Table + " WeaponBonusSet::parseWeaponBonusSet"),
     ]);
 }

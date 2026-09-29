@@ -37,6 +37,7 @@ TruncatedInputsAreRejected();
 FullCompilationsAreByteIdentical();
 FingerprintStreamingMatchesBuffer();
 ObjectCreationListsAreTypedNuggets();
+WeaponBonusesAreTypedAndStrict();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -231,6 +232,9 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // special-power unlock batch (docs/GAME-RULES.md §6d)
         "SpecialAbility", "OCLSpecialPower", "CashBountyPower", "CashHackSpecialPower", "SpecialPowerCreate", "GrantUpgradeCreate",
         "GrantScienceUpgrade", "UnpauseSpecialPowerUpgrade", "SpecialPowerCompletionDie", "SpectreGunshipDeploymentUpdate",
+        // supply economy batch (docs/GAME-RULES.md §7b)
+        "SupplyCenterCreate", "SupplyWarehouseCreate", "SupplyCenterDockUpdate", "SupplyWarehouseDockUpdate", "SupplyTruckAIUpdate", "WorkerAIUpdate",
+        "AutoDepositUpdate", "SpawnBehavior", "DozerAIUpdate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");
@@ -812,6 +816,30 @@ static void ObjectCreationListsAreTypedNuggets()
 }
 
 static MemorySource One(string text) => new(new Dictionary<string, string> { ["fixture.ini"] = text }, ["fixture.ini"]);
+
+static void WeaponBonusesAreTypedAndStrict()
+{
+    var graph = DefinitionCompiler.Compile(One("""
+    Weapon Gun
+      WeaponBonus = VETERAN DAMAGE 125%
+      WeaponBonus = VETERAN RATE_OF_FIRE 120%
+      WeaponBonus = ELITE DAMAGE 150%
+      WeaponBonus = VETERAN DAMAGE 130%
+    End
+    GameData
+      HealthBonus_Veteran = 120%
+      WeaponBonus = HERO RANGE 110%
+    End
+    """));
+    var weapon = graph.Definitions.OfType<WeaponDefinition>().Single();
+    var bonuses = weapon.Fields.Where(field => field.Name == "WeaponBonus").Select(field => (WeaponBonusValue)field.Value.Value).ToArray();
+    Assert(bonuses.Length == 3 && bonuses.Count(value => value is { Condition: "VETERAN", Field: "DAMAGE" }) == 1, "WeaponBonus lines are indexed by condition and field.");
+    Assert(bonuses.Single(value => value is { Condition: "VETERAN", Field: "DAMAGE" }).Ratio == 1.3m, "The last duplicate wins, percentages become ratios.");
+    Throws<FormatException>(() => DefinitionCompiler.Compile(One("Weapon W\n  WeaponBonus = TYPO DAMAGE 125%\nEnd\n")), "not a member of WeaponBonusCondition");
+    Throws<FormatException>(() => DefinitionCompiler.Compile(One("Weapon W\n  WeaponBonus = VETERAN SPEED 125%\nEnd\n")), "not a member of WeaponBonusField");
+    Throws<FormatException>(() => DefinitionCompiler.Compile(One("Weapon W\n  WeaponBonus = VETERAN DAMAGE 125\nEnd\n")), "percentage");
+    Assert(NameTablesPhase5.WeaponBonusCondition.Count == 27, "WeaponBonus condition table size.");
+}
 
 static void Assert(bool condition, string message)
 {

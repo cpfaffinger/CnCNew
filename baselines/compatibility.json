@@ -589,33 +589,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GameData/HealthBonus_Elite",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/HealthBonus_Heroic",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/HealthBonus_Veteran",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GameData/HideGarrisonFlags",
       "count": 1,
       "owners": [
@@ -2391,15 +2364,6 @@
       "category": "deferred-field",
       "name": "GameData/WaterType",
       "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/WeaponBonus",
-      "count": 23,
       "owners": [
         "GameData"
       ],
@@ -4659,15 +4623,6 @@
       "category": "deferred-field",
       "name": "Weapon/VeterancyProjectileExhaust",
       "count": 75,
-      "owners": [
-        "Weapon"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "Weapon/WeaponBonus",
-      "count": 109,
       "owners": [
         "Weapon"
       ],

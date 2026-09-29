@@ -112,6 +112,7 @@ public static class DefinitionSnapshotWriter
         TaggedReferenceList tagged => new { tag = tagged.Tag, references = tagged.References.Select(reference => new { kind = reference.Kind.ToString(), reference.Name, reference.IsNone }) },
         CountedReference counted => new { kind = counted.Reference.Kind.ToString(), counted.Reference.Name, counted.Reference.IsNone, counted.Count },
         CoefficientValue coefficient => new { enumName = coefficient.EnumName, kind = coefficient.Value.Kind.ToString(), value = CanonicalValue(coefficient.Value) },
+        WeaponBonusValue bonus => new { condition = bonus.Condition, field = bonus.Field, ratio = Invariant(bonus.Ratio) },
         ShotDelayValue delay => new { min = Invariant(delay.Min.Milliseconds), max = Invariant(delay.Max.Milliseconds) },
         _ => value.Value,
     };

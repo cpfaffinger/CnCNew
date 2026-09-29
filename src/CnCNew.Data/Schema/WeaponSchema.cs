@@ -34,6 +34,7 @@ public static class WeaponSchema
             // WeaponTemplate::parseShotDelay accepts a plain integer (min == max) or "Min:x Max:y" (4 shipped weapons, e.g.
             // ScudStormMissile, use the labeled form); both convert like INI::scanUnsignedInt (sscanf("%u")).
             new("DelayBetweenShots", FieldType.ShotDelayMs, Source: Table + " WeaponTemplate::parseShotDelay"),
+            new("WeaponBonus", FieldType.WeaponBonusEntry, Repeat: RepeatPolicy.IndexedByFirstTwoTokens, Source: Table + " WeaponBonusSet::parseWeaponBonusSet"),
             new("AutoReloadsClip", FieldType.Enum, Table: NameTablesPhase5.WeaponReloadType, Source: Table),
         ]);
     }

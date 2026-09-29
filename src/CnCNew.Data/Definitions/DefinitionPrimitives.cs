@@ -87,11 +87,14 @@ public sealed record CoefficientValue(string? EnumName, DefinitionValue Value)
 /// <summary><c>WeaponTemplate::parseShotDelay</c>: a milliseconds range (<c>Min == Max</c> for the plain single-value form).</summary>
 public readonly record struct ShotDelayValue(GameTime Min, GameTime Max);
 
+/// <summary>One <c>WeaponBonus = &lt;CONDITION&gt; &lt;FIELD&gt; &lt;percent&gt;</c> line (<c>Weapon.cpp WeaponBonusSet::parseWeaponBonusSet</c>); <see cref="Ratio"/> is the percentage as a ratio (125% = 1.25).</summary>
+public sealed record WeaponBonusValue(string Condition, string Field, decimal Ratio);
+
 public enum DefinitionValueKind
 {
     Text, Boolean, Integer, Number, Time, Distance, Speed, Angle, Percentage, Money,
     Vector2, Vector3, Color, Enum, Flags, List, Reference, Sentinel, Compatibility,
-    IntegerList, ColorKeyframe, Coefficient, ShotDelay
+    IntegerList, ColorKeyframe, Coefficient, ShotDelay, WeaponBonus
 }
 
 public sealed record DefinitionValue(DefinitionValueKind Kind, object Value, string OriginalText);
