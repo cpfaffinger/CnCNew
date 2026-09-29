@@ -60,6 +60,8 @@ public sealed record ExperienceLevelDefinition(DefinitionId Id, string OriginalN
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 public sealed record SpecialPowerDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
+public sealed record ObjectCreationListDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
+    : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 public sealed record CrateDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 public sealed record GlobalDataDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)

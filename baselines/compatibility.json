@@ -4891,15 +4891,6 @@
     },
     {
       "category": "definition",
-      "name": "ObjectCreationList",
-      "count": 299,
-      "owners": [
-        "top-level"
-      ],
-      "plannedTarget": "phase-specific typed definition compiler"
-    },
-    {
-      "category": "definition",
       "name": "OnlineChatColors",
       "count": 1,
       "owners": [
@@ -5030,7 +5021,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-ignored-tokens",
-      "count": 4,
+      "count": 132,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },

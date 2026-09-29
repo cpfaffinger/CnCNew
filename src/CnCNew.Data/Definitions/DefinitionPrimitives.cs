@@ -22,7 +22,7 @@ public enum DefinitionKind
 {
     Object, Weapon, WeaponSet, Armor, Damage, Upgrade, Science, Player, Faction,
     CommandButton, CommandSet, FxList, Fx, AudioEvent, DialogEvent, MusicTrack,
-    AmbientStream, Locomotor, ExperienceLevel, SpecialPower, GameData, GlobalData, Crate,
+    AmbientStream, Locomotor, ExperienceLevel, SpecialPower, GameData, GlobalData, Crate, ObjectCreationList,
     Compatibility
 }
 
@@ -69,6 +69,9 @@ public sealed record FlagsValue(string Table, ImmutableArray<string> Names, bool
 
 /// <summary>A set-tagged list of references such as <c>Locomotor = SET_NORMAL A B</c>.</summary>
 public sealed record TaggedReferenceList(string Tag, ImmutableArray<DefinitionReference> References);
+
+/// <summary>A <c>&lt;Name&gt; [count]</c> pair such as <c>DeliverPayload</c>'s <c>Payload = NapalmMissile 2</c> (the count defaults to 1 when absent).</summary>
+public sealed record CountedReference(DefinitionReference Reference, int Count);
 
 /// <summary>
 /// One <c>&lt;Default|EnumName&gt; &lt;value&gt;</c> line of a repeatable coefficient key (<c>Armor.cpp ArmorTemplate::parseArmorCoefficients</c>,

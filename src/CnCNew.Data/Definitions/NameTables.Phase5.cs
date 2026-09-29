@@ -27,4 +27,14 @@ public static class NameTablesPhase5
 
     /// <summary>Weapon.h TheWeaponReloadNames (3 entries).</summary>
     public static NameTable WeaponReloadType { get; } = new("WeaponReloadType", "Weapon.h TheWeaponReloadNames", "YES", "NO", "RETURN_TO_BASE");
+
+    /// <summary>ObjectCreationList.cpp DebrisDispositionNames (9 entries).</summary>
+    public static NameTable DebrisDisposition { get; } = new("DebrisDisposition", "ObjectCreationList.cpp DebrisDispositionNames",
+        "LIKE_EXISTING", "ON_GROUND_ALIGNED", "SEND_IT_FLYING", "SEND_IT_UP", "SEND_IT_OUT", "RANDOM_FORCE", "FLOATING", "INHERIT_VELOCITY", "WHIRLING");
+
+    /// <summary>WeaponSet.h TheWeaponSlotTypeNames (3 entries).</summary>
+    public static NameTable WeaponSlot { get; } = new("WeaponSlot", "WeaponSet.h TheWeaponSlotTypeNames", "PRIMARY", "SECONDARY", "TERTIARY");
+
+    /// <summary>GameLOD.cpp StaticGameLODNames (4 entries).</summary>
+    public static NameTable StaticGameLod { get; } = new("StaticGameLod", "GameLOD.cpp StaticGameLODNames", "Low", "Medium", "High", "Custom");
 }

@@ -14,6 +14,17 @@ public enum FieldType
     CoefficientByEnum,
     /// <summary><c>WeaponTemplate::parseShotDelay</c>: a plain millisecond duration (min == max) or <c>Min:x Max:y</c>.</summary>
     ShotDelayMs,
+    /// <summary><c>INI::parseCoord3D</c>: <c>X:n Y:n Z:n</c> with all three labels required.</summary>
+    Vector3,
+    /// <summary>Exactly <see cref="FieldSchema.Count"/> plain tokens (<c>getNextAsciiString</c> called that often); further tokens are ignored.</summary>
+    TextList,
+    /// <summary>
+    /// <c>ObjectCreationList.cpp parseDebrisObjectNames</c>: the retail loop stores a token, then reads and discards the next one, so only the
+    /// odd-positioned tokens (1st, 3rd, ...) are kept. Yields a reference list when a reference kind is set, otherwise a text list.
+    /// </summary>
+    RetailAlternatingNames,
+    /// <summary><c>&lt;Name&gt; [count]</c> with the count defaulting to 1 (<c>DeliverPayloadNugget::parsePayload</c>).</summary>
+    CountedReference,
 }
 
 /// <summary>What a repeated key inside one definition means (derived from the reference parse functions).</summary>
@@ -54,7 +65,9 @@ public sealed record FieldSchema(
         {
             FieldType.Bool or FieldType.Integer or FieldType.Money or FieldType.Real or FieldType.Distance or FieldType.Angle
                 or FieldType.DurationMs or FieldType.Enum => Math.Max(0, count - 1),
-            FieldType.IntegerList => Math.Max(0, count - Count),
+            FieldType.IntegerList or FieldType.TextList => Math.Max(0, count - Count),
+            FieldType.RetailAlternatingNames => count / 2,
+            FieldType.CountedReference => Math.Max(0, count - 2),
             _ => 0,
         };
     }
@@ -63,7 +76,8 @@ public sealed record FieldSchema(
     {
         var value = text.Trim();
         var full = value;
-        if (IgnoredTokenCount(value) > 0 && Type != FieldType.IntegerList)
+        var readsWholeText = Type is FieldType.IntegerList or FieldType.TextList or FieldType.RetailAlternatingNames or FieldType.CountedReference;
+        if (IgnoredTokenCount(value) > 0 && !readsWholeText)
             value = ValueGrammar.Tokenize(value)[0];
         var result = ParseCore(value, location);
         return result.OriginalText == full ? result : result with { OriginalText = full };
@@ -137,6 +151,29 @@ public sealed record FieldSchema(
                 else
                     minMs = maxMs = ParseMsReal(value, location);
                 return new(DefinitionValueKind.ShotDelay, new ShotDelayValue(new GameTime(minMs), new GameTime(maxMs)), value);
+            case FieldType.Vector3:
+                if (!ValueGrammar.TryLabeled(value, ["X", "Y", "Z"], [], out var vectorTexts, out var vectorRest) || vectorRest.Length != 0)
+                    throw ValueGrammar.Error($"'{Name}' expects 'X:n Y:n Z:n', got '{value}'.", location);
+                var vector = vectorTexts.Select(part => ValueGrammar.TryReal(part, out var component)
+                    ? component : throw ValueGrammar.Error($"'{Name}' component '{part}' is not a finite number.", location)).ToArray();
+                return new(DefinitionValueKind.Vector3, new Vector3Value(vector[0], vector[1], vector[2]), value);
+            case FieldType.TextList:
+                var listTokens = ValueGrammar.Tokenize(value);
+                if (listTokens.Length < Count) throw ValueGrammar.Error($"'{Name}' expects {Count} names, got {listTokens.Length}.", location);
+                return new(DefinitionValueKind.List, listTokens.Take(Count).ToImmutableArray(), value);
+            case FieldType.RetailAlternatingNames:
+                var allNames = ValueGrammar.Tokenize(value);
+                if (allNames.Length == 0) throw ValueGrammar.Error($"'{Name}' expects at least one name.", location);
+                var keptNames = allNames.Where((_, index) => index % 2 == 0).ToImmutableArray();
+                return ReferenceKind is { } namesKind
+                    ? new(DefinitionValueKind.Reference, keptNames.Select(name => new DefinitionReference(namesKind, name)).ToImmutableArray(), value)
+                    : new(DefinitionValueKind.List, keptNames, value);
+            case FieldType.CountedReference:
+                var pairTokens = ValueGrammar.Tokenize(value);
+                if (pairTokens.Length == 0) throw ValueGrammar.Error($"'{Name}' expects '<name> [count]'.", location);
+                var pairCount = pairTokens.Length > 1 ? ParseInteger(pairTokens[1], location) : 1;
+                return new(DefinitionValueKind.Reference,
+                    new CountedReference(new DefinitionReference(ReferenceKind!.Value, pairTokens[0]), checked((int)pairCount)), value);
             case FieldType.CoefficientByEnum:
                 var coefficientTokens = ValueGrammar.Tokenize(value);
                 if (coefficientTokens.Length != 2) throw ValueGrammar.Error($"'{Name}' expects '<Default|name> <value>', got '{value}'.", location);

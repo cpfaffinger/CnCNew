@@ -112,6 +112,12 @@ public static class DefinitionCompiler
         else
             state = new DefinitionState();
 
+        // ObjectCreationList.cpp parseObjectCreationListDefinition: a repeated definition replaces the earlier nuggets.
+        if (kind == DefinitionKind.ObjectCreationList)
+        {
+            state.Sections.Clear();
+            state.Fields.Clear();
+        }
         state.Kind = kind;
         state.Name = name;
         state.DeclarationType = declType;
@@ -177,6 +183,11 @@ public static class DefinitionCompiler
     private static void ApplyBlock(Context c, DefinitionState state, IniBlock block, LoadedDocument doc,
         ModuleParseMode mode, BlockScope scope, ReplaceTarget? replace)
     {
+        if (state.Kind == DefinitionKind.ObjectCreationList)
+        {
+            state.Sections.Add(CompileNugget(c, block, doc));
+            return;
+        }
         var declaration = ParseDeclaration(block.Declaration, block.Location);
         var type = declaration.Type;
         if (IsModuleBlock(type))
@@ -259,6 +270,8 @@ public static class DefinitionCompiler
         var key = property.Name;
         var repeat = RepeatPolicy.Overwrite;
         DefinitionValue value;
+        if (state.Kind == DefinitionKind.ObjectCreationList)
+            throw new DefinitionCompileException($"ObjectCreationList '{state.Name}' takes nugget blocks only; '{key}' is not one.", property.Location);
         if (state.Kind == DefinitionKind.Object && (state.DeclarationType.Equals("Object", StringComparison.OrdinalIgnoreCase) || state.IsReskin))
         {
             if (state.IsReskin && !ObjectSchema.ReskinKeys.Contains(key))
@@ -485,6 +498,55 @@ public static class DefinitionCompiler
         return new DefinitionSection(block.Declaration, fields.ToImmutable(), children.ToImmutable(), block.Location);
     }
 
+    // ------------------------------------------------------------------------------------- object creation lists
+
+    private static DefinitionSection CompileNugget(Context c, IniBlock block, LoadedDocument doc)
+    {
+        var type = ParseDeclaration(block.Declaration, block.Location).Type;
+        if (!ObjectCreationListSchema.TryGetNugget(type, out var nugget))
+            throw new DefinitionCompileException($"Unknown ObjectCreationList nugget '{type}'; it is not part of TheObjectCreationListFieldParse.", block.Location);
+        return CompileTypedBlock(c, block, doc, nugget.Fields, nugget.ChildBlocks);
+    }
+
+    private static DefinitionSection CompileTypedBlock(Context c, IniBlock block, LoadedDocument doc, SchemaSet schema, ImmutableArray<string> childBlocks)
+    {
+        var active = SelectActive(block.Children, c.Options.Conditions, doc.Document.Source).ToArray();
+        var fields = new List<DefinitionField>();
+        var seen = new HashSet<string>(Names);
+        foreach (var property in active.OfType<IniProperty>())
+        {
+            c.Keys++;
+            if (!schema.TryGet(property.Name, out var field))
+                throw new DefinitionCompileException($"Unknown key '{property.Name}' for {schema.Name}.", property.Location);
+            var value = field.Parse(property.Value, property.Location);
+            if (field.IgnoredTokenCount(property.Value) is > 0 and var ignored)
+                c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-ignored-tokens",
+                    $"'{field.Name}' = '{property.Value.Trim()}' has {ignored} token(s) that the reference parser reads past and ignores.", property.Location));
+            if (value.Value is CompatibilityValue compatibility)
+                c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-value",
+                    $"'{field.Name}' = '{property.Value.Trim()}' is accepted as {compatibility.NormalizedValue} ({compatibility.Code}).", property.Location));
+            if (value.Value is FlagsValue { IsRelative: true } relative)
+                value = value with { Value = relative.ResolveAgainst(null) };
+            if (!seen.Add(field.Name) && field.Repeat == RepeatPolicy.Overwrite)
+            {
+                CountCompat(c.DuplicateKeys, $"{schema.Name}/{field.Name}", "ObjectCreationList", "last-wins");
+                c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-duplicate-key",
+                    $"Key '{field.Name}' occurs more than once in one '{schema.Name}' block; the last value wins.", property.Location));
+                fields.RemoveAll(existing => existing.Name.Equals(field.Name, StringComparison.Ordinal));
+            }
+            fields.Add(new DefinitionField(field.Name, value, property.Location));
+        }
+        var children = ImmutableArray.CreateBuilder<DefinitionSection>();
+        foreach (var nested in active.OfType<IniBlock>())
+        {
+            var nestedType = ParseDeclaration(nested.Declaration, nested.Location).Type;
+            if (!childBlocks.Contains(nestedType, Names))
+                throw new DefinitionCompileException($"Unexpected block '{nestedType}' inside {schema.Name}.", nested.Location);
+            children.Add(CompileTypedBlock(c, nested, doc, ObjectCreationListSchema.RadiusDecal, []));
+        }
+        return new DefinitionSection(block.Declaration, [..fields], children.ToImmutable(), block.Location);
+    }
+
     // ---------------------------------------------------------------------------------------------- finishing
 
     private static CompiledDefinitionGraph Finish(Context c, List<LoadedDocument> documents, LoadPlanResult plan)
@@ -502,6 +564,7 @@ public static class DefinitionCompiler
                 DefinitionReference single => [single],
                 ImmutableArray<DefinitionReference> multiple => multiple,
                 TaggedReferenceList tagged => tagged.References,
+                CountedReference counted => [counted.Reference],
                 _ => throw new InvalidDataException($"Invalid reference payload for '{definition.Id}.{field.Name}'."),
             };
             foreach (var reference in fieldReferences)
@@ -601,6 +664,7 @@ public static class DefinitionCompiler
             DefinitionKind.ExperienceLevel => new ExperienceLevelDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.SpecialPower => new SpecialPowerDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.Crate => new CrateDefinition(id, state.Name, state.Location, fields, modules),
+            DefinitionKind.ObjectCreationList => new ObjectCreationListDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.GameData or DefinitionKind.GlobalData => new GlobalDataDefinition(id, state.Name, state.Location, fields, modules),
             _ => new CompatibilityDefinition(id, state.Name, state.Location, fields, modules),
         };
@@ -703,6 +767,7 @@ public static class DefinitionCompiler
             "locomotor" => DefinitionKind.Locomotor, "experiencelevel" => DefinitionKind.ExperienceLevel,
             "specialpower" or "specialpowertemplate" => DefinitionKind.SpecialPower,
             "gamedata" => DefinitionKind.GameData, "globaldata" => DefinitionKind.GlobalData, "cratedata" => DefinitionKind.Crate,
+            "objectcreationlist" => DefinitionKind.ObjectCreationList,
             _ => DefinitionKind.Compatibility,
         };
         return kind != DefinitionKind.Compatibility;

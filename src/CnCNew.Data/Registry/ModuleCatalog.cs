@@ -103,7 +103,7 @@ public static class ModuleCatalog
         Add("CreateObjectDie",
         [
             ..DieMux(),
-            new("CreationList", FieldType.Text, Source: "CreateObjectDie.cpp"),
+            new("CreationList", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "CreateObjectDie.cpp"),
             new("TransferPreviousHealth", FieldType.Bool, Source: "CreateObjectDie.cpp"),
         ]);
         Add("CreateCrateDie",
@@ -115,7 +115,7 @@ public static class ModuleCatalog
         [
             ..DieMux(),
             new("FX", FieldType.ReferenceList, ReferenceKind: DefinitionKind.FxList, Source: "InstantDeathBehavior.cpp"),
-            new("OCL", FieldType.Text, Source: "InstantDeathBehavior.cpp"),
+            new("OCL", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "InstantDeathBehavior.cpp"),
             new("Weapon", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Weapon, Source: "InstantDeathBehavior.cpp"),
         ]);
         Add("FXListDie",
@@ -208,12 +208,10 @@ public static class ModuleCatalog
             ..UpgradeMux(),
             new("ConditionFlag", FieldType.Opaque, Source: "ModelConditionUpgrade.cpp"),
         ]);
-        // UpgradeObject names an ObjectCreationList, which is not yet its own typed definition domain (still Compatibility);
-        // kept as Text rather than a Reference so it does not silently misroute into the Object/Upgrade/... reference graph.
         Add("ObjectCreationUpgrade",
         [
             ..UpgradeMux(),
-            new("UpgradeObject", FieldType.Text, Source: "ObjectCreationUpgrade.cpp"),
+            new("UpgradeObject", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "ObjectCreationUpgrade.cpp"),
         ]);
         // Field list verified against every occurrence in .local/phase2-import-a (510 AIUpdateInterface blocks, 34 files):
         // exactly these four top-level fields occur; AIUpdate.cpp's full FieldParse table is much larger (idle-scan timing,
@@ -258,10 +256,10 @@ public static class ModuleCatalog
             // slots are mechanically relevant (see the simulation-layer doc comment); FX lists and particle systems —
             // pure presentation — are still typed (Opaque, an implemented module may not have unlisted keys) but
             // deferred.
-            ImmutableArray<FieldSchema> Slots(string prefix, FieldType type)
+            ImmutableArray<FieldSchema> Slots(string prefix, FieldType type, DefinitionKind? referenceKind = null)
             {
                 var slots = ImmutableArray.CreateBuilder<FieldSchema>();
-                for (var i = 1; i <= 12; i++) slots.Add(new FieldSchema($"{prefix}{i}", type, Source: "TransitionDamageFX.h"));
+                for (var i = 1; i <= 12; i++) slots.Add(new FieldSchema($"{prefix}{i}", type, ReferenceKind: referenceKind, Source: "TransitionDamageFX.h"));
                 return slots.ToImmutable();
             }
             Add("TransitionDamageFX",
@@ -270,7 +268,7 @@ public static class ModuleCatalog
                 new("DamageOCLTypes", FieldType.AllNoneDeltaFlags, Table: NameTables.DamageType, Source: "TransitionDamageFX.h"),
                 new("DamageParticleTypes", FieldType.Opaque, Source: "TransitionDamageFX.h"),
                 ..Slots("DamagedFXList", FieldType.Opaque), ..Slots("ReallyDamagedFXList", FieldType.Opaque), ..Slots("RubbleFXList", FieldType.Opaque),
-                ..Slots("DamagedOCL", FieldType.Text), ..Slots("ReallyDamagedOCL", FieldType.Text), ..Slots("RubbleOCL", FieldType.Text),
+                ..Slots("DamagedOCL", FieldType.Reference, DefinitionKind.ObjectCreationList), ..Slots("ReallyDamagedOCL", FieldType.Reference, DefinitionKind.ObjectCreationList), ..Slots("RubbleOCL", FieldType.Reference, DefinitionKind.ObjectCreationList),
                 ..Slots("DamagedParticleSystem", FieldType.Opaque), ..Slots("ReallyDamagedParticleSystem", FieldType.Opaque), ..Slots("RubbleParticleSystem", FieldType.Opaque),
             ]);
         }
