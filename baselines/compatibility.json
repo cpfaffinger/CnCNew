@@ -3613,6 +3613,42 @@
     },
     {
       "category": "deferred-field",
+      "name": "SpecialAbility/InitiateSound",
+      "count": 85,
+      "owners": [
+        "SpecialAbility"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SpecialPower/AcademyClassify",
+      "count": 47,
+      "owners": [
+        "SpecialPower"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SpecialPower/InitiateAtLocationSound",
+      "count": 21,
+      "owners": [
+        "SpecialPower"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SpecialPower/InitiateSound",
+      "count": 11,
+      "owners": [
+        "SpecialPower"
+      ],
+      "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "StealthDetectorUpdate/IRBeaconParticleSysName",
       "count": 8,
       "owners": [
@@ -5006,7 +5042,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 4935,
+      "count": 4441,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5638,24 +5674,6 @@
     },
     {
       "category": "module",
-      "name": "CashBountyPower",
-      "count": 21,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "CashHackSpecialPower",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "CheckpointUpdate",
       "count": 1,
       "owners": [
@@ -5908,26 +5926,8 @@
     },
     {
       "category": "module",
-      "name": "GrantScienceUpgrade",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "GrantStealthBehavior",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "GrantUpgradeCreate",
-      "count": 58,
       "owners": [
         "Object"
       ],
@@ -6117,15 +6117,6 @@
       "category": "module",
       "name": "NeutronMissileUpdate",
       "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "OCLSpecialPower",
-      "count": 200,
       "owners": [
         "Object"
       ],
@@ -6430,44 +6421,8 @@
     },
     {
       "category": "module",
-      "name": "SpecialAbility",
-      "count": 115,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "SpecialAbilityUpdate",
       "count": 100,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpecialPowerCompletionDie",
-      "count": 22,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpecialPowerCreate",
-      "count": 22,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpectreGunshipDeploymentUpdate",
-      "count": 9,
       "owners": [
         "Object"
       ],
@@ -6657,15 +6612,6 @@
       "category": "module",
       "name": "UnitCrateCollide",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "UnpauseSpecialPowerUpgrade",
-      "count": 38,
       "owners": [
         "Object"
       ],

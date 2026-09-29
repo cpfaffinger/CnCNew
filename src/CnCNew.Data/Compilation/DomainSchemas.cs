@@ -20,6 +20,7 @@ internal static class DomainSchemas
         DefinitionKind.Locomotor => LocomotorSchema.Locomotor,
         DefinitionKind.Faction => FactionSchema.Faction,
         DefinitionKind.Crate => CrateSchema.Crate,
+        DefinitionKind.SpecialPower => SpecialPowerSchema.SpecialPower,
         DefinitionKind.GameData or DefinitionKind.GlobalData => GameDataSchema.GameData,
         _ => null,
     };

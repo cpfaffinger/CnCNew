@@ -499,6 +499,67 @@ public static class ModuleCatalog
             new("DelayExitInAir", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "TransportContain.h"),
         ]);
 
+        // SpecialPower.cpp SpecialPowerModuleData (the base of every special-power module). InitiateSound is presentation.
+        ImmutableArray<FieldSchema> SpecialPowerBase() =>
+        [
+            new("SpecialPowerTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.SpecialPower, Source: "SpecialPowerModule.cpp"),
+            new("UpdateModuleStartsAttack", FieldType.Bool, Source: "SpecialPowerModule.cpp"),
+            new("StartsPaused", FieldType.Bool, Source: "SpecialPowerModule.cpp"),
+            new("InitiateSound", FieldType.Opaque, Source: "SpecialPowerModule.cpp"),
+            new("ScriptedSpecialPowerOnly", FieldType.Bool, Source: "SpecialPowerModule.cpp"),
+        ];
+        Add("SpecialAbility", SpecialPowerBase());
+        Add("OCLSpecialPower",
+        [
+            ..SpecialPowerBase(),
+            // "SCIENCE OCL" pairs, kept in file order: the first one whose science the player owns wins.
+            new("UpgradeOCL", FieldType.TextList, Repeat: RepeatPolicy.Accumulate, Count: 2, Source: "OCLSpecialPower.cpp parseOCLSpecialPowerUpgrade"),
+            new("OCL", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "OCLSpecialPower.cpp"),
+            new("CreateLocation", FieldType.Enum, Table: NameTablesPhase5.OclCreateLocation, Source: "OCLSpecialPower.cpp"),
+            new("ReferenceObject", FieldType.Text, Source: "OCLSpecialPower.cpp"),
+            new("OCLAdjustPositionToPassable", FieldType.Bool, Source: "OCLSpecialPower.cpp"),
+        ]);
+        Add("CashBountyPower",
+        [
+            ..SpecialPowerBase(),
+            new("Bounty", FieldType.Percent, Source: "CashBountyPower.cpp"),
+        ]);
+        Add("CashHackSpecialPower",
+        [
+            ..SpecialPowerBase(),
+            new("MoneyAmount", FieldType.Integer, Source: "CashHackSpecialPower.cpp"),
+            new("UpgradeMoneyAmount", FieldType.TextList, Repeat: RepeatPolicy.Accumulate, Count: 2, Source: "CashHackSpecialPower.cpp parseCashHackSpecialPowerUpgradePair"),
+        ]);
+        Add("SpecialPowerCreate", []);
+        Add("GrantUpgradeCreate",
+        [
+            new("UpgradeToGrant", FieldType.Reference, ReferenceKind: DefinitionKind.Upgrade, Source: "GrantUpgradeCreate.cpp"),
+            new("ExemptStatus", FieldType.Flags, Table: NameTables.ObjectStatus, Source: "GrantUpgradeCreate.cpp"),
+        ]);
+        Add("GrantScienceUpgrade",
+        [
+            ..UpgradeMux(),
+            new("GrantScience", FieldType.Reference, ReferenceKind: DefinitionKind.Science, Source: "GrantScienceUpgrade.cpp"),
+        ]);
+        Add("UnpauseSpecialPowerUpgrade",
+        [
+            ..UpgradeMux(),
+            new("SpecialPowerTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.SpecialPower, Source: "UnpauseSpecialPowerUpgrade.cpp"),
+        ]);
+        Add("SpecialPowerCompletionDie",
+        [
+            ..DieMux(),
+            new("SpecialPowerTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.SpecialPower, Source: "SpecialPowerCompletionDie.cpp"),
+        ]);
+        Add("SpectreGunshipDeploymentUpdate",
+        [
+            new("SpecialPowerTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.SpecialPower, Source: "SpectreGunshipDeploymentUpdate.cpp"),
+            new("RequiredScience", FieldType.Reference, ReferenceKind: DefinitionKind.Science, Source: "SpectreGunshipDeploymentUpdate.cpp"),
+            new("GunshipTemplateName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "SpectreGunshipDeploymentUpdate.cpp"),
+            new("AttackAreaRadius", FieldType.Real, Source: "SpectreGunshipDeploymentUpdate.cpp"),
+            new("CreateLocation", FieldType.Enum, Table: NameTablesPhase5.GunshipCreateLocation, Source: "SpectreGunshipDeploymentUpdate.cpp"),
+        ]);
+
         return builder.ToImmutable();
     }
 

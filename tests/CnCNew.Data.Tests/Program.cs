@@ -228,6 +228,9 @@ static void ModuleCatalogIsExplicitAndConsistent()
         "BaseRegenerateUpdate", "GenerateMinefieldBehavior", "PhysicsBehavior", "SquishCollide",
         "DefaultProductionExitUpdate", "SupplyCenterProductionExitUpdate", "QueueProductionExitUpdate", "HealContain", "EjectPilotDie",
         "VeterancyGainCreate", "PreorderCreate", "RadarUpdate", "RebuildHoleExposeDie", "RebuildHoleBehavior",
+        // special-power unlock batch (docs/GAME-RULES.md §6d)
+        "SpecialAbility", "OCLSpecialPower", "CashBountyPower", "CashHackSpecialPower", "SpecialPowerCreate", "GrantUpgradeCreate",
+        "GrantScienceUpgrade", "UnpauseSpecialPowerUpgrade", "SpecialPowerCompletionDie", "SpectreGunshipDeploymentUpdate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");
