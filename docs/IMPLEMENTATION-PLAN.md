@@ -222,7 +222,7 @@ Objekten sind instanziierbar, weil vom Default geerbte Module (`StealthUpdate`, 
 
 ## 5. Spielregeln, Kampf, Wirtschaft und Produktion
 
-**Status: in Arbeit (Stand 29. September 2026); der Hauptumfang ist umgesetzt, die Abnahmekriterien sind noch nicht vollständig erfüllt (siehe „Noch offen“); Fortsetzungsauftrag in `docs/HANDOFF-PHASE6.md`.**
+**Status: abgeschlossen (Stand 29. September 2026) mit dokumentierten Grenzen (siehe „Bekannte Grenzen“); Folgeauftrag in `docs/HANDOFF-PHASE7.md`.**
 
 **Ergebnis (Ziel):** Die vollständige Kernschleife eines RTS-Matches funktioniert headless:
 Ressourcen sammeln, bauen, produzieren, bewegen, angreifen, Schaden anwenden und gewinnen.
@@ -239,34 +239,45 @@ Abgeschlossen, wenn ein headless Referenzmatch aller Fraktionen vom Start bis zu
 Sonderpfade durchläuft und zentrale Kampf- und Wirtschaftsabläufe durch Golden-Master-Szenarien
 gegen bekannte Originalwerte abgesichert sind.
 
-**Bisher umgesetzt** (Block 0 vollständig bis auf 0.4, Hauptumfang teilweise; Details, Numerik und bewusste
-Vereinfachungen in `docs/GAME-RULES.md`):
+**Umgesetzt** (Details, Numerik und bewusste Vereinfachungen in `docs/GAME-RULES.md`; Zahlen frisch gemessen am 29. September 2026):
 
-- Block 0.1: Domänenschemata für Weapon, Armor, Upgrade, Science, Locomotor und (fortgesetzt) Faction
-  (`docs/TYPED-DEFINITIONS.md`); als Nebenfund ein INI-Parser-Fehler behoben (`End`-Erkennung nur erstes Token, wie
-  das Original).
-- Block 0.2: `StealthUpdate` und `AutoHealBehavior` mit echten Feldern und Upgrade-Aktivierung implementiert.
-- Block 0.3 (Furchtsignal-`GameLogicRandomValue`) ist abgeschlossen; 0.4 (RNG-Abgleich mit kompiliertem Original)
-  bleibt **offen** (kein Compiler verfügbar).
-- Wirtschaft (Guthaben, Energiebilanz), das Upgrade-System (128-Bit-Maske, `UpgradeMux`-Zustandsmaschine, elf
-  `*Upgrade`-Module), direkter Kampf (Waffen, Rüstungskoeffizienten, Magazin/Nachladen, keine Flächenwirkung), einfache
-  geradlinige Bewegung (`AIUpdateInterface`, kein Terrain/Pfadsuche/Drehrate), eine Produktionswarteschlange
-  (`ProductionUpdate`), „letzter Überlebender" als Sieg, ein Spieler-/Fraktionsdatenmodell (`FactionCatalog`: Startgeld,
-  intrinsische Sciences) und ein Science-Kaufsystem (`ScienceCatalog`, `PurchaseScienceCommand`).
-- Referenzmatch-Szenario (`ReferenceMatchScenario`, `SimTool reference-match`) mit Replay-Format v2 (Fraktionen, alle 17
-  Befehlstypen), auf synthetischen **und** Retail-Daten deterministisch nachgewiesen (Sieger, Replay-Runde,
-  Snapshot-Fortsetzung); auf Retail-Daten nehmen alle 13 Fraktionen mit ihren echten Kommandozentralen teil
-  (Sieger bei Tick 11.385, `docs/GAME-RULES.md` §7a). Golden-Master
-  für Schadenskette und Produktionsuhr (unabhängiges Modell, Quellverweise) sind vorhanden; Supply/Erfahrung fehlen.
-- Spezialkräfte (`docs/GAME-RULES.md` §6d): typisierte `SpecialPower`-Definition, Bereitschaftsmaschine mit geteilten Timern,
-  `UseSpecialPowerCommand`, zehn Module, Kopfgeld beim Kill, Science-Wecker.
-- 60 von 205 Modultypen implementiert; 1.224 von 2.115 Retail-Objekten vollständig instanziierbar (57,9 %, vorher 26 von
-  2.113), 77,1 % der Modulverwendungen abgedeckt; Erzeugungslisten werden ausgeführt und `CreateCrateDie` ist implementiert (`docs/GAME-RULES.md` §6b); der 216.000-Tick-Stresstest läuft mit allen neuen Modulen deterministisch, ohne Leck.
-- **Noch offen:** Teams/Diplomatie als Datenmodell, Command-Set-Wirkung, Supply, Reparatur/Verkauf,
-  Radarwirkung, Spezialfähigkeiten (nur die Listenausführung existiert; `CreateDebris`/`DeliverPayload` brauchen Physik), volle veteranenbasierte
-  `ArmorSet`/`WeaponSet`-Auswahl, Erfahrungsvergabe, die Handler der Einheitenfähigkeiten (`SpecialAbilityUpdate`,
-  Kanonenboot-Anflug), Dozer-/Arbeiter-KI, Golden-Master-Szenarien für Supply und Erfahrung. Die verbleibende Blockerliste (nach Häufigkeit) steht in
-  `docs/SIMULATION-CORE.md` §11.
+- Block 0.1: Domänenschemata für Weapon, Armor, Upgrade, Science, Locomotor und Faction (`docs/TYPED-DEFINITIONS.md`); als Nebenfund ein
+  INI-Parser-Fehler behoben (`End`-Erkennung nur erstes Token, wie das Original).
+- Block 0.2: `StealthUpdate` und `AutoHealBehavior` mit echten Feldern und Upgrade-Aktivierung. Block 0.3 (Furchtsignal-`GameLogicRandomValue`)
+  abgeschlossen; **0.4 (RNG-Abgleich mit kompiliertem Original) bleibt offen** (kein Compiler verfügbar, der Wert wird nicht geraten).
+- Wirtschaft (Guthaben, Energiebilanz) und **Versorgungswirtschaft** (`DockMachine`, `DockCommand`, Lager, Zentren, Nachschubträger, Arbeiter,
+  `SpawnBehavior`, `GAME-RULES.md` §6e), Upgrade-System (128-Bit-Maske, `UpgradeMux`, `*Upgrade`-Module), Sciences (`ScienceCatalog`,
+  `PurchaseScienceCommand`), direkter Kampf mit **Flächenschaden** (Waffen, Rüstungskoeffizienten, Magazin/Nachladen, §6g), **Erfahrung und
+  Veteranenstufen** mit Gesundheits- und Waffenboni (`WeaponBonusTable`, §6h), **Teams und Diplomatie** (gerichtete Beziehungen,
+  `SetRelationshipCommand`, Kopfgeld und Siegregel auf Teams, §7), **Reparaturdock und `AutoFindHealingUpdate`** (§6f), einfache geradlinige
+  Bewegung (kein Terrain, keine Pfadsuche), eine Produktionswarteschlange, „letzter Überlebender“ als Sieg, Garnison/Transport-Containment,
+  Erzeugungslisten, Kisten und das Spezialkraft-Subsystem (§6d).
+- Befehlstabelle mit 19 Typen (`CommandTypes.Version = 7`), Snapshot Version 3, Replay-Format v4.
+- Referenzmatch (`ReferenceMatchScenario`, `SimTool reference-match`) auf synthetischen **und** Retail-Daten deterministisch nachgewiesen (Sieger,
+  Replay-Runde, Snapshot-Fortsetzung): 13 Fraktionen mit echten Kommandozentralen, **0 übersprungene Startobjekte**, 707 Lieferungen mit 93.075
+  ausgezahltem Guthaben, Sieger Spieler 12 bei Tick 26.880, Endhash `B6E0CDECA3168EFC` (`GAME-RULES.md` §7a). Golden Masters mit unabhängigem
+  Modell im Test decken Schadenskette, Produktionsuhr, Supply und Erfahrung (aus dem Quelltext abgeleitet, nicht gegen Originalläufe gemessen).
+- 74 von 205 Modultypen implementiert (12 aus Phase 4, 62 aus Phase 5); **1.384 von 2.115 Retail-Objekten vollständig instanziierbar (65,4 %,
+  vorher 26 von 2.113), 15.364 von 19.553 Modulverwendungen abgedeckt (78,6 %)**; der 216.000-Tick-Stresstest läuft mit allen Modulen deterministisch
+  (Endhash `D80B367CEEF6D72D`), ohne Leck.
+
+**Abnahme:** Das Abnahmekriterium „headless Referenzmatch aller Fraktionen vom Start bis zum Sieg“ ist erfüllt; „ohne Sonderpfade“ und „gegen
+bekannte Originalwerte“ nur mit den folgenden Einschränkungen.
+
+**Bekannte Grenzen** (vollständige Liste: `docs/GAME-RULES.md` §10):
+
+- Block 0.4 offen; Golden Masters sind keine Originalmessungen, Festkomma statt `Real` ist eine dokumentierte Abweichung.
+- Kein Bauvorgang: Dozer und Arbeiter bewegen und liefern, bauen aber nicht; Basen im Referenzmatch sind Startobjekte plus protokollierte
+  Ersatzinfrastruktur (`SpawnSupplyInfrastructure`). Kein Verkauf, keine Bauplatzprüfung, kein Rallypunkt.
+- Kein Terrain, keine Kollision, keine Pfadsuche, keine Projektil-Flugzeit; `ToppleUpdate`, echte `PhysicsBehavior`-Kräfte und `CrushDie` (nur inert) folgen
+  mit Phase 6.
+- Wirkung von `CommandSet`/`CommandButton` und Radar nicht implementiert; `ChinookAIUpdate` fehlt, deshalb hat Amerika im Referenzmatch keine
+  Versorgungswirtschaft; kein `UseSpecialPowerCommand`-Generator.
+- Veteranenbasierte `ArmorSet`/`WeaponSet`-Auswahl und Science Purchase Points aus Erfahrung sind nicht modelliert; `FireWeaponWhenDeadBehavior` ohne
+  Flächenschaden.
+- 731 von 2.115 Objekten sind weiter nicht instanziierbar; 80 Module der Katalogkategorie „Phase 5“ sind ohne Terrain/Kollision/KI nicht sinnvoll umsetzbar
+  (Blockerliste in `docs/SIMULATION-CORE.md` §11).
+
 
 ## 6. Welt, Terrain, Bewegung, Sicht und Skirmish-KI
 

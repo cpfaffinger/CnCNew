@@ -30,15 +30,15 @@
   Factories, Kompatibilitätsbasislinie.
 - den registrierten Template-/Module-/Behavior-Vertrag im Simulationskern instanziieren: zwölf Lebenszyklusmodule sind
   implementiert (26 von 2.113 Retail-Objekten vollständig instanziierbar); die übrigen Module folgen mit Phase 5/6.
-- **Phase 5 „Spielregeln“ in Arbeit:** Wirtschaft, Upgrades (elf Module, portierte `UpgradeMux`-Zustandsmaschine),
-  direkter Kampf (Waffen, Rüstung, Magazin), einfache geradlinige Bewegung, Produktionswarteschlange und „letzter
-  Überlebender“ sind implementiert, ebenso Sciences, Garnison/Transport-Containment, Erzeugungslisten und Kisten sowie das Spezialkraft-Subsystem; 60 Module
-  gebunden, 1.224 von 2.115 Retail-Objekten vollständig instanziierbar (57,9 %, `docs/GAME-RULES.md`). Offen:
-  Teams/Diplomatie, Supply, Reparatur/Verkauf, Radarwirkung, Flächenschaden, volle Veteranen-Bestauswahl bei
-  Rüstung/Waffen, Dozer-/Arbeiter-KI (der Referenzmatch läuft auf Retail-Daten mit allen 13 Fraktionen und den echten
-  Kommandozentralen) sowie Golden-Master-Szenarien für Supply und Erfahrung (Schadenskette und
-  Produktionsuhr sind abgedeckt)
-  (`docs/HANDOFF-PHASE6.md`).
+- **Phase 5 „Spielregeln“ abgeschlossen:** Wirtschaft mit Versorgungswirtschaft (Andockmaschine, Spawner), Upgrades (portierte
+  `UpgradeMux`-Zustandsmaschine), Sciences, direkter Kampf mit Flächenschaden, Erfahrung und Veteranenstufen, Teams und Diplomatie,
+  Garnison/Transport-Containment, Reparaturdock, Erzeugungslisten und Kisten, das Spezialkraft-Subsystem, einfache geradlinige
+  Bewegung, Produktionswarteschlange und „letzter Überlebender“; 74 Module gebunden, 1.384 von 2.115 Retail-Objekten vollständig
+  instanziierbar (65,4 %, `docs/GAME-RULES.md`). Der Referenzmatch läuft auf Retail-Daten mit allen 13 Fraktionen, echten
+  Kommandozentralen, 0 übersprungenen Startobjekten und echter Wirtschaft; Golden Masters decken Schadenskette, Produktionsuhr, Supply
+  und Erfahrung. Bewusst offen: RNG-Abgleich mit kompiliertem Original (Block 0.4), Bauvorgang, Terrain/Kollision/Pfadsuche,
+  Projektil-Flugzeit, Wirkung von `CommandSet` und Radar, Verkauf, Waffen-/Rüstungssatzwahl nach Veteranenstufe (`docs/GAME-RULES.md`
+  §10, Folgeauftrag `docs/HANDOFF-PHASE7.md`).
 - Terrain, Navigation, Sichtweite, Shroud/Fog, Zielwahl und Skirmish-KI (Phase 6).
 - Golden-Master- und Replay-basierte Vergleichstests gegen das Original.
 
