@@ -72,6 +72,10 @@ dotnet run --project tests/CnCNew.Simulation.Tests -- --content-dir .local/phase
 dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --long
 dotnet run --project tests/CnCNew.Data.Tests -- --content-dir .local/phase2-import-a
 dotnet run --project tests/CnCNew.W3D.Tests -- --content-dir .local/phase2-import-a
+dotnet run --project tests/CnCNew.Ui.Tests
+dotnet run --project tests/CnCNew.Presentation.Tests
+dotnet run --project tests/CnCNew.Game.Tests -- --content-dir .local/phase2-import-a
+dotnet run --project tests/CnCNew.Audio.Tests -- --content-dir .local/phase2-import-a
 
 dotnet run --project tools/CnCNew.AssetTool -- verify .local/phase2-import-a
 dotnet run --project tools/CnCNew.IniTool -- audit .local/phase2-import-a
@@ -87,8 +91,17 @@ dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match .local/phase2-i
 dotnet run --project tools/CnCNew.MapTool -- audit .local/phase2-import-a
 dotnet run --project tools/CnCNew.ImageTool -- audit-tga .local/phase2-import-a
 dotnet run --project tools/CnCNew.W3dTool -- audit .local/phase2-import-a
+dotnet run --project tools/CnCNew.W3dTool -- audit-skeletons .local/phase2-import-a
+dotnet run --project tools/CnCNew.PresentationTool -- object-audit .local/phase2-import-a
+dotnet run --project tools/CnCNew.PresentationTool -- fx-audit .local/phase2-import-a
+dotnet run --project tools/CnCNew.PresentationTool -- terrain-audit .local/phase2-import-a
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir .local/phase2-import-a --model-path Art/W3D/ABArFrcCmd.W3D
+dotnet run --project src/CnCNew.Client.Stride -c Release -- --match "Maps/Alpine Assault/Alpine Assault.map" --content-dir .local/phase2-import-a
 ```
+
+`tools/CnCNew.UiRenderTool` ist bewusst **nicht** in `CnCNew.slnx` (zwei Stride-Game-.exe-Projekte in einer Solution
+erzeugen erneut Assetcompiler-Warnrauschen, siehe `docs/CLIENT-UI-RENDERING.md`); es wird eigenständig gebaut und
+ausgeführt: `dotnet run --project tools/CnCNew.UiRenderTool -- --content-dir .local/phase2-import-a --out-dir <ausgabe>`.
 
 Tests sind eigenständige Konsolenprogramme (`tests/<Projekt>.Tests/Program.cs`, `OutputType=Exe`,
 Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern – kein xUnit/NUnit.
@@ -107,6 +120,20 @@ Phase 6: `MapTool audit` 150/150 Karten (462 Startpaare, 456 vollständig begehb
 Jedes `IUpdateModule` muss `nextWake` speichern (Test `SourceRules`).
 Asset-Runtimebestand: 25.682 Dateien. Stresstest (216.000 Ticks, `SimTool stress`, synthetische Fixture, mit den Modulen der Phase 5 und Phase 6):
 Endhash `D1521974C861A4B9`, Kettenhash `C298F5F74993D6CD`. Snapshot Version 6, Replay-Format v6, `CommandTypes.Version` 8.
+
+Phase 7/8 und Simulationsschulden-Paket E1 (Stand 30. September 2026; neu messen): Modulkatalog jetzt 85 von 205 Typen
+implementiert, 1.470 von 2.115 Retail-Objekten instanziierbar (69,5 %), Kompatibilitätsbasislinie 749 Einträge, Snapshot
+Version 7, Replay-Format v7, `CommandTypes.Version` 9. Retail-Referenzmatch (`SimTool reference-match`): Sieger
+FactionAmerica bei Tick 13.800, Endhash `4DCB46FE3D2E8214`. Weltpräsentation (`docs/CLIENT-TERRAIN.md`,
+`docs/CLIENT-OBJECTS.md`, `docs/CLIENT-FX.md`): Terrain 0,266 ms/Frame CPU-Mittel; Objekte 0,19–0,60 ms/Frame über zwei
+geprüfte Gefechte; FX-Bench mit 10.000 aktiven Partikeln 1,735 ms je Build; alle drei Layer liefern über wiederholte
+Läufe byteidentische SHA-256. Eingabe/UI (`docs/PRESENTATION-INPUT.md`, `docs/GAME-SHELL.md`, `docs/GAME-HUD.md`,
+`docs/CLIENT-UI-RENDERING.md`): `CommandMap.ini` 96 Einträge/0 Probleme, 820 Befehlsschaltflächen/472 Befehlssätze/0
+Probleme, 8 Shell-Screens mit 54 Golden-Hashes (6 Auflösungen), UI-Renderer-Verifikation über 32 PNGs byteidentisch.
+Bekannter, dokumentierter (nicht behobener) Live-/Replay-Determinismus-Unterschied bei geteilten Spezialkräften
+(`SpecialPowerBase.SharedReadyFrame()`, `docs/SIMULATION-CORE.md` §12/§12a) – Fix bleibt einer eigenen, vermessenen
+Phase vorbehalten. Build unverändert 21 Warnungen beim Solution-Build (10 bekannte `NU1901`/`NU1903` plus 11 bekannte
+Stride-Assetcompiler-/`YamlAssemblyRegistry`-Hinweise), 0 davon neu.
 
 ## Code- und Dokumentationsstil
 
