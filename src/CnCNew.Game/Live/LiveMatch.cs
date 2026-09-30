@@ -25,6 +25,9 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
 {
     /// <summary>0 keeps the seeds of <see cref="Options"/>.</summary>
     public int Seed { get; init; }
+
+    /// <summary>The human slot is played by the computer player (demos, captures, profiling); the viewer stays player 1.</summary>
+    public bool AutoPlay { get; init; }
 }
 
 /// <summary>
@@ -107,7 +110,7 @@ public sealed class LiveMatch
         MatchParticipant Find(string name) => data.Factions.FirstOrDefault(value => value.Faction.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"Unknown or unplayable faction '{name}'.");
         var slots = ImmutableArray.CreateBuilder<SkirmishSlot>();
-        slots.Add(new SkirmishSlot(Find(setup.HumanFaction), IsHuman: true));
+        slots.Add(new SkirmishSlot(Find(setup.HumanFaction), IsHuman: !setup.AutoPlay));
         foreach (var opponent in setup.Opponents) slots.Add(new SkirmishSlot(Find(opponent)));
         var options = setup.Options;
         if (setup.Seed != 0) options = options with { AiSeed = unchecked((uint)setup.Seed), WorldSeed = unchecked((uint)setup.Seed) ^ 0xC0FFEE06 };

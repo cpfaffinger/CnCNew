@@ -26,7 +26,12 @@ var liveOptions = matchMap is null ? null : new LiveOptions(
     (GetArgument(args, "--opponent") ?? "FactionChina").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToImmutableArray(),
     int.Parse(GetArgument(args, "--seed") ?? "1"),
     int.Parse(GetArgument(args, "--frames") ?? "90"),
-    GetArgument(args, "--size") ?? "1280x720");
+    GetArgument(args, "--size") ?? "1280x720",
+    args.Contains("--autoplay", StringComparer.OrdinalIgnoreCase),
+    GetArgument(args, "--look"),
+    GetArgument(args, "--angle"),
+    GetArgument(args, "--pitch"),
+    GetArgument(args, "--height"));
 if (matchMap is not null && contentDirectory is null)
 {
     throw new ArgumentException("--match requires --content-dir.");
@@ -77,7 +82,10 @@ static string? GetArgument(string[] arguments, string name)
 
 /// <param name="Map">Virtual map path or a unique part of it (for example "Alpine Assault").</param>
 /// <param name="Frames">Smoke test only: rendered frames at a fixed 30 fps before the capture.</param>
-internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<string> Opponents, int Seed, int Frames, string Size);
+/// <param name="AutoPlay">The human slot is played by the computer (--autoplay).</param>
+/// <param name="Look">Camera target "x,y" in world units (--look); Angle/Pitch in degrees, Height in world units above ground.</param>
+internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<string> Opponents, int Seed, int Frames, string Size,
+    bool AutoPlay, string? Look, string? Angle, string? Pitch, string? Height);
 
 internal sealed class CnCNewGame(
     bool smokeTest,
@@ -174,11 +182,27 @@ internal sealed class CnCNewGame(
         var mapPath = data.Maps.FirstOrDefault(path => path.Equals(options.Map, StringComparison.OrdinalIgnoreCase))
             ?? data.Maps.SingleOrDefault(path => path.Contains(options.Map, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"Map '{options.Map}' was not found or is ambiguous.");
-        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed };
+        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed, AutoPlay = options.AutoPlay };
         var back = GraphicsDevice.Presenter.BackBuffer;
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
+        ApplyCamera(match.Camera, options);
         _live = new LiveMatchHost(this, data, match);
         Window.Title = $"CnCNew — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)}";
+    }
+
+    private static void ApplyCamera(CnCNew.Presentation.Camera.RtsCamera camera, LiveOptions options)
+    {
+        static float Number(string text) => float.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        if (options.Look is { } look)
+        {
+            var parts = look.Split(',');
+            camera.CenterOn(new System.Numerics.Vector2(Number(parts[0]), Number(parts[1])));
+        }
+
+        if (options.Angle is { } angle) camera.SetAngle(Number(angle) * MathF.PI / 180);
+        if (options.Pitch is { } pitch) camera.SetPitch(Number(pitch) * MathF.PI / 180);
+        if (options.Height is { } height) camera.SetHeightAboveGround(Number(height));
+        camera.SettleZoom();
     }
 
     protected override void UnloadContent()
