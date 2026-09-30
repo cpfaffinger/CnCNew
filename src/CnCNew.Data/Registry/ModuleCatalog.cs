@@ -667,6 +667,172 @@ public static class ModuleCatalog
             new("CreateLocation", FieldType.Enum, Table: NameTablesPhase5.GunshipCreateLocation, Source: "SpectreGunshipDeploymentUpdate.cpp"),
         ]);
 
+        // ------------------------------------------------------------------------- transports, tunnels, projectiles (phase 8, E1)
+        // Field lists: the reference FieldParse tables (sources named per field), verified against every occurrence in .local/phase2-import-a.
+        ImmutableArray<FieldSchema> OpenContainFields(string containMaxSource) =>
+        [
+            ..DieMux(),
+            new("ContainMax", FieldType.Opaque, Source: containMaxSource),
+            new("EnterSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("ExitSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DamagePercentToUnits", FieldType.Percent, Source: "OpenContain.cpp"),
+            new("BurnedDeathToUnits", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("ForbidInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("PassengersAllowedToFire", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("PassengersInTurret", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("NumberOfExitPaths", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DoorOpenTime", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("WeaponBonusPassedToPassengers", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowAlliesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowEnemiesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowNeutralInside", FieldType.Bool, Source: "OpenContain.cpp"),
+        ];
+        ImmutableArray<FieldSchema> TransportContainFields() =>
+        [
+            new("Slots", FieldType.Integer, Source: "TransportContain.h"),
+            new("ScatterNearbyOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("OrientLikeContainerOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("KeepContainerVelocityOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("GoAggressiveOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ResetMoodCheckTimeOnExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("DestroyRidersWhoAreNotFreeToExit", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ExitBone", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ExitPitchRate", FieldType.Opaque, Source: "TransportContain.h"),
+            new("InitialPayload", FieldType.Opaque, Source: "TransportContain.h"),
+            new("HealthRegen%PerSec", FieldType.Real, Source: "TransportContain.h"),
+            new("ExitDelay", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ArmedRidersUpgradeMyWeaponSet", FieldType.Opaque, Source: "TransportContain.h"),
+            new("DelayExitInAir", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "TransportContain.h"),
+        ];
+        // TunnelContainModuleData = OpenContainModuleData + TimeForFullHeal (parseDurationReal). ContainMax is parseable but unused: the
+        // capacity is GlobalData::m_maxTunnelCapacity (TunnelTracker::getContainMax).
+        Add("TunnelContain", [..OpenContainFields("OpenContain.cpp (unused: TunnelTracker::getContainMax)"), new("TimeForFullHeal", FieldType.DurationMs, Source: "TunnelContain.h")]);
+        // HelixContainModuleData = TransportContainModuleData + PayloadTemplateName (parseAsciiStringVectorAppend) + ShouldDrawPips (UI).
+        Add("HelixContain",
+        [
+            ..OpenContainFields("OpenContain.cpp (unused: TransportContain::getContainMax reads Slots)"), ..TransportContainFields(),
+            new("PayloadTemplateName", FieldType.ReferenceList, Repeat: RepeatPolicy.Accumulate, ReferenceKind: DefinitionKind.Object, Source: "HelixContain.cpp"),
+            new("ShouldDrawPips", FieldType.Opaque, Source: "HelixContain.cpp"),
+        ]);
+        // TransportAIUpdate has no field table of its own (TransportAIUpdate.h): the AIUpdate base plus Turret sections.
+        Add("TransportAIUpdate", AiBase("TransportAIUpdate.cpp / AIUpdate.cpp"), allowsNestedSections: true);
+        // ChinookAIUpdateModuleData (ChinookAIUpdate.cpp buildFieldParse) extends SupplyTruckAIUpdateModuleData; the ropes and the rotor wash
+        // are presentation (Opaque), the combat-drop timing is typed for the documented but not simulated rappel.
+        Add("ChinookAIUpdate",
+        [
+            ..AiBase("ChinookAIUpdate.cpp"), ..TruckFields("ChinookAIUpdate.cpp"),
+            new("UpgradedSupplyBoost", FieldType.Integer, Source: "ChinookAIUpdate.cpp"),
+            new("NumRopes", FieldType.Integer, Source: "ChinookAIUpdate.cpp"),
+            new("PerRopeDelayMin", FieldType.DurationMs, Source: "ChinookAIUpdate.cpp"),
+            new("PerRopeDelayMax", FieldType.DurationMs, Source: "ChinookAIUpdate.cpp"),
+            new("RopeWidth", FieldType.Opaque, Source: "ChinookAIUpdate.cpp"),
+            new("RopeColor", FieldType.Opaque, Source: "ChinookAIUpdate.cpp"),
+            new("RopeWobbleLen", FieldType.Opaque, Source: "ChinookAIUpdate.cpp"),
+            new("RopeWobbleAmplitude", FieldType.Opaque, Source: "ChinookAIUpdate.cpp"),
+            new("RopeWobbleRate", FieldType.Opaque, Source: "ChinookAIUpdate.cpp"),
+            new("RopeFinalHeight", FieldType.Real, Source: "ChinookAIUpdate.cpp"),
+            new("RappelSpeed", FieldType.Real, Source: "ChinookAIUpdate.cpp"),
+            new("MinDropHeight", FieldType.Real, Source: "ChinookAIUpdate.cpp"),
+            new("RotorWashParticleSystem", FieldType.Opaque, Source: "ChinookAIUpdate.cpp"),
+        ], allowsNestedSections: true);
+        // HelicopterSlowDeathBehaviorModuleData (HelicopterSlowDeathUpdate.cpp buildFieldParse) extends SlowDeathBehaviorModuleData.
+        Add("HelicopterSlowDeathBehavior",
+        [
+            ..DieMux(),
+            new("SinkRate", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("ProbabilityModifier", FieldType.Integer, Source: "SlowDeathBehavior.cpp"),
+            new("ModifierBonusPerOverkillPercent", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionAltitude", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FX", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("OCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("Weapon", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForce", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForceVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitch", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitchVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            Real("SpiralOrbitTurnRate", "HelicopterSlowDeathUpdate.cpp parseAngularVelocityReal"),
+            Real("SpiralOrbitForwardSpeed", "HelicopterSlowDeathUpdate.cpp parseVelocityReal"),
+            Real("SpiralOrbitForwardSpeedDamping", "HelicopterSlowDeathUpdate.cpp"),
+            Real("MinSelfSpin", "HelicopterSlowDeathUpdate.cpp parseAngularVelocityReal"),
+            Real("MaxSelfSpin", "HelicopterSlowDeathUpdate.cpp parseAngularVelocityReal"),
+            new("SelfSpinUpdateDelay", FieldType.DurationMs, Source: "HelicopterSlowDeathUpdate.cpp parseDurationReal"),
+            Real("SelfSpinUpdateAmount", "HelicopterSlowDeathUpdate.cpp parseAngleReal"),
+            new("FallHowFast", FieldType.Percent, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("MinBladeFlyOffDelay", FieldType.DurationMs, Source: "HelicopterSlowDeathUpdate.cpp parseDurationReal"),
+            new("MaxBladeFlyOffDelay", FieldType.DurationMs, Source: "HelicopterSlowDeathUpdate.cpp parseDurationReal"),
+            new("AttachParticle", FieldType.Opaque, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("AttachParticleBone", FieldType.Opaque, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("AttachParticleLoc", FieldType.Opaque, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("BladeObjectName", FieldType.Opaque, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("BladeBoneName", FieldType.Opaque, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("OCLEjectPilot", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("FXBlade", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("OCLBlade", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("FXHitGround", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("OCLHitGround", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("FXFinalBlowUp", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("OCLFinalBlowUp", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("DelayFromGroundToFinalDeath", FieldType.DurationMs, Source: "HelicopterSlowDeathUpdate.cpp parseDurationReal"),
+            new("FinalRubbleObject", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "HelicopterSlowDeathUpdate.cpp"),
+            new("SoundDeathLoop", FieldType.Opaque, Source: "HelicopterSlowDeathUpdate.cpp"),
+            Real("MaxBraking", "HelicopterSlowDeathUpdate.cpp parseAccelerationReal"),
+        ]);
+        // DumbProjectileBehaviorModuleData (DumbProjectileBehavior.cpp buildFieldParse).
+        Add("DumbProjectileBehavior",
+        [
+            new("MaxLifespan", FieldType.DurationMs, Source: "DumbProjectileBehavior.cpp"),
+            new("TumbleRandomly", FieldType.Bool, Source: "DumbProjectileBehavior.cpp"),
+            new("DetonateCallsKill", FieldType.Bool, Source: "DumbProjectileBehavior.cpp"),
+            new("OrientToFlightPath", FieldType.Bool, Source: "DumbProjectileBehavior.cpp"),
+            Real("FirstHeight", "DumbProjectileBehavior.cpp"),
+            Real("SecondHeight", "DumbProjectileBehavior.cpp"),
+            new("FirstPercentIndent", FieldType.Percent, Source: "DumbProjectileBehavior.cpp"),
+            new("SecondPercentIndent", FieldType.Percent, Source: "DumbProjectileBehavior.cpp"),
+            new("GarrisonHitKillRequiredKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "DumbProjectileBehavior.cpp"),
+            new("GarrisonHitKillForbiddenKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "DumbProjectileBehavior.cpp"),
+            new("GarrisonHitKillCount", FieldType.Integer, Min: 0, Source: "DumbProjectileBehavior.cpp"),
+            new("GarrisonHitKillFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "DumbProjectileBehavior.cpp"),
+            Real("FlightPathAdjustDistPerSecond", "DumbProjectileBehavior.cpp parseVelocityReal"),
+        ]);
+        // MissileAIUpdateModuleData (MissileAIUpdate.cpp buildFieldParse) extends AIUpdateModuleData.
+        Add("MissileAIUpdate",
+        [
+            ..AiBase("MissileAIUpdate.cpp / AIUpdate.cpp"),
+            new("TryToFollowTarget", FieldType.Bool, Source: "MissileAIUpdate.cpp"),
+            new("FuelLifetime", FieldType.DurationMs, Source: "MissileAIUpdate.cpp"),
+            new("IgnitionDelay", FieldType.DurationMs, Source: "MissileAIUpdate.cpp"),
+            Real("InitialVelocity", "MissileAIUpdate.cpp parseVelocityReal"),
+            Real("DistanceToTravelBeforeTurning", "MissileAIUpdate.cpp"),
+            Real("DistanceToTargetBeforeDiving", "MissileAIUpdate.cpp"),
+            Real("DistanceToTargetForLock", "MissileAIUpdate.cpp"),
+            new("IgnitionFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "MissileAIUpdate.cpp"),
+            new("UseWeaponSpeed", FieldType.Bool, Source: "MissileAIUpdate.cpp"),
+            new("DetonateOnNoFuel", FieldType.Bool, Source: "MissileAIUpdate.cpp"),
+            Real("DistanceScatterWhenJammed", "MissileAIUpdate.cpp"),
+            new("GarrisonHitKillRequiredKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "MissileAIUpdate.cpp"),
+            new("GarrisonHitKillForbiddenKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "MissileAIUpdate.cpp"),
+            new("GarrisonHitKillCount", FieldType.Integer, Min: 0, Source: "MissileAIUpdate.cpp"),
+            new("GarrisonHitKillFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "MissileAIUpdate.cpp"),
+            new("DetonateCallsKill", FieldType.Bool, Source: "MissileAIUpdate.cpp"),
+            new("KillSelfDelay", FieldType.DurationMs, Source: "MissileAIUpdate.cpp"),
+        ]);
+        // PointDefenseLaserUpdateModuleData (PointDefenseLaserUpdate.cpp buildFieldParse). PredictTargetVelocityFactor has no effect in the
+        // reference (the predicted position is computed and then not used), it is typed for completeness.
+        Add("PointDefenseLaserUpdate",
+        [
+            new("WeaponTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "PointDefenseLaserUpdate.cpp"),
+            new("PrimaryTargetTypes", FieldType.Flags, Table: NameTables.KindOf, Source: "PointDefenseLaserUpdate.cpp"),
+            new("SecondaryTargetTypes", FieldType.Flags, Table: NameTables.KindOf, Source: "PointDefenseLaserUpdate.cpp"),
+            new("ScanRate", FieldType.DurationMs, Source: "PointDefenseLaserUpdate.cpp"),
+            Real("ScanRange", "PointDefenseLaserUpdate.cpp"),
+            Real("PredictTargetVelocityFactor", "PointDefenseLaserUpdate.cpp"),
+        ]);
+
         return builder.ToImmutable();
     }
 
