@@ -73,7 +73,15 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
         _power = world.SpecialPowers.TryGet(baseData.PowerName, out var info)
             ? info.Index
             : throw new InvalidOperationException($"'{Entity.Template.Name}': special power '{baseData.PowerName}' is not a SpecialPower definition.");
-        if (!Entity.HasStatus(ObjectStatusBits.UnderConstruction) && !info.SharedSynced) StartRecharge(world);
+        if (!Entity.HasStatus(ObjectStatusBits.UnderConstruction))
+        {
+            // A SharedSynced power's ready tick is established here, deterministically, instead of lazily on the first IsReady()
+            // read: the skirmish AI polls IsReady() every live tick but ReplayRunner never runs AI code, so a read-triggered seed
+            // would depend on when the AI happened to look, diverging a live match's StateHash from its own replay (see
+            // docs/SIMULATION-CORE.md §12).
+            if (info.SharedSynced) SharedReadyFrame(world);
+            else StartRecharge(world);
+        }
         if (baseData.StartsPaused) PauseCountdown(world, true);
         OnObjectCreated(world);
     }
