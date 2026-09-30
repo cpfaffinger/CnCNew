@@ -4,6 +4,11 @@ using CnCNew.Presentation.Tests;
 // Register one class per line.
 Func<string[], int>[] suites =
 [
+    TerrainTests.Run,
+    CameraTests.Run,
+    VisionTests.Run,
+    MinimapTests.Run,
+    WorldRealDataTests.Run,
 ];
 
 var failures = 0;
