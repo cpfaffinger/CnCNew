@@ -6,7 +6,7 @@ Singleplayer, Skirmish und Kampagne. Nicht im Scope: Multiplayer, binäre Kompat
 Mods und Savegames. Das Repo ist rein lokal (Branch `main`, **kein Remote**).
 
 Die Gesamtplanung steht in `docs/IMPLEMENTATION-PLAN.md`. Die aktuell zu bearbeitende Phase steht
-als vollständiger Auftrag in `docs/HANDOFF-PHASE7.md` (Handoff-Datei der jeweils nächsten Phase).
+als vollständiger Auftrag in `docs/HANDOFF-PHASE8.md` (Handoff-Datei der jeweils nächsten Phase).
 Lies vor jeder Phase `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
 `docs/IMPLEMENTATION-PLAN.md` sowie die Fachdokumente der berührten Domäne
 (`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `SIMULATION-CORE.md`, `W3D-MATERIALS.md`).
@@ -82,6 +82,9 @@ dotnet run --project tools/CnCNew.IniTool -- debt-report .local/phase2-import-a
 dotnet run -c Release --project tools/CnCNew.SimTool -- stress
 dotnet run -c Release --project tools/CnCNew.SimTool -- audit-modules .local/phase2-import-a
 dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match .local/phase2-import-a --map "Maps/Alpine Assault/Alpine Assault.map" --factions China,GLA --max-ticks 45000
+dotnet run --project tools/CnCNew.MapTool -- audit .local/phase2-import-a
 dotnet run --project tools/CnCNew.ImageTool -- audit-tga .local/phase2-import-a
 dotnet run --project tools/CnCNew.W3dTool -- audit .local/phase2-import-a
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir .local/phase2-import-a --model-path Art/W3D/ABArFrcCmd.W3D
@@ -91,18 +94,20 @@ Tests sind eigenständige Konsolenprogramme (`tests/<Projekt>.Tests/Program.cs`,
 Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern – kein xUnit/NUnit.
 Diesen Stil beibehalten. Für schnelle Wiederholung nach einem Build: `dotnet run --no-build`.
 
-Referenzwerte (Stand Abschluss Phase 5; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene
+Referenzwerte (Stand Abschluss Phase 6, 30. September 2026; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene
 INI-Dateien (28 nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 18.138/19.688
-Referenzen aufgelöst (1.550 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 144.813.963 Byte, SHA-256
-`D98CE0154ADF721DC58E9FF1FE769ADA646A058CE7B9AA9A8F0AC99254E5AB67`; Retail-Basisdaten (`--maps exclude`) 12.550
-Definitionen, 2.115 Objekte, 144.203.312 Byte, SHA-256 `9F5307957A55CD4683E8A79CBEB079320BE69400802DA38D2FFDDB200713E264` (die Hashes
-ändern sich, sobald ein Feld strikt typisiert statt als Kompatibilitätswert geführt wird – zuletzt `CrushDie`).
-Modulkatalog 205 Typen (74 implementiert: 12 aus Phase 4, 62 aus Phase 5 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
-746 Einträge, Instanziierbarkeit 1.384 von 2.115 Objekten (65,4 %), Modulverwendungen abgedeckt 15.364 von 19.553 (78,6 %).
-Retail-Referenzmatch (`SimTool reference-match`): 13 Fraktionen mit echten Kommandozentralen, 0 übersprungene Startobjekte, 707 Lieferungen (93.075), Sieger Spieler 12 bei Tick 26.880, Endhash `B6E0CDECA3168EFC`.
+Referenzen aufgelöst (1.550 sichtbare Fallbacks), Definitionssnapshot (Schema 2) 144.832.736 Byte, SHA-256
+`AEB5108DDA27ABAC7445452AA2743B794AD0BF1102F2687F8D7D8F7B87D2ADB7`; Retail-Basisdaten (`--maps exclude`) 12.550
+Definitionen, 2.115 Objekte, 144.221.861 Byte, SHA-256 `1248585D0BAAB79F5202FDB81F26A2B00962A9D393B0CE1FF93C5FFDF6A5C6E7` (die Hashes
+ändern sich, sobald ein Feld strikt typisiert statt als Kompatibilitätswert geführt wird – zuletzt `Locomotor/Surfaces` und `GameData/SellPercentage`).
+Modulkatalog 205 Typen (77 implementiert: 12 aus Phase 4, 62 aus Phase 5, 3 aus Phase 6 – `docs/GAME-RULES.md`), Kompatibilitätsbasislinie
+741 Einträge, Instanziierbarkeit 1.393 von 2.115 Objekten (65,9 %), Modulverwendungen abgedeckt 15.382 von 19.553 (78,7 %).
+Retail-Referenzmatch (`SimTool reference-match`): 13 Fraktionen, Sieger Spieler 12 bei Tick 26.880, Endhash `5C370ED383EC9F6B`.
+Phase 6: `MapTool audit` 150/150 Karten (462 Startpaare, 456 vollständig begehbar, 6 teilweise); 16 KI-gegen-KI-Läufe (`SimTool ai-match`, Tabelle `docs/SIMULATION-CORE.md` §19) alle deterministisch, 15 Sieger, 1 Patt.
 Jedes `IUpdateModule` muss `nextWake` speichern (Test `SourceRules`).
-Asset-Runtimebestand: 25.682 Dateien. Stresstest (216.000 Ticks, `SimTool stress`, synthetische Fixture, mit den Modulen der Phase 5):
-Endhash `D80B367CEEF6D72D`, Kettenhash `8E1FA50D21433123`. Snapshot Version 3, Replay-Format v4, `CommandTypes.Version` 7.
+Asset-Runtimebestand: 25.682 Dateien. Stresstest (216.000 Ticks, `SimTool stress`, synthetische Fixture, mit den Modulen der Phase 5 und Phase 6):
+Endhash `D1521974C861A4B9`, Kettenhash `C298F5F74993D6CD`. Snapshot Version 6, Replay-Format v6, `CommandTypes.Version` 8.
+
 ## Code- und Dokumentationsstil
 
 - Bezeichner, Commitmessages und Code-Kommentare englisch; Dokumentation (`docs/`, README) deutsch.
