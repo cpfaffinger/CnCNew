@@ -4,6 +4,7 @@ using CnCNew.Game.Tests;
 Func<string[], int>[] suites =
 [
     LiveMatchTests.Run,
+    ShellTests.Run,
 ];
 
 var failures = 0;
