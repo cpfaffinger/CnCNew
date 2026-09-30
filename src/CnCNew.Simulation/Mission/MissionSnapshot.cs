@@ -45,6 +45,7 @@ public static class MissionSnapshot
             writer.Int("maxTicks", session.Options.MaxTicks);
             writer.Int("presentationLatencyTicks", session.Options.PresentationLatencyTicks);
             writer.Int("combatIntervalTicks", session.Options.CombatIntervalTicks);
+            writer.Int("missionAttempts", session.Options.MissionAttempts);
             writer.EndObject();
             writer.Text("stateHash", session.StateHash().ToString("X16"));
             writer.BeginObject("session");
@@ -85,7 +86,7 @@ public static class MissionSnapshot
             var difficulty = checked((int)options.Int("difficulty"));
             if (!Enum.IsDefined((ScriptDifficulty)difficulty)) throw new SnapshotFormatException("Unknown difficulty in mission state.");
             var restoredOptions = new MissionOptions(checked((uint)options.UInt("worldSeed")), (ScriptDifficulty)difficulty, options.Int("maxTicks"),
-                checked((int)options.Int("presentationLatencyTicks")), checked((int)options.Int("combatIntervalTicks")));
+                checked((int)options.Int("presentationLatencyTicks")), checked((int)options.Int("combatIntervalTicks")), checked((int)options.Int("missionAttempts")));
 
             var worldBytes = Encoding.UTF8.GetBytes(document.RootElement.GetProperty("world").GetRawText());
             var world = WorldSnapshot.Restore(worldBytes, templates, expectedDefinitionFingerprint, terrain);

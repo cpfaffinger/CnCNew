@@ -96,8 +96,8 @@ public sealed partial class ScriptEngine
                 // Campaign maps have no start positions; the player's slot is its side number, which the skirmish condition compares against.
                 return Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } starter && starter.SideIndex == Int(p, 1);
             case "MISSION_ATTEMPTS":
-                // The attempt count lives in the campaign profile; a mission run by itself is always the first attempt.
-                return Has(type, p, 3) && Compare(Int(p, 1), 1, Int(p, 2));
+                // The attempt count lives in the campaign profile (ScriptEngineOptions.MissionAttempts); a mission run by itself is the first attempt.
+                return Has(type, p, 3) && Compare(Int(p, 1), _options.MissionAttempts, Int(p, 2));
 
             // ---- named objects
             case "NAMED_DESTROYED":

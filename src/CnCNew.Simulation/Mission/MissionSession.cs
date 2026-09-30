@@ -13,8 +13,9 @@ namespace CnCNew.Simulation.Mission;
 
 /// <param name="WorldSeed">Seed of the logic random stream (script timers draw from it).</param>
 /// <param name="MaxTicks">Hard stop for headless runs; 0 means no limit (a live mission ends with its script outcome).</param>
+/// <param name="MissionAttempts">How many times the player has started this mission (the campaign progress knows; <c>MISSION_ATTEMPTS</c> conditions compare against it).</param>
 /// <param name="CombatIntervalTicks">How often units look for a target in range (the stand-in for the reference's idle target acquisition).</param>
-public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty, long MaxTicks = 0, int PresentationLatencyTicks = 0, int CombatIntervalTicks = 3)
+public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty, long MaxTicks = 0, int PresentationLatencyTicks = 0, int CombatIntervalTicks = 3, int MissionAttempts = 1)
 {
     public static MissionOptions Standard { get; } = new(0xC0FFEE09, ScriptDifficulty.Normal);
 }
@@ -49,7 +50,7 @@ public sealed class MissionSession
         Program = program;
         Map = map;
         Notes = notes;
-        Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, LocalPlayerOf(program), options.PresentationLatencyTicks), Issue);
+        Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, LocalPlayerOf(program), options.PresentationLatencyTicks, options.MissionAttempts), Issue);
     }
 
     public MissionOptions Options { get; }

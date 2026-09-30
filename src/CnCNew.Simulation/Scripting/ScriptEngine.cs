@@ -15,8 +15,9 @@ public enum MissionOutcome { None = 0, Victory = 1, Defeat = 2 }
 
 /// <param name="Difficulty">The game difficulty scripts are gated with (<c>Script::isEasy/isNormal/isHard</c>; the reference uses the current player's difficulty, which for every player of a campaign is the chosen one).</param>
 /// <param name="LocalPlayer">What <c>&lt;Local Player&gt;</c> and the multiplayer victory/defeat conditions refer to: the human viewer.</param>
+/// <param name="MissionAttempts">Start count of this mission in the campaign profile, for <c>MISSION_ATTEMPTS</c>.</param>
 /// <param name="PresentationLatencyTicks">How long a speech/sound/movie/camera move counts as still playing for <c>HAS_FINISHED_*</c> and <c>CAMERA_MOVEMENT_FINISHED</c>; a live client may instead end them with <see cref="ScriptEngine.CompletePresentation"/>. 0: finished as soon as started (headless).</param>
-public sealed record ScriptEngineOptions(ScriptDifficulty Difficulty, PlayerId LocalPlayer, int PresentationLatencyTicks = 0)
+public sealed record ScriptEngineOptions(ScriptDifficulty Difficulty, PlayerId LocalPlayer, int PresentationLatencyTicks = 0, int MissionAttempts = 1)
 {
     public static ScriptEngineOptions Default { get; } = new(ScriptDifficulty.Normal, new PlayerId(1));
 }

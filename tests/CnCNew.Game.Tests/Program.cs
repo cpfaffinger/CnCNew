@@ -7,6 +7,7 @@ Func<string[], int>[] suites =
     AudioDirectorTests.Run,
     ShellTests.Run,
     HudTests.Run,
+    CampaignTests.Run,
 ];
 
 var failures = 0;

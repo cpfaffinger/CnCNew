@@ -1,0 +1,57 @@
+using CnCNew.Simulation.Mission;
+using CnCNew.Simulation.Scripting;
+
+namespace CnCNew.Game.Campaign;
+
+/// <summary>How a mission ended for the campaign.</summary>
+public enum MissionConclusion { Victory, Defeat }
+
+/// <summary>
+/// Drives one campaign: hands out the current mission as a <see cref="MissionRun"/> (counting the attempt) and turns the mission's script outcome into
+/// progress. A mission still running has no conclusion and is refused; victory advances to the next mission, defeat keeps the current one for a retry
+/// (<c>CampaignManager::gotoNextMission</c>, <c>ScriptActions::doVictory/doDefeat</c> calling <c>SetVictorious</c>).
+/// </summary>
+public sealed class CampaignController(MissionContext context, CampaignDefinition campaign, CampaignProgress progress, uint baseSeed = 0xC0FFEE09)
+{
+    public CampaignDefinition Campaign { get; } = campaign;
+    public CampaignProgress Progress { get; private set; } = progress;
+    public bool IsFinished => Progress.Finished;
+
+    public CampaignMission CurrentMission
+        => Campaign.FindMission(Progress.CurrentMission) ?? throw new InvalidOperationException($"Mission {Progress.CurrentMission} is not part of campaign {Campaign.Name}.");
+
+    /// <summary>Starts the current mission: counts the attempt and builds the world. The seed depends on the mission and the attempt so a retry is not a replay of the last try.</summary>
+    public MissionRun StartCurrentMission(long maxTicks = 0)
+    {
+        if (Progress.Finished) throw new InvalidOperationException("The campaign is finished.");
+        var mission = CurrentMission;
+        Progress = Progress.Started();
+        var attempts = Progress.AttemptsOf(mission.Name);
+        var seed = unchecked(baseSeed + (uint)attempts * 7919u + (uint)Campaign.Sequence.IndexOf(mission) * 104729u);
+        var options = new MissionOptions(seed, Progress.Difficulty, maxTicks, MissionAttempts: attempts);
+        return MissionRun.Load(context, mission.MapPath, options, mission);
+    }
+
+    /// <summary>Rebuilds a saved run of the current mission (used by loading a savegame); the attempt count is not increased.</summary>
+    public MissionRun ResumeCurrentMission(ReadOnlySpan<byte> state)
+        => MissionRun.Restore(context, CurrentMission.MapPath, state, CurrentMission);
+
+    /// <summary>Applies the outcome of a finished mission to the progress and returns it; a run that has no outcome yet is refused.</summary>
+    public MissionConclusion Conclude(MissionRun run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        if (run.Mission is null || !string.Equals(run.Mission.Name, Progress.CurrentMission, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The run is not of the current mission.");
+        switch (run.Session.Outcome)
+        {
+            case MissionOutcome.Victory:
+                Progress = Progress.Won(Campaign);
+                return MissionConclusion.Victory;
+            case MissionOutcome.Defeat:
+                Progress = Progress.Lost();
+                return MissionConclusion.Defeat;
+            default:
+                throw new InvalidOperationException("The mission has no outcome yet.");
+        }
+    }
+}
