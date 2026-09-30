@@ -1,6 +1,11 @@
 using System.Security.Cryptography;
+using System.Collections.Immutable;
 using CnCNew.Client.Stride;
+using CnCNew.Client.Stride.Rendering;
 using CnCNew.Content;
+using CnCNew.Game.Data;
+using CnCNew.Game.Live;
+using CnCNew.Simulation.Testing;
 using CnCNew.W3D;
 using Stride.Core;
 using Stride.Core.Mathematics;
@@ -14,6 +19,19 @@ var smokeTest = args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase);
 var contentDirectory = GetArgument(args, "--content-dir");
 var modelPath = GetArgument(args, "--model-path");
 var capturePath = GetArgument(args, "--capture");
+var matchMap = GetArgument(args, "--match");
+var liveOptions = matchMap is null ? null : new LiveOptions(
+    matchMap,
+    GetArgument(args, "--faction") ?? "FactionAmerica",
+    (GetArgument(args, "--opponent") ?? "FactionChina").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToImmutableArray(),
+    int.Parse(GetArgument(args, "--seed") ?? "1"),
+    int.Parse(GetArgument(args, "--frames") ?? "90"),
+    GetArgument(args, "--size") ?? "1280x720");
+if (matchMap is not null && contentDirectory is null)
+{
+    throw new ArgumentException("--match requires --content-dir.");
+}
+
 if (modelPath is not null && contentDirectory is null)
 {
     throw new ArgumentException("--model-path requires --content-dir.");
@@ -33,7 +51,7 @@ if (contentDirectory is not null)
     }
 }
 
-using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath))
+using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions))
 {
     game.Run();
 }
@@ -57,12 +75,18 @@ static string? GetArgument(string[] arguments, string name)
         : throw new ArgumentException($"{name} requires a value.");
 }
 
+/// <param name="Map">Virtual map path or a unique part of it (for example "Alpine Assault").</param>
+/// <param name="Frames">Smoke test only: rendered frames at a fixed 30 fps before the capture.</param>
+internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<string> Opponents, int Seed, int Frames, string Size);
+
 internal sealed class CnCNewGame(
     bool smokeTest,
     string? contentDirectory,
     string? modelPath,
-    string? capturePath) : Game
+    string? capturePath,
+    LiveOptions? liveOptions) : Game
 {
+    private LiveMatchHost? _live;
     private int _renderedFrames;
     private bool _captured;
     private W3dStrideScene? _w3dScene;
@@ -70,8 +94,9 @@ internal sealed class CnCNewGame(
     protected override void Initialize()
     {
         AutoLoadDefaultSettings = false;
-        GraphicsDeviceManager.PreferredBackBufferWidth = 1280;
-        GraphicsDeviceManager.PreferredBackBufferHeight = 720;
+        var size = (liveOptions?.Size ?? "1280x720").Split('x');
+        GraphicsDeviceManager.PreferredBackBufferWidth = int.Parse(size[0]);
+        GraphicsDeviceManager.PreferredBackBufferHeight = int.Parse(size[1]);
         base.Initialize();
         Window.Title = "CnCNew — Stride Direct3D 11 W3D Viewer";
     }
@@ -79,6 +104,12 @@ internal sealed class CnCNewGame(
     protected override async Task LoadContent()
     {
         await base.LoadContent();
+        if (liveOptions is not null)
+        {
+            LoadLiveMatch(liveOptions);
+            return;
+        }
+
         if (contentDirectory is null || modelPath is null)
         {
             return;
@@ -137,8 +168,23 @@ internal sealed class CnCNewGame(
         }
     }
 
+    private void LoadLiveMatch(LiveOptions options)
+    {
+        var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"));
+        var mapPath = data.Maps.FirstOrDefault(path => path.Equals(options.Map, StringComparison.OrdinalIgnoreCase))
+            ?? data.Maps.SingleOrDefault(path => path.Contains(options.Map, StringComparison.OrdinalIgnoreCase))
+            ?? throw new ArgumentException($"Map '{options.Map}' was not found or is ambiguous.");
+        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed };
+        var back = GraphicsDevice.Presenter.BackBuffer;
+        var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
+        _live = new LiveMatchHost(this, data, match);
+        Window.Title = $"CnCNew — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)}";
+    }
+
     protected override void UnloadContent()
     {
+        _live?.Dispose();
+        _live = null;
         _w3dScene?.Dispose();
         _w3dScene = null;
         base.UnloadContent();
@@ -147,6 +193,18 @@ internal sealed class CnCNewGame(
     protected override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
+        if (_live is not null)
+        {
+            var back = GraphicsDevice.Presenter.BackBuffer;
+            _live.Update(gameTime, GraphicsContext.CommandList, back.Width, back.Height, smokeTest ? 1.0 / 30 : null);
+            if (smokeTest && ++_renderedFrames >= liveOptions!.Frames && (capturePath is null || _captured))
+            {
+                Exit();
+            }
+
+            return;
+        }
+
         _w3dScene?.Update(
             GraphicsContext.CommandList,
             smokeTest ? _renderedFrames / 60d : gameTime.Total.TotalSeconds);
@@ -159,7 +217,7 @@ internal sealed class CnCNewGame(
     protected override void Draw(GameTime gameTime)
     {
         base.Draw(gameTime);
-        if (!_captured && capturePath is not null && _renderedFrames >= 12)
+        if (!_captured && capturePath is not null && _renderedFrames >= (liveOptions?.Frames ?? 12))
         {
             var fullPath = Path.GetFullPath(capturePath);
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
