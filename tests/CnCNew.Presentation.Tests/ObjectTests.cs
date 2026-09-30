@@ -246,7 +246,7 @@ static class ObjectTests
         var stride = (width + 7) / 8;
         var blend = new MapBlendTiles(8, [], [], [], [], [..new byte[stride * width]], stride, 0, 0, [], [], [], []);
         var map = new MapData("synthetic", new MapHeightField(width, width, border, [new MapBoundary(cells, cells)], [..new byte[width * width]]), blend,
-            MapProperties.Empty, [], [], [], [], [], []);
+            MapProperties.Empty, [], [], [], [], [], [], []);
         return TerrainMap.Build(map, "flat");
     }
 

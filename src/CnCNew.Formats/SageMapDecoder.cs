@@ -8,9 +8,10 @@ namespace CnCNew.Formats;
 /// <summary>
 /// Decodes the static content of a SAGE <c>.map</c> file into the immutable <see cref="MapData"/> model. Chunk layouts follow
 /// <c>WorldHeightMap::ParseHeightMapData/ParseBlendTileData/ParseObjectData</c> (GeneralsMD, WorldHeightMap.cpp),
-/// <c>SidesList::ParseSidesDataChunk</c>, <c>PolygonTrigger::ParsePolygonTriggersDataChunk</c> and
-/// <c>TerrainLogic::ParseWaypointDataChunk</c>. Every field is bounds-checked; chunks that are not decoded (scripts,
-/// lighting, previews) are listed in <see cref="MapData.SkippedChunks"/> instead of being ignored silently.
+/// <c>SidesList::ParseSidesDataChunk</c> (which nests the World Builder scripts, see <c>ScriptList::ParseScriptsDataChunk</c> in
+/// <c>ScriptEngine/Scripts.cpp</c>), <c>PolygonTrigger::ParsePolygonTriggersDataChunk</c> and <c>TerrainLogic::ParseWaypointDataChunk</c>.
+/// Every field is bounds-checked; chunks that are not decoded (lighting, previews) are listed in
+/// <see cref="MapData.SkippedChunks"/> instead of being ignored silently.
 /// </summary>
 public static class SageMapDecoder
 {
@@ -39,6 +40,7 @@ public static class SageMapDecoder
         var objects = ImmutableArray<MapObject>.Empty;
         var triggers = ImmutableArray<MapPolygonTrigger>.Empty;
         var links = ImmutableArray<MapWaypointLink>.Empty;
+        var playerScripts = ImmutableArray<MapScriptList>.Empty;
         var skipped = ImmutableArray.CreateBuilder<MapSkippedChunk>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -59,7 +61,7 @@ public static class SageMapDecoder
                     reader.ExpectEnd();
                     break;
                 case "SidesList":
-                    (sides, teams) = ReadSides(reader, chunk.Version, skipped);
+                    (sides, teams, playerScripts) = ReadSides(reader, chunk.Version, skipped);
                     break;
                 case "ObjectsList":
                     objects = ReadObjects(reader, skipped);
@@ -82,7 +84,7 @@ public static class SageMapDecoder
             container,
             height ?? throw new InvalidDataException("Map has no HeightMapData chunk."),
             blend ?? throw new InvalidDataException("Map has no BlendTileData chunk."),
-            worldInfo, sides, teams, objects, triggers, links, skipped.ToImmutable());
+            worldInfo, sides, teams, objects, triggers, links, playerScripts, skipped.ToImmutable());
     }
 
     private static MapHeightField ReadHeightField(ChunkReader r, int version)
@@ -219,7 +221,7 @@ public static class SageMapDecoder
             classes.MoveToImmutable(), edgeClasses.ToImmutable(), blended.MoveToImmutable(), cliffInfos.ToImmutable());
     }
 
-    private static (ImmutableArray<MapSide>, ImmutableArray<MapProperties>) ReadSides(
+    private static (ImmutableArray<MapSide>, ImmutableArray<MapProperties>, ImmutableArray<MapScriptList>) ReadSides(
         ChunkReader r, int version, ImmutableArray<MapSkippedChunk>.Builder skipped)
     {
         var sideCount = r.ReadInt();
@@ -267,13 +269,20 @@ public static class SageMapDecoder
             for (var i = 0; i < teamCount; i++) teams.Add(r.ReadDict());
         }
 
+        var playerScripts = ImmutableArray<MapScriptList>.Empty;
         while (!r.AtEnd)
         {
             var (name, childVersion, size) = r.ReadChunkHeader();
+            if (name == "PlayerScriptsList")
+            {
+                if (childVersion < 1) throw new InvalidDataException($"PlayerScriptsList version {childVersion} is not supported.");
+                playerScripts = ReadPlayerScripts(r.Sub(size));
+                continue;
+            }
             r.Skip(size);
             skipped.Add(new MapSkippedChunk("SidesList/" + name, childVersion, size));
         }
-        return (sides.MoveToImmutable(), teams.ToImmutable());
+        return (sides.MoveToImmutable(), teams.ToImmutable(), playerScripts);
     }
 
     private static ImmutableArray<MapObject> ReadObjects(ChunkReader r, ImmutableArray<MapSkippedChunk>.Builder skipped)
@@ -343,6 +352,166 @@ public static class SageMapDecoder
         var links = ImmutableArray.CreateBuilder<MapWaypointLink>(count);
         for (var i = 0; i < count; i++) links.Add(new MapWaypointLink(r.ReadInt(), r.ReadInt()));
         return links.MoveToImmutable();
+    }
+
+    // Script decoding (World Builder's `PlayerScriptsList`) follows the same nested-chunk idiom as ReadSides/ReadObjects/ReadTriggers
+    // above, mirroring `ScriptList::ParseScriptsDataChunk`, `ScriptGroup::ParseGroupDataChunk`, `Script::ParseScript`,
+    // `OrCondition::ParseOrConditionDataChunk`, `Condition::ParseConditionDataChunk`, `ScriptAction::ParseAction` and
+    // `Parameter::ReadParameter` (GeneralsMD/Code/GameEngine/Source/GameLogic/ScriptEngine/Scripts.cpp). Every condition/action's type is
+    // identified by `MapScriptCatalog` (the raw ConditionType/ScriptActionType enum index; see that file for why the NameKeyType written
+    // alongside it since version 4/2 cannot be used instead).
+    private const int MaxScriptParameters = 12; // Scripts.h: enum { MAX_PARMS = 12 }.
+
+    private static ImmutableArray<MapScriptList> ReadPlayerScripts(ChunkReader r)
+    {
+        var lists = ImmutableArray.CreateBuilder<MapScriptList>();
+        while (!r.AtEnd)
+        {
+            var (name, version, size) = r.ReadChunkHeader();
+            if (name != "ScriptList") throw new InvalidDataException($"PlayerScriptsList contains unexpected chunk '{name}'.");
+            if (version < 1) throw new InvalidDataException($"ScriptList version {version} is not supported.");
+            lists.Add(ReadScriptList(r.Sub(size)));
+        }
+        return lists.ToImmutable();
+    }
+
+    private static MapScriptList ReadScriptList(ChunkReader r)
+    {
+        var scripts = ImmutableArray.CreateBuilder<MapScript>();
+        var groups = ImmutableArray.CreateBuilder<MapScriptGroup>();
+        while (!r.AtEnd)
+        {
+            var (name, version, size) = r.ReadChunkHeader();
+            var child = r.Sub(size);
+            switch (name)
+            {
+                case "Script": scripts.Add(ReadScript(child, version)); break;
+                case "ScriptGroup": groups.Add(ReadScriptGroup(child, version)); break;
+                default: throw new InvalidDataException($"ScriptList contains unexpected chunk '{name}'.");
+            }
+            child.ExpectEnd();
+        }
+        return new MapScriptList(scripts.ToImmutable(), groups.ToImmutable());
+    }
+
+    private static MapScriptGroup ReadScriptGroup(ChunkReader r, int version)
+    {
+        if (version < 1) throw new InvalidDataException($"ScriptGroup version {version} is not supported.");
+        var name = r.ReadAscii();
+        var isActive = r.ReadByte() != 0;
+        var isSubroutine = version >= 2 && r.ReadByte() != 0;
+        var scripts = ImmutableArray.CreateBuilder<MapScript>();
+        while (!r.AtEnd)
+        {
+            var (childName, childVersion, size) = r.ReadChunkHeader();
+            if (childName != "Script") throw new InvalidDataException($"ScriptGroup contains unexpected chunk '{childName}'.");
+            var child = r.Sub(size);
+            scripts.Add(ReadScript(child, childVersion));
+            child.ExpectEnd();
+        }
+        return new MapScriptGroup(name, isActive, isSubroutine, scripts.ToImmutable());
+    }
+
+    private static MapScript ReadScript(ChunkReader r, int version)
+    {
+        if (version < 1) throw new InvalidDataException($"Script version {version} is not supported.");
+        var name = r.ReadAscii();
+        var comment = r.ReadAscii();
+        var conditionComment = r.ReadAscii();
+        var actionComment = r.ReadAscii();
+        var isActive = r.ReadByte() != 0;
+        var isOneShot = r.ReadByte() != 0;
+        var easy = r.ReadByte() != 0;
+        var normal = r.ReadByte() != 0;
+        var hard = r.ReadByte() != 0;
+        var isSubroutine = r.ReadByte() != 0;
+        var delaySeconds = version >= 2 ? r.ReadInt() : 0;
+
+        var orConditions = ImmutableArray.CreateBuilder<MapOrCondition>();
+        var actions = ImmutableArray.CreateBuilder<MapScriptAction>();
+        var falseActions = ImmutableArray.CreateBuilder<MapScriptAction>();
+        while (!r.AtEnd)
+        {
+            var (childName, childVersion, size) = r.ReadChunkHeader();
+            var child = r.Sub(size);
+            switch (childName)
+            {
+                case "OrCondition": orConditions.Add(ReadOrCondition(child, childVersion)); break;
+                case "ScriptAction": actions.Add(ReadScriptAction(child, childVersion)); break;
+                case "ScriptActionFalse": falseActions.Add(ReadScriptAction(child, childVersion)); break;
+                default: throw new InvalidDataException($"Script contains unexpected chunk '{childName}'.");
+            }
+            child.ExpectEnd();
+        }
+        return new MapScript(name, comment, conditionComment, actionComment, isActive, isOneShot, easy, normal, hard, isSubroutine,
+            delaySeconds, orConditions.ToImmutable(), actions.ToImmutable(), falseActions.ToImmutable());
+    }
+
+    private static MapOrCondition ReadOrCondition(ChunkReader r, int version)
+    {
+        if (version < 1) throw new InvalidDataException($"OrCondition version {version} is not supported.");
+        var conditions = ImmutableArray.CreateBuilder<MapCondition>();
+        while (!r.AtEnd)
+        {
+            var (name, childVersion, size) = r.ReadChunkHeader();
+            if (name != "Condition") throw new InvalidDataException($"OrCondition contains unexpected chunk '{name}'.");
+            var child = r.Sub(size);
+            conditions.Add(ReadCondition(child, childVersion));
+            child.ExpectEnd();
+        }
+        return new MapOrCondition(conditions.ToImmutable());
+    }
+
+    // Condition::WriteConditionDataChunk/ScriptAction::WriteActionDataChunk (Scripts.cpp) write the raw ConditionType/ScriptActionType
+    // enum index first, then (version 4+ / 2+) a NameKeyType. NameKeyType is not this container's own per-file symbol table (the one
+    // ReadChunkHeader/ReadDict use): NameKeyGenerator::nameToKey (Common/NameKeyGenerator.cpp) assigns it sequentially, process-wide, in
+    // first-registration order across the whole running engine - a value this decoder cannot reconstruct without replaying that exact
+    // binary's static initialization order. The raw enum index is therefore the only decodable identity; MapScriptCatalog resolves it by
+    // position, exactly as the original engine's own "rematch by name" fallback does when the two disagree (Scripts.cpp ~1701, ~2463).
+    // The NameKeyType is still read to keep the stream aligned, then discarded.
+    private static MapCondition ReadCondition(ChunkReader r, int version)
+    {
+        if (version < 1) throw new InvalidDataException($"Condition version {version} is not supported.");
+        var typeId = r.ReadInt();
+        if (version >= 4) r.ReadInt(); // NameKeyType: unresolvable process-global id, see above; kept only to stay aligned.
+        var typeName = MapScriptCatalog.ConditionName(typeId);
+        var count = r.ReadInt();
+        if (count < 0 || count > MaxScriptParameters) throw new InvalidDataException($"Condition '{typeName}' has invalid parameter count {count}.");
+        var parameters = ImmutableArray.CreateBuilder<MapScriptParameter>(count);
+        for (var i = 0; i < count; i++) parameters.Add(ReadScriptParameter(r));
+        return new MapCondition(typeId, typeName, parameters.MoveToImmutable());
+    }
+
+    private static MapScriptAction ReadScriptAction(ChunkReader r, int version)
+    {
+        if (version < 1) throw new InvalidDataException($"ScriptAction version {version} is not supported.");
+        var typeId = r.ReadInt();
+        if (version >= 2) r.ReadInt(); // NameKeyType: unresolvable process-global id, see ReadCondition; kept only to stay aligned.
+        var typeName = MapScriptCatalog.ActionName(typeId);
+        var count = r.ReadInt();
+        if (count < 0 || count > MaxScriptParameters) throw new InvalidDataException($"ScriptAction '{typeName}' has invalid parameter count {count}.");
+        var parameters = ImmutableArray.CreateBuilder<MapScriptParameter>(count);
+        for (var i = 0; i < count; i++) parameters.Add(ReadScriptParameter(r));
+        return new MapScriptAction(typeId, typeName, parameters.MoveToImmutable());
+    }
+
+    /// <summary><c>Parameter::ReadParameter</c>: every field except the coordinate is always present on disk, regardless of type.</summary>
+    private static MapScriptParameter ReadScriptParameter(ChunkReader r)
+    {
+        var rawType = r.ReadInt();
+        if (rawType < 0 || rawType > (int)MapScriptParameterType.Percent) throw new InvalidDataException($"Parameter has unknown type {rawType}.");
+        var type = (MapScriptParameterType)rawType;
+        if (type == MapScriptParameterType.Coord3D)
+        {
+            var x = r.ReadReal();
+            var y = r.ReadReal();
+            var z = r.ReadReal();
+            return new MapScriptParameter(type, 0, 0, "", x, y, z);
+        }
+        var integer = r.ReadInt();
+        var real = r.ReadReal();
+        var text = r.ReadAscii();
+        return new MapScriptParameter(type, integer, real, text, 0, 0, 0);
     }
 
     private static ImmutableArray<T> Wrap<T>(T[] array) => System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(array);

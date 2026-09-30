@@ -33,7 +33,7 @@ internal static class SyntheticTerrain
             [..cliff], stride, 8, 0,
             classes.IsDefault ? [new MapTextureClass(0, 4, 2, GrassClass), new MapTextureClass(4, 4, 2, RockClass)] : classes,
             [], blendedTiles.IsDefault ? [] : blendedTiles, cliffInfos.IsDefault ? [] : cliffInfos);
-        return new MapData("synthetic", field, blend, MapProperties.Empty, [], [], [], triggers.IsDefault ? [] : triggers, [], []);
+        return new MapData("synthetic", field, blend, MapProperties.Empty, [], [], [], triggers.IsDefault ? [] : triggers, [], [], []);
     }
 
     /// <summary>

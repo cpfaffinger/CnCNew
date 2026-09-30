@@ -501,7 +501,7 @@ static class InputTests
         flags[cy * stride + (cx >> 3)] |= (byte)(1 << (cx & 7));
         var blend = new MapBlendTiles(8, [], [], [], [], [..flags], stride, 0, 0, [], [], [], []);
         var map = new MapData("input", new MapHeightField(width, width, border, [new MapBoundary(cells, cells)], [..new byte[width * width]]), blend,
-            MapProperties.Empty, [], [], [], [], [], []);
+            MapProperties.Empty, [], [], [], [], [], [], []);
         return TerrainMap.Build(map, "input");
     }
 

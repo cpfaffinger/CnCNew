@@ -40,7 +40,7 @@ static class SyntheticMaps
             objects.Add(new MapObject("*Waypoints/Waypoint", x, y, z, 0m, 0, properties));
         }
         return new MapData("synthetic", new MapHeightField(width, fieldHeight, border, [new MapBoundary(cellsX, cellsY)], [..heights]), blend,
-            MapProperties.Empty, [], [], objects.ToImmutable(), [..triggers ?? []], [], []);
+            MapProperties.Empty, [], [], objects.ToImmutable(), [..triggers ?? []], [], [], []);
     }
 
     public static MapPolygonTrigger Water(string name, int level, params (int X, int Y)[] points)

@@ -16,6 +16,8 @@ if (args is ["info", var infoDirectory, var infoPath])
         Console.WriteLine($"{infoPath}: container {map.Container}, {map.HeightField.Width}x{map.HeightField.Height} vertices, border {map.HeightField.Border}");
         Console.WriteLine($"  blend v{map.BlendTiles.Version}, {map.Objects.Length} objects ({map.Objects.Count(o => o.IsWaypoint)} waypoints), " +
                           $"{map.Triggers.Length} triggers ({map.Triggers.Count(t => t.IsWater)} water), {map.Sides.Length} sides, {map.Teams.Length} teams");
+        var scriptCount = map.PlayerScripts.Sum(list => list.Scripts.Length + list.Groups.Sum(group => group.Scripts.Length));
+        Console.WriteLine($"  scripts: {map.PlayerScripts.Length} player lists, {scriptCount} scripts");
         foreach (var skipped in map.SkippedChunks)
             Console.WriteLine($"  skipped {skipped.Path} v{skipped.Version} {skipped.Bytes} bytes");
         return 0;
@@ -54,6 +56,10 @@ try
     var terrainFingerprints = new SortedDictionary<string, string>(StringComparer.Ordinal);
     var maxExtent = 0;
     long pathPairs = 0, pathFound = 0, pathPartial = 0, pathBlocked = 0, pathPoints = 0;
+    long scriptLists = 0, scripts = 0, scriptGroups = 0, subroutineGroups = 0, orConditions = 0, conditions = 0, scriptActions = 0, falseActions = 0;
+    var conditionTypes = new SortedDictionary<string, int>(StringComparer.Ordinal);
+    var actionTypes = new SortedDictionary<string, int>(StringComparer.Ordinal);
+    var parameterTypes = new SortedDictionary<MapScriptParameterType, int>();
     var pathDigest = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
 
     foreach (var path in paths)
@@ -131,6 +137,45 @@ try
                 var current = skippedChunks.GetValueOrDefault(skipped.Path);
                 skippedChunks[skipped.Path] = (current.Count + 1, current.Bytes + skipped.Bytes);
             }
+            scriptLists += map.PlayerScripts.Length;
+            foreach (var list in map.PlayerScripts)
+            {
+                CountScripts(list.Scripts);
+                scriptGroups += list.Groups.Length;
+                foreach (var group in list.Groups)
+                {
+                    if (group.IsSubroutine) subroutineGroups++;
+                    CountScripts(group.Scripts);
+                }
+            }
+
+            void CountScripts(System.Collections.Immutable.ImmutableArray<MapScript> list)
+            {
+                foreach (var script in list)
+                {
+                    scripts++;
+                    orConditions += script.OrConditions.Length;
+                    foreach (var or in script.OrConditions)
+                        foreach (var condition in or.AndConditions)
+                        {
+                            conditions++;
+                            conditionTypes[condition.TypeName] = conditionTypes.GetValueOrDefault(condition.TypeName) + 1;
+                            foreach (var parameter in condition.Parameters) parameterTypes[parameter.Type] = parameterTypes.GetValueOrDefault(parameter.Type) + 1;
+                        }
+                    scriptActions += script.Actions.Length;
+                    foreach (var action in script.Actions)
+                    {
+                        actionTypes[action.TypeName] = actionTypes.GetValueOrDefault(action.TypeName) + 1;
+                        foreach (var parameter in action.Parameters) parameterTypes[parameter.Type] = parameterTypes.GetValueOrDefault(parameter.Type) + 1;
+                    }
+                    falseActions += script.FalseActions.Length;
+                    foreach (var action in script.FalseActions)
+                    {
+                        actionTypes[action.TypeName] = actionTypes.GetValueOrDefault(action.TypeName) + 1;
+                        foreach (var parameter in action.Parameters) parameterTypes[parameter.Type] = parameterTypes.GetValueOrDefault(parameter.Type) + 1;
+                    }
+                }
+            }
         }
         catch (Exception exception)
         {
@@ -150,6 +195,18 @@ try
     Console.WriteLine("terrain fingerprint digest: " + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(digestInput))));
     Console.WriteLine($"ground paths between start positions: {pathPairs} pairs, {pathFound} complete, {pathPartial} partial, {pathBlocked} blocked, {pathPoints} waypoints, digest {Convert.ToHexString(pathDigest.GetHashAndReset())}");
     foreach (var rejected in terrainRejected) Console.Error.WriteLine("TERRAIN " + rejected);
+    Console.WriteLine($"scripts: {N(scriptLists)} player lists, {N(scripts)} scripts, {N(scriptGroups)} groups ({N(subroutineGroups)} subroutine), " +
+                      $"{N(orConditions)} OR-branches, {N(conditions)} conditions, {N(scriptActions)} true actions, {N(falseActions)} false actions, " +
+                      $"{conditionTypes.Count} distinct condition types, {actionTypes.Count} distinct action types");
+    Console.WriteLine("condition types by usage:");
+    foreach (var (name, count) in conditionTypes.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal))
+        Console.WriteLine($"  {name}: {N(count)}");
+    Console.WriteLine("action types by usage:");
+    foreach (var (name, count) in actionTypes.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal))
+        Console.WriteLine($"  {name}: {N(count)}");
+    Console.WriteLine("parameter types by usage:");
+    foreach (var (type, count) in parameterTypes.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key))
+        Console.WriteLine($"  {type}: {N(count)}");
     Console.WriteLine("skipped chunks:");
     foreach (var (name, value) in skippedChunks)
         Console.WriteLine($"  {name}: {N(value.Count)} occurrences, {N(value.Bytes)} bytes");

@@ -107,8 +107,64 @@ public sealed record MapBuildListEntry(
 
 public sealed record MapSide(MapProperties Properties, ImmutableArray<MapBuildListEntry> BuildList);
 
-/// <summary>A chunk the decoder recognized but deliberately did not decode (scripts, lighting, cameras, sounds); counted, never silent.</summary>
+/// <summary>A chunk the decoder recognized but deliberately did not decode (lighting, cameras, sounds); counted, never silent.</summary>
 public sealed record MapSkippedChunk(string Path, int Version, int Bytes);
+
+/// <summary>Value kind of a <see cref="MapScriptParameter"/> (<c>Parameter::ParameterType</c>, <c>Scripts.h</c>). The raw enum order on
+/// disk matches this declaration order exactly (it is the wire value, not just a label).</summary>
+public enum MapScriptParameterType
+{
+    Int = 0, Real, Script, Team, Counter, Flag, Comparison, Waypoint, Boolean, TriggerArea, TextString, Side, Sound,
+    ScriptSubroutine, Unit, ObjectType, Coord3D, Angle, TeamState, Relation, AiMood, Dialog, Music, Movie, WaypointPath,
+    LocalizedText, Bridge, KindOf, AttackPrioritySet, RadarEventType, SpecialPower, Science, Upgrade, CommandButtonAbility,
+    Boundary, Buildable, SurfacesAllowed, ShakeIntensity, CommandButton, FontName, ObjectStatus, CommandButtonAllAbilities,
+    SkirmishWaypointPath, Color, Emoticon, ObjectPanelFlag, FactionName, ObjectTypeList, RevealName, ScienceAvailability,
+    LeftOrRight, Percent,
+}
+
+/// <summary>
+/// One parameter of a <see cref="MapCondition"/> or <see cref="MapScriptAction"/> (<c>Parameter::ReadParameter</c>). Every field except
+/// <see cref="CoordX"/>/<see cref="CoordY"/>/<see cref="CoordZ"/> is always present on disk regardless of <see cref="Type"/> (the World
+/// Builder format stores int+real+string unconditionally for every non-<see cref="MapScriptParameterType.Coord3D"/> parameter, whether or
+/// not the type actually uses that field); which field is meaningful is determined solely by <see cref="Type"/>.
+/// </summary>
+public sealed record MapScriptParameter(MapScriptParameterType Type, int Integer, decimal Real, string Text, decimal CoordX, decimal CoordY, decimal CoordZ);
+
+/// <summary>
+/// One leaf test of an AND-chain inside a <see cref="MapOrCondition"/> (<c>Condition</c>). <see cref="TypeId"/> is the raw, version- and
+/// build-dependent enum value stored on disk and is kept for diagnostics only; <see cref="TypeName"/> is resolved through the map's own
+/// symbol table (the same mechanism every other name-keyed value in this format uses) and is the stable identifier callers should match
+/// on, exactly as the original engine's own "rematch by name" recovery does when <see cref="TypeId"/> drifts between builds.
+/// </summary>
+public sealed record MapCondition(int TypeId, string TypeName, ImmutableArray<MapScriptParameter> Parameters);
+
+/// <summary>One OR-branch of a <see cref="MapScript"/>: all of <see cref="AndConditions"/> must be true for the branch to be true; the
+/// script fires when any one branch (any one <c>OrCondition</c>) is true.</summary>
+public sealed record MapOrCondition(ImmutableArray<MapCondition> AndConditions);
+
+/// <summary>One action of a <see cref="MapScript"/>'s true- or false-action list (<c>ScriptAction</c>/<c>ScriptActionFalse</c>). See
+/// <see cref="MapCondition"/> for the <see cref="TypeId"/>/<see cref="TypeName"/> split.</summary>
+public sealed record MapScriptAction(int TypeId, string TypeName, ImmutableArray<MapScriptParameter> Parameters);
+
+/// <summary>One World Builder script (<c>Script</c>): an OR-of-ANDs condition tree, evaluated when the containing list is active, that
+/// runs <see cref="Actions"/> when true and <see cref="FalseActions"/> otherwise. <see cref="IsOneShot"/> scripts deactivate themselves
+/// after firing once; <see cref="Easy"/>/<see cref="Normal"/>/<see cref="Hard"/> gate a script to specific campaign difficulties.</summary>
+public sealed record MapScript(
+    string Name, string Comment, string ConditionComment, string ActionComment,
+    bool IsActive, bool IsOneShot, bool Easy, bool Normal, bool Hard, bool IsSubroutine, int DelayEvaluationSeconds,
+    ImmutableArray<MapOrCondition> OrConditions, ImmutableArray<MapScriptAction> Actions, ImmutableArray<MapScriptAction> FalseActions);
+
+/// <summary>A named, collapsible group of scripts (<c>ScriptGroup</c>); a subroutine group only runs when another script's action calls
+/// it by name, never on its own.</summary>
+public sealed record MapScriptGroup(string Name, bool IsActive, bool IsSubroutine, ImmutableArray<MapScript> Scripts);
+
+/// <summary>
+/// One player's or side's script list (<c>ScriptList</c>): one entry per <c>PlayerScriptsList</c> child, in file order, matching the
+/// side/player order of <see cref="MapData.Sides"/>. Top-level <see cref="Scripts"/> and named <see cref="Groups"/> each keep their own
+/// file order (World Builder's chunky format lets them interleave arbitrarily; the original engine appends each kind to its own list
+/// regardless of interleaving, and this decoder does the same).
+/// </summary>
+public sealed record MapScriptList(ImmutableArray<MapScript> Scripts, ImmutableArray<MapScriptGroup> Groups);
 
 /// <summary>
 /// The decoded static content of one map file (<c>TerrainLogic::loadMap</c>, <c>WorldHeightMap</c>, <c>SidesList</c>, <c>PolygonTrigger</c>).
@@ -124,6 +180,7 @@ public sealed record MapData(
     ImmutableArray<MapObject> Objects,
     ImmutableArray<MapPolygonTrigger> Triggers,
     ImmutableArray<MapWaypointLink> WaypointLinks,
+    ImmutableArray<MapScriptList> PlayerScripts,
     ImmutableArray<MapSkippedChunk> SkippedChunks)
 {
     public const decimal CellSize = 10m;
