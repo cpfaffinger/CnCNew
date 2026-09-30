@@ -9,6 +9,9 @@
     <Project Path="src/CnCNew.Images/CnCNew.Images.csproj" />
     <Project Path="src/CnCNew.Import/CnCNew.Import.csproj" />
     <Project Path="src/CnCNew.Simulation/CnCNew.Simulation.csproj" />
+    <Project Path="src/CnCNew.Presentation/CnCNew.Presentation.csproj" />
+    <Project Path="src/CnCNew.Ui/CnCNew.Ui.csproj" />
+    <Project Path="src/CnCNew.Audio/CnCNew.Audio.csproj" />
     <Project Path="src/CnCNew.W3D/CnCNew.W3D.csproj" />
   </Folder>
   <Folder Name="/tools/">
@@ -29,6 +32,9 @@
     <Project Path="tests/CnCNew.Import.Tests/CnCNew.Import.Tests.csproj" />
     <Project Path="tests/CnCNew.Simulation.Tests/CnCNew.Simulation.Tests.csproj" />
     <Project Path="tests/CnCNew.W3D.Tests/CnCNew.W3D.Tests.csproj" />
+    <Project Path="tests/CnCNew.Presentation.Tests/CnCNew.Presentation.Tests.csproj" />
+    <Project Path="tests/CnCNew.Ui.Tests/CnCNew.Ui.Tests.csproj" />
+    <Project Path="tests/CnCNew.Audio.Tests/CnCNew.Audio.Tests.csproj" />
   </Folder>
 </Solution>
 

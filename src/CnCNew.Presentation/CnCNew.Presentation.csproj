@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../CnCNew.Data/CnCNew.Data.csproj" />
+    <ProjectReference Include="../CnCNew.Simulation/CnCNew.Simulation.csproj" />
+  </ItemGroup>
+</Project>
