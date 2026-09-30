@@ -64,11 +64,33 @@ static partial class Tests
     /// A 60x40-cell map with three sides (neutral, PlayerA human, PlayerB enemy of A), two waypoints, an area around the left spawn and two teams;
     /// <paramref name="scripts"/> run in PlayerA's list (index 1), <paramref name="neutral"/> in the neutral list (index 0).
     /// </summary>
-    private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) MissionMap(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MapScript[]? neutral = null)
+    private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) MissionMap(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null)
     {
         var fixture = new SyntheticFixture(files: ScriptFiles());
         var area = new MapPolygonTrigger("LeftArea", string.Empty, 7, false, false, 0, [new MapPoint(0, 0, 0), new MapPoint(200, 0, 0), new MapPoint(200, 400, 0), new MapPoint(0, 400, 0)]);
         var baseMap = SyntheticMaps.Build(60, 40, 1, triggers: [area], waypoints: [("Spawn", 100m, 200m, 0m), ("Far", 400m, 200m, 0m), ("Mid", 250m, 200m, 0m)]);
+        // Waypoint paths: extra waypoints, the first labelled with the path name (waypointPathLabel1), linked in order by waypointID.
+        var pathObjects = ImmutableArray.CreateBuilder<MapObject>();
+        var pathLinks = ImmutableArray.CreateBuilder<MapWaypointLink>();
+        var nextId = 100;
+        foreach (var (label, points) in paths ?? [])
+        {
+            var first = true;
+            var previous = 0;
+            foreach (var (pointName, x, y) in points)
+            {
+                var id = nextId++;
+                var props = ImmutableArray.CreateBuilder<MapProperty>();
+                props.Add(new MapProperty("waypointID", MapPropertyType.Int, id, 0m, string.Empty));
+                props.Add(Scr.Text("waypointName", label + "." + pointName));
+                if (first) props.Add(Scr.Text("waypointPathLabel1", label));
+                pathObjects.Add(new MapObject("*Waypoints/Waypoint", x, y, 0m, 0m, 0, new MapProperties(props.ToImmutable())));
+                if (!first) pathLinks.Add(new MapWaypointLink(previous, id));
+                first = false;
+                previous = id;
+            }
+        }
+        baseMap = baseMap with { Objects = [..baseMap.Objects, ..pathObjects], WaypointLinks = pathLinks.ToImmutable() };
         MapSide Side(string name, bool human, string allies, string enemies)
             => new(new MapProperties([Scr.Text("playerName", name), Scr.Flag("playerIsHuman", human), Scr.Text("playerAllies", allies), Scr.Text("playerEnemies", enemies)]), []);
         var sides = ImmutableArray.Create(
@@ -94,9 +116,9 @@ static partial class Tests
         return new MapObject(template, x, y, 0m, 0m, 0, new MapProperties(properties.ToImmutable()));
     }
 
-    private static MissionSession StartMission(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MissionOptions? options = null, MapScript[]? neutral = null)
+    private static MissionSession StartMission(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MissionOptions? options = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null)
     {
-        var (map, fixture, terrain) = MissionMap(scripts, groups, objects, neutral);
+        var (map, fixture, terrain) = MissionMap(scripts, groups, objects, neutral, paths);
         return MissionSession.Start(options ?? MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
     }
 
@@ -201,17 +223,16 @@ static partial class Tests
         ], objects: [Placed("AlphaBarracks", 100m, 100m, "teamA", "Crate")]);
         var engine = session.Engine;
         var world = session.World;
-        Run(session, 1);
-        Check.That(world.Entities.Count(entity => entity.Template.Name == "BetaSoldier" && entity.Owner.Value == 2) == 2, "The team's units belong to the team owner.");
+        // Objects a script creates exist at once (as in the reference), so every later script of the same tick already sees them.
         Run(session, 1);
         Check.That(engine.FlagValue("raiders"), "Units created on a team are members of it and named.");
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(1200), "Money is set, then reduced by a negative gift.");
         Check.That(world.RelationshipOf(new PlayerId(1), new PlayerId(2)) == Relationship.Allies && world.RelationshipOf(new PlayerId(2), new PlayerId(1)) == Relationship.Enemies, "A relation is changed in one direction only.");
-        Check.That(engine.FlagValue("two"), "The object comparison counts the created units.");
+        Check.That(engine.FlagValue("two"), "The object comparison counts the created units as the team owner's.");
         Check.That(engine.FlagValue("credits"), "The credit comparison has the parameter on the left.");
         Check.That(engine.FlagValue("crateMoved"), "A named object changes owner.");
         Run(session, 4);
-        Check.That(engine.FlagValue("bossDead"), "A killed named object counts as destroyed.");
+        Check.That(engine.FlagValue("bossDead"), "A killed named object counts as destroyed. " + string.Join(";", engine.ExplainScript("Dead").Select(e => e.Label + "=" + e.Result)) + " named " + string.Join(",", engine.NamedObjects.Select(n => n.Key)) + " ents " + string.Join(",", world.Entities.Select(e => e.Template.Name + (e.EffectivelyDead ? "(dead)" : ""))) + " tick " + world.Tick);
         Check.That(engine.Outcome == MissionOutcome.Victory && engine.OutcomeTick >= 0, "VICTORY sets the outcome once every object of the opponent is gone.");
         Check.That(!session.IsOver, "The mission runs on for the end-game delay after a victory.");
         Run(session, ScriptEngine.EndGameDelayTicks + 5);
@@ -249,6 +270,58 @@ static partial class Tests
         Check.That(engine.DrainOutputs().IsEmpty, "Outputs are drained.");
         Check.That(engine.Diagnostics.ContainsKey("call of undefined script 'Nope'") && engine.Diagnostics.ContainsKey("unknown object type 'NoSuchObject'"),
             "Unresolvable references are diagnosed: " + string.Join("; ", engine.Diagnostics.Keys));
+    }
+
+
+    public static void ScriptEngineDamageHistoryAreasAndPaths()
+    {
+        // A soldier of each side 40 units apart (the gun reaches 80): the session's combat driver makes them shoot each other.
+        var session = StartMission([
+            Scr.Script("ByPlayer", [Scr.And(Scr.If("NAMED_ATTACKED_BY_PLAYER", Scr.Unit("A1"), Scr.Side(PlayerB)))], [Scr.Do("SET_FLAG", Scr.Flag("byPlayer"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("ByType", [Scr.And(Scr.If("NAMED_ATTACKED_BY_OBJECTTYPE", Scr.Unit("A1"), Scr.Type("BetaSoldier")))], [Scr.Do("SET_FLAG", Scr.Flag("byType"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("TeamByPlayer", [Scr.And(Scr.If("TEAM_ATTACKED_BY_PLAYER", Scr.Team("teamB"), Scr.Side(PlayerA)))], [Scr.Do("SET_FLAG", Scr.Flag("teamHit"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Kind", [Scr.And(Scr.If("PLAYER_HAS_COMPARISON_UNIT_KIND_IN_TRIGGER_AREA", Scr.Side(PlayerA), Scr.Compare(Scr.GreaterEqual), Scr.Int(1), Scr.Named(MapScriptParameterType.KindOf, "INFANTRY"), Scr.Area("LeftArea")))],
+                [Scr.Do("SET_FLAG", Scr.Flag("inArea"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Built", [Scr.And(Scr.If("BUILT_BY_PLAYER", Scr.Named(MapScriptParameterType.ObjectType, "AlphaSoldier"), Scr.Side(PlayerA)))], [Scr.Do("SET_FLAG", Scr.Flag("built"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("NotBuilt", [Scr.And(Scr.If("BUILT_BY_PLAYER", Scr.Named(MapScriptParameterType.ObjectType, "BetaBarracks"), Scr.Side(PlayerA)))], [Scr.Do("SET_FLAG", Scr.Flag("notBuilt"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Status", [Scr.And(Scr.If("UNIT_HAS_OBJECT_STATUS", Scr.Unit("A1"), Scr.Named(MapScriptParameterType.ObjectStatus, "UNDER_CONSTRUCTION")))], [Scr.Do("SET_FLAG", Scr.Flag("status"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Stats", [Scr.And(Scr.If("PLAYER_DESTROYED_N_BUILDINGS_PLAYER", Scr.Side(PlayerA), Scr.Int(1), Scr.Side(PlayerB)))], [Scr.Do("SET_FLAG", Scr.Flag("stub"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Factions", [Scr.And(Scr.If("SKIRMISH_PLAYER_FACTION", Scr.Side(PlayerA), Scr.Named(MapScriptParameterType.FactionName, "Nowhere")))], [Scr.Do("SET_FLAG", Scr.Flag("faction"), Scr.Bool(true))], oneShot: true),
+            // A walker on a two-waypoint path.
+            Scr.Script("Start", [Scr.And(Scr.If("NAMED_CREATED", Scr.Unit("Walker")))], [Scr.Do("NAMED_FOLLOW_WAYPOINTS", Scr.Unit("Walker"), Scr.Named(MapScriptParameterType.WaypointPath, "Route"))], oneShot: true),
+            Scr.Script("Arrived", [Scr.And(Scr.If("NAMED_REACHED_WAYPOINTS_END", Scr.Unit("Walker"), Scr.Named(MapScriptParameterType.WaypointPath, "Route")))], [Scr.Do("SET_FLAG", Scr.Flag("arrived"), Scr.Bool(true))], oneShot: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 300m, "teamA", "A1"), Placed("BetaSoldier", 140m, 300m, "teamB", "B1"), Placed("AlphaSoldier", 100m, 100m, "teamA", "Walker")],
+            paths: [("Route", [("Mid", 130m, 100m), ("Far", 220m, 100m)])]);
+        var engine = session.Engine;
+        Run(session, 900);
+        Check.That(engine.FlagValue("byPlayer") && engine.FlagValue("byType"), "The last attacker of an object is remembered by player and by type.");
+        Check.That(engine.FlagValue("teamHit"), "A team counts as attacked when a member was.");
+        Check.That(engine.FlagValue("inArea"), "The kind condition counts live infantry of the player in the area.");
+        Check.That(engine.FlagValue("built") && !engine.FlagValue("notBuilt"), "BUILT_BY_PLAYER is about objects the player owns.");
+        Check.That(!engine.FlagValue("status") && !engine.FlagValue("stub") && !engine.FlagValue("faction"), "Object status, the reference's stub condition and a foreign faction are false.");
+        Check.That(engine.FlagValue("arrived"), "A unit that followed a path to its end reports it.");
+        Check.That(engine.MissingConditionHits.Count == 0, "None of these conditions is missing: " + string.Join(",", engine.MissingConditionHits.Keys));
+    }
+
+    public static void ScriptEngineAttackPrioritiesAndReinforcements()
+    {
+        // Two targets in range of the shooter: the nearer barracks and the farther soldier. With a priority set that prefers soldiers the farther one is shot first.
+        var session = StartMission([
+            Scr.Script("Setup", [Scr.And(Scr.If("NAMED_CREATED", Scr.Unit("Shooter")))], [
+                Scr.Do("SET_ATTACK_PRIORITY_THING", Scr.Named(MapScriptParameterType.AttackPrioritySet, "Soldiers"), Scr.Type("BetaSoldier"), Scr.Int(5)),
+                Scr.Do("SET_DEFAULT_ATTACK_PRIORITY", Scr.Named(MapScriptParameterType.AttackPrioritySet, "Soldiers"), Scr.Int(0)),
+                Scr.Do("NAMED_APPLY_ATTACK_PRIORITY_SET", Scr.Unit("Shooter"), Scr.Named(MapScriptParameterType.AttackPrioritySet, "Soldiers")),
+                Scr.Do("CREATE_REINFORCEMENT_TEAM", Scr.Team("Raiders"), Scr.Waypoint("Mid"))], oneShot: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Shooter"), Placed("BetaBarracks", 130m, 100m, "teamB", "Near"), Placed("BetaSoldier", 170m, 100m, "teamB", "Far")]);
+        var engine = session.Engine;
+        Run(session, 2);
+        var shooter = session.World.FindEntity(new EntityId(engine.NamedObjects.First(item => item.Key == "Shooter").Value))!;
+        var near = session.World.FindEntity(new EntityId(engine.NamedObjects.First(item => item.Key == "Near").Value))!;
+        var far = session.World.FindEntity(new EntityId(engine.NamedObjects.First(item => item.Key == "Far").Value))!;
+        Check.That(engine.AttackPriority(shooter, far) == 5 && engine.AttackPriority(shooter, near) == 0, "The set gives soldiers priority 5 and everything else the set's default.");
+        Check.That(engine.AttackPriority(far, shooter) == ScriptEngine.DefaultAttackPriority, "An object without a set uses the default priority.");
+        Run(session, 30);
+        Check.That(far.Body!.Health < far.Body.MaxHealth && near.Body!.Health == near.Body.MaxHealth, $"The shooter went for the higher-priority target although another one was nearer (far {far.Body.Health}/{far.Body.MaxHealth}, near {near.Body!.Health}/{near.Body!.MaxHealth}, shots {session.CombatStats}).");
     }
 
     public static void ScriptEngineSnapshotContinuesIdentically()
@@ -301,5 +374,43 @@ static partial class Tests
         Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain, otherMap), "script program");
         var text = System.Text.Encoding.UTF8.GetString(bytes).Replace("\"version\":1,", "\"version\":99,");
         Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(System.Text.Encoding.UTF8.GetBytes(text), fixture.Templates, fixture.Fingerprint, terrain, map), "Unsupported mission state version");
+    }
+}
+
+static partial class Tests
+{
+    public static void MissionBlockerShellModules()
+    {
+        var files = new Dictionary<string, string>(SyntheticFixture.Files)
+        {
+            ["Data/INI/Object/Shells.ini"] = """
+            Object Hunter
+              KindOf = INFANTRY SELECTABLE
+              Body = ActiveBody Body01
+                MaxHealth = 100.0
+                InitialHealth = 100.0
+              End
+              Behavior = CommandButtonHuntUpdate Hunt01
+              End
+              Behavior = LockWeaponCreate Lock01
+                SlotToLock = PRIMARY
+              End
+            End
+            Object Switcher
+              KindOf = INFANTRY SELECTABLE
+              Body = ActiveBody Body01
+                MaxHealth = 100.0
+                InitialHealth = 100.0
+              End
+              Behavior = LockWeaponCreate Lock01
+                SlotToLock = SECONDARY
+              End
+            End
+            """,
+        };
+        var fixture = new SyntheticFixture(files: files);
+        Check.That(fixture.Templates.TryGet("Hunter", out var hunter) && hunter.IsInstantiable, "An object with the command-button hunt shell and a locked primary slot can be created.");
+        Check.That(fixture.Templates.TryGet("Switcher", out var switcher) && !switcher.IsInstantiable && switcher.MissingModules.Any(name => name.StartsWith("LockWeaponCreate", StringComparison.Ordinal)),
+            "Locking any other slot is an unsupported configuration and named as missing: " + string.Join(",", switcher?.MissingModules ?? []));
     }
 }

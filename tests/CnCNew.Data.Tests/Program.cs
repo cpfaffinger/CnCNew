@@ -244,6 +244,8 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // phase 8 E1: projectile flight (docs/GAME-RULES.md §6i), transports and tunnels (§6j)
         "DumbProjectileBehavior", "MissileAIUpdate", "PointDefenseLaserUpdate",
         "TransportAIUpdate", "ChinookAIUpdate", "HelicopterSlowDeathBehavior", "TunnelContain", "HelixContain",
+        // phase 9: shells the campaign maps' placed infantry need (docs/SCRIPT-ENGINE.md §8)
+        "CommandButtonHuntUpdate", "LockWeaponCreate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

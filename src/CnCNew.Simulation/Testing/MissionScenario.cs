@@ -10,10 +10,10 @@ namespace CnCNew.Simulation.Testing;
 
 /// <summary>What a headless mission run observed; identical inputs give an identical report, field for field.</summary>
 public sealed record MissionRunReport(
-    string Map, int Players, int PlacedObjects, int SkippedObjects, int SkippedTemplates, long Ticks, MissionOutcome Outcome, long OutcomeTick, bool Ended,
+    string Map, string OutcomeScript, int Players, int PlacedObjects, int SkippedObjects, int SkippedTemplates, long Ticks, MissionOutcome Outcome, long OutcomeTick, bool Ended,
     long ExecutedScripts, long ExecutedActions, long ForwardedActions, long Entities, long Shots, ulong FinalHash, ulong Chain,
     ImmutableArray<(string Name, long Count)> MissingActions, ImmutableArray<(string Name, long Count)> MissingConditions, ImmutableArray<(string Name, long Count)> Diagnostics,
-    ImmutableArray<(string Template, int Count)> Skipped)
+    ImmutableArray<(string Template, int Count)> Skipped, ImmutableArray<string> Notes)
 {
     public long MissingActionTotal => MissingActions.Sum(item => item.Count);
     public long MissingConditionTotal => MissingConditions.Sum(item => item.Count);
@@ -44,14 +44,14 @@ public static class MissionScenario
     public static MissionRunReport Report(MissionSession session, string name, ulong chain)
     {
         var engine = session.Engine;
-        return new MissionRunReport(name, session.Program.Players.Count(player => !player.Id.IsSystem && player.Name.Length > 0), session.Program.Objects.Length,
+        return new MissionRunReport(name, engine.OutcomeScript, session.Program.Players.Count(player => !player.Id.IsSystem && player.Name.Length > 0), session.Program.Objects.Length,
             session.SkippedObjects.Sum(item => item.Count), session.SkippedObjects.Length, session.World.Tick, engine.Outcome, engine.OutcomeTick, engine.IsEnded,
             engine.ExecutedScripts, engine.ExecutedActions, engine.ForwardedActions, session.World.Entities.Count, session.CombatStats.Shots,
             session.StateHash(), chain,
             [..engine.MissingActionHits.Select(pair => (pair.Key, pair.Value)).OrderByDescending(item => item.Value).ThenBy(item => item.Key, StringComparer.Ordinal)],
             [..engine.MissingConditionHits.Select(pair => (pair.Key, pair.Value)).OrderByDescending(item => item.Value).ThenBy(item => item.Key, StringComparer.Ordinal)],
             [..engine.Diagnostics.Select(pair => (pair.Key, pair.Value)).OrderByDescending(item => item.Value).ThenBy(item => item.Key, StringComparer.Ordinal)],
-            session.SkippedObjects);
+            session.SkippedObjects, session.Notes);
     }
 
     /// <summary>
@@ -78,7 +78,11 @@ public static class MissionScenario
 /// <param name="Outcome">The outcome that was reached (<see cref="MissionOutcome.None"/> when the run timed out).</param>
 /// <param name="EndingScripts">Scripts of the map that end the mission this way (contain the matching VICTORY/DEFEAT action), with whether each was active at the end.</param>
 /// <param name="Unmet">For an ending not reached: per ending script, the conditions that were false at the end (labels); empty when reached.</param>
-public sealed record MissionProbeResult(bool Reached, MissionOutcome Outcome, long TicksToOutcome, ImmutableArray<string> EndingScripts, ImmutableArray<string> Unmet, MissionRunReport Report);
+public sealed record MissionProbeResult(bool Reached, MissionOutcome Outcome, long TicksToOutcome, ImmutableArray<string> EndingScripts, ImmutableArray<string> Unmet, MissionRunReport Report)
+{
+    /// <summary>The mission decided itself before the probe touched anything (for example a defeat because the viewer owns nothing yet); the probe proves nothing then.</summary>
+    public bool DecidedBeforeProbe => TicksToOutcome < 0 && Outcome != MissionOutcome.None;
+}
 
 public static class MissionProbe
 {
@@ -107,7 +111,8 @@ public static class MissionProbe
                 unmet.Add($"{unit.Name}{(session.Engine.IsScriptActive(unit.Name) ? "" : " [inactive]")}: " +
                           string.Join(", ", session.Engine.ExplainScript(unit.Name).Where(item => !item.Result).Select(item => item.Label)));
         var outcomeTick = session.Engine.OutcomeTick;
-        return new MissionProbeResult(session.Engine.Outcome == wanted, session.Engine.Outcome, outcomeTick < 0 ? -1 : outcomeTick - killTick,
+        var decidedEarly = outcomeTick >= 0 && outcomeTick < killTick;
+        return new MissionProbeResult(session.Engine.Outcome == wanted && !decidedEarly, session.Engine.Outcome, outcomeTick < 0 ? -1 : outcomeTick - killTick,
             [..ending.Select(unit => unit.Name + (session.Engine.IsScriptActive(unit.Name) ? "" : " [inactive]"))], unmet.ToImmutable(), MissionScenario.Report(session, terrain.Name, StateHash.Seed));
     }
 }

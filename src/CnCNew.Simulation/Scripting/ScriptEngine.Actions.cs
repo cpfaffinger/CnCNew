@@ -196,6 +196,47 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 3)) SpawnAtWaypoint(string.Empty, Str(p, 0), Str(p, 1), Str(p, 2));
                 break;
 
+            // ---- attack priorities (AttackPriorityInfo, ScriptEngine::setPriorityThing/Kind/Default, updateNamed/TeamAttackPrioritySet)
+            case "SET_ATTACK_PRIORITY_THING":
+                if (Has(type, p, 3))
+                {
+                    var set = PrioritySetFor(Str(p, 0));
+                    var types = _objectLists.TryGetValue(Str(p, 1), out var list) ? list.ToArray() : [Str(p, 1)];
+                    foreach (var name in types)
+                    {
+                        if (!_world.Templates.TryGet(name, out _)) { Diagnose($"attack priority on unknown type '{name}'"); continue; }
+                        set.Rules.Add((false, name, Int(p, 2)));
+                    }
+                }
+                break;
+            case "SET_ATTACK_PRIORITY_KIND_OF":
+                if (Has(type, p, 3)) PrioritySetFor(Str(p, 0)).Rules.Add((true, Str(p, 1), Int(p, 2)));
+                break;
+            case "SET_DEFAULT_ATTACK_PRIORITY":
+                if (Has(type, p, 2)) PrioritySetFor(Str(p, 0)).Default = Int(p, 1);
+                break;
+            case "NAMED_APPLY_ATTACK_PRIORITY_SET":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } prioritized)
+                {
+                    if (_prioritySets.ContainsKey(Str(p, 1))) _prioritySetOf[prioritized.Id.Value] = Str(p, 1);
+                    else Diagnose($"unknown attack priority set '{Str(p, 1)}'");
+                }
+                break;
+            case "TEAM_APPLY_ATTACK_PRIORITY_SET":
+                if (Has(type, p, 2))
+                {
+                    if (!_prioritySets.ContainsKey(Str(p, 1))) { Diagnose($"unknown attack priority set '{Str(p, 1)}'"); break; }
+                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    {
+                        team.AttackPriority = Str(p, 1);
+                        foreach (var member in LiveMembers(team)) _prioritySetOf[member.Id.Value] = Str(p, 1);
+                    }
+                }
+                break;
+            case "CREATE_REINFORCEMENT_TEAM":
+                if (Has(type, p, 2)) CreateReinforcements(Str(p, 0), Str(p, 1));
+                break;
+
             // ---- orders (player commands; see OrderMove)
             case "MOVE_NAMED_UNIT_TO":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } walker && WaypointOrDiagnose(Str(p, 1)) is { } spot) MoveTo(walker, spot.X, spot.Y);
@@ -296,7 +337,11 @@ public sealed partial class ScriptEngine
     private void End(MissionOutcome outcome, long delay)
     {
         Outcome = outcome;
-        if (OutcomeTick < 0) OutcomeTick = _tick;
+        if (OutcomeTick < 0)
+        {
+            OutcomeTick = _tick;
+            OutcomeScript = _runningScript;
+        }
         _endTimer = delay;
         Output(outcome == MissionOutcome.Victory ? "VICTORY" : "DEFEAT");
     }
@@ -318,7 +363,7 @@ public sealed partial class ScriptEngine
         if (_options.PresentationLatencyTicks <= 0) return;
         var key = action.TypeName switch
         {
-            "SPEECH_PLAY" or "SOUND_PLAY_NAMED" or "MOVIE_PLAY_FULLSCREEN" or "MOVIE_PLAY_RADAR" when arguments.Length > 0 => arguments[0],
+            "SPEECH_PLAY" or "SOUND_PLAY_NAMED" or "MOVIE_PLAY_FULLSCREEN" or "MOVIE_PLAY_RADAR" or "MUSIC_SET_TRACK" when arguments.Length > 0 => arguments[0],
             "MOVE_CAMERA_TO" or "MOVE_CAMERA_ALONG_WAYPOINT_PATH" or "ROTATE_CAMERA" or "RESET_CAMERA" or "MOVE_CAMERA_TO_SELECTION" or "CAMERA_MOVE_HOME" => "<camera>",
             _ => null,
         };
@@ -355,7 +400,51 @@ public sealed partial class ScriptEngine
         var id = _world.RequestSpawn(template.Index, team.Owner, x, y, z, angle);
         team.Members.Add(id.Value);
         team.Created = true;
+        if (team.AttackPriority.Length > 0) _prioritySetOf[id.Value] = team.AttackPriority;
+        _world.MaterializePendingSpawns();
         if (unitName.Length > 0) RegisterNamed(unitName, id);
+    }
+
+    private PrioritySet PrioritySetFor(string name)
+    {
+        if (!_prioritySets.TryGetValue(name, out var set)) _prioritySets[name] = set = new PrioritySet();
+        return set;
+    }
+
+    /// <summary>
+    /// <c>ScriptActions::doCreateReinforcements</c>, without the transport: the team's units (<c>teamUnitMaxCount</c> of each type) appear at the team's
+    /// reinforcement origin (or at the destination) in a row and, when they came from an origin, walk to the destination. A team with a transport
+    /// (<c>teamTransport</c>, <c>teamStartsFull</c>) would arrive inside it; the transport and its loading are not simulated, which is counted as
+    /// <c>reinforcement transport not simulated</c> (<c>MAP-SCRIPTS.md</c> §8).
+    /// </summary>
+    private void CreateReinforcements(string teamName, string destinationName)
+    {
+        if (WaypointOrDiagnose(destinationName) is not { } destination) return;
+        var prototype = _program.FindTeam(teamName);
+        if (prototype is null) { Diagnose($"unknown team '{teamName}'"); return; }
+        var origin = prototype.ReinforcementOrigin.Length > 0 ? _program.FindWaypoint(prototype.ReinforcementOrigin) : null;
+        var start = origin ?? destination;
+        var team = CreateTeam(teamName);
+        if (team is null) return;
+        if (prototype.Transport.Length > 0) Diagnose($"reinforcement transport not simulated '{prototype.Transport}'");
+        var row = Fixed.Zero;
+        foreach (var unit in prototype.Units)
+        {
+            if (!_world.Templates.TryGet(unit.Type, out var template)) { Diagnose($"unknown object type '{unit.Type}'"); continue; }
+            if (!template.IsInstantiable) { Diagnose($"not instantiable '{unit.Type}'"); continue; }
+            for (var index = 0; index < unit.MaxCount; index++)
+            {
+                // "pos.x = origin.x + 2.25 * j * majorRadius": a row along x, one row per unit type along y.
+                var x = start.X + Fixed.FromInt(9) * index / Fixed.FromInt(4) * template.GeometryMajorRadius;
+                var id = _world.RequestSpawn(template.Index, team.Owner, x, start.Y + row, start.Z, Fixed.Zero);
+                team.Members.Add(id.Value);
+                if (team.AttackPriority.Length > 0) _prioritySetOf[id.Value] = team.AttackPriority;
+                if (origin is not null && (origin.X != destination.X || origin.Y != destination.Y)) _followers[id.Value] = new Follower { Entity = id.Value, Path = PositionMode + destinationName, Index = 0 };
+            }
+            row += template.GeometryMajorRadius * 2;
+        }
+        team.Created = true;
+        _world.MaterializePendingSpawns();
     }
 
     // ------------------------------------------------------------------------------------------------ orders
@@ -380,6 +469,7 @@ public sealed partial class ScriptEngine
     {
         if (entity.Template.Locomotor is null || entity.Owner.IsSystem) return;
         _followers[entity.Id.Value] = new Follower { Entity = entity.Id.Value, Path = mode, Index = 0 };
+        _completedPath.Remove(entity.Id.Value);
     }
 
     /// <summary>
@@ -405,7 +495,12 @@ public sealed partial class ScriptEngine
                     if (follower.Index >= path.Waypoints.Length)
                     {
                         if (path.Loops) follower.Index = 0;
-                        else { _followers.Remove(follower.Entity); continue; }
+                        else
+                        {
+                            _completedPath[follower.Entity] = path.Label;
+                            _followers.Remove(follower.Entity);
+                            continue;
+                        }
                     }
                     waypoint = path.Waypoints[follower.Index];
                 }
@@ -444,16 +539,20 @@ public sealed partial class ScriptEngine
         return dx * dx + dy * dy;
     }
 
+    /// <summary>The enemy a hunting object heads for: highest attack priority first, then the nearest (<c>AI::findClosestEnemy</c> with the priority info).</summary>
     private Entity? NearestEnemy(Entity from)
     {
         Entity? best = null;
+        var bestPriority = int.MinValue;
         var bestDistance = Fixed.MaxValue;
         foreach (var candidate in _world.Entities.OrderBy(value => value.Id.Value))
         {
             if (candidate.Owner.IsSystem || !CountsAsObject(candidate) || !_world.AreEnemies(from.Owner, candidate.Owner)) continue;
+            var priority = AttackPriority(from, candidate);
             var distance = DistanceSquared(from, candidate.X, candidate.Y);
-            if (distance >= bestDistance) continue;
+            if (priority < bestPriority || (priority == bestPriority && distance >= bestDistance)) continue;
             best = candidate;
+            bestPriority = priority;
             bestDistance = distance;
         }
         return best;

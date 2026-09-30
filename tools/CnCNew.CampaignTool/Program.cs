@@ -141,8 +141,8 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
                     defeatProbes++;
                     if (victory.Reached) victoryReached++;
                     if (defeat.Reached) defeatReached++;
-                    win = victory.Reached ? $"win@{victory.TicksToOutcome}" : victory.EndingScripts.IsEmpty ? "win:no-script" : "win:UNMET";
-                    lose = defeat.Reached ? $"lose@{defeat.TicksToOutcome}" : defeat.EndingScripts.IsEmpty ? "lose:no-script" : "lose:UNMET";
+                    win = victory.Reached ? $"win@{victory.TicksToOutcome}" : victory.DecidedBeforeProbe ? $"win:early-{victory.Outcome}[{victory.Report.OutcomeScript}]" : victory.EndingScripts.IsEmpty ? "win:no-script" : "win:UNMET";
+                    lose = defeat.Reached ? $"lose@{defeat.TicksToOutcome}" : defeat.DecidedBeforeProbe ? $"lose:early-{defeat.Outcome}" : defeat.EndingScripts.IsEmpty ? "lose:no-script" : "lose:UNMET";
                     if (explain)
                     {
                         foreach (var line in victory.Unmet) Console.WriteLine($"      victory unmet: {line}");
@@ -160,6 +160,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
                 foreach (var item in first.MissingActions) { missing[item.Name] = missing.GetValueOrDefault(item.Name) + item.Count; missingMissions[item.Name] = missingMissions.GetValueOrDefault(item.Name) + 1; }
                 foreach (var item in first.MissingConditions) { missingConditions[item.Name] = missingConditions.GetValueOrDefault(item.Name) + item.Count; missingConditionMissions[item.Name] = missingConditionMissions.GetValueOrDefault(item.Name) + 1; }
                 foreach (var item in first.Diagnostics) diagnostics[item.Name] = diagnostics.GetValueOrDefault(item.Name) + item.Count;
+                foreach (var note in first.Notes) Console.WriteLine($"      note: {note}");
                 foreach (var item in first.Skipped) skippedTemplates[item.Template] = skippedTemplates.GetValueOrDefault(item.Template) + item.Count;
                 Console.WriteLine($"{campaign.Name,-12} {mission.Name,-9} {Path.GetFileNameWithoutExtension(mission.MapPath),-24} objs {first.PlacedObjects - first.SkippedObjects,5}/{first.PlacedObjects,-5} scripts {first.ExecutedScripts,4} acts {first.ExecutedActions,5} fwd {first.ForwardedActions,4} miss {first.MissingActionTotal,4}/{first.MissingConditionTotal,-8} {(same ? "det" : "DIVERGES")} {(restoredOk ? "sav" : "SAVE-DIVERGES")} {win} {lose} [{watch.Elapsed.TotalSeconds:F0}s]");
             }
@@ -172,7 +173,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
     }
     Console.WriteLine();
     Console.WriteLine($"{run} missions run ({failed} failed to load or run), {deterministic} identical on a second run, {continued} identical after save/restore; {watch.Elapsed.TotalSeconds:F0} s.");
-    if (probes) Console.WriteLine($"Scripted endings reached by elimination: victory {victoryReached}/{victoryProbes}, defeat {defeatReached}/{defeatProbes}.");
+    if (probes) Console.WriteLine($"Scripted endings reached by elimination: victory {victoryReached}/{victoryProbes}, defeat {defeatReached}/{defeatProbes} (an ending the mission reached by itself before the probe does not count).");
     var actionTotal = executedActions + forwardedActions + missingActionTotal;
     Console.WriteLine($"Scripts executed {executedScripts}; actions executed {executedActions}, forwarded {forwardedActions}, missing hits {missingActionTotal} ({(actionTotal == 0 ? 0 : 100.0 * missingActionTotal / actionTotal):F1} % of action executions); missing condition hits {missingConditionTotal}.");
     Console.WriteLine("Missing actions (hits / missions):");

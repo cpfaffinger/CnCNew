@@ -26,6 +26,8 @@ internal static class RetailMatchModules
         new ModuleBinding<EjectPilotDieData>("EjectPilotDie", ModuleOwnerKind.Object, (configuration, _) => EjectPilotDieData.Parse(configuration), data => new EjectPilotDie(data)),
         new ModuleBinding<VeterancyGainCreateData>("VeterancyGainCreate", ModuleOwnerKind.Object, (configuration, _) => VeterancyGainCreateData.Parse(configuration), data => new VeterancyGainCreate(data)),
         new ModuleBinding<NoFieldsData>("PreorderCreate", ModuleOwnerKind.Object, (_, _) => NoFieldsData.Instance, _ => new PreorderCreate()),
+        new ModuleBinding<CommandButtonHuntData>("CommandButtonHuntUpdate", ModuleOwnerKind.Object, (configuration, _) => CommandButtonHuntData.Parse(configuration), data => new CommandButtonHuntUpdate(data)),
+        new ModuleBinding<LockWeaponCreateData>("LockWeaponCreate", ModuleOwnerKind.Object, (configuration, _) => LockWeaponCreateData.Parse(configuration), data => new LockWeaponCreate(data)),
         new ModuleBinding<RadarUpdateData>("RadarUpdate", ModuleOwnerKind.Object, (configuration, _) => RadarUpdateData.Parse(configuration), data => new RadarUpdate(data)),
         new ModuleBinding<PowerPlantUpdateData>("PowerPlantUpdate", ModuleOwnerKind.Object, (configuration, _) => PowerPlantUpdateData.Parse(configuration), data => new PowerPlantUpdate(data)),
         new ModuleBinding<OverchargeData>("OverchargeBehavior", ModuleOwnerKind.Object, (configuration, _) => OverchargeData.Parse(configuration), data => new OverchargeBehavior(data)),
@@ -184,6 +186,52 @@ public sealed class VeterancyGainCreate(VeterancyGainCreateData data) : SimModul
 public sealed class PreorderCreate : SimModule
 {
     public override string ModuleName => "PreorderCreate";
+    public override void Describe(IStateWriter writer) { }
+    public override void Load(IStateReader reader) { }
+}
+
+// ============================================================================================================ CommandButtonHuntUpdate
+
+public sealed record CommandButtonHuntData(long ScanTicks, Fixed ScanRange) : ModuleData
+{
+    public static CommandButtonHuntData Parse(ModuleConfiguration configuration)
+        => new(ModuleConfigReader.Ticks(configuration, "ScanRate", 0), ModuleConfigReader.Real(configuration, "ScanRange", Fixed.Zero));
+}
+
+/// <summary>
+/// <c>CommandButtonHuntUpdate.cpp</c> only ever acts after a script told the object which command button to hunt with
+/// (<c>TEAM_HUNT_WITH_COMMAND_BUTTON</c>, <c>ScriptActions::doTeamHuntWithCommandButton</c>); on its own it does nothing, which is what all 86 uses in the
+/// shipped data rely on ("allows use of command button hunt script with this unit"). The module therefore exists so that such objects can be created, and
+/// keeps no state: the script actions that would drive it are not implemented and are counted as missing by the script engine, never skipped silently
+/// (<c>docs/MAP-SCRIPTS.md</c> §8).
+/// </summary>
+public sealed class CommandButtonHuntUpdate(CommandButtonHuntData data) : SimModule
+{
+    public override string ModuleName => "CommandButtonHuntUpdate";
+    public CommandButtonHuntData Data => data;
+    public override void Describe(IStateWriter writer) { }
+    public override void Load(IStateReader reader) { }
+}
+
+// ============================================================================================================ LockWeaponCreate
+
+public sealed record LockWeaponCreateData : ModuleData
+{
+    public static LockWeaponCreateData Parse(ModuleConfiguration configuration)
+    {
+        // The simulation fires one weapon (the default, or the player-upgraded one) and has no weapon-slot switching, so locking the primary slot for good
+        // changes nothing; any other slot would pin the object to a weapon it never selects, which is not modelled.
+        var slot = ModuleConfigReader.Text(configuration, "SlotToLock");
+        if (slot.Length > 0 && !slot.Equals("PRIMARY", StringComparison.OrdinalIgnoreCase)) throw new UnsupportedModuleConfigurationException("SlotToLock " + slot);
+        return new LockWeaponCreateData();
+    }
+}
+
+/// <summary><c>LockWeaponCreate.cpp</c>: <c>onBuildComplete</c> locks a weapon slot permanently. With a single modelled weapon slot a locked primary slot is the normal state, so the module keeps no state (see <see cref="LockWeaponCreateData"/>).</summary>
+public sealed class LockWeaponCreate(LockWeaponCreateData data) : SimModule
+{
+    public override string ModuleName => "LockWeaponCreate";
+    public LockWeaponCreateData Data => data;
     public override void Describe(IStateWriter writer) { }
     public override void Load(IStateReader reader) { }
 }

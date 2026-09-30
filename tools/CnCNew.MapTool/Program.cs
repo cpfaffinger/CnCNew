@@ -34,7 +34,7 @@ if (args is ["dump", var dumpDirectory, var dumpPath])
     var content = ContentFileSystem.Open(dumpDirectory);
     using var stream = content.OpenRead(dumpPath);
     var map = SageMapDecoder.Decode(stream);
-    string Props(MapProperties properties) => string.Join(", ", properties.Items.Select(item => $"{item.Key}={(item.Type is MapPropertyType.Ascii or MapPropertyType.Unicode ? item.Text : item.Type == MapPropertyType.Real ? item.Real.ToString(CultureInfo.InvariantCulture) : item.Integer.ToString(CultureInfo.InvariantCulture))}"));
+    string Props(MapProperties properties) => string.Join(", ", properties.Items.Select(item => $"{item.Key}:{item.Type.ToString()[0]}={(item.Type is MapPropertyType.Ascii or MapPropertyType.Unicode ? item.Text : item.Type == MapPropertyType.Real ? item.Real.ToString(CultureInfo.InvariantCulture) : item.Integer.ToString(CultureInfo.InvariantCulture))}"));
     Console.WriteLine($"world: {Props(map.WorldInfo)}");
     for (var index = 0; index < map.Sides.Length; index++) Console.WriteLine($"side {index}: {Props(map.Sides[index].Properties)}");
     foreach (var team in map.Teams) Console.WriteLine($"team: {Props(team)}");

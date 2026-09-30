@@ -38,6 +38,9 @@ public sealed class ScriptTeam(int id, string prototype, PlayerId owner)
 
     /// <summary><c>Team::isCreated</c>: the team has been activated (here: it has ever had a member).</summary>
     public bool Created { get; set; }
+
+    /// <summary><c>Team::setAttackPriorityName</c>: the attack priority set members get, new ones included.</summary>
+    public string AttackPriority { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -56,6 +59,9 @@ public sealed partial class ScriptEngine
     /// <summary><c>FRAMES_TO_SHOW_WIN_LOSE_MESSAGE</c> (<c>ScriptEngine.cpp</c>): how long scripts keep running after a victory or defeat before the game ends.</summary>
     public const int EndGameDelayTicks = 120;
 
+    /// <summary><c>ATTACK_PRIORITY_DEFAULT</c> (<c>ScriptEngine.cpp</c>).</summary>
+    public const int DefaultAttackPriority = 1;
+
     private const int MaxSubroutineDepth = 32;
     private const string ThisPlayerName = "<This Player>";
     private const string LocalPlayerName = "<Local Player>";
@@ -65,6 +71,16 @@ public sealed partial class ScriptEngine
     {
         public long Value;
         public bool IsTimer;
+    }
+
+    /// <summary><c>BodyModule::getLastDamageInfo</c>: who hurt an object last (never reset), as far as the script conditions read it.</summary>
+    private readonly record struct LastDamage(int Owner, string Template);
+
+    /// <summary><c>AttackPriorityInfo</c>: a named set of target priorities. Rules apply in the order they were given, the last matching one wins (the reference writes kind rules into the same per-type map as type rules).</summary>
+    private sealed class PrioritySet
+    {
+        public int Default = DefaultAttackPriority;
+        public readonly List<(bool IsKind, string Name, int Priority)> Rules = [];
     }
 
     private sealed class Follower
@@ -91,6 +107,11 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<string, SortedSet<string>> _objectLists = new(StringComparer.Ordinal);
     private readonly SortedDictionary<int, ScriptTeam> _teams = [];
     private readonly SortedDictionary<uint, Follower> _followers = [];
+    private readonly SortedDictionary<uint, LastDamage> _lastDamage = [];
+    private readonly SortedDictionary<uint, string> _completedPath = [];
+    private readonly SortedDictionary<uint, int> _lastEntered = [];
+    private readonly SortedDictionary<uint, string> _prioritySetOf = [];
+    private readonly SortedDictionary<string, PrioritySet> _prioritySets = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, long> _pendingPresentation = new(StringComparer.Ordinal);
     private readonly SortedSet<string> _uiInteractions = new(StringComparer.Ordinal);
     private readonly SortedSet<uint> _selected = [];
@@ -107,6 +128,7 @@ public sealed partial class ScriptEngine
     private int _currentList;
     private ScriptTeam? _callingTeam;
     private int _depth;
+    private string _runningScript = string.Empty;
     private long _executedScripts;
     private long _executedActions;
     private long _forwardedActions;
@@ -145,6 +167,9 @@ public sealed partial class ScriptEngine
     /// <summary>The tick the outcome was decided (<c>VICTORY</c>/<c>DEFEAT</c> executed), or -1.</summary>
     public long OutcomeTick { get; private set; } = -1;
 
+    /// <summary>The script whose <c>VICTORY</c>/<c>DEFEAT</c> action decided the mission (empty when none did).</summary>
+    public string OutcomeScript { get; private set; } = string.Empty;
+
     /// <summary>The end-game delay is over: the script engine no longer runs and the client should leave the mission.</summary>
     public bool IsEnded { get; private set; }
 
@@ -178,6 +203,20 @@ public sealed partial class ScriptEngine
         return result;
     }
 
+    /// <summary>
+    /// <c>AttackPriorityInfo::getPriority</c> for the set an object was given (<c>*_APPLY_ATTACK_PRIORITY_SET</c>): the priority of <paramref name="target"/>'s
+    /// type, the set's default when no rule matches, and <see cref="DefaultAttackPriority"/> for an object without a set. The session's combat and the hunt
+    /// orders pick the highest priority, nearest first (<c>TheAI->findClosestEnemy</c> with the priority info).
+    /// </summary>
+    public int AttackPriority(Entity attacker, Entity target)
+    {
+        if (!_prioritySetOf.TryGetValue(attacker.Id.Value, out var name) || !_prioritySets.TryGetValue(name, out var set)) return DefaultAttackPriority;
+        var priority = set.Default;
+        foreach (var (isKind, ruleName, value) in set.Rules)
+            if (isKind ? target.Template.IsKindOf(ruleName) : string.Equals(target.Template.Name, ruleName, StringComparison.Ordinal)) priority = value;
+        return priority;
+    }
+
     // ------------------------------------------------------------------------------------------------ host interface
 
     /// <summary><c>TheScriptEngine->addObjectToCache</c>: makes an existing object addressable by a script name (map objects with <c>objectName</c>).</summary>
@@ -185,6 +224,7 @@ public sealed partial class ScriptEngine
     {
         if (string.IsNullOrEmpty(name)) return;
         _named[name] = id.Value;
+        if (_world.FindEntity(id) is not null) _everNamed.Add(name);
     }
 
     /// <summary>Puts an object into a team instance (map objects join the singleton team of their <c>originalOwner</c>).</summary>
@@ -209,6 +249,27 @@ public sealed partial class ScriptEngine
 
     /// <summary>A speech, sound, movie or camera move has finished playing on the client.</summary>
     public void CompletePresentation(string name) => _pendingPresentation.Remove(name);
+
+    /// <summary>
+    /// Feeds the tick's world events to the engine (call with <see cref="TickResult.Events"/> after every world step): damage events record the last
+    /// attacker of each object for the <c>*_ATTACKED_BY_*</c> conditions. The attacker's owner and type are read at this point, after the step, so an
+    /// attacker that died in the same tick is recorded with an unknown owner (the reference stores the source player mask at damage time).
+    /// </summary>
+    public void Observe(IReadOnlyList<CnCNew.Simulation.Events.SimEvent> events)
+    {
+        foreach (var item in events)
+        {
+            if (item.Kind == CnCNew.Simulation.Events.SimEventKind.EntityContained && item.Other.IsValid)
+            {
+                // ContainModuleInterface::getPlayerWhoEntered: the owner of the last object that entered the container.
+                if (_world.FindEntity(item.Entity) is { } entered) _lastEntered[item.Other.Value] = entered.Owner.Value;
+                continue;
+            }
+            if (item.Kind != CnCNew.Simulation.Events.SimEventKind.EntityDamaged || !item.Other.IsValid) continue;
+            var attacker = _world.FindEntity(item.Other);
+            _lastDamage[item.Entity.Value] = attacker is null ? new LastDamage(-1, string.Empty) : new LastDamage(attacker.Owner.Value, attacker.Template.Name);
+        }
+    }
 
     // ------------------------------------------------------------------------------------------------ update
 
@@ -252,6 +313,14 @@ public sealed partial class ScriptEngine
     private void ExecuteScript(ScriptUnit unit)
     {
         var script = unit.Script;
+        var outerScript = _runningScript;
+        _runningScript = script.Name;
+        try { ExecuteScriptBody(unit, script); }
+        finally { _runningScript = outerScript; }
+    }
+
+    private void ExecuteScriptBody(ScriptUnit unit, MapScript script)
+    {
         if (!_scriptActive[unit.Index]) return;
         var allowed = _options.Difficulty switch
         {
@@ -479,6 +548,10 @@ public sealed partial class ScriptEngine
             if (!_everNamed.Contains(name) && _world.FindEntity(new EntityId(id)) is not null) _everNamed.Add(name);
         foreach (var team in _teams.Values)
             team.Members.RemoveAll(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null);
+        foreach (var gone in _lastDamage.Keys.Where(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null).ToArray()) _lastDamage.Remove(gone);
+        foreach (var gone in _lastEntered.Keys.Where(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null).ToArray()) _lastEntered.Remove(gone);
+        foreach (var gone in _prioritySetOf.Keys.Where(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null).ToArray()) _prioritySetOf.Remove(gone);
+        foreach (var gone in _completedPath.Keys.Where(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null).ToArray()) _completedPath.Remove(gone);
     }
 
     internal static bool CountsAsObject(Entity entity)
@@ -499,6 +572,7 @@ public sealed partial class ScriptEngine
         writer.Int("tick", _tick);
         writer.Int("outcome", (int)Outcome);
         writer.Int("outcomeTick", OutcomeTick);
+        writer.Text("outcomeScript", OutcomeScript);
         writer.Int("endTimer", _endTimer);
         writer.Bool("ended", IsEnded);
         writer.Int("nextTeamId", _nextTeamId);
@@ -583,6 +657,7 @@ public sealed partial class ScriptEngine
             writer.Text("prototype", team.Prototype);
             writer.Int("owner", team.Owner.Value);
             writer.Bool("created", team.Created);
+            writer.Text("attackPriority", team.AttackPriority);
             writer.BeginArray("members");
             foreach (var member in team.Members.Order())
             {
@@ -601,6 +676,62 @@ public sealed partial class ScriptEngine
             writer.UInt("entity", follower.Entity);
             writer.Text("path", follower.Path);
             writer.Int("index", follower.Index);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.BeginArray("lastDamage");
+        foreach (var (victim, damage) in _lastDamage)
+        {
+            writer.BeginObject(null);
+            writer.UInt("victim", victim);
+            writer.Int("owner", damage.Owner);
+            writer.Text("template", damage.Template);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.BeginArray("entered");
+        foreach (var (container, player) in _lastEntered)
+        {
+            writer.BeginObject(null);
+            writer.UInt("container", container);
+            writer.Int("player", player);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.BeginArray("prioritySets");
+        foreach (var (name, set) in _prioritySets)
+        {
+            writer.BeginObject(null);
+            writer.Text("name", name);
+            writer.Int("default", set.Default);
+            writer.BeginArray("rules");
+            foreach (var (isKind, ruleName, priority) in set.Rules)
+            {
+                writer.BeginObject(null);
+                writer.Bool("kind", isKind);
+                writer.Text("type", ruleName);
+                writer.Int("priority", priority);
+                writer.EndObject();
+            }
+            writer.EndArray();
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.BeginArray("prioritySetOf");
+        foreach (var (entity, set) in _prioritySetOf)
+        {
+            writer.BeginObject(null);
+            writer.UInt("entity", entity);
+            writer.Text("set", set);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.BeginArray("completedPaths");
+        foreach (var (entity, path) in _completedPath)
+        {
+            writer.BeginObject(null);
+            writer.UInt("entity", entity);
+            writer.Text("path", path);
             writer.EndObject();
         }
         writer.EndArray();
@@ -660,6 +791,7 @@ public sealed partial class ScriptEngine
         if (!Enum.IsDefined((MissionOutcome)outcome)) throw new InvalidDataException("Unknown mission outcome in script state.");
         Outcome = (MissionOutcome)outcome;
         OutcomeTick = reader.Int("outcomeTick");
+        OutcomeScript = reader.Text("outcomeScript");
         _endTimer = reader.Int("endTimer");
         IsEnded = reader.Bool("ended");
         _nextTeamId = checked((int)reader.Int("nextTeamId"));
@@ -695,13 +827,28 @@ public sealed partial class ScriptEngine
         _teams.Clear();
         foreach (var item in reader.Array("teams"))
         {
-            var team = new ScriptTeam(checked((int)item.Int("id")), item.Text("prototype"), new PlayerId(checked((int)item.Int("owner")))) { Created = item.Bool("created") };
+            var team = new ScriptTeam(checked((int)item.Int("id")), item.Text("prototype"), new PlayerId(checked((int)item.Int("owner")))) { Created = item.Bool("created"), AttackPriority = item.Text("attackPriority") };
             foreach (var member in item.Array("members")) team.Members.Add(checked((uint)member.UInt("id")));
             _teams[team.Id] = team;
         }
         _followers.Clear();
         foreach (var item in reader.Array("followers"))
             _followers[checked((uint)item.UInt("entity"))] = new Follower { Entity = checked((uint)item.UInt("entity")), Path = item.Text("path"), Index = checked((int)item.Int("index")) };
+        _lastDamage.Clear();
+        foreach (var item in reader.Array("lastDamage")) _lastDamage[checked((uint)item.UInt("victim"))] = new LastDamage(checked((int)item.Int("owner")), item.Text("template"));
+        _lastEntered.Clear();
+        foreach (var item in reader.Array("entered")) _lastEntered[checked((uint)item.UInt("container"))] = checked((int)item.Int("player"));
+        _prioritySets.Clear();
+        foreach (var item in reader.Array("prioritySets"))
+        {
+            var set = new PrioritySet { Default = checked((int)item.Int("default")) };
+            foreach (var rule in item.Array("rules")) set.Rules.Add((rule.Bool("kind"), rule.Text("type"), checked((int)rule.Int("priority"))));
+            _prioritySets[item.Text("name")] = set;
+        }
+        _prioritySetOf.Clear();
+        foreach (var item in reader.Array("prioritySetOf")) _prioritySetOf[checked((uint)item.UInt("entity"))] = item.Text("set");
+        _completedPath.Clear();
+        foreach (var item in reader.Array("completedPaths")) _completedPath[checked((uint)item.UInt("entity"))] = item.Text("path");
         _pendingPresentation.Clear();
         foreach (var item in reader.Array("presentation")) _pendingPresentation[item.Text("name")] = item.Int("until");
         _areaInside.Clear();

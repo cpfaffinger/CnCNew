@@ -5159,7 +5159,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3974,
+      "count": 3878,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5800,15 +5800,6 @@
     },
     {
       "category": "module",
-      "name": "CommandButtonHuntUpdate",
-      "count": 85,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "ConvertToCarBombCrateCollide",
       "count": 8,
       "owners": [
@@ -6072,15 +6063,6 @@
       "category": "module",
       "name": "LeafletDropBehavior",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "LockWeaponCreate",
-      "count": 11,
       "owners": [
         "Object"
       ],

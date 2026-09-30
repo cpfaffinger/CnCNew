@@ -502,6 +502,12 @@ public static class ModuleCatalog
             new("ScienceRequired", FieldType.Reference, ReferenceKind: DefinitionKind.Science, Source: "VeterancyGainCreate.cpp"),
         ]);
         Add("PreorderCreate", []);
+        Add("CommandButtonHuntUpdate",
+        [
+            new("ScanRate", FieldType.DurationMs, Source: "CommandButtonHuntUpdate.cpp"),
+            Real("ScanRange", "CommandButtonHuntUpdate.cpp"),
+        ]);
+        Add("LockWeaponCreate", [new("SlotToLock", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "LockWeaponCreate.cpp")]);
         Add("PowerPlantUpdate", [new("RodsExtendTime", FieldType.DurationMs, Source: "PowerPlantUpdate.cpp")]);
         Add("PowerPlantUpgrade", [..UpgradeMux()]);
         Add("OverchargeBehavior",

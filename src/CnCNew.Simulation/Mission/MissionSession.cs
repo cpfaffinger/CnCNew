@@ -62,7 +62,7 @@ public sealed class MissionSession
     /// <summary>Placed objects that were not created because their template cannot be instantiated yet, by template name (ordinal order).</summary>
     public ImmutableArray<(string Template, int Count)> SkippedObjects { get; private set; } = [];
 
-    public ImmutableArray<string> Notes { get; }
+    public ImmutableArray<string> Notes { get; private set; }
     public MissionCombatStats CombatStats => new(_shots, _rejectedShots);
     public MissionOutcome Outcome => Engine.Outcome;
 
@@ -88,7 +88,9 @@ public sealed class MissionSession
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), options.WorldSeed, ConfiguredPlayers(program, catalog, notes), FixtureId, fingerprint, terrain.Fingerprint), catalog, terrain);
         ApplyRelations(world, program);
         var session = new MissionSession(options, world, program, map, [..notes]);
-        session.PlaceObjects(catalog);
+        session.PlaceObjects(catalog, terrain);
+        // The reference creates the map's objects synchronously while loading, so the first script evaluation already sees them.
+        world.MaterializePendingSpawns();
         return session;
     }
 
@@ -127,7 +129,7 @@ public sealed class MissionSession
         }
     }
 
-    private void PlaceObjects(TemplateCatalog catalog)
+    private void PlaceObjects(TemplateCatalog catalog, TerrainMap terrain)
     {
         var skipped = new SortedDictionary<string, int>(StringComparer.Ordinal);
         foreach (var placed in Program.Objects)
@@ -143,7 +145,69 @@ public sealed class MissionSession
             if (placed.ScriptName.Length > 0) Engine.RegisterNamed(placed.ScriptName, id);
             if (prototype is not null) Engine.AssignToTeam(prototype.Name, id);
         }
+        PlaceBuildLists(catalog, skipped);
+        PlaceHumanStarts(catalog, terrain, skipped);
         SkippedObjects = [..skipped.Select(pair => (pair.Key, pair.Value))];
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::newMap</c>: a computer player's build list entries flagged <c>InitiallyBuilt</c> stand finished at mission start (<c>buildStructureNow</c>),
+    /// named by the entry's <c>buildingName</c> and at its initial health.
+    /// </summary>
+    private void PlaceBuildLists(TemplateCatalog catalog, SortedDictionary<string, int> skipped)
+    {
+        for (var side = 0; side < Map.Sides.Length && side < Program.Players.Length; side++)
+        {
+            var player = Program.Players[side];
+            if (player.IsHuman || player.Id.IsSystem || !World.HasPlayer(player.Id)) continue;
+            foreach (var entry in Map.Sides[side].BuildList)
+            {
+                if (!entry.InitiallyBuilt || entry.Template.Length == 0) continue;
+                if (!catalog.TryGet(entry.Template, out var template) || !template.IsInstantiable)
+                {
+                    skipped[entry.Template] = skipped.GetValueOrDefault(entry.Template) + 1;
+                    continue;
+                }
+                var id = World.RequestSpawn(template.Index, player.Id, Fixed.FromDecimal(entry.X), Fixed.FromDecimal(entry.Y), Fixed.Zero, Fixed.FromDecimal(entry.Angle), entry.Health);
+                if (entry.BuildingName.Length > 0) Engine.RegisterNamed(entry.BuildingName, id);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A human side that owns nothing on the map but has a playable faction and a start position (the Generals' Challenge maps) starts like a skirmish player:
+    /// the faction's base building on its <c>Player_N_Start</c> waypoint and the faction's start units in a ring around it. Sides that own placed objects
+    /// (campaign maps) keep exactly what the map gives them.
+    /// </summary>
+    private void PlaceHumanStarts(TemplateCatalog catalog, TerrainMap terrain, SortedDictionary<string, int> skipped)
+    {
+        var starts = terrain.StartPositions;
+        var humans = 0;
+        foreach (var player in Program.Players)
+        {
+            if (!player.IsHuman || player.Id.IsSystem || !World.HasPlayer(player.Id)) continue;
+            var startIndex = humans++;
+            if (startIndex >= starts.Length || Program.Objects.Any(item => item.TeamName.Length > 0 && Program.FindTeam(item.TeamName)?.Owner == player.Name)) continue;
+            if (!catalog.Factions.TryGet(player.Faction, out var faction) || faction.StartingBuilding.Length == 0 || !catalog.TryGet(faction.StartingBuilding, out var building) || !building.IsInstantiable)
+            {
+                Notes = [..Notes, $"{player.Name}: no base to start with (faction '{player.Faction}')"];
+                continue;
+            }
+            var (bx, by) = (starts[startIndex].X, starts[startIndex].Y);
+            var center = World.RequestSpawn(building.Index, player.Id, bx, by, Fixed.Zero, Fixed.Zero);
+            if (Program.FindTeam("team" + player.Name) is { } startTeam) Engine.AssignToTeam(startTeam.Name, center);
+            var ring = building.BoundingCircleRadius + Fixed.FromInt(30);
+            for (var index = 0; index < faction.StartingUnits.Length; index++)
+            {
+                if (!catalog.TryGet(faction.StartingUnits[index], out var unit) || !unit.IsInstantiable)
+                {
+                    skipped[faction.StartingUnits[index]] = skipped.GetValueOrDefault(faction.StartingUnits[index]) + 1;
+                    continue;
+                }
+                var angle = FixedTrig.TwoPi * index / Fixed.FromInt(Math.Max(1, faction.StartingUnits.Length));
+                World.RequestSpawn(unit.Index, player.Id, bx + FixedTrig.Cos(angle) * ring, by + FixedTrig.Sin(angle) * ring, Fixed.Zero, angle);
+            }
+        }
     }
 
     // ------------------------------------------------------------------------------------------------------ stepping
@@ -154,7 +218,9 @@ public sealed class MissionSession
         var tick = World.Tick;
         Engine.Update(tick);
         if (Options.CombatIntervalTicks > 0) DriveCombat(tick);
-        return World.Step();
+        var result = World.Step();
+        Engine.Observe(result.Events);
+        return result;
     }
 
     /// <summary>Submits a command of <paramref name="player"/> at the current tick; the per-player sequence is assigned here, so every source of commands (scripts, the human, the combat driver) shares one counter.</summary>
@@ -183,6 +249,7 @@ public sealed class MissionSession
             targets ??= [..World.Entities.Where(value => !value.Owner.IsSystem && value.Body is not null && ScriptEngine.CountsAsObject(value)).OrderBy(value => value.Id.Value)];
             var limit = range * range;
             Entity? best = null;
+            var bestPriority = int.MinValue;
             var bestDistance = Fixed.MaxValue;
             foreach (var target in targets)
             {
@@ -190,8 +257,12 @@ public sealed class MissionSession
                 var dx = entity.X - target.X;
                 var dy = entity.Y - target.Y;
                 var distance = dx * dx + dy * dy;
-                if (distance > limit || distance >= bestDistance) continue;
+                if (distance > limit) continue;
+                // Highest attack priority first (scripts may give an object a priority set), nearest among equals.
+                var priority = Engine.AttackPriority(entity, target);
+                if (priority < bestPriority || (priority == bestPriority && distance >= bestDistance)) continue;
                 best = target;
+                bestPriority = priority;
                 bestDistance = distance;
             }
             if (best is null) continue;

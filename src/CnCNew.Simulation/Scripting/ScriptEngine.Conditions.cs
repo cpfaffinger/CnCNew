@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Data.World;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.World;
@@ -161,6 +162,55 @@ public sealed partial class ScriptEngine
                 return type.StartsWith("TEAM_ENTERED", StringComparison.Ordinal) ? now && !was : !now && was;
             }
 
+            // ---- damage history (the last attacker, fed by Observe), kinds in areas, built objects, object status, finished paths
+            case "SKIRMISH_PLAYER_FACTION":
+                // evaluateSkirmishPlayerIsFaction: the player's side (faction side name, e.g. America) equals the parameter.
+                return Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } factionPlayer && SideOf(factionPlayer) == Str(p, 1);
+            case "BUILDING_ENTERED_BY_PLAYER":
+                // evaluateBuildingEntered(param 0 = player, param 1 = building): the last object that entered the building belongs to the player.
+                return Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } enterer && NamedEntity(Str(p, 1)) is { } building && _lastEntered.TryGetValue(building.Id.Value, out var who) && who == enterer.Id.Value;
+            case "PLAYER_DESTROYED_N_BUILDINGS_PLAYER":
+                // The reference's evaluatePlayerDestroyedNOrMoreBuildings is an unimplemented stub ("@todo CLH implement me!") that returns FALSE; so does this.
+                return false;
+            case "NAMED_ATTACKED_BY_PLAYER":
+                return Has(type, p, 2) && ResolvePlayer(Str(p, 1)) is { } namedAttacker && NamedEntity(Str(p, 0)) is { } attacked && AttackedByPlayer(attacked, namedAttacker.Id);
+            case "TEAM_ATTACKED_BY_PLAYER":
+                return Has(type, p, 2) && ResolvePlayer(Str(p, 1)) is { } teamAttacker && FindTeam(Str(p, 0)) is { } attackedTeam && LiveMembers(attackedTeam).Any(member => AttackedByPlayer(member, teamAttacker.Id));
+            case "NAMED_ATTACKED_BY_OBJECTTYPE":
+                return Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } attackedNamed && AttackedByType(attackedNamed, Str(p, 1));
+            case "TEAM_ATTACKED_BY_OBJECTTYPE":
+                return Has(type, p, 2) && FindTeam(Str(p, 0)) is { } typedTeam && LiveMembers(typedTeam).Any(member => AttackedByType(member, Str(p, 1)));
+            case "PLAYER_HAS_COMPARISON_UNIT_KIND_IN_TRIGGER_AREA":
+            {
+                // evaluatePlayerHasUnitKindInArea: live, non-inert objects of the player with the kind inside the area.
+                if (!Has(type, p, 5) || ResolvePlayer(Str(p, 0)) is not { } kindOwner || AreaOrDiagnose(Str(p, 4)) is not { } kindArea) return false;
+                var count = PlayerEntities(kindOwner.Id).Count(entity => !entity.Template.IsKindOf("INERT") && entity.Template.IsKindOf(Str(p, 3)) && kindArea.Contains(entity.X, entity.Y));
+                return Compare(Int(p, 1), count, Int(p, 2));
+            }
+            case "BUILT_BY_PLAYER":
+            {
+                // evaluateBuiltByPlayer: the player owns at least one object of the type (list). The parameters are told apart by kind, not position.
+                var playerParameter = p.FirstOrDefault(value => value.Type == MapScriptParameterType.Side);
+                var typeParameter = p.FirstOrDefault(value => value.Type == MapScriptParameterType.ObjectType);
+                if (playerParameter is null || typeParameter is null || ResolvePlayer(playerParameter.Text) is not { } builtBy) return false;
+                return CountOfTypes(builtBy.Id, typeParameter.Text, null) != 0;
+            }
+            case "UNIT_HAS_OBJECT_STATUS":
+                return Has(type, p, 2) && StatusBit(Str(p, 1)) is { } unitBit && NamedEntity(Str(p, 0)) is { } statusUnit && statusUnit.HasStatus(unitBit);
+            case "TEAM_ALL_HAS_OBJECT_STATUS":
+            case "TEAM_SOME_HAVE_OBJECT_STATUS":
+            {
+                // evaluateTeamHasObjectStatus: all members (true for an empty team) or any member.
+                if (!Has(type, p, 2) || StatusBit(Str(p, 1)) is not { } teamBit || FindTeam(Str(p, 0)) is not { } statusTeam) return false;
+                var members = LiveMembers(statusTeam).ToArray();
+                return type == "TEAM_ALL_HAS_OBJECT_STATUS" ? members.All(member => member.HasStatus(teamBit)) : members.Any(member => member.HasStatus(teamBit));
+            }
+            case "NAMED_REACHED_WAYPOINTS_END":
+                return Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } walker && _completedPath.TryGetValue(walker.Id.Value, out var walked) && walked.Equals(Str(p, 1), StringComparison.OrdinalIgnoreCase);
+            case "TEAM_REACHED_WAYPOINTS_END":
+                // evaluateTeamReachedWaypointsEnd is true when any member completed the path.
+                return Has(type, p, 2) && FindTeam(Str(p, 0)) is { } pathTeam && LiveMembers(pathTeam).Any(member => _completedPath.TryGetValue(member.Id.Value, out var done) && done.Equals(Str(p, 1), StringComparison.OrdinalIgnoreCase));
+
             // ---- multiplayer victory/defeat (VictoryConditions::isLocalAlliedVictory/Defeat/isLocalDefeat)
             case "MULTIPLAYER_ALLIED_VICTORY": return IsAlliedVictory();
             case "MULTIPLAYER_ALLIED_DEFEAT": return IsAlliedDefeat();
@@ -171,11 +221,34 @@ public sealed partial class ScriptEngine
             case "HAS_FINISHED_AUDIO":
             case "HAS_FINISHED_VIDEO":
                 return !Has(type, p, 1) || !_pendingPresentation.ContainsKey(Str(p, 0));
+            case "MUSIC_TRACK_HAS_COMPLETED":
+                return !Has(type, p, 1) || !_pendingPresentation.ContainsKey(Str(p, 0));
             case "CAMERA_MOVEMENT_FINISHED": return !_pendingPresentation.ContainsKey("<camera>");
 
             default:
                 _missingConditions[type] = _missingConditions.GetValueOrDefault(type) + 1;
                 return false;
+        }
+    }
+
+    /// <summary><c>Player::getSide</c>: the side name of the player's faction (<c>PlayerTemplate::Side</c>); the faction catalog keeps no side, so it is read from the faction's starting building.</summary>
+    private string SideOf(ScriptPlayer player)
+        => _world.Templates.Factions.TryGet(player.Faction, out var faction) && _world.Templates.TryGet(faction.StartingBuilding, out var start) ? start.Side : string.Empty;
+
+    private bool AttackedByPlayer(Entity victim, PlayerId player)
+        => _lastDamage.TryGetValue(victim.Id.Value, out var damage) && damage.Owner == player.Value;
+
+    private bool AttackedByType(Entity victim, string typeParameter)
+        => _lastDamage.TryGetValue(victim.Id.Value, out var damage) && damage.Template.Length > 0
+           && (_objectLists.TryGetValue(typeParameter, out var list) ? list.Contains(damage.Template) : string.Equals(damage.Template, typeParameter, StringComparison.Ordinal));
+
+    private int? StatusBit(string name)
+    {
+        try { return ObjectStatusBits.Index(name); }
+        catch (ArgumentException)
+        {
+            Diagnose($"unknown object status '{name}'");
+            return null;
         }
     }
 

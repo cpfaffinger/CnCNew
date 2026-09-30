@@ -11,7 +11,20 @@ namespace CnCNew.Simulation.Scripting;
 public sealed record ScriptPlayer(int SideIndex, PlayerId Id, string Name, string DisplayName, string Faction, bool IsHuman, ImmutableArray<string> Allies, ImmutableArray<string> Enemies);
 
 /// <summary>A <c>TeamPrototype</c> of the map's <c>TeamsList</c> (<c>teamName</c>, <c>teamOwner</c>, <c>teamIsSingleton</c>, <c>teamMaxInstances</c>).</summary>
-public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingleton, int MaxInstances);
+public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingleton, int MaxInstances)
+{
+    /// <summary>The team's unit composition (<c>teamUnitType1..7</c> with <c>teamUnitMaxCount</c>): what a reinforcement call creates.</summary>
+    public ImmutableArray<ScriptTeamUnit> Units { get; init; } = [];
+
+    /// <summary><c>teamTransport</c>: the transport a reinforcement arrives in; empty when the units arrive by themselves.</summary>
+    public string Transport { get; init; } = string.Empty;
+
+    /// <summary><c>teamReinforcementOrigin</c>: the waypoint a reinforcement starts from; empty: it starts at its destination.</summary>
+    public string ReinforcementOrigin { get; init; } = string.Empty;
+}
+
+/// <summary>One <c>teamUnitTypeN</c> line of a team: the object type and how many of it the team has at most.</summary>
+public sealed record ScriptTeamUnit(string Type, int MinCount, int MaxCount);
 
 /// <summary>A named trigger area (<c>PolygonTrigger</c>); point-in-polygon follows <c>PolygonTrigger::pointInTrigger</c> (even-odd ray cast on the integer outline).</summary>
 public sealed record ScriptArea(string Name, ImmutableArray<(int X, int Y)> Points)
@@ -161,8 +174,19 @@ public sealed class ScriptProgram
         {
             var name = team.GetText("teamName");
             if (string.IsNullOrEmpty(name)) continue;
-            teams.Add(new ScriptTeamPrototype(name, team.GetText("teamOwner") ?? string.Empty, team.GetBool("teamIsSingleton"),
-                team.TryGetInt("teamMaxInstances", out var max) ? max : 0));
+            var teamUnits = ImmutableArray.CreateBuilder<ScriptTeamUnit>();
+            for (var slot = 1; slot <= 7; slot++)
+            {
+                var unitType = team.GetText($"teamUnitType{slot}");
+                if (string.IsNullOrEmpty(unitType)) continue;
+                teamUnits.Add(new ScriptTeamUnit(unitType, team.TryGetInt($"teamUnitMinCount{slot}", out var min) ? min : 0, team.TryGetInt($"teamUnitMaxCount{slot}", out var maxCount) ? maxCount : 0));
+            }
+            teams.Add(new ScriptTeamPrototype(name, team.GetText("teamOwner") ?? string.Empty, team.GetBool("teamIsSingleton"), team.TryGetInt("teamMaxInstances", out var max) ? max : 0)
+            {
+                Units = teamUnits.ToImmutable(),
+                Transport = team.GetText("teamTransport") ?? string.Empty,
+                ReinforcementOrigin = team.GetText("teamReinforcementOrigin") ?? string.Empty,
+            });
         }
 
         var waypoints = ImmutableArray.CreateBuilder<ScriptWaypoint>();

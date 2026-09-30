@@ -7,6 +7,12 @@ namespace CnCNew.Simulation.World;
 /// <summary>World mutations the mission script engine needs that no player command covers (<c>Scripts.h</c> actions act on the world directly, not as a player).</summary>
 public sealed partial class SimulationWorld
 {
+    /// <summary>
+    /// Creates every object requested so far right now instead of at the end of the next step. The map loader and the script actions create objects
+    /// synchronously in the reference (<c>TheThingFactory->newObject</c>), so a script that runs later in the same frame already sees them.
+    /// </summary>
+    public void MaterializePendingSpawns() => ProcessSpawns();
+
     /// <summary>Whether <paramref name="player"/> is configured in this world (the system authority, id 0, always is).</summary>
     public bool HasPlayer(PlayerId player) => _players.ContainsKey(player.Value);
 
