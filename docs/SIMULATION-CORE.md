@@ -430,6 +430,7 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
+- **Stand nach den Phase-9-Missionsmodulen (1. Oktober 2026, frisch gemessen): 2.115 Objekte, 1.494 vollständig instanziierbar (70,6 %)**, 621 blockiert; 87 von 205 Modultypen implementiert (2 neu: `CommandButtonHuntUpdate`, `LockWeaponCreate` – ehrliche Hüllenmodule, siehe unten), sie decken 15.639 von 19.553 Modulverwendungen (80,0 %); Fingerabdruck `2B9D902AEC46A6DE…`. Größte verbleibende Blocker (Objekte insgesamt / nur dadurch blockiert): `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/36, `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `HeightDieUpdate` 31/24, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `BaikonurLaunchPower` 23/23. **Hüllenmodule:** `CommandButtonHuntUpdate` (86 Verwendungen, keine Schlüssel; wird im Original nur von `TEAM_HUNT_WITH_COMMAND_BUTTON` ausgelöst) hält keinen Zustand, `LockWeaponCreate` sperrt den Primär-Slot (`SlotToLock = PRIMARY` in allen 12 Verwendungen; die Simulation führt nur eine Waffe, ein anderer Slot ist eine `UnsupportedModuleConfigurationException`); die auslösenden Skriptaktionen bleiben fehlend und werden gezählt (`docs/SCRIPT-ENGINE.md` §8). Der Retail-Referenzmatch verändert sich dadurch (Ranger u. a. entstehen jetzt als Startobjekte): Sieger FactionAmerica bei Tick 13.665 (Replay 13.966 Ticks), Endhash (`final hash`, Run 1) `D4779BE413835B6D`; zuvor Tick 13.800 (14.101 Ticks), `95022B80366E841E`. Der Stresstest (216.000 Ticks) bleibt bei `ED6F9329F59662E3`.
 - **Stand nach Phase 8, Paket E1 (30. September 2026, frisch gemessen): 2.115 Objekte, 1.470 vollständig instanziierbar (69,5 %)**, 645 blockiert;
   85 von 205 Modultypen implementiert (8 neu: `DumbProjectileBehavior`, `MissileAIUpdate`, `PointDefenseLaserUpdate`, `TransportAIUpdate`, `ChinookAIUpdate`,
   `HelicopterSlowDeathBehavior`, `TunnelContain`, `HelixContain`, §21), sie decken 15.543 von 19.553 Modulverwendungen (79,5 %); Fingerabdruck
@@ -733,3 +734,17 @@ Regeln mit Quellverweisen: `docs/GAME-RULES.md` §6i (Flugzeit) und §6j (Transp
 Feuern aus Containern, Flugfeldheilung des Chinook, Nemesis-Zielwahl der Tunnelverteidiger und Bunkerbrecher-Effekte fehlen; Chinook-Höhenwechsel und
 Helikopterabsturz sind kinematisch statt über `PhysicsBehavior`. 40 von 157 Projektilwaffen feuern ein nicht instanziierbares Objekt und fallen sichtbar
 (`CreationSkipped`) auf den projektillosen Flugzeitpfad zurück.
+## 22. Phase 9: Skript-VM, Missionssitzung und Zustandsformate
+
+Die Simulation trägt seit Phase 9 zusätzlich die Ausführung der World-Builder-Skripte (`Scripting/`), die Missionssitzung und ihren Zustand (`Mission/`); Entwurf,
+Quellverweise, Abdeckungstabellen, Abweichungen und Messwerte stehen in `docs/SCRIPT-ENGINE.md`, Kampagne und Savegame in `docs/CAMPAIGN-AND-SAVEGAMES.md`.
+
+- **Neue Weltzugriffe** (`World/SimulationWorld.Scripting.cs`): `HasPlayer`, `SetMoney`, `SetRelationship`, `TransferOwnership` (Besitzerwechsel inkl. Energieproduktion),
+  `RequestSpawn(…, healthPercent)`, `MaterializePendingSpawns()` (legt angeforderte Spawns sofort an, wie `newObject` im Original). Kein Befehlscode, keine Änderung an Snapshot (Version 7)
+  oder Replay (Version 7); `CommandTypes.Version` bleibt 9.
+- **Zustand:** `MissionSnapshot` Version 1 (`cncnew-mission-state`) bettet den unveränderten Welt-Snapshot als Roh-JSON ein und ergänzt Skriptzustand (`ScriptEngine.Describe`, in
+  einem `IStateWriter`-Durchlauf für Hash und Datei), Befehlssequenzen je Spieler und die Startoptionen; `MissionSession.StateHash` = Welt- und Skripthash.
+- **Determinismus:** alle Skriptsammlungen sind sortiert; Zufallstimer ziehen aus `LogicRandom`; der erste Auswertungszeitpunkt verzögerter Skripte ist namensabgeleitet statt zufällig
+  (Abweichung 3 in `docs/SCRIPT-ENGINE.md` §8). Der Test `SourceRules` gilt für den neuen Code unverändert und besteht.
+- **Nicht replayfähig:** Skriptaktionen (Erzeugen, Töten, Geld, Besitzerwechsel, Beziehungen) sind direkte Weltänderungen, keine aufgezeichneten Befehle; Missionen werden über Snapshots
+  verglichen, nicht über `ReplayRunner`.

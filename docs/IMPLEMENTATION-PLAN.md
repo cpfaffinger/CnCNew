@@ -529,6 +529,46 @@ Abgeschlossen, wenn alle Skirmish-Karten start- und beendbar sind, jede Kampagne
 wesentlichen Erfolgs- und Fehlerpfade besteht und Speichern/Laden einen identischen
 Simulationszustand fortsetzt.
 
+**Status: Teil A Punkte 2–5 (Skriptausführung, Kampagnenlogik, Savegames, Headless-Prüfung) und Teil B Punkt 11 umgesetzt am 1. Oktober 2026; die Phase
+ist damit noch nicht im Sinne der Abnahme abgeschlossen (siehe „Bekannte Grenzen“).** Alle Zahlen frisch gemessen; Details, Quellverweise und
+Abweichungen in `docs/SCRIPT-ENGINE.md` und `docs/CAMPAIGN-AND-SAVEGAMES.md`.
+
+- **Skript-VM** (`CnCNew.Simulation/Scripting`): deterministische Ausführung der dekodierten World-Builder-Skripte (Zähler, Flags, Timer, Zufallstimer,
+  Ein-Schuss-Skripte, Schwierigkeitsflags, verzögerte Auswertung, Unterprogramme, Teams mit Instanziierung, benannte Objekte, Bereichs- und
+  Schadensbedingungen, Wegpunktpfade, Befehle als validierte Spielerbefehle, Angriffsprioritäten, Verstärkung, Sieg/Niederlage). Bedingungen 63 ausgeführt
+  / 46 fehlend von 109, Aktionen 69 ausgeführt / 129 an den Client weitergereicht / 146 fehlend von 344; fehlende Typen werden zur Laufzeit gezählt
+  (`MissingActionHits`/`MissingConditionHits`), unauflösbare Verweise als `Diagnostics`.
+- **Missionssitzung** (`MissionSession`): Welt aus Kartendaten (Seiten, Beziehungen, platzierte Objekte, KI-Baulisten, Startbasis menschlicher Challenge-Spieler),
+  Skripte + automatisches Gefecht + Weltschritt je Tick; `MissionSnapshot` (Version 1) wrappt den `WorldSnapshot` (Version 7) und speichert Skriptzustand und
+  Befehlssequenzen. Objekte entstehen wie im Original sofort (`SimulationWorld.MaterializePendingSpawns`). Neue Weltzugriffe: `SetMoney`,
+  `SetRelationship`, `TransferOwnership`.
+- **Kampagne** (`CnCNew.Game/Campaign`): `CampaignCatalog` (Campaign.ini, 17 Kampagnen/85 Missionen, unbekannte Schlüssel gemeldet), `CampaignProgress`
+  (Sieg rückt vor, Niederlage wiederholt, Versuchszähler für `MISSION_ATTEMPTS`), `CampaignController`/`MissionRun`.
+- **Savegame** (`CnCNew.Game/Save`): `SaveGame` Version 1 (Kopf + Fortschritt + eingebetteter Missionszustand, SHA-256-Prüfsumme, kanonische Bytes,
+  verständliche Ablehnungsgründe), `SaveGameStore` (atomar, listet beschädigte Dateien mit Grund).
+- **Prüfung:** `CnCNew.CampaignTool` (`list`, `audit`, `playthrough`) und `SimTool mission-run`. 24 eindeutige Kampagnenkarten: 24/24 deterministisch (zwei Läufe),
+  24/24 identisch nach Speichern/Wiederherstellen, Endproben durch Ausschalten der Gegner Sieg 10/24 und durch Ausschalten des Betrachters Niederlage 15/24;
+  eine Challenge-Kampagne wurde über fünf Missionen mit Speichern/Laden je Mission durchgespielt. Neue Tests: 11 Skript-/Missionstests in
+  `Tests.Scripting.cs`, `CampaignTests.cs` (7 + Realdaten).
+- **Teil B:** Punkt 11 (Kartenskripte) siehe oben; Punkt 12 war bereits erledigt. `CommandButtonHuntUpdate` und `LockWeaponCreate` sind als ehrliche Hüllenmodule
+  gebunden (`docs/SCRIPT-ENGINE.md` §8): 1.494 von 2.115 Objekten instanziierbar (70,6 %, vorher 69,5 %), 87 von 205 Modultypen, Modulverwendungen
+  abgedeckt 15.639 von 19.553 (80,0 %), Kompatibilitätsbasislinie 749 → 747. Punkte 9 (Kollision) und 10 (Bau-/Regelgrenzen) sind **offen**.
+
+**Bekannte Grenzen:**
+
+- Das Skirmish-Setup selbst (Teil A Punkt 1) wurde nicht angefasst; ein Skirmish-Speicherstand ist nicht möglich (die Skirmish-KI hält Zustand außerhalb der Welt).
+- **Nicht jede Mission ist als vollständig durchspielbar belegt.** Es fehlen u. a. `*_USE_COMMANDBUTTON_ABILITY` (Spezialfähigkeiten, `SpecialAbilityUpdate`:
+  64 Objekte, 36 nur dadurch blockiert – Ranger-Fähigkeiten, Colonel Burton, Jarmen Kell), Garnison-Aktionen, Kartenaufdeckung (`MAP_REVEAL_*`), KI-Teambau
+  (`BUILD_TEAM`), Sichtbedingungen (`*_DISCOVERED`, `*_SIGHTED`), die `SKIRMISH_*`-Skripte der Original-KI und Missionsabläufe, die Kamera-/Film-Fertigmeldungen
+  eines echten Clients brauchen; Maps ohne menschliche Seite (z. B. `GC_LaserGeneral`) brauchen eine vom Host gewählte lokale Seite.
+- Objekte, deren Vorlage im Retail-Basisbestand fehlt (Kartenüberlagerungs-Definitionen wie Straßen, Zäune, Bäume), werden übersprungen und gezählt; Transporte von
+  Verstärkungen werden nicht simuliert; `*_HUNT`/`*_ATTACK_*` sind Bewegungsaufträge plus automatisches Gefecht (keine Formation, kein Angriffsmarsch).
+- Freischaltungen (Kampagnenreihenfolge der Challenge-Kampagnen, Profil) sind nicht modelliert; die Menüeinträge „Kampagne“ und „Spiel laden“ sind noch deaktiviert,
+  Briefings, Zwischensequenzen und Kampagnenauswahl sind Präsentationsarbeit (Anschluss: `docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
+- Missionen sind keine Replays (Skriptaktionen sind keine aufgezeichneten Befehle); Wahrheit ist der Snapshot.
+- Der Retail-Referenzmatch ändert sich durch die neu instanziierbaren Startobjekte (Ranger etc.): Sieger FactionAmerica bei Tick 13.665 statt 13.800, Endhash
+  (Zeile „final hash“ von `SimTool reference-match`, Run 1) `D4779BE413835B6D` statt `95022B80366E841E`; der Stresstest bleibt `ED6F9329F59662E3`.
+
 ## 10. Patch-Integration, Qualität und auslieferbarer Abschluss
 
 **Ergebnis:** Aus den Domänen entsteht ein reproduzierbar baubares, diagnostizierbares und lokal

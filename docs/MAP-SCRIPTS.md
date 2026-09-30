@@ -2,8 +2,8 @@
 
 Dieses Dokument beschreibt, wie `CnCNew.Formats` die World-Builder-Skripte einer `.map`-Datei (`PlayerScriptsList`)
 verlustfrei in ein typisiertes, unveränderliches Modell überführt. Es deckt nur die **Dekodierung** ab; die
-**Ausführung** (eine deterministische Skript-VM in `CnCNew.Simulation`) ist noch nicht gebaut – siehe
-`docs/HANDOFF-PHASE9.md` Teil A für den Anschluss.
+**Ausführung** (die deterministische Skript-VM in `CnCNew.Simulation`, Missionssitzung, Abdeckungstabellen und Messwerte) steht in
+`docs/SCRIPT-ENGINE.md`.
 
 ## 1. Fundstelle im Containerformat
 
@@ -92,9 +92,9 @@ NameKeyType, 50 weitere an der NameKeyType-Fehlannahme; beide Ursachen sind mit 
   Ausreißer oder unerwarteten Werte.
 - `MapTool info <content-dir> <pfad>` zeigt zusätzlich die Skriptanzahl einer einzelnen Karte.
 
-Diese Häufigkeitstabelle ist die Priorisierungsgrundlage für die Skript-VM (Teil A Punkt 2 der nächsten Phase, siehe
-`docs/HANDOFF-PHASE9.md`): die vier häufigsten Bedingungen und die sechs häufigsten Aktionen allein decken einen
-großen Teil aller Skriptaufrufe ab.
+Diese Häufigkeitstabelle war die Priorisierungsgrundlage für die Skript-VM (`docs/SCRIPT-ENGINE.md`): die vier häufigsten
+Bedingungen und die sechs häufigsten Aktionen sind zuerst implementiert worden; die Laufzeit-Häufigkeit der *noch fehlenden* Typen misst
+seither `CnCNew.CampaignTool audit` (`docs/SCRIPT-ENGINE.md` §9) und steuert die weitere Reihenfolge.
 
 ## 6. Bekannte Grenzen
 
@@ -103,6 +103,6 @@ großen Teil aller Skriptaufrufe ab.
   `NameKeyType`-Identität hängen, die dieser Decoder nicht verwendet, und bei keiner der 150 Retail-Karten beobachtet
   wurden (alle Parameteranzahlen passen zur jeweiligen Aktion). Sollte eine künftige Karte doch eine dieser Altlasten
   enthalten, bricht der Decoder nicht ab (er liest, was auf der Platte steht), aber die Parameterliste entspricht dann
-  nicht dem, was `ScriptActions`/`ScriptConditions` zur Ausführung erwarten – ein Fall für die künftige VM, dort
-  explizit zu behandeln, nicht für den Decoder.
+  nicht dem, was `ScriptActions`/`ScriptConditions` zur Ausführung erwarten – die VM behandelt eine zu kurze
+  Parameterliste explizit (`Has(...)`: Diagnose `<Typ>: n of m parameters`, die Aktion/Bedingung tut nichts), der Decoder bleibt unverändert.
 - `GlobalLighting` bleibt unabhängig davon ein übersprungener Chunk (siehe `docs/PRESENTATION-WORLD.md`).

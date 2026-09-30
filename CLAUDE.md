@@ -6,7 +6,7 @@ Singleplayer, Skirmish und Kampagne. Nicht im Scope: Multiplayer, binäre Kompat
 Mods und Savegames. Das Repo ist rein lokal (Branch `main`, **kein Remote**).
 
 Die Gesamtplanung steht in `docs/IMPLEMENTATION-PLAN.md`. Die aktuell zu bearbeitende Phase steht
-als vollständiger Auftrag in `docs/HANDOFF-PHASE8.md` (Handoff-Datei der jeweils nächsten Phase).
+als vollständiger Auftrag in `docs/HANDOFF-PHASE10.md` (Handoff-Datei der jeweils nächsten Phase).
 Lies vor jeder Phase `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
 `docs/IMPLEMENTATION-PLAN.md` sowie die Fachdokumente der berührten Domäne
 (`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `SIMULATION-CORE.md`, `W3D-MATERIALS.md`).
@@ -100,6 +100,10 @@ dotnet run --project tools/CnCNew.MapTool -- audit .local/phase2-import-a
 dotnet run --project tools/CnCNew.ImageTool -- audit-tga .local/phase2-import-a
 dotnet run --project tools/CnCNew.W3dTool -- audit .local/phase2-import-a
 dotnet run --project tools/CnCNew.W3dTool -- audit-skeletons .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.SimTool -- mission-run .local/phase2-import-a --map "Maps/USA01/USA01.map" --ticks 3000
+dotnet run --project tools/CnCNew.CampaignTool -- list .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/phase2-import-a --ticks 900
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough .local/phase2-import-a --campaign CHALLENGE_0
 dotnet run --project tools/CnCNew.PresentationTool -- object-audit .local/phase2-import-a
 dotnet run --project tools/CnCNew.PresentationTool -- fx-audit .local/phase2-import-a
 dotnet run --project tools/CnCNew.PresentationTool -- terrain-audit .local/phase2-import-a
@@ -163,6 +167,23 @@ Fehlschläge). 1.631 Skript-Listen, 23.906 Skripte, 2.294 Gruppen, 33.890 Beding
 (`MapScriptCatalog`, mechanisch aus `Scripts.h` extrahiert), nicht aus dem mitgeschriebenen `NameKeyType` – der ist ein
 prozessweiter, laufzeitabhängiger Zähler (`NameKeyGenerator`) und aus einer einzelnen Datei nicht rekonstruierbar. Nur die
 Dekodierung ist fertig; die Ausführung (Skript-VM) ist Gegenstand des laufenden Phase-9-Hauptauftrags.
+
+Phase 9, Skriptausführung, Kampagne und Savegames (Stand 1. Oktober 2026; neu messen; `docs/SCRIPT-ENGINE.md`, `docs/CAMPAIGN-AND-SAVEGAMES.md`):
+`CnCNew.Simulation/Scripting` führt die dekodierten Kartenskripte aus (Bedingungen 63 ausgeführt/46 fehlend von 109, Aktionen 69 ausgeführt/129
+weitergereicht/146 fehlend von 344; fehlende Typen werden zur Laufzeit gezählt, nie still übergangen); `MissionSession`/`MissionSnapshot` (Version 1, bettet
+`WorldSnapshot` Version 7 ein) tragen den Missionszustand; `CnCNew.Game/Campaign` (`CampaignCatalog`: 17 Kampagnen/85 Missionen, `CampaignProgress`,
+`CampaignController`) und `CnCNew.Game/Save` (`SaveGame` Version 1, `SaveGameStore`) bilden Ablauf und Speicherstände; `CnCNew.CampaignTool` prüft jede
+Kampagnenkarte headless. `CnCNew.CampaignTool audit` (24 eindeutige Karten, 900 Ticks): 24/24 deterministisch, 24/24 nach Speichern/Wiederherstellen identisch,
+Endproben Sieg 10/24, Niederlage 15/24, 5,7 % der Aktionsausführungen treffen fehlende Typen. Zwei ehrliche Hüllenmodule (`CommandButtonHuntUpdate`,
+`LockWeaponCreate`) heben die Instanziierbarkeit auf 1.494 von 2.115 Objekten (70,6 %), 87 von 205 Modultypen, Modulverwendungen abgedeckt 15.639 von 19.553 (80,0 %),
+Kompatibilitätsbasislinie 747 Einträge. Retail-Referenzmatch jetzt: Sieger FactionAmerica bei Tick 13.665, `final hash` (Run 1) `D4779BE413835B6D`
+(vorher Tick 13.800, `95022B80366E841E`; der früher dokumentierte „Endhash“ `4DCB46FE3D2E8214` ist mit dem Stand vor Phase 9 nicht reproduzierbar);
+Stresstest unverändert `ED6F9329F59662E3`. Definitionssnapshot Retail-Basisdaten (`--maps exclude`): 144.284.673 Byte, SHA-256
+`2B9D902AEC46A6DE66A21521EFB8FDBE669E27C50F50CC36D3AFEFBEA7ED8D80`; Vollinventar mit Überlagerungen: 144.895.548 Byte, SHA-256
+`0A9D10F4FE878F01D14877C0FB6D13DCF7DF7BA3B52FABB0D15B0D8EF13526C3`, 18.321/19.871 Referenzen aufgelöst (1.550 sichtbare Fallbacks). Missionen sind **keine**
+Replays (Skriptaktionen sind direkte Weltänderungen); Wahrheit ist der Snapshot. Zeilenenden: das Repo ist überwiegend LF, einzelne Dateien (`README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
+`docs/IMPLEMENTATION-PLAN.md` u. a.) sind CRLF, es gibt kein `.gitattributes`; beim Bearbeiten die vorhandenen Zeilenenden erhalten (die Phase-9-Arbeit hat sie einmal
+versehentlich umgestellt und in `9130f44` korrigiert).
 
 ## Code- und Dokumentationsstil
 
