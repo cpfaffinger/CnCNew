@@ -5,6 +5,7 @@ using CnCNew.Formats;
 using CnCNew.Game.Data;
 using CnCNew.Presentation.Camera;
 using CnCNew.Presentation.Fx;
+using CnCNew.Presentation.Input;
 using CnCNew.Presentation.Minimap;
 using CnCNew.Presentation.Objects;
 using CnCNew.Presentation.Terrain;
@@ -44,6 +45,7 @@ public sealed class LiveMatch
     private readonly SimulationFxWorldView _fxView;
     private readonly List<SoundCue> _soundCues = [];
     private double _accumulator;
+    private ICommandSink? _commands;
 
     private LiveMatch(GameData data, MatchSetup setup, SkirmishMatchSession session, TerrainMap terrain, MapData map, TerrainRenderModel terrainModel,
         TerrainHeightSampler heights, RtsCamera camera, FogOfWarGrid fog, MinimapImage minimap, FrameProjector projector, FxExecutor fx, TeamColors colors)
@@ -91,6 +93,18 @@ public sealed class LiveMatch
 
     public RenderFrame Frame { get; private set; }
     public long Tick => World.Tick;
+
+    /// <summary>
+    /// Command sink of the human player: everything the human changes in the world goes through it, so <see cref="SkirmishMatchSession.ToReplay"/>
+    /// reproduces the match. Created lazily; one instance per match.
+    /// </summary>
+    public ICommandSink Commands => _commands ??= new SkirmishSessionCommandSink(Session, Human);
+
+    /// <summary>Invoked immediately before every <see cref="SkirmishMatchSession.Step"/> of <see cref="Advance"/> (per-tick input bookkeeping).</summary>
+    public Action<SimulationWorld>? BeforeTick { get; set; }
+
+    /// <summary>Raised after every step with its result (events for statistics, ticker and sound).</summary>
+    public event Action<TickResult>? TickStepped;
 
     /// <summary>Sound cues of the effects executed since the last call.</summary>
     public ImmutableArray<SoundCue> DrainSoundCues()
@@ -153,7 +167,10 @@ public sealed class LiveMatch
             var steps = 0;
             while (_accumulator >= TickSeconds && steps < MaxTicksPerFrame && !Session.IsOver)
             {
-                SyncAfterTick(Session.Step());
+                BeforeTick?.Invoke(World);
+                var result = Session.Step();
+                SyncAfterTick(result);
+                TickStepped?.Invoke(result);
                 _accumulator -= TickSeconds;
                 steps++;
             }
