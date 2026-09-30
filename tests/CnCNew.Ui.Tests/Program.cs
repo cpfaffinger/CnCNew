@@ -4,6 +4,7 @@ using CnCNew.Ui.Tests;
 Func<string[], int>[] suites =
 [
     TextAndSettingsTests.Run,
+    WndTests.Run,
 ];
 
 var failures = 0;
