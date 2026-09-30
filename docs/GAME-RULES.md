@@ -86,8 +86,8 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
 ## 3. Waffen, Schaden, Rüstung
 
 - `WeaponCatalog`/`ArmorCatalog` (`src/CnCNew.Simulation/Templates/WeaponCatalog.cs`) lösen `Weapon`- und
-  `Armor`-Definitionen in Simulationswerte auf. Die Waffe trifft sofort (**bewusste Vereinfachung:** keine Projektil-Flugzeit,
-  `WeaponSpeed` ungenutzt); Flächenschaden (`PrimaryDamageRadius`, `SecondaryDamage`, `RadiusDamageAffects`) steht seit §6g, die
+  `Armor`-Definitionen in Simulationswerte auf. Seit Phase 8 fliegt ein Schuss: verzögerter Treffer nach `WeaponSpeed` oder ein Projektilobjekt
+  (`DumbProjectileBehavior`/`MissileAIUpdate`, §6i); Flächenschaden (`PrimaryDamageRadius`, `SecondaryDamage`, `RadiusDamageAffects`) steht seit §6g, die
   `WeaponBonus`-Multiplikatoren seit §6h.
 - `ArmorInfo.Adjust` portiert `ArmorTemplate::adjustDamage`: `Schaden *= Koeffizient[Schadensart]`, außer bei
   `DAMAGE_UNRESISTABLE`/`DAMAGE_SUBDUAL_UNRESISTABLE` (umgehen die Rüstung vollständig), Ergebnis nie negativ.
@@ -117,8 +117,7 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   ein `VoiceFearRequested`-Event ausgelöst (reine Präsentationsanforderung, der Tonabspielung obliegt Phase 7). Der
   Zug selbst erfolgt immer bei Schwellenüberschreitung, unabhängig vom Ergebnis, damit der Zufallsstrom mit dem
   Original synchron bleibt (Test: `Tests.Phase5FearSoundRng`, vergleicht den Rohzustand des `logic`-Streams vor/nach).
-- Erfahrung und Veteranenstufen aus Abschüssen stehen seit §6h. **Bekannte Lücken:** keine `IS_FIRING_WEAPON`/Retaliate-Logik, keine
-  Projektil-Flugzeit.
+- Erfahrung und Veteranenstufen aus Abschüssen stehen seit §6h. **Bekannte Lücken:** keine `IS_FIRING_WEAPON`/Retaliate-Logik; Projektile kollidieren nicht mit Objekten, an denen sie vorbeifliegen (§6i).
 
 ### Schadenszustände, Brand, Gift und Tod (die nächsten Blockermodule)
 
@@ -486,7 +485,7 @@ statt nur das Ziel zu treffen (`FireWeaponWhenDeadBehavior` meldet den Schuss we
 - Opfer werden in Entitäts-ID-Reihenfolge besucht (das Original iteriert die Partitionszellen); Insassen von Containern zählen nicht (außer
   als Primärziel). Der Rüstungsfaktor gilt je Opfer (`ActiveArmor`), der Rückgabewert ist der rüstungsbereinigte Schaden am Primärziel.
 - **Nicht modelliert:** `RadiusDamageAngle`-Kegel, Schockwellen, `DamageStatusType`, historischer Schaden, die Erzeugerausnahme des
-  Selbstfilters, Projektilflugzeit.
+  Selbstfilters (seit Phase 8 für Projektile modelliert, §6i); Projektilflugzeit steht in §6i.
 
 | Modul | Referenz | Verhalten |
 | --- | --- | --- |
@@ -528,6 +527,147 @@ Referenz: `ExperienceTracker.cpp`, `Object.cpp` (`onVeterancyLevelChanged`, `sco
   `VeterancyGainCreate`, Snapshotfortsetzung.
 - **Nicht modelliert:** Rang und „Science Purchase Points“ aus Erfahrung (Punkte kommen weiter per `GiveSciencePointsCommand`), dauerhafte
   Mindeststufe (`VeterancyGainCreate` setzt sie einmal), Erfahrungssenken (Heilung, Reparatur, Ausbildung durch Gebäude), Statistik/Skill Points.
+
+## 6i. Projektil-Flugzeit (Phase 8, Paket E1)
+
+Referenz: `Weapon.cpp` (`WeaponTemplate::fireWeaponTemplate`, `dealDamageInternal`, `WeaponStore::setDelayedDamage`/`update`/`handleProjectileDetonation`,
+`Weapon::positionProjectileForLaunch`), `DumbProjectileBehavior.cpp`, `MissileAIUpdate.cpp`, `BezierSegment.cpp`/`BezFwdIterator.cpp`,
+`PointDefenseLaserUpdate.cpp`. Umsetzung: `SimulationWorld.Projectiles.cs`, `SimulationWorld.Combat.cs`, `Modules/BuiltIn/ProjectileModules.cs`.
+
+**Abschuss** (`SimulationWorld.FireWeaponAt`, genutzt von `FireWeaponCommand`, `FireWeaponUpdate` und `PointDefenseLaserUpdate`):
+
+1. **Streuung:** Bei `ScatterRadius > 0` oder (`ScatterRadiusVsInfantry > 0` und Infanterieziel) wird der Radius (plus Infanteriezuschlag) mit
+   `LogicRandom.Range(0, r)` und der Winkel mit `Range(0, 2π)` gezogen (zwei Züge des Logikstroms, wie `GameLogicRandomValueReal`); das Zielgebäude
+   wird auf seinen Geometriemittelpunkt angezielt, der Punkt landet auf dem Boden. Die Streuung lenkt nur ein Projektil um; ein verzögerter Treffer behält
+   sein Opfer (im Original ist `victimObj = NULL` auskommentiert).
+2. **Ohne Projektilobjekt:** `delayInFrames = |Opferposition − Schützenposition| / WeaponSpeed` (3D). Unter einem Tick trifft der Schuss sofort
+   (unverändert gegenüber Phase 5), sonst nach `ceil(delay)` Ticks: der Eintrag landet in der Liste der verzögerten Treffer (Reihenfolge des Einfügens,
+   Teil von Hash und Snapshot) und wird **am Ende des Fälligkeitsticks nach der Zerstörungsphase** ausgewertet (`WeaponStore::update` läuft im Original
+   nach `processDestroyList`). Getroffen wird das Opfer an seiner dann aktuellen Position (`victimID`), ist es fort, der gespeicherte Punkt;
+   `DamageDealtAtSelfPosition` legt den Schaden auf die Schützenposition. Existiert der Schütze nicht mehr, gelten wie im Original **keine**
+   `RadiusDamageAffects`-Filter. `WeaponSpeed ≤ 0` (drei schadenlose Retail-Waffen; das Original teilt durch null) trifft sofort.
+3. **Mit Projektilobjekt:** Das Objekt der Vorlage `ProjectileObject` entsteht am Ende des Schusstick (Spawn-Queue, §4 der Kernbeschreibung) am
+   Geometriemittelpunkt des Schützen (die Abschussknochen sind Grafikdaten) mit dessen Besitzer und Blickrichtung; unmittelbar nach seinen
+   `OnSpawn`-Aufrufen erhält sein Projektilmodul (`IProjectileModule`) Waffe, Werfer, Opfer (bei Streuung keines), Zielpunkt und die
+   Waffenbonusbedingungen des Werfers (`m_extraBonusFlags`). Die Startdaten stehen bis dahin im Spawn-Queue-Eintrag (Snapshot und Hash).
+   Ein Objekt ohne Projektilmodul wird auf den Zielpunkt gesetzt („ok, für Dinge wie Firestorm“).
+4. **Nicht instanziierbares Projektilobjekt:** nie still: `CreationSkipped` mit Grund 10 (`ProjectileNotInstantiable`, Text = Vorlage), danach
+   verhält sich der Schuss wie einer ohne Projektil (Schritt 2). Auf Retail-Daten feuern 157 Waffen ein Projektilobjekt, 117 davon ein
+   instanziierbares (Realdatentest), die übrigen 40 laufen über diesen Ersatz.
+
+**Detonation** (`DetonateProjectile`): die Waffe detoniert an der Projektilposition **ohne** Primärziel (nur Flächenschaden), mit den Bonusbedingungen
+des Abschusses; Quelle des Schadens ist der Werfer (`projectileGetLauncherID`), der Selbstfilter verschont Projektil und Werfer
+(`getProducerID`). Ereignisse zur richtigen Position und zum richtigen Tick: `FxRequested` mit `ProjectileDetonationFX` (mit Position),
+`ProjectileDetonationOCL` wird ausgeführt, `WeaponImpact` (Entity = Projektil, Other = Werfer, Position). Beim Abschuss meldet
+`ProjectileLaunched` den Zielpunkt (bei verzögerten Treffern mit Landetick in `Value`); `WeaponFired` meldet nur noch den **sofort** zugefügten Schaden
+(0 bei Flugzeit). Ereignisse mit Ort tragen `HasPosition` und X/Y/Z; nur sie schreiben die Position, alle übrigen Ereignisse sind unverändert serialisiert.
+Die veteranenabhängigen Varianten (`VeterancyProjectileDetonationFX/OCL`), `FireOCL`/`FireFX` und `ProjectileExhaust` sind nicht modelliert.
+
+**`DumbProjectileBehavior`** (Granaten auf Bézierbogen): Geschwindigkeit `WeaponSpeed`, mit `ScaleWeaponSpeed` linear zwischen `MinWeaponSpeed` und
+`WeaponSpeed` nach der Lage der 2D-Distanz zwischen Mindest- und unveränderter Reichweite. Kontrollpunkte: Start, Ziel (Geometriemittelpunkt des Opfers
+bzw. Zielpunkt) und zwei Punkte bei `FirstPercentIndent`/`SecondPercentIndent` der Strecke auf `FirstHeight`/`SecondHeight` über dem höchsten Gelände
+zwischen Start und Ziel (nie unter einem der Enden). Punktzahl `n = ceil(Länge / Geschwindigkeit)` mit der Referenzlänge
+(`getApproximateLength`: Halbierung, bis das Kontrollpolygon höchstens 1 länger als die Sehne ist, dann Mittel aus beiden). Update k (k = 1 … n) setzt
+das Projektil auf Punkt k − 1, das Update danach (oder nach `MaxLifespan`, Standard 300 Ticks) detoniert: **Einschlag im Tick F + n + 1** nach dem
+Schusstick F. `FlightPathAdjustDistPerSecond` zieht den Endpunkt dem Opfer nach (höchstens so weit je Tick) und rechnet die Kurve mit gleicher
+Punktzahl neu. `DetonateCallsKill` tötet mit `DEATH_DETONATED`, sonst Zerstörung. `TumbleRandomly` zieht drei Logikzahlen, wenn ein
+`PhysicsBehavior` da ist (Drehraten sind Präsentation). **Festkomma:** Die Punkte werden aus der Bernsteinform bei `t = i/(n−1)` berechnet (das Original
+summiert Vorwärtsdifferenzen in binary32, nicht reproduzierbar); Anfangs- und Endpunkt sind exakt. `n = 1` (im Original undefiniertes Verhalten:
+`BezFwdIterator` lässt den Punkt im Ursprung, die Ausrichtung liest hinter das Feld) fliegt direkt zum Endpunkt. Das höchste Gelände wird alle halbe Zelle
+abgetastet (`estimateTerrainExtremesAlongLine` läuft über Partitionszellen); ein Endpunkt außerhalb der Karte zerstört das Projektil.
+
+**`MissileAIUpdate`** (gelenkte Raketen) als kinematische Zustandsmaschine statt THRUST-Lokomotor und Physik:
+
+| Zustand | Verhalten |
+| --- | --- |
+| Launch | gleitet in Startrichtung (Blickrichtung des Werfers, angehoben um `2·max(0, dz)/max(1, xy)` und normiert) mit `InitialVelocity` (mit `UseWeaponSpeed` die Waffengeschwindigkeit, die dann auch Höchstgeschwindigkeit und Beschleunigung ist), bis `IgnitionDelay` Ticks vergangen sind |
+| Ignition | schärft den Gefechtskopf, fordert `IgnitionFX` an, Treibstoff für `FuelLifetime` Ticks (0: unbegrenzt), weiter ohne Drehen |
+| Attack (ohne/mit Drehen) | beschleunigt mit der Lokomotorbeschleunigung bis zur Lokomotorgeschwindigkeit; ohne Drehen, bis `DistanceToTravelBeforeTurning` geflogen ist (gemessen vor der Bewegung, wie das Original), danach Richtung direkt aufs Ziel (`setMaxTurnRate(BIGNUM)`): die Position des verfolgten Opfers (`TryToFollowTarget`), sonst der Zielpunkt 10 über dem Boden (`APPROACH_HEIGHT`, nur mit Sperrdistanz) |
+| Kill | innerhalb der Sperrdistanz (`DistanceToTargetForLock`, Standard 75, 2D; bei einem Punktziel halbiert und wieder auf den Bodenpunkt gerichtet) direkt aufs Ziel; wer es erreicht, detoniert dort |
+| KillSelf | nach der Detonation `KillSelfDelay` Ticks (Standard 3) warten, dann `DetonateCallsKill` → Tod, sonst Zerstörung |
+
+Ohne Treibstoff detoniert die Rakete (`DetonateOnNoFuel`) oder gleitet ohne Schub und Drehung unter der Schwerkraft (`GameData.ini Gravity`, −64/s² =
+−4660 Rohwert je Tick²) weiter. Ist das verfolgte Opfer fort, läuft der Treibstoff sofort aus und die Rakete verschwindet ohne Schaden
+(`airborneTargetGone`). `MissileCallsOnDie` der Waffe (`m_dieOnDetonate`) tötet die Rakete bei der Detonation. **Stellvertreter für Kollisionen**
+(es gibt keine, Punkt 9 des Handoffs): eine geschärfte Rakete, die ihren Zielpunkt in einem Angriffszustand erreicht oder unter den Boden geriete,
+detoniert dort; eine ungeschärfte gleitet am Boden entlang; unter Höhe 0 wird sie zerstört. Nicht modelliert: Täuschkörper, Störsender
+(`DistanceScatterWhenJammed`), Marschflughöhe (`DistanceToTargetBeforeDiving`), Brückenebenen, `GarrisonHitKill*` (braucht Kollision mit Gebäuden).
+Alle Vektoren sind `Fixed`, Richtungen werden mit der Festkommawurzel normiert.
+
+**`PointDefenseLaserUpdate`** (Paladin, Avenger, Air-Force-Chinook): alle `ScanRate` Ticks wählt es das nächste Feindobjekt der primären Arten
+(`BALLISTIC_MISSILE SMALL_MISSILE`) in Laserreichweite, sonst der sekundären, sonst das nächste außerhalb der Reichweite, aber innerhalb `ScanRange`
+(2D, `FROM_CENTER_2D`; gleiche Abstände nach Entity-ID, weil die Partitionsreihenfolge nicht reproduzierbar ist); nicht entdeckte Tarnung wird übergangen,
+Bodenziele nur mit `AntiGround`. Zwischen den Scans feuert es, sobald der Laser bereit ist (`DelayBetweenShots` ohne Bonus), über `FireWeaponAt`; ein
+getötetes oder entwichenes Ziel wird verworfen und der nächste Scan nach `LogicRandom.Range(0, 3)` Ticks angesetzt. `PredictTargetVelocityFactor` hat im
+Original keine Wirkung (die vorhergesagte Position wird berechnet, aber nicht benutzt).
+
+**Nachweis** (`Tests.Projectiles.cs`, Handrechnungen): gerade Granate 200 Einheiten bei 300/s = 20 Punkte, Einschlag F + 21 mit Wirkungsereignis und
+Detonations-FX am Zielpunkt; Bogen 120 Einheiten (Höhen 30/30 bei 25 %/75 %, unabhängig in binary64 nachgerechnete Länge 131,43) = 14 Punkte,
+Einschlag F + 15, Punkt 5 bei (44,515; 21,302), Scheitel unter dem analytischen 22,5; Rakete ohne Zündverzögerung (10 je Tick sofort) Einschlag F + 10,
+Entfernung F + 13; Rakete mit 3 Ticks Zündverzögerung, 2 je Tick Anfangsgeschwindigkeit und 1 je Tick² Beschleunigung mit allen 14 Positionen und
+Einschlag F + 15; verzögerter Treffer 150 Einheiten bei 600/s = F + 8, unter einem Tick sofort; Streuung deterministisch innerhalb des Radius; der
+Punktverteidigungslaser schießt die Rakete ab; Snapshot mitten im Flug (Granate, Rakete, verzögerter Treffer) und zwei Läufe hashgleich.
+Realdaten (`Tests.RealFlight.cs`): die erste instanziierbare Einheit mit Granate (`AmericaTankCrusader`/`GenericTankShell`, Einschlag nach 11 Ticks) und die
+erste mit Rakete (`AirF_AmericaVehicleTomahawk`/`TomahawkMissile`, 45 Ticks) treffen einen Crusader, zweimal hashgleich.
+
+## 6j. Transporter, Tunnelnetz und Chinook-Versorgung (Phase 8, Paket E1)
+
+Referenz: `TransportAIUpdate.cpp`, `ChinookAIUpdate.cpp`, `SupplyTruckAIUpdate.cpp`, `TunnelContain.cpp`, `TunnelTracker.cpp`, `HelixContain.cpp`,
+`HelicopterSlowDeathUpdate.cpp`, `OpenContain.cpp`. Umsetzung: `Modules/BuiltIn/TransportModules.cs`, `World/TunnelTracker.cs`,
+`SimulationWorld.Containers.cs`, `AIUpdateInterface` (Evakuierung).
+
+**Befehle** (`CommandTypes.Version = 9`): `MoveAndEnterCommand` (26, `aiEnter`): ein eigenes bewegliches, nicht enthaltenes Objekt läuft zum Container
+und steigt ein, wenn es ihn wirklich erreicht hat (Umkreis beider Objekte plus zwei Zellen; ein Teilpfad, der zu früh endet, steigt nicht mehr
+teleportierend ein) und der Container es dann noch aufnimmt (Kapazität bei Ankunft). `EvacuateCommand` (27, `MSG_EVACUATE`/`aiMoveToAndEvacuate`): der
+Besitzer lässt alle Insassen aussteigen; ein beweglicher Container fährt mit Position zuerst dorthin, ein Chinook landet vorher, Gebäude und Tunnel
+lassen sofort aus; ein Tunnel entlässt das **ganze Netz** durch sich. Der Evakuierungsauftrag ist ein Zustand der KI (`AI_EVACUATE`: nicht untätig),
+den jeder neue Auftrag ersetzt. Das sofortige `EnterContainerCommand` (15) und `ExitContainerCommand` (16) bleiben unverändert.
+
+**`TransportAIUpdate`:** ein `AIUpdateInterface`; die Weitergabe von Angriffsbefehlen an feuerberechtigte Insassen (`privateAttackObject`) entfällt, weil
+es kein Feuern aus Containern gibt. Laden/Entladen über die Befehle oben, Aussteigen immer erlaubt (`FREE_TO_EXIT`).
+
+**`ChinookAIUpdate`:** ein `SupplyTruckAIUpdate` (dieselbe Versorgungsmaschine, §6e) mit eigenen Dockverzögerungen und `UpgradedSupplyBoost`, sobald der
+Spieler `Upgrade_AmericaSupplyLines` besitzt (`getUpgradedSupplyBoost`). Er fliegt „auch wenn er am Boden startet“: ein neuer Chinook steigt sofort auf
+`PreferredHeight` über Grund (Chinook 100), Höhenänderung um eine Lokomotorgeschwindigkeit je Tick (die Referenz lässt den Lokomotor mit `Lift` steigen,
+`ChinookTakeoffOrLandingState`); Versorgung läuft im Flug über dem Lager. Insassen verlassen nur einen gelandeten Chinook (`getAiFreeToExit`): eine
+Evakuierung senkt ihn bis zum Boden, entlädt und lässt ihn wieder steigen. Einsteigen geht ohne Landung (Vereinfachung). Nicht simuliert:
+Abseilen (Combat Drop), Heilen am Flugfeld, Wegflug vom Kartenrand, `isAvailableForSupplying` (ein beladener Chinook versorgt trotzdem).
+
+**`HelicopterSlowDeathBehavior`:** nimmt an derselben gewichteten Geschwisterlotterie teil wie `SlowDeathBehavior` (gemeinsame Schnittstelle
+`ISlowDeathCandidate`); nach dem Zuschlag (zwei Varianzzüge des Grundmoduls plus ein `Real`-Zug für den Rotorabwurf) dreht sich der Hubschrauber um
+seinen Eigendrall (Pendeln zwischen `MinSelfSpin` und `MaxSelfSpin` alle `SelfSpinUpdateDelay`), fliegt entlang seines Orbitwinkels mit gedämpfter
+`SpiralOrbitForwardSpeed` (der Winkel dreht um `SpiralOrbitTurnRate`) und fällt mit `FallHowFast` der Schwerkraft (Auftrieb `−g·(1 − FallHowFast)`).
+Nach der gezogenen Zeit fliegt der Rotor ab (`FXBlade`, `OCLBlade`, ab Veteran `OCLEjectPilot`); eine Einheit über dem Boden schlägt er auf
+(`FXHitGround`, `OCLHitGround`), und im ersten Tick mehr als `DelayFromGroundToFinalDeath` später explodiert er (`FXFinalBlowUp`, `OCLFinalBlowUp`),
+hinterlässt `FinalRubbleObject` (unbekannt oder nicht instanziierbar: `CreationSkipped`) und wird zerstört. Kinematisch statt Kraft über `PhysicsBehavior`.
+
+**`TunnelContain` mit `TunnelTracker`:** je Spieler ein Tunnelnetz (in `PlayerState`, Teil von Hash und Snapshot v7): die registrierten Tunnel in
+Registrierungsreihenfolge und die gemeinsame Insassenliste in Eintrittsreihenfolge mit Eintrittstick. Jeder Tunnel meldet sich bei der Erzeugung an
+(`onObjectCreated`, auch im Bau) und ab, wenn er stirbt (Todesfilter), entfernt (`onDelete`) oder verkauft wird (`onSelling` beim **Beginn** des Verkaufs;
+der letzte Tunnel lässt vorher alle aus). Stirbt der letzte Tunnel, werden alle Insassen zerstört (Einsturz); sonst übernimmt der älteste verbleibende
+Tunnel die Insassen, die durch den toten eingestiegen waren. Kapazität ist `GameData.ini MaxTunnelCapacity` (10) für das ganze Netz; Flugzeuge sind
+ausgeschlossen (`TunnelTracker::isValidContainerFor`); stellvertretend für `ActionManager::canEnterObject` nur eigene Objekte, nur in lebende, fertige,
+nicht verkaufte Tunnel. Heilung (`healObject`): je Tunnel und Tick ein Anteil `MaxHealth / TimeForFullHeal`, nach `TimeForFullHeal` im Netz voll –
+bei mehreren Tunneln also mehrfach je Tick, genau wie im Original, wo jeder Tunnel `healObjects` aufruft. Aussteigen setzt den Insassen auf den Tunnel
+und schickt ihn zu einem Punkt im Abstand `BoundingCircleRadius · [1; 1,5]` in zufälliger Richtung (`scatterToNearbyPosition`, zwei Logikzüge).
+Nicht modelliert: Nemesis-Zielwahl der Tunnelverteidiger, `harmAndForceExitAllContained` (Bunkerbrecher), Eroberung.
+
+**`HelixContain`:** ein `TransportContain` mit einem zusätzlichen Platz für ein `PORTABLE_STRUCTURE` (Gatling-Kanone, Propagandaturm): das erste wird
+immer angenommen, belegt keinen Platz, folgt Position und Richtung des Helix in jedem Update, stirbt mit ihm (`onDie` → `kill`) und verschwindet mit ihm
+(`onDelete`). `PayloadTemplateName` (im Retail-Bestand unbenutzt) wird ausdrücklich abgewiesen (Vorlage nicht instanziierbar mit
+`HelixContain[PayloadTemplateName]`). Nicht modelliert: Garnisonswaffenbonus, Spiegelung des Schadenszustands (Darstellung).
+
+**Skirmish-KI** (`SkirmishAi`): Chinooks sind Versorger (`Role.Carrier`); GLA-Einheiten unter 50 % Gesundheit laufen in einen eigenen Tunnel in
+600 Einheiten Umkreis (`MoveAndEnterCommand`), und sobald alle Insassen heil sind, entleert sich das Netz durch den Tunnel, der dem Armeeziel am
+nächsten liegt (`EvacuateCommand`); Transporter der Armee (Humvee, Horchposten) nehmen beim Angriff Infanterie in 250 Einheiten Umkreis auf und
+lassen sie aussteigen, wenn Feinde in `EngageRadius` sind oder das Ziel erreicht ist. Projektile sind weder Ziele noch eigene Einheiten der KI.
+
+**Nachweis** (`Tests.Transports.cs`): gemeinsames Netz, Kapazität, Eintrittsregeln, Ausstieg durch den anderen Tunnel im Streuring 20 … 30; Heilung
+zwei Anteile je Tick bei zwei Tunneln und voll nach 30 Ticks, Übergabe beim Tod, Einsturz; Verkauf lässt aus; Einlaufen und Entladen an einer Position;
+Chinook steigt 5 je Tick auf 100, versorgt im Flug (2 Kisten = 200, mit Supply Lines 260), landet zum Entladen und steigt wieder; Absturz handgerechnet
+(−2330 Rohwert je Tick², Aufschlag nach 75 Updates, Explosion im zehnten Tick danach, Wrack); Helix-Aufbau; Snapshot v7 mit Insassen und während der
+Evakuierung, Replay v7 der neuen Befehle, v6 abgewiesen. Realdaten: Chinook liefert (4 Lieferungen in 1.800 Ticks), GLA-Tunnel lässt durch den
+zweiten Tunnel aus.
 
 ## 7. Teams, Diplomatie, Sieg und Niederlage
 
@@ -598,7 +738,8 @@ frischer Lauf und der Lauf ab Snapshot bei Tick 13.590 sind tickweise identisch.
 Objekte, 984 erzeugt, 922 zerstört; Überlebende: 47 FactionGLAStealthGeneral, je 2 FactionGLA, FactionGLADemolitionGeneral und
 FactionGLAToxinGeneral. Die Wirtschaft läuft echt: **707 Lieferungen** an Versorgungszentren zahlten **93.075** Guthaben aus. Die vier
 amerikanischen Fraktionen haben in dieser Messung keine Versorgungswirtschaft (`supply note`: Ihr Nachschubträger ist der Chinook, dessen
-`ChinookAIUpdate` noch fehlt), ihr Einkommen ist das Startkapital. Der Realdatentest `Tests.RealReferenceMatch` prüft Teilnehmerzahl,
+`ChinookAIUpdate` noch fehlt), ihr Einkommen ist das Startkapital. **Neumessung Phase 8, Paket E1:** der Referenzmatch setzt jetzt auch Chinooks als Nachschubträger ein (keine `supply note` mehr), Schüsse fliegen (§6i);
+Sieger Spieler 1 (FactionAmerica) bei Tick 13.800, 36.880 Befehle, 428 Lieferungen mit 114.450 Guthaben, Werte in `docs/SIMULATION-CORE.md` §21. Der Realdatentest `Tests.RealReferenceMatch` prüft Teilnehmerzahl,
 Sieger, Lieferungen, Determinismus und Snapshotfortsetzung. Die Abdeckungslage je Seite liefert `--diagnose`; die Aufgabe „Referenzmatch
 aller Fraktionen auf Retail-Daten“ ist **erfüllt**. Grenzen (Stand Phase 5; der Referenzmatch nutzt weiterhin keinen Bau, die Skirmish-KI der Phase 6 baut, §11): kein Bauvorgang im Match (Dozer bauen nichts, Basen sind Startobjekte plus Ersatzinfrastruktur),
 keine Spezialkräfte im Befehlsstrom (es gibt keinen `UseSpecialPowerCommand`-Generator, §6d), keine Kollision/kein Terrain/keine Pfadsuche (§4);
@@ -624,12 +765,14 @@ Modell im Test, sie werden nicht aus der Simulation zurückgelesen.
 
 ## 8. Befehlstabelle
 
-Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (25 Befehlscodes, `CommandTypes.Version = 8`; Phase 6 ergänzt Codes 20–25: `ConstructCommand`, `SellCommand`, `SetRallyPointCommand`, `ResumeConstructCommand`, `CancelConstructCommand`, `RepairCommand`; `DockCommand` = 18, `SetRelationshipCommand` = 19) und die Ablehnungsgründe (Codes 25–29 für Spezialkräfte, §6d;
-Code 30 `CannotDock`, §6e); das Replay-Format v6 (`docs/SIMULATION-CORE.md` §8) kodiert alle 25, der Snapshot ist Version 6; Ablehnungscodes 31–34 (`TargetNotVisible`, `InvalidPlacement`, `CannotConstruct`, `CannotSell`) stammen aus Phase 6.
+Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (27 Befehlscodes, `CommandTypes.Version = 9`; Phase 8 ergänzt 26 `MoveAndEnterCommand`
+und 27 `EvacuateCommand`, §6j; Phase 6 ergänzt Codes 20–25: `ConstructCommand`, `SellCommand`, `SetRallyPointCommand`, `ResumeConstructCommand`, `CancelConstructCommand`, `RepairCommand`; `DockCommand` = 18, `SetRelationshipCommand` = 19) und die Ablehnungsgründe (Codes 25–29 für Spezialkräfte, §6d;
+Code 30 `CannotDock`, §6e); das Replay-Format v7 (`docs/SIMULATION-CORE.md` §8) kodiert alle 27, der Snapshot ist Version 7; Ablehnungscodes 31–34 (`TargetNotVisible`, `InvalidPlacement`, `CannotConstruct`, `CannotSell`) stammen aus Phase 6.
 
 ## 9. Modulabdeckung
 
-Siehe `docs/SIMULATION-CORE.md` §11 (Stand 30. September 2026, frisch gemessen): 1.393 von 2.115 Objekten sind instanziierbar (65,9 %, gegenüber 26/2.113 in
+Stand Phase 8, Paket E1 (frisch gemessen): 1.470 von 2.115 Objekten instanziierbar (69,5 %), 85 von 205 Modultypen implementiert, 15.543 von 19.553
+Modulverwendungen (79,5 %); Einzelheiten `docs/SIMULATION-CORE.md` §11 und §21. Verlauf (Stand nach Phase 6): 1.393 von 2.115 Objekten sind instanziierbar (65,9 %, gegenüber 26/2.113 in
 Phase 4 und 1.384 am Ende von Phase 5); 77 von 205 Modultypen sind implementiert (183
 Simulationsmodule, 22 Präsentationsmodule) und decken 15.382 von 19.553 Modulverwendungen (78,7 %). Nicht implementiert sind 77
 Module, die der Katalog der Kategorie „Phase 5“ zuordnet und die noch offen sind,
@@ -649,8 +792,10 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
 - **Block 0.4 offen:** die RNG-Folge wurde nicht gegen ein kompiliertes Original verglichen (kein Compiler, keine Originalläufe). Die
   Golden-Master-Tests (§7a) sind aus dem Quelltext abgeleitet, nicht gegen Originalläufe gemessen; Festkomma statt `Real` ist eine
   dokumentierte Abweichung.
-- Keine Projektil-Flugzeit (Schaden greift beim Schuss, §3); Flächenschaden (§6g) läuft nur für `FireWeaponCommand` und
-  `FireWeaponUpdate`, `FireWeaponWhenDeadBehavior` meldet weiterhin nur `WeaponFireRequested`.
+- Projektil-Flugzeit ist seit Phase 8 modelliert (§6i), aber **ohne Kollision**: Projektile detonieren am Ende ihrer Bahn, am Ziel, am Boden oder nach
+  Lebensdauer/Treibstoff, nie an einem Objekt, an dem sie vorbeifliegen; Täuschkörper, Störsender, Marschflughöhe und `GarrisonHitKill*` fehlen.
+  Flächenschaden (§6g) läuft für `FireWeaponCommand`, `FireWeaponUpdate`, `PointDefenseLaserUpdate` und Detonationen, `FireWeaponWhenDeadBehavior` meldet
+  weiterhin nur `WeaponFireRequested`.
 - Erfahrung, Stufen, Gesundheits- und Waffenboni sind implementiert (§6h); die Rüstungs-/Waffensatzauswahl nach Stufe ist nicht
   modelliert, weil kein ausgelieferter Satz sie verlangt. Rang und „Science Purchase Points“ aus Erfahrung fehlen. Das Furchtsignal
   (Block 0.3) ist implementiert.
@@ -661,8 +806,8 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
   `DETECTED` auswertet, §6); seit Phase 6 schließen Sichtabfragen nicht entdeckte `STEALTHED`-Objekte aus (§11), einen Detektor-Verbraucher für die KI gibt es nicht.
 - Teams und Diplomatie sind ein Datenmodell (§7). Die **Wirkung** von `CommandSet`/`CommandButton` (Kommandoleisten) und der
   **Radareffekt** (`RadarUpdate`/`RadarUpgrade` führen nur den Zustand) sind nicht implementiert. Garnison (§6a), Sciences (§1a) und
-  `TransportContain` sind implementiert; `TunnelContain`, `HelixContain`, `TransportAIUpdate` und `ChinookAIUpdate` fehlen (die amerikanischen
-  Nachschubträger sind Chinooks, deshalb hat FactionAmerica im Referenzmatch keine Versorgungswirtschaft). „Science Purchase Points“ werden
+  `TransportContain` sind implementiert, seit Phase 8 auch `TunnelContain`, `HelixContain`, `TransportAIUpdate` und `ChinookAIUpdate` (§6j; ohne Abseilen,
+  Feuern aus Containern und Flugfeldheilung). „Science Purchase Points“ werden
   nur per Systembefehl gutgeschrieben (§1a).
 - Versorgung (§6e): die Maschinensperre während der Dockbewegung, die Nähe-Prüfung der Lager, `setDockCrippled` und die Bindung von
   Spawns an einen `SlavedUpdate` fehlen; die Dockbewegung ist eine einfache geradlinige Bewegung ohne Geometrie.
