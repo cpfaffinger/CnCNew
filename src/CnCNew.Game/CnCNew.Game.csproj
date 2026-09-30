@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../CnCNew.Content/CnCNew.Content.csproj" />
+    <ProjectReference Include="../CnCNew.Data/CnCNew.Data.csproj" />
+    <ProjectReference Include="../CnCNew.Formats/CnCNew.Formats.csproj" />
+    <ProjectReference Include="../CnCNew.Images/CnCNew.Images.csproj" />
+    <ProjectReference Include="../CnCNew.Simulation/CnCNew.Simulation.csproj" />
+    <ProjectReference Include="../CnCNew.Presentation/CnCNew.Presentation.csproj" />
+    <ProjectReference Include="../CnCNew.Ui/CnCNew.Ui.csproj" />
+    <ProjectReference Include="../CnCNew.Audio/CnCNew.Audio.csproj" />
+    <ProjectReference Include="../CnCNew.W3D/CnCNew.W3D.csproj" />
+  </ItemGroup>
+</Project>
