@@ -1033,7 +1033,7 @@ public static class WndTests
                 var draw = Stopwatch.StartNew();
                 var commands = new SortedDictionary<string, int>(StringComparer.Ordinal);
                 var custom = new SortedDictionary<string, int>(StringComparer.Ordinal);
-                int labels = 0, total = 0;
+                int labels = 0, total = 0, borders = 0;
                 foreach (var layout in layouts)
                 {
                     var tree = new UiWindowTree(viewport, new UiScaleOptions { Mode = mode }, services);
@@ -1041,13 +1041,14 @@ public static class WndTests
                     var list = tree.BuildDrawList();
                     total += list.Commands.Length;
                     labels += list.Statistics.UnresolvedLabels;
+                    borders += list.Statistics.BorderStatusWindows;
                     foreach (var (kind, count) in list.CountByKind()) commands[kind] = commands.GetValueOrDefault(kind) + count;
                     foreach (var (name, count) in list.Statistics.CustomDraws) custom[name] = custom.GetValueOrDefault(name) + count;
                     Check(list.Dump() == tree.BuildDrawList().Dump(), $"{layout.FileName}: draw list not reproducible.");
                 }
                 draw.Stop();
                 Console.WriteLine($"  draw {viewport} {mode}: {total} commands in {draw.ElapsedMilliseconds} ms ({string.Join(", ", commands.Select(pair => $"{pair.Key} {pair.Value}"))}); "
-                                  + $"unresolved labels {labels} (no text source); custom draw callbacks {custom.Values.Sum()}");
+                                  + $"unresolved labels {labels} (no text source); custom draw callbacks {custom.Values.Sum()}; drawn windows with BORDER status (not drawn) {borders}");
                 if (viewport.Width == 1920 && mode == UiScaleMode.Stretch)
                     Console.WriteLine("  custom draw callbacks (host must implement): " + string.Join(", ", custom.Select(pair => $"{pair.Key} {pair.Value}")));
             }
