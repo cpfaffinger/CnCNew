@@ -6,6 +6,7 @@ Func<string[], int>[] suites =
     LiveMatchTests.Run,
     AudioDirectorTests.Run,
     ShellTests.Run,
+    HudTests.Run,
 ];
 
 var failures = 0;

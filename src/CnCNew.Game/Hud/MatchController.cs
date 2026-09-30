@@ -1,0 +1,624 @@
+using System.Collections.Immutable;
+using System.Globalization;
+using System.Numerics;
+using CnCNew.Game.Live;
+using CnCNew.Presentation.Camera;
+using CnCNew.Presentation.Input;
+using CnCNew.Simulation.Events;
+using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.World;
+using CnCNew.Ui.Layout;
+using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Wnd;
+using UiScaleMode = CnCNew.Ui.Layout.UiScaleMode;
+using SettingsScaleMode = CnCNew.Ui.Settings.UiScaleMode;
+using GameSettings = CnCNew.Ui.Settings.GameSettings;
+
+namespace CnCNew.Game.Hud;
+
+/// <summary>The four buttons of the in-game <c>QuitMenu.wnd</c> plus resume; <see cref="MatchController.MenuActionRequested"/> reports
+/// whichever the player clicked so the host (shell) can act on it (only <see cref="Resume"/> is handled here, by closing the menu).</summary>
+public enum MenuAction
+{
+    Resume,
+    SaveLoad,
+    Options,
+    Restart,
+    Exit,
+}
+
+/// <summary>
+/// The human player's whole control surface for a running <see cref="LiveMatch"/>: owns the <see cref="GameInputController"/> and the
+/// retail control-bar HUD, turns <see cref="InputEvent"/>s into simulation commands (exclusively through <see cref="LiveMatch.Commands"/>,
+/// so <c>Session.ToReplay()</c> reproduces everything the player did) and produces a <see cref="UiDrawList"/> plus screen-space overlay
+/// data for the host renderer. No Stride types: the whole class runs headless in tests.
+/// <para>
+/// Call order once per rendered frame: <see cref="Process"/> for every queued input event, then (after <see cref="LiveMatch.Advance"/>
+/// has stepped the simulation for the frame) <see cref="Update"/>, then <see cref="BuildDrawList"/>.
+/// </para>
+/// </summary>
+public sealed class MatchController
+{
+    private readonly HudAssets _assets;
+    private readonly UiWindowTree _tree;
+    private readonly UiWindow _controlBarRoot;
+    private readonly UiWindow _quitMenuRoot;
+    private readonly UiWindow _leftHud;
+    private readonly UiScaleOptions _scaleOptions;
+    private readonly ControlBarSchemeInfo? _scheme;
+    private readonly List<(string Text, long ExpiresAtMs)> _ticker = [];
+    private const long TickerLifetimeMs = 8000;
+    private const int TickerCapacity = 6;
+
+    private bool _uiOwnsMouse;
+    private bool _minimapPanning;
+    private bool _wasPausedBeforeMenu;
+    private long _clockMs;
+    private bool _matchEndedFired;
+
+    public MatchController(LiveMatch match, GameSettings settings, string language = "English", IUiTextMeasure? textMeasure = null)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        ArgumentNullException.ThrowIfNull(settings);
+        Match = match;
+        Stats = new MatchStatsTracker();
+
+        _assets = HudAssets.Load(match.Data, language);
+        var services = _assets.BuildTreeServices(textMeasure ?? new MonospaceTextMeasure());
+        _scaleOptions = new UiScaleOptions
+        {
+            Mode = MapScaleMode(settings.Display.UiScale),
+            TextScale = settings.Accessibility.UiTextScalePercent / 100m,
+        };
+        var viewport = new UiViewport(Math.Max(1, (int)match.Camera.ViewportSize.X), Math.Max(1, (int)match.Camera.ViewportSize.Y));
+        _tree = new UiWindowTree(viewport, _scaleOptions, services);
+
+        var controlBarRoots = _tree.AddLayout(_assets.ControlBar);
+        _controlBarRoot = controlBarRoots.Single(window => window.Name == "ControlBar.wnd:ControlBarParent");
+        _leftHud = _tree.FindByName("ControlBar.wnd:LeftHUD") ?? throw new InvalidOperationException("ControlBar.wnd has no LeftHUD window.");
+        // The retail file leaves the observer panels visible; this HUD is for the human player only.
+        _tree.FindByName("ControlBar.wnd:ObserverPlayerInfoWindow")?.SetHidden(true);
+        _tree.FindByName("ControlBar.wnd:ObserverPlayerListWindow")?.SetHidden(true);
+        _tree.Register("ControlBarSystem", OnControlBarSystem);
+
+        var quitMenuRoots = _tree.AddLayout(_assets.QuitMenu);
+        _quitMenuRoot = quitMenuRoots.Single(window => window.Name == "QuitMenu.wnd:QuitMenuParent");
+        _quitMenuRoot.SetHidden(true);
+        _tree.Register("QuitMenuSystem", OnQuitMenuSystem);
+
+        var humanParticipant = match.Data.Factions.FirstOrDefault(
+            participant => participant.Faction.Name.Equals(match.Setup.HumanFaction, StringComparison.OrdinalIgnoreCase));
+        if (humanParticipant is not null && _assets.Schemes.TryGetForSide(humanParticipant.Side, out var scheme)) _scheme = scheme;
+
+        var buttons = CommandButtonCatalog.Build(match.Data.Graph);
+        var hotkeys = HotkeyMap.FromGraph(match.Data.Graph).WithEngineDefaults();
+        Input = new GameInputController(match.Human, match.Commands, hotkeys, buttons,
+            label => _assets.Text.TryGet(label, out var resolved) ? resolved : null,
+            new GameInputSettings(Camera: MapCameraSettings(settings)));
+        Input.UiRequest += OnInputUiRequest;
+
+        match.BeforeTick = world => Input.Tick(world);
+        match.TickStepped += OnTickStepped;
+
+        CommandBar = Input.CommandBar!.Build(match.World, Input.Selection);
+        Hud = Input.CommandBar.Hud(match.World, match.Human);
+        Overlay = HudOverlay.Empty;
+    }
+
+    public LiveMatch Match { get; }
+    public GameInputController Input { get; }
+    public MatchStatsTracker Stats { get; }
+
+    public CommandBarView CommandBar { get; private set; }
+    public PlayerHud Hud { get; private set; }
+    public HudOverlay Overlay { get; private set; }
+    public bool IsMenuOpen { get; private set; }
+
+    /// <summary>Meta actions the controller does not handle itself (pause, screenshot, chat, diplomacy, control bar toggle, time scale, ...).
+    /// <see cref="MetaAction.Options"/> is handled internally (opens/closes the in-game menu) and never appears here.</summary>
+    public event Action<MetaAction>? UiRequest;
+
+    /// <summary>A button of the in-game menu was clicked. <see cref="MenuAction.Resume"/> is also handled internally (the menu closes).</summary>
+    public event Action<MenuAction>? MenuActionRequested;
+
+    /// <summary>Raised exactly once, the first frame <see cref="Simulation.Skirmish.SkirmishMatchSession.IsOver"/> is observed.</summary>
+    public event Action<MatchResult>? MatchEnded;
+
+    // ------------------------------------------------------------------------------------------------------------ input
+
+    public void Process(InputEvent inputEvent)
+    {
+        ArgumentNullException.ThrowIfNull(inputEvent);
+        switch (inputEvent)
+        {
+            case MouseMoveEvent move:
+                _tree.MouseMove(Round(move.Position.X), Round(move.Position.Y));
+                if (_minimapPanning && TryMinimapWorld(move.Position, out var panTo)) Match.Camera.CenterOn(panTo);
+                else if (!_uiOwnsMouse) Input.Process(inputEvent, Match.World, Match.Camera);
+                return;
+            case MouseButtonEvent button:
+                HandleMouseButton(button);
+                return;
+            case MouseWheelEvent:
+                if (!_uiOwnsMouse) Input.Process(inputEvent, Match.World, Match.Camera);
+                return;
+            case KeyEvent key:
+                HandleKey(key);
+                return;
+            case FocusLostEvent:
+                _uiOwnsMouse = false;
+                _minimapPanning = false;
+                Input.Process(inputEvent, Match.World, Match.Camera);
+                return;
+            default:
+                Input.Process(inputEvent, Match.World, Match.Camera);
+                return;
+        }
+    }
+
+    private void HandleMouseButton(MouseButtonEvent button)
+    {
+        if (!IsMenuOpen && TryMinimapWorld(button.Position, out var world))
+        {
+            _uiOwnsMouse = true;
+            if (button.IsDown)
+            {
+                if (button.Button == MouseButton.Left) { Match.Camera.CenterOn(world); _minimapPanning = true; }
+                else if (button.Button == MouseButton.Right)
+                    Input.Commands.IssueContext(Match.World, new ContextHint(ContextAction.Move, CursorKind.Move, EntityId.Invalid, new Vector3(world.X, world.Y, 0f)), null);
+            }
+            else _minimapPanning = false;
+            return;
+        }
+
+        var x = Round(button.Position.X);
+        var y = Round(button.Position.Y);
+        var uiButton = ToUiButton(button.Button);
+        if (button.IsDown)
+        {
+            var isUi = IsMenuOpen || _tree.InputTarget(x, y) is not null;
+            _uiOwnsMouse = isUi;
+            if (isUi) { _tree.MouseDown(x, y, uiButton); _tree.Dispatch(); }
+            else Input.Process(button, Match.World, Match.Camera);
+        }
+        else
+        {
+            if (_uiOwnsMouse)
+            {
+                _tree.MouseUp(x, y, uiButton);
+                _tree.Dispatch();
+                _uiOwnsMouse = false;
+            }
+            else Input.Process(button, Match.World, Match.Camera);
+        }
+    }
+
+    private void HandleKey(KeyEvent key)
+    {
+        if (IsMenuOpen)
+        {
+            if (key is { Key: KeyCode.Escape, IsDown: true, IsRepeat: false }) CloseMenu();
+            return;
+        }
+        Input.Process(key, Match.World, Match.Camera);
+    }
+
+    /// <summary>Screen position to minimap world position, honoring the letterbox fit of a square-or-not minimap inside the (usually wider) LeftHUD rectangle.</summary>
+    private bool TryMinimapWorld(Vector2 screen, out Vector2 world)
+    {
+        world = default;
+        var rect = _leftHud.Rect;
+        if (!rect.Contains((int)screen.X, (int)screen.Y)) return false;
+        var minimap = Match.Minimap;
+        var scale = Math.Min(rect.Width / (float)minimap.Width, rect.Height / (float)minimap.Height);
+        var drawWidth = minimap.Width * scale;
+        var drawHeight = minimap.Height * scale;
+        var offsetX = rect.X + (rect.Width - drawWidth) / 2f;
+        var offsetY = rect.Y + (rect.Height - drawHeight) / 2f;
+        var px = (screen.X - offsetX) / scale;
+        var py = (screen.Y - offsetY) / scale;
+        if (px < 0 || py < 0 || px >= minimap.Width || py >= minimap.Height) return false;
+        world = minimap.PixelToWorld(new Vector2(px, py));
+        return true;
+    }
+
+    private void OnInputUiRequest(MetaAction action)
+    {
+        if (action == MetaAction.Options) { OpenMenu(); return; }
+        UiRequest?.Invoke(action);
+    }
+
+    private void OpenMenu()
+    {
+        if (IsMenuOpen) return;
+        IsMenuOpen = true;
+        _wasPausedBeforeMenu = Match.Paused;
+        Match.Paused = true;
+        _quitMenuRoot.SetHidden(false);
+    }
+
+    private void CloseMenu()
+    {
+        if (!IsMenuOpen) return;
+        IsMenuOpen = false;
+        Match.Paused = _wasPausedBeforeMenu;
+        _quitMenuRoot.SetHidden(true);
+        MenuActionRequested?.Invoke(MenuAction.Resume);
+    }
+
+    private void OnQuitMenuSystem(UiWindowTree tree, UiEvent uiEvent)
+    {
+        if (uiEvent.Kind != UiEventKind.ButtonSelected) return;
+        switch (uiEvent.Source)
+        {
+            case "QuitMenu.wnd:ButtonReturn": CloseMenu(); break;
+            case "QuitMenu.wnd:ButtonOptions": MenuActionRequested?.Invoke(MenuAction.Options); break;
+            case "QuitMenu.wnd:ButtonSaveLoad": MenuActionRequested?.Invoke(MenuAction.SaveLoad); break;
+            case "QuitMenu.wnd:ButtonRestart": MenuActionRequested?.Invoke(MenuAction.Restart); break;
+            case "QuitMenu.wnd:ButtonExit": MenuActionRequested?.Invoke(MenuAction.Exit); break;
+        }
+    }
+
+    private void OnControlBarSystem(UiWindowTree tree, UiEvent uiEvent)
+    {
+        if (uiEvent.Kind is not (UiEventKind.ButtonSelected or UiEventKind.ButtonSelectedRight)) return;
+        var name = uiEvent.Source;
+        if (SlotOf(name, "ControlBar.wnd:ButtonCommand") is { } slot && slot >= 1 && slot <= CommandBarModel.GridSlots)
+        {
+            Input.CommandBar!.Activate(Match.World, CommandBar, slot, Input.Commands);
+            return;
+        }
+        if (SlotOf(name, "ControlBar.wnd:ButtonQueue") is { } queueSlot && queueSlot >= 1)
+        {
+            Input.Commands.CancelProduction(CommandBar.Producer, queueSlot - 1);
+            return;
+        }
+        switch (name)
+        {
+            case "ControlBar.wnd:ButtonCancelConstruction":
+                Input.Commands.CancelConstruction(CommandBar.Producer);
+                break;
+            case "ControlBar.wnd:ButtonIdleWorker":
+                Input.DispatchMeta(MetaAction.SelectNextIdleWorker, Match.World, Match.Camera);
+                break;
+            case "ControlBar.wnd:ButtonOptions":
+                OpenMenu();
+                break;
+            case "ControlBar.wnd:ButtonGeneral":
+            case "ControlBar.wnd:ButtonPlaceBeacon":
+            case "ControlBar.wnd:PopupCommunicator":
+                AddTicker($"{name.Split(':')[^1]} is not implemented.");
+                break;
+        }
+    }
+
+    private static int? SlotOf(string name, string prefix)
+        => name.StartsWith(prefix, StringComparison.Ordinal) && int.TryParse(name.AsSpan(prefix.Length), out var value) ? value : null;
+
+    private static UiMouseButton ToUiButton(MouseButton button) => button switch
+    {
+        MouseButton.Left => UiMouseButton.Left,
+        MouseButton.Right => UiMouseButton.Right,
+        _ => UiMouseButton.Middle,
+    };
+
+    private static int Round(float value) => (int)MathF.Round(value);
+
+    // ------------------------------------------------------------------------------------------------------------ per-frame update
+
+    /// <summary>Applies the camera intent, refreshes the command bar and HUD numbers, and recomputes the overlay. Call once per
+    /// rendered frame, after <see cref="LiveMatch.Advance"/> has stepped the simulation.</summary>
+    public void Update(double deltaSeconds)
+    {
+        if (!IsMenuOpen)
+        {
+            var intent = Input.UpdateCamera(Match.Camera, (float)deltaSeconds);
+            ApplyCamera(intent);
+            Match.Camera.Update((float)deltaSeconds, intent.Scroll != Vector2.Zero);
+        }
+
+        CommandBar = Input.CommandBar!.Build(Match.World, Input.Selection);
+        Hud = Input.CommandBar.Hud(Match.World, Match.Human);
+        DrainFeedbackToTicker();
+        Overlay = ComputeOverlay();
+        _clockMs += (long)Math.Round(deltaSeconds * 1000);
+        _tree.AdvanceTo(_clockMs);
+    }
+
+    private void ApplyCamera(CameraIntent intent)
+    {
+        if (intent.Reset)
+        {
+            Match.Camera.SetZoomToDefault();
+            Match.Camera.SetAngle(0f);
+            Match.Camera.SetPitchToDefault();
+        }
+        if (intent.CenterOn is { } center) Match.Camera.CenterOn(center);
+        if (intent.Scroll != Vector2.Zero) Match.Camera.ScrollBy(intent.Scroll);
+        if (intent.RotateDelta != 0f) Match.Camera.RotateBy(intent.RotateDelta);
+        if (intent.ZoomDelta != 0f) Match.Camera.SetHeightAboveGround(Match.Camera.HeightAboveGround + intent.ZoomDelta);
+    }
+
+    private static UiScaleMode MapScaleMode(SettingsScaleMode mode) => mode switch
+    {
+        SettingsScaleMode.Stretch => UiScaleMode.Stretch,
+        SettingsScaleMode.IntegerMultiple => UiScaleMode.Uniform,
+        _ => UiScaleMode.Anchor,
+    };
+
+    /// <summary>Maps the options-screen 0..1 scroll/rotate sliders onto the input layer's camera tuning: 0.5 (the default) keeps the
+    /// engine defaults, the ends halve/double them. There is no retail table for this since the original slider drives an entirely
+    /// different (non-linear) internal speed constant; this is a reasonable, documented approximation (see docs/GAME-HUD.md).</summary>
+    private static CameraSettings MapCameraSettings(GameSettings settings)
+    {
+        var defaults = new CameraSettings();
+        var scrollFactor = 0.5f + settings.Controls.ScrollSpeed;
+        var rotateFactor = 0.5f + settings.Controls.CameraRotateSpeed;
+        return defaults with
+        {
+            EdgeScrollEnabled = settings.Controls.EdgeScrolling,
+            HorizontalScrollSpeedFactor = defaults.HorizontalScrollSpeedFactor * scrollFactor,
+            VerticalScrollSpeedFactor = defaults.VerticalScrollSpeedFactor * scrollFactor,
+            KeyboardScrollSpeedFactor = defaults.KeyboardScrollSpeedFactor * scrollFactor,
+            KeyboardRotateRadiansPerFrame = defaults.KeyboardRotateRadiansPerFrame * rotateFactor,
+        };
+    }
+
+    // ------------------------------------------------------------------------------------------------------------ ticker and stats
+
+    private void DrainFeedbackToTicker()
+    {
+        foreach (var feedback in Input.Commands.DrainFeedback())
+        {
+            var text = feedback.Kind switch
+            {
+                FeedbackKind.Rejected => $"Rejected: {feedback.Detail}",
+                FeedbackKind.Unsupported => $"Not supported: {feedback.Detail}",
+                FeedbackKind.InvalidOrder => "Cannot do that.",
+                _ => null,
+            };
+            if (text is not null) AddTicker(text);
+        }
+    }
+
+    private void OnTickStepped(TickResult result)
+    {
+        Stats.Observe(result, Match.World);
+        foreach (var ev in result.Events) ObserveTickerEvent(ev);
+        if (Match.Session.IsOver && !_matchEndedFired)
+        {
+            _matchEndedFired = true;
+            MatchEnded?.Invoke(Stats.Snapshot(Match.Session));
+        }
+    }
+
+    /// <summary>The EVA-style ticker text, derived only from <see cref="SimEvent"/>s the simulation already raises (documented in
+    /// docs/GAME-HUD.md): construction and production completion, player defeat, special power use, upgrades and rejected commands.</summary>
+    private void ObserveTickerEvent(SimEvent ev)
+    {
+        var world = Match.World;
+        string? text = ev.Kind switch
+        {
+            SimEventKind.ConstructionCompleted => world.FindEntity(ev.Entity) is { } site ? $"{site.Template.Name} construction complete" : null,
+            SimEventKind.ProductionCompleted when (uint)ev.Value < (uint)world.Templates.Templates.Length => $"{world.Templates[(int)ev.Value].Name} ready",
+            SimEventKind.PlayerDefeated => $"Player {ev.Player.Value} has been defeated",
+            SimEventKind.SpecialPowerUsed => $"{ev.Text} activated",
+            SimEventKind.UpgradeCompleted => "Upgrade complete",
+            SimEventKind.CommandRejected => "Command rejected",
+            _ => null,
+        };
+        if (text is not null) AddTicker(text);
+    }
+
+    private void AddTicker(string text)
+    {
+        _ticker.Add((text, _clockMs + TickerLifetimeMs));
+        while (_ticker.Count > TickerCapacity) _ticker.RemoveAt(0);
+    }
+
+    private ImmutableArray<string> TickerSnapshot()
+    {
+        _ticker.RemoveAll(entry => entry.ExpiresAtMs <= _clockMs);
+        return [.._ticker.Select(entry => entry.Text)];
+    }
+
+    // ------------------------------------------------------------------------------------------------------------ overlay
+
+    private HudOverlay ComputeOverlay()
+    {
+        var world = Match.World;
+        var view = Match.Camera;
+
+        var box = SelectionBoxOverlay.None;
+        if (Input.State.HasMouse && Input.State.IsDragging(MouseButton.Left) && Input.State.PressPosition(MouseButton.Left) is { } start)
+            box = new SelectionBoxOverlay(true, start, Input.State.MousePosition);
+
+        var selected = ImmutableArray.CreateBuilder<UnitMarker>();
+        var rally = ImmutableArray.CreateBuilder<RallyPointMarker>();
+        foreach (var id in Input.Selection.Selected)
+        {
+            if (world.FindEntity(id) is not { } entity) continue;
+            if (Input.Selection.Picker.TryProject(view, entity, out var projected))
+            {
+                var health = entity.Body is { } body && body.MaxHealth.Raw != 0 ? (float)(body.Health / body.MaxHealth).ToDecimal() : 1f;
+                selected.Add(new UnitMarker(entity.Id, projected.Center, projected.Radius, health, entity.Owner == Match.Human, world.AreEnemies(Match.Human, entity.Owner)));
+            }
+            if (SimulationQueries.ProductionOf(entity) is { } production)
+            {
+                var state = SimulationQueries.Describe(production);
+                if (state.Bool("hasRally") && state.Values.TryGetValue("rallyX", out var rawX) && rawX is Fixed rallyX
+                    && state.Values.TryGetValue("rallyY", out var rawY) && rawY is Fixed rallyY
+                    && view.TryWorldToScreen(new Vector3((float)rallyX.ToDecimal(), (float)rallyY.ToDecimal(), 0f), out var rallyScreen))
+                    rally.Add(new RallyPointMarker(entity.Id, rallyScreen));
+            }
+        }
+
+        var orderLines = ImmutableArray.CreateBuilder<OrderLine>();
+        foreach (var (unitId, order) in Input.Commands.Orders.All)
+        {
+            if (world.FindEntity(unitId) is not { } unit) continue;
+            var points = ImmutableArray.CreateBuilder<Vector2>();
+            var from = SimulationQueries.GroundOf(unit);
+            if (view.TryWorldToScreen(new Vector3(from.X, from.Y, 0f), out var fromScreen)) points.Add(fromScreen);
+            if (view.TryWorldToScreen(new Vector3(order.Destination.X, order.Destination.Y, 0f), out var toScreen)) points.Add(toScreen);
+            foreach (var waypoint in order.Waypoints)
+                if (view.TryWorldToScreen(new Vector3(waypoint.X, waypoint.Y, 0f), out var waypointScreen)) points.Add(waypointScreen);
+            if (points.Count >= 2) orderLines.Add(new OrderLine(unitId, points.ToImmutable(), order.Kind == StandingOrderKind.Attack));
+        }
+
+        var placement = PlacementGhostOverlay.None;
+        if (Input.Commands.Mode == CommandModeKind.Placement && Input.Commands.Ghost is { } ghost && world.Templates.TryGet(ghost.Template, out var template))
+        {
+            var footprint = Footprint(template, ghost.Position, ghost.Angle);
+            var screenPoints = ImmutableArray.CreateBuilder<Vector2>();
+            var ok = true;
+            foreach (var corner in footprint)
+                if (view.TryWorldToScreen(corner, out var corner2D)) screenPoints.Add(corner2D);
+                else { ok = false; break; }
+            if (ok) placement = new PlacementGhostOverlay(true, screenPoints.ToImmutable(), ghost.IsValid);
+        }
+
+        var hint = DescribeHint(Input.Hint);
+        return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, TickerSnapshot());
+    }
+
+    private static string? DescribeHint(ContextHint hint) => hint.Action switch
+    {
+        ContextAction.None or ContextAction.Select => null,
+        ContextAction.Invalid => "Cannot do that here.",
+        _ => hint.Action.ToString(),
+    };
+
+    /// <summary>The four ground corners of the construction footprint, rotated by <paramref name="angle"/> (radians). A non-box geometry
+    /// (rare for buildings) is approximated by its bounding circle's square, since the simulation only exposes that radius.</summary>
+    private static Vector3[] Footprint(ObjectTemplate template, Vector3 position, float angle)
+    {
+        float halfX, halfY;
+        if (template.Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase))
+        {
+            halfX = (float)template.GeometryMajorRadius.ToDecimal();
+            halfY = (float)template.GeometryMinorRadius.ToDecimal();
+        }
+        else halfX = halfY = (float)template.BoundingCircleRadius.ToDecimal();
+
+        var cos = MathF.Cos(angle);
+        var sin = MathF.Sin(angle);
+        Vector3 Corner(float sx, float sy)
+        {
+            var dx = sx * halfX;
+            var dy = sy * halfY;
+            return new Vector3(position.X + dx * cos - dy * sin, position.Y + dx * sin + dy * cos, position.Z);
+        }
+        return [Corner(-1, -1), Corner(1, -1), Corner(1, 1), Corner(-1, 1)];
+    }
+
+    /// <summary>
+    /// The current screen rectangle of a decorated window name (e.g. <c>"ControlBar.wnd:ButtonCommand01"</c>), for a host that wants
+    /// to hit-test without duplicating the layout's scaling math, and for headless tests that click a real button. Null if no such
+    /// window exists in <c>ControlBar.wnd</c> or <c>QuitMenu.wnd</c>.
+    /// </summary>
+    public UiRect? WindowRect(string decoratedName) => _tree.FindByName(decoratedName)?.Rect;
+
+    // ------------------------------------------------------------------------------------------------------------ draw list
+
+    /// <summary>
+    /// The HUD for a <paramref name="width"/> x <paramref name="height"/> viewport: the retail control bar chrome (built from
+    /// <c>ControlBar.wnd</c>) with dynamic cameo/hotkey/cost/cooldown overlays appended, plus two synthetic <see cref="UiCustomDraw"/>
+    /// entries the host renderer fills in itself: <c>W3DLeftHUDDraw</c> (unimplemented in the original too; its window is the minimap
+    /// frame) and <c>Viewport3D</c> (this package's own addition, the screen area above the control bar the 3D scene should render into).
+    /// </summary>
+    public UiDrawList BuildDrawList(int width, int height)
+    {
+        if (width < 1 || height < 1) throw new ArgumentOutOfRangeException(nameof(width), "The viewport needs at least 1x1 pixels.");
+        if (_tree.Viewport.Width != width || _tree.Viewport.Height != height) _tree.SetViewport(new UiViewport(width, height), _scaleOptions);
+
+        RefreshDynamicWindows();
+        var baseList = _tree.BuildDrawList();
+        var extra = BuildDynamicCommands();
+        var viewportRect = new UiRect(0, 0, width, _controlBarRoot.Rect.Y);
+        var commands = baseList.Commands.AddRange(extra).Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
+        return baseList with { Commands = commands };
+    }
+
+    private void RefreshDynamicWindows()
+    {
+        var view = CommandBar;
+        _tree.FindByName("ControlBar.wnd:CommandWindow")!.SetHidden(view.Context is not (CommandBarContext.Command or CommandBarContext.MultiSelect));
+        _tree.FindByName("ControlBar.wnd:UnderConstructionWindow")!.SetHidden(view.Context != CommandBarContext.UnderConstruction);
+        var underConstructionDesc = _tree.FindByName("ControlBar.wnd:UnderConstructionDesc");
+        if (view.Context == CommandBarContext.UnderConstruction && Match.World.FindEntity(view.Producer) is { } site) underConstructionDesc?.SetText(site.Template.Name);
+
+        for (var slot = 1; slot <= CommandBarModel.GridSlots; slot++)
+        {
+            var window = _tree.FindByName($"ControlBar.wnd:ButtonCommand{slot:00}")!;
+            var button = view[slot];
+            window.SetHidden(button is null || button.Availability == ButtonAvailability.Hidden);
+            if (button is not null) window.SetEnabled(button.IsEnabled);
+        }
+
+        _tree.FindByName("ControlBar.wnd:ProductionQueueWindow")!.SetHidden(view.Queue.IsEmpty);
+        for (var index = 0; index < CommandBarModel.MaxQueueButtons; index++)
+            _tree.FindByName($"ControlBar.wnd:ButtonQueue{(index + 1):00}")!.SetHidden(index >= view.Queue.Length);
+
+        _tree.FindByName("ControlBar.wnd:WinUnitSelected")!.SetHidden(view.Context != CommandBarContext.Command);
+    }
+
+    private ImmutableArray<UiDrawCommand> BuildDynamicCommands()
+    {
+        var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
+        var smallFont = new UiFont("Arial", 10, false);
+        var white = new WndColor(255, 255, 255, 255);
+        var black = new WndColor(0, 0, 0, 255);
+        var yellow = new WndColor(255, 255, 0, 255);
+        var cooldown = new WndColor(0, 0, 0, 160);
+
+        for (var slot = 1; slot <= CommandBarModel.GridSlots; slot++)
+        {
+            var button = CommandBar[slot];
+            if (button is null || button.Availability == ButtonAvailability.Hidden) continue;
+            var rect = _tree.FindByName($"ControlBar.wnd:ButtonCommand{slot:00}")!.Rect;
+            if (button.Button.ButtonImage.Length > 0 && _assets.Images.TryGet(button.Button.ButtonImage, out _))
+                commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, WndColor.White, false, false));
+            if (button.Hotkey is { } hotkey)
+                commands.Add(new UiTextDraw(char.ToUpperInvariant(hotkey).ToString(), null, smallFont, white, black, rect.X + 2, rect.Y + 2, UiTextAlignment.Left, rect));
+            if (button.Cost.Raw != 0)
+            {
+                var text = ((int)button.Cost.ToDecimal()).ToString(CultureInfo.InvariantCulture);
+                commands.Add(new UiTextDraw(text, null, smallFont, yellow, black, rect.Right - 4 - text.Length * 6, rect.Bottom - 14, UiTextAlignment.Left, rect));
+            }
+            if (button.Availability == ButtonAvailability.NotReady && button.ReadyFraction is { } fraction)
+            {
+                var wipe = (int)(rect.Height * (1 - fraction));
+                if (wipe > 0) commands.Add(new UiFillRect(new UiRect(rect.X, rect.Y, rect.Width, wipe), cooldown));
+            }
+        }
+
+        for (var index = 0; index < CommandBar.Queue.Length; index++)
+        {
+            var entry = CommandBar.Queue[index];
+            var rect = _tree.FindByName($"ControlBar.wnd:ButtonQueue{(index + 1):00}")!.Rect;
+            if (entry.ButtonImage.Length > 0 && _assets.Images.TryGet(entry.ButtonImage, out _))
+                commands.Add(new UiImageDraw(entry.ButtonImage, rect, WndColor.White, false, false));
+            if (index == 0 && entry.Progress > 0f)
+            {
+                var wipe = (int)(rect.Height * (1 - entry.Progress));
+                if (wipe > 0) commands.Add(new UiFillRect(new UiRect(rect.X, rect.Y, rect.Width, wipe), cooldown));
+            }
+        }
+
+        if (_scheme is { } scheme)
+        {
+            var moneyRect = _controlBarRoot.Transform.Map(new WndScreenRect(scheme.Money.Left, scheme.Money.Top, scheme.Money.Right, scheme.Money.Bottom, 1920, 1080));
+            var moneyText = ((long)Hud.Money.ToDecimal()).ToString(CultureInfo.InvariantCulture);
+            commands.Add(new UiTextDraw(moneyText, null, smallFont, white, black, moneyRect.X, moneyRect.Y, UiTextAlignment.Left, moneyRect));
+
+            var powerRect = _controlBarRoot.Transform.Map(new WndScreenRect(scheme.PowerBar.Left, scheme.PowerBar.Top, scheme.PowerBar.Right, scheme.PowerBar.Bottom, 1920, 1080));
+            var powerColor = Hud.Underpowered ? new WndColor(220, 40, 40, 255) : new WndColor(40, 200, 60, 255);
+            var ratio = Hud.EnergyConsumption <= 0 ? 1f : Math.Clamp(Hud.EnergyProduction / (float)Hud.EnergyConsumption, 0f, 1f);
+            commands.Add(new UiFillRect(powerRect with { Width = (int)(powerRect.Width * ratio) }, powerColor));
+        }
+        return commands.ToImmutable();
+    }
+}
