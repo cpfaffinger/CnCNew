@@ -156,6 +156,14 @@ tatsächlich benutzt (`SimTool ai-match .local/phase2-import-a --map "Maps/Alpin
 FactionAmericaAirForceGeneral,FactionChina --max-ticks 45000`) endet mit Sieger FactionChina bei Tick 16.155, Endhash `0FDF97B63EFECC6A`. Die
 16-Karten-KI-Übersicht in `docs/SIMULATION-CORE.md` §19 wurde für diesen Fix nicht neu vermessen (eigene Balance-Erhebung, siehe dort).
 
+Phase 9, Teilpunkt 2 – Skriptdekodierung (Stand 30. September 2026; neu messen; `docs/MAP-SCRIPTS.md`): `PlayerScriptsList` liegt
+verschachtelt in `SidesList`, nicht im Top-Level-Chunk-Switch; `MapTool audit` deckt jetzt 150/150 Karten fehlerfrei ab (vorher 75
+Fehlschläge). 1.631 Skript-Listen, 23.906 Skripte, 2.294 Gruppen, 33.890 Bedingungen (82 von 109 Typen verwendet), 82.563 Aktionen
+(291 von 344 Typen verwendet). Die Typidentität kommt aus dem rohen `ConditionType`/`ScriptActionType`-Enum-Index
+(`MapScriptCatalog`, mechanisch aus `Scripts.h` extrahiert), nicht aus dem mitgeschriebenen `NameKeyType` – der ist ein
+prozessweiter, laufzeitabhängiger Zähler (`NameKeyGenerator`) und aus einer einzelnen Datei nicht rekonstruierbar. Nur die
+Dekodierung ist fertig; die Ausführung (Skript-VM) ist Gegenstand des laufenden Phase-9-Hauptauftrags.
+
 ## Code- und Dokumentationsstil
 
 - Bezeichner, Commitmessages und Code-Kommentare englisch; Dokumentation (`docs/`, README) deutsch.
