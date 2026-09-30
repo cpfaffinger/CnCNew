@@ -39,8 +39,16 @@ Import → Runtime-Content → Datenmodelle → Simulation → Präsentation. Sc
 - Determinismus: kanonische Sortierung, keine absoluten Pfade, Zeitstempel oder
   Dictionary-/HashSet-Reihenfolgen in Artefakten. Zwei unabhängige Läufe müssen byteidentisch sein.
 - `TreatWarningsAsErrors=true`. Bekannt und erklärt sind ausschließlich `NU1901`/`NU1903` aus den
-  transitiven Stride-4.3-Buildwerkzeugen (10 Warnungen beim Solution-Build). Jede neue Warnung
-  ist ein Fehler, bis sie erklärt ist.
+  transitiven Stride-4.3-Buildwerkzeugen sowie, seit `CnCNew.Client.Stride` in Phase 7/8 auf Data, Simulation,
+  Presentation, Ui, Audio, Game und Formats verweist, die dadurch ausgelösten `EXEC`-Konsolenzeilen von Strides eigenem
+  `Stride.Core.Assets.CompilerApp` (`[YamlAssemblyRegistry] Assembly … has not been processed by assembly processor
+  with --serialization flags`, je eine pro referenziertem Projekt ohne Stride-Assets, plus einmal
+  `[AssetCompiler] Could not find game settings asset …`) – informative Werkzeugausgaben, kein `Fehler`, sie tauchen nur
+  bei einem sauberen Build auf (inkrementell cacht der Asset-Compiler-Schritt sie weg) und wachsen 1:1 mit jedem neu
+  referenzierten Projekt. Referenzzahl bei sauberem `dotnet build CnCNew.slnx` (`bin`/`obj` von `CnCNew.Client.Stride`
+  gelöscht, sonst inkrementell und die Zahl irreführend niedrig): **21 Warnungen** (10 `NU1901`/`NU1903` + 11 Stride-
+  Konsolennotizen; vor Phase 7/8 waren es bei drei referenzierten Projekten 14). Jede andere neue Warnung ist ein Fehler,
+  bis sie erklärt ist.
 - Kein Vertrauen auf Zahlen aus Docs oder früheren Berichten: Bestandszahlen immer neu messen.
 - Fremder Code (EA-Quellen, GeneralsGameCode, GeneralsGamePatch unter `references/`) darf gelesen,
   aber nicht unbesehen kopiert werden. Algorithmen werden verstanden, neu geschrieben und im
