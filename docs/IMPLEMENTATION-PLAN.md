@@ -1,6 +1,6 @@
 # Implementierungsplan bis zum abgeschlossenen ersten Scope
 
-Stand: 27. September 2026
+Stand: 30. September 2026 (Phase 6 abgeschlossen)
 
 ## Ziel und Abgrenzung
 
@@ -264,7 +264,7 @@ gegen bekannte Originalwerte abgesichert sind.
 **Abnahme:** Das Abnahmekriterium „headless Referenzmatch aller Fraktionen vom Start bis zum Sieg“ ist erfüllt; „ohne Sonderpfade“ und „gegen
 bekannte Originalwerte“ nur mit den folgenden Einschränkungen.
 
-**Bekannte Grenzen** (vollständige Liste: `docs/GAME-RULES.md` §10):
+**Bekannte Grenzen** (Stand am Ende von Phase 5; Bauvorgang, Verkauf, Bauplatzprüfung, Rallypunkt, Terrain und Pfadsuche hat Phase 6 nachgeholt, siehe §6; vollständige Liste: `docs/GAME-RULES.md` §10):
 
 - Block 0.4 offen; Golden Masters sind keine Originalmessungen, Festkomma statt `Real` ist eine dokumentierte Abweichung.
 - Kein Bauvorgang: Dozer und Arbeiter bewegen und liefern, bauen aber nicht; Basen im Referenzmatch sind Startobjekte plus protokollierte
@@ -295,6 +295,44 @@ Umfang:
 Abgeschlossen, wenn die ausgewählte Vertical-Slice-Karte sowie ein repräsentativer Kartensatz
 vollständig geladen werden, Einheiten zuverlässig navigieren und mehrere lange KI-gegen-KI-Läufe
 deterministisch ohne Deadlock oder unerlaubte Information enden.
+
+**Status: abgeschlossen am 30. September 2026, mit den unten benannten Einschränkungen.** Alle Zahlen frisch gemessen; Details, Numerik und Grenzen in `docs/SIMULATION-CORE.md` §13–§20.
+
+**Umgesetzt:**
+
+- **Karten:** `SageMapDecoder` (`CnCNew.Formats`, Containerformate CkMp/EAR/ZL5, Blend-Tile-Versionen 6–8) und das Vertragsmodell `MapData` (`CnCNew.Data.World`); `MapTool audit` dekodiert **150 von 150** Retail-Karten
+  ohne Fehler (30.391.581 Höhenpunkte, 281.480 Objekte, 25.463 Wegpunkte, 2.488 Polygontrigger), baut für alle das Gelände (16.475.736 Pfadzellen, 258 Startpositionen, größte Ausdehnung 589 Zellen).
+- **Gelände und Navigation:** `TerrainMap` (Zellklassen Kliff/Wasser, Höhe, Startpositionen, Fingerabdruck in Snapshot v4 und Replay v5), `NavigationGrid` (deterministischer A*, Fußabdruckprüfung,
+  Fluchtzellen, `ObstacleSum` zur Neuplanung), drehratenbegrenzte Bewegung mit Geländehöhe in `AIUpdateInterface`. Bodenpfade zwischen Startpositionen: 462 Paare, 456 vollständig, 6 teilweise, 0 blockiert.
+- **Sicht:** `VisionMap` (sichtbar/erkundet je Spieler, Sicht-Hash in Snapshot v5), Verbündetenteilung, `REVEAL_TO_ALL`, Baustellen, Tarnung; `FireWeaponCommand` verlangt Sicht (`TargetNotVisible`). Nebenfund: Stealth-Fehler
+  behoben (`STEALTHED` nur mit `CAN_STEALTH`).
+- **Bau:** Baustellen als Entities, sechs neue Befehle (Codes 20–25, `CommandTypes.Version = 8`, Replay v6, Snapshot v6), Bauplatzprüfung, Verkauf (179 Ticks, `SellPercentage`), kostenlose Reparatur, Sammelpunkte;
+  `PowerPlantUpdate`/`PowerPlantUpgrade`/`OverchargeBehavior`; `CommandCatalog` (`CommandSet` → `CommandButton`).
+- **Skirmish-KI:** `SkirmishAi` (Rollen aus Modulen, Bauplanung, Produktion, Angriff/Verteidigung, Versorger, Reparatur, Science), arbeitet nur mit sichtbaren Informationen, Gedächtnis und öffentlichen Startpositionen;
+  `SkirmishMatchScenario`/`SimTool ai-match`.
+- **Zahlen:** 77 von 205 Modultypen implementiert (3 neue), **1.393 von 2.115 Retail-Objekten instanziierbar (65,9 %)**, 15.382 von 19.553 Modulverwendungen abgedeckt (78,7 %); Kompatibilitätsbasislinie 741 Einträge;
+  Definitionssnapshot 144.832.736 Byte (`AEB5108D…D2ADB7`); Stresstest 216.000 Ticks in 13,0 s, Endhash `D1521974C861A4B9`; Retail-Referenzmatch Sieger bei Tick 26.880, Endhash `5C370ED383EC9F6B`.
+
+**Abnahme:**
+
+- *Karten laden:* erfüllt für alle 150 Karten (Dekodierung und Geländeaufbau). Eine einzelne, ausgezeichnete Vertical-Slice-Karte gibt es erst mit der Präsentation (Schritt 7); die KI-Läufe nutzen vier Karten
+  (Alpine Assault, Armored Fury, Bitter Winter, Death Valley).
+- *Einheiten navigieren zuverlässig:* erfüllt mit Einschränkung – Navigation ist deterministisch und ohne Blockade auf den geprüften Startpaaren, aber vereinfacht (punktförmig, keine Kollision, 6 von 462 Startpaaren nur teilweise begehbar).
+- *KI gegen KI, deterministisch, ohne Deadlock, ohne unerlaubte Information:* erfüllt. 16 Läufe (4 Karten × 4 Paarungen, höchstens 45.000 Ticks): **15 enden mit einem Sieger, 1 im Patt** (Alpine Assault, America gegen China);
+  alle 16 sind mit Zweitlauf und Snapshotfortsetzung identisch. Der Test `SkirmishAiOnlyUsesWhatItSees` sichert die Informationsregel; ein Patt ist kein Deadlock (die Simulation läuft weiter), aber ein benanntes Ergebnis.
+  America gewinnt nie, weil ohne `ChinookAIUpdate` keine Versorgungswirtschaft entsteht.
+
+**Bekannte Grenzen:**
+
+- *Nicht umgesetzt aus dem Umfang:* Brücken, Formationen, lokale Vermeidung und Kollision, Texturlayer (rein Präsentation), Skripte der Karte (`SidesList`/`PlayerScriptsList` bleiben ungelesen), Triggerbereiche nur als Wasserflächen.
+  Die Skirmish-KI ist eine eigene Neuentwicklung, kein Port der Originalskripte.
+- *Navigation:* flacher A* mit Budget von 200.000 Erweiterungen, genäherter Fußabdruck, Fluchtzellen mit Zuschlag statt echter Layer; Teil- oder Fehlpfad beendet den Befehl.
+- *Sicht:* kreisförmig, ohne Höhen-Sichtlinie, alle 3 Ticks, keine Detektoren (getarnte Überlebende können ein Match verlängern).
+- *Bau:* `QueueProduction` prüft keine Voraussetzung und keine Gebäudefähigkeit, `MaxSimultaneousOfType` ungeprüft, Reparatur kostenlos; keine Eroberung von Kraftwerken, kein Umschaltbefehl für `Overcharge`.
+- *KI:* Spezialkräfte unklassifiziert, Gegnerstartpositionen öffentlich bekannt, von der Karte nur Lagerhäuser gesetzt, Startgeld (10.000) und Science-Punkte vom System, keine Flugzeuge und Flugplätze, Armee durch
+  Instanziierbarkeit begrenzt, gleichstarke Paarungen können ein Patt erreichen.
+- *Weiterhin offen:* Block 0.4 (RNG-Abgleich, nicht geraten), Projektil-Flugzeit, `ToppleUpdate`/`CrushDie` mit echter Kollision, `ChinookAIUpdate`/`TransportAIUpdate`, Wirkung von `CommandSet`/Radar,
+  Veteranen-`ArmorSet`/`WeaponSet`, `CommandButtonHuntUpdate`, `SpecialAbilityUpdate`; 722 Objekte bleiben nicht instanziierbar (Blocker in `docs/SIMULATION-CORE.md` §11).
 
 ## 7. Vollständige audiovisuelle Weltpräsentation
 
@@ -375,6 +413,6 @@ Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
 
 Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
 Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
-jedoch separat begründet und versioniert. Der nächste Implementierungseinstieg ist Schritt 5:
-Spielregeln, Kampf, Wirtschaft und Produktion auf dem deterministischen Simulationskern (Handoff:
-`docs/HANDOFF-PHASE5.md`).
+jedoch separat begründet und versioniert. Die Schritte 1 bis 6 sind abgeschlossen. Der nächste Implementierungseinstieg ist Schritt 7 mit den
+verbleibenden Simulationsmodulen (Phase-7-Handoff-Inhalt: `docs/HANDOFF-PHASE8.md`), Chinook/Transport-KI, Flug und
+Kollision als Voraussetzung für die Weltpräsentation.

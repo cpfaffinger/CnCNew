@@ -36,10 +36,16 @@
   Bewegung, Produktionswarteschlange und „letzter Überlebender“; 74 Module gebunden, 1.384 von 2.115 Retail-Objekten vollständig
   instanziierbar (65,4 %, `docs/GAME-RULES.md`). Der Referenzmatch läuft auf Retail-Daten mit allen 13 Fraktionen, echten
   Kommandozentralen, 0 übersprungenen Startobjekten und echter Wirtschaft; Golden Masters decken Schadenskette, Produktionsuhr, Supply
-  und Erfahrung. Bewusst offen: RNG-Abgleich mit kompiliertem Original (Block 0.4), Bauvorgang, Terrain/Kollision/Pfadsuche,
-  Projektil-Flugzeit, Wirkung von `CommandSet` und Radar, Verkauf, Waffen-/Rüstungssatzwahl nach Veteranenstufe (`docs/GAME-RULES.md`
-  §10, Folgeauftrag `docs/HANDOFF-PHASE7.md`).
-- Terrain, Navigation, Sichtweite, Shroud/Fog, Zielwahl und Skirmish-KI (Phase 6).
+  und Erfahrung. Bewusst offen: RNG-Abgleich mit kompiliertem Original (Block 0.4), Kollision,
+  Projektil-Flugzeit, Wirkung von `CommandSet` und Radar, Waffen-/Rüstungssatzwahl nach Veteranenstufe (`docs/GAME-RULES.md`
+  §10; Bauvorgang, Verkauf, Terrain und Pfadsuche hat Phase 6 nachgeholt).
+- **Phase 6 „Welt, Terrain, Bewegung, Sicht, Bau und Skirmish-KI“ abgeschlossen (30. September 2026):** 150 von 150 Retail-Karten
+  werden dekodiert und zu Gelände aufgebaut, A*-Navigation, Kriegsnebel je Spieler, Bau/Verkauf/Reparatur/Sammelpunkte und eine Skirmish-KI, die nur
+  sichtbare Information nutzt; 16 KI-gegen-KI-Läufe (4 Karten × 4 Paarungen) sind alle deterministisch (Zweitlauf und Snapshotfortsetzung
+  identisch), 15 enden mit einem Sieger, einer bleibt ein Patt; 77 Module gebunden, 1.393 von 2.115 Objekten (65,9 %) instanziierbar.
+  Bewusst offen: Kollision, Brücken, Formationen, Detektoren, Chinook-/Transport-KI (Amerika ohne Wirtschaft), Projektil-Flugzeit,
+  Block 0.4 (`docs/IMPLEMENTATION-PLAN.md` §6, `docs/SIMULATION-CORE.md` §20).
+- Zielwahl mit Sichtlinie über Höhen, Kartenskripte und Formationen (offen).
 - Golden-Master- und Replay-basierte Vergleichstests gegen das Original.
 
 ## 3. Windows-Client

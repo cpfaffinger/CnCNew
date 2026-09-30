@@ -35,7 +35,10 @@ getrennt. Der vollständige Vertrag steht in `docs/CONTENT-PIPELINE.md`.
    Präsentationsmodule (`W3D*Draw`, `*ClientUpdate`) werden nie instanziiert. Die Präsentation liest später Snapshots und Events
    und schreibt nur typisierte Befehle. Details in `docs/SIMULATION-CORE.md`. Die darauf aufsetzenden Spielregeln (Phase 5:
    Wirtschaft und Versorgung, Upgrades, Kampf mit Flächenschaden, Erfahrung, Teams/Diplomatie, Reparatur, einfache Bewegung, Produktion, Spezialkräfte, Sieg/Niederlage) bleiben dieselbe Schicht – neue Module und
-   Befehle, keine neue Abhängigkeit; Details in `docs/GAME-RULES.md`.
+   Befehle, keine neue Abhängigkeit; Details in `docs/GAME-RULES.md`. Phase 6 ergänzt in derselben Schicht Gelände (`TerrainMap`,
+   gebaut aus dem in `CnCNew.Data.World` definierten `MapData`, das `CnCNew.Formats` aus MAP-Dateien dekodiert; die Simulation liest
+   keine Datei), Navigation (`NavigationGrid`), Sichtkarten (`VisionMap`), Bau-/Verkaufsbefehle und die Skirmish-KI (`SkirmishAi`), die als
+   reiner Befehlsgeber nur `EntitiesVisibleTo` und öffentliche Startpositionen liest; Details in `docs/SIMULATION-CORE.md` §13–§20.
 8. `CnCNew.Client.Stride` projiziert ausschließlich Simulations-Snapshots in die zunächst gewählte Stride-Engine. `W3dStrideScene`, `W3dMaterialFactory`, `W3dTextureCache` und der Depth-Write-Pipelineprozessor trennen Meshaufbereitung, Materialübersetzung, Texturlebensdauer und Pipelinezustände vom Programmstart. Ein W3D-Batch wird als ein Stride-Material mit geordneten Pässen ausgeführt; vier UV- und vier Color-Streams erhalten die je Pass unterschiedlichen Daten. Animierte Mapper aktualisieren dynamische Vertexpuffer aus der deterministischen W3D-Auswertung. Der Client bildet Alpha-Test, Source-/Destination-Blend, Depth-Compare/-Write und Two-Sided-Culling ohne stillen Enum-Fallback ab. Der Client baut Strides Standard-Shader mit `Stride.Core.Assets.CompilerApp` in seine lokale Runtime-Datenbank; Game Studio ist keine Buildvoraussetzung.
 9. Stride übernimmt Direct3D, Fenster, Eingabe, Audio und Rendering; Legacy-Kompatibilität bleibt in unseren Bibliotheken. Der Editor ist optional.
 
