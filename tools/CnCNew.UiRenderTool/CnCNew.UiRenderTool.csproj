@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!--
+      Not part of CnCNew.slnx (S4 ownership rule): a standalone verification tool for the UI renderer
+      that is otherwise internal to CnCNew.Client.Stride. Build/run directly with `dotnet build`/`dotnet run`
+      from this directory, or `dotnet build tools/CnCNew.UiRenderTool/CnCNew.UiRenderTool.csproj`.
+    -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <StridePlatform>Windows</StridePlatform>
+    <StrideGraphicsApi>Direct3D11</StrideGraphicsApi>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Stride's build-only asset compiler currently restores audited transitive tooling packages (same as the client). -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1903</WarningsNotAsErrors>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="**/*.cs" Exclude="bin/**;obj/**" />
+    <!-- The client's UI/rendering classes are internal; link its sources (everything but its own Program.cs) instead of referencing the assembly. -->
+    <Compile Include="../../src/CnCNew.Client.Stride/**/*.cs" Exclude="../../src/CnCNew.Client.Stride/Program.cs;../../src/CnCNew.Client.Stride/bin/**;../../src/CnCNew.Client.Stride/obj/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Stride.Core.Assets.CompilerApp"
+                      Version="4.3.0.2507"
+                      PrivateAssets="contentfiles;analyzers"
+                      IncludeAssets="build" />
+    <PackageReference Include="Stride.Engine" Version="4.3.0.2507" />
+    <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Images/CnCNew.Images.csproj" />
+    <ProjectReference Include="../../src/CnCNew.W3D/CnCNew.W3D.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Data/CnCNew.Data.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Simulation/CnCNew.Simulation.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Presentation/CnCNew.Presentation.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Ui/CnCNew.Ui.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Audio/CnCNew.Audio.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Game/CnCNew.Game.csproj" />
+  </ItemGroup>
+</Project>
