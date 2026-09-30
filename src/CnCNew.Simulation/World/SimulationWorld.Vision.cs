@@ -21,6 +21,9 @@ public sealed partial class SimulationWorld
     /// <summary>The fog of war; <see langword="null"/> in a world without a terrain (everything is visible there).</summary>
     public VisionMap? Vision => _vision;
 
+    /// <summary>The <see cref="VisionMap"/> slot of a player; the system player owns slot 0.</summary>
+    public int VisionSlotOf(PlayerId player) => _playerSlots is not null && _playerSlots.TryGetValue(player.Value, out var slot) ? slot : throw new ArgumentException($"Player {player} has no vision slot.", nameof(player));
+
     private void InitializeVision()
     {
         var terrain = Terrain!;

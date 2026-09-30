@@ -103,7 +103,7 @@ public sealed class SkirmishMatchSession
     }
 
     /// <summary>Advances one logic tick: science stand-in, AI thinking, the world step and the periodic victory check.</summary>
-    public void Step()
+    public TickResult Step()
     {
         var tick = World.Tick;
         if (VictoryTick < 0)
@@ -111,13 +111,14 @@ public sealed class SkirmishMatchSession
             GrantSciencePoints(tick);
             foreach (var ai in Ais) ai?.Update();
         }
-        World.Step();
+        var result = World.Step();
         if (VictoryTick < 0 && tick > 0 && tick % VictoryCheckInterval == 0 && World.TryGetWinner() is { } winner)
         {
             Winner = winner;
             VictoryTick = tick;
             _endTick = Math.Min(_options.MaxTicks, tick + 1 + _options.GraceTicks);
         }
+        return result;
     }
 
     public SubmitResult Submit(SimCommand command)

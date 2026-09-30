@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/CnCNew.Archives/CnCNew.Archives.csproj" />
     <Project Path="src/CnCNew.Client.Stride/CnCNew.Client.Stride.csproj" />
+    <Project Path="src/CnCNew.Game/CnCNew.Game.csproj" />
     <Project Path="src/CnCNew.Content/CnCNew.Content.csproj" />
     <Project Path="src/CnCNew.Data/CnCNew.Data.csproj" />
     <Project Path="src/CnCNew.Formats/CnCNew.Formats.csproj" />
@@ -36,6 +37,7 @@
     <Project Path="tests/CnCNew.Presentation.Tests/CnCNew.Presentation.Tests.csproj" />
     <Project Path="tests/CnCNew.Ui.Tests/CnCNew.Ui.Tests.csproj" />
     <Project Path="tests/CnCNew.Audio.Tests/CnCNew.Audio.Tests.csproj" />
+    <Project Path="tests/CnCNew.Game.Tests/CnCNew.Game.Tests.csproj" />
   </Folder>
 </Solution>
 
