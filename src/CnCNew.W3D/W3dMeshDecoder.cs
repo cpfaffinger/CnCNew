@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Collections.Immutable;
 using System.Numerics;
 using System.Text;
 
@@ -11,6 +12,7 @@ public static class W3dMeshDecoder
     private const int TriangleSize = 32;
     private const int ShaderSize = 16;
     private const int VertexMaterialSize = 32;
+    private const int VertexInfluenceSize = 8;
 
     public static IReadOnlyList<W3dMesh> Decode(W3dReadResult source)
     {
@@ -66,6 +68,7 @@ public static class W3dMeshDecoder
         var triangles = ReadTriangles(meshChunk, triangleCount, vertexCount, data, name);
         var materialVariants = ReadMaterialVariants(meshChunk, vertexCount, triangleCount, data, name);
         var materials = SelectMaterialVariant(materialVariants, attributes);
+        var boneIndices = ReadVertexInfluences(meshChunk, vertexCount, data, name);
 
         return new W3dMesh(
             name,
@@ -84,7 +87,48 @@ public static class W3dMeshDecoder
             normals,
             triangles,
             materials,
-            materialVariants);
+            materialVariants)
+        {
+            VertexBoneIndices = boneIndices,
+        };
+    }
+
+    private static ImmutableArray<ushort> ReadVertexInfluences(
+        W3dChunk mesh,
+        int vertexCount,
+        ReadOnlySpan<byte> data,
+        string meshName)
+    {
+        var chunk = GetSingleChild(mesh, W3dChunkType.VertexInfluences, required: false);
+        if (chunk is null)
+        {
+            return [];
+        }
+
+        var expectedSize = checked(vertexCount * VertexInfluenceSize);
+        if (chunk.Size != expectedSize)
+        {
+            throw new InvalidDataException(
+                $"Mesh '{meshName}' vertex-influence chunk has {chunk.Size} bytes; expected {expectedSize}.");
+        }
+
+        var payload = Slice(data, chunk);
+        var result = ImmutableArray.CreateBuilder<ushort>(vertexCount);
+        for (var index = 0; index < vertexCount; index++)
+        {
+            var influence = payload.Slice(index * VertexInfluenceSize, VertexInfluenceSize);
+            if (influence[2..].IndexOfAnyExcept((byte)0) >= 0)
+            {
+                // Generals' W3dVertInfStruct is one bone plus padding; later SAGE games put a second bone and
+                // weights there. Refuse instead of silently dropping them.
+                throw new InvalidDataException(
+                    $"Mesh '{meshName}' vertex {index} has non-zero influence padding (multi-bone skinning is not supported).");
+            }
+
+            result.Add(BinaryPrimitives.ReadUInt16LittleEndian(influence));
+        }
+
+        return result.MoveToImmutable();
     }
 
     private static IReadOnlyList<W3dMaterialVariant> ReadMaterialVariants(

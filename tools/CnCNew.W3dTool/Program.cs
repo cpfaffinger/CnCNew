@@ -33,10 +33,44 @@ if (args is ["inspect", var inspectContentDirectory, var virtualPath])
     }
 }
 
+if (args is ["audit-skeletons", var skeletonContentDirectory])
+{
+    try
+    {
+        var content = ContentFileSystem.Open(skeletonContentDirectory);
+        var assetNames = content.EnumerateFiles("Art/W3D")
+            .Where(path => path.EndsWith(".w3d", StringComparison.OrdinalIgnoreCase) &&
+                           path.LastIndexOf('/') == "Art/W3D".Length)
+            .Select(path => path["Art/W3D/".Length..^".w3d".Length])
+            .ToArray();
+        var library = new W3dAssetLibrary(path => content.Exists(path) ? content.OpenRead(path) : null);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var decodeTime = new System.Diagnostics.Stopwatch();
+        var report = W3dSkeletonAudit.Run(assetNames, library, decodeTime);
+        stopwatch.Stop();
+        foreach (var line in report.FormatLines())
+        {
+            Console.WriteLine(line);
+        }
+
+        // Wall-clock time goes to stderr so that stdout stays byte-identical between runs.
+        Console.Error.WriteLine(
+            $"Timing: {report.FileCount} files read and decoded in {decodeTime.Elapsed.TotalSeconds:F2} s; " +
+            $"full audit (models, bindings, pose sampling) {stopwatch.Elapsed.TotalSeconds:F2} s.");
+        return report.Failures.IsEmpty ? 0 : 1;
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"error: {exception.Message}");
+        return 1;
+    }
+}
+
 if (args is not ["audit", var contentDirectory])
 {
     Console.Error.WriteLine("Usage:");
     Console.Error.WriteLine("  CnCNew.W3dTool audit <content-directory>");
+    Console.Error.WriteLine("  CnCNew.W3dTool audit-skeletons <content-directory>");
     Console.Error.WriteLine("  CnCNew.W3dTool inspect <content-directory> <virtual-w3d-path>");
     return 2;
 }
