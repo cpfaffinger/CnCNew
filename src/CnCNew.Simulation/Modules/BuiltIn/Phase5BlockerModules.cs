@@ -257,7 +257,7 @@ public sealed record SlowDeathData(DieMuxData Mux, int ProbabilityModifier, long
 /// Both random delay draws happen unconditionally, even at zero variance, to keep logic-RNG consumption aligned with
 /// the reference's own unconditional <c>GameLogicRandomValue(0, variance)</c> calls.
 /// </summary>
-public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.Mux), IUpdateModule
+public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.Mux), IUpdateModule, ISlowDeathCandidate
 {
     private bool _activated;
     private long _destructionTick;
@@ -269,26 +269,9 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
     public bool IsApplicable(in DamageInfo info) => Mux.IsApplicable(Entity, info);
     public int ProbabilityWeight => Math.Max(data.ProbabilityModifier, 1);
 
-    public override void OnDie(IWorldServices world, in DamageInfo info)
-    {
-        if (!IsApplicable(info) || Entity.SlowDeathStarted) return;
-        var deathInfo = info; // 'in' parameters cannot be captured by a lambda.
-        var siblings = Entity.Modules.OfType<SlowDeathBehavior>().Where(candidate => candidate.IsApplicable(deathInfo)).ToArray();
-        var total = siblings.Sum(candidate => candidate.ProbabilityWeight);
-        if (total <= 0) return;
-        var roll = world.LogicRandom.Range(1, total);
-        var cumulative = 0;
-        foreach (var candidate in siblings)
-        {
-            cumulative += candidate.ProbabilityWeight;
-            if (roll > cumulative) continue;
-            Entity.SlowDeathStarted = true;
-            candidate.BeginSlowDeath(world);
-            return;
-        }
-    }
+    public override void OnDie(IWorldServices world, in DamageInfo info) => SlowDeathLottery.Run(world, Entity, info, IsApplicable(info));
 
-    private void BeginSlowDeath(IWorldServices world)
+    public void BeginSlowDeath(IWorldServices world)
     {
         _activated = true;
         // Both draws happen every time, matching the reference's unconditional GameLogicRandomValue(0, variance) calls.
@@ -317,6 +300,40 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         _activated = reader.Bool("activated");
         _destructionTick = reader.Int("destructionTick");
         _nextWake = reader.Int("nextWake");
+    }
+}
+
+/// <summary>A module that takes part in the weighted slow-death lottery (<c>SlowDeathBehavior</c> and its subclasses such as <c>HelicopterSlowDeathBehavior</c>).</summary>
+public interface ISlowDeathCandidate
+{
+    bool IsApplicable(in DamageInfo info);
+    int ProbabilityWeight { get; }
+    void BeginSlowDeath(IWorldServices world);
+}
+
+/// <summary>
+/// The sibling lottery of <c>SlowDeathBehavior::onDie</c>: every applicable slow-death module of the object weighs in with its
+/// <c>ProbabilityModifier</c>, one <c>GameLogicRandomValue(1, total)</c> picks the winner, in module order; at most once per death.
+/// </summary>
+internal static class SlowDeathLottery
+{
+    public static void Run(IWorldServices world, Entity entity, in DamageInfo info, bool applicable)
+    {
+        if (!applicable || entity.SlowDeathStarted) return;
+        var deathInfo = info; // 'in' parameters cannot be captured by a lambda.
+        var siblings = entity.Modules.OfType<ISlowDeathCandidate>().Where(candidate => candidate.IsApplicable(deathInfo)).ToArray();
+        var total = siblings.Sum(candidate => candidate.ProbabilityWeight);
+        if (total <= 0) return;
+        var roll = world.LogicRandom.Range(1, total);
+        var cumulative = 0;
+        foreach (var candidate in siblings)
+        {
+            cumulative += candidate.ProbabilityWeight;
+            if (roll > cumulative) continue;
+            entity.SlowDeathStarted = true;
+            candidate.BeginSlowDeath(world);
+            return;
+        }
     }
 }
 

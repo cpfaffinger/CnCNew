@@ -473,7 +473,7 @@ static partial class Tests
 }
 
 
-file sealed class RealSource(ContentFileSystem content) : IDefinitionSource
+sealed class RealSource(ContentFileSystem content) : IDefinitionSource
 {
     public IEnumerable<string> EnumerateIniFiles() => content.EnumerateFiles().Where(path => path.EndsWith(".ini", StringComparison.OrdinalIgnoreCase));
     public Stream OpenRead(string virtualPath) => content.OpenRead(virtualPath);

@@ -27,6 +27,8 @@ internal static class ContainModules
     [
         new ModuleBinding<GarrisonContainData>("GarrisonContain", ModuleOwnerKind.Object, (configuration, _) => GarrisonContainData.Parse(configuration), data => new GarrisonContain(data)),
         new ModuleBinding<TransportContainData>("TransportContain", ModuleOwnerKind.Object, (configuration, _) => TransportContainData.Parse(configuration), data => new TransportContain(data)),
+        new ModuleBinding<HelixContainData>("HelixContain", ModuleOwnerKind.Object, (configuration, _) => HelixContainData.Parse(configuration), data => new HelixContain(data)),
+        new ModuleBinding<TunnelContainData>("TunnelContain", ModuleOwnerKind.Object, (configuration, _) => TunnelContainData.Parse(configuration), data => new TunnelContain(data)),
     ];
 }
 
@@ -104,7 +106,7 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         if (positionAtContainer) { candidate.X = Entity.X; candidate.Y = Entity.Y; }
     }
 
-    public void OnDie(IWorldServices world, in DamageInfo info)
+    public virtual void OnDie(IWorldServices world, in DamageInfo info)
     {
         if (!data.DieMux.IsApplicable(Entity, info)) return;
         if (data.DamagePercentToUnits > Fixed.Zero)
@@ -305,7 +307,7 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
 /// movement/positioning), capture handling (no capture system), <c>ArmedRidersUpgradeMyWeaponSet</c> (no WeaponBonus
 /// system at all, project-wide).
 /// </summary>
-public sealed class TransportContain(TransportContainData data) : ContainModuleBase(data.Base)
+public class TransportContain(TransportContainData data) : ContainModuleBase(data.Base)
 {
     /// <summary>Sum of <see cref="Templates.ObjectTemplate.TransportSlotCount"/> of everyone currently aboard, maintained incrementally (<see cref="Add"/>/<see cref="Remove"/>) so capacity checks never need to resolve <see cref="ContainModuleBase.Riders"/> back to entities.</summary>
     private int _usedSlots;

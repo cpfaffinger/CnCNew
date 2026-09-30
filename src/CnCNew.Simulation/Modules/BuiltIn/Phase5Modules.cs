@@ -506,6 +506,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private BuilderTask _task;
     private EntityId _taskTarget;
     private bool _approaching;
+    private bool _evacuatePending;
     private static readonly Fixed MisalignedAngle = Fixed.FromRaw(34315); // π/6
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
 
@@ -514,8 +515,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     private enum BuilderTask : byte { None, Construct, Repair }
 
-    /// <summary><c>AIUpdateInterface::isIdle</c>: no move order, not docking and no builder task.</summary>
-    public bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None;
+    /// <summary><c>AIUpdateInterface::isIdle</c>: no move order, not docking, no builder task and no evacuation waiting (<c>AI_EVACUATE</c>).</summary>
+    public bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending;
 
     /// <summary>Dozers and workers can raise structures (<c>DozerAIInterface</c>); every other AI cannot.</summary>
     public virtual bool CanBuild => false;
@@ -544,6 +545,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
+        _evacuatePending = false;
         _lastCommandFromPlayer = fromPlayer;
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
@@ -585,6 +587,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
+        _evacuatePending = false;
         _lastCommandFromPlayer = fromPlayer;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
@@ -598,6 +601,31 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary><c>DozerAIInterface::construct</c>: walk to the site and add work to it every tick until it is complete.</summary>
     public void OrderConstruct(IWorldServices world, Entity site) => StartTask(world, BuilderTask.Construct, site);
 
+    /// <summary>
+    /// <c>aiEvacuate</c> / <c>aiMoveToAndEvacuate</c> (<c>AI_EVACUATE</c>, <c>AI_MOVE_AND_EVACUATE</c>): unload every passenger once the object stands
+    /// still (after moving to (x, y) when <paramref name="move"/> is set) and <see cref="ReadyToUnload"/> agrees. Replaces the current state.
+    /// </summary>
+    public void OrderEvacuate(IWorldServices world, bool move, Fixed x, Fixed y)
+    {
+        if (move && Entity.Template.Locomotor is not null) OrderMove(world, x, y, true);
+        else
+        {
+            CancelDock(world);
+            ClearTask();
+            _enterTarget = EntityId.Invalid;
+            StopInternalMove();
+        }
+        _evacuatePending = true;
+        world.WakeAt(Entity, this, world.Tick);
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary>An evacuation order waits for the object to stand still and be ready (<see cref="ReadyToUnload"/>).</summary>
+    public bool EvacuatePending => _evacuatePending;
+
+    /// <summary><c>getAiFreeToExit</c>: whether passengers may leave right now (a Chinook has to land first).</summary>
+    protected virtual bool ReadyToUnload(IWorldServices world) => true;
+
     /// <summary><c>DozerAIInterface::newTask(DOZER_TASK_REPAIR)</c>: walk to the structure and heal it until it is at full health.</summary>
     public void OrderRepair(IWorldServices world, Entity target) => StartTask(world, BuilderTask.Repair, target);
 
@@ -605,6 +633,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     {
         CancelDock(world);
         _enterTarget = EntityId.Invalid;
+        _evacuatePending = false;
         StopInternalMove();
         InvalidatePath();
         _task = task;
@@ -716,7 +745,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             else Move(world, locomotor);
         }
         if (_enterTarget.IsValid) UpdateEnter(world);
-        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        if (_evacuatePending && !Entity.HasMoveTarget && _dock is null && ReadyToUnload(world))
+        {
+            _evacuatePending = false;
+            world.EvacuateContainer(Entity);
+        }
+        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None || _evacuatePending ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     private void UpdateEnter(IWorldServices world)
@@ -730,6 +764,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         if (Entity.HasMoveTarget) return;
         _enterTarget = EntityId.Invalid;
+        // The approach may end short (a partial path): only an object that actually reached the container gets in.
+        var reach = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
+        var dx = container.X - Entity.X;
+        var dy = container.Y - Entity.Y;
+        if (dx * dx + dy * dy > reach * reach) return;
         world.TryEnterContainer(Entity, container);
     }
 
@@ -866,6 +905,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         writer.Int("task", (int)_task);
         writer.UInt("taskTarget", _taskTarget.Value);
         writer.Bool("approaching", _approaching);
+        if (_evacuatePending) writer.Bool("evacuate", true);
         if (_pathValid)
         {
             writer.Bool("pathValid", true);
@@ -895,6 +935,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _task = (BuilderTask)task;
         _taskTarget = new EntityId(checked((uint)reader.UInt("taskTarget")));
         _approaching = reader.Bool("approaching");
+        _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
         InvalidatePath();
         if (reader.Has("pathValid"))
         {

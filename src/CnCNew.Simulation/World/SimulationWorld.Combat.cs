@@ -17,12 +17,23 @@ public sealed partial class SimulationWorld
     /// <c>RadiusDamageAffects</c> filters; every other victim is filtered (self, similar, airborne, relationship). A weapon without any
     /// radius hurts only the primary victim. Victims are visited in entity-id order (the reference iterates the partition cells).
     /// Returns the armor-adjusted damage dealt to the primary victim (0 without one). Not modelled: <c>RadiusDamageAngle</c> cones,
-    /// shockwaves, damage status, historic damage, the producer exception of the self filter.
+    /// shockwaves, damage status, historic damage.
     /// </summary>
     public Fixed DealWeaponDamage(Entity source, WeaponInfo weapon, Entity? primaryVictim, Fixed x, Fixed y, Fixed z)
+        => DealDamageCore(source.Id, source, EntityId.Invalid, source.Id, source.WeaponBonusConditions, weapon, primaryVictim, x, y, z);
+
+    /// <summary>
+    /// The shared body of <c>dealDamageInternal</c>. <paramref name="sourceId"/> must be valid (the reference returns without one);
+    /// <paramref name="source"/> may be gone by now (a delayed shot whose firer died) and then, exactly like the reference, no
+    /// <c>RadiusDamageAffects</c> filter applies at all. <paramref name="producer"/> is the launcher of a projectile: the self filter spares it
+    /// (<c>source->getProducerID() == curVictim->getID()</c>) and every damage is credited to <paramref name="damageSource"/>
+    /// (<c>projectileGetLauncherID</c>). <paramref name="conditions"/> are the weapon bonus conditions the shot was fired with.
+    /// </summary>
+    private Fixed DealDamageCore(EntityId sourceId, Entity? source, EntityId producer, EntityId damageSource, uint conditions, WeaponInfo weapon,
+        Entity? primaryVictim, Fixed x, Fixed y, Fixed z)
     {
+        if (!sourceId.IsValid) return Fixed.Zero;
         var bonuses = _templates.GlobalWeaponBonus;
-        var conditions = source.WeaponBonusConditions;
         if (primaryVictim is not null)
         {
             x = primaryVictim.X;
@@ -67,7 +78,7 @@ public sealed partial class SimulationWorld
         {
             if ((affects & WeaponInfo.KillsSelf) != 0)
             {
-                Damage(source.Id, new DamageInfo(source.Id, HugeDamage, weapon.DamageType, weapon.DeathType, false));
+                if (source is not null) Damage(source.Id, new DamageInfo(damageSource, HugeDamage, weapon.DamageType, weapon.DeathType, false));
                 return Fixed.Zero;
             }
             if (primaryVictim is not null && !primaryVictim.DestroyRequested) victims.Add((primaryVictim, Fixed.Zero));
@@ -78,12 +89,12 @@ public sealed partial class SimulationWorld
         foreach (var (victim, distanceSquared) in victims)
         {
             var killSelf = false;
-            if (victim != primaryVictim)
+            if (source is not null && victim != primaryVictim)
             {
                 if ((affects & WeaponInfo.KillsSelf) != 0 && victim == source) killSelf = true;
                 else
                 {
-                    if ((affects & WeaponInfo.AffectsSelf) == 0 && victim == source) continue;
+                    if ((affects & WeaponInfo.AffectsSelf) == 0 && (victim == source || (producer.IsValid && victim.Id == producer))) continue;
                     if ((affects & WeaponInfo.NotSimilar) != 0 && victim.Template.Index == source.Template.Index
                         && RelationshipOf(source.Owner, victim.Owner) == Relationship.Allies) continue;
                     if ((affects & WeaponInfo.NotAirborne) != 0 && IsSignificantlyAboveTerrain(victim)) continue;
@@ -100,7 +111,7 @@ public sealed partial class SimulationWorld
             var amount = killSelf ? HugeDamage : distanceSquared <= primaryRadiusSquared ? primaryDamage : secondaryDamage;
             var adjusted = ActiveArmor(victim).Adjust(weapon.DamageType, amount);
             if (victim == primaryVictim) dealt = adjusted;
-            Damage(victim.Id, new DamageInfo(source.Id, adjusted, weapon.DamageType, weapon.DeathType, false));
+            Damage(victim.Id, new DamageInfo(damageSource, adjusted, weapon.DamageType, weapon.DeathType, false));
         }
         return dealt;
     }

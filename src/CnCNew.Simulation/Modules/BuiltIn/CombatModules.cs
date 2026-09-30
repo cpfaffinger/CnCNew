@@ -75,7 +75,7 @@ internal sealed class FireWeaponUpdate(FireWeaponUpdateData data) : SimModule, I
         var conditions = Entity.WeaponBonusConditions;
         if (_clip != int.MaxValue) _clip--;
         _readyTick = world.Tick + (_clip == 0 ? weapon.ClipReloadWith(bonuses, conditions) : weapon.DelayBetweenShotsWith(bonuses, conditions));
-        var damage = world.DealWeaponDamage(Entity, weapon, null, Entity.X, Entity.Y, Entity.Z);
+        var damage = world.FireWeaponAt(Entity, weapon, null, Entity.X, Entity.Y, Entity.Z);
         world.Emit(SimEventKind.WeaponFired, Entity.Id, EntityId.Invalid, weapon.Name, damage.Raw);
         return SimulationTiming.SleepNone;
     }

@@ -1,7 +1,7 @@
 # Deterministischer Simulationskern (Phase 4, erweitert in Phase 5 und 6)
 
-Stand: 30. September 2026 (Phase 6 abgeschlossen; §1–§12 beschreiben den Kern und die Phase-5-Regeln, `docs/GAME-RULES.md`
-die Spielregeln, §13–§20 die Phase-6-Erweiterungen: Terrain, Navigation, Sicht, Bau, Kraftwerke, Skirmish-KI)
+Stand: 30. September 2026 (Phase 6 abgeschlossen, Phase 8 Paket E1: Projektilflugzeit, Transporter, Tunnel, Chinook; §1–§12 beschreiben den Kern und die Phase-5-Regeln, `docs/GAME-RULES.md`
+die Spielregeln, §13–§20 die Phase-6-Erweiterungen: Terrain, Navigation, Sicht, Bau, Kraftwerke, Skirmish-KI, §21 das Paket E1)
 
 `CnCNew.Simulation` ist die headless laufende, deterministische Welt: fester Tick, stabile IDs,
 reproduzierbare Zufallszahlen, Befehlsqueue, Objekt-/Modul-Lebenszyklus, Timer, Events,
@@ -111,6 +111,7 @@ Bewusste Abweichungen:
 | 3 | Updates | Sleepy-Scheduler; markierte Entities werden übersprungen; Rückgabewert bestimmt die nächste Weckzeit |
 | 4 | Events | Zustellung in Event-ID-Reihenfolge; während der Zustellung erzeugte Events kommen im selben Durchlauf dran |
 | 5 | Zerstören | markierte Entities in aufsteigender ID: `OnRemove`, Scheduler-Einträge und eigene Timer entfernen, Tabelle leeren |
+| 5a | Verzögerte Treffer | fällige Treffer von Waffen ohne Projektilobjekt in Einfügereihenfolge (`WeaponStore::update`, Phase 8, §21) |
 | 6 | Spawnen | reservierte Entities in ID-Reihenfolge erzeugen; Module erhalten `OnSpawn` (dürfen `logic` ziehen); Updates werden eingeplant |
 | 7 | Events | Events der Spawn-Phase werden zugestellt |
 | 8 | Hash | Tick-Zähler steigt, Zustands-Hash wird berechnet |
@@ -219,8 +220,8 @@ Subdual-Typen wirken nicht auf Gesundheit), `KILLPILOT`/`KILL_GARRISONED`/`STATU
 
 ## 6. Befehle
 
-Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 8` (Phase 5 hat 13 Typen ergänzt, Version 6
-brachte `DockCommand`, Version 7 `SetRelationshipCommand`, Version 8 die sechs Baubefehle der Phase 6; bestehende Codes ändern sich nie):
+Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 9` (Phase 5 hat 13 Typen ergänzt, Version 6
+brachte `DockCommand`, Version 7 `SetRelationshipCommand`, Version 8 die sechs Baubefehle der Phase 6, Version 9 `MoveAndEnterCommand` und `EvacuateCommand`; bestehende Codes ändern sich nie):
 
 | Code | Typ | Zweck | nur System |
 |---:|---|---|:-:|
@@ -249,6 +250,8 @@ brachte `DockCommand`, Version 7 `SetRelationshipCommand`, Version 8 die sechs B
 | 23 | `ResumeConstructCommand` | Unterbrochene Baustelle mit einem (anderen) Baumeister fortsetzen (`DozerAIUpdate::resumeConstruction`) | |
 | 24 | `CancelConstructCommand` | Baustelle abbrechen, Kosten werden erstattet | |
 | 25 | `RepairCommand` | Baumeister repariert ein beschädigtes eigenes Gebäude (`MSG_REPAIR`, kostenlos, §16) | |
+| 26 | `MoveAndEnterCommand` | Eigenes Objekt läuft zu einem Container (Transporter, Tunnel, Gebäude) und steigt bei Ankunft ein (`aiEnter`, §21) | |
+| 27 | `EvacuateCommand` | Besitzer entlädt einen Container, beweglich wahlweise erst an einer Position; ein Tunnel entlässt das ganze Netz (`MSG_EVACUATE`, §21) | |
 
 `Submit` prüft sofort und lehnt **explizit, gezählt und als `CommandRejected`-Event** ab: `Late` (Tick liegt zurück),
 `Duplicate` (gleiche (Spieler, Sequenz) wie die zuletzt akzeptierte), `OutOfOrder` (kleinere Sequenz), `UnknownPlayer`,
@@ -281,8 +284,8 @@ regelmäßig, der Snapshot-Restore immer).
 
 **Snapshot.** `WorldSnapshot.Write` erzeugt kanonisches UTF-8-JSON (feste Eigenschaftsreihenfolge, nur Ganzzahlen –
 `Fixed` als Rohwert –, keine Pfade oder Zeitstempel, jede Sammlung nach ID beziehungsweise (Tick, Spieler, Sequenz)
-sortiert): Kopf `format = cncnew-world-snapshot`, `version = 6` (2 ergänzte die Teams der Spielertabelle, 3 das Computerspieler-Flag, 4 den Geländefingerabdruck, 5 die Sichtkarten – der Sicht-Hash ist Teil des Zustands-Hashes –, 6 Bau-, Verkaufs- und Sammelpunktzustand), `tickRate`, `definitionFingerprint`, `fixture`, `worldId`,
-`seed`, `stateHash`, danach `state` (Tick, ID-Zähler, `logic`-Zustand, Spielertabelle, Ablehnungszähler, Spawn-/Destroy-Queue,
+sortiert): Kopf `format = cncnew-world-snapshot`, `version = 7` (2 ergänzte die Teams der Spielertabelle, 3 das Computerspieler-Flag, 4 den Geländefingerabdruck, 5 die Sichtkarten – der Sicht-Hash ist Teil des Zustands-Hashes –, 6 Bau-, Verkaufs- und Sammelpunktzustand, 7 siehe unten), `tickRate`, `definitionFingerprint`, `fixture`, `worldId`,
+`seed`, `stateHash` (Version 7, Phase 8: Tunnelnetz je Spieler, verzögerte Treffer, Startdaten eines Projektils in der Spawn-Queue, Ereignisposition), danach `state` (Tick, ID-Zähler, `logic`-Zustand, Spielertabelle, Ablehnungszähler, Spawn-/Destroy-Queue,
 Events, Entities mit Modulzuständen, Timer, Befehle) und `presentation` (`cosmetic`, `audio`). **SHA-256** identifiziert einen
 Snapshot (`WorldSnapshot.Sha256`). `Restore` ist bewusst minimal und intern gehalten (Phase 9 besitzt den späteren
 Speichervertrag) und weist ab: leere/abgeschnittene/verstümmelte Dateien, fremde Version/Format/Tickrate, abweichenden
@@ -317,6 +320,9 @@ vergleicht die Befehle; ein unbekannter Typ im Schreiber ist ein Fehler, keine s
 **Format v3 und v4.** v3 ergänzt je Spieler die Team-Nummer (`PlayerConfiguration.Team`, 0 = kein Team), v4 das Computerspieler-Flag
 (`IsComputer`, Voraussetzung für `AutoFindHealingUpdate`). Die Befehlstabelle kodiert inzwischen **alle 19 Befehlstypen**
 (`DockCommand` und `SetRelationshipCommand` sind hinzugekommen); ältere Formatversionen werden mit klarer Meldung abgewiesen.
+
+**Format v7 (Phase 8, E1).** Kodiert zusätzlich `MoveAndEnterCommand` (u32 Akteur, u32 Container) und `EvacuateCommand` (u32 Container, bool Position,
+i64 X, i64 Y roh); Befehlstabelle Version 9, **alle 27 Befehlstypen**; v6 wird mit klarer Meldung abgewiesen (`Tests.Transports`).
 
 **Format v5 und v6 (Phase 6).** v5 trägt den Geländefingerabdruck im Kopf (`TerrainMap.Fingerprint`, 32 Byte; der Runner lehnt ein
 Replay ab, dessen Gelände nicht passt, wie beim Definitionsfingerabdruck); v6 kodiert die sechs Baubefehle. Die Befehlstabelle
@@ -406,6 +412,13 @@ SHA-256 `7E3DBFDCBCD4D46502FA0C571598E826343C14D23F97A0D2919BF53661009A60`, Rest
 wie zuvor. Kettenhash und Endhash unterscheiden sich von denen vom 29. September, weil sich die Zustandsdarstellung (Sicht-Hash,
 Terrain-Fingerabdruck) und die Stealth-Regel (§15) geändert haben; das Szenario selbst blieb unverändert.
 
+**Neumessung Phase 8, Paket E1** (30. September 2026, Release, gleiche Maschine, parallel zu einer KI-Auswertung gemessen, daher langsamer; Snapshot v7, Replay v7):
+216.000 Ticks, 914.394 Befehle, Replay 47.094.815 Byte, Lauf 1 20,6 s (95,5 µs je Tick), langsamster Tick 31,34 ms, Allokation 2.158 Byte je Tick unter Churn,
+Spitzen 15.775 Entities / 42.064 Module / 29 geplante Updates / 7.048 Timer, **Kettenhash `3AECEB0579E460AF`, Endhash `ED6F9329F59662E3`**; Snapshot bei
+Tick 108.000 11.862.512 Byte (SHA-256 `6A8D0B9BD9F64F22384FF8A39D7D1AA25F0C8D0D959527D6365CC3E572DBBA8C`), Restore 0,72 s (Hash `3D5CD16AC1FEAA30`), Working Set 567 MiB.
+Drei frische Läufe und die Fortsetzung stimmen tickweise überein, 401.237 Spawns/Destroys, 2.170 `UnknownEntity`. Die Hashes ändern sich, weil der globale
+Zustand jetzt Tunnelnetz je Spieler und die (leere) Liste verzögerter Treffer beschreibt; die synthetische Fixture hat keine Projektile.
+
 **Budgets** (mit Messwert als Grundlage, etwa 2,7-facher Spielraum): 216.000-Tick-Lauf dieses Szenarios ≤ 60 s;
 Ø ≤ 300 µs je Tick; langsamster Tick ≤ 100 ms (echtes Echtzeitbudget, 33,3 ms bei 30 Hz, wird erst mit den Regeln der
 Phase 5 unter realer Last festgelegt); Working Set ≤ 1 GiB; ruhender Tick 0 Byte, Churn ≤ 4 KiB je Tick; Snapshot ≤ 1 KiB
@@ -417,7 +430,14 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
-- **Stand nach Phase 6 (30. September 2026, frisch gemessen): 2.115 Objekte, 1.393 vollständig instanziierbar (65,9 %)**, 722 blockiert;
+- **Stand nach Phase 8, Paket E1 (30. September 2026, frisch gemessen): 2.115 Objekte, 1.470 vollständig instanziierbar (69,5 %)**, 645 blockiert;
+  85 von 205 Modultypen implementiert (8 neu: `DumbProjectileBehavior`, `MissileAIUpdate`, `PointDefenseLaserUpdate`, `TransportAIUpdate`, `ChinookAIUpdate`,
+  `HelicopterSlowDeathBehavior`, `TunnelContain`, `HelixContain`, §21), sie decken 15.543 von 19.553 Modulverwendungen (79,5 %); Fingerabdruck
+  `2A31BC2A83D63A58…`. Alle 1.470 Objekte werden in einer Welt erzeugt (9.670 Module). Nicht implementiert: 72 Module „Phase 5“, 26 „Phase 6“, 22 „Phase 7“.
+  Größte verbleibende Blocker: `CommandButtonHuntUpdate` 79/18, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/3, `JetSlowDeathBehavior` 59/0,
+  `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `HeightDieUpdate` 31/24, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25,
+  `BaikonurLaunchPower` 23/23. Der Stand nach Phase 6 steht als Verlauf darunter.
+- Verlauf (Stand nach Phase 6, 30. September 2026): 2.115 Objekte, 1.393 vollständig instanziierbar (65,9 %), 722 blockiert;
   77 von 205 Modultypen sind implementiert (12 aus Phase 4, 62 aus Phase 5, 3 aus Phase 6: `PowerPlantUpdate`, `PowerPlantUpgrade`, `OverchargeBehavior`;
   183 Simulations- und 22 Präsentationsmodule im Katalog), sie decken 15.382 von 19.553 Modulverwendungen (78,7 %); der Fingerabdruck des Retail-Basisbestands ist `1248585D0BAAB79F…`.
   Alle 1.393 Objekte werden in einer Welt erzeugt (8.925 Module). Die folgenden Zahlen beschreiben den Stand am Ende von Phase 5 und bleiben als Verlauf stehen.
@@ -455,7 +475,7 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
 - **Phase 5 (abgeschlossen)**: Wirtschaft mit Versorgung, Upgrades, Sciences, direkter Kampf mit Flächenschaden und
   `WeaponBonus`, Erfahrung und Veteranenstufen, Teams und Diplomatie, Garnison/Transport, Reparaturdock, einfache Bewegung,
   Produktion und Sieg/Niederlage sind implementiert (`docs/GAME-RULES.md`), aber bewusst vereinfacht; Terrain, Pfadsuche, Bau und Verkauf sind seit Phase 6 vorhanden (§13–§16), offen bleiben
-  Kollision, Projektil-Flugzeit, die Wirkung von `CommandSet` und Radar und die Rüstungs-/Waffensatzauswahl nach Veteranenstufe. Jede Vereinfachung steht mit Quellverweis im Modul- oder
+  Kollision (Projektil-Flugzeit ist seit Phase 8 umgesetzt, §21), die Wirkung von `CommandSet` und Radar und die Rüstungs-/Waffensatzauswahl nach Veteranenstufe. Jede Vereinfachung steht mit Quellverweis im Modul- oder
   Katalog-Kommentar; die Liste der Grenzen steht in `docs/GAME-RULES.md` §10.
 - Ein INI-Parser-Fehler wurde in Phase 5 behoben: `SageIniParser` verglich das `End`-Schlüsselwort gegen die *gesamte*
   Zeile statt (wie das Original, `INI::initFromINIMulti`, `strtok`) nur gegen ihr erstes Token; zwei Objekte
@@ -467,7 +487,7 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   25-%-Schwelle) ist portiert (Block 0.3 abgeschlossen, `VoiceFearRequested`-Event, Test `Phase5FearSoundRng`).
 - Der Abgleich des RNG mit einem kompilierten Original steht aus (kein Compiler verfügbar); die Handrechnung ist unabhängig
   und reicht als Beleg für Algorithmusgleichheit, nicht als Beleg für die Weiterverwendung in Netzwerkspielen.
-- `Restore` ist intern; Vorwärts-/Rückwärtskompatibilität von Snapshots (aktuell Version 6, ältere werden abgewiesen) ist erst Thema von Phase 9.
+- `Restore` ist intern; Vorwärts-/Rückwärtskompatibilität von Snapshots (aktuell Version 7, ältere werden abgewiesen) ist erst Thema von Phase 9.
 - Der Zustands-Hash ist nicht kryptographisch und die Snapshot-JSON-Größe (≈ 485 Byte je Entity) ist nicht optimiert.
 - Vom Kern erzeugte Anforderungen (`FxRequested`, `WeaponFireRequested`, `VoiceFearRequested`, `CrateRequested`) werden
   nicht ausgeführt; sie sind Verträge für Präsentation. `CreationListRequested` ist Protokoll: die Liste wird in der Welt
@@ -591,11 +611,42 @@ Vier Karten (Alpine Assault, Armored Fury, Bitter Winter, Death Valley) × vier 
 | Death Valley | GLA, America | GLA, Tick 8.355 |
 | Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 19.095 |
 
-America gewinnt nie: Die vier America-Fraktionen haben keine Versorgungswirtschaft, weil `ChinookAIUpdate`/`TransportAIUpdate` nicht implementiert sind (Phase 7). Das ist keine Balance-Aussage,
+America gewann in Phase 6 nie: Die vier America-Fraktionen hatten keine Versorgungswirtschaft, weil `ChinookAIUpdate`/`TransportAIUpdate` fehlten (seit Paket E1 vorhanden, Wiederholung unten). Das ist keine Balance-Aussage,
 sondern ein Nebenbefund der Modullücke. Der Retail-Referenzmatch (`SimTool reference-match`, 13 Fraktionen, kein Startobjekt übersprungen) endet nach Phase 6 mit
 Sieger Spieler 12 (`FactionGLAStealthGeneral`) bei Tick 26.880, Replay 27.181 Ticks, Endhash `5C370ED383EC9F6B`, Replay-Datei 949.193 Byte (SHA-256 `DCEE89309520371C0288EDB44309DA212AEE167D129343B6BB55BEA9F08A78C2`), 27 Checkpoints;
 Lauf 2 (Kettenhash `EB8BDC1482BC20DF`) und die Fortsetzung bei Tick 13.590 sind identisch. 27.607 Befehle (1.240 Produktion, 7.194 Bewegung, 13 Andocken, 18.591 Schüsse) in 7,8 s.
 
+### Wiederholung nach Paket E1 (Phase 8: Chinook, Transporter, Tunnel, Projektilflugzeit)
+
+Gleiche Aufrufe (`SimTool ai-match … --factions <A>,<B> --max-ticks 45000`, Standardseeds), alle 16 Läufe, ohne Auswahl. **Jeder Lauf ist mit Lauf 2 und
+Snapshotfortsetzung identisch**, und eine zweite, unabhängige Auswertung mit einem frisch gebauten Werkzeug lieferte dieselben 16 Ergebnisse.
+
+| Karte | Paarung | Phase 6 | Paket E1 |
+|---|---|---|---|
+| Alpine Assault | China, GLA | China, Tick 38.655 | **Patt bei 45.000** |
+| Alpine Assault | America, China | Patt bei 45.000 | **America, Tick 10.575** |
+| Alpine Assault | GLA, America | GLA, Tick 10.980 | GLA, Tick 18.870 |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 22.335 | China Tank General, Tick 22.155 |
+| Armored Fury | China, GLA | GLA, Tick 7.335 | GLA, Tick 9.240 |
+| Armored Fury | America, China | China, Tick 15.840 | **America, Tick 9.390** |
+| Armored Fury | GLA, America | GLA, Tick 6.330 | GLA, Tick 30.735 |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 16.695 | China Tank General, Tick 17.430 |
+| Bitter Winter | China, GLA | China, Tick 28.515 | China, Tick 32.490 |
+| Bitter Winter | America, China | China, Tick 18.480 | **America, Tick 19.980** |
+| Bitter Winter | GLA, America | GLA, Tick 9.465 | GLA, Tick 18.240 |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 23.565 | China Tank General, Tick 34.515 |
+| Death Valley | China, GLA | China, Tick 21.600 | China, Tick 39.555 |
+| Death Valley | America, China | China, Tick 20.565 | **America, Tick 10.155** |
+| Death Valley | GLA, America | GLA, Tick 8.355 | GLA, Tick 16.320 |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 19.095 | China Tank General, Tick 19.035 |
+
+Ehrliche Einordnung: **America gewinnt jetzt 4 von 4 Läufen gegen China** (vorher 0 von 4, darunter das frühere Patt), **gegen GLA weiterhin 0 von 4**, und
+die Air-Force-General-Paarung verliert weiter 4 von 4. Das frühere Patt (Alpine Assault, America gegen China) ist verschwunden, dafür gibt es **ein neues Patt**
+(Alpine Assault, China gegen GLA: China steht am Ende mit 29 Objekten, GLA mit 7, darunter Kommandozentrale, Tunnel und Arbeiter; China greift nur einmal an).
+15 von 16 Läufen enden also weiterhin mit einem Sieger. Die America-Siege gegen China sind nicht allein der Chinook-Wirtschaft zuzuschreiben: in drei der
+vier Siege gibt America keinen einzigen Dockbefehl (die Chinooks versorgen selbstständig über die Versorgungsmaschine), aber die Humvees (jetzt instanziierbar,
+`TransportAIUpdate`) und die Flugzeit der chinesischen Flammenprojektile (Drachenpanzer treffen nicht mehr sofort) verschieben das Kräfteverhältnis ebenfalls;
+eine Zerlegung nach Ursachen wurde nicht gemessen. GLA-Siege dauern im Mittel länger (Tunnelheilung, Flugzeit der Raketen). Keine Balance-Aussage.
 ## 20. Grenzen der Phase 6
 
 - **Navigation:** punktförmige Einheiten ohne Kollision, flacher A* mit Budget, genäherter Fußabdruck mit Fluchtzellen (Zuschlag), Locomotoren nur über `Surfaces`; ein teilweiser oder fehlender Pfad beendet den
@@ -604,7 +655,43 @@ Lauf 2 (Kettenhash `EB8BDC1482BC20DF`) und die Fortsetzung bei Tick 13.590 sind 
 - **Bau:** `QueueProduction` ohne Voraussetzungs-/Fähigkeitsprüfung, `MaxSimultaneousOfType` ungeprüft, Reparatur kostenlos.
 - **Kraftwerke:** keine Eroberung, kein Umschaltbefehl für `Overcharge`, Reset entfernt auch den Bonus.
 - **KI:** Spezialkräfte nicht klassifiziert, Startpositionen der Gegner sind öffentliches Wissen (`HintPositions`), von der Karte nur Lagerhäuser gesetzt, Startgeld und Science-Punkte vom System, keine Flugzeuge/Flugplätze,
-  America ohne Wirtschaft (Chinook fehlt), Armeezusammensetzung durch Instanziierbarkeit begrenzt, gleichstarke Paarungen können in ein Patt laufen (1 von 16), ohne Detektoren können getarnte Überlebende verborgen
+  (seit Paket E1 mit Chinook-Wirtschaft, Tunneln und Transportern, §21), Armeezusammensetzung durch Instanziierbarkeit begrenzt, gleichstarke Paarungen können in ein Patt laufen (1 von 16), ohne Detektoren können getarnte Überlebende verborgen
   bleiben.
-- **Offen aus früheren Phasen:** Block 0.4 (RNG-Abgleich mit einem kompilierten Original), Projektil-Flugzeit, `ToppleUpdate`/`CrushDie` mit echter Kollision, `ChinookAIUpdate`/`TransportAIUpdate`,
+- **Offen aus früheren Phasen:** Block 0.4 (RNG-Abgleich mit einem kompilierten Original), `ToppleUpdate`/`CrushDie` mit echter Kollision (Projektilflugzeit und `ChinookAIUpdate`/`TransportAIUpdate` seit Paket E1, §21),
   Wirkung von `CommandSet`/Radar, Veteranen-`ArmorSet`/`WeaponSet`, `CommandButtonHuntUpdate` und `SpecialAbilityUpdate`.
+
+## 21. Phase 8, Paket E1: Projektilflugzeit, Transporter, Tunnel, Chinook
+
+Regeln mit Quellverweisen: `docs/GAME-RULES.md` §6i (Flugzeit) und §6j (Transporter, Tunnel, Chinook). Kurzfassung der Kernänderungen:
+
+- **Acht neue Module** mit Katalogschema (`ModuleCatalog`, Felder aus den FieldParse-Tabellen, gegen den Bestand geprüft), Bindung und Tests:
+  `DumbProjectileBehavior`, `MissileAIUpdate`, `PointDefenseLaserUpdate` (`ProjectileModules.cs`); `TransportAIUpdate`, `ChinookAIUpdate`,
+  `HelicopterSlowDeathBehavior`, `TunnelContain`, `HelixContain` (`TransportModules.cs`). `PointDefenseLaserUpdate` und `HelicopterSlowDeathBehavior` kamen hinzu,
+  weil sonst kein Chinook der Air-Force-Generals bzw. gar kein Chinook instanziierbar geworden wäre.
+- **Flugzeit im Kern** (`SimulationWorld.Projectiles.cs`): `FireWeaponAt` ersetzt den Sofortschaden; verzögerte Treffer sind eine geordnete Liste im globalen
+  Zustand (Hash, Snapshot) und werden nach der Zerstörungsphase ausgewertet (Tickphase 5a); Projektilobjekte entstehen über die Spawn-Queue, ihre Startdaten
+  (`ProjectileLaunch`) liegen im Queue-Eintrag. Neue Ereignisse `ProjectileLaunched` (27) und `WeaponImpact` (28); Ereignisse mit Ort tragen `HasPosition` und
+  X/Y/Z. Neuer Überspringgrund `CreationSkipReasons.ProjectileNotInstantiable` (10).
+- **Festkomma:** Bézierpunkte aus der Bernsteinform (keine aufsummierten Vorwärtsdifferenzen), Kurvenlänge nach `BezierSegment::getApproximateLength` mit Rekursionsgrenze 24,
+  Flugticks `ceil` auf Rohwerten (`(d + v − 1) / v`), Richtungen über `Fixed.Sqrt`, Schwerkraft `GameData.ini Gravity / 900` je Tick²
+  (`TemplateCatalog.GravityPerTickSquared`), Winkel über `FixedTrig`. Kein `float`/`double` (`SourceRules`).
+- **Tunnelnetz:** `TunnelTracker` je Spieler im Weltzustand (Hash und Snapshot); `TunnelContain` ist `IContainerModule` auf dem gemeinsamen Netz,
+  `IWorldAttached` verbindet es beim Registrieren (auch nach Restore), `ISellModule` bildet `onSelling` ab.
+- **Befehle 26/27** (`MoveAndEnterCommand`, `EvacuateCommand`), `CommandTypes.Version = 9`; **Snapshot v7, Replay v7** (ältere werden mit klarer Meldung abgewiesen).
+- **Skirmish-KI:** Chinooks als Versorger, Tunnel (Heilung und Abkürzung), Transporter (Infanterie laden/entladen); siehe §19 für die Auswertung.
+
+**Messungen (30. September 2026, alle zweimal ausgeführt und verglichen):**
+
+| Größe | Wert |
+|---|---|
+| Vollinventar (`IniTool compile`) | 228 INI-Dateien (28 ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 18.321/19.871 Referenzen (1.550 Fallbacks), Snapshot 144.895.033 Byte, SHA-256 `09B84AC13823DC02C250F6BC95507BC58E13CF270E028E0DC1B5E55AA5391AA5` |
+| Retail-Basis (`--maps exclude`) | 146 INI-Dateien, 12.550 Definitionen, Snapshot 144.284.158 Byte, SHA-256 `2A31BC2A83D63A58752FD5F98B7C47215978AD8DD3C1B2870A83DA31DDDEAFE7` |
+| Kompatibilitätsbasislinie | 749 Einträge (vorher 741): 16 neue `deferred-field` (Präsentationsfelder der neuen Module: Seile/Rotorwind des Chinook, Partikel/Knochen/Ton der Helikopter-Absturzbehandlung, Ausstiegs-/Anzeigefelder des `HelixContain`), 8 `module`-Einträge entfallen (jetzt implementiert), `compatibility-module` 4.133 → 3.974 Verwendungen |
+| Module | 205 Typen, 85 implementiert, 1.470 von 2.115 Objekten instanziierbar (69,5 %), 15.543 von 19.553 Verwendungen (79,5 %) |
+| Stresstest | Endhash `ED6F9329F59662E3`, Kettenhash `3AECEB0579E460AF` (§10) |
+| Retail-Referenzmatch | 13 Fraktionen, America jetzt mit Chinook-Versorgung (keine `supply note`); Sieger Spieler 1 (FactionAmerica) bei Tick 13.800, Replay 14.101 Ticks, 1.197.235 Byte (SHA-256 `80BB3FF93421C4D7EB1F7FEA2ADCF3BBA5BB0A2B006F828EB5C3A78199AF3B98`, zwei Aufnahmen byteidentisch), 36.880 Befehle, 428 Lieferungen mit 114.450 Guthaben, Endhash `4DCB46FE3D2E8214`, Kettenhash `795E3C9868716E1B`, Fortsetzung ab Tick 7.050 identisch |
+
+**Grenzen:** Projektile kollidieren nicht (Punkt 9 des Handoffs); Täuschkörper, Störsender, Marschflughöhe, veteranenabhängige Detonationseffekte, Abseilen,
+Feuern aus Containern, Flugfeldheilung des Chinook, Nemesis-Zielwahl der Tunnelverteidiger und Bunkerbrecher-Effekte fehlen; Chinook-Höhenwechsel und
+Helikopterabsturz sind kinematisch statt über `PhysicsBehavior`. 40 von 157 Projektilwaffen feuern ein nicht instanziierbares Objekt und fallen sichtbar
+(`CreationSkipped`) auf den projektillosen Flugzeitpfad zurück.

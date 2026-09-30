@@ -13,6 +13,69 @@
     },
     {
       "category": "deferred-field",
+      "name": "ChinookAIUpdate/RopeColor",
+      "count": 6,
+      "owners": [
+        "ChinookAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ChinookAIUpdate/RopeWidth",
+      "count": 6,
+      "owners": [
+        "ChinookAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ChinookAIUpdate/RopeWobbleAmplitude",
+      "count": 6,
+      "owners": [
+        "ChinookAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ChinookAIUpdate/RopeWobbleLen",
+      "count": 6,
+      "owners": [
+        "ChinookAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ChinookAIUpdate/RopeWobbleRate",
+      "count": 6,
+      "owners": [
+        "ChinookAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ChinookAIUpdate/RotorWashParticleSystem",
+      "count": 5,
+      "owners": [
+        "ChinookAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ChinookAIUpdate/SuppliesDepletedVoice",
+      "count": 6,
+      "owners": [
+        "ChinookAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Crate/CrateObject",
       "count": 11,
       "owners": [
@@ -2447,6 +2510,87 @@
       "count": 3,
       "owners": [
         "GarrisonContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HelicopterSlowDeathBehavior/AttachParticle",
+      "count": 18,
+      "owners": [
+        "HelicopterSlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HelicopterSlowDeathBehavior/AttachParticleBone",
+      "count": 18,
+      "owners": [
+        "HelicopterSlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HelicopterSlowDeathBehavior/BladeBoneName",
+      "count": 18,
+      "owners": [
+        "HelicopterSlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HelicopterSlowDeathBehavior/BladeObjectName",
+      "count": 18,
+      "owners": [
+        "HelicopterSlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HelicopterSlowDeathBehavior/SoundDeathLoop",
+      "count": 18,
+      "owners": [
+        "HelicopterSlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HelixContain/ExitDelay",
+      "count": 6,
+      "owners": [
+        "HelixContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HelixContain/NumberOfExitPaths",
+      "count": 6,
+      "owners": [
+        "HelixContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HelixContain/PassengersAllowedToFire",
+      "count": 13,
+      "owners": [
+        "HelixContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HelixContain/ShouldDrawPips",
+      "count": 3,
+      "owners": [
+        "HelixContain"
       ],
       "plannedTarget": "phase-5-module-field-typing"
     },
@@ -5015,7 +5159,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 4133,
+      "count": 3974,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5638,15 +5782,6 @@
     },
     {
       "category": "module",
-      "name": "ChinookAIUpdate",
-      "count": 11,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "CleanupAreaPower",
       "count": 6,
       "owners": [
@@ -5743,15 +5878,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "DumbProjectileBehavior",
-      "count": 16,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
@@ -5881,24 +6007,6 @@
     },
     {
       "category": "module",
-      "name": "HelicopterSlowDeathBehavior",
-      "count": 18,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "HelixContain",
-      "count": 13,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "HijackerUpdate",
       "count": 6,
       "owners": [
@@ -5986,15 +6094,6 @@
         "Object"
       ],
       "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "MissileAIUpdate",
-      "count": 42,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
     },
     {
       "category": "module",
@@ -6108,15 +6207,6 @@
       "category": "module",
       "name": "PilotFindVehicleUpdate",
       "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "PointDefenseLaserUpdate",
-      "count": 23,
       "owners": [
         "Object"
       ],
@@ -6409,24 +6499,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "TransportAIUpdate",
-      "count": 24,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "TunnelContain",
-      "count": 12,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",

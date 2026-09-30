@@ -214,6 +214,8 @@ public sealed partial class SimulationWorld
             production.CancelAll(out var refund);
             if (_players.TryGetValue(target.Owner.Value, out var owner)) owner.Money += refund;
         }
+        foreach (var module in target.ModuleArray)
+            if (module is ISellModule sellable) sellable.OnSelling(this);
         MarkDirty(target);
     }
 

@@ -74,6 +74,12 @@ sealed class Feeder(SimulationWorld world)
     public SubmitResult Dock(int player, uint actor, uint dock, long? tick = null)
         => world.Submit(new DockCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor), new EntityId(dock)));
 
+    public SubmitResult MoveAndEnter(int player, uint actor, uint container, long? tick = null)
+        => world.Submit(new MoveAndEnterCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor), new EntityId(container)));
+
+    public SubmitResult Evacuate(int player, uint container, int? x = null, int? y = null, long? tick = null)
+        => world.Submit(new EvacuateCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(container), x is not null, Fixed.FromInt(x ?? 0), Fixed.FromInt(y ?? 0)));
+
     public SubmitResult EnterContainer(int player, uint actor, uint container, long? tick = null)
         => world.Submit(new EnterContainerCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor), new EntityId(container)));
 

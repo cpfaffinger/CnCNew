@@ -69,13 +69,33 @@ public enum SimEventKind : byte
 
     /// <summary>An unfinished structure was cancelled and its full cost refunded (<c>Entity</c>: the site, <c>Value</c>: the refunded amount as a plain integer).</summary>
     ConstructionCancelled = 26,
+
+    // --------------------------------------------------------------------------------------------- projectiles (phase 8)
+
+    /// <summary>
+    /// A shot left its weapon without hitting in the same tick (<c>WeaponTemplate::fireWeaponTemplate</c>): <c>Entity</c> is the projectile
+    /// object (invalid for a delayed hit without a projectile), <c>Other</c> the launcher, <c>Text</c> the weapon, <c>Value</c> the tick the
+    /// delayed hit lands (0 for a projectile, whose flight decides), the position is the aim point.
+    /// </summary>
+    ProjectileLaunched = 27,
+
+    /// <summary>
+    /// A projectile detonated or a delayed shot landed (<c>WeaponStore::handleProjectileDetonation</c>, <c>WeaponStore::update</c>): <c>Entity</c>
+    /// is the projectile (invalid for a delayed shot), <c>Other</c> the launcher, <c>Text</c> the weapon, <c>Value</c> the raw damage the primary
+    /// victim took (0 without one), the position is the impact point.
+    /// </summary>
+    WeaponImpact = 28,
 }
 
 /// <summary>
 /// An immutable world event. Field meaning per kind: <c>Entity</c> is the subject, <c>Other</c> the source/target,
 /// <c>Text</c> a template, effect or reason name, <c>Value</c> an amount (raw fixed-point), timer tag or reject code.
+/// Events that happen at a place rather than at an object (projectile launch and impact, the detonation effect) carry
+/// <see cref="HasPosition"/> and the world position; only those events write the position, so the serialized form of every
+/// other event is unchanged.
 /// </summary>
-public readonly record struct SimEvent(EventId Id, long Tick, SimEventKind Kind, EntityId Entity, EntityId Other, PlayerId Player, string Text, long Value)
+public readonly record struct SimEvent(EventId Id, long Tick, SimEventKind Kind, EntityId Entity, EntityId Other, PlayerId Player, string Text, long Value,
+    bool HasPosition = false, Numerics.Fixed X = default, Numerics.Fixed Y = default, Numerics.Fixed Z = default)
 {
     public void Describe(IStateWriter writer)
     {
@@ -88,6 +108,12 @@ public readonly record struct SimEvent(EventId Id, long Tick, SimEventKind Kind,
         writer.Int("player", Player.Value);
         writer.Text("text", Text);
         writer.Int("value", Value);
+        if (HasPosition)
+        {
+            writer.Fixed("x", X);
+            writer.Fixed("y", Y);
+            writer.Fixed("z", Z);
+        }
         writer.EndObject();
     }
 
@@ -95,9 +121,11 @@ public readonly record struct SimEvent(EventId Id, long Tick, SimEventKind Kind,
     {
         var kind = reader.Int("kind");
         if (!Enum.IsDefined(typeof(SimEventKind), (byte)kind)) throw new InvalidDataException($"Unknown event kind {kind}.");
+        var located = reader.Has("x");
         return new SimEvent(new EventId(reader.UInt("id")), reader.Int("tick"), (SimEventKind)kind,
             new EntityId(checked((uint)reader.UInt("entity"))), new EntityId(checked((uint)reader.UInt("other"))),
-            new PlayerId(checked((int)reader.Int("player"))), reader.Text("text"), reader.Int("value"));
+            new PlayerId(checked((int)reader.Int("player"))), reader.Text("text"), reader.Int("value"),
+            located, located ? reader.Fixed("x") : default, located ? reader.Fixed("y") : default, located ? reader.Fixed("z") : default);
     }
 }
 
@@ -122,4 +150,6 @@ public static class CreationSkipReasons
     public const int NoTerrainEdge = 8;
     /// <summary>A <c>SpawnBehavior</c> owner has no production-exit module, so nothing can leave it; <c>Text</c> is the first spawn template.</summary>
     public const int NoExitInterface = 9;
+    /// <summary>A weapon's <c>ProjectileObject</c> is not instantiable (unimplemented modules): the shot lands like one without a projectile after <c>distance / WeaponSpeed</c>; <c>Text</c> is the projectile template.</summary>
+    public const int ProjectileNotInstantiable = 10;
 }

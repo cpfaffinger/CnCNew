@@ -68,7 +68,9 @@ public sealed partial class SimulationWorld
             known.CashBounty = player.Fixed("cashBounty");
             known.SharedReadyFrames.Clear();
             foreach (var shared in player.Array("sharedReadyFrames")) known.SharedReadyFrames[checked((int)shared.Int("power"))] = shared.Int("frame");
+            known.Tunnels.Load(player);
         }
+        LoadDelayedDamage(state);
         var rejections = state.Array("rejections");
         if (rejections.Count != _rejections.Length) throw new InvalidDataException("Rejection table size mismatch.");
         for (var index = 0; index < rejections.Count; index++) _rejections[index] = rejections[index].Int("count");
@@ -83,7 +85,11 @@ public sealed partial class SimulationWorld
                     pending.Int("minLifetime"), pending.Int("maxLifetime"), new EntityId(checked((uint)pending.UInt("container"))),
                     new EntityId(checked((uint)pending.UInt("containInSource"))), pending.Fixed("transferDamage"), new EntityId(checked((uint)pending.UInt("transferSource"))),
                     pending.Fixed("maxHealth"), pending.Bool("hasOrigin"), checked((int)pending.Int("originTemplate")), pending.Bool("forceSupplyWanting"),
-                    pending.Bool("hasRally"), pending.Fixed("rallyX"), pending.Fixed("rallyY"))));
+                    pending.Bool("hasRally"), pending.Fixed("rallyX"), pending.Fixed("rallyY"),
+                    pending.Has("launchWeapon")
+                        ? new ProjectileLaunch(checked((int)pending.Int("launchWeapon")), new EntityId(checked((uint)pending.UInt("launcher"))), new EntityId(checked((uint)pending.UInt("launchVictim"))),
+                            pending.Fixed("launchX"), pending.Fixed("launchY"), pending.Fixed("launchZ"), checked((uint)pending.UInt("launchConditions")))
+                        : null)));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
 

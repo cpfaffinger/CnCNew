@@ -35,7 +35,11 @@ public enum LocomotorSurfaces
 /// a path over the navigation grid, limited by <see cref="TurnRatePerTick"/> and by the <see cref="Surfaces"/> it can cross.
 /// </summary>
 public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRatePerTick, Fixed Braking, Fixed MinSpeed, Fixed CloseEnoughDist,
-    LocomotorSurfaces Surfaces = LocomotorSurfaces.None);
+    LocomotorSurfaces Surfaces = LocomotorSurfaces.None)
+{
+    /// <summary><c>Locomotor::m_preferredHeight</c>: the flight height above the terrain of an aircraft (0 for ground locomotors).</summary>
+    public Fixed PreferredHeight { get; init; }
+}
 
 /// <summary>
 /// The runtime view of an <c>Object</c> definition. Presentation modules (Draw, ClientUpdate) are listed but never
@@ -323,13 +327,44 @@ public sealed class TemplateCatalog
                 defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites, commandSets.ToImmutable()));
         }
         var commands = CommandCatalog.Build(graph);
-        var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus);
+        var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus)
+        {
+            MaxTunnelCapacity = ResolveMaxTunnelCapacity(graph),
+        };
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))
                     throw new TemplateBuildException($"Crate '{crate.Name}': CrateObject '{entry.ObjectName}' is not an Object definition.");
+        // WeaponTemplate::postProcessLoad: m_projectileTmpl = TheThingFactory->findTemplate(m_projectileName) (asserts when missing). A name
+        // without an Object definition is a data error here, never a silent "no projectile".
+        var projectiles = new int[weapons.Weapons.Length];
+        foreach (var weapon in weapons.Weapons)
+        {
+            if (weapon.ProjectileObject.Length == 0) { projectiles[weapon.Index] = -1; continue; }
+            projectiles[weapon.Index] = catalog.TryGet(weapon.ProjectileObject, out var projectile)
+                ? projectile.Index
+                : throw new TemplateBuildException($"Weapon '{weapon.Name}': ProjectileObject '{weapon.ProjectileObject}' is not an Object definition.");
+        }
+        catalog.ProjectileTemplates = [..projectiles];
         return catalog;
     }
+
+    /// <summary><c>GlobalData::m_maxTunnelCapacity</c> (<c>GameData.ini MaxTunnelCapacity = 10</c>); absent key: the reference default 0.</summary>
+    private static int ResolveMaxTunnelCapacity(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("MaxTunnelCapacity", StringComparison.OrdinalIgnoreCase))?.Value.Value;
+        return value is long integer ? checked((int)integer) : 0;
+    }
+
+    /// <summary><c>GlobalData::m_maxTunnelCapacity</c>: how many objects one player's tunnel network holds (<c>TunnelTracker::getContainMax</c>).</summary>
+    public int MaxTunnelCapacity { get; private init; }
+
+    /// <summary>Per weapon index, the index of its <see cref="WeaponInfo.ProjectileObject"/> template, or -1 when it fires none.</summary>
+    public ImmutableArray<int> ProjectileTemplates { get; private set; } = [];
+
+    /// <summary><see cref="Gravity"/> in world units per tick² (<c>GameData.ini Gravity</c> / 900), negative (downward).</summary>
+    public Fixed GravityPerTickSquared => SimulationTiming.PerSecondSquaredToPerTickSquared(Gravity);
 
     /// <summary>
     /// <c>calcDamageState</c> falls back to <c>BODY_PRISTINE</c> when <c>TheGlobalData</c> is unavailable; the closest
@@ -465,7 +500,10 @@ public sealed class TemplateCatalog
                 braking > 0 ? SimulationTiming.PerSecondSquaredToPerTickSquared(braking) : SimulationTiming.PerSecondSquaredToPerTickSquared(acceleration),
                 SimulationTiming.PerSecondToPerTick(minSpeed),
                 // CloseEnoughDist is a plain distance (not a rate): no per-tick conversion. 0 falls back to one tick's travel below.
-                Fixed.FromDecimal(closeEnough), surfaces);
+                Fixed.FromDecimal(closeEnough), surfaces)
+            {
+                PreferredHeight = Fixed.FromDecimal(Get("PreferredHeight")),
+            };
         }
         return builder.ToImmutable();
     }

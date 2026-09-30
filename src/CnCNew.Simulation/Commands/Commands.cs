@@ -12,7 +12,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 8;
+    public const int Version = 9;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -49,7 +49,11 @@ public static class CommandTypes
     public const ushort CancelConstruct = 24;
     public const ushort Repair = 25;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= Repair;
+    // --------------------------------------------------------------------------------------------------- transports and tunnels (v9)
+    public const ushort MoveAndEnter = 26;
+    public const ushort Evacuate = 27;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= Evacuate;
 }
 
 /// <summary>
@@ -116,6 +120,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.ResumeConstruct => new ResumeConstructCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("builder"))), new EntityId(checked((uint)reader.UInt("site")))),
             CommandTypes.CancelConstruct => new CancelConstructCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("site")))),
             CommandTypes.Repair => new RepairCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("builder"))), new EntityId(checked((uint)reader.UInt("target")))),
+            CommandTypes.MoveAndEnter => new MoveAndEnterCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("container")))),
+            CommandTypes.Evacuate => new EvacuateCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("container"))), reader.Bool("hasPosition"), reader.Fixed("x"), reader.Fixed("y")),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -368,6 +374,42 @@ public sealed record RepairCommand(PlayerId Player, ulong Sequence, long Tick, E
     {
         writer.UInt("builder", Builder.Value);
         writer.UInt("target", Target.Value);
+    }
+}
+
+// ------------------------------------------------------------------------------------------------------- transports and tunnels
+
+/// <summary>
+/// <c>aiEnter</c> (<c>MSG_ENTER</c>): <see cref="Actor"/> walks to <see cref="Container"/> (a transport, a tunnel, a garrisonable building) and gets in on
+/// arrival if the container still takes it then (capacity is checked on arrival, the entry rules at submission and on arrival). Unlike the
+/// instant <see cref="EnterContainerCommand"/> this is the order a player gives.
+/// </summary>
+public sealed record MoveAndEnterCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Actor, EntityId Container) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.MoveAndEnter;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("actor", Actor.Value);
+        writer.UInt("container", Container.Value);
+    }
+}
+
+/// <summary>
+/// <c>MSG_EVACUATE</c> / <c>aiMoveToAndEvacuate</c>: every passenger of <see cref="Container"/> leaves it — a mobile container first moves to (X, Y) when
+/// <see cref="HasPosition"/> is set (a Chinook lands before anybody leaves), a building or tunnel lets them out at once; evacuating a tunnel lets the whole
+/// network out through that tunnel. Only the container's owner may order it.
+/// </summary>
+public sealed record EvacuateCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Container, bool HasPosition, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Evacuate;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("container", Container.Value);
+        writer.Bool("hasPosition", HasPosition);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
     }
 }
 

@@ -36,6 +36,9 @@ public static class DeathTypes
     public const int Burned = 3;
     public const int Poisoned = 5;
 
+    /// <summary><c>DEATH_DETONATED</c>: a projectile that blew itself up.</summary>
+    public static int Detonated { get; } = NameTables.DeathType.TryIndexOf("DETONATED", out var index) ? index : throw new InvalidOperationException("DETONATED is not a death type.");
+
     public static int Count => NameTables.DeathType.Count;
     public static bool IsValid(int type) => type >= 0 && type < Count;
 }
