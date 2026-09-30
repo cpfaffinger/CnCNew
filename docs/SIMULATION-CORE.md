@@ -503,6 +503,29 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   Dozer/Arbeiter, Supply und Spezialkräfte im Befehlsstrom; Messung in `docs/GAME-RULES.md` §7a). Golden-Master-
   Szenarien existieren für die Schadenskette und die Produktionsuhr; Supply und Erfahrung stehen aus. Übrige Mechaniken sind
   durch gezielte Integrationstests (`Tests.Phase5.cs`) und den 216.000-Tick-Stresstest mit realen Objekten abgesichert.
+- **Bekannte Live/Replay-Lücke bei `SharedReadyFrame` (gefunden in Phase 8, Paket G2, nicht behoben):** `SpecialPowerBase.SharedReadyFrame()`
+  (`src/CnCNew.Simulation/Modules/BuiltIn/SpecialPowerModules.cs:133`) legt den geteilten Bereitschafts-Tick eines `SharedSynced`-Spezialkraft
+  verzögert an, beim *ersten* `IsReady()`-Zugriff, und schreibt ihn dabei in `SimulationWorld`. Für Objekte, die die Kraft von Anfang an besitzen
+  (kein `PurchaseScienceCommand`, also kein `OnSpecialPowerCreation`), ist dieser lesende Zugriff der einzige Anlegezeitpunkt. Die Skirmish-KI
+  ruft `IsReady()` in ihrer eigenen Entscheidungslogik in jedem echten Tick ab; ein reiner `ReplayRunner`-Lauf führt keinen KI-Code aus und
+  erreicht diesen Zugriff nie zum gleichen Tick (wenn überhaupt). Dadurch kann `SkirmishMatchSession.Step()` (live) einen anderen
+  `World.StateHash` liefern als `ReplayRunner.Run` über denselben `Session.ToReplay()`-Mitschnitt, reproduziert an `LiveMatch` auf
+  „Alpine Assault“: `players[2].sharedReadyFrames` hat nach einem KI-`ConstructCommand` bei Tick 13/14 acht Einträge live gegenüber null im
+  Replay (Diagnose mit `WorldSnapshot.Write` beider Welten verglichen; kein Effekt der Präsentationsschicht, reproduziert auch mit reinem
+  `Session.Step()`). Betroffen sind ausschließlich `SharedSynced`-Spezialkräfte ohne expliziten Gewährungsbefehl. **Nicht betroffen** sind alle
+  in dieser Datei gemessenen Zahlen (Referenzmatch-, Stresstest- und KI-Lauf-Hashes in §19 und in `CLAUDE.md`): die entstehen aus Live-gegen-
+  Live-Vergleichen (zwei unabhängige Läufe derselben Session), die von dieser Lücke nicht berührt werden, weil beide Läufe dieselbe KI-
+  Abfragefolge produzieren. Ein korrekter Fix (den Bereitschafts-Tick einmalig und deterministisch bei `OnSpawn`/`OnSpecialPowerCreation`
+  anlegen statt lesend) verschiebt, wann geteilte Spezialkräfte verfügbar werden, und ändert damit KI-Verhalten und in der Folge sämtliche
+  Referenzmatch-, Stress- und KI-Lauf-Hashes; das gehört in eine eigene, gemessene Simulationsphase und ist absichtlich nicht Teil von Phase 8.
+
+## 12a. Live/Replay-Determinismus: Testlücke
+
+Die bestehenden Replay-Tests (`Tests.ReferenceMatch.cs`, `Tests.Skirmish.cs`, `Tests.State.cs`) vergleichen ausschließlich zwei
+`ReplayRunner`-Läufe untereinander oder den Sieger, nie den `World.StateHash` eines live gelaufenen `SkirmishMatchSession` gegen einen
+`ReplayRunner`-Lauf über dessen eigenen `ToReplay()`-Mitschnitt. Deshalb hat kein bestehender Test die oben beschriebene Lücke gefunden; sie
+wurde erst in Paket G2 (`CnCNew.Game.Tests`) beim Testen eines echten Live-Matches sichtbar. Eine künftige Simulationsphase sollte einen
+Live-gegen-Replay-Hashvergleich als eigenen Test ergänzen, sobald die `SharedReadyFrame`-Lücke behoben ist.
 
 ## 13. Gelände und Karten (Phase 6)
 
