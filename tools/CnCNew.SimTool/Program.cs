@@ -23,7 +23,8 @@ using CnCNew.Simulation.World;
 const string Usage = """
     Usage: CnCNew.SimTool <command> [arguments]
       audit-modules [content-dir]                          bindings vs catalog; with a content directory also module use counts
-      audit-coverage <content-dir>                         module coverage of the compiled shipped objects (retail base data)
+      audit-coverage <content-dir> [--objects TEXT]        module coverage of the compiled shipped objects (retail base data);
+                                                           --objects lists blocked objects whose name or missing modules contain TEXT
       replay-record <replay.bin> [--ticks N] [--population N]
                                                            record the synthetic stress scenario as a replay with checkpoints
       replay-run <replay.bin>                              run a replay, verifying its checkpoints
@@ -47,7 +48,7 @@ try
     return args[0] switch
     {
         "audit-modules" => AuditModules(args.Length >= 2 ? args[1] : null),
-        "audit-coverage" when args.Length >= 2 => AuditCoverage(args[1]),
+        "audit-coverage" when args.Length >= 2 => AuditCoverage(args[1], args),
         "replay-record" when args.Length >= 2 => RecordReplay(args[1], Options(args)),
         "replay-run" when args.Length >= 2 => RunReplay(args[1]),
         "hash" when args.Length >= 2 => HashReplay(args[1]),
@@ -129,7 +130,7 @@ static (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, string Fingerpri
     return (graph, catalog, DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256);
 }
 
-static int AuditCoverage(string directory)
+static int AuditCoverage(string directory, string[] args)
 {
     var (graph, catalog, fingerprint) = CompileShipped(directory);
     var report = ModuleCoverage.Compute(catalog);
@@ -145,6 +146,14 @@ static int AuditCoverage(string directory)
     Console.WriteLine();
     Console.WriteLine("Presentation modules (never instantiated by the simulation), objects using them:");
     foreach (var (module, objects) in report.PresentationOnly.Take(12)) Console.WriteLine($"  {module,-42} {objects,5}");
+    if (Arg(args, "--objects") is { } filter)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"Blocked objects whose name or missing modules contain '{filter}' (object: missing modules):");
+        foreach (var template in catalog.Templates.Where(value => !value.IsInstantiable).OrderBy(value => value.Name, StringComparer.Ordinal))
+            if (template.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || template.MissingModules.Any(module => module.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+                Console.WriteLine($"  {template.Name}: {string.Join(", ", template.MissingModules)}");
+    }
 
     // Instantiate every instantiable object, tick, kill: proves the compiled definitions drive the simulation.
     var players = System.Collections.Immutable.ImmutableArray.Create(new PlayerConfiguration(new CnCNew.Simulation.Ids.PlayerId(1), "P1"));
@@ -255,7 +264,7 @@ static int AiMatch(string directory, string[] args)
     {
         var stats = scenario.Ais[index].Stats;
         var final = scenario.Finals[index];
-        Console.WriteLine($"  {final.Faction}: {(final.Defeated ? "defeated" : "alive")}, {final.Objects} objects, {final.Money} money; commands {stats.Commands} (rejected {stats.Rejected}), built {stats.Constructions} (resumed {stats.Resumes}, cancelled {stats.CancelledSites}), produced {stats.Productions}, shots {stats.Shots}, waves {stats.Waves}, powers {stats.PowerUses}, sciences {stats.SciencePurchases}, repairs {stats.Repairs}, docks {stats.DockOrders}, idle thinks {stats.IdleThinks}");
+        Console.WriteLine($"  {final.Faction}: {(final.Defeated ? "defeated" : "alive")}, {final.Objects} objects, {final.Money} money; commands {stats.Commands} (rejected {stats.Rejected}), built {stats.Constructions} (resumed {stats.Resumes}, cancelled {stats.CancelledSites}), produced {stats.Productions}, shots {stats.Shots}, waves {stats.Waves}, powers {stats.PowerUses}, sciences {stats.SciencePurchases}, repairs {stats.Repairs}, docks {stats.DockOrders}, tunnel entries {stats.TunnelEntries}, transport loads {stats.TransportLoads}, evacuations {stats.Evacuations}, idle thinks {stats.IdleThinks}");
         if (stats.RejectionsByReason.Count > 0) Console.WriteLine($"    rejections: {string.Join(", ", stats.RejectionsByReason.Select(pair => $"{pair.Key}={pair.Value}"))}");
     }
     Console.WriteLine(scenario.Winner is null
