@@ -67,18 +67,29 @@ public sealed class GameData
         var audio = AudioCatalog.FromGraph(graph, content.Exists);
         var images = MappedImageTable.FromGraph(graph);
         var factions = ReferenceMatchScenario.Participants(templates, out _);
-        var maps = ImmutableArray.CreateRange(content.EnumerateFiles()
-            .Where(path => path.StartsWith("Maps/", StringComparison.OrdinalIgnoreCase) && path.EndsWith(".map", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(path => path, StringComparer.Ordinal));
+        var maps = EnumerateMaps(content);
         return new GameData(content, graph, templates, fingerprint, visuals, fx, audio, images, factions, maps);
     }
 
+    /// <summary>Virtual paths of every <c>Maps/*.map</c> file, ordinal order. Needs only a directory listing, not compiled definitions, so callers that have not finished <see cref="Load"/> yet (a boot/loading screen) can use it too.</summary>
+    public static ImmutableArray<string> EnumerateMaps(ContentFileSystem content)
+        => ImmutableArray.CreateRange(content.EnumerateFiles()
+            .Where(path => path.StartsWith("Maps/", StringComparison.OrdinalIgnoreCase) && path.EndsWith(".map", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(path => path, StringComparer.Ordinal));
+
     /// <summary>Loads the main string table of a language (<see cref="LanguageCatalog"/> probe order).</summary>
-    public LocalizedText LoadText(string language)
+    public LocalizedText LoadText(string language) => LoadText(Content, language);
+
+    /// <summary>
+    /// Loads the main string table of a language directly from a content file system, without a compiled
+    /// <see cref="GameData"/> instance. Reading CSF/STR text needs only the raw content archive, not the compiled
+    /// definition graph, so a boot/loading screen can resolve labels before <see cref="Load"/> finishes.
+    /// </summary>
+    public static LocalizedText LoadText(ContentFileSystem content, string language)
     {
-        var files = LanguageCatalog.Resolve(language, Content.Exists);
+        var files = LanguageCatalog.Resolve(language, content.Exists);
         if (files.StringFile is null) throw new FileNotFoundException($"No string table for language '{language}' (probed {string.Join(", ", files.Candidates)}).");
-        using var stream = Content.OpenRead(files.StringFile);
+        using var stream = content.OpenRead(files.StringFile);
         var table = files.StringFormat == StringTableFormat.Csf
             ? StringTable.FromCsf(CsfReader.Read(stream), files.StringFile)
             : StrReader.Read(stream, files.StringFile);
