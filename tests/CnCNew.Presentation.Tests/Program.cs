@@ -11,6 +11,7 @@ Func<string[], int>[] suites =
     VisionTests.Run,
     MinimapTests.Run,
     WorldRealDataTests.Run,
+    InputTests.Run,
 ];
 
 var failures = 0;
