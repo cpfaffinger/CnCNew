@@ -22,7 +22,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.Timers;
 using CnCNew.Simulation.World;
 
-var run = new Runner();
+var run = new Runner(args.SkipWhile(value => value != "--only").Skip(1).FirstOrDefault());
 run.Test("Fixed-point arithmetic, rounding and limits", Tests.FixedPoint);
 run.Test("Tick rate, duration and unit conversions", Tests.Timing);
 run.Test("Reference float conversion vs exact ticks (documented deviation)", Tests.FloatDeviation);
@@ -143,19 +143,38 @@ run.Test("Power: OverchargeBehavior toggles, drains and switches itself off", Te
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
 run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);
+run.Test("Projectiles: straight shell flight time, impact event and detonation effect", Tests.ProjectileStraightShellFlightTime);
+run.Test("Projectiles: ballistic arc path points and flight time", Tests.ProjectileBallisticArc);
+run.Test("Projectiles: missile flight time (instant acceleration)", Tests.ProjectileMissileFlightTime);
+run.Test("Projectiles: missile ignition delay and acceleration", Tests.ProjectileMissileAcceleration);
+run.Test("Projectiles: delayed hit without a projectile object", Tests.ProjectileDelayedHit);
+run.Test("Projectiles: scatter radius", Tests.ProjectileScatter);
+run.Test("Projectiles: point-defense laser shoots a missile down", Tests.ProjectilePointDefenseLaser);
+run.Test("Projectiles: snapshot mid-flight and two-run determinism", Tests.ProjectileSnapshotAndDeterminism);
+run.Test("Tunnels: shared network, capacity, entry rules and exit through another tunnel", Tests.TunnelSharedNetwork);
+run.Test("Tunnels: healing, hand-over on death and cave-in", Tests.TunnelHealingAndCaveIn);
+run.Test("Tunnels: selling the last tunnel lets the riders out", Tests.TunnelSaleEvacuates);
+run.Test("Transports: walk in, drive and unload at a position", Tests.TransportLoadAndUnloadAtPosition);
+run.Test("Chinook: flight height, supply trips, Supply Lines boost and landing to unload", Tests.ChinookSupplyFlightAndLanding);
+run.Test("Chinook: helicopter slow death falls, crashes and leaves a hull", Tests.HelicopterSlowDeathFall);
+run.Test("Helix: portable structure rides free, follows and dies with it", Tests.HelixPortableStructure);
+run.Test("Transports: snapshot v7, determinism and replay v7 commands", Tests.TransportSnapshotAndReplay);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 return run.Finish();
 
-sealed class Runner
+/// <param name="only">With <c>--only TEXT</c>, just the tests whose name contains TEXT run (a development aid; the full run takes no argument).</param>
+sealed class Runner(string? only)
 {
     private int _failed;
     private int _passed;
 
     public void Test(string name, Action test)
     {
+        if (only is not null && !name.Contains(only, StringComparison.OrdinalIgnoreCase)) return;
         try
         {
             test();
