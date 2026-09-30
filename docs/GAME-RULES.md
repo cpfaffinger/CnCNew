@@ -1,12 +1,12 @@
-# Spielregeln (Phase 5, abgeschlossen)
+# Spielregeln (Phase 5, abgeschlossen; Ergänzungen der Phase 6 in §11)
 
-Stand: 29. September 2026 (Abschluss von Phase 5). Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
+Stand: 30. September 2026 (Phase 6 ergänzt Gelände, Bau und KI, siehe §11 und `docs/SIMULATION-CORE.md` §13–§20; der übrige Text beschreibt den Stand von Phase 5, soweit §11 ihn nicht ersetzt). Dieses Dokument beschreibt die auf dem deterministischen Simulationskern
 (`docs/SIMULATION-CORE.md`) aufsetzenden Spielregeln, die Phase 5 implementiert hat: Wirtschaft, Upgrades, direkter Kampf
 mit Flächenschaden, einfache Bewegung, Produktion, die Blockermodule aus §3/§6/§6a (Schadenszustände, Brand, Gift, Tod,
 Stealth-Erkennung, Garnison-Containment), das Spezialkraft-Subsystem (§6d), die Versorgungswirtschaft mit Andockmaschine
 und Spawnern (§6e), Reparatur (§6f), Erfahrung und Veteranenstufen (§6h) sowie Teams und Diplomatie (§7). Phase 5 gilt als
 abgeschlossen, weil Supply, Erfahrung und Teams stehen und der Referenzmatch auf Retail-Daten mit 0 übersprungenen
-Startobjekten läuft (§7a); die bewussten Grenzen stehen in §10, der Folgeauftrag in `docs/HANDOFF-PHASE7.md`.
+Startobjekten läuft (§7a); die bewussten Grenzen stehen in §10, der Folgeauftrag stand in `docs/HANDOFF-PHASE7.md` (Phase 6 ist erledigt, der nächste Auftrag ist `docs/HANDOFF-PHASE8.md`).
 
 Alle Regeln laufen innerhalb der bestehenden Tickphasen (`SIMULATION-CORE.md` §4): neue Befehle werden in Phase 1
 ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt keine zusätzliche Tickphase.
@@ -163,7 +163,7 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   unterschreitet), und ein Tick bewegt nie weiter als bis zum Ziel.
 - **Bewusste Vereinfachung:** keine drehratenbegrenzte Ausrichtung (`Entity.Angle` bleibt beim Bewegen unverändert;
   `LocomotorInfo.TurnRatePerTick` wird kompiliert, aber nicht angewendet), kein Terrain, keine Kollision, keine
-  Pfadsuche – alles Phase 6. Ohne Drehrate/Trigonometrie bleibt die Bewegung vollständig ganzzahlig/festkomma-basiert
+  Pfadsuche – so in Phase 5; **seit Phase 6** gilt für Einheiten mit `AIUpdateInterface` und Karte die Navigation (`SIMULATION-CORE.md` §14: A*, Drehrate, Geländehöhe), die geradlinige Bewegung bleibt für Welten ohne Gelände. Ohne Drehrate/Trigonometrie bleibt die Bewegung vollständig ganzzahlig/festkomma-basiert
   und damit plattformunabhängig deterministisch (vergleiche die Begründung für `Fixed` in `SIMULATION-CORE.md` §1).
 
 ## 5. Produktion und Konstruktion
@@ -177,7 +177,7 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   Produzenten (`RequestSpawn`, keine Ausgangs-/Türgeometrie) im Besitz von dessen Spieler, und der nächste
   Warteschlangenplatz beginnt neu.
 - **Bewusste Vereinfachung:** kein Energie-Verlangsamungsfaktor (`ProductionUpdate::calcTimeToBuild`), keine
-  Bauplatz-/Kollisionsprüfung, kein Rallypunkt, `QuantityModifier` und die Türanimationsfelder sind typisiert, aber
+  Kollisionsprüfung (Bauplatzprüfung und Sammelpunkt gibt es seit Phase 6 für Gebäude, §11), `QuantityModifier` und die Türanimationsfelder sind typisiert, aber
   ungenutzt (siehe Modulkatalog-Kommentar).
 
 ## 6. Stealth und Selbstheilung (Block 0.2)
@@ -374,7 +374,7 @@ Updatemodul, der fehlt – die Kraft wird verweigert statt still nichts zu tun).
 alle Kräfte der Objekte des Spielers, die diese Science verlangen, geweckt (`onSpecialPowerCreation` und sofort bereit,
 `Player::addScience`).
 
-**Nicht modelliert (bewusst, nicht still):** kein Bauvorgang (jedes Objekt ohne `UnderConstruction` ist im Tick nach dem Spawn
+**Nicht modelliert (bewusst, nicht still):** kein Bauvorgang (seit Phase 6 gibt es ihn für Dozer-Bauten, §11; jedes Objekt ohne `UnderConstruction` ist im Tick nach dem Spawn
 fertig, `onBuildComplete`), kein Deaktiviert-Zustand (`isDisabled`-Prüfung), `createOwner = false` (der Besitzerwechsel von
 `CreateFromList`), `OCLAdjustPositionToPassable`, Kanonenboot-KI und Kanteneinflug, Sichtobjekte (`ViewObject*`), EVA-Ansagen,
 Sounds, öffentliche Timer und Skript-Benachrichtigungen. Die
@@ -413,8 +413,8 @@ und kein Andockender belegt ist, und wird durch die erste Reservierung geweckt.
 | `SupplyCenterCreate`, `SupplyWarehouseCreate` | Melden Zentrum bzw. Lager beim `ResourceGatheringManager` an; hier wird das Netz aus den Entitäten abgeleitet, daher bleibt nichts zu tun (bewusst zustandslos). |
 | `AutoDepositUpdate` | Alle `DepositTiming` Ticks erhält der Besitzer `DepositAmount` plus den ersten Bonus, dessen Upgrade er besitzt. Neutrale und im Bau befindliche Objekte verdienen nichts (der Zähler läuft weiter). `InitialCaptureBonus` ist typisiert, aber ohne Wirkung (keine Eroberung). |
 | `SupplyTruckAIUpdate` | `SupplyTruckStateMachine` (Warten, Sammeln, Abliefern, Zurückziehen), Übergangssemantik wie die Andockmaschine. Die Supply-Maschine läuft vor der Basis-KI, der Schlaf ist der kürzere beider Werte; ein untätiger Lastwagen schläft, bis ein Befehl oder ein Erzeugungshaken ihn weckt. Ohne Upgrade-Bonus. Das `forcedBusy` des Originals (vom Halt-Befehl gesetzt) entfällt. |
-| `WorkerAIUpdate` | Wie der Lastwagen, mit Bonus nach `Upgrade_GLAWorkerShoes`; da Bau nicht modelliert ist, läuft immer das Versorgungshirn. |
-| `DozerAIUpdate` | Nur Bewegung; Bau, Reparatur und Minen (die eigene Maschine des Dozers) fehlen, ein Dozer baut nie. Er ist instanziierbar, damit Startobjekte und Produktionslisten mit Dozern funktionieren. |
+| `WorkerAIUpdate` | Wie der Lastwagen, mit Bonus nach `Upgrade_GLAWorkerShoes`; das Versorgungshirn läuft weiterhin, Bauen geschieht über die Baubefehle der Welt (§11). |
+| `DozerAIUpdate` | Bewegung; seit Phase 6 bauen, reparieren und verkaufen Dozer über `ConstructCommand`, `RepairCommand`, `ResumeConstructCommand` (§11). Minen (die eigene Maschine des Dozers) fehlen weiterhin. |
 
 **Versorgungsnetz** (`ResourceGatheringManager`): jedes Lager und jedes Zentrum ist für jeden Spieler sichtbar. Der Lastwagen wählt nach
 quadrierter 3D-Distanz; Kandidaten werden in Entitäts-ID-Reihenfolge gescannt, damit Gleichstände deterministisch brechen (das Original
@@ -600,7 +600,7 @@ FactionGLAToxinGeneral. Die Wirtschaft läuft echt: **707 Lieferungen** an Verso
 amerikanischen Fraktionen haben in dieser Messung keine Versorgungswirtschaft (`supply note`: Ihr Nachschubträger ist der Chinook, dessen
 `ChinookAIUpdate` noch fehlt), ihr Einkommen ist das Startkapital. Der Realdatentest `Tests.RealReferenceMatch` prüft Teilnehmerzahl,
 Sieger, Lieferungen, Determinismus und Snapshotfortsetzung. Die Abdeckungslage je Seite liefert `--diagnose`; die Aufgabe „Referenzmatch
-aller Fraktionen auf Retail-Daten“ ist **erfüllt**. Grenzen: kein Bauvorgang (Dozer bauen nichts, Basen sind Startobjekte plus Ersatzinfrastruktur),
+aller Fraktionen auf Retail-Daten“ ist **erfüllt**. Grenzen (Stand Phase 5; der Referenzmatch nutzt weiterhin keinen Bau, die Skirmish-KI der Phase 6 baut, §11): kein Bauvorgang im Match (Dozer bauen nichts, Basen sind Startobjekte plus Ersatzinfrastruktur),
 keine Spezialkräfte im Befehlsstrom (es gibt keinen `UseSpecialPowerCommand`-Generator, §6d), keine Kollision/kein Terrain/keine Pfadsuche (§4);
 dass GLA-Stealth gewinnt, ist ein Effekt dieser Vereinfachungen (Stealth hat keine Wirkung auf Zielwahl), keine Aussage über Spielbalance.
 
@@ -624,15 +624,14 @@ Modell im Test, sie werden nicht aus der Simulation zurückgelesen.
 
 ## 8. Befehlstabelle
 
-Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (19 Befehlscodes, `CommandTypes.Version = 7`; neu seit dem
-Spezialkraft-Stand: `DockCommand` = 18, `SetRelationshipCommand` = 19) und die Ablehnungsgründe (Codes 25–29 für Spezialkräfte, §6d;
-Code 30 `CannotDock`, §6e); das Replay-Format v4 (`docs/SIMULATION-CORE.md` §8) kodiert alle 19, der Snapshot ist Version 3.
+Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (25 Befehlscodes, `CommandTypes.Version = 8`; Phase 6 ergänzt Codes 20–25: `ConstructCommand`, `SellCommand`, `SetRallyPointCommand`, `ResumeConstructCommand`, `CancelConstructCommand`, `RepairCommand`; `DockCommand` = 18, `SetRelationshipCommand` = 19) und die Ablehnungsgründe (Codes 25–29 für Spezialkräfte, §6d;
+Code 30 `CannotDock`, §6e); das Replay-Format v6 (`docs/SIMULATION-CORE.md` §8) kodiert alle 25, der Snapshot ist Version 6; Ablehnungscodes 31–34 (`TargetNotVisible`, `InvalidPlacement`, `CannotConstruct`, `CannotSell`) stammen aus Phase 6.
 
 ## 9. Modulabdeckung
 
-Siehe `docs/SIMULATION-CORE.md` §11: 1.384 von 2.115 Objekten sind heute instanziierbar (65,4 %, gegenüber 26/2.113 in
-Phase 4 und 1.224 vor Supply, Erfahrung, Reparatur, Flächenschaden und `CrushDie`); 74 von 205 Modultypen sind implementiert (183
-Simulationsmodule, 22 Präsentationsmodule) und decken 15.364 von 19.553 Modulverwendungen (78,6 %). Nicht implementiert sind 80
+Siehe `docs/SIMULATION-CORE.md` §11 (Stand 30. September 2026, frisch gemessen): 1.393 von 2.115 Objekten sind instanziierbar (65,9 %, gegenüber 26/2.113 in
+Phase 4 und 1.384 am Ende von Phase 5); 77 von 205 Modultypen sind implementiert (183
+Simulationsmodule, 22 Präsentationsmodule) und decken 15.382 von 19.553 Modulverwendungen (78,7 %). Nicht implementiert sind 77
 Module, die der Katalog der Kategorie „Phase 5“ zuordnet und die noch offen sind,
 29 der Phase 6 und 22 der Phase 7 (Präsentation). Nach einer frischen `audit-coverage`-Messung sind die größten verbleibenden Blocker
 nach Objekten (davon nur durch dieses Modul blockiert): `CommandButtonHuntUpdate` 79/18, `ToppleUpdate` 76/66 (braucht Kollisionsphysik),
@@ -641,7 +640,7 @@ nach Objekten (davon nur durch dieses Modul blockiert): `CommandButtonHuntUpdate
 `BaikonurLaunchPower` 23/23, `SlavedUpdate` 20/7, `HelicopterSlowDeathBehavior` 18/0, `PointDefenseLaserUpdate` 17/4,
 `DumbProjectileBehavior` 16/12, `PropagandaTowerBehavior` 14/11, `HelixContain` 13/1, `HordeUpdate` 13/3, `UpgradeDie` 13/0,
 `TunnelContain` 12/12, `AnimationSteeringUpdate` 11/0, `ChinookAIUpdate` 11/0, `HiveStructureBody` 11/3. Fast alle brauchen Terrain,
-Kollision, Flugphysik, Zielwahl oder KI und gehören zu Phase 6; ein einzelnes Modul schaltet keine große Objektgruppe mehr frei.
+Kollision, Flugphysik, Zielwahl oder KI und stehen weiter aus (Phase 6 hat keine Kollision eingeführt); ein einzelnes Modul schaltet keine große Objektgruppe mehr frei.
 
 ## 10. Bekannte Grenzen (Zusammenfassung)
 
@@ -655,12 +654,11 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
 - Erfahrung, Stufen, Gesundheits- und Waffenboni sind implementiert (§6h); die Rüstungs-/Waffensatzauswahl nach Stufe ist nicht
   modelliert, weil kein ausgelieferter Satz sie verlangt. Rang und „Science Purchase Points“ aus Erfahrung fehlen. Das Furchtsignal
   (Block 0.3) ist implementiert.
-- Keine drehratenbegrenzte Ausrichtung, kein Terrain, keine Pfadsuche, keine Kollision (§4). `PhysicsBehavior`, `SquishCollide` und
+- Seit Phase 6 gibt es Terrain, Pfadsuche und drehratenbegrenzte Ausrichtung (§11), weiterhin **keine Kollision** (§4). `PhysicsBehavior`, `SquishCollide` und
   `CrushDie` sind daher Ruhezustand (§6c, §6g); Zerquetschen und Umstürzen (`ToppleUpdate`) folgen mit der Kollision.
-- Kein Energie-Verlangsamungsfaktor, keine Bauplatzprüfung, kein Rallypunkt (§5). **Kein Bauvorgang:** `DozerAIUpdate` und
-  `WorkerAIUpdate` bewegen und liefern, bauen aber nicht; Reparatur durch Dozer, Verkauf und Konstruktion fehlen.
-- Der `STEALTHED`-Statusbit hat noch keinen Verbraucher außer `StealthDetectorUpdate`s `DETECTED`-Markierung (kein Zielsystem, das
-  `DETECTED` auswertet, §6).
+- Kein Energie-Verlangsamungsfaktor (§5). Bauplatzprüfung, Rallypunkt, Bauvorgang, Verkauf und Reparatur durch Dozer gibt es seit Phase 6 (§11).
+- (Phase 5) Der `STEALTHED`-Statusbit hatte keinen Verbraucher außer `StealthDetectorUpdate`s `DETECTED`-Markierung (kein Zielsystem, das
+  `DETECTED` auswertet, §6); seit Phase 6 schließen Sichtabfragen nicht entdeckte `STEALTHED`-Objekte aus (§11), einen Detektor-Verbraucher für die KI gibt es nicht.
 - Teams und Diplomatie sind ein Datenmodell (§7). Die **Wirkung** von `CommandSet`/`CommandButton` (Kommandoleisten) und der
   **Radareffekt** (`RadarUpdate`/`RadarUpgrade` führen nur den Zustand) sind nicht implementiert. Garnison (§6a), Sciences (§1a) und
   `TransportContain` sind implementiert; `TunnelContain`, `HelixContain`, `TransportAIUpdate` und `ChinookAIUpdate` fehlen (die amerikanischen
@@ -676,3 +674,14 @@ Jede Zeile ist eine bewusste, dokumentierte Vereinfachung, keine stille Lücke:
   decken Schadenskette, Produktionsuhr, Supply und Erfahrung. Die Mechaniken sind zusätzlich durch `Tests.Phase5.cs`, `Tests.Supply.cs`,
   `Tests.Veterancy.cs`, `Tests.Teams.cs`, `Tests.Repair.cs`, `Tests.Combat.cs` und den 216.000-Tick-Stresstest mit den neuen Modulen an
   echten Objekten abgesichert.
+
+## 11. Ergänzungen der Phase 6
+
+Die Regeln der Phase 6 stehen mit Zahlen in `docs/SIMULATION-CORE.md` §13–§20; hier nur, was die Spielregeln ändert:
+
+- **Sicht:** Schüsse (`FireWeaponCommand`) verlangen ein für den Spieler sichtbares Ziel (`TargetNotVisible`); nicht entdeckte `STEALTHED`-Objekte und enthaltene Objekte sind unsichtbar. `STEALTHED` wird nur bei
+  `CAN_STEALTH` gesetzt (Fehlerbehebung: vorher wurden alle Objekte getarnt).
+- **Bau:** Dozer und Arbeiter setzen Gebäude mit `ConstructCommand`; Bauplatz nach `BuildAssistant::isLocationLegalToBuild` (Gelände, Fußabdruck, Hindernisse, erkundet), Kosten beim Start, Baufortschritt linear über
+  `BuildTime`. Verkauf über `SellCommand` (`SaleDurationTicks` 179, `SellPercentage`), Reparatur kostenlos, Sammelpunkte über `SetRallyPointCommand`.
+- **Energie:** `PowerPlantUpgrade`, `PowerPlantUpdate`, `OverchargeBehavior` (§6 der Kernbeschreibung, `SIMULATION-CORE.md` §17).
+- **Grenzen:** `QueueProduction` prüft keine Voraussetzung; `MaxSimultaneousOfType` ungeprüft; kein Eroberungsverhalten für Kraftwerke; keine Kollision; `ToppleUpdate`/`CrushDie` bleiben offen.

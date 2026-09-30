@@ -304,3 +304,20 @@ zwei unabhängige Läufe sind byteidentisch. Retail-Basisdaten (`--maps exclude`
 Blöcke, 12.550 Definitionen (2.115 Objekte), 16.065 Module, 327.293 Schlüssel, 17.748/19.271 Referenzen aufgelöst (1.523 Fallbacks),
 144.203.312 Byte, SHA-256 `9F5307957A55CD4683E8A79CBEB079320BE69400802DA38D2FFDDB200713E264` (Fingerabdruck `9F5307957A55CD46`). Die früheren
 Zahlen oben (`761 Einträge`, `144.745.050 Byte`) sind überholt.
+
+## Phase 6: Typisierung von Locomotor-`Surfaces`, `SellPercentage` und Kartenmodell
+
+- **`Locomotor/Surfaces`** ist ein Flags-Feld auf der Namenstabelle `LocomotorSurface` (`NameTables.Phase5.cs`: `GROUND`, `WATER`, `CLIFF`, `AIR`, `RUBBLE`) statt eines Kompatibilitätswerts;
+  die Navigation (`SIMULATION-CORE.md` §14) liest es als `LocomotorSurfaces`.
+- **`GameData/SellPercentage`** ist ein typisierter Prozentwert (`GameDataSchema`), Grundlage des Verkaufserlöses (`SIMULATION-CORE.md` §16).
+- **Kraftwerksmodule:** Katalogschemata für `PowerPlantUpdate` (`RodsExtendTime`), `PowerPlantUpgrade` (Upgrade-Mux) und `OverchargeBehavior`
+  (`HealthPercentToDrainPerSecond`, `NotAllowedWhenHealthBelowPercent`).
+- **Kartenmodell:** `CnCNew.Data.World.MapData` (`MapModel.cs`) ist ein unveränderlicher Vertragstyp ohne Renderer-, Archiv- oder Dateisystembezug; er ist keine Definitionsdomäne und
+  erscheint nicht im Definitionssnapshot (`SIMULATION-CORE.md` §13).
+
+Neu gemessen am 30. September 2026 (`IniTool compile .local/phase2-import-a`, Vollinventar): 228 geladene INI-Dateien (28 ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module,
+333.061 Schlüssel, 18.138/19.688 Referenzen aufgelöst (1.550 sichtbare Fallbacks); Kompatibilität: 516 `deferred-field`-Einträge (20.401 Verwendungen), 36 `definition` (2.590),
+9 `diagnostic` (4.599), 24 `duplicate-key` (120), 28 `excluded-file` (28), 128 `module` (4.133); die Basislinie hat **741 Einträge** (`compat-check`: alle stimmen).
+Definitionssnapshot (Schema 2): 144.832.736 Byte, SHA-256 `AEB5108DDA27ABAC7445452AA2743B794AD0BF1102F2687F8D7D8F7B87D2ADB7`, zwei Läufe byteidentisch.
+Retail-Basisdaten (`--maps exclude`): 12.550 Definitionen (2.115 Objekte), Snapshot 144.221.861 Byte, SHA-256 `1248585D0BAAB79F5202FDB81F26A2B00962A9D393B0CE1FF93C5FFDF6A5C6E7`.
+`IniTool audit`: 256 von 256 INI-Dateien, 66.625 Blöcke. Frühere Zahlen (`746 Einträge`, `761 Einträge`, `144.813.963 Byte`) sind überholt.

@@ -80,3 +80,9 @@ Tippfehler von einem bekannten, noch nicht implementierten Modul unterscheidbar 
 - Ausgeschlossene Dateien (28) stehen mit Grund in der Liste: Debug-Dateien (`GameDataDebug.ini`, `CommandMapDebug.ini`,
   `CommandMapDemo.ini`), die WorldBuilder-Datei `Scripts.ini`, nicht referenzierte Dateien (`MemoryPools.ini`,
   `Default/ButtonSets.ini`, `Default/Webpages.ini`, Installer-`Options.ini`) und 20 Sprachvarianten.
+
+## Stand nach Phase 6
+
+Phase 6 hat `Locomotor/Surfaces` und `GameData/SellPercentage` streng typisiert und Katalogschemata für `PowerPlantUpdate`, `PowerPlantUpgrade` und `OverchargeBehavior` ergänzt
+(`docs/TYPED-DEFINITIONS.md`, Abschnitt „Phase 6“). Die Kompatibilitätsbasislinie `baselines/compatibility.json` hat **741 Einträge** (516 `deferred-field`, 36 `definition`, 9 `diagnostic`,
+24 `duplicate-key`, 28 `excluded-file`, 128 `module`; `IniTool compat-check` bestätigt sie, 30. September 2026). Die Zahl `746` und alle früheren Werte sind überholt.

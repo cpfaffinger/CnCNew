@@ -1,7 +1,7 @@
-# Deterministischer Simulationskern (Phase 4, erweitert in Phase 5)
+# Deterministischer Simulationskern (Phase 4, erweitert in Phase 5 und 6)
 
-Stand: 29. September 2026 (Phase 5 in Arbeit, siehe `docs/GAME-RULES.md` für die Phase-5-Regeln:
-Wirtschaft, Upgrades, Kampf, einfache Bewegung, Produktion, Sieg/Niederlage)
+Stand: 30. September 2026 (Phase 6 abgeschlossen; §1–§12 beschreiben den Kern und die Phase-5-Regeln, `docs/GAME-RULES.md`
+die Spielregeln, §13–§20 die Phase-6-Erweiterungen: Terrain, Navigation, Sicht, Bau, Kraftwerke, Skirmish-KI)
 
 `CnCNew.Simulation` ist die headless laufende, deterministische Welt: fester Tick, stabile IDs,
 reproduzierbare Zufallszahlen, Befehlsqueue, Objekt-/Modul-Lebenszyklus, Timer, Events,
@@ -219,8 +219,8 @@ Subdual-Typen wirken nicht auf Gesundheit), `KILLPILOT`/`KILL_GARRISONED`/`STATU
 
 ## 6. Befehle
 
-Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 7` (Phase 5 hat 13 Typen ergänzt, Version 6
-brachte `DockCommand`, Version 7 `SetRelationshipCommand`; bestehende Codes ändern sich nie):
+Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 8` (Phase 5 hat 13 Typen ergänzt, Version 6
+brachte `DockCommand`, Version 7 `SetRelationshipCommand`, Version 8 die sechs Baubefehle der Phase 6; bestehende Codes ändern sich nie):
 
 | Code | Typ | Zweck | nur System |
 |---:|---|---|:-:|
@@ -243,6 +243,12 @@ brachte `DockCommand`, Version 7 `SetRelationshipCommand`; bestehende Codes änd
 | 17 | `UseSpecialPowerCommand` | Spezialkraft eines Objekts auslösen (`ActionManager::canDoSpecialPower`, Ziel: keines, Objekt oder Ort) | |
 | 18 | `DockCommand` | Ein Objekt zum Andocken an ein Dock schicken (`aiDock`: Versorger liefern ab oder holen, das Dock wird ihr bevorzugtes) | |
 | 19 | `SetRelationshipCommand` | Gerichtete Beziehung eines Spielers zu einem anderen setzen (`Player::setPlayerRelationship`) | ✔ |
+| 20 | `ConstructCommand` | Baumeister (Dozer/Arbeiter) setzt ein Gebäude an eine Position mit Winkel (`MSG_DOZER_CONSTRUCT`, §16) | |
+| 21 | `SellCommand` | Gebäude verkaufen (§16) | |
+| 22 | `SetRallyPointCommand` | Sammelpunkt eines Produktionsgebäudes auf einen Ort setzen (§16) | |
+| 23 | `ResumeConstructCommand` | Unterbrochene Baustelle mit einem (anderen) Baumeister fortsetzen (`DozerAIUpdate::resumeConstruction`) | |
+| 24 | `CancelConstructCommand` | Baustelle abbrechen, Kosten werden erstattet | |
+| 25 | `RepairCommand` | Baumeister repariert ein beschädigtes eigenes Gebäude (`MSG_REPAIR`, kostenlos, §16) | |
 
 `Submit` prüft sofort und lehnt **explizit, gezählt und als `CommandRejected`-Event** ab: `Late` (Tick liegt zurück),
 `Duplicate` (gleiche (Spieler, Sequenz) wie die zuletzt akzeptierte), `OutOfOrder` (kleinere Sequenz), `UnknownPlayer`,
@@ -253,7 +259,8 @@ ergänzt `InsufficientFunds`, `AlreadyOwned`, `UnknownUpgrade`, `NoWeapon`, `Wea
 `MissingPrerequisite`, `CannotEnterContainer` (KindOf-/Beziehungsfilter, Kapazität oder ein zu stark beschädigter/toter
 Container), `NotContained` sowie für Spezialkräfte `UnknownSpecialPower`, `MissingScience`, `SpecialPowerNotReady`,
 `InvalidSpecialPowerTarget` und `SpecialPowerHandlerMissing` sowie für das Andocken `CannotDock` (Code 30; Details und Numerik:
-`docs/GAME-RULES.md` §4/§1a/§6a/§6d/§6e). Sequenzen sind pro Spieler streng
+`docs/GAME-RULES.md` §4/§1a/§6a/§6d/§6e). Phase 6 ergänzt `TargetNotVisible` (31, `FireWeaponCommand` auf ein für den Spieler unsichtbares Ziel, §15), `InvalidPlacement` (32, Bauplatz
+unzulässig: Gelände, Fußabdruck, Hindernis oder unerkundet), `CannotConstruct` (33: Baumeister, Vorlage, Voraussetzung oder Rolle passen nicht) und `CannotSell` (34). Sequenzen sind pro Spieler streng
 aufsteigend; Befehle desselben Ticks laufen nach (Spieler-ID, Sequenz), unabhängig von der Einreihreihenfolge. Die Zähler
 je Grund gehören zum Zustand. **Wichtig:** `Validate()` prüft beim `Submit()` gegen den *aktuellen* Weltzustand, nicht
 gegen den Zustand nach zuvor im selben Tick eingereihten Befehlen – ein `GiveMoneyCommand` und ein darauf aufbauender
@@ -274,13 +281,17 @@ regelmäßig, der Snapshot-Restore immer).
 
 **Snapshot.** `WorldSnapshot.Write` erzeugt kanonisches UTF-8-JSON (feste Eigenschaftsreihenfolge, nur Ganzzahlen –
 `Fixed` als Rohwert –, keine Pfade oder Zeitstempel, jede Sammlung nach ID beziehungsweise (Tick, Spieler, Sequenz)
-sortiert): Kopf `format = cncnew-world-snapshot`, `version = 3` (2 ergänzte die Teams der Spielertabelle, 3 das Computerspieler-Flag), `tickRate`, `definitionFingerprint`, `fixture`, `worldId`,
+sortiert): Kopf `format = cncnew-world-snapshot`, `version = 6` (2 ergänzte die Teams der Spielertabelle, 3 das Computerspieler-Flag, 4 den Geländefingerabdruck, 5 die Sichtkarten – der Sicht-Hash ist Teil des Zustands-Hashes –, 6 Bau-, Verkaufs- und Sammelpunktzustand), `tickRate`, `definitionFingerprint`, `fixture`, `worldId`,
 `seed`, `stateHash`, danach `state` (Tick, ID-Zähler, `logic`-Zustand, Spielertabelle, Ablehnungszähler, Spawn-/Destroy-Queue,
 Events, Entities mit Modulzuständen, Timer, Befehle) und `presentation` (`cosmetic`, `audio`). **SHA-256** identifiziert einen
 Snapshot (`WorldSnapshot.Sha256`). `Restore` ist bewusst minimal und intern gehalten (Phase 9 besitzt den späteren
 Speichervertrag) und weist ab: leere/abgeschnittene/verstümmelte Dateien, fremde Version/Format/Tickrate, abweichenden
 Definitionsfingerabdruck, abweichende Templates (Name und Index werden gegenseitig geprüft) und jeden Zustand, dessen
 wiederberechneter Hash nicht dem gespeicherten entspricht (Integritätsprüfung).
+
+**Energiewiederherstellung (Phase 6).** Die Energieproduktion eines Spielers wird nach dem Laden der Entities explizit aus dem Snapshot
+gesetzt, denn `PowerPlantUpgrade` und `OverchargeBehavior` verändern sie über `IWorldServices.AddEnergyProduction` und würden
+sonst beim Registrieren der Module doppelt oder gar nicht angerechnet (der Integritätshash schlug im Test dadurch fehl).
 
 **Definitionsfingerabdruck.** SHA-256 des kanonischen Definitionssnapshots, beim Schreiben gestreamt
 (`DefinitionSnapshotWriter.ComputeFingerprint`), ohne den 142-MB-Snapshot im Speicher zu halten.
@@ -307,6 +318,10 @@ vergleicht die Befehle; ein unbekannter Typ im Schreiber ist ein Fehler, keine s
 (`IsComputer`, Voraussetzung für `AutoFindHealingUpdate`). Die Befehlstabelle kodiert inzwischen **alle 19 Befehlstypen**
 (`DockCommand` und `SetRelationshipCommand` sind hinzugekommen); ältere Formatversionen werden mit klarer Meldung abgewiesen.
 
+**Format v5 und v6 (Phase 6).** v5 trägt den Geländefingerabdruck im Kopf (`TerrainMap.Fingerprint`, 32 Byte; der Runner lehnt ein
+Replay ab, dessen Gelände nicht passt, wie beim Definitionsfingerabdruck); v6 kodiert die sechs Baubefehle. Die Befehlstabelle
+umfasst damit **alle 25 Befehlstypen**; `Tests.Construction` (`ConstructionSnapshotAndReplay`) prüft Snapshot und Replay mit Baubefehlen.
+
 ## 9. Abnahmebefehle
 
 ```powershell
@@ -321,6 +336,9 @@ dotnet run -c Release --project tools/CnCNew.SimTool -- replay-run .local/stress
 dotnet run -c Release --project tools/CnCNew.SimTool -- hash .local/stress.replay
 dotnet run -c Release --project tools/CnCNew.SimTool -- audit-modules .local/phase2-import-a
 dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match .local/phase2-import-a --map "Maps/Alpine Assault/Alpine Assault.map" --factions China,GLA --max-ticks 45000
+dotnet run --project tools/CnCNew.MapTool -- audit .local/phase2-import-a
 dotnet run --project tools/CnCNew.IniTool -- compat-check .local/phase2-import-a baselines/compatibility.json
 dotnet run --project tools/CnCNew.IniTool -- load-order-report .local/phase2-import-a
 ```
@@ -379,6 +397,15 @@ Spawns und ebenso viele Destroys, 2.170 `UnknownEntity`-Ablehnungen, Snapshot be
 1.994 Byte je Tick unter Churn, Spitzenarbeitsspeicher 596 MiB. Drei frische Läufe und die Snapshotfortsetzung stimmen tickweise überein;
 alle Tabellen stehen am Ende auf null. Die älteren Neumessungen oben sind überholt und nur als Verlauf stehen geblieben.
 
+**Neumessung am 30. September 2026** (Phase 6, Release, gleiche Maschine; Snapshot v6, Replay v6, Sichtkarten im Zustands-Hash;
+das synthetische Szenario nutzt weder Gelände noch Navigation noch Bau): 216.000 Ticks in 13,0 s (60,2 µs je Tick), 914.394 Befehle,
+langsamster Tick 18,93 ms, Allokation 2.054 Byte je Tick unter Churn, Spitzen 15.775 Entities / 42.064 Module / 29 geplante Updates /
+7.048 Timer, Kettenhash `C298F5F74993D6CD`, Endhash `D1521974C861A4B9`. Snapshot bei Tick 108.000: 11.862.400 Byte für 13.220 Entities,
+SHA-256 `7E3DBFDCBCD4D46502FA0C571598E826343C14D23F97A0D2919BF53661009A60`, Restore 0,59 s (Hash `ACCDC2E5315991DB`). Working Set (Spitze)
+596 MiB. Drei frische Läufe und die Snapshotfortsetzung stimmen tickweise überein; 401.237 Spawns/Destroys und 2.170 `UnknownEntity`-Ablehnungen
+wie zuvor. Kettenhash und Endhash unterscheiden sich von denen vom 29. September, weil sich die Zustandsdarstellung (Sicht-Hash,
+Terrain-Fingerabdruck) und die Stealth-Regel (§15) geändert haben; das Szenario selbst blieb unverändert.
+
 **Budgets** (mit Messwert als Grundlage, etwa 2,7-facher Spielraum): 216.000-Tick-Lauf dieses Szenarios ≤ 60 s;
 Ø ≤ 300 µs je Tick; langsamster Tick ≤ 100 ms (echtes Echtzeitbudget, 33,3 ms bei 30 Hz, wird erst mit den Regeln der
 Phase 5 unter realer Last festgelegt); Working Set ≤ 1 GiB; ruhender Tick 0 Byte, Churn ≤ 4 KiB je Tick; Snapshot ≤ 1 KiB
@@ -390,8 +417,11 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
-- **2.115 Objekte, 1.384 vollständig instanziierbar (65,4 %)**, 731 blockiert; 74 von 205 Modultypen sind implementiert
-  (12 aus Phase 4, 62 aus Phase 5; 183 Simulations- und 22 Präsentationsmodule im Katalog), sie decken 15.364 von 19.553
+- **Stand nach Phase 6 (30. September 2026, frisch gemessen): 2.115 Objekte, 1.393 vollständig instanziierbar (65,9 %)**, 722 blockiert;
+  77 von 205 Modultypen sind implementiert (12 aus Phase 4, 62 aus Phase 5, 3 aus Phase 6: `PowerPlantUpdate`, `PowerPlantUpgrade`, `OverchargeBehavior`;
+  183 Simulations- und 22 Präsentationsmodule im Katalog), sie decken 15.382 von 19.553 Modulverwendungen (78,7 %); der Fingerabdruck des Retail-Basisbestands ist `1248585D0BAAB79F…`.
+  Alle 1.393 Objekte werden in einer Welt erzeugt (8.925 Module). Die folgenden Zahlen beschreiben den Stand am Ende von Phase 5 und bleiben als Verlauf stehen.
+- Verlauf (Ende Phase 5): 2.115 Objekte, 1.384 vollständig instanziierbar (65,4 %), 731 blockiert; 74 von 205 Modultypen implementiert (12 aus Phase 4, 62 aus Phase 5), sie decken 15.364 von 19.553
   Modulverwendungen (78,6 %). Gegenüber Phase 4 (26/2.113,
   1,2 %) ein Sprung um den Faktor ~46, getragen von Block 0.2, den elf `*Upgrade`-Modulen, `AIUpdateInterface`,
   `ProductionUpdate`, den sechs Blockermodulen aus §6/§6a, dem Containment-Paar `GarrisonContain`/`TransportContain` und den
@@ -406,11 +436,12 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   Modulen bis auf den Zustandsumfang unberührt (Hashes neu gemessen, §10). Der Referenzmatch auf Retail-Daten
   (`docs/GAME-RULES.md` §7a) instanziiert reale Einheiten, Produktionsgebäude und Kommandozentralen aller 13 Fraktionen ohne
   übersprungenes Startobjekt.
-- Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert, frische Messung vom 29. September):
+- Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert, frische Messung vom 30. September):
   `CommandButtonHuntUpdate` 79/18, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/3, `JetSlowDeathBehavior` 59/0,
   `MissileAIUpdate` 44/29, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/2, `HeightDieUpdate` 31/15,
-  `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25. `ToppleUpdate` braucht echte Kollisionserkennung (durch Lesen der
-  Referenzquelle verifiziert, siehe `docs/HANDOFF-PHASE5.md`) und ist Phase 6. Die vollständige, tagesaktuelle Liste liefert
+  `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `TransportAIUpdate` 24/13, `BaikonurLaunchPower` 23/23. Die noch nicht
+  implementierten Module verteilen sich nach der im Katalog vermerkten Phase auf 77 (Phase 5), 29 (Phase 6) und 22 (Phase 7). `ToppleUpdate` braucht echte Kollisionserkennung (durch Lesen der
+  Referenzquelle verifiziert, siehe `docs/HANDOFF-PHASE5.md`); Phase 6 hat bewusst keine Kollision eingeführt (§14), das Modul bleibt offen. Die vollständige, tagesaktuelle Liste liefert
   das Werkzeug.
 - **Regel für Aktualisierungsmodule:** jedes Modul, das `IUpdateModule` implementiert, speichert und lädt seinen Weckzeitpunkt
   (`nextWake`). `SimulationWorld.Register` weckt wiederhergestellte Module mit negativem Weckzeitpunkt sonst ab dem
@@ -419,11 +450,12 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
 
 ## 12. Bekannte Grenzen und technische Schulden
 
+- **Phase 6 (abgeschlossen)**: Gelände, Navigation, Sicht, Bau und Skirmish-KI sind umgesetzt, aber vereinfacht; die Grenzen stehen gesammelt in §20 und in
+  `docs/IMPLEMENTATION-PLAN.md` §6.
 - **Phase 5 (abgeschlossen)**: Wirtschaft mit Versorgung, Upgrades, Sciences, direkter Kampf mit Flächenschaden und
   `WeaponBonus`, Erfahrung und Veteranenstufen, Teams und Diplomatie, Garnison/Transport, Reparaturdock, einfache Bewegung,
-  Produktion und Sieg/Niederlage sind implementiert (`docs/GAME-RULES.md`), aber bewusst vereinfacht: kein Terrain/Pfadsuche/Kollision,
-  keine Projektil-Flugzeit, kein Bauvorgang (Dozer/Arbeiter bewegen und liefern nur), keine Wirkung von `CommandSet` und Radar,
-  kein Verkauf, keine Rüstungs-/Waffensatzauswahl nach Veteranenstufe. Jede Vereinfachung steht mit Quellverweis im Modul- oder
+  Produktion und Sieg/Niederlage sind implementiert (`docs/GAME-RULES.md`), aber bewusst vereinfacht; Terrain, Pfadsuche, Bau und Verkauf sind seit Phase 6 vorhanden (§13–§16), offen bleiben
+  Kollision, Projektil-Flugzeit, die Wirkung von `CommandSet` und Radar und die Rüstungs-/Waffensatzauswahl nach Veteranenstufe. Jede Vereinfachung steht mit Quellverweis im Modul- oder
   Katalog-Kommentar; die Liste der Grenzen steht in `docs/GAME-RULES.md` §10.
 - Ein INI-Parser-Fehler wurde in Phase 5 behoben: `SageIniParser` verglich das `End`-Schlüsselwort gegen die *gesamte*
   Zeile statt (wie das Original, `INI::initFromINIMulti`, `strtok`) nur gegen ihr erstes Token; zwei Objekte
@@ -435,7 +467,7 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   25-%-Schwelle) ist portiert (Block 0.3 abgeschlossen, `VoiceFearRequested`-Event, Test `Phase5FearSoundRng`).
 - Der Abgleich des RNG mit einem kompilierten Original steht aus (kein Compiler verfügbar); die Handrechnung ist unabhängig
   und reicht als Beleg für Algorithmusgleichheit, nicht als Beleg für die Weiterverwendung in Netzwerkspielen.
-- `Restore` ist intern; Vorwärts-/Rückwärtskompatibilität von Snapshots (aktuell Version 3, ältere werden abgewiesen) ist erst Thema von Phase 9.
+- `Restore` ist intern; Vorwärts-/Rückwärtskompatibilität von Snapshots (aktuell Version 6, ältere werden abgewiesen) ist erst Thema von Phase 9.
 - Der Zustands-Hash ist nicht kryptographisch und die Snapshot-JSON-Größe (≈ 485 Byte je Entity) ist nicht optimiert.
 - Vom Kern erzeugte Anforderungen (`FxRequested`, `WeaponFireRequested`, `VoiceFearRequested`, `CrateRequested`) werden
   nicht ausgeführt; sie sind Verträge für Präsentation. `CreationListRequested` ist Protokoll: die Liste wird in der Welt
@@ -451,3 +483,128 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   Dozer/Arbeiter, Supply und Spezialkräfte im Befehlsstrom; Messung in `docs/GAME-RULES.md` §7a). Golden-Master-
   Szenarien existieren für die Schadenskette und die Produktionsuhr; Supply und Erfahrung stehen aus. Übrige Mechaniken sind
   durch gezielte Integrationstests (`Tests.Phase5.cs`) und den 216.000-Tick-Stresstest mit realen Objekten abgesichert.
+
+## 13. Gelände und Karten (Phase 6)
+
+`CnCNew.Formats` dekodiert die Kartendatei (`SageMapDecoder`; Container CkMp, EAR (RefPack) und ZL5, Blend-Tile-Versionen 6–8) in ein
+unveränderliches `MapData` (`CnCNew.Data.World`: Höhenraster, Blend-Tiles, Objekte, Wegpunkte und -verbindungen, Polygontrigger,
+Bauliste). Die Simulation liest kein Kartenformat: `TerrainMap` (`CnCNew.Simulation/Terrain`) wird aus `MapData` gebaut und ist
+das einzige Geländeobjekt, das die Welt kennt.
+
+- Raster mit `CellSize` 10 Weltkoordinaten, `CellFlags` `Cliff` (aus dem Blend-Tile-Kliffmerkmal der Karte) und `Water` (Polygontrigger mit Wasserfläche). Die Höhe wird aus dem Höhenraster
+  in Festkomma abgetastet.
+- Wegpunkte (`Player_N_Start` liefert `StartPositions`), Wasserflächen und ein **Fingerabdruck** (kanonisch, nie Pfade oder Zeit).
+  Der Fingerabdruck steht im Snapshot (v4) und im Replay (v5); ein Replay auf einem anderen Gelände wird abgewiesen.
+- Nicht übernommen (`MapTool audit` zählt sie): `GlobalLighting` (150 Karten, 130.800 Byte) und `SidesList`/`PlayerScriptsList` (150 Karten, 9.542.461 Byte), also
+  Beleuchtung, Spielerlisten und Skripte der Karte; Skripte gehören nicht zu Phase 6.
+- **`MapTool audit`** (Realdaten, 30. September): 150 Karten dekodiert, 0 fehlgeschlagen; Container CkMp 4 / EAR 145 / ZL5 1; Blend-Tile-Versionen v6 3 / v7 31 / v8 116;
+  30.391.581 Höhenpunkte, 30.259.192 Zellen, davon 8.253.119 Kliffzellen; 281.480 Objekte (0 wegen Höhenbereich verworfen), 25.463 Wegpunkte, 16.489 Wegpunktverbindungen,
+  höchstens 8 Startwegpunkte je Karte (75 Karten ohne Startwegpunkt), 2.488 Polygontrigger (davon 526 Wasser), 1.631 Seiten, 7.704 Teams, 1.356 Bauliste-Einträge.
+  Gelände: 150 Karten gebaut, 16.475.736 Pfadzellen (3.278.645 Kliff, 1.856.627 Wasser), 258 Startpositionen, größte Ausdehnung 589 Zellen, 0 abgewiesen;
+  Digest der Fingerabdrücke `723F6640405C5445189D523BA257D182149CBFCEC01A6C8F0B053031FB130459`.
+- **Bodenpfade zwischen Startpositionen:** 462 Paare, 456 vollständig, 6 nur teilweise, 0 blockiert, 1.679 Wegpunkte, Digest
+  `C775CD5CD41E90BC7C55E054E6C0F04EC60A0E02D29DFC5705359B1128BF8481`. Die sechs Teilpfade sind eine bekannte Grenze (§20).
+
+## 14. Navigation und Bewegung (Phase 6)
+
+`NavigationGrid` ist ein 8-fach verbundener A* auf dem Zellraster: Kosten 10 (gerade) und 14 (diagonal), **kein Eckenschneiden**, Gleichstände nach Zellindex,
+Erweiterungsbudget 200.000 je Anfrage (danach ist das Ergebnis `Partial` oder `Blocked`, nie ein stiller Ersatzweg). Zellklassen in dieser Vorrangfolge: Hindernis,
+Kliff, Wasser, frei; erlaubt ist, was die `Surfaces` des Locomotors zulassen (jetzt als Flags-Feld typisiert statt als Kompatibilitätswert).
+
+- **Hindernisse** sind Gebäude und andere `OBSTACLE`-Entities. Der Fußabdruck sind die Zellen, deren Mittelpunkt in der um eine Viertelzelle vergrößerten Form liegt, plus die Zelle
+  des Objekts selbst (Näherung, keine Kopie der Pathfinder-Klassifikation des Originals). `ObstacleSum` ist eine reihenfolgeunabhängige
+  Summe der Hindernisse; ändert sie sich, planen laufende Bewegungen neu.
+- **Fluchtzellen:** Steht eine Einheit (Radius 12 Zellen) oder ihr Ziel (Radius 8) in einem Hindernis, dürfen Zellen des Hindernisses mit Zuschlag 4 betreten werden. Das verhindert
+  eingeschlossene Einheiten und ist eine bewusst benannte Vereinfachung, kein Original-Verhalten.
+- `IsFootprintLegal` ist der Gelände-/Fußabdruck-Teil von `BuildAssistant::isLocationLegalToBuild` (§16).
+- `AIUpdateInterface` folgt geplanten Pfaden (`PathStatus` `Found`/`Partial`/`Blocked`), plant bei geänderter `ObstacleSum` neu, begrenzt die Drehung (`TurnRatePerTick`,
+  `FixedTrig` bekam `Atan2`, `AngleDifference`, `Normalize`) und setzt Bodeneinheiten auf die Geländehöhe. Ein teilweiser oder fehlender Pfad beendet den Befehl; es gibt keine
+  stille Ersatzbewegung.
+- Grenzen: Punktförmige Einheiten, **keine Kollision** zwischen Einheiten, ein flacher A* mit Budget (keine Hierarchie, keine Brücken), Fußabdruck genähert.
+
+## 15. Sicht und Kriegsnebel (Phase 6)
+
+`VisionMap` hält je Spieler und Zelle ein Byte (Bit 0 sichtbar, Bit 1 erkundet) und wird alle `VisionIntervalTicks` = 3 Ticks neu berechnet; der Sicht-Hash gehört zum Zustands-Hash
+(Snapshot v5). Aufdeckung ist kreisförmig, ohne Höhen-Sichtlinie.
+
+- Objekte mit Sichtweite decken für ihren Besitzer und dessen Verbündete auf; `REVEAL_TO_ALL` deckt für alle auf; Baustellen decken nur ihren `BoundingCircleRadius` auf.
+- `CanPlayerSee` schließt enthaltene Entities und nicht entdeckte `STEALTHED`-Entities aus; `EntitiesVisibleTo` liefert in aufsteigender Entity-ID-Reihenfolge. Diese Abfragen sind die einzige
+  Informationsquelle der Skirmish-KI (§18).
+- `FireWeaponCommand` auf ein für den Spieler unsichtbares Ziel wird mit `TargetNotVisible` abgelehnt.
+- Fehlerbehebung: `STEALTHED` wird nur gesetzt, wenn `CAN_STEALTH` besteht (angeboren, `StealthUpgrade`, `GrantStealth`); vorher wurde es unabhängig davon gesetzt und ließ alle Objekte getarnt erscheinen.
+- Grenzen: keine Höhenverdeckung, Aktualisierung nur alle 3 Ticks, kein Detektor-Modul (getarnte Einheiten bleiben verborgen, bis das Modul existiert).
+
+## 16. Bau, Verkauf, Reparatur und Sammelpunkte (Phase 6)
+
+Ein Bauwerk ist von Anfang an ein echtes Entity mit `UNDER_CONSTRUCTION`; seine Gesundheit steigt linear mit der Arbeit des Baumeisters über `BuildTime`
+(`SimulationWorld.Construction.cs`). `CheckConstruct` prüft in dieser Reihenfolge: Baumeister existiert → Erlaubnis → `BuilderOf` (Baumeister passt zur Vorlage über `CommandCatalog`) →
+Vorlage → `CanBuildTemplate` (`STRUCTURE`, `Buildable` Yes/Only_By_AI, Seite) → Voraussetzungen (`PrerequisitesSatisfied`: Science- und Objektzeilen, nur fertige Objekte) →
+Guthaben → Bauplatz (`IsFootprintLegal` plus erkundet). Die Kosten werden beim Start abgebucht; Abbruch erstattet sie.
+
+- **Verkauf:** `SaleDurationTicks` = 179, Erlös = `BuildCost` × `SellPercentage` (jetzt typisiert). Der Verkauf beendet laufende Produktion des Gebäudes.
+- **Reparatur:** kostenlos (`AIUpdateInterface.IsRepairable`), eine Vereinfachung.
+- **Sammelpunkt:** `SetRallyPointCommand` setzt den Punkt, zu dem neu produzierte Einheiten laufen.
+- Snapshot v6 trägt Bau-, Verkaufs- und Sammelpunktzustand; das Replay v6 die sechs Befehle.
+- Grenzen: `QueueProduction` prüft weder Voraussetzung noch Fähigkeit des Gebäudes, `MaxSimultaneousOfType` wird nicht geprüft, Reparatur ist kostenlos.
+
+## 17. Kraftwerksmodule und CommandCatalog (Phase 6)
+
+`PowerPlantUpgrade` (`EnergyBonus` bei Upgrade), `PowerPlantUpdate` (Stäbe ausfahren, passiv) und `OverchargeBehavior` (Energiebonus mit Gesundheitsverlust, schaltet sich bei niedriger Gesundheit selbst ab) verändern die Energieproduktion des
+Spielers über `IWorldServices.AddEnergyProduction`; `ObjectTemplate.EnergyBonus` und `CommandSets` sind neu. `TemplateCatalog.Commands` (`CommandCatalog`) löst `CommandSet` → `CommandButton` auf und
+beantwortet `OffersBuild` (welches Objekt was bauen oder produzieren kann); die KI nutzt es für Rollen (§18). Grenzen: kein Eroberungsverhalten, kein Umschaltbefehl für Overcharge, Reset entfernt auch den Bonus.
+
+## 18. Skirmish-KI (Phase 6)
+
+`SkirmishAi` (`Simulation/Skirmish/SkirmishAi.cs`) ist ein reiner Befehlsgeber je Computerspieler: alle 15 Ticks (`ThinkInterval`) entscheidet sie in fester Reihenfolge – Arbeiter,
+Gebäude, Baustellen, Reparatur, Science, Spezialkräfte, Armee, Sammelpunkte, Armeebefehle, Versorger – und schreibt ausschließlich typisierte Befehle (`FireInterval` 5). Sie ist eine eigenständige Neuentwicklung,
+kein Port des Skriptsystems des Originals.
+
+- **Rollen** ergeben sich aus Modulen und `KindOf` (Kommandozentrale, Versorgungsgebäude, Produktionsgebäude je Klasse, Kraftwerk, Verteidigung, Baumeister, Versorger, Kampfeinheit), nie aus Namen.
+- **Informationsregel:** Die KI plant nur mit `EntitiesVisibleTo`, einem Gedächtnis gesehener Gegner (`MemoryTicks` 900, Wiederbesuch alle `RevisitTicks` 3600) und den öffentlichen Startpositionen
+  (`HintPositions`). Der Test `SkirmishAiOnlyUsesWhatItSees` prüft in einem 60-Tick-Fenster, dass sie nichts verwendet, was sie nicht sieht oder erinnert.
+- Konstanten: `RetryTicks` 300, `OrderRefreshTicks` 150, Angriffsschwelle 8–30 Einheiten (`MinAttackThreshold`/`MaxAttackThreshold`), höchstens 400 Platzprüfungen je Denkschritt (`PlacementChecksPerThink`), `DefenseRadius` 450,
+  `EngageRadius` 260, Reparatur unter 70 % Gesundheit.
+- **`SkirmishMatchScenario`** (`SimTool ai-match`): kompiliert den Bestand ohne Kartenoverlays, baut das Gelände, setzt Lagerhäuser der Karte, gibt jeder Fraktion ihre Startobjekte, 10.000 Startgeld und alle 2.700 Ticks einen Science-Punkt (Ersatz für das nicht vorhandene Rangsystem, vom System gutgeschrieben) und lässt alle Computerspieler bis zum Sieg oder `--max-ticks` laufen. Exitcode 0 nur, wenn Lauf 2 und die Fortsetzung aus einem Snapshot
+  tickgleich sind (`SkirmishMatchOptions.Standard`: Weltseed `0xC0FFEE06`, KI-Seed `0x5EED0006`, 108.000 Ticks, Checkpoint 300).
+
+## 19. Ergebnisse der KI-gegen-KI-Läufe (30. September 2026)
+
+Vier Karten (Alpine Assault, Armored Fury, Bitter Winter, Death Valley) × vier Paarungen, höchstens 45.000 Ticks; **jeder der 16 Läufe ist mit Lauf 2 und Snapshotfortsetzung identisch**.
+15 Läufe enden mit einem Sieger, einer (Alpine Assault, America gegen China) bleibt bis zum Limit unentschieden.
+
+| Karte | Paarung | Ergebnis |
+|---|---|---|
+| Alpine Assault | China, GLA | China, Tick 38.655 |
+| Alpine Assault | America, China | Patt bei 45.000 |
+| Alpine Assault | GLA, America | GLA, Tick 10.980 |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 22.335 |
+| Armored Fury | China, GLA | GLA, Tick 7.335 |
+| Armored Fury | America, China | China, Tick 15.840 |
+| Armored Fury | GLA, America | GLA, Tick 6.330 |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 16.695 |
+| Bitter Winter | China, GLA | China, Tick 28.515 |
+| Bitter Winter | America, China | China, Tick 18.480 |
+| Bitter Winter | GLA, America | GLA, Tick 9.465 |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 23.565 |
+| Death Valley | China, GLA | China, Tick 21.600 |
+| Death Valley | America, China | China, Tick 20.565 |
+| Death Valley | GLA, America | GLA, Tick 8.355 |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 19.095 |
+
+America gewinnt nie: Die vier America-Fraktionen haben keine Versorgungswirtschaft, weil `ChinookAIUpdate`/`TransportAIUpdate` nicht implementiert sind (Phase 7). Das ist keine Balance-Aussage,
+sondern ein Nebenbefund der Modullücke. Der Retail-Referenzmatch (`SimTool reference-match`, 13 Fraktionen, kein Startobjekt übersprungen) endet nach Phase 6 mit
+Sieger Spieler 12 (`FactionGLAStealthGeneral`) bei Tick 26.880, Replay 27.181 Ticks, Endhash `5C370ED383EC9F6B`, Replay-Datei 949.193 Byte (SHA-256 `DCEE89309520371C0288EDB44309DA212AEE167D129343B6BB55BEA9F08A78C2`), 27 Checkpoints;
+Lauf 2 (Kettenhash `EB8BDC1482BC20DF`) und die Fortsetzung bei Tick 13.590 sind identisch. 27.607 Befehle (1.240 Produktion, 7.194 Bewegung, 13 Andocken, 18.591 Schüsse) in 7,8 s.
+
+## 20. Grenzen der Phase 6
+
+- **Navigation:** punktförmige Einheiten ohne Kollision, flacher A* mit Budget, genäherter Fußabdruck mit Fluchtzellen (Zuschlag), Locomotoren nur über `Surfaces`; ein teilweiser oder fehlender Pfad beendet den
+  Befehl. Von 462 Startpositionspaaren sind 6 nur teilweise begehbar.
+- **Sicht:** kreisförmig, keine Höhen-Sichtlinie, Aktualisierung alle 3 Ticks, keine Detektoren.
+- **Bau:** `QueueProduction` ohne Voraussetzungs-/Fähigkeitsprüfung, `MaxSimultaneousOfType` ungeprüft, Reparatur kostenlos.
+- **Kraftwerke:** keine Eroberung, kein Umschaltbefehl für `Overcharge`, Reset entfernt auch den Bonus.
+- **KI:** Spezialkräfte nicht klassifiziert, Startpositionen der Gegner sind öffentliches Wissen (`HintPositions`), von der Karte nur Lagerhäuser gesetzt, Startgeld und Science-Punkte vom System, keine Flugzeuge/Flugplätze,
+  America ohne Wirtschaft (Chinook fehlt), Armeezusammensetzung durch Instanziierbarkeit begrenzt, gleichstarke Paarungen können in ein Patt laufen (1 von 16), ohne Detektoren können getarnte Überlebende verborgen
+  bleiben.
+- **Offen aus früheren Phasen:** Block 0.4 (RNG-Abgleich mit einem kompilierten Original), Projektil-Flugzeit, `ToppleUpdate`/`CrushDie` mit echter Kollision, `ChinookAIUpdate`/`TransportAIUpdate`,
+  Wirkung von `CommandSet`/Radar, Veteranen-`ArmorSet`/`WeaponSet`, `CommandButtonHuntUpdate` und `SpecialAbilityUpdate`.
