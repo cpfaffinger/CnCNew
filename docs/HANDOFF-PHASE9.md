@@ -53,7 +53,13 @@ Phase 7 und Phase 8 sind abgeschlossen (Merge-Commits u. a. `4da086f`, `b90f861`
 - Retail-Referenzmatch (`SimTool reference-match`): 13 Fraktionen, Sieger FactionAmerica bei Tick 13.800, Endhash `4DCB46FE3D2E8214`.
 - Stresstest (216.000 Ticks, `SimTool stress`): unverändert seit Phase 6 (Module der Phase 5–6); mit den neuen Transport-/
   Projektilmodulen neu messen, falls die Fixture sie berührt.
-- `MapTool audit`: unverändert 150/150 Karten seit Phase 6.
+- `MapTool audit`: unverändert 150/150 Karten seit Phase 6; **World-Builder-Skripte werden jetzt mit dekodiert** (siehe unten und
+  `docs/MAP-SCRIPTS.md`) – vorher schlugen 75 der 150 Karten an dieser Stelle fehl (25 Kampagnenkarten mit einem älteren
+  Condition-Chunk-Format, 50 an einer falschen Annahme über `NameKeyType`), jetzt 0.
+- **Neu: World-Builder-Skripte dekodiert** (`docs/MAP-SCRIPTS.md`, Commits `73b8ae8`/`ef6191e`/`bef2cd8`): 1.631 Skript-Listen, 23.906 Skripte,
+  2.294 Gruppen, 33.890 Bedingungen (82 von 109 Typen verwendet), 82.563 Aktionen (291 von 344 Typen verwendet) über alle 150
+  Retail-Karten – vollständige, nach Häufigkeit sortierte Verwendungstabelle in `MapTool audit`. **Nur die Dekodierung ist fertig;
+  keine Zeile davon wird ausgeführt** – das ist Teil A, Punkt 2 unten.
 - Weltpräsentation: Terrain 0,266 ms/Frame CPU-Mittel, 33–77 MiB GPU je Karte (`docs/CLIENT-TERRAIN.md`); Objekte 0,19–0,60 ms/Frame,
   0 fehlende Modelle/Texturen/Animationen über die geprüften Gefechte (`docs/CLIENT-OBJECTS.md`); FX-Bench mit 10.000 aktiven Partikeln
   1,735 ms je Build (`docs/CLIENT-FX.md`).
@@ -67,18 +73,25 @@ Phase 7 und Phase 8 sind abgeschlossen (Merge-Commits u. a. `4da086f`, `b90f861`
 ## Teil A – Skirmish, Missionen, Kampagnen, Savegames (Plan §9)
 
 `CnCNew.Game/Shell` kennt Skirmish bereits vollständig (`MatchSetup`, `LiveMatch`, Ergebnisbildschirm); die Lücke ist Kampagne/Missionen
-und Speicherstände. Vor dem Bau klären, was `SageMapDecoder` heute aus einer `.map`-Datei an Skript-/Trigger-Rohdaten bereits mitliefert
-(`MapData.Waypoints`, Polygontrigger) und was noch fehlt (Seiten-/Skriptlisten selbst, siehe Teil B Punkt 11 – das ist Voraussetzung, kein
-Nebenschauplatz).
+und Speicherstände. **Die Dekodierung der World-Builder-Skripte ist seit diesem Durchgang fertig**
+(`MapData.PlayerScripts`, `docs/MAP-SCRIPTS.md`, `MapScriptCatalog` für die Typidentität) – lies dieses Dokument, bevor du Punkt 2
+beginnst, es erspart die erneute Reverse-Engineering-Arbeit am Binärformat und erklärt insbesondere, warum `NameKeyType` verworfen
+und stattdessen der rohe Enum-Index verwendet wird.
 
 1. **Skirmish abschließen:** Startpositionen/Teams/Regeln/KI-Profile aus `docs/HANDOFF-PHASE8.md` Teil B Punkt 10 (Bau-/Regelgrenzen) und
    Punkt 9 (Kollision) sind Voraussetzung für ein faires, vollständiges Skirmish – siehe Teil B unten, bevor du sie als „erledigt“ meldest.
    Statistik (`MatchResult` existiert bereits in `CnCNew.Game/Hud`, siehe `docs/GAME-HUD.md`) auf dem Ergebnisbildschirm vervollständigen.
-2. **Skriptengine, Trigger, Counter, Kameraabläufe, Briefings, Zwischensequenzen:** `SidesList`/`PlayerScriptsList` aus der Kartendatei
-   lesen (Format in den EA-Quellen unter `references/` studieren, nicht unbesehen kopieren – Zitat mit Datei/Funktion in
-   `docs/SIMULATION-CORE.md` ergänzen); eine deterministische Skript-VM ohne Wandzeit/ambiente Zufallszahlen in `CnCNew.Simulation`
-   ergänzen (Test `SourceRules` gilt auch hier). Zwischensequenzen/Kameraabläufe/Briefings sind Präsentationssache
-   (`CnCNew.Client.Stride`/`CnCNew.Game`), nicht Simulation.
+2. **Skriptengine (Ausführung), Trigger, Counter, Kameraabläufe, Briefings, Zwischensequenzen:** Die Rohdaten stehen bereits in
+   `MapData.PlayerScripts` (`MapScript`/`MapScriptGroup`/`MapOrCondition`/`MapCondition`/`MapScriptAction`/`MapScriptParameter`,
+   `docs/MAP-SCRIPTS.md`). Zu tun bleibt die **Ausführung**: eine deterministische Skript-VM ohne Wandzeit/ambiente Zufallszahlen in
+   `CnCNew.Simulation` (Test `SourceRules` gilt auch hier), die pro Tick die aktiven Skripte einer Skriptliste auswertet
+   (ODER-von-UND-Bedingungsbaum, `IsOneShot`/`DelayEvaluationSeconds`/Schwierigkeitsgrad-Flags beachten) und bei Erfolg/Misserfolg die
+   Wahr-/Falsch-Aktionsliste ausführt. `docs/MAP-SCRIPTS.md` §5 nennt die Häufigkeitsverteilung aller 82 verwendeten Bedingungs- und
+   291 Aktionstypen als Priorisierungsgrundlage (die häufigsten sind `CONDITION_TRUE`, `TIMER_EXPIRED`, `FLAG`, `COUNTER` und
+   `ENABLE_SCRIPT`/`SET_FLAG`/`SET_COUNTER`/`SET_(MILLISECOND_)TIMER`/`CALL_SUBROUTINE`); nicht implementierte Typen brauchen eine
+   `MissingConditions`/`MissingActions`-Zählung nach demselben Muster wie `MissingModules` bei Objekten – nie einen stillen
+   Fehlschlag. Zwischensequenzen/Kameraabläufe/Briefings sind Präsentationssache (`CnCNew.Client.Stride`/`CnCNew.Game`), nicht
+   Simulation.
 3. **Missionsziele, Niederlagen-/Siegespfade, Kampagnenreihenfolge, Freischaltungen:** eigenes typisiertes Kampagnen-/Missionsmodell in
    `CnCNew.Game` (nicht `CnCNew.Data`, das bleibt renderer-/engine-/archiv-/filesystemunabhängig – prüfen, ob ein neues Datenmodell
    überhaupt in `CnCNew.Data` gehört oder besser in `CnCNew.Game`, weil es Fortschritt/Freischaltung mit dem lokalen Nutzerprofil verknüpft).
@@ -109,8 +122,9 @@ Phase 8 – neu messen).
     `docs/GAME-HUD.md` listen konkrete fehlende Lese-/Schreib-APIs, die die Eingabeschicht bereits vermisst (Baukosten-Trockenlauf,
     Produktionswarteschlangen-Lesezugriff, `SpecialPowerModuleBase.AvailableOnFrame`, `UpgradeMuxModule.Executed`, ein öffentlicher
     Dock-Marker) – beim Schließen dieser Lücken direkt mit erledigen, sie sind kleine, klar spezifizierte Anbauten.
-11. **Kartenskripte** (`SidesList`/`PlayerScriptsList`): siehe Teil A, Punkt 2 – hier nur als technische Schuld referenziert, die
-    eigentliche Arbeit ist Teil des Hauptauftrags dieser Phase, nicht optional.
+11. **Kartenskripte** (`SidesList`/`PlayerScriptsList`): Die Dekodierung ist erledigt (`MapData.PlayerScripts`,
+    `docs/MAP-SCRIPTS.md`); offen bleibt die Ausführung – siehe Teil A, Punkt 2, das ist Teil des Hauptauftrags dieser Phase, nicht
+    optional.
 12. **(Neu, aus Phase 7/8) `SharedReadyFrame`-Determinismus-Fehler beheben oder bewusst umschiffen** (siehe oben, „Ehrlicher Status“). —
     **Erledigt** (30. September 2026, außerhalb des eigentlichen Phase-9-Hauptauftrags, als eigenständiger Fix nachgezogen): Der
     Bereitschafts-Tick wird jetzt deterministisch bei `OnSpawn` (Objekte, die die Kraft bereits mitbringen) bzw. `OnSpecialPowerCreation`
@@ -134,8 +148,9 @@ Phase 8 – neu messen).
   **sauberen** Build; jede andere neue Warnung ist ein Fehler, bis sie erklärt ist.
 - Bestandszahlen immer neu messen, nie aus Docs oder diesem Handoff übernehmen.
 - Fremder Code darf gelesen, nicht unbesehen kopiert werden; jeder portierte Algorithmus braucht einen Quellverweis (Datei, Funktion).
-  Das gilt besonders für Punkt 2 (Skriptformat) – die Originalquellen unter `references/` sind die einzige verlässliche Referenz für das
-  `SidesList`/`PlayerScriptsList`-Format.
+  Das gilt besonders für Punkt 2 (Skript-VM): `references/.../GameLogic/ScriptEngine/ScriptActions.cpp` (7.568 Zeilen) und
+  `ScriptConditions.cpp` (2.992 Zeilen) sind die einzige verlässliche Referenz für die Semantik jeder Aktion/Bedingung, die die VM
+  implementiert – jede einzeln zitieren, nicht pauschal.
 - Neue Befehle erhöhen `CommandTypes.Version` (aktuell 9) und bekommen eigene Codes; bestehende ändern sich nie. Änderungen am
   Snapshot- oder Replay-Format erhöhen deren Version (aktuell Snapshot 7, Replay 7); ältere werden mit klarer Meldung abgewiesen. Ein
   neues Savegameformat bekommt eine eigene Versionsnummer nach demselben Muster.
