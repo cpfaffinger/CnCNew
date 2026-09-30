@@ -32,7 +32,7 @@ internal static class MapDecoderTests
             ..A("Barracks"), ..A("AmericaBarracks"), ..F(100), ..F(200), ..F(9), ..F(0.5f), 1, ..I(3),
             ..A("Script"), ..I(80), 1, 0, 1,
             ..I(1), ..b.Dict(("teamName", "teamPlayer_1")),
-            ..b.Nested("PlayerScriptsList", 1, [1, 2, 3]),
+            ..b.Nested("PlayerScriptsList", 1, PlayerScripts(b)),
         ]);
         b.Chunk("GlobalLighting", 3, [9, 9]);
 
@@ -54,8 +54,68 @@ internal static class MapDecoderTests
         Assert(map.WaypointLinks.SequenceEqual([new MapWaypointLink(7, 8), new MapWaypointLink(8, 9)]), "links");
         Assert(map.Sides.Length == 1 && map.Sides[0].BuildList.Single() is { BuildingName: "Barracks", Template: "AmericaBarracks", X: 100, Y: 200, Rebuilds: 3, Health: 80, Repairable: true, Script: "Script" }, "build list");
         Assert(map.Teams.Single().GetText("teamName") == "teamPlayer_1", "teams");
-        Assert(map.SkippedChunks.Select(s => s.Path).OrderBy(p => p, StringComparer.Ordinal).SequenceEqual(["GlobalLighting", "SidesList/PlayerScriptsList"]), "skipped chunks reported");
+        Assert(map.SkippedChunks.Select(s => s.Path).SequenceEqual(["GlobalLighting"]), "scripts are no longer reported as skipped");
+        var list = map.PlayerScripts.Single();
+        Assert(list.Scripts.Length == 1 && list.Groups.Length == 1, "one top-level script and one group");
+        var script = list.Scripts[0];
+        Assert(script is { Name: "DoIt", Comment: "note", IsActive: true, IsOneShot: true, Easy: true, Normal: false, Hard: true, DelayEvaluationSeconds: 5 }, "script fields");
+        var condition = script.OrConditions.Single().AndConditions.Single();
+        Assert(condition is { TypeName: "CONDITION_TRUE" } && condition.Parameters.IsEmpty, "condition decoded by name, zero parameters");
+        var action = script.Actions.Single();
+        Assert(action.TypeName == "DEBUG_STRING" && action.Parameters.Single() is { Type: MapScriptParameterType.TextString, Text: "hi" }, "action parameter");
+        Assert(script.FalseActions.IsEmpty, "no false actions on this script");
+        var group = list.Groups[0];
+        Assert(group is { Name: "Group1", IsActive: true, IsSubroutine: true } && group.Scripts.Single().Name == "InGroup", "script group");
     }
+
+    private static byte[] PlayerScripts(MapBuilder b)
+    {
+        var condition = Condition(b, "CONDITION_TRUE");
+        var trueAction = ScriptAction(b, "DEBUG_STRING", Param(MapScriptParameterType.TextString, text: "hi"));
+        var script = Script(b, "DoIt", comment: "note", isActive: true, isOneShot: true, easy: true, normal: false, hard: true,
+            isSubroutine: false, delaySeconds: 5, orConditions: [b.Nested("Condition", 4, condition)], actions: [trueAction]);
+        var groupedScript = Script(b, "InGroup", comment: "", isActive: true, isOneShot: false, easy: true, normal: true, hard: true,
+            isSubroutine: false, delaySeconds: 0, orConditions: [], actions: []);
+        var group = ScriptGroup(b, "Group1", isActive: true, isSubroutine: true, scripts: [groupedScript]);
+        var scriptList = new byte[][]
+        {
+            b.Nested("Script", 2, script),
+            b.Nested("ScriptGroup", 2, group),
+        }.SelectMany(x => x).ToArray();
+        return [..b.Nested("ScriptList", 1, scriptList)];
+    }
+
+    private static byte[] Script(MapBuilder b, string name, string comment, bool isActive, bool isOneShot, bool easy, bool normal, bool hard,
+        bool isSubroutine, int delaySeconds, byte[][] orConditions, byte[][] actions) =>
+    [
+        ..A(name), ..A(comment), ..A(""), ..A(""),
+        isActive ? (byte)1 : (byte)0, isOneShot ? (byte)1 : (byte)0, easy ? (byte)1 : (byte)0, normal ? (byte)1 : (byte)0, hard ? (byte)1 : (byte)0,
+        isSubroutine ? (byte)1 : (byte)0,
+        ..I(delaySeconds),
+        ..orConditions.SelectMany(c => b.Nested("OrCondition", 1, c)),
+        ..actions.SelectMany(a => b.Nested("ScriptAction", 2, a)),
+    ];
+
+    private static byte[] ScriptGroup(MapBuilder b, string name, bool isActive, bool isSubroutine, byte[][] scripts) =>
+    [
+        ..A(name), isActive ? (byte)1 : (byte)0, isSubroutine ? (byte)1 : (byte)0,
+        ..scripts.SelectMany(s => b.Nested("Script", 2, s)),
+    ];
+
+    // The raw enum index is the decoded identity (see MapScriptCatalog); the NameKeyType field is unresolvable on real maps and is
+    // written here only because version 4 conditions/version 2 actions carry one on disk (the decoder reads and discards it).
+    private static byte[] Condition(MapBuilder b, string typeName, params byte[][] parameters) =>
+    [
+        ..I(MapScriptCatalog.ConditionTypeNames.IndexOf(typeName)), ..I(b.NameKey(typeName)), ..I(parameters.Length), ..parameters.SelectMany(p => p),
+    ];
+
+    private static byte[] ScriptAction(MapBuilder b, string typeName, params byte[][] parameters) =>
+    [
+        ..I(MapScriptCatalog.ScriptActionTypeNames.IndexOf(typeName)), ..I(b.NameKey(typeName)), ..I(parameters.Length), ..parameters.SelectMany(p => p),
+    ];
+
+    private static byte[] Param(MapScriptParameterType type, int number = 0, float real = 0, string text = "") =>
+        [..I((int)type), ..I(number), ..F(real), ..A(text)];
 
     private static void DerivesCliffFlagsBeforeVersion7()
     {
@@ -225,6 +285,9 @@ internal static class MapDecoderTests
             Id(name);
             _chunks.Add((name, version, data));
         }
+
+        /// <summary>A <c>NameKeyType</c> value: the same symbol table id a chunk name or dict key would get.</summary>
+        public int NameKey(string name) => Id(name);
 
         public byte[] Nested(string name, int version, byte[] data)
             => [..I(Id(name)), ..BitConverter.GetBytes((ushort)version), ..I(data.Length), ..data];
