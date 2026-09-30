@@ -36,6 +36,7 @@ public sealed class TerrainHeightSampler
         }
         PlayableCellsX = cellsX;
         PlayableCellsY = cellsY;
+        Boundaries = [..field.Boundaries.Select(boundary => new Vector2(boundary.X * CellSize, boundary.Y * CellSize))];
         var min = byte.MaxValue;
         var max = byte.MinValue;
         foreach (var height in _heights)
@@ -54,6 +55,12 @@ public sealed class TerrainHeightSampler
     /// <summary>The logical extent in cells (<c>TerrainLogic::getExtent</c>, the largest map boundary), the same as <c>TerrainMap.CellsX</c>.</summary>
     public int PlayableCellsX { get; }
     public int PlayableCellsY { get; }
+
+    /// <summary>Upper corner of every map boundary in world units (the lower corner is always (0, 0)).</summary>
+    public ImmutableArray<Vector2> Boundaries { get; }
+
+    /// <summary><c>W3DTerrainLogic::getExtent</c>: the extent of one boundary (the active one is 0 unless a script switches it).</summary>
+    public Vector2 BoundaryMax(int index) => Boundaries[index];
 
     public float MinHeight { get; }
     public float MaxHeight { get; }
