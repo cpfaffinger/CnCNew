@@ -11,7 +11,9 @@ using CnCNew.Formats;
 using CnCNew.Data.Snapshots;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
+using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.State;
@@ -33,6 +35,8 @@ const string Usage = """
                                                            headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
       ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin]
                                                            skirmish AIs on a real map: record, two fresh runs, snapshot continuation
+      mission-run <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N]
+                                                           run a campaign/scripted mission headless: two fresh runs, save/restore continuation, script and combat report
       stress [--ticks N] [--population N] [--out replay.bin]
                                                            record + two fresh runs + snapshot continuation, leak and budget checks
     """;
@@ -55,6 +59,7 @@ try
         "stress" => Stress(Options(args), Arg(args, "--out")),
         "reference-match" when args.Length >= 2 => ReferenceMatch(args[1], args),
         "ai-match" when args.Length >= 2 => AiMatch(args[1], args),
+        "mission-run" when args.Length >= 2 => MissionRun(args[1], args),
         _ => Fail(Usage),
     };
 }
@@ -339,6 +344,41 @@ static ulong Chain(ulong[] hashes)
     return chain;
 }
 
+static int MissionRun(string directory, string[] args)
+{
+    var mapPath = Arg(args, "--map") ?? throw new ArgumentException("--map <virtual-map-path> is required.");
+    var ticks = long.Parse(Arg(args, "--ticks") ?? "9000", CultureInfo.InvariantCulture);
+    var options = MissionOptions.Standard with { Difficulty = Enum.Parse<ScriptDifficulty>(Arg(args, "--difficulty") ?? "Normal", true), MaxTicks = 0 };
+    if (Arg(args, "--seed") is { } seed) options = options with { WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) };
+    var (_, catalog, fingerprint) = CompileShipped(directory);
+    var content = ContentFileSystem.Open(directory);
+    using var mapStream = content.OpenRead(mapPath);
+    var map = SageMapDecoder.Decode(mapStream);
+    var terrain = TerrainMap.Build(map, mapPath);
+    Console.WriteLine($"Mission {mapPath} ({terrain.CellsX}x{terrain.CellsY} cells), {options.Difficulty}, definitions {fingerprint[..16]}, terrain {terrain.Fingerprint[..16]}.");
+    var watch = Stopwatch.StartNew();
+    var first = MissionScenario.Run(options, catalog, fingerprint, terrain, map, ticks);
+    Console.WriteLine($"Run 1: {watch.Elapsed.TotalSeconds:F1} s.");
+    Print(first);
+    var second = MissionScenario.Run(options, catalog, fingerprint, terrain, map, ticks);
+    Console.WriteLine($"Run 2 (fresh): chain {second.Chain:X16}, final {second.FinalHash:X16}: identical to run 1: {second.Chain == first.Chain && second.FinalHash == first.FinalHash}.");
+    var (original, restored, bytes) = MissionScenario.VerifyContinuation(options, catalog, fingerprint, terrain, map, ticks);
+    Console.WriteLine($"Save/restore at tick {ticks / 2} ({bytes} bytes): continuation identical: {original.Chain == restored.Chain && original.FinalHash == restored.FinalHash} (chain {restored.Chain:X16}).");
+    return original.Chain == restored.Chain && second.Chain == first.Chain ? 0 : 1;
+
+    static void Print(MissionRunReport report)
+    {
+        Console.WriteLine($"  {report.Players} players, {report.PlacedObjects} placed objects ({report.SkippedObjects} skipped over {report.SkippedTemplates} templates), {report.Entities} entities at tick {report.Ticks}.");
+        Console.WriteLine($"  scripts executed {report.ExecutedScripts}, actions executed {report.ExecutedActions}, forwarded {report.ForwardedActions}, shots {report.Shots}; outcome {report.Outcome}{(report.OutcomeTick >= 0 ? $" at tick {report.OutcomeTick}" : "")}{(report.Ended ? " (ended)" : "")}.");
+        Console.WriteLine($"  final hash {report.FinalHash:X16}, chain {report.Chain:X16}.");
+        Console.WriteLine($"  missing actions {report.MissingActionTotal} ({report.MissingActions.Length} types): {string.Join(", ", report.MissingActions.Take(12).Select(item => $"{item.Name}={item.Count}"))}");
+        Console.WriteLine($"  missing conditions {report.MissingConditionTotal} ({report.MissingConditions.Length} types): {string.Join(", ", report.MissingConditions.Take(12).Select(item => $"{item.Name}={item.Count}"))}");
+        foreach (var item in report.Diagnostics.Take(10)) Console.WriteLine($"  diagnostic: {item.Name} x{item.Count}");
+        foreach (var item in report.Skipped.OrderByDescending(value => value.Count).Take(8)) Console.WriteLine($"  skipped object {item.Template} x{item.Count}");
+    }
+}
+
+
 static int Stress(StressOptions options, string? replayOut)
 {
     var report = new List<string>();
@@ -471,3 +511,4 @@ file sealed class ContentSource(ContentFileSystem content) : IDefinitionSource
     public Stream OpenRead(string virtualPath) => content.OpenRead(virtualPath);
     public bool Exists(string virtualPath) => content.Exists(virtualPath);
 }
+

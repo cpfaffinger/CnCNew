@@ -1,0 +1,305 @@
+using System.Collections.Immutable;
+using CnCNew.Data.World;
+using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Mission;
+using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Scripting;
+using CnCNew.Simulation.Snapshots;
+using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.World;
+
+/// <summary>A tiny builder for decoded World Builder scripts, so a test states what a map designer would have clicked together.</summary>
+static class Scr
+{
+    public static MapScriptParameter Int(int value) => new(MapScriptParameterType.Int, value, 0m, string.Empty, 0m, 0m, 0m);
+    public static MapScriptParameter Bool(bool value) => new(MapScriptParameterType.Boolean, value ? 1 : 0, 0m, string.Empty, 0m, 0m, 0m);
+    public static MapScriptParameter Real(decimal value) => new(MapScriptParameterType.Real, 0, value, string.Empty, 0m, 0m, 0m);
+    public static MapScriptParameter Named(MapScriptParameterType type, string text) => new(type, 0, 0m, text, 0m, 0m, 0m);
+    public static MapScriptParameter Counter(string name) => Named(MapScriptParameterType.Counter, name);
+    public static MapScriptParameter Flag(string name) => Named(MapScriptParameterType.Flag, name);
+    public static MapScriptParameter Side(string name) => Named(MapScriptParameterType.Side, name);
+    public static MapScriptParameter Team(string name) => Named(MapScriptParameterType.Team, name);
+    public static MapScriptParameter Unit(string name) => Named(MapScriptParameterType.Unit, name);
+    public static MapScriptParameter Type(string name) => Named(MapScriptParameterType.ObjectType, name);
+    public static MapScriptParameter Waypoint(string name) => Named(MapScriptParameterType.Waypoint, name);
+    public static MapScriptParameter Area(string name) => Named(MapScriptParameterType.TriggerArea, name);
+    public static MapScriptParameter Script(string name) => Named(MapScriptParameterType.Script, name);
+    public static MapScriptParameter Compare(int op) => new(MapScriptParameterType.Comparison, op, 0m, string.Empty, 0m, 0m, 0m);
+    public const int Less = 0, LessEqual = 1, Equal = 2, GreaterEqual = 3, Greater = 4, NotEqual = 5;
+
+    public static MapCondition If(string name, params MapScriptParameter[] parameters)
+    {
+        var id = MapScriptCatalog.ConditionTypeNames.IndexOf(name);
+        if (id < 0) throw new ArgumentException($"Unknown condition {name}.");
+        return new MapCondition(id, name, [..parameters]);
+    }
+
+    public static MapScriptAction Do(string name, params MapScriptParameter[] parameters)
+    {
+        var id = MapScriptCatalog.ScriptActionTypeNames.IndexOf(name);
+        if (id < 0) throw new ArgumentException($"Unknown action {name}.");
+        return new MapScriptAction(id, name, [..parameters]);
+    }
+
+    public static MapOrCondition And(params MapCondition[] conditions) => new([..conditions]);
+
+    public static MapScript Script(string name, MapOrCondition[] conditions, MapScriptAction[] actions, MapScriptAction[]? otherwise = null, bool active = true, bool oneShot = false,
+        bool subroutine = false, int delaySeconds = 0, bool easy = true, bool normal = true, bool hard = true)
+        => new(name, string.Empty, string.Empty, string.Empty, active, oneShot, easy, normal, hard, subroutine, delaySeconds, [..conditions], [..actions], [..otherwise ?? []]);
+
+    public static MapProperty Text(string key, string value) => new(key, MapPropertyType.Ascii, 0, 0m, value);
+    public static MapProperty Flag(string key, bool value, int _ = 0) => new(key, MapPropertyType.Bool, value ? 1 : 0, 0m, string.Empty);
+}
+
+static partial class Tests
+{
+    private const string PlayerA = "PlayerA";
+    private const string PlayerB = "PlayerB";
+
+    private static IReadOnlyDictionary<string, string> ScriptFiles() => SkirmishFiles();
+
+    /// <summary>
+    /// A 60x40-cell map with three sides (neutral, PlayerA human, PlayerB enemy of A), two waypoints, an area around the left spawn and two teams;
+    /// <paramref name="scripts"/> run in PlayerA's list (index 1), <paramref name="neutral"/> in the neutral list (index 0).
+    /// </summary>
+    private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) MissionMap(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MapScript[]? neutral = null)
+    {
+        var fixture = new SyntheticFixture(files: ScriptFiles());
+        var area = new MapPolygonTrigger("LeftArea", string.Empty, 7, false, false, 0, [new MapPoint(0, 0, 0), new MapPoint(200, 0, 0), new MapPoint(200, 400, 0), new MapPoint(0, 400, 0)]);
+        var baseMap = SyntheticMaps.Build(60, 40, 1, triggers: [area], waypoints: [("Spawn", 100m, 200m, 0m), ("Far", 400m, 200m, 0m), ("Mid", 250m, 200m, 0m)]);
+        MapSide Side(string name, bool human, string allies, string enemies)
+            => new(new MapProperties([Scr.Text("playerName", name), Scr.Flag("playerIsHuman", human), Scr.Text("playerAllies", allies), Scr.Text("playerEnemies", enemies)]), []);
+        var sides = ImmutableArray.Create(
+            new MapSide(new MapProperties([Scr.Text("playerName", string.Empty)]), []),
+            Side(PlayerA, true, string.Empty, PlayerB),
+            Side(PlayerB, false, string.Empty, PlayerA));
+        MapProperties Team(string name, string owner, bool singleton) => new([Scr.Text("teamName", name), Scr.Text("teamOwner", owner), Scr.Flag("teamIsSingleton", singleton)]);
+        var map = baseMap with
+        {
+            Sides = sides,
+            Teams = [Team("teamA", PlayerA, true), Team("teamB", PlayerB, true), Team("Raiders", PlayerB, false)],
+            Objects = [..baseMap.Objects, ..objects ?? []],
+            PlayerScripts = [new MapScriptList([..neutral ?? []], []), new MapScriptList([..scripts], [..groups ?? []]), new MapScriptList([], [])],
+        };
+        return (map, fixture, TerrainMap.Build(map, "mission"));
+    }
+
+    private static MapObject Placed(string template, decimal x, decimal y, string team, string name = "")
+    {
+        var properties = ImmutableArray.CreateBuilder<MapProperty>();
+        properties.Add(Scr.Text("originalOwner", team));
+        if (name.Length > 0) properties.Add(Scr.Text("objectName", name));
+        return new MapObject(template, x, y, 0m, 0m, 0, new MapProperties(properties.ToImmutable()));
+    }
+
+    private static MissionSession StartMission(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MissionOptions? options = null, MapScript[]? neutral = null)
+    {
+        var (map, fixture, terrain) = MissionMap(scripts, groups, objects, neutral);
+        return MissionSession.Start(options ?? MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+    }
+
+    private static void Run(MissionSession session, int ticks)
+    {
+        for (var index = 0; index < ticks && !session.IsOver; index++) session.Step();
+    }
+
+    public static void ScriptSupportTableIsConsistent()
+    {
+        Check.That(ScriptCoverage.Validate().IsEmpty, "Every name of the support tables is a real condition/action type: " + string.Join(", ", ScriptCoverage.Validate()));
+        var conditions = MapScriptCatalog.ConditionTypeNames.GroupBy(ScriptCoverage.ConditionSupport).ToDictionary(group => group.Key, group => group.Count());
+        var actions = MapScriptCatalog.ScriptActionTypeNames.GroupBy(ScriptCoverage.ActionSupport).ToDictionary(group => group.Key, group => group.Count());
+        Console.WriteLine($"       conditions: {conditions.GetValueOrDefault(ScriptSupport.Executed)} executed, {conditions.GetValueOrDefault(ScriptSupport.Missing)} missing of {MapScriptCatalog.ConditionTypeNames.Length}; " +
+                          $"actions: {actions.GetValueOrDefault(ScriptSupport.Executed)} executed, {actions.GetValueOrDefault(ScriptSupport.Forwarded)} forwarded, {actions.GetValueOrDefault(ScriptSupport.Missing)} missing of {MapScriptCatalog.ScriptActionTypeNames.Length}");
+        // The five condition types and the action types the retail usage table ranks first are all implemented.
+        foreach (var name in new[] { "CONDITION_TRUE", "TIMER_EXPIRED", "FLAG", "COUNTER", "PLAYER_HAS_OBJECT_COMPARISON" })
+            Check.That(ScriptCoverage.ConditionSupport(name) == ScriptSupport.Executed, $"{name} is implemented.");
+        foreach (var name in new[] { "ENABLE_SCRIPT", "OBJECTLIST_ADDOBJECTTYPE", "SET_MILLISECOND_TIMER", "SET_FLAG", "CALL_SUBROUTINE", "SET_COUNTER" })
+            Check.That(ScriptCoverage.ActionSupport(name) == ScriptSupport.Executed, $"{name} is implemented.");
+        Check.That(ScriptCoverage.ActionSupport("SPEECH_PLAY") == ScriptSupport.Forwarded, "Speech is forwarded to the client.");
+        Check.That(ScriptCoverage.ActionSupport("NAMED_SET_TOPPLE_DIRECTION") == ScriptSupport.Missing, "An unimplemented action is reported as missing.");
+    }
+
+    public static void ScriptEngineCountersFlagsAndTimers()
+    {
+        // Script 'Start' runs once: sets a counter, a flag and a 2 s timer. 'Tick' counts while the timer runs; 'Expired' fires when it ends.
+        var session = StartMission([
+            Scr.Script("Start", [Scr.And(Scr.If("CONDITION_TRUE"))],
+                [Scr.Do("SET_COUNTER", Scr.Counter("c"), Scr.Int(5)), Scr.Do("SET_FLAG", Scr.Flag("f"), Scr.Bool(true)), Scr.Do("SET_MILLISECOND_TIMER", Scr.Counter("t"), Scr.Real(2m)),
+                 Scr.Do("INCREMENT_COUNTER", Scr.Int(3), Scr.Counter("c")), Scr.Do("DECREMENT_COUNTER", Scr.Int(1), Scr.Counter("c"))], oneShot: true),
+            Scr.Script("Expired", [Scr.And(Scr.If("TIMER_EXPIRED", Scr.Counter("t")), Scr.If("FLAG", Scr.Flag("f"), Scr.Bool(true)), Scr.If("COUNTER", Scr.Counter("c"), Scr.Compare(Scr.Equal), Scr.Int(7)))],
+                [Scr.Do("SET_COUNTER", Scr.Counter("done"), Scr.Int(1))], oneShot: true),
+            Scr.Script("NeverStarted", [Scr.And(Scr.If("TIMER_EXPIRED", Scr.Counter("other")))], [Scr.Do("SET_COUNTER", Scr.Counter("bad"), Scr.Int(1))]),
+        ]);
+        var engine = session.Engine;
+        Run(session, 1);
+        Check.That(engine.CounterValue("c") == 7 && engine.FlagValue("f"), "Set, increment and decrement leave the counter at 7; the flag is set.");
+        Check.That(engine.CounterIsTimer("t") && engine.CounterValue("t") == 60, $"A 2 s timer holds 60 frames right after it was set (got {engine.CounterValue("t")}).");
+        Check.That(!engine.IsScriptActive("Start"), "A one-shot script deactivates itself after it fired.");
+        Run(session, 58);
+        Check.That(engine.CounterValue("done") == 0, "The timer has not expired after 59 ticks.");
+        Run(session, 4);
+        Check.That(engine.CounterValue("done") == 1, $"The timer expired ('done' = {engine.CounterValue("done")}, timer {engine.CounterValue("t")}).");
+        Check.That(engine.CounterValue("bad") == 0 && !engine.CounterIsTimer("other"), "A timer that was never started is not expired.");
+        Run(session, 120);
+        Check.That(engine.CounterValue("t") == -1, "Timers count down to -1 and stop.");
+    }
+
+    public static void ScriptEngineActivationDifficultyAndSubroutines()
+    {
+        var subroutine = Scr.Script("Sub", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("subs"))], subroutine: true);
+        var group = new MapScriptGroup("Calls", true, false, [
+            Scr.Script("CallIt", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("CALL_SUBROUTINE", Scr.Script("Sub")), Scr.Do("CALL_SUBROUTINE", Scr.Script("Library"))], oneShot: true)]);
+        var library = new MapScriptGroup("Library", true, true, [Scr.Script("L1", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(10), Scr.Counter("subs"))]), Scr.Script("L2", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(100), Scr.Counter("subs"))])]);
+        var session = StartMission([
+            subroutine,
+            Scr.Script("Sleeper", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_COUNTER", Scr.Counter("slept"), Scr.Int(1))], active: false),
+            Scr.Script("Waker", [Scr.And(Scr.If("FLAG", Scr.Flag("wake"), Scr.Bool(true)))], [Scr.Do("ENABLE_SCRIPT", Scr.Script("Sleeper"))], oneShot: true),
+            Scr.Script("EasyOnly", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_COUNTER", Scr.Counter("easy"), Scr.Int(1))], normal: false, hard: false, oneShot: true),
+            Scr.Script("NormalOnly", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_COUNTER", Scr.Counter("normal"), Scr.Int(1))], easy: false, hard: false, oneShot: true),
+            Scr.Script("Else", [Scr.And(Scr.If("FLAG", Scr.Flag("never"), Scr.Bool(true)))], [], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("else"))], oneShot: true),
+            Scr.Script("Delayed", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("delayed"))], delaySeconds: 1),
+        ], [group, library]);
+        var engine = session.Engine;
+        Run(session, 3);
+        Check.That(engine.CounterValue("subs") == 111, $"A subroutine script and a subroutine group both ran once when called (got {engine.CounterValue("subs")}); a subroutine never runs on its own.");
+        Check.That(engine.CounterValue("slept") == 0 && !engine.IsScriptActive("Sleeper"), "An inactive script does not run.");
+        Check.That(engine.CounterValue("normal") == 1 && engine.CounterValue("easy") == 0, "Difficulty flags gate scripts: the Normal game runs the normal-only script, not the easy-only one.");
+        Check.That(engine.CounterValue("else") == 1 && !engine.IsScriptActive("Else"), "A false condition runs the false actions once; a one-shot script ends after them.");
+        var delayedAtStart = engine.CounterValue("delayed");
+        Run(session, 120);
+        Check.That(engine.CounterValue("delayed") - delayedAtStart is >= 3 and <= 4, $"A 1 s delayed script evaluates about once a second (got {engine.CounterValue("delayed")} after 4 s).");
+        engine.SignalUiInteraction("wake");
+        engine.SignalUiInteraction("none");
+        Run(session, 1);
+        Check.That(engine.IsScriptActive("Sleeper") && !engine.FlagValue("wake"), "A UI interaction satisfies a FLAG condition for one evaluation round without setting the flag (ScriptEngine::evaluateFlag).");
+        session.Engine.Describe(new CnCNew.Simulation.State.HashStateWriter());
+
+        var easy = StartMission([Scr.Script("EasyOnly", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_COUNTER", Scr.Counter("easy"), Scr.Int(1))], normal: false, hard: false, oneShot: true)],
+            options: MissionOptions.Standard with { Difficulty = ScriptDifficulty.Easy });
+        Run(easy, 2);
+        Check.That(easy.Engine.CounterValue("easy") == 1, "On Easy the easy-only script runs.");
+    }
+
+    public static void ScriptEngineWorldActionsAndConditions()
+    {
+        var session = StartMission([
+            // Teams and units: two soldiers for PlayerB's 'Raiders' at the far waypoint, named one of them; a named barrel of A stands at the spawn.
+            Scr.Script("Spawn", [Scr.And(Scr.If("CONDITION_TRUE"))], [
+                Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("Boss"), Scr.Type("BetaSoldier"), Scr.Team("Raiders"), Scr.Waypoint("Far")),
+                Scr.Do("CREATE_UNNAMED_ON_TEAM_AT_WAYPOINT", Scr.Type("BetaSoldier"), Scr.Team("Raiders"), Scr.Waypoint("Far")),
+                Scr.Do("PLAYER_SET_MONEY", Scr.Side(PlayerA), Scr.Int(1234)), Scr.Do("PLAYER_GIVE_MONEY", Scr.Side(PlayerA), Scr.Int(-34)),
+                Scr.Do("PLAYER_RELATES_PLAYER", Scr.Side(PlayerA), Scr.Side(PlayerB), Scr.Int((int)Relationship.Allies))], oneShot: true),
+            Scr.Script("HaveRaiders", [Scr.And(Scr.If("TEAM_HAS_UNITS", Scr.Team("Raiders")), Scr.If("NAMED_CREATED", Scr.Unit("Boss")))], [Scr.Do("SET_FLAG", Scr.Flag("raiders"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Two", [Scr.And(Scr.If("PLAYER_HAS_OBJECT_COMPARISON", Scr.Side(PlayerB), Scr.Compare(Scr.GreaterEqual), Scr.Int(2), Scr.Type("BetaSoldier")))],
+                [Scr.Do("SET_FLAG", Scr.Flag("two"), Scr.Bool(true)), Scr.Do("NAMED_KILL", Scr.Unit("Boss")), Scr.Do("NAMED_TRANSFER_OWNERSHIP_PLAYER", Scr.Unit("Crate"), Scr.Side(PlayerB))], oneShot: true),
+            Scr.Script("Owned", [Scr.And(Scr.If("NAMED_OWNED_BY_PLAYER", Scr.Unit("Crate"), Scr.Side(PlayerB)))], [Scr.Do("SET_FLAG", Scr.Flag("crateMoved"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Dead", [Scr.And(Scr.If("NAMED_DESTROYED", Scr.Unit("Boss")))], [Scr.Do("SET_FLAG", Scr.Flag("bossDead"), Scr.Bool(true)), Scr.Do("TEAM_DELETE", Scr.Team("Raiders")), Scr.Do("NAMED_DELETE", Scr.Unit("Crate"))], oneShot: true),
+            Scr.Script("Credits", [Scr.And(Scr.If("PLAYER_HAS_CREDITS", Scr.Int(1200), Scr.Compare(Scr.LessEqual), Scr.Side(PlayerA)))], [Scr.Do("SET_FLAG", Scr.Flag("credits"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Victory", [Scr.And(Scr.If("FLAG", Scr.Flag("bossDead"), Scr.Bool(true)), Scr.If("PLAYER_ALL_DESTROYED", Scr.Side(PlayerB)))], [Scr.Do("VICTORY")], oneShot: true),
+        ], objects: [Placed("AlphaBarracks", 100m, 100m, "teamA", "Crate")]);
+        var engine = session.Engine;
+        var world = session.World;
+        Run(session, 1);
+        Check.That(world.Entities.Count(entity => entity.Template.Name == "BetaSoldier" && entity.Owner.Value == 2) == 2, "The team's units belong to the team owner.");
+        Run(session, 1);
+        Check.That(engine.FlagValue("raiders"), "Units created on a team are members of it and named.");
+        Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(1200), "Money is set, then reduced by a negative gift.");
+        Check.That(world.RelationshipOf(new PlayerId(1), new PlayerId(2)) == Relationship.Allies && world.RelationshipOf(new PlayerId(2), new PlayerId(1)) == Relationship.Enemies, "A relation is changed in one direction only.");
+        Check.That(engine.FlagValue("two"), "The object comparison counts the created units.");
+        Check.That(engine.FlagValue("credits"), "The credit comparison has the parameter on the left.");
+        Check.That(engine.FlagValue("crateMoved"), "A named object changes owner.");
+        Run(session, 4);
+        Check.That(engine.FlagValue("bossDead"), "A killed named object counts as destroyed.");
+        Check.That(engine.Outcome == MissionOutcome.Victory && engine.OutcomeTick >= 0, "VICTORY sets the outcome once every object of the opponent is gone.");
+        Check.That(!session.IsOver, "The mission runs on for the end-game delay after a victory.");
+        Run(session, ScriptEngine.EndGameDelayTicks + 5);
+        Check.That(engine.IsEnded && session.IsOver, "The end-game delay ends the mission.");
+    }
+
+    public static void ScriptEngineOrdersAreRealCommands()
+    {
+        var session = StartMission([
+            Scr.Script("Go", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("Runner"), Scr.Type("AlphaSoldier"), Scr.Team("teamA"), Scr.Waypoint("Spawn"))], oneShot: true),
+            Scr.Script("March", [Scr.And(Scr.If("NAMED_CREATED", Scr.Unit("Runner")))], [Scr.Do("MOVE_NAMED_UNIT_TO", Scr.Unit("Runner"), Scr.Waypoint("Mid"))], oneShot: true),
+            Scr.Script("Arrived", [Scr.And(Scr.If("NAMED_OUTSIDE_AREA", Scr.Unit("Runner"), Scr.Area("LeftArea")))], [Scr.Do("SET_FLAG", Scr.Flag("outside"), Scr.Bool(true))], oneShot: true),
+        ]);
+        Run(session, 600);
+        var runner = session.World.Entities.First(entity => entity.Template.Name == "AlphaSoldier");
+        Check.That(runner.X > Fixed.FromInt(200), $"The unit walked out of the area toward the waypoint (x = {runner.X}).");
+        Check.That(session.Engine.FlagValue("outside"), "The area condition saw it leave.");
+        Check.That(session.World.RejectionCounts.Sum() == 0, "Script orders were accepted by the normal command validation.");
+    }
+
+    public static void ScriptEngineMissingTypesAreCounted()
+    {
+        var session = StartMission([
+            Scr.Script("Odd", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_SET_TOPPLE_DIRECTION", Scr.Unit("x"), Scr.Int(0)), Scr.Do("SPEECH_PLAY", Scr.Named(MapScriptParameterType.Dialog, "Hello"), Scr.Bool(false)),
+                Scr.Do("CALL_SUBROUTINE", Scr.Script("Nope")), Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("u"), Scr.Type("NoSuchObject"), Scr.Team("teamA"), Scr.Waypoint("Spawn"))], oneShot: true),
+            Scr.Script("Sighted", [Scr.And(Scr.If("ENEMY_SIGHTED", Scr.Unit("x"), Scr.Int(0), Scr.Side(PlayerA)))], [Scr.Do("SET_FLAG", Scr.Flag("seen"), Scr.Bool(true))]),
+        ]);
+        Run(session, 3);
+        var engine = session.Engine;
+        Check.That(engine.MissingActionHits.GetValueOrDefault("NAMED_SET_TOPPLE_DIRECTION") == 1, "An unimplemented action is counted, not skipped silently.");
+        Check.That(engine.MissingConditionHits.GetValueOrDefault("ENEMY_SIGHTED") == 3 && !engine.FlagValue("seen"), "An unimplemented condition is counted on every evaluation and evaluates to false.");
+        Check.That(engine.ForwardedActions == 1, "Speech is forwarded.");
+        var output = engine.DrainOutputs();
+        Check.That(output.Length == 1 && output[0].Action == "SPEECH_PLAY" && output[0].Arguments[0] == "Hello", "The forwarded action reaches the client with its parameters.");
+        Check.That(engine.DrainOutputs().IsEmpty, "Outputs are drained.");
+        Check.That(engine.Diagnostics.ContainsKey("call of undefined script 'Nope'") && engine.Diagnostics.ContainsKey("unknown object type 'NoSuchObject'"),
+            "Unresolvable references are diagnosed: " + string.Join("; ", engine.Diagnostics.Keys));
+    }
+
+    public static void ScriptEngineSnapshotContinuesIdentically()
+    {
+        MapScript[] Scripts() => [
+            Scr.Script("Spawn", [Scr.And(Scr.If("CONDITION_TRUE"))], [
+                Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("Runner"), Scr.Type("AlphaSoldier"), Scr.Team("teamA"), Scr.Waypoint("Spawn")),
+                Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("Foe"), Scr.Type("BetaSoldier"), Scr.Team("teamB"), Scr.Waypoint("Far")),
+                Scr.Do("SET_RANDOM_MSEC_TIMER", Scr.Counter("r"), Scr.Real(2m), Scr.Real(9m)), Scr.Do("OBJECTLIST_ADDOBJECTTYPE", Scr.Named(MapScriptParameterType.ObjectTypeList, "Soldiers"), Scr.Type("AlphaSoldier"))], oneShot: true),
+            Scr.Script("March", [Scr.And(Scr.If("NAMED_CREATED", Scr.Unit("Runner")), Scr.If("NAMED_CREATED", Scr.Unit("Foe")))],
+                [Scr.Do("MOVE_NAMED_UNIT_TO", Scr.Unit("Runner"), Scr.Waypoint("Far")), Scr.Do("NAMED_HUNT", Scr.Unit("Foe"))], oneShot: true),
+            Scr.Script("Count", [Scr.And(Scr.If("TIMER_EXPIRED", Scr.Counter("r")))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("hits")), Scr.Do("SET_MILLISECOND_TIMER", Scr.Counter("r"), Scr.Real(3m))]),
+        ];
+        var (map, fixture, terrain) = MissionMap(Scripts());
+        var (original, restored, bytes) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 900);
+        Check.That(original.Chain == restored.Chain && original.FinalHash == restored.FinalHash,
+            $"A saved and restored mission continues hash-identically (chain {original.Chain:X16} vs {restored.Chain:X16}, {bytes} bytes).");
+        Check.That(original.ExecutedScripts > 0 && original.Shots + original.Entities > 0, "The mission did something.");
+
+        var again = MissionScenario.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 900);
+        Check.That(again.Chain == original.Chain && again.FinalHash == original.FinalHash, "Two fresh runs of the same mission are identical.");
+        var other = MissionScenario.Run(MissionOptions.Standard with { WorldSeed = 12345 }, fixture.Templates, fixture.Fingerprint, terrain, map, 900);
+        Check.That(other.Chain != original.Chain, "A different logic seed changes the script timers and so the run.");
+
+        // Save, restore and save again: the byte stream is canonical.
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, 200);
+        var first = MissionSnapshot.Write(session);
+        var copy = MissionSnapshot.Restore(first, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(MissionSnapshot.Write(copy).AsSpan().SequenceEqual(first), "Restoring and saving again reproduces the snapshot byte for byte.");
+        Check.That(copy.Engine.CounterValue("r") == session.Engine.CounterValue("r") && copy.Engine.NamedObjects.SequenceEqual(session.Engine.NamedObjects), "Counters and named objects survive the round trip.");
+    }
+
+    public static void ScriptEngineSnapshotRejection()
+    {
+        var scripts = new[] { Scr.Script("S", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_COUNTER", Scr.Counter("c"), Scr.Int(1))], oneShot: true) };
+        var (map, fixture, terrain) = MissionMap(scripts);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, 10);
+        var bytes = MissionSnapshot.Write(session);
+        Check.That(MissionSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain, map).Engine.CounterValue("c") == 1, "The intact snapshot restores.");
+
+        Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(bytes.AsSpan(0, bytes.Length / 2), fixture.Templates, fixture.Fingerprint, terrain, map), "corrupt");
+        var flipped = (byte[])bytes.Clone();
+        var at = Array.LastIndexOf(flipped, (byte)'c', flipped.Length - 100);
+        flipped[at] ^= 1;
+        Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(flipped, fixture.Templates, fixture.Fingerprint, terrain, map), "");
+        Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(bytes, fixture.Templates, "0000", terrain, map), "different definitions");
+        var otherMap = map with { PlayerScripts = [.. map.PlayerScripts.Select(list => list with { Scripts = [.. list.Scripts, Scr.Script("Extra", [], [])] })] };
+        Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain, otherMap), "script program");
+        var text = System.Text.Encoding.UTF8.GetString(bytes).Replace("\"version\":1,", "\"version\":99,");
+        Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(System.Text.Encoding.UTF8.GetBytes(text), fixture.Templates, fixture.Fingerprint, terrain, map), "Unsupported mission state version");
+    }
+}

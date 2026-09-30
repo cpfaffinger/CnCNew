@@ -29,6 +29,48 @@ if (args is ["info", var infoDirectory, var infoPath])
     }
 }
 
+if (args is ["dump", var dumpDirectory, var dumpPath])
+{
+    var content = ContentFileSystem.Open(dumpDirectory);
+    using var stream = content.OpenRead(dumpPath);
+    var map = SageMapDecoder.Decode(stream);
+    string Props(MapProperties properties) => string.Join(", ", properties.Items.Select(item => $"{item.Key}={(item.Type is MapPropertyType.Ascii or MapPropertyType.Unicode ? item.Text : item.Type == MapPropertyType.Real ? item.Real.ToString(CultureInfo.InvariantCulture) : item.Integer.ToString(CultureInfo.InvariantCulture))}"));
+    Console.WriteLine($"world: {Props(map.WorldInfo)}");
+    for (var index = 0; index < map.Sides.Length; index++) Console.WriteLine($"side {index}: {Props(map.Sides[index].Properties)}");
+    foreach (var team in map.Teams) Console.WriteLine($"team: {Props(team)}");
+    foreach (var trigger in map.Triggers) Console.WriteLine($"trigger {trigger.Id} '{trigger.Name}' points={trigger.Points.Length} water={trigger.IsWater}");
+    foreach (var mapObject in map.Objects.Where(value => !value.IsWaypoint)) Console.WriteLine($"object {mapObject.Name} ({mapObject.X},{mapObject.Y},{mapObject.Z}) a={mapObject.Angle} {Props(mapObject.Properties)}");
+    foreach (var mapObject in map.Objects.Where(value => value.IsWaypoint)) Console.WriteLine($"waypoint {mapObject.Name} ({mapObject.X},{mapObject.Y}) {Props(mapObject.Properties)}");
+    string Par(MapScriptParameter p) => p.Type switch
+    {
+        MapScriptParameterType.Coord3D => $"{p.Type}({p.CoordX},{p.CoordY},{p.CoordZ})",
+        MapScriptParameterType.Real or MapScriptParameterType.Angle or MapScriptParameterType.Percent => $"{p.Type}({p.Real})",
+        _ => $"{p.Type}(i={p.Integer},s='{p.Text}')",
+    };
+    void Script(string indent, MapScript script)
+    {
+        Console.WriteLine($"{indent}script '{script.Name}' active={script.IsActive} oneShot={script.IsOneShot} sub={script.IsSubroutine} delay={script.DelayEvaluationSeconds} diff={(script.Easy ? "E" : "")}{(script.Normal ? "N" : "")}{(script.Hard ? "H" : "")}");
+        foreach (var or in script.OrConditions)
+        {
+            Console.WriteLine($"{indent}  OR");
+            foreach (var condition in or.AndConditions) Console.WriteLine($"{indent}    IF {condition.TypeName} [{string.Join("; ", condition.Parameters.Select(Par))}]");
+        }
+        foreach (var action in script.Actions) Console.WriteLine($"{indent}  DO {action.TypeName} [{string.Join("; ", action.Parameters.Select(Par))}]");
+        foreach (var action in script.FalseActions) Console.WriteLine($"{indent}  ELSE {action.TypeName} [{string.Join("; ", action.Parameters.Select(Par))}]");
+    }
+    for (var index = 0; index < map.PlayerScripts.Length; index++)
+    {
+        Console.WriteLine($"scriptlist {index}");
+        foreach (var script in map.PlayerScripts[index].Scripts) Script("  ", script);
+        foreach (var group in map.PlayerScripts[index].Groups)
+        {
+            Console.WriteLine($"  group '{group.Name}' active={group.IsActive} sub={group.IsSubroutine}");
+            foreach (var script in group.Scripts) Script("    ", script);
+        }
+    }
+    return 0;
+}
+
 if (args is not ["audit", var contentDirectory])
 {
     Console.Error.WriteLine("Usage:");

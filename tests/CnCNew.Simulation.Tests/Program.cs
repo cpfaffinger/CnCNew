@@ -138,6 +138,14 @@ run.Test("Construction: rejections for permission, prerequisites, funds and kind
 run.Test("Construction: placement on terrain", Tests.ConstructionPlacementRules);
 run.Test("Construction: snapshot mid-construction and mid-sale, replay round trip", Tests.ConstructionSnapshotAndReplay);
 run.Test("Navigation: escape from and goal inside a footprint", Tests.NavigationFootprintEscape);
+run.Test("Scripts: the support table matches the legacy type catalog", Tests.ScriptSupportTableIsConsistent);
+run.Test("Scripts: counters, flags, timers and one-shot scripts", Tests.ScriptEngineCountersFlagsAndTimers);
+run.Test("Scripts: activation, difficulty, false actions, delay and subroutines", Tests.ScriptEngineActivationDifficultyAndSubroutines);
+run.Test("Scripts: teams, named objects, money, relations, ownership and victory", Tests.ScriptEngineWorldActionsAndConditions);
+run.Test("Scripts: orders are validated player commands", Tests.ScriptEngineOrdersAreRealCommands);
+run.Test("Scripts: missing types are counted, presentation is forwarded", Tests.ScriptEngineMissingTypesAreCounted);
+run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
+run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);
 run.Test("Power: PowerPlantUpgrade adds and removes the energy bonus", Tests.PowerPlantUpgradeAddsAndRemovesTheBonus);
 run.Test("Power: OverchargeBehavior toggles, drains and switches itself off", Tests.OverchargeTogglesDrainsAndSwitchesItselfOff);
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);

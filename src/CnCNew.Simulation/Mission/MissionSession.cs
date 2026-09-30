@@ -1,0 +1,238 @@
+using System.Collections.Immutable;
+using CnCNew.Data.World;
+using CnCNew.Simulation.Commands;
+using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Scripting;
+using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.World;
+
+namespace CnCNew.Simulation.Mission;
+
+/// <param name="WorldSeed">Seed of the logic random stream (script timers draw from it).</param>
+/// <param name="MaxTicks">Hard stop for headless runs; 0 means no limit (a live mission ends with its script outcome).</param>
+/// <param name="CombatIntervalTicks">How often units look for a target in range (the stand-in for the reference's idle target acquisition).</param>
+public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty, long MaxTicks = 0, int PresentationLatencyTicks = 0, int CombatIntervalTicks = 3)
+{
+    public static MissionOptions Standard { get; } = new(0xC0FFEE09, ScriptDifficulty.Normal);
+}
+
+/// <summary>Counters of the units' automatic combat driver.</summary>
+public sealed record MissionCombatStats(long Shots, long Rejected);
+
+/// <summary>
+/// One running campaign (or scripted) mission: the world built from a map's own data, the script engine that runs the map's scripts, and the
+/// combat driver that stands in for idle target acquisition (<c>AIUpdateInterface</c> in the reference; this simulation has none, the skirmish AI fires
+/// explicitly and so does this driver). <see cref="Step"/> advances one logic tick: scripts, combat, world. The whole state is
+/// <see cref="MissionSnapshot"/>-saveable: a restored session continues hash-identically to the original.
+/// <para>
+/// What is built from the map: one player per named side (relations from <c>playerAllies</c>/<c>playerEnemies</c>, everything unlisted neutral, as in the
+/// reference), every pre-placed instantiable object owned by the player of its <c>originalOwner</c> team (unowned ones are neutral), named objects and
+/// teams for the script engine. Objects whose template is not instantiable (<see cref="ObjectTemplate.MissingModules"/>) are counted in
+/// <see cref="SkippedObjects"/>, never dropped silently.
+/// </para>
+/// </summary>
+public sealed class MissionSession
+{
+    public const string FixtureId = "mission";
+
+    private readonly Dictionary<int, ulong> _sequences = [];
+    private long _shots;
+    private long _rejectedShots;
+
+    internal MissionSession(MissionOptions options, SimulationWorld world, ScriptProgram program, MapData map, ImmutableArray<string> notes)
+    {
+        Options = options;
+        World = world;
+        Program = program;
+        Map = map;
+        Notes = notes;
+        Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, LocalPlayerOf(program), options.PresentationLatencyTicks), Issue);
+    }
+
+    public MissionOptions Options { get; }
+    public SimulationWorld World { get; }
+    public ScriptProgram Program { get; }
+    public MapData Map { get; }
+    public ScriptEngine Engine { get; }
+
+    /// <summary>Placed objects that were not created because their template cannot be instantiated yet, by template name (ordinal order).</summary>
+    public ImmutableArray<(string Template, int Count)> SkippedObjects { get; private set; } = [];
+
+    public ImmutableArray<string> Notes { get; }
+    public MissionCombatStats CombatStats => new(_shots, _rejectedShots);
+    public MissionOutcome Outcome => Engine.Outcome;
+
+    /// <summary>The mission is over once its script ended it (victory or defeat plus the end-game delay) or the tick limit passed.</summary>
+    public bool IsOver => Engine.IsEnded || (Options.MaxTicks > 0 && World.Tick >= Options.MaxTicks);
+
+    /// <summary>The human viewer: the first human side of the map.</summary>
+    public static PlayerId LocalPlayerOf(ScriptProgram program)
+    {
+        foreach (var player in program.Players)
+            if (player.IsHuman && !player.Id.IsSystem) return player.Id;
+        return new PlayerId(1);
+    }
+
+    public static MissionSession Start(MissionOptions options, TemplateCatalog catalog, string fingerprint, TerrainMap terrain, MapData map)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(terrain);
+        ArgumentNullException.ThrowIfNull(map);
+        var program = ScriptProgram.Build(map);
+        var notes = ImmutableArray.CreateBuilder<string>();
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), options.WorldSeed, ConfiguredPlayers(program, catalog, notes), FixtureId, fingerprint, terrain.Fingerprint), catalog, terrain);
+        ApplyRelations(world, program);
+        var session = new MissionSession(options, world, program, map, [..notes]);
+        session.PlaceObjects(catalog);
+        return session;
+    }
+
+    private static ImmutableArray<PlayerConfiguration> ConfiguredPlayers(ScriptProgram program, TemplateCatalog catalog, ImmutableArray<string>.Builder notes)
+    {
+        var players = ImmutableArray.CreateBuilder<PlayerConfiguration>();
+        foreach (var player in program.Players)
+        {
+            if (player.Id.IsSystem || string.IsNullOrEmpty(player.Name)) continue;
+            string? faction = null;
+            if (player.Faction.Length > 0)
+            {
+                if (catalog.Factions.TryGet(player.Faction, out _)) faction = player.Faction;
+                else notes.Add($"{player.Name}: faction '{player.Faction}' is not a playable faction definition; the player starts without faction money and sciences");
+            }
+            players.Add(new PlayerConfiguration(player.Id, player.Name, faction, 0, !player.IsHuman));
+        }
+        return players.ToImmutable();
+    }
+
+    /// <summary>
+    /// <c>SidesList</c> relations: <c>playerAllies</c>/<c>playerEnemies</c> name each side's view of the others; every pair the lists do not mention is neutral
+    /// (<c>Player::getRelationship</c> defaults to NEUTRAL; the world's own default would make unlisted pairs enemies).
+    /// </summary>
+    internal static void ApplyRelations(SimulationWorld world, ScriptProgram program)
+    {
+        foreach (var from in program.Players)
+        {
+            if (from.Id.IsSystem || !world.HasPlayer(from.Id)) continue;
+            foreach (var to in program.Players)
+            {
+                if (to.Id.IsSystem || to.Id == from.Id || !world.HasPlayer(to.Id)) continue;
+                var relationship = from.Allies.Contains(to.Name) ? Relationship.Allies : from.Enemies.Contains(to.Name) ? Relationship.Enemies : Relationship.Neutral;
+                world.SetRelationship(from.Id, to.Id, relationship);
+            }
+        }
+    }
+
+    private void PlaceObjects(TemplateCatalog catalog)
+    {
+        var skipped = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        foreach (var placed in Program.Objects)
+        {
+            if (!catalog.TryGet(placed.Template, out var template) || !template.IsInstantiable)
+            {
+                skipped[placed.Template] = skipped.GetValueOrDefault(placed.Template) + 1;
+                continue;
+            }
+            var prototype = placed.TeamName.Length > 0 ? Program.FindTeam(placed.TeamName) : null;
+            var owner = prototype is not null && Program.FindPlayer(prototype.Owner) is { } side && World.HasPlayer(side.Id) ? side.Id : PlayerId.System;
+            var id = World.RequestSpawn(template.Index, owner, placed.X, placed.Y, placed.Z, placed.Angle, placed.HealthPercent);
+            if (placed.ScriptName.Length > 0) Engine.RegisterNamed(placed.ScriptName, id);
+            if (prototype is not null) Engine.AssignToTeam(prototype.Name, id);
+        }
+        SkippedObjects = [..skipped.Select(pair => (pair.Key, pair.Value))];
+    }
+
+    // ------------------------------------------------------------------------------------------------------ stepping
+
+    /// <summary>Advances one logic tick: scripts (may order units and change the world), the automatic combat, then the world step.</summary>
+    public TickResult Step()
+    {
+        var tick = World.Tick;
+        Engine.Update(tick);
+        if (Options.CombatIntervalTicks > 0) DriveCombat(tick);
+        return World.Step();
+    }
+
+    /// <summary>Submits a command of <paramref name="player"/> at the current tick; the per-player sequence is assigned here, so every source of commands (scripts, the human, the combat driver) shares one counter.</summary>
+    public SubmitResult Issue(PlayerId player, Func<ulong, long, SimCommand> make)
+    {
+        var sequence = _sequences.GetValueOrDefault(player.Value) + 1;
+        _sequences[player.Value] = sequence;
+        return World.Submit(make(sequence, World.Tick));
+    }
+
+    /// <summary>
+    /// Every armed object fires at the nearest enemy in weapon range (the idle <c>AutoAcquireEnemiesWhenIdle</c> behaviour, which the simulation's AI modules
+    /// do not model). Only players that are enemies of each other shoot; neutral objects never do. Runs every <see cref="MissionOptions.CombatIntervalTicks"/>
+    /// ticks, staggered by object id.
+    /// </summary>
+    private void DriveCombat(long tick)
+    {
+        var interval = Options.CombatIntervalTicks;
+        List<Entity>? targets = null;
+        foreach (var entity in World.Entities.OrderBy(value => value.Id.Value).ToArray())
+        {
+            if ((tick + entity.Id.Value) % interval != 0) continue;
+            if (entity.Owner.IsSystem || entity.Template.DefaultWeapon < 0 || !ScriptEngine.CountsAsObject(entity) || tick < entity.WeaponReadyTick) continue;
+            var range = World.Weapons[entity.Template.DefaultWeapon].RangeWith(World.Templates.GlobalWeaponBonus, entity.WeaponBonusConditions);
+            if (range <= Fixed.Zero) continue;
+            targets ??= [..World.Entities.Where(value => !value.Owner.IsSystem && value.Body is not null && ScriptEngine.CountsAsObject(value)).OrderBy(value => value.Id.Value)];
+            var limit = range * range;
+            Entity? best = null;
+            var bestDistance = Fixed.MaxValue;
+            foreach (var target in targets)
+            {
+                if (!World.AreEnemies(entity.Owner, target.Owner)) continue;
+                var dx = entity.X - target.X;
+                var dy = entity.Y - target.Y;
+                var distance = dx * dx + dy * dy;
+                if (distance > limit || distance >= bestDistance) continue;
+                best = target;
+                bestDistance = distance;
+            }
+            if (best is null) continue;
+            var owner = entity.Owner;
+            var source = entity.Id;
+            var victim = best.Id;
+            if (Issue(owner, (sequence, at) => new FireWeaponCommand(owner, sequence, at, source, victim)).Accepted) _shots++;
+            else _rejectedShots++;
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------- state
+
+    internal void DescribeSession(IStateWriter writer)
+    {
+        writer.Int("shots", _shots);
+        writer.Int("rejectedShots", _rejectedShots);
+        writer.BeginArray("sequences");
+        foreach (var (player, sequence) in _sequences.OrderBy(pair => pair.Key))
+        {
+            writer.BeginObject(null);
+            writer.Int("player", player);
+            writer.UInt("sequence", sequence);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+
+    internal void LoadSession(IStateReader reader)
+    {
+        _shots = reader.Int("shots");
+        _rejectedShots = reader.Int("rejectedShots");
+        _sequences.Clear();
+        foreach (var item in reader.Array("sequences")) _sequences[checked((int)item.Int("player"))] = item.UInt("sequence");
+    }
+
+    /// <summary>Hash over the world and the script engine: what a saved-and-restored session must reproduce tick for tick.</summary>
+    public ulong StateHash()
+        => StateHashes.Combine(World.StateHash, Engine.StateHash());
+}
+
+internal static class StateHashes
+{
+    public static ulong Combine(ulong first, ulong second) => StateHash.Mix(StateHash.Mix(StateHash.Seed, first), second);
+}
