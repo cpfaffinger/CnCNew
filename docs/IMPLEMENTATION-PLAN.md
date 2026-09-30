@@ -413,6 +413,6 @@ Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
 
 Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
 Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
-jedoch separat begründet und versioniert. Die Schritte 1 bis 6 sind abgeschlossen. Der nächste Implementierungseinstieg ist Schritt 7 mit den
-verbleibenden Simulationsmodulen (Phase-7-Handoff-Inhalt: `docs/HANDOFF-PHASE8.md`), Chinook/Transport-KI, Flug und
-Kollision als Voraussetzung für die Weltpräsentation.
+jedoch separat begründet und versioniert. Die Schritte 1 bis 6 sind abgeschlossen. Der nächste Implementierungseinstieg ist Schritt 7
+(Weltpräsentation) zusammen mit den offenen Simulationsschulden aus Phase 6 (Chinook/Transport-KI, Projektil-Flugzeit, Kollision;
+Auftrag: `docs/HANDOFF-PHASE8.md`).
