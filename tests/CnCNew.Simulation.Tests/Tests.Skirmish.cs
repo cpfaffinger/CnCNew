@@ -31,6 +31,9 @@ static partial class Tests
           Behavior = ProductionUpdate Prod01
             MaxQueueEntries = 3
           End
+          Behavior = SpecialAbility Power01
+            SpecialPowerTemplate = {{side}}Shared
+          End
         End
         Object {{side}}Dozer
           Side = {{side}}
@@ -172,6 +175,14 @@ static partial class Tests
           MinSpeed = 0.0
           CloseEnoughDist = 1.0
         End
+        SpecialPower AlphaShared
+          ReloadTime = 10000
+          SharedSyncedTimer = Yes
+        End
+        SpecialPower BetaShared
+          ReloadTime = 10000
+          SharedSyncedTimer = Yes
+        End
         {{SkirmishSide("Alpha")}}
         {{SkirmishSide("Beta")}}
         """,
@@ -254,5 +265,31 @@ static partial class Tests
             Check.That(ai.KnownEnemyStructures == 0, "Before the armies meet, no enemy structure is known: start positions are hints, not knowledge.");
         Check.That(scenario.Winner is null, "Nobody wins in the first two seconds.");
         Check.That(holder.Terrain.StartPositions.Length == 2, "The synthetic map has two start positions.");
+    }
+
+    /// <summary>
+    /// A live, incrementally stepped <see cref="SkirmishMatchSession"/> must hash-match a fresh <see cref="ReplayRunner"/> run of its own
+    /// <see cref="SkirmishMatchSession.ToReplay"/> recording (docs/SIMULATION-CORE.md §12/§12a): the existing replay tests only ever compared
+    /// two fresh <see cref="ReplayRunner"/> runs against each other, never a live session's own <see cref="SimulationWorld.StateHash"/>. Each
+    /// starting centre carries a <c>SharedSyncedTimer</c> power (<c>{{side}}Shared</c>) the AI's <c>UsePowers()</c> queries every live tick,
+    /// which used to seed the shared ready frame from <see cref="SimulationWorld.Tick"/> at query time and diverge from a replay that never
+    /// runs AI code.
+    /// </summary>
+    public static void SkirmishLiveSessionMatchesItsOwnReplay()
+    {
+        var fixture = new SyntheticFixture(files: SkirmishFiles());
+        var map = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
+        var terrain = TerrainMap.Build(map, "skirmish");
+        var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
+        var options = new SkirmishMatchOptions(0xC0FFEE06, 7, 12_000, 60, 500, 500, 0);
+        var session = SkirmishMatchSession.Start(options, fixture.Templates, fixture.Fingerprint, terrain, map.Objects, [.. participants.Select(participant => new SkirmishSlot(participant))]);
+        while (!session.IsOver) session.Step();
+        Check.That(session.Ais.Any(ai => ai!.Stats.PowerUses > 0), "The AI actually used the shared power at least once (otherwise the scenario does not exercise the gap).");
+
+        var liveHash = session.World.StateHash;
+        var replay = session.ToReplay();
+        var replayResult = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, terrain: terrain);
+        Check.That(replayResult.FinalHash == liveHash,
+            $"A live session's own StateHash ({liveHash:X16}) matches a fresh ReplayRunner.Run of its own ToReplay() recording ({replayResult.FinalHash:X16}).");
     }
 }

@@ -143,6 +143,7 @@ run.Test("Power: OverchargeBehavior toggles, drains and switches itself off", Te
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
 run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);
+run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Projectiles: straight shell flight time, impact event and detonation effect", Tests.ProjectileStraightShellFlightTime);
 run.Test("Projectiles: ballistic arc path points and flight time", Tests.ProjectileBallisticArc);
 run.Test("Projectiles: missile flight time (instant acceleration)", Tests.ProjectileMissileFlightTime);
