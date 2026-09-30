@@ -1,6 +1,9 @@
+using CnCNew.Presentation.Tests;
+
 var suites = new List<Func<string[], int>>
 {
     ObjectTests.Run,
+    FxTests.Run,
 };
 
 var failures = 0;

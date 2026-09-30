@@ -6,6 +6,7 @@ using CnCNew.Presentation.Objects;
 const string Usage = """
     Usage: CnCNew.PresentationTool <command> [arguments]
       object-audit <content-dir>   Draw modules, model states, condition names, draw keys and Art/W3D references of every retail object.
+      fx-audit <content-dir>       FX inventory, references, textures and an execution sweep.
     """;
 
 if (args.Length == 0)
@@ -19,6 +20,7 @@ try
     switch (args[0])
     {
         case "object-audit" when args.Length == 2: return ObjectAuditCommand(args[1]);
+        case "fx-audit": return FxAuditCommand.Run(args);
         default:
             Console.Error.WriteLine(Usage);
             return 2;
