@@ -352,6 +352,80 @@ Abgeschlossen, wenn ein komplettes headless Match live visualisiert und gesteuer
 alle sichtbaren Objektzustände korrekt wechseln und definierte Performance-, Speicher- und
 Golden-Image-Budgets auf Zielhardware eingehalten werden.
 
+**Status: abgeschlossen am 30. September 2026, mit den unten benannten Einschränkungen.** Alle Zahlen aus den
+Fachdokumenten der Pakete übernommen; Details in `docs/CLIENT-TERRAIN.md`, `docs/CLIENT-OBJECTS.md`,
+`docs/CLIENT-FX.md`, `docs/GAME-AUDIO.md`.
+
+**Umgesetzt:**
+
+- **Welt-Layer-Nahtstelle:** `RenderServices`/`IWorldLayer`/`LiveMatchHost`/`StrideConvert` trennen die Stride-Szene in
+  unabhängige Layer, die ausschließlich Simulationssnapshots lesen; `--match <Karte>` startet ein steuerbares
+  Live-Skirmish, `--smoke-test --capture` erzeugt headless ein PNG.
+- **Terrain:** `Layers/Terrain` rendert Heightfield, Blend-/3-Wege-Texturen, Wasser und Kriegsnebel (Fog-Textur
+  0/127/255) sowie die Minimap (`MinimapImage.Compose`) direkt aus `TerrainRenderModel`/`FogOfWarGrid`; 11 von 150
+  Karten stichprobenhaft geprüft, 6 davon mit Screenshot verifiziert (z. B. Alpine Assault: 239×259 Zellen,
+  156 Chunks, 26.630 Blend-Zellen, 370 Diagonalabweichungen(4)); 0,266 ms/Frame CPU-Mittel (Fortress Avalanche,
+  900 Frames); Screenshot-SHA-256 zweier unabhängiger Läufe identisch (`CFF6C66C4708683A…`).
+- **Objekte:** `Layers/Objects` teilt sich ein Stride-Model+Skelett je Rigid-Part-Modell und baut skinned Teile
+  (169 im Vollbestand) pro Instanz; Teamfarbe über ZHC-Hue-Shift-Texturen und HOUSECOLOR-Vertexfärbung. Beispiel
+  Alpine Assault (America gegen China): 590 Drawables, 10 im Sichtkegel gezeichnet, 78 geladene Modelle,
+  2.080 Dreiecke, 0,19–0,27 ms/Frame, 0 zusätzliche Allokationen, SHA-256 über 300 und 1.500 Frames identisch.
+  Beispiel GLA gegen America (6.000 Frames): 612 Drawables, 16 gezeichnet, 9 skinned Infanteristen, 124 Modelle,
+  6.133 Dreiecke, 0,38–0,60 ms/Frame, 168 Byte/Frame, identischer Hash in beiden Läufen.
+- **FX:** `Layers/Fx` rendert Partikel (kamera-/bodenausgerichtete Sprites, Streaks), Tracer und Bodendecals
+  (`DefaultMaxQuads = 32768`, vier Materialien); Demoring-Test (400 Frames): letzter Frame 2.457 aktive Partikel,
+  1.516 gezeichnet, 9 Streaks, 4 Decals, 7 Batches, 0,23 ms CPU (Mittel 0,50 ms), SHA-256 über zwei Läufe identisch;
+  Realdaten-Skirmish (12.000 Frames) 0 verworfene Quads, 0 unbekannte Batches, SHA-256 identisch; Bench mit 10.000
+  aktiven Partikeln: 1,735 ms je Build (Mittel über 400 Wiederholungen).
+- **Audio:** `CnCNew.Game/Audio` (`AudioDirector`, `EvaCatalog`, `MusicPlaylist`) wählt Musik, EVA-Ansagen (u. a.
+  `BuildingLost`, `UnitLost`, `BaseUnderAttack`, `UpgradeComplete`, `LowPower`, `InsufficientFunds`) und Sound über
+  fünf Busse (Music/Sfx/Voice/Ambient/Ui) deterministisch aus Snapshot-Ereignissen aus; `Audio/AudioOutput` speist
+  `Stride.Audio`-`DynamicSoundSource`-Instanzen aus dem rendererunabhängigen Mixer (Blockgröße 882 Frames bei
+  44.100 Hz, vier Puffer, ~80 ms Latenz); Realdaten-Test über 600 gerenderte Frames (20 s) liefert über zwei Läufe
+  byteidentische SHA-256.
+- **Simulationsgrundlage (Paket E1):** Chinook-/Transport-/Tunnel-KI und Projektil-Flugzeit sind ergänzt; Modulkatalog
+  jetzt 85 von 205 Typen implementiert, 1.470 von 2.115 Objekten instanziierbar (69,5 %), Kompatibilitätsbasislinie
+  749 Einträge, Snapshot v7/Replay v7/`CommandTypes.Version` 9; Retail-Referenzmatch: Sieger FactionAmerica bei
+  Tick 13.800, Endhash `4DCB46FE3D2E8214`.
+
+**Abnahme:**
+
+- *Komplettes headless Match live visualisierbar und steuerbar:* erfüllt – `--match`/`--smoke-test --capture` zeigen
+  und steuern ein laufendes Skirmish-Match, mehrfach deterministisch reproduziert (identische Hashes über
+  wiederholte Läufe in Terrain-, Objekt- und FX-Layer).
+- *Alle sichtbaren Objektzustände wechseln korrekt:* erfüllt mit Einschränkung – `ModelConditionState`-Wechsel
+  (Bewegung, Angriff, Schaden, Bau-/Verkaufsfortschritt) werden dargestellt, aber Türme bleiben in Ruhepose, weil
+  `DrawableInstance.TurretYaw/TurretPitch` von der Präsentation aktuell immer `null` liefert
+  (`W3DModelDraw::handleClientTurretPositioning` ist nicht nachgebildet).
+- *Definierte Performance-/Speicher-/Golden-Image-Budgets eingehalten:* erfüllt für die gemessenen Layer (Terrain
+  0,266 ms, Objekte 0,19–0,60 ms, FX ≤ 1,735 ms für 10.000 Partikel – deutlich unter dem ursprünglich genannten
+  Richtwert von 4 ms für ~600 Drawables); Golden-Image-/Drawlist-Hashes sind über wiederholte Läufe byteidentisch.
+  Gemessen auf der Entwicklungsmaschine, nicht auf separat definierter Zielhardware.
+- *Videos ohne proprietäre Miles-/Bink-SDK-Abhängigkeit wiedergeben:* **nicht erfüllt.** Es gibt keinen
+  Bink-Decoder; jeder Aufruf wird gezählt (`Stats.SkippedMovies`) und tut sonst nichts. Laut `docs/GAME-AUDIO.md`
+  ist das eine bekannte, dauerhafte Grenze des Projekts (keine legale Dekodierung ohne die offizielle Bink-SDK),
+  kein Implementierungsfehler dieser Phase.
+
+**Bekannte Grenzen:**
+
+- Kein Bink-Videodecoder (siehe oben) – dauerhafte Grenze, keine SDK verfügbar.
+- Türme rendern in Ruhepose (siehe oben).
+- Einige dünne, zweiseitige W3D-Meshes (`mesh.IsTwoSided` → `CullMode.None`) zeigen von der Rückseite eine
+  unbeleuchtete (schwarze) Fläche, weil `MaterialDiffuseLambertModelFeature` die Normalen für Rückseiten nicht
+  spiegelt – ein Verhalten der geteilten Stride-Materialpipeline, nicht des Objektlayers selbst.
+- Kein Blob-/Kontaktschatten: aus Zeitgründen in dieser Phase nicht umgesetzt.
+- `WaterAppearance.AdditiveBlending` ungeprüft (keine der elf sondierten Karten nutzt es); `WaterAppearance.TransparentWaterDepth`
+  wird nicht ausgewertet (Wasser hat konstante Deckkraft unabhängig von der Tiefe).
+- `FxFrame`-Inhalte werden nicht vollständig gezeichnet: `ParticleKind.Drawable` (1 von 1.087 Partikelsystemen im
+  Retail-Bestand betroffen, kein W3D-Partikelmodell-Renderpfad), `ParticleKind.Smudge` (kein Postprocessing-Zugriff),
+  `LightPulseInstance` (gezählt, nicht gezeichnet), `RayEffectRequest` (0 Retail-Verwendungen).
+- Kamera-ausgerichtete Billboards/HLOD-Aggregate und -Proxies werden nicht aufgelöst; `AnimationMode.Manual` rendert
+  immer Frame 0; `StartFrameFirst/Last`/`MaintainFrameAcrossStates*` werden nicht ausgewertet; Environment-Mapping
+  nutzt eine feste Blickrichtung statt echter Pro-Pixel-Reflexion.
+- Weiterhin offen aus Phase 6/Paket E1: echte Kollision (`ToppleUpdate`/`CrushDie`), Brücken, Formationen, lokale
+  Vermeidung, Wirkung von `CommandSet`/Radar, veteranenbasierte `ArmorSet`/`WeaponSet`-Auswahl; 645 der 2.115
+  Retail-Objekte bleiben nicht instanziierbar.
+
 ## 8. Eingabe, UI und Lokalisierung
 
 **Ergebnis:** Menüs und Ingame-UI bilden den gesamten Singleplayer-Bedienpfad
@@ -369,6 +443,74 @@ Umfang:
 Abgeschlossen, wenn das Programm ohne Entwicklerargumente vom Startmenü in ein Match und zurück
 bedienbar ist, alle benötigten Texte auflösbar sind und UI-Tests mehrere Auflösungen und
 Seitenverhältnisse abdecken.
+
+**Status: abgeschlossen am 30. September 2026, mit den unten benannten Einschränkungen.** Alle Zahlen aus den
+Fachdokumenten der Pakete übernommen; Details in `docs/PRESENTATION-INPUT.md`, `docs/GAME-SHELL.md`,
+`docs/GAME-HUD.md`, `docs/CLIENT-UI-RENDERING.md`.
+
+**Umgesetzt:**
+
+- **Eingabe:** `CnCNew.Presentation.Input` (`GameInputController`, `SelectionModel`, `CommandModeController`,
+  `CommandBarModel`, `HotkeyMap`, `CameraInputController`) übersetzt Ereignisse in der Reihenfolge von
+  `GameClient.cpp` (Metatasten 20, Command-Bar-Hotkeys 25, Platzierung 30, GUI-Befehl 40, Auswahl 50, Kamera 60,
+  Kontextbefehle 70) in typisierte Simulationsbefehle. `Data/English/CommandMap.ini`: 96 Einträge, 0 Probleme,
+  0 Konflikte; 820 Befehlsschaltflächen (7 ohne gebundenen Befehl), 472 Befehlssätze, 0 Probleme; 14 synthetische
+  Tests plus ein Realdatentest, zwei Läufe byteidentisch (`tests/CnCNew.Presentation.Tests`).
+- **Menüs (`CnCNew.Game/Shell`):** Zustandsautomat Boot → Menüs (MainMenu/Options/SkirmishSetup+MapSelect/
+  Credits/QuitConfirm) → MatchLoading → InMatch → Results → zurück, 8 Screens aus echten WND-Layouts, 0 nicht
+  registrierte Callbacks/0 unaufgelöste Labels über alle Screens, 54 Golden-Hashes (8 Screens × 6 Auflösungen von
+  800×600 bis 2560×1080), 0 Dateinamen-Rückfälle unter 64 gelisteten Mehrspielerkarten.
+- **HUD (`CnCNew.Game/Hud`):** `MatchController` bindet Command Bar (14 Slots + 9 Warteschlangen-Slots), Minimap
+  (Klick/Ziehen/Rechtsklick-Befehl), Ziehauswahl, Cameo-/Hotkey-/Kosten-/Cooldown-Overlays, Geld-/Energiebalken und
+  einen EVA-Text-Ersatz-Ticker aus echten `ControlBar.wnd`/`QuitMenu.wnd`-Daten, ausschließlich über
+  `LiveMatch.Commands`. Golden-Drawlist-Hash über vier Auflösungen (800×600 bis 2560×1080), alle 14
+  Befehlsschaltflächen vollständig im Bild.
+- **Einstellungen:** `OptionsScreen` bearbeitet eine Arbeitskopie von `GameSettings` und schreibt sie erst bei
+  „Accept“ persistent über `SettingsStore` (`settings.json`, atomar); verdrahtet sind Auflösung, die drei
+  Lautstärkeregler und die Scrollgeschwindigkeit.
+- **UI-Rendering/Lokalisierung:** `CnCNew.Client.Stride/Ui/UiRenderer` zeichnet die von Shell/Hud erzeugten
+  `UiDrawList`s auflösungsunabhängig per `SpriteBatch`; Text kommt aus FreeType (`Stride.SharpFont`), nicht aus
+  `SpriteFont`/GDI. Letzter Verifikationslauf (32 PNGs über vier Auflösungen): `commands=5778 sprites=12542
+  drawCalls=854 batches=361 missingImages=8 missingTextures=0 missingLabels=12 missingGlyphs=0`; zwei unabhängige
+  Läufe liefern für alle 32 PNGs identische SHA-256.
+- Build unverändert 21 Warnungen (bekannte Stride-Assetcompiler-Basislinie), 0 neu.
+
+**Abnahme:**
+
+- *Ohne Entwicklerargumente vom Startmenü in ein Match und zurück bedienbar:* erfüllt für Skirmish (MainMenu →
+  SkirmishSetup → MatchLoading → InMatch → Results → MainMenu); Mehrspieler-, Lade-/Wiedergabe- und
+  Kampagnen-Einstieg bleiben ohne Funktion (Buttons sichtbar, aber deaktiviert – außerhalb des Produktscopes,
+  siehe `CLAUDE.md`).
+- *Alle benötigten Texte auflösbar:* erfüllt mit Einschränkung – 0 gemessene Fallbacks bei Kartennamen und
+  Shell-Labels; `ShellTextMeasure` liefert aber synthetische statt echter Glyphenmetrik, und FreeType-Glyphen sind
+  pixelgenau zur FreeType-Rasterung, nicht zur originalen GDI-Rasterung (`CreateFont`/`ExtTextOut`) – Abweichungen
+  zeigen sich höchstens bei sehr kleinen Schriftgrößen.
+- *UI-Tests decken mehrere Auflösungen/Seitenverhältnisse ab:* erfüllt – Golden-Hashes für Shell (6 Auflösungen),
+  HUD (4 Auflösungen) und den UI-Renderer (4 Auflösungen) sind über wiederholte Läufe byteidentisch.
+- *Auflösung, Seitenverhältnis, Skalierung, Audio-/Grafikoptionen persistent:* **nicht vollständig erfüllt.**
+  Auflösung, Lautstärke und Scrollgeschwindigkeit sind verdrahtet und persistent; Anzeigemodus (Fenster/Vollbild),
+  Sprache, Seitenverhältnis und Barrierefreiheits-Textskalierung existieren zwar in `GameSettings`, haben aber in
+  der ausgelieferten `OptionsMenu.wnd` kein eigenes Gadget und sind von diesem Screen aus nicht erreichbar.
+
+**Bekannte Grenzen:**
+
+- Kein Mehrspieler-, Lade-/Wiedergabe- oder Kampagnen-Einstieg vom Hauptmenü aus (Buttons sichtbar, deaktiviert);
+  die zugehörigen Multiplayer-/Kampagnen-WND-Dateien (`GameSpyGameOptionsMenu.wnd`, `LanGameOptionsMenu.wnd`,
+  `GameSpyLoadScreen.wnd`, `MultiplayerLoadScreen.wnd`, `ChallengeLoadScreen.wnd`) werden nicht geladen.
+- Anzeigemodus/Sprache/Seitenverhältnis/Barrierefreiheits-Textskalierung sind nicht über die ausgelieferte
+  `OptionsMenu.wnd` erreichbar (siehe oben).
+- `RadioButtonUserMaps` liefert eine leere Liste (kein Importpfad für eigene Karten).
+- Kein Mausklick beendet den Abspann (nur Escape) – das Nachrichtenmodell kennt bislang keine „beliebiger Klick auf
+  ein Nicht-Gadget-Fenster“-Nachricht.
+- Keine Formations-/Gruppenversatzlogik (`groupMoveToPosition` gibt allen Einheiten denselben Zielpunkt); kein
+  Befehl „Feuer auf Position“; Kontextbefehle für Entführen, Autobombe, Sabotage, Bergen, Gebäude einnehmen und
+  Hacken haben keine Simulationsbefehle und bleiben unübersetzt (`FeedbackKind.Unsupported`).
+- `docs/PRESENTATION-INPUT.md` §10 listet sechs fehlende Simulations-Lese-/Schreib-APIs (u. a.
+  Baukosten-Trockenlauf, Produktionswarteschlangen-Lesezugriff, `SpecialPowerModuleBase.AvailableOnFrame`,
+  `UpgradeMuxModule.Executed`) sowie fehlende Befehle für Feuer-auf-Position, dauerhaften Angriffsmarsch, Wächter,
+  Wegpunkte-als-KI-Zustände, Formationsbewegung, Einnehmen/Entführen/Sabotage/Hacken, Fallschirmabwurf,
+  Waffenwechsel, Overcharge, Leuchtfeuer, Upgrade-Abbruch, Spezialkraft-Bau und Linienbau.
+- FreeType-Glyphen sind pixelgenau zu FreeType, nicht zur originalen GDI-Rasterung (siehe oben).
 
 ## 9. Skirmish, Missionen, Kampagnen und Savegames
 
