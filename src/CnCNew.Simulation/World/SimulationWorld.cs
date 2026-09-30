@@ -104,6 +104,9 @@ public sealed partial class SimulationWorld : IWorldServices
         public SortedList<int, long> SharedReadyFrames { get; } = [];
         /// <summary><c>Player::m_cashBountyPercent</c> as a ratio.</summary>
         public Fixed CashBounty { get; set; }
+
+        /// <summary><c>Player::getTunnelSystem</c>.</summary>
+        public TunnelTracker Tunnels { get; } = new();
     }
 
     /// <summary>
@@ -116,7 +119,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
-        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default);
+        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null);
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
 
@@ -322,6 +325,10 @@ public sealed partial class SimulationWorld : IWorldServices
     }
 
     public Fixed CashBountyOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.CashBounty : Fixed.Zero;
+
+    private readonly TunnelTracker _orphanTunnels = new();
+
+    public TunnelTracker TunnelSystemOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.Tunnels : _orphanTunnels;
 
     public void RaiseCashBounty(PlayerId player, Fixed ratio)
     {
@@ -665,7 +672,35 @@ public sealed partial class SimulationWorld : IWorldServices
                 return CheckCancelConstruct(command.Player, cancelConstruct, out _);
             case RepairCommand repair:
                 return CheckRepair(command.Player, repair, out _, out _);
+            case MoveAndEnterCommand moveAndEnter:
+                return CheckMoveAndEnter(command.Player, moveAndEnter, out _, out _);
+            case EvacuateCommand evacuate:
+                return CheckEvacuate(command.Player, evacuate, out _);
         }
+        return 0;
+    }
+
+    /// <summary><c>ActionManager::canEnterObject</c>, reduced to what exists here: an own mobile object that is not inside anything, a container whose entry rules accept it (capacity is checked on arrival).</summary>
+    private CommandRejection CheckMoveAndEnter(PlayerId issuer, MoveAndEnterCommand order, out Entity? actor, out Entity? container)
+    {
+        container = null;
+        actor = FindEntity(order.Actor);
+        if (actor is null || actor.DestroyRequested) return CommandRejection.UnknownEntity;
+        if (actor.Owner != issuer) return CommandRejection.NotPermitted;
+        if (!CanMove(actor) || actor.Template.Locomotor is null) return CommandRejection.CannotMove;
+        if (actor.ContainedBy.IsValid) return CommandRejection.CannotEnterContainer;
+        container = FindEntity(order.Container);
+        if (container is null || container.DestroyRequested || container.Container is null || container == actor) return CommandRejection.UnknownEntity;
+        return container.Container.IsValidContainerFor(this, actor, false) ? 0 : CommandRejection.CannotEnterContainer;
+    }
+
+    /// <summary>The container's owner evacuates it; a position needs a container that can move there.</summary>
+    private CommandRejection CheckEvacuate(PlayerId issuer, EvacuateCommand order, out Entity? container)
+    {
+        container = FindEntity(order.Container);
+        if (container is null || container.DestroyRequested || container.Container is null) return CommandRejection.UnknownEntity;
+        if (!issuer.IsSystem && container.Owner != issuer) return CommandRejection.NotPermitted;
+        if (order.HasPosition && (AiOf(container) is null || container.Template.Locomotor is null)) return CommandRejection.CannotMove;
         return 0;
     }
 
@@ -884,7 +919,7 @@ public sealed partial class SimulationWorld : IWorldServices
                     ? _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
                     : _tick + weapon.DelayBetweenShotsWith(bonuses, source.WeaponBonusConditions);
                 MarkDirty(source);
-                var damage = DealWeaponDamage(source, weapon, fireTarget, fireTarget.X, fireTarget.Y, fireTarget.Z);
+                var damage = FireWeaponAt(source, weapon, fireTarget, fireTarget.X, fireTarget.Y, fireTarget.Z);
                 Emit(SimEventKind.WeaponFired, source.Id, fireTarget.Id, weapon.Name, damage.Raw, command.Player);
                 break;
             }
@@ -981,6 +1016,21 @@ public sealed partial class SimulationWorld : IWorldServices
                 var reason = CheckRepair(command.Player, repair, out var builder, out var target);
                 if (reason != 0) { RecordRejection(command, reason); break; }
                 AiOf(builder!)!.OrderRepair(this, target!);
+                break;
+            }
+            case MoveAndEnterCommand moveAndEnter:
+            {
+                var reason = CheckMoveAndEnter(command.Player, moveAndEnter, out var actor, out var container);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                AiOf(actor!)!.OrderEnter(this, container!, true);
+                break;
+            }
+            case EvacuateCommand evacuate:
+            {
+                var reason = CheckEvacuate(command.Player, evacuate, out var container);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                if (AiOf(container!) is { } carrier) carrier.OrderEvacuate(this, evacuate.HasPosition, evacuate.X, evacuate.Y);
+                else EvacuateContainer(container!);
                 break;
             }
             default:
@@ -1301,6 +1351,18 @@ public sealed partial class SimulationWorld : IWorldServices
         if (setup.TransferDamage > Fixed.Zero)
             Damage(entity.Id, new DamageInfo(setup.TransferSource, setup.TransferDamage, DamageTypes.Unresistable, DeathTypes.Normal, false));
         if (setup.HasRally && template.Locomotor is not null && AiOf(entity) is { } rallyAi) rallyAi.OrderMove(this, setup.RallyX, setup.RallyY, false);
+        if (setup.Launch is { } launch)
+        {
+            // fireWeaponTemplate: an object without a ProjectileUpdateInterface is simply put at the destination ("ok, for things like Firestorm").
+            if (Array.Find(entity.ModuleArray, module => module is IProjectileModule) is IProjectileModule projectile) projectile.Launch(this, launch);
+            else
+            {
+                entity.X = launch.X;
+                entity.Y = launch.Y;
+                entity.Z = launch.Z;
+            }
+            MarkDirty(entity);
+        }
         return entity;
     }
 
@@ -1356,6 +1418,8 @@ public sealed partial class SimulationWorld : IWorldServices
         if (entity.SellCompleteTick >= 0) _sales.Add((entity.SellCompleteTick, entity.Id.Value));
         if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
             navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+        foreach (var module in entity.ModuleArray)
+            if (module is IWorldAttached attached) attached.Attach(this);
         foreach (var node in entity.Updates)
         {
             var update = node.Update;
@@ -1386,6 +1450,7 @@ public sealed partial class SimulationWorld : IWorldServices
         DeliverEvents();
         ProcessSales(tick);
         ProcessDestroys();
+        ProcessDelayedDamage(tick);
         ProcessSpawns();
         DeliverEvents();
         if (_vision is not null && tick % VisionIntervalTicks == 0) RefreshVision();
@@ -1520,9 +1585,11 @@ public sealed partial class SimulationWorld : IWorldServices
                 writer.EndObject();
             }
             writer.EndArray();
+            player.Tunnels.Describe(writer);
             writer.EndObject();
         }
         writer.EndArray();
+        DescribeDelayedDamage(writer);
         writer.BeginArray("rejections");
         foreach (var count in _rejections)
         {
@@ -1560,6 +1627,16 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Bool("hasRally", setup.HasRally);
             writer.Fixed("rallyX", setup.RallyX);
             writer.Fixed("rallyY", setup.RallyY);
+            if (setup.Launch is { } launch)
+            {
+                writer.Int("launchWeapon", launch.Weapon);
+                writer.UInt("launcher", launch.Launcher.Value);
+                writer.UInt("launchVictim", launch.Victim.Value);
+                writer.Fixed("launchX", launch.X);
+                writer.Fixed("launchY", launch.Y);
+                writer.Fixed("launchZ", launch.Z);
+                writer.UInt("launchConditions", launch.Conditions);
+            }
             writer.EndObject();
         }
         writer.EndArray();

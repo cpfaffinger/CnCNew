@@ -36,6 +36,12 @@ public sealed class SkirmishAiStats
     public int DockOrders { get; internal set; }
     public int Waves { get; internal set; }
     public int IdleThinks { get; internal set; }
+    /// <summary>Units sent into an own tunnel network (to heal or to travel).</summary>
+    public int TunnelEntries { get; internal set; }
+    /// <summary>Evacuation orders to tunnels and transports.</summary>
+    public int Evacuations { get; internal set; }
+    /// <summary>Infantry sent into a transport.</summary>
+    public int TransportLoads { get; internal set; }
     public long AttackTicks { get; internal set; }
     public SortedDictionary<CommandRejection, int> RejectionsByReason { get; } = [];
 }
@@ -65,6 +71,10 @@ public sealed class SkirmishAi
     private static readonly Fixed DefenseRadius = Fixed.FromInt(450);
     private static readonly Fixed EngageRadius = Fixed.FromInt(260);
     private static readonly Fixed RepairBelow = Fixed.FromDecimal(0.7m);
+    private static readonly Fixed TunnelHealBelow = Fixed.FromDecimal(0.5m);
+    private static readonly Fixed TunnelReach = Fixed.FromInt(600);
+    private static readonly Fixed BoardingReach = Fixed.FromInt(250);
+    private const int BoardingTicks = 300;
 
     [Flags]
     private enum Role
@@ -81,6 +91,8 @@ public sealed class SkirmishAi
         Army = 256,
         Producer = 512,
         Warehouse = 1024,
+        Tunnel = 2048,
+        Transport = 4096,
     }
 
     private enum PlanState : byte { Impossible, Waiting, Ready }
@@ -131,6 +143,8 @@ public sealed class SkirmishAi
     private readonly Dictionary<int, long> _seenAt = [];
     private readonly HashSet<int> _unreachable = [];
     private const int RevisitTicks = 3600;
+    private readonly Dictionary<uint, long> _boarding = [];
+    private (Fixed X, Fixed Y)? _armyGoal;
 
     public SkirmishAi(SimulationWorld world, TemplateCatalog catalog, SkirmishAiOptions options, Func<SimCommand, SubmitResult> submit)
     {
@@ -167,6 +181,7 @@ public sealed class SkirmishAi
     {
         _budget = _world.MoneyOf(_player);
         _inFlight.RemoveAll(value => value.Until <= _tick);
+        foreach (var expired in _boarding.Where(pair => pair.Value <= _tick).Select(pair => pair.Key).ToList()) _boarding.Remove(expired);
         var before = Stats.Commands;
         ProduceWorkers();
         BuildStructures();
@@ -177,6 +192,8 @@ public sealed class SkirmishAi
         ProduceArmy();
         SetRallyPoints();
         CommandArmy();
+        UseTunnels();
+        UseTransports();
         OrderCarriers();
         if (Stats.Commands == before) Stats.IdleThinks++;
         if (_attacking) Stats.AttackTicks += ThinkInterval;
@@ -216,7 +233,7 @@ public sealed class SkirmishAi
         var seen = new HashSet<uint>();
         foreach (var entity in _visible)
         {
-            if (entity.EffectivelyDead) continue;
+            if (entity.EffectivelyDead || entity.Template.IsKindOf("PROJECTILE")) continue;
             if (entity.Owner == _player)
             {
                 if (entity.Template.IsKindOf("STRUCTURE"))
@@ -265,8 +282,10 @@ public sealed class SkirmishAi
         var role = Role.None;
         bool Has(string name) => template.Modules.Any(module => module.Name == name);
         if (Has("DozerAIUpdate") || Has("WorkerAIUpdate")) role |= Role.Builder;
-        if (Has("SupplyTruckAIUpdate") || Has("WorkerAIUpdate")) role |= Role.Carrier;
+        if (Has("SupplyTruckAIUpdate") || Has("WorkerAIUpdate") || Has("ChinookAIUpdate")) role |= Role.Carrier;
         if (Has("SupplyWarehouseDockUpdate")) role |= Role.Warehouse;
+        if (Has("TunnelContain")) role |= Role.Tunnel;
+        if (!template.IsKindOf("STRUCTURE") && (Has("TransportContain") || Has("HelixContain"))) role |= Role.Transport;
         if (template.IsKindOf("STRUCTURE"))
         {
             if (Has("SupplyCenterDockUpdate")) role |= Role.SupplyCenter;
@@ -770,9 +789,11 @@ public sealed class SkirmishAi
             }
             goal = _attacking ? AttackTarget(army) : _rally;
         }
+        _armyGoal = goal;
         if (goal is not { } destination) return;
         foreach (var unit in army)
         {
+            if (_boarding.TryGetValue(unit.Id.Value, out var boardingUntil) && boardingUntil > _tick) continue;
             var (x, y) = MoveGoalFor(unit, destination);
             if (DistanceSquared(unit.X, unit.Y, x, y) < Fixed.FromInt(1600)) continue;
             if (_orders.TryGetValue(unit.Id.Value, out var order))
@@ -783,6 +804,91 @@ public sealed class SkirmishAi
             }
             if (Send(sequence => new SetMoveTargetCommand(_player, sequence, _tick, unit.Id, x, y)).Accepted) Stats.MoveOrders++;
             _orders[unit.Id.Value] = new Goal(x, y, _tick);
+        }
+    }
+
+    /// <summary>
+    /// GLA tunnel networks (<c>TunnelContain</c>): a badly hurt army unit near an own tunnel walks in (the network heals it, <c>TimeForFullHeal</c>), and
+    /// once everybody inside is whole again the network empties through the tunnel nearest to where the army is heading — so the tunnels double as
+    /// a shortcut between the base and a forward defence. Uses only own objects and the own network.
+    /// </summary>
+    private void UseTunnels()
+    {
+        Entity? Nearest(List<Entity> candidates, Fixed x, Fixed y, Fixed reach)
+        {
+            Entity? best = null;
+            var bestDistance = reach * reach;
+            foreach (var candidate in candidates)
+            {
+                var distance = DistanceSquared(candidate.X, candidate.Y, x, y);
+                if (distance < bestDistance) { best = candidate; bestDistance = distance; }
+            }
+            return best;
+        }
+
+        var tunnels = _structures.Where(value => (RoleOf(value.Template) & Role.Tunnel) != 0 && value.Container is not null).ToList();
+        if (tunnels.Count == 0) return;
+        var network = _world.TunnelSystemOf(_player);
+        var room = _catalog.MaxTunnelCapacity - network.ContainCount - _boarding.Count(pair => pair.Value > _tick);
+        foreach (var unit in _units)
+        {
+            if (room <= 0) break;
+            if ((RoleOf(unit.Template) & Role.Army) == 0 || unit.Template.IsKindOf("AIRCRAFT") || unit.Body is not { } body || body.Health >= body.MaxHealth * TunnelHealBelow) continue;
+            if (_boarding.TryGetValue(unit.Id.Value, out var until) && until > _tick) continue;
+            var tunnel = Nearest(tunnels, unit.X, unit.Y, TunnelReach);
+            if (tunnel is null || Backoff(unchecked(0x80000000u + unit.Id.Value), RetryTicks)) continue;
+            if (!Send(sequence => new MoveAndEnterCommand(_player, sequence, _tick, unit.Id, tunnel.Id)).Accepted) continue;
+            _boarding[unit.Id.Value] = _tick + BoardingTicks;
+            _orders.Remove(unit.Id.Value);
+            Stats.TunnelEntries++;
+            room--;
+        }
+        if (network.ContainCount == 0 || Backoff(0x81000000u, 90)) return;
+        foreach (var riderId in network.Riders)
+            if (_world.FindEntity(riderId) is { Body: { } riderBody } && riderBody.Health < riderBody.MaxHealth) return;
+        var (goalX, goalY) = _armyGoal ?? _rally ?? (_options.HomeX, _options.HomeY);
+        var exit = Nearest(tunnels, goalX, goalY, Fixed.FromInt(100_000));
+        if (exit is not null && Send(sequence => new EvacuateCommand(_player, sequence, _tick, exit.Id, false, Fixed.Zero, Fixed.Zero)).Accepted) Stats.Evacuations++;
+    }
+
+    /// <summary>
+    /// Transports of the army (<c>TransportContain</c>/<c>HelixContain</c> on an armed unit, e.g. Humvee, Listening Outpost): when a wave marches,
+    /// nearby infantry boards; a loaded transport that sees enemies or reaches the goal lets its passengers out there.
+    /// </summary>
+    private void UseTransports()
+    {
+        foreach (var transport in _units)
+        {
+            var role = RoleOf(transport.Template);
+            if ((role & Role.Transport) == 0 || (role & Role.Army) == 0 || transport.Container is not { ContainCount: > 0 }) continue;
+            var arrived = _armyGoal is { } goal && DistanceSquared(transport.X, transport.Y, goal.X, goal.Y) < Fixed.FromInt(90_000);
+            var engaged = _enemyTargets.Any(enemy => DistanceSquared(enemy.X, enemy.Y, transport.X, transport.Y) < EngageRadius * EngageRadius);
+            if (!arrived && !engaged) continue;
+            if (Backoff(unchecked(0x82000000u + transport.Id.Value), 60)) continue;
+            if (Send(sequence => new EvacuateCommand(_player, sequence, _tick, transport.Id, false, Fixed.Zero, Fixed.Zero)).Accepted) Stats.Evacuations++;
+        }
+        if (!_attacking) return;
+        foreach (var transport in _units)
+        {
+            var role = RoleOf(transport.Template);
+            if ((role & Role.Transport) == 0 || (role & Role.Army) == 0 || transport.Container is not { } contain) continue;
+            if (contain.ContainMax >= 0 && contain.ContainCount >= contain.ContainMax) continue;
+            Entity? pick = null;
+            var best = BoardingReach * BoardingReach;
+            foreach (var unit in _units)
+            {
+                if (!unit.Template.IsKindOf("INFANTRY") || (RoleOf(unit.Template) & Role.Army) == 0 || unit.Template.TransportSlotCount <= 0) continue;
+                if (_boarding.TryGetValue(unit.Id.Value, out var until) && until > _tick) continue;
+                var distance = DistanceSquared(unit.X, unit.Y, transport.X, transport.Y);
+                if (distance >= best || !contain.IsValidContainerFor(_world, unit, true)) continue;
+                best = distance;
+                pick = unit;
+            }
+            if (pick is null || Backoff(unchecked(0x83000000u + pick.Id.Value), RetryTicks)) continue;
+            if (!Send(sequence => new MoveAndEnterCommand(_player, sequence, _tick, pick.Id, transport.Id)).Accepted) continue;
+            _boarding[pick.Id.Value] = _tick + BoardingTicks;
+            _orders.Remove(pick.Id.Value);
+            Stats.TransportLoads++;
         }
     }
 

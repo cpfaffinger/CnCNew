@@ -7,12 +7,18 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Templates;
 
 /// <summary>
-/// A typed <c>Weapon</c> definition, resolved to simulation units. Phase 5 scope: hitscan damage — no projectile travel time
-/// (<c>WeaponSpeed</c> is kept for audit but the shot resolves the instant it is fired). Radius damage follows
-/// <c>WeaponTemplate::dealDamageInternal</c> (primary/secondary radius and damage, <c>RadiusDamageAffects</c>); the directional cone
-/// (<c>RadiusDamageAngle</c>), shockwaves and status damage stay in the compiled definition, unused here.
-/// <c>WeaponBonus</c> is modeled through <see cref="Bonuses"/> and the world-wide <see cref="WeaponBonusTable"/> (GameData); the
-/// unmodified values are the base fields. These are documented simplifications, not silent gaps: <c>GAME-RULES.md</c> names them.
+/// A typed <c>Weapon</c> definition, resolved to simulation units. Radius damage follows <c>WeaponTemplate::dealDamageInternal</c>
+/// (primary/secondary radius and damage, <c>RadiusDamageAffects</c>); the directional cone (<c>RadiusDamageAngle</c>), shockwaves and
+/// status damage stay in the compiled definition, unused here. <c>WeaponBonus</c> is modeled through <see cref="Bonuses"/> and the
+/// world-wide <see cref="WeaponBonusTable"/> (GameData); the unmodified values are the base fields.
+/// <para>
+/// Flight time (phase 8, <c>WeaponTemplate::fireWeaponTemplate</c>): <see cref="WeaponSpeed"/>/<see cref="MinWeaponSpeed"/> are per tick
+/// (<c>INI::parseVelocityReal</c>, default 999999 = "effectively instant"); a weapon with a <see cref="ProjectileObject"/> launches that
+/// object, one without lands after <c>ceil(distance / WeaponSpeed)</c> ticks (at once below one tick). <see cref="ScatterRadius"/> and
+/// <see cref="ScatterRadiusVsInfantry"/> (<c>m_infantryInaccuracyDist</c>) randomise a projectile's aim point, the detonation effect and
+/// creation list are <see cref="DetonationFx"/>/<see cref="DetonationOcl"/> (the veterancy-specific variants are not modeled). These are
+/// documented simplifications, not silent gaps: <c>GAME-RULES.md</c> names them.
+/// </para>
 /// </summary>
 public sealed record WeaponInfo(
     int Index, string Name, Fixed PrimaryDamage, int DamageType, int DeathType, Fixed AttackRange,
@@ -22,6 +28,29 @@ public sealed record WeaponInfo(
     public const int AffectsSelf = 1, AffectsAllies = 2, AffectsEnemies = 4, AffectsNeutrals = 8, KillsSelf = 16, NotSimilar = 32, NotAirborne = 64;
     // WeaponTemplate ctor default (Weapon.cpp): ALLIES | ENEMIES | NEUTRALS.
     public const int DefaultAffects = AffectsAllies | AffectsEnemies | AffectsNeutrals;
+
+    /// <summary><c>WeaponTemplate</c> ctor: <c>m_weaponSpeed = m_minWeaponSpeed = 999999.0f</c> (per frame, "effectively instant").</summary>
+    public static readonly Fixed InstantSpeed = Fixed.FromInt(999999);
+
+    public Fixed WeaponSpeed { get; init; } = InstantSpeed;
+    public Fixed MinWeaponSpeed { get; init; } = InstantSpeed;
+    public bool ScaleWeaponSpeed { get; init; }
+    public Fixed MinimumAttackRange { get; init; }
+
+    /// <summary><c>m_projectileName</c>; empty when the weapon fires no projectile object (<c>None</c> or absent).</summary>
+    public string ProjectileObject { get; init; } = string.Empty;
+
+    public Fixed ScatterRadius { get; init; }
+    public Fixed ScatterRadiusVsInfantry { get; init; }
+    public string DetonationFx { get; init; } = string.Empty;
+    public string DetonationOcl { get; init; } = string.Empty;
+    public bool DamageDealtAtSelfPosition { get; init; }
+
+    /// <summary><c>MissileCallsOnDie</c> (<c>m_dieOnDetonate</c>): a detonating missile kills itself with <c>DEATH_DETONATED</c> so its die modules run.</summary>
+    public bool DieOnDetonate { get; init; }
+
+    /// <summary><c>WEAPON_ANTI_GROUND</c> of <c>m_antiMask</c> (<c>AntiGround = Yes</c>); read by <c>PointDefenseLaserUpdate</c> for targets on the ground.</summary>
+    public bool AntiGround { get; init; }
 
     public Fixed RadiusWith(WeaponBonusTable global, uint conditions, Fixed baseRadius) => baseRadius * Multiplier(global, conditions, WeaponBonusTable.Radius);
 
@@ -137,8 +166,46 @@ public sealed class WeaponCatalog
                 foreach (var name in affectsFlags.Names)
                     affects |= 1 << (NameTablesPhase5.WeaponAffectsMask.TryIndexOf(name, out var bit) ? bit : throw new InvalidDataException($"{definition.OriginalName}: unknown RadiusDamageAffects {name}."));
             }
+            // Keys without a strict weapon schema keep the generic typing (Text/Distance/Boolean, or the NONE sentinel); read them explicitly.
+            string Name(string key) => Field(key)?.Value switch
+            {
+                null => string.Empty,
+                { Kind: DefinitionValueKind.Sentinel } => string.Empty,
+                { Value: string text } => text.Trim(),
+                var other => other.OriginalText.Trim(),
+            };
+            Fixed Length(string key) => Field(key)?.Value.Value switch
+            {
+                Distance distance => Fixed.FromDecimal(distance.Value),
+                decimal number => Fixed.FromDecimal(number),
+                long integer => Fixed.FromInt(integer),
+                null => Fixed.Zero,
+                var other => throw new InvalidDataException($"{definition.OriginalName}: '{key}' has the unexpected value {other}."),
+            };
+            bool Flag(string key) => Field(key)?.Value.Value switch
+            {
+                bool value => value,
+                null => false,
+                var other => throw new InvalidDataException($"{definition.OriginalName}: '{key}' has the unexpected value {other}."),
+            };
+            Fixed Speed(string key) => Field(key)?.Value.Value is decimal perSecond ? SimulationTiming.PerSecondToPerTick(perSecond) : WeaponInfo.InstantSpeed;
+            var projectile = Name("ProjectileObject");
             weapons.Add(new WeaponInfo(index++, definition.OriginalName, damage, damageType, deathType, range, clipSize, reload, Math.Max(SimulationTiming.SleepNone, delay), WeaponBonusTable.From(definition),
-                primaryRadius, secondaryDamage, secondaryRadius, affects));
+                primaryRadius, secondaryDamage, secondaryRadius, affects)
+            {
+                WeaponSpeed = Speed("WeaponSpeed"),
+                MinWeaponSpeed = Speed("MinWeaponSpeed"),
+                ScaleWeaponSpeed = Flag("ScaleWeaponSpeed"),
+                MinimumAttackRange = Length("MinimumAttackRange"),
+                ProjectileObject = projectile,
+                ScatterRadius = Length("ScatterRadius"),
+                ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),
+                DetonationFx = Name("ProjectileDetonationFX"),
+                DetonationOcl = Name("ProjectileDetonationOCL"),
+                DamageDealtAtSelfPosition = Flag("DamageDealtAtSelfPosition"),
+                DieOnDetonate = Flag("MissileCallsOnDie"),
+                AntiGround = Flag("AntiGround"),
+            });
         }
         return new WeaponCatalog(weapons.ToImmutable());
     }

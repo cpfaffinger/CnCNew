@@ -165,6 +165,52 @@ public interface IWorldServices
     /// <summary><c>Player::m_cashBountyPercent</c> as a ratio (0: no bounty); <c>CashBountyPower</c> only ever raises it.</summary>
     Fixed CashBountyOf(PlayerId player);
     void RaiseCashBounty(PlayerId player, Fixed ratio);
+
+    // ------------------------------------------------------------------------------------ phase 8: flight time, tunnels
+
+    /// <summary>An event that happens at a place (projectile launch/impact, detonation effect); see <see cref="SimEvent.HasPosition"/>.</summary>
+    void EmitAt(SimEventKind kind, EntityId entity, EntityId other, string text, long value, Fixed x, Fixed y, Fixed z);
+
+    /// <summary><c>WeaponTemplate::fireWeaponTemplate</c> from <paramref name="source"/> at a victim or a position: scatter, delayed or immediate hit, or a launched projectile. Returns the damage the victim took right now.</summary>
+    Fixed FireWeaponAt(Entity source, WeaponInfo weapon, Entity? victim, Fixed x, Fixed y, Fixed z);
+
+    /// <summary><c>WeaponStore::handleProjectileDetonation</c> at the projectile's position, credited to <paramref name="launcher"/>.</summary>
+    void DetonateProjectile(Entity projectile, WeaponInfo weapon, EntityId launcher, uint conditions);
+
+    /// <summary><c>Player::getTunnelSystem</c>: the player's tunnel network (every player has one; an unknown player gets an empty, unused one).</summary>
+    TunnelTracker TunnelSystemOf(PlayerId player);
+
+    /// <summary><c>ContainModuleInterface::removeAllContained</c> as an ordered evacuation: every passenger leaves through <paramref name="container"/> (for a tunnel: everybody in the network).</summary>
+    void EvacuateContainer(Entity container);
+}
+
+/// <summary>
+/// What a projectile object is told when it is launched (<c>ProjectileUpdateInterface::projectileLaunchAtObjectOrPosition</c>): the firing
+/// weapon (its detonation weapon), the launcher, the victim it may follow (invalid for a position shot or a scattered one), the aim point and
+/// the launcher's weapon bonus conditions (<c>m_extraBonusFlags</c>).
+/// </summary>
+public readonly record struct ProjectileLaunch(int Weapon, EntityId Launcher, EntityId Victim, Fixed X, Fixed Y, Fixed Z, uint Conditions);
+
+/// <summary><c>ProjectileUpdateInterface</c>: <c>DumbProjectileBehavior</c> and <c>MissileAIUpdate</c>.</summary>
+public interface IProjectileModule
+{
+    /// <summary>Runs right after the projectile object was created (after <see cref="SimModule.OnSpawn"/>).</summary>
+    void Launch(IWorldServices world, in ProjectileLaunch launch);
+
+    /// <summary><c>projectileGetLauncherID</c>.</summary>
+    EntityId Launcher { get; }
+}
+
+/// <summary><c>ContainModuleInterface::onSelling</c>: called when a sale of the entity starts (<c>BuildAssistant::sellObject</c>).</summary>
+public interface ISellModule
+{
+    void OnSelling(IWorldServices world);
+}
+
+/// <summary>A module that needs a world-owned structure (a player's tunnel network) whenever its entity is registered — fresh or restored from a snapshot.</summary>
+public interface IWorldAttached
+{
+    void Attach(IWorldServices world);
 }
 
 /// <summary>

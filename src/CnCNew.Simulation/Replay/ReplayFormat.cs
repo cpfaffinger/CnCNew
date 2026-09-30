@@ -34,7 +34,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 6;
+    public const int CurrentVersion = 7;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -289,6 +289,16 @@ public static class ReplayFormat
                 writer.Write(repair.Builder.Value);
                 writer.Write(repair.Target.Value);
                 break;
+            case MoveAndEnterCommand moveAndEnter:
+                writer.Write(moveAndEnter.Actor.Value);
+                writer.Write(moveAndEnter.Container.Value);
+                break;
+            case EvacuateCommand evacuate:
+                writer.Write(evacuate.Container.Value);
+                writer.Write(evacuate.HasPosition);
+                writer.Write(evacuate.X.Raw);
+                writer.Write(evacuate.Y.Raw);
+                break;
             default:
                 throw new ReplayFormatException($"Command type {command.GetType().Name} has no replay encoding.");
         }
@@ -330,6 +340,8 @@ public static class ReplayFormat
             CommandTypes.ResumeConstruct => new ResumeConstructCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.CancelConstruct => new CancelConstructCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             CommandTypes.Repair => new RepairCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
+            CommandTypes.MoveAndEnter => new MoveAndEnterCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
+            CommandTypes.Evacuate => new EvacuateCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), reader.ReadBoolean(), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
     }

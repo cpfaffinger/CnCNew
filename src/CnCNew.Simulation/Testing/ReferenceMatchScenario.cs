@@ -225,7 +225,7 @@ public sealed class ReferenceMatchScenario
             var centerTemplate = catalog.Templates.Where(value => value.IsInstantiable && value.IsKindOf("STRUCTURE") && string.Equals(value.Side, side, StringComparison.OrdinalIgnoreCase)
                     && value.Modules.Any(module => module.Name == "SupplyCenterDockUpdate")).OrderBy(value => value.Name, StringComparer.Ordinal).FirstOrDefault();
             var carrier = catalog.Templates.Where(value => value.IsInstantiable && string.Equals(value.Side, side, StringComparison.OrdinalIgnoreCase)
-                    && value.Modules.Any(module => module.Name is "SupplyTruckAIUpdate" or "WorkerAIUpdate")).OrderBy(value => value.Name, StringComparer.Ordinal).FirstOrDefault();
+                    && value.Modules.Any(module => module.Name is "SupplyTruckAIUpdate" or "WorkerAIUpdate" or "ChinookAIUpdate")).OrderBy(value => value.Name, StringComparer.Ordinal).FirstOrDefault();
             if (centerTemplate is null || carrier is null || warehouse is null)
             {
                 notes.Add($"{factions[index].Faction.Name}: no supply economy (center {centerTemplate?.Name ?? "-"}, carrier {carrier?.Name ?? "-"})");
