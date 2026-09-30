@@ -16,6 +16,16 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
     public int LoadedCount => _textures.Count;
     public int MissingCount => _missingReferences.Count;
 
+    /// <summary>
+    /// While set, textures the original recolors for a team (TGA names starting with "ZHC", see <see cref="Layers.Objects.HouseColor"/>) resolve to
+    /// a copy recolored with this color (cached per path and color). Callers set it around material creation and reset it to null.
+    /// </summary>
+    public CnCNew.Data.Definitions.ColorValue? HouseColor { get; set; }
+
+    /// <summary>ZHC textures the recolor path could not handle (not a TGA or not the alpha-mask variant); logged once each.</summary>
+    public int UnsupportedHouseColorCount => _unsupportedHouseColor.Count;
+    private readonly HashSet<string> _unsupportedHouseColor = new(StringComparer.OrdinalIgnoreCase);
+
     public Texture Resolve(W3dTextureReference reference)
     {
         var resolution = _paths.Resolve(reference.Name);
@@ -41,7 +51,20 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
         }
 
         var path = resolution.VirtualPath!;
-        if (_textures.TryGetValue(path, out var cached))
+        var recolor = HouseColor is { } team && Layers.Objects.HouseColor.IsHouseColorTexture(reference.Name) ? team : (CnCNew.Data.Definitions.ColorValue?)null;
+        if (recolor is not null &&
+            (!path.EndsWith(".tga", StringComparison.OrdinalIgnoreCase) || !Layers.Objects.HouseColor.IsAlphaMaskTexture(reference.Name)))
+        {
+            if (_unsupportedHouseColor.Add(reference.Name))
+            {
+                Console.Error.WriteLine($"warning: house-color texture '{reference.Name}' is not an alpha-mask TGA; it is drawn unrecolored.");
+            }
+
+            recolor = null;
+        }
+
+        var cacheKey = recolor is { } color ? $"{path}|hc{color.Red:X2}{color.Green:X2}{color.Blue:X2}" : path;
+        if (_textures.TryGetValue(cacheKey, out var cached))
         {
             return cached;
         }
@@ -51,6 +74,11 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
         if (path.EndsWith(".tga", StringComparison.OrdinalIgnoreCase))
         {
             var image = TgaReader.Read(stream);
+            if (recolor is { } teamColor)
+            {
+                image = image with { RgbaPixels = Layers.Objects.HouseColor.Recolor(image.RgbaPixels, teamColor) };
+            }
+
             var format = graphicsDevice.ColorSpace == ColorSpace.Linear
                 ? PixelFormat.R8G8B8A8_UNorm_SRgb
                 : PixelFormat.R8G8B8A8_UNorm;
@@ -68,7 +96,7 @@ internal sealed class W3dTextureCache(GraphicsDevice graphicsDevice, ContentFile
             texture = Texture.Load(graphicsDevice, stream, loadAsSRGB: graphicsDevice.ColorSpace == ColorSpace.Linear);
         }
 
-        _textures.Add(path, texture);
+        _textures.Add(cacheKey, texture);
         return texture;
     }
 
