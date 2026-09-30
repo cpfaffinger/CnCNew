@@ -143,6 +143,19 @@ Bekannter, dokumentierter (nicht behobener) Live-/Replay-Determinismus-Unterschi
 Phase vorbehalten. Build unverändert 21 Warnungen beim Solution-Build (10 bekannte `NU1901`/`NU1903` plus 11 bekannte
 Stride-Assetcompiler-/`YamlAssemblyRegistry`-Hinweise), 0 davon neu.
 
+Phase 9, Teilpunkt 12 (Stand 30. September 2026; neu messen): Der `SharedReadyFrame`-Determinismus-Fehler oben ist behoben
+(`SpecialPowerModuleBase.OnSpawn` legt den Bereitschafts-Tick einer `SharedSynced`-Kraft jetzt deterministisch an statt lesend in
+`IsReady()`; volle Diagnose und Messung in `docs/SIMULATION-CORE.md` §12/§12a). Ein neuer Test (`Tests.Skirmish.cs` →
+`SkirmishLiveSessionMatchesItsOwnReplay`) vergleicht erstmals den `World.StateHash` einer live gelaufenen `SkirmishMatchSession` gegen
+`ReplayRunner.Run` ihres eigenen `ToReplay()`-Mitschnitts und schlägt auf dem unbehobenen Code nachweislich fehl. Unverändert durch den Fix:
+Retail-Referenzmatch (`SimTool reference-match`) weiterhin Sieger FactionAmerica bei Tick 13.800, Endhash `4DCB46FE3D2E8214` (das Szenario
+nutzt `SkirmishAi` nicht); 216.000-Tick-Stresstest (`SimTool stress`) weiterhin Endhash `ED6F9329F59662E3` (die synthetische Fixture trägt
+keine geteilte Spezialkraft; dieser Hash weicht bereits unabhängig vom Fix von der Phase-6-Referenzzahl oben ab – seit Phase 7/8 nicht neu
+gemessen, siehe `docs/HANDOFF-PHASE9.md`). Geändert durch den Fix (KI-Timing verschiebt sich): ein Skirmish-KI-Lauf, der die Kraft
+tatsächlich benutzt (`SimTool ai-match .local/phase2-import-a --map "Maps/Alpine Assault/Alpine Assault.map" --factions
+FactionAmericaAirForceGeneral,FactionChina --max-ticks 45000`) endet mit Sieger FactionChina bei Tick 16.155, Endhash `0FDF97B63EFECC6A`. Die
+16-Karten-KI-Übersicht in `docs/SIMULATION-CORE.md` §19 wurde für diesen Fix nicht neu vermessen (eigene Balance-Erhebung, siehe dort).
+
 ## Code- und Dokumentationsstil
 
 - Bezeichner, Commitmessages und Code-Kommentare englisch; Dokumentation (`docs/`, README) deutsch.

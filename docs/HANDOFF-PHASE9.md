@@ -111,12 +111,17 @@ Phase 8 – neu messen).
     Dock-Marker) – beim Schließen dieser Lücken direkt mit erledigen, sie sind kleine, klar spezifizierte Anbauten.
 11. **Kartenskripte** (`SidesList`/`PlayerScriptsList`): siehe Teil A, Punkt 2 – hier nur als technische Schuld referenziert, die
     eigentliche Arbeit ist Teil des Hauptauftrags dieser Phase, nicht optional.
-12. **(Neu, aus Phase 7/8) `SharedReadyFrame`-Determinismus-Fehler beheben oder bewusst umschiffen** (siehe oben, „Ehrlicher Status“).
-    Empfehlung: den Bereitschafts-Tick deterministisch bei `OnSpawn` (für Objekte, die die Kraft bereits mitbringen) bzw.
-    `OnSpecialPowerCreation` (für gewährte Kräfte) setzen, nie lesend in `IsReady()`; danach alle betroffenen Referenzmatch-/Stress-/
-    KI-Lauf-Hashes neu messen und `CLAUDE.md` aktualisieren. Falls diese Phase das nicht angeht: mindestens einen Live-gegen-Replay-
-    Hashvergleichstest ergänzen (`docs/SIMULATION-CORE.md` §12a schlägt das bereits vor), damit die Lücke nicht wieder unbemerkt bleibt,
-    sobald Savegames/Replays produktiv genutzt werden.
+12. **(Neu, aus Phase 7/8) `SharedReadyFrame`-Determinismus-Fehler beheben oder bewusst umschiffen** (siehe oben, „Ehrlicher Status“). —
+    **Erledigt** (30. September 2026, außerhalb des eigentlichen Phase-9-Hauptauftrags, als eigenständiger Fix nachgezogen): Der
+    Bereitschafts-Tick wird jetzt deterministisch bei `OnSpawn` (Objekte, die die Kraft bereits mitbringen) bzw. `OnSpecialPowerCreation`
+    (gewährte Kräfte) gesetzt, `IsReady()` liest ihn nur noch. Live-gegen-Replay-Hashvergleichstest ergänzt
+    (`Tests.Skirmish.cs` → `SkirmishLiveSessionMatchesItsOwnReplay`, schlägt auf dem unbehobenen Code nachweislich fehl). Retail-
+    Referenzmatch- und Stresstest-Hashes unverändert (berühren die Stelle nicht); ein Skirmish-KI-Lauf, der sie berührt, ändert sich wie
+    erwartet. Volle Diagnose, Messung und Commit-Referenzen in `docs/SIMULATION-CORE.md` §12/§12a und `CLAUDE.md`. **Nicht** in diesem
+    Durchgang gemacht: die 16-Karten-KI-Übersicht in `docs/SIMULATION-CORE.md` §19 neu vermessen (eigene Balance-Erhebung, nicht
+    Bestandteil der Determinismuskorrektur) – wer ihre Zahlen für eine andere Entscheidung braucht, muss sie neu laufen lassen. Der
+    übrige Hauptauftrag dieser Phase (Teil A: Skirmish-Abschluss, Skriptengine, Kampagne, Savegames; Teil B, Punkte 9–11) ist von diesem
+    Fix unberührt und steht weiterhin aus.
 
 ## Nicht verhandelbare Regeln (unverändert, siehe `CLAUDE.md`)
 
