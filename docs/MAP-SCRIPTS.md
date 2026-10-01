@@ -96,6 +96,14 @@ Diese Häufigkeitstabelle war die Priorisierungsgrundlage für die Skript-VM (`d
 Bedingungen und die sechs häufigsten Aktionen sind zuerst implementiert worden; die Laufzeit-Häufigkeit der *noch fehlenden* Typen misst
 seither `CnCNew.CampaignTool audit` (`docs/SCRIPT-ENGINE.md` §9) und steuert die weitere Reihenfolge.
 
+## 5a. Teamschlüssel, die die VM liest (Phase 11)
+
+`ScriptProgram` liest aus jedem Eintrag der `TeamsList` (`ScriptTeamPrototype`): `teamName`, `teamOwner`, `teamIsSingleton`, `teamMaxInstances`, die Einheitszusammensetzung
+(`teamUnitType1..7`, `teamUnitMinCount1..7`, `teamUnitMaxCount1..7`), `teamTransport`, `teamReinforcementOrigin` und seit Phase 11 `teamHome`, `teamProductionPriority`,
+`teamIsAIRecruitable` (Rekrutierung, `RECRUIT_TEAM`) sowie die sechs Ereignisskripte `teamOnCreateScript`, `teamOnIdleScript`, `teamEnemySightedScript`, `teamAllClearScript`,
+`teamOnDestroyedScript` (mit `teamDestroyedThreshold`) und `teamOnUnitDestroyedScript` (`docs/SCRIPT-ENGINE.md` §5b). Weitere Teamschlüssel des Originals (`teamTransportsReturn`,
+`teamProductionCondition`, `teamExecutesActionsOnCreate`, `teamProductionPrioritySuccessIncrease/FailureDecrease`, `teamAggressiveness`, `teamAutoReinforce` …) werden **nicht** gelesen.
+
 ## 6. Bekannte Grenzen
 
 - Die "heal old files"-Kompatibilitätsfälle des Originals (z. B. `TEAM_FOLLOW_WAYPOINTS` mit fehlendem dritten

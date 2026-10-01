@@ -1053,3 +1053,25 @@ Bis es ihn gibt, ist `SkirmishMatchSession.CreateSave()` der eine, dokumentierte
   Karten bei identischen 75/11/64-Zahlen bestätigen das indirekt).
 - `dotnet build CnCNew.slnx`: weiterhin 0 Fehler, 21 bekannte Warnungen bei sauberem `CnCNew.Client.Stride`-`bin`/`obj`.
 - `tests/CnCNew.Simulation.Tests` (synthetisch und `--content-dir`) sowie `tests/CnCNew.Game.Tests` (ohne und mit `--content-dir`): alle bestehen.
+
+## 26. Phase 11: Weltschnittstellen für die Skript-VM
+
+Quelle und Auftrag: `docs/HANDOFF-PHASE11.md` (Skript-Restfamilien); die Skriptseite steht in `docs/SCRIPT-ENGINE.md` §4–§5a. Alle neuen Weltzustände folgen derselben Regel wie
+`SimEvent`s Position seit Phase 8: **sie werden nur geschrieben, wenn sie vom Standard abweichen**. Ein Lauf, der keine dieser Schnittstellen benutzt, behält Zustandsform und
+Hash von vorher (`SimTool reference-match` weiterhin Sieger FactionGLA bei Tick 19.200, Endhash `28BE35C1174E369F`; `SimTool stress` Endhash `56882F763EABEF67`, vor und nach dieser
+Phase gleich – die in früheren Ständen genannte Zahl `ED6F9329F59662E3` stammt aus der Zeit vor Phase 9 und war schon zu Beginn dieser Phase nicht mehr reproduzierbar). Snapshot-,
+Replay- und Befehlsversionen bleiben deshalb unverändert (`WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10); ein älterer Zustand lädt unverändert, ein neuer
+mit benutzten Schnittstellen wäre für eine ältere Version nicht lesbar – bewusst nicht als Versionssprung geführt, weil kein bestehender Lauf betroffen ist (Entscheidung, Review-Gegenstand).
+
+- **Dauerhafte Aufdeckung** (`Terrain/VisionMap.cs`, `World/SimulationWorld.Scripting.cs`): ein dritter Bit je Zelle und Spieler (`PermanentBit`, immer zusammen mit „sichtbar“ und
+  „erkundet“); `BeginRefresh` lässt ihn stehen, alles andere wird neu berechnet. `RevealMapPermanently`/`ExploreMap`/`ShroudMap`/`ExploreArea`/`ShroudArea`/`RevealAreaPermanently` setzen
+  oder löschen ihn (Quellen: `ScriptActions::doRevealMapEntire`, `doRevealMapEntirePermanently`, `doShroudMapEntire`, `doRevealMapAtWaypoint`, `doShroudMapAtWaypoint`,
+  `doRevealMapAtWaypointPermanent`; das Original deckt „einen kurzen Blick“ mit `doShroudReveal` + `undoShroudReveal` im selben Frame auf, das Ergebnis ist „erkundet, nicht sichtbar“, und
+  genau das setzen `ExploreMap`/`ExploreArea`). Ein Zustand mit Bit 2 wird beim Laden geprüft (Bit 2 verlangt Bit 0 und 1).
+- **Bauschalter** (`PlayerState.CanBuildBase`/`CanBuildUnits`, `SetCanBuild`, `CanBuildStructures`/`CanBuildUnits`): `Player::allowedToBuild` – Strukturen platzieren (`ConstructCommand` →
+  `CannotConstruct`) bzw. Einheiten einreihen (`QueueProductionCommand` → `CannotProduceTemplate`) ist gesperrt, solange der Schalter aus ist; kein neuer Ablehnungsgrund, also keine neue
+  `CommandTypes.Version`. Serialisiert nur, wenn aus (`canBuildBase`/`canBuildUnits`).
+- **Lese-/Schreib-APIs:** `SimulationWorld.WarehouseBoxes(id)` und `SupplyWarehouseDockUpdate.SetCashValue` (`WAREHOUSE_SET_VALUE`: `ceil(cash / ValuePerSupplyBox)` Kisten, wie
+  `SupplyWarehouseDockUpdate::setCashValue`), `SpecialPowerInfo.RadiusCursorRadius` (aus `SpecialPower.ini`, für `SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST`),
+  `CommandCatalog.TryGetButton` (Befehlsart, `Upgrade`, `WeaponSlot` jedes Knopfes; Grundlage der neuen Pfade für Upgrade-/`FIRE_WEAPON`-Knöpfe),
+  `ScriptEngine.IsNamedSelected` (Lesezugriff auf die vom Client gemeldete Auswahl).

@@ -543,6 +543,22 @@ Objekte instanziierbar (Ranger, Jarmen Kell, GLA-Rebellin-Fähigkeiten). Lokale 
 verschoben, `docs/SCRIPT-ENGINE.md` §9). Garnison, Kartenaufdeckung, KI-Teambau, Sichtbedingungen, `SKIRMISH_*` und Skirmish-Setup (Teil A
 Punkt 1) bleiben offen; Details in `docs/HANDOFF-PHASE11.md`.
 
+**Phase-11-Stand (1. Oktober 2026, frisch gemessen; Auftrag `docs/HANDOFF-PHASE11.md`, Vorbereitung für `docs/HANDOFF-PHASE12.md`):** die Skript-VM führt jetzt auch die
+`SKIRMISH_*`-Bedingungen (Entscheidung „Portierung“ statt `SkirmishAi`-Ersatz, `docs/SCRIPT-ENGINE.md` §5c), Sicht-/Spezialkraft-Bedingungen, Kartenaufdeckung, Garnison/Behälter, Bauschalter,
+`BUILD_TEAM`/`TEAM_MERGE_INTO_TEAM`/`RECRUIT_TEAM`, die Wegpunkt-Varianten der Befehlsknopf-Fähigkeiten, **Sequenzskripte** (§5a) und **Teamereignis-Skripte** (§5b) aus; Upgrade-/`FIRE_WEAPON`-
+Knöpfe haben einen eigenen Pfad. Bedingungen **80** ausgeführt / 29 fehlend von 109, Aktionen **131** ausgeführt / 129 weitergereicht / **2 aufgezeichnet** / **82** fehlend von 344
+(vor der Phase: 63/46 und 73/129/0/142). Die Shell wählt die menschliche Seite einer Challenge-Karte selbst (`ChallengeSides`), `CampaignController.StartCurrentMission` hat den
+Latenz-Parameter, und eine Kampagnenmission spielt hinter der vollen Skirmish-Befehlsleiste (`LiveGame`/`LiveMission`/`MissionController`, `docs/GAME-HUD.md` §14).
+**Neuer Beleg für „die Mission endet auf ihrem eigenen Skriptweg“:** `CampaignTool reachability` prüft statisch, ob die `VICTORY`/`DEFEAT`-Skripte jeder Karte mit den implementierten Typen
+überhaupt feuern können (Ketten über Flags, Zähler, Timer, Freischaltungen und Teamereignisse). Vorher (Stand von Phase 10, gleiche Analyse): Sieg sauber 4 / eingeschränkt 18 / blockiert 2,
+Niederlage sauber 0 / eingeschränkt 24; **jetzt: Sieg sauber 21 / eingeschränkt 3 / blockiert 0, Niederlage sauber 24 / 24 Karten** (Tabelle: `docs/SCRIPT-ENGINE.md` §9). „Sauber“ heißt:
+jede Bedingung und Aktion auf der Kette ist implementiert; es heißt **nicht**, dass ein Spieler die Mission gewinnen kann (Zustandsbedingungen sind Blätter). Die Ausschalt-Endproben des
+`CampaignTool audit` sind unverändert Sieg 10/24, Niederlage 15/24 – sie fahren keine Ziele ab. Der neue Zielfahrer (`CampaignTool drive`, `MissionObjectiveDriver`) erfüllt die Weltzustands-Bedingungen der Skripte und zählt nur, wenn eine `VICTORY`/`DEFEAT`-Aktion des Skripts selbst feuert: **Sieg auf dem Skriptweg 10/24, Niederlage 16/24** (`docs/SCRIPT-ENGINE.md` §9, mit Befund, woran die übrigen scheitern). Weiterhin offen: `TEAM_HUNT_WITH_COMMAND_BUTTON`, `TEAM_SET_ATTITUDE`,
+`TEAM_LOAD_TRANSPORTS`, die `TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_*`-Familie, die Überschreibungs-Beziehungen, Verstärkung mit Transport, `PLAYER_COMPLETED/MIDWAY_SPECIAL_POWER`, die Persona-Fraktion
+der Challenge-Wahl (`docs/SCRIPT-ENGINE.md` §9, Blockerliste).
+
+**Verlauf (Stand vor Phase 11, nur noch zur Nachvollziehbarkeit; die Zahlen unten stammen aus Phase 9):**
+
 - **Skript-VM** (`CnCNew.Simulation/Scripting`): deterministische Ausführung der dekodierten World-Builder-Skripte (Zähler, Flags, Timer, Zufallstimer,
   Ein-Schuss-Skripte, Schwierigkeitsflags, verzögerte Auswertung, Unterprogramme, Teams mit Instanziierung, benannte Objekte, Bereichs- und
   Schadensbedingungen, Wegpunktpfade, Befehle als validierte Spielerbefehle, Angriffsprioritäten, Verstärkung, Sieg/Niederlage). Bedingungen 63 ausgeführt
@@ -566,20 +582,27 @@ Punkt 1) bleiben offen; Details in `docs/HANDOFF-PHASE11.md`.
 
 **Bekannte Grenzen:**
 
-- Das Skirmish-Setup selbst (Teil A Punkt 1) wurde nicht angefasst; ein Skirmish-Speicherstand ist nicht möglich (die Skirmish-KI hält Zustand außerhalb der Welt).
-- **Nicht jede Mission ist als vollständig durchspielbar belegt.** Die vier häufigsten `*_USE_COMMANDBUTTON_ABILITY*`-Aktionen lösen jetzt Spezialkräfte
-  aus und `SpecialAbilityUpdate` ist keine Hülle mehr ohne Objekt; offen bleiben die Pfadvarianten, die `TEAM_USE_COMMANDBUTTON_ON_NEAREST_*`-Familie
-  und die inszenierte Fähigkeitswirkung selbst (Anreise, Verpacken, Fähigkeitsobjekte), dazu Garnison-Aktionen, Kartenaufdeckung (`MAP_REVEAL_*`),
-  KI-Teambau (`BUILD_TEAM`), Sichtbedingungen (`*_DISCOVERED`, `*_SIGHTED`), die `SKIRMISH_*`-Skripte der Original-KI und Missionsabläufe, die
-  Kamera-/Film-Fertigmeldungen eines echten Clients brauchen. Maps ohne menschliche Seite (z. B. `GC_LaserGeneral`) können die lokale Seite jetzt über
-  `MissionOptions.HumanSideName`/`CampaignTool --human-side` vom Host benennen lassen; die General-Auswahl in der Shell fehlt noch.
-- Objekte, deren Vorlage im Retail-Basisbestand fehlt (Kartenüberlagerungs-Definitionen wie Straßen, Zäune, Bäume), werden übersprungen und gezählt; Transporte von
-  Verstärkungen werden nicht simuliert; `*_HUNT`/`*_ATTACK_*` sind Bewegungsaufträge plus automatisches Gefecht (keine Formation, kein Angriffsmarsch).
-- Freischaltungen (Kampagnenreihenfolge der Challenge-Kampagnen, Profil) sind nicht modelliert; die Menüeinträge „Kampagne“ und „Spiel laden“ sind noch deaktiviert,
-  Briefings, Zwischensequenzen und Kampagnenauswahl sind Präsentationsarbeit (Anschluss: `docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
+**Bekannte Grenzen (Stand nach Phase 11):**
+
+- **Nicht jede Mission ist als vollständig durchspielbar belegt.** Belegt ist, dass die Endskripte jeder Karte statisch erreichbar sind (21/24 Siege, 24/24 Niederlagen „sauber“) und dass jede Karte
+  deterministisch läuft und nach Speichern/Laden identisch fortsetzt; **nicht** belegt ist, dass ein Spieler alle Ziele erfüllen kann. Die dynamischen Endproben (Auslöschen) erreichen weiterhin nur
+  10/24 Siege und 15/24 Niederlagen, der Zielfahrer 10/24 Siege und 16/24 Niederlagen auf dem Skriptweg, weil die Siegskripte von Zielen (Zähler, Bereiche, Teams, Spezialkräfte) abhängen, die eine Auslöschung nicht abfährt. Was zur Einlösung der Abnahme
+  „jede Kampagnenmission besteht ihre wesentlichen Erfolgs- und Fehlerpfade“ noch fehlt, ist ein Zielfahrer (Spieler-Agent oder Skript-Zeuge), der die Missionsziele erfüllt – Auftrag von
+  `docs/HANDOFF-PHASE12.md`.
+- Noch fehlende Skriptaktionen/-bedingungen mit Treffern (statisch, Skripte/Karten): `TEAM_HUNT_WITH_COMMAND_BUTTON` 53/12, `TEAM_SET_ATTITUDE` 42/11, `TEAM_LOAD_TRANSPORTS` 33/8,
+  `TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_OBJECTTYPE` 30/5, `TEAM_SET_OVERRIDE_RELATION_TO_PLAYER` 27/5, `PLAYER_SET_OVERRIDE_RELATION_TO_TEAM` 19/6, `TEAM_PANIC` 18/4, …; fehlende Bedingungen:
+  `PLAYER_COMPLETED/MIDWAY_SPECIAL_POWER`, `SUPPLY_SOURCE_SAFE/ATTACKED`, `PLAYER_BUILT_UPGRADE`, `TEAM_STATE_IS`, `PLAYER_POWER_COMPARE_PERCENT`, `SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE`
+  (`docs/SCRIPT-ENGINE.md` §9). Verstärkung mit Transport (`teamTransport`, `teamStartsFull`, `CINE_*`-Flugzeuge, Fallschirm) und Formationen/Angriffsmarsch sind nicht simuliert.
+- Die Fraktion der Persona einer Challenge-Wahl (`ChallengeMode.ini` `PlayerTemplate`) ersetzt die Fraktion der Kartenseite nicht (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
+- Das Skirmish-Setup (Teil A Punkt 1) ist seit Phase 10 abgeschlossen (alle 64 Skirmish-Karten mit ≥2 Startpositionen starten und enden, `SimTool skirmish-sweep`); ein Skirmish-Speicherstand ist
+  bewusst nicht unterstützt (`SkirmishMatchSession.CreateSave()` wirft; Replay/Checkpoint deckt Skirmish-Partien ab).
+- Objekte, deren Vorlage im Retail-Basisbestand fehlt (Kartenüberlagerungs-Definitionen wie Straßen, Zäune, Bäume), werden übersprungen und gezählt; `*_HUNT`/`*_ATTACK_*` sind Bewegungsaufträge plus
+  automatisches Gefecht (keine Formation, kein Angriffsmarsch); `PLAYER_AFFECT_RECEIVING_EXPERIENCE`/`OBJECT_ALLOW_BONUSES` werden nur aufgezeichnet.
+- Freischaltungen (Kampagnenreihenfolge der Challenge-Kampagnen, Profil) sind nicht modelliert; Menü, Briefing, Ladeliste, Speichern im Spiel und Missionsabschluss sind angeschlossen
+  (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7), der Stride-Client verarbeitet die Shell-Ausgaben (`StartMissionOutput`) noch nicht (`--mission` startet eine Karte direkt).
 - Missionen sind keine Replays (Skriptaktionen sind keine aufgezeichneten Befehle); Wahrheit ist der Snapshot.
-- Der Retail-Referenzmatch ändert sich durch die neu instanziierbaren Startobjekte (Ranger etc.): Sieger FactionAmerica bei Tick 13.665 statt 13.800, Endhash
-  (Zeile „final hash“ von `SimTool reference-match`, Run 1) `D4779BE413835B6D` statt `95022B80366E841E`; der Stresstest bleibt `ED6F9329F59662E3`.
+- Referenzwerte nach Phase 11: Retail-Referenzmatch Sieger FactionGLA bei Tick 19.200, Endhash `28BE35C1174E369F` (unverändert gegenüber Phase 10); Stresstest `56882F763EABEF67` (die frühere Angabe
+  `ED6F9329F59662E3` war schon vor dieser Phase nicht mehr reproduzierbar).
 
 ## 10. Patch-Integration, Qualität und auslieferbarer Abschluss
 
@@ -607,6 +630,5 @@ Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
 
 Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
 Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
-jedoch separat begründet und versioniert. Die Schritte 1 bis 6 sind abgeschlossen. Der nächste Implementierungseinstieg ist Schritt 7
-(Weltpräsentation) zusammen mit den offenen Simulationsschulden aus Phase 6 (Chinook/Transport-KI, Projektil-Flugzeit, Kollision;
-Auftrag: `docs/HANDOFF-PHASE8.md`).
+jedoch separat begründet und versioniert. Die Schritte 1 bis 8 sind abgeschlossen, Schritt 9 ist weit fortgeschritten, aber nicht im Sinne seiner Abnahme beendet (siehe oben „Bekannte Grenzen“).
+Der nächste Einstieg ist `docs/HANDOFF-PHASE12.md` (Zielfahrer für die Missionen, restliche Skriptfamilien, Verstärkungstransport, Client-Verdrahtung der Shell).

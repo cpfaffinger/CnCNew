@@ -258,3 +258,26 @@ ausschließlich Felder aus, die die Simulation bereits über `SimEvent` offenleg
   G2 selbst hatte keine weiteren Simulationsänderungen benötigt.
 * Für ein originalgetreues Objektporträt und Upgrade-Symbole bräuchte `CommandBarView`/`ObjectTemplate` einen Verweis auf ein
   Porträtbild bzw. einen Upgrade→Bild-Katalog; aktuell liefert die Simulation nur Namen.
+
+## 14. Phase 11: dieselbe Befehlsleiste für Kampagnenmissionen (`LiveGame`, `LiveMission`, `MissionController`)
+
+`MatchController` (und die Stride-Schichten, `AudioDirector`) sahen bis Phase 10 nur ein `LiveMatch`, also eine Skirmish-Sitzung. Seit Phase 11 sehen sie ein `LiveGame`
+(`src/CnCNew.Game/Live/LiveGame.cs`): die gemeinsame Präsentationsschicht (projizierte Frames, Fog, Kamera, Minimap, Effekte, Teamfarben, 30-Hz-Schleife `Advance`) hinter der
+abstrakten Sicht „welche Simulation läuft“ (`IsOver`, `Winner`, `Players`, `HumanFaction`, `Commands`, `StepSimulation`). Aus `LiveMatch.cs` wurde nichts kopiert – die Konstruktion der
+Schichten wanderte unverändert in die Basisklasse, `LiveMatch` blieb für seine Aufrufer gleich (`Create`, `Setup`, `Session`, `Commands`).
+
+- **`LiveMission`** (`Live/LiveMission.cs`) setzt eine `MissionRun` (`MissionSession`) dahinter. Der Betrachter ist die lokale Seite der Mission (`MissionSession.LocalPlayerOf`,
+  einschließlich der von `ChallengeSides` gewählten Seite); die Kamera startet über dem Schwerpunkt seiner Objekte. Ein Tick ist `MissionPresentationDirector.BeforeStep` → `Session.Step()`
+  (Skripte, automatisches Gefecht, Welt) → `AfterStep`; die vom Skript bestellte Kamera wird einmal je neuem Ziel auf die `RtsCamera` übertragen (`OnAdvanced`). Befehle des Menschen laufen
+  über `MissionCommandSink` (`Presentation/Input/CommandSink.cs`) in `MissionSession.Issue`, also durch denselben Sequenzzähler je Spieler wie die der Skripte.
+  `Winner` ist der Betrachter bei einem Missionssieg, sonst `null` (die Gegner sind geskriptet, kein konkurrierender Mensch).
+- **`MissionController`** (`Hud/MissionController.cs`) setzt ein `MatchController` über die `LiveMission`, hängt `SelectionModel.SelectionChanged` an `MissionUiBridge.OnSelectionChanged`
+  (die Auswahl erreicht `NAMED_SELECTED`), liefert `BuildDrawList` mit dem Bildschirmtext des Directors (Caption/Untertitel/Filmplatzhalter) über dem HUD und meldet das Missionsende
+  einmal (`MissionEnded`); danach ruft der Host `GameShell.MissionFinished(run, controller)`.
+- **Stride:** `LiveMatchHost` und alle Weltschichten nehmen ein `LiveGame`; `CnCNew.Client.Stride --mission <Karte> [--human-side <Name>]` startet eine Kampagnenkarte (Rauchtest:
+  `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/phase2-import-a`). Die Stride-Hülle zeichnet weiterhin nur die Welt; die HUD-Zeichenliste
+  (`MissionController.BuildDrawList`) zu zeichnen und die Shell-Ausgaben (`StartMissionOutput`) zu verarbeiten, ist wie beim Skirmish Sache der noch fehlenden Client-Verdrahtung.
+- **Grenzen:** das Schnellspeichern im Spiel bleibt `MissionPauseMenu` (`MatchController` hat seinen eigenen Quit-Dialog); Kampagnenzustand und Fortschritt hält weiter der
+  `CampaignController`. Die Skirmish-Statistik (`MatchResult`) wird für Missionen mit denselben Ereignissen gefüllt (`MatchStatsTracker.Snapshot(Players, Winner, Tick)`), ihre Zählung
+  „gebaut/verloren/getötet“ gilt also auch dort, ein Missionsergebnis mit Zielen/Punkten gibt es nicht. Test: `tests/CnCNew.Game.Tests/MissionHudTests.cs` (echte Karte
+  `GC_ChemGeneral`: Frames, Zeichenliste, Befehl über die Senke, Auswahl erreicht die VM, Ende genau einmal).

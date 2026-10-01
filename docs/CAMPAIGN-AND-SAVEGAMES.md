@@ -152,14 +152,17 @@ und Endproben: `docs/SCRIPT-ENGINE.md` §9). Die Größe eines Missionszustands 
   Selektionsänderungen an `ScriptEngine.SelectNamed` weiter (`NAMED_SELECTED`) und reicht `SignalUiInteraction` direkt durch
   (`FLAG`); eine feste Zuordnung „dieser Knopf → dieses Flag“ gibt es nicht (die Mission-Metadaten tragen das nirgends),
   das bleibt eine Entscheidung des jeweiligen Host-Codes.
-- **Bekannte Grenze**: `CampaignController.StartCurrentMission` hat keinen Parameter für
-  `MissionOptions.PresentationLatencyTicks` (immer 0) – ein Klient kann also keinen Verzögerungs-Fallback setzen und muss
-  sich für `HAS_FINISHED_*`/`CAMERA_MOVEMENT_FINISHED` vollständig auf eigene `CompletePresentation`-Aufrufe verlassen
-  (was `MissionPresentationDirector` tut); ein kleiner zusätzlicher Parameter dort wäre ein sinnvoller Folgeschritt.
-- Noch nicht angebunden: eine volle Missions-HUD (Kamera/Auswahl/Befehlsleiste) parallel zu `LiveMatch`/`MatchController`
-  (die bleiben Skirmish-typisiert); `MissionPresentationDirector`/`MissionUiBridge`/`MissionPauseMenu` sind bewusst headless
-  testbare, renderer-neutrale Bausteine dafür, aber kein vollständiger Ersatz für `MatchController` bei Kampagnenmissionen.
-- **Noch offen:** die Generals'-Challenge-General-Wahl bildet den vom Spieler gewählten General noch nicht auf den
-  Seitennamen der jeweiligen Karte ab (pro Karte verschieden, z. B. `PlyrLaserGeneral` auf `GC_LaserGeneral`); die
-  Engine-Seite dafür steht bereits (`StartCurrentMission(humanSideName:)`/`MissionOptions.HumanSideName`,
-  `docs/SCRIPT-ENGINE.md` §7) – `ChallengeSelectScreen` muss die Zuordnung nur noch herstellen und durchreichen.
+- **Verzögerung ohne Director (Phase 11):** `CampaignController.StartCurrentMission(maxTicks, humanSideName, presentationLatencyTicks)` reicht
+  `MissionOptions.PresentationLatencyTicks` durch; ein Host ohne `MissionPresentationDirector` setzt damit einen Verzögerungs-Fallback für
+  `HAS_FINISHED_*`/`CAMERA_MOVEMENT_FINISHED` (Standard 0 = sofort fertig, wie headless). Test: `CampaignTests` → „a host without a presentation director …“.
+- **Missions-HUD (Phase 11):** eine Kampagnenmission lässt sich jetzt mit der vollen Skirmish-Befehlsleiste spielen – `LiveGame`/`LiveMission`/`MissionController`, siehe
+  `docs/GAME-HUD.md` §14. `MissionPresentationDirector`/`MissionUiBridge` hängen darin; `MissionPauseMenu` bleibt der Speicher-/Lade-Dialog der Mission.
+- **Generals'-Challenge-General-Wahl (Phase 11):** `ChallengeSides.HumanSideFor(map)` (`CnCNew.Game/Campaign`) bestimmt die menschliche Seite einer Challenge-Karte, und
+  `CampaignController.StartCurrentMission` ruft es für `IsChallenge`-Kampagnen auf, wenn der Host keine Seite nennt (`ChallengeSelectScreen` ruft dadurch automatisch die richtige
+  Seite ab, ohne eigenen Code). Messung (`CampaignTool sides`): sieben der acht Challenge-Karten markieren ihre Seite selbst (`ThePlayer`, `playerIsHuman`) – dort entscheidet die Karte;
+  `GC_LaserGeneral` markiert keine, die erste Nicht-Neutral-/Nicht-Civilian-Seite mit `*General`-Fraktion (`PlyrAmericaLaserGeneral`) ist dort der Mensch. **Nicht
+  übernommen:** der `PlayerTemplate` des gewählten Generals (`ChallengeMode.ini`, `GeneralPersonaN`) ersetzt die Fraktion der Kartenseite nicht – der Mensch spielt, was die Karte für
+  `ThePlayer` vorsieht (z. B. `FactionGLAToxinGeneral` auf `GC_NukeGeneral` unabhängig vom gewählten Persona). Das Original setzt die Fraktion der menschlichen Seite aus der
+  Persona; ein solcher Austausch bräuchte einen Fraktions-Override in `MissionSession.Start` (Startobjekte, Geld, Wissenschaften der Fraktion) und ist offen.
+  Gemessen: `CampaignTool playthrough --campaign CHALLENGE_0` gewinnt Mission01–05 per Auslöschung (Sieg nach 330–360 Ticks), Mission06 (`GC_LaserGeneral`) nicht (Endskripte
+  fraktionsabhängig, `docs/SCRIPT-ENGINE.md` §9).

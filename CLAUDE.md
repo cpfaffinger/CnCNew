@@ -6,7 +6,7 @@ Singleplayer, Skirmish und Kampagne. Nicht im Scope: Multiplayer, binäre Kompat
 Mods und Savegames. Das Repo ist rein lokal (Branch `main`, **kein Remote**).
 
 Die Gesamtplanung steht in `docs/IMPLEMENTATION-PLAN.md`. Die aktuell zu bearbeitende Phase steht
-als vollständiger Auftrag in `docs/HANDOFF-PHASE10.md` (Handoff-Datei der jeweils nächsten Phase).
+als vollständiger Auftrag in `docs/HANDOFF-PHASE12.md` (Handoff-Datei der jeweils nächsten Phase).
 Lies vor jeder Phase `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
 `docs/IMPLEMENTATION-PLAN.md` sowie die Fachdokumente der berührten Domäne
 (`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `SIMULATION-CORE.md`, `W3D-MATERIALS.md`).
@@ -104,11 +104,15 @@ dotnet run -c Release --project tools/CnCNew.SimTool -- mission-run .local/phase
 dotnet run --project tools/CnCNew.CampaignTool -- list .local/phase2-import-a
 dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/phase2-import-a --ticks 900
 dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough .local/phase2-import-a --campaign CHALLENGE_0
+dotnet run --project tools/CnCNew.CampaignTool -- reachability .local/phase2-import-a [--campaign NAME] [--difficulty easy|normal|hard]
+dotnet run --project tools/CnCNew.CampaignTool -- sides .local/phase2-import-a --campaign CHALLENGE_0
+dotnet run --project tools/CnCNew.CampaignTool -- script .local/phase2-import-a --map MD_CHI04 --name END_Final_
 dotnet run --project tools/CnCNew.PresentationTool -- object-audit .local/phase2-import-a
 dotnet run --project tools/CnCNew.PresentationTool -- fx-audit .local/phase2-import-a
 dotnet run --project tools/CnCNew.PresentationTool -- terrain-audit .local/phase2-import-a
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir .local/phase2-import-a --model-path Art/W3D/ABArFrcCmd.W3D
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --match "Maps/Alpine Assault/Alpine Assault.map" --content-dir .local/phase2-import-a
+dotnet run --project src/CnCNew.Client.Stride -c Release -- --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/phase2-import-a
 ```
 
 `tools/CnCNew.UiRenderTool` ist bewusst **nicht** in `CnCNew.slnx` (zwei Stride-Game-.exe-Projekte in einer Solution
@@ -153,7 +157,7 @@ Phase 9, Teilpunkt 12 (Stand 30. September 2026; neu messen): Der `SharedReadyFr
 `SkirmishLiveSessionMatchesItsOwnReplay`) vergleicht erstmals den `World.StateHash` einer live gelaufenen `SkirmishMatchSession` gegen
 `ReplayRunner.Run` ihres eigenen `ToReplay()`-Mitschnitts und schlägt auf dem unbehobenen Code nachweislich fehl. Unverändert durch den Fix:
 Retail-Referenzmatch (`SimTool reference-match`) weiterhin Sieger FactionAmerica bei Tick 13.800, Endhash `4DCB46FE3D2E8214` (das Szenario
-nutzt `SkirmishAi` nicht); 216.000-Tick-Stresstest (`SimTool stress`) weiterhin Endhash `ED6F9329F59662E3` (die synthetische Fixture trägt
+nutzt `SkirmishAi` nicht); 216.000-Tick-Stresstest (`SimTool stress`) weiterhin Endhash `ED6F9329F59662E3` (veraltet – seit Phase 11 gemessen `56882F763EABEF67`, auch am Stand vor Phase 11; die synthetische Fixture trägt
 keine geteilte Spezialkraft; dieser Hash weicht bereits unabhängig vom Fix von der Phase-6-Referenzzahl oben ab – seit Phase 7/8 nicht neu
 gemessen, siehe `docs/HANDOFF-PHASE9.md`). Geändert durch den Fix (KI-Timing verschiebt sich): ein Skirmish-KI-Lauf, der die Kraft
 tatsächlich benutzt (`SimTool ai-match .local/phase2-import-a --map "Maps/Alpine Assault/Alpine Assault.map" --factions
@@ -178,7 +182,7 @@ Endproben Sieg 10/24, Niederlage 15/24, 5,7 % der Aktionsausführungen treffen f
 `LockWeaponCreate`) heben die Instanziierbarkeit auf 1.494 von 2.115 Objekten (70,6 %), 87 von 205 Modultypen, Modulverwendungen abgedeckt 15.639 von 19.553 (80,0 %),
 Kompatibilitätsbasislinie 747 Einträge. Retail-Referenzmatch jetzt: Sieger FactionAmerica bei Tick 13.665, `final hash` (Run 1) `D4779BE413835B6D`
 (vorher Tick 13.800, `95022B80366E841E`; der früher dokumentierte „Endhash“ `4DCB46FE3D2E8214` ist mit dem Stand vor Phase 9 nicht reproduzierbar);
-Stresstest unverändert `ED6F9329F59662E3`. Definitionssnapshot Retail-Basisdaten (`--maps exclude`): 144.284.673 Byte, SHA-256
+Stresstest (damalige Angabe; aktuell `56882F763EABEF67`) `ED6F9329F59662E3`. Definitionssnapshot Retail-Basisdaten (`--maps exclude`): 144.284.673 Byte, SHA-256
 `2B9D902AEC46A6DE66A21521EFB8FDBE669E27C50F50CC36D3AFEFBEA7ED8D80`; Vollinventar mit Überlagerungen: 144.895.548 Byte, SHA-256
 `0A9D10F4FE878F01D14877C0FB6D13DCF7DF7BA3B52FABB0D15B0D8EF13526C3`, 18.321/19.871 Referenzen aufgelöst (1.550 sichtbare Fallbacks). Missionen sind **keine**
 Replays (Skriptaktionen sind direkte Weltänderungen); Wahrheit ist der Snapshot. Zeilenenden: das Repo ist überwiegend LF, einzelne Dateien (`README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
@@ -227,3 +231,16 @@ Verstärkungstransport/Formationen, eine Missions-HUD und die Generals'-Challeng
 4. Doku aktualisieren (README, ARCHITECTURE, ROADMAP, IMPLEMENTATION-PLAN + Fachdokument).
 5. Commits, sauberer Working Tree, Abschlussbericht mit Zahlen und Commit-Hashes.
 6. Eigenständigen N+1-Handoff nach `docs/HANDOFF-PHASE<N+1>.md` schreiben und committen.
+
+Phase 11 (Stand 1. Oktober 2026; neu messen; `docs/SCRIPT-ENGINE.md` §4–§9, `docs/GAME-HUD.md` §14, `docs/SIMULATION-CORE.md` §26): die Skript-VM führt jetzt 80 von 109 Bedingungs- und 131 von
+344 Aktionstypen aus (129 weitergereicht, 2 aufgezeichnet – `ScriptSupport.Recorded`: Wert gespeichert, aber ohne Verbraucher in der Simulation –, 82 fehlend), darunter die `SKIRMISH_*`-Bedingungen
+(Entscheidung Portierung statt `SkirmishAi`-Ersatz), Sicht-/Spezialkraft-Bedingungen, Kartenaufdeckung, Garnison, Bauschalter, `BUILD_TEAM`/`RECRUIT_TEAM`, **Sequenzskripte** und **Teamereignis-Skripte**.
+`ScriptEngine` ist auf Teildateien verteilt (`ScriptEngine.Extended*.cs`, `.Sequential.cs`, `.Powers.cs`, `.TeamEvents.cs`). Neuer Zustand wird nur geschrieben, wenn er vom Standard abweicht, damit Hashes
+bestehender Läufe unverändert bleiben (Retail-Referenzmatch weiter Sieger FactionGLA Tick 19.200, Endhash `28BE35C1174E369F`; Stresstest `56882F763EABEF67`; keine Versionssprünge: `WorldSnapshot` 7, Replay 7,
+`MissionSnapshot` 2, `CommandTypes.Version` 10). Modulkatalog (91/205), Instanziierbarkeit (1.624 von 2.115) und Kompatibilitätsbasislinie (760) unverändert. `CnCNew.CampaignTool reachability` prüft statisch, ob
+die `VICTORY`/`DEFEAT`-Skripte jeder Kampagnenkarte mit den implementierten Typen feuern können: Sieg sauber 21 / eingeschränkt 3 / blockiert 0, Niederlage sauber 24 von 24 (Stand Phase 10, gleiche Analyse:
+Sieg 4/18/2, Niederlage 0/24/0); „sauber“ heißt nicht „gewinnbar“ – die Ausschalt-Endproben von `audit` erreichen unverändert Sieg 10/24, Niederlage 15/24. Der Zielfahrer `CampaignTool drive` (`MissionObjectiveDriver`) erreicht Sieg 10/24, Niederlage 16/24 auf dem Skriptweg. Offen (`docs/HANDOFF-PHASE12.md`): ein vollständigerer Zielfahrer, der
+die Missionsziele auf dem Skriptweg erfüllt, restliche Skriptaktionen, Verstärkung mit Transport, die Persona-Fraktion der Challenge-Wahl und die Client-Verdrahtung der Shell. Die Challenge-Seite wählt
+`ChallengeSides` (`CampaignController`), eine Kampagnenmission spielt hinter der Skirmish-Befehlsleiste (`LiveGame`/`LiveMission`/`MissionController`, Stride `--mission`).
+**Zeilenenden** (Korrektur): maßgeblich ist `git ls-files --eol <datei>`; CRLF im Index haben `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, alles andere ist LF. Zeilenenden pro Datei erhalten
+(Skripte: `newline=''`, `\n` im Suchtext nach `\r\n` umwandeln, danach `git ls-files --eol -m` prüfen); mehrzeilige Python-Editskripte als Datei im Scratchpad ausführen statt als Heredoc.
