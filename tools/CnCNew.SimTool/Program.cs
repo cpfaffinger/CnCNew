@@ -35,6 +35,8 @@ const string Usage = """
                                                            headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
       ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin]
                                                            skirmish AIs on a real map: record, two fresh runs, snapshot continuation
+      skirmish-sweep <content-dir> [--max-ticks N]        starts a short two-AI skirmish on every map with >= 2 start positions;
+                                                           reports which start and end (by victory or the tick budget) without crashing
       mission-run <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N]
                                                            run a campaign/scripted mission headless: two fresh runs, save/restore continuation, script and combat report
       stress [--ticks N] [--population N] [--out replay.bin]
@@ -59,6 +61,7 @@ try
         "stress" => Stress(Options(args), Arg(args, "--out")),
         "reference-match" when args.Length >= 2 => ReferenceMatch(args[1], args),
         "ai-match" when args.Length >= 2 => AiMatch(args[1], args),
+        "skirmish-sweep" when args.Length >= 2 => SkirmishSweep(args[1], args),
         "mission-run" when args.Length >= 2 => MissionRun(args[1], args),
         _ => Fail(Usage),
     };
@@ -304,6 +307,69 @@ static int AiMatch(string directory, string[] args)
         Console.WriteLine($"  {player.Faction}: {string.Join(", ", world.Entities.Where(value => value.Owner == player.Id && !value.EffectivelyDead).GroupBy(value => value.Template.Name).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => $"{group.Key}={group.Count()}"))}");
     Console.WriteLine($"Rejections by reason: {string.Join(", ", Enum.GetValues<CommandRejection>().Where(reason => world.RejectionCounts[(int)reason] > 0).Select(reason => $"{reason}={world.RejectionCounts[(int)reason]}"))}.");
     return identical && continued && first.FinalHash == second.FinalHash ? 0 : 1;
+}
+
+/// <summary>
+/// `docs/HANDOFF-PHASE10.md` point 1 / `docs/IMPLEMENTATION-PLAN.md` §9's open "alle Skirmish-Karten start- und beendbar" acceptance: every
+/// map with at least two start positions (<c>MapTool audit</c>: 75 of 150 maps have none at all — those are campaign maps, not a gap) gets a
+/// short, two-faction <see cref="SkirmishMatchScenario"/>. "Startable and endable" here means the match session runs its full lifecycle
+/// (starting objects spawn, the AIs think and act, the session reaches a winner or its own tick budget) without throwing; it is not a balance
+/// or win-rate measurement (that is <c>ai-match</c>'s and the 16-map table's job, run far longer).
+/// </summary>
+static int SkirmishSweep(string directory, string[] args)
+{
+    var maxTicks = long.Parse(Arg(args, "--max-ticks") ?? "3000", CultureInfo.InvariantCulture);
+    var watch = Stopwatch.StartNew();
+    var (_, catalog, fingerprint) = CompileShipped(directory);
+    var content = ContentFileSystem.Open(directory);
+    var everyone = ReferenceMatchScenario.Participants(catalog, out _);
+    if (everyone.Length < 2) { Console.Error.WriteLine("Fewer than two playable factions in this content set."); return 1; }
+    var chosen = everyone.Take(2).ToImmutableArray();
+    var paths = content.EnumerateFiles().Where(path => path.EndsWith(".map", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal).ToArray();
+
+    var zeroStarts = 0;
+    var oneStart = 0;
+    var started = 0;
+    var finishedWithWinner = 0;
+    var finishedAtBudget = 0;
+    var failures = new List<string>();
+    foreach (var path in paths)
+    {
+        TerrainMap terrain;
+        ImmutableArray<CnCNew.Data.World.MapObject> mapObjects;
+        try
+        {
+            using var stream = content.OpenRead(path);
+            var map = SageMapDecoder.Decode(stream);
+            terrain = TerrainMap.Build(map, path);
+            mapObjects = map.Objects;
+        }
+        catch (Exception exception)
+        {
+            failures.Add($"{path}: decode/terrain failed: {exception.GetType().Name}: {exception.Message}");
+            continue;
+        }
+        if (terrain.StartPositions.Length == 0) { zeroStarts++; continue; }
+        if (terrain.StartPositions.Length == 1) { oneStart++; continue; }
+        started++;
+        try
+        {
+            var options = SkirmishMatchOptions.Standard with { MaxTicks = maxTicks, GraceTicks = Math.Min(SkirmishMatchOptions.Standard.GraceTicks, maxTicks / 4) };
+            var scenario = new SkirmishMatchScenario(options);
+            scenario.Record(catalog, fingerprint, terrain, mapObjects, chosen);
+            if (scenario.Winner is not null) finishedWithWinner++;
+            else finishedAtBudget++;
+        }
+        catch (Exception exception)
+        {
+            failures.Add($"{path}: {exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
+    Console.WriteLine($"{paths.Length} maps; {zeroStarts} with no start waypoint at all (campaign maps, `MapTool audit`'s figure), {oneStart} with exactly one (not enough for a 2-player skirmish); {started} with >= 2 attempted with {chosen[0].Faction.Name} vs {chosen[1].Faction.Name}.");
+    Console.WriteLine($"Started and ended cleanly: {started - failures.Count} ({finishedWithWinner} with a winner within {maxTicks} ticks, {finishedAtBudget} reached the tick budget undecided); {failures.Count} failed. {watch.Elapsed.TotalSeconds:F1} s.");
+    foreach (var failure in failures) Console.WriteLine($"  FAIL {failure}");
+    return failures.Count == 0 ? 0 : 1;
 }
 
 static int RecordReplay(string path, StressOptions options)
