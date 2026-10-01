@@ -208,7 +208,7 @@ static partial class Tests
         var conditions = MapScriptCatalog.ConditionTypeNames.GroupBy(ScriptCoverage.ConditionSupport).ToDictionary(group => group.Key, group => group.Count());
         var actions = MapScriptCatalog.ScriptActionTypeNames.GroupBy(ScriptCoverage.ActionSupport).ToDictionary(group => group.Key, group => group.Count());
         Console.WriteLine($"       conditions: {conditions.GetValueOrDefault(ScriptSupport.Executed)} executed, {conditions.GetValueOrDefault(ScriptSupport.Missing)} missing of {MapScriptCatalog.ConditionTypeNames.Length}; " +
-                          $"actions: {actions.GetValueOrDefault(ScriptSupport.Executed)} executed, {actions.GetValueOrDefault(ScriptSupport.Forwarded)} forwarded, {actions.GetValueOrDefault(ScriptSupport.Missing)} missing of {MapScriptCatalog.ScriptActionTypeNames.Length}");
+                          $"actions: {actions.GetValueOrDefault(ScriptSupport.Executed)} executed, {actions.GetValueOrDefault(ScriptSupport.Forwarded)} forwarded, {actions.GetValueOrDefault(ScriptSupport.Recorded)} recorded, {actions.GetValueOrDefault(ScriptSupport.Missing)} missing of {MapScriptCatalog.ScriptActionTypeNames.Length}");
         // The five condition types and the action types the retail usage table ranks first are all implemented.
         foreach (var name in new[] { "CONDITION_TRUE", "TIMER_EXPIRED", "FLAG", "COUNTER", "PLAYER_HAS_OBJECT_COMPARISON" })
             Check.That(ScriptCoverage.ConditionSupport(name) == ScriptSupport.Executed, $"{name} is implemented.");
