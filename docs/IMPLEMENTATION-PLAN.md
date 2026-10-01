@@ -533,6 +533,16 @@ Simulationszustand fortsetzt.
 ist damit noch nicht im Sinne der Abnahme abgeschlossen (siehe „Bekannte Grenzen“).** Alle Zahlen frisch gemessen; Details, Quellverweise und
 Abweichungen in `docs/SCRIPT-ENGINE.md` und `docs/CAMPAIGN-AND-SAVEGAMES.md`.
 
+**Phase-10-Zwischenstand (1. Oktober 2026, Teil der Durchspielbarkeits-Abnahme, noch nicht abgeschlossen):** Befehlsknopf-Fähigkeiten
+(`NAMED_/TEAM_USE_COMMANDBUTTON_ABILITY(_ON_NAMED)`, die vier häufigsten der Familie) lösen jetzt echte `UseSpecialPowerCommand`-Befehle aus;
+`SpecialAbilityUpdate` ist eine ehrliche Hülle (Nachlademechanismus ohne die inszenierte Fähigkeitswirkung) und macht 36 vorher blockierte
+Objekte instanziierbar (Ranger, Jarmen Kell, GLA-Rebellin-Fähigkeiten). Lokale Seite ohne `playerIsHuman`: `MissionOptions.HumanSideName` plus
+`CampaignTool --human-side` lösen das API-seitig; die General-Auswahl bleibt Shell-Arbeit. Zahlen: 1.530 von 2.115 Objekten instanziierbar
+(72,3 %, vorher 70,6 %), 88 von 205 Modultypen, Modulverwendungen abgedeckt 15.730 von 19.553 (80,4 %), Kompatibilitätsbasislinie 747 → 751.
+`CampaignTool audit`: fehlende Aktionsausführungen 5,7 % → 4,3 %, Endproben weiterhin Sieg 10/24, Niederlage 15/24 in Summe (Zusammensetzung
+verschoben, `docs/SCRIPT-ENGINE.md` §9). Garnison, Kartenaufdeckung, KI-Teambau, Sichtbedingungen, `SKIRMISH_*` und Skirmish-Setup (Teil A
+Punkt 1) bleiben offen; Details in `docs/HANDOFF-PHASE11.md`.
+
 - **Skript-VM** (`CnCNew.Simulation/Scripting`): deterministische Ausführung der dekodierten World-Builder-Skripte (Zähler, Flags, Timer, Zufallstimer,
   Ein-Schuss-Skripte, Schwierigkeitsflags, verzögerte Auswertung, Unterprogramme, Teams mit Instanziierung, benannte Objekte, Bereichs- und
   Schadensbedingungen, Wegpunktpfade, Befehle als validierte Spielerbefehle, Angriffsprioritäten, Verstärkung, Sieg/Niederlage). Bedingungen 63 ausgeführt
@@ -557,10 +567,12 @@ Abweichungen in `docs/SCRIPT-ENGINE.md` und `docs/CAMPAIGN-AND-SAVEGAMES.md`.
 **Bekannte Grenzen:**
 
 - Das Skirmish-Setup selbst (Teil A Punkt 1) wurde nicht angefasst; ein Skirmish-Speicherstand ist nicht möglich (die Skirmish-KI hält Zustand außerhalb der Welt).
-- **Nicht jede Mission ist als vollständig durchspielbar belegt.** Es fehlen u. a. `*_USE_COMMANDBUTTON_ABILITY` (Spezialfähigkeiten, `SpecialAbilityUpdate`:
-  64 Objekte, 36 nur dadurch blockiert – Ranger-Fähigkeiten, Colonel Burton, Jarmen Kell), Garnison-Aktionen, Kartenaufdeckung (`MAP_REVEAL_*`), KI-Teambau
-  (`BUILD_TEAM`), Sichtbedingungen (`*_DISCOVERED`, `*_SIGHTED`), die `SKIRMISH_*`-Skripte der Original-KI und Missionsabläufe, die Kamera-/Film-Fertigmeldungen
-  eines echten Clients brauchen; Maps ohne menschliche Seite (z. B. `GC_LaserGeneral`) brauchen eine vom Host gewählte lokale Seite.
+- **Nicht jede Mission ist als vollständig durchspielbar belegt.** Die vier häufigsten `*_USE_COMMANDBUTTON_ABILITY*`-Aktionen lösen jetzt Spezialkräfte
+  aus und `SpecialAbilityUpdate` ist keine Hülle mehr ohne Objekt; offen bleiben die Pfadvarianten, die `TEAM_USE_COMMANDBUTTON_ON_NEAREST_*`-Familie
+  und die inszenierte Fähigkeitswirkung selbst (Anreise, Verpacken, Fähigkeitsobjekte), dazu Garnison-Aktionen, Kartenaufdeckung (`MAP_REVEAL_*`),
+  KI-Teambau (`BUILD_TEAM`), Sichtbedingungen (`*_DISCOVERED`, `*_SIGHTED`), die `SKIRMISH_*`-Skripte der Original-KI und Missionsabläufe, die
+  Kamera-/Film-Fertigmeldungen eines echten Clients brauchen. Maps ohne menschliche Seite (z. B. `GC_LaserGeneral`) können die lokale Seite jetzt über
+  `MissionOptions.HumanSideName`/`CampaignTool --human-side` vom Host benennen lassen; die General-Auswahl in der Shell fehlt noch.
 - Objekte, deren Vorlage im Retail-Basisbestand fehlt (Kartenüberlagerungs-Definitionen wie Straßen, Zäune, Bäume), werden übersprungen und gezählt; Transporte von
   Verstärkungen werden nicht simuliert; `*_HUNT`/`*_ATTACK_*` sind Bewegungsaufträge plus automatisches Gefecht (keine Formation, kein Angriffsmarsch).
 - Freischaltungen (Kampagnenreihenfolge der Challenge-Kampagnen, Profil) sind nicht modelliert; die Menüeinträge „Kampagne“ und „Spiel laden“ sind noch deaktiviert,

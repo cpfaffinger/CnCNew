@@ -35,18 +35,21 @@ die Profilfreischaltung der Originalshell sind Sache des Profils/der Shell und h
 `MissionContext.From(GameData)` für das Spiel, Lambdas für Tests). `MissionRun.Load` baut Terrain und `MissionSession`; `Restore`
 stellt sie aus einem `MissionSnapshot` wieder her.
 
-`CampaignController.StartCurrentMission()` zählt den Versuch und startet die Mission mit Schwierigkeit und Versuchszahl
-(`MISSION_ATTEMPTS`); der Logik-Seed hängt von Mission und Versuch ab, eine Wiederholung ist also nicht der Lauf des letzten Versuchs.
+`CampaignController.StartCurrentMission(maxTicks, humanSideName)` zählt den Versuch und startet die Mission mit Schwierigkeit und
+Versuchszahl (`MISSION_ATTEMPTS`); der Logik-Seed hängt von Mission und Versuch ab, eine Wiederholung ist also nicht der Lauf des
+letzten Versuchs. `humanSideName` (optional, Standard leer) reicht `MissionOptions.HumanSideName` durch — für Karten, die keine Seite
+selbst als `playerIsHuman` markieren (die Generals'-Challenge-Karten), muss der Host die Seite des Menschen benennen, siehe
+`docs/SCRIPT-ENGINE.md` §7; die General-Auswahl selbst ist Sache der Shell (§7 unten).
 `Conclude(run)` liest `MissionSession.Outcome` (vom Skript gesetzt): Sieg → `Won`, Niederlage → `Lost`; ein Lauf ohne Ergebnis oder einer
 fremden Mission wird abgewiesen. `ResumeCurrentMission(state)` setzt einen gespeicherten Lauf fort, ohne einen Versuch zu zählen.
 
 ## 4. Zustandsformate
 
-### `MissionSnapshot` (Simulation, Version 1)
+### `MissionSnapshot` (Simulation, Version 2)
 
 UTF-8-JSON, feste Schlüsselreihenfolge, nur Ganzzahlen, keine Pfade/Zeitstempel. Felder: `format` (`cncnew-mission-state`), `version`,
 `tickRate`, `programFingerprint` (strukturelle Prüfsumme des Kartenskripts), `definitionFingerprint`, `terrainFingerprint`, `options`
-(Seed, Schwierigkeit, Tick-Limit, Präsentationslatenz, Gefechtsintervall, Missionsversuche), `stateHash` (Welt + Skript), `session`
+(Seed, Schwierigkeit, Tick-Limit, Präsentationslatenz, Gefechtsintervall, Missionsversuche, seit Version 2 `humanSideName`), `stateHash` (Welt + Skript), `session`
 (Gefechtszähler, Befehlssequenzen je Spieler), `script` (`ScriptEngine.Describe`: Skript-/Gruppenzustand, Zähler, Flags, benannte
 Objekte, Teams, Objektlisten, Folgeaufträge, Angriffsprioritäten, Schadenshistorie, Ergebnis, Zählerstände der fehlenden Typen), `world`
 (der **unveränderte** `WorldSnapshot`, Version 7, als Roh-JSON eingebettet). `Restore` baut die Welt aus dem Snapshot, leitet das Skriptprogramm
@@ -90,8 +93,12 @@ Ablehnung fremder/beschädigter/abgeschnittener Dateien, Store. Mit `--content-d
 dotnet run --project tools/CnCNew.CampaignTool -- list .local/phase2-import-a
 dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/phase2-import-a --ticks 900
 dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/phase2-import-a --map MD_USA01 --explain
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/phase2-import-a --map GC_LaserGeneral --human-side PlyrLaserGeneral
 dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough .local/phase2-import-a --campaign USA
 ```
+
+`--human-side <Name>` (`audit` und `playthrough`): reicht `MissionOptions.HumanSideName` durch, für Karten ohne eigene `playerIsHuman`-Seite
+(`docs/SCRIPT-ENGINE.md` §7); ein Name, der keine Seite der Karte trifft, fällt mit einer Notiz auf den Standard zurück (nie still).
 
 `audit`: jede eindeutige Kampagnenkarte – zwei frische Läufe, Speichern/Wiederherstellen, Endproben Sieg/Niederlage, danach die
 Aggregation der fehlenden Aktions-/Bedingungstypen, nicht auflösbarer Verweise und nicht erzeugbarer Objekttypen; Exitcode ≠ 0 bei
@@ -107,6 +114,9 @@ und Endproben: `docs/SCRIPT-ENGINE.md` §9). Die Größe eines Missionszustands 
 ## 7. Anschluss für die Shell (nächster Schritt)
 
 - Kampagnenauswahl: `CampaignCatalog.Campaigns` (Namensschlüssel `NameLabel` → Text), Schwierigkeit → `CampaignProgress.Begin`.
+- Generals'-Challenge-General-Wahl: die Engine-Seite dafür steht (`StartCurrentMission(humanSideName:)`/`MissionOptions.HumanSideName`,
+  `docs/SCRIPT-ENGINE.md` §7); die Shell muss nur noch den gewählten General auf den Seitennamen der jeweiligen Karte abbilden (per Karte
+  verschieden, z. B. `PlyrLaserGeneral` auf `GC_LaserGeneral`) und durchreichen.
 - Briefing: `CampaignMission.ObjectiveLabels`/`IntroMovie`/`BriefingVoice`/`UnitNames`/`LocationLabel`; Zwischensequenzen spielt der
   Client anhand der `ScriptOutput`-Liste (`ScriptEngine.DrainOutputs`).
 - Laden: `SaveGameStore.List()` → `SaveGame.Load` → `CampaignController(context, campaign, loaded.Progress)` + `run`.

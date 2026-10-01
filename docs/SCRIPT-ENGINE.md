@@ -98,6 +98,7 @@ Alle übrigen Bedingungstypen sind **fehlend**: Auswertung = `false` und Zähler
 | Objekte/Teams | `NAMED_KILL/DELETE/DAMAGE`, `TEAM_KILL/DELETE(_LIVING)`, `DAMAGE_MEMBERS_OF_TEAM`, `CREATE_OBJECT`, `UNIT_SPAWN_NAMED_LOCATION_ORIENTATION`, `CREATE_NAMED/UNNAMED_ON_TEAM_AT_WAYPOINT`, `CREATE_REINFORCEMENT_TEAM` | `doNamedKill` …, `doCreateObject`, `createUnitOnTeamAt`, `doCreateReinforcements` |
 | Befehle | `MOVE_NAMED_UNIT_TO`, `MOVE_TEAM_TO`, `*_FOLLOW_WAYPOINTS(_EXACT)`, `*_STOP`, `*_GUARD*`, `*_HUNT`, `PLAYER_HUNT`, `*_ATTACK_*` | `doMoveToWaypoint`, `doTeamFollowWaypoints`, … (siehe §8) |
 | Angriffsprioritäten | `SET_ATTACK_PRIORITY_THING/KIND_OF`, `SET_DEFAULT_ATTACK_PRIORITY`, `NAMED_/TEAM_APPLY_ATTACK_PRIORITY_SET` | `setPriorityThing/Kind/Default`, `AttackPriorityInfo::getPriority` |
+| Befehlsknopf-Fähigkeiten | `NAMED_USE_COMMANDBUTTON_ABILITY(_ON_NAMED)`, `TEAM_USE_COMMANDBUTTON_ABILITY(_ON_NAMED)` | `doNamed/TeamUseCommandButtonAbility(OnNamed)`: löst den benannten `CommandButton` (`Command = SPECIAL_POWER*`) als gewöhnlichen `UseSpecialPowerCommand` des Trägers aus (`CommandCatalog.TryGetSpecialPowerAbility`); ein Knopf einer anderen Befehlsart oder ein unbekannter Name ist ein Diagnosefall, keine Ausführung (§8) |
 | **Weitergereicht** (Präsentation) | Kamera, Ton, Sprache, Film, Musik, Radar, UI-Text, Blende, Countdown-Anzeigen, Eingabesperre u. a. (129 Typen) | als `ScriptOutput` (Tick, Aktion, Parameter als Text) an den Client; `SPEECH_PLAY`/Film/Musik/Kamerabewegung gelten für `PresentationLatencyTicks` als laufend |
 
 Alle übrigen Aktionstypen sind **fehlend**: keine Wirkung, Zähler `MissingActionHits[Typ]`.
@@ -123,6 +124,13 @@ Ergebnis (Werkzeug/Test, verändert kantengetriggerte Bedingungen).
   `buildingName`, mit Anfangsgesundheit.
 - **Startbasis menschlicher Spieler:** besitzt eine menschliche Seite mit echter Fraktion nichts auf der Karte (Generals'-Challenge-Karten),
   startet sie wie ein Skirmish-Spieler: Basisgebäude auf `Player_N_Start` plus Startfahrzeuge im Ring.
+- **Lokale Seite** (`<Local Player>`, `MULTIPLAYER_*`-Bedingungen): `MissionSession.LocalPlayerOf` nimmt die erste Seite, die die Karte selbst
+  `playerIsHuman` setzt; `MissionOptions.HumanSideName` (Version 2 des Missionszustands) lässt den Host stattdessen eine beliebige Seite beim Namen
+  nennen — bewusst unabhängig von `playerIsHuman`, weil die Generals'-Challenge-Karten die gewählte General-Seite als gewöhnliche KI-Seite modellieren
+  und die „Mensch ist das“-Entscheidung dem Host überlassen (`GC_LaserGeneral` markiert keine Seite als Mensch). Ein nicht vorhandener Name fällt auf
+  denselben Standard zurück und hinterlässt eine Notiz in `MissionSession.Notes`, nie still. `CampaignController.StartCurrentMission` und
+  `CampaignTool audit|playthrough --human-side <Name>` reichen die Wahl durch; die eigentliche General-Auswahl bleibt Sache der Shell-Anbindung
+  (`docs/HANDOFF-PHASE10.md` Teil 2).
 - **Automatisches Gefecht** (`DriveCombat`): Die Simulation hat keine Zielerfassung im Leerlauf (`AutoAcquireEnemiesWhenIdle` wird nicht
   modelliert; auch die Skirmish-KI schießt ausdrücklich). Die Sitzung lässt jedes bewaffnete Objekt alle `CombatIntervalTicks` (3, versetzt
   nach Objekt-ID) per `FireWeaponCommand` auf den Feind in Reichweite schießen, höchste Angriffspriorität zuerst, dann am nächsten.
@@ -143,10 +151,19 @@ Ergebnis (Werkzeug/Test, verändert kantengetriggerte Bedingungen).
 6. **Verstärkung** (`CREATE_REINFORCEMENT_TEAM`): die Einheiten des Teams (je `teamUnitMaxCount`) erscheinen am Ursprung (oder am Ziel) und
    laufen zum Ziel; der Transport samt Beladung (`teamTransport`, `teamStartsFull`) wird **nicht** simuliert (Diagnose
    `reinforcement transport not simulated`).
-7. **Hüllenmodule** `CommandButtonHuntUpdate` (nur durch `TEAM_HUNT_WITH_COMMAND_BUTTON` ausgelöst) und `LockWeaponCreate` (Primär-Slot;
-   andere Slots: nicht unterstützte Konfiguration): das Objekt kann existieren; die auslösenden Aktionen bleiben fehlend und werden gezählt.
-8. **Mission ohne Replay** (§3).
-9. Karten- und Kampagnen-Anforderungen, die das Original aus dem Spiellauf bezieht (Schwierigkeit pro Spieler, Kamera-/Film-Zeiten,
+7. **Hüllenmodule** `CommandButtonHuntUpdate` (nur durch `TEAM_HUNT_WITH_COMMAND_BUTTON` ausgelöst, weiterhin fehlend) und `LockWeaponCreate` (Primär-Slot;
+   andere Slots: nicht unterstützte Konfiguration): das Objekt kann existieren. `SpecialAbilityUpdate` ist seit dieser Phase ebenfalls eine Hülle:
+   das Modul trägt nur den geteilten Nachlademechanismus jeder Spezialkraft (`SpecialPowerModuleBase`); die eigentliche Anreise-/Verpackungs-/
+   Vorbereitungs-/Fähigkeitsobjekt-Inszenierung des Originals (`SpecialAbilityUpdate.cpp`: Ranger-Fähigkeiten, Colonel Burton, Jarmen Kell, der
+   GLA-Rebellin Gebäudeeroberung/Fallenlegen, der Hacker-Geldraub) ist nicht simuliert — `NAMED_/TEAM_USE_COMMANDBUTTON_ABILITY*` lösen die Kraft aus
+   und starten ihr Nachladen (ein beobachtbarer, echter Effekt: Bereitschaft, Pausen, geteilte Zeitgeber), der inszenierte Effekt selbst bleibt aus.
+8. **Befehlsknöpfe global aufgelöst:** `NAMED_USE_COMMANDBUTTON_ABILITY(_ON_NAMED)` sucht im Original im `CommandSet` des Trägers, `TEAM_USE_COMMANDBUTTON_ABILITY(_ON_NAMED)` in der globalen Schaltflächenregistrierung (`TheControlBar->findCommandButton`); da Schaltflächennamen im
+   Originalbestand eindeutig sind, löst `CommandCatalog.TryGetSpecialPowerAbility` beide Varianten gleich auf (eine globale Zuordnung
+   Schaltflächenname → `SpecialPowerTemplate`, nur für `Command = SPECIAL_POWER*`-Knöpfe). Pfadvarianten
+   (`*_AT_WAYPOINT`, `*_USING_WAYPOINT_PATH`) und die `TEAM_USE_COMMANDBUTTON_ON_NEAREST_*`-Familie sind weiterhin fehlend.
+9. **Mission ohne Replay** (§3).
+10. **Lokale Seite ohne `playerIsHuman`:** `MissionOptions.HumanSideName` überschreibt den Standard, siehe §7.
+11. Karten- und Kampagnen-Anforderungen, die das Original aus dem Spiellauf bezieht (Schwierigkeit pro Spieler, Kamera-/Film-Zeiten,
    Fortschrittsprofil), kommen aus `MissionOptions`/Host.
 
 ## 9. Headless-Prüfung (Messung)
@@ -156,63 +173,84 @@ Je Mission: zwei frische Läufe (Hash-Kette identisch), Speichern/Wiederherstell
 (`MissionProbe`): nach 150 Ticks werden alle Objekte der Feinde (Sieg) bzw. des Betrachters und seiner Verbündeten (Niederlage)
 zerstört und 600 Ticks auf das Skriptergebnis gewartet; ein Ergebnis, das die Mission vor der Probe selbst erreicht, zählt nicht.
 
-Stand 1. Oktober 2026 (Release, 900 Ticks je Lauf; frisch messen):
+Stand 1. Oktober 2026, vor dieser Phase (Release, 900 Ticks je Lauf):
 
 - **`ScriptCoverage`:** Bedingungen 63 ausgeführt / 46 fehlend von 109; Aktionen 69 ausgeführt / 129 weitergereicht / 146 fehlend von 344.
-  Retail-Häufigkeit (`MapTool audit`): die fünf häufigsten Bedingungen sind ausgeführt, die sechs häufigsten Aktionen ausgeführt bzw. (`SPEECH_PLAY`) an den Client weitergereicht.
-- **24 eindeutige Kampagnenkarten** (17 Kampagnen, 85 Missionen; die Challenge-Kampagnen teilen Karten) liefen fehlerfrei; die 25. Karte der Liste,
-  `Maps/CampEADemo/CampEADemo.map`, ist im Retail-Bestand nicht vorhanden (Prüfung `CampaignTool list`).
-  **24/24** liefern über zwei frische Läufe dieselbe Hash-Kette und denselben Endhash; **24/24** setzen nach Speichern und Wiederherstellen
-  bei Tick 450 hash-identisch fort.
-- **Endproben durch Ausschalten:** Sieg **10/24**, Niederlage **15/24** der Karten erreichen ihr skriptdefiniertes Ende. Die übrigen haben Endskripte
-  mit Bedingungen, die erst aus einem längeren Missionsverlauf wahr werden (Timer, Flags, Kartenbereiche, Aufträge, die Menschen auslösen); das
-  ist kein Nachweis, dass sie nicht funktionieren, sondern dass die Probe sie nicht erreicht (`--explain` nennt die falschen Bedingungen).
-- **Ausführungsbilanz** aller 24 Läufe: 2.307 Skripte ausgeführt, 7.161 Aktionen ausgeführt, 2.434 an den Client weitergereicht, **575 Treffer auf fehlende
-  Aktionstypen = 5,7 % aller Aktionsausführungen** (vor der zweiten Ausbaustufe 1.272 / 13,5 %).
-- **Häufigste fehlende Aktionen** (Treffer / Missionen): `NAMED_USE_COMMANDBUTTON_ABILITY` 89/11, `TEAM_GARRISON_SPECIFIC_BUILDING` 38/6,
+- Ausführungsbilanz aller 24 Läufe: 2.307 Skripte ausgeführt, 7.161 Aktionen ausgeführt, 2.434 an den Client weitergereicht, 575 Treffer auf fehlende
+  Aktionstypen = 5,7 % aller Aktionsausführungen. Endproben durch Ausschalten: Sieg 10/24, Niederlage 15/24.
+- Häufigste fehlende Aktionen (Treffer/Missionen): `NAMED_USE_COMMANDBUTTON_ABILITY` 89/11, `TEAM_GARRISON_SPECIFIC_BUILDING` 38/6,
   `MAP_REVEAL_ALL_PERM` 34/24, `TEAM_GARRISON_NEAREST_BUILDING` 33/3, `NAMED_USE_COMMANDBUTTON_ABILITY_ON_NAMED` 27/2, `BUILD_TEAM` 25/5,
   `TEAM_USE_COMMANDBUTTON_ABILITY` 20/6, `WAREHOUSE_SET_VALUE` 20/5, `TEAM_MERGE_INTO_TEAM` 17/2, `OBJECT_ALLOW_BONUSES` 16/15,
   `PLAYER_ENABLE/DISABLE_BASE/UNIT_CONSTRUCTION` 16…7/3–11.
-- **Häufigste fehlende Bedingungen:** fast ausschließlich die `SKIRMISH_*`-Familie (Skripte der Original-Skirmish-KI, die die Challenge-Karten
-  mitbringen): `SKIRMISH_PLAYER_HAS_UNITS_IN_AREA` 37.227, `SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER` 37.220, `SKIRMISH_SPECIAL_POWER_READY`
-  36.907, `SKIRMISH_VALUE_IN_AREA` 15.432; dazu `PLAYER_TRIGGERED_SPECIAL_POWER` 17.106, `TYPE_SIGHTED` 9.150, `NAMED/TEAM_DISCOVERED` (Sicht).
-- **Nicht erzeugbare Objekte** (Vorlage vorhanden, aber Modul fehlt, je Mission gezählt): zuerst `AmericaInfantryRanger`/`MissileDefender` und
-  `GLAInfantryJarmenKell` (`SpecialAbilityUpdate`), `CINE_*`-Flugzeuge, `ChinaVehicleHelix`, `AmericaJetRaptor`. Dazu Kartenobjekte, deren Vorlage im
-  Retail-Basisbestand gar nicht steht (Straßen, Bürgersteige, Zäune, Bäume aus Kartenüberlagerungen, `MapOverlayMode.Exclude`): je Mission
-  mehrere hundert bis tausend Stück, alle in `SkippedObjects` gezählt.
+
+**Stand nach dieser Phase (1. Oktober 2026, Release, 900 Ticks je Lauf, frisch gemessen; die vier `*_USE_COMMANDBUTTON_ABILITY*`-Aktionen und
+`SpecialAbilityUpdate` sind neu):**
+
+- **`ScriptCoverage`:** Bedingungen weiterhin 63 ausgeführt / 46 fehlend von 109 (keine neue Bedingung diese Phase); Aktionen **73 ausgeführt** / 129
+  weitergereicht / **142 fehlend** von 344 (vier neu: `NAMED_USE_COMMANDBUTTON_ABILITY`, `NAMED_USE_COMMANDBUTTON_ABILITY_ON_NAMED`,
+  `TEAM_USE_COMMANDBUTTON_ABILITY`, `TEAM_USE_COMMANDBUTTON_ABILITY_ON_NAMED`).
+- **24 eindeutige Kampagnenkarten** liefen weiterhin fehlerfrei; **24/24** liefern über zwei frische Läufe dieselbe Hash-Kette und denselben Endhash;
+  **24/24** setzen nach Speichern und Wiederherstellen hash-identisch fort (unverändert — die 25. Karte der Liste, `Maps/CampEADemo/CampEADemo.map`,
+  bleibt im Retail-Bestand nicht vorhanden).
+- **Endproben durch Ausschalten:** Sieg **10/24** (unverändert), Niederlage **15/24** (in Summe unverändert, Zusammensetzung verschoben: `MD_USA03`
+  erreicht jetzt `lose@181` statt zuvor `UNMET`, `MD_GLA04` erreicht jetzt `UNMET` statt zuvor `lose@31` — mehr instanziierbare Objekte verschieben
+  Zähler- und Skriptausführungsreihenfolge in der 150-Tick-Anlaufphase der Probe, kein Regressionsbefund im eigentlichen Skriptverhalten, siehe die
+  neue Tabelle unten).
+- **Ausführungsbilanz** aller 24 Läufe: 2.341 Skripte ausgeführt, **7.377 Aktionen ausgeführt** (+216), 2.447 an den Client weitergereicht, **445
+  Treffer auf fehlende Aktionstypen = 4,3 % aller Aktionsausführungen** (vorher 575 / 5,7 %).
+- **Häufigste fehlende Aktionen jetzt:** `TEAM_GARRISON_SPECIFIC_BUILDING` 38/6, `MAP_REVEAL_ALL_PERM` 34/24, `TEAM_GARRISON_NEAREST_BUILDING` 33/3,
+  `BUILD_TEAM` 25/5, `WAREHOUSE_SET_VALUE` 20/5, `TEAM_MERGE_INTO_TEAM` 18/3, `OBJECT_ALLOW_BONUSES` 16/15, `PLAYER_ENABLE_BASE_CONSTRUCTION` 16/9,
+  `PLAYER_ENABLE_UNIT_CONSTRUCTION` 16/11, `PLAYER_AFFECT_RECEIVING_EXPERIENCE` 15/13, `PLAYER_PURCHASE_SCIENCE` 15/1; die vier implementierten
+  Typen sind vollständig aus dieser Liste verschwunden. Noch fehlend aus derselben Familie: die Pfadvarianten
+  `NAMED_USE_COMMANDBUTTON_ABILITY_(AT_WAYPOINT|USING_WAYPOINT_PATH)` und `TEAM_USE_COMMANDBUTTON_ABILITY_AT_WAYPOINT` sowie die gesamte
+  `TEAM_USE_COMMANDBUTTON_ON_NEAREST_*`-Familie (§8).
+- **Häufigste fehlende Bedingungen:** unverändert fast ausschließlich die `SKIRMISH_*`-Familie: `SKIRMISH_PLAYER_HAS_UNITS_IN_AREA` 37.227,
+  `SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER` 37.220, `SKIRMISH_SPECIAL_POWER_READY` 36.907, `PLAYER_TRIGGERED_SPECIAL_POWER` 17.106,
+  `SKIRMISH_VALUE_IN_AREA` 15.432, `TYPE_SIGHTED` 9.150, `NAMED_DISCOVERED` 3.929, `TEAM_DISCOVERED` 3.600.
+- **Unresolved references** nennt jetzt auch Befehlsknöpfe, die real existieren, aber keine Spezialkraft sind (kein stiller Fehlschlag): z. B.
+  `command button 'Command_GLAInfantryJarmenKellSnipeVehicleAttack' is not a special-power ability` (40, vermutlich `FIRE_WEAPON`/`SWITCH_WEAPON`)
+  und drei `Command_Upgrade*`-Knöpfe (`PLAYER_UPGRADE`, nicht `SPECIAL_POWER`).
+- **Nicht erzeugbare Objekte:** `SpecialAbilityUpdate` blockiert keine Mission mehr allein (36 vorher nur dadurch blockierte Objekte sind jetzt
+  instanziierbar, `AmericaInfantryRanger`/`MissileDefender`, `GLAInfantryJarmenKell`, `GLAInfantryRebel`-Fähigkeiten u. a.); verbleibend je Mission:
+  `CINE_*`-Flugzeuge (Verstärkungstransport nicht simuliert, §8), `ChinaVehicleHelix`, `AmericaJetRaptor`, einzelne `SupW_*`-Sonderwaffenobjekte. Dazu
+  weiterhin Kartenobjekte, deren Vorlage im Retail-Basisbestand gar nicht steht (Straßen, Bürgersteige, Zäune, Bäume aus Kartenüberlagerungen,
+  `MapOverlayMode.Exclude`): je Mission mehrere hundert bis tausend Stück, alle in `SkippedObjects` gezählt.
 
 | Kampagne | Mission | Karte | Objekte erzeugt/platziert | Skripte | Aktionen ausgeführt / weitergereicht / fehlend | Sieg-Probe | Niederlage-Probe |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| TRAINING | Mission01 | Training01 | 1326/2040 | 45 | 37 / 57 / 30 | win:UNMET | lose:UNMET |
-| CHALLENGE_0 | Mission01 | GC_ChemGeneral | 646/983 | 64 | 751 / 27 / 8 | win@210 | lose@90 |
+| TRAINING | Mission01 | Training01 | 1369/2040 | 43 | 28 / 57 / 30 | win:UNMET | lose:UNMET |
+| CHALLENGE_0 | Mission01 | GC_ChemGeneral | 656/983 | 59 | 745 / 21 / 8 | win@210 | lose@90 |
 | CHALLENGE_0 | Mission02 | GC_NukeGeneral | 1466/2300 | 71 | 528 / 30 / 28 | win@180 | lose@90 |
-| CHALLENGE_0 | Mission03 | GC_SuperWeaponsGeneral | 569/681 | 73 | 518 / 21 / 27 | win@180 | lose@90 |
+| CHALLENGE_0 | Mission03 | GC_SuperWeaponsGeneral | 569/681 | 73 | 533 / 21 / 12 | win@180 | lose@90 |
 | CHALLENGE_0 | Mission04 | GC_TankGeneral | 1519/1573 | 932 | 480 / 926 / 25 | win@180 | lose@90 |
-| CHALLENGE_0 | Mission05 | GC_Stealth | 732/961 | 73 | 443 / 20 / 36 | win@180 | lose@90 |
-| CHALLENGE_0 | Mission06 | GC_LaserGeneral | 1184/4556 | 95 | 492 / 45 / 31 | win:UNMET | lose:UNMET |
-| CHALLENGE_0 | Mission07 | GC_ChinaBoss | 1034/1551 | 63 | 631 / 22 / 30 | win@300 | lose:UNMET |
+| CHALLENGE_0 | Mission05 | GC_Stealth | 733/961 | 73 | 469 / 20 / 10 | win@180 | lose@90 |
+| CHALLENGE_0 | Mission06 | GC_LaserGeneral | 1214/4556 | 95 | 492 / 45 / 31 | win:UNMET | lose:UNMET |
+| CHALLENGE_0 | Mission07 | GC_ChinaBoss | 1055/1551 | 60 | 628 / 18 / 30 | win@300 | lose:UNMET |
 | CHALLENGE_1 | Mission06 | GC_AirGeneral | 917/1077 | 50 | 559 / 29 / 3 | win@210 | lose@90 |
-| MD_USA_1_DEMO | Mission01 | MD_USA01 | 1326/2846 | 38 | 57 / 102 / 30 | win:UNMET | lose@151 |
-| MD_USA_2_DEMO | Mission01 | MD_USA02 | 1013/3158 | 56 | 103 / 132 / 7 | win:UNMET | lose@181 |
-| MD_GLA_3_DEMO | Mission01 | MD_GLA03 | 1020/1753 | 60 | 355 / 78 / 31 | win:UNMET | lose@182 |
-| USA | Mission03 | MD_USA03 | 1395/2153 | 33 | 74 / 70 / 16 | win:UNMET | lose:UNMET |
-| USA | Mission04 | MD_USA04 | 1100/2027 | 68 | 273 / 49 / 30 | win:UNMET | lose:UNMET |
-| USA | Mission05 | MD_USA05 | 1429/2757 | 69 | 197 / 108 / 7 | win:UNMET | lose:UNMET |
-| GLA | Mission01 | MD_GLA01 | 1213/1780 | 110 | 224 / 172 / 21 | win:UNMET | lose@181 |
-| GLA | Mission02 | MD_GLA02 | 526/1923 | 53 | 232 / 49 / 37 | win@180 | lose:UNMET |
-| GLA | Mission04 | MD_GLA04 | 1709/4271 | 44 | 131 / 73 / 71 | win:UNMET | lose@31 |
-| GLA | Mission05 | MD_GLA05 | 1784/5813 | 76 | 320 / 60 / 18 | win:UNMET | lose:UNMET |
-| China | Mission01 | MD_CHI01 | 973/3168 | 17 | 50 / 42 / 6 | win@241 | lose@181 |
-| China | Mission02 | MD_CHI02 | 1418/2321 | 74 | 215 / 161 / 33 | win@241 | lose@241 |
-| China | Mission03 | MD_CHI03 | 1242/2768 | 43 | 272 / 25 / 13 | win:UNMET | lose:UNMET |
-| China | Mission04 | MD_CHI04 | 1243/2038 | 22 | 19 / 37 / 3 | win:UNMET | lose@213 |
-| China | Mission05 | MD_CHI05 | 1413/2749 | 78 | 200 / 99 / 34 | win:UNMET | lose@181 |
+| MD_USA_1_DEMO | Mission01 | MD_USA01 | 1374/2846 | 38 | 68 / 102 / 19 | win:UNMET | lose@151 |
+| MD_USA_2_DEMO | Mission01 | MD_USA02 | 1049/3158 | 55 | 104 / 131 / 5 | win:UNMET | lose@181 |
+| MD_GLA_3_DEMO | Mission01 | MD_GLA03 | 1076/1753 | 61 | 356 / 78 / 31 | win:UNMET | lose@182 |
+| USA | Mission03 | MD_USA03 | 1426/2153 | 33 | 77 / 70 / 13 | win:UNMET | lose@181 |
+| USA | Mission04 | MD_USA04 | 1106/2027 | 68 | 274 / 49 / 29 | win:UNMET | lose:UNMET |
+| USA | Mission05 | MD_USA05 | 1442/2757 | 69 | 199 / 108 / 5 | win:UNMET | lose:UNMET |
+| GLA | Mission01 | MD_GLA01 | 1232/1780 | 110 | 225 / 172 / 20 | win:UNMET | lose@181 |
+| GLA | Mission02 | MD_GLA02 | 566/1923 | 53 | 232 / 49 / 37 | win@180 | lose:UNMET |
+| GLA | Mission04 | MD_GLA04 | 1734/4271 | 88 | 273 / 97 / 33 | win:UNMET | lose:UNMET |
+| GLA | Mission05 | MD_GLA05 | 1847/5813 | 76 | 320 / 60 / 18 | win:UNMET | lose:UNMET |
+| China | Mission01 | MD_CHI01 | 990/3168 | 17 | 50 / 42 / 6 | win@241 | lose@181 |
+| China | Mission02 | MD_CHI02 | 1418/2321 | 74 | 223 / 161 / 25 | win@241 | lose@241 |
+| China | Mission03 | MD_CHI03 | 1280/2768 | 43 | 277 / 25 / 8 | win:UNMET | lose:UNMET |
+| China | Mission04 | MD_CHI04 | 1259/2038 | 22 | 19 / 37 / 3 | win:UNMET | lose@213 |
+| China | Mission05 | MD_CHI05 | 1426/2749 | 78 | 218 / 99 / 16 | win:UNMET | lose@181 |
 
 Sieg-/Niederlage-Probe: `win@N`/`lose@N` = Ergebnis N Ticks nach der Probe erreicht; `win:UNMET`/`lose:UNMET` = Endskripte vorhanden, Ende nicht erreicht;
 `early-…` = die Mission entschied sich vor der Probe selbst (zählt nicht).
 
 **Ehrliche Einordnung:** Jede Kampagnenkarte lädt, läuft deterministisch und setzt nach Speichern/Laden identisch fort; ein großer Teil ihres Skriptflusses
-(Zustand, Teams, Bereiche, Gefechtsauslöser, Verstärkung, Ende) wird ausgeführt. **Es ist nicht belegt, dass jede Mission vollständig durchspielbar ist:**
-Befehlsknopf-Fähigkeiten (`*_USE_COMMANDBUTTON_ABILITY`), Garnisonen, Kartenaufdeckung, das Bauen von KI-Teams, Sichtbedingungen und die
-`SKIRMISH_*`-KI-Skripte fehlen, und die Endprobe erreicht nur die durch Ausschalten erreichbaren Enden.
+(Zustand, Teams, Bereiche, Gefechtsauslöser, Verstärkung, Ende) wird ausgeführt. Die vier häufigsten Befehlsknopf-Fähigkeits-Aktionen
+(`NAMED_/TEAM_USE_COMMANDBUTTON_ABILITY(_ON_NAMED)`) lösen jetzt echte Spezialkraftbefehle aus, und `SpecialAbilityUpdate` macht die davon betroffenen
+Einheiten (Ranger, Jarmen Kell, GLA-Rebellin u. a.) instanziierbar — die Pfadvarianten, die `TEAM_USE_COMMANDBUTTON_ON_NEAREST_*`-Familie und die
+inszenierte Fähigkeitswirkung selbst (Anreise, Verpacken, Fähigkeitsobjekte) bleiben offen. **Es ist weiterhin nicht belegt, dass jede Mission
+vollständig durchspielbar ist:** Garnisonen, Kartenaufdeckung, das Bauen von KI-Teams, Sichtbedingungen und die `SKIRMISH_*`-KI-Skripte fehlen, und die
+Endprobe erreicht nur die durch Ausschalten erreichbaren Enden.
 
