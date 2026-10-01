@@ -321,11 +321,12 @@ Welt-Dienste `IsSignificantlyAboveTerrain` und `BaseRegen*`.
 
 ## 6d. Spezialkräfte
 
-Zehn Module und ein Befehl bilden das Spezialkraft-Subsystem. Es schaltet die **echten Kommandozentralen aller 13
+Elf Module und ein Befehl bilden das Spezialkraft-Subsystem. Es schaltet die **echten Kommandozentralen aller 13
 Fraktionen** frei (vorher Kasernen als Ersatz, §7a). Referenz: `SpecialPower.cpp` (`SpecialPowerTemplate`, Feldtabelle),
 `SpecialPowerModule.cpp`, `OCLSpecialPower.cpp`, `CashBountyPower.cpp`, `CashHackSpecialPower.cpp`,
-`SpectreGunshipDeploymentUpdate.cpp`, `Player.cpp` (`addScience`, `grantScience`, `getOrStartSpecialPowerReadyFrame`,
-`expressSpecialPowerReadyFrame`), `ActionManager.cpp` (`canDoSpecialPower`) und `Object.cpp` (`scoreTheKill`).
+`SpectreGunshipDeploymentUpdate.cpp`, `SpecialAbilityUpdate.cpp`, `Player.cpp` (`addScience`, `grantScience`,
+`getOrStartSpecialPowerReadyFrame`, `expressSpecialPowerReadyFrame`), `ActionManager.cpp` (`canDoSpecialPower`) und
+`Object.cpp` (`scoreTheKill`).
 
 **Definition und Katalog.** `SpecialPower` ist streng typisiert (`SpecialPowerSchema`): `ReloadTime`, `RequiredScience`
 (Referenz auf `Science`), `PublicTimer`, `Enum` (Namenstabelle `SpecialPowerType`, 67 Einträge), `SharedSyncedTimer`,
@@ -368,6 +369,7 @@ Updatemodul, der fehlt – die Kraft wird verweigert statt still nichts zu tun).
 | `UnpauseSpecialPowerUpgrade` | Hebt eine Pause der benannten Kraft am Objekt auf. |
 | `SpecialPowerCompletionDie` | Meldet dem Skript-System das Ende des Trägers; Skripte gibt es nicht, das Modul ist ausdrücklich inert. |
 | `SpectreGunshipDeploymentUpdate` | Handler der Gunship-Kraft (erster Treffer nach Modulreihenfolge, `RequiredScience`). Das Kanonenboot ist eine fliegende Einheit mit eigener KI, die vom Kartenrand einfliegt; beides fehlt, daher `CreationSkipped(NoTerrainEdge)` und nur der Nachladestart des Trägers. |
+| `SpecialAbilityUpdate` | Wie `SpecialAbility`: eine reine Kraft ohne eigene Wirkung hier (Phase-10-Hülle). Im Original trägt dieses Modul die befehlsknopfausgelösten Einheitenfähigkeiten (Ranger-Granaten, Colonel Burtons Sprengsatz, Jarmen Kells Scharfschuss, der GLA-Rebellin Gebäudeeroberung/Fallenlegen, der Hacker-Geldraub) mit einer eigenen Anreise-/Verpackungs-/Vorbereitungs-/Fähigkeitsobjekt-Zustandsmaschine (`SpecialAbilityUpdate.cpp`); keine dieser Phasen ist simuliert. Das Modul hält nur den geteilten Nachlademechanismus, damit das Objekt instanziierbar ist (`docs/SIMULATION-CORE.md` §11) und `NAMED_/TEAM_USE_COMMANDBUTTON_ABILITY(_ON_NAMED)` die Kraft auslösen und nachladen lassen kann (`docs/SCRIPT-ENGINE.md` §5/§8). |
 
 **Science-Vergabe** (`SimulationWorld.AddScience`, gemeinsam für Kauf und `GrantScienceUpgrade`): nach dem Eintragen werden
 alle Kräfte der Objekte des Spielers, die diese Science verlangen, geweckt (`onSpecialPowerCreation` und sofort bereit,

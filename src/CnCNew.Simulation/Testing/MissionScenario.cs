@@ -95,7 +95,7 @@ public static class MissionProbe
     {
         var session = MissionSession.Start(options, catalog, fingerprint, terrain, map);
         while (session.World.Tick < settleTicks && !session.IsOver) session.Step();
-        var local = MissionSession.LocalPlayerOf(session.Program);
+        var local = MissionSession.LocalPlayerOf(session.Program, options.HumanSideName);
         var world = session.World;
         var toKill = world.Entities.Where(entity => !entity.Owner.IsSystem && (victory ? world.AreEnemies(local, entity.Owner) : entity.Owner == local || world.AreAllies(local, entity.Owner)))
             .OrderBy(entity => entity.Id.Value).Select(entity => entity.Id).ToArray();

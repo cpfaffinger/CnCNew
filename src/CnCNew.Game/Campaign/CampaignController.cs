@@ -20,15 +20,20 @@ public sealed class CampaignController(MissionContext context, CampaignDefinitio
     public CampaignMission CurrentMission
         => Campaign.FindMission(Progress.CurrentMission) ?? throw new InvalidOperationException($"Mission {Progress.CurrentMission} is not part of campaign {Campaign.Name}.");
 
-    /// <summary>Starts the current mission: counts the attempt and builds the world. The seed depends on the mission and the attempt so a retry is not a replay of the last try.</summary>
-    public MissionRun StartCurrentMission(long maxTicks = 0)
+    /// <summary>
+    /// Starts the current mission: counts the attempt and builds the world. The seed depends on the mission and the attempt so a retry is not a
+    /// replay of the last try. <paramref name="humanSideName"/> is the host's choice of human side for a map that does not mark one itself (the
+    /// Generals' Challenge maps model the chosen general as the map's only human side but leave naming it to the host); empty keeps
+    /// <see cref="Mission.MissionSession.LocalPlayerOf"/>'s own fallback.
+    /// </summary>
+    public MissionRun StartCurrentMission(long maxTicks = 0, string humanSideName = "")
     {
         if (Progress.Finished) throw new InvalidOperationException("The campaign is finished.");
         var mission = CurrentMission;
         Progress = Progress.Started();
         var attempts = Progress.AttemptsOf(mission.Name);
         var seed = unchecked(baseSeed + (uint)attempts * 7919u + (uint)Campaign.Sequence.IndexOf(mission) * 104729u);
-        var options = new MissionOptions(seed, Progress.Difficulty, maxTicks, MissionAttempts: attempts);
+        var options = new MissionOptions(seed, Progress.Difficulty, maxTicks, MissionAttempts: attempts, HumanSideName: humanSideName);
         return MissionRun.Load(context, mission.MapPath, options, mission);
     }
 

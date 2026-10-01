@@ -100,6 +100,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
     var probes = !args.Contains("--no-probes");
     var continuation = !args.Contains("--no-continuation");
     var explain = args.Contains("--explain");
+    var humanSideName = Arg(args, "--human-side") ?? string.Empty;
     var (context, catalog, fingerprint) = Compile(content);
     var missing = new SortedDictionary<string, long>(StringComparer.Ordinal);
     var missingMissions = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -122,7 +123,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             {
                 var map = context.LoadMap(mission.MapPath);
                 var terrain = TerrainMap.Build(map, mission.MapPath);
-                var options = MissionOptions.Standard;
+                var options = MissionOptions.Standard with { HumanSideName = humanSideName };
                 var first = MissionScenario.Run(options, catalog, fingerprint, terrain, map, ticks);
                 var second = MissionScenario.Run(options, catalog, fingerprint, terrain, map, ticks);
                 var same = first.Chain == second.Chain && first.FinalHash == second.FinalHash;
@@ -191,6 +192,7 @@ static int Playthrough(ContentFileSystem content, CampaignCatalog campaigns, str
 {
     var name = Arg(args, "--campaign") ?? throw new ArgumentException("--campaign <name> is required.");
     var ticks = long.Parse(Arg(args, "--ticks") ?? "900", CultureInfo.InvariantCulture);
+    var humanSideName = Arg(args, "--human-side") ?? string.Empty;
     var campaign = campaigns.Find(name) ?? throw new ArgumentException($"Unknown campaign {name}.");
     var (context, _, _) = Compile(content);
     var controller = new CampaignController(context, campaign, CampaignProgress.Begin(campaign, ScriptDifficulty.Normal));
@@ -198,13 +200,13 @@ static int Playthrough(ContentFileSystem content, CampaignCatalog campaigns, str
     while (!controller.IsFinished)
     {
         var mission = controller.CurrentMission;
-        var run = controller.StartCurrentMission();
+        var run = controller.StartCurrentMission(humanSideName: humanSideName);
         var session = run.Session;
         while (session.World.Tick < 150 && !session.IsOver) session.Step();
         var save = SaveGame.Write(run, controller.Progress, $"{campaign.Name} {mission.Name}");
         var loaded = SaveGame.Load(save, context, campaigns);
         var reloadOk = loaded.Run.Session.StateHash() == session.StateHash() && loaded.Progress is not null && loaded.Progress.CurrentMission == mission.Name;
-        var local = MissionSession.LocalPlayerOf(session.Program);
+        var local = MissionSession.LocalPlayerOf(session.Program, session.Options.HumanSideName);
         foreach (var entity in session.World.Entities.Where(entity => !entity.Owner.IsSystem && session.World.AreEnemies(local, entity.Owner)).OrderBy(entity => entity.Id.Value).ToArray()) session.World.Kill(entity.Id);
         while (session.World.Tick < ticks && !session.IsOver) session.Step();
         if (session.Outcome == MissionOutcome.None)

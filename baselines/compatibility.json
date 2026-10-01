@@ -3748,6 +3748,51 @@
     },
     {
       "category": "deferred-field",
+      "name": "SpecialAbilityUpdate/DisableFXParticleSystem",
+      "count": 15,
+      "owners": [
+        "SpecialAbilityUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SpecialAbilityUpdate/PackSound",
+      "count": 33,
+      "owners": [
+        "SpecialAbilityUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SpecialAbilityUpdate/PrepSoundLoop",
+      "count": 33,
+      "owners": [
+        "SpecialAbilityUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SpecialAbilityUpdate/TriggerSound",
+      "count": 28,
+      "owners": [
+        "SpecialAbilityUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SpecialAbilityUpdate/UnpackSound",
+      "count": 54,
+      "owners": [
+        "SpecialAbilityUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "SpecialPower/AcademyClassify",
       "count": 47,
       "owners": [
@@ -5267,7 +5312,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3792,
+      "count": 3692,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6459,15 +6504,6 @@
       "category": "module",
       "name": "SpawnPointProductionExitUpdate",
       "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpecialAbilityUpdate",
-      "count": 100,
       "owners": [
         "Object"
       ],

@@ -237,6 +237,26 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 2)) CreateReinforcements(Str(p, 0), Str(p, 1));
                 break;
 
+            // ---- command-button abilities (doNamed/TeamUseCommandButtonAbility(OnNamed), ControlBar::findCommandButton)
+            case "NAMED_USE_COMMANDBUTTON_ABILITY":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } namedAbilityUser)
+                    UseCommandButtonAbility(namedAbilityUser, Str(p, 1), SpecialPowerTargetKind.None, EntityId.Invalid, Fixed.Zero, Fixed.Zero);
+                break;
+            case "NAMED_USE_COMMANDBUTTON_ABILITY_ON_NAMED":
+                if (Has(type, p, 3) && NamedEntity(Str(p, 0)) is { } namedAbilityAttacker && NamedEntity(Str(p, 2)) is { } namedAbilityTarget)
+                    UseCommandButtonAbility(namedAbilityAttacker, Str(p, 1), SpecialPowerTargetKind.Object, namedAbilityTarget.Id, Fixed.Zero, Fixed.Zero);
+                break;
+            case "TEAM_USE_COMMANDBUTTON_ABILITY":
+                if (Has(type, p, 2))
+                    foreach (var team in TeamsNamed(Str(p, 0)))
+                        foreach (var member in LiveMembers(team).ToArray()) UseCommandButtonAbility(member, Str(p, 1), SpecialPowerTargetKind.None, EntityId.Invalid, Fixed.Zero, Fixed.Zero);
+                break;
+            case "TEAM_USE_COMMANDBUTTON_ABILITY_ON_NAMED":
+                if (Has(type, p, 3) && NamedEntity(Str(p, 2)) is { } teamAbilityTarget)
+                    foreach (var team in TeamsNamed(Str(p, 0)))
+                        foreach (var member in LiveMembers(team).ToArray()) UseCommandButtonAbility(member, Str(p, 1), SpecialPowerTargetKind.Object, teamAbilityTarget.Id, Fixed.Zero, Fixed.Zero);
+                break;
+
             // ---- orders (player commands; see OrderMove)
             case "MOVE_NAMED_UNIT_TO":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } walker && WaypointOrDiagnose(Str(p, 1)) is { } spot) MoveTo(walker, spot.X, spot.Y);
@@ -445,6 +465,28 @@ public sealed partial class ScriptEngine
         }
         team.Created = true;
         _world.MaterializePendingSpawns();
+    }
+
+    /// <summary>
+    /// <c>Object::doCommandButton</c>/<c>doCommandButtonAtObject</c> for a script-named ability: the reference looks the button up in the carrier's
+    /// own command set for the <c>NAMED_*</c> variants and in the global command-button registry for the <c>TEAM_*</c> ones
+    /// (<c>ScriptActions::doNamedUseCommandButtonAbility</c>, <c>doTeamUseCommandButtonAbility</c>); ability button names are unique in the shipped
+    /// data, so one global lookup (<see cref="CommandCatalog.TryGetSpecialPowerAbility"/>) serves both. Only <c>SPECIAL_POWER*</c> buttons
+    /// are handled — a button of another command type (set rally point, sell, switch weapon, ...) is counted as a diagnostic, not executed, since the
+    /// VM has no generic command dispatch (<c>docs/SCRIPT-ENGINE.md</c> §8). The actual use is the ordinary <see cref="UseSpecialPowerCommand"/> a
+    /// player's UI would issue, so the usual readiness, science and target checks apply.
+    /// </summary>
+    private void UseCommandButtonAbility(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target, Fixed x, Fixed y)
+    {
+        if (!_world.Templates.Commands.TryGetSpecialPowerAbility(ability, out var power))
+        {
+            Diagnose($"command button '{ability}' is not a special-power ability");
+            return;
+        }
+        if (carrier.Owner.IsSystem) { Diagnose("ability use for a neutral object"); return; }
+        var owner = carrier.Owner;
+        var source = carrier.Id;
+        if (!_issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, source, power, kind, target, x, y)).Accepted) Diagnose("ability use rejected");
     }
 
     // ------------------------------------------------------------------------------------------------ orders

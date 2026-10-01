@@ -430,6 +430,10 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
+- **Stand nach Zusammenführung von Kollision und Spezialfähigkeits-Hülle (1. Oktober 2026, neu zu messen): beide Zweige unten wurden unabhängig
+  voneinander auf demselben Phase-9-Stand gemessen und danach gemergt; 91 von 205 Modultypen implementiert (4 neu gegenüber dem Phase-9-Stand:
+  `ToppleUpdate`, `StructureToppleUpdate`, `HeightDieUpdate`, `SpecialAbilityUpdate`).** Instanziierbarkeit, Modulverwendungen, Kompatibilitätsbasislinie
+  und Referenzmatch-Hash sind nach dem Merge neu zu messen (siehe Abschlussbericht dieser Phase für die frischen Zahlen).
 - **Stand nach Phase 10, Kollision (1. Oktober 2026, frisch gemessen): 2.115 Objekte, 1.588 vollständig instanziierbar (75,1 %)**, 527 blockiert; 90 von 205 Modultypen
   implementiert (3 neu: `ToppleUpdate`, `StructureToppleUpdate`, `HeightDieUpdate`, §23), sie decken 15.752 von 19.553 Modulverwendungen (80,6 %); Fingerabdruck `D112D8B5AF345559…`.
   `ToppleUpdate` (76/66) und `HeightDieUpdate` (31/24) verschwinden vollständig aus der Blockerliste; größte verbleibende Blocker: `SpecialAbilityUpdate` 64/36,
@@ -439,7 +443,13 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   sind und am Kampf teilnehmen); zwei frische Läufe und eine Fortsetzung ab Tick 5.438 liefern identische Hashes. Der synthetische 216.000-Tick-Stresstest trägt keine der drei
   neuen Module und bleibt unverändert bei `ED6F9329F59662E3`. Kompatibilitätsbasislinie 756 Einträge (vorher 749): 9 `module`-Einträge entfallen (jetzt implementiert), 16 neue
   `deferred-field`-Einträge für reine Präsentationsfelder der drei Module (FX-Listen, `ReorientToppledRubble`, Salven-Timing, `DestroyAttachedParticlesAtHeight`).
-- **Stand nach den Phase-9-Missionsmodulen (1. Oktober 2026): 2.115 Objekte, 1.494 vollständig instanziierbar (70,6 %)**, 621 blockiert; 87 von 205 Modultypen implementiert (2 neu: `CommandButtonHuntUpdate`, `LockWeaponCreate` – ehrliche Hüllenmodule, siehe unten), sie decken 15.639 von 19.553 Modulverwendungen (80,0 %); Fingerabdruck `2B9D902AEC46A6DE…`. Größte verbleibende Blocker (Objekte insgesamt / nur dadurch blockiert): `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/36, `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `HeightDieUpdate` 31/24, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `BaikonurLaunchPower` 23/23. **Hüllenmodule:** `CommandButtonHuntUpdate` (86 Verwendungen, keine Schlüssel; wird im Original nur von `TEAM_HUNT_WITH_COMMAND_BUTTON` ausgelöst) hält keinen Zustand, `LockWeaponCreate` sperrt den Primär-Slot (`SlotToLock = PRIMARY` in allen 12 Verwendungen; die Simulation führt nur eine Waffe, ein anderer Slot ist eine `UnsupportedModuleConfigurationException`); die auslösenden Skriptaktionen bleiben fehlend und werden gezählt (`docs/SCRIPT-ENGINE.md` §8). Der Retail-Referenzmatch verändert sich dadurch (Ranger u. a. entstehen jetzt als Startobjekte): Sieger FactionAmerica bei Tick 13.665 (Replay 13.966 Ticks), Endhash (`final hash`, Run 1) `D4779BE413835B6D`; zuvor Tick 13.800 (14.101 Ticks), `95022B80366E841E`. Der Stresstest (216.000 Ticks) bleibt bei `ED6F9329F59662E3`.
+- **Stand nach Phase 10, Spezialfähigkeits-Hülle (1. Oktober 2026, frisch gemessen): 2.115 Objekte, 1.530 vollständig instanziierbar (72,3 %)**, 585 blockiert; 88 von 205
+  Modultypen implementiert (1 neu: `SpecialAbilityUpdate`, ehrliche Hülle, siehe §23), sie decken 15.730 von 19.553 Modulverwendungen (80,4 %);
+  Kompatibilitätsbasislinie 751 Einträge. `SpecialAbilityUpdate` fällt aus der Blockerliste (vorher 64 Objekte/36 nur dadurch blockiert). Der
+  Retail-Referenzmatch verändert sich dadurch (Ranger, Jarmen Kell, GLA-Rebellin u. a. sind jetzt vollständig instanziierbar, nicht nur ihre Hülle):
+  Sieger FactionAmerica bei Tick 14.550 (Replay 14.851 Ticks), Endhash (`final hash`, Run 1) `3DA826C10BB6781B`; zuvor Tick 13.665 (13.966 Ticks),
+  `D4779BE413835B6D`. Details in §23.
+- Stand nach den Phase-9-Missionsmodulen (1. Oktober 2026): 2.115 Objekte, 1.494 vollständig instanziierbar (70,6 %), 621 blockiert; 87 von 205 Modultypen implementiert (2 neu: `CommandButtonHuntUpdate`, `LockWeaponCreate` – ehrliche Hüllenmodule, siehe unten), sie decken 15.639 von 19.553 Modulverwendungen (80,0 %); Fingerabdruck `2B9D902AEC46A6DE…`. Größte verbleibende Blocker (Objekte insgesamt / nur dadurch blockiert): `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/36, `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `HeightDieUpdate` 31/24, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `BaikonurLaunchPower` 23/23. **Hüllenmodule:** `CommandButtonHuntUpdate` (86 Verwendungen, keine Schlüssel; wird im Original nur von `TEAM_HUNT_WITH_COMMAND_BUTTON` ausgelöst) hält keinen Zustand, `LockWeaponCreate` sperrt den Primär-Slot (`SlotToLock = PRIMARY` in allen 12 Verwendungen; die Simulation führt nur eine Waffe, ein anderer Slot ist eine `UnsupportedModuleConfigurationException`); die auslösenden Skriptaktionen bleiben fehlend und werden gezählt (`docs/SCRIPT-ENGINE.md` §8). Der Retail-Referenzmatch verändert sich dadurch (Ranger u. a. entstehen jetzt als Startobjekte): Sieger FactionAmerica bei Tick 13.665 (Replay 13.966 Ticks), Endhash (`final hash`, Run 1) `D4779BE413835B6D`; zuvor Tick 13.800 (14.101 Ticks), `95022B80366E841E`. Der Stresstest (216.000 Ticks) bleibt bei `ED6F9329F59662E3`.
 - **Stand nach Phase 8, Paket E1 (30. September 2026, frisch gemessen): 2.115 Objekte, 1.470 vollständig instanziierbar (69,5 %)**, 645 blockiert;
   85 von 205 Modultypen implementiert (8 neu: `DumbProjectileBehavior`, `MissileAIUpdate`, `PointDefenseLaserUpdate`, `TransportAIUpdate`, `ChinookAIUpdate`,
   `HelicopterSlowDeathBehavior`, `TunnelContain`, `HelixContain`, §21), sie decken 15.543 von 19.553 Modulverwendungen (79,5 %); Fingerabdruck
@@ -834,3 +844,25 @@ Katalogschema und Bindung: `src/CnCNew.Data/Registry/ModuleCatalog.cs`, `src/CnC
 Dateien, die andere Agenten parallel bearbeiten könnten: zwei neue Methoden auf `IWorldServices`/`SimulationWorld` (`AvoidLocalBlockers`, `ResolveFootprintCollisions`, beide in der
 neuen Datei `World/SimulationWorld.Collision.cs`), zwei neue Felder auf `ObjectTemplate` (`CrusherLevel`, `CrushableLevel`), ein neuer Eintrag in der Bindungsliste
 `BuiltInModules.cs` und zwei minimale Aufrufe (keine Logikänderung) im Bewegungscode von `AIUpdateInterface` (`Modules/BuiltIn/Phase5Modules.cs`).
+
+## 24. Phase 10: Befehlsknopf-Fähigkeiten, lokale Seite
+
+Details, Quellverweise und Messwerte in `docs/SCRIPT-ENGINE.md` §5/§7/§8/§9; dieser Abschnitt nennt nur die neuen Schnittstellen.
+
+- **Neues Modul** `SpecialAbilityUpdate` (`Modules/BuiltIn/SpecialPowerModules.cs`): eine `SpecialPowerModuleBase`-Hülle ohne eigene Wirkung (siehe
+  `docs/GAME-RULES.md` §6d); Katalogschema in `CnCNew.Data.Registry.ModuleCatalog` (31 im Bestand verwendete Felder, Quelle `SpecialAbilityUpdate.cpp`).
+  Modultypen implementiert jetzt 88 von 205 (vorher 87); Instanziierbarkeit 1.530 von 2.115 Objekten (72,3 %, vorher 70,6 %), Modulverwendungen
+  abgedeckt 15.730 von 19.553 (80,4 %, vorher 80,0 %); Kompatibilitätsbasislinie **751** Einträge (vorher 747 — fünf neue `deferred-field`-Einträge für
+  die Sound-/Partikelfelder des Moduls, ein `MISSING module`-Eintrag entfällt; `IniTool compat-baseline` neu geschrieben, Review-Gegenstand).
+- **Neue, additive API** (keine bestehende Signatur geändert):
+  - `CnCNew.Simulation.Templates.CommandCatalog.TryGetSpecialPowerAbility(string buttonName, out string specialPower)`: löst einen `CommandButton`
+    (`Command = SPECIAL_POWER*`) global auf seinen `SpecialPowerTemplate`-Namen auf; `CommandCatalog.Build` füllt die Tabelle zusätzlich zu den
+    bestehenden Baulisten.
+  - `MissionSession.LocalPlayerOf(ScriptProgram, string humanSideName = "")` (zusätzlicher Parameter, Standard unverändert) und
+    `MissionOptions.HumanSideName` (zusätzlicher Record-Parameter mit Standard `""`): der Host kann die Seite des menschlichen Betrachters benennen,
+    unabhängig von `playerIsHuman` (Generals'-Challenge-Karten ohne markierte menschliche Seite). `CampaignController.StartCurrentMission` bekommt
+    denselben zusätzlichen Parameter; `CampaignTool audit|playthrough` ein neues `--human-side <Name>`.
+- **Zustandsformat:** `MissionSnapshot.Version` **2** (vorher 1): `options.humanSideName` ergänzt; ältere Missionszustände werden mit
+  `SnapshotFormatException` abgelehnt (keine stille Migration). Welt-Snapshot (7), Replay (7) und `CommandTypes.Version` (9) sind unverändert.
+- **Determinismus:** `SpecialAbilityUpdate` fügt keinen eigenen Zustand hinzu (die geerbte Nachlademaschine von `SpecialPowerModuleBase` deckt es ab);
+  der `SourceRules`-Test besteht unverändert. `CommandCatalog`s neue Tabelle wird aus den Definitionen gebaut, nicht zur Laufzeit verändert.

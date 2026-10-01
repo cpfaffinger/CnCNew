@@ -15,7 +15,16 @@ namespace CnCNew.Simulation.Mission;
 /// <param name="MaxTicks">Hard stop for headless runs; 0 means no limit (a live mission ends with its script outcome).</param>
 /// <param name="MissionAttempts">How many times the player has started this mission (the campaign progress knows; <c>MISSION_ATTEMPTS</c> conditions compare against it).</param>
 /// <param name="CombatIntervalTicks">How often units look for a target in range (the stand-in for the reference's idle target acquisition).</param>
-public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty, long MaxTicks = 0, int PresentationLatencyTicks = 0, int CombatIntervalTicks = 3, int MissionAttempts = 1)
+/// <param name="HumanSideName">
+/// Which map side the host wants as the human viewer (<c>&lt;Local Player&gt;</c>, the multiplayer victory/defeat conditions), by side name —
+/// deliberately not required to be marked <c>playerIsHuman</c> on the map, since the Generals' Challenge maps model the chosen general as an
+/// ordinary side and leave naming the human one to the host. Empty (the default) keeps <see cref="MissionSession.LocalPlayerOf"/>'s own fallback:
+/// the first side the map itself marks <c>playerIsHuman</c>; without this set, a map with no such side (e.g. <c>GC_LaserGeneral</c>) silently
+/// defaults to player 1 — see <c>docs/SCRIPT-ENGINE.md</c> §7. A name that does not exist on the map falls back the same way, which
+/// <see cref="MissionSession.Notes"/> records, never silently.
+/// </param>
+public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty, long MaxTicks = 0, int PresentationLatencyTicks = 0, int CombatIntervalTicks = 3,
+    int MissionAttempts = 1, string HumanSideName = "")
 {
     public static MissionOptions Standard { get; } = new(0xC0FFEE09, ScriptDifficulty.Normal);
 }
@@ -50,7 +59,13 @@ public sealed class MissionSession
         Program = program;
         Map = map;
         Notes = notes;
-        Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, LocalPlayerOf(program), options.PresentationLatencyTicks, options.MissionAttempts), Issue);
+        var localPlayer = LocalPlayerOf(program, options.HumanSideName);
+        if (options.HumanSideName.Length > 0 && !program.Players.Any(player => !player.Id.IsSystem && string.Equals(player.Name, options.HumanSideName, StringComparison.Ordinal)))
+        {
+            var fallbackName = program.Players.FirstOrDefault(player => player.Id == localPlayer)?.Name ?? localPlayer.ToString();
+            Notes = [..Notes, $"requested human side '{options.HumanSideName}' is not a human side of this map; falling back to '{fallbackName}'"];
+        }
+        Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, localPlayer, options.PresentationLatencyTicks, options.MissionAttempts), Issue);
     }
 
     public MissionOptions Options { get; }
@@ -69,9 +84,17 @@ public sealed class MissionSession
     /// <summary>The mission is over once its script ended it (victory or defeat plus the end-game delay) or the tick limit passed.</summary>
     public bool IsOver => Engine.IsEnded || (Options.MaxTicks > 0 && World.Tick >= Options.MaxTicks);
 
-    /// <summary>The human viewer: the first human side of the map.</summary>
-    public static PlayerId LocalPlayerOf(ScriptProgram program)
+    /// <summary>
+    /// The human viewer: <paramref name="humanSideName"/> when it names any non-system side of the map (the host's explicit choice — deliberately
+    /// not required to be <c>playerIsHuman</c>, since the Generals' Challenge maps model the chosen general as an ordinary side and leave which one
+    /// is the human to the host), else the first side the map itself marks <c>playerIsHuman</c>, else player 1 (a map with no human side at all,
+    /// which does not happen in practice but must still resolve to something).
+    /// </summary>
+    public static PlayerId LocalPlayerOf(ScriptProgram program, string humanSideName = "")
     {
+        if (humanSideName.Length > 0)
+            foreach (var player in program.Players)
+                if (!player.Id.IsSystem && string.Equals(player.Name, humanSideName, StringComparison.Ordinal)) return player.Id;
         foreach (var player in program.Players)
             if (player.IsHuman && !player.Id.IsSystem) return player.Id;
         return new PlayerId(1);

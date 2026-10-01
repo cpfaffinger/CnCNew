@@ -22,7 +22,8 @@ namespace CnCNew.Simulation.Mission;
 public static class MissionSnapshot
 {
     public const string Format = "cncnew-mission-state";
-    public const int Version = 1;
+    // Version 2 adds options.humanSideName (MissionOptions.HumanSideName, docs/SCRIPT-ENGINE.md §7); older snapshots are refused, never defaulted.
+    public const int Version = 2;
 
     public static byte[] Write(MissionSession session)
     {
@@ -46,6 +47,7 @@ public static class MissionSnapshot
             writer.Int("presentationLatencyTicks", session.Options.PresentationLatencyTicks);
             writer.Int("combatIntervalTicks", session.Options.CombatIntervalTicks);
             writer.Int("missionAttempts", session.Options.MissionAttempts);
+            writer.Text("humanSideName", session.Options.HumanSideName);
             writer.EndObject();
             writer.Text("stateHash", session.StateHash().ToString("X16"));
             writer.BeginObject("session");
@@ -86,7 +88,8 @@ public static class MissionSnapshot
             var difficulty = checked((int)options.Int("difficulty"));
             if (!Enum.IsDefined((ScriptDifficulty)difficulty)) throw new SnapshotFormatException("Unknown difficulty in mission state.");
             var restoredOptions = new MissionOptions(checked((uint)options.UInt("worldSeed")), (ScriptDifficulty)difficulty, options.Int("maxTicks"),
-                checked((int)options.Int("presentationLatencyTicks")), checked((int)options.Int("combatIntervalTicks")), checked((int)options.Int("missionAttempts")));
+                checked((int)options.Int("presentationLatencyTicks")), checked((int)options.Int("combatIntervalTicks")), checked((int)options.Int("missionAttempts")),
+                options.Text("humanSideName"));
 
             var worldBytes = Encoding.UTF8.GetBytes(document.RootElement.GetProperty("world").GetRawText());
             var world = WorldSnapshot.Restore(worldBytes, templates, expectedDefinitionFingerprint, terrain);
