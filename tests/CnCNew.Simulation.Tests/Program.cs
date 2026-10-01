@@ -59,6 +59,7 @@ run.Test("Phase 5: player/faction setup and science purchase", Tests.Phase5Scien
 run.Test("Phase 5: SlowDeathBehavior weighted sibling lottery", Tests.Phase5SlowDeath);
 run.Test("Phase 5: FireWeaponWhenDeadBehavior activation and conflict re-check", Tests.Phase5FireWeaponWhenDead);
 run.Test("Phase 5: StealthDetectorUpdate marks and expires DETECTED", Tests.Phase5StealthDetector);
+run.Test("Phase 10: StealthDetectorUpdate respects height line of sight", Tests.Phase5StealthDetectorHeightLineOfSight);
 run.Test("Phase 5: PoisonedBehavior periodic damage, re-poison and healing", Tests.Phase5Poisoned);
 run.Test("Phase 5: BaseRegenerateUpdate delay, bursts and stop at full health", Tests.Phase5BaseRegenerate);
 run.Test("Phase 5: PhysicsBehavior, SquishCollide and GenerateMinefieldBehavior", Tests.MatchMinefieldAndPhysics);
@@ -86,6 +87,7 @@ run.Test("Veterancy golden master: experience, levels and health scaling", Tests
 run.Test("Veterancy: no experience for non-trainable killers and IGNORED_IN_GUI victims", Tests.VeterancyGrantRules);
 run.Test("Veterancy golden master: weapon bonus damage, range and rate of fire per level", Tests.VeterancyWeaponBonusGoldenMaster);
 run.Test("Veterancy: experience scalar, weapon bonus upgrade, starting level and snapshot", Tests.VeterancyUpgradesAndStartingLevel);
+run.Test("Veterancy: veteran ArmorSet/WeaponSet selection by rank", Tests.VeterancyArmorAndWeaponSetSelection);
 run.Test("Supply economy: an unordered hauler stays idle", Tests.SupplyIdleHaulerEarnsNothing);
 run.Test("Supply economy: warehouse queue and DeleteWhenEmpty", Tests.SupplyQueueAndDeleteWhenEmpty);
 run.Test("Supply economy: DockCommand validation", Tests.SupplyDockCommandValidation);
@@ -116,6 +118,7 @@ run.Test("Terrain: height sampling, border and clamping", Tests.TerrainHeightSam
 run.Test("Terrain: cliff and water cell classification, overlapping water", Tests.TerrainCellClassification);
 run.Test("Terrain: world placement, snapshot v5 and replay v5 carry the fingerprint", Tests.TerrainInWorldSnapshotAndReplay);
 run.Test("Terrain: start positions, waypoints, fingerprint and boundary validation", Tests.TerrainStartsAndFingerprint);
+run.Test("Terrain: height-based line of sight", Tests.TerrainHeightLineOfSight);
 run.Test("Navigation: integer Atan2, angle difference and normalization", Tests.NavigationAtan2);
 run.Test("Navigation: surface priorities, footprints and the obstacle sum", Tests.NavigationGridRules);
 run.Test("Navigation: A* around walls, smoothing, partial and blocked paths", Tests.NavigationPathfinding);
@@ -135,6 +138,7 @@ run.Test("Construction: produced units walk to the rally point", Tests.Construct
 run.Test("Construction: dozers repair damaged structures", Tests.ConstructionRepair);
 run.Test("Construction: a second builder resumes an unfinished site", Tests.ConstructionResumeWithAnotherBuilder);
 run.Test("Construction: rejections for permission, prerequisites, funds and kind", Tests.ConstructionRejections);
+run.Test("Construction: production rejections (side, buildable, prerequisites, MaxSimultaneousOfType)", Tests.ConstructionProductionRejections);
 run.Test("Construction: placement on terrain", Tests.ConstructionPlacementRules);
 run.Test("Construction: snapshot mid-construction and mid-sale, replay round trip", Tests.ConstructionSnapshotAndReplay);
 run.Test("Navigation: escape from and goal inside a footprint", Tests.NavigationFootprintEscape);
@@ -151,10 +155,13 @@ run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", 
 run.Test("Modules: CommandButtonHuntUpdate and LockWeaponCreate shells", Tests.MissionBlockerShellModules);
 run.Test("Power: PowerPlantUpgrade adds and removes the energy bonus", Tests.PowerPlantUpgradeAddsAndRemovesTheBonus);
 run.Test("Power: OverchargeBehavior toggles, drains and switches itself off", Tests.OverchargeTogglesDrainsAndSwitchesItselfOff);
+run.Test("Power: the TOGGLE_OVERCHARGE command reaches the module", Tests.OverchargeCommandTogglesTheModule);
+run.Test("Power: CaptureCommand transfers ownership and the power pool", Tests.CaptureTransfersOwnershipAndThePowerPool);
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
 run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
+run.Test("Skirmish: a live session refuses to be saved (explicit, loud guard)", Tests.SkirmishSessionRefusesToSave);
 run.Test("Projectiles: straight shell flight time, impact event and detonation effect", Tests.ProjectileStraightShellFlightTime);
 run.Test("Projectiles: ballistic arc path points and flight time", Tests.ProjectileBallisticArc);
 run.Test("Projectiles: missile flight time (instant acceleration)", Tests.ProjectileMissileFlightTime);
