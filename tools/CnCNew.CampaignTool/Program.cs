@@ -25,6 +25,8 @@ const string Usage = """
                                                 script coverage (missing action/condition hits, unresolved references)
       reachability <content-dir> [--campaign NAME] [--difficulty easy|normal|hard]
                                                 static: can the mission's own VICTORY/DEFEAT scripts fire with the implemented condition/action types? (clean / degraded / blocked chains)
+      script <content-dir> --map TEXT --name SCRIPT
+                                                prints one script (conditions, actions) and every script whose actions name it
       sides <content-dir> [--campaign NAME]       the script players (sides) of every campaign map: name, faction, human flag (to map a chosen general to a map's side)
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
@@ -48,6 +50,7 @@ try
         "audit" => Audit(content, campaigns, args),
         "sides" => Sides(content, campaigns, args),
         "reachability" => ReachabilityReport(content, campaigns, args),
+        "script" => ScriptDump(content, campaigns, args),
         "playthrough" => Playthrough(content, campaigns, args),
         _ => Fail(Usage),
     };
@@ -124,6 +127,32 @@ static int ReachabilityReport(ContentFileSystem content, CampaignCatalog campaig
         Console.WriteLine($"  {name,-52} {scripts,5} / {missingActionMaps[name]}");
     Console.WriteLine($"{maps} maps analysed ({difficulty}). victory: clean {tally.GetValueOrDefault("victory:CLEAN")}, degraded {tally.GetValueOrDefault("victory:DEGRADED")}, blocked {tally.GetValueOrDefault("victory:BLOCKED")}, no victory script {tally.GetValueOrDefault("victory:NONE")}; " +
                       $"defeat: clean {tally.GetValueOrDefault("defeat:CLEAN")}, degraded {tally.GetValueOrDefault("defeat:DEGRADED")}, blocked {tally.GetValueOrDefault("defeat:BLOCKED")}, no defeat script {tally.GetValueOrDefault("defeat:NONE")}.");
+    return 0;
+}
+
+static int ScriptDump(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
+{
+    var (context, _, _) = Compile(content);
+    var mapFilter = Arg(args, "--map") ?? string.Empty;
+    var name = Arg(args, "--name") ?? string.Empty;
+    var mission = campaigns.Campaigns.SelectMany(campaign => campaign.Sequence).FirstOrDefault(item => item.MapPath.Contains(mapFilter, StringComparison.OrdinalIgnoreCase));
+    if (mission is null) return Fail("no such map");
+    var program = ScriptProgram.Build(context.LoadMap(mission.MapPath));
+    static string Text(MapScriptParameter value) => value.Text.Length > 0 ? value.Text : value.Type is MapScriptParameterType.Real or MapScriptParameterType.Angle ? value.Real.ToString(CultureInfo.InvariantCulture) : value.Integer.ToString(CultureInfo.InvariantCulture);
+    static string Describe(MapScriptAction action) => $"{action.TypeName}({string.Join(", ", action.Parameters.Select(Text))})";
+    foreach (var unit in program.Units.Where(item => item.Name == name))
+    {
+        var group = unit.GroupIndex >= 0 ? program.Groups[unit.GroupIndex] : null;
+        Console.WriteLine($"script '{unit.Name}' list {unit.ListIndex} group {group?.Name ?? "-"} (group active {group?.Group.IsActive}, subroutine {group?.Group.IsSubroutine}) active {unit.Script.IsActive} subroutine {unit.IsSubroutine}");
+        foreach (var or in unit.Script.OrConditions)
+            Console.WriteLine("  OR: " + string.Join(" AND ", or.AndConditions.Select(condition => $"{condition.TypeName}({string.Join(", ", condition.Parameters.Select(Text))})")));
+        foreach (var action in unit.Script.Actions) Console.WriteLine("  do " + Describe(action));
+        foreach (var action in unit.Script.FalseActions) Console.WriteLine("  else " + Describe(action));
+    }
+    foreach (var unit in program.Units)
+        foreach (var action in unit.Script.Actions.Concat(unit.Script.FalseActions).Where(item => item.Parameters.Any(value => value.Text == name)))
+            Console.WriteLine($"  named by '{unit.Name}': {Describe(action)}");
+    foreach (var group in program.Groups.Where(item => item.Name == name)) Console.WriteLine($"group '{group.Name}' active {group.Group.IsActive} subroutine {group.Group.IsSubroutine}, {group.ScriptIndices.Length} scripts");
     return 0;
 }
 

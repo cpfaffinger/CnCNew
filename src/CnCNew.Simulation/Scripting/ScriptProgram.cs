@@ -19,6 +19,20 @@ public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingl
     /// <summary><c>teamTransport</c>: the transport a reinforcement arrives in; empty when the units arrive by themselves.</summary>
     public string Transport { get; init; } = string.Empty;
 
+    /// <summary>The team event scripts (<c>teamOnCreateScript</c>, <c>teamOnIdleScript</c>, <c>teamEnemySightedScript</c>, <c>teamAllClearScript</c>, <c>teamOnDestroyedScript</c>, <c>teamOnUnitDestroyedScript</c>); empty when absent.</summary>
+    public string OnCreateScript { get; init; } = string.Empty;
+    public string OnIdleScript { get; init; } = string.Empty;
+    public string EnemySightedScript { get; init; } = string.Empty;
+    public string AllClearScript { get; init; } = string.Empty;
+    public string OnDestroyedScript { get; init; } = string.Empty;
+    public string OnUnitDestroyedScript { get; init; } = string.Empty;
+
+    /// <summary><c>teamDestroyedThreshold</c>: the share of the team that has to be lost before <see cref="OnDestroyedScript"/> runs (0: all of it).</summary>
+    public Fixed DestroyedThreshold { get; init; }
+
+    /// <summary>Whether the prototype has any event script, i.e. whether its instances carry <see cref="ScriptTeam"/> event state.</summary>
+    public bool HasEventScripts => OnCreateScript.Length + OnIdleScript.Length + EnemySightedScript.Length + AllClearScript.Length + OnDestroyedScript.Length + OnUnitDestroyedScript.Length > 0;
+
     /// <summary><c>teamHome</c>: the waypoint recruited units walk to (<c>RECRUIT_TEAM</c>); empty when the team has none.</summary>
     public string Home { get; init; } = string.Empty;
 
@@ -196,6 +210,13 @@ public sealed class ScriptProgram
                 Transport = team.GetText("teamTransport") ?? string.Empty,
                 ReinforcementOrigin = team.GetText("teamReinforcementOrigin") ?? string.Empty,
                 Home = team.GetText("teamHome") ?? string.Empty,
+                OnCreateScript = EventScript(team, "teamOnCreateScript"),
+                OnIdleScript = EventScript(team, "teamOnIdleScript"),
+                EnemySightedScript = EventScript(team, "teamEnemySightedScript"),
+                AllClearScript = EventScript(team, "teamAllClearScript"),
+                OnDestroyedScript = EventScript(team, "teamOnDestroyedScript"),
+                OnUnitDestroyedScript = EventScript(team, "teamOnUnitDestroyedScript"),
+                DestroyedThreshold = team.TryGetReal("teamDestroyedThreshold", out var threshold) ? Fixed.FromDecimal(threshold) : Fixed.Zero,
                 ProductionPriority = team.TryGetInt("teamProductionPriority", out var priority) ? priority : 0,
                 AiRecruitable = team.GetBool("teamIsAIRecruitable"),
             });
@@ -271,6 +292,13 @@ public sealed class ScriptProgram
         }
         return new ScriptProgram(players.ToImmutable(), teams.ToImmutable(), waypoints.ToImmutable(), areas.ToImmutable(), paths.ToImmutable(),
             objects.ToImmutable(), units.ToImmutable(), groups.ToImmutable(), map.PlayerScripts.Length);
+    }
+
+    /// <summary>A team event script name; the reference treats an empty name and the literal <c>&lt;none&gt;</c>/<c>None</c> entry of the World Builder as "no script" (<c>ScriptEngine::runScript</c>).</summary>
+    private static string EventScript(MapProperties team, string key)
+    {
+        var name = team.GetText(key) ?? string.Empty;
+        return name is "<none>" or "None" ? string.Empty : name;
     }
 
     private static ImmutableArray<string> SplitNames(string? text)

@@ -186,6 +186,11 @@ public sealed partial class ScriptEngine
                 if (_world.FindEntity(item.Entity) is { } hurt && _world.FindEntity(item.Other) is { } source && !hurt.Owner.IsSystem)
                     _attackedBy.Add((hurt.Owner.Value, source.Owner.Value));
                 break;
+            case CnCNew.Simulation.Events.SimEventKind.EntityDied:
+                // Team::notifyTeamOfObjectDeath: every member's death runs the team's unit-destroyed script (queued for the next update).
+                foreach (var team in _teams.Values)
+                    if (team.Members.Contains(item.Entity.Value) && _program.FindTeam(team.Prototype) is { OnUnitDestroyedScript.Length: > 0 } dying) _pendingTeamScripts.Add((team.Id, dying.OnUnitDestroyedScript));
+                break;
             case CnCNew.Simulation.Events.SimEventKind.EntitySpawned:
                 if (_world.FindEntity(item.Entity) is { } produced) JoinProducedUnit(produced);
                 break;
@@ -201,6 +206,18 @@ public sealed partial class ScriptEngine
         DescribeTeamBuilds(writer);
         DescribeSequences(writer);
         DescribePowerState(writer);
+        if (_pendingTeamScripts.Count > 0)
+        {
+            writer.BeginArray("pendingTeamScripts");
+            foreach (var (teamId, script) in _pendingTeamScripts)
+            {
+                writer.BeginObject(null);
+                writer.Int("team", teamId);
+                writer.Text("script", script);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
         // Written only when non-empty: a run that never used these keeps the serialized form (and hash) it had before they existed.
         if (_attackedBy.Count > 0)
         {
@@ -234,6 +251,9 @@ public sealed partial class ScriptEngine
         LoadTeamBuilds(reader);
         LoadSequences(reader);
         LoadPowerState(reader);
+        _pendingTeamScripts.Clear();
+        if (reader.Has("pendingTeamScripts"))
+            foreach (var item in reader.Array("pendingTeamScripts")) _pendingTeamScripts.Add((checked((int)item.Int("team")), item.Text("script")));
         _attackedBy.Clear();
         if (reader.Has("attackedBy")) foreach (var item in reader.Array("attackedBy")) _attackedBy.Add((checked((int)item.Int("victim")), checked((int)item.Int("attacker"))));
         _triggeredPowers.Clear();

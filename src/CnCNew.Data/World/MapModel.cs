@@ -37,6 +37,13 @@ public sealed record MapProperties(ImmutableArray<MapProperty> Items)
         return false;
     }
 
+    public bool TryGetReal(string key, out decimal value)
+    {
+        if (Find(key) is { Type: MapPropertyType.Real } property) { value = property.Real; return true; }
+        value = 0m;
+        return false;
+    }
+
     public string? GetText(string key) => Find(key) is { Type: MapPropertyType.Ascii or MapPropertyType.Unicode } property ? property.Text : null;
 
     public bool GetBool(string key) => Find(key) is { Type: MapPropertyType.Bool } property && property.Bool;

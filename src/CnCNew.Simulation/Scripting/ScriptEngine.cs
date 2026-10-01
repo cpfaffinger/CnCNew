@@ -45,6 +45,13 @@ public sealed class ScriptTeam(int id, string prototype, PlayerId owner)
     /// <summary><c>Team::m_isRecruitablitySet</c> / <c>m_isRecruitable</c> (<c>TEAM_AVAILABLE_FOR_RECRUITMENT</c>): when set, overrides the prototype's own recruitability.</summary>
     public bool RecruitableSet { get; set; }
 
+    // ---- state of the team event scripts (Team::updateState); only saved for a team whose prototype has any event script
+    internal bool CreateHandled { get; set; }
+    internal int CurUnits { get; set; }
+    internal int DestroyThreshold { get; set; } = -1;
+    internal bool SeeEnemy { get; set; }
+    internal bool WasIdle { get; set; }
+
     public bool Recruitable { get; set; }
 }
 
@@ -314,6 +321,7 @@ public sealed partial class ScriptEngine
         }
         _uiInteractions.Clear();
         UpdateFollowers();
+        ProcessTeamEvents();
         ProcessSequences();
         ProcessTeamBuilds();
         _pruneBelow = _world.Ids.NextEntity;
@@ -671,6 +679,14 @@ public sealed partial class ScriptEngine
             writer.Bool("created", team.Created);
             writer.Text("attackPriority", team.AttackPriority);
             if (team.RecruitableSet) writer.Bool("recruitable", team.Recruitable);
+            if (_program.FindTeam(team.Prototype) is { HasEventScripts: true })
+            {
+                writer.Bool("eventsCreateHandled", team.CreateHandled);
+                writer.Int("eventsCurUnits", team.CurUnits);
+                writer.Int("eventsThreshold", team.DestroyThreshold);
+                writer.Bool("eventsSeeEnemy", team.SeeEnemy);
+                writer.Bool("eventsWasIdle", team.WasIdle);
+            }
             writer.BeginArray("members");
             foreach (var member in team.Members.Order())
             {
@@ -842,6 +858,14 @@ public sealed partial class ScriptEngine
         foreach (var item in reader.Array("teams"))
         {
             var team = new ScriptTeam(checked((int)item.Int("id")), item.Text("prototype"), new PlayerId(checked((int)item.Int("owner")))) { Created = item.Bool("created"), AttackPriority = item.Text("attackPriority"), RecruitableSet = item.Has("recruitable"), Recruitable = item.Has("recruitable") && item.Bool("recruitable") };
+            if (item.Has("eventsCreateHandled"))
+            {
+                team.CreateHandled = item.Bool("eventsCreateHandled");
+                team.CurUnits = checked((int)item.Int("eventsCurUnits"));
+                team.DestroyThreshold = checked((int)item.Int("eventsThreshold"));
+                team.SeeEnemy = item.Bool("eventsSeeEnemy");
+                team.WasIdle = item.Bool("eventsWasIdle");
+            }
             foreach (var member in item.Array("members")) team.Members.Add(checked((uint)member.UInt("id")));
             _teams[team.Id] = team;
         }

@@ -25,6 +25,7 @@ sealed class Reachability(ScriptProgram program, ScriptDifficulty difficulty)
     private readonly Dictionary<string, List<ScriptUnit>> _counterSetters = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<ScriptUnit>> _timerSetters = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<ScriptUnit>> _enablers = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _teamEventScripts = new(StringComparer.Ordinal);
     private readonly Dictionary<int, Verdict> _memo = [];
     private readonly HashSet<int> _stack = [];
 
@@ -69,6 +70,9 @@ sealed class Reachability(ScriptProgram program, ScriptDifficulty difficulty)
 
     private void Index()
     {
+        foreach (var team in program.Teams)
+            foreach (var name in new[] { team.OnCreateScript, team.OnIdleScript, team.EnemySightedScript, team.AllClearScript, team.OnDestroyedScript, team.OnUnitDestroyedScript })
+                if (name.Length > 0) _teamEventScripts.Add(name);
         foreach (var unit in program.Units)
         {
             if (!Allowed(unit)) continue;
@@ -118,13 +122,15 @@ sealed class Reachability(ScriptProgram program, ScriptDifficulty difficulty)
         // Being enabled: active from the start (and its group too), or switched on / called by a reachable script.
         var group = unit.GroupIndex >= 0 ? program.Groups[unit.GroupIndex] : null;
         var startsRunning = script.IsActive && !script.IsSubroutine && (group is null || (group.Group.IsActive && !group.Group.IsSubroutine));
+        // A team event script (create, idle, enemy sighted, all clear, destroyed, unit destroyed) is called by the engine, not by another script.
+        if (!startsRunning && (_teamEventScripts.Contains(script.Name) || (group is not null && _teamEventScripts.Contains(group.Name)))) startsRunning = true;
         if (!startsRunning)
         {
             var enablers = new List<ScriptUnit>();
             if (_enablers.TryGetValue(script.Name, out var byScript)) enablers.AddRange(byScript);
             if (group is not null && _enablers.TryGetValue(group.Name, out var byGroup)) enablers.AddRange(byGroup);
-            var best = Best(enablers.Where(enabler => enabler != unit));
-            if (best is null) return Unreachable;
+            var best = Best(enablers.Where(enabler => enabler != unit), out var reasons);
+            if (best is null) return new Verdict(Kind.Blocked, reasons.Count > 0 ? reasons : ImmutableSortedSet.Create($"script '{script.Name}' is never enabled"));
             foreach (var blocker in best.Blockers) blockers.Add(blocker);
         }
 
@@ -154,15 +160,20 @@ sealed class Reachability(ScriptProgram program, ScriptDifficulty difficulty)
 
     private static Verdict Finish(ImmutableSortedSet<string>.Builder blockers) => new(blockers.Count == 0 ? Kind.Clean : Kind.Degraded, blockers.ToImmutable());
 
-    private Verdict? Best(IEnumerable<ScriptUnit> producers)
+    private Verdict? Best(IEnumerable<ScriptUnit> producers) => Best(producers, out _);
+
+    private Verdict? Best(IEnumerable<ScriptUnit> producers, out ImmutableSortedSet<string> blockedReasons)
     {
         Verdict? best = null;
+        var reasons = ImmutableSortedSet.CreateBuilder<string>(StringComparer.Ordinal);
+        blockedReasons = ImmutableSortedSet<string>.Empty;
         foreach (var producer in producers.OrderBy(value => value.Index))
         {
             var verdict = Of(producer);
-            if (verdict.Kind == Kind.Blocked) continue;
+            if (verdict.Kind == Kind.Blocked) { reasons.UnionWith(verdict.Blockers); continue; }
             if (best is null || verdict.Blockers.Count < best.Blockers.Count) best = verdict;
         }
+        if (best is null) blockedReasons = reasons.ToImmutable();
         return best;
     }
 
@@ -178,7 +189,7 @@ sealed class Reachability(ScriptProgram program, ScriptDifficulty difficulty)
                 // A flag is false from the start (and a UI interaction can also satisfy the condition); only "flag is true" needs a setter.
                 var wantsTrue = condition.Parameters.Length < 2 || condition.Parameters[1].Integer != 0;
                 if (!wantsTrue) return Ok;
-                return _flagSetters.TryGetValue(Name(condition, 0), out var setters) && Best(setters) is { } best ? best : new Verdict(Kind.Blocked, ImmutableSortedSet.Create($"flag '{Name(condition, 0)}' is never set"));
+                return Produced(_flagSetters, Name(condition, 0), "flag", "is never set");
             }
             case "COUNTER":
             {
@@ -197,13 +208,20 @@ sealed class Reachability(ScriptProgram program, ScriptDifficulty difficulty)
                     };
                     if (holdsAtZero) return Ok;
                 }
-                return _counterSetters.TryGetValue(Name(condition, 0), out var setters) && Best(setters) is { } best ? best : new Verdict(Kind.Blocked, ImmutableSortedSet.Create($"counter '{Name(condition, 0)}' is never changed"));
+                return Produced(_counterSetters, Name(condition, 0), "counter", "is never changed");
             }
             case "TIMER_EXPIRED":
-                return _timerSetters.TryGetValue(Name(condition, 0), out var timers) && Best(timers) is { } timer ? timer : new Verdict(Kind.Blocked, ImmutableSortedSet.Create($"timer '{Name(condition, 0)}' is never started"));
+                return Produced(_timerSetters, Name(condition, 0), "timer", "is never started");
             default:
                 return Ok;
         }
+    }
+
+    private Verdict Produced(Dictionary<string, List<ScriptUnit>> setters, string name, string what, string never)
+    {
+        if (!setters.TryGetValue(name, out var list)) return new Verdict(Kind.Blocked, ImmutableSortedSet.Create($"{what} '{name}' {never}"));
+        if (Best(list, out var reasons) is { } best) return best;
+        return new Verdict(Kind.Blocked, reasons.Count > 0 ? reasons : ImmutableSortedSet.Create($"{what} '{name}' {never}"));
     }
 
     private static readonly Verdict Ok = new(Kind.Clean, ImmutableSortedSet<string>.Empty);
