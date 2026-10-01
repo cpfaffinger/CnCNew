@@ -125,6 +125,11 @@ static partial class Tests
           Command = SPECIAL_POWER
           SpecialPower = AlphaInstantPower
         End
+        Upgrade Upgrade_AlphaPlayer
+          Type = PLAYER
+          BuildCost = 10
+          BuildTime = 1
+        End
         CommandButton Cmd_AlphaFire
           Command = FIRE_WEAPON
           WeaponSlot = SECONDARY
