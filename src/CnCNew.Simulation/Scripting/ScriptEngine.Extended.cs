@@ -93,6 +93,11 @@ public sealed partial class ScriptEngine
                 result = true;
                 return true;
             }
+            case "SKIRMISH_COMMAND_BUTTON_READY_ALL":
+            case "SKIRMISH_COMMAND_BUTTON_READY_PARTIAL":
+                // evaluateSkirmishCommandButtonIsReady (the player parameter is unused there as well).
+                result = Has(type, p, 3) && CommandButtonReady(Str(p, 1), Str(p, 2), type.EndsWith("ALL", StringComparison.Ordinal));
+                return true;
             case "NAMED_BUILDING_IS_EMPTY":
                 // evaluateIsBuildingEmpty: an existing container without occupants (a non-container is not "empty").
                 result = Has(type, p, 1) && NamedEntity(Str(p, 0)) is { Container: { } container } && container.ContainCount == 0;
@@ -194,6 +199,7 @@ public sealed partial class ScriptEngine
     private void DescribeExtended(IStateWriter writer)
     {
         DescribeTeamBuilds(writer);
+        DescribeSequences(writer);
         // Written only when non-empty: a run that never used these keeps the serialized form (and hash) it had before they existed.
         if (_attackedBy.Count > 0)
         {
@@ -225,6 +231,7 @@ public sealed partial class ScriptEngine
     private void LoadExtended(IStateReader reader)
     {
         LoadTeamBuilds(reader);
+        LoadSequences(reader);
         _attackedBy.Clear();
         if (reader.Has("attackedBy")) foreach (var item in reader.Array("attackedBy")) _attackedBy.Add((checked((int)item.Int("victim")), checked((int)item.Int("attacker"))));
         _triggeredPowers.Clear();

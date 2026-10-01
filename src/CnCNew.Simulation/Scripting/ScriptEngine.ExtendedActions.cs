@@ -167,8 +167,12 @@ public sealed partial class ScriptEngine
                 UseCommandButtonAbility(pathUser, Str(p, 1), SpecialPowerTargetKind.Location, EntityId.Invalid, closest.X, closest.Y);
                 return true;
             }
+            // ---- doIdleAllPlayerUnits (empty player name: the human players): every mobile non-structure object stops where it is
+            case "IDLE_ALL_UNITS":
+                foreach (var entity in PlayerEntities(_options.LocalPlayer).Where(value => !value.Template.IsKindOf("STRUCTURE")).ToArray()) Stop(entity);
+                return true;
             default:
-                return false;
+                return TryExecuteSequentialAction(action);
         }
     }
 
@@ -197,6 +201,7 @@ public sealed partial class ScriptEngine
         var actorId = actor.Id;
         var containerId = container.Id;
         if (!_issue(owner, (sequence, tick) => new MoveAndEnterCommand(owner, sequence, tick, actorId, containerId)).Accepted) Diagnose("enter order rejected");
+        else _busyThisTick.Add(actorId.Value);
     }
 
     private void ExitContainer(Entity actor)

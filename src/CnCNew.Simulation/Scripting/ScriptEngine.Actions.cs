@@ -529,20 +529,21 @@ public sealed partial class ScriptEngine
 
     // ------------------------------------------------------------------------------------------------ orders
 
-    private void MoveTo(Entity entity, Fixed x, Fixed y)
+    private void MoveTo(Entity entity, Fixed x, Fixed y, bool busy = true)
     {
         if (entity.Owner.IsSystem) { Diagnose("order for a neutral object"); return; }
         if (entity.Template.Locomotor is null) return;
         var owner = entity.Owner;
         var id = entity.Id;
         if (!_issue(owner, (sequence, tick) => new SetMoveTargetCommand(owner, sequence, tick, id, x, y)).Accepted) Diagnose("order rejected");
+        else if (busy) _busyThisTick.Add(id.Value);
     }
 
     private void Stop(Entity entity)
     {
         _followers.Remove(entity.Id.Value);
         if (entity.Template.Locomotor is null || entity.Owner.IsSystem) return;
-        MoveTo(entity, entity.X, entity.Y);
+        MoveTo(entity, entity.X, entity.Y, busy: false);
     }
 
     private void StartFollowing(Entity entity, string mode)

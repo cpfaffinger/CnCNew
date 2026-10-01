@@ -279,6 +279,11 @@ public sealed partial class ScriptEngine
             if (_callingTeam is { } calling) yield return calling;
             yield break;
         }
+        if (_callingTeam is { } instance && instance.Prototype == name)
+        {
+            yield return instance;
+            yield break;
+        }
         foreach (var team in _teams.Values)
             if (team.Prototype == name) yield return team;
     }

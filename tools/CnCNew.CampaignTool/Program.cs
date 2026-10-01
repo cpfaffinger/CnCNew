@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using CnCNew.Content;
+using CnCNew.Data.World;
 using CnCNew.Data.Compilation;
 using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
@@ -22,6 +23,8 @@ const string Usage = """
       audit <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--no-probes] [--no-continuation] [--explain]
                                                 every campaign mission headless: two fresh runs, save/restore continuation, scripted-ending probes,
                                                 script coverage (missing action/condition hits, unresolved references)
+      reachability <content-dir> [--campaign NAME] [--difficulty easy|normal|hard]
+                                                static: can the mission's own VICTORY/DEFEAT scripts fire with the implemented condition/action types? (clean / degraded / blocked chains)
       sides <content-dir> [--campaign NAME]       the script players (sides) of every campaign map: name, faction, human flag (to map a chosen general to a map's side)
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
@@ -44,6 +47,7 @@ try
         "list" => List(content, campaigns),
         "audit" => Audit(content, campaigns, args),
         "sides" => Sides(content, campaigns, args),
+        "reachability" => ReachabilityReport(content, campaigns, args),
         "playthrough" => Playthrough(content, campaigns, args),
         _ => Fail(Usage),
     };
@@ -68,6 +72,58 @@ static int Sides(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             Console.WriteLine($"  {mission.Name,-10} {mission.MapPath}: " + string.Join(", ", program.Players.Select(player => $"{(player.Name.Length == 0 ? "<neutral>" : player.Name)}[{player.Faction}{(player.IsHuman ? ",human" : "")}]")));
         }
     }
+    return 0;
+}
+
+static int ReachabilityReport(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
+{
+    var (context, _, _) = Compile(content);
+    var filterCampaign = Arg(args, "--campaign");
+    var difficulty = (Arg(args, "--difficulty") ?? "normal").ToLowerInvariant() switch { "easy" => ScriptDifficulty.Easy, "hard" => ScriptDifficulty.Hard, _ => ScriptDifficulty.Normal };
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var tally = new Dictionary<string, int>();
+    var missingActionScripts = new SortedDictionary<string, int>(StringComparer.Ordinal);
+    var missingActionMaps = new SortedDictionary<string, int>(StringComparer.Ordinal);
+    var maps = 0;
+    foreach (var campaign in campaigns.Campaigns)
+    {
+        if (filterCampaign is not null && !campaign.Name.Equals(filterCampaign, StringComparison.OrdinalIgnoreCase)) continue;
+        foreach (var mission in campaign.Sequence)
+        {
+            if (!seen.Add(mission.MapPath)) continue;
+            MapData map;
+            try { map = context.LoadMap(mission.MapPath); }
+            catch (FileNotFoundException) { Console.WriteLine($"{campaign.Name,-12} {mission.Name,-9} {mission.MapPath}: map not in the content"); continue; }
+            maps++;
+            var scriptProgram = ScriptProgram.Build(map);
+            foreach (var (name, scripts) in Reachability.MissingActionUsage(scriptProgram))
+            {
+                missingActionScripts[name] = missingActionScripts.GetValueOrDefault(name) + scripts;
+                missingActionMaps[name] = missingActionMaps.GetValueOrDefault(name) + 1;
+            }
+            var analysis = Reachability.Analyze(scriptProgram, difficulty);
+            var line = new List<string>();
+            foreach (var ending in new[] { "victory", "defeat" })
+            {
+                var scripts = analysis.Endings.Where(item => item.Ending == ending).ToArray();
+                var clean = scripts.Count(item => item.Verdict.Kind == Reachability.Kind.Clean);
+                var degraded = scripts.Count(item => item.Verdict.Kind == Reachability.Kind.Degraded);
+                var blocked = scripts.Length - clean - degraded;
+                var best = clean > 0 ? "CLEAN" : degraded > 0 ? "DEGRADED" : scripts.Length > 0 ? "BLOCKED" : "NONE";
+                tally[ending + ":" + best] = tally.GetValueOrDefault(ending + ":" + best) + 1;
+                var why = best is "BLOCKED" or "DEGRADED"
+                    ? " (" + string.Join("; ", scripts.Where(item => item.Verdict.Kind != Reachability.Kind.Clean).SelectMany(item => item.Verdict.Blockers).Distinct().Take(4)) + ")"
+                    : string.Empty;
+                line.Add($"{ending} {best} [{clean}/{degraded}/{blocked} of {scripts.Length}]{why}");
+            }
+            Console.WriteLine($"{campaign.Name,-12} {mission.Name,-9} {Path.GetFileNameWithoutExtension(mission.MapPath),-22} " + string.Join("  |  ", line));
+        }
+    }
+    Console.WriteLine("Unimplemented action types used by the scripts (scripts using it / maps):");
+    foreach (var (name, scripts) in missingActionScripts.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal).Take(40))
+        Console.WriteLine($"  {name,-52} {scripts,5} / {missingActionMaps[name]}");
+    Console.WriteLine($"{maps} maps analysed ({difficulty}). victory: clean {tally.GetValueOrDefault("victory:CLEAN")}, degraded {tally.GetValueOrDefault("victory:DEGRADED")}, blocked {tally.GetValueOrDefault("victory:BLOCKED")}, no victory script {tally.GetValueOrDefault("victory:NONE")}; " +
+                      $"defeat: clean {tally.GetValueOrDefault("defeat:CLEAN")}, degraded {tally.GetValueOrDefault("defeat:DEGRADED")}, blocked {tally.GetValueOrDefault("defeat:BLOCKED")}, no defeat script {tally.GetValueOrDefault("defeat:NONE")}.");
     return 0;
 }
 

@@ -278,6 +278,7 @@ public sealed partial class ScriptEngine
     public void Update(long tick)
     {
         _tick = tick;
+        _busyThisTick.Clear();
         if (_endTimer > 0)
         {
             _endTimer--;
@@ -307,8 +308,9 @@ public sealed partial class ScriptEngine
             }
         }
         _uiInteractions.Clear();
-        ProcessTeamBuilds();
         UpdateFollowers();
+        ProcessSequences();
+        ProcessTeamBuilds();
         _pruneBelow = _world.Ids.NextEntity;
     }
 
@@ -506,6 +508,8 @@ public sealed partial class ScriptEngine
     private ScriptTeam? FindTeam(string name)
     {
         if (name == ThisTeamName) return _callingTeam;
+        // ScriptEngine::getTeamNamed: the instance the running script/sequence acts for wins over any other instance of the prototype.
+        if (_callingTeam is { } calling && calling.Prototype == name) return calling;
         foreach (var team in _teams.Values)
             if (team.Prototype == name) return team;
         return null;
@@ -529,6 +533,7 @@ public sealed partial class ScriptEngine
 
     private Entity? NamedEntity(string name)
     {
+        if (name == ThisObjectName) return _callingObject is { DestroyRequested: false } ? _callingObject : null;
         if (!_named.TryGetValue(name, out var id)) return null;
         var entity = _world.FindEntity(new EntityId(id));
         return entity is null || entity.DestroyRequested ? null : entity;
