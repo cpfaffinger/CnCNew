@@ -12,7 +12,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 9;
+    public const int Version = 10;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -53,7 +53,19 @@ public static class CommandTypes
     public const ushort MoveAndEnter = 26;
     public const ushort Evacuate = 27;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= Evacuate;
+    // --------------------------------------------------------------------------------------------------- build/rule limits (v10)
+    /// <summary><c>GUI_COMMAND_TOGGLE_OVERCHARGE</c> (<c>CommandButton.ini</c> <c>Command = TOGGLE_OVERCHARGE</c>): flips an <c>OverchargeBehavior</c>.</summary>
+    public const ushort Overcharge = 28;
+    /// <summary>
+    /// Direct capture of a structure (<c>Object::onCapture</c>'s ownership change plus its power-pool effect). Retail gates capturing behind a
+    /// channeled <c>SpecialAbilityUpdate</c> ability (<c>hasSpecialPower(SPECIAL_*_CAPTURE_BUILDING)</c>, <c>ActionManager::canCaptureBuilding</c>);
+    /// that module is a 64-object blocker spanning unrelated channeled abilities (disguise, hijack, hack, paradrop, capture) and is out of scope
+    /// here. This command approximates only the capture <em>outcome</em> for any of the issuer's own mobile units already standing next to the
+    /// target, without the ability's channel timer, science gate or stealth-detection requirement — a documented simplification, not a port.
+    /// </summary>
+    public const ushort Capture = 29;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= Capture;
 }
 
 /// <summary>
@@ -122,6 +134,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Repair => new RepairCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("builder"))), new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.MoveAndEnter => new MoveAndEnterCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("container")))),
             CommandTypes.Evacuate => new EvacuateCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("container"))), reader.Bool("hasPosition"), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.Overcharge => new OverchargeCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target")))),
+            CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("target")))),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -377,6 +391,27 @@ public sealed record RepairCommand(PlayerId Player, ulong Sequence, long Tick, E
     }
 }
 
+// ------------------------------------------------------------------------------------------------------- build/rule limits (v10)
+
+/// <summary><c>TOGGLE_OVERCHARGE</c>: flips the <c>OverchargeBehavior</c> of <see cref="Target"/> (idempotent only in effect, never rejected by current state).</summary>
+public sealed record OverchargeCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Target) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Overcharge;
+    protected override void DescribeBody(IStateWriter writer) => writer.UInt("target", Target.Value);
+}
+
+/// <summary>Direct capture: <see cref="Actor"/> (owned by the issuer) takes <see cref="Target"/> for the issuer. See <see cref="CommandTypes.Capture"/>.</summary>
+public sealed record CaptureCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Actor, EntityId Target) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Capture;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("actor", Actor.Value);
+        writer.UInt("target", Target.Value);
+    }
+}
+
 // ------------------------------------------------------------------------------------------------------- transports and tunnels
 
 /// <summary>
@@ -561,6 +596,24 @@ public enum CommandRejection : byte
     CannotConstruct = 33,
     /// <summary>The structure cannot be sold: not a structure, still under construction, or already being sold (<c>BuildAssistant::sellObject</c>).</summary>
     CannotSell = 34,
+
+    // --------------------------------------------------------------------------------------------------- phase 10: build/rule limits
+    /// <summary>
+    /// <c>Player::canBuild</c>/<c>canProduceObject</c> for a unit queued at a producer: the template is a <c>STRUCTURE</c> (must be placed via
+    /// <c>ConstructCommand</c> instead), <c>Buildable</c> is <c>No</c>, <c>Only_By_AI</c> for a human player, or its <c>Side</c> does not match the
+    /// producer's.
+    /// </summary>
+    CannotProduceTemplate = 35,
+    /// <summary><c>Player::canBuildMoreOfType</c>: the template's <c>MaxSimultaneousOfType</c> live-or-queued count is already reached.</summary>
+    ProductionLimitReached = 36,
+    /// <summary>
+    /// <c>ActionManager::canCaptureBuilding</c> (reduced, see <see cref="CommandTypes.Capture"/>): the actor has no AI, is not the issuer's,
+    /// or the target is not a capturable structure (dead, under construction, sold, owned by an ally, or not <c>KINDOF_CAPTURABLE</c> while not an
+    /// enemy's), is out of reach, or is not visible to the issuer.
+    /// </summary>
+    CannotCapture = 37,
+    /// <summary>The target has no <c>OverchargeBehavior</c> module, is not the issuer's, is dead, or is still under construction.</summary>
+    CannotToggleOvercharge = 38,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

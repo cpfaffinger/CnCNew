@@ -144,6 +144,67 @@ static partial class Tests
             Object = Plant
           End
         End
+        Object ForeignTrooper
+          KindOf = SELECTABLE INFANTRY
+          Side = OtherFaction
+          Locomotor = SET_NORMAL GroundLoco
+          BuildCost = 20
+          BuildTime = 1
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object SecretTrooper
+          KindOf = SELECTABLE INFANTRY
+          Buildable = No
+          BuildCost = 20
+          BuildTime = 1
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object EliteTrooper
+          KindOf = SELECTABLE INFANTRY
+          Locomotor = SET_NORMAL GroundLoco
+          BuildCost = 30
+          BuildTime = 1
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Prerequisites
+            Object = Plant
+          End
+        End
+        Object HeroTrooper
+          KindOf = SELECTABLE INFANTRY
+          Locomotor = SET_NORMAL GroundLoco
+          BuildCost = 30
+          BuildTime = 1
+          MaxSimultaneousOfType = 1
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
         """,
     };
 
@@ -371,6 +432,46 @@ static partial class Tests
         poorFeeder.Spawn(1, "Dozer", x: 0, y: 0);
         poor.Step();
         Check.That(poorFeeder.Construct(1, 1, "Plant", 60, 0).Reason == CommandRejection.InsufficientFunds, "Without the cost the order is rejected.");
+
+        // CheckConstruct's public dry run (docs/PRESENTATION-INPUT.md §10 point 1) agrees with Submit and has no side effect.
+        var moneyBefore = world.MoneyOf(new PlayerId(1));
+        var dry = world.CheckConstruct(new PlayerId(1), new ConstructCommand(new PlayerId(1), 999, world.Tick, new EntityId(1), "Tower", Fixed.FromInt(60), Fixed.FromInt(200), Fixed.Zero));
+        Check.That(dry == 0 && world.MoneyOf(new PlayerId(1)) == moneyBefore, "The public dry run reports the same outcome Submit would and spends nothing.");
+    }
+
+    /// <summary>Phase 10: prerequisites, side/buildable and MaxSimultaneousOfType applied to units queued at a producer, not just structures.</summary>
+    public static void ConstructionProductionRejections()
+    {
+        var (world, feeder, _, _) = ConstructionSetup();
+        feeder.Spawn(1, "Barracks", x: 50, y: 50);
+        world.Step();
+        var barracks = world.Entities.Single(value => value.Template.Name == "Barracks").Id.Value;
+        Check.That(feeder.QueueProduction(1, barracks, "Plant").Reason == CommandRejection.CannotProduceTemplate, "A STRUCTURE template cannot be queued at a producer; it must be placed via ConstructCommand.");
+        Check.That(feeder.QueueProduction(1, barracks, "SecretTrooper").Reason == CommandRejection.CannotProduceTemplate, "Buildable = No cannot be produced either.");
+        Check.That(feeder.QueueProduction(1, barracks, "ForeignTrooper").Reason == CommandRejection.CannotProduceTemplate, "A unit of another side cannot be produced here.");
+        Check.That(feeder.QueueProduction(1, barracks, "EliteTrooper").Reason == CommandRejection.MissingPrerequisite, "A unit's own Prerequisites block is enforced exactly like a structure's.");
+        Check.That(feeder.QueueProduction(1, barracks, "Grunt").Accepted, "A plain roster unit with no prerequisite is still accepted.");
+        world.Step();
+
+        feeder.Spawn(1, "Plant", x: 90, y: 90);
+        world.Step();
+        Check.That(feeder.QueueProduction(1, barracks, "EliteTrooper").Accepted, "Once the prerequisite structure exists, the unit becomes queueable.");
+        // Let the two-slot queue (Grunt, then EliteTrooper) fully drain before testing MaxSimultaneousOfType, so QueueFull never masks it.
+        StepUntil(world, 100, () => world.Entities.Count(value => value.Template.Name is "Grunt" or "EliteTrooper") >= 2);
+
+        Check.That(feeder.QueueProduction(1, barracks, "HeroTrooper").Accepted, "The first of a MaxSimultaneousOfType = 1 unit is accepted.");
+        var producedAt = StepUntil(world, 60, () => world.Entities.Any(value => value.Template.Name == "HeroTrooper"));
+        Check.That(producedAt < 60, "The hero unit is produced.");
+        Check.That(feeder.QueueProduction(1, barracks, "HeroTrooper").Reason == CommandRejection.ProductionLimitReached, "A second one is refused while the first is alive.");
+        var hero = world.Entities.Single(value => value.Template.Name == "HeroTrooper").Id.Value;
+        feeder.Kill(hero);
+        world.Step();
+        Check.That(feeder.QueueProduction(1, barracks, "HeroTrooper").Accepted, "Once the live one is dead, another may be queued.");
+
+        feeder.Spawn(1, "Barracks", x: 150, y: 50);
+        world.Step();
+        var secondBarracks = world.Entities.Last(value => value.Template.Name == "Barracks").Id.Value;
+        Check.That(feeder.QueueProduction(1, secondBarracks, "HeroTrooper").Reason == CommandRejection.ProductionLimitReached, "The cap counts a unit still queued elsewhere, not just completed ones.");
     }
 
     public static void ConstructionPlacementRules()

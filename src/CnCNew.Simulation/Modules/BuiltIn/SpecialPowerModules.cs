@@ -98,6 +98,13 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
         return _pausedCount == 0 && world.Tick >= _availableOnFrame;
     }
 
+    /// <summary>
+    /// Public read of the recharge tick (`docs/PRESENTATION-INPUT.md` §10 point 2, HUD <c>ReadyFraction</c>): a shared power reads the player's
+    /// shared ready frame exactly as <see cref="IsReady"/> does; this ignores <see cref="IsPaused"/> (a paused power still reports when it would
+    /// otherwise be ready, matching the reference's own <c>availableOnFrame</c> field).
+    /// </summary>
+    public long AvailableOnFrame(IWorldServices world) => world.SpecialPowers[_power].SharedSynced ? SharedReadyFrame(world) : _availableOnFrame;
+
     public virtual void OnSpecialPowerCreation(IWorldServices world)
     {
         StartRecharge(world);

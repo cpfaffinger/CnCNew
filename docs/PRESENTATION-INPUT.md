@@ -266,14 +266,20 @@ Abstand zu Versorgungslagern (`SupplyBuildBorder`), Kartenrandabstand, Linienbau
 Die Schicht liest die lebende `SimulationWorld`; einen unveränderlichen Lese-Snapshot gibt es noch nicht. Aus der Simulation fehlen (bzw.
 wären als rein lesende Zugriffe hilfreich):
 
-1. `SimulationWorld.CheckConstruct(ConstructCommand)` als öffentlicher Trockenlauf (heute nachgebaut, Risiko des Auseinanderlaufens).
-2. Öffentliche Lesezugriffe auf die Produktionswarteschlange (`ProductionUpdate`: Einträge, Restticks), auf `SpecialPowerModuleBase.AvailableOnFrame`
-   und auf den Ausführungszustand von Upgrade-Modulen (`UpgradeMuxModule.Executed`); heute über `SimModule.Describe` gelesen.
-3. Ein öffentliches Dock-Kennzeichen (`IDockModule` ist intern); heute über Modulnamen (`SupplyCenterDockUpdate`, `SupplyWarehouseDockUpdate`,
-   `RepairDockUpdate`, `SupplyTruckAIUpdate`, `WorkerAIUpdate`).
+1. ~~`SimulationWorld.CheckConstruct(ConstructCommand)` als öffentlicher Trockenlauf~~ **erledigt (Phase 10):** `SimulationWorld.CheckConstruct(PlayerId, ConstructCommand)`
+   ist jetzt `public` (`SimulationWorld.Construction.cs`) und die exakte Logik, die `SimulationQueries.CheckPlacement` bisher nachbauen musste; die beiden
+   können nicht mehr auseinanderlaufen.
+2. ~~Öffentliche Lesezugriffe auf die Produktionswarteschlange, `SpecialPowerModuleBase.AvailableOnFrame`, `UpgradeMuxModule.Executed`~~ **erledigt (Phase 10):**
+   `ProductionUpdate.Queue` (`ImmutableArray<ProductionQueueItem>`, Vorlage/Kosten/Restticks, Kopf zuerst), `SpecialPowerModuleBase.AvailableOnFrame(IWorldServices)`
+   (liest bei geteilten Kräften denselben gemeinsamen Bereitschaftsframe wie `IsReady`) und `UpgradeMuxModule.Executed` sind jetzt öffentlich.
+3. ~~Ein öffentliches Dock-Kennzeichen~~ **erledigt (Phase 10):** `SimulationWorld.IsDock(EntityId)` ersetzt den Modulnamen-Abgleich von außen; `IDockModule`
+   bleibt intern, wird aber nicht mehr gebraucht.
 4. Befehle für: Feuern auf eine Position (`FORCE_ATTACK_GROUND`, `FIRE_WEAPON` mit `NEED_TARGET_POS`), dauerhaftes Angreifen/Angriffsbewegung/
-   Wachen/Wegpunkte als KI-Zustände (heute clientseitig wiederholt), Formationsbewegung, Einnehmen, Entführen, Sabotage, Hacken, Kampfabsprung,
-   Waffenwechsel, Überladung, Leuchtfeuer, Upgrade-Abbruch, Spezialkraft-Bau, Linienbau.
+   Wachen/Wegpunkte als KI-Zustände (heute clientseitig wiederholt), Formationsbewegung, Entführen, Sabotage, Hacken, Kampfabsprung,
+   Waffenwechsel, Leuchtfeuer, Upgrade-Abbruch, Spezialkraft-Bau, Linienbau. **Seit Phase 10 vorhanden:** `OverchargeCommand` (`TOGGLE_OVERCHARGE`,
+   schaltet `OverchargeBehavior.Toggle`) und, als bewusst vereinfachtes „Einnehmen“, `CaptureCommand` (direkte Übernahme samt Energiepool-Effekt durch
+   ein eigenes, in Reichweite stehendes beliebiges bewegliches Objekt — ohne den Kanalisierungstimer/Wissenschaftsvorbehalt/Tarnungs-Check der echten,
+   an `SpecialAbilityUpdate` hängenden Fähigkeit; siehe `docs/SIMULATION-CORE.md` §23 und `CommandTypes.Capture`s Kommentar für die Abgrenzung).
 5. Energie: die Simulation führt nur die Nettobilanz; Erzeugung/Verbrauch des HUD sind aus Template-Werten rekonstruiert, und der
    „underpowered“-Zustand von `POWERED`-Objekten wird nur in der Leiste abgebildet (die Simulation deaktiviert nichts).
 6. `EnterContainerCommand` wirkt sofort ohne Anlaufweg (Simulationsstand Phase 5).

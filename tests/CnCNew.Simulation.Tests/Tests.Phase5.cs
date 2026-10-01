@@ -8,6 +8,7 @@ using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.World;
 
@@ -944,6 +945,39 @@ static partial class Tests
         var expiry = world.Tick + 16;
         while (world.Tick <= expiry) world.Step();
         Check.That(!enemy.HasStatus(detectedBit), "DETECTED expires once nothing re-marks it before its duration elapses.");
+    }
+
+    /// <summary>Phase 10: a <see cref="TerrainMap.HasHeightLineOfSight"/> occlusion check on top of the range test in <see cref="Phase5StealthDetector"/>.</summary>
+    public static void Phase5StealthDetectorHeightLineOfSight()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var detectedBit = ObjectStatusBits.Index("DETECTED");
+        var stealthedBit = ObjectStatusBits.Index("STEALTHED");
+
+        // A 25 m ridge (vertices 2..4, world x roughly 10..30) sits between the detector (x=0) and the target (x=40); both are
+        // comfortably inside DetectionRange = 50.
+        var ridged = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1, (x, _) => x is >= 2 and <= 4 ? 40 : 0), "detector-ridge");
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, ridged.Fingerprint), fixture.Templates, ridged);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Spotter", x: 0, y: 15);
+        feeder.Spawn(2, "Cloaked", x: 40, y: 15);
+        world.Step();
+        var enemy = world.FindEntity(new EntityId(2))!;
+        for (var i = 0; i < 6; i++) world.Step();
+        Check.That(enemy.HasStatus(stealthedBit), "The target is cloaked.");
+        for (var i = 0; i < 20; i++) world.Step();
+        Check.That(!enemy.HasStatus(detectedBit), "A ridge between the detector and the target blocks detection even within DetectionRange.");
+
+        // The identical layout without the ridge detects normally: the range test alone is not what is being exercised here.
+        var flat = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1), "detector-flat");
+        var openWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, flat.Fingerprint), fixture.Templates, flat);
+        var openFeeder = new Feeder(openWorld);
+        openFeeder.Spawn(1, "Spotter", x: 0, y: 15);
+        openFeeder.Spawn(2, "Cloaked", x: 40, y: 15);
+        openWorld.Step();
+        var openEnemy = openWorld.FindEntity(new EntityId(2))!;
+        for (var i = 0; i < 26; i++) openWorld.Step();
+        Check.That(openEnemy.HasStatus(detectedBit), "The same layout without the ridge detects normally.");
     }
 
     /// <summary>

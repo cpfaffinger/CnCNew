@@ -252,7 +252,9 @@ ausschließlich Felder aus, die die Simulation bereits über `SimEvent` offenleg
 
 * **`ReplayRunner`/`SkirmishMatchSession`-Divergenz** (Abschnitt 11) – bitte durch das Team untersuchen, das `LiveMatch.cs`
   bzw. die Simulation/Presentation-Kopplung verantwortet; ein Hintergrundauftrag wurde dafür angelegt.
-* Die von Paket C3 bereits offenen Wünsche (`CheckConstruct`-Trockenlauf, Produktionswarteschlangen-Zugriff, `AvailableOnFrame`
-  für Spezialkräfte, `Executed` für Upgrades) gelten unverändert; G2 hat keine weiteren Simulationsänderungen benötigt.
+* Die von Paket C3 offenen Wünsche (`CheckConstruct`-Trockenlauf, Produktionswarteschlangen-Zugriff, `AvailableOnFrame`
+  für Spezialkräfte, `Executed` für Upgrades) sind seit Phase 10 erledigt (`SimulationWorld.CheckConstruct`, `ProductionUpdate.Queue`,
+  `SpecialPowerModuleBase.AvailableOnFrame`, `UpgradeMuxModule.Executed` — siehe `docs/PRESENTATION-INPUT.md` §10, `docs/SIMULATION-CORE.md` §23);
+  G2 selbst hatte keine weiteren Simulationsänderungen benötigt.
 * Für ein originalgetreues Objektporträt und Upgrade-Symbole bräuchte `CommandBarView`/`ObjectTemplate` einen Verweis auf ein
   Porträtbild bzw. einen Upgrade→Bild-Katalog; aktuell liefert die Simulation nur Namen.

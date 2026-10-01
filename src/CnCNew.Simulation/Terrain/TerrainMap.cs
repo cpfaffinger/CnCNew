@@ -212,6 +212,38 @@ public sealed class TerrainMap
     /// <summary><c>TerrainLogic::isUnderwater</c>: water at the point and the terrain below its level.</summary>
     public bool IsUnderwater(Fixed x, Fixed y) => TryWaterLevel(x, y, out var level) && HeightAt(x, y) < level;
 
+    /// <summary>Upper bound on the samples <see cref="HasHeightLineOfSight"/> takes along one line; see its doc comment for what this limits.</summary>
+    public const int MaxLineOfSightSamples = 64;
+
+    /// <summary>
+    /// Height-based terrain occlusion between two eye points (<paramref name="z0"/>/<paramref name="z1"/> already include whatever eye-height
+    /// offset the caller wants — this model has no per-template eye height, a named simplification). There is no single reference function this
+    /// ports (the original resolves line of sight through <c>PartitionManager</c>'s object-to-object sightline tests, which this project does not
+    /// have); this is a straightforward, self-contained terrain-horizon check: walk the straight segment from (x0,y0,z0) to (x1,y1,z1) at
+    /// <see cref="CellSize"/> intervals (capped at <see cref="MaxLineOfSightSamples"/> samples — a line longer than that undersamples, a named
+    /// limit; no vision or detection range in the shipped game is anywhere near that long in cells) and compare, at each sample, the terrain
+    /// height (<see cref="HeightAt"/>) against the height the straight sight line would have there. The line is blocked the first time terrain
+    /// strictly exceeds it — so a viewer standing high is never blocked by terrain below the line to a distant low target ("sees over" it), while
+    /// any ridge the line must climb over blocks it. This only ever narrows an existing circular range check; it never extends one (a tall
+    /// observer gets no bonus range, only fewer false blocks). Fixed-point only, no trigonometry, deterministic for a given terrain and inputs.
+    /// </summary>
+    public bool HasHeightLineOfSight(Fixed x0, Fixed y0, Fixed z0, Fixed x1, Fixed y1, Fixed z1)
+    {
+        var dx = x1 - x0;
+        var dy = y1 - y0;
+        var distance = Fixed.Sqrt(dx * dx + dy * dy);
+        if (distance <= CellSizeFixed) return true;
+        var cells = (int)(distance / CellSizeFixed).Floor() + 1;
+        var steps = Math.Min(MaxLineOfSightSamples, cells);
+        for (var i = 1; i < steps; i++)
+        {
+            var t = Fixed.FromInt(i) / Fixed.FromInt(steps);
+            var sightZ = z0 + (z1 - z0) * t;
+            if (HeightAt(x0 + dx * t, y0 + dy * t) > sightZ) return false;
+        }
+        return true;
+    }
+
     /// <summary>Even-odd ray cast (<c>PolygonTrigger::pointInTrigger</c>).</summary>
     private static bool PointInPolygon(WaterArea area, int x, int y)
     {

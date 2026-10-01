@@ -109,6 +109,14 @@ sealed class Feeder(SimulationWorld world)
 
     public SubmitResult SetRelationship(int from, int to, Relationship relationship, long? tick = null)
         => world.Submit(new SetRelationshipCommand(PlayerId.System, Next(0), tick ?? world.Tick, new PlayerId(from), new PlayerId(to), relationship));
+
+    // ----------------------------------------------------------------------------------------------------- phase 10
+
+    public SubmitResult Overcharge(int player, uint target, long? tick = null)
+        => world.Submit(new OverchargeCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(target)));
+
+    public SubmitResult Capture(int player, uint actor, uint target, long? tick = null)
+        => world.Submit(new CaptureCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(actor), new EntityId(target)));
 }
 
 static partial class Tests

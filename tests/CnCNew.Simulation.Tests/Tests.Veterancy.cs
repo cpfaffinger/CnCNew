@@ -367,4 +367,122 @@ static partial class Tests
         for (var i = 0; i < 120; i++)
             Check.That(restored.Step().StateHash == second.Step().StateHash, "Two restored copies stay identical (tick " + i + ").");
     }
+
+    private static IReadOnlyDictionary<string, string> VeteranSetFiles() => new Dictionary<string, string>(SyntheticFixture.Files)
+    {
+        ["Data/INI/Object/VeteranSetFixture.ini"] = """
+        Weapon WeakGun
+          PrimaryDamage = 10
+          AttackRange = 50.0
+          DamageType = EXPLOSION
+        End
+        Weapon StrongGun
+          PrimaryDamage = 99
+          AttackRange = 50.0
+          DamageType = EXPLOSION
+        End
+        Weapon TestHit
+          PrimaryDamage = 100
+          AttackRange = 50.0
+          DamageType = EXPLOSION
+        End
+        Armor WeakArmor
+          Armor = Default 100%
+        End
+        Armor StrongArmor
+          Armor = Default 25%
+        End
+        Object Promotable
+          KindOf = SELECTABLE INFANTRY
+          IsTrainable = Yes
+          ExperienceValue = 0 0 0 0
+          ExperienceRequired = 0 1 2 3
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY WeakGun
+          End
+          WeaponSet
+            Conditions = VETERAN
+            Weapon = PRIMARY StrongGun
+          End
+          ArmorSet
+            Conditions = None
+            Armor = WeakArmor
+          End
+          ArmorSet
+            Conditions = ELITE
+            Armor = StrongArmor
+          End
+        End
+        Object Attacker
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY TestHit
+          End
+        End
+        Object VeteranDummy
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 1000000.0
+            InitialHealth = 1000000.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        """,
+    };
+
+    /// <summary>
+    /// Phase 10: a veterancy-conditioned <c>WeaponSet</c>/<c>ArmorSet</c> (<c>Conditions = VETERAN</c>/<c>ELITE</c>/<c>HERO</c>) wins over the
+    /// base set once the object reaches that rank, reduced to single-condition sets (see <c>ObjectTemplate.VeteranArmor</c>'s doc comment: no
+    /// shipped Zero Hour object combines veterancy with another condition, so this covers everything the real game data needs).
+    /// </summary>
+    public static void VeterancyArmorAndWeaponSetSelection()
+    {
+        var fixture = new SyntheticFixture(files: VeteranSetFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "Promotable", x: 0, y: 0);
+        feeder.Spawn(1, "VeteranDummy", x: 40, y: 0);
+        feeder.Spawn(2, "Attacker", owner: 2, x: 0, y: 10);
+        world.Step();
+        var promotable = IdOf(world, "Promotable");
+        var dummy = IdOf(world, "VeteranDummy");
+        var attacker = IdOf(world, "Attacker");
+
+        long FireAt(uint source, int player, uint target)
+        {
+            for (var i = 0; i < 50; i++)
+            {
+                feeder.FireWeapon(player, source, target);
+                var hit = world.Step().Events.FirstOrDefault(value => value.Kind == SimEventKind.WeaponFired && value.Entity.Value == source);
+                if (hit.Kind == SimEventKind.WeaponFired) return hit.Value;
+            }
+            throw new InvalidOperationException("The weapon never fired.");
+        }
+
+        Check.That(FireAt(promotable, 1, dummy) == Fixed.FromInt(10).Raw, "A regular object uses its default WeaponSet (WeakGun, 10 damage).");
+        Check.That(FireAt(attacker, 2, promotable) == Fixed.FromInt(100).Raw, "A regular object uses its default ArmorSet too (WeakArmor 100 %, full 100 damage taken).");
+
+        world.SetVeterancy(new EntityId(promotable), 1); // VETERAN
+        Check.That(FireAt(promotable, 1, dummy) == Fixed.FromInt(99).Raw, "Once VETERAN, the WeaponSet Conditions = VETERAN (StrongGun, 99 damage) is used instead of the default.");
+        Check.That(FireAt(attacker, 2, promotable) == Fixed.FromInt(100).Raw, "VETERAN alone does not switch the ArmorSet: no ELITE set exists for rank 1, so the default (100 %) still applies.");
+
+        world.SetVeterancy(new EntityId(promotable), 2); // ELITE
+        Check.That(FireAt(attacker, 2, promotable) == Fixed.FromInt(25).Raw, "Once ELITE, the ArmorSet Conditions = ELITE (StrongArmor 25 %) applies: 100 damage becomes 25.");
+        Check.That(FireAt(promotable, 1, dummy) == Fixed.FromInt(10).Raw, "ELITE has no WeaponSet of its own, so the object falls back to the default WeaponSet, not the VETERAN one.");
+    }
 }

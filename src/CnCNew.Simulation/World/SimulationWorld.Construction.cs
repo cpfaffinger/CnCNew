@@ -24,6 +24,13 @@ public sealed partial class SimulationWorld
     private static Modules.BuiltIn.AIUpdateInterface? BuilderOf(Entity entity)
         => AiOf(entity) is { CanBuild: true } ai && !entity.HasStatus(ObjectStatusBits.UnderConstruction) ? ai : null;
 
+    /// <summary>
+    /// Public dry run of a <see cref="ConstructCommand"/> (`docs/PRESENTATION-INPUT.md` §10 point 1): the exact rejection the command would get if
+    /// submitted now, with no side effect. Presentation used to rebuild this check from public data only (`SimulationQueries.CheckPlacement`); this
+    /// is the authoritative version it approximated, so the two can never drift apart again.
+    /// </summary>
+    public CommandRejection CheckConstruct(PlayerId issuer, ConstructCommand construct) => CheckConstruct(issuer, construct, out _, out _);
+
     /// <summary>Shared by submission and execution: funds, prerequisites and the map change between the two.</summary>
     private CommandRejection CheckConstruct(PlayerId issuer, ConstructCommand construct, out Entity? builder, out ObjectTemplate? template)
     {
@@ -38,6 +45,7 @@ public sealed partial class SimulationWorld
         if (!CanBuildTemplate(owner, builder, found)) return CommandRejection.CannotConstruct;
         if (!found.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, found))
             return CommandRejection.MissingPrerequisite;
+        if (ExceedsMaxSimultaneousOfType(owner, found)) return CommandRejection.ProductionLimitReached;
         if (owner.Money < found.BuildCost) return CommandRejection.InsufficientFunds;
         if (Navigation is { } navigation
             && (!navigation.IsFootprintLegal(found, construct.X, construct.Y, construct.Angle) || !IsPositionExploredBy(owner.Id, construct.X, construct.Y)))
@@ -79,6 +87,54 @@ public sealed partial class SimulationWorld
             if (!satisfied) return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// <c>Player::canBuild</c> applied to a unit queued at a producer instead of a structure placed by a dozer: the template must not itself be a
+    /// <c>STRUCTURE</c> (those are only ever built via <see cref="ConstructCommand"/>), and the same <c>Buildable</c>/<c>Side</c> rules apply.
+    /// </summary>
+    private static bool CanProduceTemplate(PlayerState owner, Entity producer, ObjectTemplate template)
+    {
+        if (template.IsKindOf("STRUCTURE")) return false;
+        if (template.Buildable.Equals("No", StringComparison.OrdinalIgnoreCase)) return false;
+        if (template.Buildable.Equals("Only_By_AI", StringComparison.OrdinalIgnoreCase) && !owner.IsComputer) return false;
+        return template.Side.Length == 0 || producer.Template.Side.Length == 0 || template.Side.Equals(producer.Template.Side, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// <c>Player::canBuildMoreOfType</c>: counts the player's own, not-yet-dead objects of the exact template (<c>MaxSimultaneousLinkKey</c>
+    /// grouping is not modeled, see <see cref="ObjectTemplate.MaxSimultaneousOfType"/>) plus, for a non-structure template, every matching entry
+    /// still queued in any of the player's <see cref="Modules.BuiltIn.ProductionUpdate"/>s (a structure can never sit in a factory queue).
+    /// </summary>
+    private bool ExceedsMaxSimultaneousOfType(PlayerState owner, ObjectTemplate template)
+    {
+        if (template.MaxSimultaneousOfType <= 0) return false;
+        var count = 0;
+        var countQueued = !template.IsKindOf("STRUCTURE");
+        foreach (var entity in _entities.Values)
+        {
+            if (entity.Owner != owner.Id || entity.EffectivelyDead) continue;
+            if (entity.Template.Index == template.Index) count++;
+            if (countQueued && FindProductionModule(entity) is { } production) count += production.CountInQueue(template.Index);
+            if (count >= template.MaxSimultaneousOfType) return true;
+        }
+        return count >= template.MaxSimultaneousOfType;
+    }
+
+    /// <summary>
+    /// Everything <see cref="Commands.QueueProductionCommand"/> would check except funds and queue room: side/buildable/kind, prerequisites and
+    /// the <c>MaxSimultaneousOfType</c> cap. A read-only filter for a caller choosing among candidate templates before spending a command — the
+    /// retail reference-match scenario's random production picks use it so a template whose tech building does not exist in that scenario is
+    /// never attempted (`docs/SIMULATION-CORE.md` §7a); it is equally useful to a skirmish AI or to presentation's command-bar availability.
+    /// </summary>
+    public bool CanQueueProductionTemplate(PlayerId player, EntityId producerId, string templateName)
+    {
+        if (!_players.TryGetValue(player.Value, out var owner)) return false;
+        if (!_templates.TryGet(templateName, out var template) || !template.IsInstantiable) return false;
+        if (FindEntity(producerId) is not { } producer || producer.Owner != player) return false;
+        if (!CanProduceTemplate(owner, producer, template)) return false;
+        if (!template.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, template)) return false;
+        return !ExceedsMaxSimultaneousOfType(owner, template);
     }
 
     private void StartConstruction(PlayerId issuer, Entity builder, ObjectTemplate template, ConstructCommand construct)

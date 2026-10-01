@@ -166,4 +166,37 @@ static partial class Tests
             HeightField = new MapHeightField(6, 6, 1, [new MapBoundary(0, 4)], [..new byte[36]]),
         }, "empty"), "empty");
     }
+
+    /// <summary>
+    /// Phase 10: <see cref="TerrainMap.HasHeightLineOfSight"/>, the detector/sight height check. All heights below use raw byte 40 = 25 m
+    /// (<c>40 * 0.625</c>) so the numbers are exact; observer and target are always far enough apart (180 units, 18 cells) to need several
+    /// of the method's samples, not just its endpoints.
+    /// </summary>
+    public static void TerrainHeightLineOfSight()
+    {
+        // A flat plain has nothing to block any line of sight, however far.
+        var flat = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1), "flat");
+        Check.That(flat.HasHeightLineOfSight(Fixed.FromInt(10), Fixed.FromInt(15), Fixed.FromInt(2), Fixed.FromInt(190), Fixed.FromInt(15), Fixed.FromInt(2)),
+            "Flat terrain blocks nothing.");
+        Check.That(flat.HasHeightLineOfSight(Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.FromInt(5), Fixed.Zero, Fixed.Zero), "Two points closer than one cell apart always see each other.");
+
+        // A 25 m ridge (vertices 10..12, i.e. world x roughly 90..110) sits squarely between two ground-level (2 m eye height) points.
+        var ridged = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1, (x, _) => x is >= 10 and <= 12 ? 40 : 0), "ridge");
+        Check.That(!ridged.HasHeightLineOfSight(Fixed.FromInt(10), Fixed.FromInt(15), Fixed.FromInt(2), Fixed.FromInt(190), Fixed.FromInt(15), Fixed.FromInt(2)),
+            "A 25 m ridge blocks a 2 m-high line of sight straight through it.");
+        // The same ridge never reduces the view along a path that does not cross it.
+        Check.That(ridged.HasHeightLineOfSight(Fixed.FromInt(10), Fixed.FromInt(5), Fixed.FromInt(2), Fixed.FromInt(50), Fixed.FromInt(5), Fixed.FromInt(2)),
+            "Terrain elsewhere on the map does not block an unrelated line of sight.");
+        // An observer standing far above the ridge (e.g. on a cliff) sees past it to a ground-level target; a ground-level observer cannot.
+        Check.That(ridged.HasHeightLineOfSight(Fixed.FromInt(10), Fixed.FromInt(15), Fixed.FromInt(300), Fixed.FromInt(190), Fixed.FromInt(15), Fixed.FromInt(2)),
+            "A high enough observer sees over the ridge to a target beyond it ('sees further over lower terrain').");
+
+        // A 1.25 m bump (raw 2) halfway along stays below a constant 2 m-high line of sight and never blocks it.
+        var bumped = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1, (x, _) => x == 11 ? 2 : 0), "bump");
+        Check.That(bumped.HasHeightLineOfSight(Fixed.FromInt(10), Fixed.FromInt(15), Fixed.FromInt(2), Fixed.FromInt(190), Fixed.FromInt(15), Fixed.FromInt(2)),
+            "A bump below the sight line does not block it.");
+
+        // The sample cap bounds the cost of a very long line; it does not change the blocked/clear outcome of any case above.
+        Check.That(TerrainMap.MaxLineOfSightSamples > 0, "The sample cap is a positive, documented limit.");
+    }
 }

@@ -625,13 +625,15 @@ Guthaben → Bauplatz (`IsFootprintLegal` plus erkundet). Die Kosten werden beim
 - **Reparatur:** kostenlos (`AIUpdateInterface.IsRepairable`), eine Vereinfachung.
 - **Sammelpunkt:** `SetRallyPointCommand` setzt den Punkt, zu dem neu produzierte Einheiten laufen.
 - Snapshot v6 trägt Bau-, Verkaufs- und Sammelpunktzustand; das Replay v6 die sechs Befehle.
-- Grenzen: `QueueProduction` prüft weder Voraussetzung noch Fähigkeit des Gebäudes, `MaxSimultaneousOfType` wird nicht geprüft, Reparatur ist kostenlos.
+- Grenzen (Stand Phase 6, siehe §23 für den Phase-10-Stand): `QueueProduction` prüfte weder Voraussetzung noch Fähigkeit des Gebäudes, `MaxSimultaneousOfType`
+  wurde nicht geprüft. Reparatur ist (und bleibt) kostenlos – das ist keine Vereinfachung, siehe §23.
 
 ## 17. Kraftwerksmodule und CommandCatalog (Phase 6)
 
 `PowerPlantUpgrade` (`EnergyBonus` bei Upgrade), `PowerPlantUpdate` (Stäbe ausfahren, passiv) und `OverchargeBehavior` (Energiebonus mit Gesundheitsverlust, schaltet sich bei niedriger Gesundheit selbst ab) verändern die Energieproduktion des
 Spielers über `IWorldServices.AddEnergyProduction`; `ObjectTemplate.EnergyBonus` und `CommandSets` sind neu. `TemplateCatalog.Commands` (`CommandCatalog`) löst `CommandSet` → `CommandButton` auf und
-beantwortet `OffersBuild` (welches Objekt was bauen oder produzieren kann); die KI nutzt es für Rollen (§18). Grenzen: kein Eroberungsverhalten, kein Umschaltbefehl für Overcharge, Reset entfernt auch den Bonus.
+beantwortet `OffersBuild` (welches Objekt was bauen oder produzieren kann); die KI nutzt es für Rollen (§18). Grenzen (Stand Phase 6): kein Eroberungsverhalten, kein
+Umschaltbefehl für Overcharge, Reset entfernt auch den Bonus. Seit Phase 10: `OverchargeCommand` und eine reduzierte Kraftwerkseroberung (`CaptureCommand`), §23.
 
 ## 18. Skirmish-KI (Phase 6)
 
@@ -712,15 +714,20 @@ eine Zerlegung nach Ursachen wurde nicht gemessen. GLA-Siege dauern im Mittel l�
 - **Navigation:** punktförmige Einheiten (seit Phase 10, §23, mit begrenzter lokaler Ausweichbewegung und echter Crush-/Squish-/Topple-Kollision bei Überlappung, aber ohne echte
   Steuerung/Flocking), flacher A* mit Budget, genäherter Fußabdruck mit Fluchtzellen (Zuschlag), Locomotoren nur über `Surfaces`; ein teilweiser oder fehlender Pfad beendet den
   Befehl. Von 462 Startpositionspaaren sind 6 nur teilweise begehbar.
-- **Sicht:** kreisförmig, keine Höhen-Sichtlinie, Aktualisierung alle 3 Ticks, keine Detektoren.
-- **Bau:** `QueueProduction` ohne Voraussetzungs-/Fähigkeitsprüfung, `MaxSimultaneousOfType` ungeprüft, Reparatur kostenlos.
-- **Kraftwerke:** keine Eroberung, kein Umschaltbefehl für `Overcharge`, Reset entfernt auch den Bonus.
+- **Sicht:** kreisförmig, keine Höhen-Sichtlinie, Aktualisierung alle 3 Ticks, keine Detektoren. (Beides seit Phase 10 vorhanden: `StealthDetectorUpdate`
+  kam mit den Phase-7/8/9-Blockermodulen hinzu, eine Höhen-Sichtlinie für Detektoren seit Phase 10, §23; die kreisförmige Sichtweite/Aufdeckung selbst
+  (`VisionMap`, §15) bleibt ohne Höhenverdeckung.)
+- **Bau:** `QueueProduction` ohne Voraussetzungs-/Fähigkeitsprüfung, `MaxSimultaneousOfType` ungeprüft, Reparatur kostenlos. (Die ersten zwei seit Phase 10
+  behoben, §23; Reparatur ist weiterhin kostenlos, aber das ist keine Vereinfachung – siehe §23.)
+- **Kraftwerke:** keine Eroberung, kein Umschaltbefehl für `Overcharge`, Reset entfernt auch den Bonus. (Die ersten zwei seit Phase 10 vorhanden, als
+  reduzierter `CaptureCommand` bzw. `OverchargeCommand`, §23.)
 - **KI:** Spezialkräfte nicht klassifiziert, Startpositionen der Gegner sind öffentliches Wissen (`HintPositions`), von der Karte nur Lagerhäuser gesetzt, Startgeld und Science-Punkte vom System, keine Flugzeuge/Flugplätze,
   (seit Paket E1 mit Chinook-Wirtschaft, Tunneln und Transportern, §21), Armeezusammensetzung durch Instanziierbarkeit begrenzt, gleichstarke Paarungen können in ein Patt laufen (1 von 16), ohne Detektoren können getarnte Überlebende verborgen
   bleiben.
 - **Offen aus früheren Phasen:** Block 0.4 (RNG-Abgleich mit einem kompilierten Original; Projektilflugzeit und `ChinookAIUpdate`/`TransportAIUpdate` seit Paket E1, §21;
-  `ToppleUpdate`/`StructureToppleUpdate`/`HeightDieUpdate` und echte `CrushDie`/`SquishCollide`-Kollision seit Phase 10, §23), Wirkung von `CommandSet`/Radar,
-  Veteranen-`ArmorSet`/`WeaponSet`, `CommandButtonHuntUpdate` und `SpecialAbilityUpdate`.
+  `ToppleUpdate`/`StructureToppleUpdate`/`HeightDieUpdate` und echte `CrushDie`/`SquishCollide`-Kollision seit Phase 10, §23). Seit Phase 10 teilweise geklärt (§23): Wirkung
+  von `CommandSet`/Radar, Veteranen-`ArmorSet`/`WeaponSet` (implementiert, aber in Retail-Daten ohne messbare Wirkung), Kraftwerkseroberung und Overcharge-Umschaltbefehl
+  (reduzierte Fassungen). Weiterhin offen: `CommandButtonHuntUpdate` und `SpecialAbilityUpdate` als volle Implementierungen (bleiben ehrliche Hüllenmodule).
 
 ## 21. Phase 8, Paket E1: Projektilflugzeit, Transporter, Tunnel, Chinook
 
@@ -866,3 +873,183 @@ Details, Quellverweise und Messwerte in `docs/SCRIPT-ENGINE.md` §5/§7/§8/§9;
   `SnapshotFormatException` abgelehnt (keine stille Migration). Welt-Snapshot (7), Replay (7) und `CommandTypes.Version` (9) sind unverändert.
 - **Determinismus:** `SpecialAbilityUpdate` fügt keinen eigenen Zustand hinzu (die geerbte Nachlademaschine von `SpecialPowerModuleBase` deckt es ab);
   der `SourceRules`-Test besteht unverändert. `CommandCatalog`s neue Tabelle wird aus den Definitionen gebaut, nicht zur Laufzeit verändert.
+
+## 25. Phase 10: Bau-/Regelgrenzen, Veteranen-Sätze, Höhen-Sichtlinie, Capture
+
+Quelle und Auftrag: `docs/HANDOFF-PHASE10.md` Punkt 10 (Fortsetzung der in Phase 9 offen gebliebenen Teile A/B). Neue Dateien: `World/SimulationWorld.PowerAndCapture.cs`
+(Overcharge-/Capture-Befehl, `MaxSimultaneousOfType`-Zähler teilt sich `World/SimulationWorld.Construction.cs`). Geänderte Dateien: `Commands/Commands.cs` (`CommandTypes.Version` 9 → 10,
+Codes 28/29, Ablehnungsgründe 35–38), `Replay/ReplayFormat.cs` (Kodierung der zwei neuen Befehle, Containerformat selbst unverändert), `Events/SimEvent.cs` (`StructureCaptured` = 29),
+`Templates/ObjectTemplate.cs` (`MaxSimultaneousOfType`, `VeteranArmor`/`VeteranWeapon`), `World/SimulationWorld.cs` (`ActiveArmor`/`ActiveWeaponIndex` nach Veteranenstufe, `IsDock`,
+`AddEnergyProduction`-Nachbarschaft), `World/SimulationWorld.Construction.cs` (`CanProduceTemplate`, `ExceedsMaxSimultaneousOfType`, `CanQueueProductionTemplate`, öffentliches
+`CheckConstruct`), `Modules/BuiltIn/Phase5Modules.cs` (`UpgradeMuxModule.Executed`, `ProductionUpdate.Queue`/`CountInQueue`), `Modules/BuiltIn/SpecialPowerModules.cs`
+(`SpecialPowerModuleBase.AvailableOnFrame`), `Modules/BuiltIn/Phase5BlockerModules.cs` (`StealthDetectorUpdate`, Höhen-Sichtlinie), `Terrain/TerrainMap.cs` (`HasHeightLineOfSight`),
+`Skirmish/SkirmishMatchSession.cs` (`CreateSave`-Sperre), `Testing/ReferenceMatchScenario.cs` (Produktionsauswahl respektiert jetzt Voraussetzungen).
+
+### Bauregeln (Punkt 1)
+
+- **Voraussetzungs- und Fähigkeitsprüfung für Einheiten:** `QueueProductionCommand` prüfte bisher nur `IsInstantiable`, Eigentümerschaft und Geld; `ConstructCommand` (Gebäude) hatte
+  seit Phase 6 bereits `CanBuildTemplate`/`PrerequisitesSatisfied`. `CanProduceTemplate` (`SimulationWorld.Construction.cs`) überträgt dieselbe Regel auf produzierte Einheiten: die
+  Vorlage darf kein `STRUCTURE` sein (die werden nur über `ConstructCommand` platziert – `Player::canBuildMoreOfType`s eigener `checkProductionInterface`-Unterschied in
+  `Player.cpp`), `Buildable = No` ist gesperrt, `Only_By_AI` nur für Computerspieler, die Seite muss zur des Produzenten passen (leere Seite auf beiden Seiten gilt als Freipass, wie bei
+  Gebäuden). `PrerequisitesSatisfied` (unverändert, §16) wird jetzt auch für Einheiten aufgerufen. Neuer Ablehnungsgrund `CannotProduceTemplate` (35); `MissingPrerequisite` (12, schon
+  vorhanden) wird wiederverwendet, weil die Bedeutung identisch ist. Quelle: `Player::canBuild` (`Player.cpp`), dessen `BSTATUS_*`-Fallunterscheidung Gebäude und Einheiten nicht
+  unterscheidet.
+- **`MaxSimultaneousOfType`:** `ObjectTemplate.MaxSimultaneousOfType` (0 = unbegrenzt) ist jetzt typisiert (`ThingTemplate::getMaxSimultaneousOfType`). `ExceedsMaxSimultaneousOfType`
+  zählt die lebenden, nicht toten Objekte exakt dieser Vorlage des Spielers plus – nur für Nicht-`STRUCTURE`-Vorlagen – alle noch in irgendeiner `ProductionUpdate`-Warteschlange
+  dieses Spielers stehenden Einträge derselben Vorlage (`ProductionUpdate.CountInQueue`, neu öffentlich); Quelle `Player::canBuildMoreOfType`/`countExisting` (`Player.cpp`). Gilt für
+  `ConstructCommand` und `QueueProductionCommand` gleichermaßen. Neuer Ablehnungsgrund `ProductionLimitReached` (36). **Nicht modelliert:** `MaxSimultaneousLinkKey` (eine
+  `NameKeyType`-Gruppierung mehrerer Vorlagen unter einem gemeinsamen Zähler); in `.local/phase2-import-a` kommt der Schlüssel in 17 Dateien vor, aber nie zusammen mit
+  `MaxSimultaneousOfType` an genau der gruppierten Stelle, die den Unterschied sichtbar machen würde – die Lücke ist dokumentiert, nicht gemessen folgenlos.
+  Gemessene Wirkung auf echte Daten: `AmericaInfantry.ini` (Colonel Burton, `MaxSimultaneousOfType = 1`), `AirforceGeneral.ini`, `TankGeneral.ini` und 21 weitere Objektdateien tragen
+  den Schlüssel; die Skirmish-KI besaß vorher keinerlei Kappungs-Bewusstsein und hätte (ohne das hier neue, serverseitige Verbot) beliebig viele Kopien einer eigentlich einmaligen
+  Heldeneinheit anfordern können – `SkirmishAi`s eigene `PrerequisitesMet`-Vorprüfung kennt `MaxSimultaneousOfType` weiterhin nicht, verlässt sich also jetzt auf diese serverseitige
+  Schranke als Netz (ein abgelehnter Befehl ist für die KI nur ein verlorener Denkschritt, kein Fehler).
+- **Reparaturkosten – kein Fehlverhalten, sondern eine bereits korrekte Portierung:** geprüft gegen `DozerAIUpdate.cpp` (`privateRepair`/`DozerPrimaryStateMachine`'s Heilschritt:
+  `health = maxHealth * getRepairHealthPerSecond() / LOGICFRAMES_PER_SECOND`, dann `attemptHealingFromSoleBenefactor`) und `RepairDockUpdate.cpp` (`action`:
+  `healthToAddPerFrame = (maxHealth - health) / framesForFullHeal`) – **keiner der beiden Reparaturwege im Original zieht Geld ab.** Die bisherige Doku-Formulierung „Reparatur:
+  kostenlos … eine Vereinfachung“ (§16/§20, `docs/GAME-RULES.md` §11) war demnach unpräzise: es ist keine Vereinfachung, sondern die treue Portierung beider Quellfunktionen. Es gibt
+  deshalb absichtlich **keine** Codeänderung an der bestehenden kostenlosen Reparatur.
+- **Kraftwerkseroberung und der `Overcharge`-Befehl** (`World/SimulationWorld.PowerAndCapture.cs`): `OverchargeBehavior` (seit Phase 6 implementiert, `RetailMatchModules.cs`) hatte nie
+  einen Befehl, der `Toggle` erreicht – die Schaltfläche `CommandButton.ini`s `Command = TOGGLE_OVERCHARGE` lief ins Leere. `OverchargeCommand` (Typcode 28) prüft Eigentümerschaft,
+  Lebendigkeit, Fertigstellung und das Vorhandensein eines `OverchargeBehavior`-Moduls (sonst `CannotToggleOvercharge`, 38) und ruft dann dessen bereits vorhandenes `Toggle` auf – keine
+  neue Spielmechanik, nur der fehlende Draht zur bestehenden.
+  Kraftwerkseroberung ist dagegen eine echte Lücke: im Original hängt „ein Gebäude einnehmen“ komplett an `SpecialAbilityUpdate` (`ActionManager::canCaptureBuilding` verlangt
+  `obj->hasSpecialPower(SPECIAL_*_CAPTURE_BUILDING)`, eine kanalisierte, wissenschafts- und tarnungsabhängige Fähigkeit), und `SpecialAbilityUpdate` ist mit 64 blockierten Objekten (36
+  nur dadurch) der zweitgrößte verbleibende Blocker (§11) – ein eigenständiges, mehrere unzusammenhängende Fähigkeiten (Tarnen, Entführen, Hacken, Kampfabsprung, Einnehmen) umfassendes
+  Modul, dessen vollständige Umsetzung den Rahmen dieser Phase sprengt. `CaptureCommand` (Typcode 29, Ablehnungsgrund `CannotCapture` = 37) bildet stattdessen nur das **Ergebnis** nach:
+  ein beliebiges eigenes, bewegliches (ein `AIUpdateInterface` besitzendes), nicht im Bau befindliches Objekt kann ein für den Spieler sichtbares, fertiges, nicht verkauftes
+  `STRUCTURE`-Ziel direkt übernehmen, wenn es entweder einem Feind gehört oder `KINDOF_CAPTURABLE` trägt und nicht einem Verbündeten gehört (reduziertes
+  `ActionManager::canCaptureBuilding`), und wenn der Akteur bereits in Reichweite steht (`BoundingCircleRadius` + 2 Zellen, wie die Baumeister-Reichweite in `UpdateTask`, §16) –
+  **ohne** Kanalisierungstimer, Wissenschaftsvorbehalt oder Tarnungs-Erkennungs-Check der echten Fähigkeit. `ExecuteCapture` überträgt die statische `EnergyProduction` (wie die
+  Skript-Engine-eigene, unveränderte `TransferOwnership` es für `NAMED_TRANSFER_ASSETS_TO_PLAYER` schon tat) und zusätzlich jeden gerade gewährten dynamischen Bonus (ein ausgeführtes
+  `PowerPlantUpgrade`, ein aktives `OverchargeBehavior`) – das war die eigentliche Lücke: beide Module hatten keinerlei Besitzerwechsel-Rückruf, der `TransferOwnership` schon vorher
+  nicht erreichte. Nicht übertragen/zurückgesetzt: Produktionswarteschlange, Upgrades, Garnisoninhalt. Quelle für den begrenzten Mechanismus-Zuschnitt: `CommandTypes.Capture`s
+  XML-Kommentar in `Commands.cs` zitiert dieselbe Stelle in `ActionManager.cpp`.
+- **`CommandSet`/Radar – geprüft, keine weitere Wirkung gefunden:** `CommandSet` hat bereits eine echte Spielwirkung (`TemplateCatalog.Commands`/`CommandCatalog.OffersBuild`, von der
+  Skirmish-KI für Rollen genutzt, §17/§18); was fehlte, war nicht „Wirkung“, sondern der oben beschriebene `Overcharge`-Befehl – derselbe Fund wie oben, hier nur aus der
+  `CommandSet`-Perspektive dokumentiert. Radar wurde gegen die Referenz geprüft: `Player::hasRadar()` (`Player.h`/`.cpp`) wird außerhalb dieser beiden Dateien nirgends in
+  `GameLogic` gelesen – keine Spezialkraft, kein Gebäude, keine Sichtregel hängt davon ab. Der einzige Spielwirkung von Radar im Original ist die Minimap-Übersicht und
+  Radar-Pings, beides Präsentation. `RadarUpdate`/`RadarUpgrade` (seit Phase 6 implementiert) tragen bereits den vollständigen Simulationsvertrag (`Extended`/`IsExtendComplete`);
+  es gibt keine weitere Simulationswirkung nachzuholen.
+
+### Veteranen-`ArmorSet`/`WeaponSet`-Auswahl (Punkt 2)
+
+`ObjectTemplate.VeteranArmor`/`VeteranWeapon` (je ein 4-elementiges Array, Index 1..3 = `Entity.VeterancyLevel`) werden aus `ArmorSet`/`WeaponSet`-Blöcken mit genau einer Bedingung
+`VETERAN`/`ELITE`/`HERO` befüllt (`ObjectTemplate.ResolveArmor`/`ResolveWeapon`, `VeterancyConditionIndex`). `SimulationWorld.ActiveArmor`/`ActiveWeaponIndex` wählen zuerst den zur
+aktuellen Stufe passenden Veteranensatz, dann `PLAYER_UPGRADE`, zuletzt den Standardsatz. **Modellierungsgrenze (unverändert gegenüber Phase 5, nur erweitert):** nur Sätze mit genau
+einer Bedingung werden aufgelöst; ein Satz, der zwei Bedingungen gleichzeitig verlangt (z. B. `PLAYER_UPGRADE VETERAN`), wird nicht unterschieden – der `SparseMatchFinder` des
+Originals score-basiert über beliebige Kombinationen zu matchen bleibt offen. **Gemessene Wirkung auf echte Daten: keine.** Eine Volltextsuche über `.local/phase2-import-a` nach
+`Conditions` mit `VETERAN`/`ELITE`/`HERO` in einem `ArmorSet`- oder `WeaponSet`-Block ergibt **null Treffer** – kein einziges Zero-Hour-Objekt nutzt diese Bedingungen überhaupt, die
+Veteranenstufe wirkt im Original nach wie vor hauptsächlich über Waffenbonus und Gesundheit (§6h in `docs/GAME-RULES.md`). Die Auswahl ist damit für zukünftige Daten korrekt, ändert
+aber weder `audit-coverage` noch `reference-match` am echten Bestand.
+
+### Detektoren und Höhen-Sichtlinie (Punkt 3)
+
+`StealthDetectorUpdate` existierte bereits (seit den Phase-7/8/9-Blockermodulen, `Phase5BlockerModules.cs`) und erkannte getarnte Objekte in Reichweite bereits korrekt (geprüft:
+`Tests.Phase5StealthDetector` bestand unverändert) – die offene Lücke war nicht die Erkennung selbst, sondern die fehlende Geländeverdeckung. `TerrainMap.HasHeightLineOfSight`
+(`Terrain/TerrainMap.cs`) ist eine eigenständige, nicht aus dem Original portierte Sichtlinienprüfung (das Original löst Sichtlinien über `PartitionManager`s
+Objekt-zu-Objekt-Tests, die dieses Projekt nicht hat): sie läuft die Gerade zwischen zwei Augenpunkten in Schritten von `CellSize` ab (höchstens `MaxLineOfSightSamples` = 64 Proben;
+länger als das wird unterabgetastet – eine benannte, bei den real vorkommenden Sicht-/Erkennungsreichweiten folgenlose Grenze) und vergleicht an jeder Probe die Geländehöhe
+(`HeightAt`) gegen die geradlinig interpolierte Höhe der Sichtlinie; die erste Probe, an der das Gelände die Linie übersteigt, blockiert. Das ist reine Verdeckung: eine höher
+stehende Beobachterin bekommt keinen Reichweitenbonus, sie wird nur seltener blockiert („sieht über“ niedrigeres Gelände bis zur regulären Reichweitengrenze); nur Geländehöhe zählt,
+Gebäude/Bäume/Klippen-als-Hindernis sind keine Geometrie hier. `StealthDetectorUpdate.Update` ruft sie zwischen Detektor und Ziel auf, mit der „Augenhöhe“ = Bodenposition plus volle
+`GeometryHeight` des Objekts (kein eigenes Augenhöhenfeld im Katalog – eine benannte Vereinfachung); ohne Terrain (synthetische Fixtures) bleibt das Verhalten exakt wie zuvor (jedes
+Ziel in Reichweite ist erreichbar). Die kreisförmige Sichtweiten-/Aufdeckungsberechnung selbst (`VisionMap`, §15) bleibt unverändert ohne Höhenverdeckung – das wäre eine
+Schattenwurf-Berechnung pro Zelle und deutlich teurer; nur die Detektor-zu-Ziel-Prüfung (paarweise, so teuer wie der ohnehin vorhandene O(Objekte)-Scan) bekam die Höhenprüfung.
+
+### Fehlende Lese-/Schreib-APIs (Punkt 4, `docs/PRESENTATION-INPUT.md` §10, `docs/GAME-HUD.md`)
+
+Alle fünf in Phase 7/8 (Paket C3) offenen Wünsche sind erledigt, ausnahmslos als kleine, lesende Ergänzungen ohne Protokolländerung:
+
+| API | Datei | Bemerkung |
+|---|---|---|
+| `SimulationWorld.CheckConstruct(PlayerId, ConstructCommand)` | `World/SimulationWorld.Construction.cs` | öffentlicher Trockenlauf der exakt gleichen privaten Prüfung, die auch `Submit`/`ExecuteCommands` nutzen |
+| `ProductionUpdate.Queue` | `Modules/BuiltIn/Phase5Modules.cs` | `ImmutableArray<ProductionQueueItem>`, Kopf zuerst, Vorlage/Kosten/Restticks |
+| `SpecialPowerModuleBase.AvailableOnFrame(IWorldServices)` | `Modules/BuiltIn/SpecialPowerModules.cs` | liest bei geteilten Kräften denselben gemeinsamen Bereitschaftsframe wie `IsReady` |
+| `UpgradeMuxModule.Executed` | `Modules/BuiltIn/Phase5Modules.cs` | liest den bisher `protected`en `UpgradeMuxState.Executed` |
+| `SimulationWorld.IsDock(EntityId)` | `World/SimulationWorld.cs` | ersetzt den Modulnamen-Abgleich (`SupplyCenterDockUpdate` usw.) von außen |
+
+Keine dieser Ergänzungen ändert Snapshot, Replay oder `CommandTypes.Version` – reine Lesezugriffe.
+
+### Skirmish: Start-/Endbarkeit jeder Karte (Punkt 5)
+
+Neues Werkzeug `SimTool skirmish-sweep <content-dir> [--max-ticks N]`: kompiliert den Bestand einmal, läuft dann über jede `.map`-Datei, baut ihr Terrain, und startet bei mindestens
+zwei Startpositionen ein kurzes, zweiseitiges `SkirmishMatchScenario` (`FactionAmerica` gegen `FactionAmericaAirForceGeneral`, die ersten zwei aus `ReferenceMatchScenario.Participants`)
+mit `--max-ticks` (Standard 3.000) als hartem Budget. „Start- und beendbar“ heißt hier: die Sitzung durchläuft ihren vollen Lebenszyklus (Startobjekte, KI-Denkschritte, Sieg oder
+Tick-Budget) ohne Ausnahme – keine Balance- oder Gewinnratenmessung (dafür `ai-match` und die Tabelle in §19).
+
+**Ergebnis (30.09./1.10.2026, `.local/phase2-import-a`, `--max-ticks 3000`):** 150 Karten; 75 ohne jeden Startwegpunkt (Kampagnenkarten, dieselbe Zahl wie `MapTool audit`), 11 mit genau
+einem (nicht genug für zwei Spieler); **alle 64 Karten mit mindestens zwei Startpositionen starten und enden sauber** (0 Abstürze; da `--max-ticks` klein gegenüber den in §19 gemessenen
+Siegzeiten ist, enden praktisch alle am Tick-Budget statt mit einem Sieger, was für diese Messung irrelevant ist – entscheidend ist der exakte Lebenszyklus ohne Ausnahme). Dauer: 75 s.
+Damit ist die seit `docs/HANDOFF-PHASE8.md` offene Abnahme „alle Skirmish-Karten start- und beendbar“ für jede Karte mit genug Startpositionen gemessen und bestanden; Karten ohne
+(genug) Startpositionen sind keine Skirmish-Karten (Kampagnenkarten oder Einzelstart-Herausforderungskarten) und kein Fehlbefund.
+
+### Wiederholung der 16-Karten-KI-Übersicht nach dem `SharedReadyFrame`-Fix (§19)
+
+Alle 16 Läufe aus §19s „Wiederholung nach Paket E1“-Tabelle erneut mit denselben Aufrufen (`SimTool ai-match … --max-ticks 45000`, Standardseeds) ausgeführt, da der in §12/§12a
+beschriebene `SharedReadyFrame`-Fix nach der letzten Messung dieser Tabelle gelandet war:
+
+| Karte | Paarung | Paket E1 | Phase 10 (jetzt) | Geändert? |
+|---|---|---|---|---|
+| Alpine Assault | China, GLA | Patt bei 45.000 | Patt bei 45.000 | nein |
+| Alpine Assault | America, China | America, Tick 10.575 | America, Tick 10.575 | nein |
+| Alpine Assault | GLA, America | GLA, Tick 18.870 | GLA, Tick 18.870 | nein |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 22.155 | China Tank General, Tick 23.325 | **ja** |
+| Armored Fury | China, GLA | GLA, Tick 9.240 | GLA, Tick 9.240 | nein |
+| Armored Fury | America, China | America, Tick 9.390 | America, Tick 9.390 | nein |
+| Armored Fury | GLA, America | GLA, Tick 30.735 | GLA, Tick 30.735 | nein |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 17.430 | China Tank General, Tick 19.020 | **ja** |
+| Bitter Winter | China, GLA | China, Tick 32.490 | China, Tick 32.490 | nein |
+| Bitter Winter | America, China | America, Tick 19.980 | America, Tick 19.980 | nein |
+| Bitter Winter | GLA, America | GLA, Tick 18.240 | GLA, Tick 18.240 | nein |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 34.515 | China Tank General, Tick 27.990 | **ja** |
+| Death Valley | China, GLA | China, Tick 39.555 | China, Tick 39.555 | nein |
+| Death Valley | America, China | America, Tick 10.155 | America, Tick 10.155 | nein |
+| Death Valley | GLA, America | GLA, Tick 16.320 | GLA, Tick 16.320 | nein |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 19.035 | China Tank General, Tick 15.900 | **ja** |
+
+Jeder der 16 Läufe ist weiterhin mit Lauf 2 und Snapshotfortsetzung identisch. Auffällig und durchgängig: **alle 12 Paarungen ohne `FactionAmericaAirForceGeneral`/`FactionChinaTankGeneral`
+sind tickgleich mit der Paket-E1-Tabelle, alle 4 Paarungen mit genau diesen beiden Generälen weichen ab.** Das ist kein Nebeneffekt des `SharedReadyFrame`-Fixes selbst (der schon vor
+dieser Messung landete und in §12 bereits mit einem eigenen `ai-match`-Lauf belegt ist), sondern der hier neuen `MaxSimultaneousOfType`-Schranke (oben, Punkt 1): `AirforceGeneral.ini`
+und `TankGeneral.ini` tragen beide den Schlüssel für ihre einmaligen General-Einheiten, und `SkirmishAi`s eigene Vorprüfung (`PrerequisitesMet`) kannte diese Schranke nie – vorher
+konnte die KI (soweit die Vorlage sonst instanziierbar und erschwinglich war) in der Theorie mehrere Kopien einer eigentlich einmaligen Einheit anfordern, was das Original verbietet;
+jetzt wird der zweite Versuch korrekt abgelehnt. Eine abgelehnte Produktion ist für die KI nur ein verlorener Denkschritt (`Backoff`), verschiebt aber nachfolgende Entscheidungen und
+damit, über die deterministische Kaskade, den gesamten weiteren Spielverlauf – daher die veränderten, aber weiterhin deterministischen Siegzeiten. Keine Balance-Aussage.
+
+### Skirmish-Speicherstand: Entscheidung (Punkt 6)
+
+**Entscheidung: kein Speichern einer laufenden Skirmish-Sitzung als fortsetzbares Live-Spiel in dieser Phase; `SkirmishMatchSession.CreateSave()` verweigert das laut und dokumentiert,
+statt einen stillschweigend unvollständigen Spielstand zu schreiben.**
+
+Zwei Dinge, die ähnlich klingen, aber zu unterscheiden sind:
+
+1. **Ein abgeschlossener oder teilweise aufgezeichneter Lauf speichert und lädt bereits heute exakt:** `ToReplay()` plus ein `WorldSnapshot`-Checkpoint
+   (`SkirmishMatchOptions.CheckpointInterval`) ergeben eine tickgleiche Fortsetzung – genau das prüft jeder „snapshot continuation“-Check in `ai-match`/`reference-match` schon
+   seit Phase 6/8/9, und braucht keinerlei KI-Zustand, weil ein Replay nur die von der KI bereits erzeugten Befehle erneut ausführt, nie die KI selbst.
+2. **Was fehlt, ist das Pausieren einer noch laufenden, nicht vollständig aufgezeichneten Sitzung und ihre Fortsetzung als weiterhin live entscheidende Partie.** Dafür müsste
+   `SkirmishAi` selbst den Rundweg überleben: pro Computerspieler hält sie erhebliches, außerhalb von `World` liegendes Erinnerungs- und Ablaufwissen (Feind-/Lagerhaus-Gedächtnis mit
+   Zeitstempeln, Auftrags- und Rückzugs-Timer-Tabellen, Produktion-in-Arbeit-Verfolgung, Sammel-/Erkundungsziele, Schlechte-Stellen-Vermeidung, einen eigenen `SageRandom`-Strom – die
+   vollständige Feldliste steht in `SkirmishAi.cs`), nichts davon trägt `WorldSnapshot`. Nur die Welt zu schreiben würde beim Laden jede KI mit ausgelöschtem Gedächtnis
+   fortsetzen – kein sauberer Neustart, sondern ein leise falscher: die KI „entdeckt“ sofort wieder Feinde und Lagerhäuser, die sie längst kannte, und vergisst laufende Produktion und
+   Rückzugs-Zeitsperren, ohne dass irgendetwas einen Fehler meldet.
+
+Ein `SkirmishAiSnapshot`, der Lücke 2 schließt, ist reale, aber begrenzte Fortsetzungsarbeit (ein flacher Zustandsdump, keine neue Mechanik) und bewusst nicht Teil dieser Phase.
+Bis es ihn gibt, ist `SkirmishMatchSession.CreateSave()` der eine, dokumentierte, laute Fehlschlagpunkt für ein Live-Sitzungs-Speichern (Test: `Tests.Skirmish.cs` →
+`SkirmishSessionRefusesToSave`), statt einer Speicherroutine, die die KI still fallen lässt und einen kaputten Spielstand ausliefert.
+
+### Gemessene Zahlen (1. Oktober 2026, `.local/phase2-import-a`, unverändert gegenüber Phase 9 wo nicht anders vermerkt)
+
+- `SimTool audit-coverage`: 2.115 Objekte, **1.494 instanziierbar (70,6 %) – unverändert**, 621 blockiert, Fingerabdruck `2B9D902AEC46A6DE…` unverändert (keine neue
+  Simulationsmodul-Anforderung durch Phase 10).
+- `SimTool audit-modules` mit Inhaltsverzeichnis: 19.553 Modulverwendungen, 15.639 abgedeckt (80,0 %) – **unverändert**.
+- `IniTool compat-check`: 747 Einträge – **unverändert** (`MaxSimultaneousOfType` ist ein Objekt-Top-Level-Feld, kein Modulfeld, und war nie als `deferred-field` geführt; die neue
+  Typisierung ändert daher keine Baseline).
+- `SimTool reference-match`: **geändert**, weil `ReferenceMatchScenario`s Zufallsproduktionsauswahl jetzt `CanQueueProductionTemplate` respektiert (vorher konnte sie Vorlagen wählen,
+  deren Voraussetzungsgebäude in diesem Szenario nie gebaut werden – das Szenario baut bewusst keine Gebäude außer den Start-Kommandozentralen, §7a) – 13 Fraktionen, 46.284 Befehle
+  (0 abgelehnt), Sieger Spieler 10 (`FactionGLA`) bei Tick 17.580, Endhash `EC8267B594CC4D8A`, zwei frische Läufe und eine Snapshotfortsetzung bei Tick 8.940 tickgleich; vorher (Phase
+  9) Sieger `FactionAmerica` bei Tick 13.665, `D4779BE413835B6D`. Weder Sieger noch Hash sind ein Qualitätsmerkmal dieses Szenarios (reine Zufallsproduktion ohne Baugebäude);
+  entscheidend ist 0 abgelehnte Befehle (die Auswahl ist jetzt wieder vollständig gültig) und die unveränderte Determinismus-/Fortsetzungsgarantie.
+- `MapTool audit`: von Phase 10 unberührt (keine Änderung an `CnCNew.Formats`/`SageMapDecoder`/`TerrainMap.Build`/`Classify`; `skirmish-sweep`s 150/150 dekodierte, 0 fehlgeschlagene
+  Karten bei identischen 75/11/64-Zahlen bestätigen das indirekt).
+- `dotnet build CnCNew.slnx`: weiterhin 0 Fehler, 21 bekannte Warnungen bei sauberem `CnCNew.Client.Stride`-`bin`/`obj`.
+- `tests/CnCNew.Simulation.Tests` (synthetisch und `--content-dir`) sowie `tests/CnCNew.Game.Tests` (ohne und mit `--content-dir`): alle bestehen.

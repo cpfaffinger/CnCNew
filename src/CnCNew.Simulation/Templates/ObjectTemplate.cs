@@ -50,7 +50,8 @@ public sealed class ObjectTemplate
 {
     internal ObjectTemplate(int index, ObjectDefinition definition, ImmutableArray<ModuleSpec> modules,
         ImmutableArray<string> presentationModules, ImmutableArray<string> missingModules,
-        ArmorInfo defaultArmor, ArmorInfo? playerUpgradeArmor, int defaultWeapon, int playerUpgradeWeapon, LocomotorInfo? locomotor,
+        ArmorInfo defaultArmor, ArmorInfo? playerUpgradeArmor, ImmutableArray<ArmorInfo?> veteranArmor,
+        int defaultWeapon, int playerUpgradeWeapon, ImmutableArray<int> veteranWeapon, LocomotorInfo? locomotor,
         ImmutableArray<PrerequisiteLine> prerequisites, ImmutableArray<string> commandSets)
     {
         CommandSets = commandSets;
@@ -75,13 +76,16 @@ public sealed class ObjectTemplate
         BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? SimulationTiming.SecondsToTicks(seconds) : 0;
         EnergyProduction = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyProduction", StringComparison.OrdinalIgnoreCase))?.Value.Value is long energy ? checked((int)energy) : 0;
         EnergyBonus = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyBonus", StringComparison.OrdinalIgnoreCase))?.Value.Value is long bonus ? checked((int)bonus) : 0;
+        MaxSimultaneousOfType = definition.Fields.LastOrDefault(field => field.Name.Equals("MaxSimultaneousOfType", StringComparison.OrdinalIgnoreCase))?.Value.Value is long maxType ? checked((int)maxType) : 0;
         IsTrainable = definition.Fields.LastOrDefault(field => field.Name.Equals("IsTrainable", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         ExperienceValue = IntegerArray(definition, "ExperienceValue");
         ExperienceRequired = IntegerArray(definition, "ExperienceRequired");
         DefaultArmor = defaultArmor;
         PlayerUpgradeArmor = playerUpgradeArmor;
+        VeteranArmor = veteranArmor;
         DefaultWeapon = defaultWeapon;
         PlayerUpgradeWeapon = playerUpgradeWeapon;
+        VeteranWeapon = veteranWeapon;
         Locomotor = locomotor;
         Prerequisites = prerequisites;
         CrusherLevel = definition.Fields.LastOrDefault(field => field.Name.Equals("CrusherLevel", StringComparison.OrdinalIgnoreCase))?.Value.Value is long crusher ? checked((int)crusher) : 0;
@@ -134,6 +138,12 @@ public sealed class ObjectTemplate
     public ImmutableArray<string> CommandSets { get; }
     /// <summary><c>ThingTemplate::getEnergyBonus</c>: extra production a <c>PowerPlantUpgrade</c> adds to the owner.</summary>
     public int EnergyBonus { get; }
+    /// <summary>
+    /// <c>ThingTemplate::getMaxSimultaneousOfType</c> (<c>Player::canBuildMoreOfType</c>); 0 (absent key) means unlimited.
+    /// <c>MaxSimultaneousLinkKey</c> (grouping several templates under one shared cap) is not modeled: no object in this
+    /// grouping is counted beyond its own template index, so a link-keyed family's effective cap is looser than retail's.
+    /// </summary>
+    public int MaxSimultaneousOfType { get; }
     /// <summary><c>ThingTemplate::m_isTrainable</c>: only trainable objects take over a veterancy level from an object creation list.</summary>
     public bool IsTrainable { get; }
     /// <summary><c>ThingTemplate::m_experienceValue</c>: the experience a killer earns for destroying this object, by the victim's own veterancy level (absent key: all zero, the reference default).</summary>
@@ -149,10 +159,22 @@ public sealed class ObjectTemplate
     public ArmorInfo DefaultArmor { get; }
     /// <summary><c>ArmorSet Conditions = PLAYER_UPGRADE</c>, if the object declares one (selected once <c>ArmorUpgrade</c> completes).</summary>
     public ArmorInfo? PlayerUpgradeArmor { get; }
+    /// <summary>
+    /// <c>ArmorSet Conditions = VETERAN</c>/<c>ELITE</c>/<c>HERO</c> (index by <c>Entity.VeterancyLevel</c>, 1..3; index 0 is unused), if the object
+    /// declares one. The original selects the best-scoring set via <c>SparseMatchFinder</c> across every combination of simultaneous
+    /// conditions (veterancy, <c>PLAYER_UPGRADE</c>, second life, crate upgrades, ...); this only resolves single-condition sets (exactly one of
+    /// <c>None</c>/<c>PLAYER_UPGRADE</c>/<c>VETERAN</c>/<c>ELITE</c>/<c>HERO</c>), matching the retail Zero Hour object data, where no shipped
+    /// <c>ArmorSet</c>/<c>WeaponSet</c> ever combines two conditions (verified: zero occurrences of <c>Conditions = ... VETERAN|ELITE|HERO</c> in
+    /// <c>.local/phase2-import-a</c>). A set requiring more than one simultaneous condition is not modeled and falls back to the next best
+    /// single-condition match, a named simplification with no effect on the shipped game.
+    /// </summary>
+    public ImmutableArray<ArmorInfo?> VeteranArmor { get; }
     /// <summary>Index into the world's <see cref="WeaponCatalog"/> of the <c>WeaponSet Conditions=None</c> primary weapon, or -1.</summary>
     public int DefaultWeapon { get; }
     /// <summary>Primary weapon of the <c>WeaponSet Conditions = PLAYER_UPGRADE</c> variant, if any, else -1.</summary>
     public int PlayerUpgradeWeapon { get; }
+    /// <summary>Primary weapon of the <c>WeaponSet Conditions = VETERAN</c>/<c>ELITE</c>/<c>HERO</c> variant (index 1..3), or -1. See <see cref="VeteranArmor"/> for the selection simplification.</summary>
+    public ImmutableArray<int> VeteranWeapon { get; }
     public LocomotorInfo? Locomotor { get; }
     public ImmutableArray<PrerequisiteLine> Prerequisites { get; }
 
@@ -321,8 +343,8 @@ public sealed class TemplateCatalog
                 }
             }
 
-            var (defaultArmor, playerUpgradeArmor) = ResolveArmor(definition, armors);
-            var (defaultWeapon, playerUpgradeWeapon) = ResolveWeapon(definition, weapons);
+            var (defaultArmor, playerUpgradeArmor, veteranArmor) = ResolveArmor(definition, armors);
+            var (defaultWeapon, playerUpgradeWeapon, veteranWeapon) = ResolveWeapon(definition, weapons);
             var locomotor = ResolveLocomotor(definition, locomotors);
             var prerequisites = ResolvePrerequisites(definition);
             var commandSets = ImmutableArray.CreateBuilder<string>();
@@ -331,7 +353,7 @@ public sealed class TemplateCatalog
                 foreach (var field in module.Fields.Where(value => value.Name.Equals("CommandSet", StringComparison.OrdinalIgnoreCase) || value.Name.Equals("CommandSetAlt", StringComparison.OrdinalIgnoreCase)))
                     if (field.Value.OriginalText.Trim() is { Length: > 0 } name && !commandSets.Contains(name)) commandSets.Add(name);
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
-                defaultArmor, playerUpgradeArmor, defaultWeapon, playerUpgradeWeapon, locomotor, prerequisites, commandSets.ToImmutable()));
+                defaultArmor, playerUpgradeArmor, veteranArmor, defaultWeapon, playerUpgradeWeapon, veteranWeapon, locomotor, prerequisites, commandSets.ToImmutable()));
         }
         var commands = CommandCatalog.Build(graph);
         var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus)
@@ -449,10 +471,20 @@ public sealed class TemplateCatalog
         return text.Equals("None", StringComparison.OrdinalIgnoreCase) ? [] : [..text.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)];
     }
 
-    private static (ArmorInfo Default, ArmorInfo? PlayerUpgrade) ResolveArmor(ObjectDefinition definition, ImmutableDictionary<string, ArmorInfo> armors)
+    /// <summary>Maps a single-condition-set token to a 1..3 veterancy index (<c>Entity.VeterancyLevel</c>), or 0 when it names none of the three.</summary>
+    private static int VeterancyConditionIndex(string condition)
+    {
+        if (condition.Equals("VETERAN", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (condition.Equals("ELITE", StringComparison.OrdinalIgnoreCase)) return 2;
+        if (condition.Equals("HERO", StringComparison.OrdinalIgnoreCase)) return 3;
+        return 0;
+    }
+
+    private static (ArmorInfo Default, ArmorInfo? PlayerUpgrade, ImmutableArray<ArmorInfo?> Veteran) ResolveArmor(ObjectDefinition definition, ImmutableDictionary<string, ArmorInfo> armors)
     {
         ArmorInfo? defaultArmor = null;
         ArmorInfo? playerUpgrade = null;
+        var veteran = new ArmorInfo?[4];
         foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("ArmorSet", StringComparison.OrdinalIgnoreCase)))
         {
             var armorName = section.Fields.LastOrDefault(value => value.Name.Equals("Armor", StringComparison.OrdinalIgnoreCase))?.Value.Value switch
@@ -463,15 +495,20 @@ public sealed class TemplateCatalog
             if (armorName is null || !armors.TryGetValue(armorName, out var info)) continue;
             var conditions = ConditionTokens(section);
             if (conditions.Length == 0) defaultArmor ??= info;
-            else if (conditions is [var only] && only.Equals("PLAYER_UPGRADE", StringComparison.OrdinalIgnoreCase)) playerUpgrade ??= info;
+            else if (conditions is [var only])
+            {
+                if (only.Equals("PLAYER_UPGRADE", StringComparison.OrdinalIgnoreCase)) playerUpgrade ??= info;
+                else if (VeterancyConditionIndex(only) is > 0 and var level) veteran[level] ??= info;
+            }
         }
-        return (defaultArmor ?? ArmorInfo.Default, playerUpgrade);
+        return (defaultArmor ?? ArmorInfo.Default, playerUpgrade, [..veteran]);
     }
 
-    private static (int Default, int PlayerUpgrade) ResolveWeapon(ObjectDefinition definition, WeaponCatalog weapons)
+    private static (int Default, int PlayerUpgrade, ImmutableArray<int> Veteran) ResolveWeapon(ObjectDefinition definition, WeaponCatalog weapons)
     {
         var defaultWeapon = -1;
         var playerUpgradeWeapon = -1;
+        var veteran = new[] { -1, -1, -1, -1 };
         foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)))
         {
             var primary = section.Fields.Where(value => value.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase))
@@ -480,9 +517,13 @@ public sealed class TemplateCatalog
             var index = weaponName is not null && weapons.TryGet(weaponName, out var info) ? info.Index : -1;
             var conditions = ConditionTokens(section);
             if (conditions.Length == 0) { if (defaultWeapon < 0) defaultWeapon = index; }
-            else if (conditions is [var only] && only.Equals("PLAYER_UPGRADE", StringComparison.OrdinalIgnoreCase)) { if (playerUpgradeWeapon < 0) playerUpgradeWeapon = index; }
+            else if (conditions is [var only])
+            {
+                if (only.Equals("PLAYER_UPGRADE", StringComparison.OrdinalIgnoreCase)) { if (playerUpgradeWeapon < 0) playerUpgradeWeapon = index; }
+                else if (VeterancyConditionIndex(only) is > 0 and var level) { if (veteran[level] < 0) veteran[level] = index; }
+            }
         }
-        return (defaultWeapon, playerUpgradeWeapon);
+        return (defaultWeapon, playerUpgradeWeapon, [..veteran]);
     }
 
     private static ImmutableDictionary<string, LocomotorInfo> BuildLocomotors(CompiledDefinitionGraph graph)
