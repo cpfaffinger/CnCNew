@@ -83,9 +83,51 @@ static partial class Tests
             SpecialPowerTemplate = AlphaInstantPower
           End
         End
+        Object AlphaBunker
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE
+          VisionRange = 60.0
+          ShroudClearingRange = 60.0
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 200.0
+            InitialHealth = 200.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = GarrisonContain Garrison01
+            ContainMax = 2
+          End
+        End
+        Object ScriptWarehouse
+          KindOf = STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 200.0
+            InitialHealth = 200.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = SupplyWarehouseDockUpdate Dock01
+            NumberApproachPositions = 1
+            StartingBoxes = 5
+          End
+        End
         CommandButton Cmd_AlphaPower
           Command = SPECIAL_POWER
           SpecialPower = AlphaInstantPower
+        End
+        CommandButton Cmd_AlphaFire
+          Command = FIRE_WEAPON
+          WeaponSlot = SECONDARY
         End
         CommandButton Cmd_AlphaSellNotPower
           Command = SELL
@@ -134,7 +176,7 @@ static partial class Tests
         var map = baseMap with
         {
             Sides = sides,
-            Teams = [Team("teamA", PlayerA, true), Team("teamB", PlayerB, true), Team("Raiders", PlayerB, false)],
+            Teams = [Team("teamA", PlayerA, true), Team("teamB", PlayerB, true), Team("Raiders", PlayerB, false), Team("Squad", PlayerA, true)],
             Objects = [..baseMap.Objects, ..objects ?? []],
             PlayerScripts = [new MapScriptList([..neutral ?? []], []), new MapScriptList([..scripts], [..groups ?? []]), new MapScriptList([], [])],
         };
@@ -291,12 +333,12 @@ static partial class Tests
         var session = StartMission([
             Scr.Script("Odd", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_SET_TOPPLE_DIRECTION", Scr.Unit("x"), Scr.Int(0)), Scr.Do("SPEECH_PLAY", Scr.Named(MapScriptParameterType.Dialog, "Hello"), Scr.Bool(false)),
                 Scr.Do("CALL_SUBROUTINE", Scr.Script("Nope")), Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("u"), Scr.Type("NoSuchObject"), Scr.Team("teamA"), Scr.Waypoint("Spawn"))], oneShot: true),
-            Scr.Script("Sighted", [Scr.And(Scr.If("ENEMY_SIGHTED", Scr.Unit("x"), Scr.Int(0), Scr.Side(PlayerA)))], [Scr.Do("SET_FLAG", Scr.Flag("seen"), Scr.Bool(true))]),
+            Scr.Script("Sighted", [Scr.And(Scr.If("SUPPLY_SOURCE_SAFE", Scr.Side(PlayerA), Scr.Int(0)))], [Scr.Do("SET_FLAG", Scr.Flag("seen"), Scr.Bool(true))]),
         ]);
         Run(session, 3);
         var engine = session.Engine;
         Check.That(engine.MissingActionHits.GetValueOrDefault("NAMED_SET_TOPPLE_DIRECTION") == 1, "An unimplemented action is counted, not skipped silently.");
-        Check.That(engine.MissingConditionHits.GetValueOrDefault("ENEMY_SIGHTED") == 3 && !engine.FlagValue("seen"), "An unimplemented condition is counted on every evaluation and evaluates to false.");
+        Check.That(engine.MissingConditionHits.GetValueOrDefault("SUPPLY_SOURCE_SAFE") == 3 && !engine.FlagValue("seen"), "An unimplemented condition is counted on every evaluation and evaluates to false.");
         Check.That(engine.ForwardedActions == 1, "Speech is forwarded.");
         var output = engine.DrainOutputs();
         Check.That(output.Length == 1 && output[0].Action == "SPEECH_PLAY" && output[0].Arguments[0] == "Hello", "The forwarded action reaches the client with its parameters.");
@@ -326,8 +368,8 @@ static partial class Tests
         Check.That(!engine.MissingActionHits.ContainsKey("NAMED_USE_COMMANDBUTTON_ABILITY") && !engine.MissingActionHits.ContainsKey("TEAM_USE_COMMANDBUTTON_ABILITY_ON_NAMED"),
             "The implemented ability actions are no longer counted as missing.");
         Check.That(session.World.RejectionCounts.Sum() == 0, "The resolved special-power uses were accepted as ordinary player commands (ready, unpaused, no required science).");
-        Check.That(engine.Diagnostics.ContainsKey("command button 'Cmd_AlphaSellNotPower' is not a special-power ability"), "A real but non-special-power button is diagnosed, never silently ignored.");
-        Check.That(engine.Diagnostics.ContainsKey("command button 'Cmd_NoSuchButton' is not a special-power ability"), "An unknown button name is diagnosed the same way.");
+        Check.That(engine.Diagnostics.ContainsKey("command button 'Cmd_AlphaSellNotPower' has command SELL, not executed"), "A real but non-special-power button is diagnosed, never silently ignored.");
+        Check.That(engine.Diagnostics.ContainsKey("unknown command button 'Cmd_NoSuchButton'"), "An unknown button name is diagnosed under its own message.");
     }
 
     public static void ScriptEngineHumanSideSelection()

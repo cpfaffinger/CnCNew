@@ -152,6 +152,14 @@ run.Test("Scripts: attack priorities steer targeting", Tests.ScriptEngineAttackP
 run.Test("Scripts: missing types are counted, presentation is forwarded", Tests.ScriptEngineMissingTypesAreCounted);
 run.Test("Scripts: command-button abilities fire the named special power", Tests.ScriptEngineCommandButtonAbilities);
 run.Test("Scripts: an explicit human side overrides the map default", Tests.ScriptEngineHumanSideSelection);
+run.Test("Scripts: SKIRMISH_* conditions (units/value in area, outside area, attacked by player, area exists)", Tests.ScriptSkirmishConditions);
+run.Test("Scripts: special-power, sight and discovery conditions", Tests.ScriptSpecialPowerAndSightConditions);
+run.Test("Scripts: map reveal (permanent, undo, quick look) and shroud", Tests.ScriptMapRevealAndShroud);
+run.Test("Scripts: construction switches and world snapshot", Tests.ScriptBuildSwitchesAndSciences);
+run.Test("Scripts: garrison, enter and exit actions", Tests.ScriptContainerAndGarrisonActions);
+run.Test("Scripts: warehouse value and team merge", Tests.ScriptWarehouseAndTeamActions);
+run.Test("Scripts: BUILD_TEAM produces and activates the team", Tests.ScriptBuildTeamProducesTheTeam);
+run.Test("Scripts: other command buttons and waypoint abilities", Tests.ScriptOtherCommandButtonsAndWaypointAbilities);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);
 run.Test("Modules: CommandButtonHuntUpdate and LockWeaponCreate shells", Tests.MissionBlockerShellModules);
