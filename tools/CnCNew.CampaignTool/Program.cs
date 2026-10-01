@@ -27,6 +27,9 @@ const string Usage = """
                                                 static: can the mission's own VICTORY/DEFEAT scripts fire with the implemented condition/action types? (clean / degraded / blocked chains)
       script <content-dir> --map TEXT --name SCRIPT
                                                 prints one script (conditions, actions) and every script whose actions name it
+      drive <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--explain]
+                                                objective driver: satisfies the world-state conditions of the scripts (kill named objects/teams, send units into areas, ...) one by one and
+                                                reports whether the mission's OWN VICTORY/DEFEAT action fired (no generic elimination)
       sides <content-dir> [--campaign NAME]       the script players (sides) of every campaign map: name, faction, human flag (to map a chosen general to a map's side)
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
@@ -51,6 +54,7 @@ try
         "sides" => Sides(content, campaigns, args),
         "reachability" => ReachabilityReport(content, campaigns, args),
         "script" => ScriptDump(content, campaigns, args),
+        "drive" => Drive(content, campaigns, args),
         "playthrough" => Playthrough(content, campaigns, args),
         _ => Fail(Usage),
     };
@@ -153,6 +157,47 @@ static int ScriptDump(ContentFileSystem content, CampaignCatalog campaigns, stri
         foreach (var action in unit.Script.Actions.Concat(unit.Script.FalseActions).Where(item => item.Parameters.Any(value => value.Text == name)))
             Console.WriteLine($"  named by '{unit.Name}': {Describe(action)}");
     foreach (var group in program.Groups.Where(item => item.Name == name)) Console.WriteLine($"group '{group.Name}' active {group.Group.IsActive} subroutine {group.Group.IsSubroutine}, {group.ScriptIndices.Length} scripts");
+    return 0;
+}
+
+static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
+{
+    var ticks = long.Parse(Arg(args, "--ticks") ?? "4500", CultureInfo.InvariantCulture);
+    var filterCampaign = Arg(args, "--campaign");
+    var filterMap = Arg(args, "--map");
+    var explain = args.Contains("--explain");
+    var (context, catalog, fingerprint) = Compile(content);
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    int maps = 0, victories = 0, defeats = 0;
+    foreach (var campaign in campaigns.Campaigns)
+    {
+        if (filterCampaign is not null && !campaign.Name.Equals(filterCampaign, StringComparison.OrdinalIgnoreCase)) continue;
+        foreach (var mission in campaign.Sequence)
+        {
+            if (filterMap is not null && !mission.MapPath.Contains(filterMap, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!seen.Add(mission.MapPath)) continue;
+            MapData map;
+            try { map = context.LoadMap(mission.MapPath); }
+            catch (FileNotFoundException) { Console.WriteLine($"{campaign.Name,-12} {mission.Name,-9} {mission.MapPath}: map not in the content"); continue; }
+            maps++;
+            var terrain = TerrainMap.Build(map, mission.MapPath);
+            var options = MissionOptions.Standard with { HumanSideName = campaign.IsChallenge ? ChallengeSides.HumanSideFor(map) : string.Empty };
+            var cells = new List<string>();
+            foreach (var victory in new[] { true, false })
+            {
+                var result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks);
+                if (result.ReachedByScript) { if (victory) victories++; else defeats++; }
+                cells.Add($"{(victory ? "victory" : "defeat")} {(result.ReachedByScript ? $"REACHED by '{result.OutcomeScript}' @{result.OutcomeTick}" : "not reached")} ({result.Interventions} interventions)");
+                if (explain)
+                {
+                    foreach (var line in result.Log.Take(40)) Console.WriteLine($"      {(victory ? "V" : "D")} {line}");
+                    foreach (var line in result.Unmet) Console.WriteLine($"      {(victory ? "V" : "D")} unmet: {line}");
+                }
+            }
+            Console.WriteLine($"{campaign.Name,-12} {mission.Name,-9} {Path.GetFileNameWithoutExtension(mission.MapPath),-22} {string.Join("  |  ", cells)}");
+        }
+    }
+    Console.WriteLine($"{maps} maps driven ({ticks} ticks): victory reached by the mission's own script on {victories}, defeat on {defeats}.");
     return 0;
 }
 
