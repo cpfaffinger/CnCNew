@@ -8,6 +8,8 @@ Func<string[], int>[] suites =
     ShellTests.Run,
     HudTests.Run,
     CampaignTests.Run,
+    CampaignShellTests.Run,
+    MissionPresentationTests.Run,
 ];
 
 var failures = 0;
