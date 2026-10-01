@@ -104,10 +104,51 @@ Stand 1. Oktober 2026: `CampaignTool list` – 17 Kampagnen, 85 Missionen, 0 unb
 und Endproben: `docs/SCRIPT-ENGINE.md` §9). Die Größe eines Missionszustands liegt bei rund 3 MB (2.991.420 Byte für die Originalkarte `USA01` nach
 1.500 Ticks, Messung vom Werkzeug `SimTool mission-run`; der Weltzustand dominiert).
 
-## 7. Anschluss für die Shell (nächster Schritt)
+## 7. Anschluss an die Shell (Phase 10, Punkt 2 – umgesetzt)
 
-- Kampagnenauswahl: `CampaignCatalog.Campaigns` (Namensschlüssel `NameLabel` → Text), Schwierigkeit → `CampaignProgress.Begin`.
-- Briefing: `CampaignMission.ObjectiveLabels`/`IntroMovie`/`BriefingVoice`/`UnitNames`/`LocationLabel`; Zwischensequenzen spielt der
-  Client anhand der `ScriptOutput`-Liste (`ScriptEngine.DrainOutputs`).
-- Laden: `SaveGameStore.List()` → `SaveGame.Load` → `CampaignController(context, campaign, loaded.Progress)` + `run`.
-- Mission beenden: `MissionSession.Outcome` ≠ `None` und `IsOver` → `Conclude`.
+`src/CnCNew.Game/Shell/Screens/CampaignScreens.cs`, `src/CnCNew.Game/Shell/MissionPresentation.cs` und die Erweiterungen in
+`GameShell.cs`/`MainMenuScreen.cs` verdrahten diesen Abschnitt vollständig:
+
+- **Kampagnenauswahl**: `MainMenu.wnd`s `ButtonUSA`/`ButtonGLA`/`ButtonChina` (jetzt aktiv) öffnen `CampaignFactionScreen`
+  (`SinglePlayerMenu.wnd`, New/Load Game); `ButtonChallenge` öffnet `ChallengeSelectScreen` (`ChallengeMenu.wnd`, listet
+  `IsChallengeCampaign`-Kampagnen über die `GeneralPosition0..11`-Knöpfe, feste Schwierigkeit Hard). New Game fragt die
+  Schwierigkeit über `DifficultySelectScreen` (`DifficultySelect.wnd`) ab, dann `GameShell.BeginCampaign` →
+  `CampaignProgress.Begin` + `CampaignController.StartCurrentMission`.
+- **Briefing**: `MissionBriefingScreen` nutzt das reale `SinglePlayerLoadScreen.wnd` wieder (dessen `ObjectivesWin`-Gruppe mit
+  `StaticTextLine0..4` schon für genau `ObjectiveLabels` gedacht ist; `StaticTextCameoText0..3` trägt `LocationLabel` plus
+  `UnitNames0..2`). `ShellPhase.MissionBriefing` hält den Bildschirm für `max(VoiceLengthSeconds, 2)` simulierte Sekunden
+  (kein Klick-Skip, exakt wie die ausgelieferte Datei – sie deklariert keinen Eingabe-Callback); `IntroMovie`/`BriefingVoice`
+  erscheinen als benannter Platzhalter im Fortschrittstext (kein Bink-Decoder, dauerhafte Grenze). Die meisten echten
+  USA/GLA/China-Missionen tragen gar keine `ObjectiveLine`-Einträge in `Campaign.ini` (nur `TRAINING` tut das) – eine leere
+  Zeile ist dann korrektes Verhalten, kein Fehler.
+- **Ladeliste**: `LoadGameScreen` (`SaveLoad.wnd`, aus dem Hauptmenü über „Load/Replay“ → „Load Game“) listet
+  `SaveGameStore.List()`, lädt über die vorhandenen Bestätigungsdialoge der Datei; ein `SaveGameException` zeigt
+  `GameShell.ShowError` als `MessageBox.wnd` (neue Klartext-Variante, da die Fehlermeldung nie ein CSF-Schlüssel ist).
+- **Speichern im Spiel**: `MissionPauseMenu` (`src/CnCNew.Game/Hud/MissionPauseMenu.cs`) kombiniert `QuitMenu.wnd` (wie
+  `MatchController`) mit `PopupSaveLoad.wnd` hinter dessen `ButtonSaveLoad`; der Slotname kommt aus der eingegebenen
+  Beschreibung (dateinamensicher gemacht), Überschreiben fragt über das vorhandene `OverwriteConfirmParent` nach.
+  Eigenständig von `MatchController`/`LiveMatch` (die bleiben Skirmish-spezifisch, siehe `docs/HANDOFF-PHASE10.md`).
+- **Missionsabschluss**: `GameShell.MissionFinished` ruft `CampaignController.Conclude` auf und legt `MissionBannerScreen`
+  (`Victorious.wnd`/`Defeat.wnd`, reine Grafik ohne Knöpfe im Original) unter `MissionResultScreen` (`ScoreScreen.wnd`
+  wiederverwendet, da die echten Sieg/Niederlage-Dateien gar keine Schaltflächen haben); `ButtonContinue` wird zu „Next
+  Mission“/„Retry Mission“/„Campaign Complete“ je nach Ausgang, `ButtonOk` bleibt „Main Menu“.
+- **`ScriptOutput`-Wiedergabe und Rückmeldung an die VM**: `MissionPresentationDirector` (neu) zieht
+  `ScriptEngine.DrainOutputs()` pro Tick, verfolgt Sprache/Film (Platzhalter-Dauer, kein Audio-/Videolänge-Datensatz
+  vorhanden), Bildschirmtext (`DISPLAY_TEXT`/`SHOW_MILITARY_CAPTION`/`INGAME_POPUP_MESSAGE`, echte CSF-Auflösung über einen
+  Callback) und Radar-Ereignisse (`RADAR_CREATE_EVENT`/`OBJECT_CREATE_RADAR_EVENT`/`TEAM_CREATE_RADAR_EVENT`, echte
+  Weltposition). Kamerabewegungen (`MOVE_CAMERA_TO` u. a.) werden mit ihrer echten Sekundenparameter-Dauer verfolgt und
+  `CompletePresentation` wird exakt zu diesem Zeitpunkt aufgerufen (`BeforeStep`/`AfterStep`, zeitlich genauso wie die
+  eigene `PresentationLatencyTicks`-Selbstauflösung der Engine) – mit Test gegen eine echte Kamerabewegungssequenz
+  (`CnCNew.Game.Tests` → `MissionPresentationTests`). `ApplyCameraTo` überträgt das Ziel einmalig auf eine echte
+  `RtsCamera`; `BuildOverlayCommands` liefert den Bildschirmtext als `UiDrawCommand`s, die der vorhandene
+  `CnCNew.Client.Stride`-`UiRenderer` bereits zeichnen kann (kein neuer Renderer nötig). `MissionUiBridge` leitet
+  Selektionsänderungen an `ScriptEngine.SelectNamed` weiter (`NAMED_SELECTED`) und reicht `SignalUiInteraction` direkt durch
+  (`FLAG`); eine feste Zuordnung „dieser Knopf → dieses Flag“ gibt es nicht (die Mission-Metadaten tragen das nirgends),
+  das bleibt eine Entscheidung des jeweiligen Host-Codes.
+- **Bekannte Grenze**: `CampaignController.StartCurrentMission` hat keinen Parameter für
+  `MissionOptions.PresentationLatencyTicks` (immer 0) – ein Klient kann also keinen Verzögerungs-Fallback setzen und muss
+  sich für `HAS_FINISHED_*`/`CAMERA_MOVEMENT_FINISHED` vollständig auf eigene `CompletePresentation`-Aufrufe verlassen
+  (was `MissionPresentationDirector` tut); ein kleiner zusätzlicher Parameter dort wäre ein sinnvoller Folgeschritt.
+- Noch nicht angebunden: eine volle Missions-HUD (Kamera/Auswahl/Befehlsleiste) parallel zu `LiveMatch`/`MatchController`
+  (die bleiben Skirmish-typisiert); `MissionPresentationDirector`/`MissionUiBridge`/`MissionPauseMenu` sind bewusst headless
+  testbare, renderer-neutrale Bausteine dafür, aber kein vollständiger Ersatz für `MatchController` bei Kampagnenmissionen.

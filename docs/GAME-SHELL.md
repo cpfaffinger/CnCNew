@@ -63,6 +63,15 @@ registrierte Callbacks, 0 nicht aufgelöste Labels** über alle acht besuchten S
 Eingebaute Callback-Namen (`PassMessagesToParentSystem`, `PassSelectedButtonsToParentSystem`,
 `GameWinBlockInput`, `W3DNoDraw`, Gadget-Funktionen) brauchen keine Registrierung – `UiWindowTree` kennt sie bereits.
 
+### Kampagnen- und Speicherstand-Screens (Phase 10, `CampaignScreens.cs`)
+
+Sieben weitere Screens, nicht Teil des oben genannten Klickdurchlaufs/der 54 Golden-Hashes (eigene Tests in
+`tests/CnCNew.Game.Tests/CampaignShellTests.cs`): `CampaignFactionScreen` (`SinglePlayerMenu.wnd`), `ChallengeSelectScreen`
+(`ChallengeMenu.wnd`), `DifficultySelectScreen` (`DifficultySelect.wnd`), `LoadGameScreen` (`SaveLoad.wnd`),
+`MissionBriefingScreen` (`SinglePlayerLoadScreen.wnd` wiederverwendet), `MissionBannerScreen` (`Victorious.wnd`/`Defeat.wnd`,
+keine Schaltflächen) und `MissionResultScreen` (`ScoreScreen.wnd` wiederverwendet). Details und Begründung je Screen:
+`docs/CAMPAIGN-AND-SAVEGAMES.md` §7.
+
 ### Nicht in diesem Paket
 
 `GameSpyGameOptionsMenu.wnd`, `LanGameOptionsMenu.wnd`, `GameSpyLoadScreen.wnd`, `MultiplayerLoadScreen.wnd`,
@@ -188,7 +197,10 @@ davon neu.
 
 ## 10. Bekannte Grenzen (Zusammenfassung)
 
-* Kein Mehrspieler-, Lade-/Wiedergabe- oder Kampagnen-Einstieg vom Hauptmenü aus (Buttons sichtbar, deaktiviert).
+* Kampagnenauswahl, Briefing, Ladeliste, Speichern im Spiel und Missionsabschluss sind seit Phase 10 angebunden
+  (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7, `src/CnCNew.Game/Shell/Screens/CampaignScreens.cs`,
+  `src/CnCNew.Game/Shell/MissionPresentation.cs`, `src/CnCNew.Game/Hud/MissionPauseMenu.cs`); nur Mehrspieler und
+  Wiedergabe (Replays) bleiben außerhalb des Produktumfangs (Buttons sichtbar, deaktiviert).
 * `RadioButtonUserMaps` liefert eine leere Liste (kein Importpfad für eigene Karten in diesem Stand).
 * Kein Mausklick beendet den Abspann (nur Escape) – `WinTextDraw` ist ein einfaches `USER`-Fenster, und diese Laufzeit
   routet nur Gadget- und Tastaturnachrichten (siehe `docs/UI-WND.md`); eine „beliebiger Mausklick auf ein Nicht-
