@@ -79,6 +79,19 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 1) && _namedReveals.Remove(Str(p, 0), out var undone)) _world.RevealAreaPermanently(new PlayerId(undone.Player), undone.X, undone.Y, undone.Radius, false);
                 return true;
 
+            // ---- doBuildUpgrade -> AIPlayer::buildUpgrade: a player upgrade is bought like a player's own purchase (funds and prerequisites apply); the factory search of the original is not modelled
+            case "AI_PLAYER_BUILD_UPGRADE":
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } upgrader && _world.HasPlayer(upgrader.Id))
+                {
+                    if (!_world.Upgrades.TryGet(Str(p, 1), out var upgrade)) { Diagnose($"unknown upgrade '{Str(p, 1)}'"); return true; }
+                    if (upgrade.Scope != Templates.UpgradeScope.Player) { Diagnose($"AI_PLAYER_BUILD_UPGRADE: '{upgrade.Name}' is an object upgrade"); return true; }
+                    if (_world.PlayerUpgrades(upgrader.Id).Has(upgrade.Index)) return true;
+                    var buyer = upgrader.Id;
+                    var name = upgrade.Name;
+                    if (!_issue(buyer, (sequence, tick) => new PurchaseUpgradeCommand(buyer, sequence, tick, name, null)).Accepted) Diagnose($"AI_PLAYER_BUILD_UPGRADE '{name}' rejected");
+                }
+                return true;
+
             // ---- recruiting (AIPlayer::recruitSpecificAITeam, Team::setRecruitable)
             case "RECRUIT_TEAM":
                 if (Has(type, p, 2)) RecruitTeam(Str(p, 0), Real(p, 1));
