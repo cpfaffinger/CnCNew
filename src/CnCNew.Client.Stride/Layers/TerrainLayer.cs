@@ -47,7 +47,7 @@ internal sealed class TerrainLayer : IWorldLayer
     private readonly List<ModelComponent> _chunkComponents = [];
     private readonly List<WaterDraw> _waterDraws = [];
     private RenderServices? _services;
-    private LiveMatch? _match;
+    private LiveGame? _match;
     private bool[] _chunkVisible = [];
     private byte[] _fogLevels = [];
     private byte[] _fogUpload = [];
@@ -90,7 +90,7 @@ internal sealed class TerrainLayer : IWorldLayer
     /// <summary>Wall time of <see cref="Attach"/> in milliseconds.</summary>
     public double AttachMilliseconds { get; private set; }
 
-    public void Attach(RenderServices services, LiveMatch match)
+    public void Attach(RenderServices services, LiveGame match)
     {
         var watch = Stopwatch.StartNew();
         _services = services;
@@ -228,7 +228,7 @@ internal sealed class TerrainLayer : IWorldLayer
         _minimapDirty = true;
     }
 
-    private void RefreshMinimap(CommandList commandList, double totalSeconds, LiveMatch match)
+    private void RefreshMinimap(CommandList commandList, double totalSeconds, LiveGame match)
     {
         var footprint = _footprintOverride?.ToArray() ?? match.Camera.GroundFootprint();
         var rgba = match.Minimap.Compose(match.Fog, _dots, footprint, _dotSize);
@@ -245,7 +245,7 @@ internal sealed class TerrainLayer : IWorldLayer
         _minimapDirty = false;
     }
 
-    private void CreateFogTexture(GraphicsDevice device, LiveMatch match)
+    private void CreateFogTexture(GraphicsDevice device, LiveGame match)
     {
         var cells = match.Fog.CellsX * match.Fog.CellsY;
         _fogLevels = new byte[cells];
@@ -254,7 +254,7 @@ internal sealed class TerrainLayer : IWorldLayer
         Track(FogTexture, cells);
     }
 
-    private void CreateMinimapTexture(GraphicsDevice device, LiveMatch match)
+    private void CreateMinimapTexture(GraphicsDevice device, LiveGame match)
     {
         var minimap = match.Minimap;
         MinimapTexture = Texture.New2D(device, minimap.Width, minimap.Height, PixelFormat.R8G8B8A8_UNorm, TextureFlags.ShaderResource, 1, GraphicsResourceUsage.Dynamic);
@@ -287,7 +287,7 @@ internal sealed class TerrainLayer : IWorldLayer
         }
     }
 
-    private void CreateWater(RenderServices services, LiveMatch match, Texture atlas, bool linear, System.Numerics.Vector2 fogScale)
+    private void CreateWater(RenderServices services, LiveGame match, Texture atlas, bool linear, System.Numerics.Vector2 fogScale)
     {
         var model = match.TerrainModel;
         if (model.Water.IsDefaultOrEmpty) return;

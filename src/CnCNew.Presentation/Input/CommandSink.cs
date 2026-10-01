@@ -1,5 +1,6 @@
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Skirmish;
 
 namespace CnCNew.Presentation.Input;
@@ -15,6 +16,12 @@ public interface ICommandSink
 
 /// <summary>The live adapter: a human slot of a running skirmish.</summary>
 public sealed class SkirmishSessionCommandSink(SkirmishMatchSession session, PlayerId player) : ICommandSink
+{
+    public SubmitResult Issue(Func<ulong, long, SimCommand> make) => session.Issue(player, make);
+}
+
+/// <summary>The live adapter of a campaign mission: the human side shares the session's single per-player sequence counter with the scripts and the combat driver.</summary>
+public sealed class MissionCommandSink(MissionSession session, PlayerId player) : ICommandSink
 {
     public SubmitResult Issue(Func<ulong, long, SimCommand> make) => session.Issue(player, make);
 }

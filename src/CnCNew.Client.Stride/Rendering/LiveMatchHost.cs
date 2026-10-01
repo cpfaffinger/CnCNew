@@ -15,7 +15,7 @@ internal sealed class LiveMatchHost : IDisposable
     private readonly IWorldLayer[] _layers;
     private double _total;
 
-    public LiveMatchHost(global::Stride.Engine.Game game, GameData data, LiveMatch match)
+    public LiveMatchHost(global::Stride.Engine.Game game, GameData data, LiveGame match)
     {
         Match = match;
         Scene = new Scene();
@@ -39,7 +39,7 @@ internal sealed class LiveMatchHost : IDisposable
         game.SceneSystem.SceneInstance = new SceneInstance(game.Services, Scene);
     }
 
-    public LiveMatch Match { get; }
+    public LiveGame Match { get; }
     public Scene Scene { get; }
     public RenderServices Services { get; }
 

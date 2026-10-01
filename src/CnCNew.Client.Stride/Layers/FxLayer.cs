@@ -42,7 +42,7 @@ internal sealed class FxLayer : IWorldLayer
     /// </summary>
     public FxFrame? LastFrame { get; private set; }
 
-    public void Attach(RenderServices services, LiveMatch match)
+    public void Attach(RenderServices services, LiveGame match)
     {
         _geometry = new FxGeometry(services.GraphicsDevice);
         _materials = new FxMaterials(services);

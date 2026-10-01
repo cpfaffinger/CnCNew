@@ -19,7 +19,7 @@ internal sealed class ObjectLayer : IWorldLayer
     /// <summary>Per-frame counters (drawn, culled, pooled, models loaded, triangles, timing); see <see cref="ObjectLayerStats"/>.</summary>
     public ObjectLayerStats Stats => _core.Stats;
 
-    public void Attach(RenderServices services, LiveMatch match) => _core.Attach(services, match);
+    public void Attach(RenderServices services, LiveGame match) => _core.Attach(services, match);
 
     public void Update(in WorldFrame frame) => _core.Update(frame);
 

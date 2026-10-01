@@ -3,8 +3,10 @@ using System.Collections.Immutable;
 using CnCNew.Client.Stride;
 using CnCNew.Client.Stride.Rendering;
 using CnCNew.Content;
+using CnCNew.Game.Campaign;
 using CnCNew.Game.Data;
 using CnCNew.Game.Live;
+using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Testing;
 using CnCNew.W3D;
 using Stride.Core;
@@ -20,8 +22,9 @@ var contentDirectory = GetArgument(args, "--content-dir");
 var modelPath = GetArgument(args, "--model-path");
 var capturePath = GetArgument(args, "--capture");
 var matchMap = GetArgument(args, "--match");
-var liveOptions = matchMap is null ? null : new LiveOptions(
-    matchMap,
+var missionMap = GetArgument(args, "--mission");
+var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
+    (matchMap ?? missionMap)!,
     GetArgument(args, "--faction") ?? "FactionAmerica",
     (GetArgument(args, "--opponent") ?? "FactionChina").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToImmutableArray(),
     int.Parse(GetArgument(args, "--seed") ?? "1"),
@@ -31,10 +34,19 @@ var liveOptions = matchMap is null ? null : new LiveOptions(
     GetArgument(args, "--look"),
     GetArgument(args, "--angle"),
     GetArgument(args, "--pitch"),
-    GetArgument(args, "--height"));
-if (matchMap is not null && contentDirectory is null)
+    GetArgument(args, "--height"))
 {
-    throw new ArgumentException("--match requires --content-dir.");
+    IsMission = missionMap is not null,
+    HumanSide = GetArgument(args, "--human-side") ?? string.Empty,
+};
+if (matchMap is not null && missionMap is not null)
+{
+    throw new ArgumentException("--match and --mission exclude each other.");
+}
+
+if ((matchMap ?? missionMap) is not null && contentDirectory is null)
+{
+    throw new ArgumentException("--match and --mission require --content-dir.");
 }
 
 if (modelPath is not null && contentDirectory is null)
@@ -85,7 +97,14 @@ static string? GetArgument(string[] arguments, string name)
 /// <param name="AutoPlay">The human slot is played by the computer (--autoplay).</param>
 /// <param name="Look">Camera target "x,y" in world units (--look); Angle/Pitch in degrees, Height in world units above ground.</param>
 internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<string> Opponents, int Seed, int Frames, string Size,
-    bool AutoPlay, string? Look, string? Angle, string? Pitch, string? Height);
+    bool AutoPlay, string? Look, string? Angle, string? Pitch, string? Height)
+{
+    /// <summary>The map is a campaign mission played by its own scripts (--mission) instead of a skirmish (--match).</summary>
+    public bool IsMission { get; init; }
+
+    /// <summary>The side the human plays in a mission whose map marks none (--human-side; see <c>MissionOptions.HumanSideName</c>).</summary>
+    public string HumanSide { get; init; } = string.Empty;
+}
 
 internal sealed class CnCNewGame(
     bool smokeTest,
@@ -182,6 +201,16 @@ internal sealed class CnCNewGame(
         var mapPath = data.Maps.FirstOrDefault(path => path.Equals(options.Map, StringComparison.OrdinalIgnoreCase))
             ?? data.Maps.SingleOrDefault(path => path.Contains(options.Map, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"Map '{options.Map}' was not found or is ambiguous.");
+        if (options.IsMission)
+        {
+            var viewport = GraphicsDevice.Presenter.BackBuffer;
+            var run = MissionRun.Load(MissionContext.From(data), mapPath, MissionOptions.Standard with { HumanSideName = options.HumanSide });
+            var mission = LiveMission.Create(data, run, new System.Numerics.Vector2(viewport.Width, viewport.Height));
+            ApplyCamera(mission.Camera, options);
+            _live = new LiveMatchHost(this, data, mission);
+            Window.Title = $"CnCNew — mission {mapPath} — {mission.HumanFaction}";
+            return;
+        }
         var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed, AutoPlay = options.AutoPlay };
         var back = GraphicsDevice.Presenter.BackBuffer;
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));

@@ -58,7 +58,7 @@ public sealed class MatchController
     private long _clockMs;
     private bool _matchEndedFired;
 
-    public MatchController(LiveMatch match, GameSettings settings, string language = "English", IUiTextMeasure? textMeasure = null)
+    public MatchController(LiveGame match, GameSettings settings, string language = "English", IUiTextMeasure? textMeasure = null)
     {
         ArgumentNullException.ThrowIfNull(match);
         ArgumentNullException.ThrowIfNull(settings);
@@ -89,7 +89,7 @@ public sealed class MatchController
         _tree.Register("QuitMenuSystem", OnQuitMenuSystem);
 
         var humanParticipant = match.Data.Factions.FirstOrDefault(
-            participant => participant.Faction.Name.Equals(match.Setup.HumanFaction, StringComparison.OrdinalIgnoreCase));
+            participant => participant.Faction.Name.Equals(match.HumanFaction, StringComparison.OrdinalIgnoreCase));
         if (humanParticipant is not null && _assets.Schemes.TryGetForSide(humanParticipant.Side, out var scheme)) _scheme = scheme;
 
         var buttons = CommandButtonCatalog.Build(match.Data.Graph);
@@ -107,7 +107,7 @@ public sealed class MatchController
         Overlay = HudOverlay.Empty;
     }
 
-    public LiveMatch Match { get; }
+    public LiveGame Match { get; }
     public GameInputController Input { get; }
     public MatchStatsTracker Stats { get; }
 
@@ -387,10 +387,10 @@ public sealed class MatchController
     {
         Stats.Observe(result, Match.World);
         foreach (var ev in result.Events) ObserveTickerEvent(ev);
-        if (Match.Session.IsOver && !_matchEndedFired)
+        if (Match.IsOver && !_matchEndedFired)
         {
             _matchEndedFired = true;
-            MatchEnded?.Invoke(Stats.Snapshot(Match.Session));
+            MatchEnded?.Invoke(Stats.Snapshot(Match.Players, Match.Winner, Match.World.Tick));
         }
     }
 

@@ -33,7 +33,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
     public ObjectLayerStats Stats { get; } = new();
 
     private RenderServices _services = null!;
-    private LiveMatch _match = null!;
+    private LiveGame _match = null!;
     private ModelAssetCache _assets = null!;
     private EntityPool _pool = null!;
     private global::Stride.Rendering.Model _placeholderModel = null!;
@@ -46,7 +46,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
     private int _frameCounter;
     private bool _summaryPrinted;
 
-    public void Attach(RenderServices services, LiveMatch match)
+    public void Attach(RenderServices services, LiveGame match)
     {
         _services = services;
         _match = match;

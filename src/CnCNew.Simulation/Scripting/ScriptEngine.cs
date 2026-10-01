@@ -259,6 +259,9 @@ public sealed partial class ScriptEngine
 
     public void ClearSelection() => _selected.Clear();
 
+    /// <summary>Whether the client reported the object with this script name as selected (what <c>NAMED_SELECTED</c> reads).</summary>
+    public bool IsNamedSelected(string name) => _named.TryGetValue(name, out var id) && _selected.Contains(id);
+
     /// <summary>A speech, sound, movie or camera move has finished playing on the client.</summary>
     public void CompletePresentation(string name) => _pendingPresentation.Remove(name);
 

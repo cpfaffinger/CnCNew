@@ -5,7 +5,7 @@ using Stride.Graphics;
 namespace CnCNew.Client.Stride.Rendering;
 
 /// <summary>Per-frame inputs of a world layer; all data is immutable or owned by the match.</summary>
-internal readonly record struct WorldFrame(LiveMatch Match, RenderFrame Objects, CommandList CommandList, float DeltaSeconds, double TotalSeconds);
+internal readonly record struct WorldFrame(LiveGame Match, RenderFrame Objects, CommandList CommandList, float DeltaSeconds, double TotalSeconds);
 
 /// <summary>
 /// One slice of the 3D world (terrain, objects, effects). A layer creates its GPU resources in <see cref="Attach"/>, adds its entities to
@@ -15,7 +15,7 @@ internal interface IWorldLayer : IDisposable
 {
     string Name { get; }
 
-    void Attach(RenderServices services, LiveMatch match);
+    void Attach(RenderServices services, LiveGame match);
 
     void Update(in WorldFrame frame);
 }

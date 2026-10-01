@@ -81,12 +81,19 @@ public sealed class MatchStatsTracker
     public MatchResult Snapshot(SkirmishMatchSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
+        return Snapshot(session.Players, session.Winner, session.World.Tick);
+    }
+
+    /// <summary>The result of any game (skirmish or mission) from its players, winner and end tick.</summary>
+    public MatchResult Snapshot(IEnumerable<PlayerConfiguration> configurations, PlayerId? winner, long tick)
+    {
+        ArgumentNullException.ThrowIfNull(configurations);
         var players = ImmutableArray.CreateBuilder<PlayerMatchStats>();
-        foreach (var player in session.Players.OrderBy(configuration => configuration.Id.Value))
+        foreach (var player in configurations.OrderBy(configuration => configuration.Id.Value))
         {
             var row = RowOf(player.Id);
             players.Add(new PlayerMatchStats(player.Id, row.UnitsBuilt, row.StructuresBuilt, row.UnitsLost, row.UnitsKilled, row.MoneyEarned));
         }
-        return new MatchResult(session.Winner, session.World.Tick, players.ToImmutable());
+        return new MatchResult(winner, tick, players.ToImmutable());
     }
 }

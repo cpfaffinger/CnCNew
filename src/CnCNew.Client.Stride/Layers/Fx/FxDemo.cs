@@ -56,7 +56,7 @@ internal sealed class FxDemo
         throw new InvalidOperationException($"{VariableName}='{value}' is not one of: ring, 1, bench, 0.");
     }
 
-    public void Tick(LiveMatch match)
+    public void Tick(LiveGame match)
     {
         if (!_ring || match.Fx.Frame < _nextFrame)
         {
@@ -67,7 +67,7 @@ internal sealed class FxDemo
         Spawn(match);
     }
 
-    private void Spawn(LiveMatch match)
+    private void Spawn(LiveGame match)
     {
         var fx = match.Fx;
         _templates ??= PickTemplates(fx.Catalog);

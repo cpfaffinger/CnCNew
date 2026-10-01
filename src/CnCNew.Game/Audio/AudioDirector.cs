@@ -39,7 +39,7 @@ public sealed record AudioDirectorOptions
     public float UnitVoiceFadeSeconds { get; init; } = 0.08f;
 }
 
-/// <summary>What the director needs to know about the running match; <see cref="LiveAudioView"/> answers it from a <see cref="LiveMatch"/>.</summary>
+/// <summary>What the director needs to know about the running match; <see cref="LiveAudioView"/> answers it from a <see cref="LiveGame"/>.</summary>
 public interface IAudioGameView
 {
     PlayerId Human { get; }
@@ -58,14 +58,14 @@ public interface IAudioGameView
     bool IsShrouded(Vector3 position);
 }
 
-public sealed class LiveAudioView(LiveMatch live) : IAudioGameView
+public sealed class LiveAudioView(LiveGame live) : IAudioGameView
 {
     private string? _side;
 
     public PlayerId Human => live.Human;
 
     public string HumanSide => _side ??= live.Data.Factions
-        .FirstOrDefault(value => value.Faction.Name.Equals(live.Setup.HumanFaction, StringComparison.OrdinalIgnoreCase))?.Side ?? "";
+        .FirstOrDefault(value => value.Faction.Name.Equals(live.HumanFaction, StringComparison.OrdinalIgnoreCase))?.Side ?? "";
 
     public long Tick => live.Tick;
     public bool LowPower => live.World.EnergyProductionOf(live.Human) < 0;
@@ -250,7 +250,7 @@ public sealed class AudioDirector : IDisposable
     /// <c>LiveMatch</c> does not forward its tick events, so unit voices, UI sounds and the insufficient-funds notice still need the
     /// explicit calls (<see cref="OnUnitSelected"/>, <see cref="OnUnitOrdered"/>, <see cref="PlayUi"/>, <see cref="NotifyInsufficientFunds"/>).
     /// </summary>
-    public void Update(LiveMatch live, double dt)
+    public void Update(LiveGame live, double dt)
     {
         ArgumentNullException.ThrowIfNull(live);
         if (_disposed) return;
@@ -265,7 +265,7 @@ public sealed class AudioDirector : IDisposable
     }
 
     private LiveAudioView? _liveView;
-    private LiveMatch? _liveViewMatch;
+    private LiveGame? _liveViewMatch;
 
     /// <summary>
     /// Advances the director's time by <paramref name="dt"/> seconds, runs the Eva announcer (when a match view is given and the game is
