@@ -838,6 +838,56 @@ public static class ModuleCatalog
             Real("ScanRange", "PointDefenseLaserUpdate.cpp"),
             Real("PredictTargetVelocityFactor", "PointDefenseLaserUpdate.cpp"),
         ]);
+        // ToppleUpdateModuleData (ToppleUpdate.cpp buildFieldParse). FX/stump-burn presentation and the cosmetic planar
+        // realignment (ReorientToppledRubble, the "x-axis" rotation in applyTopplingForce) are Opaque: phase 10's collision
+        // module tracks only the fall angle and the resulting death/stump spawn, not a 3D model transform.
+        Add("ToppleUpdate",
+        [
+            new("ToppleFX", FieldType.Opaque, Source: "ToppleUpdate.cpp"),
+            new("BounceFX", FieldType.Opaque, Source: "ToppleUpdate.cpp"),
+            new("StumpName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "ToppleUpdate.cpp"),
+            new("KillWhenStartToppling", FieldType.Bool, Source: "ToppleUpdate.cpp"),
+            new("KillWhenFinishedToppling", FieldType.Bool, Source: "ToppleUpdate.cpp"),
+            new("KillStumpWhenToppled", FieldType.Bool, Source: "ToppleUpdate.cpp"),
+            new("ToppleLeftOrRightOnly", FieldType.Bool, Source: "ToppleUpdate.cpp"),
+            new("ReorientToppledRubble", FieldType.Opaque, Source: "ToppleUpdate.cpp"),
+            new("InitialVelocityPercent", FieldType.Percent, Source: "ToppleUpdate.cpp"),
+            new("InitialAccelPercent", FieldType.Percent, Source: "ToppleUpdate.cpp"),
+            new("BounceVelocityPercent", FieldType.Percent, Source: "ToppleUpdate.cpp"),
+        ]);
+        // StructureToppleUpdateModuleData (StructureToppleUpdate.cpp buildFieldParse). The burst-FX cadence, every FX list,
+        // the damage-FX type gate and the OCL/AngleFX custom parsers are Opaque presentation; the crushing weapon and the
+        // delay/integrity/decay fields that drive the actual collapse and its ground damage are typed and consumed.
+        Add("StructureToppleUpdate",
+        [
+            ..DieMux(),
+            new("MinToppleDelay", FieldType.DurationMs, Source: "StructureToppleUpdate.cpp"),
+            new("MaxToppleDelay", FieldType.DurationMs, Source: "StructureToppleUpdate.cpp"),
+            new("MinToppleBurstDelay", FieldType.Opaque, Source: "StructureToppleUpdate.cpp"),
+            new("MaxToppleBurstDelay", FieldType.Opaque, Source: "StructureToppleUpdate.cpp"),
+            new("StructuralIntegrity", FieldType.Real, Source: "StructureToppleUpdate.cpp"),
+            new("StructuralDecay", FieldType.Real, Source: "StructureToppleUpdate.cpp"),
+            new("DamageFXTypes", FieldType.Opaque, Source: "StructureToppleUpdate.cpp"),
+            new("TopplingFX", FieldType.Opaque, Source: "StructureToppleUpdate.cpp"),
+            new("ToppleDelayFX", FieldType.Opaque, Source: "StructureToppleUpdate.cpp"),
+            new("ToppleStartFX", FieldType.Opaque, Source: "StructureToppleUpdate.cpp"),
+            new("ToppleDoneFX", FieldType.Opaque, Source: "StructureToppleUpdate.cpp"),
+            new("CrushingFX", FieldType.Opaque, Source: "StructureToppleUpdate.cpp"),
+            new("CrushingWeaponName", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "StructureToppleUpdate.cpp"),
+            new("OCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "StructureToppleUpdate.cpp"),
+            new("AngleFX", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "StructureToppleUpdate.cpp"),
+        ]);
+        // HeightDieUpdateModuleData (HeightDieUpdate.cpp buildFieldParse). DestroyAttachedParticlesAtHeight is a presentation
+        // cleanup hint (no particle systems exist to destroy) and stays Opaque.
+        Add("HeightDieUpdate",
+        [
+            new("TargetHeight", FieldType.Real, Source: "HeightDieUpdate.cpp"),
+            new("TargetHeightIncludesStructures", FieldType.Bool, Source: "HeightDieUpdate.cpp"),
+            new("OnlyWhenMovingDown", FieldType.Bool, Source: "HeightDieUpdate.cpp"),
+            new("DestroyAttachedParticlesAtHeight", FieldType.Opaque, Source: "HeightDieUpdate.cpp"),
+            new("SnapToGroundOnDeath", FieldType.Bool, Source: "HeightDieUpdate.cpp"),
+            new("InitialDelay", FieldType.DurationMs, Source: "HeightDieUpdate.cpp"),
+        ]);
 
         return builder.ToImmutable();
     }

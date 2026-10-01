@@ -835,9 +835,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         Entity.Speed = Entity.Speed < goalSpeed
             ? Fixed.Min(goalSpeed, Entity.Speed + locomotor.Acceleration)
             : Fixed.Max(goalSpeed, Entity.Speed - locomotor.Braking);
-        Entity.X += FixedTrig.Cos(Entity.Angle) * Entity.Speed;
-        Entity.Y += FixedTrig.Sin(Entity.Angle) * Entity.Speed;
-        if (!air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+        // phase 10 (docs/SIMULATION-CORE.md, CnCNew.Simulation/World/SimulationWorld.Collision.cs): bounded local avoidance
+        // against another unit's footprint, then the crush/topple collision check — both own-file, additive world services.
+        var (stepX, stepY) = air
+            ? (FixedTrig.Cos(Entity.Angle) * Entity.Speed, FixedTrig.Sin(Entity.Angle) * Entity.Speed)
+            : world.AvoidLocalBlockers(Entity, FixedTrig.Cos(Entity.Angle) * Entity.Speed, FixedTrig.Sin(Entity.Angle) * Entity.Speed);
+        Entity.X += stepX;
+        Entity.Y += stepY;
+        if (!air)
+        {
+            Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            world.ResolveFootprintCollisions(Entity, stepX, stepY);
+        }
     }
 
     private void PlanPath(NavigationGrid navigation, LocomotorInfo locomotor, bool air)
@@ -892,8 +901,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             ? Fixed.Min(goalSpeed, Entity.Speed + locomotor.Acceleration)
             : Fixed.Max(goalSpeed, Entity.Speed - locomotor.Braking);
         var step = Fixed.Min(Entity.Speed, dist);
-        Entity.X += dx * step / dist;
-        Entity.Y += dy * step / dist;
+        var stepX = dx * step / dist;
+        var stepY = dy * step / dist;
+        Entity.X += stepX;
+        Entity.Y += stepY;
+        // phase 10: no terrain here (fixture mode), so no local avoidance, but the crush/topple check still applies.
+        world.ResolveFootprintCollisions(Entity, stepX, stepY);
     }
 
     public override void Describe(IStateWriter writer)
