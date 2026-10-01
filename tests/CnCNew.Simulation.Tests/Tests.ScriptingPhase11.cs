@@ -345,4 +345,34 @@ static partial class Tests
         var (original, restored, _) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 300);
         Check.That(original.Chain == restored.Chain && original.FinalHash == restored.FinalHash, "A recruited team continues identically after save/restore.");
     }
+
+    public static void ScriptTeamEventScripts()
+    {
+        // Team "Wave" (singleton, owner PlayerB) has event scripts; its two soldiers fight PlayerA's soldier in range. Subroutines count what happens.
+        MapScript Sub(string name, string counter) => Scr.Script(name, [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter(counter))], subroutine: true);
+        var (map, fixture, terrain) = MissionMap([
+            Sub("OnCreate", "created"), Sub("OnUnit", "unitDied"), Sub("OnGone", "gone"), Sub("OnSight", "sighted"), Sub("OnClear", "clear"),
+        ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Hunter"), Placed("BetaSoldier", 200m, 200m, "Wave", "W1"), Placed("BetaSoldier", 210m, 220m, "Wave", "W2")]);
+        MapProperties Wave() => new([Scr.Text("teamName", "Wave"), Scr.Text("teamOwner", PlayerB), Scr.Flag("teamIsSingleton", true),
+            Scr.Text("teamOnCreateScript", "OnCreate"), Scr.Text("teamOnUnitDestroyedScript", "OnUnit"), Scr.Text("teamOnDestroyedScript", "OnGone"),
+            Scr.Text("teamEnemySightedScript", "OnSight"), Scr.Text("teamAllClearScript", "OnClear")]);
+        map = map with { Teams = [..map.Teams, Wave()] };
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var engine = session.Engine;
+        Run(session, 3);
+        Check.That(engine.CounterValue("created") == 1, $"The team's create script ran once when the team was active (got {engine.CounterValue("created")}).");
+        Run(session, 4);
+        Check.That(engine.CounterValue("sighted") == 1 && engine.CounterValue("clear") == 0, "The enemy-sighted script ran when the Hunter came into the soldiers' vision range.");
+        session.World.Kill(NamedIn(session, "W1")!.Id);
+        Run(session, 3);
+        Check.That(engine.CounterValue("unitDied") == 1, $"Every member's death runs the unit-destroyed script (got {engine.CounterValue("unitDied")}).");
+        Check.That(engine.CounterValue("gone") == 1, "With the default threshold (clamped to units - 1, Team::updateState) the destroyed script runs as soon as the team has lost a unit.");
+        session.World.Kill(NamedIn(session, "W2")!.Id);
+        Run(session, 3);
+        Check.That(engine.CounterValue("unitDied") == 2 && engine.CounterValue("gone") == 1, $"The second death runs the unit-destroyed script again but not the destroyed script a second time (died {engine.CounterValue("unitDied")}, gone {engine.CounterValue("gone")}).");
+        Run(session, 30);
+        Check.That(engine.CounterValue("gone") == 1 && engine.CounterValue("created") == 1, "Neither script repeats.");
+        var (original, restored, _) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 200);
+        Check.That(original.Chain == restored.Chain && original.FinalHash == restored.FinalHash, "A mission with team event state continues identically after save/restore.");
+    }
 }
