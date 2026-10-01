@@ -66,6 +66,8 @@ public sealed partial class SimulationWorld
             known.CompletedSciences = ScienceMask.Load(player, "completedSciences");
             known.SciencePurchasePoints = checked((int)player.Int("sciencePurchasePoints"));
             known.CashBounty = player.Fixed("cashBounty");
+            known.CanBuildBase = !player.Has("canBuildBase") || player.Bool("canBuildBase");
+            known.CanBuildUnits = !player.Has("canBuildUnits") || player.Bool("canBuildUnits");
             known.SharedReadyFrames.Clear();
             foreach (var shared in player.Array("sharedReadyFrames")) known.SharedReadyFrames[checked((int)shared.Int("power"))] = shared.Int("frame");
             known.Tunnels.Load(player);

@@ -42,7 +42,7 @@ public sealed partial class SimulationWorld
         if (!_templates.TryGet(construct.Template, out var found) || !found.IsInstantiable) return CommandRejection.UnknownTemplate;
         template = found;
         if (!_players.TryGetValue(builder.Owner.Value, out var owner)) return CommandRejection.NotPermitted;
-        if (!CanBuildTemplate(owner, builder, found)) return CommandRejection.CannotConstruct;
+        if (!CanBuildTemplate(owner, builder, found) || !owner.CanBuildBase) return CommandRejection.CannotConstruct;
         if (!found.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, found))
             return CommandRejection.MissingPrerequisite;
         if (ExceedsMaxSimultaneousOfType(owner, found)) return CommandRejection.ProductionLimitReached;

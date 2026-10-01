@@ -99,6 +99,10 @@ public sealed partial class SimulationWorld : IWorldServices
         /// <summary>"Science Purchase Points" (<c>Player::getSciencePurchasePoints</c>): a currency separate from money, normally earned via rank/experience (not modeled — see <see cref="IWorldServices.AddSciencePoints"/>).</summary>
         public int SciencePurchasePoints { get; set; }
 
+        /// <summary><c>Player::m_canBuildBase</c> / <c>m_canBuildUnits</c> (<c>Player::allowedToBuild</c>): switched off by the <c>PLAYER_DISABLE_*_CONSTRUCTION</c> script actions.</summary>
+        public bool CanBuildBase { get; set; } = true;
+        public bool CanBuildUnits { get; set; } = true;
+
         // ------------------------------------------------------------------------------------- special powers
         /// <summary>Power index to shared ready frame (<c>SharedSyncedTimer</c> powers), ordered for deterministic output.</summary>
         public SortedList<int, long> SharedReadyFrames { get; } = [];
@@ -602,7 +606,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 var production = FindProductionModule(producer);
                 if (production is null || !CanProduceNow(producer)) return CommandRejection.CannotProduce;
                 if (!production.HasRoom) return CommandRejection.QueueFull;
-                if (!CanProduceTemplate(player, producer, queueTemplate)) return CommandRejection.CannotProduceTemplate;
+                if (!CanProduceTemplate(player, producer, queueTemplate) || !player.CanBuildUnits) return CommandRejection.CannotProduceTemplate;
                 if (!queueTemplate.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(player, queueTemplate))
                     return CommandRejection.MissingPrerequisite;
                 if (ExceedsMaxSimultaneousOfType(player, queueTemplate)) return CommandRejection.ProductionLimitReached;
@@ -1621,6 +1625,9 @@ public sealed partial class SimulationWorld : IWorldServices
             player.CompletedSciences.Describe(writer, "completedSciences");
             writer.Int("sciencePurchasePoints", player.SciencePurchasePoints);
             writer.Fixed("cashBounty", player.CashBounty);
+            // Written only when switched off, so a world no script ever restricted keeps the serialized form (and hash) it had before the switches existed.
+            if (!player.CanBuildBase) writer.Bool("canBuildBase", false);
+            if (!player.CanBuildUnits) writer.Bool("canBuildUnits", false);
             writer.BeginArray("sharedReadyFrames");
             // Indexed: SortedList's foreach boxes its enumerator, and this runs every tick.
             for (var index = 0; index < player.SharedReadyFrames.Count; index++)

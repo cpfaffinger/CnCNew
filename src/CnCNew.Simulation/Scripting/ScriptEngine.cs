@@ -259,6 +259,7 @@ public sealed partial class ScriptEngine
     {
         foreach (var item in events)
         {
+            ObserveExtended(item);
             if (item.Kind == CnCNew.Simulation.Events.SimEventKind.EntityContained && item.Other.IsValid)
             {
                 // ContainModuleInterface::getPlayerWhoEntered: the owner of the last object that entered the container.
@@ -306,6 +307,7 @@ public sealed partial class ScriptEngine
             }
         }
         _uiInteractions.Clear();
+        ProcessTeamBuilds();
         UpdateFollowers();
         _pruneBelow = _world.Ids.NextEntity;
     }
@@ -771,6 +773,7 @@ public sealed partial class ScriptEngine
             writer.EndObject();
         }
         writer.EndArray();
+        DescribeExtended(writer);
         writer.BeginArray("diagnostics");
         foreach (var (name, count) in _diagnostics)
         {
@@ -857,6 +860,7 @@ public sealed partial class ScriptEngine
         foreach (var item in reader.Array("missingConditions")) _missingConditions[item.Text("name")] = item.Int("count");
         _missingActions.Clear();
         foreach (var item in reader.Array("missingActions")) _missingActions[item.Text("name")] = item.Int("count");
+        LoadExtended(reader);
         _diagnostics.Clear();
         foreach (var item in reader.Array("diagnostics")) _diagnostics[item.Text("name")] = item.Int("count");
         _outputs.Clear();

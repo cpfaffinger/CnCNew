@@ -226,6 +226,7 @@ public sealed partial class ScriptEngine
             case "CAMERA_MOVEMENT_FINISHED": return !_pendingPresentation.ContainsKey("<camera>");
 
             default:
+                if (TryEvaluateExtendedCondition(condition, out var extended)) return extended;
                 _missingConditions[type] = _missingConditions.GetValueOrDefault(type) + 1;
                 return false;
         }

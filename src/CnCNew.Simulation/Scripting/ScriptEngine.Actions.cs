@@ -334,6 +334,7 @@ public sealed partial class ScriptEngine
                 break;
 
             default:
+                if (TryExecuteExtendedAction(action)) break;
                 _missingActions[type] = _missingActions.GetValueOrDefault(type) + 1;
                 return;
         }
@@ -478,15 +479,52 @@ public sealed partial class ScriptEngine
     /// </summary>
     private void UseCommandButtonAbility(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target, Fixed x, Fixed y)
     {
-        if (!_world.Templates.Commands.TryGetSpecialPowerAbility(ability, out var power))
-        {
-            Diagnose($"command button '{ability}' is not a special-power ability");
-            return;
-        }
         if (carrier.Owner.IsSystem) { Diagnose("ability use for a neutral object"); return; }
         var owner = carrier.Owner;
         var source = carrier.Id;
+        if (!_world.Templates.Commands.TryGetSpecialPowerAbility(ability, out var power))
+        {
+            UseOtherCommandButton(carrier, ability, kind, target);
+            return;
+        }
         if (!_issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, source, power, kind, target, x, y)).Accepted) Diagnose("ability use rejected");
+    }
+
+    /// <summary>
+    /// A script-named button that is not a special power. <c>PLAYER_UPGRADE</c>/<c>OBJECT_UPGRADE</c> buy the upgrade the button names (the ordinary
+    /// <see cref="PurchaseUpgradeCommand"/>, so funds and prerequisites apply); a <c>FIRE_WEAPON</c> button with a target object fires the carrier's weapon at it
+    /// (the button's <c>WeaponSlot</c> is not honoured: <see cref="FireWeaponCommand"/> uses the default weapon). Every other command type, a missing target and an
+    /// unknown button are counted as diagnostics under their own message, never executed and never confused with each other.
+    /// </summary>
+    private void UseOtherCommandButton(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target)
+    {
+        if (!_world.Templates.Commands.TryGetButton(ability, out var button))
+        {
+            Diagnose($"unknown command button '{ability}'");
+            return;
+        }
+        var owner = carrier.Owner;
+        var source = carrier.Id;
+        switch (button.Command.ToUpperInvariant())
+        {
+            case "PLAYER_UPGRADE" or "OBJECT_UPGRADE":
+            {
+                if (button.Upgrade.Length == 0) { Diagnose($"command button '{ability}' names no upgrade"); return; }
+                var upgrade = button.Upgrade;
+                EntityId? upgradeTarget = button.Command.Equals("OBJECT_UPGRADE", StringComparison.OrdinalIgnoreCase) ? source : null;
+                if (!_issue(owner, (sequence, tick) => new PurchaseUpgradeCommand(owner, sequence, tick, upgrade, upgradeTarget)).Accepted) Diagnose($"upgrade button '{ability}' rejected");
+                return;
+            }
+            case "FIRE_WEAPON":
+            {
+                if (kind != SpecialPowerTargetKind.Object || !target.IsValid) { Diagnose($"fire-weapon button '{ability}' used without a target object"); return; }
+                if (!_issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target)).Accepted) Diagnose($"fire-weapon button '{ability}' rejected");
+                return;
+            }
+            default:
+                Diagnose($"command button '{ability}' has command {button.Command}, not executed");
+                return;
+        }
     }
 
     // ------------------------------------------------------------------------------------------------ orders

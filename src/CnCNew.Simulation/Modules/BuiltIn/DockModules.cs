@@ -311,6 +311,13 @@ internal sealed class SupplyWarehouseDockUpdate(SupplyWarehouseDockData data) : 
     public override string ModuleName => "SupplyWarehouseDockUpdate";
     public int Boxes => _boxes;
 
+    /// <summary><c>SupplyWarehouseDockUpdate::setCashValue</c> (<c>WAREHOUSE_SET_VALUE</c>): the stock becomes enough boxes for the cash value, rounded up.</summary>
+    public void SetCashValue(int cash, int valuePerBox)
+    {
+        _boxes = valuePerBox > 0 ? (int)((Math.Max(cash, 0) + (long)valuePerBox - 1) / valuePerBox) : 0;
+        Entity.Dirty = true;
+    }
+
     public override bool Action(IWorldServices world, Entity docker)
     {
         if (_boxes == 0) return false;

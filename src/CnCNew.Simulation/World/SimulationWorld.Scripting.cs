@@ -26,6 +26,38 @@ public sealed partial class SimulationWorld
         state.Money = amount.IsNegative ? Fixed.Zero : amount;
     }
 
+    /// <summary><c>Player::setCanBuildBase</c> / <c>setCanBuildUnits</c> (<c>PLAYER_ENABLE/DISABLE_BASE/UNIT_CONSTRUCTION</c>): structures cannot be placed / units cannot be queued while off.</summary>
+    public void SetCanBuild(PlayerId player, bool structures, bool allowed)
+    {
+        if (!_players.TryGetValue(player.Value, out var state)) return;
+        if (structures) state.CanBuildBase = allowed;
+        else state.CanBuildUnits = allowed;
+    }
+
+    /// <summary>The boxes a supply warehouse still holds (<c>SupplyWarehouseDockUpdate::getBoxesStored</c>); <see langword="null"/> for an object that is not a warehouse.</summary>
+    public int? WarehouseBoxes(EntityId id)
+        => FindEntity(id)?.ModuleArray.OfType<Modules.BuiltIn.SupplyWarehouseDockUpdate>().FirstOrDefault()?.Boxes;
+
+    public bool CanBuildStructures(PlayerId player) => !_players.TryGetValue(player.Value, out var state) || state.CanBuildBase;
+    public bool CanBuildUnits(PlayerId player) => !_players.TryGetValue(player.Value, out var state) || state.CanBuildUnits;
+
+    /// <summary>
+    /// Map reveal/shroud for one player (<c>ScriptActions::doRevealMapEntirePermanently</c>, <c>doRevealMapEntire</c>, <c>doRevealMapAtWaypoint</c>,
+    /// <c>doShroudMapEntire</c>, <c>doShroudMapAtWaypoint</c>). No-ops in a world without a terrain (everything is visible there anyway).
+    /// </summary>
+    public void RevealMapPermanently(PlayerId player, bool revealed) => ChangeVision(player, vision => vision.SetPermanentRevealAll(SlotOf(player), revealed));
+    public void ExploreMap(PlayerId player) => ChangeVision(player, vision => vision.ExploreAll(SlotOf(player)));
+    public void ShroudMap(PlayerId player) => ChangeVision(player, vision => vision.ShroudAll(SlotOf(player)));
+    public void ExploreArea(PlayerId player, Fixed x, Fixed y, Fixed radius) => ChangeVision(player, vision => vision.ExploreCircle(SlotOf(player), x, y, radius));
+    public void ShroudArea(PlayerId player, Fixed x, Fixed y, Fixed radius) => ChangeVision(player, vision => vision.ShroudCircle(SlotOf(player), x, y, radius));
+
+    private void ChangeVision(PlayerId player, Action<Terrain.VisionMap> change)
+    {
+        if (_vision is null || SlotOf(player) < 0) return;
+        change(_vision);
+        _visionHash = _vision.Hash();
+    }
+
     /// <summary>Sets one directed relation (<c>Player::setPlayerRelationship</c>), as <see cref="Commands.SetRelationshipCommand"/> does.</summary>
     public void SetRelationship(PlayerId from, PlayerId to, Relationship relationship)
     {
