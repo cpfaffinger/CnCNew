@@ -160,6 +160,7 @@ run.Test("Scripts: garrison, enter and exit actions", Tests.ScriptContainerAndGa
 run.Test("Scripts: warehouse value and team merge", Tests.ScriptWarehouseAndTeamActions);
 run.Test("Scripts: BUILD_TEAM produces and activates the team", Tests.ScriptBuildTeamProducesTheTeam);
 run.Test("Scripts: other command buttons and waypoint abilities", Tests.ScriptOtherCommandButtonsAndWaypointAbilities);
+run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);
 run.Test("Modules: CommandButtonHuntUpdate and LockWeaponCreate shells", Tests.MissionBlockerShellModules);

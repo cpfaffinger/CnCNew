@@ -238,4 +238,51 @@ static partial class Tests
         Check.That(!session.Engine.MissingActionHits.ContainsKey("NAMED_USE_COMMANDBUTTON_ABILITY_AT_WAYPOINT"), "The waypoint variant is implemented.");
         Check.That(session.World.RejectionCounts.Sum() == 0 || session.Engine.Diagnostics.Count > 0, "Every refusal is visible (rejection or diagnostic).");
     }
+
+    public static void ScriptSequentialScripts()
+    {
+        // "Patrol" runs on the Squad team one instruction at a time: instant instructions run in the same tick, the move waits for arrival, the idle waits for its timer.
+        var patrol = Scr.Script("Patrol", [], [
+            Scr.Do("SET_FLAG", Scr.Flag("step1"), Scr.Bool(true)),
+            Scr.Do("MOVE_TEAM_TO", Scr.Team("Squad"), Scr.Waypoint("Mid")),
+            Scr.Do("SET_FLAG", Scr.Flag("arrived"), Scr.Bool(true)),
+            Scr.Do("TEAM_IDLE_FOR_FRAMECOUNT", Scr.Team("Squad"), Scr.Int(60)),
+            Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("laps"))], active: false);
+        var session = StartMission([
+            Scr.Script("Start", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_EXECUTE_SEQUENTIAL_SCRIPT_LOOPING", Scr.Team("Squad"), Scr.Script("Patrol"), Scr.Int(3))], oneShot: true),
+            patrol,
+            Scr.Script("Unit", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("UNIT_EXECUTE_SEQUENTIAL_SCRIPT", Scr.Unit("Lone"), Scr.Script("LoneSteps"))], oneShot: true),
+            Scr.Script("LoneSteps", [], [Scr.Do("SET_FLAG", Scr.Flag("loneStarted"), Scr.Bool(true)), Scr.Do("NAMED_STOP", Scr.Unit("<This Object>")), Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("loneDone"))], active: false),
+        ], objects: [Placed("AlphaSoldier", 100m, 200m, "Squad", "S1"), Placed("AlphaSoldier", 100m, 300m, "teamA", "Lone")]);
+        var engine = session.Engine;
+        Run(session, 3);
+        Check.That(engine.FlagValue("step1"), "The first instruction of the sequential script ran right away.");
+        Check.That(!engine.FlagValue("arrived"), "The next instruction waits until the move has finished (the team is not idle).");
+        Check.That(engine.FlagValue("loneStarted") && engine.CounterValue("loneDone") == 1, "A unit sequence runs its instructions in one tick while the unit stays idle, with <This Object> naming the unit.");
+        Run(session, 400);
+        Check.That(engine.FlagValue("arrived"), "After the team reached the waypoint the sequence went on.");
+        var soldier = NamedIn(session, "S1")!;
+        Check.That(soldier.X > Fixed.FromInt(200), $"The soldier walked to the waypoint (x = {soldier.X}).");
+        Check.That(engine.CounterValue("laps") >= 1, $"The idle timer ended and the last instruction ran (laps {engine.CounterValue("laps")}).");
+        Run(session, 3000);
+        Check.That(engine.CounterValue("laps") == 3, $"A looping sequential script with 3 runs stops after exactly 3 laps (got {engine.CounterValue("laps")}).");
+        Check.That(engine.MissingActionHits.Count == 0, "No action counted as missing: " + string.Join(", ", engine.MissingActionHits.Keys));
+
+        // Stopping and killing the team end the runner; the state is saved and restored with the runner in flight.
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Start", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_EXECUTE_SEQUENTIAL_SCRIPT_LOOPING", Scr.Team("Squad"), Scr.Script("Patrol"), Scr.Int(0))], oneShot: true),
+            patrol,
+        ], objects: [Placed("AlphaSoldier", 100m, 200m, "Squad", "S1")]);
+        var (original, restored, bytes) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 700);
+        Check.That(original.Chain == restored.Chain && original.FinalHash == restored.FinalHash, $"A mission with a sequential script in flight continues identically after save/restore ({bytes} bytes).");
+        var stopper = StartMission([
+            Scr.Script("Start", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_EXECUTE_SEQUENTIAL_SCRIPT_LOOPING", Scr.Team("Squad"), Scr.Script("Patrol"), Scr.Int(0))], oneShot: true),
+            patrol,
+            Scr.Script("Stop", [Scr.And(Scr.If("FLAG", Scr.Flag("halt"), Scr.Bool(true)))], [Scr.Do("TEAM_STOP_SEQUENTIAL_SCRIPT", Scr.Team("Squad"))], oneShot: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 200m, "Squad", "S1")]);
+        Run(stopper, 5);
+        stopper.Engine.SignalUiInteraction("halt");
+        Run(stopper, 600);
+        Check.That(!stopper.Engine.FlagValue("arrived"), "TEAM_STOP_SEQUENTIAL_SCRIPT ends the runner: the instruction after the move never ran.");
+    }
 }
