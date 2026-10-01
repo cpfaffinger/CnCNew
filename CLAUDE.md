@@ -185,6 +185,21 @@ Replays (Skriptaktionen sind direkte Weltänderungen); Wahrheit ist der Snapshot
 `docs/IMPLEMENTATION-PLAN.md` u. a.) sind CRLF, es gibt kein `.gitattributes`; beim Bearbeiten die vorhandenen Zeilenenden erhalten (die Phase-9-Arbeit hat sie einmal
 versehentlich umgestellt und in `9130f44` korrigiert).
 
+Phase 10, vier zusammengeführte Pakete (Stand 1. Oktober 2026; neu messen; `docs/SIMULATION-CORE.md` §23–§25,
+`docs/CAMPAIGN-AND-SAVEGAMES.md` §7, `docs/SCRIPT-ENGINE.md` §5/§7/§9): Kollision (`ToppleUpdate`, `StructureToppleUpdate`,
+`HeightDieUpdate`, echtes `CrushDie`/`SquishCollide`, lokale Ausweichbewegung), Skript-Befehlsknopf-Fähigkeiten
+(`NAMED_/TEAM_USE_COMMANDBUTTON_ABILITY*`, `SpecialAbilityUpdate`, wählbare lokale Seite), Bau-/Regelgrenzen
+(Voraussetzungs-/Fähigkeitsprüfung, `MaxSimultaneousOfType`, `OverchargeCommand`, reduzierter `CaptureCommand`, Veteranen-`ArmorSet`/
+`WeaponSet`, Höhen-Sichtlinie, `CommandTypes.Version` 9 → 10) und die Kampagnen-Shell (Hauptmenü → Mission → Briefing → Speichern/
+Laden → Abschluss, echte `ScriptOutput`-Wiedergabe mit VM-Rückmeldung) sind gemergt. Nach dem Merge frisch gemessen: Modulkatalog
+91 von 205 implementiert, Instanziierbarkeit 1.624 von 2.115 (76,8 %), Modulverwendungen abgedeckt 15.843 von 19.553 (81,0 %),
+Kompatibilitätsbasislinie 760 Einträge. Retail-Referenzmatch: Sieger FactionGLA bei Tick 19.200, Endhash `28BE35C1174E369F`
+(Sieger/Hash ändern sich gegenüber Phase 9, weil die Zufallsproduktion des Szenarios jetzt Voraussetzungen respektiert). Alle 64
+Skirmish-Karten mit ≥2 Startpositionen starten und enden fehlerfrei (`SimTool skirmish-sweep`); Skirmish-Speicherstände sind
+bewusst nicht unterstützt (`SkirmishMatchSession.CreateSave()` wirft `NotSupportedException`). `MissionSnapshot.Version` 1 → 2
+(`humanSideName`). Offen (siehe `docs/HANDOFF-PHASE11.md`): die `SKIRMISH_*`-Skriptfamilie, Garnison-/Aufdeckungs-/Bauteam-Aktionen,
+Verstärkungstransport/Formationen, eine Missions-HUD und die Generals'-Challenge-General-Zuordnung in der Shell.
+
 ## Code- und Dokumentationsstil
 
 - Bezeichner, Commitmessages und Code-Kommentare englisch; Dokumentation (`docs/`, README) deutsch.
