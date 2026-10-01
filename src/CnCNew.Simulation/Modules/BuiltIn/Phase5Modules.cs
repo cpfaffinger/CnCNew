@@ -275,6 +275,9 @@ public abstract class UpgradeMuxModule(UpgradeMuxData data) : SimModule, IUpgrad
 {
     protected UpgradeMuxState Mux { get; } = new(data);
 
+    /// <summary>Public read of the mux state (`docs/PRESENTATION-INPUT.md` §10 point 2): whether <see cref="Activate"/> has already run.</summary>
+    public bool Executed => Mux.Executed;
+
     public void TryActivate(IWorldServices world, UpgradeMask keyMask) => Mux.AttemptUpgrade(world, Entity, keyMask, Activate);
     public void TryReset(IWorldServices world, UpgradeMask keyMask) { if (Mux.ResetUpgrade(keyMask)) Deactivate(world); }
 
@@ -964,6 +967,9 @@ public sealed record ProductionData(int MaxQueueEntries) : ModuleData
 /// <summary>One queued unit: template, its cost (for a full refund on cancel) and remaining build ticks.</summary>
 internal readonly record struct ProductionEntry(int TemplateIndex, Fixed Cost, long RemainingTicks);
 
+/// <summary>Public counterpart of <see cref="ProductionEntry"/> for <see cref="ProductionUpdate.Queue"/>.</summary>
+public readonly record struct ProductionQueueItem(int TemplateIndex, Fixed Cost, long RemainingTicks);
+
 /// <summary>
 /// <c>ProductionUpdate::update()</c>: only the head-of-queue entry accumulates progress, one tick per call; when it reaches
 /// zero the unit spawns at the producer's own position and the next entry (if any) starts from a fresh tick count. The full
@@ -988,6 +994,20 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public void Enqueue(int templateIndex, Fixed cost, long totalTicks) => _queue.Add(new ProductionEntry(templateIndex, cost, Math.Max(totalTicks, 1)));
 
     public bool HasSlot(int slot) => slot >= 0 && slot < _queue.Count;
+
+    /// <summary>How many entries of <paramref name="templateIndex"/> are currently queued (<c>ProductionUpdateInterface::countUnitTypeInQueue</c>).</summary>
+    public int CountInQueue(int templateIndex)
+    {
+        var count = 0;
+        foreach (var entry in _queue) if (entry.TemplateIndex == templateIndex) count++;
+        return count;
+    }
+
+    /// <summary>
+    /// Public, read-only view of the queue (`docs/PRESENTATION-INPUT.md` §10 point 2): template, paid cost (full refund on cancel) and the
+    /// remaining ticks of work, head first. Only the head entry (index 0) progresses.
+    /// </summary>
+    public ImmutableArray<ProductionQueueItem> Queue => [.._queue.Select(entry => new ProductionQueueItem(entry.TemplateIndex, entry.Cost, entry.RemainingTicks))];
 
     public bool TryCancel(int slot, out Fixed refund)
     {

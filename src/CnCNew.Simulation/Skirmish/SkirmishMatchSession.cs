@@ -140,6 +140,33 @@ public sealed class SkirmishMatchSession
         => new(_header with { EndTick = IsOver ? _endTick : World.Tick },
             [.._commands.OrderBy(value => value.Tick).ThenBy(value => value.Player.Value).ThenBy(value => value.Sequence)], []);
 
+    /// <summary>
+    /// Phase 10 decision (`docs/HANDOFF-PHASE10.md` point 6, `docs/SIMULATION-CORE.md` §18): a <em>live, still in-progress</em> skirmish
+    /// session cannot be saved and later resumed as a continuing live game, unlike a mission (<c>MissionSnapshot</c>). Two things that sound
+    /// similar but are not what this blocks:
+    /// <list type="bullet">
+    /// <item>A <b>finished or partial recording</b> already saves and resumes perfectly today: <see cref="ToReplay"/> plus a mid-replay
+    /// <c>WorldSnapshot</c> checkpoint (<see cref="SkirmishMatchOptions.CheckpointInterval"/>) reproduce the exact same continuation hash for
+    /// hash — this is exercised by every <c>ai-match</c>/<c>reference-match</c> run's "snapshot continuation" check and needs no AI state at
+    /// all, because a replay only replays the commands the AI already emitted, never the AI itself.</item>
+    /// <item>What is missing is pausing a session <em>before</em> it has a full recording and resuming it later as a live session that keeps
+    /// making its own new decisions. That needs <see cref="SkirmishAi"/> itself to survive the round trip: per computer player it holds
+    /// substantial state outside <see cref="World"/> (enemy and warehouse memory with "seen at" timestamps, order and retry-timer tables,
+    /// in-flight production tracking, rally/scout targets, bad-spot avoidance, and its own <c>SageRandom</c> stream — the full field list is
+    /// in SkirmishAi.cs), none of which <c>WorldSnapshot</c> carries. Writing only the world would silently resume with every AI's memory
+    /// erased: not a fresh-but-valid restart, a quietly wrong one (it would immediately "re-discover" enemies and warehouses it had already
+    /// found, and forget mid-flight production and retry back-off, changing behaviour without any error).
+    /// </list>
+    /// A <c>SkirmishAiSnapshot</c> that closes this gap is real, bounded future work (it is a flat state dump, no new mechanics), just not
+    /// done in this phase. Until it exists, this method is the one loud, documented failure point for a live-session save, rather than a
+    /// save routine that silently drops the AI and ships a broken resume.
+    /// </summary>
+    public byte[] CreateSave() => throw new NotSupportedException(
+        "A live skirmish session cannot be saved: SkirmishAi holds per-player state (enemy/warehouse memory, retry timers, in-flight " +
+        "production tracking, its own random stream) that WorldSnapshot does not carry, so saving only the world would silently erase " +
+        "it on load. A finished or partial match already saves and resumes exactly via ToReplay() plus a WorldSnapshot checkpoint, which " +
+        "needs no AI state. See docs/SIMULATION-CORE.md §18.");
+
     private void System(Func<ulong, SimCommand> make)
     {
         var command = make(++_systemSequence);

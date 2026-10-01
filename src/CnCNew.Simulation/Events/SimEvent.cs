@@ -85,6 +85,14 @@ public enum SimEventKind : byte
     /// victim took (0 without one), the position is the impact point.
     /// </summary>
     WeaponImpact = 28,
+
+    // --------------------------------------------------------------------------------------------- build/rule limits (phase 10)
+
+    /// <summary>
+    /// <c>CaptureCommand</c> changed a structure's owner (<c>Entity</c>: the captured structure, <c>Other</c>: the capturing actor, <c>Player</c>:
+    /// the new owner, <c>Value</c>: the old owner's id).
+    /// </summary>
+    StructureCaptured = 29,
 }
 
 /// <summary>

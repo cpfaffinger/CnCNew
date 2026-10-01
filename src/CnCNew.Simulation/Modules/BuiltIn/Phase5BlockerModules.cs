@@ -424,6 +424,9 @@ public sealed record StealthDetectorData(
 /// <c>CanDetectWhileGarrisoned</c>/<c>CanDetectWhileContained</c> are typed but currently inert (an object is never
 /// "contained"), and garrisoned-riders' own stealth is never scanned. <c>UNDER_CONSTRUCTION</c>/<c>SOLD</c> are ported
 /// (matching every other module that checks them) even though nothing sets either status bit yet.
+/// A candidate within <see cref="StealthDetectorData.DetectionRange"/> but behind higher terrain is not detected
+/// (<c>TerrainMap.HasHeightLineOfSight</c>, phase 10); without a terrain (synthetic fixtures) every in-range candidate is
+/// still reachable, as before.
 /// </summary>
 public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule, IUpdateModule
 {
@@ -437,6 +440,12 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
     public override void OnSpawn(IWorldServices world)
         => _nextWake = data.InitiallyDisabled ? SimulationTiming.SleepForever : world.Tick + world.LogicRandom.Range(1, checked((int)data.UpdateRateTicks));
 
+    /// <summary>
+    /// The height a line of sight is drawn from/to for an object: ground position plus its full <c>GeometryHeight</c> (the object's own
+    /// top, not a separate per-template eye-height field, which the catalog does not carry — a named simplification).
+    /// </summary>
+    private static Fixed EyeHeight(World.Entity entity) => entity.Z + entity.Template.GeometryHeight;
+
     public long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
@@ -444,6 +453,7 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
         if (Entity.HasStatus(SoldBit)) return SimulationTiming.SleepForever;
 
         var range = data.DetectionRange > Fixed.Zero ? data.DetectionRange : Entity.Template.VisionRange;
+        var terrain = world.Terrain;
         foreach (var candidate in world.Entities)
         {
             if (candidate.Id == Entity.Id || candidate.EffectivelyDead || world.RelationshipOf(Entity.Owner, candidate.Owner) == Relationship.Allies) continue;
@@ -453,6 +463,7 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
             var dx = candidate.X - Entity.X;
             var dy = candidate.Y - Entity.Y;
             if (dx * dx + dy * dy > range * range) continue;
+            if (terrain is not null && !terrain.HasHeightLineOfSight(Entity.X, Entity.Y, EyeHeight(Entity), candidate.X, candidate.Y, EyeHeight(candidate))) continue;
             candidate.Modules.OfType<StealthUpdate>().FirstOrDefault()?.MarkDetected(world, data.UpdateRateTicks + 1);
         }
         return Math.Max(data.UpdateRateTicks, SimulationTiming.SleepNone);

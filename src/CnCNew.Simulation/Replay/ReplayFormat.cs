@@ -299,6 +299,13 @@ public static class ReplayFormat
                 writer.Write(evacuate.X.Raw);
                 writer.Write(evacuate.Y.Raw);
                 break;
+            case OverchargeCommand overcharge:
+                writer.Write(overcharge.Target.Value);
+                break;
+            case CaptureCommand capture:
+                writer.Write(capture.Actor.Value);
+                writer.Write(capture.Target.Value);
+                break;
             default:
                 throw new ReplayFormatException($"Command type {command.GetType().Name} has no replay encoding.");
         }
@@ -342,6 +349,8 @@ public static class ReplayFormat
             CommandTypes.Repair => new RepairCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.MoveAndEnter => new MoveAndEnterCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.Evacuate => new EvacuateCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), reader.ReadBoolean(), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.Overcharge => new OverchargeCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
+            CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
     }

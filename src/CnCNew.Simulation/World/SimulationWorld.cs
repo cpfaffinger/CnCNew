@@ -63,7 +63,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[(int)CommandRejection.CannotSell + 1];
+    private readonly long[] _rejections = new long[(int)CommandRejection.CannotToggleOvercharge + 1];
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
     private long _tick;
@@ -232,7 +232,9 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <summary>
     /// <c>Object::onVeterancyLevelChanged</c>: the body's max health is scaled by the ratio of the GameData health bonuses (health keeps its
     /// ratio), the VETERAN/ELITE/HERO weapon bonus condition follows the level, and the engine-made <c>Upgrade_Veterancy_*</c> of the new
-    /// level is granted (none for level 0). Armor/weapon set selection by veterancy is not modeled: no shipped set asks for it.
+    /// level is granted (none for level 0). <see cref="ActiveWeaponIndex"/>/<see cref="ActiveArmor"/> also switch to the level's
+    /// <c>WeaponSet</c>/<c>ArmorSet</c> when the template declares one (see <see cref="Templates.ObjectTemplate.VeteranArmor"/>); no change is
+    /// needed here, as they read <see cref="World.Entity.VeterancyLevel"/> directly.
     /// </summary>
     private void OnVeterancyLevelChanged(Entity entity, int newLevel)
     {
@@ -377,6 +379,13 @@ public sealed partial class SimulationWorld : IWorldServices
         if (_players.TryGetValue(player.Value, out var state)) state.EnergyProduction += amount;
     }
 
+    /// <summary>
+    /// Public dock marker (`docs/PRESENTATION-INPUT.md` §10 point 3): whether <paramref name="id"/> has a dock module at all, replacing the
+    /// module-name string match (<c>SupplyCenterDockUpdate</c>, <c>SupplyWarehouseDockUpdate</c>, <c>RepairDockUpdate</c>, ...) presentation used
+    /// from outside the assembly, where <c>IDockModule</c> itself is not visible.
+    /// </summary>
+    public bool IsDock(EntityId id) => FindEntity(id) is { } entity && Modules.BuiltIn.DockModules.DockOf(entity) is not null;
+
     /// <summary><c>Money::withdraw</c>: clamps to the available balance and returns the amount actually withdrawn.</summary>
     public Fixed WithdrawMoney(PlayerId player, Fixed amount)
     {
@@ -459,11 +468,22 @@ public sealed partial class SimulationWorld : IWorldServices
         return id;
     }
 
+    /// <summary>
+    /// <c>ActiveBody::getWeaponSet</c>/<c>SparseMatchFinder</c> (reduced, see <see cref="Templates.ObjectTemplate.VeteranWeapon"/>): a veterancy-
+    /// conditioned <c>WeaponSet</c> for the entity's current rank wins over <c>PLAYER_UPGRADE</c>, which wins over the default set.
+    /// </summary>
     private static int ActiveWeaponIndex(Entity entity)
-        => entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
+    {
+        if (entity.VeterancyLevel > 0 && entity.Template.VeteranWeapon[entity.VeterancyLevel] is var veteran and >= 0) return veteran;
+        return entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
+    }
 
+    /// <summary>Armor counterpart of <see cref="ActiveWeaponIndex"/>; see <see cref="Templates.ObjectTemplate.VeteranArmor"/>.</summary>
     private static ArmorInfo ActiveArmor(Entity entity)
-        => entity.HasPlayerUpgradeArmor && entity.Template.PlayerUpgradeArmor is { } upgraded ? upgraded : entity.Template.DefaultArmor;
+    {
+        if (entity.VeterancyLevel > 0 && entity.Template.VeteranArmor[entity.VeterancyLevel] is { } veteran) return veteran;
+        return entity.HasPlayerUpgradeArmor && entity.Template.PlayerUpgradeArmor is { } upgraded ? upgraded : entity.Template.DefaultArmor;
+    }
 
     private static Modules.BuiltIn.ProductionUpdate? FindProductionModule(Entity entity)
         => Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.ProductionUpdate) as Modules.BuiltIn.ProductionUpdate;
@@ -582,6 +602,10 @@ public sealed partial class SimulationWorld : IWorldServices
                 var production = FindProductionModule(producer);
                 if (production is null || !CanProduceNow(producer)) return CommandRejection.CannotProduce;
                 if (!production.HasRoom) return CommandRejection.QueueFull;
+                if (!CanProduceTemplate(player, producer, queueTemplate)) return CommandRejection.CannotProduceTemplate;
+                if (!queueTemplate.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(player, queueTemplate))
+                    return CommandRejection.MissingPrerequisite;
+                if (ExceedsMaxSimultaneousOfType(player, queueTemplate)) return CommandRejection.ProductionLimitReached;
                 if (player.Money < queueTemplate.BuildCost) return CommandRejection.InsufficientFunds;
                 break;
             }
@@ -676,6 +700,10 @@ public sealed partial class SimulationWorld : IWorldServices
                 return CheckMoveAndEnter(command.Player, moveAndEnter, out _, out _);
             case EvacuateCommand evacuate:
                 return CheckEvacuate(command.Player, evacuate, out _);
+            case OverchargeCommand overcharge:
+                return CheckOvercharge(command.Player, overcharge, out _);
+            case CaptureCommand capture:
+                return CheckCapture(command.Player, capture, out _, out _);
         }
         return 0;
     }
@@ -851,6 +879,10 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (production is null || !CanProduceNow(producer)) { RecordRejection(command, CommandRejection.CannotProduce); break; }
                 if (!production.HasRoom) { RecordRejection(command, CommandRejection.QueueFull); break; }
                 var buyer = _players[producer.Owner.Value];
+                if (!CanProduceTemplate(buyer, producer, queueTemplate)) { RecordRejection(command, CommandRejection.CannotProduceTemplate); break; }
+                if (!queueTemplate.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(buyer, queueTemplate))
+                    { RecordRejection(command, CommandRejection.MissingPrerequisite); break; }
+                if (ExceedsMaxSimultaneousOfType(buyer, queueTemplate)) { RecordRejection(command, CommandRejection.ProductionLimitReached); break; }
                 if (buyer.Money < queueTemplate.BuildCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }
                 // ProductionUpdate.h: the full cost is withdrawn immediately at queue time, refunded in full on cancel.
                 buyer.Money -= queueTemplate.BuildCost;
@@ -1031,6 +1063,20 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (reason != 0) { RecordRejection(command, reason); break; }
                 if (AiOf(container!) is { } carrier) carrier.OrderEvacuate(this, evacuate.HasPosition, evacuate.X, evacuate.Y);
                 else EvacuateContainer(container!);
+                break;
+            }
+            case OverchargeCommand overcharge:
+            {
+                var reason = CheckOvercharge(command.Player, overcharge, out var module);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                module!.Toggle(this);
+                break;
+            }
+            case CaptureCommand capture:
+            {
+                var reason = CheckCapture(command.Player, capture, out var actor, out var target);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                ExecuteCapture(actor!, target!);
                 break;
             }
             default:

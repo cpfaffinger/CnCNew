@@ -373,6 +373,9 @@ public sealed class ReferenceMatchScenario
             {
                 var pick = roster[_random.Range(0, roster.Length - 1)];
                 if (pick.BuildCost > budget[producer.Owner.Value]) continue;
+                // Phase 10 enforces prerequisites and MaxSimultaneousOfType on QueueProductionCommand; this scenario never builds the tech
+                // structures a tier-2/3 pick might need, so a template not currently queueable is skipped rather than sent as a doomed command.
+                if (!world.CanQueueProductionTemplate(producer.Owner, producer.Id, pick.Name)) continue;
                 budget[producer.Owner.Value] -= pick.BuildCost;
                 Add(world, new QueueProductionCommand(producer.Owner, Next(producer.Owner), tick, producer.Id, pick.Name));
                 ProductionOrders++;
