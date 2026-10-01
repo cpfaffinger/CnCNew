@@ -17,13 +17,21 @@ public sealed class MessageBoxScreen : ShellScreen
     private readonly Action? _onDecline;
 
     public MessageBoxScreen(GameShell shell, string layoutName, string titleLabel, string messageLabel,
+        ShellMessageBoxButtons buttons, Action onAccept, Action? onDecline = null) : this(shell, layoutName, titleLabel, messageLabel, plainMessage: false, buttons, onAccept, onDecline)
+    {
+    }
+
+    /// <summary>Same as the main constructor, but <paramref name="plainMessage"/> shows <paramref name="titleLabel"/>/
+    /// <paramref name="messageLabel"/> as already-resolved text instead of CSF labels (for messages built at runtime, e.g. a
+    /// <c>SaveGameException</c> reason, which are never label keys and would otherwise count as unresolved labels).</summary>
+    public MessageBoxScreen(GameShell shell, string layoutName, string titleLabel, string messageLabel, bool plainMessage,
         ShellMessageBoxButtons buttons, Action onAccept, Action? onDecline = null) : base(shell, layoutName)
     {
         _onAccept = onAccept;
         _onDecline = onDecline;
         Tree.Register(layoutName == ShellLayoutNames.QuitMessageBox ? "QuitMessageBoxSystem" : "MessageBoxSystem", OnSystem);
-        W("StaticTextTitle").SetTextLabel(titleLabel);
-        W("StaticTextMessage").SetTextLabel(messageLabel);
+        if (plainMessage) { W("StaticTextTitle").SetText(titleLabel); W("StaticTextMessage").SetText(messageLabel); }
+        else { W("StaticTextTitle").SetTextLabel(titleLabel); W("StaticTextMessage").SetTextLabel(messageLabel); }
         W("ButtonOk").SetHidden(buttons != ShellMessageBoxButtons.OkOnly);
         W("ButtonYes").SetHidden(buttons == ShellMessageBoxButtons.OkOnly);
         W("ButtonNo").SetHidden(buttons == ShellMessageBoxButtons.OkOnly);

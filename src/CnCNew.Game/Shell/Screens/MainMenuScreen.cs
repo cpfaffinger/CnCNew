@@ -9,9 +9,10 @@ namespace CnCNew.Game.Shell.Screens;
 /// routed messages, just lifecycle names in the WND file), so this constructor performs the equivalent of
 /// <c>W3DMainMenuInit</c> directly: hide every submenu group except the entry one.
 /// <para>
-/// Out of scope for this build (see <c>docs/GAME-SHELL.md</c>): multiplayer, load/replay, and the three faction
-/// campaign buttons plus Challenge. Their buttons stay visible (so the menu looks authentic) but disabled, and their
-/// submenus (network options, load/replay, difficulty) are therefore unreachable and stay hidden.
+/// USA/GLA/China/Challenge and Load Game are wired to the campaign/savegame flow (<c>docs/CAMPAIGN-AND-SAVEGAMES.md</c>
+/// §7). The three faction "recent save" shortcuts on the root have no equivalent in this build (there is no concept of
+/// "most recent save per faction") and stay disabled; <c>ButtonMultiplayer</c> stays out of scope (see
+/// <c>docs/GAME-SHELL.md</c>) and stays disabled too.
 /// </para>
 /// </summary>
 public sealed class MainMenuScreen : ShellScreen
@@ -28,14 +29,16 @@ public sealed class MainMenuScreen : ShellScreen
         W("MapBorder3").SetHidden(true);
         W("MapBorder4").SetHidden(true);
 
-        // Out of scope for this package; kept visible but inert.
+        // Multiplayer is out of scope for this build (see docs/GAME-SHELL.md); kept visible but inert.
         W("ButtonMultiplayer").SetEnabled(false);
-        W("ButtonLoadReplay").SetEnabled(false);
-        W("ButtonUSA").SetEnabled(false);
-        W("ButtonGLA").SetEnabled(false);
-        W("ButtonChina").SetEnabled(false);
-        W("ButtonChallenge").SetEnabled(false);
-        // Campaign "recent save" shortcuts sit directly on the root (not inside any submenu group); no save system exists yet.
+        var hasCampaigns = Shell.Campaigns is not null;
+        W("ButtonUSA").SetEnabled(hasCampaigns && Shell.Campaigns!.Find("USA") is not null);
+        W("ButtonGLA").SetEnabled(hasCampaigns && Shell.Campaigns!.Find("GLA") is not null);
+        W("ButtonChina").SetEnabled(hasCampaigns && Shell.Campaigns!.Find("China") is not null);
+        W("ButtonChallenge").SetEnabled(hasCampaigns && Shell.Campaigns!.Campaigns.Any(campaign => campaign.IsChallenge));
+        W("ButtonLoadReplay").SetEnabled(true);
+        // Campaign "recent save" shortcuts sit directly on the root (not inside any submenu group); this build has no
+        // concept of a "most recent save per faction" (saves are not tagged by faction at all), so they stay inert.
         W("ButtonUSARecentSave").SetEnabled(false);
         W("ButtonUSALoadGame").SetEnabled(false);
         W("ButtonGLARecentSave").SetEnabled(false);
@@ -45,17 +48,32 @@ public sealed class MainMenuScreen : ShellScreen
     }
 
     private bool SinglePlayerSubmenuOpen => !W("MapBorder").IsHidden;
+    private bool LoadReplaySubmenuOpen => !W("MapBorder3").IsHidden;
 
     private void ShowMain()
     {
         W("MapBorder2").SetHidden(false);
         W("MapBorder").SetHidden(true);
+        W("MapBorder3").SetHidden(true);
     }
 
     private void ShowSinglePlayer()
     {
         W("MapBorder2").SetHidden(true);
         W("MapBorder").SetHidden(false);
+    }
+
+    private void ShowLoadReplay()
+    {
+        W("MapBorder2").SetHidden(true);
+        W("MapBorder3").SetHidden(false);
+    }
+
+    private void OpenCampaign(string name)
+    {
+        if (Shell.Campaigns?.Find(name) is not { } campaign) return;
+        Shell.PlaySound(ShellUiSounds.ButtonClick);
+        Shell.OpenCampaignFaction(campaign);
     }
 
     private void OnSystem(UiWindowTree tree, UiEvent e)
@@ -66,6 +84,13 @@ public sealed class MainMenuScreen : ShellScreen
             case "MainMenu.wnd:ButtonSinglePlayer": ShowSinglePlayer(); Shell.PlaySound(ShellUiSounds.ButtonClick); break;
             case "MainMenu.wnd:ButtonSingleBack": ShowMain(); Shell.PlaySound(ShellUiSounds.ButtonClick); break;
             case "MainMenu.wnd:ButtonSkirmish": Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.OpenSkirmishSetup(); break;
+            case "MainMenu.wnd:ButtonUSA": OpenCampaign("USA"); break;
+            case "MainMenu.wnd:ButtonGLA": OpenCampaign("GLA"); break;
+            case "MainMenu.wnd:ButtonChina": OpenCampaign("China"); break;
+            case "MainMenu.wnd:ButtonChallenge": Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.OpenChallengeSelect(); break;
+            case "MainMenu.wnd:ButtonLoadReplay": ShowLoadReplay(); Shell.PlaySound(ShellUiSounds.ButtonClick); break;
+            case "MainMenu.wnd:ButtonLoadReplayBack": ShowMain(); Shell.PlaySound(ShellUiSounds.ButtonClick); break;
+            case "MainMenu.wnd:ButtonLoadGame": Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.OpenLoadGame(); break;
             case "MainMenu.wnd:ButtonOptions": Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.OpenOptions(); break;
             case "MainMenu.wnd:ButtonCredits": Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.OpenCredits(); break;
             case "MainMenu.wnd:ButtonExit": Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.OpenQuitConfirm(); break;
@@ -75,7 +100,7 @@ public sealed class MainMenuScreen : ShellScreen
     private void OnInput(UiWindowTree tree, UiEvent e)
     {
         if (e.Kind != UiEventKind.Key || e.Value != (int)UiKey.Escape) return;
-        if (SinglePlayerSubmenuOpen) ShowMain();
+        if (SinglePlayerSubmenuOpen || LoadReplaySubmenuOpen) ShowMain();
         else Shell.OpenQuitConfirm();
     }
 }

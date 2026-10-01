@@ -1,3 +1,4 @@
+using CnCNew.Game.Campaign;
 using CnCNew.Game.Live;
 using CnCNew.Ui.Settings;
 
@@ -12,6 +13,15 @@ public abstract record ShellOutput;
 
 /// <summary>The setup screen produced a valid match; the host should construct and run a <c>LiveMatch</c> from it.</summary>
 public sealed record StartMatchOutput(MatchSetup Setup) : ShellOutput;
+
+/// <summary>
+/// A campaign mission is ready to run (a fresh start past its briefing, or a save just loaded): the host should step
+/// <see cref="MissionRun.Session"/> every tick (<see cref="CnCNew.Simulation.Mission.MissionSession.Step"/>), drain its
+/// <c>ScriptEngine.DrainOutputs()</c> for presentation, and call <see cref="GameShell.MissionFinished"/> once
+/// <c>Session.IsOver</c>. <see cref="Controller"/> is the campaign driving the mission (<see langword="null"/> only if a
+/// future revision plays a single mission map outside any campaign).
+/// </summary>
+public sealed record StartMissionOutput(MissionRun Run, CampaignController? Controller) : ShellOutput;
 
 /// <summary>The player confirmed Quit; the host should terminate the application.</summary>
 public sealed record ExitRequestedOutput : ShellOutput;

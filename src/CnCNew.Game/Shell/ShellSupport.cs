@@ -15,14 +15,19 @@ public interface IShellEnvironment
     string SettingsDirectory { get; }
     int DesktopWidth { get; }
     int DesktopHeight { get; }
+
+    /// <summary>Where <see cref="CnCNew.Game.Save.SaveGameStore"/> keeps <c>.cncsave</c> files. Defaults to a <c>Saves</c>
+    /// subdirectory of <see cref="SettingsDirectory"/> so a host that only configures settings still gets a working store.</summary>
+    string SaveDirectory => Path.Combine(SettingsDirectory, "Saves");
 }
 
 /// <summary>A fixed-size desktop backed by a caller-chosen directory (used by tests and by any host that already knows its screen size).</summary>
-public sealed class FixedShellEnvironment(string settingsDirectory, int desktopWidth = 1920, int desktopHeight = 1080) : IShellEnvironment
+public sealed class FixedShellEnvironment(string settingsDirectory, int desktopWidth = 1920, int desktopHeight = 1080, string? saveDirectory = null) : IShellEnvironment
 {
     public string SettingsDirectory { get; } = settingsDirectory;
     public int DesktopWidth { get; } = desktopWidth;
     public int DesktopHeight { get; } = desktopHeight;
+    public string SaveDirectory { get; } = saveDirectory ?? Path.Combine(settingsDirectory, "Saves");
 }
 
 /// <summary>

@@ -1,9 +1,12 @@
 using System.Collections.Immutable;
 using CnCNew.Content;
+using CnCNew.Game.Campaign;
 using CnCNew.Game.Data;
 using CnCNew.Game.Live;
+using CnCNew.Game.Save;
 using CnCNew.Game.Shell.Screens;
 using CnCNew.Presentation.Input;
+using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Skirmish;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
@@ -26,6 +29,16 @@ public enum ShellPhase
     InMatch,
     /// <summary>The score screen, built from the finished match.</summary>
     Results,
+    /// <summary>A campaign mission was chosen: <c>SinglePlayerLoadScreen.wnd</c> shows its objectives/units/location while a
+    /// placeholder stands in for the intro movie and briefing voice (no Bink decoder, see <c>docs/CAMPAIGN-AND-SAVEGAMES.md</c>).
+    /// Held for <see cref="CampaignMission.VoiceLengthSeconds"/> of simulated time, then <see cref="StartMissionOutput"/> fires.</summary>
+    MissionBriefing,
+    /// <summary>The host owns the mission now (steps <c>MissionRun.Session</c> and drains its <c>ScriptEngine</c> outputs); the
+    /// shell draws nothing until <see cref="GameShell.MissionFinished"/>.</summary>
+    InMission,
+    /// <summary>The victory/defeat banner plus the mission result screen (next mission/retry/main menu), built from the
+    /// finished mission.</summary>
+    MissionResults,
 }
 
 /// <summary>
@@ -44,6 +57,11 @@ public sealed class GameShell
     private ContentFileSystem? _bootContent;
     private MatchSetup? _pendingMatchSetup;
     private bool _loadingFrameShown;
+
+    private MissionRun? _pendingMission;
+    private CampaignController? _pendingMissionController;
+    private double _briefingElapsed;
+    private double _briefingDuration;
 
     private GameShell(IShellEnvironment environment, string language, UiViewport viewport)
     {
@@ -72,6 +90,16 @@ public sealed class GameShell
     public ImmutableArray<CreditsLine> Credits { get; private set; } = [];
     public IReadOnlyList<ShellScreen> Stack => _stack;
     public ShellScreen CurrentScreen => _stack[^1];
+
+    /// <summary><c>Data/INI/Campaign.ini</c> (not part of the compiled definition graph, see <c>docs/CAMPAIGN-AND-SAVEGAMES.md</c> §1);
+    /// <see langword="null"/> only while still booting.</summary>
+    public CampaignCatalog? Campaigns { get; private set; }
+
+    /// <summary>Savegame files under <see cref="IShellEnvironment.SaveDirectory"/>; <see langword="null"/> only while still booting.</summary>
+    public SaveGameStore? Saves { get; private set; }
+
+    private MissionContext MissionContext => _missionContext ??= MissionContext.From(Data);
+    private MissionContext? _missionContext;
 
     /// <summary>0..100, only meaningful during <see cref="ShellPhase.Boot"/>; based on the three fixed stages <see cref="GameData.Load"/> reports.</summary>
     public int LoadProgressPercent => _loadStage switch
@@ -130,6 +158,13 @@ public sealed class GameShell
         };
         MapCatalog = ShellMapCatalog.Load(data.Content, data.Maps);
         Credits = ShellCredits.Load(data.Content);
+        const string campaignPath = "Data/INI/Campaign.ini";
+        if (data.Content.Exists(campaignPath))
+        {
+            using var stream = data.Content.OpenRead(campaignPath);
+            Campaigns = CampaignCatalog.Parse(stream);
+        }
+        Saves = new SaveGameStore(Environment.SaveDirectory);
         Phase = ShellPhase.Menus;
         Replace(new MainMenuScreen(this));
         _bootContent = null;
@@ -203,13 +238,26 @@ public sealed class GameShell
             Phase = ShellPhase.InMatch;
             _outputs.Add(new StartMatchOutput(setup));
         }
+        else if (Phase == ShellPhase.MissionBriefing)
+        {
+            _briefingElapsed += dtSeconds;
+            if (_briefingElapsed >= _briefingDuration)
+            {
+                var run = _pendingMission!;
+                var controller = _pendingMissionController;
+                _pendingMission = null;
+                _pendingMissionController = null;
+                Phase = ShellPhase.InMission;
+                _outputs.Add(new StartMissionOutput(run, controller));
+            }
+        }
         foreach (var screen in _stack) screen.Update(dtSeconds);
         if (_stack.Count > 0) CurrentScreen.Tree.AdvanceTo((long)_clockMs);
     }
 
     public UiDrawList BuildDrawList()
     {
-        if (Phase == ShellPhase.InMatch) return new UiDrawList([], new UiDrawStatistics(0, 0, 0, 0, ImmutableSortedDictionary<string, int>.Empty.WithComparers(StringComparer.Ordinal)));
+        if (Phase is ShellPhase.InMatch or ShellPhase.InMission) return new UiDrawList([], new UiDrawStatistics(0, 0, 0, 0, ImmutableSortedDictionary<string, int>.Empty.WithComparers(StringComparer.Ordinal)));
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
         int windows = 0, unresolvedLabels = 0, unresolvedSizes = 0, border = 0;
         var custom = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -240,6 +288,71 @@ public sealed class GameShell
         Phase = ShellPhase.Results;
         Replace(new ScoreScreenScreen(this, MatchResult.From(session, statistics)));
     }
+
+    /// <summary>
+    /// The host calls this once <c>run.Session.IsOver</c> (victory or defeat): applies the outcome to the campaign
+    /// (<see cref="CampaignController.Conclude"/>) and shows the victory/defeat banner plus the result screen
+    /// (<c>docs/CAMPAIGN-AND-SAVEGAMES.md</c> §7). A run without a controller (should not happen once a mission is only ever
+    /// reached through the campaign flow below) is reported as a defeat-less dead end: the result screen only offers Main Menu.
+    /// </summary>
+    public void MissionFinished(MissionRun run, CampaignController? controller)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var conclusion = controller is null ? (MissionConclusion?)null : controller.Conclude(run);
+        Phase = ShellPhase.MissionResults;
+        Replace(new MissionBannerScreen(this, conclusion));
+        Push(new MissionResultScreen(this, run, controller, conclusion));
+    }
+
+    // ------------------------------------------------------------------------------------------------- campaign and savegame navigation (called by screens)
+
+    internal void OpenCampaignFaction(CampaignDefinition campaign) => Push(new CampaignFactionScreen(this, campaign));
+    internal void OpenChallengeSelect() => Push(new ChallengeSelectScreen(this));
+    internal void OpenDifficultySelect(Action<ScriptDifficulty> onAccept) => Push(new DifficultySelectScreen(this, onAccept));
+    internal void OpenLoadGame() => Push(new LoadGameScreen(this));
+
+    /// <summary>Starts (or restarts) the current mission of <paramref name="controller"/> and shows its briefing
+    /// (<see cref="ShellPhase.MissionBriefing"/>); <c>VoiceLengthSeconds</c> sets how long the briefing holds (floor of 2 s so
+    /// a mission that does not set it is still readable, no Bink decoder so the intro movie stays a placeholder).</summary>
+    internal void BeginMission(CampaignController controller)
+    {
+        var run = controller.StartCurrentMission();
+        _pendingMission = run;
+        _pendingMissionController = controller;
+        _briefingElapsed = 0;
+        _briefingDuration = Math.Max(2.0, run.Mission?.VoiceLengthSeconds ?? 0);
+        Phase = ShellPhase.MissionBriefing;
+        Replace(new MissionBriefingScreen(this, run.Mission!));
+    }
+
+    internal void BeginCampaign(CampaignDefinition campaign, ScriptDifficulty difficulty)
+        => BeginMission(new CampaignController(MissionContext, campaign, CampaignProgress.Begin(campaign, difficulty)));
+
+    /// <summary>Loads a savegame and goes straight to <see cref="ShellPhase.InMission"/> (no briefing: resuming is not a new
+    /// start). Throws <see cref="SaveGameException"/> with a message fit to show the player when the file does not load.</summary>
+    internal void LoadSaveAndContinue(string slot)
+    {
+        var bytes = Saves!.Read(slot);
+        var loaded = SaveGame.Load(bytes, MissionContext, Campaigns);
+        CampaignController? controller = null;
+        if (loaded.Progress is { } progress && Campaigns?.Find(progress.Campaign) is { } campaign) controller = new CampaignController(MissionContext, campaign, progress);
+        Phase = ShellPhase.InMission;
+        _outputs.Add(new StartMissionOutput(loaded.Run, controller));
+    }
+
+    /// <summary>After a mission result: victory and not the last mission continues with the next one; defeat retries the
+    /// current one. Both re-enter <see cref="ShellPhase.MissionBriefing"/>; a finished campaign returns to the main menu.</summary>
+    internal void ContinueOrRetryMission(CampaignController controller)
+    {
+        if (controller.IsFinished) { ReturnToMainMenuFromResults(); return; }
+        BeginMission(controller);
+    }
+
+    internal void ReturnToMainMenuFromMissionResults() => ReturnToMainMenuFromResults();
+
+    /// <summary>Shows a plain-text error dialog (<c>MessageBox.wnd</c>, OK only) on top of the current screen, e.g. for a
+    /// <see cref="SaveGameException"/> message, which is never a CSF label.</summary>
+    internal void ShowError(string title, string message) => Push(new MessageBoxScreen(this, ShellLayoutNames.MessageBox, title, message, plainMessage: true, ShellMessageBoxButtons.OkOnly, CloseTop));
 
     // ------------------------------------------------------------------------------------------------- screen navigation (called by screens)
 
