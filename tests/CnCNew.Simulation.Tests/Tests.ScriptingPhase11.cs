@@ -375,4 +375,21 @@ static partial class Tests
         var (original, restored, _) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 200);
         Check.That(original.Chain == restored.Chain && original.FinalHash == restored.FinalHash, "A mission with team event state continues identically after save/restore.");
     }
+
+    public static void ScriptObjectiveDriver()
+    {
+        // "Win" needs the enemy's Target dead and a flag a walker sets by reaching an area; "Lose" needs the Hero dead. The driver satisfies the world conditions, the scripts end the mission.
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Arrive", [Scr.And(Scr.If("NAMED_INSIDE_AREA", Scr.Unit("Walker"), Scr.Area("LeftArea")))], [Scr.Do("SET_FLAG", Scr.Flag("arrived"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Win", [Scr.And(Scr.If("NAMED_DESTROYED", Scr.Unit("Target")), Scr.If("FLAG", Scr.Flag("arrived"), Scr.Bool(true)))], [Scr.Do("VICTORY")], oneShot: true),
+            Scr.Script("Lose", [Scr.And(Scr.If("NAMED_DESTROYED", Scr.Unit("Hero")))], [Scr.Do("DEFEAT")], oneShot: true),
+        ], objects: [Placed("AlphaHero", 100m, 100m, "teamA", "Hero"), Placed("AlphaSoldier", 400m, 300m, "teamA", "Walker"), Placed("BetaSoldier", 520m, 380m, "teamB", "Target")]);
+        var win = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, true, maxTicks: 3000);
+        Check.That(win.ReachedByScript && win.Outcome == MissionOutcome.Victory && win.OutcomeScript == "Win", $"The driver reached the victory through the mission's own 'Win' script (outcome {win.Outcome} by '{win.OutcomeScript}', log: {string.Join("; ", win.Log)}).");
+        Check.That(win.Interventions >= 2 && win.Log.Any(line => line.Contains("send named 'Walker'", StringComparison.Ordinal)) && win.Log.Any(line => line.Contains("destroy named 'Target'", StringComparison.Ordinal)), "It sent the walker into the area and destroyed the enemy's target.");
+        var lose = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, false, maxTicks: 3000);
+        Check.That(lose.ReachedByScript && lose.Outcome == MissionOutcome.Defeat && lose.OutcomeScript == "Lose", $"...and the defeat through 'Lose' (outcome {lose.Outcome} by '{lose.OutcomeScript}').");
+        var again = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, true, maxTicks: 3000);
+        Check.That(again.OutcomeTick == win.OutcomeTick && again.Log.SequenceEqual(win.Log), "A second run of the driver is identical.");
+    }
 }
