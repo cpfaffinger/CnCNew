@@ -146,6 +146,8 @@ run.Test("Scripts: orders are validated player commands", Tests.ScriptEngineOrde
 run.Test("Scripts: damage history, kinds in areas, built objects and finished paths", Tests.ScriptEngineDamageHistoryAreasAndPaths);
 run.Test("Scripts: attack priorities steer targeting", Tests.ScriptEngineAttackPrioritiesAndReinforcements);
 run.Test("Scripts: missing types are counted, presentation is forwarded", Tests.ScriptEngineMissingTypesAreCounted);
+run.Test("Scripts: command-button abilities fire the named special power", Tests.ScriptEngineCommandButtonAbilities);
+run.Test("Scripts: an explicit human side overrides the map default", Tests.ScriptEngineHumanSideSelection);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);
 run.Test("Modules: CommandButtonHuntUpdate and LockWeaponCreate shells", Tests.MissionBlockerShellModules);

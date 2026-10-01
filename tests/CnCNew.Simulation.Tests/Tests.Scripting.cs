@@ -26,6 +26,7 @@ static class Scr
     public static MapScriptParameter Waypoint(string name) => Named(MapScriptParameterType.Waypoint, name);
     public static MapScriptParameter Area(string name) => Named(MapScriptParameterType.TriggerArea, name);
     public static MapScriptParameter Script(string name) => Named(MapScriptParameterType.Script, name);
+    public static MapScriptParameter Ability(string name) => Named(MapScriptParameterType.CommandButtonAbility, name);
     public static MapScriptParameter Compare(int op) => new(MapScriptParameterType.Comparison, op, 0m, string.Empty, 0m, 0m, 0m);
     public const int Less = 0, LessEqual = 1, Equal = 2, GreaterEqual = 3, Greater = 4, NotEqual = 5;
 
@@ -58,7 +59,39 @@ static partial class Tests
     private const string PlayerA = "PlayerA";
     private const string PlayerB = "PlayerB";
 
-    private static IReadOnlyDictionary<string, string> ScriptFiles() => SkirmishFiles();
+    private static IReadOnlyDictionary<string, string> ScriptFiles() => new Dictionary<string, string>(SkirmishFiles())
+    {
+        ["Data/INI/Object/ScriptAbilityFixture.ini"] = """
+        SpecialPower AlphaInstantPower
+          ReloadTime = 0
+        End
+        Object AlphaHero
+          Side = Alpha
+          KindOf = SELECTABLE INFANTRY
+          VisionRange = 100.0
+          ShroudClearingRange = 100.0
+          BuildCost = 10
+          BuildTime = 1
+          Locomotor = SET_NORMAL SkirmishLoco
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = SpecialAbility Power01
+            SpecialPowerTemplate = AlphaInstantPower
+          End
+        End
+        CommandButton Cmd_AlphaPower
+          Command = SPECIAL_POWER
+          SpecialPower = AlphaInstantPower
+        End
+        CommandButton Cmd_AlphaSellNotPower
+          Command = SELL
+        End
+        """,
+    };
 
     /// <summary>
     /// A 60x40-cell map with three sides (neutral, PlayerA human, PlayerB enemy of A), two waypoints, an area around the left spawn and two teams;
@@ -273,6 +306,42 @@ static partial class Tests
     }
 
 
+    public static void ScriptEngineCommandButtonAbilities()
+    {
+        // Cmd_AlphaPower (Command = SPECIAL_POWER, SpecialPower = AlphaInstantPower) is a global command button, resolved the same way for the
+        // NAMED_* and TEAM_* variants (docs/SCRIPT-ENGINE.md §8); Cmd_AlphaSellNotPower is a real button of a different command type.
+        var session = StartMission([
+            Scr.Script("UseNamed", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY", Scr.Unit("Hero"), Scr.Ability("Cmd_AlphaPower"))], oneShot: true),
+            Scr.Script("UseOnNamed", [Scr.And(Scr.If("CONDITION_TRUE"))],
+                [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY_ON_NAMED", Scr.Unit("Hero2"), Scr.Ability("Cmd_AlphaPower"), Scr.Unit("Target"))], oneShot: true),
+            Scr.Script("UseTeam", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_USE_COMMANDBUTTON_ABILITY", Scr.Team("teamA"), Scr.Ability("Cmd_AlphaPower"))], oneShot: true),
+            Scr.Script("UseTeamOnNamed", [Scr.And(Scr.If("CONDITION_TRUE"))],
+                [Scr.Do("TEAM_USE_COMMANDBUTTON_ABILITY_ON_NAMED", Scr.Team("teamA"), Scr.Ability("Cmd_AlphaPower"), Scr.Unit("Target"))], oneShot: true),
+            Scr.Script("BadAbility", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY", Scr.Unit("Hero"), Scr.Ability("Cmd_AlphaSellNotPower"))], oneShot: true),
+            Scr.Script("UnknownAbility", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY", Scr.Unit("Hero"), Scr.Ability("Cmd_NoSuchButton"))], oneShot: true),
+        ], objects: [Placed("AlphaHero", 100m, 100m, "teamA", "Hero"), Placed("AlphaHero", 140m, 100m, "teamA", "Hero2"), Placed("BetaSoldier", 100m, 300m, "teamB", "Target")]);
+        Run(session, 1);
+        var engine = session.Engine;
+        Check.That(engine.ExecutedActions >= 6, "Every ability action (named, on-named, team, team-on-named, the two diagnosed ones) counts as executed, not missing.");
+        Check.That(!engine.MissingActionHits.ContainsKey("NAMED_USE_COMMANDBUTTON_ABILITY") && !engine.MissingActionHits.ContainsKey("TEAM_USE_COMMANDBUTTON_ABILITY_ON_NAMED"),
+            "The implemented ability actions are no longer counted as missing.");
+        Check.That(session.World.RejectionCounts.Sum() == 0, "The resolved special-power uses were accepted as ordinary player commands (ready, unpaused, no required science).");
+        Check.That(engine.Diagnostics.ContainsKey("command button 'Cmd_AlphaSellNotPower' is not a special-power ability"), "A real but non-special-power button is diagnosed, never silently ignored.");
+        Check.That(engine.Diagnostics.ContainsKey("command button 'Cmd_NoSuchButton' is not a special-power ability"), "An unknown button name is diagnosed the same way.");
+    }
+
+    public static void ScriptEngineHumanSideSelection()
+    {
+        // Neither side of this map sets playerIsHuman = No for PlayerB, but PlayerA is the first human side per MissionMap; requesting PlayerB
+        // explicitly must still win over that default (docs/SCRIPT-ENGINE.md §7), and an unknown name must fall back, noted, not silently ignored.
+        Check.That(MissionSession.LocalPlayerOf(StartMission([]).Program) == new PlayerId(1), "With no request, the first human side (PlayerA) is the default.");
+        var chosen = StartMission([], options: MissionOptions.Standard with { HumanSideName = PlayerB });
+        Check.That(MissionSession.LocalPlayerOf(chosen.Program, PlayerB) == new PlayerId(2), "An explicit human side overrides the map's own default.");
+        var unknown = StartMission([], options: MissionOptions.Standard with { HumanSideName = "NoSuchSide" });
+        Check.That(MissionSession.LocalPlayerOf(unknown.Program, "NoSuchSide") == new PlayerId(1), "An unresolvable name falls back to the map default.");
+        Check.That(unknown.Notes.Any(note => note.Contains("NoSuchSide", StringComparison.Ordinal)), "The fallback is recorded as a note, not silent: " + string.Join("; ", unknown.Notes));
+    }
+
     public static void ScriptEngineDamageHistoryAreasAndPaths()
     {
         // A soldier of each side 40 units apart (the gun reaches 80): the session's combat driver makes them shoot each other.
@@ -372,7 +441,7 @@ static partial class Tests
         Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(bytes, fixture.Templates, "0000", terrain, map), "different definitions");
         var otherMap = map with { PlayerScripts = [.. map.PlayerScripts.Select(list => list with { Scripts = [.. list.Scripts, Scr.Script("Extra", [], [])] })] };
         Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain, otherMap), "script program");
-        var text = System.Text.Encoding.UTF8.GetString(bytes).Replace("\"version\":1,", "\"version\":99,");
+        var text = System.Text.Encoding.UTF8.GetString(bytes).Replace($"\"version\":{MissionSnapshot.Version},", "\"version\":99,");
         Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(System.Text.Encoding.UTF8.GetBytes(text), fixture.Templates, fixture.Fingerprint, terrain, map), "Unsupported mission state version");
     }
 }
