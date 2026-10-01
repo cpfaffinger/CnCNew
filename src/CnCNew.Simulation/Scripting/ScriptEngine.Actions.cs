@@ -334,6 +334,12 @@ public sealed partial class ScriptEngine
                 break;
 
             default:
+                if (ScriptCoverage.RecordedActions.Contains(type))
+                {
+                    // Recorded, not executed: the value is kept but nothing reads it (ScriptSupport.Recorded), so it must not inflate the executed count.
+                    TryExecutePowerAction(action);
+                    return;
+                }
                 if (TryExecuteExtendedAction(action)) break;
                 _missingActions[type] = _missingActions.GetValueOrDefault(type) + 1;
                 return;

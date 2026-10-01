@@ -19,6 +19,15 @@ public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingl
     /// <summary><c>teamTransport</c>: the transport a reinforcement arrives in; empty when the units arrive by themselves.</summary>
     public string Transport { get; init; } = string.Empty;
 
+    /// <summary><c>teamHome</c>: the waypoint recruited units walk to (<c>RECRUIT_TEAM</c>); empty when the team has none.</summary>
+    public string Home { get; init; } = string.Empty;
+
+    /// <summary><c>teamProductionPriority</c>: a team may only recruit from teams of a lower priority.</summary>
+    public int ProductionPriority { get; init; }
+
+    /// <summary><c>teamIsAIRecruitable</c>: the team's units may be taken by <c>RECRUIT_TEAM</c> without <c>TEAM_AVAILABLE_FOR_RECRUITMENT</c>.</summary>
+    public bool AiRecruitable { get; init; }
+
     /// <summary><c>teamReinforcementOrigin</c>: the waypoint a reinforcement starts from; empty: it starts at its destination.</summary>
     public string ReinforcementOrigin { get; init; } = string.Empty;
 }
@@ -186,6 +195,9 @@ public sealed class ScriptProgram
                 Units = teamUnits.ToImmutable(),
                 Transport = team.GetText("teamTransport") ?? string.Empty,
                 ReinforcementOrigin = team.GetText("teamReinforcementOrigin") ?? string.Empty,
+                Home = team.GetText("teamHome") ?? string.Empty,
+                ProductionPriority = team.TryGetInt("teamProductionPriority", out var priority) ? priority : 0,
+                AiRecruitable = team.GetBool("teamIsAIRecruitable"),
             });
         }
 

@@ -47,6 +47,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     public void RevealMapPermanently(PlayerId player, bool revealed) => ChangeVision(player, vision => vision.SetPermanentRevealAll(SlotOf(player), revealed));
     public void ExploreMap(PlayerId player) => ChangeVision(player, vision => vision.ExploreAll(SlotOf(player)));
+    public void RevealAreaPermanently(PlayerId player, Fixed x, Fixed y, Fixed radius, bool revealed) => ChangeVision(player, vision => vision.SetPermanentRevealCircle(SlotOf(player), x, y, radius, revealed));
     public void ShroudMap(PlayerId player) => ChangeVision(player, vision => vision.ShroudAll(SlotOf(player)));
     public void ExploreArea(PlayerId player, Fixed x, Fixed y, Fixed radius) => ChangeVision(player, vision => vision.ExploreCircle(SlotOf(player), x, y, radius));
     public void ShroudArea(PlayerId player, Fixed x, Fixed y, Fixed radius) => ChangeVision(player, vision => vision.ShroudCircle(SlotOf(player), x, y, radius));

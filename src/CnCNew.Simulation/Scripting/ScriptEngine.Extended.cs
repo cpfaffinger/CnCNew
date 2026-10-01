@@ -200,6 +200,7 @@ public sealed partial class ScriptEngine
     {
         DescribeTeamBuilds(writer);
         DescribeSequences(writer);
+        DescribePowerState(writer);
         // Written only when non-empty: a run that never used these keeps the serialized form (and hash) it had before they existed.
         if (_attackedBy.Count > 0)
         {
@@ -232,6 +233,7 @@ public sealed partial class ScriptEngine
     {
         LoadTeamBuilds(reader);
         LoadSequences(reader);
+        LoadPowerState(reader);
         _attackedBy.Clear();
         if (reader.Has("attackedBy")) foreach (var item in reader.Array("attackedBy")) _attackedBy.Add((checked((int)item.Int("victim")), checked((int)item.Int("attacker"))));
         _triggeredPowers.Clear();

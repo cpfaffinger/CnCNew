@@ -99,7 +99,7 @@ public sealed partial class ScriptEngine
                 Diagnose($"{type} outside a sequential script");
                 return true;
             default:
-                return false;
+                return TryExecutePowerAction(action);
         }
     }
 

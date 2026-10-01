@@ -72,6 +72,12 @@ public sealed class VisionMap
     public void ShroudCircle(int slot, Fixed x, Fixed y, Fixed radius)
         => ForCircle(slot, x, y, radius, (ref byte cell) => { if ((cell & PermanentBit) == 0) cell = 0; });
 
+    /// <summary><c>MAP_REVEAL_PERMANENTLY_AT_WAYPOINT</c> and its undo: the cells within the radius are marked permanently visible, or lose the mark again (what was seen stays explored).</summary>
+    public void SetPermanentRevealCircle(int slot, Fixed x, Fixed y, Fixed radius, bool revealed)
+        => ForCircle(slot, x, y, radius, revealed
+            ? (ref byte cell) => cell = unchecked((byte)(VisibleBit | ExploredBit | PermanentBit))
+            : (ref byte cell) => cell = (byte)(cell & ~(PermanentBit | VisibleBit)));
+
     private delegate void CellAction(ref byte cell);
 
     private void ForCircle(int slot, Fixed x, Fixed y, Fixed radius, CellAction action)

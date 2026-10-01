@@ -41,6 +41,11 @@ public sealed class ScriptTeam(int id, string prototype, PlayerId owner)
 
     /// <summary><c>Team::setAttackPriorityName</c>: the attack priority set members get, new ones included.</summary>
     public string AttackPriority { get; set; } = string.Empty;
+
+    /// <summary><c>Team::m_isRecruitablitySet</c> / <c>m_isRecruitable</c> (<c>TEAM_AVAILABLE_FOR_RECRUITMENT</c>): when set, overrides the prototype's own recruitability.</summary>
+    public bool RecruitableSet { get; set; }
+
+    public bool Recruitable { get; set; }
 }
 
 /// <summary>
@@ -665,6 +670,7 @@ public sealed partial class ScriptEngine
             writer.Int("owner", team.Owner.Value);
             writer.Bool("created", team.Created);
             writer.Text("attackPriority", team.AttackPriority);
+            if (team.RecruitableSet) writer.Bool("recruitable", team.Recruitable);
             writer.BeginArray("members");
             foreach (var member in team.Members.Order())
             {
@@ -835,7 +841,7 @@ public sealed partial class ScriptEngine
         _teams.Clear();
         foreach (var item in reader.Array("teams"))
         {
-            var team = new ScriptTeam(checked((int)item.Int("id")), item.Text("prototype"), new PlayerId(checked((int)item.Int("owner")))) { Created = item.Bool("created"), AttackPriority = item.Text("attackPriority") };
+            var team = new ScriptTeam(checked((int)item.Int("id")), item.Text("prototype"), new PlayerId(checked((int)item.Int("owner")))) { Created = item.Bool("created"), AttackPriority = item.Text("attackPriority"), RecruitableSet = item.Has("recruitable"), Recruitable = item.Has("recruitable") && item.Bool("recruitable") };
             foreach (var member in item.Array("members")) team.Members.Add(checked((uint)member.UInt("id")));
             _teams[team.Id] = team;
         }

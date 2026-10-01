@@ -9,6 +9,9 @@ public enum ScriptSupport
     /// <summary>The type changes or reads engine, world or team state as the reference does (or as documented in <c>MAP-SCRIPTS.md</c> §8 where the simulation cannot model the reference exactly).</summary>
     Executed,
 
+    /// <summary>The engine keeps the value (saved and hashed) but the simulation has no consumer for it yet (player experience scale, difficulty bonuses): counted separately, never reported as executed or missing.</summary>
+    Recorded,
+
     /// <summary>A presentation/host concern (camera, sound, speech, movie, radar, UI text): the engine records it as a <see cref="ScriptOutput"/> for the client and does not touch the simulation.</summary>
     Forwarded,
 
@@ -62,7 +65,10 @@ public static class ScriptCoverage
         "TEAM_EXECUTE_SEQUENTIAL_SCRIPT", "TEAM_EXECUTE_SEQUENTIAL_SCRIPT_LOOPING", "UNIT_EXECUTE_SEQUENTIAL_SCRIPT", "UNIT_EXECUTE_SEQUENTIAL_SCRIPT_LOOPING",
         "TEAM_STOP_SEQUENTIAL_SCRIPT", "UNIT_STOP_SEQUENTIAL_SCRIPT", "TEAM_GUARD_FOR_FRAMECOUNT", "TEAM_IDLE_FOR_FRAMECOUNT", "TEAM_SPIN_FOR_FRAMECOUNT",
         "UNIT_GUARD_FOR_FRAMECOUNT", "UNIT_IDLE_FOR_FRAMECOUNT", "TEAM_WAIT_FOR_NOT_CONTAINED_ALL", "TEAM_WAIT_FOR_NOT_CONTAINED_PARTIAL",
-        "SKIRMISH_WAIT_FOR_COMMANDBUTTON_AVAILABLE_ALL", "SKIRMISH_WAIT_FOR_COMMANDBUTTON_AVAILABLE_PARTIAL");
+        "SKIRMISH_WAIT_FOR_COMMANDBUTTON_AVAILABLE_ALL", "SKIRMISH_WAIT_FOR_COMMANDBUTTON_AVAILABLE_PARTIAL",
+        "NAMED_FIRE_SPECIAL_POWER_AT_WAYPOINT", "NAMED_FIRE_SPECIAL_POWER_AT_NAMED", "SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST", "NAMED_SET_SPECIAL_POWER_COUNTDOWN",
+        "NAMED_ADD_SPECIAL_POWER_COUNTDOWN", "NAMED_STOP_SPECIAL_POWER_COUNTDOWN", "NAMED_START_SPECIAL_POWER_COUNTDOWN", "MAP_REVEAL_PERMANENTLY_AT_WAYPOINT",
+        "MAP_UNDO_REVEAL_PERMANENTLY_AT_WAYPOINT", "RECRUIT_TEAM", "TEAM_AVAILABLE_FOR_RECRUITMENT");
 
     public static readonly ImmutableHashSet<string> ForwardedActions = ImmutableHashSet.Create(StringComparer.Ordinal,
         "DEBUG_MESSAGE_BOX", "DEBUG_STRING", "PLAY_SOUND_EFFECT", "PLAY_SOUND_EFFECT_AT", "SOUND_PLAY_NAMED", "SPEECH_PLAY", "MOVIE_PLAY_FULLSCREEN", "MOVIE_PLAY_RADAR",
@@ -89,8 +95,13 @@ public static class ScriptCoverage
 
     public static ScriptSupport ConditionSupport(string typeName) => ExecutedConditions.Contains(typeName) ? ScriptSupport.Executed : ScriptSupport.Missing;
 
+    /// <summary>Actions the VM stores without the simulation reading them (<see cref="ScriptSupport.Recorded"/>); see <c>docs/SCRIPT-ENGINE.md</c> §8.</summary>
+    public static readonly ImmutableHashSet<string> RecordedActions = ImmutableHashSet.Create(StringComparer.Ordinal,
+        "PLAYER_AFFECT_RECEIVING_EXPERIENCE", "OBJECT_ALLOW_BONUSES");
+
     public static ScriptSupport ActionSupport(string typeName)
-        => ExecutedActions.Contains(typeName) ? ScriptSupport.Executed : ForwardedActions.Contains(typeName) ? ScriptSupport.Forwarded : ScriptSupport.Missing;
+        => ExecutedActions.Contains(typeName) ? ScriptSupport.Executed : ForwardedActions.Contains(typeName) ? ScriptSupport.Forwarded
+            : RecordedActions.Contains(typeName) ? ScriptSupport.Recorded : ScriptSupport.Missing;
 
     /// <summary>Every name in the support tables must be a real type of <see cref="MapScriptCatalog"/>; returns the ones that are not (empty when consistent).</summary>
     public static ImmutableArray<string> Validate()
@@ -100,6 +111,8 @@ public static class ScriptCoverage
         var actions = MapScriptCatalog.ScriptActionTypeNames.ToHashSet(StringComparer.Ordinal);
         foreach (var name in ExecutedConditions) if (!conditions.Contains(name)) problems.Add($"condition {name}");
         foreach (var name in ExecutedActions) if (!actions.Contains(name)) problems.Add($"action {name}");
+        foreach (var name in RecordedActions)
+            if (!actions.Contains(name)) problems.Add($"recorded action {name}");
         foreach (var name in ForwardedActions)
         {
             if (!actions.Contains(name)) problems.Add($"forwarded action {name}");

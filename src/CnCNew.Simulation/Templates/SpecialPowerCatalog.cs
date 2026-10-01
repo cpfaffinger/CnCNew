@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CnCNew.Data.Definitions;
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.Templates;
@@ -8,7 +9,11 @@ namespace CnCNew.Simulation.Templates;
 /// One <c>SpecialPower</c> definition (<c>SpecialPowerTemplate</c>): <see cref="ReloadTicks"/> is <c>ReloadTime</c>, <see cref="RequiredScience"/>
 /// the <see cref="ScienceInfo.Index"/> the controlling player must own (-1: none), <see cref="SharedSynced"/> the <c>SharedSyncedTimer</c> flag.
 /// </summary>
-public sealed record SpecialPowerInfo(int Index, string Name, string Type, long ReloadTicks, int RequiredScience, bool SharedSynced, bool PublicTimer);
+public sealed record SpecialPowerInfo(int Index, string Name, string Type, long ReloadTicks, int RequiredScience, bool SharedSynced, bool PublicTimer)
+{
+    /// <summary><c>RadiusCursorRadius</c>: the area the power affects, as far as the script AI aims it (<c>SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST</c>); zero when the definition declares none.</summary>
+    public Fixed RadiusCursorRadius { get; init; }
+}
 
 /// <summary>
 /// <c>SpecialPowerStore</c> equivalent: every <c>SpecialPower</c> definition with a stable ordinal index (ordinal name order).
@@ -57,7 +62,14 @@ public sealed class SpecialPowerCatalog
             var sharedSynced = Field("SharedSyncedTimer")?.Value.Value is true;
             var publicTimer = Field("PublicTimer")?.Value.Value is true;
             var type = Field("Enum")?.Value.OriginalText.Trim() ?? string.Empty;
-            powers.Add(new SpecialPowerInfo(powers.Count, definition.OriginalName, type, reloadTicks, science, sharedSynced, publicTimer));
+            var radius = Field("RadiusCursorRadius")?.Value.Value switch
+            {
+                Distance distance => Fixed.FromDecimal(distance.Value),
+                CompatibilityValue compatibility when decimal.TryParse(compatibility.NormalizedValue, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed) => Fixed.FromDecimal(parsed),
+                long whole => Fixed.FromInt(whole),
+                _ => Fixed.Zero,
+            };
+            powers.Add(new SpecialPowerInfo(powers.Count, definition.OriginalName, type, reloadTicks, science, sharedSynced, publicTimer) { RadiusCursorRadius = radius });
         }
         return new SpecialPowerCatalog(powers.ToImmutable(), defaulted);
     }
