@@ -213,9 +213,13 @@ internal static class CampaignTests
         Step(retry, 3);
         TestHarness.Assert(controller.Progress.AttemptsOf("A") == 2 && retry.Session.Engine.FlagValue("second try"), "the retry is attempt two and the script sees it");
         TestHarness.Assert(retry.Session.Options.WorldSeed != run.Session.Options.WorldSeed, "a retry does not repeat the seed of the last try");
+        TestHarness.Assert(retry.Session.Options.PresentationLatencyTicks == 0, "no presentation latency by default");
         Destroy(retry, "VillainBarrel");
         Step(retry, 10);
         TestHarness.Assert(controller.Conclude(retry) == MissionConclusion.Victory && controller.Progress.CurrentMission == "B" && controller.Progress.Completed.Contains("A"), "victory advances the campaign");
+
+        var delayed = new CampaignController(context, campaign, CampaignProgress.Begin(campaign, ScriptDifficulty.Normal)).StartCurrentMission(presentationLatencyTicks: 90);
+        TestHarness.Assert(delayed.Session.Options.PresentationLatencyTicks == 90, "a host without a presentation director can set the presentation latency of the mission it starts");
 
         var last = controller.StartCurrentMission();
         Step(last, 3);
@@ -335,5 +339,19 @@ internal static class CampaignTests
         // The EA demo map is not part of the retail install; everything else must be consistent.
         TestHarness.Assert(problems.Length == 1 && problems[0].Contains("CampEADemo"), "only the EA demo map is absent: " + string.Join("; ", problems));
         TestHarness.Assert(catalog.Find("USA")!.Sequence.Length == 5 && catalog.Find("CHALLENGE_0")!.IsChallenge, "campaign chains are complete");
+
+        // Generals' Challenge: a map that marks its own human side decides itself; GC_LaserGeneral marks none and gets the named general side.
+        MapData Load(string path)
+        {
+            using var mapStream = content.OpenRead(path);
+            return SageMapDecoder.Decode(mapStream);
+        }
+        var challengeMaps = catalog.Campaigns.Where(campaign => campaign.IsChallenge).SelectMany(campaign => campaign.Sequence).Select(mission => mission.MapPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var sides = challengeMaps.ToDictionary(path => path, path => ChallengeSides.HumanSideFor(Load(path)), StringComparer.OrdinalIgnoreCase);
+        TestHarness.Assert(challengeMaps.Length == 8, $"eight distinct challenge maps (got {challengeMaps.Length})");
+        TestHarness.Assert(sides["Maps/GC_LaserGeneral/GC_LaserGeneral.map"] == "PlyrAmericaLaserGeneral", "the laser map without a human side gets its named general side: " + sides["Maps/GC_LaserGeneral/GC_LaserGeneral.map"]);
+        TestHarness.Assert(sides["Maps/GC_Stealth/GC_Stealth.map"].Length == 0 && sides["Maps/GC_TankGeneral/GC_TankGeneral.map"].Length == 0, "maps that mark ThePlayer as human need no host choice");
+        foreach (var (path, side) in sides)
+            if (side.Length > 0) TestHarness.Assert(ScriptProgram.Build(Load(path)).FindPlayer(side) is not null, $"{path}: the chosen side exists");
     }
 }
