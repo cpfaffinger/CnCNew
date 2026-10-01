@@ -285,4 +285,64 @@ static partial class Tests
         Run(stopper, 600);
         Check.That(!stopper.Engine.FlagValue("arrived"), "TEAM_STOP_SEQUENTIAL_SCRIPT ends the runner: the instruction after the move never ran.");
     }
+
+    public static void ScriptSpecialPowerActionsRevealsAndRecording()
+    {
+        var power = Scr.Named(MapScriptParameterType.SpecialPower, "AlphaInstantPower");
+        var session = StartMission([
+            Scr.Script("Countdown", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_SET_SPECIAL_POWER_COUNTDOWN", Scr.Unit("Hero"), power, Scr.Int(4))], oneShot: true),
+            Scr.Script("Ready", [Scr.And(Scr.If("SKIRMISH_SPECIAL_POWER_READY", Scr.Side(PlayerA), power))], [Scr.Do("SET_FLAG", Scr.Flag("ready"), Scr.Bool(true))]),
+            Scr.Script("Fire", [Scr.And(Scr.If("FLAG", Scr.Flag("ready"), Scr.Bool(true)))], [Scr.Do("NAMED_FIRE_SPECIAL_POWER_AT_NAMED", Scr.Unit("Hero"), power, Scr.Unit("Target"))], oneShot: true),
+            Scr.Script("Fired", [Scr.And(Scr.If("PLAYER_TRIGGERED_SPECIAL_POWER_FROM_NAMED", Scr.Side(PlayerA), power, Scr.Unit("Hero")))], [Scr.Do("SET_FLAG", Scr.Flag("fired"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Look", [Scr.And(Scr.If("FLAG", Scr.Flag("look"), Scr.Bool(true)))], [Scr.Do("MAP_REVEAL_PERMANENTLY_AT_WAYPOINT", Scr.Waypoint("Far"), Scr.Real(60m), Scr.Side(PlayerA), Scr.Named(MapScriptParameterType.RevealName, "FarLook"))], oneShot: true),
+            Scr.Script("Unlook", [Scr.And(Scr.If("FLAG", Scr.Flag("unlook"), Scr.Bool(true)))], [Scr.Do("MAP_UNDO_REVEAL_PERMANENTLY_AT_WAYPOINT", Scr.Named(MapScriptParameterType.RevealName, "FarLook"))], oneShot: true),
+            Scr.Script("Record", [Scr.And(Scr.If("FLAG", Scr.Flag("record"), Scr.Bool(true)))], [Scr.Do("PLAYER_AFFECT_RECEIVING_EXPERIENCE", Scr.Side(PlayerA), Scr.Real(2m)), Scr.Do("OBJECT_ALLOW_BONUSES", Scr.Bool(false))], oneShot: true),
+        ], objects: [Placed("AlphaHero", 100m, 100m, "teamA", "Hero"), Placed("BetaSoldier", 300m, 100m, "teamB", "Target")]);
+        var engine = session.Engine;
+        var viewer = new PlayerId(1);
+        var far = (X: Fixed.FromInt(400), Y: Fixed.FromInt(200));
+        Run(session, 60);
+        Check.That(!engine.FlagValue("ready"), "A countdown set to 4 s keeps the power from being ready after 2 s.");
+        Run(session, 90);
+        Check.That(engine.FlagValue("ready") && engine.FlagValue("fired"), "After the countdown the power is ready and NAMED_FIRE_SPECIAL_POWER_AT_NAMED used it (and the trigger condition saw the unit).");
+        Check.That(session.World.RejectionCounts.Sum() == 0, "The use was accepted: " + string.Join("; ", engine.Diagnostics.Keys));
+        Check.That(!world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "The far waypoint is out of sight before the reveal.");
+        engine.SignalUiInteraction("look");
+        Run(session, 8);
+        Check.That(world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "MAP_REVEAL_PERMANENTLY_AT_WAYPOINT keeps the area in sight.");
+        engine.SignalUiInteraction("unlook");
+        Run(session, 8);
+        Check.That(!world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "The named undo takes the reveal back.");
+        engine.SignalUiInteraction("record");
+        Run(session, 2);
+        Check.That(engine.RecordedActions == 2 && engine.SkillPointsModifierOf(viewer) == Fixed.FromInt(2), "The experience scale and the bonus switch are recorded, not executed.");
+        var recordOnly = StartMission([Scr.Script("Record", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("PLAYER_AFFECT_RECEIVING_EXPERIENCE", Scr.Side(PlayerA), Scr.Real(2m)), Scr.Do("OBJECT_ALLOW_BONUSES", Scr.Bool(false))], oneShot: true)]);
+        Run(recordOnly, 2);
+        Check.That(recordOnly.Engine.ExecutedActions == 0 && recordOnly.Engine.RecordedActions == 2 && recordOnly.Engine.MissingActionHits.Count == 0, "Recorded actions are neither counted as executed nor as missing.");
+        Check.That(ScriptCoverage.ActionSupport("OBJECT_ALLOW_BONUSES") == ScriptSupport.Recorded, "The support table names them as recorded.");
+    }
+
+    private static CnCNew.Simulation.World.SimulationWorld world(MissionSession session) => session.World;
+
+    public static void ScriptRecruitTeam()
+    {
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Recruit", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("RECRUIT_TEAM", Scr.Team("Strike"), Scr.Real(0m))], oneShot: true),
+            Scr.Script("Ready", [Scr.And(Scr.If("TEAM_CREATED", Scr.Team("Strike")))], [Scr.Do("SET_FLAG", Scr.Flag("strike"), Scr.Bool(true))]),
+            Scr.Script("Hold", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_AVAILABLE_FOR_RECRUITMENT", Scr.Team("Squad"), Scr.Bool(false))], oneShot: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamPlayerA", "Free1"), Placed("AlphaSoldier", 120m, 200m, "teamPlayerA", "Free2"), Placed("AlphaSoldier", 140m, 200m, "teamPlayerA", "Free3"), Placed("AlphaSoldier", 100m, 100m, "Squad", "Squad1")]);
+        MapProperties Strike() => new([Scr.Text("teamName", "Strike"), Scr.Text("teamOwner", PlayerA), Scr.Flag("teamIsSingleton", true), Scr.Text("teamHome", "Far"),
+            new MapProperty("teamProductionPriority", MapPropertyType.Int, 5, 0m, string.Empty),
+            Scr.Text("teamUnitType1", "AlphaSoldier"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 1, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 2, 0m, string.Empty)]);
+        map = map with { Teams = [..map.Teams, Strike()] };
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, 400);
+        var strike = session.Engine.TeamInstances.First(team => team.Prototype == "Strike");
+        Check.That(strike.Created && strike.Members.Count == 2 && session.Engine.FlagValue("strike"), $"RECRUIT_TEAM took the two (MaxCount) free soldiers (members {strike.Members.Count}, diagnostics {string.Join("; ", session.Engine.Diagnostics.Keys)}).");
+        Check.That(!strike.Members.Contains(NamedIn(session, "Squad1")!.Id.Value), "A unit of another team that was not made recruitable stays where it is.");
+        var recruit = session.World.FindEntity(new EntityId(strike.Members[0]))!;
+        Check.That(recruit.X > Fixed.FromInt(300), $"The recruits walk to the team's home waypoint (x = {recruit.X}).");
+        var (original, restored, _) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 300);
+        Check.That(original.Chain == restored.Chain && original.FinalHash == restored.FinalHash, "A recruited team continues identically after save/restore.");
+    }
 }

@@ -176,7 +176,7 @@ static partial class Tests
         var map = baseMap with
         {
             Sides = sides,
-            Teams = [Team("teamA", PlayerA, true), Team("teamB", PlayerB, true), Team("Raiders", PlayerB, false), Team("Squad", PlayerA, true)],
+            Teams = [Team("teamA", PlayerA, true), Team("teamB", PlayerB, true), Team("Raiders", PlayerB, false), Team("Squad", PlayerA, true), Team("teamPlayerA", PlayerA, true)],
             Objects = [..baseMap.Objects, ..objects ?? []],
             PlayerScripts = [new MapScriptList([..neutral ?? []], []), new MapScriptList([..scripts], [..groups ?? []]), new MapScriptList([], [])],
         };
