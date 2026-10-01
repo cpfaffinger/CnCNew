@@ -22,6 +22,7 @@ const string Usage = """
       audit <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--no-probes] [--no-continuation] [--explain]
                                                 every campaign mission headless: two fresh runs, save/restore continuation, scripted-ending probes,
                                                 script coverage (missing action/condition hits, unresolved references)
+      sides <content-dir> [--campaign NAME]       the script players (sides) of every campaign map: name, faction, human flag (to map a chosen general to a map's side)
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
                                                 and a savegame from mission to mission
@@ -42,6 +43,7 @@ try
     {
         "list" => List(content, campaigns),
         "audit" => Audit(content, campaigns, args),
+        "sides" => Sides(content, campaigns, args),
         "playthrough" => Playthrough(content, campaigns, args),
         _ => Fail(Usage),
     };
@@ -50,6 +52,23 @@ catch (Exception exception)
 {
     Console.Error.WriteLine($"error: {exception.Message}");
     return 1;
+}
+
+static int Sides(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
+{
+    var (context, _, _) = Compile(content);
+    var filterCampaign = Arg(args, "--campaign");
+    foreach (var campaign in campaigns.Campaigns)
+    {
+        if (filterCampaign is not null && !campaign.Name.Equals(filterCampaign, StringComparison.OrdinalIgnoreCase)) continue;
+        Console.WriteLine($"{campaign.Name}{(campaign.PlayerFaction.Length > 0 ? $" (player faction {campaign.PlayerFaction})" : "")}");
+        foreach (var mission in campaign.Sequence)
+        {
+            var program = ScriptProgram.Build(context.LoadMap(mission.MapPath));
+            Console.WriteLine($"  {mission.Name,-10} {mission.MapPath}: " + string.Join(", ", program.Players.Select(player => $"{(player.Name.Length == 0 ? "<neutral>" : player.Name)}[{player.Faction}{(player.IsHuman ? ",human" : "")}]")));
+        }
+    }
+    return 0;
 }
 
 static int Fail(string message)

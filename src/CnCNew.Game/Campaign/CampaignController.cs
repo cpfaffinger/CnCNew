@@ -24,16 +24,19 @@ public sealed class CampaignController(MissionContext context, CampaignDefinitio
     /// Starts the current mission: counts the attempt and builds the world. The seed depends on the mission and the attempt so a retry is not a
     /// replay of the last try. <paramref name="humanSideName"/> is the host's choice of human side for a map that does not mark one itself (the
     /// Generals' Challenge maps model the chosen general as the map's only human side but leave naming it to the host); empty keeps
-    /// <see cref="Mission.MissionSession.LocalPlayerOf"/>'s own fallback.
+    /// <see cref="Mission.MissionSession.LocalPlayerOf"/>'s own fallback; for a Generals' Challenge campaign it is chosen by <see cref="ChallengeSides"/> instead
+    /// of left empty. <paramref name="presentationLatencyTicks"/> is for a host that has no <c>MissionPresentationDirector</c> to complete speech/movie/camera
+    /// outputs itself: they then count as playing for that many ticks (0: finished at once, the headless default).
     /// </summary>
-    public MissionRun StartCurrentMission(long maxTicks = 0, string humanSideName = "")
+    public MissionRun StartCurrentMission(long maxTicks = 0, string humanSideName = "", int presentationLatencyTicks = 0)
     {
         if (Progress.Finished) throw new InvalidOperationException("The campaign is finished.");
         var mission = CurrentMission;
+        if (humanSideName.Length == 0 && Campaign.IsChallenge) humanSideName = ChallengeSides.HumanSideFor(context.LoadMap(mission.MapPath));
         Progress = Progress.Started();
         var attempts = Progress.AttemptsOf(mission.Name);
         var seed = unchecked(baseSeed + (uint)attempts * 7919u + (uint)Campaign.Sequence.IndexOf(mission) * 104729u);
-        var options = new MissionOptions(seed, Progress.Difficulty, maxTicks, MissionAttempts: attempts, HumanSideName: humanSideName);
+        var options = new MissionOptions(seed, Progress.Difficulty, maxTicks, PresentationLatencyTicks: presentationLatencyTicks, MissionAttempts: attempts, HumanSideName: humanSideName);
         return MissionRun.Load(context, mission.MapPath, options, mission);
     }
 
