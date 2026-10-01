@@ -2515,6 +2515,15 @@
     },
     {
       "category": "deferred-field",
+      "name": "HeightDieUpdate/DestroyAttachedParticlesAtHeight",
+      "count": 4,
+      "owners": [
+        "HeightDieUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "HelicopterSlowDeathBehavior/AttachParticle",
       "count": 18,
       "owners": [
@@ -3865,10 +3874,109 @@
     },
     {
       "category": "deferred-field",
+      "name": "StructureToppleUpdate/AngleFX",
+      "count": 6,
+      "owners": [
+        "StructureToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StructureToppleUpdate/CrushingFX",
+      "count": 6,
+      "owners": [
+        "StructureToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StructureToppleUpdate/DamageFXTypes",
+      "count": 6,
+      "owners": [
+        "StructureToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StructureToppleUpdate/MaxToppleBurstDelay",
+      "count": 6,
+      "owners": [
+        "StructureToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StructureToppleUpdate/MinToppleBurstDelay",
+      "count": 6,
+      "owners": [
+        "StructureToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StructureToppleUpdate/ToppleDelayFX",
+      "count": 6,
+      "owners": [
+        "StructureToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StructureToppleUpdate/ToppleDoneFX",
+      "count": 6,
+      "owners": [
+        "StructureToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StructureToppleUpdate/ToppleStartFX",
+      "count": 6,
+      "owners": [
+        "StructureToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "SupplyTruckAIUpdate/SuppliesDepletedVoice",
       "count": 6,
       "owners": [
         "SupplyTruckAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ToppleUpdate/BounceFX",
+      "count": 34,
+      "owners": [
+        "ToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ToppleUpdate/ReorientToppledRubble",
+      "count": 11,
+      "owners": [
+        "ToppleUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ToppleUpdate/ToppleFX",
+      "count": 46,
+      "owners": [
+        "ToppleUpdate"
       ],
       "plannedTarget": "phase-5-module-field-typing"
     },
@@ -5159,7 +5267,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3878,
+      "count": 3792,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5989,15 +6097,6 @@
     },
     {
       "category": "module",
-      "name": "HeightDieUpdate",
-      "count": 32,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "HijackerUpdate",
       "count": 6,
       "owners": [
@@ -6421,15 +6520,6 @@
     },
     {
       "category": "module",
-      "name": "StructureToppleUpdate",
-      "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "SubObjectsUpgrade",
       "count": 17,
       "owners": [
@@ -6468,15 +6558,6 @@
       "category": "module",
       "name": "TensileFormationUpdate",
       "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "ToppleUpdate",
-      "count": 48,
       "owners": [
         "Object"
       ],

@@ -171,6 +171,11 @@ run.Test("Chinook: flight height, supply trips, Supply Lines boost and landing t
 run.Test("Chinook: helicopter slow death falls, crashes and leaves a hull", Tests.HelicopterSlowDeathFall);
 run.Test("Helix: portable structure rides free, follows and dies with it", Tests.HelixPortableStructure);
 run.Test("Transports: snapshot v7, determinism and replay v7 commands", Tests.TransportSnapshotAndReplay);
+run.Test("Collision: real CrushDie/SquishCollide footprint overlap", Tests.CollisionCrushAndSquish);
+run.Test("Collision: ToppleUpdate push, kill, stump and mid-fall snapshot continuation", Tests.CollisionTopple);
+run.Test("Collision: StructureToppleUpdate delayed collapse and reduced crushing sweep", Tests.CollisionStructureTopple);
+run.Test("Collision: HeightDieUpdate threshold, delay, structures and ground floor", Tests.CollisionHeightDie);
+run.Test("Collision: bounded local avoidance around another unit's footprint", Tests.CollisionLocalAvoidance);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

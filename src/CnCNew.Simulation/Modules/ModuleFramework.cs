@@ -182,6 +182,28 @@ public interface IWorldServices
 
     /// <summary><c>ContainModuleInterface::removeAllContained</c> as an ordered evacuation: every passenger leaves through <paramref name="container"/> (for a tunnel: everybody in the network).</summary>
     void EvacuateContainer(Entity container);
+
+    // ------------------------------------------------------------------------------------ phase 10: footprint collision
+
+    /// <summary>
+    /// Local collision avoidance for ground path-following (<c>docs/SIMULATION-CORE.md</c>, phase 10): when the straight
+    /// step from <paramref name="mover"/>'s position by (<paramref name="dx"/>, <paramref name="dy"/>) would end inside
+    /// another live, mobile entity's footprint, rotates the step by one of a few fixed angles and retries, bounded to a
+    /// handful of attempts; returns the unmodified step when every attempt is still blocked. A bounded nudge-and-retry,
+    /// not steering or flocking: it does not coordinate with the blocker, does not look beyond this one step and can
+    /// oscillate against a mover coming the other way.
+    /// </summary>
+    (Fixed Dx, Fixed Dy) AvoidLocalBlockers(Entity mover, Fixed dx, Fixed dy);
+
+    /// <summary>
+    /// <c>SquishCollide.cpp onCollide</c> / <c>ToppleUpdate.cpp onCollide</c>: after <paramref name="mover"/>'s position
+    /// changed this tick by (<paramref name="stepX"/>, <paramref name="stepY"/>) — the exact displacement just applied, used
+    /// to tell a closing mover from a receding one without rebuilding velocity from <c>Angle</c>/<c>Speed</c> — checks every
+    /// other live entity whose footprint now overlaps the mover's and applies the crush (a <c>SquishCollide</c> victim, not
+    /// allied, the mover closing on it) or topple (a <c>ToppleUpdate</c> object, the mover's <c>CrusherLevel</c> above 1)
+    /// effect that the reference's physics collision would have delivered.
+    /// </summary>
+    void ResolveFootprintCollisions(Entity mover, Fixed stepX, Fixed stepY);
 }
 
 /// <summary>

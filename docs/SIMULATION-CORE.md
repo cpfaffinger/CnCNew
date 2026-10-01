@@ -430,7 +430,16 @@ je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das
 siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
 Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
 
-- **Stand nach den Phase-9-Missionsmodulen (1. Oktober 2026, frisch gemessen): 2.115 Objekte, 1.494 vollständig instanziierbar (70,6 %)**, 621 blockiert; 87 von 205 Modultypen implementiert (2 neu: `CommandButtonHuntUpdate`, `LockWeaponCreate` – ehrliche Hüllenmodule, siehe unten), sie decken 15.639 von 19.553 Modulverwendungen (80,0 %); Fingerabdruck `2B9D902AEC46A6DE…`. Größte verbleibende Blocker (Objekte insgesamt / nur dadurch blockiert): `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/36, `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `HeightDieUpdate` 31/24, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `BaikonurLaunchPower` 23/23. **Hüllenmodule:** `CommandButtonHuntUpdate` (86 Verwendungen, keine Schlüssel; wird im Original nur von `TEAM_HUNT_WITH_COMMAND_BUTTON` ausgelöst) hält keinen Zustand, `LockWeaponCreate` sperrt den Primär-Slot (`SlotToLock = PRIMARY` in allen 12 Verwendungen; die Simulation führt nur eine Waffe, ein anderer Slot ist eine `UnsupportedModuleConfigurationException`); die auslösenden Skriptaktionen bleiben fehlend und werden gezählt (`docs/SCRIPT-ENGINE.md` §8). Der Retail-Referenzmatch verändert sich dadurch (Ranger u. a. entstehen jetzt als Startobjekte): Sieger FactionAmerica bei Tick 13.665 (Replay 13.966 Ticks), Endhash (`final hash`, Run 1) `D4779BE413835B6D`; zuvor Tick 13.800 (14.101 Ticks), `95022B80366E841E`. Der Stresstest (216.000 Ticks) bleibt bei `ED6F9329F59662E3`.
+- **Stand nach Phase 10, Kollision (1. Oktober 2026, frisch gemessen): 2.115 Objekte, 1.588 vollständig instanziierbar (75,1 %)**, 527 blockiert; 90 von 205 Modultypen
+  implementiert (3 neu: `ToppleUpdate`, `StructureToppleUpdate`, `HeightDieUpdate`, §23), sie decken 15.752 von 19.553 Modulverwendungen (80,6 %); Fingerabdruck `D112D8B5AF345559…`.
+  `ToppleUpdate` (76/66) und `HeightDieUpdate` (31/24) verschwinden vollständig aus der Blockerliste; größte verbleibende Blocker: `SpecialAbilityUpdate` 64/36,
+  `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25,
+  `BaikonurLaunchPower` 23/23. Retail-Referenzmatch (`SimTool reference-match`): Sieger FactionAmerica bei Tick 10.575 (Replay 10.876 Ticks), Endhash (`final hash`, Run 1)
+  `057C6678FE8F3381` (verändert sich gegenüber dem Phase-9-Stand, weil zuvor blockierte Objekte – u. a. Bäume und Höhenstopp-Objekte auf den Startkarten – jetzt instanziierbar
+  sind und am Kampf teilnehmen); zwei frische Läufe und eine Fortsetzung ab Tick 5.438 liefern identische Hashes. Der synthetische 216.000-Tick-Stresstest trägt keine der drei
+  neuen Module und bleibt unverändert bei `ED6F9329F59662E3`. Kompatibilitätsbasislinie 756 Einträge (vorher 749): 9 `module`-Einträge entfallen (jetzt implementiert), 16 neue
+  `deferred-field`-Einträge für reine Präsentationsfelder der drei Module (FX-Listen, `ReorientToppledRubble`, Salven-Timing, `DestroyAttachedParticlesAtHeight`).
+- **Stand nach den Phase-9-Missionsmodulen (1. Oktober 2026): 2.115 Objekte, 1.494 vollständig instanziierbar (70,6 %)**, 621 blockiert; 87 von 205 Modultypen implementiert (2 neu: `CommandButtonHuntUpdate`, `LockWeaponCreate` – ehrliche Hüllenmodule, siehe unten), sie decken 15.639 von 19.553 Modulverwendungen (80,0 %); Fingerabdruck `2B9D902AEC46A6DE…`. Größte verbleibende Blocker (Objekte insgesamt / nur dadurch blockiert): `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/36, `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `HeightDieUpdate` 31/24, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `BaikonurLaunchPower` 23/23. **Hüllenmodule:** `CommandButtonHuntUpdate` (86 Verwendungen, keine Schlüssel; wird im Original nur von `TEAM_HUNT_WITH_COMMAND_BUTTON` ausgelöst) hält keinen Zustand, `LockWeaponCreate` sperrt den Primär-Slot (`SlotToLock = PRIMARY` in allen 12 Verwendungen; die Simulation führt nur eine Waffe, ein anderer Slot ist eine `UnsupportedModuleConfigurationException`); die auslösenden Skriptaktionen bleiben fehlend und werden gezählt (`docs/SCRIPT-ENGINE.md` §8). Der Retail-Referenzmatch verändert sich dadurch (Ranger u. a. entstehen jetzt als Startobjekte): Sieger FactionAmerica bei Tick 13.665 (Replay 13.966 Ticks), Endhash (`final hash`, Run 1) `D4779BE413835B6D`; zuvor Tick 13.800 (14.101 Ticks), `95022B80366E841E`. Der Stresstest (216.000 Ticks) bleibt bei `ED6F9329F59662E3`.
 - **Stand nach Phase 8, Paket E1 (30. September 2026, frisch gemessen): 2.115 Objekte, 1.470 vollständig instanziierbar (69,5 %)**, 645 blockiert;
   85 von 205 Modultypen implementiert (8 neu: `DumbProjectileBehavior`, `MissileAIUpdate`, `PointDefenseLaserUpdate`, `TransportAIUpdate`, `ChinookAIUpdate`,
   `HelicopterSlowDeathBehavior`, `TunnelContain`, `HelixContain`, §21), sie decken 15.543 von 19.553 Modulverwendungen (79,5 %); Fingerabdruck
@@ -579,7 +588,9 @@ Kliff, Wasser, frei; erlaubt ist, was die `Surfaces` des Locomotors zulassen (je
 - `AIUpdateInterface` folgt geplanten Pfaden (`PathStatus` `Found`/`Partial`/`Blocked`), plant bei geänderter `ObstacleSum` neu, begrenzt die Drehung (`TurnRatePerTick`,
   `FixedTrig` bekam `Atan2`, `AngleDifference`, `Normalize`) und setzt Bodeneinheiten auf die Geländehöhe. Ein teilweiser oder fehlender Pfad beendet den Befehl; es gibt keine
   stille Ersatzbewegung.
-- Grenzen: Punktförmige Einheiten, **keine Kollision** zwischen Einheiten, ein flacher A* mit Budget (keine Hierarchie, keine Brücken), Fußabdruck genähert.
+- Grenzen: Punktförmige Einheiten (kein echtes Blockieren von Zellen durch andere Einheiten), ein flacher A* mit Budget (keine Hierarchie, keine Brücken), Fußabdruck genähert.
+  Seit Phase 10 (§23) gibt es eine begrenzte lokale Ausweichbewegung gegen andere Einheiten (`AvoidLocalBlockers`, nicht Teil der Pfadplanung) sowie echte
+  Crush-/Squish-/Topple-Kollision, sobald sich zwei Fußabdrücke überlappen (`ResolveFootprintCollisions`); eine vollständige Steuerung/Vermeidung (Flocking) bleibt offen.
 
 ## 15. Sicht und Kriegsnebel (Phase 6)
 
@@ -688,7 +699,8 @@ vier Siege gibt America keinen einzigen Dockbefehl (die Chinooks versorgen selbs
 eine Zerlegung nach Ursachen wurde nicht gemessen. GLA-Siege dauern im Mittel länger (Tunnelheilung, Flugzeit der Raketen). Keine Balance-Aussage.
 ## 20. Grenzen der Phase 6
 
-- **Navigation:** punktförmige Einheiten ohne Kollision, flacher A* mit Budget, genäherter Fußabdruck mit Fluchtzellen (Zuschlag), Locomotoren nur über `Surfaces`; ein teilweiser oder fehlender Pfad beendet den
+- **Navigation:** punktförmige Einheiten (seit Phase 10, §23, mit begrenzter lokaler Ausweichbewegung und echter Crush-/Squish-/Topple-Kollision bei Überlappung, aber ohne echte
+  Steuerung/Flocking), flacher A* mit Budget, genäherter Fußabdruck mit Fluchtzellen (Zuschlag), Locomotoren nur über `Surfaces`; ein teilweiser oder fehlender Pfad beendet den
   Befehl. Von 462 Startpositionspaaren sind 6 nur teilweise begehbar.
 - **Sicht:** kreisförmig, keine Höhen-Sichtlinie, Aktualisierung alle 3 Ticks, keine Detektoren.
 - **Bau:** `QueueProduction` ohne Voraussetzungs-/Fähigkeitsprüfung, `MaxSimultaneousOfType` ungeprüft, Reparatur kostenlos.
@@ -696,8 +708,9 @@ eine Zerlegung nach Ursachen wurde nicht gemessen. GLA-Siege dauern im Mittel l�
 - **KI:** Spezialkräfte nicht klassifiziert, Startpositionen der Gegner sind öffentliches Wissen (`HintPositions`), von der Karte nur Lagerhäuser gesetzt, Startgeld und Science-Punkte vom System, keine Flugzeuge/Flugplätze,
   (seit Paket E1 mit Chinook-Wirtschaft, Tunneln und Transportern, §21), Armeezusammensetzung durch Instanziierbarkeit begrenzt, gleichstarke Paarungen können in ein Patt laufen (1 von 16), ohne Detektoren können getarnte Überlebende verborgen
   bleiben.
-- **Offen aus früheren Phasen:** Block 0.4 (RNG-Abgleich mit einem kompilierten Original), `ToppleUpdate`/`CrushDie` mit echter Kollision (Projektilflugzeit und `ChinookAIUpdate`/`TransportAIUpdate` seit Paket E1, §21),
-  Wirkung von `CommandSet`/Radar, Veteranen-`ArmorSet`/`WeaponSet`, `CommandButtonHuntUpdate` und `SpecialAbilityUpdate`.
+- **Offen aus früheren Phasen:** Block 0.4 (RNG-Abgleich mit einem kompilierten Original; Projektilflugzeit und `ChinookAIUpdate`/`TransportAIUpdate` seit Paket E1, §21;
+  `ToppleUpdate`/`StructureToppleUpdate`/`HeightDieUpdate` und echte `CrushDie`/`SquishCollide`-Kollision seit Phase 10, §23), Wirkung von `CommandSet`/Radar,
+  Veteranen-`ArmorSet`/`WeaponSet`, `CommandButtonHuntUpdate` und `SpecialAbilityUpdate`.
 
 ## 21. Phase 8, Paket E1: Projektilflugzeit, Transporter, Tunnel, Chinook
 
@@ -748,3 +761,76 @@ Quellverweise, Abdeckungstabellen, Abweichungen und Messwerte stehen in `docs/SC
   (Abweichung 3 in `docs/SCRIPT-ENGINE.md` §8). Der Test `SourceRules` gilt für den neuen Code unverändert und besteht.
 - **Nicht replayfähig:** Skriptaktionen (Erzeugen, Töten, Geld, Besitzerwechsel, Beziehungen) sind direkte Weltänderungen, keine aufgezeichneten Befehle; Missionen werden über Snapshots
   verglichen, nicht über `ReplayRunner`.
+
+## 23. Phase 10, Teil B Punkt 9: Topple, Höhenstopp und echte Crush-/Squish-Kollision
+
+Quellen (Datei, Funktion) und Kompatibilitätsfragen stehen an den Modulen selbst (`Modules/BuiltIn/ToppleAndFallModules.cs`); diese Sektion fasst Semantik, Vereinfachungen und
+Messwerte zusammen. Alle drei Module sind reine `CnCNew.Data`-Konsumenten (keine Wandzeit, kein `float`/`double`, keine Threads) und bestehen `SourceRules`.
+
+### `ToppleUpdate` (`ToppleUpdate.cpp`)
+
+Ein aufrechtes Objekt (Baum, Laterne, Zaun), das von einem Objekt mit `CrusherLevel` > 1 gerammt wird (`onCollide`, hier `SimulationWorld.Collision.cs` → `TryTopple`), kippt: eine
+skalare Winkelgeschwindigkeit/-beschleunigung treibt eine Akkumulation von 0 bis zu einer festen Grenze (`π/2 − π/64`, wie im Original); wird die Grenze mit positiver
+Geschwindigkeit erreicht, dämpft `BounceVelocityPercent` die Geschwindigkeit, bis sie unter eine feste Schwelle (0,01) fällt und das Objekt zur Ruhe kommt. `KillWhenStartToppling`
+tötet sofort (keine Fallanimation); sonst tötet `KillWhenFinishedToppling` (Standard an) mit dem Todestyp `TOPPLED`, sobald das Kippen zur Ruhe kommt, und optional auch den per
+`StumpName` erzeugten Stumpf (`KillStumpWhenToppled`). `ToppleLeftOrRightOnly` schränkt die Fallrichtung auf die nähere der beiden um ±90° gedrehten Objektachsen ein
+(`angleClosestTo`) – das beeinflusst, wohin Leiche und Stumpf tatsächlich zu liegen kommen, nicht nur die Optik. **Nicht modelliert** (rein kosmetisch, da keine 3D-Transformation
+existiert): die Ebenen-Realignment-Drehung aus `applyTopplingForce` (`ReorientToppledRubble`), Topple-/Bounce-FX und die Partikel-/Soundeffekte des Treffers; diese Felder sind
+`Opaque` im Katalogschema. Eine Fehlabstimmung der drei Prozentfelder kann (wie im Original) zu einem stabilen Grenzzyklus führen, der die Schwelle nie unterschreitet – kein Fehler
+der Portierung, sondern eine Eigenschaft der Formel; die Testfixtur wählt Werte, die zuverlässig innerhalb weniger Ticks konvergieren.
+
+### `StructureToppleUpdate` (`StructureToppleUpdate.cpp`)
+
+Reagiert auf den normalen Tod des Gebäudes (`DieMuxData`, Standardmaske): nach einer zufälligen Verzögerung (`MinToppleDelay`/`MaxToppleDelay`, aus `LogicRandom` gezogen) kippt das
+Gebäude in eine aus der Angreiferposition abgeleitete Richtung (plus ±π/8 Jitter, ebenfalls aus `LogicRandom` – deterministisch, nicht der nicht-synchronisierte
+`GameLogicRandomValueReal` des Originals) über eine sinusförmig beschleunigte, durch `StructuralIntegrity`/`StructuralDecay` gedämpfte Akkumulation bis `π/2`. Während des Kippens
+feuert `CrushingWeaponName` Bodentreffer entlang der Falllinie, sobald der Neigungswinkel ≤ π/6 ist (`applyCrushingDamage`), über die bestehende Waffeninfrastruktur
+(`IWorldServices.FireWeaponAt`). **Vereinfacht:** das Original feuert pro Tick ein Raster aus Schüssen über die gesamte Gebäudebreite (`doDamageLine`); portiert ist nur der
+vorderste Punkt der Linie (`m_lastCrushedLocation`-Fortschritt), die seitliche Streuung entfällt – weniger Flächenschaden unter einem einstürzenden Gebäude, nicht keiner; das
+Modul meldet das einmal je Objekt explizit (`SimEventKind.CreationSkipped`, `CreationSkipReasons.SettingNotSimulated`, Text „StructureToppleUpdate crushing grid sweep“). FX-Listen,
+die Salven-Kadenz (`Min/MaxToppleBurstDelay`) und die `OCL`/`AngleFX`-Trümmerlisten sind `Opaque` (reine Optik); das Gebäude ändert keinen Modellzustand und wird nie selbst entfernt
+(das Modul ist sein einziges Die-Modul und löst keine Zerstörung aus – wie die Original-Trümmer, die als Objekt bestehen bleiben).
+
+### `HeightDieUpdate` (`HeightDieUpdate.cpp`)
+
+Ein reiner Höhentest, jeden Tick nach `InitialDelay`: stirbt (`IWorldServices.Kill`), sobald die Z-Position unter die Zielhöhe (Geländehöhe plus `TargetHeight`, oder – mit
+`TargetHeightIncludesStructures` – die Höhe des höchsten `STRUCTURE`-Objekts im eigenen `BoundingCircleRadius`, falls größer) fällt, außer `OnlyWhenMovingDown` ist gesetzt und das
+Objekt bewegt sich gerade nicht abwärts. Ein enthaltenes Objekt (Transport) wird nie geprüft. `SnapToGroundOnDeath` setzt beim Sterben die Z-Position exakt auf die Geländehöhe; auch
+ohne das Flag verhindert die gleiche Zeile ein Absinken unter das Gelände. **Nicht modelliert:** die Brücken-/Tunnel-Ebenenhöhe, die das Original zusätzlich zur flachen
+Geländehöhe berücksichtigt (keine Pfadebenen in dieser Simulation) und `DestroyAttachedParticlesAtHeight` (reine Partikel-Aufräum-Optik, `Opaque`).
+
+### Echte Kollision für `CrushDie`/`SquishCollide`
+
+Beide Module bestanden seit Phase 5 nur, damit ihre Objekte instanziierbar werden; ihre Wirkung (Zerquetschen-Flaggen bzw. Zerquetschen-Tod) wurde nie ausgelöst, weil es keine
+Kollisionserkennung gab (vgl. die Kommentare an den Modulen selbst). Seit Phase 10 ruft `AIUpdateInterface.Move`/`MoveStraight` (`Modules/BuiltIn/Phase5Modules.cs`) nach jeder
+Positionsänderung eines Bodenobjekts `IWorldServices.ResolveFootprintCollisions(mover, stepX, stepY)` auf (implementiert in der neuen Datei `World/SimulationWorld.Collision.cs`):
+
+- **Topple** (`TryTopple`): überlappen sich die Begrenzungskreise von Angreifer und Ziel und hat der Angreifer `CrusherLevel` > 1, wird `ToppleUpdate.ApplyTopplingForce` auf dem
+  Ziel aufgerufen (Richtung vom Angreifer zum Ziel, Geschwindigkeit = aktuelle Geschwindigkeit des Angreifers) – keine Allianzprüfung, wie im Original.
+- **Squish** (`TrySquish`): ist das Ziel kein Verbündeter des Angreifers (`RelationshipOf`), sein `SquishCollide` vorhanden, die beiden Begrenzungskreise mit einem auf 1,0 verkleinerten
+  Zielradius überlappen (wie im Original: „der Panzer muss die Infanterie wirklich treffen“) und verringert der tatsächliche Schritt dieses Ticks (`stepX`/`stepY`, nicht eine aus
+  `Angle`/`Speed` neu berechnete Geschwindigkeit – das vermeidet Vorzeichenfehler durch `Sin`/`Cos`-Rundung exakt auf der Fahrlinie) den quadrierten Abstand zum Ziel, stirbt das
+  Ziel sofort (`DamageType CRUSH`, `DeathType CRUSHED`, Schaden `HUGE_DAMAGE_AMOUNT`, unresistierbar in der Höhe, aber als normaler Schaden durchgereicht).
+- `mover.Template.CrusherLevel`/`CrushableLevel` sind neue, strikt typisierte Felder auf `ObjectTemplate` (`Templates/ObjectTemplate.cs`, `Object`-Schlüssel `CrusherLevel`/
+  `CrushableLevel`, Standard 0/255 wie im Original); `CrushableLevel` wird noch nicht ausgewertet (im Original nur für `canCrushOrSquish`, das in dieser Simulation nicht existiert –
+  jede Einheit mit `SquishCollide` ist quetschbar, unabhängig von ihrem eigenen `CrushableLevel`; eine künftige Phase kann das nachtragen).
+
+### Lokale Ausweichbewegung (`AvoidLocalBlockers`, keine Originalfunktion)
+
+Kein Original-Mechanismus, sondern eine bewusst einfache Ergänzung, damit Bodeneinheiten einander nicht klaglos durchdringen: Bevor `AIUpdateInterface` den geplanten Schritt zum
+nächsten Wegpunkt anwendet, prüft `AvoidLocalBlockers`, ob die Zielposition innerhalb des Begrenzungskreises einer anderen lebenden, beweglichen Einheit (`Template.Locomotor` gesetzt
+– Gebäude blockieren bereits über `NavigationGrid`) liegt; falls ja, wird der Schrittvektor nacheinander um vier feste Winkel gedreht (±45°, ±90°) und erneut geprüft, der erste freie
+Versuch gewinnt. Bleiben alle vier Versuche blockiert, bewegt sich die Einheit unverändert in den Blocker hinein (was dort ggf. `ResolveFootprintCollisions` auslöst). **Ehrliche
+Grenzen:** das ist ein beschränktes Ausweichen, keine Steuerung/kein Flocking – es schaut nur einen Schritt voraus, stimmt sich nicht mit dem Blocker ab und kann mit einer
+entgegenkommenden Einheit pendeln; es wirkt nur mit vorhandenem `NavigationGrid` (nicht im terrainlosen Testmodus) und ändert nie den geplanten Pfad selbst, nur den einzelnen
+Schritt.
+
+### Nicht verhandelbare Einträge
+
+Katalogschema und Bindung: `src/CnCNew.Data/Registry/ModuleCatalog.cs`, `src/CnCNew.Simulation/Modules/BuiltIn/ToppleAndFallModules.cs`,
+`src/CnCNew.Simulation/Modules/BuiltIn/BuiltInModules.cs` (Registrierung). Tests: `tests/CnCNew.Simulation.Tests/Tests.Collision.cs` (fünf Testfälle: Crush/Squish,
+`ToppleUpdate` inklusive Fortsetzungstest nach einem Snapshot mitten im Fall, `StructureToppleUpdate`, `HeightDieUpdate`, lokale Ausweichbewegung), registriert in
+`tests/CnCNew.Simulation.Tests/Program.cs`. Kompatibilitätsbasislinie nach `IniTool compat-baseline`: 756 Einträge (vorher 749, siehe §11). Additive Erweiterungen an geteilten
+Dateien, die andere Agenten parallel bearbeiten könnten: zwei neue Methoden auf `IWorldServices`/`SimulationWorld` (`AvoidLocalBlockers`, `ResolveFootprintCollisions`, beide in der
+neuen Datei `World/SimulationWorld.Collision.cs`), zwei neue Felder auf `ObjectTemplate` (`CrusherLevel`, `CrushableLevel`), ein neuer Eintrag in der Bindungsliste
+`BuiltInModules.cs` und zwei minimale Aufrufe (keine Logikänderung) im Bewegungscode von `AIUpdateInterface` (`Modules/BuiltIn/Phase5Modules.cs`).

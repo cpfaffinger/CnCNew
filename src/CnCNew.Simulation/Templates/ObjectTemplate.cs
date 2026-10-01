@@ -84,6 +84,8 @@ public sealed class ObjectTemplate
         PlayerUpgradeWeapon = playerUpgradeWeapon;
         Locomotor = locomotor;
         Prerequisites = prerequisites;
+        CrusherLevel = definition.Fields.LastOrDefault(field => field.Name.Equals("CrusherLevel", StringComparison.OrdinalIgnoreCase))?.Value.Value is long crusher ? checked((int)crusher) : 0;
+        CrushableLevel = definition.Fields.LastOrDefault(field => field.Name.Equals("CrushableLevel", StringComparison.OrdinalIgnoreCase))?.Value.Value is long crushable ? checked((int)crushable) : 255;
     }
 
     /// <summary>Position in the ordinally sorted list of all object definitions (stable for one definition graph).</summary>
@@ -153,6 +155,11 @@ public sealed class ObjectTemplate
     public int PlayerUpgradeWeapon { get; }
     public LocomotorInfo? Locomotor { get; }
     public ImmutableArray<PrerequisiteLine> Prerequisites { get; }
+
+    /// <summary><c>ThingTemplate::m_crusherLevel</c> (<c>Object.cpp canCrushOrSquish</c>): crushes a <see cref="CrushableLevel"/> it exceeds; 0 (the reference default) crushes nothing.</summary>
+    public int CrusherLevel { get; }
+    /// <summary><c>ThingTemplate::m_crushableLevel</c>; 255 (the reference default) can never be crushed.</summary>
+    public int CrushableLevel { get; }
 
     /// <summary><c>ThingTemplate::m_buildable</c> (<c>BuildableStatus</c>: <c>Yes</c>, <c>Ignore_Prerequisites</c>, <c>No</c>, <c>Only_By_AI</c>); absent key: <c>Yes</c>, the reference default.</summary>
     public string Buildable { get; }
