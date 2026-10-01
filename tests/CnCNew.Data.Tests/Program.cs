@@ -246,6 +246,8 @@ static void ModuleCatalogIsExplicitAndConsistent()
         "TransportAIUpdate", "ChinookAIUpdate", "HelicopterSlowDeathBehavior", "TunnelContain", "HelixContain",
         // phase 9: shells the campaign maps' placed infantry need (docs/SCRIPT-ENGINE.md §8)
         "CommandButtonHuntUpdate", "LockWeaponCreate",
+        // phase 10: command-button abilities need their carrier to exist (docs/SCRIPT-ENGINE.md §8, docs/GAME-RULES.md §6d)
+        "SpecialAbilityUpdate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

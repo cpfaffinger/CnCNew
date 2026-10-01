@@ -4,25 +4,44 @@ using CnCNew.Data.Definitions;
 namespace CnCNew.Simulation.Templates;
 
 /// <summary>
-/// The build buttons of the <c>CommandSet</c>/<c>CommandButton</c> definitions (<c>ControlBar</c> data): which objects a producer or
-/// builder offers. Only <c>UNIT_BUILD</c> and <c>DOZER_CONSTRUCT</c> buttons matter to the simulation; everything else on a set
-/// (rally point, sell, upgrades, special powers) is presentation or handled elsewhere.
+/// The buttons of the <c>CommandSet</c>/<c>CommandButton</c> definitions (<c>ControlBar</c> data) the simulation itself needs: which objects a
+/// producer or builder offers (<c>UNIT_BUILD</c>/<c>DOZER_CONSTRUCT</c>), and which <c>SpecialPower</c> a named ability button fires
+/// (<c>SPECIAL_POWER</c>/<c>SPECIAL_POWER_FROM_SHORTCUT</c>/<c>SPECIAL_POWER_CONSTRUCT(_FROM_SHORTCUT)</c>, for
+/// <c>*_USE_COMMANDBUTTON_ABILITY*</c> script actions, <c>ScriptEngine.Actions.cs</c>). Everything else on a button (rally point, sell,
+/// upgrades, non-power commands) is presentation or handled elsewhere.
 /// </summary>
 public sealed class CommandCatalog
 {
     private readonly ImmutableDictionary<string, ImmutableArray<string>> _buildsBySet;
+    private readonly ImmutableDictionary<string, string> _specialPowerByButton;
 
-    private CommandCatalog(ImmutableDictionary<string, ImmutableArray<string>> buildsBySet) => _buildsBySet = buildsBySet;
+    private CommandCatalog(ImmutableDictionary<string, ImmutableArray<string>> buildsBySet, ImmutableDictionary<string, string> specialPowerByButton)
+    {
+        _buildsBySet = buildsBySet;
+        _specialPowerByButton = specialPowerByButton;
+    }
 
     /// <summary>Object names the named command set can build or construct; empty for an unknown set.</summary>
     public ImmutableArray<string> BuildsOf(string commandSet) => _buildsBySet.TryGetValue(commandSet, out var builds) ? builds : [];
 
+    /// <summary>
+    /// The <c>SpecialPowerTemplate</c> a command button of this name fires, for the script actions that name a button globally by its definition
+    /// name (<c>TheControlBar-&gt;findCommandButton</c>); <see langword="false"/> for an unknown button or one that is not a special-power command.
+    /// </summary>
+    public bool TryGetSpecialPowerAbility(string buttonName, out string specialPower) => _specialPowerByButton.TryGetValue(buttonName, out specialPower!);
+
     public static CommandCatalog Build(CompiledDefinitionGraph graph)
     {
         var buttons = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var abilities = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var button in graph.Definitions.OfType<CommandButtonDefinition>())
         {
             var command = button.Fields.LastOrDefault(field => field.Name.Equals("Command", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText ?? string.Empty;
+            if (command.StartsWith("SPECIAL_POWER", StringComparison.OrdinalIgnoreCase))
+            {
+                var power = button.Fields.LastOrDefault(field => field.Name.Equals("SpecialPower", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText;
+                if (!string.IsNullOrWhiteSpace(power)) abilities[button.OriginalName] = power.Trim();
+            }
             if (!command.Equals("UNIT_BUILD", StringComparison.OrdinalIgnoreCase) && !command.Equals("DOZER_CONSTRUCT", StringComparison.OrdinalIgnoreCase)) continue;
             var target = button.Fields.LastOrDefault(field => field.Name.Equals("Object", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText;
             if (!string.IsNullOrWhiteSpace(target)) buttons[button.OriginalName] = target.Trim();
@@ -35,6 +54,6 @@ public sealed class CommandCatalog
                 if (buttons.TryGetValue(field.Value.OriginalText.Trim(), out var target) && !builds.Contains(target, StringComparer.OrdinalIgnoreCase)) builds.Add(target);
             sets[set.OriginalName] = builds.ToImmutable();
         }
-        return new CommandCatalog(sets.ToImmutable());
+        return new CommandCatalog(sets.ToImmutable(), abilities.ToImmutable());
     }
 }

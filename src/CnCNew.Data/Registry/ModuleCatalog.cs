@@ -622,6 +622,42 @@ public static class ModuleCatalog
             new("ScriptedSpecialPowerOnly", FieldType.Bool, Source: "SpecialPowerModule.cpp"),
         ];
         Add("SpecialAbility", SpecialPowerBase());
+        // SpecialAbilityUpdate.h: the packing/preparation/special-object staging fields are recognized (so the shipped data compiles without an
+        // unknown-field error) but not read; the module only carries the shared recharge state (see CnCNew.Simulation SpecialAbilityUpdate).
+        Add("SpecialAbilityUpdate",
+        [
+            ..SpecialPowerBase(),
+            Real("StartAbilityRange", "SpecialAbilityUpdate.cpp"),
+            Real("AbilityAbortRange", "SpecialAbilityUpdate.cpp"),
+            new("PreparationTime", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
+            new("PersistentPrepTime", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
+            new("PackTime", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
+            new("UnpackTime", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
+            new("PreTriggerUnstealthTime", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
+            new("SkipPackingWithNoTarget", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("SpecialObject", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "SpecialAbilityUpdate.cpp"),
+            new("SpecialObjectAttachToBone", FieldType.Text, Source: "SpecialAbilityUpdate.cpp"),
+            new("MaxSpecialObjects", FieldType.Integer, Source: "SpecialAbilityUpdate.cpp"),
+            new("SpecialObjectsPersistent", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("UniqueSpecialObjectTargets", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("SpecialObjectsPersistWhenOwnerDies", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("AlwaysValidateSpecialObjects", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("FlipOwnerAfterUnpacking", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("FleeRangeAfterCompletion", FieldType.Real, Source: "SpecialAbilityUpdate.cpp"),
+            new("EffectDuration", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
+            new("EffectValue", FieldType.Integer, Source: "SpecialAbilityUpdate.cpp"),
+            new("DoCaptureFX", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("DisableFXParticleSystem", FieldType.Opaque, Source: "SpecialAbilityUpdate.cpp"),
+            new("PackSound", FieldType.Opaque, Source: "SpecialAbilityUpdate.cpp"),
+            new("UnpackSound", FieldType.Opaque, Source: "SpecialAbilityUpdate.cpp"),
+            new("PrepSoundLoop", FieldType.Opaque, Source: "SpecialAbilityUpdate.cpp"),
+            new("TriggerSound", FieldType.Opaque, Source: "SpecialAbilityUpdate.cpp"),
+            new("LoseStealthOnTrigger", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("AwardXPForTriggering", FieldType.Integer, Source: "SpecialAbilityUpdate.cpp"),
+            new("ApproachRequiresLOS", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("NeedToFaceTarget", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+            new("PersistenceRequiresRecharge", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
+        ]);
         Add("OCLSpecialPower",
         [
             ..SpecialPowerBase(),
