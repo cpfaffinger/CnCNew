@@ -92,10 +92,13 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
 - `ArmorInfo.Adjust` portiert `ArmorTemplate::adjustDamage`: `Schaden *= Koeffizient[Schadensart]`, außer bei
   `DAMAGE_UNRESISTABLE`/`DAMAGE_SUBDUAL_UNRESISTABLE` (umgehen die Rüstung vollständig), Ergebnis nie negativ.
 - **`ArmorSet`/`WeaponSet`-Auswahl:** Das Original wählt über einen `SparseMatchFinder` die beste zu den aktuellen
-  Bedingungen (Veteranenstufe, Upgrades, Second-Life, Kistenupgrades, …) passende Menge. Phase 5 modelliert nur zwei
-  Bedingungen: `Conditions = None` (Standard) und `Conditions = PLAYER_UPGRADE` (die einzige Bedingung, die
-  `ArmorUpgrade`/`WeaponSetUpgrade` tatsächlich setzen). Die Veteranenstufe wirkt über Waffenbonus und Gesundheit (§6h), nicht über die
-  Satzauswahl: kein ausgelieferter Satz verlangt sie; die volle Bestauswahl bleibt eine Fortsetzungsaufgabe.
+  Bedingungen (Veteranenstufe, Upgrades, Second-Life, Kistenupgrades, …) passende Menge. Phase 5 modellierte nur zwei
+  Bedingungen: `Conditions = None` (Standard) und `Conditions = PLAYER_UPGRADE`. Seit Phase 10 kommen `VETERAN`/`ELITE`/`HERO` als weitere,
+  je für sich stehende Bedingungen hinzu (`ObjectTemplate.VeteranArmor`/`VeteranWeapon`, ausgewählt nach `Entity.VeterancyLevel` in
+  `SimulationWorld.ActiveArmor`/`ActiveWeaponIndex`); nicht modelliert bleibt die Kombination mehrerer gleichzeitiger Bedingungen (ein Satz, der
+  z. B. `PLAYER_UPGRADE` UND `VETERAN` zugleich verlangt) – geprüft gegen `.local/phase2-import-a`: **kein einziges `ArmorSet`/`WeaponSet` der
+  Retail-Zero-Hour-Daten kombiniert eine Bedingung mit der Veteranenstufe**, die Einschränkung hat also auf den echten Bestand keine Auswirkung.
+  Die Veteranenstufe wirkte zuvor nur über Waffenbonus und Gesundheit (§6h), jetzt zusätzlich über die Satzauswahl selbst.
 - **`FireWeaponCommand`:** direkter, expliziter Schuss (kein automatisches Zielsuchen, keine Sichtlinie). Ablehnungen:
   `NoWeapon` (kein `DefaultWeapon`/`PlayerUpgradeWeapon`), `WeaponNotReady` (Tick < `WeaponReadyTick` – Nachladezeit
   oder Schusspause), `OutOfRange` (quadrierte Distanz > quadrierte `AttackRange`, damit keine Wurzel nötig ist).
@@ -765,9 +768,11 @@ Modell im Test, sie werden nicht aus der Simulation zurückgelesen.
 
 ## 8. Befehlstabelle
 
-Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (27 Befehlscodes, `CommandTypes.Version = 9`; Phase 8 ergänzt 26 `MoveAndEnterCommand`
+Siehe `docs/SIMULATION-CORE.md` §6 für die vollständige, versionierte Tabelle (27 Befehlscodes, `CommandTypes.Version = 9` bis Phase 9; Phase 8 ergänzt 26 `MoveAndEnterCommand`
 und 27 `EvacuateCommand`, §6j; Phase 6 ergänzt Codes 20–25: `ConstructCommand`, `SellCommand`, `SetRallyPointCommand`, `ResumeConstructCommand`, `CancelConstructCommand`, `RepairCommand`; `DockCommand` = 18, `SetRelationshipCommand` = 19) und die Ablehnungsgründe (Codes 25–29 für Spezialkräfte, §6d;
-Code 30 `CannotDock`, §6e); das Replay-Format v7 (`docs/SIMULATION-CORE.md` §8) kodiert alle 27, der Snapshot ist Version 7; Ablehnungscodes 31–34 (`TargetNotVisible`, `InvalidPlacement`, `CannotConstruct`, `CannotSell`) stammen aus Phase 6.
+Code 30 `CannotDock`, §6e); das Replay-Format v7 (`docs/SIMULATION-CORE.md` §8) kodiert alle 27, der Snapshot ist Version 7; Ablehnungscodes 31–34 (`TargetNotVisible`, `InvalidPlacement`, `CannotConstruct`, `CannotSell`) stammen aus Phase 6. Phase 10 ergänzt Codes 28/29
+(`OverchargeCommand`, `CaptureCommand`, `CommandTypes.Version = 10`) und Ablehnungsgründe 35–38 (`CannotProduceTemplate`, `ProductionLimitReached`, `CannotCapture`,
+`CannotToggleOvercharge`); siehe `docs/SIMULATION-CORE.md` §23.
 
 ## 9. Modulabdeckung
 
@@ -827,6 +832,10 @@ Die Regeln der Phase 6 stehen mit Zahlen in `docs/SIMULATION-CORE.md` §13–§2
 - **Sicht:** Schüsse (`FireWeaponCommand`) verlangen ein für den Spieler sichtbares Ziel (`TargetNotVisible`); nicht entdeckte `STEALTHED`-Objekte und enthaltene Objekte sind unsichtbar. `STEALTHED` wird nur bei
   `CAN_STEALTH` gesetzt (Fehlerbehebung: vorher wurden alle Objekte getarnt).
 - **Bau:** Dozer und Arbeiter setzen Gebäude mit `ConstructCommand`; Bauplatz nach `BuildAssistant::isLocationLegalToBuild` (Gelände, Fußabdruck, Hindernisse, erkundet), Kosten beim Start, Baufortschritt linear über
-  `BuildTime`. Verkauf über `SellCommand` (`SaleDurationTicks` 179, `SellPercentage`), Reparatur kostenlos, Sammelpunkte über `SetRallyPointCommand`.
-- **Energie:** `PowerPlantUpgrade`, `PowerPlantUpdate`, `OverchargeBehavior` (§6 der Kernbeschreibung, `SIMULATION-CORE.md` §17).
-- **Grenzen:** `QueueProduction` prüft keine Voraussetzung; `MaxSimultaneousOfType` ungeprüft; kein Eroberungsverhalten für Kraftwerke; keine Kollision; `ToppleUpdate`/`CrushDie` bleiben offen.
+  `BuildTime`. Verkauf über `SellCommand` (`SaleDurationTicks` 179, `SellPercentage`), Reparatur **kostenlos** (keine Vereinfachung, sondern die korrekte Portierung: weder
+  `DozerAIUpdate::privateRepair`/`DozerPrimaryStateMachine`'s Heilschritt noch `RepairDockUpdate::action` ziehen in der Referenz Geld ab, beide skalieren nur über Zeit/Prozentsatz;
+  siehe `docs/SIMULATION-CORE.md` §23 für den Belegtext), Sammelpunkte über `SetRallyPointCommand`.
+- **Energie:** `PowerPlantUpgrade`, `PowerPlantUpdate`, `OverchargeBehavior` (§6 der Kernbeschreibung, `SIMULATION-CORE.md` §17); seit Phase 10 ein echter `OverchargeCommand`
+  (`TOGGLE_OVERCHARGE`) und eine reduzierte Kraftwerkseroberung (`CaptureCommand`, `SIMULATION-CORE.md` §23).
+- **Grenzen (Stand Phase 9, siehe §23 für den Phase-10-Stand):** `QueueProduction` prüfte keine Voraussetzung; `MaxSimultaneousOfType` ungeprüft; kein Eroberungsverhalten für
+  Kraftwerke; keine Kollision; `ToppleUpdate`/`CrushDie` bleiben offen.
