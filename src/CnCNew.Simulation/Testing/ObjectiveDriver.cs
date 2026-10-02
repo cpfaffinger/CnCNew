@@ -212,8 +212,18 @@ internal sealed partial class ObjectiveDriver
         var opposite = _victory ? new[] { "DEFEAT" } : new[] { "VICTORY", "QUICKVICTORY" };
         foreach (var unit in _program.Units)
             if (Allowed(unit) && !_endings.Contains(unit) && unit.Script.Actions.Concat(unit.Script.FalseActions).Any(action => opposite.Contains(action.TypeName))) _tainted.Add(unit.Index);
-        bool Leads(string name)
-            => _program.FindScript(name) is { } script && _tainted.Contains(script.Index) || _program.FindGroup(name) is { } group && group.ScriptIndices.Any(index => _tainted.Contains(index));
+        // What each script switches on or calls (a group stands for all its scripts). A dispatcher that enables the win condition and the lose condition together
+        // ("Win_Loss_Enable - USA") leads to both endings and is not a defeat-only script; only a script all of whose targets lead to defeat is one.
+        var targetsOf = new Dictionary<int, HashSet<int>>();
+        foreach (var (name, producers) in _enablers.Concat(_callers))
+        {
+            var targets = _program.FindScript(name) is { } target ? [target.Index] : _program.FindGroup(name) is { } group ? group.ScriptIndices.ToArray() : [];
+            foreach (var producer in producers)
+            {
+                if (!targetsOf.TryGetValue(producer.Unit.Index, out var set)) targetsOf[producer.Unit.Index] = set = [];
+                set.UnionWith(targets);
+            }
+        }
         // A script that only sets timers, counters or flags which nothing but defeat-leading scripts read belongs to the defeat sequence as well ("Losing Condition 1" starts the
         // timer "Start Lose Condition", which only the lose sequence reads).
         var consumers = new Dictionary<string, List<int>>(StringComparer.Ordinal);
@@ -245,11 +255,11 @@ internal sealed partial class ObjectiveDriver
         for (var changed = true; changed;)
         {
             changed = false;
-            foreach (var (name, producers) in _enablers.Concat(_callers))
+            foreach (var (index, targets) in targetsOf)
             {
-                if (!Leads(name)) continue;
-                foreach (var producer in producers)
-                    if (!_endings.Contains(producer.Unit) && _tainted.Add(producer.Unit.Index)) changed = true;
+                if (_endings.Any(ending => ending.Index == index) || _tainted.Contains(index) || targets.Count == 0 || !targets.All(_tainted.Contains)) continue;
+                _tainted.Add(index);
+                changed = true;
             }
             foreach (var unit in _program.Units)
             {
@@ -505,6 +515,18 @@ internal sealed partial class ObjectiveDriver
     }
 
     // ------------------------------------------------------------------------------------------------ the diagnosis of a run that did not end
+
+    /// <summary>The live objects each side still has at the end of a run that did not end (template counts, most numerous first): what a kill-everything leaf could not remove.</summary>
+    public ImmutableArray<string> Survivors()
+    {
+        var lines = ImmutableArray.CreateBuilder<string>();
+        foreach (var player in _program.Players.Where(player => !player.Id.IsSystem && player.Name.Length > 0))
+        {
+            var alive = LiveOf(player.Id).GroupBy(entity => entity.Template.Name).OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).Take(6).ToArray();
+            if (alive.Length > 0) lines.Add($"alive of '{player.Name}': {string.Join(", ", alive.Select(group => $"{group.Key} x{group.Count()}"))}");
+        }
+        return lines.ToImmutable();
+    }
 
     /// <summary>For each ending script that stayed open: what the planner still saw missing, then the trace of the scripts it walked (state, subroutine/delay, conditions).</summary>
     public ImmutableArray<string> Unmet()

@@ -334,6 +334,11 @@ internal static class CampaignTests
         Console.WriteLine($"  Campaign.ini: {catalog.Campaigns.Length} campaigns, {catalog.Campaigns.Sum(campaign => campaign.Missions.Length)} missions");
         TestHarness.Assert(catalog.Campaigns.Length == 17, $"17 campaigns (got {catalog.Campaigns.Length})");
         TestHarness.Assert(catalog.Campaigns.Sum(campaign => campaign.Missions.Length) == 85, "85 missions");
+        using var personaStream = content.OpenRead("Data/INI/ChallengeMode.ini");
+        using var personaReader = new StreamReader(personaStream);
+        var withPersonas = catalog.WithPersonas(personaReader.ReadToEnd());
+        TestHarness.Assert(withPersonas.Find("CHALLENGE_0")!.PlayerFaction == "FactionAmericaAirForceGeneral" && withPersonas.Find("CHALLENGE_1")!.PlayerFaction == "FactionGLAToxinGeneral" && withPersonas.Find("CHALLENGE_2")!.PlayerFaction == "FactionChinaNukeGeneral", "each challenge campaign gets the faction of its general persona (ChallengeMode.ini), CHALLENGE_0 keeps its own");
+        TestHarness.Assert(withPersonas.Campaigns.Where(campaign => !campaign.IsChallenge).All(campaign => campaign.PlayerFaction.Length == 0), "story campaigns have no persona");
         TestHarness.Assert(catalog.UnknownKeys.IsEmpty, "no unknown keys: " + string.Join(", ", catalog.UnknownKeys));
         var problems = catalog.Validate(content.Exists);
         // The EA demo map is not part of the retail install; everything else must be consistent.

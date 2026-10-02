@@ -47,6 +47,6 @@ public static class MissionObjectiveDriver
             session.Step();
         }
         var wanted = victory ? MissionOutcome.Victory : MissionOutcome.Defeat;
-        return new ObjectiveDriveResult(engine.Outcome == wanted, engine.Outcome, engine.OutcomeScript, engine.OutcomeTick, driver.Interventions, driver.Log, engine.Outcome == wanted ? [] : driver.Unmet());
+        return new ObjectiveDriveResult(engine.Outcome == wanted, engine.Outcome, engine.OutcomeScript, engine.OutcomeTick, driver.Interventions, driver.Log, engine.Outcome == wanted ? [] : [..driver.Unmet(), ..driver.Survivors()]);
     }
 }

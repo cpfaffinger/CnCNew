@@ -56,6 +56,32 @@ public sealed class CampaignCatalog
     /// <summary>Virtual path of a map as the INI spells it (<c>Maps\USA01\USA01.map</c>).</summary>
     public static string NormalizeMapPath(string path) => path.Replace('\\', '/').Trim();
 
+    /// <summary>
+    /// The same catalog with the human faction of every Generals' Challenge campaign that does not name one (<c>CHALLENGE_1</c> …) filled in from <c>ChallengeMode.ini</c>:
+    /// <c>GeneralPersonaN</c> carries the <c>PlayerTemplate</c> of the general the player picks and the <c>Campaign</c> that general plays. Personas with <c>Campaign = unimplemented</c>
+    /// and campaigns that set <c>PlayerFaction</c> themselves are left alone.
+    /// </summary>
+    public CampaignCatalog WithPersonas(string challengeModeText)
+    {
+        var personas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string template = string.Empty;
+        foreach (var raw in challengeModeText.Split('\n'))
+        {
+            var line = raw;
+            var comment = line.IndexOf(';');
+            if (comment >= 0) line = line[..comment];
+            line = line.Trim();
+            var (key, value) = Split(line);
+            if (key.Equals("PlayerTemplate", StringComparison.OrdinalIgnoreCase)) template = value;
+            else if (key.Equals("Campaign", StringComparison.OrdinalIgnoreCase) && template.Length > 0)
+            {
+                personas.TryAdd(value, template);
+                template = string.Empty;
+            }
+        }
+        return new CampaignCatalog([..Campaigns.Select(campaign => campaign.IsChallenge && campaign.PlayerFaction.Length == 0 && personas.TryGetValue(campaign.Name, out var faction) ? campaign with { PlayerFaction = faction } : campaign)], UnknownKeys);
+    }
+
     public static CampaignCatalog Parse(Stream stream)
     {
         using var reader = new StreamReader(stream, leaveOpen: true);

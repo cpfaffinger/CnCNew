@@ -31,6 +31,7 @@ const string Usage = """
                                                 objective driver: satisfies the world-state conditions of the scripts (kill named objects/teams, send units into areas, ...) one by one and
                                                 reports whether the mission's OWN VICTORY/DEFEAT action fired (no generic elimination)
       template <content-dir> --name A[,B]          is the template instantiable, and which modules are missing
+      transports <content-dir>                     the reinforcement transports the campaign maps name, and whether each can be created
       objects <content-dir> --map TEXT [--name N]  the named objects a map places: template, team, position, whether the template can be created
       sides <content-dir> [--campaign NAME]       the script players (sides) of every campaign map: name, faction, human flag (to map a chosen general to a map's side)
       playthrough <content-dir> --campaign NAME [--ticks N]
@@ -49,6 +50,12 @@ try
     var content = ContentFileSystem.Open(args[1]);
     using var catalogStream = content.OpenRead("Data/INI/Campaign.ini");
     var campaigns = CampaignCatalog.Parse(catalogStream);
+    if (content.Exists("Data/INI/ChallengeMode.ini"))
+    {
+        using var personaStream = content.OpenRead("Data/INI/ChallengeMode.ini");
+        using var personaReader = new StreamReader(personaStream);
+        campaigns = campaigns.WithPersonas(personaReader.ReadToEnd());
+    }
     return args[0] switch
     {
         "list" => List(content, campaigns),
@@ -59,6 +66,7 @@ try
         "drive" => Drive(content, campaigns, args),
         "template" => TemplateInfo(content, args),
         "objects" => ObjectInfo(content, campaigns, args),
+        "transports" => TransportInfo(content, campaigns, args),
         "playthrough" => Playthrough(content, campaigns, args),
         _ => Fail(Usage),
     };
@@ -401,6 +409,32 @@ static int ObjectInfo(ContentFileSystem content, CampaignCatalog campaigns, stri
     {
         var known = catalog.TryGet(placed.Template, out var template);
         Console.WriteLine($"{placed.ScriptName,-32} {placed.Template,-34} team '{placed.TeamName}' at ({placed.X:F0},{placed.Y:F0}) {(known ? (template!.IsInstantiable ? "instantiable" : "NOT instantiable: " + string.Join(", ", template.MissingModules)) : "unknown template")}");
+    }
+    return 0;
+}
+
+static int TransportInfo(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
+{
+    var (context, catalog, _) = Compile(content);
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var usedBy = new SortedDictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+    foreach (var mission in campaigns.Campaigns.SelectMany(campaign => campaign.Sequence))
+    {
+        if (!seen.Add(mission.MapPath)) continue;
+        MapData map;
+        try { map = context.LoadMap(mission.MapPath); }
+        catch (FileNotFoundException) { continue; }
+        var program = ScriptProgram.Build(map);
+        foreach (var team in program.Teams.Where(team => team.Transport.Length > 0))
+        {
+            if (!usedBy.TryGetValue(team.Transport, out var maps)) usedBy[team.Transport] = maps = new SortedSet<string>(StringComparer.Ordinal);
+            maps.Add(Path.GetFileNameWithoutExtension(mission.MapPath));
+        }
+    }
+    foreach (var (transport, maps) in usedBy)
+    {
+        var known = catalog.TryGet(transport, out var template);
+        Console.WriteLine($"{transport,-40} {(known ? (template!.IsInstantiable ? "instantiable" : "NOT instantiable: " + string.Join(", ", template.MissingModules)) : "unknown template"),-60} {maps.Count} map(s): {string.Join(", ", maps)}");
     }
     return 0;
 }

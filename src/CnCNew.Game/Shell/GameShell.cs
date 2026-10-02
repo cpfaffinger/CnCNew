@@ -163,6 +163,13 @@ public sealed class GameShell
         {
             using var stream = data.Content.OpenRead(campaignPath);
             Campaigns = CampaignCatalog.Parse(stream);
+            const string personaPath = "Data/INI/ChallengeMode.ini";
+            if (data.Content.Exists(personaPath))
+            {
+                using var personas = data.Content.OpenRead(personaPath);
+                using var reader = new StreamReader(personas);
+                Campaigns = Campaigns.WithPersonas(reader.ReadToEnd());
+            }
         }
         Saves = new SaveGameStore(Environment.SaveDirectory);
         Phase = ShellPhase.Menus;
