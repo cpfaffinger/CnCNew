@@ -89,6 +89,9 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     private long _readyTick = long.MaxValue;
     private long _detectedUntilTick = -1;
 
+    /// <summary><c>OBJECT_STATUS_SCRIPT_UNSTEALTHED</c> (<c>NAMED_SET_STEALTH_ENABLED</c> false): a script keeps the object from stealthing; saved only while set.</summary>
+    public bool ScriptUnstealthed { get; set; }
+
     public override string ModuleName => "StealthUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
@@ -111,7 +114,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         if (Entity.HasStatus(DetectedBit) && world.Tick >= _detectedUntilTick) Entity.Status &= ~(1UL << DetectedBit);
         // StealthUpdate::update: without CAN_STEALTH (innate, or granted by StealthUpgrade) the module does nothing.
         if (!Entity.HasStatus(CanStealthBit)) return SimulationTiming.SleepNone;
-        if (!Satisfies(world, data.RequiredStatus, data.ForbiddenStatus) || AnyForbiddenCondition(world))
+        if (!Satisfies(world, data.RequiredStatus, data.ForbiddenStatus) || AnyForbiddenCondition(world) || ScriptUnstealthed)
         {
             _readyTick = long.MaxValue;
             Entity.Status &= ~(1UL << StealthedBit);
@@ -159,6 +162,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         writer.Int("nextWake", _nextWake);
         writer.Int("readyTick", _readyTick == long.MaxValue ? -1 : _readyTick);
         writer.Int("detectedUntilTick", _detectedUntilTick);
+        if (ScriptUnstealthed) writer.Bool("scriptUnstealthed", true);
     }
 
     public override void Load(IStateReader reader)
@@ -167,6 +171,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         var value = reader.Int("readyTick");
         _readyTick = value < 0 ? long.MaxValue : value;
         _detectedUntilTick = reader.Int("detectedUntilTick");
+        ScriptUnstealthed = reader.Has("scriptUnstealthed") && reader.Bool("scriptUnstealthed");
     }
 }
 

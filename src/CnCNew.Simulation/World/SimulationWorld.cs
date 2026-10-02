@@ -305,6 +305,14 @@ public sealed partial class SimulationWorld : IWorldServices
 
     public bool AreEnemies(PlayerId a, PlayerId b) => a != b && RelationshipOf(a, b) == Relationship.Enemies;
 
+    /// <summary>A per-object relationship override the mission script engine installs while a script has set team or player overrides (<c>Team::getRelationship</c>); <see langword="null"/> means none.</summary>
+    public Func<Entity, Entity, Relationship?>? RelationshipOverride { get; set; }
+
+    /// <summary>The relationship of one object to another: a script team override if there is one, else the player relationship of the owners.</summary>
+    public Relationship RelationshipBetween(Entity from, Entity to) => RelationshipOverride?.Invoke(from, to) ?? RelationshipOf(from.Owner, to.Owner);
+
+    public bool AreEnemies(Entity a, Entity b) => a != b && RelationshipBetween(a, b) == Relationship.Enemies;
+
     /// <summary><c>VictoryConditions::areAllies</c>: two distinct players that are allies of each other, in both directions.</summary>
     public bool AreAllies(PlayerId a, PlayerId b) => a != b && RelationshipOf(a, b) == Relationship.Allies && RelationshipOf(b, a) == Relationship.Allies;
 

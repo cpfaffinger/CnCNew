@@ -39,6 +39,10 @@ public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingl
     /// <summary><c>teamProductionPriority</c>: a team may only recruit from teams of a lower priority.</summary>
     public int ProductionPriority { get; init; }
 
+    /// <summary><c>teamProductionPrioritySuccessIncrease</c> / <c>teamProductionPriorityFailureDecrease</c>: what <c>TEAM_INCREASE_PRIORITY</c> / <c>TEAM_DECREASE_PRIORITY</c> add to or take from the priority.</summary>
+    public int PrioritySuccessIncrease { get; init; }
+    public int PriorityFailureDecrease { get; init; }
+
     /// <summary><c>teamIsAIRecruitable</c>: the team's units may be taken by <c>RECRUIT_TEAM</c> without <c>TEAM_AVAILABLE_FOR_RECRUITMENT</c>.</summary>
     public bool AiRecruitable { get; init; }
 
@@ -218,6 +222,8 @@ public sealed class ScriptProgram
                 OnUnitDestroyedScript = EventScript(team, "teamOnUnitDestroyedScript"),
                 DestroyedThreshold = team.TryGetReal("teamDestroyedThreshold", out var threshold) ? Fixed.FromDecimal(threshold) : Fixed.Zero,
                 ProductionPriority = team.TryGetInt("teamProductionPriority", out var priority) ? priority : 0,
+                PrioritySuccessIncrease = team.TryGetInt("teamProductionPrioritySuccessIncrease", out var increase) ? increase : 0,
+                PriorityFailureDecrease = team.TryGetInt("teamProductionPriorityFailureDecrease", out var decrease) ? decrease : 0,
                 AiRecruitable = team.GetBool("teamIsAIRecruitable"),
             });
         }

@@ -167,6 +167,10 @@ run.Test("Scripts: the objective driver ends a mission through its own victory a
 run.Test("Scripts: the goal-directed driver plans backwards from the ending and avoids the opposite ending", Tests.ScriptObjectiveDriverPlansBackwards);
 run.Test("Scripts: the driver moves counters the right way", Tests.ScriptObjectiveDriverMovesCountersTheRightWay);
 run.Test("Scripts: explaining a script leaves the engine untouched", Tests.ScriptExplainLeavesTheEngineUntouched);
+run.Test("Scripts: override relations between teams and players", Tests.ScriptOverrideRelations);
+run.Test("Scripts: team command buttons (nearest enemy, partial use)", Tests.ScriptTeamCommandButtons);
+run.Test("Scripts: hunting with a command button", Tests.ScriptHuntWithCommandButton);
+run.Test("Scripts: facing, unmanned objects and recorded-only actions", Tests.ScriptFacingUnmannedAndRecorded);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);

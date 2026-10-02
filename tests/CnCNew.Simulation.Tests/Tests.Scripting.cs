@@ -121,6 +121,31 @@ static partial class Tests
             StartingBoxes = 5
           End
         End
+        Object AlphaHunter
+          Side = Alpha
+          KindOf = SELECTABLE INFANTRY
+          VisionRange = 120.0
+          ShroudClearingRange = 120.0
+          BuildCost = 25
+          BuildTime = 1
+          Locomotor = SET_NORMAL SkirmishLoco
+          Body = ActiveBody Body01
+            MaxHealth = 80.0
+            InitialHealth = 80.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY SkirmishGun
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = CommandButtonHuntUpdate Hunt01
+            ScanRate = 500
+            ScanRange = 400.0
+          End
+        End
         CommandButton Cmd_AlphaPower
           Command = SPECIAL_POWER
           SpecialPower = AlphaInstantPower

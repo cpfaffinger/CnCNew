@@ -92,7 +92,7 @@ public sealed partial class ScriptEngine
         var limit = member.Template.VisionRange * member.Template.VisionRange;
         foreach (var entity in _world.Entities)
         {
-            if (entity.Owner.IsSystem || entity.EffectivelyDead || entity.DestroyRequested || !_world.AreEnemies(member.Owner, entity.Owner)) continue;
+            if (entity.Owner.IsSystem || entity.EffectivelyDead || entity.DestroyRequested || !_world.AreEnemies(member, entity)) continue;
             if (DistanceSquared(member, entity.X, entity.Y) <= limit) return true;
         }
         return false;

@@ -114,7 +114,7 @@ public sealed partial class ScriptEngine
                 _recordedActions++;
                 return true;
             default:
-                return false;
+                return TryExecuteTeamAbilityAction(action);
         }
     }
 
@@ -219,7 +219,7 @@ public sealed partial class ScriptEngine
             {
                 if (ReferenceEquals(current, into) || !current.Created) continue;
                 var currentPrototype = _program.FindTeam(current.Prototype);
-                if (currentPrototype is not null && currentPrototype.ProductionPriority >= prototype.ProductionPriority) continue;
+                if (currentPrototype is not null && ProductionPriorityOf(currentPrototype) >= ProductionPriorityOf(prototype)) continue;
                 // The default team of a player is "team" + the player's name (Player::getDefaultTeam); its units are always recruitable.
                 var recruitable = (currentPrototype?.AiRecruitable ?? false) || (currentPrototype is not null && currentPrototype.Name == "team" + currentPrototype.Owner);
                 if (current.RecruitableSet) recruitable = current.Recruitable;

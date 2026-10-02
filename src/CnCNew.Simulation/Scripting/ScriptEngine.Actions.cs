@@ -483,17 +483,18 @@ public sealed partial class ScriptEngine
     /// VM has no generic command dispatch (<c>docs/SCRIPT-ENGINE.md</c> §8). The actual use is the ordinary <see cref="UseSpecialPowerCommand"/> a
     /// player's UI would issue, so the usual readiness, science and target checks apply.
     /// </summary>
-    private void UseCommandButtonAbility(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target, Fixed x, Fixed y)
+    private bool UseCommandButtonAbility(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target, Fixed x, Fixed y)
     {
-        if (carrier.Owner.IsSystem) { Diagnose("ability use for a neutral object"); return; }
+        if (carrier.Owner.IsSystem) { Diagnose("ability use for a neutral object"); return false; }
         var owner = carrier.Owner;
         var source = carrier.Id;
         if (!_world.Templates.Commands.TryGetSpecialPowerAbility(ability, out var power))
         {
-            UseOtherCommandButton(carrier, ability, kind, target);
-            return;
+            return UseOtherCommandButton(carrier, ability, kind, target);
         }
-        if (!_issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, source, power, kind, target, x, y)).Accepted) Diagnose("ability use rejected");
+        if (_issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, source, power, kind, target, x, y)).Accepted) return true;
+        Diagnose("ability use rejected");
+        return false;
     }
 
     /// <summary>
@@ -502,12 +503,12 @@ public sealed partial class ScriptEngine
     /// (the button's <c>WeaponSlot</c> is not honoured: <see cref="FireWeaponCommand"/> uses the default weapon). Every other command type, a missing target and an
     /// unknown button are counted as diagnostics under their own message, never executed and never confused with each other.
     /// </summary>
-    private void UseOtherCommandButton(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target)
+    private bool UseOtherCommandButton(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target)
     {
         if (!_world.Templates.Commands.TryGetButton(ability, out var button))
         {
             Diagnose($"unknown command button '{ability}'");
-            return;
+            return false;
         }
         var owner = carrier.Owner;
         var source = carrier.Id;
@@ -515,21 +516,23 @@ public sealed partial class ScriptEngine
         {
             case "PLAYER_UPGRADE" or "OBJECT_UPGRADE":
             {
-                if (button.Upgrade.Length == 0) { Diagnose($"command button '{ability}' names no upgrade"); return; }
+                if (button.Upgrade.Length == 0) { Diagnose($"command button '{ability}' names no upgrade"); return false; }
                 var upgrade = button.Upgrade;
                 EntityId? upgradeTarget = button.Command.Equals("OBJECT_UPGRADE", StringComparison.OrdinalIgnoreCase) ? source : null;
-                if (!_issue(owner, (sequence, tick) => new PurchaseUpgradeCommand(owner, sequence, tick, upgrade, upgradeTarget)).Accepted) Diagnose($"upgrade button '{ability}' rejected");
-                return;
+                if (_issue(owner, (sequence, tick) => new PurchaseUpgradeCommand(owner, sequence, tick, upgrade, upgradeTarget)).Accepted) return true;
+                Diagnose($"upgrade button '{ability}' rejected");
+                return false;
             }
             case "FIRE_WEAPON":
             {
-                if (kind != SpecialPowerTargetKind.Object || !target.IsValid) { Diagnose($"fire-weapon button '{ability}' used without a target object"); return; }
-                if (!_issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target)).Accepted) Diagnose($"fire-weapon button '{ability}' rejected");
-                return;
+                if (kind != SpecialPowerTargetKind.Object || !target.IsValid) { Diagnose($"fire-weapon button '{ability}' used without a target object"); return false; }
+                if (_issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target)).Accepted) return true;
+                Diagnose($"fire-weapon button '{ability}' rejected");
+                return false;
             }
             default:
                 Diagnose($"command button '{ability}' has command {button.Command}, not executed");
-                return;
+                return false;
         }
     }
 
@@ -537,6 +540,7 @@ public sealed partial class ScriptEngine
 
     private void MoveTo(Entity entity, Fixed x, Fixed y, bool busy = true)
     {
+        _buttonHunts.Remove(entity.Id.Value);
         if (entity.Owner.IsSystem) { Diagnose("order for a neutral object"); return; }
         if (entity.Template.Locomotor is null) return;
         var owner = entity.Owner;
@@ -547,6 +551,7 @@ public sealed partial class ScriptEngine
 
     private void Stop(Entity entity)
     {
+        _buttonHunts.Remove(entity.Id.Value);
         _followers.Remove(entity.Id.Value);
         if (entity.Template.Locomotor is null || entity.Owner.IsSystem) return;
         MoveTo(entity, entity.X, entity.Y, busy: false);
@@ -554,6 +559,7 @@ public sealed partial class ScriptEngine
 
     private void StartFollowing(Entity entity, string mode)
     {
+        _buttonHunts.Remove(entity.Id.Value);
         if (entity.Template.Locomotor is null || entity.Owner.IsSystem) return;
         _followers[entity.Id.Value] = new Follower { Entity = entity.Id.Value, Path = mode, Index = 0 };
         _completedPath.Remove(entity.Id.Value);
@@ -634,7 +640,7 @@ public sealed partial class ScriptEngine
         var bestDistance = Fixed.MaxValue;
         foreach (var candidate in _world.Entities.OrderBy(value => value.Id.Value))
         {
-            if (candidate.Owner.IsSystem || !CountsAsObject(candidate) || !_world.AreEnemies(from.Owner, candidate.Owner)) continue;
+            if (candidate.Owner.IsSystem || !CountsAsObject(candidate) || !_world.AreEnemies(from, candidate)) continue;
             var priority = AttackPriority(from, candidate);
             var distance = DistanceSquared(from, candidate.X, candidate.Y);
             if (priority < bestPriority || (priority == bestPriority && distance >= bestDistance)) continue;

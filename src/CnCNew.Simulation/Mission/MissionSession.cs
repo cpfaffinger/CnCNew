@@ -276,7 +276,7 @@ public sealed class MissionSession
             var bestDistance = Fixed.MaxValue;
             foreach (var target in targets)
             {
-                if (!World.AreEnemies(entity.Owner, target.Owner)) continue;
+                if (!World.AreEnemies(entity, target)) continue;
                 var dx = entity.X - target.X;
                 var dy = entity.Y - target.Y;
                 var distance = dx * dx + dy * dy;

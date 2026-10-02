@@ -326,6 +326,7 @@ public sealed partial class ScriptEngine
         }
         _uiInteractions.Clear();
         UpdateFollowers();
+        UpdateButtonHunts();
         ProcessTeamEvents();
         ProcessSequences();
         ProcessTeamBuilds();

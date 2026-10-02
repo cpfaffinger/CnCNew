@@ -98,7 +98,7 @@ public sealed partial class SimulationWorld
                     if ((affects & WeaponInfo.NotSimilar) != 0 && victim.Template.Index == source.Template.Index
                         && RelationshipOf(source.Owner, victim.Owner) == Relationship.Allies) continue;
                     if ((affects & WeaponInfo.NotAirborne) != 0 && IsSignificantlyAboveTerrain(victim)) continue;
-                    var required = RelationshipOf(victim.Owner, source.Owner) switch
+                    var required = RelationshipBetween(victim, source) switch
                     {
                         Relationship.Allies => WeaponInfo.AffectsAllies,
                         Relationship.Enemies => WeaponInfo.AffectsEnemies,
