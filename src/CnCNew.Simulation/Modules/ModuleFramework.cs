@@ -178,7 +178,7 @@ public interface IWorldServices
     Fixed FireWeaponAt(Entity source, WeaponInfo weapon, Entity? victim, Fixed x, Fixed y, Fixed z);
 
     /// <summary><c>WeaponStore::handleProjectileDetonation</c> at the projectile's position, credited to <paramref name="launcher"/>.</summary>
-    void DetonateProjectile(Entity projectile, WeaponInfo weapon, EntityId launcher, uint conditions);
+    void DetonateProjectile(Entity projectile, WeaponInfo weapon, EntityId launcher, uint conditions, bool damage = true);
 
     /// <summary><c>Player::getTunnelSystem</c>: the player's tunnel network (every player has one; an unknown player gets an empty, unused one).</summary>
     TunnelTracker TunnelSystemOf(PlayerId player);

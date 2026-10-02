@@ -986,6 +986,104 @@ public static class ModuleCatalog
             new("InitialDelay", FieldType.DurationMs, Source: "HeightDieUpdate.cpp"),
         ]);
 
+        // JetSlowDeathBehaviorModuleData (JetSlowDeathBehavior.cpp buildFieldParse) extends SlowDeathBehaviorModuleData. RollRate/RollRateDelta/PitchRate turn the model
+        // and DeathLoopSound plays a sound: typed, no consumer.
+        Add("JetSlowDeathBehavior",
+        [
+            ..DieMux(),
+            new("SinkRate", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("ProbabilityModifier", FieldType.Integer, Source: "SlowDeathBehavior.cpp"),
+            new("ModifierBonusPerOverkillPercent", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionAltitude", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FX", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("OCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("Weapon", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForce", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForceVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitch", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitchVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FXOnGroundDeath", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "JetSlowDeathBehavior.cpp"),
+            new("OCLOnGroundDeath", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "JetSlowDeathBehavior.cpp"),
+            new("FXInitialDeath", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "JetSlowDeathBehavior.cpp"),
+            new("OCLInitialDeath", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "JetSlowDeathBehavior.cpp"),
+            new("DelaySecondaryFromInitialDeath", FieldType.DurationMs, Source: "JetSlowDeathBehavior.cpp"),
+            new("FXSecondary", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "JetSlowDeathBehavior.cpp"),
+            new("OCLSecondary", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "JetSlowDeathBehavior.cpp"),
+            new("FXHitGround", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "JetSlowDeathBehavior.cpp"),
+            new("OCLHitGround", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "JetSlowDeathBehavior.cpp"),
+            new("DelayFinalBlowUpFromHitGround", FieldType.DurationMs, Source: "JetSlowDeathBehavior.cpp"),
+            new("FXFinalBlowUp", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "JetSlowDeathBehavior.cpp"),
+            new("OCLFinalBlowUp", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "JetSlowDeathBehavior.cpp"),
+            new("DeathLoopSound", FieldType.Opaque, Source: "JetSlowDeathBehavior.cpp"),
+            Real("RollRate", "JetSlowDeathBehavior.cpp"),
+            new("RollRateDelta", FieldType.Percent, Source: "JetSlowDeathBehavior.cpp"),
+            Real("PitchRate", "JetSlowDeathBehavior.cpp"),
+            new("FallHowFast", FieldType.Percent, Source: "JetSlowDeathBehavior.cpp"),
+        ]);
+        // CountermeasuresBehaviorModuleData (CountermeasuresBehavior.h). FlareBoneBaseName places the flare on the model (presentation); MustReloadAtAirfield has no airfield to
+        // reload at here. VolleyArcAngle is in degrees (INI::parseAngleReal, converted by the module).
+        Add("CountermeasuresBehavior",
+        [
+            ..UpgradeMux(),
+            new("FlareTemplateName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "CountermeasuresBehavior.h"),
+            new("FlareBoneBaseName", FieldType.Text, Source: "CountermeasuresBehavior.h"),
+            new("VolleySize", FieldType.Integer, Min: 0, Source: "CountermeasuresBehavior.h"),
+            Real("VolleyArcAngle", "CountermeasuresBehavior.h parseAngleReal"),
+            Real("VolleyVelocityFactor", "CountermeasuresBehavior.h"),
+            new("DelayBetweenVolleys", FieldType.DurationMs, Source: "CountermeasuresBehavior.h"),
+            new("NumberOfVolleys", FieldType.Integer, Min: 0, Source: "CountermeasuresBehavior.h"),
+            new("ReloadTime", FieldType.DurationMs, Source: "CountermeasuresBehavior.h"),
+            new("EvasionRate", FieldType.Percent, Source: "CountermeasuresBehavior.h"),
+            new("MustReloadAtAirfield", FieldType.Bool, Source: "CountermeasuresBehavior.h"),
+            new("MissileDecoyDelay", FieldType.DurationMs, Source: "CountermeasuresBehavior.h"),
+            new("ReactionLaunchLatency", FieldType.DurationMs, Source: "CountermeasuresBehavior.h"),
+        ]);
+        // ParachuteContainModuleData (ParachuteContain.cpp) on OpenContainModuleData (OpenContain.cpp; see TransportContain for the Opaque choices).
+        Add("ParachuteContain",
+        [
+            ..DieMux(),
+            new("ContainMax", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("EnterSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("ExitSound", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DamagePercentToUnits", FieldType.Percent, Source: "OpenContain.cpp"),
+            new("BurnedDeathToUnits", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("ForbidInsideKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "OpenContain.cpp"),
+            new("PassengersAllowedToFire", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("PassengersInTurret", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("NumberOfExitPaths", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("DoorOpenTime", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("WeaponBonusPassedToPassengers", FieldType.Opaque, Source: "OpenContain.cpp"),
+            new("AllowAlliesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowEnemiesInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            new("AllowNeutralInside", FieldType.Bool, Source: "OpenContain.cpp"),
+            Real("PitchRateMax", "ParachuteContain.cpp parseAngularVelocityReal"),
+            Real("RollRateMax", "ParachuteContain.cpp parseAngularVelocityReal"),
+            Real("LowAltitudeDamping", "ParachuteContain.cpp"),
+            Real("ParachuteOpenDist", "ParachuteContain.cpp"),
+            Real("KillWhenLandingInWaterSlop", "ParachuteContain.cpp"),
+            new("FreeFallDamagePercent", FieldType.Percent, Source: "ParachuteContain.cpp"),
+            new("ParachuteOpenSound", FieldType.Opaque, Source: "ParachuteContain.cpp"),
+        ]);
+        // DeliverPayloadAIUpdateModuleData (DeliverPayloadAIUpdate.h): only the keys of scripted reinforcement delivery; the nugget data (dive, strafe, visible payload) is the OCL's.
+        Add("DeliverPayloadAIUpdate",
+        [
+            ..AiBase("DeliverPayloadAIUpdate.cpp / AIUpdate.cpp"),
+            new("DoorDelay", FieldType.DurationMs, Source: "DeliverPayloadAIUpdate.h"),
+            new("PutInContainer", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "DeliverPayloadAIUpdate.h"),
+            Real("DeliveryDistance", "DeliverPayloadAIUpdate.h"),
+            new("MaxAttempts", FieldType.Integer, Min: 0, Source: "DeliverPayloadAIUpdate.h"),
+            new("DropDelay", FieldType.DurationMs, Source: "DeliverPayloadAIUpdate.h"),
+            new("DropOffset", FieldType.Vector3, Source: "DeliverPayloadAIUpdate.h"),
+            new("DropVariance", FieldType.Vector3, Source: "DeliverPayloadAIUpdate.h"),
+            new("DeliveryDecal", FieldType.Opaque, Source: "DeliverPayloadAIUpdate.h"),
+            Real("DeliveryDecalRadius", "DeliverPayloadAIUpdate.h"),
+        ]);
+
         return builder.ToImmutable();
     }
 

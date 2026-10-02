@@ -425,6 +425,13 @@ static int TransportInfo(ContentFileSystem content, CampaignCatalog campaigns, s
         try { map = context.LoadMap(mission.MapPath); }
         catch (FileNotFoundException) { continue; }
         var program = ScriptProgram.Build(map);
+        foreach (var unit in program.Units)
+            foreach (var action in unit.Script.Actions.Concat(unit.Script.FalseActions).Where(action => action.TypeName == "CREATE_REINFORCEMENT_TEAM"))
+            {
+                var called = program.FindTeam(action.Parameters.Length > 0 ? action.Parameters[0].Text : string.Empty);
+                if (called is null) continue;
+                Console.WriteLine($"  call {Path.GetFileNameWithoutExtension(mission.MapPath)} '{unit.Name}': team '{called.Name}' transport '{called.Transport}' full={called.StartsFull} exit={called.TransportsExit} origin='{called.ReinforcementOrigin}' units={string.Join(",", called.Units.Select(u => $"{u.Type}x{u.MaxCount}"))}");
+            }
         foreach (var team in program.Teams.Where(team => team.Transport.Length > 0))
         {
             if (!usedBy.TryGetValue(team.Transport, out var maps)) usedBy[team.Transport] = maps = new SortedSet<string>(StringComparer.Ordinal);

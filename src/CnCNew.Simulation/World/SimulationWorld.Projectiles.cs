@@ -131,10 +131,10 @@ public sealed partial class SimulationWorld
     /// without a victim (radius damage only), with the launcher's weapon bonus conditions of the launch, credited to the launcher. The
     /// detonation effect and creation list (<c>ProjectileDetonationFX</c>/<c>OCL</c>) are requested at that position.
     /// </summary>
-    public void DetonateProjectile(Entity projectile, WeaponInfo weapon, EntityId launcher, uint conditions)
+    public void DetonateProjectile(Entity projectile, WeaponInfo weapon, EntityId launcher, uint conditions, bool damage = true)
     {
         MarkDirty(projectile);
-        DealDamageCore(projectile.Id, projectile, launcher, launcher, conditions, weapon, null, projectile.X, projectile.Y, projectile.Z);
+        if (damage) DealDamageCore(projectile.Id, projectile, launcher, launcher, conditions, weapon, null, projectile.X, projectile.Y, projectile.Z);
         if (weapon.DetonationFx.Length > 0)
             EmitAt(SimEventKind.FxRequested, projectile.Id, launcher, weapon.DetonationFx, 0, projectile.X, projectile.Y, projectile.Z);
         if (weapon.DetonationOcl.Length > 0) CreateFromList(projectile, weapon.DetonationOcl, launcher, false);

@@ -276,6 +276,7 @@ static partial class Tests
           Command = SELL
         End
         """,
+        ["Data/INI/Object/FlightFixture.ini"] = FlightFixtureIni,
     };
 
     /// <summary>

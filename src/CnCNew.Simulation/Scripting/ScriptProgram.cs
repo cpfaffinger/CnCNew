@@ -48,6 +48,12 @@ public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingl
 
     /// <summary><c>teamReinforcementOrigin</c>: the waypoint a reinforcement starts from; empty: it starts at its destination.</summary>
     public string ReinforcementOrigin { get; init; } = string.Empty;
+
+    /// <summary><c>teamStartsFull</c>: the team's units are loaded into the transports of the team before it moves (<c>doCreateReinforcements</c>).</summary>
+    public bool StartsFull { get; init; }
+
+    /// <summary><c>teamTransportsExit</c>: the transport leaves the map after it unloaded instead of staying (<c>aiMoveToAndEvacuateAndExit</c>).</summary>
+    public bool TransportsExit { get; init; }
 }
 
 /// <summary>One <c>teamUnitTypeN</c> line of a team: the object type and how many of it the team has at most.</summary>
@@ -244,6 +250,8 @@ public sealed class ScriptProgram
                 Units = teamUnits.ToImmutable(),
                 Transport = team.GetText("teamTransport") ?? string.Empty,
                 ReinforcementOrigin = team.GetText("teamReinforcementOrigin") ?? string.Empty,
+                StartsFull = team.GetBool("teamStartsFull"),
+                TransportsExit = team.GetBool("teamTransportsExit"),
                 Home = team.GetText("teamHome") ?? string.Empty,
                 OnCreateScript = EventScript(team, "teamOnCreateScript"),
                 OnIdleScript = EventScript(team, "teamOnIdleScript"),

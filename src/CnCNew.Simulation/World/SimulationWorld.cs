@@ -1412,7 +1412,14 @@ public sealed partial class SimulationWorld : IWorldServices
         if (setup.Launch is { } launch)
         {
             // fireWeaponTemplate: an object without a ProjectileUpdateInterface is simply put at the destination ("ok, for things like Firestorm").
-            if (Array.Find(entity.ModuleArray, module => module is IProjectileModule) is IProjectileModule projectile) projectile.Launch(this, launch);
+            if (Array.Find(entity.ModuleArray, module => module is IProjectileModule) is IProjectileModule projectile)
+            {
+                projectile.Launch(this, launch);
+                // Weapon::fireWeaponTemplate: a small missile fired at an object with active countermeasures lets it decide now whether a flare will take the missile.
+                if (launch.Victim.IsValid && template.IsKindOf("SMALL_MISSILE") && FindEntity(launch.Victim) is { } victim
+                    && Array.Find(victim.ModuleArray, module => module is Modules.BuiltIn.ICountermeasuresModule { IsActive: true }) is Modules.BuiltIn.ICountermeasuresModule countermeasures)
+                    countermeasures.ReportMissile(this, entity);
+            }
             else
             {
                 entity.X = launch.X;

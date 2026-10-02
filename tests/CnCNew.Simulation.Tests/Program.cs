@@ -173,6 +173,10 @@ run.Test("Scripts: hunting with a command button", Tests.ScriptHuntWithCommandBu
 run.Test("Scripts: facing, unmanned objects and recorded-only actions", Tests.ScriptFacingUnmannedAndRecorded);
 run.Test("Mission: a chosen persona adds or adapts the human side and survives save/restore", Tests.MissionHumanFactionAddsAndAdaptsTheHumanSide);
 run.Test("Modules: damage reaction weapon, horde, fire-weapon and launch powers, tech building and the shells", Tests.Phase12ModulesCreateAndBehave);
+run.Test("Flight: scripted paradrop (plane, parachutes, landing, deletion, continuation)", Tests.FlightParadropReinforcement);
+run.Test("Flight: a ground transport sets its team down, returns and is deleted", Tests.FlightTransportReturnsAndLeaves);
+run.Test("Flight: a shot-down payload plane takes its riders with it", Tests.FlightShotDownPlaneDestroysItsPayload);
+run.Test("Flight: countermeasures divert missiles to flares", Tests.FlightCountermeasuresDivertMissiles);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);

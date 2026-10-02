@@ -3028,15 +3028,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "Locomotor/SpeedLimitZ",
-      "count": 7,
-      "owners": [
-        "Locomotor"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Locomotor/ThrustMaxWobble",
       "count": 1,
       "owners": [
@@ -3466,6 +3457,15 @@
         "Object"
       ],
       "plannedTarget": "phase-5-object-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParachuteContain/ParachuteOpenSound",
+      "count": 7,
+      "owners": [
+        "ParachuteContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
     },
     {
       "category": "deferred-field",
@@ -5420,7 +5420,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3625,
+      "count": 3490,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6079,30 +6079,12 @@
     },
     {
       "category": "module",
-      "name": "CountermeasuresBehavior",
-      "count": 40,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "DamDie",
       "count": 1,
       "owners": [
         "Object"
       ],
       "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "DeliverPayloadAIUpdate",
-      "count": 29,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
     },
     {
       "category": "module",
@@ -6250,15 +6232,6 @@
     },
     {
       "category": "module",
-      "name": "JetSlowDeathBehavior",
-      "count": 59,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "LaserUpdate",
       "count": 24,
       "owners": [
@@ -6351,15 +6324,6 @@
       "category": "module",
       "name": "OverlordContain",
       "count": 10,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "ParachuteContain",
-      "count": 7,
       "owners": [
         "Object"
       ],

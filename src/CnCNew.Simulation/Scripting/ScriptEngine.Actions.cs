@@ -438,41 +438,6 @@ public sealed partial class ScriptEngine
         return set;
     }
 
-    /// <summary>
-    /// <c>ScriptActions::doCreateReinforcements</c>, without the transport: the team's units (<c>teamUnitMaxCount</c> of each type) appear at the team's
-    /// reinforcement origin (or at the destination) in a row and, when they came from an origin, walk to the destination. A team with a transport
-    /// (<c>teamTransport</c>, <c>teamStartsFull</c>) would arrive inside it; the transport and its loading are not simulated, which is counted as
-    /// <c>reinforcement transport not simulated</c> (<c>MAP-SCRIPTS.md</c> §8).
-    /// </summary>
-    private void CreateReinforcements(string teamName, string destinationName)
-    {
-        if (WaypointOrDiagnose(destinationName) is not { } destination) return;
-        var prototype = _program.FindTeam(teamName);
-        if (prototype is null) { Diagnose($"unknown team '{teamName}'"); return; }
-        var origin = prototype.ReinforcementOrigin.Length > 0 ? _program.FindWaypoint(prototype.ReinforcementOrigin) : null;
-        var start = origin ?? destination;
-        var team = CreateTeam(teamName);
-        if (team is null) return;
-        if (prototype.Transport.Length > 0) Diagnose($"reinforcement transport not simulated '{prototype.Transport}'");
-        var row = Fixed.Zero;
-        foreach (var unit in prototype.Units)
-        {
-            if (!_world.Templates.TryGet(unit.Type, out var template)) { Diagnose($"unknown object type '{unit.Type}'"); continue; }
-            if (!template.IsInstantiable) { Diagnose($"not instantiable '{unit.Type}'"); continue; }
-            for (var index = 0; index < unit.MaxCount; index++)
-            {
-                // "pos.x = origin.x + 2.25 * j * majorRadius": a row along x, one row per unit type along y.
-                var x = start.X + Fixed.FromInt(9) * index / Fixed.FromInt(4) * template.GeometryMajorRadius;
-                var id = _world.RequestSpawn(template.Index, team.Owner, x, start.Y + row, start.Z, Fixed.Zero);
-                team.Members.Add(id.Value);
-                if (team.AttackPriority.Length > 0) _prioritySetOf[id.Value] = team.AttackPriority;
-                if (origin is not null && (origin.X != destination.X || origin.Y != destination.Y)) _followers[id.Value] = new Follower { Entity = id.Value, Path = PositionMode + destinationName, Index = 0 };
-            }
-            row += template.GeometryMajorRadius * 2;
-        }
-        team.Created = true;
-        _world.MaterializePendingSpawns();
-    }
 
     /// <summary>
     /// <c>Object::doCommandButton</c>/<c>doCommandButtonAtObject</c> for a script-named ability: the reference looks the button up in the carrier's

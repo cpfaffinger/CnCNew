@@ -62,6 +62,7 @@ public static class LocomotorSchema
             Real("AccelerationDamaged"),
             Real("Braking"),
             Real("PreferredHeight"),
+            Real("SpeedLimitZ"),
             Real("CloseEnoughDist"),
             new FieldSchema("Surfaces", FieldType.Flags, Table: NameTablesPhase5.LocomotorSurface, Source: Table),
             new FieldSchema("StickToGround", FieldType.Bool, Source: Table),

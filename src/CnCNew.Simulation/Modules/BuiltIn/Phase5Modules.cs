@@ -515,6 +515,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private EntityId _taskTarget;
     private bool _approaching;
     private bool _evacuatePending;
+    private bool _exitAfterEvacuate;
+    private bool _returning;
+    private Fixed _exitX;
+    private Fixed _exitY;
     private static readonly Fixed MisalignedAngle = Fixed.FromRaw(34315); // π/6
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
 
@@ -524,7 +528,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private enum BuilderTask : byte { None, Construct, Repair }
 
     /// <summary><c>AIUpdateInterface::isIdle</c>: no move order, not docking, no builder task and no evacuation waiting (<c>AI_EVACUATE</c>).</summary>
-    public bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending;
+    public bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning;
 
     /// <summary>Dozers and workers can raise structures (<c>DozerAIInterface</c>); every other AI cannot.</summary>
     public virtual bool CanBuild => false;
@@ -548,12 +552,14 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
     /// <summary><c>aiMoveToPosition</c>: replaces the current state with a move.</summary>
-    public void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
+    public virtual void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
     {
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
         _evacuatePending = false;
+        _exitAfterEvacuate = false;
+        _returning = false;
         _lastCommandFromPlayer = fromPlayer;
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
@@ -613,16 +619,23 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <c>aiEvacuate</c> / <c>aiMoveToAndEvacuate</c> (<c>AI_EVACUATE</c>, <c>AI_MOVE_AND_EVACUATE</c>): unload every passenger once the object stands
     /// still (after moving to (x, y) when <paramref name="move"/> is set) and <see cref="ReadyToUnload"/> agrees. Replaces the current state.
     /// </summary>
-    public void OrderEvacuate(IWorldServices world, bool move, Fixed x, Fixed y)
+    public void OrderEvacuate(IWorldServices world, bool move, Fixed x, Fixed y, bool thenExit = false)
     {
+        // aiMoveToAndEvacuateAndExit: the place the order was given is where the transport returns to (AIMoveAndEvacuateState::m_origin) and is deleted.
+        var originX = Entity.X;
+        var originY = Entity.Y;
         if (move && Entity.Template.Locomotor is not null) OrderMove(world, x, y, true);
         else
         {
             CancelDock(world);
             ClearTask();
             _enterTarget = EntityId.Invalid;
+            _returning = false;
             StopInternalMove();
         }
+        _exitAfterEvacuate = thenExit && Entity.Template.Locomotor is not null;
+        _exitX = originX;
+        _exitY = originY;
         _evacuatePending = true;
         world.WakeAt(Entity, this, world.Tick);
         world.MarkDirty(Entity);
@@ -757,8 +770,20 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         {
             _evacuatePending = false;
             world.EvacuateContainer(Entity);
+            if (_exitAfterEvacuate)
+            {
+                // AIMoveAndDeleteState: back to where the order was given, then deleted.
+                _exitAfterEvacuate = false;
+                _returning = StartInternalMove(_exitX, _exitY);
+                if (!_returning) world.RequestDestroy(Entity.Id);
+            }
         }
-        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None || _evacuatePending ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        else if (_returning && !Entity.HasMoveTarget)
+        {
+            _returning = false;
+            world.RequestDestroy(Entity.Id);
+        }
+        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None || _evacuatePending || _returning ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     private void UpdateEnter(IWorldServices world)
@@ -927,6 +952,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         writer.UInt("taskTarget", _taskTarget.Value);
         writer.Bool("approaching", _approaching);
         if (_evacuatePending) writer.Bool("evacuate", true);
+        if (_exitAfterEvacuate || _returning)
+        {
+            writer.Bool("exitAfterEvacuate", _exitAfterEvacuate);
+            writer.Bool("returning", _returning);
+            writer.Fixed("exitX", _exitX);
+            writer.Fixed("exitY", _exitY);
+        }
         if (_pathValid)
         {
             writer.Bool("pathValid", true);
@@ -957,6 +989,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _taskTarget = new EntityId(checked((uint)reader.UInt("taskTarget")));
         _approaching = reader.Bool("approaching");
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
+        _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");
+        _returning = reader.Has("returning") && reader.Bool("returning");
+        _exitX = reader.Has("exitX") ? reader.Fixed("exitX") : Fixed.Zero;
+        _exitY = reader.Has("exitY") ? reader.Fixed("exitY") : Fixed.Zero;
         InvalidatePath();
         if (reader.Has("pathValid"))
         {

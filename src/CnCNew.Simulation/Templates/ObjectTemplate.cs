@@ -39,6 +39,9 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
 {
     /// <summary><c>Locomotor::m_preferredHeight</c>: the flight height above the terrain of an aircraft (0 for ground locomotors).</summary>
     public Fixed PreferredHeight { get; init; }
+
+    /// <summary><c>Locomotor::m_speedLimitZ</c>: the fastest an airborne object descends under its own control, per tick (0 when the locomotor sets none).</summary>
+    public Fixed SpeedLimitZ { get; init; }
 }
 
 /// <summary>
@@ -551,6 +554,7 @@ public sealed class TemplateCatalog
                 Fixed.FromDecimal(closeEnough), surfaces)
             {
                 PreferredHeight = Fixed.FromDecimal(Get("PreferredHeight")),
+                SpeedLimitZ = SimulationTiming.PerSecondToPerTick(Get("SpeedLimitZ")),
             };
         }
         return builder.ToImmutable();

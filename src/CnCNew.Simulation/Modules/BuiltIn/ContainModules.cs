@@ -330,6 +330,30 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         _usedSlots += candidate.Template.TransportSlotCount;
     }
 
+    /// <summary>
+    /// <c>DestroyRidersWhoAreNotFreeToExit</c> (<c>TransportContain::killRidersWhoAreNotFreeToExit</c>), as far as this simulation has a gate: a payload plane
+    /// (<see cref="DeliverPayloadAIUpdate"/>) whose doors are shut when it dies takes its riders (and what they carry) with it — they are destroyed, not killed.
+    /// </summary>
+    public override void OnDie(IWorldServices world, in DamageInfo info)
+    {
+        if (data.Base.DieMux.IsApplicable(Entity, info) && Entity.ModuleArray.OfType<DeliverPayloadAIUpdate>().FirstOrDefault() is { FreeToExit: false })
+            foreach (var riderId in Riders.ToArray())
+                if (world.FindEntity(riderId) is { } rider)
+                {
+                    Remove(world, rider, false);
+                    DestroyWithContents(world, rider);
+                }
+        base.OnDie(world, info);
+    }
+
+    private static void DestroyWithContents(IWorldServices world, Entity entity)
+    {
+        if (entity.Container is { } inside)
+            foreach (var id in inside.Contained.ToArray())
+                if (world.FindEntity(id) is { } passenger) DestroyWithContents(world, passenger);
+        world.RequestDestroy(entity.Id);
+    }
+
     public override void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
     {
         base.Remove(world, candidate, positionAtContainer);

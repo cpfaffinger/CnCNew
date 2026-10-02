@@ -359,8 +359,8 @@ public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks,
 /// <item><description>After detonating it waits <c>KillSelfDelay</c> ticks, then dies (<c>DetonateCallsKill</c>) or is destroyed.</description></item>
 /// </list>
 /// Collision stand-ins (no collision system): an armed missile that reaches its goal point in any attack state, or the ground, detonates there;
-/// an unarmed one reaching the ground is destroyed; below height 0 it is destroyed (<c>newPos.z &lt; 0</c>). Not modeled: countermeasures and
-/// decoy flares, jamming, preferred-height cruise flight, bridge layers. All vectors are <see cref="Fixed"/>; directions are normalised with the
+/// an unarmed one reaching the ground is destroyed; below height 0 it is destroyed (<c>newPos.z &lt; 0</c>). A missile marked by a plane's <c>CountermeasuresBehavior</c> gives up its victim for the closest flare after the decoy delay and then does no damage. Not modeled:
+/// jamming, preferred-height cruise flight, bridge layers. All vectors are <see cref="Fixed"/>; directions are normalised with the
 /// fixed-point square root.
 /// </summary>
 public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule, IProjectileModule
@@ -388,6 +388,8 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     private Fixed _maxSpeed;
     private Fixed _acceleration;
     private Fixed _verticalSpeed;
+    private long _decoyTick;
+    private bool _noDamage;
 
     public override string ModuleName => "MissileAIUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -463,6 +465,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             _noTurnDistanceLeft -= Distance(position, _previous);
             _previous = position;
         }
+        if (_decoyTick != 0 && _decoyTick <= world.Tick) DivertToCountermeasure(world);
         if (Entity.Z < Fixed.Zero)
         {
             world.RequestDestroy(Entity.Id);
@@ -515,6 +518,28 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     }
 
     private long Finish(IWorldServices world) => _state == MissileState.Dead ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
+
+    /// <summary><c>MissileAIUpdate::setFramesTillCountermeasureDiversionOccurs</c>: <paramref name="frames"/> ticks from now the missile gives up its victim for a decoy flare.</summary>
+    public void SetFramesTillCountermeasureDiversionOccurs(IWorldServices world, long frames) => _decoyTick = world.Tick + Math.Max(frames, 1);
+
+    /// <summary>
+    /// The diversion of <c>MissileAIUpdate::update</c>: the missile no longer does damage and, when its victim has a flare out, flies at the closest flare of the newest volley
+    /// (<c>calculateCountermeasureToDivertTo</c>) instead, as if it had been shot at it.
+    /// </summary>
+    private void DivertToCountermeasure(IWorldServices world)
+    {
+        _decoyTick = 0;
+        _noDamage = true;
+        if (world.FindEntity(_victim) is not { } victim) return;
+        var counter = victim.ModuleArray.OfType<ICountermeasuresModule>().FirstOrDefault();
+        if (counter is null || !counter.CalculateCountermeasureToDivertTo(world, victim).IsValid) return;
+        var flare = world.FindEntity(counter.CalculateCountermeasureToDivertTo(world, victim));
+        if (flare is null) return;
+        _victim = flare.Id;
+        _tracking = true;
+        _goal = new Point3(flare.X, flare.Y, flare.Z);
+        _originalTarget = _goal;
+    }
 
     /// <summary><c>doIgnitionState</c>: arm, request the ignition effect, start the fuel clock, attack without turning.</summary>
     private void Ignite(IWorldServices world)
@@ -632,10 +657,10 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         if (_weapon >= 0)
         {
             var weapon = world.Weapons[_weapon];
-            world.DetonateProjectile(Entity, weapon, _launcher, _conditions);
+            world.DetonateProjectile(Entity, weapon, _launcher, _conditions, !_noDamage);
             if (weapon.DieOnDetonate) ProjectileModules.KillDetonated(world, Entity);
         }
-        else ProjectileModules.KillDetonated(world, Entity);
+        else if (!_noDamage) ProjectileModules.KillDetonated(world, Entity);
         SwitchTo(world, MissileState.KillSelf);
     }
 
@@ -676,6 +701,8 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         writer.Fixed("maxSpeed", _maxSpeed);
         writer.Fixed("acceleration", _acceleration);
         writer.Fixed("verticalSpeed", _verticalSpeed);
+        if (_decoyTick != 0) writer.Int("decoyTick", _decoyTick);
+        if (_noDamage) writer.Bool("noDamage", true);
     }
 
     public override void Load(IStateReader reader)
@@ -702,6 +729,8 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         _maxSpeed = reader.Fixed("maxSpeed");
         _acceleration = reader.Fixed("acceleration");
         _verticalSpeed = reader.Fixed("verticalSpeed");
+        _decoyTick = reader.Has("decoyTick") ? reader.Int("decoyTick") : 0;
+        _noDamage = reader.Has("noDamage") && reader.Bool("noDamage");
     }
 }
 
