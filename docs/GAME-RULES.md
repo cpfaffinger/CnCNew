@@ -778,6 +778,11 @@ Code 30 `CannotDock`, §6e); das Replay-Format v7 (`docs/SIMULATION-CORE.md` §8
 
 ## 9. Modulabdeckung
 
+Stand Phase 12 (2. Oktober 2026, frisch gemessen mit `SimTool audit-coverage`/`audit-modules`): **1.680 von 2.115 Objekten instanziierbar (79,4 %)**, 98 von 205 Modultypen implementiert, Modulverwendungen abgedeckt 15.903 von
+19.553 (81,3 %); neu sind sieben Missionsobjekt-Module (`docs/SIMULATION-CORE.md` §27). Die größten verbleibenden Blocker nach Objekten (davon nur durch dieses Modul blockiert): `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0,
+`JetAIUpdate` 34/5, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `SlavedUpdate` 20/7, `PropagandaTowerBehavior` 14/13, `UpgradeDie` 13/0, `ParticleUplinkCannonUpdate` 8/8 (blockiert das
+Siegziel von `MD_GLA03`).
+
 Stand Phase 8, Paket E1 (frisch gemessen): 1.470 von 2.115 Objekten instanziierbar (69,5 %), 85 von 205 Modultypen implementiert, 15.543 von 19.553
 Modulverwendungen (79,5 %); Einzelheiten `docs/SIMULATION-CORE.md` §11 und §21. Verlauf (Stand nach Phase 6): 1.393 von 2.115 Objekten sind instanziierbar (65,9 %, gegenüber 26/2.113 in
 Phase 4 und 1.384 am Ende von Phase 5); 77 von 205 Modultypen sind implementiert (183

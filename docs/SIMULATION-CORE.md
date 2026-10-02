@@ -1075,3 +1075,28 @@ mit benutzten Schnittstellen wäre für eine ältere Version nicht lesbar – be
   `SupplyWarehouseDockUpdate::setCashValue`), `SpecialPowerInfo.RadiusCursorRadius` (aus `SpecialPower.ini`, für `SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST`),
   `CommandCatalog.TryGetButton` (Befehlsart, `Upgrade`, `WeaponSlot` jedes Knopfes; Grundlage der neuen Pfade für Upgrade-/`FIRE_WEAPON`-Knöpfe),
   `ScriptEngine.IsNamedSelected` (Lesezugriff auf die vom Client gemeldete Auswahl).
+
+## 27. Phase 12: Missionsobjekt-Module, Überschreibungs-Beziehungen, Besitzerwechsel
+
+Die Missionen der Kampagne benennen Objekte, die erst mit sieben weiteren Modulen instanziierbar sind. Sie stehen in `Modules/BuiltIn/Phase12Modules.cs` (Schemas in `ModuleCatalog`, Bindungen in
+`BuiltInModules`, Test `Phase12ModulesCreateAndBehave`), je Modul mit Quellverweis; was ein Modul der Präsentation überlässt, steht an ihm.
+
+| Modul | Quelle | Verhalten |
+| --- | --- | --- |
+| `FireWeaponWhenDamagedBehavior` | `FireWeaponWhenDamagedBehavior.cpp` | nach Aktivierung (`StartsActive` oder passendes Upgrade) feuert ein schädigender Treffer eines angenommenen `DamageTypes`-Typs mit mindestens `DamageAmount` die Reaktionswaffe des aktuellen Körperzustands auf das Objekt selbst (`forceFireWeapon(obj, position)`); die Dauerwaffe des Zustands feuert, sooft sie bereit ist; Nachladen = `DelayBetweenShots`, Zustand im Objekt |
+| `HordeUpdate` | `HordeUpdate.cpp`, `AIUpdateInterface::evaluateMoraleBonus` | zählt Objekte mit `HordeUpdate` im `Radius` (Verbündete, `KindOf`, ggf. exakte Vorlage, `RubOffRadius`); ab `Count` gilt die Waffenbonus-Bedingung `HORDE` (Bit aus `NameTablesPhase5.WeaponBonusCondition`) |
+| `FireWeaponPower` | `FireWeaponPower.cpp` | die Spezialkraft lädt nach und lässt das Objekt `MaxShotsToFire` Schuss seiner Standardwaffe auf Objekt/Ort/sich selbst abgeben, je Schuss `DelayBetweenShots` (ohne Anfahrt/Drehzeit der KI) |
+| `BaikonurLaunchPower` | `BaikonurLaunchPower.cpp` | am Zielort entsteht das `DetonationObject` des Kraft-Besitzers (Tod und Waffe des Objekts erledigen den Rest); ohne Ort nur das gemeinsame Nachladen (das Original öffnet nur die Tür); eine nicht erzeugbare Vorlage wird als übersprungene Erzeugung gemeldet |
+| `TechBuildingBehavior` | `TechBuildingBehavior.cpp` | ein zerstörtes Technikgebäude wird neutral; `PulseFX` und das Erobert-Modell sind Präsentation (nur die Rate bleibt) |
+| `RadiusDecalUpdate` | `RadiusDecalUpdate.cpp` | reine Präsentation (Zielkreis einer Superwaffe), ohne Zustand |
+| `FlightDeckBehavior` | `FlightDeckBehavior.cpp` | ehrliche **Hülle**: Felder gebunden, Flugdeck-Betrieb (Start/Landung/Reparatur) nicht simuliert, das Objekt kann existieren (der Träger von `MD_GLA03`, dessen Zerstörung das Missionsziel ist) |
+
+Zustand dieser Module wird nur geschrieben, wenn er vom Anfangswert abweicht (keine Versionssprünge; `WorldSnapshot` 7, Replay 7, `CommandTypes.Version` 10 bleiben). Neu im Katalog: 98 von 205
+Modultypen, 1.680 von 2.115 Retail-Objekten instanziierbar (79,4 %), 15.903 von 19.553 Modulverwendungen abgedeckt (81,3 %), Kompatibilitätsbasislinie 765 Einträge (neu gemessen, `baselines/compatibility.json`).
+
+**Überschreibungs-Beziehungen** (`SimulationWorld.RelationshipOverride`): ein Haken `Func<Entity, Entity, Relationship?>`, den `RelationshipBetween` vor der Spielerbeziehung befragt; `AreEnemies(Entity, Entity)`,
+die Zielwahl und der Kampf (`SimulationWorld.Combat`) und `MissionSession.DriveCombat` benutzen die Entitätsvariante. Der Haken gehört dem Skript-Motor (`docs/SCRIPT-ENGINE.md` §5, §8 Punkt 19) und ist `null`,
+solange keine Überschreibung gesetzt ist – Läufe ohne sie bleiben byteidentisch (Retail-Referenzmatch und Stresstest unverändert).
+
+**`IWorldServices.TransferOwnership`:** die Modulschnittstelle bietet jetzt den Besitzerwechsel an (für `TechBuildingBehavior`; `SimulationWorld.TransferOwnership` aus §22 verschiebt auch die Energieproduktion).
+**`StealthUpdate.ScriptUnstealthed`:** Schalter für `NAMED/TEAM_SET_STEALTH_ENABLED`, nur gespeichert, wenn gesetzt.
