@@ -13,6 +13,33 @@
     },
     {
       "category": "deferred-field",
+      "name": "BattleBusSlowDeathBehavior/FX",
+      "count": 6,
+      "owners": [
+        "BattleBusSlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BattleBusSlowDeathBehavior/ModifierBonusPerOverkillPercent",
+      "count": 6,
+      "owners": [
+        "BattleBusSlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BattleBusSlowDeathBehavior/OCL",
+      "count": 5,
+      "owners": [
+        "BattleBusSlowDeathBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "ChinookAIUpdate/RopeColor",
       "count": 6,
       "owners": [
@@ -4189,6 +4216,24 @@
     },
     {
       "category": "deferred-field",
+      "name": "SubObjectsUpgrade/HideSubObjects",
+      "count": 12,
+      "owners": [
+        "SubObjectsUpgrade"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SubObjectsUpgrade/ShowSubObjects",
+      "count": 17,
+      "owners": [
+        "SubObjectsUpgrade"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "SupplyTruckAIUpdate/SuppliesDepletedVoice",
       "count": 6,
       "owners": [
@@ -5510,7 +5555,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3482,
+      "count": 3442,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6007,15 +6052,6 @@
     },
     {
       "category": "module",
-      "name": "AnimationSteeringUpdate",
-      "count": 11,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "AssaultTransportAIUpdate",
       "count": 5,
       "owners": [
@@ -6027,15 +6063,6 @@
       "category": "module",
       "name": "AssistedTargetingUpdate",
       "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "BattleBusSlowDeathBehavior",
-      "count": 6,
       "owners": [
         "Object"
       ],
@@ -6655,15 +6682,6 @@
     },
     {
       "category": "module",
-      "name": "SubObjectsUpgrade",
-      "count": 17,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "SupplyWarehouseCripplingBehavior",
       "count": 1,
       "owners": [
@@ -6688,15 +6706,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "UndeadBody",
-      "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",

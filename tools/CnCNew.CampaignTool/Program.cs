@@ -27,6 +27,7 @@ const string Usage = """
                                                 static: can the mission's own VICTORY/DEFEAT scripts fire with the implemented condition/action types? (clean / degraded / blocked chains)
       script <content-dir> --map TEXT --name SCRIPT
                                                 prints one script (conditions, actions) and every script whose actions name it
+      teams <content-dir> --map TEXT [--filter TEXT]
       drive <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--explain] [--watch TEMPLATE-TEXT]
                                                 objective driver: satisfies the world-state conditions of the scripts (kill named objects/teams, send units into areas, ...) one by one and
                                                 reports whether the mission's OWN VICTORY/DEFEAT action fired (no generic elimination)
@@ -67,6 +68,7 @@ try
         "template" => TemplateInfo(content, args),
         "objects" => ObjectInfo(content, campaigns, args),
         "transports" => TransportInfo(content, campaigns, args),
+        "teams" => TeamInfo(content, campaigns, args),
         "playthrough" => Playthrough(content, campaigns, args),
         _ => Fail(Usage),
     };
@@ -174,7 +176,7 @@ static int ScriptDump(ContentFileSystem content, CampaignCatalog campaigns, stri
 
 static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
 {
-    var ticks = long.Parse(Arg(args, "--ticks") ?? "12000", CultureInfo.InvariantCulture);
+    var ticks = long.Parse(Arg(args, "--ticks") ?? "60000", CultureInfo.InvariantCulture);
     var filterCampaign = Arg(args, "--campaign");
     var filterMap = Arg(args, "--map");
     var watch = Arg(args, "--watch");
@@ -461,4 +463,20 @@ static Action<MissionSession> WatchEntities(string text, bool victory)
         foreach (var id in known.Keys.Where(id => !now.ContainsKey(id))) Console.WriteLine($"      {(victory ? "V" : "D")} @{world.Tick} watch #{id} is gone");
         known = now;
     };
+}
+
+static int TeamInfo(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
+{
+    var (context, catalog, _) = Compile(content);
+    var mapFilter = Arg(args, "--map") ?? string.Empty;
+    var filter = Arg(args, "--filter") ?? string.Empty;
+    var mission = campaigns.Campaigns.SelectMany(campaign => campaign.Sequence).FirstOrDefault(item => item.MapPath.Contains(mapFilter, StringComparison.OrdinalIgnoreCase));
+    if (mission is null) return Fail("no such map");
+    var program = ScriptProgram.Build(context.LoadMap(mission.MapPath));
+    foreach (var team in program.Teams.Where(team => team.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+    {
+        var units = string.Join(",", team.Units.Select(unit => $"{unit.Type} {unit.MinCount}..{unit.MaxCount}{(catalog.TryGet(unit.Type, out var template) && !template.IsInstantiable ? "(NOT instantiable)" : string.Empty)}"));
+        Console.WriteLine($"{team.Name,-28} owner {team.Owner,-12} {(team.IsSingleton ? "singleton" : $"max {team.MaxInstances}")} units [{units}] transport '{team.Transport}' origin '{team.ReinforcementOrigin}' onUnitDestroyed '{team.OnUnitDestroyedScript}' onCreate '{team.OnCreateScript}'");
+    }
+    return 0;
 }

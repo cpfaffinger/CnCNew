@@ -1069,6 +1069,43 @@ public static class ModuleCatalog
             new("FreeFallDamagePercent", FieldType.Percent, Source: "ParachuteContain.cpp"),
             new("ParachuteOpenSound", FieldType.Opaque, Source: "ParachuteContain.cpp"),
         ]);
+        // UndeadBodyModuleData (UndeadBody.cpp): ActiveBody plus the second life's maximum health.
+        Add("UndeadBody", [..Body(), Real("SecondLifeMaxHealth", "UndeadBody.cpp")]);
+        // BattleBusSlowDeathBehaviorModuleData (BattleBusSlowDeathBehavior.cpp) extends SlowDeathBehaviorModuleData.
+        Add("BattleBusSlowDeathBehavior",
+        [
+            ..DieMux(),
+            new("SinkRate", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("ProbabilityModifier", FieldType.Integer, Source: "SlowDeathBehavior.cpp"),
+            new("ModifierBonusPerOverkillPercent", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionAltitude", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FX", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("OCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("Weapon", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForce", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForceVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitch", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitchVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FXStartUndeath", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "BattleBusSlowDeathBehavior.cpp"),
+            new("OCLStartUndeath", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "BattleBusSlowDeathBehavior.cpp"),
+            new("FXHitGround", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "BattleBusSlowDeathBehavior.cpp"),
+            new("OCLHitGround", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "BattleBusSlowDeathBehavior.cpp"),
+            Real("ThrowForce", "BattleBusSlowDeathBehavior.cpp"),
+            new("PercentDamageToPassengers", FieldType.Percent, Source: "BattleBusSlowDeathBehavior.cpp"),
+            new("EmptyHulkDestructionDelay", FieldType.DurationMs, Source: "BattleBusSlowDeathBehavior.cpp"),
+        ]);
+        // SubObjectsUpgrade.cpp: the sub-object names only steer the model (typed, no consumer in the simulation).
+        Add("SubObjectsUpgrade",
+        [
+            ..UpgradeMux(),
+            new("ShowSubObjects", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SubObjectsUpgrade.cpp"),
+            new("HideSubObjects", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SubObjectsUpgrade.cpp"),
+        ]);
+        Add("AnimationSteeringUpdate", [new("MinTransitionTime", FieldType.DurationMs, Source: "AnimationSteeringUpdate.h")]);
         // ParticleUplinkCannonUpdateModuleData (ParticleUplinkCannonUpdate.cpp buildFieldParse). The charge/antenna/ready times, bones, flares, sounds, scorch marks and the shroud reveal are
         // presentation (typed, no consumer); beam timing, path, damage and the beam object drive the simulated effect.
         Add("ParticleUplinkCannonUpdate",

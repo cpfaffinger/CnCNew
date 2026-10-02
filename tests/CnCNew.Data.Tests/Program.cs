@@ -254,6 +254,8 @@ static void ModuleCatalogIsExplicitAndConsistent()
         "RadiusDecalUpdate", "TechBuildingBehavior", "FireWeaponWhenDamagedBehavior", "FireWeaponPower", "BaikonurLaunchPower", "HordeUpdate", "FlightDeckBehavior",
         // phase 13: the aircraft of scripted reinforcements (docs/SCRIPT-ENGINE.md §5)
         "DeliverPayloadAIUpdate", "ParachuteContain", "JetSlowDeathBehavior", "CountermeasuresBehavior", "ParticleUplinkCannonUpdate",
+        // phase 13: the Battle Bus and two animation-only modules (docs/SCRIPT-ENGINE.md §9)
+        "UndeadBody", "BattleBusSlowDeathBehavior", "SubObjectsUpgrade", "AnimationSteeringUpdate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

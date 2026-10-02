@@ -228,6 +228,35 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
         End
+        Object AlphaBus
+          Side = Alpha
+          KindOf = SELECTABLE VEHICLE TRANSPORT
+          Locomotor = SET_NORMAL SkirmishLoco
+          Body = UndeadBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+            SecondLifeMaxHealth = 300.0
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 40.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = TransportContain Transport01
+            Slots = 4
+            AllowInsideKindOf = INFANTRY
+          End
+          Behavior = BattleBusSlowDeathBehavior Bus01
+            DeathTypes = ALL -CRUSHED -SPLATTED -EXTRA_4
+            ProbabilityModifier = 5
+            ThrowForce = 100.0
+            PercentDamageToPassengers = 50%
+            EmptyHulkDestructionDelay = 1000
+            DestructionDelay = 500
+            FXStartUndeath = FX_Test
+            FXHitGround = FX_Other
+          End
+        End
         Object AlphaTruck
           Side = Alpha
           KindOf = SELECTABLE VEHICLE TRANSPORT
@@ -394,5 +423,46 @@ static partial class Tests
         Check.That(NamedIn(session, "Near")!.Body!.Health > NamedIn(session, "AtTarget")!.Body!.Health && NamedIn(session, "Near")!.Body!.Health < Fixed.FromInt(100), "An object at the edge of the grown beam got only the later pulses.");
         Check.That(NamedIn(session, "Far")!.Body!.Health == Fixed.FromInt(100), "An object outside the beam's radius is untouched.");
         _ = fired;
+    }
+
+    public static void FlightBattleBusHasTwoLives()
+    {
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)],
+            objects: [Placed("AlphaBus", 300m, 200m, "teamA", "Bus"), Placed("AlphaTrooper", 300m, 200m, "teamA", "Rider"), Placed("AlphaBus", 300m, 300m, "teamA", "Other")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(session.SkippedObjects.IsEmpty, "The bus instantiates: " + string.Join(",", session.SkippedObjects));
+        Run(session, 3);
+        var bus = NamedIn(session, "Bus")!;
+        var rider = NamedIn(session, "Rider")!;
+        Check.That(session.World.TryEnterContainer(rider, bus), "The trooper boards the bus.");
+        var body = bus.Body as UndeadBody ?? throw new InvalidOperationException("The bus has an UndeadBody.");
+
+        // First life: a lethal hit leaves one hit point, then the second life starts with the new maximum and the throw.
+        session.World.Damage(bus.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(500), DamageTypes.Explosion, DeathTypes.Normal, false));
+        Check.That(!bus.EffectivelyDead && body.IsSecondLife, "The first lethal hit is not a death: the second life began.");
+        Check.That(body.MaxHealth == Fixed.FromInt(300) && body.Health == Fixed.FromInt(300), $"The second life is fully healed to 300 ({body.Health}/{body.MaxHealth}).");
+        Check.That(rider.Body!.Health == Fixed.FromInt(50), $"The passenger took 50 % of its maximum health ({rider.Body!.Health}).");
+        var peak = Fixed.Zero;
+        long landed = -1;
+        for (var tick = 0; tick < 200 && landed < 0; tick++)
+        {
+            session.Step();
+            peak = Fixed.Max(peak, bus.Z);
+            if (tick > 12 && bus.Z == Fixed.Zero) landed = tick;
+        }
+        Check.That(peak > Fixed.FromInt(10), $"The bus was thrown into the air (peak {peak}).");
+        Check.That(landed > 0, "It came down again.");
+        Check.That(!bus.EffectivelyDead, "It survived the throw.");
+
+        // Second life: a normal death.
+        session.World.Damage(bus.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(1000), DamageTypes.Explosion, DeathTypes.Normal, false));
+        Check.That(bus.EffectivelyDead, "The second lethal hit kills it.");
+        Run(session, 40);
+        Check.That(Of(session, "AlphaBus").All(entity => entity.Id != bus.Id), "The real death ends in destruction after its delay.");
+
+        // Unresistable damage ignores the first life.
+        var other = NamedIn(session, "Other")!;
+        session.World.Damage(other.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(500), DamageTypes.Unresistable, DeathTypes.Normal, false));
+        Check.That(other.EffectivelyDead, "Unresistable damage kills a bus on its first life.");
     }
 }

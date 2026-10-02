@@ -233,7 +233,7 @@ static partial class Tests
         var registry = ModuleRegistry.Default;
         ModuleBindingTable Build(IEnumerable<IModuleBinding> bindings, ModuleRegistry? custom = null) => new(bindings, custom ?? registry);
         var all = BuiltInModules.Bindings;
-        Check.That(Build(all).Bindings.Length == 103, "The production table binds one hundred and three modules (twelve phase-4, twenty-four phase-5, fourteen reference-match unlock, eleven special-power, eight supply-economy, one spawner, two repair, three combat, three power-plant, three projectile, five transport/tunnel, two mission-blocker shells, three topple/height-die collision, seven mission-object modules of phase 12, four aircraft modules and the particle uplink cannon of phase 13).");
+        Check.That(Build(all).Bindings.Length == 107, "The production table binds one hundred and seven modules (twelve phase-4, twenty-four phase-5, fourteen reference-match unlock, eleven special-power, eight supply-economy, one spawner, two repair, three combat, three power-plant, three projectile, five transport/tunnel, two mission-blocker shells, three topple/height-die collision, seven mission-object modules of phase 12, four aircraft modules the particle uplink cannon and four vehicle modules of phase 13).");
         Check.That(all.Select(value => value.Name).SequenceEqual(all.Select(value => value.Name).Order(StringComparer.Ordinal)), "The built-in list is sorted ordinally.");
         Check.That(ModuleBindingTable.Default.TryGet("destroydie", out var binding) && binding.Name == "DestroyDie", "Lookup is case-insensitive.");
 
