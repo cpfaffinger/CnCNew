@@ -340,7 +340,7 @@ internal static class CampaignTests
         TestHarness.Assert(problems.Length == 1 && problems[0].Contains("CampEADemo"), "only the EA demo map is absent: " + string.Join("; ", problems));
         TestHarness.Assert(catalog.Find("USA")!.Sequence.Length == 5 && catalog.Find("CHALLENGE_0")!.IsChallenge, "campaign chains are complete");
 
-        // Generals' Challenge: a map that marks its own human side decides itself; GC_LaserGeneral marks none and gets the named general side.
+        // Generals Challenge: a map that marks its own human side decides itself; GC_LaserGeneral marks none and gets a synthetic human side with the persona faction.
         MapData Load(string path)
         {
             using var mapStream = content.OpenRead(path);
@@ -349,9 +349,19 @@ internal static class CampaignTests
         var challengeMaps = catalog.Campaigns.Where(campaign => campaign.IsChallenge).SelectMany(campaign => campaign.Sequence).Select(mission => mission.MapPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var sides = challengeMaps.ToDictionary(path => path, path => ChallengeSides.HumanSideFor(Load(path)), StringComparer.OrdinalIgnoreCase);
         TestHarness.Assert(challengeMaps.Length == 8, $"eight distinct challenge maps (got {challengeMaps.Length})");
-        TestHarness.Assert(sides["Maps/GC_LaserGeneral/GC_LaserGeneral.map"] == "PlyrAmericaLaserGeneral", "the laser map without a human side gets its named general side: " + sides["Maps/GC_LaserGeneral/GC_LaserGeneral.map"]);
+        TestHarness.Assert(sides["Maps/GC_LaserGeneral/GC_LaserGeneral.map"] == ChallengeSides.SyntheticHumanSide, "the laser map without a human side gets the synthetic human side: " + sides["Maps/GC_LaserGeneral/GC_LaserGeneral.map"]);;
         TestHarness.Assert(sides["Maps/GC_Stealth/GC_Stealth.map"].Length == 0 && sides["Maps/GC_TankGeneral/GC_TankGeneral.map"].Length == 0, "maps that mark ThePlayer as human need no host choice");
         foreach (var (path, side) in sides)
-            if (side.Length > 0) TestHarness.Assert(ScriptProgram.Build(Load(path)).FindPlayer(side) is not null, $"{path}: the chosen side exists");
+            if (side.Length > 0 && side != ChallengeSides.SyntheticHumanSide) TestHarness.Assert(ScriptProgram.Build(Load(path)).FindPlayer(side) is not null, $"{path}: the chosen side exists");
+
+        // The persona replaces the human side faction; on the laser map a human side is added that fights the opponent general and is fought by it.
+        const string persona = "FactionAmericaAirForceGeneral";
+        var laser = ScriptProgram.Build(Load("Maps/GC_LaserGeneral/GC_LaserGeneral.map")).WithHumanSide(ChallengeSides.SyntheticHumanSide, persona);
+        var added = laser.FindPlayer(ChallengeSides.SyntheticHumanSide);
+        TestHarness.Assert(added is { IsHuman: true } && added.Faction == persona && added.Enemies.Contains("PlyrAmericaLaserGeneral") && !added.Enemies.Contains("PlyrCivilian"), "the added human side has the persona faction and is hostile to the opponent, not to civilians");
+        TestHarness.Assert(laser.FindPlayer("PlyrAmericaLaserGeneral")!.Enemies.Contains(ChallengeSides.SyntheticHumanSide), "the opponent general is hostile to the added side");
+        TestHarness.Assert(laser.Fingerprint == ScriptProgram.Build(Load("Maps/GC_LaserGeneral/GC_LaserGeneral.map")).Fingerprint, "the program fingerprint stays the map one");
+        var chem = ScriptProgram.Build(Load("Maps/GC_ChemGeneral/GC_ChemGeneral.map")).WithHumanSide(string.Empty, persona);
+        TestHarness.Assert(chem.FindPlayer("ThePlayer")!.Faction == persona && chem.Players.Length == ScriptProgram.Build(Load("Maps/GC_ChemGeneral/GC_ChemGeneral.map")).Players.Length, "a map with its own human side only gets the persona faction, no extra side");
     }
 }

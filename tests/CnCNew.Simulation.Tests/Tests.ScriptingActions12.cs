@@ -91,4 +91,23 @@ static partial class Tests
         var after = session.World.FindEntity(abandoned.Id);
         Check.That(after is null || after.DestroyRequested || after.EffectivelyDead, "DELETE_ALL_UNMANNED removes the unmanned object.");
     }
+
+    public static void MissionHumanFactionAddsAndAdaptsTheHumanSide()
+    {
+        // A chosen persona: on a map without the named side a human side is added (faction money, hostile to the others), and a restored mission keeps it.
+        var options = MissionOptions.Standard with { HumanSideName = "NewHero", HumanFaction = "FactionBeta" };
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)]);
+        var session = MissionSession.Start(options, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var added = session.Program.FindPlayer("NewHero");
+        Check.That(added is { IsHuman: true, Faction: "FactionBeta" }, "The persona side was added as the human side.");
+        Check.That(MissionSession.LocalPlayerOf(session.Program, options.HumanSideName) == added!.Id, "It is the viewer of the mission.");
+        Check.That(session.World.MoneyOf(added.Id) == Fixed.FromInt(500), $"It starts with the persona faction's money ({session.World.MoneyOf(added.Id)}).");
+        Check.That(session.World.AreEnemies(added.Id, session.Program.FindPlayer(PlayerA)!.Id) && session.World.AreEnemies(session.Program.FindPlayer(PlayerB)!.Id, added.Id), "It is hostile to the map sides, and they to it.");
+        Run(session, 5);
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.Program.FindPlayer("NewHero") is { IsHuman: true } && restored.StateHash() == session.StateHash(), "A restored mission has the same added side and the same state.");
+        // A persona on a map whose human side exists replaces its faction without adding a side.
+        var adapted = MissionSession.Start(MissionOptions.Standard with { HumanFaction = "FactionBeta" }, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(adapted.Program.FindPlayer(PlayerA)!.Faction == "FactionBeta" && adapted.Program.Players.Length == session.Program.Players.Length - 1, "The map's own human side takes the persona faction; no side is added.");
+    }
 }

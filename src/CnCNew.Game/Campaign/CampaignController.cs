@@ -36,7 +36,8 @@ public sealed class CampaignController(MissionContext context, CampaignDefinitio
         Progress = Progress.Started();
         var attempts = Progress.AttemptsOf(mission.Name);
         var seed = unchecked(baseSeed + (uint)attempts * 7919u + (uint)Campaign.Sequence.IndexOf(mission) * 104729u);
-        var options = new MissionOptions(seed, Progress.Difficulty, maxTicks, PresentationLatencyTicks: presentationLatencyTicks, MissionAttempts: attempts, HumanSideName: humanSideName);
+        var options = new MissionOptions(seed, Progress.Difficulty, maxTicks, PresentationLatencyTicks: presentationLatencyTicks, MissionAttempts: attempts, HumanSideName: humanSideName,
+            HumanFaction: Campaign.IsChallenge ? Campaign.PlayerFaction : string.Empty);
         return MissionRun.Load(context, mission.MapPath, options, mission);
     }
 

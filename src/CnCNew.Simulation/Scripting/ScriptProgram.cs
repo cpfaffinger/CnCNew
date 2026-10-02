@@ -127,7 +127,7 @@ public sealed class ScriptProgram
 
     private ScriptProgram(ImmutableArray<ScriptPlayer> players, ImmutableArray<ScriptTeamPrototype> teams, ImmutableArray<ScriptWaypoint> waypoints,
         ImmutableArray<ScriptArea> areas, ImmutableArray<ScriptWaypointPath> paths, ImmutableArray<ScriptMapObject> objects,
-        ImmutableArray<ScriptUnit> units, ImmutableArray<ScriptGroupUnit> groups, int listCount)
+        ImmutableArray<ScriptUnit> units, ImmutableArray<ScriptGroupUnit> groups, int listCount, string? fingerprint = null)
     {
         Players = players;
         Teams = teams;
@@ -156,7 +156,7 @@ public sealed class ScriptProgram
             }
         }
         foreach (var group in groups) _groupByName.TryAdd(group.Name, group.Index);
-        Fingerprint = ComputeFingerprint();
+        Fingerprint = fingerprint ?? ComputeFingerprint();
     }
 
     public ImmutableArray<ScriptPlayer> Players { get; }
@@ -182,6 +182,37 @@ public sealed class ScriptProgram
     public ScriptWaypoint? FindWaypoint(string name) => _waypointByName.GetValueOrDefault(name);
     public ScriptArea? FindArea(string name) => _areaByName.GetValueOrDefault(name);
     public ScriptWaypointPath? FindPath(string label) => _pathByLabel.GetValueOrDefault(label);
+
+    /// <summary>
+    /// The program for a mission whose human side is a chosen persona (<c>MissionOptions.HumanFaction</c>, the Generals Challenge general): the human side — the one named
+    /// <paramref name="sideName"/>, else the one the map marks human — gets <paramref name="faction"/>; when the map has no such side (<c>GC_LaserGeneral</c> defines only its
+    /// opponents) a new human side is appended, named <paramref name="sideName"/> (default <c>ThePlayer</c>), enemy of every non-civilian side of the map and enemy to it in
+    /// return. The fingerprint stays the map's, so a savegame still recognises the program; the options say how it was adapted.
+    /// </summary>
+    public ScriptProgram WithHumanSide(string sideName, string faction)
+    {
+        if (faction.Length == 0) return this;
+        // A named side that exists is the human side; a name that does not exist asks for a new side; no name means the side the map marks human.
+        var existing = sideName.Length > 0
+            ? Players.FirstOrDefault(player => !player.Id.IsSystem && player.Name == sideName)
+            : Players.FirstOrDefault(player => !player.Id.IsSystem && player.IsHuman);
+        ImmutableArray<ScriptPlayer> players;
+        if (existing is not null)
+        {
+            if (existing.Faction == faction && existing.IsHuman) return this;
+            players = Players.Replace(existing, existing with { Faction = faction, IsHuman = true });
+        }
+        else
+        {
+            var name = sideName.Length > 0 ? sideName : "ThePlayer";
+            static bool Hostile(ScriptPlayer player) => !player.Id.IsSystem && player.Name.Length > 0 && !player.Faction.Contains("Civilian", StringComparison.Ordinal);
+            var builder = ImmutableArray.CreateBuilder<ScriptPlayer>();
+            foreach (var player in Players) builder.Add(Hostile(player) ? player with { Enemies = player.Enemies.Contains(name) ? player.Enemies : [..player.Enemies, name] } : player);
+            builder.Add(new ScriptPlayer(Players.Length, new PlayerId(Players.Length), name, name, faction, true, [], [..Players.Where(Hostile).Select(player => player.Name)]));
+            players = builder.ToImmutable();
+        }
+        return new ScriptProgram(players, Teams, Waypoints, Areas, Paths, Objects, Units, Groups, ListCount, Fingerprint);
+    }
 
     public static ScriptProgram Build(MapData map)
     {

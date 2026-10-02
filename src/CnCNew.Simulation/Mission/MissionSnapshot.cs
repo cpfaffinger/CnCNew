@@ -48,6 +48,7 @@ public static class MissionSnapshot
             writer.Int("combatIntervalTicks", session.Options.CombatIntervalTicks);
             writer.Int("missionAttempts", session.Options.MissionAttempts);
             writer.Text("humanSideName", session.Options.HumanSideName);
+            if (session.Options.HumanFaction.Length > 0) writer.Text("humanFaction", session.Options.HumanFaction);
             writer.EndObject();
             writer.Text("stateHash", session.StateHash().ToString("X16"));
             writer.BeginObject("session");
@@ -89,7 +90,8 @@ public static class MissionSnapshot
             if (!Enum.IsDefined((ScriptDifficulty)difficulty)) throw new SnapshotFormatException("Unknown difficulty in mission state.");
             var restoredOptions = new MissionOptions(checked((uint)options.UInt("worldSeed")), (ScriptDifficulty)difficulty, options.Int("maxTicks"),
                 checked((int)options.Int("presentationLatencyTicks")), checked((int)options.Int("combatIntervalTicks")), checked((int)options.Int("missionAttempts")),
-                options.Text("humanSideName"));
+                options.Text("humanSideName"), options.Has("humanFaction") ? options.Text("humanFaction") : string.Empty);
+            program = program.WithHumanSide(restoredOptions.HumanSideName, restoredOptions.HumanFaction);
 
             var worldBytes = Encoding.UTF8.GetBytes(document.RootElement.GetProperty("world").GetRawText());
             var world = WorldSnapshot.Restore(worldBytes, templates, expectedDefinitionFingerprint, terrain);

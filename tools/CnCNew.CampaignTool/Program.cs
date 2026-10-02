@@ -183,7 +183,7 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             catch (FileNotFoundException) { Console.WriteLine($"{campaign.Name,-12} {mission.Name,-9} {mission.MapPath}: map not in the content"); continue; }
             maps++;
             var terrain = TerrainMap.Build(map, mission.MapPath);
-            var options = MissionOptions.Standard with { HumanSideName = campaign.IsChallenge ? ChallengeSides.HumanSideFor(map) : string.Empty };
+            var options = MissionOptions.Standard with { HumanSideName = campaign.IsChallenge ? ChallengeSides.HumanSideFor(map) : string.Empty, HumanFaction = campaign.IsChallenge ? campaign.PlayerFaction : string.Empty };
             var cells = new List<string>();
             foreach (var victory in new[] { true, false })
             {
@@ -276,7 +276,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             {
                 var map = context.LoadMap(mission.MapPath);
                 var terrain = TerrainMap.Build(map, mission.MapPath);
-                var options = MissionOptions.Standard with { HumanSideName = humanSideName };
+                var options = MissionOptions.Standard with { HumanSideName = humanSideName.Length > 0 || !campaign.IsChallenge ? humanSideName : ChallengeSides.HumanSideFor(map), HumanFaction = campaign.IsChallenge ? campaign.PlayerFaction : string.Empty };
                 var first = MissionScenario.Run(options, catalog, fingerprint, terrain, map, ticks);
                 var second = MissionScenario.Run(options, catalog, fingerprint, terrain, map, ticks);
                 var same = first.Chain == second.Chain && first.FinalHash == second.FinalHash;

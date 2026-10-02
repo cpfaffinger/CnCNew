@@ -23,8 +23,11 @@ namespace CnCNew.Simulation.Mission;
 /// defaults to player 1 — see <c>docs/SCRIPT-ENGINE.md</c> §7. A name that does not exist on the map falls back the same way, which
 /// <see cref="MissionSession.Notes"/> records, never silently.
 /// </param>
+/// <param name="HumanFaction">
+/// The faction of the human side when the host chose a persona (the Generals' Challenge general): it replaces the faction the map gives that side and, on a map without any human side (<c>GC_LaserGeneral</c>), adds one named <paramref name="HumanSideName"/> (default <c>ThePlayer</c>) — <see cref="ScriptProgram.WithHumanSide"/>. Empty keeps what the map says.
+/// </param>
 public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty, long MaxTicks = 0, int PresentationLatencyTicks = 0, int CombatIntervalTicks = 3,
-    int MissionAttempts = 1, string HumanSideName = "")
+    int MissionAttempts = 1, string HumanSideName = "", string HumanFaction = "")
 {
     public static MissionOptions Standard { get; } = new(0xC0FFEE09, ScriptDifficulty.Normal);
 }
@@ -106,7 +109,7 @@ public sealed class MissionSession
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(terrain);
         ArgumentNullException.ThrowIfNull(map);
-        var program = ScriptProgram.Build(map);
+        var program = ScriptProgram.Build(map).WithHumanSide(options.HumanSideName, options.HumanFaction);
         var notes = ImmutableArray.CreateBuilder<string>();
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), options.WorldSeed, ConfiguredPlayers(program, catalog, notes), FixtureId, fingerprint, terrain.Fingerprint), catalog, terrain);
         ApplyRelations(world, program);

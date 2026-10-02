@@ -171,6 +171,7 @@ run.Test("Scripts: override relations between teams and players", Tests.ScriptOv
 run.Test("Scripts: team command buttons (nearest enemy, partial use)", Tests.ScriptTeamCommandButtons);
 run.Test("Scripts: hunting with a command button", Tests.ScriptHuntWithCommandButton);
 run.Test("Scripts: facing, unmanned objects and recorded-only actions", Tests.ScriptFacingUnmannedAndRecorded);
+run.Test("Mission: a chosen persona adds or adapts the human side and survives save/restore", Tests.MissionHumanFactionAddsAndAdaptsTheHumanSide);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);
