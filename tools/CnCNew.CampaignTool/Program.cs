@@ -174,7 +174,7 @@ static int ScriptDump(ContentFileSystem content, CampaignCatalog campaigns, stri
 
 static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
 {
-    var ticks = long.Parse(Arg(args, "--ticks") ?? "4500", CultureInfo.InvariantCulture);
+    var ticks = long.Parse(Arg(args, "--ticks") ?? "12000", CultureInfo.InvariantCulture);
     var filterCampaign = Arg(args, "--campaign");
     var filterMap = Arg(args, "--map");
     var explain = args.Contains("--explain");
