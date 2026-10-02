@@ -201,6 +201,8 @@ public sealed partial class ScriptEngine
     public long CounterValue(string name) => _counters.TryGetValue(name, out var counter) ? counter.Value : 0;
     public bool CounterIsTimer(string name) => _counters.TryGetValue(name, out var counter) && counter.IsTimer;
     public bool FlagValue(string name) => _flags.GetValueOrDefault(name);
+    /// <summary>The templates of an object-type list built by <c>OBJECTLIST_ADDOBJECTTYPE</c>, or empty when the name is no list (then the parameter is a single template name).</summary>
+    public IReadOnlyCollection<string> ObjectListTypes(string name) => _objectLists.TryGetValue(name, out var list) ? list : [];
     public bool IsScriptActive(string name) => _program.FindScript(name) is { } unit && _scriptActive[unit.Index];
     public bool IsGroupActive(string name) => _program.FindGroup(name) is { } group && _groupActive[group.Index];
     public IEnumerable<KeyValuePair<string, uint>> NamedObjects => _named;
@@ -390,7 +392,9 @@ public sealed partial class ScriptEngine
 
     /// <summary>
     /// Evaluates every condition of a script once, outside the normal schedule, and reports each result (<c>branch.condition</c> labels). A diagnostic for tools
-    /// and tests: edge-triggered conditions (entered/exited area, lost object type) update their memory, so do not call it on a run you still want to compare.
+    /// and tests that leaves the engine untouched: the memory edge-triggered conditions keep (entered/exited area, lost object type, a consumed special-power
+    /// trigger), the counters a read creates and the diagnostic tallies are restored afterwards, so a run that was explained continues exactly as one that was not.
+    /// An edge condition therefore reports its edge only if the engine's own next evaluation would see it.
     /// </summary>
     public ImmutableArray<(string Label, bool Result)> ExplainScript(string name)
     {
@@ -398,15 +402,39 @@ public sealed partial class ScriptEngine
         var result = ImmutableArray.CreateBuilder<(string, bool)>();
         var team = _conditionTeam[unit.Index] is { } prototype ? FindTeam(prototype) : null;
         var previous = _callingTeam;
+        var areaMemory = new Dictionary<string, bool>(_areaInside, StringComparer.Ordinal);
+        var counterMemory = _counters.ToDictionary(pair => pair.Key, pair => (pair.Value.Value, pair.Value.IsTimer), StringComparer.Ordinal);
+        var powerMemory = _triggeredPowers.ToArray();
+        var missingMemory = new Dictionary<string, long>(_missingConditions, StringComparer.Ordinal);
+        var diagnosticMemory = new Dictionary<string, long>(_diagnostics, StringComparer.Ordinal);
         _callingTeam = team;
-        for (var branch = 0; branch < unit.Script.OrConditions.Length; branch++)
-            for (var index = 0; index < unit.Script.OrConditions[branch].AndConditions.Length; index++)
-            {
-                var condition = unit.Script.OrConditions[branch].AndConditions[index];
-                result.Add(($"{branch}.{index} {condition.TypeName}", EvaluateCondition(condition)));
-            }
-        _callingTeam = previous;
+        try
+        {
+            for (var branch = 0; branch < unit.Script.OrConditions.Length; branch++)
+                for (var index = 0; index < unit.Script.OrConditions[branch].AndConditions.Length; index++)
+                {
+                    var condition = unit.Script.OrConditions[branch].AndConditions[index];
+                    result.Add(($"{branch}.{index} {condition.TypeName}", EvaluateCondition(condition)));
+                }
+        }
+        finally
+        {
+            _callingTeam = previous;
+            Restore(_areaInside, areaMemory);
+            Restore(_missingConditions, missingMemory);
+            Restore(_diagnostics, diagnosticMemory);
+            _counters.Clear();
+            foreach (var (key, (value, isTimer)) in counterMemory) _counters[key] = new Counter { Value = value, IsTimer = isTimer };
+            _triggeredPowers.Clear();
+            _triggeredPowers.AddRange(powerMemory);
+        }
         return result.ToImmutable();
+
+        static void Restore<TValue>(SortedDictionary<string, TValue> target, Dictionary<string, TValue> saved)
+        {
+            target.Clear();
+            foreach (var (key, value) in saved) target[key] = value;
+        }
     }
 
     private bool EvaluateConditions(ScriptUnit unit)
