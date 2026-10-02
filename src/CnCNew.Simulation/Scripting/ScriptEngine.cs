@@ -170,7 +170,7 @@ public sealed partial class ScriptEngine
         }
         for (var index = 0; index < program.Groups.Length; index++) _groupActive[index] = program.Groups[index].Group.IsActive;
         foreach (var prototype in program.Teams)
-            if (prototype.IsSingleton || prototype.MaxInstances < 2) CreateTeam(prototype.Name);
+            if (prototype.IsSingleton || prototype.MaxInstances < 2) CreateTeam(prototype.Name, runStartActions: false);
     }
 
     public ScriptProgram Program => _program;
@@ -244,7 +244,7 @@ public sealed partial class ScriptEngine
     /// <summary>Puts an object into a team instance (map objects join the singleton team of their <c>originalOwner</c>).</summary>
     public void AssignToTeam(string prototype, EntityId id)
     {
-        var team = FindTeam(prototype) ?? CreateTeam(prototype);
+        var team = FindTeam(prototype) ?? CreateTeam(prototype, runStartActions: false);
         if (team is null) return;
         if (!team.Members.Contains(id.Value)) team.Members.Add(id.Value);
         team.Created = true;
@@ -330,6 +330,7 @@ public sealed partial class ScriptEngine
         ProcessTeamEvents();
         ProcessSequences();
         ProcessTeamBuilds();
+        UpdateTeamQueues();
         _pruneBelow = _world.Ids.NextEntity;
     }
 
@@ -550,18 +551,32 @@ public sealed partial class ScriptEngine
 
     private ScriptPlayer? PlayerById(PlayerId id) => id.Value >= 0 && id.Value < _program.Players.Length ? _program.Players[id.Value] : null;
 
+    /// <summary>
+    /// <c>ScriptEngine::getTeamNamed</c>: the instance the running script/sequence acts for wins over any other instance of the prototype; a singleton team that is not active yet
+    /// (<see cref="ScriptTeam.Created"/>: it is still being built or recruited, or nothing ever joined it) is <see langword="null"/>; for any other prototype the first instance.
+    /// </summary>
     private ScriptTeam? FindTeam(string name)
     {
         if (name == ThisTeamName) return _callingTeam;
-        // ScriptEngine::getTeamNamed: the instance the running script/sequence acts for wins over any other instance of the prototype.
         if (_callingTeam is { } calling && calling.Prototype == name) return calling;
+        var team = FindTeamInstance(name);
+        return team is not null && !team.Created && _program.FindTeam(name) is { IsSingleton: true } ? null : team;
+    }
+
+    /// <summary>The first instance of a prototype whatever its state: the lookup that creates, builds and recruits into a team (<c>TeamPrototype::getFirstItemIn_TeamInstanceList</c>).</summary>
+    private ScriptTeam? FindTeamInstance(string name)
+    {
         foreach (var team in _teams.Values)
             if (team.Prototype == name) return team;
         return null;
     }
 
-    /// <summary><c>TeamFactory::createTeam</c>: a new instance of a prototype, or the existing one of a singleton; <see langword="null"/> for an unknown prototype.</summary>
-    private ScriptTeam? CreateTeam(string prototypeName)
+    /// <summary>
+    /// <c>TeamFactory::createTeam</c>/<c>createInactiveTeam</c>: a new instance of a prototype, or the existing one of a singleton; <see langword="null"/> for an unknown prototype. A prototype with
+    /// <c>teamExecutesActionsOnCreate</c> also runs the true-actions of its <c>teamProductionCondition</c> script each time it is created, existing singleton included
+    /// (<paramref name="runStartActions"/> is off for the map load, where objects join their teams before any script ran).
+    /// </summary>
+    private ScriptTeam? CreateTeam(string prototypeName, bool runStartActions = true)
     {
         var prototype = _program.FindTeam(prototypeName);
         if (prototype is null)
@@ -569,10 +584,25 @@ public sealed partial class ScriptEngine
             Diagnose($"unknown team '{prototypeName}'");
             return null;
         }
-        if ((prototype.IsSingleton || prototype.MaxInstances < 2) && FindTeam(prototypeName) is { } existing) return existing;
-        var owner = _program.FindPlayer(prototype.Owner);
-        var team = new ScriptTeam(_nextTeamId++, prototypeName, owner is null ? PlayerId.System : owner.Id);
-        _teams[team.Id] = team;
+        ScriptTeam team;
+        if ((prototype.IsSingleton || prototype.MaxInstances < 2) && FindTeamInstance(prototypeName) is { } existing) team = existing;
+        else
+        {
+            var owner = _program.FindPlayer(prototype.Owner);
+            team = new ScriptTeam(_nextTeamId++, prototypeName, owner is null ? PlayerId.System : owner.Id);
+            _teams[team.Id] = team;
+        }
+        if (runStartActions && prototype.ExecutesActionsOnCreate && prototype.ProductionCondition.Length > 0)
+        {
+            if (_program.FindScript(prototype.ProductionCondition) is not { } script) Diagnose($"team '{prototypeName}': production condition script '{prototype.ProductionCondition}' is missing");
+            else if (_depth >= MaxSubroutineDepth) Diagnose($"subroutine recursion limit at team '{prototypeName}'");
+            else
+            {
+                _depth++;
+                try { ExecuteActions(script.Script.Actions); }
+                finally { _depth--; }
+            }
+        }
         return team;
     }
 

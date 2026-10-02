@@ -226,6 +226,8 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         world.WakeAt(Entity, this, world.Tick + Math.Max(data.StartHealingDelayTicks, SimulationTiming.SleepNone));
     }
 
+    public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
+
     public void TryReset(IWorldServices world, UpgradeMask keyMask)
     {
         if (_mux.ResetUpgrade(keyMask)) _active = false;
@@ -285,6 +287,7 @@ public abstract class UpgradeMuxModule(UpgradeMuxData data) : SimModule, IUpgrad
 
     public void TryActivate(IWorldServices world, UpgradeMask keyMask) => Mux.AttemptUpgrade(world, Entity, keyMask, Activate);
     public void TryReset(IWorldServices world, UpgradeMask keyMask) { if (Mux.ResetUpgrade(keyMask)) Deactivate(world); }
+    public bool WouldUpgrade(UpgradeMask keyMask) => Mux.WouldUpgrade(keyMask);
 
     protected abstract void Activate(IWorldServices world);
     protected virtual void Deactivate(IWorldServices world) => Deactivate();

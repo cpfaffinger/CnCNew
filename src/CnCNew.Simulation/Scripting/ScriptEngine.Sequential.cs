@@ -2,6 +2,7 @@ using CnCNew.Data.World;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Scripting;
@@ -221,22 +222,37 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>ScriptConditions::evaluateSkirmishCommandButtonIsReady</c> for special-power buttons: every (or some) member that owns the power has it ready. Other button kinds
-    /// are not modelled (diagnosed, never ready).
+    /// <c>ScriptConditions::evaluateSkirmishCommandButtonIsReady</c> with <c>CommandButton::isReady</c>: every (or some) member that is concerned by the button has it ready. A special-power
+    /// button concerns the members that carry the power (ready = recharged); an upgrade button concerns every member, and is ready for one that an upgrade module of it would react to
+    /// (<c>affectedByUpgrade</c>: the module would execute with the object's, the player's and the button's upgrades together) and that does not have the upgrade yet.
     /// </summary>
     private bool CommandButtonReady(string teamName, string button, bool all)
     {
         var team = FindTeam(teamName);
         if (team is null) return false;
-        if (!_world.Templates.Commands.TryGetSpecialPowerAbility(button, out var power) || !_world.SpecialPowers.TryGet(power, out var info))
+        if (_world.Templates.Commands.TryGetSpecialPowerAbility(button, out var power))
         {
-            Diagnose(_world.Templates.Commands.TryGetButton(button, out _) ? $"command button '{button}' readiness is only modelled for special powers" : $"unknown command button '{button}'");
+            if (!_world.SpecialPowers.TryGet(power, out var info)) return false;
+            foreach (var member in LiveMembers(team))
+            {
+                if (SpecialPowerRouting.FindModule(member, info.Index) is not { } module) continue;
+                if (module.IsReady(_world)) { if (!all) return true; }
+                else if (all) return false;
+            }
+            return all;
+        }
+        if (!_world.Templates.Commands.TryGetButton(button, out var buttonInfo))
+        {
+            Diagnose($"unknown command button '{button}'");
             return false;
         }
+        if (buttonInfo.Upgrade.Length == 0 || !_world.Upgrades.TryGet(buttonInfo.Upgrade, out var upgrade)) return all;
+        var upgradeBit = UpgradeMask.Bit(upgrade.Index);
         foreach (var member in LiveMembers(team))
         {
-            if (SpecialPowerRouting.FindModule(member, info.Index) is not { } module) continue;
-            if (module.IsReady(_world)) { if (!all) return true; }
+            var mask = member.CompletedUpgrades | _world.PlayerUpgrades(member.Owner) | upgradeBit;
+            var ready = !member.CompletedUpgrades.TestForAll(upgradeBit) && member.ModuleArray.OfType<IUpgradeModule>().Any(module => module.WouldUpgrade(mask));
+            if (ready) { if (!all) return true; }
             else if (all) return false;
         }
         return all;

@@ -262,6 +262,7 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
     }
 
     public void TryReset(IWorldServices world, UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
+    public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
     public void ReportMissile(IWorldServices world, Entity missile)
     {

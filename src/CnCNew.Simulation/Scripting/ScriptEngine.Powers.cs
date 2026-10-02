@@ -178,10 +178,10 @@ public sealed partial class ScriptEngine
         var owner = _program.FindPlayer(prototype.Owner);
         if (owner is null || !_world.HasPlayer(owner.Id)) { Diagnose($"RECRUIT_TEAM '{teamName}': team has no player"); return; }
         var singleton = prototype.IsSingleton || prototype.MaxInstances < 2;
-        if (singleton && FindTeam(teamName) is { } existing && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"RECRUIT_TEAM '{teamName}': singleton team already exists"); return; }
+        if (singleton && FindTeamInstance(teamName) is { } existing && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"RECRUIT_TEAM '{teamName}': singleton team already exists"); return; }
         var home = prototype.Home.Length > 0 ? _program.FindWaypoint(prototype.Home) : null;
         if (home is null) { Diagnose($"RECRUIT_TEAM '{teamName}': team has no home position"); return; }
-        var team = (singleton ? FindTeam(teamName) : null) ?? CreateTeam(teamName);
+        var team = (singleton ? FindTeamInstance(teamName) : null) ?? CreateTeam(teamName);
         if (team is null) return;
         var maxDistanceSquared = radius < Fixed.One ? Fixed.MaxValue : radius * radius;
         var recruited = 0;
@@ -199,7 +199,7 @@ public sealed partial class ScriptEngine
                 recruited++;
             }
         }
-        if (recruited > 0) team.Created = true;
+        if (recruited > 0) EnqueueReadyTeam(team);
         else
         {
             Diagnose($"RECRUIT_TEAM '{teamName}': recruited no units");

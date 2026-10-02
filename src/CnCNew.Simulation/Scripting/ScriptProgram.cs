@@ -54,6 +54,13 @@ public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingl
 
     /// <summary><c>teamTransportsExit</c>: the transport leaves the map after it unloaded instead of staying (<c>aiMoveToAndEvacuateAndExit</c>).</summary>
     public bool TransportsExit { get; init; }
+
+    /// <summary><c>teamProductionCondition</c> + <c>teamExecutesActionsOnCreate</c>: when the flag is set, creating the team also runs the true-actions of the named script (<c>TeamFactory::createInactiveTeam</c>).</summary>
+    public string ProductionCondition { get; init; } = string.Empty;
+    public bool ExecutesActionsOnCreate { get; init; }
+
+    /// <summary><c>teamInitialIdleFrames</c>: how long the AI may take to build the team before it is disbanded (0: unlimited).</summary>
+    public int InitialIdleFrames { get; init; }
 }
 
 /// <summary>One <c>teamUnitTypeN</c> line of a team: the object type and how many of it the team has at most.</summary>
@@ -252,6 +259,9 @@ public sealed class ScriptProgram
                 ReinforcementOrigin = team.GetText("teamReinforcementOrigin") ?? string.Empty,
                 StartsFull = team.GetBool("teamStartsFull"),
                 TransportsExit = team.GetBool("teamTransportsExit"),
+                ProductionCondition = team.GetText("teamProductionCondition") ?? string.Empty,
+                ExecutesActionsOnCreate = team.GetBool("teamExecutesActionsOnCreate"),
+                InitialIdleFrames = team.TryGetInt("teamInitialIdleFrames", out var idleFrames) ? idleFrames : 0,
                 Home = team.GetText("teamHome") ?? string.Empty,
                 OnCreateScript = EventScript(team, "teamOnCreateScript"),
                 OnIdleScript = EventScript(team, "teamOnIdleScript"),

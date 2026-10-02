@@ -107,6 +107,7 @@ public sealed class GenerateMinefieldBehavior(GenerateMinefieldData data) : SimM
 
     public void TryActivate(IWorldServices world, UpgradeMask keyMask) => _mux.AttemptUpgrade(world, Entity, keyMask, PlaceMines);
     public void TryReset(IWorldServices world, UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
+    public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
     public void OnDie(IWorldServices world, in DamageInfo info)
     {

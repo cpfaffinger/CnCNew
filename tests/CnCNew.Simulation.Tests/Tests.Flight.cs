@@ -56,6 +56,10 @@ static partial class Tests
           BuildCost = 10
           BuildTime = 1
         End
+        CommandButton Cmd_AlphaFlaresUpgrade
+          Command = PLAYER_UPGRADE
+          Upgrade = Upgrade_AlphaFlares
+        End
         Weapon FlightMissileGun
           PrimaryDamage = 60
           PrimaryDamageRadius = 5.0
@@ -464,5 +468,36 @@ static partial class Tests
         var other = NamedIn(session, "Other")!;
         session.World.Damage(other.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(500), DamageTypes.Unresistable, DeathTypes.Normal, false));
         Check.That(other.EffectivelyDead, "Unresistable damage kills a bus on its first life.");
+    }
+
+    public static void FlightUpgradeButtonReadiness()
+    {
+        // SKIRMISH_COMMAND_BUTTON_READY for an upgrade button: ready while an upgrade module of the object would react and the object does not have the upgrade yet.
+        var ready = Scr.Script("Ready", [Scr.And(Scr.If("SKIRMISH_COMMAND_BUTTON_READY_ALL", Scr.Side(PlayerA), Scr.Team("PlaneOnly"), Scr.Ability("Cmd_AlphaFlaresUpgrade")))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("ready"))]);
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Deliver", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("CREATE_REINFORCEMENT_TEAM", Scr.Team("PlaneOnly"), Scr.Waypoint("Far"))], oneShot: true), ready]);
+        map = map with { Teams = [..map.Teams, ReinforcementTeam("PlaneOnly", "AlphaPlane", 0)] };
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, 20);
+        var before = session.Engine.CounterValue("ready");
+        Check.That(before > 0, "The flares upgrade is available to a plane that does not have it.");
+        session.World.CompleteUpgrade(Of(session, "AlphaPlane").Single().Owner, null, "Upgrade_AlphaFlares");
+        Run(session, 2);
+        var after = session.Engine.CounterValue("ready");
+        Run(session, 20);
+        Check.That(session.Engine.CounterValue("ready") == after, "Once the upgrade is complete the button is no longer ready.");
+        Check.That(Of(session, "AlphaPlane").Single().Modules.OfType<CountermeasuresBehavior>().Single().IsActive, "The upgrade took effect.");
+    }
+
+    public static void FlightTeamCreationRunsStartActions()
+    {
+        var go = Scr.Script("Go", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("CREATE_REINFORCEMENT_TEAM", Scr.Team("Starter"), Scr.Waypoint("Far")), Scr.Do("CREATE_REINFORCEMENT_TEAM", Scr.Team("Quiet"), Scr.Waypoint("Far"))], oneShot: true);
+        var start = Scr.Script("StartScript", [Scr.And(Scr.If("CONDITION_FALSE"))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("started"))], active: false);
+        var (map, fixture, terrain) = MissionMap([go, start]);
+        MapProperties Team(string name, bool executes) => new([Scr.Text("teamName", name), Scr.Text("teamOwner", PlayerA), Scr.Flag("teamIsSingleton", true), Scr.Text("teamProductionCondition", "StartScript"), Scr.Flag("teamExecutesActionsOnCreate", executes),
+            Scr.Text("teamUnitType1", "AlphaHunter"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 1, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 1, 0m, string.Empty)]);
+        map = map with { Teams = [..map.Teams, Team("Starter", true), Team("Quiet", false)] };
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, 10);
+        Check.That(session.Engine.CounterValue("started") == 1, $"Creating the team with teamExecutesActionsOnCreate ran the true-actions of its production-condition script once; the team without the flag ran nothing ({session.Engine.CounterValue("started")}); the script itself never fires (its condition is false).");
     }
 }

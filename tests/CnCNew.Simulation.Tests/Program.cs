@@ -179,6 +179,8 @@ run.Test("Flight: a shot-down payload plane takes its riders with it", Tests.Fli
 run.Test("Flight: countermeasures divert missiles to flares", Tests.FlightCountermeasuresDivertMissiles);
 run.Test("Flight: the particle uplink cannon burns its target and restores mid-beam", Tests.FlightParticleUplinkCannonBurnsItsTarget);
 run.Test("Flight: a battle bus has two lives and is thrown by the first death", Tests.FlightBattleBusHasTwoLives);
+run.Test("Scripts: an upgrade command button is ready until the upgrade is owned", Tests.FlightUpgradeButtonReadiness);
+run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);

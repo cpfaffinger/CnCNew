@@ -336,7 +336,7 @@ static partial class Tests
             Scr.Text("teamUnitType1", "AlphaSoldier"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 1, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 2, 0m, string.Empty)]);
         map = map with { Teams = [..map.Teams, Strike()] };
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 400);
+        Run(session, 2400);
         var strike = session.Engine.TeamInstances.First(team => team.Prototype == "Strike");
         Check.That(strike.Created && strike.Members.Count == 2 && session.Engine.FlagValue("strike"), $"RECRUIT_TEAM took the two (MaxCount) free soldiers (members {strike.Members.Count}, diagnostics {string.Join("; ", session.Engine.Diagnostics.Keys)}).");
         Check.That(!strike.Members.Contains(NamedIn(session, "Squad1")!.Id.Value), "A unit of another team that was not made recruitable stays where it is.");

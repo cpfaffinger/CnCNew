@@ -204,6 +204,7 @@ public sealed partial class ScriptEngine
     private void DescribeExtended(IStateWriter writer)
     {
         DescribeTeamBuilds(writer);
+        DescribeTeamQueue(writer);
         DescribeSequences(writer);
         DescribePowerState(writer);
         DescribeTeamAbilityState(writer);
@@ -250,6 +251,7 @@ public sealed partial class ScriptEngine
     private void LoadExtended(IStateReader reader)
     {
         LoadTeamBuilds(reader);
+        LoadTeamQueue(reader);
         LoadSequences(reader);
         LoadPowerState(reader);
         LoadTeamAbilityState(reader);

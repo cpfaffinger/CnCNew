@@ -331,6 +331,9 @@ public interface IUpgradeModule
 {
     void TryActivate(IWorldServices world, UpgradeMask keyMask);
     void TryReset(IWorldServices world, UpgradeMask keyMask);
+
+    /// <summary><c>UpgradeModuleInterface::wouldUpgrade</c>: whether the module would execute in response to this combination of completed upgrades (a module that never does reports false).</summary>
+    bool WouldUpgrade(UpgradeMask keyMask) => false;
 }
 
 /// <summary>A body that can change its maximum health at run time (<c>MaxHealthUpgrade.cpp</c>). Not every body supports this (<c>InactiveBody</c> has no health).</summary>

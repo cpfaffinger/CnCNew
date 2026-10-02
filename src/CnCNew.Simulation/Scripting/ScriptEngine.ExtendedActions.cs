@@ -330,7 +330,7 @@ public sealed partial class ScriptEngine
     {
         var prototype = _program.FindTeam(teamName);
         if (prototype is null) { Diagnose($"unknown team '{teamName}'"); return; }
-        var team = (prototype.IsSingleton || prototype.MaxInstances < 2 ? FindTeam(teamName) : null) ?? CreateTeam(teamName);
+        var team = (prototype.IsSingleton || prototype.MaxInstances < 2 ? FindTeamInstance(teamName) : null) ?? CreateTeam(teamName);
         if (team is null) return;
         if (team.Owner.IsSystem || !_world.HasPlayer(team.Owner)) { Diagnose($"BUILD_TEAM '{teamName}': team has no player"); return; }
         if (!_world.CanBuildUnits(team.Owner)) { Diagnose($"BUILD_TEAM '{teamName}': unit construction disabled"); return; }
@@ -345,6 +345,7 @@ public sealed partial class ScriptEngine
             _teamBuilds.Add(new TeamBuildOrder { TeamId = team.Id, Type = unit.Type, Min = Math.Min(unit.MinCount, unit.MaxCount), Total = unit.MaxCount });
         }
         if (!_teamBuilds.Any(order => order.TeamId == team.Id)) Diagnose($"BUILD_TEAM '{teamName}': contains no buildable units");
+        else { _teamQueue.RemoveAll(entry => entry.TeamId == team.Id); _teamQueue.Add(new TeamQueueEntry { TeamId = team.Id, Started = _tick }); }
     }
 
     /// <summary>Queues one more unit per open order per tick at an idle (else any) factory that can produce it; a shortage of money simply retries next tick.</summary>
@@ -389,7 +390,7 @@ public sealed partial class ScriptEngine
         order.Joined++;
         if (!joined.Members.Contains(unit.Id.Value)) joined.Members.Add(unit.Id.Value);
         if (joined.AttackPriority.Length > 0) _prioritySetOf[unit.Id.Value] = joined.AttackPriority;
-        if (!joined.Created && _teamBuilds.Where(other => other.TeamId == order.TeamId).All(other => other.Joined >= other.Min)) joined.Created = true;
+        if (_program.FindTeam(joined.Prototype) is { Home.Length: > 0 } built && _program.FindWaypoint(built.Home) is { } home && unit.Template.Locomotor is not null) MoveTo(unit, home.X, home.Y);
         if (_teamBuilds.Where(other => other.TeamId == order.TeamId).All(other => other.Joined >= other.Total)) _teamBuilds.RemoveAll(other => other.TeamId == order.TeamId);
     }
 
