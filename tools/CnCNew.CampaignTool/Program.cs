@@ -31,6 +31,7 @@ const string Usage = """
                                                 objective driver: satisfies the world-state conditions of the scripts (kill named objects/teams, send units into areas, ...) one by one and
                                                 reports whether the mission's OWN VICTORY/DEFEAT action fired (no generic elimination)
       template <content-dir> --name A[,B]          is the template instantiable, and which modules are missing
+      objects <content-dir> --map TEXT [--name N]  the named objects a map places: template, team, position, whether the template can be created
       sides <content-dir> [--campaign NAME]       the script players (sides) of every campaign map: name, faction, human flag (to map a chosen general to a map's side)
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
@@ -57,6 +58,7 @@ try
         "script" => ScriptDump(content, campaigns, args),
         "drive" => Drive(content, campaigns, args),
         "template" => TemplateInfo(content, args),
+        "objects" => ObjectInfo(content, campaigns, args),
         "playthrough" => Playthrough(content, campaigns, args),
         _ => Fail(Usage),
     };
@@ -383,6 +385,22 @@ static int TemplateInfo(ContentFileSystem content, string[] args)
     {
         if (!catalog.TryGet(name, out var template)) { Console.WriteLine($"{name}: no such template"); continue; }
         Console.WriteLine($"{name}: instantiable {template.IsInstantiable}; missing modules: {string.Join(", ", template.MissingModules)}");
+    }
+    return 0;
+}
+
+static int ObjectInfo(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
+{
+    var (context, catalog, _) = Compile(content);
+    var mapFilter = Arg(args, "--map") ?? string.Empty;
+    var name = Arg(args, "--name");
+    var mission = campaigns.Campaigns.SelectMany(campaign => campaign.Sequence).FirstOrDefault(item => item.MapPath.Contains(mapFilter, StringComparison.OrdinalIgnoreCase));
+    if (mission is null) return Fail("no such map");
+    var program = ScriptProgram.Build(context.LoadMap(mission.MapPath));
+    foreach (var placed in program.Objects.Where(item => name is null ? item.ScriptName.Length > 0 : item.ScriptName == name))
+    {
+        var known = catalog.TryGet(placed.Template, out var template);
+        Console.WriteLine($"{placed.ScriptName,-32} {placed.Template,-34} team '{placed.TeamName}' at ({placed.X:F0},{placed.Y:F0}) {(known ? (template!.IsInstantiable ? "instantiable" : "NOT instantiable: " + string.Join(", ", template.MissingModules)) : "unknown template")}");
     }
     return 0;
 }

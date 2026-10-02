@@ -220,7 +220,7 @@ static partial class Tests
         End
         Object HollowHole
           KindOf = STRUCTURE
-          Behavior = HordeUpdate Horde01
+          Behavior = ParkingPlaceBehavior Parking01
           End
         End
         Object HoleWorker

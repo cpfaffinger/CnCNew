@@ -508,6 +508,67 @@ public static class ModuleCatalog
             Real("ScanRange", "CommandButtonHuntUpdate.cpp"),
         ]);
         Add("LockWeaponCreate", [new("SlotToLock", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "LockWeaponCreate.cpp")]);
+        // Phase 12: modules the campaign missions need to create their named objects (docs/SCRIPT-ENGINE.md §9).
+        Add("RadiusDecalUpdate", []);
+        Add("TechBuildingBehavior",
+        [
+            new("PulseFX", FieldType.Opaque, Source: "TechBuildingBehavior.cpp"),
+            new("PulseFXRate", FieldType.DurationMs, Source: "TechBuildingBehavior.cpp"),
+        ]);
+        Add("FireWeaponWhenDamagedBehavior",
+        [
+            ..UpgradeMux(),
+            new("StartsActive", FieldType.Bool, Source: "FireWeaponWhenDamagedBehavior.h"),
+            new("ReactionWeaponPristine", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDamagedBehavior.h"),
+            new("ReactionWeaponDamaged", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDamagedBehavior.h"),
+            new("ReactionWeaponReallyDamaged", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDamagedBehavior.h"),
+            new("ReactionWeaponRubble", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDamagedBehavior.h"),
+            new("ContinuousWeaponPristine", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDamagedBehavior.h"),
+            new("ContinuousWeaponDamaged", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDamagedBehavior.h"),
+            new("ContinuousWeaponReallyDamaged", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDamagedBehavior.h"),
+            new("ContinuousWeaponRubble", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponWhenDamagedBehavior.h"),
+            new("DamageTypes", FieldType.AllNoneDeltaFlags, Table: NameTables.DamageType, Source: "FireWeaponWhenDamagedBehavior.h"),
+            Real("DamageAmount", "FireWeaponWhenDamagedBehavior.h"),
+        ]);
+        Add("FireWeaponPower", [..SpecialPowerBase(), new("MaxShotsToFire", FieldType.Integer, Source: "FireWeaponPower.cpp")]);
+        Add("BaikonurLaunchPower", [..SpecialPowerBase(), new("DetonationObject", FieldType.Text, Source: "BaikonurLaunchPower.cpp")]);
+        // FlightDeckBehavior.cpp: the carrier's runway/launch fields are recognized so the shipped data compiles; the module is a shell (no aircraft are launched, landed or replaced).
+        Add("FlightDeckBehavior",
+        [
+            new("NumRunways", FieldType.Integer, Source: "FlightDeckBehavior.cpp"),
+            new("NumSpacesPerRunway", FieldType.Integer, Source: "FlightDeckBehavior.cpp"),
+            new("Runway1Spaces", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway1Takeoff", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
+            new("Runway1Landing", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway1Taxi", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
+            new("Runway1Creation", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway1CatapultSystem", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
+            new("Runway2Spaces", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway2Takeoff", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
+            new("Runway2Landing", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway2Taxi", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
+            new("Runway2Creation", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"), new("Runway2CatapultSystem", FieldType.Opaque, Source: "FlightDeckBehavior.cpp"),
+            Real("HealAmountPerSecond", "FlightDeckBehavior.cpp"),
+            Real("ApproachHeight", "FlightDeckBehavior.cpp"),
+            Real("LandingDeckHeightOffset", "FlightDeckBehavior.cpp"),
+            new("ParkingCleanupPeriod", FieldType.DurationMs, Source: "FlightDeckBehavior.cpp"),
+            new("HumanFollowPeriod", FieldType.DurationMs, Source: "FlightDeckBehavior.cpp"),
+            new("PayloadTemplate", FieldType.Text, Source: "FlightDeckBehavior.cpp"),
+            new("ReplacementDelay", FieldType.DurationMs, Source: "FlightDeckBehavior.cpp"),
+            new("DockAnimationDelay", FieldType.DurationMs, Source: "FlightDeckBehavior.cpp"),
+            new("LaunchWaveDelay", FieldType.DurationMs, Source: "FlightDeckBehavior.cpp"),
+            new("LaunchRampDelay", FieldType.DurationMs, Source: "FlightDeckBehavior.cpp"),
+            new("LowerRampDelay", FieldType.DurationMs, Source: "FlightDeckBehavior.cpp"),
+            new("CatapultFireDelay", FieldType.DurationMs, Source: "FlightDeckBehavior.cpp"),
+        ]);
+        Add("HordeUpdate",
+        [
+            new("UpdateRate", FieldType.DurationMs, Source: "HordeUpdate.cpp"),
+            new("KindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "HordeUpdate.cpp"),
+            new("Count", FieldType.Integer, Source: "HordeUpdate.cpp"),
+            new("Radius", FieldType.Distance, Source: "HordeUpdate.cpp"),
+            new("RubOffRadius", FieldType.Distance, Source: "HordeUpdate.cpp"),
+            new("AlliesOnly", FieldType.Bool, Source: "HordeUpdate.cpp"),
+            new("ExactMatch", FieldType.Bool, Source: "HordeUpdate.cpp"),
+            new("Action", FieldType.Text, Source: "HordeUpdate.cpp TheHordeActionTypeNames (HORDE)"),
+            new("FlagSubObjectNames", FieldType.Opaque, Source: "HordeUpdate.cpp"),
+            new("AllowedNationalism", FieldType.Bool, Source: "HordeUpdate.cpp"),
+        ]);
         Add("PowerPlantUpdate", [new("RodsExtendTime", FieldType.DurationMs, Source: "PowerPlantUpdate.cpp")]);
         Add("PowerPlantUpgrade", [..UpgradeMux()]);
         Add("OverchargeBehavior",

@@ -121,6 +121,119 @@ static partial class Tests
             StartingBoxes = 5
           End
         End
+        Weapon TrapBlast
+          PrimaryDamage = 7
+          PrimaryDamageRadius = 60.0
+          RadiusDamageAffects = ENEMIES
+          AttackRange = 10.0
+          DamageType = EXPLOSION
+          DelayBetweenShots = 100
+        End
+        SpecialPower GunPower
+          ReloadTime = 0
+        End
+        SpecialPower LaunchPower
+          ReloadTime = 0
+        End
+        Object AlphaTrap
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 400.0
+            InitialHealth = 400.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = FireWeaponWhenDamagedBehavior Trap01
+            StartsActive = Yes
+            ReactionWeaponPristine = TrapBlast
+            ReactionWeaponDamaged = TrapBlast
+            DamageTypes = NONE +EXPLOSION
+            DamageAmount = 1.0
+          End
+        End
+        Object AlphaTech
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = TechBuildingBehavior Tech01
+          End
+          Behavior = RadiusDecalUpdate Decal01
+          End
+          Behavior = FlightDeckBehavior Deck01
+            NumRunways = 1
+            NumSpacesPerRunway = 2
+            PayloadTemplate = AlphaSoldier
+            ReplacementDelay = 4000
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object AlphaGunner
+          Side = Alpha
+          KindOf = SELECTABLE INFANTRY
+          VisionRange = 120.0
+          ShroudClearingRange = 120.0
+          Locomotor = SET_NORMAL SkirmishLoco
+          Body = ActiveBody Body01
+            MaxHealth = 80.0
+            InitialHealth = 80.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY SkirmishGun
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = FireWeaponPower Gun01
+            SpecialPowerTemplate = GunPower
+            MaxShotsToFire = 2
+          End
+          Behavior = BaikonurLaunchPower Launch01
+            SpecialPowerTemplate = LaunchPower
+            DetonationObject = AlphaSoldier
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object AlphaHorde
+          Side = Alpha
+          KindOf = SELECTABLE INFANTRY
+          VisionRange = 120.0
+          ShroudClearingRange = 120.0
+          Locomotor = SET_NORMAL SkirmishLoco
+          Body = ActiveBody Body01
+            MaxHealth = 80.0
+            InitialHealth = 80.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = HordeUpdate Horde01
+            UpdateRate = 100
+            RubOffRadius = 20
+            Radius = 60
+            KindOf = INFANTRY
+            AlliesOnly = Yes
+            ExactMatch = No
+            Count = 3
+            Action = HORDE
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
         Object AlphaHunter
           Side = Alpha
           KindOf = SELECTABLE INFANTRY

@@ -15,6 +15,7 @@ namespace CnCNew.Simulation.Testing;
 internal sealed partial class ObjectiveDriver
 {
     private const string LocalPlayerName = "<Local Player>";
+    private const int GuardMargin = 150;
 
     private PlayerId? PlayerOf(string name)
     {
@@ -485,5 +486,69 @@ internal sealed partial class ObjectiveDriver
             }
             return true;
         }));
+    }
+}
+
+internal sealed partial class ObjectiveDriver
+{
+    /// <summary>
+    /// What a victory run does about the conditions of the defeat sequence that it can keep false: units of a hostile side standing where the mission loses when one of them gets there
+    /// (an escape area, a base), found in the conditions of every defeat-leading script (<c>_tainted</c>). The leaf removes those units whenever the condition would hold — the driver's
+    /// stand-in for the player defending the objective. Conditions about the viewer's own losses cannot be prevented this way and are left alone.
+    /// </summary>
+    private List<Leaf> BuildDefense()
+    {
+        var leaves = new List<Leaf>();
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var unit in _program.Units.Where(unit => _tainted.Contains(unit.Index)))
+            foreach (var or in unit.Script.OrConditions)
+                foreach (var condition in or.AndConditions)
+                    if (PreventLeaf(condition) is { } leaf && keys.Add(leaf.Key)) leaves.Add(leaf);
+        return leaves;
+    }
+
+    private Leaf? PreventLeaf(MapCondition condition)
+    {
+        var p = condition.Parameters;
+        string Text(int index) => index < p.Length ? p[index].Text : string.Empty;
+        int Int(int index) => index < p.Length ? p[index].Integer : 0;
+        string player, area;
+        int comparison, n;
+        Func<Entity, bool> counts;
+        switch (condition.TypeName)
+        {
+            case "PLAYER_HAS_COMPARISON_UNIT_KIND_IN_TRIGGER_AREA":
+            {
+                player = Text(0); comparison = Int(1); n = Int(2); area = Text(4);
+                var kind = Text(3);
+                counts = entity => !entity.Template.IsKindOf("INERT") && entity.Template.IsKindOf(kind);
+                break;
+            }
+            case "PLAYER_HAS_COMPARISON_UNIT_TYPE_IN_TRIGGER_AREA":
+            {
+                player = Text(0); comparison = Int(1); n = Int(2); area = Text(4);
+                var typeParameter = Text(3);
+                counts = entity => Matches(typeParameter, entity);
+                break;
+            }
+            case "SKIRMISH_PLAYER_HAS_UNITS_IN_AREA":
+                player = Text(0); area = Text(1); comparison = 3; n = 1;
+                counts = entity => ScriptEngine.CountsAsObject(entity) && !entity.Template.IsKindOf("PROJECTILE");
+                break;
+            default:
+                return null;
+        }
+        // Only conditions that become true when hostile units arrive can be guarded (a count that must stay below something is the other way round).
+        if (comparison is 0 or 1 || PlayerOf(player) is not { } owner || !_world.AreEnemies(_local, owner)) return null;
+        return new Leaf($"defend:{player}:{area}:{comparison}:{n}", $"keep '{player}' out of area '{area}'", 100000, 15, _ =>
+        {
+            if (_program.FindArea(area) is not { Points.Length: > 0 } zone) return false;
+            // The scripts look every tick, the driver every few: a unit has to be removed before it arrives, so the guard reaches a margin around the area.
+            long minX = zone.Points.Min(point => point.X) - GuardMargin, maxX = zone.Points.Max(point => point.X) + GuardMargin, minY = zone.Points.Min(point => point.Y) - GuardMargin, maxY = zone.Points.Max(point => point.Y) + GuardMargin;
+            var near = LiveOf(owner).Where(entity => counts(entity) && entity.X >= Fixed.FromInt(minX) && entity.X <= Fixed.FromInt(maxX) && entity.Y >= Fixed.FromInt(minY) && entity.Y <= Fixed.FromInt(maxY)).ToArray();
+            if (near.Length == 0) return false;
+            foreach (var entity in near) _world.Kill(entity.Id);
+            return true;
+        });
     }
 }

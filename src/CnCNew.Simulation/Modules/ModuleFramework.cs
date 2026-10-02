@@ -141,6 +141,9 @@ public interface IWorldServices
     /// <summary>The arrival half of <c>aiEnter</c>: puts <paramref name="actor"/> into <paramref name="container"/> when the container accepts it; false leaves both untouched.</summary>
     bool TryEnterContainer(Entity actor, Entity container);
 
+    /// <summary><c>Object::setTeam</c> for a controlling-player change: the object (and the power it supplies or consumes) now belongs to <paramref name="newOwner"/>; false when nothing changed.</summary>
+    bool TransferOwnership(EntityId id, PlayerId newOwner);
+
     /// <summary><c>Player::getPlayerType() == PLAYER_COMPUTER</c>.</summary>
     bool IsComputerPlayer(PlayerId player);
 

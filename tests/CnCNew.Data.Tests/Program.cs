@@ -250,6 +250,8 @@ static void ModuleCatalogIsExplicitAndConsistent()
         "SpecialAbilityUpdate",
         // phase 10: topple, structure collapse and height-threshold death (docs/SIMULATION-CORE.md §23)
         "ToppleUpdate", "StructureToppleUpdate", "HeightDieUpdate",
+        // phase 12: the modules the campaign missions need to create their named objects (docs/SCRIPT-ENGINE.md §9)
+        "RadiusDecalUpdate", "TechBuildingBehavior", "FireWeaponWhenDamagedBehavior", "FireWeaponPower", "BaikonurLaunchPower", "HordeUpdate", "FlightDeckBehavior",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

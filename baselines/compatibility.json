@@ -121,6 +121,114 @@
     },
     {
       "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway1CatapultSystem",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway1Creation",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway1Landing",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway1Spaces",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway1Takeoff",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway1Taxi",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway2CatapultSystem",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway2Creation",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway2Landing",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway2Spaces",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway2Takeoff",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FlightDeckBehavior/Runway2Taxi",
+      "count": 1,
+      "owners": [
+        "FlightDeckBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "GameData/AdjustCliffTextures",
       "count": 1,
       "owners": [
@@ -5312,7 +5420,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3692,
+      "count": 3625,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5836,15 +5944,6 @@
     },
     {
       "category": "module",
-      "name": "BaikonurLaunchPower",
-      "count": 23,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "BattleBusSlowDeathBehavior",
       "count": 6,
       "owners": [
@@ -6079,39 +6178,12 @@
     },
     {
       "category": "module",
-      "name": "FireWeaponPower",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "FireWeaponWhenDamagedBehavior",
-      "count": 8,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "FirestormDynamicGeometryInfoUpdate",
       "count": 2,
       "owners": [
         "Object"
       ],
       "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "FlightDeckBehavior",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
     },
     {
       "category": "module",
@@ -6157,15 +6229,6 @@
         "Object"
       ],
       "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "HordeUpdate",
-      "count": 13,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
     },
     {
       "category": "module",
@@ -6351,15 +6414,6 @@
       "category": "module",
       "name": "PropagandaTowerBehavior",
       "count": 14,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "RadiusDecalUpdate",
-      "count": 7,
       "owners": [
         "Object"
       ],
@@ -6580,15 +6634,6 @@
         "Object"
       ],
       "plannedTarget": "phase-7-presentation"
-    },
-    {
-      "category": "module",
-      "name": "TechBuildingBehavior",
-      "count": 12,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",

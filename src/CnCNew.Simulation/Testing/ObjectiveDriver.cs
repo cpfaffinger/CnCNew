@@ -23,6 +23,7 @@ internal sealed partial class ObjectiveDriver
     private bool _allowHarm;
     private bool Exhaustive => _idleRounds >= ExhaustiveRoundsBeforeUnion;
     private List<string>? _trace;
+    private List<Leaf>? _defense;
 
     /// <summary>One world intervention. <paramref name="Edge"/> leaves matter only at the instant their script evaluates (entering an area), so they are held back until the script is live.</summary>
     internal sealed class Leaf(string key, string label, int maxApplications, int cooldown, Func<int, bool> apply, bool edge = false)
@@ -213,6 +214,34 @@ internal sealed partial class ObjectiveDriver
             if (Allowed(unit) && !_endings.Contains(unit) && unit.Script.Actions.Concat(unit.Script.FalseActions).Any(action => opposite.Contains(action.TypeName))) _tainted.Add(unit.Index);
         bool Leads(string name)
             => _program.FindScript(name) is { } script && _tainted.Contains(script.Index) || _program.FindGroup(name) is { } group && group.ScriptIndices.Any(index => _tainted.Contains(index));
+        // A script that only sets timers, counters or flags which nothing but defeat-leading scripts read belongs to the defeat sequence as well ("Losing Condition 1" starts the
+        // timer "Start Lose Condition", which only the lose sequence reads).
+        var consumers = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        foreach (var unit in _program.Units)
+        {
+            if (!Allowed(unit)) continue;
+            foreach (var or in unit.Script.OrConditions)
+                foreach (var condition in or.AndConditions)
+                    if (condition.TypeName is "TIMER_EXPIRED" or "COUNTER" or "FLAG" && condition.Parameters.Length > 0)
+                    {
+                        if (!consumers.TryGetValue(condition.Parameters[0].Text, out var list)) consumers[condition.Parameters[0].Text] = list = [];
+                        if (!list.Contains(unit.Index)) list.Add(unit.Index);
+                    }
+        }
+        var produced = new Dictionary<int, HashSet<string>>();
+        foreach (var map in new[] { _timers, _flagsTrue, _flagsFalse })
+            foreach (var (name, producers) in map)
+                foreach (var producer in producers)
+                {
+                    if (!produced.TryGetValue(producer.Unit.Index, out var names)) produced[producer.Unit.Index] = names = new HashSet<string>(StringComparer.Ordinal);
+                    names.Add(name);
+                }
+        foreach (var (name, movers) in _counters)
+            foreach (var mover in movers)
+            {
+                if (!produced.TryGetValue(mover.Producer.Unit.Index, out var names)) produced[mover.Producer.Unit.Index] = names = new HashSet<string>(StringComparer.Ordinal);
+                names.Add(name);
+            }
         for (var changed = true; changed;)
         {
             changed = false;
@@ -221,6 +250,11 @@ internal sealed partial class ObjectiveDriver
                 if (!Leads(name)) continue;
                 foreach (var producer in producers)
                     if (!_endings.Contains(producer.Unit) && _tainted.Add(producer.Unit.Index)) changed = true;
+            }
+            foreach (var unit in _program.Units)
+            {
+                if (!Allowed(unit) || _endings.Contains(unit) || _tainted.Contains(unit.Index) || !produced.TryGetValue(unit.Index, out var names) || names.Count == 0) continue;
+                if (names.All(name => consumers.TryGetValue(name, out var readers) && readers.All(reader => reader != unit.Index && _tainted.Contains(reader)))) { _tainted.Add(unit.Index); changed = true; }
             }
         }
 
@@ -260,6 +294,15 @@ internal sealed partial class ObjectiveDriver
                 _log.Add($"{tick}: {leaf.Label}");
             }
         var signature = Signature();
+        if (_victory)
+            foreach (var leaf in _defense ??= BuildDefense())
+            {
+                if (_lastApplied.TryGetValue(leaf.Key, out var lastDefence) && tick - lastDefence < leaf.Cooldown) continue;
+                if (!leaf.Apply(0)) continue;
+                _lastApplied[leaf.Key] = tick;
+                var times = _applications[leaf.Key] = _applications.GetValueOrDefault(leaf.Key) + 1;
+                if (times <= 3) _log.Add($"{tick}: {leaf.Label}");
+            }
         _idleRounds = Interventions == before && signature == _lastSignature ? _idleRounds + 1 : 0;
         _lastSignature = signature;
     }
@@ -325,7 +368,7 @@ internal sealed partial class ObjectiveDriver
                 alternatives.Add(PlanFire(producer.Unit, producer.OnFalse, depth + 1));
             foreach (var name in group is null ? new[] { unit.Name } : [unit.Name, group.Name])
                 if (_teamEvents.TryGetValue(name, out var events))
-                    foreach (var (team, kind) in events) alternatives.Add(TeamEventPlan(team, kind));
+                    alternatives.Add(TeamEventPlan(events));
             if (alternatives.Count == 0) { plan.Blockers.Add($"subroutine '{unit.Name}' is never called"); return; }
             plan.Merge(Choose(alternatives));
         }
@@ -426,23 +469,39 @@ internal sealed partial class ObjectiveDriver
         }
     }
 
-    private Plan TeamEventPlan(string team, string kind)
+    /// <summary>
+    /// What makes the engine call a team event script: the script is shared by every team prototype that names it (one <c>Wave 6 Team Member Destroyed</c> serves a dozen teams), and
+    /// whichever of them has a live member will do, so the leaf works on the first such team instead of insisting on one that may never exist.
+    /// </summary>
+    private Plan TeamEventPlan(IReadOnlyList<(string Team, string Kind)> events)
     {
-        switch (kind)
+        var plan = new Plan();
+        foreach (var kind in events.Select(item => item.Kind).Distinct(StringComparer.Ordinal))
         {
-            case "unitDestroyed":
-                return Plan.Of(new Leaf("teamdie:" + team, $"destroy a member of team '{team}'", 80, 24, _ =>
-                {
-                    var member = LiveTeamMembers(team).FirstOrDefault();
-                    if (member is null) return false;
-                    _world.Kill(member.Id);
-                    return true;
-                }));
-            case "destroyed":
-                return Plan.Of(KillTeamLeaf(team));
-            default:
-                return new Plan();
+            var teams = events.Where(item => item.Kind == kind).Select(item => item.Team).Distinct(StringComparer.Ordinal).ToArray();
+            switch (kind)
+            {
+                case "unitDestroyed":
+                    plan.Merge(Plan.Of(new Leaf("teamdie:" + string.Join("|", teams), $"destroy a member of team '{teams[0]}'{(teams.Length > 1 ? $" or {teams.Length - 1} other(s)" : "")}", 400, 24, _ =>
+                    {
+                        var member = teams.SelectMany(LiveTeamMembers).FirstOrDefault();
+                        if (member is null) return false;
+                        _world.Kill(member.Id);
+                        return true;
+                    })));
+                    break;
+                case "destroyed":
+                    plan.Merge(Plan.Of(new Leaf("killteams:" + string.Join("|", teams), $"destroy team '{teams[0]}'{(teams.Length > 1 ? $" and {teams.Length - 1} other(s)" : "")}", 40, 30, _ =>
+                    {
+                        var members = teams.SelectMany(LiveTeamMembers).ToArray();
+                        if (members.Length == 0) return false;
+                        foreach (var member in members) _world.Kill(member.Id);
+                        return true;
+                    })));
+                    break;
+            }
         }
+        return plan;
     }
 
     // ------------------------------------------------------------------------------------------------ the diagnosis of a run that did not end
