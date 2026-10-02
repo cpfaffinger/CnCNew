@@ -543,6 +543,26 @@ Objekte instanziierbar (Ranger, Jarmen Kell, GLA-Rebellin-Fähigkeiten). Lokale 
 verschoben, `docs/SCRIPT-ENGINE.md` §9). Garnison, Kartenaufdeckung, KI-Teambau, Sichtbedingungen, `SKIRMISH_*` und Skirmish-Setup (Teil A
 Punkt 1) bleiben offen; Details in `docs/HANDOFF-PHASE11.md`.
 
+**Phase-12-Stand (2. Oktober 2026, frisch gemessen; Auftrag `docs/HANDOFF-PHASE12.md`, Vorbereitung für `docs/HANDOFF-PHASE13.md`):**
+
+- **Zielfahrer (Punkt 1, Kern):** `MissionObjectiveDriver`/`ObjectiveDriver` planen rückwärts von den `VICTORY`/`DEFEAT`-Skripten (Plan je Endskript, Blätter und Blocker, Gegenrichtung, richtungsbewusste Zähler,
+  Stillstandserkennung mit Vereinigung aller Alternativen, Abwehrblätter; `docs/SCRIPT-ENGINE.md` §9). Ergebnis (`CampaignTool drive`, 12.000 Ticks): **Sieg auf dem eigenen Skriptweg 22/24, Niederlage 24/24**
+  (vorher 10/24 und 16/24). Offen und benannt: `MD_GLA03` (der Träger ist unsterblich, das Siegskript wartet auf den Strahl von `ParticleUplinkCannonUpdate`, nicht implementiert) und `MD_CHI04` (lange
+  Wellenmission). Die statische Erreichbarkeit ist jetzt **Sieg sauber 24/24, Niederlage sauber 24/24**.
+- **Aktionen (Punkt 2):** 29 Typen ausgeführt (Überschreibungs-Beziehungen, die `TEAM_ALL_USE_COMMANDBUTTON_*`-Familie, Jagd mit Befehlsknopf, `TEAM_LOAD_TRANSPORTS`, `TEAM_PANIC`, Blickrichtung, Tarnschalter,
+  unbemannt, Priorität u. a.) und 8 aufgezeichnet (`TEAM_SET_ATTITUDE`, `TEAM_WANDER(_IN_PLACE)`, `NAMED_SET_HELD`, Rang, Wrack-Lebensdauer): Aktionen **160** ausgeführt / 129 weitergereicht / **10** aufgezeichnet / **45**
+  fehlend von 344 (vorher 131/129/2/82); Bedingungen unverändert 80/29 (die fehlenden Bedingungen stehen in keiner Endkette). Treffer auf fehlende Aktionstypen im Audit 1,1 % → 0,3 %.
+- **Module:** sieben Missionsobjekt-Module (`FireWeaponWhenDamagedBehavior`, `HordeUpdate`, `FireWeaponPower`, `BaikonurLaunchPower`, `TechBuildingBehavior`, `RadiusDecalUpdate`, `FlightDeckBehavior` als Hülle,
+  `docs/SIMULATION-CORE.md` §27): 98 von 205 Modultypen, **1.680 von 2.115 Objekten instanziierbar (79,4 %)**, Modulverwendungen abgedeckt 15.903 von 19.553 (81,3 %), Kompatibilitätsbasislinie 765 Einträge.
+- **Persona-Fraktion (Punkt 4):** `MissionOptions.HumanFaction`, `ScriptProgram.WithHumanSide` (synthetische Seite `ThePlayer` für `GC_LaserGeneral`), `CampaignCatalog.WithPersonas(ChallengeMode.ini)`;
+  `GC_LaserGeneral` hat jetzt eine eigene menschliche Seite (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
+- **Client-Verdrahtung (Punkt 5):** `ClientRuntime` und `StrideInputTranslator` schließen HUD-Zeichenliste, Eingabe und Shell-Ausgaben an den Stride-Client an, dazu die Hintergrundkunst der Befehlsleiste
+  (`ControlBarScheme.ini`, `RightHUDImage`) und die Minimap (`docs/GAME-HUD.md` §15).
+- **Nicht umgesetzt:** Punkt 3 (**Verstärkung mit Transport/Formationen**: alle `CINE_*`-Transportflugzeuge sind nicht instanziierbar, die Chinook-Lieferung fehlt) und Punkt 6 (**VM-Semantiklücken**, nur
+  dokumentiert und begründet belassen: `docs/SCRIPT-ENGINE.md` §8 Punkt 23). Beides ist Gegenstand von `docs/HANDOFF-PHASE13.md`.
+- Unverändert: Retail-Referenzmatch Sieger FactionGLA bei Tick 19.200, Endhash `28BE35C1174E369F`; Stresstest `56882F763EABEF67`; keine Versionssprünge (`WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2,
+  `CommandTypes.Version` 10; `humanFaction` wird im Missionszustand nur bei gesetztem Wert geschrieben); 21 erklärte Build-Warnungen.
+
 **Phase-11-Stand (1. Oktober 2026, frisch gemessen; Auftrag `docs/HANDOFF-PHASE11.md`, Vorbereitung für `docs/HANDOFF-PHASE12.md`):** die Skript-VM führt jetzt auch die
 `SKIRMISH_*`-Bedingungen (Entscheidung „Portierung“ statt `SkirmishAi`-Ersatz, `docs/SCRIPT-ENGINE.md` §5c), Sicht-/Spezialkraft-Bedingungen, Kartenaufdeckung, Garnison/Behälter, Bauschalter,
 `BUILD_TEAM`/`TEAM_MERGE_INTO_TEAM`/`RECRUIT_TEAM`, die Wegpunkt-Varianten der Befehlsknopf-Fähigkeiten, **Sequenzskripte** (§5a) und **Teamereignis-Skripte** (§5b) aus; Upgrade-/`FIRE_WEAPON`-
@@ -582,27 +602,25 @@ der Challenge-Wahl (`docs/SCRIPT-ENGINE.md` §9, Blockerliste).
 
 **Bekannte Grenzen:**
 
-**Bekannte Grenzen (Stand nach Phase 11):**
+**Bekannte Grenzen (Stand nach Phase 12):**
 
-- **Nicht jede Mission ist als vollständig durchspielbar belegt.** Belegt ist, dass die Endskripte jeder Karte statisch erreichbar sind (21/24 Siege, 24/24 Niederlagen „sauber“) und dass jede Karte
-  deterministisch läuft und nach Speichern/Laden identisch fortsetzt; **nicht** belegt ist, dass ein Spieler alle Ziele erfüllen kann. Die dynamischen Endproben (Auslöschen) erreichen weiterhin nur
-  10/24 Siege und 15/24 Niederlagen, der Zielfahrer 10/24 Siege und 16/24 Niederlagen auf dem Skriptweg, weil die Siegskripte von Zielen (Zähler, Bereiche, Teams, Spezialkräfte) abhängen, die eine Auslöschung nicht abfährt. Was zur Einlösung der Abnahme
-  „jede Kampagnenmission besteht ihre wesentlichen Erfolgs- und Fehlerpfade“ noch fehlt, ist ein Zielfahrer (Spieler-Agent oder Skript-Zeuge), der die Missionsziele erfüllt – Auftrag von
-  `docs/HANDOFF-PHASE12.md`.
-- Noch fehlende Skriptaktionen/-bedingungen mit Treffern (statisch, Skripte/Karten): `TEAM_HUNT_WITH_COMMAND_BUTTON` 53/12, `TEAM_SET_ATTITUDE` 42/11, `TEAM_LOAD_TRANSPORTS` 33/8,
-  `TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_OBJECTTYPE` 30/5, `TEAM_SET_OVERRIDE_RELATION_TO_PLAYER` 27/5, `PLAYER_SET_OVERRIDE_RELATION_TO_TEAM` 19/6, `TEAM_PANIC` 18/4, …; fehlende Bedingungen:
-  `PLAYER_COMPLETED/MIDWAY_SPECIAL_POWER`, `SUPPLY_SOURCE_SAFE/ATTACKED`, `PLAYER_BUILT_UPGRADE`, `TEAM_STATE_IS`, `PLAYER_POWER_COMPARE_PERCENT`, `SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE`
-  (`docs/SCRIPT-ENGINE.md` §9). Verstärkung mit Transport (`teamTransport`, `teamStartsFull`, `CINE_*`-Flugzeuge, Fallschirm) und Formationen/Angriffsmarsch sind nicht simuliert.
-- Die Fraktion der Persona einer Challenge-Wahl (`ChallengeMode.ini` `PlayerTemplate`) ersetzt die Fraktion der Kartenseite nicht (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
+- **Die Spielbarkeit der Missionen durch einen Menschen ist nicht belegt.** Belegt ist: die Endskripte jeder Karte sind statisch erreichbar (Sieg und Niederlage je 24/24 „sauber“), jede Karte läuft
+  deterministisch und setzt nach Speichern/Laden identisch fort, und der zielgerichtete Fahrer erreicht Sieg auf dem eigenen Skriptweg bei 22/24 und Niederlage bei 24/24 Karten. Der Fahrer ersetzt jedoch Spielerhandlungen
+  durch Welteingriffe (platzierte Einheiten, entfernte Gegner in Abwehrbereichen, UI-Signale); „ja“ belegt die Skriptkette, nicht, dass ein Spieler mit den implementierten Einheiten gewinnen kann. Die
+  Ausschalt-Endproben erreichen weiter nur 13/24 Siege und 15/24 Niederlagen. Offen: `MD_GLA03` (Sieg: `ParticleUplinkCannonUpdate`) und `MD_CHI04` (Sieg: sehr lange Wellenmission, Wellenzähler 11 von 15 in 70.000 Ticks).
+- Noch fehlende Skriptaktionen (statisch, Skripte/Karten): `SKIRMISH_MOVE_TO_APPROACH_PATH` 10/3, `SKIRMISH_FOLLOW_APPROACH_PATH` 7/3, `AI_PLAYER_BUILD_SUPPLY_CENTER` 5/1, `SET_TRAIN_HELD` 5/1,
+  `TEAM_CAPTURE_NEAREST_UNOWNED_FACTION_UNIT` 5/4, `TEAM_GUARD_SUPPLY_CENTER` 5/1, …; fehlende Bedingungen unverändert `PLAYER_COMPLETED/MIDWAY_SPECIAL_POWER`, `SUPPLY_SOURCE_SAFE/ATTACKED`,
+  `PLAYER_BUILT_UPGRADE`, `TEAM_STATE_IS`, `PLAYER_POWER_COMPARE_PERCENT`, `SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE` (`docs/SCRIPT-ENGINE.md` §9). **Verstärkung mit Transport**
+  (`teamTransport`, `teamStartsFull`, `CINE_*`-Flugzeuge, Fallschirm, Chinook-Lieferung) und Formationen/Angriffsmarsch sind nicht simuliert; zehn Aktionen werden nur aufgezeichnet (`SCRIPT-ENGINE.md` §8 Punkt 17).
+- Die in Phase 12 bewusst nicht angefassten VM-Semantiklücken stehen in `docs/SCRIPT-ENGINE.md` §8 Punkt 23.
 - Das Skirmish-Setup (Teil A Punkt 1) ist seit Phase 10 abgeschlossen (alle 64 Skirmish-Karten mit ≥2 Startpositionen starten und enden, `SimTool skirmish-sweep`); ein Skirmish-Speicherstand ist
   bewusst nicht unterstützt (`SkirmishMatchSession.CreateSave()` wirft; Replay/Checkpoint deckt Skirmish-Partien ab).
 - Objekte, deren Vorlage im Retail-Basisbestand fehlt (Kartenüberlagerungs-Definitionen wie Straßen, Zäune, Bäume), werden übersprungen und gezählt; `*_HUNT`/`*_ATTACK_*` sind Bewegungsaufträge plus
-  automatisches Gefecht (keine Formation, kein Angriffsmarsch); `PLAYER_AFFECT_RECEIVING_EXPERIENCE`/`OBJECT_ALLOW_BONUSES` werden nur aufgezeichnet.
+  automatisches Gefecht (keine Formation, kein Angriffsmarsch).
 - Freischaltungen (Kampagnenreihenfolge der Challenge-Kampagnen, Profil) sind nicht modelliert; Menü, Briefing, Ladeliste, Speichern im Spiel und Missionsabschluss sind angeschlossen
-  (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7), der Stride-Client verarbeitet die Shell-Ausgaben (`StartMissionOutput`) noch nicht (`--mission` startet eine Karte direkt).
+  (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7), und der Stride-Client verarbeitet seit Phase 12 die Shell-Ausgaben (`ClientRuntime`, `docs/GAME-HUD.md` §15); die Verdrahtung ist headless per Rauchtest geprüft, nicht von einem Menschen gespielt.
 - Missionen sind keine Replays (Skriptaktionen sind keine aufgezeichneten Befehle); Wahrheit ist der Snapshot.
-- Referenzwerte nach Phase 11: Retail-Referenzmatch Sieger FactionGLA bei Tick 19.200, Endhash `28BE35C1174E369F` (unverändert gegenüber Phase 10); Stresstest `56882F763EABEF67` (die frühere Angabe
-  `ED6F9329F59662E3` war schon vor dieser Phase nicht mehr reproduzierbar).
+- Referenzwerte nach Phase 12: Retail-Referenzmatch Sieger FactionGLA bei Tick 19.200, Endhash `28BE35C1174E369F` (unverändert gegenüber Phase 10/11); Stresstest `56882F763EABEF67`.
 
 ## 10. Patch-Integration, Qualität und auslieferbarer Abschluss
 
@@ -631,4 +649,4 @@ Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
 Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
 Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
 jedoch separat begründet und versioniert. Die Schritte 1 bis 8 sind abgeschlossen, Schritt 9 ist weit fortgeschritten, aber nicht im Sinne seiner Abnahme beendet (siehe oben „Bekannte Grenzen“).
-Der nächste Einstieg ist `docs/HANDOFF-PHASE12.md` (Zielfahrer für die Missionen, restliche Skriptfamilien, Verstärkungstransport, Client-Verdrahtung der Shell).
+Der nächste Einstieg ist `docs/HANDOFF-PHASE13.md` (Verstärkung mit Transport, die zwei offenen Sieg-Missionen, Spielbarkeit der Missionen, VM-Semantiklücken).

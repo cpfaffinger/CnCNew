@@ -6,7 +6,7 @@ Singleplayer, Skirmish und Kampagne. Nicht im Scope: Multiplayer, binäre Kompat
 Mods und Savegames. Das Repo ist rein lokal (Branch `main`, **kein Remote**).
 
 Die Gesamtplanung steht in `docs/IMPLEMENTATION-PLAN.md`. Die aktuell zu bearbeitende Phase steht
-als vollständiger Auftrag in `docs/HANDOFF-PHASE12.md` (Handoff-Datei der jeweils nächsten Phase).
+als vollständiger Auftrag in `docs/HANDOFF-PHASE13.md` (Handoff-Datei der jeweils nächsten Phase).
 Lies vor jeder Phase `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
 `docs/IMPLEMENTATION-PLAN.md` sowie die Fachdokumente der berührten Domäne
 (`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `SIMULATION-CORE.md`, `W3D-MATERIALS.md`).
@@ -244,3 +244,13 @@ die Missionsziele auf dem Skriptweg erfüllt, restliche Skriptaktionen, Verstär
 `ChallengeSides` (`CampaignController`), eine Kampagnenmission spielt hinter der Skirmish-Befehlsleiste (`LiveGame`/`LiveMission`/`MissionController`, Stride `--mission`).
 **Zeilenenden** (Korrektur): maßgeblich ist `git ls-files --eol <datei>`; CRLF im Index haben `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, alles andere ist LF. Zeilenenden pro Datei erhalten
 (Skripte: `newline=''`, `\n` im Suchtext nach `\r\n` umwandeln, danach `git ls-files --eol -m` prüfen); mehrzeilige Python-Editskripte als Datei im Scratchpad ausführen statt als Heredoc.
+
+Phase 12 (Stand 2. Oktober 2026; neu messen; `docs/SCRIPT-ENGINE.md` §5/§8/§9, `docs/SIMULATION-CORE.md` §27, `docs/CAMPAIGN-AND-SAVEGAMES.md` §7, `docs/GAME-HUD.md` §15): der zielgerichtete Zielfahrer
+(`CampaignTool drive`, `ObjectiveDriver*`, Test-/Werkzeugcode, 12.000 Ticks) erreicht auf dem eigenen Skriptweg **Sieg 22/24, Niederlage 24/24** (offen: `MD_GLA03` braucht `ParticleUplinkCannonUpdate`, `MD_CHI04` ist eine
+sehr lange Wellenmission); `CampaignTool reachability`: Sieg und Niederlage sauber 24/24. Die Skript-VM führt 80/109 Bedingungen und 160 Aktionstypen aus (129 weitergereicht, 10 aufgezeichnet, 45 fehlend von 344). Sieben
+Missionsobjekt-Module (`Phase12Modules.cs`), Überschreibungs-Beziehungen (`SimulationWorld.RelationshipOverride`), Persona-Fraktion (`MissionOptions.HumanFaction`, `ScriptProgram.WithHumanSide`, `CampaignCatalog.WithPersonas`)
+und die Client-Verdrahtung (`ClientRuntime`, `StrideInputTranslator`, Befehlsleisten-Schemakunst) sind gemergt. Modulkatalog 98 von 205, Instanziierbarkeit 1.680 von 2.115 (79,4 %), Modulverwendungen abgedeckt
+15.903 von 19.553 (81,3 %), Kompatibilitätsbasislinie 765 Einträge. Unverändert: Retail-Referenzmatch Sieger FactionGLA Tick 19.200, Endhash `28BE35C1174E369F`; Stresstest `56882F763EABEF67`; keine Versionssprünge
+(`WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10); 21 erklärte Warnungen. **Nicht erledigt:** Verstärkung mit Transport/Formationen und die VM-Semantiklücken (`docs/HANDOFF-PHASE13.md`).
+Der Zielfahrer ersetzt Spielerhandlungen durch Welteingriffe – „ja“ belegt die Skriptkette, nicht die Spielbarkeit. Zeilenenden: Bash-`git show > Datei` und Perl/`awk`-Umschreiben verändern CRLF-Dateien in dieser Umgebung; für
+`README.md`/`docs/ARCHITECTURE.md`/`docs/ROADMAP.md`/`docs/IMPLEMENTATION-PLAN.md` PowerShell mit `[IO.File]::ReadAllText/WriteAllText` (UTF-8 ohne BOM, `` `r`n ``) benutzen und danach `git ls-files --eol -m` prüfen.
