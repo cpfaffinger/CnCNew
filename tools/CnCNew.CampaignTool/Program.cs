@@ -30,6 +30,7 @@ const string Usage = """
       drive <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--explain]
                                                 objective driver: satisfies the world-state conditions of the scripts (kill named objects/teams, send units into areas, ...) one by one and
                                                 reports whether the mission's OWN VICTORY/DEFEAT action fired (no generic elimination)
+      template <content-dir> --name A[,B]          is the template instantiable, and which modules are missing
       sides <content-dir> [--campaign NAME]       the script players (sides) of every campaign map: name, faction, human flag (to map a chosen general to a map's side)
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
@@ -55,13 +56,14 @@ try
         "reachability" => ReachabilityReport(content, campaigns, args),
         "script" => ScriptDump(content, campaigns, args),
         "drive" => Drive(content, campaigns, args),
+        "template" => TemplateInfo(content, args),
         "playthrough" => Playthrough(content, campaigns, args),
         _ => Fail(Usage),
     };
 }
 catch (Exception exception)
 {
-    Console.Error.WriteLine($"error: {exception.Message}");
+    Console.Error.WriteLine(args.Contains("--trace") ? $"error: {exception}" : $"error: {exception.Message}");
     return 1;
 }
 
@@ -185,7 +187,9 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             var cells = new List<string>();
             foreach (var victory in new[] { true, false })
             {
-                var result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks);
+                ObjectiveDriveResult result;
+                try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks); }
+                catch (Exception exception) when (exception is not OutOfMemoryException) { cells.Add($"{(victory ? "victory" : "defeat")} FAILED {exception.GetType().Name}: {exception.Message}"); continue; }
                 if (result.ReachedByScript) { if (victory) victories++; else defeats++; }
                 cells.Add($"{(victory ? "victory" : "defeat")} {(result.ReachedByScript ? $"REACHED by '{result.OutcomeScript}' @{result.OutcomeTick}" : "not reached")} ({result.Interventions} interventions)");
                 if (explain)
@@ -370,4 +374,15 @@ static int Playthrough(ContentFileSystem content, CampaignCatalog campaigns, str
     }
     Console.WriteLine(ok ? $"Campaign {campaign.Name} played through: {controller.Progress.Completed.Count} missions." : $"Campaign {campaign.Name} did not finish.");
     return ok ? 0 : 1;
+}
+
+static int TemplateInfo(ContentFileSystem content, string[] args)
+{
+    var (_, catalog, _) = Compile(content);
+    foreach (var name in (Arg(args, "--name") ?? throw new ArgumentException("--name <template[,template]> is required.")).Split(','))
+    {
+        if (!catalog.TryGet(name, out var template)) { Console.WriteLine($"{name}: no such template"); continue; }
+        Console.WriteLine($"{name}: instantiable {template.IsInstantiable}; missing modules: {string.Join(", ", template.MissingModules)}");
+    }
+    return 0;
 }

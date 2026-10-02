@@ -164,6 +164,9 @@ run.Test("Scripts: named special powers, countdowns, named reveals and recorded-
 run.Test("Scripts: RECRUIT_TEAM takes free units into the team", Tests.ScriptRecruitTeam);
 run.Test("Scripts: team event scripts (create, enemy sighted, unit destroyed, destroyed)", Tests.ScriptTeamEventScripts);
 run.Test("Scripts: the objective driver ends a mission through its own victory and defeat scripts", Tests.ScriptObjectiveDriver);
+run.Test("Scripts: the goal-directed driver plans backwards from the ending and avoids the opposite ending", Tests.ScriptObjectiveDriverPlansBackwards);
+run.Test("Scripts: the driver moves counters the right way", Tests.ScriptObjectiveDriverMovesCountersTheRightWay);
+run.Test("Scripts: explaining a script leaves the engine untouched", Tests.ScriptExplainLeavesTheEngineUntouched);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);
