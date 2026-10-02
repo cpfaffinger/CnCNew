@@ -157,12 +157,14 @@ und Endproben: `docs/SCRIPT-ENGINE.md` §9). Die Größe eines Missionszustands 
   `HAS_FINISHED_*`/`CAMERA_MOVEMENT_FINISHED` (Standard 0 = sofort fertig, wie headless). Test: `CampaignTests` → „a host without a presentation director …“.
 - **Missions-HUD (Phase 11):** eine Kampagnenmission lässt sich jetzt mit der vollen Skirmish-Befehlsleiste spielen – `LiveGame`/`LiveMission`/`MissionController`, siehe
   `docs/GAME-HUD.md` §14. `MissionPresentationDirector`/`MissionUiBridge` hängen darin; `MissionPauseMenu` bleibt der Speicher-/Lade-Dialog der Mission.
-- **Generals'-Challenge-General-Wahl (Phase 11):** `ChallengeSides.HumanSideFor(map)` (`CnCNew.Game/Campaign`) bestimmt die menschliche Seite einer Challenge-Karte, und
+- **Generals'-Challenge-General-Wahl (Phase 11, Phase 12 ergänzt):** `ChallengeSides.HumanSideFor(map)` (`CnCNew.Game/Campaign`) bestimmt die menschliche Seite einer Challenge-Karte, und
   `CampaignController.StartCurrentMission` ruft es für `IsChallenge`-Kampagnen auf, wenn der Host keine Seite nennt (`ChallengeSelectScreen` ruft dadurch automatisch die richtige
   Seite ab, ohne eigenen Code). Messung (`CampaignTool sides`): sieben der acht Challenge-Karten markieren ihre Seite selbst (`ThePlayer`, `playerIsHuman`) – dort entscheidet die Karte;
-  `GC_LaserGeneral` markiert keine, die erste Nicht-Neutral-/Nicht-Civilian-Seite mit `*General`-Fraktion (`PlyrAmericaLaserGeneral`) ist dort der Mensch. **Nicht
-  übernommen:** der `PlayerTemplate` des gewählten Generals (`ChallengeMode.ini`, `GeneralPersonaN`) ersetzt die Fraktion der Kartenseite nicht – der Mensch spielt, was die Karte für
-  `ThePlayer` vorsieht (z. B. `FactionGLAToxinGeneral` auf `GC_NukeGeneral` unabhängig vom gewählten Persona). Das Original setzt die Fraktion der menschlichen Seite aus der
-  Persona; ein solcher Austausch bräuchte einen Fraktions-Override in `MissionSession.Start` (Startobjekte, Geld, Wissenschaften der Fraktion) und ist offen.
-  Gemessen: `CampaignTool playthrough --campaign CHALLENGE_0` gewinnt Mission01–05 per Auslöschung (Sieg nach 330–360 Ticks), Mission06 (`GC_LaserGeneral`) nicht (Endskripte
-  fraktionsabhängig, `docs/SCRIPT-ENGINE.md` §9).
+  `GC_LaserGeneral` markiert keine und definiert nur ihre Gegner (`PlyrAmericaLaserGeneral` ist der Feind, dessen Bauanlagen das Siegskript zerstört sehen will). **Phase 12 – Persona-Fraktion:**
+  `MissionOptions.HumanFaction` (Missionszustand 2, `humanFaction` wird nur bei gesetztem Wert gespeichert) trägt die Fraktion des gewählten Generals; `ScriptProgram.WithHumanSide(seite, fraktion)` ersetzt
+  damit die Fraktion der menschlichen Seite und hängt auf einer Karte ohne menschliche Seite (`GC_LaserGeneral`) eine **synthetische Seite** `ThePlayer` an (Feind jeder nicht-zivilen Kartenseite und
+  umgekehrt; `ChallengeSides.SyntheticHumanSide`); die Programmprüfsumme bleibt die der Karte, damit ein Speicherstand das Programm erkennt, die Optionen sagen, wie es angepasst wurde.
+  `CampaignCatalog.WithPersonas(ChallengeMode.ini)` füllt die `PlayerFaction` jeder Challenge-Kampagne ohne eigene aus `GeneralPersonaN` (`PlayerTemplate` + `Campaign`; Personas mit
+  `Campaign = unimplemented` und Kampagnen mit eigener `PlayerFaction` bleiben unverändert), `GameShell` liest `Data/INI/ChallengeMode.ini` beim Start. Messung: `GC_LaserGeneral` hat jetzt eine eigene
+  menschliche Seite und ist auf dem Skriptweg gewinn- und verlierbar (Zielfahrer, `docs/SCRIPT-ENGINE.md` §9); `CampaignTool drive|audit` reichen die Persona durch.
+  Gemessen: `CampaignTool playthrough --campaign CHALLENGE_0` gewinnt Mission01–05 per Auslöschung (Sieg nach 330–360 Ticks).

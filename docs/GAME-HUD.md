@@ -275,9 +275,34 @@ Schichten wanderte unverändert in die Basisklasse, `LiveMatch` blieb für seine
   (die Auswahl erreicht `NAMED_SELECTED`), liefert `BuildDrawList` mit dem Bildschirmtext des Directors (Caption/Untertitel/Filmplatzhalter) über dem HUD und meldet das Missionsende
   einmal (`MissionEnded`); danach ruft der Host `GameShell.MissionFinished(run, controller)`.
 - **Stride:** `LiveMatchHost` und alle Weltschichten nehmen ein `LiveGame`; `CnCNew.Client.Stride --mission <Karte> [--human-side <Name>]` startet eine Kampagnenkarte (Rauchtest:
-  `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/phase2-import-a`). Die Stride-Hülle zeichnet weiterhin nur die Welt; die HUD-Zeichenliste
-  (`MissionController.BuildDrawList`) zu zeichnen und die Shell-Ausgaben (`StartMissionOutput`) zu verarbeiten, ist wie beim Skirmish Sache der noch fehlenden Client-Verdrahtung.
+  `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/phase2-import-a`). Seit Phase 12 zeichnet die Stride-Hülle auch die HUD-Zeichenliste
+  (`MissionController.BuildDrawList`) und verarbeitet die Shell-Ausgaben (`StartMissionOutput`), §15.
 - **Grenzen:** das Schnellspeichern im Spiel bleibt `MissionPauseMenu` (`MatchController` hat seinen eigenen Quit-Dialog); Kampagnenzustand und Fortschritt hält weiter der
   `CampaignController`. Die Skirmish-Statistik (`MatchResult`) wird für Missionen mit denselben Ereignissen gefüllt (`MatchStatsTracker.Snapshot(Players, Winner, Tick)`), ihre Zählung
   „gebaut/verloren/getötet“ gilt also auch dort, ein Missionsergebnis mit Zielen/Punkten gibt es nicht. Test: `tests/CnCNew.Game.Tests/MissionHudTests.cs` (echte Karte
   `GC_ChemGeneral`: Frames, Zeichenliste, Befehl über die Senke, Auswahl erreicht die VM, Ende genau einmal).
+
+## 15. Phase 12: HUD, Eingabe und Shell im Stride-Client (`ClientRuntime`)
+
+Die Stride-Hülle zeichnete bis Phase 11 nur die Welt. Seit Phase 12 verdrahtet `src/CnCNew.Client.Stride/ClientRuntime.cs` alles, was die Präsentationsschicht liefert – ohne Simulationszustand zu berühren, sie liest
+nur, was die Controller zeigen, und gibt typisierte Eingaben weiter:
+
+- **Eingabe:** `Ui/StrideInputTranslator.cs` übersetzt je Frame `InputManager.Events` und die absolute Mausposition in die gerätneutralen `PresentationInput.InputEvent`s (Fensterpixel, Ursprung oben links =
+  Raum des Backbuffers, in dem das UI gelegt ist; Move-Ereignis zuerst, wenn sich der Zeiger bewegte; Tasten ohne Namen in `KeyNames` werden verworfen, Text geht als Zeichen durch). Der Empfänger ist
+  der Bildschirmbesitzer: die Shell (Menüs) oder das HUD des laufenden Spiels (`MatchController`/`MissionController`).
+- **Zeichnen:** `GameShell.BuildDrawList`, `MatchController.BuildDrawList` und `MissionController.BuildDrawList` werden mit **einem** `UiRenderer` über der 3D-Welt (`LiveMatchHost`) gezeichnet. Die Fenster, die die
+  Befehlsleiste dem Host überlässt (§5): `W3DLeftHUDDraw` ist der Minimaprahmen, seitenverhältniserhaltend zentriert wie in `MatchController.TryMinimapWorld` (§11) – ein Punkt je Objekt, das der Betrachter sieht
+  (Teamfarbe; die Projektion lässt aus, was Nebel/Schatten verbergen); `Viewport3D` braucht nichts (die Welt liegt schon dahinter); jeder andere Rückruf wird vom Renderer gezählt und bleibt ungezeichnet
+  (`ClientRuntime.LastFrame`: gezeichnete Befehle und offen gebliebene Eigenzeichnungen, für Rauchtests).
+- **Shell-Ausgaben:** `StartMatchOutput`, `StartMissionOutput`, `ExitRequestedOutput` und die Anzeige-/Einstellungsänderungen werden ausgeführt; ein beendetes Spiel meldet sich genau einmal an die Shell
+  zurück (`GameShell.MatchFinished`/`MissionFinished`: Ergebnis-/Abspannbildschirme), danach fällt die Welt weg und die Shell erscheint wieder. Befehlszeile: `--shell` (Standard bei `--content-dir` ohne
+  `--match`/`--mission`/`--model-path`), `--match`, `--mission`, `--smoke-test [--frames N --capture <png>]`.
+- **Schema-Kunst der Befehlsleiste (Fund beim Verdrahten):** die Befehlsleiste hatte bisher nur die Fensterbaumgrafik. `ControlBarScheme.ini` liefert den eigentlichen Hintergrund: `BuildSchemeBackground`
+  (`ControlBarScheme::drawBackground`) legt die `ImagePart`s der Seite des Menschen in Ebenenreihenfolge (Ebene 0 zuletzt, oben) unter den Fensterbaum, jeweils über dieselbe Abbildung wie die Geld-/Energie-
+  Rechtecke; ein Bild, das die Tabelle nicht kennt, wird übersprungen. Das Porträtfenster rechts nennt das Bild `HardCodedWithControlBarSchemeIni`, das das Original durch das `RightHUDImage` des Schemas (das
+  Seitenlogo) ersetzt (`ResolveHardCodedImages`, neues Feld `ControlBarSchemeInfo.RightHudImage`). Das hat die HUD-Zeichenliste geändert: der Golden-Hash `hud-drawlist-1280x720.sha256` wurde bewusst neu
+  erzeugt (Test `HudTests`).
+- **Grenzen:** Schriftmetrik und echte Glyphen kommen weiter aus `ShellTextMeasure` (synthetisch, `docs/GAME-SHELL.md` §10); Video und die Tonausgabe der Shell/Missionen sind nicht Teil dieses Pakets (die Ausgabe `Audio/AudioOutput` ist unverändert);
+  die Verdrahtung ist headless per Rauchtest geprüft, nicht von einem Menschen gespielt.
+- **Bildprobe (2. Oktober 2026):** `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --frames 60 --capture <png>` zeigt über der Welt die Minimap mit Teampunkten im Rahmen, die Befehlsleiste mit Geldanzeige, Fortschrittsbalken und
+  leerem Befehlsraster sowie den Sprach-Untertitel der Mission (`(speech: Taunts_Toxin102)`); das Porträtfenster rechts bleibt leer. Die Shell (`--shell`) zeichnet 172 Befehle ohne fehlende Bilder/Texturen/Beschriftungen/Glyphen.
