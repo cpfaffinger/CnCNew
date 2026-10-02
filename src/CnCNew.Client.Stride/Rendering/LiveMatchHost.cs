@@ -40,17 +40,31 @@ internal sealed class LiveMatchHost : IDisposable
     }
 
     public LiveGame Match { get; }
+
+    /// <summary>The minimap texture the terrain layer composes (terrain, fog, entity dots, camera footprint).</summary>
+    public Texture MinimapTexture => _layers.OfType<CnCNew.Client.Stride.Layers.TerrainLayer>().Single().MinimapTexture;
+
+    /// <summary>Gives the minimap the dots of what the viewer sees (the terrain layer would otherwise show terrain, fog and the camera only).</summary>
+    public void UpdateMinimap(CommandList commandList, IReadOnlyList<CnCNew.Presentation.Minimap.MinimapDot> dots)
+        => _layers.OfType<CnCNew.Client.Stride.Layers.TerrainLayer>().Single().UpdateMinimap(commandList, dots);
     public Scene Scene { get; }
     public RenderServices Services { get; }
 
-    /// <summary>Advances the match by the frame time, then refreshes camera and layers.</summary>
-    public void Update(GameTime gameTime, CommandList commandList, int width, int height, double? fixedSeconds = null)
+    /// <summary>
+    /// Advances the match by the frame time, then refreshes camera and layers. A HUD controller passes <paramref name="step"/> to advance the match and the camera itself
+    /// (it applies its own camera intent and clocks); without one the camera just settles and the match advances.
+    /// </summary>
+    public void Update(GameTime gameTime, CommandList commandList, int width, int height, double? fixedSeconds = null, Action<double>? step = null)
     {
         var seconds = fixedSeconds ?? gameTime.Elapsed.TotalSeconds;
         _total += seconds;
         if (width > 0 && height > 0) Match.Camera.SetViewportSize(new System.Numerics.Vector2(width, height));
-        Match.Camera.Update((float)seconds, false);
-        Match.Advance(seconds);
+        if (step is null)
+        {
+            Match.Camera.Update((float)seconds, false);
+            Match.Advance(seconds);
+        }
+        else step(seconds);
         _camera.ViewMatrix = Match.Camera.View.ToStride();
         _camera.ProjectionMatrix = Match.Camera.Projection.ToStride();
         var frame = new WorldFrame(Match, Match.Frame, commandList, (float)seconds, _total);

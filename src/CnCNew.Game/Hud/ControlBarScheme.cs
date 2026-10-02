@@ -21,7 +21,8 @@ public sealed record ControlBarSchemeInfo(
     string Side,
     SchemeRect Money,
     SchemeRect PowerBar,
-    ImmutableArray<ControlBarImagePart> ImageParts);
+    ImmutableArray<ControlBarImagePart> ImageParts,
+    string RightHudImage = "");
 
 public sealed class ControlBarSchemeTable
 {
@@ -72,18 +73,22 @@ public sealed class ControlBarSchemeTable
     private static ControlBarSchemeInfo ParseScheme(string name, string[] lines, ref int index)
     {
         var side = string.Empty;
+        var rightHud = string.Empty;
         SchemeRect money = default, power = default;
         var parts = ImmutableArray.CreateBuilder<ControlBarImagePart>();
         for (; index < lines.Length; index++)
         {
             var line = StripComment(lines[index]);
             if (line.Length == 0) continue;
-            if (line.Equals("End", StringComparison.OrdinalIgnoreCase)) return new ControlBarSchemeInfo(name, side, money, power, parts.ToImmutable());
+            if (line.Equals("End", StringComparison.OrdinalIgnoreCase)) return new ControlBarSchemeInfo(name, side, money, power, parts.ToImmutable(), rightHud);
             var (key, rest) = SplitFirst(line);
             switch (key.ToUpperInvariant())
             {
                 case "SIDE":
                     side = rest.Trim();
+                    break;
+                case "RIGHTHUDIMAGE":
+                    rightHud = rest.Trim();
                     break;
                 case "MONEYUL":
                     money = money with { Left = ParsePair(rest).X, Top = ParsePair(rest).Y };

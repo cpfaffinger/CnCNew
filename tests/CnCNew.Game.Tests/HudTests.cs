@@ -1,3 +1,4 @@
+using CnCNew.Ui.Runtime;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
@@ -33,6 +34,7 @@ internal static class HudTests
         harness.Run("Minimap click moves the camera", () => MinimapClickMovesCamera(data));
         harness.Run("Box selection selects the start units", () => BoxSelectionSelects(data));
         harness.Run("Control groups store and recall a selection", () => ControlGroupsWork(data));
+        harness.Run("Control bar scheme art and the logo image", () => SchemeArt(data));
         harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
 
         return harness.Failures;
@@ -330,6 +332,17 @@ internal static class HudTests
         controller.Process(new KeyEvent(time += 16, KeyCode.D1, true));
         controller.Process(new KeyEvent(time += 16, KeyCode.D1, false));
         TestHarness.Assert(controller.Input.Selection.Contains(dozer.Id), "1 recalls the group");
+    }
+
+    private static void SchemeArt(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        Advance(match, controller, 1);
+        var commands = controller.BuildDrawList(1280, 720).Commands;
+        TestHarness.Assert(commands.Length > 0 && commands[0] is UiImageDraw, "the scheme's background parts come first, under the window tree");
+        var backgroundParts = commands.TakeWhile(command => command is UiImageDraw).Count();
+        TestHarness.Assert(backgroundParts >= 1, $"the human side scheme contributes background parts ({backgroundParts})");
+        TestHarness.Assert(!commands.OfType<UiImageDraw>().Any(draw => draw.Image == "HardCodedWithControlBarSchemeIni"), "the hard-coded portrait image is replaced by the scheme's own right-hand image");
     }
 
     private static void GoldenDrawListHash(GameData data)

@@ -538,8 +538,36 @@ public sealed class MatchController
         var baseList = _tree.BuildDrawList();
         var extra = BuildDynamicCommands();
         var viewportRect = new UiRect(0, 0, width, _controlBarRoot.Rect.Y);
-        var commands = baseList.Commands.AddRange(extra).Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
+        // The scheme art is the control bar's own background (W3DCommandBarBackgroundDraw in the original): it lies under the window tree, whose windows draw their own chrome on top.
+        var commands = BuildSchemeBackground().AddRange(ResolveHardCodedImages(baseList.Commands)).AddRange(extra).Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
         return baseList with { Commands = commands };
+    }
+
+    /// <summary>
+    /// <c>ControlBar.wnd</c> names the right-hand portrait window\x27s image <c>HardCodedWithControlBarSchemeIni</c>: the original replaces it with the scheme\x27s <c>RightHUDImage</c> (the side logo).
+    /// </summary>
+    private ImmutableArray<UiDrawCommand> ResolveHardCodedImages(ImmutableArray<UiDrawCommand> commands)
+    {
+        const string placeholder = "HardCodedWithControlBarSchemeIni";
+        if (_scheme is not { RightHudImage.Length: > 0 } scheme) return commands;
+        return [..commands.Select(command => command is UiImageDraw draw && draw.Image == placeholder ? draw with { Image = scheme.RightHudImage } : command)];
+    }
+
+    /// <summary>
+    /// <c>ControlBarScheme::drawBackground</c>: the <c>ImagePart</c>s of the human side's scheme in layer order (the file draws layer 0 last, on top), each placed by the
+    /// same transform as the scheme's money and power rectangles; an image the table does not know is skipped (the scheme names a few art pieces this data set lacks).
+    /// </summary>
+    private ImmutableArray<UiDrawCommand> BuildSchemeBackground()
+    {
+        if (_scheme is not { } scheme) return [];
+        var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
+        foreach (var part in scheme.ImageParts.Select((value, index) => (value, index)).OrderByDescending(item => item.value.Layer).ThenBy(item => item.index).Select(item => item.value))
+        {
+            if (!_assets.Images.TryGet(part.ImageName, out _)) continue;
+            var rect = _controlBarRoot.Transform.Map(new WndScreenRect(part.X, part.Y, part.X + part.Width, part.Y + part.Height, 1920, 1080));
+            commands.Add(new UiImageDraw(part.ImageName, rect, WndColor.White, false, false));
+        }
+        return commands.ToImmutable();
     }
 
     private void RefreshDynamicWindows()

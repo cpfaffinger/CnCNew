@@ -23,6 +23,7 @@ var modelPath = GetArgument(args, "--model-path");
 var capturePath = GetArgument(args, "--capture");
 var matchMap = GetArgument(args, "--match");
 var missionMap = GetArgument(args, "--mission");
+var shellMode = args.Contains("--shell", StringComparer.OrdinalIgnoreCase) || (contentDirectory is not null && modelPath is null && matchMap is null && missionMap is null);
 var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
     (matchMap ?? missionMap)!,
     GetArgument(args, "--faction") ?? "FactionAmerica",
@@ -42,6 +43,11 @@ var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
 if (matchMap is not null && missionMap is not null)
 {
     throw new ArgumentException("--match and --mission exclude each other.");
+}
+
+if (shellMode && (matchMap is not null || missionMap is not null || modelPath is not null))
+{
+    throw new ArgumentException("--shell excludes --match, --mission and --model-path.");
 }
 
 if ((matchMap ?? missionMap) is not null && contentDirectory is null)
@@ -68,7 +74,7 @@ if (contentDirectory is not null)
     }
 }
 
-using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions))
+using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90")))
 {
     game.Run();
 }
@@ -111,9 +117,12 @@ internal sealed class CnCNewGame(
     string? contentDirectory,
     string? modelPath,
     string? capturePath,
-    LiveOptions? liveOptions) : Game
+    LiveOptions? liveOptions,
+    bool shellMode,
+    string windowSize,
+    int smokeFrames) : Game
 {
-    private LiveMatchHost? _live;
+    private ClientRuntime? _runtime;
     private int _renderedFrames;
     private bool _captured;
     private W3dStrideScene? _w3dScene;
@@ -121,7 +130,7 @@ internal sealed class CnCNewGame(
     protected override void Initialize()
     {
         AutoLoadDefaultSettings = false;
-        var size = (liveOptions?.Size ?? "1280x720").Split('x');
+        var size = windowSize.Split('x');
         GraphicsDeviceManager.PreferredBackBufferWidth = int.Parse(size[0]);
         GraphicsDeviceManager.PreferredBackBufferHeight = int.Parse(size[1]);
         base.Initialize();
@@ -134,6 +143,15 @@ internal sealed class CnCNewGame(
         if (liveOptions is not null)
         {
             LoadLiveMatch(liveOptions);
+            return;
+        }
+
+        if (shellMode)
+        {
+            var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"));
+            var back = GraphicsDevice.Presenter.BackBuffer;
+            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height);
+            Window.Title = "CnCNew";
             return;
         }
 
@@ -205,9 +223,10 @@ internal sealed class CnCNewGame(
         {
             var viewport = GraphicsDevice.Presenter.BackBuffer;
             var run = MissionRun.Load(MissionContext.From(data), mapPath, MissionOptions.Standard with { HumanSideName = options.HumanSide });
-            var mission = LiveMission.Create(data, run, new System.Numerics.Vector2(viewport.Width, viewport.Height));
+            var text = data.LoadText("English");
+            var mission = LiveMission.Create(data, run, new System.Numerics.Vector2(viewport.Width, viewport.Height), label => text.TryGet(label, out var resolved) ? resolved : label);
             ApplyCamera(mission.Camera, options);
-            _live = new LiveMatchHost(this, data, mission);
+            _runtime = ClientRuntime.ForMission(this, data, mission);
             Window.Title = $"CnCNew — mission {mapPath} — {mission.HumanFaction}";
             return;
         }
@@ -215,7 +234,7 @@ internal sealed class CnCNewGame(
         var back = GraphicsDevice.Presenter.BackBuffer;
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
         ApplyCamera(match.Camera, options);
-        _live = new LiveMatchHost(this, data, match);
+        _runtime = ClientRuntime.ForMatch(this, data, match);
         Window.Title = $"CnCNew — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)}";
     }
 
@@ -236,8 +255,8 @@ internal sealed class CnCNewGame(
 
     protected override void UnloadContent()
     {
-        _live?.Dispose();
-        _live = null;
+        _runtime?.Dispose();
+        _runtime = null;
         _w3dScene?.Dispose();
         _w3dScene = null;
         base.UnloadContent();
@@ -246,12 +265,20 @@ internal sealed class CnCNewGame(
     protected override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
-        if (_live is not null)
+        if (_runtime is not null)
         {
             var back = GraphicsDevice.Presenter.BackBuffer;
-            _live.Update(gameTime, GraphicsContext.CommandList, back.Width, back.Height, smokeTest ? 1.0 / 30 : null);
-            if (smokeTest && ++_renderedFrames >= liveOptions!.Frames && (capturePath is null || _captured))
+            _runtime.Update(gameTime, Input, back.Width, back.Height, smokeTest ? 1.0 / 30 : null);
+            if (_runtime.Game is { } game) Window.Title = $"CnCNew — {game.HumanFaction}";
+            if (_runtime.PendingResolution is { } resolution)
             {
+                GraphicsDeviceManager.PreferredBackBufferWidth = resolution.Width;
+                GraphicsDeviceManager.PreferredBackBufferHeight = resolution.Height;
+                GraphicsDeviceManager.ApplyChanges();
+            }
+            if (_runtime.ExitRequested || (smokeTest && ++_renderedFrames >= smokeFrames && (capturePath is null || _captured)))
+            {
+                if (smokeTest) Console.WriteLine($"ui: {_runtime.LastFrame.Format()}; missing images [{string.Join(", ", _runtime.LastFrame.MissingImageNames.Take(12))}]; missing textures [{string.Join(", ", _runtime.LastFrame.MissingTextureFiles.Take(12))}]");
                 Exit();
             }
 
@@ -270,7 +297,8 @@ internal sealed class CnCNewGame(
     protected override void Draw(GameTime gameTime)
     {
         base.Draw(gameTime);
-        if (!_captured && capturePath is not null && _renderedFrames >= (liveOptions?.Frames ?? 12))
+        _runtime?.Draw(GraphicsContext, GraphicsDevice);
+        if (!_captured && capturePath is not null && _renderedFrames >= (liveOptions?.Frames ?? (shellMode ? smokeFrames : 12)))
         {
             var fullPath = Path.GetFullPath(capturePath);
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
