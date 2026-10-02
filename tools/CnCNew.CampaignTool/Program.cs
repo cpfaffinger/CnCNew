@@ -27,7 +27,7 @@ const string Usage = """
                                                 static: can the mission's own VICTORY/DEFEAT scripts fire with the implemented condition/action types? (clean / degraded / blocked chains)
       script <content-dir> --map TEXT --name SCRIPT
                                                 prints one script (conditions, actions) and every script whose actions name it
-      drive <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--explain]
+      drive <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--explain] [--watch TEMPLATE-TEXT]
                                                 objective driver: satisfies the world-state conditions of the scripts (kill named objects/teams, send units into areas, ...) one by one and
                                                 reports whether the mission's OWN VICTORY/DEFEAT action fired (no generic elimination)
       template <content-dir> --name A[,B]          is the template instantiable, and which modules are missing
@@ -177,6 +177,7 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
     var ticks = long.Parse(Arg(args, "--ticks") ?? "12000", CultureInfo.InvariantCulture);
     var filterCampaign = Arg(args, "--campaign");
     var filterMap = Arg(args, "--map");
+    var watch = Arg(args, "--watch");
     var explain = args.Contains("--explain");
     var (context, catalog, fingerprint) = Compile(content);
     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -198,7 +199,7 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             foreach (var victory in new[] { true, false })
             {
                 ObjectiveDriveResult result;
-                try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks); }
+                try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks, observe: watch is null ? null : WatchEntities(watch, victory)); }
                 catch (Exception exception) when (exception is not OutOfMemoryException) { cells.Add($"{(victory ? "victory" : "defeat")} FAILED {exception.GetType().Name}: {exception.Message}"); continue; }
                 if (result.ReachedByScript) { if (victory) victories++; else defeats++; }
                 cells.Add($"{(victory ? "victory" : "defeat")} {(result.ReachedByScript ? $"REACHED by '{result.OutcomeScript}' @{result.OutcomeTick}" : "not reached")} ({result.Interventions} interventions)");
@@ -444,4 +445,20 @@ static int TransportInfo(ContentFileSystem content, CampaignCatalog campaigns, s
         Console.WriteLine($"{transport,-40} {(known ? (template!.IsInstantiable ? "instantiable" : "NOT instantiable: " + string.Join(", ", template.MissingModules)) : "unknown template"),-60} {maps.Count} map(s): {string.Join(", ", maps)}");
     }
     return 0;
+}
+
+/// <summary>Prints a line whenever one of the objects whose template name contains <paramref name="text"/> appears, changes owner, loses health class or disappears (drive --watch).</summary>
+static Action<MissionSession> WatchEntities(string text, bool victory)
+{
+    var known = new Dictionary<uint, string>();
+    return session =>
+    {
+        var world = session.World;
+        var now = new Dictionary<uint, string>();
+        foreach (var entity in world.Entities.Where(entity => entity.Template.Name.Contains(text, StringComparison.OrdinalIgnoreCase)))
+            now[entity.Id.Value] = $"{entity.Template.Name} #{entity.Id.Value} owner={entity.Owner.Value} health={entity.Body?.Health.ToString() ?? "-"} dead={entity.EffectivelyDead}";
+        foreach (var (id, line) in now.Where(pair => !known.TryGetValue(pair.Key, out var before) || before != pair.Value)) Console.WriteLine($"      {(victory ? "V" : "D")} @{world.Tick} watch {line}");
+        foreach (var id in known.Keys.Where(id => !now.ContainsKey(id))) Console.WriteLine($"      {(victory ? "V" : "D")} @{world.Tick} watch #{id} is gone");
+        known = now;
+    };
 }

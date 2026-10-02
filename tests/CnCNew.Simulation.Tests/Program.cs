@@ -177,6 +177,7 @@ run.Test("Flight: scripted paradrop (plane, parachutes, landing, deletion, conti
 run.Test("Flight: a ground transport sets its team down, returns and is deleted", Tests.FlightTransportReturnsAndLeaves);
 run.Test("Flight: a shot-down payload plane takes its riders with it", Tests.FlightShotDownPlaneDestroysItsPayload);
 run.Test("Flight: countermeasures divert missiles to flares", Tests.FlightCountermeasuresDivertMissiles);
+run.Test("Flight: the particle uplink cannon burns its target and restores mid-beam", Tests.FlightParticleUplinkCannonBurnsItsTarget);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);

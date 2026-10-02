@@ -28,14 +28,14 @@ public sealed record ObjectiveDriveResult(bool ReachedByScript, MissionOutcome O
 /// </summary>
 public static class MissionObjectiveDriver
 {
-    public static ObjectiveDriveResult Run(MissionOptions options, TemplateCatalog catalog, string fingerprint, TerrainMap terrain, MapData map, bool victory, long maxTicks = 4500, int spacing = 15, long settleTicks = 60)
+    public static ObjectiveDriveResult Run(MissionOptions options, TemplateCatalog catalog, string fingerprint, TerrainMap terrain, MapData map, bool victory, long maxTicks = 4500, int spacing = 15, long settleTicks = 60, Action<MissionSession>? observe = null)
     {
         var session = MissionSession.Start(options, catalog, fingerprint, terrain, map);
         var driver = new ObjectiveDriver(session, victory);
         var world = session.World;
         var engine = session.Engine;
 
-        while (world.Tick < settleTicks && !session.IsOver) session.Step();
+        while (world.Tick < settleTicks && !session.IsOver) { session.Step(); observe?.Invoke(session); }
         long nextAt = world.Tick;
         while (world.Tick < maxTicks && !session.IsOver && engine.Outcome == MissionOutcome.None)
         {
@@ -45,8 +45,9 @@ public static class MissionObjectiveDriver
                 nextAt = world.Tick + spacing;
             }
             session.Step();
+            observe?.Invoke(session);
         }
         var wanted = victory ? MissionOutcome.Victory : MissionOutcome.Defeat;
-        return new ObjectiveDriveResult(engine.Outcome == wanted, engine.Outcome, engine.OutcomeScript, engine.OutcomeTick, driver.Interventions, driver.Log, engine.Outcome == wanted ? [] : [..driver.Unmet(), ..driver.Survivors()]);
+        return new ObjectiveDriveResult(engine.Outcome == wanted, engine.Outcome, engine.OutcomeScript, engine.OutcomeTick, driver.Interventions, driver.Log, engine.Outcome == wanted ? [] : [..driver.Unmet(), ..driver.Survivors(), ..driver.PowerCarriers()]);
     }
 }

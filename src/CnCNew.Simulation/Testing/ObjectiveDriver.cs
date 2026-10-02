@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using CnCNew.Data.World;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
+using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.World;
 
@@ -515,6 +516,24 @@ internal sealed partial class ObjectiveDriver
     }
 
     // ------------------------------------------------------------------------------------------------ the diagnosis of a run that did not end
+
+    /// <summary>For every special power a script asks about (<c>SKIRMISH_SPECIAL_POWER_READY</c>): who carries it and whether it is ready or paused — why a power condition stays false.</summary>
+    public ImmutableArray<string> PowerCarriers()
+    {
+        var lines = ImmutableArray.CreateBuilder<string>();
+        var powers = _program.Units.SelectMany(unit => unit.Script.OrConditions.SelectMany(or => or.AndConditions)).Where(condition => condition.TypeName == "SKIRMISH_SPECIAL_POWER_READY" && condition.Parameters.Length > 1)
+            .Select(condition => condition.Parameters[1].Text).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal);
+        foreach (var name in powers)
+        {
+            if (!_world.SpecialPowers.TryGet(name, out var power)) { lines.Add($"power '{name}': unknown"); continue; }
+            var before = lines.Count;
+            foreach (var entity in _world.Entities.OrderBy(value => value.Id.Value))
+                if (SpecialPowerRouting.FindModule(entity, power.Index) is { } module)
+                    lines.Add($"power '{name}': {entity.Template.Name} #{entity.Id.Value} of {(_program.Players.FirstOrDefault(player => player.Id == entity.Owner)?.Name ?? entity.Owner.Value.ToString())} ready={module.IsReady(_world)} paused={module.IsPaused} dead={entity.EffectivelyDead}");
+            if (lines.Count == before) lines.Add($"power '{name}': no live carrier");
+        }
+        return lines.ToImmutable();
+    }
 
     /// <summary>The live objects each side still has at the end of a run that did not end (template counts, most numerous first): what a kill-everything leaf could not remove.</summary>
     public ImmutableArray<string> Survivors()

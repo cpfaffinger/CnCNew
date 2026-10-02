@@ -59,6 +59,9 @@ public sealed class ObjectTemplate
     {
         CommandSets = commandSets;
         Buildable = definition.Fields.LastOrDefault(field => field.Name.Equals("Buildable", StringComparison.OrdinalIgnoreCase))?.Value.Value is EnumValue buildable ? buildable.Name : "Yes";
+        var laserWidth = definition.Modules.FirstOrDefault(module => module.Name.Equals("W3DLaserDraw", StringComparison.OrdinalIgnoreCase))?.Fields
+            .LastOrDefault(field => field.Name.Equals("OuterBeamWidth", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim();
+        LaserBeamRadius = laserWidth is not null && decimal.TryParse(laserWidth, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var width) ? Fixed.FromDecimal(width / 2m) : Fixed.Zero;
         Index = index;
         Id = definition.Id;
         Name = definition.OriginalName;
@@ -103,6 +106,9 @@ public sealed class ObjectTemplate
     public ImmutableArray<string> KindOf { get; }
     public string Geometry { get; }
     public Fixed GeometryMajorRadius { get; }
+
+    /// <summary><c>W3DLaserDraw::getLaserTemplateWidth</c>: half the <c>OuterBeamWidth</c> of a laser object's draw module (0 for any other object); the logic reads it for the radius of a beam (<c>LaserUpdate::getCurrentLaserRadius</c>).</summary>
+    public Fixed LaserBeamRadius { get; }
     public Fixed GeometryMinorRadius { get; }
     public Fixed GeometryHeight { get; }
 

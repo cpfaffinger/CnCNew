@@ -253,7 +253,7 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // phase 12: the modules the campaign missions need to create their named objects (docs/SCRIPT-ENGINE.md §9)
         "RadiusDecalUpdate", "TechBuildingBehavior", "FireWeaponWhenDamagedBehavior", "FireWeaponPower", "BaikonurLaunchPower", "HordeUpdate", "FlightDeckBehavior",
         // phase 13: the aircraft of scripted reinforcements (docs/SCRIPT-ENGINE.md §5)
-        "DeliverPayloadAIUpdate", "ParachuteContain", "JetSlowDeathBehavior", "CountermeasuresBehavior",
+        "DeliverPayloadAIUpdate", "ParachuteContain", "JetSlowDeathBehavior", "CountermeasuresBehavior", "ParticleUplinkCannonUpdate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

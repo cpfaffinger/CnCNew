@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
@@ -25,6 +26,7 @@ internal static class FlightModules
         new ModuleBinding<JetSlowDeathData>("JetSlowDeathBehavior", ModuleOwnerKind.Object, (configuration, _) => JetSlowDeathData.Parse(configuration), data => new JetSlowDeathBehavior(data)),
         new ModuleBinding<CountermeasuresData>("CountermeasuresBehavior", ModuleOwnerKind.Object, CountermeasuresData.Parse, data => new CountermeasuresBehavior(data)),
         new ModuleBinding<ParachuteData>("ParachuteContain", ModuleOwnerKind.Object, (configuration, _) => ParachuteData.Parse(configuration), data => new ParachuteContain(data)),
+        new ModuleBinding<ParticleUplinkData>("ParticleUplinkCannonUpdate", ModuleOwnerKind.Object, (configuration, _) => ParticleUplinkData.Parse(configuration), data => new ParticleUplinkCannonUpdate(data)),
         new ModuleBinding<DeliverPayloadData>("DeliverPayloadAIUpdate", ModuleOwnerKind.Object, (configuration, _) => DeliverPayloadData.Parse(configuration), data => new DeliverPayloadAIUpdate(data)),
     ];
 
@@ -882,5 +884,275 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         _dropDelayLeft = reader.Int("dropDelayLeft");
         _attempts = checked((int)reader.Int("attempts"));
         _reentryTick = reader.Int("reentryTick");
+    }
+}
+
+// ================================================================================================================ ParticleUplinkCannonUpdate
+
+/// <summary>
+/// <c>ParticleUplinkCannonUpdateModuleData</c> (<c>ParticleUplinkCannonUpdate.cpp</c>) in simulation units. The charge, antenna and ready times, the bones, flares, sounds and scorch marks are
+/// presentation and typed only; what drives the effect is the beam's timing (<c>BeamTravelTime</c>, <c>WidthGrowTime</c>, <c>TotalFiringTime</c>), its path (<c>SwathOfDeath*</c>, the manual driving speed)
+/// and its damage (<c>DamagePerSecond</c>, <c>TotalDamagePulses</c>, <c>DamageType</c>, <c>DeathType</c>, <c>DamageRadiusScalar</c> on the radius of the beam object <c>ParticleBeamLaserName</c>).
+/// </summary>
+public sealed record ParticleUplinkData(string PowerName, string BeamObject, string RemnantObject, string GroundHitFx, string BeamLaunchFx, long LaunchFxTicks, long WidthGrowTicks, long BeamTravelTicks,
+    long TotalFiringTicks, Fixed SwathDistance, Fixed SwathAmplitude, long TotalScorchMarks, int TotalDamagePulses, Fixed DamagePerSecond, int DamageType, int DeathType, Fixed DamageRadiusScalar,
+    Fixed ManualDrivingSpeed) : ModuleData
+{
+    public static ParticleUplinkData Parse(ModuleConfiguration configuration)
+    {
+        var damageType = ModuleConfigReader.Text(configuration, "DamageType");
+        var deathType = ModuleConfigReader.Text(configuration, "DeathType");
+        return new ParticleUplinkData(
+            ModuleConfigReader.Text(configuration, "SpecialPowerTemplate"), ModuleConfigReader.Text(configuration, "ParticleBeamLaserName"), ModuleConfigReader.Text(configuration, "DamagePulseRemnantObjectName"),
+            ModuleConfigReader.Text(configuration, "GroundHitFX"), ModuleConfigReader.Text(configuration, "BeamLaunchFX"), ModuleConfigReader.Ticks(configuration, "DelayBetweenLaunchFX", 0),
+            ModuleConfigReader.Ticks(configuration, "WidthGrowTime", 0), ModuleConfigReader.Ticks(configuration, "BeamTravelTime", 0), ModuleConfigReader.Ticks(configuration, "TotalFiringTime", 0),
+            ModuleConfigReader.Real(configuration, "SwathOfDeathDistance", Fixed.Zero), ModuleConfigReader.Real(configuration, "SwathOfDeathAmplitude", Fixed.Zero),
+            ModuleConfigReader.Int(configuration, "TotalScorchMarks", 0), checked((int)ModuleConfigReader.Int(configuration, "TotalDamagePulses", 0)),
+            ModuleConfigReader.Real(configuration, "DamagePerSecond", Fixed.Zero),
+            damageType.Length == 0 ? DamageTypes.Explosion : NameTables.DamageType.TryIndexOf(damageType, out var damageIndex) ? damageIndex : throw new InvalidDataException($"Unknown damage type '{damageType}'."),
+            deathType.Length == 0 ? DeathTypes.Normal : NameTables.DeathType.TryIndexOf(deathType, out var deathIndex) ? deathIndex : throw new InvalidDataException($"Unknown death type '{deathType}'."),
+            ModuleConfigReader.Real(configuration, "DamageRadiusScalar", Fixed.Zero), ModuleConfigReader.Real(configuration, "ManualDrivingSpeed", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond));
+    }
+}
+
+/// <summary>
+/// <c>ParticleUplinkCannonUpdate.cpp</c>: the beam of the Particle Uplink Cannon. The power module on the same object (<c>SpecialAbility</c> with <c>UpdateModuleStartsAttack</c>) keeps the recharge;
+/// this module is the handler that carries out a use: the beam is born <c>BeamTravelTime</c> after the order, then for <c>TotalFiringTime</c> it burns at its target — every
+/// <c>lifetime / TotalDamagePulses</c> a pulse of <c>TotalFiringTime · DamagePerSecond / TotalDamagePulses</c> hits every living object (friend and foe alike) within the beam's radius
+/// (half the beam object's <c>OuterBeamWidth</c>, growing from nothing over <c>WidthGrowTime</c> and shrinking the same way after <c>TotalFiringTime</c>) times <c>DamageRadiusScalar</c>
+/// — and the use ends when the beam has decayed. A computer-controlled owner (and so a scripted use) lets the beam sweep an S curve across the target
+/// (<c>SwathOfDeathDistance</c> long, <c>SwathOfDeathAmplitude</c> wide, along the line from the building to the target, with the reference's own rotation formula); a human owner
+/// drives it, and without a driving command the beam stays where it was aimed. The ground-hit effect and the remnant object follow each pulse. Not modeled: the antenna/charge
+/// stages (presentation, only visible through the power's own readiness), the shroud reveal around the beam, the abort of a beam whose building is underpowered or disabled, the
+/// scripted waypoint path, the sounds and the scorch marks.
+/// </summary>
+public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimModule, IUpdateModule, ISpecialPowerHandler
+{
+    private enum Beam : byte { None, Born, Decaying, Dead }
+
+    private long _nextWake = -1;
+    private long _startAttack;
+    private long _startDecay;
+    private long _decayStart;
+    private Beam _beam;
+    private bool _manual;
+    private Point3 _initial;
+    private Point3 _current;
+    private Point3 _destination;
+    private int _pulses;
+    private long _nextPulse;
+    private long _scorches;
+    private long _nextScorch;
+    private long _nextLaunchFx;
+
+    public override string ModuleName => "ParticleUplinkCannonUpdate";
+    public long NextWake { get => _nextWake; set => _nextWake = value; }
+
+    /// <summary><c>isPowerCurrentlyInUse</c>: an order is running (the beam is on its way, burning or decaying).</summary>
+    public bool InUse => _startAttack != 0;
+
+    /// <summary>Where the beam burns right now (valid while <see cref="InUse"/> and the beam is born).</summary>
+    public Point3 BeamPosition => _current;
+
+    public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
+
+    public bool Handles(IWorldServices world, int powerIndex) => world.SpecialPowers.TryGet(data.PowerName, out var info) && info.Index == powerIndex;
+
+    public void Initiate(IWorldServices world, int powerIndex, in SpecialPowerTarget target)
+    {
+        var aimed = target.Kind == SpecialPowerTargetKind.Object ? world.FindEntity(target.Entity) : null;
+        var x = aimed?.X ?? target.X;
+        var y = aimed?.Y ?? target.Y;
+        _initial = new Point3(x, y, world.GroundHeightAt(x, y));
+        _current = _initial;
+        _destination = _initial;
+        // All human players "drive" the beam; a computer-controlled owner (and so a scripted use) lets it sweep.
+        _manual = !world.IsComputerPlayer(Entity.Owner);
+        _startAttack = Math.Max(world.Tick, 1);
+        _startDecay = _startAttack + data.TotalFiringTicks;
+        _decayStart = 0;
+        _beam = Beam.None;
+        _pulses = 0;
+        _scorches = 0;
+        SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world);
+        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+    }
+
+    public long Update(IWorldServices world)
+    {
+        if (_startAttack == 0) return SimulationTiming.SleepForever;
+        if (Entity.EffectivelyDead || Entity.HasStatus(ObjectStatusBits.Sold)) { Reset(); return SimulationTiming.SleepForever; }
+        if (Entity.HasStatus(ObjectStatusBits.UnderConstruction)) return SimulationTiming.SleepNone;
+        var now = world.Tick;
+        if (_startAttack > now) return SimulationTiming.SleepNone;
+        var birth = _startAttack + data.BeamTravelTicks;
+        var decayStart = _startDecay + data.BeamTravelTicks;
+        var death = decayStart + data.WidthGrowTicks;
+        switch (_beam)
+        {
+            case Beam.None:
+                if (birth <= now)
+                {
+                    _beam = Beam.Born;
+                    _scorches = 0;
+                    _nextScorch = now;
+                    _pulses = 0;
+                    _nextPulse = now;
+                }
+                break;
+            case Beam.Born:
+                if (decayStart <= now)
+                {
+                    _beam = Beam.Decaying;
+                    _decayStart = now;
+                }
+                break;
+            case Beam.Decaying:
+                if (death <= now)
+                {
+                    _beam = Beam.Dead;
+                    Reset();
+                    return SimulationTiming.SleepForever;
+                }
+                break;
+        }
+        if (_beam is Beam.Born or Beam.Decaying && birth <= now && now <= death)
+        {
+            MoveBeam(world, now, birth, death);
+            var radius = data.DamageRadiusScalar * BeamRadius(world, now, birth);
+            if (_nextScorch <= now)
+            {
+                _scorches++;
+                if (data.GroundHitFx.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.GroundHitFx, 0, _current.X, _current.Y, _current.Z);
+                _nextScorch = data.TotalScorchMarks > 0 ? birth + (death - birth) * _scorches / data.TotalScorchMarks : death + 1;
+            }
+            if (_nextPulse <= now && data.TotalDamagePulses > 0)
+            {
+                _pulses++;
+                Pulse(world, radius);
+                _nextPulse = birth + (death - birth) * _pulses / data.TotalDamagePulses;
+            }
+        }
+        if (_startDecay > now && data.BeamLaunchFx.Length > 0 && _nextLaunchFx <= now)
+        {
+            world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.BeamLaunchFx, 0, Entity.X, Entity.Y, Entity.Z);
+            _nextLaunchFx = now + Math.Max(data.LaunchFxTicks, 1);
+        }
+        return SimulationTiming.SleepNone;
+    }
+
+    private void Reset()
+    {
+        _startAttack = 0;
+        _startDecay = 0;
+        _beam = Beam.None;
+    }
+
+    /// <summary><c>LaserUpdate::getCurrentLaserRadius</c>: the beam object's template radius times the width scalar (growing after birth, shrinking after the decay began).</summary>
+    private Fixed BeamRadius(IWorldServices world, long now, long birth)
+    {
+        if (!world.Templates.TryGet(data.BeamObject, out var beam) || data.WidthGrowTicks <= 0) return Fixed.Zero;
+        var scalar = _beam == Beam.Decaying
+            ? Fixed.One - Fixed.FromInt(now - _decayStart) / Fixed.FromInt(data.WidthGrowTicks)
+            : Fixed.Min(Fixed.One, Fixed.FromInt(now - birth) / Fixed.FromInt(data.WidthGrowTicks));
+        return beam.LaserBeamRadius * Fixed.Max(Fixed.Zero, scalar);
+    }
+
+    /// <summary>The beam's position this tick: the S curve of the reference (with its rotation by the angle between the building→target line and the offset's own direction), or a drive towards the destination.</summary>
+    private void MoveBeam(IWorldServices world, long now, long birth, long death)
+    {
+        if (!_manual)
+        {
+            var factor = death > birth ? Fixed.FromInt(now - birth) / Fixed.FromInt(death - birth) : Fixed.Zero;
+            var radians = factor * FixedTrig.TwoPi - FixedTrig.Pi;
+            var along = factor * data.SwathDistance - data.SwathDistance / Fixed.FromInt(2);
+            var across = FixedTrig.Sin(radians) * data.SwathAmplitude;
+            var toTargetX = _initial.X - Entity.X;
+            var toTargetY = _initial.Y - Entity.Y;
+            var aimLength = Fixed.Sqrt(toTargetX * toTargetX + toTargetY * toTargetY);
+            var offsetX = along + aimLength;
+            var offsetY = across;
+            var length = Fixed.Sqrt(offsetX * offsetX + offsetY * offsetY);
+            if (length > Fixed.Zero && aimLength > Fixed.Zero)
+            {
+                var dot = toTargetX / aimLength * (offsetX / length) + toTargetY / aimLength * (offsetY / length);
+                var limit = Fixed.FromDecimal(0.99999m);
+                dot = Fixed.Min(limit, Fixed.Max(-limit, dot));
+                var angle = FixedTrig.Atan2(Fixed.Sqrt(Fixed.One - dot * dot), dot);
+                if (toTargetY >= Fixed.Zero) angle = -angle;
+                _current = _current with { X = Entity.X + length * FixedTrig.Cos(-angle), Y = Entity.Y + length * FixedTrig.Sin(-angle) };
+            }
+        }
+        else
+        {
+            var dx = _destination.X - _current.X;
+            var dy = _destination.Y - _current.Y;
+            var distance = Fixed.Sqrt(dx * dx + dy * dy);
+            var speed = Fixed.Min(data.ManualDrivingSpeed, distance);
+            if (distance > Fixed.Zero) _current = _current with { X = _current.X + dx * speed / distance, Y = _current.Y + dy * speed / distance };
+        }
+        _current = _current with { Z = world.GroundHeightAt(_current.X, _current.Y) };
+    }
+
+    /// <summary>One damage pulse: every living object with a body within <paramref name="radius"/> (2D from its centre) takes the pulse's share of <c>TotalFiringTime · DamagePerSecond</c>.</summary>
+    private void Pulse(IWorldServices world, Fixed radius)
+    {
+        var seconds = Fixed.FromInt(data.TotalFiringTicks) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+        var amount = seconds * data.DamagePerSecond / Fixed.FromInt(data.TotalDamagePulses);
+        var limit = radius * radius;
+        foreach (var entity in world.Entities.OrderBy(value => value.Id.Value).ToArray())
+        {
+            if (entity.EffectivelyDead || entity.DestroyRequested || entity.Body is null) continue;
+            var dx = entity.X - _current.X;
+            var dy = entity.Y - _current.Y;
+            if (dx * dx + dy * dy > limit) continue;
+            world.Damage(entity.Id, new DamageInfo(Entity.Id, amount, data.DamageType, data.DeathType, false));
+        }
+        if (data.RemnantObject.Length > 0 && world.Templates.TryGet(data.RemnantObject, out var remnant))
+        {
+            if (remnant.IsInstantiable) world.RequestSpawn(remnant.Index, Entity.Owner, _current.X, _current.Y, _current.Z, Fixed.Zero);
+            else world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, data.RemnantObject, CreationSkipReasons.TemplateNotInstantiable);
+        }
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        writer.Int("nextWake", _nextWake);
+        if (_startAttack == 0) return;
+        writer.Int("startAttack", _startAttack);
+        writer.Int("startDecay", _startDecay);
+        writer.Int("decayStart", _decayStart);
+        writer.Int("beam", (int)_beam);
+        writer.Bool("manual", _manual);
+        DumbProjectileBehavior.WritePoint(writer, "initial", _initial);
+        DumbProjectileBehavior.WritePoint(writer, "current", _current);
+        DumbProjectileBehavior.WritePoint(writer, "destination", _destination);
+        writer.Int("pulses", _pulses);
+        writer.Int("nextPulse", _nextPulse);
+        writer.Int("scorches", _scorches);
+        writer.Int("nextScorch", _nextScorch);
+        writer.Int("nextLaunchFx", _nextLaunchFx);
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        _nextWake = reader.Int("nextWake");
+        Reset();
+        if (!reader.Has("startAttack")) return;
+        _startAttack = reader.Int("startAttack");
+        _startDecay = reader.Int("startDecay");
+        _decayStart = reader.Int("decayStart");
+        var beam = reader.Int("beam");
+        if (beam < 0 || beam > (int)Beam.Dead) throw new InvalidDataException("Uplink beam state out of range.");
+        _beam = (Beam)beam;
+        _manual = reader.Bool("manual");
+        _initial = DumbProjectileBehavior.ReadPoint(reader, "initial");
+        _current = DumbProjectileBehavior.ReadPoint(reader, "current");
+        _destination = DumbProjectileBehavior.ReadPoint(reader, "destination");
+        _pulses = checked((int)reader.Int("pulses"));
+        _nextPulse = reader.Int("nextPulse");
+        _scorches = reader.Int("scorches");
+        _nextScorch = reader.Int("nextScorch");
+        _nextLaunchFx = reader.Int("nextLaunchFx");
     }
 }

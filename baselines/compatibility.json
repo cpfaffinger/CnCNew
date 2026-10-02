@@ -3469,6 +3469,96 @@
     },
     {
       "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/ConnectorIntenseLaserName",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/ConnectorMediumLaserName",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/FiringToPackSoundLoop",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/GroundAnnihilationSoundLoop",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/LaserBaseLightFlareParticleSystemName",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/OuterNodesIntenseFlareParticleSystem",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/OuterNodesLightFlareParticleSystem",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/OuterNodesMediumFlareParticleSystem",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/PoweringUpSoundLoop",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "ParticleUplinkCannonUpdate/UnpackToIdleSoundLoop",
+      "count": 8,
+      "owners": [
+        "ParticleUplinkCannonUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "PlayerTemplate/ArmyTooltip",
       "count": 13,
       "owners": [
@@ -5420,7 +5510,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3490,
+      "count": 3482,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6337,15 +6427,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "ParticleUplinkCannonUpdate",
-      "count": 8,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",

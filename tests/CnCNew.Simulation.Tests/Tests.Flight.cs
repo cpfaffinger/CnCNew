@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Linq;
 using CnCNew.Data.World;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Modules.BuiltIn;
@@ -185,6 +186,48 @@ static partial class Tests
             MissileDecoyDelay = 200
           End
         End
+        SpecialPower UplinkPower
+          ReloadTime = 0
+        End
+        Object UplinkBeam
+          KindOf = IMMOBILE
+          Draw = W3DLaserDraw ModuleTag_01
+            OuterBeamWidth = 40.0
+            InnerBeamWidth = 4.0
+          End
+        End
+        Object BetaCannon
+          KindOf = SELECTABLE STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = SpecialAbility Power01
+            SpecialPowerTemplate = UplinkPower
+            UpdateModuleStartsAttack = Yes
+          End
+          Behavior = ParticleUplinkCannonUpdate Beam01
+            SpecialPowerTemplate = UplinkPower
+            WidthGrowTime = 300
+            BeamTravelTime = 200
+            TotalFiringTime = 600
+            TotalDamagePulses = 6
+            DamagePerSecond = 100.0
+            DamageType = PARTICLE_BEAM
+            DeathType = NORMAL
+            DamageRadiusScalar = 2.0
+            ParticleBeamLaserName = UplinkBeam
+            SwathOfDeathDistance = 0.0
+            SwathOfDeathAmplitude = 0.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
         Object AlphaTruck
           Side = Alpha
           KindOf = SELECTABLE VEHICLE TRANSPORT
@@ -317,5 +360,39 @@ static partial class Tests
             }
         }
         Check.That(damaged > Fixed.Zero, "Without countermeasures the missiles hurt the plane.");
+    }
+
+    public static void FlightParticleUplinkCannonBurnsItsTarget()
+    {
+        MapObject[] Objects() => [Placed("BetaCannon", 100m, 200m, "teamB", "Cannon"), Placed("AlphaTrooper", 300m, 200m, "teamA", "AtTarget"), Placed("AlphaTrooper", 300m, 225m, "teamA", "Near"), Placed("AlphaTrooper", 300m, 320m, "teamA", "Far")];
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)], objects: Objects());
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(session.SkippedObjects.IsEmpty, "The cannon and its beam instantiate: " + string.Join(",", session.SkippedObjects));
+        Run(session, 3);
+        var cannon = NamedIn(session, "Cannon")!;
+        var module = cannon.Modules.OfType<ParticleUplinkCannonUpdate>().Single();
+        var owner = cannon.Owner;
+        Check.That(session.Issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, cannon.Id, "UplinkPower", SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(300), Fixed.FromInt(200))).Accepted, "The cannon accepts the order.");
+        Run(session, 1);
+        Check.That(module.InUse, "The order is running.");
+        var fired = session.World.Tick;
+        Run(session, 4);
+        Check.That(NamedIn(session, "AtTarget")!.Body!.Health == Fixed.FromInt(100), "The beam has not arrived yet (BeamTravelTime 6 ticks).");
+        Run(session, 8);
+        Check.That(NamedIn(session, "AtTarget")!.Body!.Health < Fixed.FromInt(100), "The growing beam burns what stands at the aim point.");
+        var mid = MissionSnapshot.Write(session);
+        var restored = MissionSnapshot.Restore(mid, fixture.Templates, fixture.Fingerprint, terrain, map);
+        for (var tick = 0; tick < 60; tick++)
+        {
+            var left = session.Step().StateHash;
+            var right = restored.Step().StateHash;
+            Check.That(left == right, $"A beam restored from a snapshot burns identically (tick {tick}).");
+        }
+        Check.That(!module.InUse, "The beam has decayed and the use is over.");
+        // 18 ticks of beam at 100/s in 6 pulses of 10 (the reference also pulses once more at the very end of the decay).
+        Check.That(NamedIn(session, "AtTarget")!.Body!.Health <= Fixed.FromInt(50), $"The aim point took most of the pulses (health {NamedIn(session, "AtTarget")!.Body!.Health}).");
+        Check.That(NamedIn(session, "Near")!.Body!.Health > NamedIn(session, "AtTarget")!.Body!.Health && NamedIn(session, "Near")!.Body!.Health < Fixed.FromInt(100), "An object at the edge of the grown beam got only the later pulses.");
+        Check.That(NamedIn(session, "Far")!.Body!.Health == Fixed.FromInt(100), "An object outside the beam's radius is untouched.");
+        _ = fired;
     }
 }

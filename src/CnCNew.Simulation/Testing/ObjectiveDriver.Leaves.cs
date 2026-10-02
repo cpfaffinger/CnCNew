@@ -1,6 +1,7 @@
 using CnCNew.Data.World;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.World;
@@ -425,6 +426,27 @@ internal sealed partial class ObjectiveDriver
                 }));
             }
             case "SKIRMISH_SPECIAL_POWER_READY":
+            {
+                // What a player cannot do is use a power nobody of its side carries: hand it the first carrier of another side (a captured superweapon) and, since holding it
+                // for the whole recharge is a fight the driver does not play, let the power finish recharging at once (like a script's NAMED_SET_SPECIAL_POWER_COUNTDOWN 0).
+                var playerName = Text(0);
+                var powerName = Text(1);
+                if (PlayerOf(playerName) is not { } owner || !_world.SpecialPowers.TryGet(powerName, out var power)) return new Plan();
+                bool Carries(Entity entity) => !entity.EffectivelyDead && !entity.DestroyRequested && SpecialPowerRouting.FindModule(entity, power.Index) is not null;
+                bool Recharge(Entity carrier)
+                {
+                    if (SpecialPowerRouting.FindModule(carrier, power.Index) is not { } module) return false;
+                    module.SetReadyFrame(_world.Tick);
+                    return true;
+                }
+                var own = _world.Entities.Where(entity => entity.Owner == owner && Carries(entity)).OrderBy(entity => entity.Id.Value).ToArray();
+                if (own.Length > 0)
+                    return own.Any(entity => SpecialPowerRouting.FindModule(entity, power.Index)!.IsReady(_world)) ? new Plan()
+                        : Plan.Of(new Leaf($"recharge:{playerName}:{powerName}", $"finish recharging '{powerName}' of '{playerName}'", 2, 60, _ => Recharge(own[0])));
+                return Plan.Of(new Leaf($"carrier:{playerName}:{powerName}", $"capture a carrier of '{powerName}' for '{playerName}'", 2, 60, _ =>
+                    _world.Entities.Where(entity => entity.Owner != owner && !entity.Owner.IsSystem && Carries(entity)).OrderBy(entity => entity.Id.Value).FirstOrDefault() is { } carrier
+                    && _world.TransferOwnership(carrier.Id, owner) && Recharge(carrier)));
+            }
             case "SKIRMISH_COMMAND_BUTTON_READY_ALL":
             case "SKIRMISH_COMMAND_BUTTON_READY_PARTIAL":
                 return new Plan();
