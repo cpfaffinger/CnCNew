@@ -116,13 +116,13 @@ public sealed record EmpData(long LifetimeTicks, long StartFadeTicks, Fixed Star
     uint RejectMask, bool DoesNotAffectMyOwnBuildings) : ModuleData
 {
     public static EmpData Parse(ModuleConfiguration configuration) => new(
-        ModuleConfigReader.Ticks(configuration, "Lifetime", 0),
+        ModuleConfigReader.Ticks(configuration, "Lifetime", 1),
         ModuleConfigReader.Ticks(configuration, "StartFadeTime", 0),
-        ModuleConfigReader.Real(configuration, "StartScale", Fixed.Zero),
+        ModuleConfigReader.Real(configuration, "StartScale", Fixed.One),
         ModuleConfigReader.Ticks(configuration, "DisabledDuration", 0),
-        ModuleConfigReader.Real(configuration, "TargetScaleMax", Fixed.Zero),
-        ModuleConfigReader.Real(configuration, "TargetScaleMin", Fixed.Zero),
-        ModuleConfigReader.Real(configuration, "EffectRadius", Fixed.Zero),
+        ModuleConfigReader.Real(configuration, "TargetScaleMax", Fixed.One),
+        ModuleConfigReader.Real(configuration, "TargetScaleMin", Fixed.One),
+        ModuleConfigReader.Real(configuration, "EffectRadius", Fixed.FromInt(200)),
         checked((uint)ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "DoesNotAffect"), NameTablesPhase5.WeaponAffectsMask)),
         ModuleConfigReader.Bool(configuration, "DoesNotAffectMyOwnBuildings", false));
 }
@@ -232,9 +232,9 @@ public sealed class EmpUpdate(EmpData data) : SimModule, IUpdateModule
 public sealed record LeafletData(long DelayTicks, long DisabledDurationTicks, Fixed AffectRadius) : ModuleData
 {
     public static LeafletData Parse(ModuleConfiguration configuration) => new(
-        ModuleConfigReader.Ticks(configuration, "Delay", 0),
+        ModuleConfigReader.Ticks(configuration, "Delay", 1),
         ModuleConfigReader.Ticks(configuration, "DisabledDuration", 0),
-        ModuleConfigReader.Real(configuration, "AffectRadius", Fixed.Zero));
+        ModuleConfigReader.Real(configuration, "AffectRadius", Fixed.FromInt(60)));
 }
 
 /// <summary>
@@ -395,7 +395,7 @@ public sealed class BunkerBusterBehavior(BunkerBusterData data) : SimModule, IUp
 public sealed record NeutronBlastData(Fixed BlastRadius, bool AffectAirborne, bool AffectAllies) : ModuleData
 {
     public static NeutronBlastData Parse(ModuleConfiguration configuration) => new(
-        ModuleConfigReader.Real(configuration, "BlastRadius", Fixed.Zero),
+        ModuleConfigReader.Real(configuration, "BlastRadius", Fixed.FromInt(10)),
         ModuleConfigReader.Bool(configuration, "AffectAirborne", true),
         ModuleConfigReader.Bool(configuration, "AffectAllies", true));
 }
