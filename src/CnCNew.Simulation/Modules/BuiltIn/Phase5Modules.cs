@@ -717,7 +717,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <c>aiEvacuate</c> / <c>aiMoveToAndEvacuate</c> (<c>AI_EVACUATE</c>, <c>AI_MOVE_AND_EVACUATE</c>): unload every passenger once the object stands
     /// still (after moving to (x, y) when <paramref name="move"/> is set) and <see cref="ReadyToUnload"/> agrees. Replaces the current state.
     /// </summary>
-    public void OrderEvacuate(IWorldServices world, bool move, Fixed x, Fixed y, bool thenExit = false)
+    public virtual void OrderEvacuate(IWorldServices world, bool move, Fixed x, Fixed y, bool thenExit = false)
     {
         // aiMoveToAndEvacuateAndExit: the place the order was given is where the transport returns to (AIMoveAndEvacuateState::m_origin) and is deleted.
         var originX = Entity.X;

@@ -86,12 +86,14 @@ internal static class AirWeaponModules
 
     public static ArmorInfo ArmorOf(Entity entity)
     {
+        if (entity.CrateArmorLevel > 0 && entity.Template.CrateUpgradeArmor[entity.CrateArmorLevel] is { } crate) return crate;
         if (entity.VeterancyLevel > 0 && entity.Template.VeteranArmor[entity.VeterancyLevel] is { } veteran) return veteran;
         return entity.HasPlayerUpgradeArmor && entity.Template.PlayerUpgradeArmor is { } upgraded ? upgraded : entity.Template.DefaultArmor;
     }
 
     public static int ActiveWeaponIndex(Entity entity)
     {
+        if (entity.CrateWeaponLevel > 0 && entity.Template.CrateUpgradeWeapon[entity.CrateWeaponLevel] is var crate and >= 0) return crate;
         if (entity.VeterancyLevel > 0 && entity.Template.VeteranWeapon[entity.VeterancyLevel] is var veteran and >= 0) return veteran;
         return entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
     }

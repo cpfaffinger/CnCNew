@@ -918,6 +918,9 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         if (run.ParachuteDirectly && item.Modules.OfType<IOverrideDestination>().FirstOrDefault() is { } parachute) parachute.SetOverrideDestination(_targetX, _targetY);
         // A bomb has no locomotor and falls: PhysicsBehavior takes over (the reference leaves it to the physics module, too).
         if (item.Modules.OfType<PhysicsBehavior>().FirstOrDefault() is { } physics && item.Template.Locomotor is null) physics.StartFall(world, Fixed.Zero, Fixed.Zero);
+        // "smthu->SetTargetPosition(*ai->getMoveToPos())": a smart bomb (the MOAB) steers towards the point the plane was sent to.
+        if (item.Modules.OfType<SmartBombTargetHomingUpdate>().FirstOrDefault() is { } homing)
+            homing.SetTargetPosition(world, _moveToX, _moveToY, FlightModules.GroundOrDefault(world, _moveToX, _moveToY, Fixed.Zero));
         world.MarkDirty(item);
     }
 

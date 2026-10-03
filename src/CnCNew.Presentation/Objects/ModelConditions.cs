@@ -102,6 +102,10 @@ public static class ModelConditions
     public static readonly ModelConditionFlag WeaponSetElite = Parse("WEAPONSET_ELITE");
     public static readonly ModelConditionFlag WeaponSetHero = Parse("WEAPONSET_HERO");
     public static readonly ModelConditionFlag WeaponSetPlayerUpgrade = Parse("WEAPONSET_PLAYER_UPGRADE");
+    public static readonly ModelConditionFlag WeaponSetCrateUpgradeOne = Parse("WEAPONSET_CRATEUPGRADE_ONE");
+    public static readonly ModelConditionFlag WeaponSetCrateUpgradeTwo = Parse("WEAPONSET_CRATEUPGRADE_TWO");
+    public static readonly ModelConditionFlag ArmorSetCrateUpgradeOne = Parse("ARMORSET_CRATEUPGRADE_ONE");
+    public static readonly ModelConditionFlag ArmorSetCrateUpgradeTwo = Parse("ARMORSET_CRATEUPGRADE_TWO");
     public static readonly ModelConditionFlag Attacking = Parse("ATTACKING");
     public static readonly ModelConditionFlag FiringA = Parse("FIRING_A");
     public static readonly ModelConditionFlag BetweenFiringShotsA = Parse("BETWEEN_FIRING_SHOTS_A");
