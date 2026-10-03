@@ -128,6 +128,7 @@ Alle übrigen Bedingungstypen sind **fehlend**: Auswertung = `false` und Zähler
 | Überschreibungs-Beziehungen (Phase 12) | `TEAM_SET/REMOVE_OVERRIDE_RELATION_TO_TEAM`, `TEAM_SET/REMOVE_OVERRIDE_RELATION_TO_PLAYER`, `PLAYER_SET/REMOVE_OVERRIDE_RELATION_TO_TEAM`, `TEAM_REMOVE_ALL_OVERRIDE_RELATIONS` | `doTeamSetOverrideRelationToTeam`, `…ToPlayer`, `doPlayerSetOverrideRelationToTeam`, `doTeamRemoveAllOverrideRelations` (`Team::setOverrideTeamRelationship`/`setOverridePlayerRelationship`, `Team::getRelationship` mit der Reihenfolge Team→Team, Team→Spieler, Spieler→Team, danach Spielerbeziehung). In der Welt: `SimulationWorld.RelationshipOverride` (ein Haken, der je Objektpaar die Beziehung liefern kann; sortierter, gespeicherter Zustand im `ScriptEngine`); Kampf, Zielwahl und `AreEnemies(Entity, Entity)` benutzen `RelationshipBetween` |
 | Befehlsknopf-Familie (Phase 12) | `TEAM_HUNT_WITH_COMMAND_BUTTON`, `TEAM_ALL_USE_COMMANDBUTTON_ON_NAMED`, `…_ON_NEAREST_ENEMY_UNIT/_ENEMY_BUILDING/_ENEMY_BUILDING_CLASS/_KINDOF/_GARRISONED_BUILDING/_OBJECTTYPE`, `TEAM_PARTIAL_USE_COMMANDBUTTON` | `doTeamHuntWithCommandButton`, `doTeamUseCommandButtonOnNamed`, `doTeamUseCommandButtonOnNearest*`, `doTeamPartialUseCommandButton`; der Knopf geht als gewöhnlicher Befehl (Spezialkraft, `FIRE_WEAPON`, Upgrade) an die Träger; `…ON_NEAREST_*` wählt je Träger das nächste passende Ziel, die Jagd setzt einen Auftrag (`_buttonHunts`), der alle paar Ticks das nächste Ziel neu sucht (die Hülle `CommandButtonHuntUpdate` trägt den Knopf, nicht die Suche) |
 | Team-Bewegung und -Zustand (Phase 12) | `TEAM_LOAD_TRANSPORTS`, `TEAM_MOVE_TOWARDS_NEAREST_OBJECT_TYPE`, `TEAM_GUARD_IN_TUNNEL_NETWORK`, `TEAM_PANIC`, `NAMED/TEAM_FACE_WAYPOINT`, `NAMED/TEAM_SET_STEALTH_ENABLED`, `NAMED/TEAM_SET_UNMANNED_STATUS`, `DELETE_ALL_UNMANNED`, `TEAM_INCREASE/DECREASE_PRIORITY` | `doTeamLoadTransports`, `doTeamMoveTowardsNearestObjectType`, `doTeamGuardInTunnelNetwork`, `doTeamPanic`, `doNamed/TeamFaceWaypoint`, `doNamed/TeamSetStealthEnabled`, `doNamed/TeamSetUnmannedStatus`, `doDeleteAllUnmanned`, `TeamPrototype::increaseAIPriorityForSuccess`/`decreaseAIPriorityForFailure` (§8 Punkt 19–22 für die Näherungen; die Priorität liest nur `RECRUIT_TEAM`) |
+| Team-Ausrichtung, Verkauf, Einstellungen (Phase 13) | `TEAM_FACE_NAMED`, `PLAYER_SELL_EVERYTHING`; aufgezeichnet: `NAMED_SET_STOPPING_DISTANCE`, `NAMED_SET_REPULSOR`, `SET_BASE_CONSTRUCTION_SPEED` | `doTeamFaceNamed` (jedes Mitglied hält an und blickt zum Objekt; ohne Drehrate), `doPlayerSellEverything` → `Player::sellEverythingUnderTheSun` (ein `SellCommand` je Struktur, die Welt prüft wie bei einem Spieler), `doNamedSetStoppingDistance`/`doNamedSetRepulsor`/`doSetBaseConstructionSpeed` (kein Verbraucher; `RecordedSetting`) |
 | **Aufgezeichnet** | `PLAYER_AFFECT_RECEIVING_EXPERIENCE`, `OBJECT_ALLOW_BONUSES`; seit Phase 12 `TEAM_SET_ATTITUDE`, `TEAM_WANDER`, `TEAM_WANDER_IN_PLACE`, `NAMED_SET_HELD`, `PLAYER_SET_RANKLEVELLIMIT`, `PLAYER_SET_RANKLEVEL`, `PLAYER_ADD_RANKLEVEL`, `SCRIPTING_OVERRIDE_HULK_LIFETIME` | der Wert wird gespeichert (`SkillPointsModifierOf`, Schalter, Haltung, Rang, Haltezustand, Wrack-Lebensdauer), aber **kein Simulationsteil liest ihn** (keine Erfahrungsgewinn-Skalierung je Spieler, keine Schwierigkeitsboni, keine KI-Haltung, kein Rangsystem, keine Wrackliste); getrennter Zähler `RecordedActions`, weder „ausgeführt“ noch „fehlend“ (§8) |
 | **Weitergereicht** (Präsentation) | Kamera, Ton, Sprache, Film, Musik, Radar, UI-Text, Blende, Countdown-Anzeigen, Eingabesperre u. a. (129 Typen) | als `ScriptOutput` (Tick, Aktion, Parameter als Text) an den Client; `SPEECH_PLAY`/Film/Musik/Kamerabewegung gelten für `PresentationLatencyTicks` als laufend |
 
@@ -300,7 +301,7 @@ erreichen kann, **kein** Beweis, dass ein Spieler gewinnen kann: Zustandsbedingu
 | Messgröße | Ende Phase 11 | Ende Phase 12 |
 | --- | --- | --- |
 | `ScriptCoverage` Bedingungen ausgeführt / fehlend | 80 / 29 | 80 / 29 (unverändert) |
-| `ScriptCoverage` Aktionen ausgeführt / weitergereicht / aufgezeichnet / fehlend | 131 / 129 / 2 / 82 | **160 / 129 / 10 / 45** |
+| `ScriptCoverage` Aktionen ausgeführt / weitergereicht / aufgezeichnet / fehlend | 131 / 129 / 2 / 82 | 160 / 129 / 10 / 45 (Phase 13: **162 / 129 / 13 / 40**) |
 | Skripte ausgeführt (24 Karten) | 2.403 | 2.403 |
 | Aktionen ausgeführt / weitergereicht | 7.775 / 2.453 | 7.821 / 2.452 |
 | Treffer auf fehlende Aktionstypen (Anteil der Ausführungen) | 116 (1,1 %) | **27 (0,3 %)** |
@@ -449,3 +450,55 @@ Aktionstypen (0,8 %), 21.181 auf fehlende Bedingungstypen. Häufigste fehlende A
 **Wiederholung nach Phase 13 (3. Oktober 2026, `audit --ticks 3000 --no-continuation`, je Kampagne parallel, 24 Karten):** 24/24 deterministisch und identisch nach Speichern/Wiederherstellen; 7.124 Skripte, 13.016 Aktionen
 ausgeführt, 7.155 weitergereicht, 35 Treffer auf fehlende Aktionstypen (0,3 %), 21.181 auf fehlende Bedingungstypen; Ausschalt-Endproben Sieg 13/24, Niederlage 15/24 – gegenüber Phase 12 praktisch unverändert; die
 Team-Warteschlangen und die `getTeamNamed`-Regel verschieben die Karten also nicht.
+
+### Nur-Befehle-Modus des Zielfahrers (Phase 13: Handoff Punkt 1, „Spielbarkeit statt Welteingriffe“)
+
+`CampaignTool drive --commands-only [--outcome victory|defeat]` (`MissionObjectiveDriver.Run(…, commandsOnly: true)`, `ObjectiveDriver.Commands.cs`) schreibt **nichts direkt in die Welt**: jedes Blatt trägt eine Art
+(`LeafKind`: Weltschreibung, Befehl, UI-Signal), Weltschreibungen (Töten, Platzieren, Geld, Wissenschaft, Besitzerwechsel, Gesundheit, Erzeugen, Aufdecken, die Abwehrblätter) werden **abgelehnt, gezählt und
+berichtet** (`ObjectiveDriveResult.Declined`, Zeile `declined world write` in `Unmet`); der Ergebnisbericht trennt jetzt Befehle (`Commands`: Bewegungsbefehle, Produktionsbefehle, die Befehle des Agenten) und
+Weltschreibungen (`WorldWrites`) – auch im Normalmodus (`drive` zeigt „N interventions: C commands, W world writes“).
+
+Was ein Spieler tut, übernehmen: (1) „zerstöre X“-Blätter schicken die bewaffneten, beweglichen Einheiten des Betrachters mit Bewegungsbefehlen zum nächsten Opfer (die Gefechtsschleife der Sitzung, `DriveCombat`,
+schießt, sobald Ziele in Reichweite sind); (2) „Anzahl von Typ X“-Blätter stellen Produktion bei einem eigenen Produzenten an (`QueueProductionCommand` nach `CanQueueProductionTemplate`), Einheiten außerhalb des Bereichs
+gehen zu Fuß dorthin (kein Teleport); (3) **Wirtschaft und Heer spielt der Skirmish-Agent**: `SkirmishAi` (`CnCNew.Simulation/Skirmish`, „spielt nur über typisierte Befehle“) steuert den Betrachter durch den
+Befehlszähler der Sitzung (`command with { Sequence, Tick }`, damit Skripte, Fahrer und Agent einen Zähler teilen); er baut Basis und Wirtschaft, produziert, sammelt ein Heer und greift in Wellen an, mit den Positionen
+der Feindstrukturen vom Kartenstart als Hinweisen (was ein Spieler auf der Minimap sieht). Der Fahrer hält seine Angriffsbefehle zurück, bis der Agent im Angriff ist (einzeln eintreffende Einheiten sterben einzeln).
+Ohne Fraktion mit Startgebäude (z. B. `Training01`) gibt es keinen Agenten.
+
+**Messung (3. Oktober 2026, Release, `--commands-only --outcome victory --ticks 15000`, 24 Karten):** **0 Weltschreibungen auf allen Karten, Sieg über die eigenen Skripte auf 1 von 24** – und dort (`MD_GLA04`,
+`CINE_END` @1022) endet das Skript ohne Zutun des Spielers; auf den übrigen 23 Karten nicht erreicht:
+
+| Kampagne | Mission | Karte | Sieg nur mit Befehlen (15.000 Ticks) | Befehle (Fahrer + Agent) |
+| --- | --- | --- | --- | --- |
+| CHALLENGE_1 | Mission06 | GC_AirGeneral | nicht erreicht | 4529 |
+| CHALLENGE_0 | Mission01 | GC_ChemGeneral | nicht erreicht | 619 |
+| CHALLENGE_0 | Mission07 | GC_ChinaBoss | nicht erreicht | 7899 |
+| CHALLENGE_0 | Mission06 | GC_LaserGeneral | nicht erreicht | 1070 |
+| CHALLENGE_0 | Mission02 | GC_NukeGeneral | nicht erreicht | 3417 |
+| CHALLENGE_0 | Mission05 | GC_Stealth | nicht erreicht | 3534 |
+| CHALLENGE_0 | Mission03 | GC_SuperWeaponsGeneral | nicht erreicht | 6325 |
+| CHALLENGE_0 | Mission04 | GC_TankGeneral | nicht erreicht | 3469 |
+| China | Mission01 | MD_CHI01 | nicht erreicht | 3003 |
+| China | Mission02 | MD_CHI02 | nicht erreicht | 7292 |
+| China | Mission03 | MD_CHI03 | nicht erreicht | 2871 |
+| China | Mission04 | MD_CHI04 | nicht erreicht | 353 |
+| China | Mission05 | MD_CHI05 | nicht erreicht | 8389 |
+| GLA | Mission01 | MD_GLA01 | nicht erreicht | 35 |
+| GLA | Mission02 | MD_GLA02 | nicht erreicht | 376 |
+| MD_GLA_3_DEMO | Mission01 | MD_GLA03 | nicht erreicht | 3860 |
+| GLA | Mission04 | MD_GLA04 | ja – Skript endet selbst @1022 | 104 |
+| GLA | Mission05 | MD_GLA05 | nicht erreicht | 929 |
+| MD_USA_1_DEMO | Mission01 | MD_USA01 | nicht erreicht | 813 |
+| MD_USA_2_DEMO | Mission01 | MD_USA02 | nicht erreicht | 2191 |
+| USA | Mission03 | MD_USA03 | nicht erreicht | 12 |
+| USA | Mission04 | MD_USA04 | nicht erreicht | 13330 |
+| USA | Mission05 | MD_USA05 | nicht erreicht | 557 |
+| TRAINING | Mission01 | Training01 | nicht erreicht | 0 |
+
+**Warum es scheitert (ehrlich, nicht behoben):** (a) Der Agent ist `SkirmishAi`, kein Kampagnenspieler: auf `GC_ChemGeneral` baut er Basis und produziert 97 Einheiten, greift mit **einer** Welle an, verliert sie gegen die vorgefertigte
+GLA-Basis (Tunnelnetze, Bunker, Quad-Kanonen) und hat danach kein Heer mehr (`agent: … 1 attack waves … army now 0`). (b) Viele Ziele sind Weltzustände, die nur eine Schreibung erreicht: Geld, Wissenschaft,
+Besitzer, UI-Flags, Aufdeckung – sie stehen als `declined world write` in `Unmet`. (c) Kampagnenkarten verlangen Abläufe (Konvois eskortieren, Gebäude erobern, Skriptzeitpunkte), die weder der Agent noch die
+Blätter als Befehle kennen. (d) 15.000 Ticks (8,3 Spielminuten) sind für Basisbau plus Angriff knapp; längere Läufe kosten Minuten je Karte (der Agent plant alle paar Ticks). **Ein „Spieler-Agent“, der die Kampagne wirklich
+gewinnt, ist Gegenstand des nächsten Handoffs** (`docs/HANDOFF-PHASE14.md`): Angriffswellen mit Rückzug und Verstärkung, Eroberung (`CaptureCommand`), Spezialkräfte, eine KI, die Missionsziele liest.
+Der Normalmodus bleibt bei Sieg und Niederlage 24/24 mit Welteingriffen (`Interventions` je Karte: Tabelle oben); der Nur-Befehle-Modus ist der Maßstab, an dem sich der Abstand zur Spielbarkeit messen lässt
+(Tests `ScriptCommandsOnlyDriverUsesOrdersNotWrites`, `…DeclinesWhatOnlyAWriteCanDo`: auf einer synthetischen Karte erreicht er den Sieg nur mit Befehlen, und Geld wird abgelehnt und benannt).

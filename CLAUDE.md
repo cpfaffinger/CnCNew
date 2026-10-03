@@ -264,3 +264,8 @@ Upgrade-Knopf-Bereitschaft (`IUpgradeModule.WouldUpgrade`). Modulkatalog **107 v
 `28BE35C1174E369F` oben sind überholt; Ursache sind die neuen Flug-/Fahrzeugmodule); Stresstest unverändert `56882F763EABEF67`; keine Versionssprünge (`WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10).
 **Nicht erledigt (bewusst, begründet):** Formationen/Angriffsmarsch (`asTeam`), Pfadflug (`…_USING_WAYPOINT_PATH`), `FIRE_WEAPON` mit `WeaponSlot` (braucht ein Waffenslot-Modell), „untätig“ ohne AI-Zustand, `JetAIUpdate`
 (34 Objekte), `RiderChangeContain`; die Spielbarkeit durch einen Menschen ist weiter nicht belegt (`docs/HANDOFF-PHASE14.md`).
+Phase 13, Nachtrag (3. Oktober 2026): `CampaignTool drive --commands-only [--outcome victory|defeat]` (Nur-Befehle-Modus, `ObjectiveDriver.Commands.cs`, `SkirmishAi` als Wirtschafts-/Heer-Agent des Betrachters) schreibt nichts
+direkt in die Welt: **0 Weltschreibungen, Sieg über die eigenen Skripte auf 1 von 24 Karten** in 15.000 Ticks (`docs/SCRIPT-ENGINE.md` §9) – die Spielbarkeit ist damit messbar, nicht belegt. Skript-VM jetzt 80/109 Bedingungen
+und **162** Aktionstypen (129 weitergereicht, **13** aufgezeichnet, **40** fehlend von 344; neu: `TEAM_FACE_NAMED`, `PLAYER_SELL_EVERYTHING`, aufgezeichnet `NAMED_SET_STOPPING_DISTANCE`, `NAMED_SET_REPULSOR`,
+`SET_BASE_CONSTRUCTION_SPEED`). Normaler Fahrer weiter Sieg und Niederlage 24/24; Referenzmatch (Tick 15.000, `532F19F360C59550`) und Stresstest unverändert. Fallstrick: in PowerShell ist `R` ein Alias von
+`Invoke-History` – Hilfsfunktionen in Editskripten anders nennen.
