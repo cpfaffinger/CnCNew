@@ -1289,6 +1289,8 @@ static partial class Tests
         var spawnable = carriers.Where(template => template.IsInstantiable && !template.Modules.Any(module => module.Name is "RailroadBehavior" or "WaveGuideUpdate" or "BridgeBehavior" or "BridgeTowerBehavior" or "BridgeScaffoldBehavior")).ToArray();
         var usage = StructureGroupModules.ToDictionary(name => name, name => catalog.Templates.Count(template => template.IsInstantiable && template.Modules.Any(module => module.Name == name)));
         Console.WriteLine($"       real structures: {carriers.Length} retail objects carry the group, {spawnable.Length} spawned; instantiable by module: " + string.Join(", ", usage.Where(pair => pair.Value > 0).Select(pair => $"{pair.Key} {pair.Value}")));
+        var waiting = carriers.Where(template => !template.IsInstantiable).GroupBy(template => string.Join("+", template.MissingModules)).OrderBy(group => group.Key, StringComparer.Ordinal).ToArray();
+        Console.WriteLine("       real structures: carriers still blocked by other modules: " + string.Join("; ", waiting.Select(group => $"{group.Key} x{group.Count()}")));
         foreach (var name in new[] { "RailroadBehavior", "StructureCollapseUpdate", "DeployStyleAIUpdate", "FireWeaponCollide", "BridgeBehavior" })
             Check.That(usage[name] > 0, $"Some retail object with {name} is instantiable.");
 
