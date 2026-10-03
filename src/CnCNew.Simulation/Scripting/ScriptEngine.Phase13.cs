@@ -160,8 +160,118 @@ public sealed partial class ScriptEngine
             case "AI_PLAYER_BUILD_SUPPLY_CENTER":
                 if (Has(type, p, 3) && ResolvePlayer(Str(p, 0)) is { } builder) BuildBySupplies(builder.Id, Str(p, 1), Int(p, 2));
                 return true;
+            // doNamedSetHeld: Object::setDisabledUntil(DISABLED_HELD, FOREVER/NEVER) - a held object does nothing.
+            case "NAMED_SET_HELD":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } held) _world.SetScriptDisable(held, Entity.ScriptHeld, Int(p, 1) != 0);
+                return true;
+            // doPlayerDisableFactories/EnableFactories -> Player::setObjectsEnabled: every object of the template the player owns gets (loses) OBJECT_STATUS_SCRIPT_DISABLED; later objects are not affected.
+            case "PLAYER_DISABLE_FACTORIES":
+            case "PLAYER_ENABLE_FACTORIES":
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } factoryOwner)
+                    foreach (var entity in _world.Entities.Where(entity => entity.Owner == factoryOwner.Id && !entity.DestroyRequested && entity.Template.Name.Equals(Str(p, 1), StringComparison.Ordinal)).OrderBy(entity => entity.Id.Value).ToArray())
+                        _world.SetScriptDisable(entity, Entity.ScriptDisabled, type == "PLAYER_DISABLE_FACTORIES");
+                return true;
+            // doNamedSetTrainHeld: RailroadBehavior::setHeld.
+            case "SET_TRAIN_HELD":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } locomotive && locomotive.Modules.OfType<RailroadBehavior>().FirstOrDefault() is { } railroad) railroad.SetHeld(Int(p, 1) != 0);
+                return true;
+            // doNamedSetGarrisonEvacDisposition: ContainModuleInterface::setEvacDisposition (only 1 = left and 2 = right differ from the default burst).
+            case "NAMED_SET_EVAC_LEFT_OR_RIGHT":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } garrison && garrison.Modules.OfType<GarrisonContain>().FirstOrDefault() is { } contain)
+                {
+                    contain.EvacDisposition = checked((int)Int(p, 1));
+                    _world.MarkDirty(garrison);
+                }
+                return true;
+            // doNamedSetBoobytrapped / doTeamSetBoobytrapped: a new object of the template (the booby trap) is created on the victim side and put at a random point of the victim perimeter.
+            case "NAMED_SET_BOOBYTRAPPED":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 1)) is { } trapped) BoobyTrap(Str(p, 0), trapped);
+                return true;
+            case "TEAM_SET_BOOBYTRAPPED":
+                if (Has(type, p, 2))
+                    foreach (var team in TeamsNamed(Str(p, 1)))
+                        foreach (var member in LiveMembers(team).OrderBy(member => member.Id.Value).ToArray()) BoobyTrap(Str(p, 0), member);
+                return true;
             default:
                 return false;
+        }
+    }
+
+    // ------------------------------------------------------------------------------------------------ booby traps and bridges
+
+    private readonly List<(uint Bomb, uint Victim, long OffsetX, long OffsetY)> _pendingTraps = [];
+    private readonly SortedDictionary<uint, (bool Rubble, bool Changed)> _bridgeStates = [];
+
+    /// <summary>
+    /// <c>GeometryInfo::makeRandomOffsetOnPerimeter</c> + <c>StickyBombUpdate::initStickyBomb(victim, null, pos)</c>: the trap object is requested now and attached the tick it exists
+    /// (<see cref="AttachPendingTraps"/>); the offset is drawn now (a box: a random point of the outline, a cylinder or sphere: a random angle) and turned into the victim frame.
+    /// </summary>
+    private void BoobyTrap(string templateName, Entity victim)
+    {
+        if (!_world.Templates.TryGet(templateName, out var template) || !template.IsInstantiable) { Diagnose($"unknown template '{templateName}'"); return; }
+        var geometry = victim.Template;
+        Fixed localX, localY;
+        if (geometry.IsBox)
+        {
+            var major = geometry.GeometryMajorRadius;
+            var minor = geometry.GeometryMinorRadius;
+            var sideLength = major + minor;
+            var along = _world.LogicRandom.Range(Fixed.Zero, sideLength * Fixed.FromInt(4));
+            var step = sideLength > Fixed.Zero ? (along / sideLength).Floor() : 0;
+            var fraction = along - Fixed.FromInt(step) * sideLength;
+            switch (step)
+            {
+                case 0: localX = -major + Fixed.Min(fraction, major * Fixed.FromInt(2)); localY = -minor; break;
+                case 1: localX = major; localY = -minor + Fixed.Min(fraction, minor * Fixed.FromInt(2)); break;
+                case 2: localX = major - Fixed.Min(fraction, major * Fixed.FromInt(2)); localY = minor; break;
+                default: localX = -major; localY = minor - Fixed.Min(fraction, minor * Fixed.FromInt(2)); break;
+            }
+        }
+        else
+        {
+            var angle = _world.LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
+            localX = geometry.GeometryMajorRadius * FixedTrig.Cos(angle);
+            localY = geometry.GeometryMajorRadius * FixedTrig.Sin(angle);
+        }
+        var cos = FixedTrig.Cos(victim.Angle);
+        var sin = FixedTrig.Sin(victim.Angle);
+        var offsetX = localX * cos - localY * sin;
+        var offsetY = localX * sin + localY * cos;
+        var bomb = _world.RequestSpawn(template.Index, victim.Owner, victim.X + offsetX, victim.Y + offsetY, _world.GroundHeightAt(victim.X + offsetX, victim.Y + offsetY), Fixed.Zero);
+        _pendingTraps.Add((bomb.Value, victim.Id.Value, offsetX.Raw, offsetY.Raw));
+    }
+
+    /// <summary>Attaches every requested trap whose object exists now (the spawn queue is flushed between ticks); one whose victim is gone is dropped and its object removed.</summary>
+    private void AttachPendingTraps()
+    {
+        if (_pendingTraps.Count == 0) return;
+        for (var index = 0; index < _pendingTraps.Count; index++)
+        {
+            var (bombId, victimId, offsetX, offsetY) = _pendingTraps[index];
+            var bomb = _world.FindEntity(new EntityId(bombId));
+            if (bomb is null) continue;
+            _pendingTraps.RemoveAt(index--);
+            var victim = _world.FindEntity(new EntityId(victimId));
+            if (victim is null || victim.EffectivelyDead || bomb.Modules.OfType<StickyBombUpdate>().FirstOrDefault() is not { } sticky) { _world.RequestDestroy(bomb.Id); continue; }
+            sticky.InitStickyBombAtOffset(_world, victim, Fixed.FromRaw(offsetX), Fixed.FromRaw(offsetY));
+        }
+    }
+
+    private static bool BridgeIsRubble(Entity bridge) => bridge.EffectivelyDead || bridge.Body is ActiveBody { DamageState: BodyDamageStates.Rubble };
+
+    /// <summary>
+    /// <c>TerrainLogic::updateBridgeDamageStates</c> / <c>BridgeInfo::damageStateChanged</c>: the update after a watched bridge object moved into or out of rubble its change flag is up
+    /// (<see cref="TryEvaluatePhase13Condition"/> reads it; the flag drops at the end of the next update, like <c>TerrainLogic::update</c> resets it).
+    /// </summary>
+    private void UpdateBridgeStates()
+    {
+        if (_bridgeStates.Count == 0) return;
+        foreach (var id in _bridgeStates.Keys.ToArray())
+        {
+            var state = _bridgeStates[id];
+            var bridge = _world.FindEntity(new EntityId(id));
+            var rubble = bridge is null || BridgeIsRubble(bridge);
+            _bridgeStates[id] = (rubble, rubble != state.Rubble);
         }
     }
 
@@ -435,6 +545,8 @@ public sealed partial class ScriptEngine
     {
         UpdateCaptureOrders(tick);
         UpdatePendingStructures(tick);
+        AttachPendingTraps();
+        UpdateBridgeStates();
     }
 
     private void DescribePhase13State(IStateWriter writer)
@@ -459,6 +571,18 @@ public sealed partial class ScriptEngine
             foreach (var (member, target) in _captureOrders) { writer.BeginObject(null); writer.UInt("member", member); writer.UInt("target", target); writer.EndObject(); }
             writer.EndArray();
         }
+        if (_pendingTraps.Count > 0)
+        {
+            writer.BeginArray("pendingTraps");
+            foreach (var (bomb, victim, offsetX, offsetY) in _pendingTraps) { writer.BeginObject(null); writer.UInt("bomb", bomb); writer.UInt("victim", victim); writer.Int("x", offsetX); writer.Int("y", offsetY); writer.EndObject(); }
+            writer.EndArray();
+        }
+        if (_bridgeStates.Count > 0)
+        {
+            writer.BeginArray("bridgeStates");
+            foreach (var (id, state) in _bridgeStates) { writer.BeginObject(null); writer.UInt("id", id); writer.Bool("rubble", state.Rubble); writer.Bool("changed", state.Changed); writer.EndObject(); }
+            writer.EndArray();
+        }
         if (_pendingStructures.Count > 0)
         {
             writer.BeginArray("pendingStructures");
@@ -479,6 +603,10 @@ public sealed partial class ScriptEngine
         if (_buildableOverrides.Count > 0) InstallBuildableHook();
         _captureOrders.Clear();
         if (reader.Has("captureOrders")) foreach (var item in reader.Array("captureOrders")) _captureOrders[checked((uint)item.UInt("member"))] = checked((uint)item.UInt("target"));
+        _pendingTraps.Clear();
+        if (reader.Has("pendingTraps")) foreach (var item in reader.Array("pendingTraps")) _pendingTraps.Add((checked((uint)item.UInt("bomb")), checked((uint)item.UInt("victim")), item.Int("x"), item.Int("y")));
+        _bridgeStates.Clear();
+        if (reader.Has("bridgeStates")) foreach (var item in reader.Array("bridgeStates")) _bridgeStates[checked((uint)item.UInt("id"))] = (item.Bool("rubble"), item.Bool("changed"));
         _pendingStructures.Clear();
         if (reader.Has("pendingStructures")) foreach (var item in reader.Array("pendingStructures")) _pendingStructures[item.Text("key")] = (checked((int)item.Int("owner")), item.Int("x"), item.Int("y"));
     }
@@ -555,6 +683,15 @@ public sealed partial class ScriptEngine
                 result = Has(type, p, 3) && TechBuildingNear(Str(p, 0), Int(p, 1), Str(p, 2));
                 return true;
             // evaluateSkirmishSupplySourceSafe (AIPlayer::isSupplySourceSafe/isLocationSafe); the reference re-evaluates every two seconds only, this version every time.
+            // evaluateBridgeBroken / evaluateBridgeRepaired -> TerrainLogic::isBridgeBroken/isBridgeRepaired: true only on the update right after the bridge object entered (left) the rubble damage state.
+            case "BRIDGE_BROKEN":
+            case "BRIDGE_REPAIRED":
+                if (Has(type, p, 1) && NamedEntity(Str(p, 0)) is { } bridge && bridge.Modules.OfType<BridgeBehavior>().Any())
+                {
+                    if (!_bridgeStates.TryGetValue(bridge.Id.Value, out var bridgeState)) _bridgeStates[bridge.Id.Value] = (BridgeIsRubble(bridge), false);
+                    else result = bridgeState.Changed && bridgeState.Rubble == (type == "BRIDGE_BROKEN");
+                }
+                return true;
             case "SUPPLY_SOURCE_SAFE":
                 result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } safe && SupplySourceSafe(safe.Id, Int(p, 1));
                 return true;

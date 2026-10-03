@@ -866,7 +866,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     public virtual long Update(IWorldServices world)
     {
-        if (Entity.EmpDisabledUntil > world.Tick)
+        if (Entity.EmpDisabledUntil > world.Tick || (Entity.ScriptDisableMask & Entity.ScriptHeld) != 0)
         {
             // DISABLED_EMP (EMPUpdate): the object cannot act until the disable runs out; its orders stay.
             Entity.Speed = Fixed.Zero;
@@ -1273,7 +1273,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public long Update(IWorldServices world)
     {
         if (_queue.Count == 0) return SimulationTiming.SleepForever;
-        if (world.Tick < _disabledUntil) return SimulationTiming.SleepNone;
+        if (world.Tick < _disabledUntil || Entity.ScriptDisableMask != 0) return SimulationTiming.SleepNone;
         var head = _queue[0];
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
         var remaining = head.RemainingTicks - 1;

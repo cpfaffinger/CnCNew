@@ -90,6 +90,15 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary><see cref="RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed)"/> with a map object's initial health in percent (<c>objectInitialHealth</c>).</summary>
+    /// <summary>Sets or clears one script disable bit of an entity (<see cref="Entity.ScriptHeld"/> = <c>DISABLED_HELD</c>, <see cref="Entity.ScriptDisabled"/> = <c>OBJECT_STATUS_SCRIPT_DISABLED</c>).</summary>
+    public void SetScriptDisable(Entity entity, byte bit, bool on)
+    {
+        var mask = on ? (byte)(entity.ScriptDisableMask | bit) : (byte)(entity.ScriptDisableMask & ~bit);
+        if (mask == entity.ScriptDisableMask) return;
+        entity.ScriptDisableMask = mask;
+        MarkDirty(entity);
+    }
+
     public EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle, int healthPercent)
     {
         if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));

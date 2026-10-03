@@ -115,7 +115,7 @@ public sealed class ObjectTemplate
     public Fixed GeometryMinorRadius { get; }
     public Fixed GeometryHeight { get; }
 
-    private bool IsBox => Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
+    public bool IsBox => Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
     private bool IsSphere => Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase);
 
     /// <summary><c>GeometryInfo::getBoundingCircleRadius</c> (<c>calcBoundingStuff</c>): the corner distance of a box, the major radius of a cylinder or sphere.</summary>

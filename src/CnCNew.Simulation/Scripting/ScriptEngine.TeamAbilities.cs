@@ -25,7 +25,6 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<int, int> _teamAttitude = [];
     private readonly SortedDictionary<int, int> _teamWander = [];
     private readonly SortedDictionary<int, int> _rankLevel = [];
-    private readonly SortedSet<uint> _held = [];
     private readonly SortedSet<uint> _unmanned = [];
     private readonly SortedDictionary<string, int> _priorityDelta = [];
     private readonly SortedDictionary<uint, string> _buttonHunts = [];
@@ -199,14 +198,6 @@ public sealed partial class ScriptEngine
             case "TEAM_WANDER_IN_PLACE":
                 if (Has(type, p, 1))
                     foreach (var team in TeamsNamed(Str(p, 0))) _teamWander[team.Id] = type == "TEAM_WANDER" ? 1 : 2;
-                _recordedActions++;
-                return true;
-            case "NAMED_SET_HELD":
-                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } held)
-                {
-                    if (Int(p, 1) != 0) _held.Add(held.Id.Value);
-                    else _held.Remove(held.Id.Value);
-                }
                 _recordedActions++;
                 return true;
             case "PLAYER_SET_RANKLEVELLIMIT":
@@ -473,7 +464,6 @@ public sealed partial class ScriptEngine
         DescribePairs(writer, "rankLevel", _rankLevel);
         if (_rankLimit != -1) writer.Int("rankLimit", _rankLimit);
         if (_hulkLifetimeOverrideTicks != -1) writer.Int("hulkLifetimeOverride", _hulkLifetimeOverrideTicks);
-        if (_held.Count > 0) { writer.BeginArray("held"); foreach (var id in _held) { writer.BeginObject(null); writer.UInt("id", id); writer.EndObject(); } writer.EndArray(); }
         if (_unmanned.Count > 0) { writer.BeginArray("unmanned"); foreach (var id in _unmanned) { writer.BeginObject(null); writer.UInt("id", id); writer.EndObject(); } writer.EndArray(); }
         if (_priorityDelta.Count > 0)
         {
@@ -515,8 +505,6 @@ public sealed partial class ScriptEngine
         LoadPairs(reader, "rankLevel", _rankLevel);
         _rankLimit = reader.Has("rankLimit") ? checked((int)reader.Int("rankLimit")) : -1;
         _hulkLifetimeOverrideTicks = reader.Has("hulkLifetimeOverride") ? reader.Int("hulkLifetimeOverride") : -1;
-        _held.Clear();
-        if (reader.Has("held")) foreach (var item in reader.Array("held")) _held.Add(checked((uint)item.UInt("id")));
         _unmanned.Clear();
         if (reader.Has("unmanned")) foreach (var item in reader.Array("unmanned")) _unmanned.Add(checked((uint)item.UInt("id")));
         _priorityDelta.Clear();

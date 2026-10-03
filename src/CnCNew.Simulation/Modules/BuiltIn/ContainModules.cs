@@ -223,10 +223,35 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         if (data.HealObjects) world.WakeAt(Entity, this, world.Tick);
     }
 
+    /// <summary><c>GarrisonContain::m_evacDisposition</c> (<c>NAMED_SET_EVAC_LEFT_OR_RIGHT</c>): 1 = leave to the left, 2 = to the right, anything else bursts from the centre.</summary>
+    public int EvacDisposition { get; set; }
+
     public override void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
     {
         base.Remove(world, candidate, positionAtContainer);
         _containedSinceTick.Remove(candidate.Id.Value);
+        if (positionAtContainer && EvacDisposition is 1 or 2) LeaveToTheSide(world, candidate);
+    }
+
+    /// <summary>
+    /// <c>GarrisonContain::exitObjectViaDoor</c> (<c>EVAC_TO_LEFT</c>/<c>RIGHT</c>): the occupant appears in a pocket beside the building (a random point of the doorway, a quarter of the length along it,
+    /// half to twice the width to the side) and walks to a spread-out point ten widths away, both rotated into the building's frame.
+    /// </summary>
+    private void LeaveToTheSide(IWorldServices world, Entity candidate)
+    {
+        var scalar = EvacDisposition == 1 ? Fixed.One : -Fixed.One;
+        var length = Entity.Template.GeometryMajorRadius;
+        var width = Entity.Template.GeometryMinorRadius;
+        var doorX = world.LogicRandom.Range(-length / Fixed.FromInt(4), length / Fixed.FromInt(4));
+        var doorY = world.LogicRandom.Range(width / Fixed.FromInt(2), width * Fixed.FromInt(2)) * scalar;
+        var walkX = world.LogicRandom.Range(-length, length);
+        var walkY = width * Fixed.FromInt(10) * scalar;
+        var cos = FixedTrig.Cos(Entity.Angle);
+        var sin = FixedTrig.Sin(Entity.Angle);
+        candidate.X = Entity.X + doorX * cos - doorY * sin;
+        candidate.Y = Entity.Y + doorX * sin + doorY * cos;
+        candidate.Angle = Entity.Angle;
+        if (CrateModules.AiOf(candidate) is { } ai) ai.OrderMove(world, Entity.X + walkX * cos - walkY * sin, Entity.Y + walkX * sin + walkY * cos, false);
     }
 
     public void OnBodyDamageStateChange(IWorldServices world, in DamageInfo info, int oldState, int newState)
@@ -263,6 +288,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     public override void Describe(IStateWriter writer)
     {
         writer.Int("nextWake", NextWake);
+        if (EvacDisposition != 0) writer.Int("evacDisposition", EvacDisposition);
         writer.BeginArray("contained");
         foreach (var riderId in Riders)
         {
@@ -277,6 +303,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     public override void Load(IStateReader reader)
     {
         NextWake = reader.Int("nextWake");
+        EvacDisposition = reader.Has("evacDisposition") ? checked((int)reader.Int("evacDisposition")) : 0;
         Riders.Clear();
         _containedSinceTick.Clear();
         foreach (var entry in reader.Array("contained"))

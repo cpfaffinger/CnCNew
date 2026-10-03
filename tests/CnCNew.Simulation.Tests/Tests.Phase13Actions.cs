@@ -165,4 +165,53 @@ static partial class Tests
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches.");
     }
+
+    public static void ScriptDisableHoldAndEvacuate()
+    {
+        // NAMED_SET_HELD freezes an object, PLAYER_DISABLE_FACTORIES stops the production of one type, NAMED_SET_EVAC_LEFT_OR_RIGHT sets a garrison's exit side.
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Hold", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_SET_HELD", Scr.Unit("Held"), Scr.Int(1)), Scr.Do("MOVE_NAMED_UNIT_TO", Scr.Unit("Held"), Scr.Waypoint("Far")), Scr.Do("MOVE_NAMED_UNIT_TO", Scr.Unit("Free"), Scr.Waypoint("Far")),
+                Scr.Do("PLAYER_DISABLE_FACTORIES", Scr.Side(PlayerA), Scr.Type("AlphaBunker")), Scr.Do("NAMED_SET_EVAC_LEFT_OR_RIGHT", Scr.Unit("Bunker"), Scr.Int(1))], oneShot: true),
+            Scr.Script("Release", [Scr.And(Scr.If("FLAG", Scr.Flag("release"), Scr.Bool(true)))], [Scr.Do("NAMED_SET_HELD", Scr.Unit("Held"), Scr.Int(0)), Scr.Do("PLAYER_ENABLE_FACTORIES", Scr.Side(PlayerA), Scr.Type("AlphaBunker"))], oneShot: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Held"), Placed("AlphaSoldier", 100m, 140m, "teamA", "Free"), Placed("AlphaBunker", 100m, 60m, "teamA", "Bunker"), Placed("AlphaSoldier", 100m, 180m, "teamA", "Other")],
+            paths: [("Route", [("Far", 300m, 100m)])]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, 60);
+        var held = NamedIn(session, "Held")!;
+        var free = NamedIn(session, "Free")!;
+        var bunker = NamedIn(session, "Bunker")!;
+        Check.That((held.ScriptDisableMask & CnCNew.Simulation.World.Entity.ScriptHeld) != 0 && held.X == Fixed.FromInt(100), $"A held unit stays where it is ({held.X}).");
+        Check.That(free.X > Fixed.FromInt(100), "An unheld unit walks.");
+        Check.That((bunker.ScriptDisableMask & CnCNew.Simulation.World.Entity.ScriptDisabled) != 0 && (NamedIn(session, "Other")!.ScriptDisableMask == 0), "PLAYER_DISABLE_FACTORIES marks the objects of the type only.");
+        Check.That(bunker.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.GarrisonContain>().Single().EvacDisposition == 1, "The garrison leaves to the left.");
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches (script disables and evacuation side are state).");
+        session.Engine.SignalUiInteraction("release");
+        Run(session, 120);
+        Check.That(held.ScriptDisableMask == 0 && bunker.ScriptDisableMask == 0, "Releasing clears both disables.");
+    }
+
+    public static void ScriptBoobyTrapsAndBridges()
+    {
+        // NAMED_SET_BOOBYTRAPPED puts a trap object at the victim's perimeter; BRIDGE_BROKEN is true for one update after the bridge object went to rubble.
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Trap", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_SET_BOOBYTRAPPED", Scr.Type("ScriptTrap"), Scr.Unit("Victim")), Scr.Do("TEAM_SET_BOOBYTRAPPED", Scr.Type("ScriptTrap"), Scr.Team("Squad"))], oneShot: true),
+            Scr.Script("Watch", [Scr.And(Scr.If("BRIDGE_BROKEN", Scr.Unit("Bridge")))], [Scr.Do("SET_FLAG", Scr.Flag("broken"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Fixed", [Scr.And(Scr.If("BRIDGE_REPAIRED", Scr.Unit("Bridge")))], [Scr.Do("SET_FLAG", Scr.Flag("repaired"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Blow", [Scr.And(Scr.If("FLAG", Scr.Flag("blow"), Scr.Bool(true)))], [Scr.Do("NAMED_KILL", Scr.Unit("Bridge"))], oneShot: true),
+        ], objects: [Placed("AlphaBunker", 200m, 100m, "teamPlayerA", "Victim"), Placed("AlphaSoldier", 100m, 100m, "Squad", "Guard"), Placed("ScriptBridge", 60m, 60m, "", "Bridge")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(session.SkippedObjects.IsEmpty, "The fixture instantiates: " + string.Join(",", session.SkippedObjects));
+        Run(session, 20);
+        var traps = session.World.Entities.Where(entity => entity.Template.Name == "ScriptTrap").OrderBy(entity => entity.Id.Value).ToArray();
+        Check.That(traps.Length == 2, $"One trap per victim ({traps.Length}).");
+        var victim = NamedIn(session, "Victim")!;
+        Check.That(victim.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.Index("BOOBY_TRAPPED")) && NamedIn(session, "Guard")!.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.Index("BOOBY_TRAPPED")), "Both victims are booby-trapped.");
+        Check.That(!session.Engine.FlagValue("broken") && !session.Engine.FlagValue("repaired"), "An intact bridge is neither broken nor repaired.");
+        session.Engine.SignalUiInteraction("blow");
+        Run(session, 4);
+        Check.That(session.Engine.FlagValue("broken") && !session.Engine.FlagValue("repaired"), "The killed bridge reads as broken.");
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches.");
+    }
 }

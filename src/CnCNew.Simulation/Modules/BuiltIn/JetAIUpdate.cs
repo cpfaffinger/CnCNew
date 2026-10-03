@@ -358,7 +358,7 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
     public override long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
-        if (Entity.EmpDisabledUntil > world.Tick)
+        if (Entity.EmpDisabledUntil > world.Tick || (Entity.ScriptDisableMask & Entity.ScriptHeld) != 0)
         {
             Entity.Speed = Fixed.Zero;
             return SimulationTiming.SleepNone;

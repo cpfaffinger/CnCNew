@@ -404,6 +404,31 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
         End
+        Object ScriptTrap
+          KindOf = BOOBY_TRAP NO_COLLIDE MINE
+          Body = HighlanderBody Body01
+            MaxHealth = 1.0
+            InitialHealth = 1.0
+          End
+          Behavior = StickyBombUpdate Sticky01
+          End
+        End
+        Object ScriptBridge
+          KindOf = STRUCTURE IMMOBILE BRIDGE
+          Geometry = BOX
+          GeometryMajorRadius = 20.0
+          GeometryMinorRadius = 6.0
+          GeometryHeight = 5.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 200.0
+            InitialHealth = 200.0
+          End
+          Behavior = BridgeBehavior Bridge01
+          End
+          Behavior = KeepObjectDie Keep01
+          End
+        End
         """;
 
     private static MapProperties ReinforcementTeam(string name, string transport, int troopers, bool exit = false, bool full = false)
