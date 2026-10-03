@@ -652,7 +652,6 @@ public sealed partial class SimulationWorld : IWorldServices
                 var dy = fireTarget.Y - source.Y;
                 var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
                 if (dx * dx + dy * dy > reach * reach) return CommandRejection.OutOfRange;
-                if (!GateAllowsFire(source, fireTarget)) return CommandRejection.WeaponNotReady;
                 if (!CanPlayerSee(command.Player, fireTarget)) return CommandRejection.TargetNotVisible;
                 break;
             }

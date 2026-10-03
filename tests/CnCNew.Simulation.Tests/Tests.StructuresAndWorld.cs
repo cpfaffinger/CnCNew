@@ -825,17 +825,23 @@ static partial class Tests
         var deployedBit = ObjectStatusBits.Index("DEPLOYED");
         Check.That(ai.IsPacked && !deployer.HasStatus(deployedBit), "A fresh unit is packed.");
 
-        var first = sw.Feeder.FireWeapon(1, deployer.Id.Value, target.Id.Value);
-        Check.That(!first.Accepted && first.Reason == CommandRejection.WeaponNotReady, "The first fire order is refused: the unit starts to deploy.");
+        // The gate lives in the execution of an accepted fire command (so that a replay, which holds only accepted commands, repeats the deployment).
+        var health = target.Body!.Health;
+        var refusals = sw.World.RejectionCounts[(int)CommandRejection.WeaponNotReady];
+        Check.That(sw.Feeder.FireWeapon(1, deployer.Id.Value, target.Id.Value).Accepted, "The fire order is accepted.");
+        sw.Run(2);
+        Check.That(target.Body.Health == health && !ai.IsDeployed && !ai.IsPacked, "It only starts the deployment: no shot, the unit is no longer packed and not yet deployed.");
+        Check.That(sw.World.RejectionCounts[(int)CommandRejection.WeaponNotReady] == refusals + 1, "The dropped shot is counted, not lost silently.");
         sw.Run(20);
         Check.That(!ai.IsDeployed, "Twenty ticks into the unpack time of thirty the unit is not deployed yet.");
-        Check.That(!sw.Feeder.FireWeapon(1, deployer.Id.Value, target.Id.Value).Accepted, "Still refused while unpacking.");
+        sw.Feeder.FireWeapon(1, deployer.Id.Value, target.Id.Value);
+        sw.Run(2);
+        Check.That(target.Body.Health == health, "Still no shot while unpacking.");
         sw.Run(12);
         Check.That(ai.IsDeployed && deployer.HasStatus(deployedBit), "After the unpack time the unit is deployed and carries the DEPLOYED status.");
-        var health = target.Body!.Health;
-        Check.That(sw.Feeder.FireWeapon(1, deployer.Id.Value, target.Id.Value).Accepted, "A deployed unit fires.");
+        sw.Feeder.FireWeapon(1, deployer.Id.Value, target.Id.Value);
         sw.Run(2);
-        Check.That(target.Body.Health < health, "The shot hit.");
+        Check.That(target.Body.Health < health, "A deployed unit fires and the shot hits.");
 
         // Moving: the unit packs first (fifteen ticks), then drives.
         var startX = deployer.X;
@@ -844,7 +850,10 @@ static partial class Tests
         Check.That(!deployer.HasStatus(deployedBit) && deployer.X == startX && deployer.Y == Fixed.FromInt(100), "While packing the unit stands still and is no longer deployed.");
         sw.Run(25);
         Check.That(ai.IsPacked && deployer.Y > Fixed.FromInt(100), "Packed, it drives off.");
-        Check.That(!sw.Feeder.FireWeapon(1, deployer.Id.Value, target.Id.Value).Accepted || ai.IsDeployed, "A moving unit does not shoot.");
+        var damaged = target.Body.Health;
+        sw.Feeder.FireWeapon(1, deployer.Id.Value, target.Id.Value);
+        sw.Run(2);
+        Check.That(target.Body.Health == damaged || ai.IsDeployed, "A unit that is not deployed does not shoot.");
 
         // Save and restore while deployed continues identically.
         var other = new StructuresWorld();
@@ -1254,4 +1263,87 @@ static partial class Tests
         Check.That(a.World.StateHash == b.World.StateHash, "Two independent runs agree.");
         Check.That(a.World.StateHash == restored.World.StateHash, "The restored run continues identically (train, bridge, drop zone, firestorm, shroud, beacon).");
     }
+
+    private static readonly string[] StructureGroupModules =
+    [
+        "UpgradeDie", "StructureCollapseUpdate", "FireWeaponCollide", "FireSpreadUpdate", "DeployStyleAIUpdate", "FloatUpdate", "RailroadBehavior", "DemoTrapUpdate", "MinefieldBehavior",
+        "BridgeBehavior", "BridgeTowerBehavior", "BridgeScaffoldBehavior", "OCLUpdate", "DynamicShroudClearingRangeUpdate", "FireOCLAfterWeaponCooldownUpdate", "WaveGuideUpdate", "DamDie",
+        "CheckpointUpdate", "EnemyNearUpdate", "FirestormDynamicGeometryInfoUpdate", "WeaponBonusUpdate", "CostModifierUpgrade", "BoneFXDamage", "BoneFXUpdate",
+    ];
+
+    /// <summary>
+    /// Retail data: every shipped object that carries one of the structures-and-world modules is instantiable as far as these modules go; all of them (except the ones that need a map's waypoints
+    /// or another object) are spawned side by side, run, killed and run on, twice, with identical tick hashes and a consistent incremental hash; every building with a collapse update finishes
+    /// collapsing.
+    /// </summary>
+    public static void RealStructuresAndWorld(string directory)
+    {
+        var content = CnCNew.Content.ContentFileSystem.Open(directory);
+        var options = CnCNew.Data.Compilation.DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = CnCNew.Data.Compilation.MapOverlayMode.Exclude };
+        var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new RealSource(content), CnCNew.Data.Registry.ModuleRegistry.Default, options);
+        var catalog = CnCNew.Simulation.Templates.TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        var carriers = catalog.Templates.Where(template => template.Modules.Any(module => StructureGroupModules.Contains(module.Name)) || template.MissingModules.Any(module => StructureGroupModules.Contains(module))).ToArray();
+        var refused = carriers.Where(template => template.MissingModules.Any(module => StructureGroupModules.Any(name => module.Contains(name, StringComparison.Ordinal)))).ToArray();
+        Check.That(refused.Length == 0, "No retail object is refused because of a structures-and-world module: " + string.Join(", ", refused.Select(template => template.Name + " (" + string.Join(",", template.MissingModules) + ")")));
+        var spawnable = carriers.Where(template => template.IsInstantiable && !template.Modules.Any(module => module.Name is "RailroadBehavior" or "WaveGuideUpdate" or "BridgeBehavior" or "BridgeTowerBehavior" or "BridgeScaffoldBehavior")).ToArray();
+        var usage = StructureGroupModules.ToDictionary(name => name, name => catalog.Templates.Count(template => template.IsInstantiable && template.Modules.Any(module => module.Name == name)));
+        Console.WriteLine($"       real structures: {carriers.Length} retail objects carry the group, {spawnable.Length} spawned; instantiable by module: " + string.Join(", ", usage.Where(pair => pair.Value > 0).Select(pair => $"{pair.Key} {pair.Value}")));
+        foreach (var name in new[] { "RailroadBehavior", "StructureCollapseUpdate", "DeployStyleAIUpdate", "FireWeaponCollide", "BridgeBehavior" })
+            Check.That(usage[name] > 0, $"Some retail object with {name} is instantiable.");
+
+        var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
+        (ulong[] Hashes, int Collapsed, int Collapsing) Run()
+        {
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 11, players, "real-structures", fingerprint), catalog);
+            var sequence = 0UL;
+            var column = 0;
+            foreach (var template in spawnable)
+            {
+                var x = 500 + column % 25 * 300;
+                var y = 500 + column / 25 * 300;
+                column++;
+                Check.That(world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, template.Name, new PlayerId(column % 2 + 1), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, $"{template.Name} spawns.");
+            }
+            var hashes = new List<ulong>();
+            for (var tick = 0; tick < 120; tick++) hashes.Add(world.Step().StateHash);
+            foreach (var entity in world.Entities.OrderBy(value => value.Id.Value).ToArray())
+                world.Submit(new KillCommand(PlayerId.System, ++sequence, world.Tick, entity.Id));
+            for (var tick = 0; tick < 900; tick++) hashes.Add(world.Step().StateHash);
+            world.VerifyIncrementalHash();
+            var collapses = world.Entities.SelectMany(entity => entity.Modules.OfType<StructureCollapseUpdate>()).ToArray();
+            return ([..hashes], collapses.Count(value => value.IsCollapsed), collapses.Count(value => value.IsCollapsing));
+        }
+
+        var (first, collapsed, collapsing) = Run();
+        Check.That(collapsing == 0, $"Every collapsing building finished ({collapsed} collapsed, {collapsing} still going).");
+        var (second, _, _) = Run();
+        Check.That(first.SequenceEqual(second), "Two runs are hash identical on every tick.");
+
+        // The retail train: the locomotive creates its two carriages from its own list and hauls them along a track of linked waypoints.
+        var terrain = StructuresTerrain();
+        TrainRun RunTrain()
+        {
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(2), 3, players, "real-train", fingerprint, terrain.Fingerprint), catalog, terrain);
+            Check.That(world.Submit(new SpawnCommand(PlayerId.System, 1, world.Tick, "TrainEngine", PlayerId.System, Fixed.FromInt(60), Fixed.FromInt(100), Fixed.Zero, Fixed.Zero)).Accepted, "The retail locomotive spawns.");
+            var hashes = new List<ulong>();
+            var seen = 0;
+            var braked = false;
+            for (var tick = 0; tick < 450; tick++)
+            {
+                hashes.Add(world.Step().StateHash);
+                var cars = world.Entities.Count(entity => entity.Template.Name is "TrainCoal" or "TrainCab");
+                seen = Math.Max(seen, cars);
+                if (world.Entities.FirstOrDefault(entity => entity.Template.Name == "TrainEngine")?.Modules.OfType<RailroadBehavior>().FirstOrDefault() is { Conductor: RailroadBehavior.ConductorStates.WaitAtStation }) braked = true;
+            }
+            world.VerifyIncrementalHash();
+            return new([..hashes], seen, braked, world.Entities.FirstOrDefault(entity => entity.Template.Name == "TrainEngine")?.X ?? Fixed.Zero);
+        }
+        var train = RunTrain();
+        Check.That(train.Cars == 2, $"The retail locomotive made its two carriages ({train.Cars}).");
+        Check.That(train.EngineX > Fixed.FromInt(300) || train.Braked, "The retail train rolls along the track.");
+        Check.That(RunTrain().Hashes.SequenceEqual(train.Hashes), "Two retail train runs are hash identical on every tick.");
+    }
+
+    private readonly record struct TrainRun(ulong[] Hashes, int Cars, bool Braked, Fixed EngineX);
 }

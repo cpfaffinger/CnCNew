@@ -325,7 +325,7 @@ public sealed record DeployStyleData(AIUpdateData Base, long UnpackTicks, long P
 /// <c>DeployStyleAIUpdate.cpp</c>: a unit (Patriot battery, Sentry Drone, Tomahawk, Nuke Cannon, Inferno Cannon, ...) that must be set up to shoot and packed up to move. The five
 /// states of the reference are kept: <c>READY_TO_MOVE</c> (mobile, cannot attack), <c>DEPLOY</c> (unpacking for <c>UnpackTime</c>), <c>READY_TO_ATTACK</c> (the <c>DEPLOYED</c> status is set),
 /// <c>UNDEPLOY</c> (packing for <c>PackTime</c>) and <c>ALIGNING_TURRETS</c>. The game logic here has no AI state machine, so the two triggers of <c>update</c> are read where they surface:
-/// a fire command in range (<see cref="IFireGate"/>, asked by the command path after range and readiness) starts deploying and is refused until the unit is deployed — the periodic
+/// a fire command in range (<see cref="IFireGate"/>, asked when the accepted command executes, after range and readiness) starts deploying and its shot is dropped until the unit is deployed — the periodic
 /// re-issue of the fire order (<c>MissionSession</c>'s combat drive, the skirmish AI) succeeds afterwards — and a move order (<see cref="OrderMove"/>) starts undeploying and is carried out
 /// when the unit is packed. An attack wanted while packing reverses the pack where it stands (<c>setMyState(DEPLOY, reverseDeploy)</c>, both directions take <c>UnpackTime</c> as in the
 /// reference) and drops the pending move; an unpacking unit asked to move reverses likewise. While unpacking or packing the unit stands still. Not modeled: the idle-guard auto deploy

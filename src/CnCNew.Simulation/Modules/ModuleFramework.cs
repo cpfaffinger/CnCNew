@@ -357,10 +357,10 @@ public static class ProducerAwareModules
     public static bool Contains(string moduleName) => moduleName is "UpgradeDie" or "MinefieldBehavior" or "RailroadBehavior";
 }
 
-/// <summary>A module that vetoes or delays a fire command (<c>DeployStyleAIUpdate</c>: a deployed-only weapon); asked by the command path once range and readiness are known.</summary>
+/// <summary>A module that vetoes or delays a fire command (<c>DeployStyleAIUpdate</c>: a deployed-only weapon); asked when an accepted command executes (never while it is validated, so that replays, which hold only accepted commands, repeat its state changes).</summary>
 public interface IFireGate
 {
-    /// <summary>True when the object may fire this tick; a gate that returns false may start a state change (deploying) that makes a later request succeed.</summary>
+    /// <summary>True when the object may fire now; a gate that returns false may start a state change (deploying) that lets a later command succeed, and the shot is counted as a <c>WeaponNotReady</c> rejection.</summary>
     bool AllowsFire(IWorldServices world, Entity victim);
 }
 
