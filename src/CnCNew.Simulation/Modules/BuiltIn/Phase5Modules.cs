@@ -861,7 +861,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var brakingDistance = locomotor.Braking > Fixed.Zero ? Entity.Speed * Entity.Speed / (locomotor.Braking * Fixed.FromInt(2)) : Fixed.Zero;
         var remaining = distance;
         if (distance <= brakingDistance && _pathIndex < _path.Count - 1) remaining += TailLength();
-        var goalSpeed = remaining <= brakingDistance ? locomotor.MinSpeed : locomotor.Speed;
+        var goalSpeed = remaining <= brakingDistance ? locomotor.MinSpeed : CappedSpeed(locomotor);
         if (FixedTrig.AngleDifference(Entity.Angle, desired).Abs() > MisalignedAngle)
         {
             goalSpeed = Fixed.Min(goalSpeed, locomotor.MinSpeed);
@@ -932,7 +932,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var dist = Fixed.Sqrt(distSq);
         // calcSlowDownDist equivalent: v^2 = 2*a*d, so begin braking once the remaining distance fits the stopping distance at the current speed.
         var brakingDist = locomotor.Braking > Fixed.Zero ? Entity.Speed * Entity.Speed / (locomotor.Braking * Fixed.FromInt(2)) : Fixed.Zero;
-        var goalSpeed = dist <= brakingDist ? locomotor.MinSpeed : locomotor.Speed;
+        var goalSpeed = dist <= brakingDist ? locomotor.MinSpeed : CappedSpeed(locomotor);
         Entity.Speed = Entity.Speed < goalSpeed
             ? Fixed.Min(goalSpeed, Entity.Speed + locomotor.Acceleration)
             : Fixed.Max(goalSpeed, Entity.Speed - locomotor.Braking);
@@ -945,9 +945,20 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         world.ResolveFootprintCollisions(Entity, stepX, stepY);
     }
 
+    private Fixed _speedCap;
+
+    /// <summary>
+    /// <c>AIUpdateInterface::setDesiredSpeed</c> (zero: no limit): a group that moves as a team (<c>AIGroup::getSpeed</c>, the slowest member) keeps every member at the group speed. The
+    /// locomotor's own speed is never exceeded.
+    /// </summary>
+    public Fixed SpeedCap { get => _speedCap; set => _speedCap = value; }
+
+    private Fixed CappedSpeed(LocomotorInfo locomotor) => _speedCap > Fixed.Zero ? Fixed.Min(locomotor.Speed, _speedCap) : locomotor.Speed;
+
     public override void Describe(IStateWriter writer)
     {
         writer.Int("nextWake", _nextWake);
+        if (_speedCap > Fixed.Zero) writer.Fixed("speedCap", _speedCap);
         writer.Bool("lastCommandFromPlayer", _lastCommandFromPlayer);
         writer.Bool("docking", _dock is not null);
         writer.UInt("enterTarget", _enterTarget.Value);
@@ -984,6 +995,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public override void Load(IStateReader reader)
     {
         _nextWake = reader.Int("nextWake");
+        _speedCap = reader.Has("speedCap") ? reader.Fixed("speedCap") : Fixed.Zero;
         _lastCommandFromPlayer = reader.Bool("lastCommandFromPlayer");
         _enterTarget = new EntityId(checked((uint)reader.UInt("enterTarget")));
         var task = reader.Int("task");

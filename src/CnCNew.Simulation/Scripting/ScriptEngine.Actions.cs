@@ -269,7 +269,11 @@ public sealed partial class ScriptEngine
             case "TEAM_FOLLOW_WAYPOINTS":
             case "TEAM_FOLLOW_WAYPOINTS_EXACT":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0))) foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, PathMode + Str(p, 1));
+                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    {
+                        if (p.Length > 2 && Int(p, 2) != 0) FollowAsTeam(team, PathMode + Str(p, 1));
+                        else foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, PathMode + Str(p, 1));
+                    }
                 break;
             case "NAMED_FOLLOW_WAYPOINTS":
             case "NAMED_FOLLOW_WAYPOINTS_EXACT":
@@ -518,6 +522,7 @@ public sealed partial class ScriptEngine
     {
         _buttonHunts.Remove(entity.Id.Value);
         _followers.Remove(entity.Id.Value);
+        if (AiOf(entity) is { SpeedCap.Raw: > 0 } capped) capped.SpeedCap = Fixed.Zero;
         if (entity.Template.Locomotor is null || entity.Owner.IsSystem) return;
         MoveTo(entity, entity.X, entity.Y, busy: false);
     }
@@ -526,6 +531,7 @@ public sealed partial class ScriptEngine
     {
         _buttonHunts.Remove(entity.Id.Value);
         if (entity.Template.Locomotor is null || entity.Owner.IsSystem) return;
+        if (AiOf(entity) is { SpeedCap.Raw: > 0 } slowed) slowed.SpeedCap = Fixed.Zero;
         _followers[entity.Id.Value] = new Follower { Entity = entity.Id.Value, Path = mode, Index = 0 };
         _completedPath.Remove(entity.Id.Value);
     }
@@ -546,6 +552,11 @@ public sealed partial class ScriptEngine
             if (mode.StartsWith(PathMode, StringComparison.Ordinal))
             {
                 if (_program.FindPath(mode[PathMode.Length..]) is not { } path || path.Waypoints.IsDefaultOrEmpty) { Diagnose($"unknown waypoint path '{mode[PathMode.Length..]}'"); _followers.Remove(follower.Entity); continue; }
+                if (follower.AsTeam)
+                {
+                    UpdateTeamFollower(follower, entity, path);
+                    continue;
+                }
                 var waypoint = path.Waypoints[Math.Min(follower.Index, path.Waypoints.Length - 1)];
                 if (DistanceSquared(entity, waypoint.X, waypoint.Y) <= ArrivalDistanceSquared)
                 {

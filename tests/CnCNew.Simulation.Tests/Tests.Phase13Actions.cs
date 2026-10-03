@@ -115,4 +115,33 @@ static partial class Tests
                    && session.Engine.RecordedSetting("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", string.Empty) == 1 && session.Engine.RecordedSetting("PLAYER_ADD_SKILLPOINTS", owner) == 7, "The consumer-less settings are recorded (skill points add up).");
         Check.That(session.Engine.MissingActionHits.Count == 0, "No missing actions: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
     }
+
+    public static void ScriptTeamFollowsAPathAsAFormation()
+    {
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Go", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_FOLLOW_WAYPOINTS", Scr.Team("teamA"), Scr.Named(MapScriptParameterType.WaypointPath, "Route"), Scr.Bool(true))], oneShot: true)],
+            objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Lead"), Placed("AlphaSoldier", 100m, 140m, "teamA", "Wing")],
+            paths: [("Route", [("A", 200m, 100m), ("B", 300m, 100m), ("C", 400m, 100m)])]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var lead = NamedIn(session, "Lead")!;
+        var wing = NamedIn(session, "Wing")!;
+        var minGap = Fixed.MaxValue;
+        var maxGap = Fixed.Zero;
+        for (var tick = 0; tick < 700; tick++)
+        {
+            session.Step();
+            if (lead.X > Fixed.FromInt(150) && lead.X < Fixed.FromInt(380))
+            {
+                var gap = (wing.Y - lead.Y).Abs();
+                minGap = Fixed.Min(minGap, gap);
+                maxGap = Fixed.Max(maxGap, gap);
+            }
+        }
+        Check.That(lead.X > Fixed.FromInt(370) && wing.X > Fixed.FromInt(370), $"Both reach the end of the path (lead {lead.X}, wing {wing.X}).");
+        Check.That(minGap > Fixed.FromInt(25) && maxGap < Fixed.FromInt(55), $"The wing keeps its place beside the lead while they march (gap {minGap}..{maxGap}).");
+        var restored = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        for (var tick = 0; tick < 120; tick++) restored.Step();
+        var snapshot = MissionSnapshot.Write(restored);
+        var continued = MissionSnapshot.Restore(snapshot, fixture.Templates, fixture.Fingerprint, terrain, map);
+        for (var tick = 0; tick < 200; tick++) Check.That(restored.Step().StateHash == continued.Step().StateHash, $"A formation march restored from a snapshot continues identically (tick {tick}).");
+    }
 }

@@ -100,7 +100,17 @@ public sealed partial class ScriptEngine
         public uint Entity;
         public string Path = string.Empty;
         public int Index;
+        /// <summary><c>m_moveAsGroup</c> (<c>groupFollowWaypointPathAsTeam</c>): the member keeps its offset from the group centre and follows the team's waypoint.</summary>
+        public bool AsTeam;
+        public int Team;
+        public Fixed OffsetX;
+        public Fixed OffsetY;
+        /// <summary>The team waypoint the current move order was given for (-1: none yet).</summary>
+        public int GoalIndex = -1;
     }
+
+    /// <summary><c>Team::getCurrentWaypoint</c> of the teams that follow a path as a team: the index the first member to arrive advances.</summary>
+    private readonly SortedDictionary<int, int> _teamWaypoints = [];
 
     private readonly ScriptProgram _program;
     private readonly SimulationWorld _world;
@@ -780,6 +790,14 @@ public sealed partial class ScriptEngine
             writer.UInt("entity", follower.Entity);
             writer.Text("path", follower.Path);
             writer.Int("index", follower.Index);
+            if (follower.AsTeam)
+            {
+                writer.Bool("asTeam", true);
+                writer.Int("team", follower.Team);
+                writer.Fixed("offsetX", follower.OffsetX);
+                writer.Fixed("offsetY", follower.OffsetY);
+                writer.Int("goalIndex", follower.GoalIndex);
+            }
             writer.EndObject();
         }
         writer.EndArray();
@@ -946,7 +964,12 @@ public sealed partial class ScriptEngine
         }
         _followers.Clear();
         foreach (var item in reader.Array("followers"))
-            _followers[checked((uint)item.UInt("entity"))] = new Follower { Entity = checked((uint)item.UInt("entity")), Path = item.Text("path"), Index = checked((int)item.Int("index")) };
+            _followers[checked((uint)item.UInt("entity"))] = new Follower
+            {
+                Entity = checked((uint)item.UInt("entity")), Path = item.Text("path"), Index = checked((int)item.Int("index")), AsTeam = item.Has("asTeam"),
+                Team = item.Has("asTeam") ? checked((int)item.Int("team")) : 0, OffsetX = item.Has("asTeam") ? item.Fixed("offsetX") : Fixed.Zero,
+                OffsetY = item.Has("asTeam") ? item.Fixed("offsetY") : Fixed.Zero, GoalIndex = item.Has("asTeam") ? checked((int)item.Int("goalIndex")) : -1,
+            };
         _lastDamage.Clear();
         foreach (var item in reader.Array("lastDamage")) _lastDamage[checked((uint)item.UInt("victim"))] = new LastDamage(checked((int)item.Int("owner")), item.Text("template"));
         _lastEntered.Clear();

@@ -440,6 +440,7 @@ public sealed partial class ScriptEngine
     private void DescribePhase13State(IStateWriter writer)
     {
         DescribeConditionState(writer);
+        DescribeFormationState(writer);
         if (_toppleDirections.Count > 0)
         {
             writer.BeginArray("toppleDirections");
@@ -469,6 +470,7 @@ public sealed partial class ScriptEngine
     private void LoadPhase13State(IStateReader reader)
     {
         LoadConditionState(reader);
+        LoadFormationState(reader);
         _toppleDirections.Clear();
         if (reader.Has("toppleDirections")) foreach (var item in reader.Array("toppleDirections")) _toppleDirections[item.Text("name")] = (item.Int("x"), item.Int("y"));
         if (_toppleDirections.Count > 0) InstallToppleHook();
@@ -746,5 +748,89 @@ public sealed partial class ScriptEngine
             list.Clear();
             if (reader.Has(name)) foreach (var item in reader.Array(name)) list.Add((checked((int)item.Int("player")), item.Text("name"), checked((uint)item.UInt("source"))));
         }
+    }
+}
+
+// ====================================================================================================================================== formations
+
+public sealed partial class ScriptEngine
+{
+    /// <summary>
+    /// <c>AIGroup::groupFollowWaypointPathAsTeam</c> (<c>AIFollowWaypointPathState</c> with <c>m_moveAsGroup</c>): each member keeps the offset it has from the group centre
+    /// (<c>m_groupOffset</c>), all follow one team waypoint (<c>Team::setCurrentWaypoint</c>) and none is faster than the slowest member (<c>AIGroup::getSpeed</c>).
+    /// </summary>
+    private void FollowAsTeam(ScriptTeam team, string mode)
+    {
+        var members = LiveMembers(team).Where(member => member.Template.Locomotor is not null && !member.Owner.IsSystem).ToArray();
+        if (members.Length == 0) return;
+        long sumX = 0, sumY = 0;
+        foreach (var member in members) { sumX += member.X.Floor(); sumY += member.Y.Floor(); }
+        var centreX = Fixed.FromInt(sumX / members.Length);
+        var centreY = Fixed.FromInt(sumY / members.Length);
+        var slowest = members.Min(member => member.Template.Locomotor!.Speed);
+        _teamWaypoints[team.Id] = 0;
+        foreach (var member in members)
+        {
+            _buttonHunts.Remove(member.Id.Value);
+            _completedPath.Remove(member.Id.Value);
+            _followers[member.Id.Value] = new Follower { Entity = member.Id.Value, Path = mode, Index = 0, AsTeam = true, Team = team.Id, OffsetX = member.X - centreX, OffsetY = member.Y - centreY };
+            if (AiOf(member) is { } ai) ai.SpeedCap = slowest;
+        }
+    }
+
+    private static AIUpdateInterface? AiOf(Entity entity) => entity.Modules.OfType<AIUpdateInterface>().FirstOrDefault();
+
+    /// <summary>One tick of a team follower: the goal is the team waypoint plus the member's offset; the first member to arrive advances the team waypoint, the others switch to it.</summary>
+    private void UpdateTeamFollower(Follower follower, Entity entity, ScriptWaypointPath path)
+    {
+        var current = _teamWaypoints.GetValueOrDefault(follower.Team);
+        if (current >= path.Waypoints.Length)
+        {
+            if (path.Loops) { current = 0; _teamWaypoints[follower.Team] = 0; }
+            else
+            {
+                _completedPath[follower.Entity] = path.Label;
+                _followers.Remove(follower.Entity);
+                if (AiOf(entity) is { } finished) finished.SpeedCap = Fixed.Zero;
+                return;
+            }
+        }
+        var waypoint = path.Waypoints[current];
+        var goalX = waypoint.X + follower.OffsetX;
+        var goalY = waypoint.Y + follower.OffsetY;
+        if (DistanceSquared(entity, goalX, goalY) <= ArrivalDistanceSquared)
+        {
+            if (_teamWaypoints.GetValueOrDefault(follower.Team) == current) _teamWaypoints[follower.Team] = current + 1;
+            current = _teamWaypoints[follower.Team];
+            if (current >= path.Waypoints.Length)
+            {
+                if (!path.Loops) { _completedPath[follower.Entity] = path.Label; _followers.Remove(follower.Entity); if (AiOf(entity) is { } done) done.SpeedCap = Fixed.Zero; return; }
+                current = 0;
+                _teamWaypoints[follower.Team] = 0;
+            }
+            waypoint = path.Waypoints[current];
+            goalX = waypoint.X + follower.OffsetX;
+            goalY = waypoint.Y + follower.OffsetY;
+        }
+        follower.Index = current;
+        if (follower.GoalIndex != current || !entity.HasMoveTarget)
+        {
+            follower.GoalIndex = current;
+            MoveTo(entity, goalX, goalY);
+        }
+    }
+
+    private void DescribeFormationState(IStateWriter writer)
+    {
+        if (_teamWaypoints.Count == 0) return;
+        writer.BeginArray("teamWaypoints");
+        foreach (var (team, index) in _teamWaypoints) { writer.BeginObject(null); writer.Int("team", team); writer.Int("index", index); writer.EndObject(); }
+        writer.EndArray();
+    }
+
+    private void LoadFormationState(IStateReader reader)
+    {
+        _teamWaypoints.Clear();
+        if (reader.Has("teamWaypoints")) foreach (var item in reader.Array("teamWaypoints")) _teamWaypoints[checked((int)item.Int("team"))] = checked((int)item.Int("index"));
     }
 }
