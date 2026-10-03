@@ -97,6 +97,17 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
         if (_flameDamageLimit <= Fixed.Zero) Ignite(world);
     }
 
+    /// <summary><c>FlammableUpdate::wouldIgnite</c>: the object can still catch fire (<c>FS_NORMAL</c>: not burning, not burned out for good).</summary>
+    public bool WouldIgnite => !_aflame && !Entity.HasStatus(BurnedBit);
+
+    /// <summary><c>FlammableUpdate::tryToIgnite</c>: sets a flammable object alight (used by <c>FireSpreadUpdate</c>); false when it burns or burned already.</summary>
+    public bool TryToIgnite(IWorldServices world)
+    {
+        if (!WouldIgnite) return false;
+        Ignite(world);
+        return true;
+    }
+
     private void Ignite(IWorldServices world)
     {
         _aflame = true;
@@ -106,6 +117,9 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
         _burnedEndTick = data.BurnedDelayTicks > 0 ? now + data.BurnedDelayTicks : 0;
         _damageEndTick = data.AflameDamageDelayTicks > 0 ? now + data.AflameDamageDelayTicks : 0;
         world.WakeAt(Entity, this, now + SimulationTiming.SleepNone);
+        // tryToIgnite: "bleah. this sucks." — the object's FireSpreadUpdate starts its spreading countdown.
+        foreach (var module in Entity.ModuleArray)
+            if (module is FireSpreadUpdate spread) spread.StartFireSpreading(world);
     }
 
     public long Update(IWorldServices world)

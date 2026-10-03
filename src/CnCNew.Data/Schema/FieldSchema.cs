@@ -65,7 +65,7 @@ public sealed record FieldSchema(
         var count = ValueGrammar.Tokenize(text).Length;
         return Type switch
         {
-            FieldType.Bool or FieldType.Integer or FieldType.Money or FieldType.Real or FieldType.Distance or FieldType.Angle
+            FieldType.Bool or FieldType.Integer or FieldType.Money or FieldType.Real or FieldType.Distance or FieldType.Angle or FieldType.Reference
                 or FieldType.DurationMs or FieldType.Enum => Math.Max(0, count - 1),
             FieldType.IntegerList or FieldType.TextList => Math.Max(0, count - Count),
             FieldType.RetailAlternatingNames => count / 2,

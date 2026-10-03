@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CnCNew.Data.Definitions;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
@@ -207,6 +208,26 @@ public interface IWorldServices
     /// effect that the reference's physics collision would have delivered.
     /// </summary>
     void ResolveFootprintCollisions(Entity mover, Fixed stepX, Fixed stepY);
+
+    // ------------------------------------------------------------------------------------ structures and world group
+
+    /// <summary><c>ObjectCreationList::create(list, source, secondary, lifetimeFrames)</c>: the list is executed with every created object's <c>LifetimeUpdate</c> range replaced by <paramref name="lifetimeTicks"/>; returns the first created entity.</summary>
+    EntityId CreateFromListWithLifetime(Entity source, string listName, EntityId requester, long lifetimeTicks);
+
+    /// <summary><c>Player::addKindOfProductionCostChange</c>: objects with all of <paramref name="kinds"/> cost <c>1 + percent</c> times as much for the player from now on (reference counted per kinds/percent pair).</summary>
+    void AddProductionCostChange(PlayerId player, ImmutableArray<string> kinds, Fixed percent);
+
+    /// <summary><c>Player::removeKindOfProductionCostChange</c>: undoes one <see cref="AddProductionCostChange"/>.</summary>
+    void RemoveProductionCostChange(PlayerId player, ImmutableArray<string> kinds, Fixed percent);
+
+    /// <summary>The damage amount after the victim's armor (<c>ActiveBody::attemptDamage</c> adjusts it inside the body in the reference; here the caller of <see cref="Damage"/> does).</summary>
+    Fixed AdjustDamageByArmor(Entity victim, int damageType, Fixed amount);
+
+    /// <summary><c>PlayerTemplate::getSide()</c> of the player's faction (empty without a faction, for the system player and an unknown player).</summary>
+    string FactionSideOf(PlayerId player);
+
+    /// <summary><c>Player::isPlayableSide</c>: the player's faction is a playable side (false without a faction and for the system player).</summary>
+    bool IsPlayableSide(PlayerId player);
 }
 
 /// <summary>
@@ -305,7 +326,50 @@ public static class SpecialPowerRouting
 /// supply-center exit tells a fresh truck to start supplying at once, <c>SupplyTruckAIUpdate::privateWanting</c>) and the rally point
 /// (<c>ProductionUpdate::setRallyPoint</c>): a mobile object walks there right after it appears.
 /// </summary>
-public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default);
+public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, EntityId Producer = default);
+
+// ------------------------------------------------------------------------------------------------ structures and world group
+
+/// <summary>
+/// <c>CollideModuleInterface::onCollide</c>: told that <paramref name="other"/>'s footprint overlaps this entity's after one of the two moved. The reference's physics engine delivers it
+/// to both parties; <c>SimulationWorld.ResolveFootprintCollisions</c> does the same for every mover that goes through the ground move machine.
+/// </summary>
+public interface ICollideModule
+{
+    void OnCollide(IWorldServices world, Entity other);
+}
+
+/// <summary><c>UpgradeModule::onCapture</c>: told that the object's controlling player is about to change (<c>Object::setTeam</c> by a capture or a script transfer), before <see cref="Entity.Owner"/> changes.</summary>
+public interface IOwnerChangeReceiver
+{
+    void OnOwnerChanged(IWorldServices world, PlayerId oldOwner, PlayerId newOwner);
+}
+
+/// <summary>A module that wants to know which entity created its object (<c>Object::getProducerID</c>), delivered once right after <see cref="SimModule.OnSpawn"/>.</summary>
+public interface IProducerReceiver
+{
+    void OnProducedBy(IWorldServices world, EntityId producer);
+}
+
+/// <summary>Names of the modules that implement <see cref="IProducerReceiver"/>: a creation list only records the producer for objects that carry one (so the saved state of every other object stays as it was).</summary>
+public static class ProducerAwareModules
+{
+    public static bool Contains(string moduleName) => moduleName is "UpgradeDie" or "MinefieldBehavior" or "RailroadBehavior";
+}
+
+/// <summary>A module that vetoes or delays a fire command (<c>DeployStyleAIUpdate</c>: a deployed-only weapon); asked by the command path once range and readiness are known.</summary>
+public interface IFireGate
+{
+    /// <summary>True when the object may fire this tick; a gate that returns false may start a state change (deploying) that makes a later request succeed.</summary>
+    bool AllowsFire(IWorldServices world, Entity victim);
+}
+
+/// <summary>A module that overrides its object's shroud clearing range at run time (<c>DynamicShroudClearingRangeUpdate</c>, <c>Object::setShroudClearingRange</c>).</summary>
+public interface IShroudRangeProvider
+{
+    /// <summary>The current range, or false while the template's own range applies.</summary>
+    bool TryGetShroudRange(out Fixed range);
+}
 
 /// <summary>A module told which template its object replaces when it is created by <see cref="IWorldServices.RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed, in SpawnExtras)"/>.</summary>
 public interface ISpawnOriginReceiver

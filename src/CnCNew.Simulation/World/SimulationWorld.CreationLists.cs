@@ -149,7 +149,10 @@ public sealed partial class SimulationWorld
     {
         var (setup, placement) = Configure(source, nugget, template, x, y, z);
         var id = RequestSpawn(template.Index, owner, placement.X, placement.Y, placement.Z, placement.Angle);
-        UpdateSetup(id, _ => setup with { Container = container });
+        // ObjectCreationList.cpp reallyCreate: obj->setProducer(sourceObj). Only recorded for objects with a module that reads it.
+        var producer = source.Id;
+        var wantsProducer = template.Modules.Any(spec => Modules.ProducerAwareModules.Contains(spec.Name));
+        UpdateSetup(id, _ => setup with { Container = container, Producer = wantsProducer ? producer : default });
         return id;
     }
 
@@ -174,10 +177,12 @@ public sealed partial class SimulationWorld
         }
         if ((disposition & (CreationDisposition.SendItFlying | CreationDisposition.SendItUp | CreationDisposition.RandomForce)) != 0) angle = source.Angle;
 
-        var lifetimeMax = nugget.MaxLifetimeTicks;
+        // ObjectCreationList::create(..., lifetimeFrames): a lifetime handed in by the caller (FireOCLAfterWeaponCooldownUpdate) replaces the nugget's own.
+        var lifetimeMin = _listLifetimeOverride > 0 ? _listLifetimeOverride : nugget.MinLifetimeTicks;
+        var lifetimeMax = _listLifetimeOverride > 0 ? _listLifetimeOverride : nugget.MaxLifetimeTicks;
         var setup = new SpawnSetup(true, checked((int)(healthPercent * Fixed.FromInt(100)).Floor()),
             nugget.InheritsVeterancy && template.IsTrainable, nugget.InheritsVeterancy ? source.VeterancyLevel : 0,
-            lifetimeMax > 0 ? nugget.MinLifetimeTicks : 0, lifetimeMax > 0 ? lifetimeMax : 0,
+            lifetimeMax > 0 ? lifetimeMin : 0, lifetimeMax > 0 ? lifetimeMax : 0,
             EntityId.Invalid, nugget.ContainInsideSourceObject ? source.Id : EntityId.Invalid, Fixed.Zero, EntityId.Invalid);
         return (setup, (x, y, z, angle));
     }

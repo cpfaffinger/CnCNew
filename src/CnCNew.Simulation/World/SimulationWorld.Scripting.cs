@@ -81,6 +81,7 @@ public sealed partial class SimulationWorld
             if (_players.TryGetValue(entity.Owner.Value, out var previous)) previous.EnergyProduction -= entity.Template.EnergyProduction;
             if (_players.TryGetValue(newOwner.Value, out var next)) next.EnergyProduction += entity.Template.EnergyProduction;
         }
+        NotifyOwnerChange(entity, newOwner);
         entity.Owner = newOwner;
         MarkDirty(entity);
         return true;

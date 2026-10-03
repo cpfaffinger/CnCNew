@@ -233,6 +233,13 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         if (_mux.ResetUpgrade(keyMask)) _active = false;
     }
 
+    /// <summary><c>AutoHealBehavior::stopHealing</c> (called by <c>MinefieldBehavior</c> once the mine's creator is gone): the aura goes off and the module sleeps for good.</summary>
+    public void StopHealing(IWorldServices world)
+    {
+        _active = false;
+        world.WakeAt(Entity, this, SimulationTiming.SleepForever);
+    }
+
     public long Update(IWorldServices world)
     {
         if (!_active) return SimulationTiming.SleepForever;

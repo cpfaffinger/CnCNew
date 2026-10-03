@@ -142,6 +142,12 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
 
     public void ChangeHealthForConstruction(IWorldServices world, Fixed delta) => InternalChangeHealth(world, delta);
 
+    /// <summary><c>BodyModuleInterface::internalChangeHealth</c> as <c>MinefieldBehavior::onDamage</c> uses it: lifts the health to <paramref name="minimum"/> when a hit took it below (called from inside a damage callback, before the death check, so the object never dies).</summary>
+    public void RaiseHealthTo(IWorldServices world, Fixed minimum)
+    {
+        if (Health < minimum) InternalChangeHealth(world, minimum - Health);
+    }
+
     /// <summary><c>MaxHealthUpgrade.cpp</c>: raises (or lowers) the cap; <paramref name="changeType"/> is one of <c>NameTablesPhase5.MaxHealthChangeType</c>, compared case-insensitively (unrecognized text falls back to the default, matching the reference's zero-based enum default).</summary>
     public virtual void AdjustMaxHealth(IWorldServices world, Fixed delta, string changeType)
     {

@@ -16,7 +16,8 @@ public enum CellFlags : byte
 }
 
 /// <summary>A named map waypoint in world coordinates (<c>Waypoint</c>, <c>TerrainLogic::getWaypointByName</c>).</summary>
-public sealed record TerrainWaypoint(string Name, Fixed X, Fixed Y, Fixed Z);
+/// <remarks><see cref="Id"/> is the map's <c>waypointID</c> and <see cref="NextId"/> the target of its first link (<c>Waypoint::getLink(0)</c>), both -1 when absent (a waypoint built by hand).</remarks>
+public sealed record TerrainWaypoint(string Name, Fixed X, Fixed Y, Fixed Z, int Id = -1, int NextId = -1);
 
 /// <summary>A water polygon (<c>PolygonTrigger::isWaterArea</c>): the level is the z of its first point (<c>TerrainLogic::getWaterHeight</c>).</summary>
 public sealed record WaterArea(string Name, ImmutableArray<int> PointX, ImmutableArray<int> PointY, Fixed Level);
@@ -40,6 +41,7 @@ public sealed class TerrainMap
     private readonly int _border;
     private readonly ImmutableArray<CellFlags> _cells;
     private readonly ImmutableArray<WaterArea> _water;
+    private readonly Dictionary<int, TerrainWaypoint> _waypointsById;
 
     private TerrainMap(string name, MapData map, int cellsX, int cellsY, ImmutableArray<WaterArea> water, ImmutableArray<TerrainWaypoint> waypoints)
     {
@@ -53,6 +55,7 @@ public sealed class TerrainMap
         CellsY = cellsY;
         _water = water;
         Waypoints = waypoints;
+        _waypointsById = waypoints.Where(value => value.Id >= 0).GroupBy(value => value.Id).ToDictionary(group => group.Key, group => group.First());
         var cells = new CellFlags[cellsX * cellsY];
         for (var cy = 0; cy < cellsY; cy++)
             for (var cx = 0; cx < cellsX; cx++) cells[cy * cellsX + cx] = Classify(map.BlendTiles, cx, cy);
@@ -90,6 +93,10 @@ public sealed class TerrainMap
             && int.TryParse(name.AsSpan(prefix.Length, name.Length - prefix.Length - suffix.Length), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out index) && index > 0;
     }
 
+    /// <summary><c>Waypoint::getLink(0)</c>: the waypoint a link of <paramref name="waypoint"/> leads to, or <see langword="null"/> at the end of a path.</summary>
+    public TerrainWaypoint? NextWaypoint(TerrainWaypoint waypoint)
+        => waypoint.NextId >= 0 && _waypointsById.TryGetValue(waypoint.NextId, out var next) ? next : null;
+
     public TerrainWaypoint? FindWaypoint(string name)
     {
         foreach (var waypoint in Waypoints)
@@ -123,13 +130,16 @@ public sealed class TerrainMap
                 Fixed.FromInt(trigger.Points[0].Z)));
         }
 
+        var links = new Dictionary<int, int>();
+        foreach (var link in map.WaypointLinks) links.TryAdd(link.From, link.To);
         var waypoints = ImmutableArray.CreateBuilder<TerrainWaypoint>();
         foreach (var obj in map.Objects)
         {
             if (!obj.IsWaypoint) continue;
             var waypointName = obj.Properties.GetText("waypointName");
             if (string.IsNullOrEmpty(waypointName)) continue;
-            waypoints.Add(new TerrainWaypoint(waypointName, Fixed.FromDecimal(obj.X), Fixed.FromDecimal(obj.Y), Fixed.FromDecimal(obj.Z)));
+            var id = obj.Properties.TryGetInt("waypointID", out var waypointId) ? waypointId : -1;
+            waypoints.Add(new TerrainWaypoint(waypointName, Fixed.FromDecimal(obj.X), Fixed.FromDecimal(obj.Y), Fixed.FromDecimal(obj.Z), id, id >= 0 && links.TryGetValue(id, out var next) ? next : -1));
         }
         waypoints.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name) is var order and not 0 ? order : a.X.Raw.CompareTo(b.X.Raw) is var xo and not 0 ? xo : a.Y.Raw.CompareTo(b.Y.Raw));
 

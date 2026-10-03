@@ -1169,6 +1169,208 @@ public static class ModuleCatalog
             Real("DeliveryDecalRadius", "DeliverPayloadAIUpdate.h"),
         ]);
 
+        // ------------------------------------------------------------------------------------------ structures and world group
+        // Field lists from the reference module-data tables named in each Source, checked against every occurrence in the shipped INIs.
+        Add("UpgradeDie", [..DieMux(), new("UpgradeToRemove", FieldType.Reference, ReferenceKind: DefinitionKind.Upgrade, Source: "UpgradeDie.h")]);
+        Add("DamDie", DieMux());
+        // StructureCollapseUpdate.cpp: <phase> <name> ... lines (the phase is INITIAL, DELAY, BURST or FINAL) are parsed by the module.
+        Add("StructureCollapseUpdate",
+        [
+            ..DieMux(),
+            new("MinCollapseDelay", FieldType.DurationMs, Source: "StructureCollapseUpdate.cpp"),
+            new("MaxCollapseDelay", FieldType.DurationMs, Source: "StructureCollapseUpdate.cpp"),
+            new("MinBurstDelay", FieldType.DurationMs, Source: "StructureCollapseUpdate.cpp"),
+            new("MaxBurstDelay", FieldType.DurationMs, Source: "StructureCollapseUpdate.cpp"),
+            Real("CollapseDamping", "StructureCollapseUpdate.cpp"),
+            Real("MaxShudder", "StructureCollapseUpdate.cpp"),
+            new("BigBurstFrequency", FieldType.Integer, Source: "StructureCollapseUpdate.cpp"),
+            new("OCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "StructureCollapseUpdate.cpp"),
+            new("FXList", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "StructureCollapseUpdate.cpp"),
+        ]);
+        // DeployStyleAIUpdate.h on top of the AIUpdate base: the Turret block is a nested section, turret behaviour itself is not simulated.
+        Add("DeployStyleAIUpdate",
+        [
+            ..AiBase("DeployStyleAIUpdate.cpp / AIUpdate.cpp"),
+            new("UnpackTime", FieldType.DurationMs, Source: "DeployStyleAIUpdate.h"),
+            new("PackTime", FieldType.DurationMs, Source: "DeployStyleAIUpdate.h"),
+            new("ResetTurretBeforePacking", FieldType.Bool, Source: "DeployStyleAIUpdate.h"),
+            new("TurretsFunctionOnlyWhenDeployed", FieldType.Bool, Source: "DeployStyleAIUpdate.h"),
+            new("TurretsMustCenterBeforePacking", FieldType.Bool, Source: "DeployStyleAIUpdate.h"),
+            new("ManualDeployAnimations", FieldType.Bool, Source: "DeployStyleAIUpdate.h"),
+        ], allowsNestedSections: true);
+        Add("FireWeaponCollide",
+        [
+            new("CollideWeapon", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "FireWeaponCollide.h"),
+            new("FireOnce", FieldType.Bool, Source: "FireWeaponCollide.cpp"),
+            new("RequiredStatus", FieldType.Flags, Table: NameTables.ObjectStatus, Source: "FireWeaponCollide.cpp"),
+            new("ForbiddenStatus", FieldType.Flags, Table: NameTables.ObjectStatus, Source: "FireWeaponCollide.cpp"),
+        ]);
+        Add("FireSpreadUpdate",
+        [
+            new("OCLEmbers", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "FireSpreadUpdate.cpp"),
+            new("MinSpreadDelay", FieldType.DurationMs, Source: "FireSpreadUpdate.cpp"),
+            new("MaxSpreadDelay", FieldType.DurationMs, Source: "FireSpreadUpdate.cpp"),
+            Real("SpreadTryRange", "FireSpreadUpdate.cpp"),
+        ]);
+        // RailroadGuideAIUpdate.h (RailroadBehaviorModuleData): PhysicsBehavior's own keys never occur on a train and are not part of the schema.
+        Add("RailroadBehavior",
+        [
+            new("PathPrefixName", FieldType.Text, Source: "RailroadGuideAIUpdate.h"),
+            new("CrashFXTemplateName", FieldType.Text, Source: "RailroadGuideAIUpdate.h"),
+            new("IsLocomotive", FieldType.Bool, Source: "RailroadGuideAIUpdate.h"),
+            new("CarriageTemplateName", FieldType.ReferenceList, Repeat: RepeatPolicy.Accumulate, ReferenceKind: DefinitionKind.Object, Source: "RailroadGuideAIUpdate.h"),
+            new("BigMetalBounceSound", FieldType.Opaque, Source: "RailroadGuideAIUpdate.h"),
+            new("SmallMetalBounceSound", FieldType.Opaque, Source: "RailroadGuideAIUpdate.h"),
+            new("MeatyBounceSound", FieldType.Opaque, Source: "RailroadGuideAIUpdate.h"),
+            Real("RunningGarrisonSpeedMax", "RailroadGuideAIUpdate.h"),
+            Real("KillSpeedMin", "RailroadGuideAIUpdate.h"),
+            Real("SpeedMax", "RailroadGuideAIUpdate.h"),
+            Real("Acceleration", "RailroadGuideAIUpdate.h"),
+            Real("Braking", "RailroadGuideAIUpdate.h"),
+            new("WaitAtStationTime", FieldType.DurationMs, Source: "RailroadGuideAIUpdate.h"),
+            new("RunningSound", FieldType.Opaque, Source: "RailroadGuideAIUpdate.h"),
+            new("ClicketyClackSound", FieldType.Opaque, Source: "RailroadGuideAIUpdate.h"),
+            new("WhistleSound", FieldType.Opaque, Source: "RailroadGuideAIUpdate.h"),
+            Real("Friction", "RailroadGuideAIUpdate.h"),
+        ]);
+        // BridgeBehavior.cpp: <FX|OCL>:<name> Delay:<ms> [Bone:<name>] lines are parsed by the module; the scaffold speeds drive the (unsimulated) repair scaffolding.
+        Add("BridgeBehavior",
+        [
+            Real("LateralScaffoldSpeed", "BridgeBehavior.cpp"),
+            Real("VerticalScaffoldSpeed", "BridgeBehavior.cpp"),
+            new("BridgeDieFX", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "BridgeBehavior.cpp"),
+            new("BridgeDieOCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "BridgeBehavior.cpp"),
+        ]);
+        Add("BridgeTowerBehavior", []);
+        Add("BridgeScaffoldBehavior", []);
+        Add("DemoTrapUpdate",
+        [
+            new("DefaultProximityMode", FieldType.Bool, Source: "DemoTrapUpdate.cpp"),
+            new("DetonationWeaponSlot", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "DemoTrapUpdate.cpp"),
+            new("ProximityModeWeaponSlot", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "DemoTrapUpdate.cpp"),
+            new("ManualModeWeaponSlot", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "DemoTrapUpdate.cpp"),
+            Real("TriggerDetonationRange", "DemoTrapUpdate.cpp"),
+            new("IgnoreTargetTypes", FieldType.Flags, Table: NameTables.KindOf, Source: "DemoTrapUpdate.cpp"),
+            new("ScanRate", FieldType.DurationMs, Source: "DemoTrapUpdate.cpp"),
+            new("AutoDetonationWithFriendsInvolved", FieldType.Bool, Source: "DemoTrapUpdate.cpp"),
+            new("DetonationWeapon", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "DemoTrapUpdate.cpp"),
+            new("DetonateWhenKilled", FieldType.Bool, Source: "DemoTrapUpdate.cpp"),
+        ]);
+        Add("MinefieldBehavior",
+        [
+            new("DetonationWeapon", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "MinefieldBehavior.cpp"),
+            new("DetonatedBy", FieldType.Flags, Table: NameTablesStructures.Relationship, Source: "MinefieldBehavior.cpp"),
+            new("StopsRegenAfterCreatorDies", FieldType.Bool, Source: "MinefieldBehavior.cpp"),
+            new("Regenerates", FieldType.Bool, Source: "MinefieldBehavior.cpp"),
+            new("WorkersDetonate", FieldType.Bool, Source: "MinefieldBehavior.cpp"),
+            new("CreatorDeathCheckRate", FieldType.DurationMs, Source: "MinefieldBehavior.cpp"),
+            new("ScootFromStartingPointTime", FieldType.DurationMs, Source: "MinefieldBehavior.cpp"),
+            new("NumVirtualMines", FieldType.Integer, Min: 1, Source: "MinefieldBehavior.cpp"),
+            Real("RepeatDetonateMoveThresh", "MinefieldBehavior.cpp"),
+            new("DegenPercentPerSecondAfterCreatorDies", FieldType.Percent, Source: "MinefieldBehavior.cpp"),
+            new("CreationList", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "MinefieldBehavior.cpp"),
+        ]);
+        // OCLUpdate.cpp: FactionOCL is "Faction:<side> OCL:<name>" and is parsed by the module.
+        Add("OCLUpdate",
+        [
+            new("OCL", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "OCLUpdate.cpp"),
+            new("FactionOCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "OCLUpdate.cpp"),
+            new("MinDelay", FieldType.DurationMs, Source: "OCLUpdate.cpp"),
+            new("MaxDelay", FieldType.DurationMs, Source: "OCLUpdate.cpp"),
+            new("CreateAtEdge", FieldType.Bool, Source: "OCLUpdate.cpp"),
+            new("FactionTriggered", FieldType.Bool, Source: "OCLUpdate.cpp"),
+        ]);
+        // DynamicShroudClearingRangeUpdate.cpp: GridDecalTemplate is a nested decal section (presentation).
+        Add("DynamicShroudClearingRangeUpdate",
+        [
+            new("ChangeInterval", FieldType.DurationMs, Source: "DynamicShroudClearingRangeUpdate.cpp"),
+            new("GrowInterval", FieldType.DurationMs, Source: "DynamicShroudClearingRangeUpdate.cpp"),
+            new("ShrinkDelay", FieldType.DurationMs, Source: "DynamicShroudClearingRangeUpdate.cpp"),
+            new("ShrinkTime", FieldType.DurationMs, Source: "DynamicShroudClearingRangeUpdate.cpp"),
+            new("GrowDelay", FieldType.DurationMs, Source: "DynamicShroudClearingRangeUpdate.cpp"),
+            new("GrowTime", FieldType.DurationMs, Source: "DynamicShroudClearingRangeUpdate.cpp"),
+            Real("FinalVision", "DynamicShroudClearingRangeUpdate.cpp"),
+        ], allowsNestedSections: true);
+        Add("FireOCLAfterWeaponCooldownUpdate",
+        [
+            ..UpgradeMux(),
+            new("WeaponSlot", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "FireOCLAfterWeaponCooldownUpdate.cpp"),
+            new("OCL", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "FireOCLAfterWeaponCooldownUpdate.cpp"),
+            new("MinShotsToCreateOCL", FieldType.Integer, Min: 0, Source: "FireOCLAfterWeaponCooldownUpdate.cpp"),
+            new("OCLLifetimePerSecond", FieldType.Integer, Min: 0, Source: "FireOCLAfterWeaponCooldownUpdate.cpp"),
+            new("OCLLifetimeMaxCap", FieldType.DurationMs, Source: "FireOCLAfterWeaponCooldownUpdate.cpp"),
+        ]);
+        Add("FloatUpdate", [new("Enabled", FieldType.Bool, Source: "FloatUpdate.cpp")]);
+        Add("WaveGuideUpdate",
+        [
+            new("WaveDelay", FieldType.DurationMs, Source: "WaveGuideUpdate.cpp"),
+            Real("YSize", "WaveGuideUpdate.cpp"),
+            Real("LinearWaveSpacing", "WaveGuideUpdate.cpp"),
+            Real("WaveBendMagnitude", "WaveGuideUpdate.cpp"),
+            Real("WaterVelocity", "WaveGuideUpdate.cpp"),
+            Real("PreferredHeight", "WaveGuideUpdate.cpp"),
+            Real("ShorelineEffectDistance", "WaveGuideUpdate.cpp"),
+            Real("DamageRadius", "WaveGuideUpdate.cpp"),
+            Real("DamageAmount", "WaveGuideUpdate.cpp"),
+            Real("ToppleForce", "WaveGuideUpdate.cpp"),
+            new("RandomSplashSound", FieldType.Opaque, Source: "WaveGuideUpdate.cpp"),
+            new("RandomSplashSoundFrequency", FieldType.Integer, Source: "WaveGuideUpdate.cpp"),
+            new("BridgeParticle", FieldType.Opaque, Source: "WaveGuideUpdate.cpp"),
+            Real("BridgeParticleAngleFudge", "WaveGuideUpdate.cpp"),
+            new("LoopingSound", FieldType.Opaque, Source: "WaveGuideUpdate.cpp"),
+        ]);
+        Add("CheckpointUpdate", [new("ScanDelayTime", FieldType.DurationMs, Source: "CheckpointUpdate.h")]);
+        Add("EnemyNearUpdate", [new("ScanDelayTime", FieldType.DurationMs, Source: "EnemyNearUpdate.h")]);
+        {
+            // DynamicGeometryInfoUpdate.cpp fields plus FirestormDynamicGeometryInfoUpdate.cpp's; the particle systems, FX list, offset and scorch are presentation.
+            var firestorm = ImmutableArray.CreateBuilder<FieldSchema>();
+            firestorm.Add(new("InitialDelay", FieldType.DurationMs, Source: "DynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("InitialHeight", "DynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("InitialMajorRadius", "DynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("InitialMinorRadius", "DynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("FinalHeight", "DynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("FinalMajorRadius", "DynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("FinalMinorRadius", "DynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(new("TransitionTime", FieldType.DurationMs, Source: "DynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(new("ReverseAtTransitionTime", FieldType.Bool, Source: "DynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(new("DelayBetweenDamageFrames", FieldType.DurationMs, Source: "FirestormDynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("DamageAmount", "FirestormDynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("MaxHeightForDamage", "FirestormDynamicGeometryInfoUpdate.cpp"));
+            for (var system = 1; system <= 16; system++) firestorm.Add(new($"ParticleSystem{system}", FieldType.Opaque, Source: "FirestormDynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(new("FXList", FieldType.Opaque, Source: "FirestormDynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("ParticleOffsetZ", "FirestormDynamicGeometryInfoUpdate.cpp"));
+            firestorm.Add(Real("ScorchSize", "FirestormDynamicGeometryInfoUpdate.cpp"));
+            Add("FirestormDynamicGeometryInfoUpdate", firestorm.ToImmutable());
+        }
+        Add("CostModifierUpgrade",
+        [
+            ..UpgradeMux(),
+            new("EffectKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "CostModifierUpgrade.cpp"),
+            new("Percentage", FieldType.Percent, Source: "CostModifierUpgrade.cpp"),
+        ]);
+        Add("WeaponBonusUpdate",
+        [
+            new("RequiredAffectKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "WeaponBonusUpdate.cpp"),
+            new("ForbiddenAffectKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "WeaponBonusUpdate.cpp"),
+            new("BonusDuration", FieldType.DurationMs, Source: "WeaponBonusUpdate.cpp"),
+            new("BonusDelay", FieldType.DurationMs, Source: "WeaponBonusUpdate.cpp"),
+            Real("BonusRange", "WeaponBonusUpdate.cpp"),
+            new("BonusConditionType", FieldType.Enum, Table: NameTablesPhase5.WeaponBonusCondition, Source: "WeaponBonusUpdate.cpp"),
+        ]);
+        {
+            // BoneFXUpdate.h: <State><Kind><1..8> per body-damage state (Pristine, Damaged, ReallyDamaged, Rubble) and effect kind (FXList, OCL, ParticleSystem), plus the three damage-type masks.
+            // All of it is effect playback at model bones: typed, never simulated (docs/SIMULATION-CORE.md; an OCL slot makes the module refuse to bind).
+            var bones = ImmutableArray.CreateBuilder<FieldSchema>();
+            bones.Add(new("DamageFXTypes", FieldType.Opaque, Source: "BoneFXUpdate.h"));
+            bones.Add(new("DamageOCLTypes", FieldType.Opaque, Source: "BoneFXUpdate.h"));
+            bones.Add(new("DamageParticleTypes", FieldType.Opaque, Source: "BoneFXUpdate.h"));
+            foreach (var kind in new[] { "FXList", "OCL", "ParticleSystem" })
+                foreach (var state in new[] { "Pristine", "Damaged", "ReallyDamaged", "Rubble" })
+                    for (var slot = 1; slot <= 8; slot++) bones.Add(new($"{state}{kind}{slot}", FieldType.Opaque, Source: "BoneFXUpdate.h"));
+            Add("BoneFXUpdate", bones.ToImmutable());
+            Add("BoneFXDamage", []);
+        }
+
         return builder.ToImmutable();
     }
 

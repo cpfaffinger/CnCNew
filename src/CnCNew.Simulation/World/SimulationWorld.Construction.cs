@@ -46,7 +46,7 @@ public sealed partial class SimulationWorld
         if (!found.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, found))
             return CommandRejection.MissingPrerequisite;
         if (ExceedsMaxSimultaneousOfType(owner, found)) return CommandRejection.ProductionLimitReached;
-        if (owner.Money < found.BuildCost) return CommandRejection.InsufficientFunds;
+        if (owner.Money < ProductionCostOf(owner, found)) return CommandRejection.InsufficientFunds;
         if (Navigation is { } navigation
             && (!navigation.IsFootprintLegal(found, construct.X, construct.Y, construct.Angle) || !IsPositionExploredBy(owner.Id, construct.X, construct.Y)))
             return CommandRejection.InvalidPlacement;
@@ -139,9 +139,10 @@ public sealed partial class SimulationWorld
 
     private void StartConstruction(PlayerId issuer, Entity builder, ObjectTemplate template, ConstructCommand construct)
     {
-        _players[builder.Owner.Value].Money -= template.BuildCost;
+        var constructionCost = ProductionCostOf(_players[builder.Owner.Value], template);
+        _players[builder.Owner.Value].Money -= constructionCost;
         var site = SpawnEntity(new PendingSpawn(Ids.AllocateEntity(), template.Index, builder.Owner, construct.X, construct.Y, Fixed.Zero, construct.Angle), builder.Id);
-        Emit(SimEventKind.ConstructionStarted, site.Id, builder.Id, template.Name, template.BuildCost.Raw, builder.Owner);
+        Emit(SimEventKind.ConstructionStarted, site.Id, builder.Id, template.Name, constructionCost.Raw, builder.Owner);
         BuilderOf(builder)!.OrderConstruct(this, site);
     }
 
@@ -253,7 +254,7 @@ public sealed partial class SimulationWorld
 
     private void CancelConstruction(Entity site)
     {
-        var refund = site.HasStatus(ObjectStatusBits.Reconstructing) ? Fixed.Zero : site.Template.BuildCost;
+        var refund = site.HasStatus(ObjectStatusBits.Reconstructing) ? Fixed.Zero : _players.TryGetValue(site.Owner.Value, out var payer) ? ProductionCostOf(payer, site.Template) : site.Template.BuildCost;
         if (_players.TryGetValue(site.Owner.Value, out var owner)) owner.Money += refund;
         Emit(SimEventKind.ConstructionCancelled, site.Id, EntityId.Invalid, string.Empty, refund.Raw, site.Owner);
         if (site.Body is null) RequestDestroy(site.Id);

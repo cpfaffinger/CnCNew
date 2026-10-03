@@ -68,14 +68,17 @@ public sealed partial class SimulationWorld
     /// <inheritdoc cref="IWorldServices.ResolveFootprintCollisions"/>
     public void ResolveFootprintCollisions(Entity mover, Fixed stepX, Fixed stepY)
     {
-        if (mover.EffectivelyDead || mover.Template.CrusherLevel <= 0) return;
-        foreach (var other in Entities)
-        {
-            if (other.Id == mover.Id || other.EffectivelyDead) continue;
-            if (!FootprintsOverlap(mover, other)) continue;
-            TryTopple(mover, other);
-            TrySquish(mover, other, stepX, stepY);
-        }
+        if (mover.EffectivelyDead) return;
+        if (mover.Template.CrusherLevel > 0)
+            foreach (var other in Entities)
+            {
+                if (other.Id == mover.Id || other.EffectivelyDead) continue;
+                if (!FootprintsOverlap(mover, other)) continue;
+                TryTopple(mover, other);
+                TrySquish(mover, other, stepX, stepY);
+            }
+        // Structures-and-world group: the collide modules of whatever the mover now overlaps (a burning tree, a mine).
+        DispatchCollisions(mover);
     }
 
     private static bool FootprintsOverlap(Entity a, Entity b)

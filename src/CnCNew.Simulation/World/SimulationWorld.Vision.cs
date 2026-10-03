@@ -54,6 +54,7 @@ public sealed partial class SimulationWorld
         {
             if (entity.Owner.IsSystem || entity.DestroyRequested || entity.EffectivelyDead || entity.ContainedBy.IsValid) continue;
             var range = entity.HasStatus(ObjectStatusBits.UnderConstruction) ? entity.Template.BoundingCircleRadius : entity.Template.ShroudClearingRange;
+            if (TryShroudOverride(entity, out var overridden)) range = overridden;
             if (range <= Fixed.Zero) continue;
             var viewers = entity.Template.IsKindOf("REVEAL_TO_ALL") ? everybody : allySlots[_playerSlots![entity.Owner.Value]];
             foreach (var slot in viewers) vision.Reveal(slot, entity.X, entity.Y, range);

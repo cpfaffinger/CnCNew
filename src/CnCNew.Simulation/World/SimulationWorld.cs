@@ -111,6 +111,9 @@ public sealed partial class SimulationWorld : IWorldServices
 
         /// <summary><c>Player::getTunnelSystem</c>.</summary>
         public TunnelTracker Tunnels { get; } = new();
+
+        /// <summary><c>Player::m_kindOfPercentProductionChangeList</c> (<c>CostModifierUpgrade</c>); empty for every player no such upgrade ever touched.</summary>
+        public List<CostModifier> CostModifiers { get; } = [];
     }
 
     /// <summary>
@@ -123,7 +126,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
-        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null);
+        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, EntityId Producer = default);
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
 
@@ -475,7 +478,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));
         var id = Ids.AllocateEntity();
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
-            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY);
+            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY, Producer: extras.Producer);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }
@@ -618,7 +621,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!queueTemplate.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(player, queueTemplate))
                     return CommandRejection.MissingPrerequisite;
                 if (ExceedsMaxSimultaneousOfType(player, queueTemplate)) return CommandRejection.ProductionLimitReached;
-                if (player.Money < queueTemplate.BuildCost) return CommandRejection.InsufficientFunds;
+                if (player.Money < ProductionCostOf(player, queueTemplate)) return CommandRejection.InsufficientFunds;
                 break;
             }
             case CancelProductionCommand cancel:
@@ -649,6 +652,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 var dy = fireTarget.Y - source.Y;
                 var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
                 if (dx * dx + dy * dy > reach * reach) return CommandRejection.OutOfRange;
+                if (!GateAllowsFire(source, fireTarget)) return CommandRejection.WeaponNotReady;
                 if (!CanPlayerSee(command.Player, fireTarget)) return CommandRejection.TargetNotVisible;
                 break;
             }
@@ -895,10 +899,11 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!queueTemplate.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(buyer, queueTemplate))
                     { RecordRejection(command, CommandRejection.MissingPrerequisite); break; }
                 if (ExceedsMaxSimultaneousOfType(buyer, queueTemplate)) { RecordRejection(command, CommandRejection.ProductionLimitReached); break; }
-                if (buyer.Money < queueTemplate.BuildCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }
+                var queueCost = ProductionCostOf(buyer, queueTemplate);
+                if (buyer.Money < queueCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }
                 // ProductionUpdate.h: the full cost is withdrawn immediately at queue time, refunded in full on cancel.
-                buyer.Money -= queueTemplate.BuildCost;
-                production.Enqueue(queueTemplate.Index, queueTemplate.BuildCost, queueTemplate.BuildTicks);
+                buyer.Money -= queueCost;
+                production.Enqueue(queueTemplate.Index, queueCost, queueTemplate.BuildTicks);
                 var producerNode = Array.Find(producer.Updates, node => ReferenceEquals(node.Module, production));
                 if (producerNode is not null) WakeAt(producer, producerNode.Update, _tick);
                 MarkDirty(producer);
@@ -954,6 +959,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 var dy = fireTarget.Y - source.Y;
                 var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
                 if (dx * dx + dy * dy > reach * reach) { RecordRejection(command, CommandRejection.OutOfRange); break; }
+                if (!GateAllowsFire(source, fireTarget)) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
                 // _tick >= WeaponReadyTick was just confirmed above: an empty clip has finished its ClipReloadTime by now.
                 if (source.WeaponClip == 0) source.WeaponClip = ClipCapacity(weapon);
                 var bonuses = _templates.GlobalWeaponBonus;
@@ -1332,6 +1338,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
                 navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
             _entitySum = unchecked(_entitySum - entity.CachedHash);
+            UnregisterStructureHooks(entity);
             _entities.Remove(entity.Id.Value);
             entity.Registered = false;
             _moduleCount -= entity.ModuleArray.Length;
@@ -1375,6 +1382,9 @@ public sealed partial class SimulationWorld : IWorldServices
             foreach (var module in entity.ModuleArray)
                 if (module is Modules.BuiltIn.LifetimeUpdate lifetime) lifetime.OverrideRange(setup.MinLifetimeTicks, setup.MaxLifetimeTicks);
         foreach (var module in entity.ModuleArray) module.OnSpawn(this);
+        if (setup.Producer.IsValid)
+            foreach (var module in entity.ModuleArray)
+                if (module is IProducerReceiver receiver) receiver.OnProducedBy(this, setup.Producer);
         if (setup.HasOrigin)
             foreach (var module in entity.ModuleArray)
                 if (module is ISpawnOriginReceiver receiver) receiver.OnSpawnedFrom(this, setup.OriginTemplate);
@@ -1483,6 +1493,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (entity.SellCompleteTick >= 0) _sales.Add((entity.SellCompleteTick, entity.Id.Value));
         if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
             navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
+        RegisterStructureHooks(entity);
         foreach (var module in entity.ModuleArray)
             if (module is IWorldAttached attached) attached.Attach(this);
         foreach (var node in entity.Updates)
@@ -1643,6 +1654,7 @@ public sealed partial class SimulationWorld : IWorldServices
             // Written only when switched off, so a world no script ever restricted keeps the serialized form (and hash) it had before the switches existed.
             if (!player.CanBuildBase) writer.Bool("canBuildBase", false);
             if (!player.CanBuildUnits) writer.Bool("canBuildUnits", false);
+            DescribeCostModifiers(writer, player);
             writer.BeginArray("sharedReadyFrames");
             // Indexed: SortedList's foreach boxes its enumerator, and this runs every tick.
             for (var index = 0; index < player.SharedReadyFrames.Count; index++)
@@ -1695,6 +1707,7 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Bool("hasRally", setup.HasRally);
             writer.Fixed("rallyX", setup.RallyX);
             writer.Fixed("rallyY", setup.RallyY);
+            if (setup.Producer.IsValid) writer.UInt("producer", setup.Producer.Value);
             if (setup.Launch is { } launch)
             {
                 writer.Int("launchWeapon", launch.Weapon);
