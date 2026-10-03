@@ -1169,6 +1169,170 @@ public static class ModuleCatalog
             Real("DeliveryDecalRadius", "DeliverPayloadAIUpdate.h"),
         ]);
 
+        // ---- Air group: aircraft, airfields, missiles and pulse objects (src/CnCNew.Simulation/Modules/BuiltIn/AirModules.cs, AirWeaponModules.cs).
+        // JetAIUpdateModuleData (JetAIUpdate.cpp buildFieldParse) on top of the AIUpdate base; the nested Turret block of the Comanche is allowed (no consumer).
+        Add("JetAIUpdate",
+        [
+            ..AiBase("JetAIUpdate.cpp / AIUpdate.cpp"),
+            new("OutOfAmmoDamagePerSecond", FieldType.Percent, Source: "JetAIUpdate.cpp"),
+            new("NeedsRunway", FieldType.Bool, Source: "JetAIUpdate.cpp"),
+            new("KeepsParkingSpaceWhenAirborne", FieldType.Bool, Source: "JetAIUpdate.cpp"),
+            new("TakeoffDistForMaxLift", FieldType.Percent, Source: "JetAIUpdate.cpp"),
+            new("TakeoffPause", FieldType.DurationMs, Source: "JetAIUpdate.cpp"),
+            Real("MinHeight", "JetAIUpdate.cpp"),
+            Real("ParkingOffset", "JetAIUpdate.cpp"),
+            Real("SneakyOffsetWhenAttacking", "JetAIUpdate.cpp"),
+            new("AttackLocomotorType", FieldType.Enum, Table: NameTables.LocomotorSet, Source: "JetAIUpdate.cpp"),
+            new("AttackLocomotorPersistTime", FieldType.DurationMs, Source: "JetAIUpdate.cpp"),
+            new("AttackersMissPersistTime", FieldType.DurationMs, Source: "JetAIUpdate.cpp"),
+            new("ReturnForAmmoLocomotorType", FieldType.Enum, Table: NameTables.LocomotorSet, Source: "JetAIUpdate.cpp"),
+            new("LockonTime", FieldType.DurationMs, Source: "JetAIUpdate.cpp"),
+            new("LockonCursor", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "JetAIUpdate.cpp"),
+            Real("LockonInitialDist", "JetAIUpdate.cpp"),
+            Real("LockonFreq", "JetAIUpdate.cpp"),
+            new("LockonAngleSpin", FieldType.Angle, Source: "JetAIUpdate.cpp"),
+            new("LockonBlinky", FieldType.Bool, Source: "JetAIUpdate.cpp"),
+            new("ReturnToBaseIdleTime", FieldType.DurationMs, Source: "JetAIUpdate.cpp"),
+        ], allowsNestedSections: true);
+        // ParkingPlaceBehaviorModuleData (ParkingPlaceBehavior.h): the airfield's parking rows/columns, runways and healing. The bone positions of the model have no counterpart; the layout is computed.
+        Add("ParkingPlaceBehavior",
+        [
+            new("NumRows", FieldType.Integer, Min: 0, Source: "ParkingPlaceBehavior.h"),
+            new("NumCols", FieldType.Integer, Min: 0, Source: "ParkingPlaceBehavior.h"),
+            Real("ApproachHeight", "ParkingPlaceBehavior.h"),
+            Real("LandingDeckHeightOffset", "ParkingPlaceBehavior.h"),
+            new("HasRunways", FieldType.Bool, Source: "ParkingPlaceBehavior.h"),
+            new("ParkInHangars", FieldType.Bool, Source: "ParkingPlaceBehavior.h"),
+            Real("HealAmountPerSecond", "ParkingPlaceBehavior.h"),
+        ]);
+        // SpectreGunshipUpdateModuleData (SpectreGunshipUpdate.cpp buildFieldParse); the two radius decals are nested blocks (presentation).
+        Add("SpectreGunshipUpdate",
+        [
+            new("SpecialPowerTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.SpecialPower, Source: "SpectreGunshipUpdate.cpp"),
+            new("GattlingTemplateName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "SpectreGunshipUpdate.cpp"),
+            new("HowitzerFiringRate", FieldType.DurationMs, Source: "SpectreGunshipUpdate.cpp"),
+            new("OrbitTime", FieldType.DurationMs, Source: "SpectreGunshipUpdate.cpp"),
+            new("HowitzerFollowLag", FieldType.DurationMs, Source: "SpectreGunshipUpdate.cpp"),
+            Real("AttackAreaRadius", "SpectreGunshipUpdate.cpp"),
+            Real("StrafingIncrement", "SpectreGunshipUpdate.cpp"),
+            Real("OrbitInsertionSlope", "SpectreGunshipUpdate.cpp"),
+            Real("RandomOffsetForHowitzer", "SpectreGunshipUpdate.cpp"),
+            Real("TargetingReticleRadius", "SpectreGunshipUpdate.cpp"),
+            Real("GunshipOrbitRadius", "SpectreGunshipUpdate.cpp"),
+            new("HowitzerWeaponTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "SpectreGunshipUpdate.cpp"),
+            new("GattlingStrafeFXParticleSystem", FieldType.Opaque, Source: "SpectreGunshipUpdate.cpp"),
+        ], allowsNestedSections: true);
+        // MissileLauncherBuildingUpdateModuleData (MissileLauncherBuildingUpdate.h): the silo door timing and its effects at each door state.
+        Add("MissileLauncherBuildingUpdate",
+        [
+            new("SpecialPowerTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.SpecialPower, Source: "MissileLauncherBuildingUpdate.h"),
+            new("DoorOpenTime", FieldType.DurationMs, Source: "MissileLauncherBuildingUpdate.h"),
+            new("DoorWaitOpenTime", FieldType.DurationMs, Source: "MissileLauncherBuildingUpdate.h"),
+            new("DoorCloseTime", FieldType.DurationMs, Source: "MissileLauncherBuildingUpdate.h"),
+            new("DoorOpeningFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "MissileLauncherBuildingUpdate.h"),
+            new("DoorOpenFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "MissileLauncherBuildingUpdate.h"),
+            new("DoorWaitingToCloseFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "MissileLauncherBuildingUpdate.h"),
+            new("DoorClosingFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "MissileLauncherBuildingUpdate.h"),
+            new("DoorClosedFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "MissileLauncherBuildingUpdate.h"),
+            new("DoorOpenIdleAudio", FieldType.Opaque, Source: "MissileLauncherBuildingUpdate.h"),
+        ]);
+        // NeutronMissileUpdateModuleData (NeutronMissileUpdate.cpp buildFieldParse); the delivery decal is a nested block (presentation).
+        Add("NeutronMissileUpdate",
+        [
+            Real("DistanceToTravelBeforeTurning", "NeutronMissileUpdate.cpp"),
+            Real("MaxTurnRate", "NeutronMissileUpdate.cpp parseAngularVelocityReal"),
+            Real("ForwardDamping", "NeutronMissileUpdate.cpp"),
+            Real("RelativeSpeed", "NeutronMissileUpdate.cpp"),
+            Real("TargetFromDirectlyAbove", "NeutronMissileUpdate.cpp"),
+            new("LaunchFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "NeutronMissileUpdate.cpp"),
+            new("SpecialSpeedTime", FieldType.DurationMs, Source: "NeutronMissileUpdate.cpp"),
+            Real("SpecialSpeedHeight", "NeutronMissileUpdate.cpp"),
+            Real("SpecialAccelFactor", "NeutronMissileUpdate.cpp"),
+            Real("SpecialJitterDistance", "NeutronMissileUpdate.cpp"),
+            new("IgnitionFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "NeutronMissileUpdate.cpp"),
+            Real("DeliveryDecalRadius", "NeutronMissileUpdate.cpp"),
+        ], allowsNestedSections: true);
+        // NeutronMissileSlowDeathBehaviorModuleData (NeutronMissileSlowDeathUpdate.cpp buildFieldParse): the SlowDeathBehavior base plus nine blast stages.
+        Add("NeutronMissileSlowDeathBehavior",
+        [
+            ..DieMux(),
+            new("SinkRate", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("ProbabilityModifier", FieldType.Integer, Source: "SlowDeathBehavior.cpp"),
+            new("ModifierBonusPerOverkillPercent", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("SinkDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelay", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionDelayVariance", FieldType.DurationMs, Source: "SlowDeathBehavior.cpp"),
+            new("DestructionAltitude", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FX", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("OCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("Weapon", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForce", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingForceVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitch", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            new("FlingPitchVariance", FieldType.Opaque, Source: "SlowDeathBehavior.cpp"),
+            Real("ScorchMarkSize", "NeutronMissileSlowDeathUpdate.cpp"),
+            new("FXList", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "NeutronMissileSlowDeathUpdate.cpp"),
+            ..Enumerable.Range(1, 9).SelectMany(stage => new FieldSchema[]
+            {
+                new($"Blast{stage}Enabled", FieldType.Bool, Source: "NeutronMissileSlowDeathUpdate.cpp"),
+                new($"Blast{stage}Delay", FieldType.DurationMs, Source: "NeutronMissileSlowDeathUpdate.cpp parseDurationReal"),
+                new($"Blast{stage}ScorchDelay", FieldType.DurationMs, Source: "NeutronMissileSlowDeathUpdate.cpp parseDurationReal"),
+                Real($"Blast{stage}InnerRadius", "NeutronMissileSlowDeathUpdate.cpp"),
+                Real($"Blast{stage}OuterRadius", "NeutronMissileSlowDeathUpdate.cpp"),
+                Real($"Blast{stage}MaxDamage", "NeutronMissileSlowDeathUpdate.cpp"),
+                Real($"Blast{stage}MinDamage", "NeutronMissileSlowDeathUpdate.cpp"),
+                Real($"Blast{stage}ToppleSpeed", "NeutronMissileSlowDeathUpdate.cpp"),
+                Real($"Blast{stage}PushForce", "NeutronMissileSlowDeathUpdate.cpp"),
+            }),
+        ]);
+        // NeutronBlastBehaviorModuleData (NeutronBlastBehavior.h).
+        Add("NeutronBlastBehavior",
+        [
+            Real("BlastRadius", "NeutronBlastBehavior.h"),
+            new("AffectAirborne", FieldType.Bool, Source: "NeutronBlastBehavior.h"),
+            new("AffectAllies", FieldType.Bool, Source: "NeutronBlastBehavior.h"),
+        ]);
+        // EMPUpdateModuleData (EMPUpdate.h): the growth/fade of the pulse object and what it disables. Colors, scale, the spark system and the victim kind filter (commented out in the update) are presentation.
+        Add("EMPUpdate",
+        [
+            new("Lifetime", FieldType.DurationMs, Source: "EMPUpdate.h"),
+            new("StartFadeTime", FieldType.DurationMs, Source: "EMPUpdate.h"),
+            Real("StartScale", "EMPUpdate.h"),
+            new("DisabledDuration", FieldType.DurationMs, Source: "EMPUpdate.h"),
+            Real("TargetScaleMax", "EMPUpdate.h"),
+            Real("TargetScaleMin", "EMPUpdate.h"),
+            new("StartColor", FieldType.Opaque, Source: "EMPUpdate.h"),
+            new("EndColor", FieldType.Opaque, Source: "EMPUpdate.h"),
+            new("DisableFXParticleSystem", FieldType.Opaque, Source: "EMPUpdate.h"),
+            Real("SparksPerCubicFoot", "EMPUpdate.h"),
+            Real("EffectRadius", "EMPUpdate.h"),
+            new("DoesNotAffect", FieldType.Flags, Table: NameTablesPhase5.WeaponAffectsMask, Source: "EMPUpdate.h"),
+            new("DoesNotAffectMyOwnBuildings", FieldType.Bool, Source: "EMPUpdate.h"),
+            new("VictimRequiredKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "EMPUpdate.h"),
+            new("VictimForbiddenKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "EMPUpdate.h"),
+        ]);
+        // LeafletDropBehaviorModuleData (EMPUpdate.h).
+        Add("LeafletDropBehavior",
+        [
+            new("Delay", FieldType.DurationMs, Source: "EMPUpdate.h"),
+            new("DisabledDuration", FieldType.DurationMs, Source: "EMPUpdate.h"),
+            Real("AffectRadius", "EMPUpdate.h"),
+            new("LeafletFXParticleSystem", FieldType.Opaque, Source: "EMPUpdate.h"),
+        ]);
+        // BunkerBusterBehaviorModuleData (BunkerBusterBehavior.cpp buildFieldParse).
+        Add("BunkerBusterBehavior",
+        [
+            new("UpgradeRequired", FieldType.Reference, ReferenceKind: DefinitionKind.Upgrade, Source: "BunkerBusterBehavior.cpp"),
+            new("DetonationFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "BunkerBusterBehavior.cpp"),
+            new("CrashThroughBunkerFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "BunkerBusterBehavior.cpp"),
+            new("CrashThroughBunkerFXFrequency", FieldType.DurationMs, Source: "BunkerBusterBehavior.cpp"),
+            Real("SeismicEffectRadius", "BunkerBusterBehavior.cpp"),
+            Real("SeismicEffectMagnitude", "BunkerBusterBehavior.cpp"),
+            new("ShockwaveWeaponTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "BunkerBusterBehavior.cpp"),
+            new("OccupantDamageWeaponTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "BunkerBusterBehavior.cpp"),
+        ]);
+
         return builder.ToImmutable();
     }
 

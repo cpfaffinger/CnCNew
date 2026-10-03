@@ -139,6 +139,33 @@
     },
     {
       "category": "deferred-field",
+      "name": "EMPUpdate/DisableFXParticleSystem",
+      "count": 5,
+      "owners": [
+        "EMPUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "EMPUpdate/EndColor",
+      "count": 5,
+      "owners": [
+        "EMPUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "EMPUpdate/StartColor",
+      "count": 5,
+      "owners": [
+        "EMPUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "FlammableUpdate/BurningSoundName",
       "count": 4,
       "owners": [
@@ -2740,6 +2767,15 @@
     },
     {
       "category": "deferred-field",
+      "name": "LeafletDropBehavior/LeafletFXParticleSystem",
+      "count": 1,
+      "owners": [
+        "LeafletDropBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Locomotor/AccelerationPitchLimit",
       "count": 101,
       "owners": [
@@ -3145,10 +3181,28 @@
     },
     {
       "category": "deferred-field",
+      "name": "MissileLauncherBuildingUpdate/DoorOpenIdleAudio",
+      "count": 7,
+      "owners": [
+        "MissileLauncherBuildingUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "ModelConditionUpgrade/ConditionFlag",
       "count": 55,
       "owners": [
         "ModelConditionUpgrade"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "NeutronMissileSlowDeathBehavior/OCL",
+      "count": 3,
+      "owners": [
+        "NeutronMissileSlowDeathBehavior"
       ],
       "plannedTarget": "phase-5-module-field-typing"
     },
@@ -4042,6 +4096,15 @@
         "SpecialPower"
       ],
       "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SpectreGunshipUpdate/GattlingStrafeFXParticleSystem",
+      "count": 7,
+      "owners": [
+        "SpectreGunshipUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
     },
     {
       "category": "deferred-field",
@@ -5555,7 +5618,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3442,
+      "count": 3366,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6133,15 +6196,6 @@
     },
     {
       "category": "module",
-      "name": "BunkerBusterBehavior",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "CheckpointUpdate",
       "count": 1,
       "owners": [
@@ -6229,15 +6283,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "EMPUpdate",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
@@ -6340,15 +6385,6 @@
     },
     {
       "category": "module",
-      "name": "JetAIUpdate",
-      "count": 34,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "LaserUpdate",
       "count": 24,
       "owners": [
@@ -6358,26 +6394,8 @@
     },
     {
       "category": "module",
-      "name": "LeafletDropBehavior",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "MinefieldBehavior",
       "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "MissileLauncherBuildingUpdate",
-      "count": 7,
       "owners": [
         "Object"
       ],
@@ -6403,33 +6421,6 @@
     },
     {
       "category": "module",
-      "name": "NeutronBlastBehavior",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "NeutronMissileSlowDeathBehavior",
-      "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "NeutronMissileUpdate",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "OCLUpdate",
       "count": 5,
       "owners": [
@@ -6445,15 +6436,6 @@
         "Object"
       ],
       "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "ParkingPlaceBehavior",
-      "count": 9,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
     },
     {
       "category": "module",
@@ -6629,15 +6611,6 @@
     {
       "category": "module",
       "name": "SpawnPointProductionExitUpdate",
-      "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpectreGunshipUpdate",
       "count": 7,
       "owners": [
         "Object"

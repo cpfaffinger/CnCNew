@@ -84,6 +84,9 @@ public sealed class Entity
     /// <summary><c>EFFECTIVELY_DEAD</c>: set by bodies when health reaches zero (always for inactive bodies).</summary>
     public bool EffectivelyDead { get; set; }
 
+    /// <summary><c>DISABLED_EMP</c> until this tick (<c>Object::setDisabledUntil</c> by <c>EMPUpdate</c>/<c>LeafletDropBehavior</c>); 0 when never disabled. Movement and weapons stand still while it lies ahead.</summary>
+    public long EmpDisabledUntil { get; internal set; }
+
     /// <summary><c>SlowDeathBehavior::onDie</c>'s "another AI already handled us" guard, generalized to the entity (not tied to <c>AIUpdateInterface</c>): the weighted sibling lottery runs at most once per death.</summary>
     public bool SlowDeathStarted { get; internal set; }
 
@@ -149,6 +152,7 @@ public sealed class Entity
         writer.Int("weaponReadyTick", WeaponReadyTick);
         writer.Int("lastDamageTick", LastDamageTick);
         writer.Int("lastFireTick", LastFireTick);
+        if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
         writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);
         writer.Bool("hasPlayerUpgradeWeapon", HasPlayerUpgradeWeapon);
         writer.Int("constructionWork", ConstructionWork);

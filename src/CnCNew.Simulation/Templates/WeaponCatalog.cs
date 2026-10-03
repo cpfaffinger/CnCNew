@@ -52,6 +52,9 @@ public sealed record WeaponInfo(
     /// <summary><c>WEAPON_ANTI_GROUND</c> of <c>m_antiMask</c> (<c>AntiGround = Yes</c>); read by <c>PointDefenseLaserUpdate</c> for targets on the ground.</summary>
     public bool AntiGround { get; init; }
 
+    /// <summary><c>AutoReloadsClip = RETURN_TO_BASE</c> (<c>RETURN_TO_BASE_TO_RELOAD</c>): an emptied clip refills only when the aircraft reloads at an airfield (<c>JetAIUpdate</c>), never by time.</summary>
+    public bool ReloadsAtBase { get; init; }
+
     public Fixed RadiusWith(WeaponBonusTable global, uint conditions, Fixed baseRadius) => baseRadius * Multiplier(global, conditions, WeaponBonusTable.Radius);
 
     // Weapon.cpp Weapon::computeBonus: the multiplier of a field is 1 plus the sum of the (entry - 1) deltas of every set condition,
@@ -205,6 +208,7 @@ public sealed class WeaponCatalog
                 DamageDealtAtSelfPosition = Flag("DamageDealtAtSelfPosition"),
                 DieOnDetonate = Flag("MissileCallsOnDie"),
                 AntiGround = Flag("AntiGround"),
+                ReloadsAtBase = Field("AutoReloadsClip")?.Value.Value is EnumValue { Name: var reloadName } && reloadName.Equals("RETURN_TO_BASE", StringComparison.OrdinalIgnoreCase),
             });
         }
         return new WeaponCatalog(weapons.ToImmutable());
