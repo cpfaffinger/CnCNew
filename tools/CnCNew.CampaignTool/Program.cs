@@ -468,7 +468,18 @@ static Action<MissionSession> WatchEntities(string text, bool victory)
         var now = new Dictionary<uint, string>();
         foreach (var entity in world.Entities.Where(entity => entity.Template.Name.Contains(text, StringComparison.OrdinalIgnoreCase)))
             now[entity.Id.Value] = $"{entity.Template.Name} #{entity.Id.Value} owner={entity.Owner.Value} health={entity.Body?.Health.ToString() ?? "-"} dead={entity.EffectivelyDead}";
-        foreach (var (id, line) in now.Where(pair => !known.TryGetValue(pair.Key, out var before) || before != pair.Value)) Console.WriteLine($"      {(victory ? "V" : "D")} @{world.Tick} watch {line}");
+        foreach (var (id, line) in now.Where(pair => !known.TryGetValue(pair.Key, out var before) || before != pair.Value))
+        {
+            Console.WriteLine($"      {(victory ? "V" : "D")} @{world.Tick} watch {line}");
+            // who stands near a hurt object: the three closest objects of other sides (a hint at the attacker, not a proof)
+            if (known.ContainsKey(id) && world.FindEntity(new CnCNew.Simulation.Ids.EntityId(id)) is { } hurt && hurt.Body is not null && hurt.Body.Health < hurt.Body.MaxHealth && world.Tick % 150 < 2)
+            {
+                var near = world.Entities.Where(other => other.Owner != hurt.Owner && !other.EffectivelyDead && other.Template.Locomotor is not null)
+                    .Select(other => (other, d: (long)((other.X - hurt.X).Floor() * (other.X - hurt.X).Floor() + (other.Y - hurt.Y).Floor() * (other.Y - hurt.Y).Floor())))
+                    .OrderBy(pair => pair.d).ThenBy(pair => pair.other.Id.Value).Take(3);
+                Console.WriteLine($"          nearest foes: {string.Join(", ", near.Select(pair => $"{pair.other.Template.Name}#{pair.other.Id.Value} owner {pair.other.Owner.Value} d={Math.Sqrt(pair.d):F0}"))}");
+            }
+        }
         foreach (var id in known.Keys.Where(id => !now.ContainsKey(id))) Console.WriteLine($"      {(victory ? "V" : "D")} @{world.Tick} watch #{id} is gone");
         known = now;
     };

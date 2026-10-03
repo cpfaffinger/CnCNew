@@ -426,7 +426,7 @@ internal sealed partial class ObjectiveDriver
                         : Plan.Of(new Leaf($"recharge:{playerName}:{powerName}", $"finish recharging '{powerName}' of '{playerName}'", 2, 60, _ => Recharge(own[0])));
                 return Plan.Of(new Leaf($"carrier:{playerName}:{powerName}", $"capture a carrier of '{powerName}' for '{playerName}'", 2, 60, _ =>
                     _world.Entities.Where(entity => entity.Owner != owner && !entity.Owner.IsSystem && Carries(entity)).OrderBy(entity => entity.Id.Value).FirstOrDefault() is { } carrier
-                    && _world.TransferOwnership(carrier.Id, owner) && Recharge(carrier)));
+                    && _world.TransferOwnership(carrier.Id, owner) && _capturedCarriers.Add(carrier.Id.Value) && Recharge(carrier)));
             }
             case "SKIRMISH_COMMAND_BUTTON_READY_ALL":
             case "SKIRMISH_COMMAND_BUTTON_READY_PARTIAL":
