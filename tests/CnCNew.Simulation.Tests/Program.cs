@@ -168,6 +168,8 @@ run.Test("Scripts: the goal-directed driver plans backwards from the ending and 
 run.Test("Scripts: the commands-only driver uses orders, not world writes", Tests.ScriptCommandsOnlyDriverUsesOrdersNotWrites);
 run.Test("Scripts: the commands-only driver declines what only a write can do", Tests.ScriptCommandsOnlyDriverDeclinesWhatOnlyAWriteCanDo);
 run.Test("Scripts: team facing a named object, selling everything and the recorded settings", Tests.ScriptPhase13SettingActions);
+run.Test("Scripts: topple directions, buildability, skill set, local defeat", Tests.ScriptPhase13TablesAndOutcome);
+run.Test("Scripts: approach paths, nearest-object moves and unmanned capture", Tests.ScriptPhase13MovementActions);
 run.Test("Scripts: the driver moves counters the right way", Tests.ScriptObjectiveDriverMovesCountersTheRightWay);
 run.Test("Scripts: explaining a script leaves the engine untouched", Tests.ScriptExplainLeavesTheEngineUntouched);
 run.Test("Scripts: override relations between teams and players", Tests.ScriptOverrideRelations);

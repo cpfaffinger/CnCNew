@@ -27,6 +27,8 @@ const string Usage = """
                                                 static: can the mission's own VICTORY/DEFEAT scripts fire with the implemented condition/action types? (clean / degraded / blocked chains)
       script <content-dir> --map TEXT --name SCRIPT
                                                 prints one script (conditions, actions) and every script whose actions name it
+      usage <content-dir> --action A[,B] [--condition]
+                                                every use of the named script action (or, with --condition, condition) types in the campaign maps: map, script, parameters
       teams <content-dir> --map TEXT [--filter TEXT]
       drive <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--explain] [--watch TEMPLATE-TEXT] [--commands-only] [--outcome victory|defeat]
                                                 objective driver: satisfies the world-state conditions of the scripts (kill named objects/teams, send units into areas, ...) one by one and
@@ -65,6 +67,7 @@ try
         "sides" => Sides(content, campaigns, args),
         "reachability" => ReachabilityReport(content, campaigns, args),
         "script" => ScriptDump(content, campaigns, args),
+        "usage" => ActionUsage(content, campaigns, args),
         "drive" => Drive(content, campaigns, args),
         "template" => TemplateInfo(content, args),
         "objects" => ObjectInfo(content, campaigns, args),
@@ -480,6 +483,37 @@ static int TeamInfo(ContentFileSystem content, CampaignCatalog campaigns, string
     {
         var units = string.Join(",", team.Units.Select(unit => $"{unit.Type} {unit.MinCount}..{unit.MaxCount}{(catalog.TryGet(unit.Type, out var template) && !template.IsInstantiable ? "(NOT instantiable)" : string.Empty)}"));
         Console.WriteLine($"{team.Name,-28} owner {team.Owner,-12} {(team.IsSingleton ? "singleton" : $"max {team.MaxInstances}")} units [{units}] transport '{team.Transport}' origin '{team.ReinforcementOrigin}' onUnitDestroyed '{team.OnUnitDestroyedScript}' onCreate '{team.OnCreateScript}'");
+    }
+    return 0;
+}
+
+static int ActionUsage(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
+{
+    var wanted = (Arg(args, "--action") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.Ordinal);
+    if (wanted.Count == 0) return Fail("--action is required");
+    var conditions = args.Contains("--condition");
+    var (context, _, _) = Compile(content);
+    static string Text(MapScriptParameter value) => value.Text.Length > 0 ? value.Text : value.Type is MapScriptParameterType.Real or MapScriptParameterType.Angle ? value.Real.ToString(CultureInfo.InvariantCulture) : value.Integer.ToString(CultureInfo.InvariantCulture);
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var mission in campaigns.Campaigns.SelectMany(campaign => campaign.Sequence))
+    {
+        if (!seen.Add(mission.MapPath)) continue;
+        MapData map;
+        try { map = context.LoadMap(mission.MapPath); }
+        catch (FileNotFoundException) { continue; }
+        var program = ScriptProgram.Build(map);
+        foreach (var unit in program.Units)
+        {
+            if (conditions)
+            {
+                foreach (var or in unit.Script.OrConditions)
+                    foreach (var condition in or.AndConditions.Where(item => wanted.Contains(item.TypeName)))
+                        Console.WriteLine($"{Path.GetFileNameWithoutExtension(mission.MapPath)}: '{unit.Name}': {condition.TypeName}({string.Join(", ", condition.Parameters.Select(Text))})");
+                continue;
+            }
+            foreach (var action in unit.Script.Actions.Concat(unit.Script.FalseActions).Where(item => wanted.Contains(item.TypeName)))
+                Console.WriteLine($"{Path.GetFileNameWithoutExtension(mission.MapPath)}: '{unit.Name}': {action.TypeName}({string.Join(", ", action.Parameters.Select(Text))})");
+        }
     }
     return 0;
 }

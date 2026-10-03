@@ -27,6 +27,8 @@ static class Scr
     public static MapScriptParameter Area(string name) => Named(MapScriptParameterType.TriggerArea, name);
     public static MapScriptParameter Script(string name) => Named(MapScriptParameterType.Script, name);
     public static MapScriptParameter Ability(string name) => Named(MapScriptParameterType.CommandButtonAbility, name);
+    public static MapScriptParameter Coord(decimal x, decimal y, decimal z) => new(MapScriptParameterType.Coord3D, 0, 0m, string.Empty, x, y, z);
+    public static MapScriptParameter SkirmishPath(string name) => Named(MapScriptParameterType.SkirmishWaypointPath, name);
     public static MapScriptParameter Compare(int op) => new(MapScriptParameterType.Comparison, op, 0m, string.Empty, 0m, 0m, 0m);
     public const int Less = 0, LessEqual = 1, Equal = 2, GreaterEqual = 3, Greater = 4, NotEqual = 5;
 
@@ -85,7 +87,7 @@ static partial class Tests
         End
         Object AlphaBunker
           Side = Alpha
-          KindOf = SELECTABLE STRUCTURE
+          KindOf = SELECTABLE STRUCTURE FS_BASE_DEFENSE
           VisionRange = 60.0
           ShroudClearingRange = 60.0
           Geometry = BOX
@@ -359,7 +361,7 @@ static partial class Tests
         foreach (var name in new[] { "ENABLE_SCRIPT", "OBJECTLIST_ADDOBJECTTYPE", "SET_MILLISECOND_TIMER", "SET_FLAG", "CALL_SUBROUTINE", "SET_COUNTER" })
             Check.That(ScriptCoverage.ActionSupport(name) == ScriptSupport.Executed, $"{name} is implemented.");
         Check.That(ScriptCoverage.ActionSupport("SPEECH_PLAY") == ScriptSupport.Forwarded, "Speech is forwarded to the client.");
-        Check.That(ScriptCoverage.ActionSupport("NAMED_SET_TOPPLE_DIRECTION") == ScriptSupport.Missing, "An unimplemented action is reported as missing.");
+        Check.That(ScriptCoverage.ActionSupport("SET_CAVE_INDEX") == ScriptSupport.Missing, "An unimplemented action is reported as missing.");
     }
 
     public static void ScriptEngineCountersFlagsAndTimers()
@@ -475,13 +477,13 @@ static partial class Tests
     public static void ScriptEngineMissingTypesAreCounted()
     {
         var session = StartMission([
-            Scr.Script("Odd", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_SET_TOPPLE_DIRECTION", Scr.Unit("x"), Scr.Int(0)), Scr.Do("SPEECH_PLAY", Scr.Named(MapScriptParameterType.Dialog, "Hello"), Scr.Bool(false)),
+            Scr.Script("Odd", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_CAVE_INDEX", Scr.Unit("x"), Scr.Int(0)), Scr.Do("SPEECH_PLAY", Scr.Named(MapScriptParameterType.Dialog, "Hello"), Scr.Bool(false)),
                 Scr.Do("CALL_SUBROUTINE", Scr.Script("Nope")), Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("u"), Scr.Type("NoSuchObject"), Scr.Team("teamA"), Scr.Waypoint("Spawn"))], oneShot: true),
             Scr.Script("Sighted", [Scr.And(Scr.If("SUPPLY_SOURCE_SAFE", Scr.Side(PlayerA), Scr.Int(0)))], [Scr.Do("SET_FLAG", Scr.Flag("seen"), Scr.Bool(true))]),
         ]);
         Run(session, 3);
         var engine = session.Engine;
-        Check.That(engine.MissingActionHits.GetValueOrDefault("NAMED_SET_TOPPLE_DIRECTION") == 1, "An unimplemented action is counted, not skipped silently.");
+        Check.That(engine.MissingActionHits.GetValueOrDefault("SET_CAVE_INDEX") == 1, "An unimplemented action is counted, not skipped silently.");
         Check.That(engine.MissingConditionHits.GetValueOrDefault("SUPPLY_SOURCE_SAFE") == 3 && !engine.FlagValue("seen"), "An unimplemented condition is counted on every evaluation and evaluates to false.");
         Check.That(engine.ForwardedActions == 1, "Speech is forwarded.");
         var output = engine.DrainOutputs();

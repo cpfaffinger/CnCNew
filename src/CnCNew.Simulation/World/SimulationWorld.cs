@@ -172,6 +172,17 @@ public sealed partial class SimulationWorld : IWorldServices
 
     public Fixed GroundHeightAt(Fixed x, Fixed y) => Terrain is { } terrain ? terrain.HeightAt(x, y) : Fixed.Zero;
 
+    /// <summary>The mission script engine's topple-direction table (installed while a script has set one).</summary>
+    public Func<Entity, (Fixed X, Fixed Y)?>? ToppleDirectionOverride { get; set; }
+
+    public bool TryGetToppleDirectionOverride(Entity entity, out Fixed x, out Fixed y)
+    {
+        var direction = ToppleDirectionOverride?.Invoke(entity);
+        x = direction?.X ?? Fixed.Zero;
+        y = direction?.Y ?? Fixed.Zero;
+        return direction is not null;
+    }
+
     /// <summary>Number of executed ticks; also the number of the next tick to execute.</summary>
     public long Tick => _tick;
 
@@ -307,6 +318,12 @@ public sealed partial class SimulationWorld : IWorldServices
 
     /// <summary>A per-object relationship override the mission script engine installs while a script has set team or player overrides (<c>Team::getRelationship</c>); <see langword="null"/> means none.</summary>
     public Func<Entity, Entity, Relationship?>? RelationshipOverride { get; set; }
+
+    /// <summary>The mission script engine's <c>TECHTREE_MODIFY_BUILDABILITY_OBJECT</c> table (<c>GameLogic::setBuildableStatusOverride</c>): the <c>Buildable</c> status a script gave a template, or <see langword="null"/> for the template's own.</summary>
+    public Func<ObjectTemplate, string?>? BuildableOverride { get; set; }
+
+    /// <summary>The effective <c>Buildable</c> status of a template (<c>ThingTemplate::getBuildable</c> after a script override).</summary>
+    public string BuildableOf(ObjectTemplate template) => BuildableOverride?.Invoke(template) ?? template.Buildable;
 
     /// <summary>The relationship of one object to another: a script team override if there is one, else the player relationship of the owners.</summary>
     public Relationship RelationshipBetween(Entity from, Entity to) => RelationshipOverride?.Invoke(from, to) ?? RelationshipOf(from.Owner, to.Owner);
@@ -615,7 +632,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (production is null || !CanProduceNow(producer)) return CommandRejection.CannotProduce;
                 if (!production.HasRoom) return CommandRejection.QueueFull;
                 if (!CanProduceTemplate(player, producer, queueTemplate) || !player.CanBuildUnits) return CommandRejection.CannotProduceTemplate;
-                if (!queueTemplate.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(player, queueTemplate))
+                if (!BuildableOf(queueTemplate).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(player, queueTemplate))
                     return CommandRejection.MissingPrerequisite;
                 if (ExceedsMaxSimultaneousOfType(player, queueTemplate)) return CommandRejection.ProductionLimitReached;
                 if (player.Money < queueTemplate.BuildCost) return CommandRejection.InsufficientFunds;
@@ -892,7 +909,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!production.HasRoom) { RecordRejection(command, CommandRejection.QueueFull); break; }
                 var buyer = _players[producer.Owner.Value];
                 if (!CanProduceTemplate(buyer, producer, queueTemplate)) { RecordRejection(command, CommandRejection.CannotProduceTemplate); break; }
-                if (!queueTemplate.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(buyer, queueTemplate))
+                if (!BuildableOf(queueTemplate).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(buyer, queueTemplate))
                     { RecordRejection(command, CommandRejection.MissingPrerequisite); break; }
                 if (ExceedsMaxSimultaneousOfType(buyer, queueTemplate)) { RecordRejection(command, CommandRejection.ProductionLimitReached); break; }
                 if (buyer.Money < queueTemplate.BuildCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }

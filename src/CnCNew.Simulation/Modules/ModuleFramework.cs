@@ -30,6 +30,9 @@ public interface IWorldServices
 
     /// <summary>Terrain height at (x, y); 0 without terrain.</summary>
     Fixed GroundHeightAt(Fixed x, Fixed y);
+
+    /// <summary><c>ScriptEngine::adjustToppleDirection</c>: the direction a script gave a named object to fall in (<c>NAMED_SET_TOPPLE_DIRECTION</c>), normalised; false when it has none.</summary>
+    bool TryGetToppleDirectionOverride(Entity entity, out Fixed x, out Fixed y) { x = Fixed.Zero; y = Fixed.Zero; return false; }
     SageRandom LogicRandom { get; }
     Entity? FindEntity(EntityId id);
 

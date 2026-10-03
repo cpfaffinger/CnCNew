@@ -19,6 +19,11 @@ public sealed partial class ScriptEngine
     /// <summary>The value a recorded setting action stored for <paramref name="subject"/> (<c>ACTION|subject</c>), or <see langword="null"/>.</summary>
     public long? RecordedSetting(string action, string subject) => _recordedSettings.TryGetValue(action + "|" + subject, out var value) ? value : null;
 
+    private static readonly string[] FactionStructureKinds = ["FS_FACTORY", "FS_BASE_DEFENSE", "FS_TECHNOLOGY", "FS_SUPPLY_DROPZONE", "FS_SUPERWEAPON", "FS_BLACK_MARKET", "FS_SUPPLY_CENTER", "FS_STRATEGY_CENTER", "FS_FAKE", "FS_INTERNET_CENTER", "FS_ADVANCED_TECH", "FS_BARRACKS", "FS_WARFACTORY", "FS_AIRFIELD"];
+
+    /// <summary><c>sellBuildings</c> (Player.cpp): faction structures (<c>KINDOFMASK_FS</c>), command centres and power plants.</summary>
+    private static bool IsSellable(Entity entity) => entity.Template.IsKindOf("STRUCTURE") && (entity.Template.IsKindOf("COMMANDCENTER") || entity.Template.IsKindOf("FS_POWER") || FactionStructureKinds.Any(entity.Template.IsKindOf));
+
     private bool TryExecuteSettingAction(MapScriptAction action)
     {
         var p = action.Parameters;
@@ -31,12 +36,12 @@ public sealed partial class ScriptEngine
                     foreach (var team in TeamsNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Face(member, faced.X, faced.Y);
                 return true;
-            // ScriptActions::doPlayerSellEverything -> Player::sellEverythingUnderTheSun: BuildAssistant::sellObject for every object of the player's teams; here a sell command for each structure.
+            // ScriptActions::doPlayerSellEverything -> Player::sellEverythingUnderTheSun: iterateObjects(sellBuildings): every faction structure, command centre and power plant is sold (a sell command each).
             case "PLAYER_SELL_EVERYTHING":
                 if (Has(type, p, 1) && ResolvePlayer(Str(p, 0)) is { } seller)
                 {
                     var owner = seller.Id;
-                    foreach (var entity in _world.Entities.Where(entity => entity.Owner == owner && entity.Template.IsKindOf("STRUCTURE") && !entity.EffectivelyDead && !entity.DestroyRequested).OrderBy(entity => entity.Id.Value).ToArray())
+                    foreach (var entity in _world.Entities.Where(entity => entity.Owner == owner && IsSellable(entity) && !entity.EffectivelyDead && !entity.DestroyRequested).OrderBy(entity => entity.Id.Value).ToArray())
                     {
                         var target = entity.Id;
                         _issue(owner, (sequence, tick) => new SellCommand(owner, sequence, tick, target));
@@ -57,12 +62,13 @@ public sealed partial class ScriptEngine
                 _recordedActions++;
                 return true;
             default:
-                return false;
+                return TryExecutePhase13Action(action);
         }
     }
 
     private void DescribeSettingState(IStateWriter writer)
     {
+        DescribePhase13State(writer);
         if (_recordedSettings.Count == 0) return;
         writer.BeginArray("recordedSettings");
         foreach (var (key, value) in _recordedSettings) { writer.BeginObject(null); writer.Text("key", key); writer.Int("value", value); writer.EndObject(); }
@@ -71,6 +77,7 @@ public sealed partial class ScriptEngine
 
     private void LoadSettingState(IStateReader reader)
     {
+        LoadPhase13State(reader);
         _recordedSettings.Clear();
         if (reader.Has("recordedSettings")) foreach (var item in reader.Array("recordedSettings")) _recordedSettings[item.Text("key")] = item.Int("value");
     }

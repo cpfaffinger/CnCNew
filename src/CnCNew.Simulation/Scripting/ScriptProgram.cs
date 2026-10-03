@@ -8,7 +8,7 @@ namespace CnCNew.Simulation.Scripting;
 
 /// <summary>A map side as the script engine sees it: the player behind a <c>Side</c> parameter (<c>SidesList</c>, <c>playerName</c> key).</summary>
 /// <param name="SideIndex">Index into <see cref="MapData.Sides"/>; side 0 is the unnamed neutral side (<see cref="PlayerId.System"/>), every other side is player <c>SideIndex</c>.</param>
-public sealed record ScriptPlayer(int SideIndex, PlayerId Id, string Name, string DisplayName, string Faction, bool IsHuman, ImmutableArray<string> Allies, ImmutableArray<string> Enemies);
+public sealed record ScriptPlayer(int SideIndex, PlayerId Id, string Name, string DisplayName, string Faction, bool IsHuman, ImmutableArray<string> Allies, ImmutableArray<string> Enemies, int StartIndex = 0);
 
 /// <summary>A <c>TeamPrototype</c> of the map's <c>TeamsList</c> (<c>teamName</c>, <c>teamOwner</c>, <c>teamIsSingleton</c>, <c>teamMaxInstances</c>).</summary>
 public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingleton, int MaxInstances)
@@ -237,7 +237,7 @@ public sealed class ScriptProgram
             var name = properties.GetText("playerName") ?? string.Empty;
             players.Add(new ScriptPlayer(side, new PlayerId(side), name, properties.GetText("playerDisplayName") ?? name,
                 properties.GetText("playerFaction") ?? string.Empty, properties.GetBool("playerIsHuman"),
-                SplitNames(properties.GetText("playerAllies")), SplitNames(properties.GetText("playerEnemies"))));
+                SplitNames(properties.GetText("playerAllies")), SplitNames(properties.GetText("playerEnemies")), properties.TryGetInt("multiplayerStartIndex", out var startIndex) ? startIndex : 0));
         }
 
         var teams = ImmutableArray.CreateBuilder<ScriptTeamPrototype>();

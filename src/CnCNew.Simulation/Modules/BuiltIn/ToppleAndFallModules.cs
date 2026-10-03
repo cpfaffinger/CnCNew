@@ -101,6 +101,7 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
             world.Kill(Entity.Id);
             return;
         }
+        if (world.TryGetToppleDirectionOverride(Entity, out var overrideX, out var overrideY)) { directionX = overrideX; directionY = overrideY; }
         var pushAngle = directionX == Fixed.Zero && directionY == Fixed.Zero ? Entity.Angle : FixedTrig.Atan2(directionY, directionX);
         _toppleAngle = data.ToppleLeftOrRightOnly ? ClosestPerpendicular(Entity.Angle, pushAngle) : pushAngle;
         _angularVelocity = speed * data.InitialVelocityPercent;
@@ -257,6 +258,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
             angle = world.LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
         else
             angle = FixedTrig.Normalize(FixedTrig.Atan2(Entity.Y - attacker.Y, Entity.X - attacker.X) + world.LogicRandom.Range(-EighthPi, EighthPi));
+        if (world.TryGetToppleDirectionOverride(Entity, out var scriptedX, out var scriptedY) && (scriptedX != Fixed.Zero || scriptedY != Fixed.Zero)) angle = FixedTrig.Atan2(scriptedY, scriptedX);
         _directionX = FixedTrig.Cos(angle);
         _directionY = FixedTrig.Sin(angle);
         _state = State.WaitingForToppleStart;

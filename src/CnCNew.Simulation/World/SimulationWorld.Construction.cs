@@ -43,7 +43,7 @@ public sealed partial class SimulationWorld
         template = found;
         if (!_players.TryGetValue(builder.Owner.Value, out var owner)) return CommandRejection.NotPermitted;
         if (!CanBuildTemplate(owner, builder, found) || !owner.CanBuildBase) return CommandRejection.CannotConstruct;
-        if (!found.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, found))
+        if (!BuildableOf(found).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, found))
             return CommandRejection.MissingPrerequisite;
         if (ExceedsMaxSimultaneousOfType(owner, found)) return CommandRejection.ProductionLimitReached;
         if (owner.Money < found.BuildCost) return CommandRejection.InsufficientFunds;
@@ -54,11 +54,11 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary><c>Player::canBuild</c> (buildable status) plus the builder's command set, approximated by the shared <c>Side</c>.</summary>
-    private static bool CanBuildTemplate(PlayerState owner, Entity builder, ObjectTemplate template)
+    private bool CanBuildTemplate(PlayerState owner, Entity builder, ObjectTemplate template)
     {
         if (!template.IsKindOf("STRUCTURE")) return false;
-        if (template.Buildable.Equals("No", StringComparison.OrdinalIgnoreCase)) return false;
-        if (template.Buildable.Equals("Only_By_AI", StringComparison.OrdinalIgnoreCase) && !owner.IsComputer) return false;
+        if (BuildableOf(template).Equals("No", StringComparison.OrdinalIgnoreCase)) return false;
+        if (BuildableOf(template).Equals("Only_By_AI", StringComparison.OrdinalIgnoreCase) && !owner.IsComputer) return false;
         return template.Side.Length == 0 || builder.Template.Side.Length == 0 || template.Side.Equals(builder.Template.Side, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -93,11 +93,11 @@ public sealed partial class SimulationWorld
     /// <c>Player::canBuild</c> applied to a unit queued at a producer instead of a structure placed by a dozer: the template must not itself be a
     /// <c>STRUCTURE</c> (those are only ever built via <see cref="ConstructCommand"/>), and the same <c>Buildable</c>/<c>Side</c> rules apply.
     /// </summary>
-    private static bool CanProduceTemplate(PlayerState owner, Entity producer, ObjectTemplate template)
+    private bool CanProduceTemplate(PlayerState owner, Entity producer, ObjectTemplate template)
     {
         if (template.IsKindOf("STRUCTURE")) return false;
-        if (template.Buildable.Equals("No", StringComparison.OrdinalIgnoreCase)) return false;
-        if (template.Buildable.Equals("Only_By_AI", StringComparison.OrdinalIgnoreCase) && !owner.IsComputer) return false;
+        if (BuildableOf(template).Equals("No", StringComparison.OrdinalIgnoreCase)) return false;
+        if (BuildableOf(template).Equals("Only_By_AI", StringComparison.OrdinalIgnoreCase) && !owner.IsComputer) return false;
         return template.Side.Length == 0 || producer.Template.Side.Length == 0 || template.Side.Equals(producer.Template.Side, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -133,7 +133,7 @@ public sealed partial class SimulationWorld
         if (!_templates.TryGet(templateName, out var template) || !template.IsInstantiable) return false;
         if (FindEntity(producerId) is not { } producer || producer.Owner != player) return false;
         if (!CanProduceTemplate(owner, producer, template)) return false;
-        if (!template.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, template)) return false;
+        if (!BuildableOf(template).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, template)) return false;
         return !ExceedsMaxSimultaneousOfType(owner, template);
     }
 

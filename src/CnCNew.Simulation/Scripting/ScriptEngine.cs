@@ -331,6 +331,7 @@ public sealed partial class ScriptEngine
         ProcessSequences();
         ProcessTeamBuilds();
         UpdateTeamQueues();
+        UpdatePhase13(tick);
         _pruneBelow = _world.Ids.NextEntity;
     }
 

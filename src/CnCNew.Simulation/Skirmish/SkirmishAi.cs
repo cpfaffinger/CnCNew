@@ -307,7 +307,7 @@ public sealed class SkirmishAi
 
     private bool InFamily(ObjectTemplate template) => _options.FamilyPrefix.Length > 0 && template.Name.StartsWith(_options.FamilyPrefix, StringComparison.OrdinalIgnoreCase);
 
-    private static bool Available(ObjectTemplate template) => template.IsInstantiable && !template.Buildable.Equals("No", StringComparison.OrdinalIgnoreCase) && template.BuildCost >= Fixed.Zero;
+    private bool Available(ObjectTemplate template) => template.IsInstantiable && !_world.BuildableOf(template).Equals("No", StringComparison.OrdinalIgnoreCase) && template.BuildCost >= Fixed.Zero;
 
     /// <summary>Every unit the producer structure's command sets offer, own variants first.</summary>
     private ImmutableArray<ObjectTemplate> ProducibleBy(ObjectTemplate producer)
@@ -326,7 +326,7 @@ public sealed class SkirmishAi
 
     private bool PrerequisitesMet(ObjectTemplate template)
     {
-        if (template.Buildable.Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase)) return true;
+        if (_world.BuildableOf(template).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase)) return true;
         foreach (var line in template.Prerequisites)
         {
             if (line.IsScience)
