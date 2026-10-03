@@ -40,6 +40,114 @@
     },
     {
       "category": "deferred-field",
+      "name": "BoneFXUpdate/DamageFXTypes",
+      "count": 2,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BoneFXUpdate/DamageParticleTypes",
+      "count": 2,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BoneFXUpdate/PristineParticleSystem1",
+      "count": 8,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BoneFXUpdate/PristineParticleSystem2",
+      "count": 2,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BoneFXUpdate/PristineParticleSystem3",
+      "count": 2,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BoneFXUpdate/PristineParticleSystem4",
+      "count": 2,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BoneFXUpdate/PristineParticleSystem5",
+      "count": 2,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BoneFXUpdate/PristineParticleSystem6",
+      "count": 2,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BoneFXUpdate/RubbleFXList1",
+      "count": 2,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BoneFXUpdate/RubbleParticleSystem1",
+      "count": 2,
+      "owners": [
+        "BoneFXUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BridgeBehavior/BridgeDieFX",
+      "count": 21,
+      "owners": [
+        "BridgeBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "BridgeBehavior/BridgeDieOCL",
+      "count": 9,
+      "owners": [
+        "BridgeBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "ChinookAIUpdate/RopeColor",
       "count": 6,
       "owners": [
@@ -170,6 +278,33 @@
       "count": 5,
       "owners": [
         "EMPUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FirestormDynamicGeometryInfoUpdate/FXList",
+      "count": 2,
+      "owners": [
+        "FirestormDynamicGeometryInfoUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FirestormDynamicGeometryInfoUpdate/ParticleSystem1",
+      "count": 2,
+      "owners": [
+        "FirestormDynamicGeometryInfoUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "FirestormDynamicGeometryInfoUpdate/ParticleSystem2",
+      "count": 2,
+      "owners": [
+        "FirestormDynamicGeometryInfoUpdate"
       ],
       "plannedTarget": "phase-5-module-field-typing"
     },
@@ -3280,6 +3415,15 @@
     },
     {
       "category": "deferred-field",
+      "name": "OCLUpdate/FactionOCL",
+      "count": 12,
+      "owners": [
+        "OCLUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Object/ButtonImage",
       "count": 672,
       "owners": [
@@ -4009,6 +4153,60 @@
     },
     {
       "category": "deferred-field",
+      "name": "RailroadBehavior/BigMetalBounceSound",
+      "count": 28,
+      "owners": [
+        "RailroadBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RailroadBehavior/ClicketyClackSound",
+      "count": 28,
+      "owners": [
+        "RailroadBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RailroadBehavior/MeatyBounceSound",
+      "count": 28,
+      "owners": [
+        "RailroadBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RailroadBehavior/RunningSound",
+      "count": 7,
+      "owners": [
+        "RailroadBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RailroadBehavior/SmallMetalBounceSound",
+      "count": 28,
+      "owners": [
+        "RailroadBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RailroadBehavior/WhistleSound",
+      "count": 9,
+      "owners": [
+        "RailroadBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "RiderChangeContain/BurnedDeathToUnits",
       "count": 10,
       "owners": [
@@ -4373,6 +4571,24 @@
       "count": 19,
       "owners": [
         "StealthUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StructureCollapseUpdate/FXList",
+      "count": 40,
+      "owners": [
+        "StructureCollapseUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "StructureCollapseUpdate/OCL",
+      "count": 30,
+      "owners": [
+        "StructureCollapseUpdate"
       ],
       "plannedTarget": "phase-5-module-field-typing"
     },
@@ -4924,6 +5140,33 @@
         "Upgrade"
       ],
       "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "WaveGuideUpdate/BridgeParticle",
+      "count": 2,
+      "owners": [
+        "WaveGuideUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "WaveGuideUpdate/LoopingSound",
+      "count": 2,
+      "owners": [
+        "WaveGuideUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "WaveGuideUpdate/RandomSplashSound",
+      "count": 2,
+      "owners": [
+        "WaveGuideUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
     },
     {
       "category": "deferred-field",
@@ -5798,7 +6041,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3136,
+      "count": 2986,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6304,183 +6547,12 @@
     },
     {
       "category": "module",
-      "name": "BoneFXDamage",
-      "count": 10,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "BoneFXUpdate",
-      "count": 10,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "BridgeBehavior",
-      "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "BridgeScaffoldBehavior",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "BridgeTowerBehavior",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "CheckpointUpdate",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "CostModifierUpgrade",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "DamDie",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "DemoTrapUpdate",
-      "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "DeployStyleAIUpdate",
-      "count": 10,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "DynamicShroudClearingRangeUpdate",
-      "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "EnemyNearUpdate",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "FireOCLAfterWeaponCooldownUpdate",
-      "count": 12,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "FireSpreadUpdate",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "FireWeaponCollide",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "FirestormDynamicGeometryInfoUpdate",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "FloatUpdate",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "LaserUpdate",
       "count": 24,
       "owners": [
         "Object"
       ],
       "plannedTarget": "phase-7-presentation"
-    },
-    {
-      "category": "module",
-      "name": "MinefieldBehavior",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "OCLUpdate",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
@@ -6504,15 +6576,6 @@
       "category": "module",
       "name": "RailedTransportDockUpdate",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "RailroadBehavior",
-      "count": 28,
       "owners": [
         "Object"
       ],
@@ -6556,15 +6619,6 @@
     },
     {
       "category": "module",
-      "name": "StructureCollapseUpdate",
-      "count": 10,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "SupplyWarehouseCripplingBehavior",
       "count": 1,
       "owners": [
@@ -6585,15 +6639,6 @@
       "category": "module",
       "name": "UnitCrateCollide",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "UpgradeDie",
-      "count": 13,
       "owners": [
         "Object"
       ],
@@ -6760,24 +6805,6 @@
         "Object"
       ],
       "plannedTarget": "phase-7-presentation"
-    },
-    {
-      "category": "module",
-      "name": "WaveGuideUpdate",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "WeaponBonusUpdate",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     }
   ]
 }

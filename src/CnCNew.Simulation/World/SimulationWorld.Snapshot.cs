@@ -68,6 +68,7 @@ public sealed partial class SimulationWorld
             known.CashBounty = player.Fixed("cashBounty");
             known.CanBuildBase = !player.Has("canBuildBase") || player.Bool("canBuildBase");
             known.CanBuildUnits = !player.Has("canBuildUnits") || player.Bool("canBuildUnits");
+            LoadCostModifiers(player, known);
             known.SharedReadyFrames.Clear();
             foreach (var shared in player.Array("sharedReadyFrames")) known.SharedReadyFrames[checked((int)shared.Int("power"))] = shared.Int("frame");
             known.Tunnels.Load(player);
@@ -98,7 +99,8 @@ public sealed partial class SimulationWorld
                         ? new Modules.BuiltIn.DeliveryOrder(pending.Fixed("deliveryMoveX"), pending.Fixed("deliveryMoveY"), pending.Fixed("deliveryTargetX"), pending.Fixed("deliveryTargetY"), CnCNew.Simulation.Templates.DeliveryRun.Load(pending), pending.Int("deliveryDelay"))
                         : null,
                     pending.Has("creator"), pending.Has("creator") ? new EntityId(checked((uint)pending.UInt("creator"))) : EntityId.Invalid,
-                    pending.Has("enslaver") ? new EntityId(checked((uint)pending.UInt("enslaver"))) : default)));
+                    pending.Has("enslaver") ? new EntityId(checked((uint)pending.UInt("enslaver"))) : default,
+                    pending.Has("producer") ? new EntityId(checked((uint)pending.UInt("producer"))) : default)));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
 

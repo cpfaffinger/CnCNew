@@ -82,6 +82,7 @@ public sealed partial class SimulationWorld
             if (_players.TryGetValue(newOwner.Value, out var next)) next.EnergyProduction += entity.Template.EnergyProduction;
         }
         RemoveBattlePlanFromEntity(entity);
+        NotifyOwnerChange(entity, newOwner);
         entity.Owner = newOwner;
         ApplyBattlePlanToEntity(entity);
         MarkDirty(entity);

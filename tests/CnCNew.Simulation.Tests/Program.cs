@@ -219,6 +219,21 @@ run.Test("Specials: assisted targeting (request range, free check, secondary cli
 run.Test("Specials: battle plans (cycle, army bonuses, center bonus, paralysis, snapshot)", Tests.SpecialsBattlePlanCycle);
 run.Test("Specials: battle plan restore and unsupported options", Tests.SpecialsBattlePlanShrouds);
 run.Test("Specials: projectile stream bookkeeping", Tests.SpecialsProjectileStream);
+run.Test("Structures: the fixture instantiates, a bone-FX OCL slot is refused", Tests.StructuresFixtureInstantiates);
+run.Test("Structures: a dying drone frees its producer's upgrade (save/restore)", Tests.StructuresUpgradeDieFreesTheProducersUpgrade);
+run.Test("Structures: a destroyed building collapses through its phases", Tests.StructuresCollapseRunsItsPhases);
+run.Test("Structures: burning trees spread and hurt whoever touches them", Tests.StructuresBurningTreesSpreadAndHurtWhoTouchesThem);
+run.Test("Structures: deploy-style units deploy to shoot and pack to move", Tests.StructuresDeployStyleUnitsDeployToShootAndPackToMove);
+run.Test("Structures: trains run their track, brake at stations and leave the track", Tests.StructuresTrainsRunTheirTrackAndHaulCarriages);
+run.Test("Structures: a moving locomotive kills what is on its track", Tests.StructuresTrainsKillWhatIsOnTheTrack);
+run.Test("Structures: demo traps go off for enemies, on command and when destroyed", Tests.StructuresDemoTrapsGoOffForEnemiesOnly);
+run.Test("Structures: mines detonate one virtual mine at a time and regenerate", Tests.StructuresMinesDetonateOnceAndRegenerate);
+run.Test("Structures: bridges, towers and scaffolds", Tests.StructuresBridgesTowersAndScaffolds);
+run.Test("Structures: OCL updates, dynamic shroud, floating, checkpoints, enemy-near, firestorms", Tests.StructuresWorldEffects);
+run.Test("Structures: weapon bonus beacons and cost modifiers", Tests.StructuresWeaponBonusAndCostModifier);
+run.Test("Structures: a broken dam sends the flood wave", Tests.StructuresDamMakesTheWaveFlood);
+run.Test("Structures: bone FX modules are honest shells", Tests.StructuresBoneFxModulesAreHonestShells);
+run.Test("Structures: a save in the middle continues identically", Tests.StructuresModulesSurviveSaveAndRestore);
 run.Test("Scripts: an upgrade command button is ready until the upgrade is owned", Tests.FlightUpgradeButtonReadiness);
 run.Test("Flight: an OCL strike power delivers bombs from the map edge", Tests.FlightStrikePowerDeliversBombs);
 run.Test("Flight: the uplink beam follows a scripted waypoint path", Tests.FlightUplinkFollowsAScriptedWaypointPath);
@@ -275,6 +290,7 @@ if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and s
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 return run.Finish();
 

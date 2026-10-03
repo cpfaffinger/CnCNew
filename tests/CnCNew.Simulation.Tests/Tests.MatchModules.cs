@@ -59,7 +59,7 @@ static partial class Tests
               GeometryMajorRadius = 5.0
               GeometryMinorRadius = 5.0
               GeometryHeight = 2.0
-              Behavior = MinefieldBehavior Mine01
+              Behavior = SmartBombTargetHomingUpdate Mine01
               End
             End
             Object Wall
@@ -150,7 +150,7 @@ static partial class Tests
     {
         var fixture = new SyntheticFixture(files: MinefieldFiles());
         Check.That(fixture.Templates.TryGet("Truck", out var truck) && truck.IsInstantiable, "PhysicsBehavior and SquishCollide leave a vehicle instantiable: " + (truck is null ? "missing" : string.Join(", ", truck.MissingModules)));
-        Check.That(fixture.Templates.TryGet("BadMine", out var badMine) && !badMine.IsInstantiable, "A mine with MinefieldBehavior stays non-instantiable.");
+        Check.That(fixture.Templates.TryGet("BadMine", out var badMine) && !badMine.IsInstantiable, "A mine with a module that is not implemented stays non-instantiable.");
 
         // ---- ring layout, FX request, upgrade swap
         var world = NewWorld(fixture);

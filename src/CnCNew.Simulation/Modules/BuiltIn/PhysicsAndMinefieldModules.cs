@@ -252,7 +252,8 @@ public sealed class GenerateMinefieldBehavior(GenerateMinefieldData data) : SimM
             var limit = BoundingRadius(other.Template) + reach;
             if (dx * dx + dy * dy < limit * limit) return;
         }
-        var id = world.RequestSpawn(mine.Index, Entity.Owner, x, y, Entity.Z, orientation);
+        // GenerateMinefieldBehavior.cpp: mine->setProducer(producer) — the mine stops regenerating when this object is gone.
+        var id = world.RequestSpawn(mine.Index, Entity.Owner, x, y, Entity.Z, orientation, new SpawnExtras(Fixed.Zero, Producer: Entity.Id));
         if (data.Upgradable) _mines.Add(id);
     }
 
