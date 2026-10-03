@@ -559,5 +559,8 @@ static int Coverage()
 {
     Console.WriteLine("Missing actions: " + string.Join(", ", MapScriptCatalog.ScriptActionTypeNames.Where(name => ScriptCoverage.ActionSupport(name) == ScriptSupport.Missing)));
     Console.WriteLine("Missing conditions: " + string.Join(", ", MapScriptCatalog.ConditionTypeNames.Where(name => ScriptCoverage.ConditionSupport(name) == ScriptSupport.Missing)));
+    var actions = MapScriptCatalog.ScriptActionTypeNames.GroupBy(ScriptCoverage.ActionSupport).ToDictionary(group => group.Key, group => group.Count());
+    Console.WriteLine($"Actions: {MapScriptCatalog.ScriptActionTypeNames.Count()} types: " + string.Join(", ", actions.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key} {pair.Value}")));
+    Console.WriteLine($"Conditions: {MapScriptCatalog.ConditionTypeNames.Count()} types, executed {MapScriptCatalog.ConditionTypeNames.Count(name => ScriptCoverage.ConditionSupport(name) == ScriptSupport.Executed)}.");
     return 0;
 }
