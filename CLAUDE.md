@@ -269,3 +269,12 @@ direkt in die Welt: **0 Weltschreibungen, Sieg über die eigenen Skripte auf 1 v
 und **162** Aktionstypen (129 weitergereicht, **13** aufgezeichnet, **40** fehlend von 344; neu: `TEAM_FACE_NAMED`, `PLAYER_SELL_EVERYTHING`, aufgezeichnet `NAMED_SET_STOPPING_DISTANCE`, `NAMED_SET_REPULSOR`,
 `SET_BASE_CONSTRUCTION_SPEED`). Normaler Fahrer weiter Sieg und Niederlage 24/24; Referenzmatch (Tick 15.000, `532F19F360C59550`) und Stresstest unverändert. Fallstrick: in PowerShell ist `R` ein Alias von
 `Invoke-History` – Hilfsfunktionen in Editskripten anders nennen.
+
+Phase 14 (Stand 4. Oktober 2026; neu messen; `docs/SIMULATION-CORE.md` §30, `docs/SCRIPT-ENGINE.md` §5/§8/§9, Handoff `docs/HANDOFF-PHASE15.md`): Modulkatalog **183 von 205 implementiert – alle 183 Simulationsmodule** (offen nur die 22 Präsentationsmodule),
+Instanziierbarkeit **2.115 von 2.115 (100,0 %)**, Modulverwendungen abgedeckt 16.558 von 19.553 (84,7 %), Kompatibilitätsbasislinie **751** Einträge. Neu: vier Modulgruppen (Luft, Kisten/Spezial/Kollision, Struktur/Welt, Sklaven/Spawn/Container),
+die letzten neun Blocker, ein **Waffenslot-Modell** (`WorldSnapshot` **8**, Replay **8**, `CommandTypes.Version` **11**, `MissionSnapshot` 2), Formationen, Pfadflug des Partikelstrahls, Luftlieferungen und weitere Skriptaktionen: Skript-VM **109/109 Bedingungen**, Aktionen
+187 ausgeführt / 129 weitergereicht / 19 aufgezeichnet / 9 fehlend von 344 (`CampaignTool coverage` druckt die Zähler). `CampaignTool drive` (60.000 Ticks): **Sieg 24/24, Niederlage 24/24**; `audit --ticks 900` (je Kampagne einzeln, Gesamtlauf über eine Stunde):
+24/24 deterministisch und identisch nach Speichern/Laden, 0 Treffer auf fehlende Typen, Ausschalt-Endproben Sieg 13/24, Niederlage 15/24; `reachability` sauber 24/24 und 24/24; Nur-Befehle-Modus unverändert **1 von 24** (`MD_GLA04`). **Neue Referenzwerte:**
+Retail-Referenzmatch Sieger FactionGLA bei **Tick 13.890**, Endhash `76F22CB0CA79BEEF` (Kette `35F54CAD40A43E6E`; die älteren Angaben Tick 15.000 / 19.200 oben sind überholt); Stresstest unverändert `56882F763EABEF67`; sauberer Solution-Build 21 Warnungen. Fallstricke: Release-Werkzeuge nach
+Quelländerungen neu bauen (`--no-build` zeigt sonst Zahlen des alten Stands); `Entity.cs` hat gemischte Zeilenenden (Merge-Konflikt über die ganze Datei: `main`-Fassung nehmen und Hunks von Hand anwenden); PowerShell-Skripte mit Umlauten nur mit `pwsh`.
+Nicht belegt: die Spielbarkeit der Missionen durch einen Menschen (kein interaktives Durchklicken, Nur-Befehle-Agent 1/24).
