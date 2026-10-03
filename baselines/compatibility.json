@@ -2740,6 +2740,51 @@
     },
     {
       "category": "deferred-field",
+      "name": "InternetHackContain/ExitDelay",
+      "count": 4,
+      "owners": [
+        "InternetHackContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "InternetHackContain/GoAggressiveOnExit",
+      "count": 4,
+      "owners": [
+        "InternetHackContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "InternetHackContain/NumberOfExitPaths",
+      "count": 4,
+      "owners": [
+        "InternetHackContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "InternetHackContain/PassengersAllowedToFire",
+      "count": 4,
+      "owners": [
+        "InternetHackContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "InternetHackContain/ScatterNearbyOnExit",
+      "count": 4,
+      "owners": [
+        "InternetHackContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Locomotor/AccelerationPitchLimit",
       "count": 101,
       "owners": [
@@ -3487,6 +3532,24 @@
     },
     {
       "category": "deferred-field",
+      "name": "OverlordContain/PassengersAllowedToFire",
+      "count": 10,
+      "owners": [
+        "OverlordContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "OverlordContain/PassengersInTurret",
+      "count": 5,
+      "owners": [
+        "OverlordContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "ParachuteContain/ParachuteOpenSound",
       "count": 7,
       "owners": [
@@ -3865,6 +3928,69 @@
     },
     {
       "category": "deferred-field",
+      "name": "RiderChangeContain/BurnedDeathToUnits",
+      "count": 10,
+      "owners": [
+        "RiderChangeContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RiderChangeContain/DoorOpenTime",
+      "count": 4,
+      "owners": [
+        "RiderChangeContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RiderChangeContain/ExitDelay",
+      "count": 11,
+      "owners": [
+        "RiderChangeContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RiderChangeContain/GoAggressiveOnExit",
+      "count": 11,
+      "owners": [
+        "RiderChangeContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RiderChangeContain/NumberOfExitPaths",
+      "count": 11,
+      "owners": [
+        "RiderChangeContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RiderChangeContain/ScatterNearbyOnExit",
+      "count": 11,
+      "owners": [
+        "RiderChangeContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RiderChangeContain/ScuttleStatus",
+      "count": 11,
+      "owners": [
+        "RiderChangeContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Science/Description",
       "count": 397,
       "owners": [
@@ -3880,6 +4006,24 @@
         "Science"
       ],
       "plannedTarget": "phase-5-domain-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlavedUpdate/RepairWeldingFXBone",
+      "count": 4,
+      "owners": [
+        "SlavedUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "SlavedUpdate/RepairWeldingSys",
+      "count": 4,
+      "owners": [
+        "SlavedUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
     },
     {
       "category": "deferred-field",
@@ -4238,6 +4382,15 @@
       "count": 6,
       "owners": [
         "SupplyTruckAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TensileFormationUpdate/CrackSound",
+      "count": 2,
+      "owners": [
+        "TensileFormationUpdate"
       ],
       "plannedTarget": "phase-5-module-field-typing"
     },
@@ -5555,7 +5708,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3442,
+      "count": 3329,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6052,15 +6205,6 @@
     },
     {
       "category": "module",
-      "name": "AssaultTransportAIUpdate",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "AssistedTargetingUpdate",
       "count": 5,
       "owners": [
@@ -6304,35 +6448,8 @@
     },
     {
       "category": "module",
-      "name": "HackInternetAIUpdate",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "HijackerUpdate",
       "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "HiveStructureBody",
-      "count": 15,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "InternetHackContain",
-      "count": 4,
       "owners": [
         "Object"
       ],
@@ -6385,15 +6502,6 @@
     },
     {
       "category": "module",
-      "name": "MobMemberSlavedUpdate",
-      "count": 15,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "MoneyCrateCollide",
       "count": 18,
       "owners": [
@@ -6439,30 +6547,12 @@
     },
     {
       "category": "module",
-      "name": "OverlordContain",
-      "count": 10,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "ParkingPlaceBehavior",
       "count": 9,
       "owners": [
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "PassengersFireUpgrade",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
@@ -6477,15 +6567,6 @@
       "category": "module",
       "name": "ProjectileStreamUpdate",
       "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "PropagandaTowerBehavior",
-      "count": 14,
       "owners": [
         "Object"
       ],
@@ -6526,15 +6607,6 @@
         "Object"
       ],
       "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "RiderChangeContain",
-      "count": 11,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",
@@ -6610,26 +6682,8 @@
     },
     {
       "category": "module",
-      "name": "SlavedUpdate",
-      "count": 20,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
       "name": "SmartBombTargetHomingUpdate",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpawnPointProductionExitUpdate",
-      "count": 7,
       "owners": [
         "Object"
       ],
@@ -6697,15 +6751,6 @@
         "Object"
       ],
       "plannedTarget": "phase-7-presentation"
-    },
-    {
-      "category": "module",
-      "name": "TensileFormationUpdate",
-      "count": 2,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
     },
     {
       "category": "module",
