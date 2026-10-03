@@ -106,7 +106,7 @@ static partial class Tests
           End
         End
         Object ScriptWarehouse
-          KindOf = STRUCTURE
+          KindOf = STRUCTURE SUPPLY_SOURCE
           Geometry = BOX
           GeometryMajorRadius = 8.0
           GeometryMinorRadius = 8.0

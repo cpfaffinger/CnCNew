@@ -144,4 +144,25 @@ static partial class Tests
         var continued = MissionSnapshot.Restore(snapshot, fixture.Templates, fixture.Fingerprint, terrain, map);
         for (var tick = 0; tick < 200; tick++) Check.That(restored.Step().StateHash == continued.Step().StateHash, $"A formation march restored from a snapshot continues identically (tick {tick}).");
     }
+
+    public static void ScriptAiExpandsToASupplyWarehouse()
+    {
+        // AI_PLAYER_BUILD_SUPPLY_CENTER: a dozer of the player builds a depot next to a warehouse that holds enough supplies; TEAM_GUARD_SUPPLY_CENTER walks a team to it.
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Fund", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("PLAYER_SET_MONEY", Scr.Side(PlayerA), Scr.Int(500))], oneShot: true),
+            Scr.Script("Expand", [Scr.And(Scr.If("SUPPLY_SOURCE_SAFE", Scr.Side(PlayerA), Scr.Int(0)), Scr.If("FLAG", Scr.Flag("go"), Scr.Bool(true)))], [Scr.Do("AI_PLAYER_BUILD_SUPPLY_CENTER", Scr.Side(PlayerA), Scr.Type("AlphaDepot"), Scr.Int(0)), Scr.Do("TEAM_GUARD_SUPPLY_CENTER", Scr.Team("Squad"), Scr.Int(0)), Scr.Do("RESUME_SUPPLY_TRUCKING")], oneShot: true),
+        ], objects: [Placed("AlphaDozer", 100m, 100m, "teamA", "Dozer"), Placed("ScriptWarehouse", 170m, 100m, "teamPlayerA", "Warehouse"), Placed("AlphaSoldier", 100m, 140m, "Squad", "Guard")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(session.SkippedObjects.IsEmpty, "The fixture instantiates: " + string.Join(",", session.SkippedObjects));
+        Run(session, 5);
+        session.Engine.SignalUiInteraction("go");
+        Run(session, 900);
+        var depot = session.World.Entities.FirstOrDefault(entity => entity.Template.Name == "AlphaDepot");
+        Check.That(depot is not null && depot.Owner == session.Program.FindPlayer(PlayerA)!.Id, $"The dozer builds the depot (diagnostics: {string.Join("; ", session.Engine.Diagnostics.Keys)}; money {session.World.MoneyOf(session.Program.FindPlayer(PlayerA)!.Id)}; objects {string.Join(",", session.World.Entities.Select(entity => entity.Template.Name))}).");
+        Check.That(depot is not null && (depot.X - Fixed.FromInt(170)).Abs() < Fixed.FromInt(60) && (depot.Y - Fixed.FromInt(100)).Abs() < Fixed.FromInt(60), $"The depot stands next to the warehouse ({depot?.X}, {depot?.Y}).");
+        var guard = NamedIn(session, "Guard")!;
+        Check.That(guard.X > Fixed.FromInt(140), $"The guard team walked towards the warehouse ({guard.X}).");
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches.");
+    }
 }

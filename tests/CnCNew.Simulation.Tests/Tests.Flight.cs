@@ -371,6 +371,39 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
         End
+        Object AlphaDozer
+          Side = Alpha
+          KindOf = SELECTABLE VEHICLE DOZER
+          VisionRange = 400.0
+          ShroudClearingRange = 400.0
+          Locomotor = SET_NORMAL SkirmishLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = DozerAIUpdate AI01
+            RepairHealthPercentPerSecond = 10%
+          End
+        End
+        Object AlphaDepot
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE CASH_GENERATOR
+          BuildCost = 100
+          BuildTime = 2
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
         """;
 
     private static MapProperties ReinforcementTeam(string name, string transport, int troopers, bool exit = false, bool full = false)
