@@ -4153,6 +4153,24 @@
     },
     {
       "category": "deferred-field",
+      "name": "RailedTransportContain/DoorOpenTime",
+      "count": 1,
+      "owners": [
+        "RailedTransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "RailedTransportContain/ScatterNearbyOnExit",
+      "count": 1,
+      "owners": [
+        "RailedTransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "RailroadBehavior/BigMetalBounceSound",
       "count": 28,
       "owners": [
@@ -6041,7 +6059,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 2986,
+      "count": 2973,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6556,93 +6574,12 @@
     },
     {
       "category": "module",
-      "name": "RailedTransportAIUpdate",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "RailedTransportContain",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "RailedTransportDockUpdate",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
-    },
-    {
-      "category": "module",
-      "name": "SabotageFakeBuildingCrateCollide",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SabotageInternetCenterCrateCollide",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SalvageCrateCollide",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SmartBombTargetHomingUpdate",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SupplyWarehouseCripplingBehavior",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "SwayClientUpdate",
       "count": 4,
       "owners": [
         "Object"
       ],
       "plannedTarget": "phase-7-presentation"
-    },
-    {
-      "category": "module",
-      "name": "UnitCrateCollide",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
     },
     {
       "category": "module",

@@ -51,7 +51,7 @@ internal interface IDockModule
     /// <summary><c>advanceApproachPosition</c>: moves the docker one slot closer if that slot is free.</summary>
     bool AdvanceApproachPosition(IWorldServices world, Entity docker, ref int index, out Fixed x, out Fixed y);
 
-    bool IsClearToEnter(EntityId docker);
+    bool IsClearToEnter(IWorldServices world, EntityId docker);
     bool IsClearToAdvance(EntityId docker, int index);
     void OnApproachReached(EntityId docker);
     void OnEnterReached(EntityId docker);
@@ -60,6 +60,15 @@ internal interface IDockModule
 
     /// <summary><c>action</c>: true while the dock wants to be asked again after the action delay.</summary>
     bool Action(IWorldServices world, Entity docker);
+
+    /// <summary><c>isDockOpen</c>: a closed dock refuses every state of the docker's machine (the ferry in transit); open by default.</summary>
+    bool IsOpen { get; }
+
+    /// <summary><c>setDockOpen</c>.</summary>
+    void SetOpen(bool open);
+
+    /// <summary><c>setDockCrippled</c>: a crippled dock accepts approaches but never grants entry (the supply warehouse below the really-damaged edge).</summary>
+    void SetDockCrippled(IWorldServices world, bool crippled);
 }
 
 /// <summary><c>DockUpdate</c> field set (<c>AllowsPassthrough</c> only steers pathfinding, which does not exist here).</summary>
@@ -105,10 +114,33 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
     private EntityId[] _owners = new EntityId[data.InitialSlots];
     private bool[] _reached = new bool[data.InitialSlots];
     private EntityId _activeDocker;
+    private bool _closed;
+    private bool _crippled;
+    private bool _dockerInside;
 
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
     public EntityId ActiveDocker => _activeDocker;
+
+    /// <summary><c>m_dockerInside</c>: the active docker has reached the entry and has not left through the exit yet.</summary>
+    public bool DockerInside => _dockerInside;
+
+    public bool IsOpen => !_closed;
+    public bool IsCrippled => _crippled;
+
+    public void SetOpen(bool open)
+    {
+        if (_closed != !open) Entity.Dirty = true;
+        _closed = !open;
+    }
+
+    /// <summary><c>DockUpdate::setDockCrippled</c>: the dock stops granting entry (it still takes approaches); uncrippling wakes it so a docker that waited is let in.</summary>
+    public virtual void SetDockCrippled(IWorldServices world, bool crippled)
+    {
+        _crippled = crippled;
+        world.WakeAt(Entity, this, world.Tick);
+        world.MarkDirty(Entity);
+    }
 
     private bool Dynamic => data.NumberApproachPositions == DockData.DynamicApproachPositions;
 
@@ -163,7 +195,8 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
         return true;
     }
 
-    private (Fixed X, Fixed Y) ApproachPosition(Entity docker)
+    /// <summary><c>computeApproachPosition</c> without bones: the dock's centre pushed <c>majorRadius / 2</c> towards the docker; a dock that is itself a mobile blocker overrides it.</summary>
+    protected virtual (Fixed X, Fixed Y) ApproachPosition(Entity docker)
     {
         var dx = docker.X - Entity.X;
         var dy = docker.Y - Entity.Y;
@@ -174,7 +207,7 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
         return (Entity.X + dx / dist * reach, Entity.Y + dy / dist * reach);
     }
 
-    public bool IsClearToEnter(EntityId docker) => docker == _activeDocker;
+    public virtual bool IsClearToEnter(IWorldServices world, EntityId docker) => docker == _activeDocker;
 
     public bool IsClearToAdvance(EntityId docker, int index)
         => index > 0 && index < _owners.Length && _owners[index] == docker && _reached[index] && !_owners[index - 1].IsValid;
@@ -187,6 +220,7 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
 
     public void OnEnterReached(EntityId docker)
     {
+        _dockerInside = true;
         var slot = Array.IndexOf(_owners, docker);
         if (slot < 0) return;
         _owners[slot] = EntityId.Invalid;
@@ -195,6 +229,7 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
 
     public void OnExitReached(EntityId docker)
     {
+        _dockerInside = false;
         if (docker == _activeDocker) _activeDocker = EntityId.Invalid;
     }
 
@@ -206,12 +241,16 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
             _owners[slot] = EntityId.Invalid;
             _reached[slot] = false;
         }
-        if (_activeDocker == docker) _activeDocker = EntityId.Invalid;
+        if (_activeDocker == docker)
+        {
+            _activeDocker = EntityId.Invalid;
+            _dockerInside = false;
+        }
     }
 
     public abstract bool Action(IWorldServices world, Entity docker);
 
-    public long Update(IWorldServices world)
+    public virtual long Update(IWorldServices world)
     {
         var busy = false;
         for (var slot = 0; slot < _owners.Length; slot++)
@@ -220,8 +259,13 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
             if (IsGone(world, _owners[slot])) { _owners[slot] = EntityId.Invalid; _reached[slot] = false; }
             else busy = true;
         }
-        if (_activeDocker.IsValid && IsGone(world, _activeDocker)) _activeDocker = EntityId.Invalid;
-        if (!_activeDocker.IsValid)
+        if (_activeDocker.IsValid && IsGone(world, _activeDocker))
+        {
+            _activeDocker = EntityId.Invalid;
+            _dockerInside = false;
+        }
+        // DockUpdate::update: "if setDockCrippled has been called, I will never give enterance permission".
+        if (!_activeDocker.IsValid && !_crippled)
         {
             for (var slot = 0; slot < _owners.Length; slot++)
             {
@@ -240,6 +284,10 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
     {
         writer.Int("nextWake", _nextWake);
         writer.UInt("activeDocker", _activeDocker.Value);
+        // Written only when set, so every dock that was never closed, crippled or entered keeps its serialized form.
+        if (_closed) writer.Bool("closed", true);
+        if (_crippled) writer.Bool("crippled", true);
+        if (_dockerInside) writer.Bool("dockerInside", true);
         writer.BeginArray("slots");
         for (var slot = 0; slot < _owners.Length; slot++)
         {
@@ -256,6 +304,9 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
     {
         _nextWake = reader.Int("nextWake");
         _activeDocker = new EntityId(checked((uint)reader.UInt("activeDocker")));
+        _closed = reader.Has("closed") && reader.Bool("closed");
+        _crippled = reader.Has("crippled") && reader.Bool("crippled");
+        _dockerInside = reader.Has("dockerInside") && reader.Bool("dockerInside");
         var slots = reader.Array("slots");
         _owners = new EntityId[slots.Count];
         _reached = new bool[slots.Count];
@@ -301,8 +352,9 @@ internal sealed class SupplyCenterDockUpdate(SupplyCenterDockData data) : DockUp
 /// <summary>
 /// <c>SupplyWarehouseDockUpdate::action</c>: hands one box to the docker per action while stock remains; the last box of a
 /// <c>DeleteWhenEmpty</c> warehouse destroys it. The reference's "close enough" check (the docker twitches by a random offset when it stopped
-/// too far away) is skipped: the docker always stops inside the warehouse's footprint here. <c>setDockCrippled</c> (the supply-warehouse
-/// crippling special power) is not modelled.
+/// too far away) is skipped: the docker always stops inside the warehouse's footprint here. <c>setDockCrippled</c> (raised by
+/// <see cref="SupplyWarehouseCripplingBehavior"/>) kills a truck that is between the entry and the exit and sends one that has only approached
+/// back to idle with its "want supplies" state forced, before the dock stops granting entry.
 /// </summary>
 internal sealed class SupplyWarehouseDockUpdate(SupplyWarehouseDockData data) : DockUpdateBase(data)
 {
@@ -336,6 +388,25 @@ internal sealed class SupplyWarehouseDockUpdate(SupplyWarehouseDockData data) : 
             return false;
         }
         return true;
+    }
+
+    public override void SetDockCrippled(IWorldServices world, bool crippled)
+    {
+        // SupplyWarehouseDockUpdate::setDockCrippled: "At this level, Crippling means I kill any activeDocker between enter and exit."
+        if (crippled && ActiveDocker.IsValid && world.FindEntity(ActiveDocker) is { } victim)
+        {
+            if (DockerInside)
+            {
+                if (!CrateModules.UsesAirborneLocomotor(victim)) world.Kill(victim.Id);
+            }
+            else if (SupplyNetwork.CarrierOf(victim) is { } carrier)
+            {
+                // Between approach and enter: stop, but remind him that he wants to try again later.
+                CrateModules.AiOf(victim)?.OrderIdle(world);
+                carrier.ForceWanting(world);
+            }
+        }
+        base.SetDockCrippled(world, crippled);
     }
 
     protected override void DescribeDock(IStateWriter writer) => writer.Int("boxes", _boxes);

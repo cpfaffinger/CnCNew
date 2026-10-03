@@ -67,6 +67,9 @@ public static class ConditionDeriver
             _ => set,
         };
         if (entity.HasPlayerUpgradeWeapon) set = set.With(ModelConditions.WeaponSetPlayerUpgrade);
+        // SalvageCrateCollide: setWeaponSetFlag / setModelConditionState for the salvager's crate upgrades.
+        if (entity.CrateWeaponLevel > 0) set = set.With(entity.CrateWeaponLevel == 1 ? ModelConditions.WeaponSetCrateUpgradeOne : ModelConditions.WeaponSetCrateUpgradeTwo);
+        if (entity.CrateArmorLevel > 0) set = set.With(entity.CrateArmorLevel == 1 ? ModelConditions.ArmorSetCrateUpgradeOne : ModelConditions.ArmorSetCrateUpgradeTwo);
 
         if (entity.Container is { ContainCount: > 0 } container)
             set = set.With(container is GarrisonContain ? ModelConditions.Garrisoned : ModelConditions.Loaded);

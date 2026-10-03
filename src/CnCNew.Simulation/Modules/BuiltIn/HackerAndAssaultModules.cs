@@ -45,8 +45,8 @@ public sealed record HackInternetData(AIUpdateData Base, long UnpackTicks, long 
 /// [1 − v, 1 + v], one logic draw), then hacks: every <c>CashUpdateDelay</c> frames (<c>CashUpdateDelayFast</c> inside a container) the owner gets the cash of the hacker's veterancy
 /// level and the hacker the experience <c>XpPerCashUpdate</c>. A move order given while hacking is held back until the hacker has packed up (<c>PackTime</c>, none inside a container),
 /// then carried out. Any other order replaces the hacking. There is no command in this simulation that starts hacking from outside a container yet — only
-/// <c>InternetHackContain</c> and the <see cref="StartHacking"/> call do. The cash ping, floating text and the model conditions are presentation, and a "hacked" (disabled) hacker is not
-/// stopped because disabled states are not simulated.
+/// <c>InternetHackContain</c> and the <see cref="StartHacking"/> call do. The cash ping, floating text and the model conditions are presentation. A hacker that
+/// <c>SabotageInternetCenterCrateCollide</c> disabled (<see cref="DisableUntil"/>, <c>DISABLED_HACKED</c>) does nothing at all until the tick: no state advances and no cash is paid.
 /// </summary>
 public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterface(data.Base)
 {
@@ -54,12 +54,22 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
 
     private HackState _state;
     private long _remaining;
+    private long _hackedUntil;
     private bool _hasPending;
     private bool _pendingFromPlayer;
     private Fixed _pendingX;
     private Fixed _pendingY;
 
     public override string ModuleName => "HackInternetAIUpdate";
+
+    /// <summary><c>Object::setDisabledUntil(DISABLED_HACKED, frame)</c> as the Internet-Center sabotage hands it to every hacker inside: the module's update does not run before <paramref name="tick"/>.</summary>
+    public void DisableUntil(IWorldServices world, long tick)
+    {
+        _hackedUntil = tick;
+        Entity.Speed = Fixed.Zero;
+        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        world.MarkDirty(Entity);
+    }
 
     /// <summary><c>isHacking</c>: in the cash-making state.</summary>
     public bool IsHacking => _state == HackState.Hacking;
@@ -112,6 +122,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
     public override long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
+        if (world.Tick < _hackedUntil) return SimulationTiming.SleepNone;
         // The parent's idle test, not ours: a hacker that holds a pending order is never idle.
         if (_state == HackState.None && _hasPending && IsIdle)
         {
@@ -165,6 +176,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
         base.Describe(writer);
         writer.Int("hackState", (int)_state);
         writer.Int("hackRemaining", _remaining);
+        if (_hackedUntil > 0) writer.Int("hackedUntil", _hackedUntil);
         if (_hasPending)
         {
             writer.Bool("hackPending", true);
@@ -181,6 +193,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
         if (state < 0 || state > (int)HackState.Packing) throw new InvalidDataException("Hack state out of range.");
         _state = (HackState)state;
         _remaining = reader.Int("hackRemaining");
+        _hackedUntil = reader.Has("hackedUntil") ? reader.Int("hackedUntil") : 0;
         _hasPending = reader.Has("hackPending") && reader.Bool("hackPending");
         _pendingFromPlayer = _hasPending && reader.Bool("hackPendingFromPlayer");
         _pendingX = _hasPending ? reader.Fixed("hackPendingX") : Fixed.Zero;

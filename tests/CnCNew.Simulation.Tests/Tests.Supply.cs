@@ -136,7 +136,8 @@ static partial class Tests
           End
           Behavior = DestroyDie Destroy01
           End
-          Behavior = RailedTransportAIUpdate Rail01
+          Behavior = LockWeaponCreate Rail01
+            SlotToLock = SECONDARY
           End
         End
 

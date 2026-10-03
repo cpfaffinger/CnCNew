@@ -516,6 +516,8 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         // WEAPONSET_CARBOMB: ConvertToCarBombCrateCollide sets the weapon-set flag together with IS_CARBOMB and nothing ever clears either, so the status bit is the flag.
         if (entity.Template.CarBombWeapon >= 0 && entity.HasStatus(CarBombStatusBit)) return entity.Template.CarBombWeapon;
+        // WEAPONSET_CRATEUPGRADE_ONE/TWO (SalvageCrateCollide): the salvager's crate level, when the template declares a set for it.
+        if (entity.CrateWeaponLevel > 0 && entity.Template.CrateUpgradeWeapon[entity.CrateWeaponLevel] is var crate and >= 0) return crate;
         if (entity.VeterancyLevel > 0 && entity.Template.VeteranWeapon[entity.VeterancyLevel] is var veteran and >= 0) return veteran;
         return entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
     }
@@ -523,6 +525,8 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <summary>Armor counterpart of <see cref="ActiveWeaponIndex"/>; see <see cref="Templates.ObjectTemplate.VeteranArmor"/>.</summary>
     private static ArmorInfo ActiveArmor(Entity entity)
     {
+        // ARMORSET_CRATE_UPGRADE_ONE/TWO (SalvageCrateCollide).
+        if (entity.CrateArmorLevel > 0 && entity.Template.CrateUpgradeArmor[entity.CrateArmorLevel] is { } crate) return crate;
         if (entity.VeterancyLevel > 0 && entity.Template.VeteranArmor[entity.VeterancyLevel] is { } veteran) return veteran;
         return entity.HasPlayerUpgradeArmor && entity.Template.PlayerUpgradeArmor is { } upgraded ? upgraded : entity.Template.DefaultArmor;
     }
@@ -708,6 +712,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 var byContainer = _entities.GetValueOrDefault(actor.ContainedBy.Value);
                 if (!command.Player.IsSystem && actor.Owner != command.Player && (byContainer is null || byContainer.Owner != command.Player))
                     return CommandRejection.NotPermitted;
+                if (byContainer?.Container is { } door && !door.IsRiderFreeToExit(actor)) return CommandRejection.NotPermitted;
                 break;
             }
             case SetRelationshipCommand relation:
@@ -1039,6 +1044,11 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!command.Player.IsSystem && actor.Owner != command.Player && (byContainer is null || byContainer.Owner != command.Player))
                 { RecordRejection(command, CommandRejection.NotPermitted); break; }
                 var previousContainer = actor.ContainedBy;
+                if (byContainer?.Container is { } door)
+                {
+                    if (!door.IsRiderFreeToExit(actor)) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                    if (door.ExitViaDoor(this, actor)) break; // the container runs its own exit sequence (the ferry's dock)
+                }
                 byContainer?.Container?.Remove(this, actor, true);
                 actor.ContainedBy = EntityId.Invalid; // Safety net: Remove() also does this; guards a dangling/missing container reference.
                 MarkDirty(actor);

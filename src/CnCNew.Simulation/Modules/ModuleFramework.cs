@@ -560,6 +560,15 @@ public interface IContainerModule
 
     /// <summary><paramref name="positionAtContainer"/> is false only when the container itself is gone (its position is stale/irrelevant).</summary>
     void Remove(IWorldServices world, Entity candidate, bool positionAtContainer);
+
+    /// <summary><c>ContainModuleInterface::isSpecificRiderFreeToExit</c>, as an exit command asks it: false refuses the command (the ferry's riders cannot leave while it is in transit); true for every container but the ferry.</summary>
+    bool IsRiderFreeToExit(Entity rider) => true;
+
+    /// <summary>
+    /// <c>ContainModuleInterface::exitObjectViaDoor</c> for a container that runs its own exit sequence instead of letting the rider simply step out (<c>RailedTransportContain</c>
+    /// hands the exit to its dock): true when the container took the exit over, false to let the world remove the rider with <see cref="Remove"/>.
+    /// </summary>
+    bool ExitViaDoor(IWorldServices world, Entity rider) => false;
 }
 
 /// <summary>

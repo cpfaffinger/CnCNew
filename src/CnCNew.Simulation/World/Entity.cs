@@ -84,6 +84,12 @@ public sealed class Entity
     /// <summary>Set by <c>WeaponSetUpgrade</c> once completed: combat resolution reads <see cref="Templates.ObjectTemplate.PlayerUpgradeWeapon"/> instead of the default weapon.</summary>
     public bool HasPlayerUpgradeWeapon { get; internal set; }
 
+    /// <summary><c>WEAPONSET_CRATEUPGRADE_ONE</c> (1) / <c>_TWO</c> (2) of <c>SalvageCrateCollide</c>: the salvager's weapon-set upgrade level; 0 (the flag cleared) is never written.</summary>
+    public int CrateWeaponLevel { get; internal set; }
+
+    /// <summary><c>ARMORSET_CRATE_UPGRADE_ONE</c> (1) / <c>_TWO</c> (2) of <c>SalvageCrateCollide</c>: the salvager's armor-set upgrade level; 0 is never written.</summary>
+    public int CrateArmorLevel { get; internal set; }
+
     /// <summary><c>EFFECTIVELY_DEAD</c>: set by bodies when health reaches zero (always for inactive bodies).</summary>
     public bool EffectivelyDead { get; set; }
 
@@ -183,6 +189,8 @@ public sealed class Entity
         writer.UInt("builder", BuilderId.Value);
         writer.Int("sellCompleteTick", SellCompleteTick);
         if (ShroudScalar != Fixed.One) writer.Fixed("shroudScalar", ShroudScalar);
+        if (CrateWeaponLevel != 0) writer.Int("crateWeaponLevel", CrateWeaponLevel);
+        if (CrateArmorLevel != 0) writer.Int("crateArmorLevel", CrateArmorLevel);
         // Written only for an object somebody spied through, so every other object keeps its serialized form (and hash).
         if (VisionSpiedBy is { Count: > 0 })
         {

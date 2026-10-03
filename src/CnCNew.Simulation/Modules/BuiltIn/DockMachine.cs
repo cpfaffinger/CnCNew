@@ -107,9 +107,11 @@ internal sealed class DockMachine(EntityId dockId)
         switch (state)
         {
             case DockState.Approach:
+                if (dock is not null && !dock.IsOpen) return RefuseClosed(dock, ai);
                 if (dock is null || !dock.ReserveApproachPosition(world, ai.Entity, out _approachPosition, out var x, out var y)) return DockStatus.Failure;
                 return ai.StartInternalMove(x, y) ? DockStatus.Continue : DockStatus.Failure;
             case DockState.AdvancePosition:
+                if (dock is not null && !dock.IsOpen) return RefuseClosed(dock, ai);
                 if (dock is null || !dock.AdvanceApproachPosition(world, ai.Entity, ref _approachPosition, out x, out y)) return DockStatus.Failure;
                 return ai.StartInternalMove(x, y) ? DockStatus.Continue : DockStatus.Failure;
             case DockState.WaitForClearance:
@@ -117,9 +119,12 @@ internal sealed class DockMachine(EntityId dockId)
                 return DockStatus.Continue;
             case DockState.MoveToEntry:
                 if (dock is null) return DockStatus.Failure;
+                if (!dock.IsOpen) return RefuseClosed(dock, ai);
                 _approachPosition = -1;
                 return DockStatus.Success;
             case DockState.MoveToDock:
+                if (dock is null) return DockStatus.Failure;
+                return dock.IsOpen ? DockStatus.Success : RefuseClosed(dock, ai);
             case DockState.MoveToExit:
                 return dock is null ? DockStatus.Failure : DockStatus.Success;
             case DockState.ProcessDock:
@@ -144,13 +149,15 @@ internal sealed class DockMachine(EntityId dockId)
                 return ai.Entity.HasMoveTarget ? DockStatus.Continue : DockStatus.Success;
             case DockState.WaitForClearance:
                 if (dock is null) return DockStatus.Failure;
-                if (dock.IsClearToEnter(ai.Entity.Id)) return DockStatus.Success;
+                if (!dock.IsOpen) return RefuseClosed(dock, ai);
+                if (dock.IsClearToEnter(world, ai.Entity.Id)) return DockStatus.Success;
                 return _enterTick + ClearanceTimeoutTicks < world.Tick ? DockStatus.Failure : DockStatus.Continue;
             case DockState.ProcessDock:
                 if (dock is null) return DockStatus.Failure;
                 if (world.Tick < _nextActionTick) return DockStatus.Continue;
                 _nextActionTick = world.Tick + ActionDelay(dock, ai);
-                return dock.Action(world, ai.Entity) ? DockStatus.Continue : DockStatus.Success;
+                // "invoke the dock's action until it tells us it is done or the dock becomes closed" (AIDockProcessDockState::update)
+                return dock.IsOpen && dock.Action(world, ai.Entity) ? DockStatus.Continue : DockStatus.Success;
             default:
                 return dock is null ? DockStatus.Failure : DockStatus.Continue;
         }
@@ -166,28 +173,35 @@ internal sealed class DockMachine(EntityId dockId)
             case DockState.AdvancePosition:
                 if (dock is not null)
                 {
-                    if (reset) dock.CancelDock(id);
+                    if (reset || !dock.IsOpen) dock.CancelDock(id);
                     else dock.OnApproachReached(id);
                 }
                 ai.StopInternalMove();
                 break;
             case DockState.WaitForClearance:
-                if (reset) dock?.CancelDock(id);
+                if (dock is not null && (reset || !dock.IsOpen)) dock.CancelDock(id);
                 break;
             case DockState.MoveToEntry:
                 if (dock is not null)
                 {
-                    if (reset) dock.CancelDock(id);
+                    if (reset || !dock.IsOpen) dock.CancelDock(id);
                     else dock.OnEnterReached(id);
                 }
                 break;
             case DockState.MoveToDock:
-                if (reset) dock?.CancelDock(id);
+                if (dock is not null && (reset || !dock.IsOpen)) dock.CancelDock(id);
                 break;
             case DockState.MoveToExit:
                 dock?.OnExitReached(id);
                 break;
         }
+    }
+
+    /// <summary>"Fail if the dock is closed": the docker tells the dock it is not coming and the state fails.</summary>
+    private static DockStatus RefuseClosed(IDockModule dock, AIUpdateInterface ai)
+    {
+        dock.CancelDock(ai.Entity.Id);
+        return DockStatus.Failure;
     }
 
     private static long ActionDelay(IDockModule dock, AIUpdateInterface ai) => ai is ISupplyCarrier carrier ? carrier.ActionDelayFor(dock) : 0;

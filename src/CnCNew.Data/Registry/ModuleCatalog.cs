@@ -1772,6 +1772,48 @@ public static class ModuleCatalog
             Add("BoneFXDamage", []);
         }
 
+        // ===== BEGIN the last nine modules (LastBlockerModules.cs): salvage/unit crates, two sabotage crates, smart bomb, crippled warehouse and the ferry =====
+        Add("SalvageCrateCollide",
+        [
+            ..CrateCollide(),
+            new("WeaponChance", FieldType.Percent, Source: "SalvageCrateCollide.h"),
+            new("LevelChance", FieldType.Percent, Source: "SalvageCrateCollide.h"),
+            // MoneyChance is parsed by the reference and never read: the money branch is the else of the other two (SalvageCrateCollide.cpp executeCrateBehavior).
+            new("MoneyChance", FieldType.Percent, Source: "SalvageCrateCollide.h"),
+            new("MinMoney", FieldType.Integer, Min: 0, Source: "SalvageCrateCollide.h"),
+            new("MaxMoney", FieldType.Integer, Min: 0, Source: "SalvageCrateCollide.h"),
+        ]);
+        Add("UnitCrateCollide",
+        [
+            ..CrateCollide(),
+            new("UnitCount", FieldType.Integer, Min: 0, Source: "UnitCrateCollide.h"),
+            new("UnitName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "UnitCrateCollide.h"),
+        ]);
+        Add("SabotageFakeBuildingCrateCollide", CrateCollide());
+        Add("SabotageInternetCenterCrateCollide", [..CrateCollide(), new("SabotageDuration", FieldType.DurationMs, Source: "SabotageInternetCenterCrateCollide.h")]);
+        Add("SmartBombTargetHomingUpdate", [Real("CourseCorrectionScalar", "SmartBombTargetHomingUpdate.h")]);
+        Add("SupplyWarehouseCripplingBehavior",
+        [
+            new("SelfHealSupression", FieldType.DurationMs, Source: "SupplyWarehouseCripplingBehavior.cpp"),
+            new("SelfHealDelay", FieldType.DurationMs, Source: "SupplyWarehouseCripplingBehavior.cpp"),
+            Real("SelfHealAmount", "SupplyWarehouseCripplingBehavior.cpp"),
+        ]);
+        // The ferry: RailedTransportAIUpdate.cpp (AIUpdate base + PathPrefixName), RailedTransportContain.cpp (adds nothing to TransportContain's table) and RailedTransportDockUpdate.cpp.
+        Add("RailedTransportAIUpdate",
+        [
+            ..AiBase("RailedTransportAIUpdate.cpp / AIUpdate.cpp"),
+            new("PathPrefixName", FieldType.Text, Source: "RailedTransportAIUpdate.cpp"),
+        ], allowsNestedSections: true);
+        Add("RailedTransportContain", [..OpenContainFields("OpenContain.cpp (unused: TransportContain::getContainMax reads Slots)"), ..TransportContainFields()]);
+        Add("RailedTransportDockUpdate",
+        [
+            ..DockBase("DockUpdate.cpp"),
+            new("PullInsideDuration", FieldType.DurationMs, Source: "RailedTransportDockUpdate.cpp"),
+            new("PushOutsideDuration", FieldType.DurationMs, Source: "RailedTransportDockUpdate.cpp"),
+            Real("ToleranceDistance", "RailedTransportDockUpdate.cpp"),
+        ]);
+        // ===== END the last nine modules =====
+
         return builder.ToImmutable();
     }
 

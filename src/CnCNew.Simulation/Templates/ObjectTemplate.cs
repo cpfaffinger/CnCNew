@@ -195,6 +195,16 @@ public sealed class ObjectTemplate
     public int CarBombWeapon { get; init; } = -1;
 
     /// <summary>
+    /// Primary weapon of the <c>WeaponSet Conditions = CRATEUPGRADE_ONE</c> (index 1) / <c>CRATEUPGRADE_TWO</c> (index 2) variant, or -1 (index 0 is unused); selected for a salvager
+    /// that picked up weapon crates (<see cref="World.Entity.CrateWeaponLevel"/>). Only the single-condition sets are resolved, like <see cref="VeteranWeapon"/>: the
+    /// <c>CRATEUPGRADE_x PLAYER_UPGRADE</c> sets (which differ in the unsimulated secondary weapon only) fall back to the single-condition one.
+    /// </summary>
+    public ImmutableArray<int> CrateUpgradeWeapon { get; init; } = [-1, -1, -1];
+
+    /// <summary><c>ArmorSet Conditions = CRATE_UPGRADE_ONE</c> (index 1) / <c>CRATE_UPGRADE_TWO</c> (index 2) variant, or <see langword="null"/>; the <c>SECOND_LIFE</c> combinations are not modeled.</summary>
+    public ImmutableArray<ArmorInfo?> CrateUpgradeArmor { get; init; } = [null, null, null];
+
+    /// <summary>
     /// The <c>SECONDARY</c> weapon of the unconditional <c>WeaponSet</c>, or -1. Entities fire one weapon here (<see cref="DefaultWeapon"/>); the secondary is only used by modules that
     /// address a weapon slot themselves (<c>AssistedTargetingUpdate</c>), with their own clip bookkeeping.
     /// </summary>
@@ -385,6 +395,8 @@ public sealed class TemplateCatalog
                 LocomotorSets = ResolveLocomotorSets(definition, locomotors),
                 CarBombWeapon = ResolveCarBombWeapon(definition, weapons),
                 SecondaryWeapon = ResolveSecondaryWeapon(definition, weapons),
+                CrateUpgradeWeapon = ResolveCrateUpgradeWeapon(definition, weapons),
+                CrateUpgradeArmor = ResolveCrateUpgradeArmor(definition, armors),
             });
         }
         var commands = CommandCatalog.Build(graph);
@@ -546,6 +558,44 @@ public sealed class TemplateCatalog
             return secondary?.Value.Value is DefinitionReference { IsNone: false } reference && weapons.TryGet(reference.Name, out var info) ? info.Index : -1;
         }
         return -1;
+    }
+
+    /// <summary><c>WeaponSet Conditions = CRATEUPGRADE_ONE</c>/<c>CRATEUPGRADE_TWO</c> alone: the primary weapon of each level.</summary>
+    private static ImmutableArray<int> ResolveCrateUpgradeWeapon(ObjectDefinition definition, WeaponCatalog weapons)
+    {
+        var levels = new[] { -1, -1, -1 };
+        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (ConditionTokens(section) is not [var only] || CrateConditionIndex(only, "CRATEUPGRADE_") is not (> 0 and var level) || levels[level] >= 0) continue;
+            var primary = section.Fields.Where(value => value.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault(value => value.Value.OriginalText.TrimStart().StartsWith("PRIMARY", StringComparison.OrdinalIgnoreCase));
+            if (primary?.Value.Value is DefinitionReference { IsNone: false } reference && weapons.TryGet(reference.Name, out var info)) levels[level] = info.Index;
+        }
+        return [..levels];
+    }
+
+    /// <summary><c>ArmorSet Conditions = CRATE_UPGRADE_ONE</c>/<c>CRATE_UPGRADE_TWO</c> alone: the armor of each level.</summary>
+    private static ImmutableArray<ArmorInfo?> ResolveCrateUpgradeArmor(ObjectDefinition definition, ImmutableDictionary<string, ArmorInfo> armors)
+    {
+        var levels = new ArmorInfo?[3];
+        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("ArmorSet", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (ConditionTokens(section) is not [var only] || CrateConditionIndex(only, "CRATE_UPGRADE_") is not (> 0 and var level) || levels[level] is not null) continue;
+            var armorName = section.Fields.LastOrDefault(value => value.Name.Equals("Armor", StringComparison.OrdinalIgnoreCase))?.Value.Value switch
+            {
+                DefinitionReference { IsNone: false } reference => reference.Name,
+                _ => null,
+            };
+            if (armorName is not null && armors.TryGetValue(armorName, out var info)) levels[level] = info;
+        }
+        return [..levels];
+    }
+
+    /// <summary>Maps <c>&lt;prefix&gt;ONE</c>/<c>&lt;prefix&gt;TWO</c> to 1/2, else 0.</summary>
+    private static int CrateConditionIndex(string condition, string prefix)
+    {
+        if (condition.Equals(prefix + "ONE", StringComparison.OrdinalIgnoreCase)) return 1;
+        return condition.Equals(prefix + "TWO", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
     }
 
     private static int ResolveCarBombWeapon(ObjectDefinition definition, WeaponCatalog weapons)

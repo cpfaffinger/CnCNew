@@ -228,12 +228,16 @@ static partial class Tests
         }, "start at 1");
     }
 
+    /// <summary>The default registry in which the named implemented simulation modules are declared compatibility-only: stand-ins for "a module the simulation does not implement".</summary>
+    private static ModuleRegistry StandInRegistry(params string[] names)
+        => new(ModuleRegistry.Default.Descriptors.Select(value => names.Contains(value.Name, StringComparer.Ordinal) ? value with { CompatibilityOnly = true, Schema = [], PlannedTarget = "stand-in" } : value));
+
     public static void BindingTable()
     {
         var registry = ModuleRegistry.Default;
         ModuleBindingTable Build(IEnumerable<IModuleBinding> bindings, ModuleRegistry? custom = null) => new(bindings, custom ?? registry);
         var all = BuiltInModules.Bindings;
-        Check.That(Build(all).Bindings.Length == 174, "The production table binds one hundred and seventy-four modules (twelve phase-4, twenty-four phase-5, fourteen reference-match unlock, eleven special-power, eight supply-economy, one spawner, two repair, three combat, three power-plant, three projectile, five transport/tunnel, two mission-blocker shells, three topple/height-die collision, seven mission-object modules of phase 12, four aircraft modules the particle uplink cannon and four vehicle modules of phase 13, twelve slave/spawn/container modules of phase 14 and ten air-group modules: airfield, jet AI, Spectre gunship, silo doors, neutron missile with slow death and blast, EMP, leaflets, bunker buster, twenty-one crate, collide and special modules: crates, hijack, sabotage, pilot, sticky bomb, stealth grant, wander, projectile stream, cleanup, spy vision, assisted targeting, battle plans and twenty-four structure and world modules: railroad, bridges, mines, collapse, deploy-style AI, fire spread, OCL and shroud updates, flood wave, checkpoints, cost modifier).");
+        Check.That(Build(all).Bindings.Length == 183, "The production table binds one hundred and eighty-three modules (twelve phase-4, twenty-four phase-5, fourteen reference-match unlock, eleven special-power, eight supply-economy, one spawner, two repair, three combat, three power-plant, three projectile, five transport/tunnel, two mission-blocker shells, three topple/height-die collision, seven mission-object modules of phase 12, four aircraft modules the particle uplink cannon and four vehicle modules of phase 13, twelve slave/spawn/container modules of phase 14 and ten air-group modules: airfield, jet AI, Spectre gunship, silo doors, neutron missile with slow death and blast, EMP, leaflets, bunker buster, twenty-one crate, collide and special modules: crates, hijack, sabotage, pilot, sticky bomb, stealth grant, wander, projectile stream, cleanup, spy vision, assisted targeting, battle plans twenty-four structure and world modules: railroad, bridges, mines, collapse, deploy-style AI, fire spread, OCL and shroud updates, flood wave, checkpoints, cost modifier and the last nine: salvage and unit crates, fake-building and Internet-Center saboteurs, smart bomb homing, crippled supply warehouse and the three ferry modules).");
         Check.That(all.Select(value => value.Name).SequenceEqual(all.Select(value => value.Name).Order(StringComparer.Ordinal)), "The built-in list is sorted ordinally.");
         Check.That(ModuleBindingTable.Default.TryGet("destroydie", out var binding) && binding.Name == "DestroyDie", "Lookup is case-insensitive.");
 
@@ -248,8 +252,8 @@ static partial class Tests
         Check.Throws<ModuleBindingException>(() => Build(all.Take(all.Length - 1)), "no binding");
         var unknown = new ModuleBinding<InactiveBodyData>("ZZZUnknownModule", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
         Check.Throws<ModuleBindingException>(() => Build(all.Append(unknown)), "unknown module name");
-        var unimplemented = new ModuleBinding<InactiveBodyData>("SmartBombTargetHomingUpdate", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
-        Check.Throws<ModuleBindingException>(() => Build(all.Append(unimplemented).OrderBy(value => value.Name, StringComparer.Ordinal)), "not implemented");
+        // Every module of the catalog is implemented now, so "the catalog marks it as not implemented" is shown with a registry in which one module is declared compatibility-only.
+        Check.Throws<ModuleBindingException>(() => Build(all, StandInRegistry("PreorderCreate")), "not implemented");
         var presentation = new ModuleBinding<InactiveBodyData>("W3DModelDraw", ModuleOwnerKind.Object, (_, _) => InactiveBodyData.Instance, _ => new InactiveBody());
         Check.Throws<ModuleBindingException>(() => Build(all.Append(presentation).OrderBy(value => value.Name, StringComparer.Ordinal)), "");
         var wrongOwner = all.Select(value => value.Name == "KeepObjectDie"
@@ -272,15 +276,17 @@ static partial class Tests
         Check.That(catalog.TryGet("Tank", out var tank) && tank.Modules.Select(value => value.Name).SequenceEqual(["ActiveBody", "InstantDeathBehavior"]), "InstantDeathBehavior (a die module) replaces the default DestroyDie.");
         Check.That(barrel.IsKindOf("STRUCTURE") && barrel.Side == "Civilian" && barrel.Geometry == "SPHERE" && barrel.GeometryMajorRadius == Fixed.One, "Template facts come from the typed definition.");
 
-        // A module the simulation does not implement makes the object non-instantiable, and it is named.
+        // A module the simulation does not implement makes the object non-instantiable, and it is named. The catalog has no unimplemented simulation module any more, so two
+        // implemented ones are declared compatibility-only in a registry of the test's own.
         var files = new Dictionary<string, string>(SyntheticFixture.Files)
         {
-            ["Data/INI/Object/Blocked.ini"] = "Object Blocked\n  Behavior = RailedTransportAIUpdate Park01\n  End\n  Behavior = SmartBombTargetHomingUpdate Rail01\n  End\nEnd\n",
+            ["Data/INI/Object/Blocked.ini"] = "Object Blocked\n  Behavior = SpecialPowerCreate Park01\n  End\n  Behavior = PreorderCreate Rail01\n  End\nEnd\n",
         };
-        var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new InMemoryDefinitionSource(files), ModuleRegistry.Default,
+        var standIn = StandInRegistry("PreorderCreate", "SpecialPowerCreate");
+        var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new InMemoryDefinitionSource(files), standIn,
             CnCNew.Data.Compilation.DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true });
-        var blockedCatalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
-        Check.That(blockedCatalog.TryGet("Blocked", out var blocked) && !blocked.IsInstantiable && blocked.MissingModules.SequenceEqual(["RailedTransportAIUpdate", "SmartBombTargetHomingUpdate"]), "Missing modules are listed sorted and never dropped.");
+        var blockedCatalog = TemplateCatalog.Build(graph, new ModuleBindingTable(BuiltInModules.Bindings.Where(value => value.Name is not ("PreorderCreate" or "SpecialPowerCreate")), standIn));
+        Check.That(blockedCatalog.TryGet("Blocked", out var blocked) && !blocked.IsInstantiable && blocked.MissingModules.SequenceEqual(["PreorderCreate", "SpecialPowerCreate"]), "Missing modules are listed sorted and never dropped.");
         var report = ModuleCoverage.Compute(blockedCatalog);
         Check.That(report.Blocked == 1 && report.Blockers.Length == 2 && report.Blockers.All(value => value.ObjectsBlocked == 1 && value.ObjectsBlockedOnlyByThisModule == 0), "Coverage names each blocker.");
     }
