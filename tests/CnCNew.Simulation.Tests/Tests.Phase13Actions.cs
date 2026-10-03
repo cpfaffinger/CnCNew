@@ -214,4 +214,16 @@ static partial class Tests
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches.");
     }
+
+    public static void ScriptNameFollowsATransfer()
+    {
+        // ObjectNameTransferred (car bomb, hijack, pilot): the script name of the consumed object moves to the one that took over.
+        var session = StartMission([], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Old"), Placed("AlphaSoldier", 140m, 100m, "teamA", "New")]);
+        Run(session, 2);
+        var old = NamedIn(session, "Old")!;
+        var successor = NamedIn(session, "New")!;
+        session.World.Emit(CnCNew.Simulation.Events.SimEventKind.ObjectNameTransferred, old.Id, successor.Id, string.Empty, 0);
+        Run(session, 2);
+        Check.That(NamedIn(session, "Old")?.Id == successor.Id, "The name Old now belongs to the object that took over.");
+    }
 }

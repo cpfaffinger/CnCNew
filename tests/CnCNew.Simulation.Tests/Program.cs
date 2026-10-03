@@ -175,6 +175,7 @@ run.Test("Scripts: facing, destroying cargo and more recorded settings", Tests.S
 run.Test("Scripts: a team follows a waypoint path as a formation", Tests.ScriptTeamFollowsAPathAsAFormation);
 run.Test("Scripts: held objects, disabled factories and the evacuation side", Tests.ScriptDisableHoldAndEvacuate);
 run.Test("Scripts: booby traps and bridge conditions", Tests.ScriptBoobyTrapsAndBridges);
+run.Test("Scripts: a script name follows a transfer (car bomb, hijack, pilot)", Tests.ScriptNameFollowsATransfer);
 run.Test("Scripts: the AI expands to a supply warehouse", Tests.ScriptAiExpandsToASupplyWarehouse);
 run.Test("Scripts: the driver moves counters the right way", Tests.ScriptObjectiveDriverMovesCountersTheRightWay);
 run.Test("Scripts: explaining a script leaves the engine untouched", Tests.ScriptExplainLeavesTheEngineUntouched);

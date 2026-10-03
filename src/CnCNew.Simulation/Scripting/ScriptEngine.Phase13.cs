@@ -634,6 +634,10 @@ public sealed partial class ScriptEngine
                 // SpecialPowerCompletionDie::notifyScriptEngine -> notifyOfCompletedSpecialPower(owner, power, creator)
                 _completedPowers.Add((checked((int)item.Value), item.Text, item.Other.Value));
                 break;
+            case CnCNew.Simulation.Events.SimEventKind.ObjectNameTransferred:
+                // ScriptEngine::transferObjectName (car bomb, hijack, pilot): the script name moves to the object that took over.
+                foreach (var name in _named.Where(pair => pair.Value == item.Entity.Value).Select(pair => pair.Key).ToArray()) _named[name] = item.Other.Value;
+                break;
             case CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted:
                 // ProductionUpdate (PRODUCTION_UPGRADE) -> notifyOfCompletedUpgrade(owner, upgrade, producer): the simulation raises the event for the player or the object.
                 _completedUpgrades.Add((item.Player.Value, item.Text, item.Entity.Value));
