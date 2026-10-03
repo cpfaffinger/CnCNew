@@ -778,6 +778,10 @@ Code 30 `CannotDock`, §6e); das Replay-Format v7 (`docs/SIMULATION-CORE.md` §8
 
 ## 9. Modulabdeckung
 
+Stand Phase 14 (3. Oktober 2026, frisch gemessen mit `SimTool audit-coverage`/`audit-modules`): **2.115 von 2.115 Objekten instanziierbar (100,0 %)**, **183 von 205 Modultypen implementiert – alle 183 Simulationsmodule**, offen sind nur
+die 22 Präsentationsmodule; Modulverwendungen abgedeckt 16.558 von 19.553 (84,7 %, der Rest sind Präsentationsmodule). Neu seit Phase 13: 76 Module in vier Gruppen (Luft 10, Kisten/Spezial/Kollision 21, Struktur/Welt 24, Sklaven/Spawn/Container
+12 aus dem Slave-Paket, die letzten neun Blocker) plus das Waffenslot-Modell (`docs/SIMULATION-CORE.md` §30). Die Regelkapitel §6 beschreiben diese Module nicht mehr einzeln; die Tabellen mit Quelle und Näherung stehen in §29/§30 von `SIMULATION-CORE.md`.
+
 Stand Phase 13 (3. Oktober 2026, frisch gemessen mit `SimTool audit-coverage`/`audit-modules`): **1.735 von 2.115 Objekten instanziierbar (82,0 %)**, 107 von 205 Modultypen implementiert, Modulverwendungen abgedeckt 16.085 von
 19.553 (82,3 %); neu sind neun Flugzeug-/Fahrzeug-/Uplink-Module (`docs/SIMULATION-CORE.md` §28). Die größten verbleibenden Blocker nach Objekten (davon nur durch dieses Modul blockiert): `JetAIUpdate` 34/34,
 `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `SlavedUpdate` 20/7, `PropagandaTowerBehavior` 14/13, `UpgradeDie` 13/0, `HiveStructureBody` 11/4, `RiderChangeContain` 11/11, `DeployStyleAIUpdate` 10/10,
