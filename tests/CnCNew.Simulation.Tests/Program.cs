@@ -191,6 +191,12 @@ run.Test("Crates: the five saboteurs, disabled factory and power sabotage", Test
 run.Test("Specials: sticky bomb, booby trap with geometry-based damage", Tests.SpecialsStickyBombAndBoobyTrap);
 run.Test("Specials: GPS scrambler stealth grant and temporary grants", Tests.SpecialsGrantStealth);
 run.Test("Specials: wander AI, determinism and restore", Tests.SpecialsWander);
+run.Test("Specials: the hazard-cleaning ambulance, its area power and snapshot", Tests.SpecialsCleanupHazard);
+run.Test("Specials: spy vision power, reference counts, reveal and duration", Tests.SpecialsSpyVision);
+run.Test("Specials: spy vision upgrades, kind filter and self-powered cycle", Tests.SpecialsSpyVisionUpgrades);
+run.Test("Specials: assisted targeting (request range, free check, secondary clip)", Tests.SpecialsAssistedTargeting);
+run.Test("Specials: battle plans (cycle, army bonuses, center bonus, paralysis, snapshot)", Tests.SpecialsBattlePlanCycle);
+run.Test("Specials: battle plan restore and unsupported options", Tests.SpecialsBattlePlanShrouds);
 run.Test("Specials: projectile stream bookkeeping", Tests.SpecialsProjectileStream);
 run.Test("Scripts: an upgrade command button is ready until the upgrade is owned", Tests.FlightUpgradeButtonReadiness);
 run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);

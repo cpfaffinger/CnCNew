@@ -260,6 +260,7 @@ static void ModuleCatalogIsExplicitAndConsistent()
         "MoneyCrateCollide", "VeterancyCrateCollide", "ConvertToCarBombCrateCollide", "ConvertToHijackedVehicleCrateCollide", "HijackerUpdate", "SabotageCommandCenterCrateCollide",
         "SabotageSuperweaponCrateCollide", "SabotageMilitaryFactoryCrateCollide", "SabotagePowerPlantCrateCollide", "SabotageSupplyCenterCrateCollide", "PilotFindVehicleUpdate",
         "StickyBombUpdate", "GrantStealthBehavior", "WanderAIUpdate", "ProjectileStreamUpdate",
+        "CleanupHazardUpdate", "CleanupAreaPower", "SpyVisionUpdate", "SpyVisionSpecialPower", "AssistedTargetingUpdate", "BattlePlanUpdate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

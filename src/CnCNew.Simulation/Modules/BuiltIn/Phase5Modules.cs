@@ -827,8 +827,23 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         machine.Halt(world, this);
     }
 
+    private long _paralyzedUntil;
+
+    /// <summary>
+    /// <c>Object::setDisabledUntil(DISABLED_PARALYZED, frame)</c> for an object with AI (<c>BattlePlanUpdate</c> paralyzes the troops of a changing battle plan): until <paramref name="tick"/> the AI does not run
+    /// at all (<c>AIUpdateInterface::getDisabledTypesToProcess</c> only lets <c>DISABLED_HELD</c> through), so the object stands still with its order intact and carries on afterwards.
+    /// </summary>
+    public void ParalyzeUntil(IWorldServices world, long tick)
+    {
+        _paralyzedUntil = Math.Max(_paralyzedUntil, tick);
+        Entity.Speed = Fixed.Zero;
+        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        world.MarkDirty(Entity);
+    }
+
     public virtual long Update(IWorldServices world)
     {
+        if (world.Tick < _paralyzedUntil) return SimulationTiming.SleepNone;
         if (_dock is not null && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
         if (_task != BuilderTask.None) UpdateTask(world);
         if (Entity.HasMoveTarget)
@@ -1067,6 +1082,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         writer.Bool("approaching", _approaching);
         if (_evacuatePending) writer.Bool("evacuate", true);
         if (_goal.IsValid) writer.UInt("goal", _goal.Value);
+        if (_paralyzedUntil > 0) writer.Int("paralyzedUntil", _paralyzedUntil);
         if (_exitAfterEvacuate || _returning)
         {
             writer.Bool("exitAfterEvacuate", _exitAfterEvacuate);
@@ -1105,6 +1121,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _approaching = reader.Bool("approaching");
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
         _goal = reader.Has("goal") ? new EntityId(checked((uint)reader.UInt("goal"))) : EntityId.Invalid;
+        _paralyzedUntil = reader.Has("paralyzedUntil") ? reader.Int("paralyzedUntil") : 0;
         _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");
         _returning = reader.Has("returning") && reader.Bool("returning");
         _exitX = reader.Has("exitX") ? reader.Fixed("exitX") : Fixed.Zero;

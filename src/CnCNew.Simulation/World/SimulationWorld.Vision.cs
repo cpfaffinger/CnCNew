@@ -50,13 +50,21 @@ public sealed partial class SimulationWorld
             allySlots[slot] = [..viewers];
         }
         var everybody = Enumerable.Range(0, _playerList.Length).Where(slot => !_playerList[slot].Id.IsSystem).ToArray();
+        var anySightBonus = _players.Values.Any(player => player.BattlePlan is { SearchAndDestroy: > 0 });
         foreach (var entity in _entities.Values)
         {
             if (entity.Owner.IsSystem || entity.DestroyRequested || entity.EffectivelyDead || entity.ContainedBy.IsValid) continue;
             var range = entity.HasStatus(ObjectStatusBits.UnderConstruction) ? entity.Template.BoundingCircleRadius : entity.Template.ShroudClearingRange;
             if (range <= Fixed.Zero) continue;
+            // The strategy center's own wider shroud and the search-and-destroy plan's sight bonus for the army.
+            if (entity.ShroudScalar != Fixed.One) range *= entity.ShroudScalar;
+            if (anySightBonus) range *= BattlePlanSightScalarOf(entity);
             var viewers = entity.Template.IsKindOf("REVEAL_TO_ALL") ? everybody : allySlots[_playerSlots![entity.Owner.Value]];
             foreach (var slot in viewers) vision.Reveal(slot, entity.X, entity.Y, range);
+            // SpyVisionUpdate: a player that spies through this object (reference count above zero) sees what it sees, though not its allies.
+            if (entity.VisionSpiedBy is { Count: > 0 } spied)
+                for (var index = 0; index < spied.Count; index++)
+                    if (spied.Values[index] > 0 && SlotOf(new PlayerId(spied.Keys[index])) is var spy and >= 0 && !viewers.Contains(spy)) vision.Reveal(spy, entity.X, entity.Y, range);
         }
         _visionHash = vision.Hash();
     }

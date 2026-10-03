@@ -72,6 +72,7 @@ public sealed partial class SimulationWorld
             foreach (var shared in player.Array("sharedReadyFrames")) known.SharedReadyFrames[checked((int)shared.Int("power"))] = shared.Int("frame");
             known.Tunnels.Load(player);
             known.PowerSabotagedUntil = player.Has("powerSabotagedUntil") ? player.Int("powerSabotagedUntil") : 0;
+            known.BattlePlan = player.Has("battlePlan") ? BattlePlanState.Load(player.Object("battlePlan")) : null;
         }
         LoadDelayedDamage(state);
         var rejections = state.Array("rejections");
@@ -160,6 +161,12 @@ public sealed partial class SimulationWorld
             BuilderId = new EntityId(checked((uint)reader.UInt("builder"))),
             SellCompleteTick = reader.Int("sellCompleteTick"),
         };
+        if (reader.Has("shroudScalar")) entity.ShroudScalar = reader.Fixed("shroudScalar");
+        if (reader.Has("visionSpied"))
+        {
+            entity.VisionSpiedBy = [];
+            foreach (var item in reader.Array("visionSpied")) entity.VisionSpiedBy[checked((int)item.Int("player"))] = checked((int)item.Int("count"));
+        }
         if (entity.VeterancyLevel is < 0 or > 3) throw new InvalidDataException("Veterancy level out of range.");
         if (entity.WeaponBonusConditions >> NameTablesPhase5.WeaponBonusCondition.Count != 0) throw new InvalidDataException("Weapon bonus condition mask out of range.");
         AttachModules(entity, template);

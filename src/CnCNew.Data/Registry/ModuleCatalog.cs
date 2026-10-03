@@ -1234,6 +1234,68 @@ public static class ModuleCatalog
         ]);
         Add("WanderAIUpdate", AiBase("AIUpdate.cpp"), allowsNestedSections: true);
         Add("ProjectileStreamUpdate", []);
+        Add("CleanupHazardUpdate",
+        [
+            new("WeaponSlot", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "CleanupHazardUpdate.cpp"),
+            new("ScanRate", FieldType.DurationMs, Source: "CleanupHazardUpdate.cpp"),
+            Real("ScanRange", "CleanupHazardUpdate.cpp"),
+        ]);
+        Add("CleanupAreaPower", [..SpecialPowerBase(), Real("MaxMoveDistanceFromLocation", "CleanupAreaPower.cpp")]);
+        Add("SpyVisionUpdate",
+        [
+            ..UpgradeMux(),
+            new("NeedsUpgrade", FieldType.Bool, Source: "SpyVisionUpdate.h"),
+            new("SelfPowered", FieldType.Bool, Source: "SpyVisionUpdate.h"),
+            new("SelfPoweredDuration", FieldType.DurationMs, Source: "SpyVisionUpdate.h"),
+            new("SelfPoweredInterval", FieldType.DurationMs, Source: "SpyVisionUpdate.h"),
+            new("SpyOnKindof", FieldType.Flags, Table: NameTables.KindOf, Source: "SpyVisionUpdate.h"),
+        ]);
+        Add("SpyVisionSpecialPower",
+        [
+            ..SpecialPowerBase(),
+            new("BaseDuration", FieldType.DurationMs, Source: "SpyVisionSpecialPower.cpp"),
+            new("BonusDurationPerCaptured", FieldType.DurationMs, Source: "SpyVisionSpecialPower.cpp"),
+            new("MaxDuration", FieldType.DurationMs, Source: "SpyVisionSpecialPower.cpp"),
+        ]);
+        Add("AssistedTargetingUpdate",
+        [
+            new("AssistingClipSize", FieldType.Integer, Min: 0, Source: "AssistedTargetingUpdate.cpp"),
+            new("AssistingWeaponSlot", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "AssistedTargetingUpdate.cpp"),
+            new("LaserFromAssisted", FieldType.Text, Source: "AssistedTargetingUpdate.cpp"),
+            new("LaserToTarget", FieldType.Text, Source: "AssistedTargetingUpdate.cpp"),
+        ]);
+        // BattlePlanUpdateModuleData (BattlePlanUpdate.cpp buildFieldParse). Messages, sounds and announcements are presentation (typed, no consumer); the rest drives the simulated plans.
+        Add("BattlePlanUpdate",
+        [
+            new("SpecialPowerTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.SpecialPower, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentPlanAnimationTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLinePlanAnimationTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyPlanAnimationTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            new("TransitionIdleTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentPlanUnpackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentPlanPackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentMessageLabel", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentAnnouncementName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyPlanUnpackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyPlanIdleLoopSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyPlanPackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyMessageLabel", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyAnnouncementName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLinePlanUnpackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLinePlanPackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLineMessageLabel", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLineAnnouncementName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("ValidMemberKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "BattlePlanUpdate.cpp"),
+            new("InvalidMemberKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "BattlePlanUpdate.cpp"),
+            new("BattlePlanChangeParalyzeTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            Real("HoldTheLinePlanArmorDamageScalar", "BattlePlanUpdate.cpp"),
+            Real("SearchAndDestroyPlanSightRangeScalar", "BattlePlanUpdate.cpp"),
+            Real("StrategyCenterSearchAndDestroySightRangeScalar", "BattlePlanUpdate.cpp"),
+            new("StrategyCenterSearchAndDestroyDetectsStealth", FieldType.Bool, Source: "BattlePlanUpdate.cpp"),
+            Real("StrategyCenterHoldTheLineMaxHealthScalar", "BattlePlanUpdate.cpp"),
+            new("StrategyCenterHoldTheLineMaxHealthChangeType", FieldType.Enum, Table: NameTablesPhase5.MaxHealthChangeType, Source: "BattlePlanUpdate.cpp"),
+            new("VisionObjectName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+        ]);
         // ===== END crates, collide modules and specials =====
 
         return builder.ToImmutable();

@@ -91,7 +91,11 @@ public sealed partial class SimulationWorld
     private void TrackCollidable(Entity entity)
     {
         entity.CollideModules = [..entity.ModuleArray.OfType<ICollideModule>()];
-        if (entity.CollideModules.Length > 0) _collidables.Add(entity);
+        if (entity.CollideModules.Length == 0) return;
+        // Kept in ascending id order, so a live world and one restored from a snapshot (which registers in id order) visit overlapping holders in the same order.
+        var index = _collidables.Count;
+        while (index > 0 && _collidables[index - 1].Id.Value > entity.Id.Value) index--;
+        _collidables.Insert(index, entity);
     }
 
     private void UntrackCollidable(Entity entity)

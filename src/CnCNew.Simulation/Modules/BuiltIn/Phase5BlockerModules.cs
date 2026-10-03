@@ -441,6 +441,9 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
     public override void OnSpawn(IWorldServices world)
         => _nextWake = data.InitiallyDisabled ? SimulationTiming.SleepForever : world.Tick + world.LogicRandom.Range(1, checked((int)data.UpdateRateTicks));
 
+    /// <summary><c>StealthDetectorUpdate::setSDEnabled</c> (the strategy center's search-and-destroy plan): an enabled detector scans again from the next tick, a disabled one sleeps.</summary>
+    public void SetEnabled(IWorldServices world, bool enabled) => world.WakeAt(Entity, this, enabled ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever);
+
     /// <summary>
     /// The height a line of sight is drawn from/to for an object: ground position plus its full <c>GeometryHeight</c> (the object's own
     /// top, not a separate per-template eye-height field, which the catalog does not carry — a named simplification).

@@ -190,6 +190,12 @@ public sealed class ObjectTemplate
     /// vehicle that has one declares it alone). Selected for an entity that <c>ConvertToCarBombCrateCollide</c> turned into a car bomb.
     /// </summary>
     public int CarBombWeapon { get; init; } = -1;
+
+    /// <summary>
+    /// The <c>SECONDARY</c> weapon of the unconditional <c>WeaponSet</c>, or -1. Entities fire one weapon here (<see cref="DefaultWeapon"/>); the secondary is only used by modules that
+    /// address a weapon slot themselves (<c>AssistedTargetingUpdate</c>), with their own clip bookkeeping.
+    /// </summary>
+    public int SecondaryWeapon { get; init; } = -1;
     public LocomotorInfo? Locomotor { get; }
     public ImmutableArray<PrerequisiteLine> Prerequisites { get; }
 
@@ -371,6 +377,7 @@ public sealed class TemplateCatalog
                 defaultArmor, playerUpgradeArmor, veteranArmor, defaultWeapon, playerUpgradeWeapon, veteranWeapon, locomotor, prerequisites, commandSets.ToImmutable())
             {
                 CarBombWeapon = ResolveCarBombWeapon(definition, weapons),
+                SecondaryWeapon = ResolveSecondaryWeapon(definition, weapons),
             });
         }
         var commands = CommandCatalog.Build(graph);
@@ -520,6 +527,18 @@ public sealed class TemplateCatalog
             }
         }
         return (defaultArmor ?? ArmorInfo.Default, playerUpgrade, [..veteran]);
+    }
+
+    private static int ResolveSecondaryWeapon(ObjectDefinition definition, WeaponCatalog weapons)
+    {
+        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!ConditionTokens(section).IsEmpty) continue;
+            var secondary = section.Fields.Where(value => value.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault(value => value.Value.OriginalText.TrimStart().StartsWith("SECONDARY", StringComparison.OrdinalIgnoreCase));
+            return secondary?.Value.Value is DefinitionReference { IsNone: false } reference && weapons.TryGet(reference.Name, out var info) ? info.Index : -1;
+        }
+        return -1;
     }
 
     private static int ResolveCarBombWeapon(ObjectDefinition definition, WeaponCatalog weapons)

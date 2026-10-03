@@ -52,6 +52,9 @@ public sealed record WeaponInfo(
     /// <summary><c>WEAPON_ANTI_GROUND</c> of <c>m_antiMask</c> (<c>AntiGround = Yes</c>); read by <c>PointDefenseLaserUpdate</c> for targets on the ground.</summary>
     public bool AntiGround { get; init; }
 
+    /// <summary><c>RequestAssistRange</c> (<c>WeaponTemplate::m_requestAssistRange</c>): when this weapon fires at an object, equivalent objects of the same player this close may join in (<c>AssistedTargetingUpdate</c>); 0 = never.</summary>
+    public Fixed RequestAssistRange { get; init; }
+
     public Fixed RadiusWith(WeaponBonusTable global, uint conditions, Fixed baseRadius) => baseRadius * Multiplier(global, conditions, WeaponBonusTable.Radius);
 
     // Weapon.cpp Weapon::computeBonus: the multiplier of a field is 1 plus the sum of the (entry - 1) deltas of every set condition,
@@ -205,6 +208,7 @@ public sealed class WeaponCatalog
                 DamageDealtAtSelfPosition = Flag("DamageDealtAtSelfPosition"),
                 DieOnDetonate = Flag("MissileCallsOnDie"),
                 AntiGround = Flag("AntiGround"),
+                RequestAssistRange = Length("RequestAssistRange"),
             });
         }
         return new WeaponCatalog(weapons.ToImmutable());

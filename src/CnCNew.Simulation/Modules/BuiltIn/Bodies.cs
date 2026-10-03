@@ -104,6 +104,8 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         }
         if (DamageTypes.IsSubdual(info.DamageType) || info.DamageType is DamageTypes.KillPilot or DamageTypes.KillGarrisoned or DamageTypes.Status)
             return DamageOutcome.NoEffect;
+        // ActiveBody::attemptDamage: the body's damage scalar (the strategy center's hold-the-line plan) applies to everything but unresistable damage.
+        if (info.DamageType != DamageTypes.Unresistable) amount *= world.DamageScalarOf(Entity);
         if (amount <= Fixed.Zero && !info.Kill) return DamageOutcome.NoEffect;
 
         if (info.Kill) amount = Health;

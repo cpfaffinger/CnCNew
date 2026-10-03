@@ -103,6 +103,15 @@
     },
     {
       "category": "deferred-field",
+      "name": "CleanupAreaPower/InitiateSound",
+      "count": 4,
+      "owners": [
+        "CleanupAreaPower"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Crate/CrateObject",
       "count": 11,
       "owners": [
@@ -5573,7 +5582,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3362,
+      "count": 3325,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6079,24 +6088,6 @@
     },
     {
       "category": "module",
-      "name": "AssistedTargetingUpdate",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "BattlePlanUpdate",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "BeaconClientUpdate",
       "count": 1,
       "owners": [
@@ -6162,24 +6153,6 @@
       "category": "module",
       "name": "CheckpointUpdate",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "CleanupAreaPower",
-      "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "CleanupHazardUpdate",
-      "count": 6,
       "owners": [
         "Object"
       ],
@@ -6549,24 +6522,6 @@
       "category": "module",
       "name": "SpectreGunshipUpdate",
       "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpyVisionSpecialPower",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpyVisionUpdate",
-      "count": 12,
       "owners": [
         "Object"
       ],

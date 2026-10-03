@@ -114,6 +114,9 @@ public sealed partial class SimulationWorld : IWorldServices
 
         /// <summary><c>Energy::m_powerSabotagedTillFrame</c> (<c>SabotagePowerPlantCrateCollide</c>): the tick until which the player's power counts as sabotaged; 0 = never.</summary>
         public long PowerSabotagedUntil { get; set; }
+
+        /// <summary>The strategy centers' battle plans in force (<c>SimulationWorld.BattlePlan.cs</c>); <see langword="null"/> until a plan was ever started.</summary>
+        public BattlePlanState? BattlePlan { get; set; }
     }
 
     /// <summary>
@@ -1383,6 +1386,7 @@ public sealed partial class SimulationWorld : IWorldServices
             foreach (var module in entity.ModuleArray)
                 if (module is Modules.BuiltIn.LifetimeUpdate lifetime) lifetime.OverrideRange(setup.MinLifetimeTicks, setup.MaxLifetimeTicks);
         foreach (var module in entity.ModuleArray) module.OnSpawn(this);
+        ApplyBattlePlanToEntity(entity);
         if (setup.HasOrigin)
             foreach (var module in entity.ModuleArray)
                 if (module is ISpawnOriginReceiver receiver) receiver.OnSpawnedFrom(this, setup.OriginTemplate);
@@ -1665,6 +1669,7 @@ public sealed partial class SimulationWorld : IWorldServices
             player.Tunnels.Describe(writer);
             // Written only once a power plant was sabotaged, so every world without a saboteur keeps its serialized form (and hash).
             if (player.PowerSabotagedUntil > 0) writer.Int("powerSabotagedUntil", player.PowerSabotagedUntil);
+            player.BattlePlan?.Describe(writer);
             writer.EndObject();
         }
         writer.EndArray();

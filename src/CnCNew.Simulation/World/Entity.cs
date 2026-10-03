@@ -113,6 +113,17 @@ public sealed class Entity
     internal IDamageModule[] DamageModules { get; set; } = [];
     /// <summary>The entity's collide modules (<see cref="ICollideModule"/>), filled when the world registers the entity.</summary>
     internal ICollideModule[] CollideModules { get; set; } = [];
+
+    /// <summary>
+    /// <c>Object::m_visionSpiedBy</c>: per spying player id, the reference count of "looks through this object's eyes" (<c>SpyVisionUpdate</c>); <see langword="null"/> for an object nobody ever spied on.
+    /// A player is spying while its count is above zero (see <see cref="IsVisionSpiedBy"/>); the world reveals the object's shroud clearing range to every spying player.
+    /// </summary>
+    internal SortedList<int, int>? VisionSpiedBy { get; set; }
+
+    /// <summary>Factor on the template's shroud clearing range (<c>Object::setShroudClearingRange</c>: the strategy center's search-and-destroy bonus); 1 for every other object.</summary>
+    public Fixed ShroudScalar { get; internal set; } = Fixed.One;
+
+    public bool IsVisionSpiedBy(PlayerId player) => VisionSpiedBy is { } spied && spied.TryGetValue(player.Value, out var count) && count > 0;
     internal UpdateNode[] Updates { get; set; } = [];
     internal List<Timers.SimTimer>? Timers { get; set; }
     internal bool Registered { get; set; }
@@ -156,6 +167,20 @@ public sealed class Entity
         writer.Int("constructionWork", ConstructionWork);
         writer.UInt("builder", BuilderId.Value);
         writer.Int("sellCompleteTick", SellCompleteTick);
+        if (ShroudScalar != Fixed.One) writer.Fixed("shroudScalar", ShroudScalar);
+        // Written only for an object somebody spied through, so every other object keeps its serialized form (and hash).
+        if (VisionSpiedBy is { Count: > 0 })
+        {
+            writer.BeginArray("visionSpied");
+            for (var index = 0; index < VisionSpiedBy.Count; index++)
+            {
+                writer.BeginObject(null);
+                writer.Int("player", VisionSpiedBy.Keys[index]);
+                writer.Int("count", VisionSpiedBy.Values[index]);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
         writer.BeginArray("modules");
         foreach (var module in ModuleArray)
         {
