@@ -363,9 +363,8 @@ public sealed record FireWeaponWhenDeadData(DieMuxData DieMux, UpgradeMuxData Up
 /// not just at activation time, because the <c>StartsActive</c> path never went through the conflict check at all (this
 /// is how mutually exclusive "pick one detonation weapon" upgrade families such as ChemicalGeneral.ini's demo-trap
 /// modules work: the default starts active, a conflicting upgrade silences it and its own sibling fires instead).
-/// Firing itself only requests the weapon (<see cref="SimEventKind.WeaponFireRequested"/>, the same event
-/// <see cref="InstantDeathBehavior"/> already uses): actually resolving splash damage to bystanders is a known,
-/// project-wide simplification (see <c>WeaponCatalog</c>'s doc comment — phase 5's combat model is direct-target only).
+/// Firing raises <see cref="SimEventKind.WeaponFireRequested"/> (for presentation, the same event
+/// <see cref="InstantDeathBehavior"/> raises) and fires the weapon at the object's own position (<c>createAndFireTempWeapon</c>, Phase 13: until then the request was never executed).
 /// </summary>
 public sealed class FireWeaponWhenDeadBehavior(FireWeaponWhenDeadData data) : SimModule, IUpgradeModule, IDieModule
 {
@@ -388,7 +387,9 @@ public sealed class FireWeaponWhenDeadBehavior(FireWeaponWhenDeadData data) : Si
         if (Entity.HasStatus(ObjectStatusBits.UnderConstruction)) return;
         var conflicting = data.UpgradeMux.Conflicting;
         if (Entity.CompletedUpgrades.TestForAny(conflicting) || world.PlayerUpgrades(Entity.Owner).TestForAny(conflicting)) return;
-        if (data.DeathWeapon.Length != 0) world.Emit(SimEventKind.WeaponFireRequested, Entity.Id, info.Source, data.DeathWeapon, 0);
+        if (data.DeathWeapon.Length == 0) return;
+        world.Emit(SimEventKind.WeaponFireRequested, Entity.Id, info.Source, data.DeathWeapon, 0);
+        world.FireTempWeapon(Entity, data.DeathWeapon, Entity.X, Entity.Y, Entity.Z);
     }
 
     public override void Describe(IStateWriter writer) => _mux.Describe(writer);

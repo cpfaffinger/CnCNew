@@ -22,23 +22,74 @@ public sealed record PhysicsData(Fixed Mass, bool AllowBouncing, bool AllowColli
 }
 
 /// <summary>
-/// <c>PhysicsUpdate.cpp</c>: the reference module only acts on forces (<c>applyForce</c>, <c>applyShock</c>, <c>applyMotiveForce</c>) and on
-/// terrain contact, and sleeps forever until one arrives. This simulation has neither terrain nor any force source (no knockback, no
-/// crash, no bouncing debris, no locomotor thrust), so the module is exactly the reference's resting state: bound with the full strict
-/// schema, parked forever, never moving the object. Ground movement comes from the move-order system in the meantime.
-/// Forces and terrain contact are phase 6 (<c>docs/GAME-RULES.md</c> §7a).
+/// <c>PhysicsUpdate.cpp</c>: the reference module acts on forces (<c>applyForce</c>, <c>applyShock</c>, <c>applyMotiveForce</c>) and on terrain contact, and sleeps until one arrives. This
+/// simulation has no force source (no knockback, no bouncing debris, no locomotor thrust), so the module is the reference's resting state — except for one force, gravity on an object that is
+/// let go in the air (a bomb leaving its plane, <see cref="StartFall"/>): it then falls with <c>GravityPerTickSquared</c> and the horizontal speed it was given, lands on the terrain and rests
+/// there (<c>KillWhenRestingOnGround</c> kills it; the bomb's <c>HeightDieUpdate</c> normally ends it a tick earlier, one unit above the ground). Ground movement comes from the move-order system.
 /// </summary>
 public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
 {
     private long _nextWake = SimulationTiming.SleepForever;
+    private bool _falling;
+    private Fixed _velocityX;
+    private Fixed _velocityY;
+    private Fixed _velocityZ;
 
     public override string ModuleName => "PhysicsBehavior";
     public PhysicsData Data => data;
     public long NextWake { get => _nextWake; set => _nextWake = value; }
-    public long Update(IWorldServices world) => SimulationTiming.SleepForever;
 
-    public override void Describe(IStateWriter writer) => writer.Int("nextWake", _nextWake);
-    public override void Load(IStateReader reader) => _nextWake = reader.Int("nextWake");
+    /// <summary>The object is in free fall.</summary>
+    public bool Falling => _falling;
+
+    /// <summary>Lets the object go: it keeps (<paramref name="velocityX"/>, <paramref name="velocityY"/>) per tick horizontally and accelerates downwards.</summary>
+    public void StartFall(IWorldServices world, Fixed velocityX, Fixed velocityY)
+    {
+        _falling = true;
+        _velocityX = velocityX;
+        _velocityY = velocityY;
+        _velocityZ = Fixed.Zero;
+        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+    }
+
+    public long Update(IWorldServices world)
+    {
+        if (!_falling) return SimulationTiming.SleepForever;
+        _velocityZ += world.Templates.GravityPerTickSquared;
+        Entity.X += _velocityX;
+        Entity.Y += _velocityY;
+        Entity.Z += _velocityZ;
+        var ground = world.GroundHeightAt(Entity.X, Entity.Y);
+        if (Entity.Z <= ground)
+        {
+            Entity.Z = ground;
+            _falling = false;
+            world.MarkDirty(Entity);
+            if (data.KillWhenRestingOnGround) world.Kill(Entity.Id);
+            return SimulationTiming.SleepForever;
+        }
+        world.MarkDirty(Entity);
+        return SimulationTiming.SleepNone;
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        writer.Int("nextWake", _nextWake);
+        if (!_falling) return;
+        writer.Bool("falling", true);
+        writer.Fixed("velocityX", _velocityX);
+        writer.Fixed("velocityY", _velocityY);
+        writer.Fixed("velocityZ", _velocityZ);
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        _nextWake = reader.Int("nextWake");
+        _falling = reader.Has("falling");
+        _velocityX = _falling ? reader.Fixed("velocityX") : Fixed.Zero;
+        _velocityY = _falling ? reader.Fixed("velocityY") : Fixed.Zero;
+        _velocityZ = _falling ? reader.Fixed("velocityZ") : Fixed.Zero;
+    }
 }
 
 /// <summary>

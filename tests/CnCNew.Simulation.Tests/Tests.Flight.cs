@@ -278,6 +278,93 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
         End
+        Weapon AlphaBombWeapon
+          PrimaryDamage = 80
+          PrimaryDamageRadius = 30.0
+          AttackRange = 1.0
+          DelayBetweenShots = 1000
+        End
+        SpecialPower StrikePower
+          ReloadTime = 0
+        End
+        Object AlphaBomb
+          KindOf = PROJECTILE
+          TransportSlotCount = 1
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 75.0
+          End
+          Behavior = FireWeaponWhenDeadBehavior Fire01
+            DeathWeapon = AlphaBombWeapon
+            StartsActive = Yes
+          End
+          Behavior = HeightDieUpdate Height01
+            TargetHeight = 1.0
+            TargetHeightIncludesStructures = No
+          End
+          Behavior = SpecialPowerCompletionDie Completion01
+            SpecialPowerTemplate = StrikePower
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object AlphaBomber
+          Side = Alpha
+          KindOf = SELECTABLE VEHICLE TRANSPORT AIRCRAFT
+          Locomotor = SET_NORMAL PlaneLoco
+          Body = ActiveBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = DeliverPayloadAIUpdate Deliver01
+            MaxAttempts = 1
+            DeliveryDistance = 80.0
+          End
+          Behavior = TransportContain Transport01
+            Slots = 10
+            AllowInsideKindOf = PROJECTILE
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        ObjectCreationList OCL_AlphaStrike
+          DeliverPayload
+            Transport = AlphaBomber
+            StartAtPreferredHeight = Yes
+            StartAtMaxSpeed = Yes
+            FormationSize = 2
+            FormationSpacing = 40.0
+            MaxAttempts = 1
+            DropOffset = X:0 Y:0 Z:-2
+            DropVariance = X:6 Y:6 Z:0
+            DropDelay = 100
+            Payload = AlphaBomb 3
+            DeliveryDistance = 40.0
+          End
+        End
+        Object AlphaCommander
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = OCLSpecialPower Power01
+            SpecialPowerTemplate = StrikePower
+            OCL = OCL_AlphaStrike
+            CreateLocation = CREATE_AT_EDGE_FARTHEST_FROM_TARGET
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
         """;
 
     private static MapProperties ReinforcementTeam(string name, string transport, int troopers, bool exit = false, bool full = false)
@@ -499,5 +586,41 @@ static partial class Tests
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Run(session, 10);
         Check.That(session.Engine.CounterValue("started") == 1, $"Creating the team with teamExecutesActionsOnCreate ran the true-actions of its production-condition script once; the team without the flag ran nothing ({session.Engine.CounterValue("started")}); the script itself never fires (its condition is false).");
+    }
+
+    public static void FlightStrikePowerDeliversBombs()
+    {
+        // An OCL special power at the farthest edge: two bombers fly in, drop three bombs each on the target, the bombs fall and kill what stands there, and the power reports its completion.
+        MapScript Notice() => Scr.Script("Notice", [Scr.And(Scr.If("PLAYER_COMPLETED_SPECIAL_POWER", Scr.Side(PlayerA), Scr.Named(MapScriptParameterType.SpecialPower, "StrikePower")))], [Scr.Do("SET_FLAG", Scr.Flag("done"), Scr.Bool(true))], oneShot: true);
+        var (map, fixture, terrain) = MissionMap([Notice()], objects: [Placed("AlphaCommander", 100m, 200m, "teamA", "Commander"), Placed("BetaSoldier", 400m, 200m, "teamB", "Victim"), Placed("BetaSoldier", 400m, 300m, "teamB", "Bystander")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(session.SkippedObjects.IsEmpty, "The strike fixture instantiates: " + string.Join(",", session.SkippedObjects));
+        Run(session, 3);
+        var commander = NamedIn(session, "Commander")!;
+        var owner = commander.Owner;
+        Check.That(session.Issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, commander.Id, "StrikePower", SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(400), Fixed.FromInt(200))).Accepted, "The power is used.");
+        Run(session, 3);
+        var bombers = Of(session, "AlphaBomber");
+        Check.That(bombers.Length == 2, $"The formation has two bombers ({bombers.Length}).");
+        Check.That(Of(session, "AlphaBomb").Length == 6 && Of(session, "AlphaBomb").All(bomb => bomb.ContainedBy.IsValid), "Each bomber carries its three bombs.");
+        Check.That(bombers.All(bomber => bomber.Z == Fixed.FromInt(60) && bomber.X < Fixed.FromInt(100) && bomber.Y < Fixed.FromInt(100)), $"They start at the far corner at their preferred height ({bombers[0].X},{bombers[0].Y},{bombers[0].Z}).");
+        var victim = NamedIn(session, "Victim")!;
+        var bystander = NamedIn(session, "Bystander")!;
+        byte[]? mid = null;
+        var seen = new SortedDictionary<string, int>();
+        var lastBombs = new SortedDictionary<uint, string>();
+        for (var tick = 0; tick < 900 && Of(session, "AlphaBomber").Length > 0; tick++)
+        {
+            foreach (var bomb in Of(session, "AlphaBomb")) lastBombs[bomb.Id.Value] = $"{bomb.X}/{bomb.Y}/{bomb.Z}";
+            foreach (var item in session.Step().Events) seen[item.Kind + ":" + item.Text] = seen.GetValueOrDefault(item.Kind + ":" + item.Text) + 1;
+            if (tick == 60) mid = MissionSnapshot.Write(session);
+        }
+        Check.That(victim.EffectivelyDead || victim.Body!.Health < victim.Body.MaxHealth, $"The bombs hurt what stood at the target (victim health {victim.Body!.Health}/{victim.Body.MaxHealth}, bystander {bystander.Body!.Health}, bombs left {Of(session, "AlphaBomb").Length}, seen {string.Join(";", seen.Select(pair => pair.Key + "=" + pair.Value))}, bombs {string.Join(" ", lastBombs.Values)}, tick {session.World.Tick}, events: {string.Join(",", session.World.Entities.Where(entity => entity.Template.Name == "AlphaBomb").Select(entity => $"{entity.X}/{entity.Y}/{entity.Z}"))}).");
+        Check.That(!bystander.EffectivelyDead && bystander.Body!.Health == bystander.Body.MaxHealth, "A bystander outside the bomb radius is untouched.");
+        Check.That(Of(session, "AlphaBomber").Length == 0, "The bombers flew off the map and were deleted.");
+        Check.That(session.Engine.FlagValue("done"), "SpecialPowerCompletionDie told the script engine (PLAYER_COMPLETED_SPECIAL_POWER).");
+        var restored = MissionSnapshot.Restore(mid!, fixture.Templates, fixture.Fingerprint, terrain, map);
+        for (var tick = 0; tick < 700; tick++) restored.Step();
+        Check.That(restored.World.Entities.Count(entity => entity.Template.Name == "AlphaBomber") == 0 && restored.Engine.FlagValue("done"), "A delivery restored from a snapshot during the run ends the same way.");
     }
 }

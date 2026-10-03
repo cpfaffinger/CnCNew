@@ -136,7 +136,12 @@ public sealed class InstantDeathBehavior(InstantDeathData data) : DieModuleBase(
         if (!Mux.IsApplicable(Entity, info)) return;
         if (data.Fx.Length > 0) world.Emit(SimEventKind.FxRequested, Entity.Id, info.Source, data.Fx[world.LogicRandom.Range(0, data.Fx.Length - 1)], 0);
         if (data.CreationLists.Length > 0) world.CreateFromList(Entity, data.CreationLists[world.LogicRandom.Range(0, data.CreationLists.Length - 1)], info.Source, false);
-        if (data.Weapons.Length > 0) world.Emit(SimEventKind.WeaponFireRequested, Entity.Id, info.Source, data.Weapons[world.LogicRandom.Range(0, data.Weapons.Length - 1)], 0);
+        if (data.Weapons.Length > 0)
+        {
+            var weapon = data.Weapons[world.LogicRandom.Range(0, data.Weapons.Length - 1)];
+            world.Emit(SimEventKind.WeaponFireRequested, Entity.Id, info.Source, weapon, 0);
+            world.FireTempWeapon(Entity, weapon, Entity.X, Entity.Y, Entity.Z);
+        }
         world.RequestDestroy(Entity.Id);
     }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Data.Definitions;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.State;
 using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.Templates;
@@ -34,7 +35,57 @@ public sealed record CreationNugget(CreationNuggetKind Kind, int Count, Creation
     Fixed MinDistanceA, Fixed MinDistanceB, Fixed MaxDistance, Fixed OffsetX, Fixed OffsetY, Fixed OffsetZ,
     long MinLifetimeTicks, long MaxLifetimeTicks, ImmutableArray<string> Objects, string PutInContainer, bool ContainInsideSourceObject,
     bool InheritsVeterancy, bool SkipIfSignificantlyAirborne, Fixed MinHealth, Fixed MaxHealth, bool RequiresLivePlayer, string Weapon,
-    long InvulnerableTicks, bool DiesOnBadLand);
+    long InvulnerableTicks, bool DiesOnBadLand, PayloadDelivery? Delivery = null);
+
+/// <summary>
+/// The data of a <c>DeliverPayload</c> nugget (<c>DeliverPayloadNugget</c>, <c>ObjectCreationList.cpp</c>): the transports (<see cref="FormationSize"/> of them, spaced
+/// <see cref="FormationSpacing"/> apart), what they carry (<see cref="Payload"/>, optionally each packed into <see cref="PutInContainer"/>) and the run itself
+/// (<see cref="Run"/>, <c>DeliverPayloadData</c> of <c>DeliverPayloadAIUpdate.cpp</c>).
+/// </summary>
+public sealed record PayloadDelivery(string Transport, bool StartAtPreferredHeight, bool StartAtMaxSpeed, int FormationSize, Fixed FormationSpacing, Fixed ConvergenceFactor, Fixed ErrorRadius,
+    long DelayDeliveryMaxTicks, ImmutableArray<(string Name, int Count)> Payload, string PutInContainer, DeliveryRun Run);
+
+/// <summary>
+/// <c>DeliverPayloadData</c>: <see cref="DeliveryDistance"/> (<c>m_distToTarget</c>), <see cref="PreOpenDistance"/>, <see cref="MaxAttempts"/>, the drop (<see cref="DropDelayTicks"/>,
+/// <see cref="DropOffset"/>, <see cref="DropVariance"/>, <see cref="ParachuteDirectly"/>), the visible payload that is created when it is dropped (<see cref="VisiblePayloadTemplate"/> with
+/// <see cref="VisiblePayloadWeapon"/> for missiles, <see cref="VisibleNumBones"/> items, <see cref="VisibleItemsDroppedPerInterval"/> at a time), <see cref="FireWeapon"/>,
+/// <see cref="SelfDestructObject"/> and the dive/strafe of bombers. Pitch rate, bone names and the velocity inheritance are presentation/physics and not modelled.
+/// </summary>
+public sealed record DeliveryRun(Fixed DeliveryDistance, Fixed PreOpenDistance, int MaxAttempts, long DropDelayTicks, Fixed DropOffsetX, Fixed DropOffsetY, Fixed DropOffsetZ,
+    Fixed DropVarianceX, Fixed DropVarianceY, Fixed DropVarianceZ, bool ParachuteDirectly, int VisibleItemsDroppedPerInterval, int VisibleNumBones, string VisiblePayloadTemplate,
+    string VisiblePayloadWeapon, bool SelfDestructObject, bool FireWeapon, Fixed DiveStartDistance, Fixed DiveEndDistance, bool Strafes, Fixed StrafeLength)
+{
+    /// <summary>Written only for runs that exist (a delivery in progress, a queued spawn), so worlds without deliveries keep their state.</summary>
+    public void Describe(IStateWriter writer)
+    {
+        writer.Fixed("runDistance", DeliveryDistance);
+        writer.Fixed("runPreOpen", PreOpenDistance);
+        writer.Int("runAttempts", MaxAttempts);
+        writer.Int("runDropDelay", DropDelayTicks);
+        writer.Fixed("runOffsetX", DropOffsetX);
+        writer.Fixed("runOffsetY", DropOffsetY);
+        writer.Fixed("runOffsetZ", DropOffsetZ);
+        writer.Fixed("runVarianceX", DropVarianceX);
+        writer.Fixed("runVarianceY", DropVarianceY);
+        writer.Fixed("runVarianceZ", DropVarianceZ);
+        writer.Bool("runParachute", ParachuteDirectly);
+        writer.Int("runItemsPerInterval", VisibleItemsDroppedPerInterval);
+        writer.Int("runBones", VisibleNumBones);
+        writer.Text("runVisibleTemplate", VisiblePayloadTemplate);
+        writer.Text("runVisibleWeapon", VisiblePayloadWeapon);
+        writer.Bool("runSelfDestruct", SelfDestructObject);
+        writer.Bool("runFireWeapon", FireWeapon);
+        writer.Fixed("runDiveStart", DiveStartDistance);
+        writer.Fixed("runDiveEnd", DiveEndDistance);
+        writer.Bool("runStrafes", Strafes);
+        writer.Fixed("runStrafeLength", StrafeLength);
+    }
+
+    public static DeliveryRun Load(IStateReader reader) => new(reader.Fixed("runDistance"), reader.Fixed("runPreOpen"), checked((int)reader.Int("runAttempts")), reader.Int("runDropDelay"),
+        reader.Fixed("runOffsetX"), reader.Fixed("runOffsetY"), reader.Fixed("runOffsetZ"), reader.Fixed("runVarianceX"), reader.Fixed("runVarianceY"), reader.Fixed("runVarianceZ"),
+        reader.Bool("runParachute"), checked((int)reader.Int("runItemsPerInterval")), checked((int)reader.Int("runBones")), reader.Text("runVisibleTemplate"), reader.Text("runVisibleWeapon"),
+        reader.Bool("runSelfDestruct"), reader.Bool("runFireWeapon"), reader.Fixed("runDiveStart"), reader.Fixed("runDiveEnd"), reader.Bool("runStrafes"), reader.Fixed("runStrafeLength"));
+}
 
 public sealed record CreationListInfo(string Name, ImmutableArray<CreationNugget> Nuggets);
 
@@ -118,6 +169,38 @@ public sealed class ObjectCreationListCatalog
             Real("MinDistanceAFormation", Fixed.Zero), Real("MinDistanceBFormation", Fixed.Zero), Real("MaxDistanceFormation", Fixed.Zero),
             offset.Item1, offset.Item2, offset.Item3, Ticks("MinLifetime"), Ticks("MaxLifetime"), objects.ToImmutable(), Reference("PutInContainer"),
             Bool("ContainInsideSourceObject"), Bool("InheritsVeterancy"), Bool("SkipIfSignificantlyAirborne"), health, maxHealth,
-            Bool("RequiresLivePlayer"), Reference("Weapon"), Ticks("InvulnerableTime"), Bool("DiesOnBadLand"));
+            Bool("RequiresLivePlayer"), Reference("Weapon"), Ticks("InvulnerableTime"), Bool("DiesOnBadLand"), kind == CreationNuggetKind.DeliverPayload ? BuildDelivery(section) : null);
+    }
+
+    private static PayloadDelivery BuildDelivery(DefinitionSection section)
+    {
+        DefinitionField? Field(string name) => section.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        Fixed Real(string name) => Field(name)?.Value.Value switch
+        {
+            decimal value => Fixed.FromDecimal(value),
+            Distance distance => Fixed.FromDecimal(distance.Value),
+            _ => Fixed.Zero,
+        };
+        bool Bool(string name, bool fallback = false) => Field(name)?.Value.Value is bool flag ? flag : fallback;
+        int Int(string name, int fallback = 0) => Field(name)?.Value.Value is long number ? checked((int)number) : fallback;
+        long Ticks(string name) => Field(name)?.Value.Value is GameTime time ? SimulationTiming.DurationMillisecondsToTicks(time.Milliseconds) : 0;
+        string Reference(string name) => Field(name)?.Value.Value is DefinitionReference { IsNone: false } reference ? reference.Name : string.Empty;
+        (Fixed X, Fixed Y, Fixed Z) Vector(string name) => Field(name)?.Value.Value is Vector3Value vector ? (Fixed.FromDecimal(vector.X), Fixed.FromDecimal(vector.Y), Fixed.FromDecimal(vector.Z)) : (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+
+        var payload = ImmutableArray.CreateBuilder<(string Name, int Count)>();
+        foreach (var field in section.Fields.Where(field => field.Name.Equals("Payload", StringComparison.OrdinalIgnoreCase)))
+            switch (field.Value.Value)
+            {
+                case CountedReference counted: payload.Add((counted.Reference.Name, counted.Count)); break;
+                case ImmutableArray<CountedReference> list: foreach (var counted in list) payload.Add((counted.Reference.Name, counted.Count)); break;
+            }
+        var offset = Vector("DropOffset");
+        var variance = Vector("DropVariance");
+        var strafes = Field("StrafingWeaponSlot")?.Value.OriginalText.Trim() is { Length: > 0 } slot && !slot.Equals("None", StringComparison.OrdinalIgnoreCase);
+        var run = new DeliveryRun(Real("DeliveryDistance"), Real("PreOpenDistance"), Int("MaxAttempts", 1), Ticks("DropDelay"), offset.X, offset.Y, offset.Z, variance.X, variance.Y, variance.Z,
+            Bool("ParachuteDirectly"), Int("VisibleItemsDroppedPerInterval"), Int("VisibleNumBones"), Reference("VisiblePayloadTemplateName"), Reference("VisiblePayloadWeaponTemplate"),
+            Bool("SelfDestructObject"), Bool("FireWeapon"), Real("DiveStartDistance"), Real("DiveEndDistance"), strafes, Real("StrafeLength"));
+        return new PayloadDelivery(Reference("Transport"), Bool("StartAtPreferredHeight", true), Bool("StartAtMaxSpeed"), Int("FormationSize", 1), Field("FormationSpacing") is null ? Fixed.FromInt(25) : Real("FormationSpacing"),
+            Real("WeaponConvergenceFactor"), Real("WeaponErrorRadius"), Ticks("DelayDeliveryMax"), payload.ToImmutable(), Reference("PutInContainer"), run);
     }
 }

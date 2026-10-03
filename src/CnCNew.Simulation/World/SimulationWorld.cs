@@ -123,7 +123,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
-        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null);
+        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default);
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
 
@@ -1426,6 +1426,10 @@ public sealed partial class SimulationWorld : IWorldServices
         if (setup.TransferDamage > Fixed.Zero)
             Damage(entity.Id, new DamageInfo(setup.TransferSource, setup.TransferDamage, DamageTypes.Unresistable, DeathTypes.Normal, false));
         if (setup.HasRally && template.Locomotor is not null && AiOf(entity) is { } rallyAi) rallyAi.OrderMove(this, setup.RallyX, setup.RallyY, false);
+        if (setup.SetCreator)
+            foreach (var module in entity.ModuleArray)
+                if (module is Modules.BuiltIn.SpecialPowerCompletionDie completion) completion.SetCreator(setup.Creator);
+        if (setup.Delivery is { } order && AiOf(entity) is Modules.BuiltIn.DeliverPayloadAIUpdate deliverer) deliverer.DeliverPayload(this, order);
         if (setup.Launch is { } launch)
         {
             // fireWeaponTemplate: an object without a ProjectileUpdateInterface is simply put at the destination ("ok, for things like Firestorm").
@@ -1722,6 +1726,16 @@ public sealed partial class SimulationWorld : IWorldServices
                 writer.Fixed("launchZ", launch.Z);
                 writer.UInt("launchConditions", launch.Conditions);
             }
+            if (setup.Delivery is { } delivery)
+            {
+                writer.Fixed("deliveryMoveX", delivery.MoveToX);
+                writer.Fixed("deliveryMoveY", delivery.MoveToY);
+                writer.Fixed("deliveryTargetX", delivery.TargetX);
+                writer.Fixed("deliveryTargetY", delivery.TargetY);
+                writer.Int("deliveryDelay", delivery.DelayTicks);
+                delivery.Run.Describe(writer);
+            }
+            if (setup.SetCreator) writer.UInt("creator", setup.Creator.Value);
             writer.EndObject();
         }
         writer.EndArray();

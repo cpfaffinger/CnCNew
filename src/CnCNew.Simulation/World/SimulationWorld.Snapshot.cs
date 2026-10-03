@@ -91,7 +91,11 @@ public sealed partial class SimulationWorld
                     pending.Has("launchWeapon")
                         ? new ProjectileLaunch(checked((int)pending.Int("launchWeapon")), new EntityId(checked((uint)pending.UInt("launcher"))), new EntityId(checked((uint)pending.UInt("launchVictim"))),
                             pending.Fixed("launchX"), pending.Fixed("launchY"), pending.Fixed("launchZ"), checked((uint)pending.UInt("launchConditions")))
-                        : null)));
+                        : null,
+                    pending.Has("deliveryMoveX")
+                        ? new Modules.BuiltIn.DeliveryOrder(pending.Fixed("deliveryMoveX"), pending.Fixed("deliveryMoveY"), pending.Fixed("deliveryTargetX"), pending.Fixed("deliveryTargetY"), CnCNew.Simulation.Templates.DeliveryRun.Load(pending), pending.Int("deliveryDelay"))
+                        : null,
+                    pending.Has("creator"), pending.Has("creator") ? new EntityId(checked((uint)pending.UInt("creator"))) : EntityId.Invalid)));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
 

@@ -86,6 +86,39 @@ public sealed partial class SimulationWorld
         return Fixed.Zero;
     }
 
+
+    public void FireTempWeapon(Entity source, string weaponName, Fixed x, Fixed y, Fixed z)
+    {
+        if (!_templates.Weapons.TryGet(weaponName, out var weapon))
+        {
+            Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, weaponName, CreationSkipReasons.UnknownTemplate);
+            return;
+        }
+        FireWeaponAt(source, weapon, null, x, y, z);
+    }
+
+    /// <summary>
+    /// <c>Object::fireCurrentWeapon(const Coord3D*)</c>: fires the object's active weapon at a position if it is ready (the clip and the delay between shots are kept exactly as
+    /// <see cref="FireWeaponCommand"/> keeps them); false when it has no weapon or is still reloading. No range check, as the reference has none for a position shot.
+    /// </summary>
+    public bool FireCurrentWeaponAtPosition(Entity source, Fixed x, Fixed y, Fixed z)
+    {
+        var weaponIndex = ActiveWeaponIndex(source);
+        if (weaponIndex < 0 || _tick < source.WeaponReadyTick) return false;
+        var weapon = _templates.Weapons[weaponIndex];
+        if (source.WeaponClip == 0) source.WeaponClip = ClipCapacity(weapon);
+        var bonuses = _templates.GlobalWeaponBonus;
+        source.LastFireTick = _tick;
+        if (source.WeaponClip != int.MaxValue) source.WeaponClip--;
+        source.WeaponReadyTick = source.WeaponClip == 0
+            ? _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
+            : _tick + weapon.DelayBetweenShotsWith(bonuses, source.WeaponBonusConditions);
+        MarkDirty(source);
+        var damage = FireWeaponAt(source, weapon, null, x, y, z);
+        Emit(SimEventKind.WeaponFired, source.Id, EntityId.Invalid, weapon.Name, damage.Raw, source.Owner);
+        return true;
+    }
+
     /// <summary>
     /// <c>delayInFrames = |victimPos - sourcePos| / WeaponSpeed</c>: 0 (hit now) below one tick, otherwise <c>REAL_TO_INT_CEIL</c> of it,
     /// computed exactly on the raw fixed-point values (the distance itself is the floored fixed-point square root). A speed of 0 or less —

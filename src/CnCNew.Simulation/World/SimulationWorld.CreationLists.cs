@@ -15,9 +15,13 @@ public sealed partial class SimulationWorld
         => CreateFromList(source, listName, requester, transferPreviousHealth, source.X, source.Y, source.Z);
 
     public EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth, Fixed originX, Fixed originY, Fixed originZ)
+        => CreateFromList(source, listName, requester, transferPreviousHealth, originX, originY, originZ, originX, originY, originZ, true);
+
+    public EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth, Fixed originX, Fixed originY, Fixed originZ, Fixed targetX, Fixed targetY, Fixed targetZ, bool createOwner)
     {
         ArgumentNullException.ThrowIfNull(source);
         var origin = (X: originX, Y: originY, Z: originZ);
+        var target = (X: targetX, Y: targetY, Z: targetZ);
         Emit(SimEventKind.CreationListRequested, source.Id, requester, listName, transferPreviousHealth ? 1 : 0);
         if (!_templates.CreationLists.TryGet(listName, out var list))
         {
@@ -28,7 +32,7 @@ public sealed partial class SimulationWorld
         var first = EntityId.Invalid;
         foreach (var nugget in list.Nuggets)
         {
-            var created = ExecuteNugget(source, nugget, origin);
+            var created = nugget.Kind == CreationNuggetKind.DeliverPayload ? ExecuteDeliverPayload(source, nugget, origin, target, createOwner) : ExecuteNugget(source, nugget, origin);
             if (!first.IsValid) first = created;
         }
 
@@ -49,6 +53,128 @@ public sealed partial class SimulationWorld
             return;
         }
         throw new InvalidOperationException($"Spawn {id.Value} is not queued.");
+    }
+
+    /// <summary>
+    /// <c>DeliverPayloadNugget::create</c> (<c>ObjectCreationList.cpp</c>): <c>FormationSize</c> transports start at the creation point (the formation is laid out sideways of the line from the
+    /// target to the start, alternating sides, <c>FormationSpacing</c> apart), each carrying the payload objects (optionally packed into <c>PutInContainer</c> objects) and told to fly the run
+    /// (<see cref="Modules.BuiltIn.DeliverPayloadAIUpdate.DeliverPayload"/>). With <paramref name="createOwner"/> false the source object is the transport. The first transport/payload of the
+    /// whole nugget reports to <c>SpecialPowerCompletionDie</c>. Not modelled: <c>StartAtMaxSpeed</c> (a physics push; the kinematic plane starts at its speed) and the delivery decal.
+    /// </summary>
+    private EntityId ExecuteDeliverPayload(Entity source, CreationNugget nugget, (Fixed X, Fixed Y, Fixed Z) origin, (Fixed X, Fixed Y, Fixed Z) target, bool createOwner)
+    {
+        var spec = nugget.Delivery!;
+        ObjectTemplate? transportTemplate = null;
+        if (createOwner)
+        {
+            if (!_templates.TryGet(spec.Transport, out transportTemplate)) { Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, spec.Transport, CreationSkipReasons.UnknownTemplate); return EntityId.Invalid; }
+            if (!transportTemplate.IsInstantiable) { Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, spec.Transport, CreationSkipReasons.TemplateNotInstantiable); return EntityId.Invalid; }
+        }
+        ObjectTemplate? containerTemplate = null;
+        if (spec.PutInContainer.Length > 0)
+        {
+            if (!_templates.TryGet(spec.PutInContainer, out containerTemplate)) { Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, spec.PutInContainer, CreationSkipReasons.UnknownTemplate); return EntityId.Invalid; }
+            if (!containerTemplate.IsInstantiable) { Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, spec.PutInContainer, CreationSkipReasons.ContainerNotInstantiable); return EntityId.Invalid; }
+        }
+        var payloads = new List<ObjectTemplate>();
+        foreach (var (name, count) in spec.Payload)
+        {
+            if (!_templates.TryGet(name, out var payloadTemplate)) { Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, name, CreationSkipReasons.UnknownTemplate); return EntityId.Invalid; }
+            if (!payloadTemplate.IsInstantiable) { Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, name, CreationSkipReasons.TemplateNotInstantiable); return EntityId.Invalid; }
+            for (var index = 0; index < count; index++) payloads.Add(payloadTemplate);
+        }
+
+        // The formation offsets: the unit vector from the target to the start, turned 90 degrees both ways and added to itself (as the reference computes them).
+        Fixed ccwX = Fixed.Zero, ccwY = Fixed.Zero, cwX = Fixed.Zero, cwY = Fixed.Zero;
+        if (spec.FormationSize > 1)
+        {
+            var dx = origin.X - target.X;
+            var dy = origin.Y - target.Y;
+            var length = Fixed.Sqrt(dx * dx + dy * dy);
+            if (length > Fixed.Zero) { dx /= length; dy /= length; }
+            ccwX = dx - dy;
+            ccwY = dx + dy;
+            cwX = dx + dy;
+            cwY = dy - dx;
+        }
+
+        var run = spec.Run;
+        var firstTransport = EntityId.Invalid;
+        for (var formation = 0; formation < spec.FormationSize; formation++)
+        {
+            var multiplier = Fixed.FromInt((formation + 1) / 2 * spec.FormationSpacing.Floor());
+            var offsetX = (formation % 2 != 0 ? ccwX : cwX) * multiplier;
+            var offsetY = (formation % 2 != 0 ? ccwY : cwY) * multiplier;
+            var startX = origin.X + offsetX;
+            var startY = origin.Y + offsetY;
+            var moveX = target.X + offsetX;
+            var moveY = target.Y + offsetY;
+            var targetX = target.X + offsetX * (Fixed.One - spec.ConvergenceFactor);
+            var targetY = target.Y + offsetY * (Fixed.One - spec.ConvergenceFactor);
+            if (spec.ErrorRadius > Fixed.One && formation > 0)
+            {
+                var radius = LogicRandom.Range(Fixed.Zero, spec.ErrorRadius);
+                var angle = LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
+                targetX += radius * FixedTrig.Cos(angle);
+                targetY += radius * FixedTrig.Sin(angle);
+            }
+            var orient = FixedTrig.Atan2(moveY - startY, moveX - startX);
+            if (run.DeliveryDistance > Fixed.Zero)
+            {
+                var slop = run.DeliveryDistance * Fixed.FromDecimal(1.5m);
+                startX -= FixedTrig.Cos(orient) * slop;
+                startY -= FixedTrig.Sin(orient) * slop;
+            }
+            long delay = spec.DelayDeliveryMaxTicks > 0 ? LogicRandom.Range(0, checked((int)spec.DelayDeliveryMaxTicks)) : 0;
+            var order = new Modules.BuiltIn.DeliveryOrder(moveX, moveY, targetX, targetY, run, delay);
+
+            var transport = source.Id;
+            var creatorOfTransport = formation == 0 ? source.Id : EntityId.Invalid;
+            if (createOwner)
+            {
+                var z = spec.StartAtPreferredHeight && transportTemplate!.Locomotor is { } locomotor ? GroundHeightAt(startX, startY) + locomotor.PreferredHeight : origin.Z;
+                transport = RequestSpawn(transportTemplate!.Index, source.Owner, startX, startY, z, orient);
+                UpdateSetup(transport, setup => setup with { Delivery = order, SetCreator = true, Creator = creatorOfTransport });
+            }
+            else if (AiOf(source) is Modules.BuiltIn.DeliverPayloadAIUpdate owner)
+            {
+                owner.DeliverPayload(this, order);
+                foreach (var module in source.ModuleArray)
+                    if (module is Modules.BuiltIn.SpecialPowerCompletionDie completion) completion.SetCreator(creatorOfTransport);
+            }
+            else
+            {
+                Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, "DeliverPayloadAIUpdate", CreationSkipReasons.TemplateNotInstantiable);
+                return EntityId.Invalid;
+            }
+            if (!firstTransport.IsValid) firstTransport = transport;
+
+            var carried = 0;
+            foreach (var payloadTemplate in payloads)
+            {
+                var creator = formation == 0 && carried == 0 ? source.Id : EntityId.Invalid;
+                var payload = RequestSpawn(payloadTemplate.Index, source.Owner, startX, startY, origin.Z, orient);
+                var holder = transport;
+                if (containerTemplate is not null)
+                {
+                    var container = RequestSpawn(containerTemplate.Index, source.Owner, startX, startY, origin.Z, orient);
+                    UpdateSetup(container, setup => setup with { Container = transport, SetCreator = true, Creator = creator });
+                    holder = container;
+                }
+                UpdateSetup(payload, setup => setup with { Container = holder, SetCreator = true, Creator = creator });
+                carried++;
+            }
+        }
+        return firstTransport;
+    }
+
+    public EntityId LaunchProjectileObject(Entity launcher, int templateIndex, WeaponInfo weapon, Fixed startX, Fixed startY, Fixed startZ, Fixed targetX, Fixed targetY, Fixed targetZ)
+    {
+        var id = Ids.AllocateEntity();
+        var launch = new Modules.ProjectileLaunch(weapon.Index, launcher.Id, EntityId.Invalid, targetX, targetY, targetZ, launcher.WeaponBonusConditions);
+        _spawnQueue.Add(new PendingSpawn(id, templateIndex, launcher.Owner, startX, startY, startZ, launcher.Angle, default(SpawnSetup) with { Launch = launch }));
+        EmitAt(SimEventKind.ProjectileLaunched, id, launcher.Id, weapon.Name, 0, targetX, targetY, targetZ);
+        return id;
     }
 
     private EntityId ExecuteNugget(Entity source, CreationNugget nugget, (Fixed X, Fixed Y, Fixed Z) origin)

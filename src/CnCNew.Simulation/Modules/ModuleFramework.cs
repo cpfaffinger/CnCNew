@@ -120,6 +120,27 @@ public interface IWorldServices
     /// <summary><see cref="CreateFromList(Entity, string, EntityId, bool)"/> with the creation origin an <c>OCLSpecialPower</c> chooses (<c>ObjectCreationList::create(ocl, primary, &creationCoord, …)</c>) instead of the source's position.</summary>
     EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth, Fixed originX, Fixed originY, Fixed originZ);
 
+    /// <summary>
+    /// <c>ObjectCreationList::create(ocl, primaryObj, &primary, &secondary, angle, createOwner)</c>: the creation origin (<c>primary</c>) and the target (<c>secondary</c>) a
+    /// <c>DeliverPayload</c> nugget needs; with <paramref name="createOwner"/> false the source object itself is the transport (<c>USE_OWNER_OBJECT</c>).
+    /// </summary>
+    EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth, Fixed originX, Fixed originY, Fixed originZ, Fixed targetX, Fixed targetY, Fixed targetZ, bool createOwner);
+
+    /// <summary>
+    /// <c>DeliverPayloadDataState</c> of the visible payload: a projectile object of <paramref name="templateIndex"/> is created at the start point and launched at the target with
+    /// <paramref name="weapon"/> (<c>projectileFireAtObjectOrPosition</c>); an object without a projectile module is simply put at the target.
+    /// </summary>
+    /// <summary>
+    /// <c>WeaponStore::createAndFireTempWeapon(template, source, pos)</c>: a weapon of this name is fired once from <paramref name="source"/> at a position, without any clip or delay of the source
+    /// (death weapons of <c>FireWeaponWhenDeadBehavior</c> and <c>InstantDeathBehavior</c>). An unknown name is reported as a skipped creation, never ignored.
+    /// </summary>
+    void FireTempWeapon(Entity source, string weaponName, Fixed x, Fixed y, Fixed z);
+
+    /// <summary><c>Object::fireCurrentWeapon(pos)</c>: fires the active weapon at a position when it is ready (false otherwise).</summary>
+    bool FireCurrentWeaponAtPosition(Entity source, Fixed x, Fixed y, Fixed z);
+
+    EntityId LaunchProjectileObject(Entity launcher, int templateIndex, WeaponInfo weapon, Fixed startX, Fixed startY, Fixed startZ, Fixed targetX, Fixed targetY, Fixed targetZ);
+
     ObjectCreationListCatalog CreationLists { get; }
 
     // ------------------------------------------------------------------------------------------- phase 5: sciences

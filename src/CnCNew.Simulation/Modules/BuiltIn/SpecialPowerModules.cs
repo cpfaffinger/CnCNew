@@ -219,10 +219,11 @@ public sealed record OclSpecialPowerData(SpecialPowerBaseData Base, ImmutableArr
 
 /// <summary>
 /// <c>OCLSpecialPower.cpp</c>: the effect is one <c>ObjectCreationList</c> — the first <c>UpgradeOCL</c> whose science the owner has, else <c>OCL</c> —
-/// created at the origin <c>CreateLocation</c> selects. A use without a target creates it at the source object (<c>doSpecialPower</c>). The three
-/// map-edge locations need a terrain model that does not exist: the power still triggers and recharges, and the missing delivery is reported as
-/// <see cref="CreationSkipReasons.NoTerrainEdge"/>. <c>USE_OWNER_OBJECT</c> creates like <c>CREATE_AT_LOCATION</c> (the reference only passes
-/// <c>createOwner=false</c>, which the owner-transfer rule of <see cref="IWorldServices.CreateFromList(Entity, string, EntityId, bool)"/> does not model).
+/// created at the origin <c>CreateLocation</c> selects (the three map-edge locations from the terrain extent: nearest edge point to the source or the target, farthest corner from the target
+/// plus 300 up) with the target as the nugget's second point, which a <c>DeliverPayload</c> nugget flies for. A use without a target creates it at the source object (<c>doSpecialPower</c>). Without a terrain the three
+/// map-edge locations cannot be placed: the power still triggers and recharges, and the missing delivery is reported as
+/// <see cref="CreationSkipReasons.NoTerrainEdge"/>. <c>USE_OWNER_OBJECT</c> passes <c>createOwner=false</c>: the object itself is the transport of a <c>DeliverPayload</c> nugget (the reference passes
+/// <c>createOwner=false</c>).
 /// </summary>
 public sealed class OclSpecialPower(OclSpecialPowerData data) : SpecialPowerModuleBase(data.Base)
 {
@@ -237,7 +238,8 @@ public sealed class OclSpecialPower(OclSpecialPowerData data) : SpecialPowerModu
         if (ocl.Length == 0) return;
         if (target.Kind == SpecialPowerTargetKind.None)
         {
-            world.CreateFromList(Entity, ocl, Entity.Id, false, Entity.X, Entity.Y, Entity.Z);
+            // doSpecialPower: ObjectCreationList::create(ocl, owner, &creationCoord, &creationCoord, false) at the owner.
+            world.CreateFromList(Entity, ocl, Entity.Id, false, Entity.X, Entity.Y, Entity.Z, Entity.X, Entity.Y, Entity.Z, false);
             return;
         }
 
@@ -248,16 +250,38 @@ public sealed class OclSpecialPower(OclSpecialPowerData data) : SpecialPowerModu
             if (victim is null) return;
             (x, y, z) = (victim.X, victim.Y, victim.Z);
         }
+        z = target.Kind == SpecialPowerTargetKind.Object ? z : world.GroundHeightAt(x, y);
 
+        // OCLSpecialPower::doSpecialPowerAtLocation: where the deliverer comes in, and the target it flies for.
         switch (NameTablesPhase5.OclCreateLocation.Canonical(data.CreateLocation))
         {
             case "CREATE_AT_LOCATION":
+                world.CreateFromList(Entity, ocl, Entity.Id, false, x, y, z, x, y, z, true);
+                break;
             case "USE_OWNER_OBJECT":
-                world.CreateFromList(Entity, ocl, Entity.Id, false, x, y, z);
+                world.CreateFromList(Entity, ocl, Entity.Id, false, x, y, z, x, y, z, false);
                 break;
             case "CREATE_ABOVE_LOCATION":
-                world.CreateFromList(Entity, ocl, Entity.Id, false, x, y, z + AboveLocationHeight);
+                world.CreateFromList(Entity, ocl, Entity.Id, false, x, y, z + AboveLocationHeight, x, y, z, true);
                 break;
+            case "CREATE_AT_EDGE_NEAR_SOURCE" when world.Terrain is not null:
+            {
+                var (edgeX, edgeY) = FlightModules.ClosestEdgePoint(world, Entity.X, Entity.Y);
+                world.CreateFromList(Entity, ocl, Entity.Id, false, edgeX, edgeY, world.GroundHeightAt(edgeX, edgeY), x, y, z, true);
+                break;
+            }
+            case "CREATE_AT_EDGE_NEAR_TARGET" when world.Terrain is not null:
+            {
+                var (edgeX, edgeY) = FlightModules.ClosestEdgePoint(world, x, y);
+                world.CreateFromList(Entity, ocl, Entity.Id, false, edgeX, edgeY, world.GroundHeightAt(edgeX, edgeY), x, y, z, true);
+                break;
+            }
+            case "CREATE_AT_EDGE_FARTHEST_FROM_TARGET" when world.Terrain is not null:
+            {
+                var (edgeX, edgeY) = FlightModules.FarthestEdgePoint(world, x, y);
+                world.CreateFromList(Entity, ocl, Entity.Id, false, edgeX, edgeY, world.GroundHeightAt(edgeX, edgeY) + AboveLocationHeight, x, y, z, true);
+                break;
+            }
             case var edge:
                 world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, edge, CreationSkipReasons.NoTerrainEdge);
                 break;

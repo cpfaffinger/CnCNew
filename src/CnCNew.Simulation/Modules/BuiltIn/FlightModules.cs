@@ -37,6 +37,13 @@ internal static class FlightModules
     /// <summary>The terrain height under a point, or the given fallback when the point is off the map.</summary>
     public static Fixed GroundOrDefault(IWorldServices world, Fixed x, Fixed y, Fixed fallback) => IsOffMap(world, x, y) ? fallback : world.GroundHeightAt(x, y);
 
+    /// <summary>The corner of the map farthest from a point (<c>TerrainLogic::findFarthestEdgePoint</c>): the far side in both axes; the point itself without a terrain.</summary>
+    public static (Fixed X, Fixed Y) FarthestEdgePoint(IWorldServices world, Fixed x, Fixed y)
+    {
+        if (world.Terrain is not { } terrain) return (x, y);
+        return (x < terrain.ExtentX / Fixed.FromInt(2) ? terrain.ExtentX : Fixed.Zero, y < terrain.ExtentY / Fixed.FromInt(2) ? terrain.ExtentY : Fixed.Zero);
+    }
+
     /// <summary>The nearest point of the map's rim (<c>TerrainLogic::findClosestEdgePoint</c>); the point itself without a terrain.</summary>
     public static (Fixed X, Fixed Y) ClosestEdgePoint(IWorldServices world, Fixed x, Fixed y)
     {
@@ -630,22 +637,37 @@ public sealed record DeliverPayloadData(AIUpdateData Base, long DoorDelayTicks, 
         ModuleConfigReader.Vector(configuration, "DropOffset"),
         ModuleConfigReader.Vector(configuration, "DropVariance"));
 }
+/// <summary>
+/// What a creation-list <c>DeliverPayload</c> nugget (or the scripted reinforcement path) tells a transport: where to fly (<paramref name="MoveToX"/>/<paramref name="MoveToY"/>), where the
+/// payload is meant to land (<paramref name="TargetX"/>/<paramref name="TargetY"/>), the run's data and a delay before the start (<c>DelayDeliveryMax</c>, the transport is disabled until then).
+/// </summary>
+public readonly record struct DeliveryOrder(Fixed MoveToX, Fixed MoveToY, Fixed TargetX, Fixed TargetY, DeliveryRun Run, long DelayTicks);
 
 /// <summary>
-/// <c>DeliverPayloadAIUpdate.cpp</c> as used by scripted reinforcements (<see cref="DeliverViaModuleData"/>, <c>deliverPayloadViaModuleData</c>): the plane flies to the drop
-/// target (<c>ApproachState</c>), and once it is within <c>DeliveryDistance</c> opens its doors and, every <c>DropDelay</c> ticks after <c>DoorDelay</c>, lets the first of its
-/// riders leave (<c>DeliveringState</c>: the rider is put at the plane's position plus <c>DropOffset</c> and the random <c>DropVariance</c>, where its own parachute takes over);
-/// when nothing is left it flies on in a straight line until it leaves the map (<c>HeadOffMapState</c>) and is deleted (<c>CleanUpState</c>). A plane that overflew the target
-/// (<c>ConsiderNewApproachState</c>) turns around at <c>2.2 ·</c> its minimum turn radius for up to <c>MaxAttempts</c> new passes, and one that left the map while doing so is hidden
-/// for the time a turn takes and re-enters at the nearest edge (<c>RecoverFromOffMapState</c>). From head-off-map on it no longer answers movement orders. Flight is kinematic
-/// through the ordinary move machine of <see cref="AIUpdateInterface"/> at the locomotor's <c>PreferredHeight</c>. Not modeled: the dive and strafe of bombers, visible payload
-/// bones, <c>SelfDestructObject</c> and the hack that kills a plane that was turned off its exit course (the nugget-driven data, no scripted use).
+/// <c>DeliverPayloadAIUpdate.cpp</c>: the plane flies to the delivery point (<c>ApproachState</c>, a move order at the locomotor's <c>PreferredHeight</c>), and once it is within
+/// <c>DeliveryDistance</c> of the target (<c>PreOpenDistance</c> more while it is still flying towards it, <c>isCloseEnoughToTarget</c>) opens its doors and, every <c>DropDelay</c> ticks after
+/// <c>DoorDelay</c>, delivers (<c>DeliveringState</c>): the first rider leaves (put at the plane's position plus <c>DropOffset</c> and the random <c>DropVariance</c>; a parachute it sits
+/// in is told to land at the target with <c>ParachuteDirectly</c>; a bomb falls under gravity, <see cref="PhysicsBehavior"/>), or with <c>FireWeapon</c> the plane fires its weapon at the target
+/// and the rider is deleted, or <c>VisibleItemsDroppedPerInterval</c> visible payload objects are created (<c>VisiblePayloadTemplateName</c>; a missile is launched at the target with
+/// <c>VisiblePayloadWeaponTemplate</c>, a bomb falls). When nothing is left it flies on in a straight line until it leaves the map (<c>HeadOffMapState</c>, or vanishes at once with
+/// <c>SelfDestructObject</c>) and is deleted (<c>CleanUpState</c>). A plane that overflew the target (<c>ConsiderNewApproachState</c>) turns around at <c>2.2 ·</c> its minimum turn
+/// radius for up to <c>MaxAttempts</c> new passes, and one that left the map while doing so is hidden for the time a turn takes and re-enters at the nearest edge
+/// (<c>RecoverFromOffMapState</c>). From head-off-map on it no longer answers movement orders. A bomber with <c>DiveStartDistance</c> strafes: while it is between the dive start and end
+/// distance it fires its weapon at a point sliding along its heading over the target (<c>StrafeLength</c> is the weapon's own reach and not read). Flight is kinematic through the
+/// ordinary move machine of <see cref="AIUpdateInterface"/>; the dive's altitude change, <c>InheritTransportVelocity</c> (a physics push), the exit pitch, the drop bones and the delivery decal are
+/// not modelled, nor is the hack that kills a plane that was turned off its exit course. <see cref="DeliverViaModuleData"/> is <c>deliverPayloadViaModuleData</c> (scripted reinforcements),
+/// <see cref="DeliverPayload"/> is <c>deliverPayload</c> (creation lists).
 /// </summary>
 public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateInterface(data.Base)
 {
-    private enum Phase : byte { None, Approach, Delivering, ConsiderNewApproach, RecoverFromOffMap, HeadOffMap }
+    private enum Phase : byte { None, Approach, Delivering, ConsiderNewApproach, RecoverFromOffMap, HeadOffMap, Delay }
+
+    private enum Dive : byte { Post, Pre, Diving }
 
     private Phase _phase;
+    private DeliveryRun? _run;
+    private Fixed _moveToX;
+    private Fixed _moveToY;
     private Fixed _targetX;
     private Fixed _targetY;
     private bool _freeToExit;
@@ -653,6 +675,10 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     private long _dropDelayLeft;
     private int _attempts;
     private long _reentryTick;
+    private long _startTick;
+    private int _visibleDelivered;
+    private Dive _dive;
+    private Fixed _previousDistance2;
 
     public override string ModuleName => "DeliverPayloadAIUpdate";
 
@@ -677,15 +703,34 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         if (_accepting) base.OrderMove(world, x, y, fromPlayer);
     }
 
-    /// <summary><c>deliverPayloadViaModuleData</c>: fly to (<paramref name="x"/>, <paramref name="y"/>), drop everything inside, leave.</summary>
+    /// <summary><c>deliverPayloadViaModuleData</c>: fly to (<paramref name="x"/>, <paramref name="y"/>), drop everything inside, leave. The run is built from the module's own keys.</summary>
     public void DeliverViaModuleData(IWorldServices world, Fixed x, Fixed y)
     {
-        _targetX = x;
-        _targetY = y;
+        var run = new DeliveryRun(data.DeliveryDistance, Fixed.Zero, data.MaxAttempts, data.DropDelayTicks, data.DropOffset.X, data.DropOffset.Y, data.DropOffset.Z,
+            data.DropVariance.X, data.DropVariance.Y, data.DropVariance.Z, false, 0, 0, string.Empty, string.Empty, false, false, Fixed.Zero, Fixed.Zero, false, Fixed.Zero);
+        DeliverPayload(world, new DeliveryOrder(x, y, x, y, run, 0));
+    }
+
+    /// <summary><c>deliverPayload(moveToPos, targetPos, data)</c>: the creation list hands the plane its run.</summary>
+    public void DeliverPayload(IWorldServices world, in DeliveryOrder order)
+    {
+        _run = order.Run;
+        _moveToX = order.MoveToX;
+        _moveToY = order.MoveToY;
+        _targetX = order.TargetX;
+        _targetY = order.TargetY;
         _attempts = 0;
+        _visibleDelivered = 0;
         _freeToExit = false;
         _accepting = true;
-        StartPhase(world, Phase.Approach);
+        _previousDistance2 = Fixed.Zero;
+        _dive = order.Run.DiveStartDistance <= Fixed.Zero ? Dive.Post : Dive.Pre;
+        if (order.DelayTicks > 0)
+        {
+            _phase = Phase.Delay;
+            _startTick = world.Tick + order.DelayTicks;
+        }
+        else StartPhase(world, Phase.Approach);
         world.WakeAt(Entity, this, world.Tick);
     }
 
@@ -696,8 +741,9 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
             if (Entity.EffectivelyDead) _phase = Phase.None;
             else
             {
+                if (_phase != Phase.Delay) Strafe(world);
                 RunPhase(world);
-                ClimbToHeight(world);
+                if (_phase != Phase.Delay) ClimbToHeight(world);
             }
         }
         var sleep = base.Update(world);
@@ -719,7 +765,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         switch (phase)
         {
             case Phase.Approach:
-                base.OrderMove(world, _targetX, _targetY, false);
+                base.OrderMove(world, _moveToX, _moveToY, false);
                 break;
             case Phase.Delivering:
                 _dropDelayLeft = data.DoorDelayTicks;
@@ -742,6 +788,9 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     {
         switch (_phase)
         {
+            case Phase.Delay:
+                if (world.Tick >= _startTick) StartPhase(world, Phase.Approach);
+                break;
             case Phase.Approach:
                 if (CloseEnoughToTarget()) StartPhase(world, Phase.Delivering);
                 else if (!Entity.HasMoveTarget) StartPhase(world, Phase.ConsiderNewApproach);
@@ -758,7 +807,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
                 var (edgeX, edgeY) = FlightModules.ClosestEdgePoint(world, Entity.X, Entity.Y);
                 Entity.X = edgeX;
                 Entity.Y = edgeY;
-                Entity.Angle = FixedTrig.Atan2(_targetY - edgeY, _targetX - edgeX);
+                Entity.Angle = FixedTrig.Atan2(_moveToY - edgeY, _moveToX - edgeX);
                 Entity.Speed = Fixed.Zero;
                 world.MarkDirty(Entity);
                 StartPhase(world, Phase.Approach);
@@ -773,22 +822,52 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         }
     }
 
+    /// <summary><c>isCloseEnoughToTarget</c>: inside <c>DeliveryDistance</c> of the target, plus <c>PreOpenDistance</c> while the plane is flying towards it.</summary>
     private bool CloseEnoughToTarget()
     {
+        var run = _run!;
         var dx = Entity.X - _targetX;
         var dy = Entity.Y - _targetY;
-        return data.DeliveryDistance * data.DeliveryDistance > dx * dx + dy * dy;
+        var distance2 = dx * dx + dy * dy;
+        var inbound = _previousDistance2 > distance2;
+        _previousDistance2 = distance2;
+        var allowed = inbound ? run.DeliveryDistance + run.PreOpenDistance : run.DeliveryDistance;
+        return allowed * allowed > distance2;
+    }
+
+    /// <summary>The dive logic that runs whatever the state (<c>DeliverPayloadAIUpdate::update</c>): from the dive start the plane strafes, until it is inside the dive end distance.</summary>
+    private void Strafe(IWorldServices world)
+    {
+        if (_dive == Dive.Post || _run is not { } run) return;
+        var dx = _targetX - Entity.X;
+        var dy = _targetY - Entity.Y;
+        if (_dive == Dive.Pre)
+        {
+            if (dx * dx + dy * dy <= run.DiveStartDistance * run.DiveStartDistance) _dive = Dive.Diving;
+            return;
+        }
+        var dz = FlightModules.GroundOrDefault(world, _targetX, _targetY, Fixed.Zero) - Entity.Z;
+        var distance = Fixed.Sqrt(dx * dx + dy * dy + dz * dz);
+        if (distance <= run.DiveEndDistance) { _dive = Dive.Post; return; }
+        if (!run.Strafes || Entity.Template.DefaultWeapon < 0 || run.DiveStartDistance <= run.DiveEndDistance) return;
+        // strafePoint = target - 0.33 * v + v with v = heading * diveRatio * 100 (the plane flies on at constant speed, so the heading is the velocity direction).
+        var ratio = (run.DiveStartDistance - distance) / (run.DiveStartDistance - run.DiveEndDistance);
+        var reach = ratio * Fixed.FromInt(100) * Fixed.FromDecimal(0.67m);
+        var x = _targetX + FixedTrig.Cos(Entity.Angle) * reach;
+        var y = _targetY + FixedTrig.Sin(Entity.Angle) * reach;
+        world.FireCurrentWeaponAtPosition(Entity, x, y, FlightModules.GroundOrDefault(world, x, y, Fixed.Zero));
     }
 
     private void RunDelivering(IWorldServices world)
     {
+        var run = _run!;
         if (_dropDelayLeft > 0)
         {
             _dropDelayLeft--;
             return;
         }
         _freeToExit = true;
-        _dropDelayLeft = data.DropDelayTicks;
+        _dropDelayLeft = run.DropDelayTicks;
         if (!CloseEnoughToTarget())
         {
             _freeToExit = false;
@@ -796,33 +875,73 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
             return;
         }
         var item = Entity.Container is { } contain ? contain.Contained.Select(world.FindEntity).FirstOrDefault(rider => rider is not null) : null;
-        if (item is null)
+        if (item is null && _visibleDelivered >= run.VisibleNumBones)
         {
             _freeToExit = false;
             StartPhase(world, Phase.HeadOffMap);
             return;
         }
-        Drop(world, Entity.Container!, item);
+        if (item is not null) DropContained(world, Entity.Container!, item, run);
+        if (_visibleDelivered < run.VisibleNumBones) DropVisible(world, run);
     }
 
-    private void Drop(IWorldServices world, IContainerModule contain, Entity item)
+    private void DropContained(IWorldServices world, IContainerModule contain, Entity item, DeliveryRun run)
     {
+        if (run.FireWeapon)
+        {
+            // owner->fireCurrentWeapon(target + dropOffset); the item is only the weapon's stand-in and is deleted.
+            world.FireCurrentWeaponAtPosition(Entity, _targetX + run.DropOffsetX, _targetY + run.DropOffsetY, FlightModules.GroundOrDefault(world, _targetX, _targetY, Fixed.Zero) + run.DropOffsetZ);
+            contain.Remove(world, item, true);
+            world.RequestDestroy(item.Id);
+            return;
+        }
         contain.Remove(world, item, true);
         world.Emit(SimEventKind.EntityUncontained, item.Id, Entity.Id, string.Empty, 0);
-        var x = Entity.X + data.DropOffset.X;
-        var y = Entity.Y + data.DropOffset.Y;
-        var z = Entity.Z + data.DropOffset.Z;
-        if (data.DropVariance.X > Fixed.Zero) x += world.LogicRandom.Range(-data.DropVariance.X, data.DropVariance.X);
-        if (data.DropVariance.Y > Fixed.Zero) y += world.LogicRandom.Range(-data.DropVariance.Y, data.DropVariance.Y);
-        if (data.DropVariance.Z > Fixed.Zero) z += world.LogicRandom.Range(-data.DropVariance.Z, data.DropVariance.Z);
+        var x = Entity.X + run.DropOffsetX;
+        var y = Entity.Y + run.DropOffsetY;
+        var z = Entity.Z + run.DropOffsetZ;
+        if (run.DropVarianceX > Fixed.Zero) x += world.LogicRandom.Range(-run.DropVarianceX, run.DropVarianceX);
+        if (run.DropVarianceY > Fixed.Zero) y += world.LogicRandom.Range(-run.DropVarianceY, run.DropVarianceY);
+        if (run.DropVarianceZ > Fixed.Zero) z += world.LogicRandom.Range(-run.DropVarianceZ, run.DropVarianceZ);
         item.X = x;
         item.Y = y;
         item.Z = z;
         item.HasMoveTarget = false;
+        if (run.ParachuteDirectly && item.Modules.OfType<IOverrideDestination>().FirstOrDefault() is { } parachute) parachute.SetOverrideDestination(_targetX, _targetY);
+        // A bomb has no locomotor and falls: PhysicsBehavior takes over (the reference leaves it to the physics module, too).
+        if (item.Modules.OfType<PhysicsBehavior>().FirstOrDefault() is { } physics && item.Template.Locomotor is null) physics.StartFall(world, Fixed.Zero, Fixed.Zero);
         world.MarkDirty(item);
     }
 
-    /// <summary>The reference estimates the turn radius from the speed and the turn rate and flies on <c>2.2</c> radii before turning back.</summary>
+    /// <summary>The visible payload: each of <c>VisibleItemsDroppedPerInterval</c> items is created at the plane; a missile is fired at the target, anything else falls.</summary>
+    private void DropVisible(IWorldServices world, DeliveryRun run)
+    {
+        var attempts = run.VisibleItemsDroppedPerInterval;
+        while (attempts > 0 && _visibleDelivered < run.VisibleNumBones)
+        {
+            attempts--;
+            _visibleDelivered++;
+            if (run.VisiblePayloadTemplate.Length == 0) continue;
+            if (!world.Templates.TryGet(run.VisiblePayloadTemplate, out var template) || !template.IsInstantiable)
+            {
+                world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, run.VisiblePayloadTemplate, CreationSkipReasons.TemplateNotInstantiable);
+                continue;
+            }
+            var targetZ = FlightModules.GroundOrDefault(world, _targetX, _targetY, Fixed.Zero);
+            if (template.Modules.Any(module => module.Name is "MissileAIUpdate" or "DumbProjectileBehavior"))
+            {
+                if (run.VisiblePayloadWeapon.Length == 0 || !world.Weapons.TryGet(run.VisiblePayloadWeapon, out var weapon))
+                {
+                    world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, run.VisiblePayloadWeapon.Length > 0 ? run.VisiblePayloadWeapon : run.VisiblePayloadTemplate, CreationSkipReasons.UnknownTemplate);
+                    continue;
+                }
+                world.LaunchProjectileObject(Entity, template.Index, weapon, Entity.X, Entity.Y, Entity.Z, _targetX, _targetY, targetZ);
+            }
+            else world.RequestSpawn(template.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
+        }
+    }
+
+    /// <summary>The reference estimates the turn radius from the speed and the turn rate and flies on <c>2.2 ·</c> radii before turning back.</summary>
     private Fixed MinTurnRadius()
     {
         var locomotor = Entity.Template.Locomotor;
@@ -838,7 +957,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     private void ConsiderNewApproach(IWorldServices world)
     {
         _attempts++;
-        if (_attempts > data.MaxAttempts)
+        if (_attempts > _run!.MaxAttempts)
         {
             StartPhase(world, Phase.HeadOffMap);
             return;
@@ -850,6 +969,13 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     private void HeadOffMap(IWorldServices world)
     {
         _accepting = false;
+        if (_run is { SelfDestructObject: true })
+        {
+            // "this makes delivery unit pop away like a bubble"
+            _phase = Phase.None;
+            world.RequestDestroy(Entity.Id);
+            return;
+        }
         // "just keep moving straight ahead till we exit the map": a point 1.2 map diagonals away along the heading.
         var reach = world.Terrain is { } terrain
             ? Fixed.Sqrt(terrain.ExtentX * terrain.ExtentX + terrain.ExtentY * terrain.ExtentY) * Fixed.FromDecimal(1.2m)
@@ -864,11 +990,18 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         writer.Int("deliverPhase", (int)_phase);
         writer.Fixed("deliverX", _targetX);
         writer.Fixed("deliverY", _targetY);
+        writer.Fixed("deliverMoveX", _moveToX);
+        writer.Fixed("deliverMoveY", _moveToY);
         writer.Bool("freeToExit", _freeToExit);
         writer.Bool("accepting", _accepting);
         writer.Int("dropDelayLeft", _dropDelayLeft);
         writer.Int("attempts", _attempts);
         writer.Int("reentryTick", _reentryTick);
+        writer.Int("deliverStart", _startTick);
+        writer.Int("visibleDelivered", _visibleDelivered);
+        writer.Int("diveState", (int)_dive);
+        writer.Fixed("previousDistance2", _previousDistance2);
+        if (_run is { } run) run.Describe(writer);
     }
 
     public override void Load(IStateReader reader)
@@ -876,15 +1009,24 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         base.Load(reader);
         if (!reader.Has("deliverPhase")) return;
         var phase = reader.Int("deliverPhase");
-        if (phase < 0 || phase > (int)Phase.HeadOffMap) throw new InvalidDataException("Delivery phase out of range.");
+        if (phase < 0 || phase > (int)Phase.Delay) throw new InvalidDataException("Delivery phase out of range.");
         _phase = (Phase)phase;
         _targetX = reader.Fixed("deliverX");
         _targetY = reader.Fixed("deliverY");
+        _moveToX = reader.Fixed("deliverMoveX");
+        _moveToY = reader.Fixed("deliverMoveY");
         _freeToExit = reader.Bool("freeToExit");
         _accepting = reader.Bool("accepting");
         _dropDelayLeft = reader.Int("dropDelayLeft");
         _attempts = checked((int)reader.Int("attempts"));
         _reentryTick = reader.Int("reentryTick");
+        _startTick = reader.Int("deliverStart");
+        _visibleDelivered = checked((int)reader.Int("visibleDelivered"));
+        var dive = reader.Int("diveState");
+        if (dive < 0 || dive > (int)Dive.Diving) throw new InvalidDataException("Dive state out of range.");
+        _dive = (Dive)dive;
+        _previousDistance2 = reader.Fixed("previousDistance2");
+        _run = reader.Has("runDistance") ? DeliveryRun.Load(reader) : null;
     }
 }
 
