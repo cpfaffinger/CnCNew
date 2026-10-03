@@ -38,6 +38,8 @@ public sealed partial class SimulationWorld
     {
         if (victim is not null) { x = victim.X; y = victim.Y; z = victim.Z; }
         var conditions = source.WeaponBonusConditions;
+        // Weapon::privateFireWeapon starts with this: a networked weapon asks its neighbours to join in.
+        if (weapon.RequestAssistRange > Fixed.Zero && victim is not null) ProcessRequestAssistance(source, weapon, victim);
 
         // Scatter (fireWeaponTemplate): a random point within the radius, on the ground. It only redirects a projectile; a delayed hit keeps
         // its victim (the reference leaves victimObj set, "victimObj = NULL" is commented out).

@@ -262,6 +262,11 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // air group: airfields and aircraft, silo doors, neutron missile, pulses, bunker busters, the Spectre gunship (docs/SIMULATION-CORE.md)
         "JetAIUpdate", "ParkingPlaceBehavior", "SpectreGunshipUpdate", "MissileLauncherBuildingUpdate", "NeutronMissileUpdate", "NeutronMissileSlowDeathBehavior", "NeutronBlastBehavior",
         "EMPUpdate", "LeafletDropBehavior", "BunkerBusterBehavior",
+        // crates, collide modules and specials (docs/SIMULATION-CORE.md): crate family, hijack, sabotage, pilot, sticky bomb, stealth grant, wander, projectile stream
+        "MoneyCrateCollide", "VeterancyCrateCollide", "ConvertToCarBombCrateCollide", "ConvertToHijackedVehicleCrateCollide", "HijackerUpdate", "SabotageCommandCenterCrateCollide",
+        "SabotageSuperweaponCrateCollide", "SabotageMilitaryFactoryCrateCollide", "SabotagePowerPlantCrateCollide", "SabotageSupplyCenterCrateCollide", "PilotFindVehicleUpdate",
+        "StickyBombUpdate", "GrantStealthBehavior", "WanderAIUpdate", "ProjectileStreamUpdate",
+        "CleanupHazardUpdate", "CleanupAreaPower", "SpyVisionUpdate", "SpyVisionSpecialPower", "AssistedTargetingUpdate", "BattlePlanUpdate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

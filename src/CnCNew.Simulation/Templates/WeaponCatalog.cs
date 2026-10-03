@@ -54,6 +54,8 @@ public sealed record WeaponInfo(
 
     /// <summary><c>AutoReloadsClip = RETURN_TO_BASE</c> (<c>RETURN_TO_BASE_TO_RELOAD</c>): an emptied clip refills only when the aircraft reloads at an airfield (<c>JetAIUpdate</c>), never by time.</summary>
     public bool ReloadsAtBase { get; init; }
+    /// <summary><c>RequestAssistRange</c> (<c>WeaponTemplate::m_requestAssistRange</c>): when this weapon fires at an object, equivalent objects of the same player this close may join in (<c>AssistedTargetingUpdate</c>); 0 = never.</summary>
+    public Fixed RequestAssistRange { get; init; }
 
     public Fixed RadiusWith(WeaponBonusTable global, uint conditions, Fixed baseRadius) => baseRadius * Multiplier(global, conditions, WeaponBonusTable.Radius);
 
@@ -209,6 +211,7 @@ public sealed class WeaponCatalog
                 DieOnDetonate = Flag("MissileCallsOnDie"),
                 AntiGround = Flag("AntiGround"),
                 ReloadsAtBase = Field("AutoReloadsClip")?.Value.Value is EnumValue { Name: var reloadName } && reloadName.Equals("RETURN_TO_BASE", StringComparison.OrdinalIgnoreCase),
+                RequestAssistRange = Length("RequestAssistRange"),
             });
         }
         return new WeaponCatalog(weapons.ToImmutable());

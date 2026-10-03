@@ -103,6 +103,15 @@
     },
     {
       "category": "deferred-field",
+      "name": "CleanupAreaPower/InitiateSound",
+      "count": 4,
+      "owners": [
+        "CleanupAreaPower"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "Crate/CrateObject",
       "count": 11,
       "owners": [
@@ -2677,6 +2686,15 @@
     },
     {
       "category": "deferred-field",
+      "name": "GrantStealthBehavior/RadiusParticleSystemName",
+      "count": 1,
+      "owners": [
+        "GrantStealthBehavior"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "HeightDieUpdate/DestroyAttachedParticlesAtHeight",
       "count": 4,
       "owners": [
@@ -3239,6 +3257,15 @@
       "count": 55,
       "owners": [
         "ModelConditionUpgrade"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "MoneyCrateCollide/UpgradedBoost",
+      "count": 1,
+      "owners": [
+        "MoneyCrateCollide"
       ],
       "plannedTarget": "phase-5-module-field-typing"
     },
@@ -5771,7 +5798,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 3253,
+      "count": 3136,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -6268,24 +6295,6 @@
     },
     {
       "category": "module",
-      "name": "AssistedTargetingUpdate",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "BattlePlanUpdate",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "BeaconClientUpdate",
       "count": 1,
       "owners": [
@@ -6342,42 +6351,6 @@
       "category": "module",
       "name": "CheckpointUpdate",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "CleanupAreaPower",
-      "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "CleanupHazardUpdate",
-      "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "ConvertToCarBombCrateCollide",
-      "count": 8,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "ConvertToHijackedVehicleCrateCollide",
-      "count": 6,
       "owners": [
         "Object"
       ],
@@ -6484,24 +6457,6 @@
     },
     {
       "category": "module",
-      "name": "GrantStealthBehavior",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "HijackerUpdate",
-      "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "LaserUpdate",
       "count": 24,
       "owners": [
@@ -6520,35 +6475,8 @@
     },
     {
       "category": "module",
-      "name": "MoneyCrateCollide",
-      "count": 18,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "OCLUpdate",
       "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "PilotFindVehicleUpdate",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "ProjectileStreamUpdate",
-      "count": 7,
       "owners": [
         "Object"
       ],
@@ -6592,15 +6520,6 @@
     },
     {
       "category": "module",
-      "name": "SabotageCommandCenterCrateCollide",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "SabotageFakeBuildingCrateCollide",
       "count": 1,
       "owners": [
@@ -6619,42 +6538,6 @@
     },
     {
       "category": "module",
-      "name": "SabotageMilitaryFactoryCrateCollide",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SabotagePowerPlantCrateCollide",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SabotageSuperweaponCrateCollide",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SabotageSupplyCenterCrateCollide",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
       "name": "SalvageCrateCollide",
       "count": 5,
       "owners": [
@@ -6666,33 +6549,6 @@
       "category": "module",
       "name": "SmartBombTargetHomingUpdate",
       "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpyVisionSpecialPower",
-      "count": 4,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "SpyVisionUpdate",
-      "count": 12,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "StickyBombUpdate",
-      "count": 4,
       "owners": [
         "Object"
       ],
@@ -6738,15 +6594,6 @@
       "category": "module",
       "name": "UpgradeDie",
       "count": 13,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-5-rules-combat-economy"
-    },
-    {
-      "category": "module",
-      "name": "VeterancyCrateCollide",
-      "count": 7,
       "owners": [
         "Object"
       ],
@@ -6913,15 +6760,6 @@
         "Object"
       ],
       "plannedTarget": "phase-7-presentation"
-    },
-    {
-      "category": "module",
-      "name": "WanderAIUpdate",
-      "count": 3,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "phase-6-world-movement-ai"
     },
     {
       "category": "module",

@@ -101,6 +101,23 @@ public enum SimEventKind : byte
     /// the power), <c>Text</c>: the <c>SpecialPower</c> name, <c>Value</c>: the id of the carrier's owner.
     /// </summary>
     SpecialPowerCompleted = 60,
+
+    // --------------------------------------------------------------------------------------------- crates, hijacking, sabotage (numbers 80..83 are reserved for this group)
+
+    /// <summary>
+    /// A <c>CrateCollide</c> module executed (<c>Entity</c>: the object that carries the module and is consumed — the crate or the unit —, <c>Other</c>: the object that
+    /// triggered it, <c>Text</c>: the module name, <c>Value</c>: the money granted or the veterancy levels given, 0 otherwise).
+    /// </summary>
+    CrateCollected = 80,
+
+    /// <summary>A vehicle changed hands or purpose (<c>Entity</c>: the vehicle, <c>Other</c>: the converting object, <c>Text</c>: <c>HIJACKED</c> or <c>CARBOMB</c>).</summary>
+    ObjectConverted = 81,
+
+    /// <summary>A building was sabotaged (<c>Entity</c>: the building, <c>Other</c>: the saboteur, <c>Text</c>: the module name, <c>Value</c>: the stolen cash, the disabling ticks or 0).</summary>
+    Sabotaged = 82,
+
+    /// <summary><c>ScriptEngine::transferObjectName</c> was asked for (<c>Entity</c>: the object that held the script name, <c>Other</c>: the object that takes it over); only the mission layer can act on it.</summary>
+    ObjectNameTransferred = 83,
 }
 
 /// <summary>

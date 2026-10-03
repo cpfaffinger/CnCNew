@@ -101,6 +101,31 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         _nextWake = Math.Min(world.Tick + SimulationTiming.SleepNone, SimulationTiming.SleepForever);
     }
 
+    private long _framesGranted;
+
+    /// <summary>
+    /// <c>StealthUpdate::receiveGrant(active, frames)</c> (<c>GrantStealthBehavior</c>, the GPS scrambler): switches stealth on (<c>CAN_STEALTH</c> and <c>STEALTHED</c> at once, for
+    /// <paramref name="frames"/> ticks, 0 = until revoked) or off. Not modelled: the disguise exception (<c>canDisguise</c>: there is no disguise module) and the rider of a
+    /// <c>RiderChangeContain</c> inheriting the grant.
+    /// </summary>
+    public void ReceiveGrant(IWorldServices world, bool active, long frames)
+    {
+        if (active)
+        {
+            Entity.Status |= (1UL << CanStealthBit) | (1UL << StealthedBit);
+            _readyTick = world.Tick;
+            _framesGranted = frames;
+            world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        }
+        else
+        {
+            Entity.Status &= ~((1UL << CanStealthBit) | (1UL << StealthedBit));
+            _readyTick = long.MaxValue;
+            _framesGranted = 0;
+        }
+        world.MarkDirty(Entity);
+    }
+
     /// <summary><c>StealthUpdate::markAsDetected</c>: extends (never shortens) how long <c>DETECTED</c> stays set. Called by <c>StealthDetectorUpdate</c>.</summary>
     public void MarkDetected(IWorldServices world, long ticks)
     {
@@ -114,6 +139,13 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         if (Entity.HasStatus(DetectedBit) && world.Tick >= _detectedUntilTick) Entity.Status &= ~(1UL << DetectedBit);
         // StealthUpdate::update: without CAN_STEALTH (innate, or granted by StealthUpgrade) the module does nothing.
         if (!Entity.HasStatus(CanStealthBit)) return SimulationTiming.SleepNone;
+        // "Deal with temporary stealth": a grant with a duration ends when it runs out or as soon as the player gives the unit an order ("No exploits").
+        if (_framesGranted > 0)
+        {
+            _framesGranted--;
+            if (_framesGranted == 0 || CrateModules.AiOf(Entity) is { LastCommandFromPlayer: true }) ReceiveGrant(world, false, 0);
+            if (!Entity.HasStatus(CanStealthBit)) return SimulationTiming.SleepNone;
+        }
         if (!Satisfies(world, data.RequiredStatus, data.ForbiddenStatus) || AnyForbiddenCondition(world) || ScriptUnstealthed)
         {
             _readyTick = long.MaxValue;
@@ -163,6 +195,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         writer.Int("readyTick", _readyTick == long.MaxValue ? -1 : _readyTick);
         writer.Int("detectedUntilTick", _detectedUntilTick);
         if (ScriptUnstealthed) writer.Bool("scriptUnstealthed", true);
+        if (_framesGranted > 0) writer.Int("framesGranted", _framesGranted);
     }
 
     public override void Load(IStateReader reader)
@@ -172,6 +205,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         _readyTick = value < 0 ? long.MaxValue : value;
         _detectedUntilTick = reader.Int("detectedUntilTick");
         ScriptUnstealthed = reader.Has("scriptUnstealthed") && reader.Bool("scriptUnstealthed");
+        _framesGranted = reader.Has("framesGranted") ? reader.Int("framesGranted") : 0;
     }
 }
 
@@ -509,6 +543,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private DockMachine? _dock;
     private bool _lastCommandFromPlayer;
     private EntityId _enterTarget;
+    private EntityId _goal;
     private readonly List<PathPoint> _path = [];
     private int _pathIndex;
     private bool _pathValid;
@@ -524,6 +559,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private Fixed _exitY;
     private static readonly Fixed MisalignedAngle = Fixed.FromRaw(34315); // π/6
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
+    private static readonly int NoCollisionsBit = ObjectStatusBits.Index("NO_COLLISIONS");
 
     public override string ModuleName => "AIUpdateInterface";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -563,6 +599,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
+        _goal = EntityId.Invalid;
         _evacuatePending = false;
         _exitAfterEvacuate = false;
         _returning = false;
@@ -584,6 +621,40 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (Entity.Template.Locomotor is null) return;
         OrderMove(world, container.X, container.Y, fromPlayer);
         _enterTarget = container.Id;
+    }
+
+    /// <summary>
+    /// <c>AIUpdateInterface::getGoalObject</c>: the object the current order aims at (a hijacker's car, a saboteur's building, a pilot's vehicle).
+    /// <c>CrateCollide</c> subclasses with a purpose of their own only fire when the object they touch is this goal, so walking past is harmless.
+    /// </summary>
+    public EntityId GoalObject => _goal;
+
+    /// <summary>
+    /// The approach half of <c>aiEnter</c>/<c>aiHijack</c>-style orders that end in a collision instead of a container entry: moves to <paramref name="goal"/> (following
+    /// it when it moves) and, once the footprints overlap or the move ends within reach, lets this object's <see cref="ICollideModule"/>s act on it. An immobile object
+    /// ignores the order. Replaced by any later order.
+    /// </summary>
+    public void OrderApproachGoal(IWorldServices world, Entity goal, bool fromPlayer)
+    {
+        if (Entity.Template.Locomotor is null) return;
+        OrderMove(world, goal.X, goal.Y, fromPlayer);
+        _goal = goal.Id;
+    }
+
+    /// <summary><c>aiIdle</c>: drops the move order and the goal object; the object stands where it is.</summary>
+    public void OrderIdle(IWorldServices world, bool fromPlayer = false)
+    {
+        CancelDock(world);
+        ClearTask();
+        _enterTarget = EntityId.Invalid;
+        _goal = EntityId.Invalid;
+        _evacuatePending = false;
+        _exitAfterEvacuate = false;
+        _returning = false;
+        _lastCommandFromPlayer = fromPlayer;
+        StopInternalMove();
+        world.WakeAt(Entity, this, world.Tick);
+        world.MarkDirty(Entity);
     }
 
     /// <summary>
@@ -620,6 +691,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
+        _goal = EntityId.Invalid;
         _evacuatePending = false;
         _lastCommandFromPlayer = fromPlayer;
         Entity.HasMoveTarget = false;
@@ -673,6 +745,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     {
         CancelDock(world);
         _enterTarget = EntityId.Invalid;
+        _goal = EntityId.Invalid;
         _evacuatePending = false;
         StopInternalMove();
         InvalidatePath();
@@ -770,6 +843,20 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         machine.Halt(world, this);
     }
 
+    private long _paralyzedUntil;
+
+    /// <summary>
+    /// <c>Object::setDisabledUntil(DISABLED_PARALYZED, frame)</c> for an object with AI (<c>BattlePlanUpdate</c> paralyzes the troops of a changing battle plan): until <paramref name="tick"/> the AI does not run
+    /// at all (<c>AIUpdateInterface::getDisabledTypesToProcess</c> only lets <c>DISABLED_HELD</c> through), so the object stands still with its order intact and carries on afterwards.
+    /// </summary>
+    public void ParalyzeUntil(IWorldServices world, long tick)
+    {
+        _paralyzedUntil = Math.Max(_paralyzedUntil, tick);
+        Entity.Speed = Fixed.Zero;
+        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        world.MarkDirty(Entity);
+    }
+
     public virtual long Update(IWorldServices world)
     {
         if (Entity.EmpDisabledUntil > world.Tick)
@@ -778,6 +865,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             Entity.Speed = Fixed.Zero;
             return SimulationTiming.SleepNone;
         }
+        if (world.Tick < _paralyzedUntil) return SimulationTiming.SleepNone;
         if (_dock is not null && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
         if (_task != BuilderTask.None) UpdateTask(world);
         if (Entity.HasMoveTarget)
@@ -791,6 +879,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             else Move(world, locomotor);
         }
         if (_enterTarget.IsValid) UpdateEnter(world);
+        if (_goal.IsValid) UpdateGoal(world);
         if (_evacuatePending && !Entity.HasMoveTarget && _dock is null && ReadyToUnload(world))
         {
             _evacuatePending = false;
@@ -808,7 +897,44 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _returning = false;
             world.RequestDestroy(Entity.Id);
         }
-        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None || _evacuatePending || _returning ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None || _evacuatePending || _returning || _goal.IsValid ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+    }
+
+    /// <summary>
+    /// The approach to the goal object of <see cref="OrderApproachGoal"/>: gone, dead or destroyed ends the order; a goal that has walked off is followed (the move is
+    /// re-aimed once it is two cells away from where the object is heading); when the move has ended close enough the object's collide modules act on the goal once,
+    /// the stand-in for the physics collision the reference waits for. The module may end the order itself (<see cref="OrderIdle"/>, destroying the object).
+    /// </summary>
+    private void UpdateGoal(IWorldServices world)
+    {
+        var goal = world.FindEntity(_goal);
+        if (Entity.DestroyRequested || goal is null || goal.DestroyRequested || goal.EffectivelyDead)
+        {
+            _goal = EntityId.Invalid;
+            StopInternalMove();
+            return;
+        }
+        if (Entity.HasMoveTarget)
+        {
+            var slack = Fixed.FromInt(2 * TerrainMap.CellSize);
+            var gx = goal.X - Entity.MoveTargetX;
+            var gy = goal.Y - Entity.MoveTargetY;
+            if (gx * gx + gy * gy > slack * slack) StartInternalMove(goal.X, goal.Y);
+            return;
+        }
+        var reach = goal.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
+        var dx = goal.X - Entity.X;
+        var dy = goal.Y - Entity.Y;
+        var near = dx * dx + dy * dy <= reach * reach;
+        if (near)
+            foreach (var module in Entity.Modules)
+            {
+                if (module is not ICollideModule collide) continue;
+                if (Entity.DestroyRequested || goal.DestroyRequested || Entity.HasStatus(NoCollisionsBit)) break;
+                collide.OnCollide(world, goal);
+            }
+        // Whatever happened, a finished approach is over: a module that wanted to keep the order called OrderApproachGoal again itself.
+        if (_goal == goal.Id && !Entity.HasMoveTarget) _goal = EntityId.Invalid;
     }
 
     private void UpdateEnter(IWorldServices world)
@@ -988,6 +1114,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         writer.UInt("taskTarget", _taskTarget.Value);
         writer.Bool("approaching", _approaching);
         if (_evacuatePending) writer.Bool("evacuate", true);
+        if (_goal.IsValid) writer.UInt("goal", _goal.Value);
+        if (_paralyzedUntil > 0) writer.Int("paralyzedUntil", _paralyzedUntil);
         if (_exitAfterEvacuate || _returning)
         {
             writer.Bool("exitAfterEvacuate", _exitAfterEvacuate);
@@ -1026,6 +1154,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _taskTarget = new EntityId(checked((uint)reader.UInt("taskTarget")));
         _approaching = reader.Bool("approaching");
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
+        _goal = reader.Has("goal") ? new EntityId(checked((uint)reader.UInt("goal"))) : EntityId.Invalid;
+        _paralyzedUntil = reader.Has("paralyzedUntil") ? reader.Int("paralyzedUntil") : 0;
         _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");
         _returning = reader.Has("returning") && reader.Bool("returning");
         _exitX = reader.Has("exitX") ? reader.Fixed("exitX") : Fixed.Zero;
@@ -1124,9 +1254,19 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         _rallyY = y;
     }
 
+    private long _disabledUntil;
+
+    /// <summary><c>Object::setDisabledUntil(DISABLED_HACKED, frame)</c> as <c>SabotageMilitaryFactoryCrateCollide</c> uses it: a disabled producer's update does not run (<c>ProductionUpdateModuleData::m_disabledTypesToProcess</c> is empty by default), so its queue stands still until the tick.</summary>
+    public void DisableUntil(IWorldServices world, long tick)
+    {
+        _disabledUntil = tick;
+        world.MarkDirty(Entity);
+    }
+
     public long Update(IWorldServices world)
     {
         if (_queue.Count == 0) return SimulationTiming.SleepForever;
+        if (world.Tick < _disabledUntil) return SimulationTiming.SleepNone;
         var head = _queue[0];
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
         var remaining = head.RemainingTicks - 1;
@@ -1157,6 +1297,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         writer.Bool("hasRally", _hasRally);
         writer.Fixed("rallyX", _rallyX);
         writer.Fixed("rallyY", _rallyY);
+        if (_disabledUntil > 0) writer.Int("disabledUntil", _disabledUntil);
         writer.BeginArray("queue");
         foreach (var entry in _queue)
         {
@@ -1175,6 +1316,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         _hasRally = reader.Bool("hasRally");
         _rallyX = reader.Fixed("rallyX");
         _rallyY = reader.Fixed("rallyY");
+        _disabledUntil = reader.Has("disabledUntil") ? reader.Int("disabledUntil") : 0;
         _queue.Clear();
         foreach (var entry in reader.Array("queue"))
             _queue.Add(new ProductionEntry(checked((int)entry.Int("template")), entry.Fixed("cost"), entry.Int("remaining")));

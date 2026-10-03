@@ -144,7 +144,7 @@ static partial class Tests
         End
         Object Pending
           KindOf = INFANTRY
-          Behavior = MoneyCrateCollide Collide01
+          Behavior = SalvageCrateCollide Collide01
           End
         End
         Object Wreckable

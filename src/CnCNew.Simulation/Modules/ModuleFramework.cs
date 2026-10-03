@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CnCNew.Data.Definitions;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
@@ -234,6 +235,63 @@ public interface IWorldServices
     /// effect that the reference's physics collision would have delivered.
     /// </summary>
     void ResolveFootprintCollisions(Entity mover, Fixed stepX, Fixed stepY);
+
+    // ------------------------------------------------------------------------------------ crates, collisions, sabotage (see SimulationWorld.CrateServices.cs)
+
+    /// <summary>
+    /// <c>ExperienceTracker::gainExpForLevel</c>: gives <paramref name="entity"/> exactly the experience it needs to rise <paramref name="levels"/> veterancy levels
+    /// (capped at heroic), scaled by its experience scalar when <paramref name="scaleForBonus"/>; false when no level can be gained. A non-trainable object takes
+    /// nothing (<c>addExperiencePoints</c> returns early) but still reports true when a level was available, as the reference does.
+    /// </summary>
+    bool GainExperienceForLevels(Entity entity, int levels, bool scaleForBonus);
+
+    /// <summary><c>ExperienceTracker::setVeterancyLevel</c>: sets the level exactly (up or down), the experience becomes the level's requirement and the level-change effects run.</summary>
+    void SetVeterancy(Entity entity, int level);
+
+    /// <summary>Re-reads the entity's active weapon set after something switched it (<c>Object::setWeaponSetFlag</c>): the clip is refilled for the new primary weapon.</summary>
+    void WeaponSetChanged(Entity entity);
+
+    /// <summary><c>Energy::setPowerSabotagedTillFrame</c>: the player's power counts as sabotaged until the given tick (overwrites any earlier value; unknown players are ignored).</summary>
+    void SetPowerSabotagedUntil(PlayerId player, long tick);
+
+    /// <summary><c>Energy::m_powerSabotagedTillFrame</c> as a tick; 0 when the player's power was never sabotaged.</summary>
+    long PowerSabotagedUntil(PlayerId player);
+
+    /// <summary>
+    /// The attack half of a <c>FireWeaponCommand</c> for an object's own active weapon, issued by a module instead of the player: when the weapon is ready (clip, reload), the victim is
+    /// alive and within the weapon's range, spends a round, starts the next delay or reload and fires (<see cref="FireWeaponAt"/>); returns whether a shot was fired. There is no
+    /// visibility check (the module acts for the object itself, not for a player).
+    /// </summary>
+    bool TryFireActiveWeapon(Entity source, Entity victim);
+
+    /// <summary>Every player of the world in ascending id order, the neutral system player included (<c>ThePlayerList</c>).</summary>
+    IReadOnlyList<PlayerId> PlayerIds { get; }
+
+    /// <summary>
+    /// <c>Player::setUnitsVisionSpied(setting, whichUnits, byWhom)</c>: raises or lowers, on every object of <paramref name="victim"/> that is of one of <paramref name="kinds"/> (empty: any), the
+    /// reference count of "<paramref name="byWhom"/> looks through this object's eyes". Per object and unbalanced exactly like the reference (an object created between an
+    /// activation and its deactivation ends at -1 and is never spied again until it climbs back above 0).
+    /// </summary>
+    void SetUnitsVisionSpied(PlayerId victim, bool setting, ImmutableArray<string> kinds, PlayerId byWhom);
+
+    /// <summary>
+    /// <c>Player::changeBattlePlan</c>: a strategy center brings a plan of its player into (<paramref name="delta"/> +1) or out of (-1) force. The first center of a plan hands the bonus to every qualifying
+    /// object of the player (the <c>BATTLEPLAN_*</c> weapon bonus, the hold-the-line damage scalar, the search-and-destroy sight scalar) and the last one to leave takes it back; objects created or
+    /// transferred later receive the standing bonuses (see <c>SimulationWorld.BattlePlan.cs</c>).
+    /// </summary>
+    void ChangeBattlePlan(PlayerId player, Modules.BuiltIn.BattlePlanKind plan, int delta, Modules.BuiltIn.BattlePlanBonus bonus);
+
+    /// <summary>The number of centers whose plan <paramref name="plan"/> is in force for the player (<c>Player::getBattlePlansActiveSpecific</c>).</summary>
+    int BattlePlansActive(PlayerId player, Modules.BuiltIn.BattlePlanKind plan);
+
+    /// <summary><c>paralyzeTroop</c> for every qualifying object of the player: until <paramref name="untilTick"/> it neither moves nor fires (<c>DISABLED_PARALYZED</c>).</summary>
+    void ParalyzeTroops(PlayerId player, ImmutableArray<string> validKinds, ImmutableArray<string> invalidKinds, long untilTick);
+
+    /// <summary><c>BodyModuleInterface::getDamageScalar</c>: the factor every non-unresistable damage is multiplied by (1 unless a hold-the-line battle plan covers the object).</summary>
+    Fixed DamageScalarOf(Entity entity);
+
+    /// <summary>Scales the object's shroud clearing range by <paramref name="scalar"/> (<c>Object::setShroudClearingRange</c>); 1 restores the template's range.</summary>
+    void SetShroudScalar(Entity entity, Fixed scalar);
 }
 
 /// <summary>

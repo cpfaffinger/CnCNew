@@ -1441,6 +1441,135 @@ public static class ModuleCatalog
             new("OccupantDamageWeaponTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "BunkerBusterBehavior.cpp"),
         ]);
 
+        // ===== BEGIN crates, collide modules and specials (CrateModules.cs, SpecialsModules.cs) =====
+        // CrateCollide.cpp CrateCollideModuleData: the fields every *CrateCollide shares. ExecuteAnimation* drive a screen-space 2D animation (presentation, typed, no consumer).
+        ImmutableArray<FieldSchema> CrateCollide() =>
+        [
+            new("RequiredKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "CrateCollide.cpp"),
+            new("ForbiddenKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "CrateCollide.cpp"),
+            new("ForbidOwnerPlayer", FieldType.Bool, Source: "CrateCollide.cpp"),
+            new("BuildingPickup", FieldType.Bool, Source: "CrateCollide.cpp"),
+            new("HumanOnly", FieldType.Bool, Source: "CrateCollide.cpp"),
+            new("PickupScience", FieldType.Reference, ReferenceKind: DefinitionKind.Science, Source: "CrateCollide.cpp"),
+            new("ExecuteFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "CrateCollide.cpp"),
+            new("ExecuteAnimation", FieldType.Text, Source: "CrateCollide.cpp"),
+            Real("ExecuteAnimationTime", "CrateCollide.cpp"),
+            Real("ExecuteAnimationZRise", "CrateCollide.cpp"),
+            new("ExecuteAnimationFades", FieldType.Bool, Source: "CrateCollide.cpp"),
+        ];
+        Add("MoneyCrateCollide",
+        [
+            ..CrateCollide(),
+            new("MoneyProvided", FieldType.Integer, Min: 0, Source: "MoneyCrateCollide.h"),
+            // "UpgradeType:<name> Boost:<int>" (parseUpgradePair), repeatable: a token pair the generic typer cannot read, parsed by the binding like AutoDepositUpdate's.
+            new("UpgradedBoost", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "MoneyCrateCollide.h"),
+        ]);
+        Add("VeterancyCrateCollide",
+        [
+            ..CrateCollide(),
+            new("EffectRange", FieldType.Integer, Min: 0, Source: "VeterancyCrateCollide.h"),
+            new("AddsOwnerVeterancy", FieldType.Bool, Source: "VeterancyCrateCollide.h"),
+            new("IsPilot", FieldType.Bool, Source: "VeterancyCrateCollide.h"),
+        ]);
+        Add("ConvertToCarBombCrateCollide", [..CrateCollide(), new("FXList", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "ConvertToCarBombCrateCollide.h")]);
+        Add("ConvertToHijackedVehicleCrateCollide", CrateCollide());
+        Add("HijackerUpdate",
+        [
+            new("AttachToTargetBone", FieldType.Text, Source: "HijackerUpdate.h"),
+            new("ParachuteName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "HijackerUpdate.h"),
+        ]);
+        Add("SabotageCommandCenterCrateCollide", CrateCollide());
+        Add("SabotageSuperweaponCrateCollide", CrateCollide());
+        Add("SabotageMilitaryFactoryCrateCollide", [..CrateCollide(), new("SabotageDuration", FieldType.DurationMs, Source: "SabotageMilitaryFactoryCrateCollide.h")]);
+        Add("SabotagePowerPlantCrateCollide", [..CrateCollide(), new("SabotagePowerDuration", FieldType.DurationMs, Source: "SabotagePowerPlantCrateCollide.h")]);
+        Add("SabotageSupplyCenterCrateCollide", [..CrateCollide(), new("StealCashAmount", FieldType.Integer, Min: 0, Source: "SabotageSupplyCenterCrateCollide.h")]);
+        Add("PilotFindVehicleUpdate",
+        [
+            new("ScanRate", FieldType.DurationMs, Source: "PilotFindVehicleUpdate.cpp"),
+            Real("ScanRange", "PilotFindVehicleUpdate.cpp"),
+            Real("MinHealth", "PilotFindVehicleUpdate.cpp"),
+        ]);
+        Add("StickyBombUpdate",
+        [
+            new("AttachToTargetBone", FieldType.Text, Source: "StickyBombUpdate.h"),
+            Real("OffsetZ", "StickyBombUpdate.h"),
+            new("GeometryBasedDamageWeapon", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "StickyBombUpdate.h"),
+            new("GeometryBasedDamageFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "StickyBombUpdate.h"),
+        ]);
+        Add("GrantStealthBehavior",
+        [
+            Real("StartRadius", "GrantStealthBehavior.cpp"),
+            Real("FinalRadius", "GrantStealthBehavior.cpp"),
+            Real("RadiusGrowRate", "GrantStealthBehavior.cpp"),
+            new("RadiusParticleSystemName", FieldType.Opaque, Source: "GrantStealthBehavior.cpp"),
+            new("KindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "GrantStealthBehavior.cpp"),
+        ]);
+        Add("WanderAIUpdate", AiBase("AIUpdate.cpp"), allowsNestedSections: true);
+        Add("ProjectileStreamUpdate", []);
+        Add("CleanupHazardUpdate",
+        [
+            new("WeaponSlot", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "CleanupHazardUpdate.cpp"),
+            new("ScanRate", FieldType.DurationMs, Source: "CleanupHazardUpdate.cpp"),
+            Real("ScanRange", "CleanupHazardUpdate.cpp"),
+        ]);
+        Add("CleanupAreaPower", [..SpecialPowerBase(), Real("MaxMoveDistanceFromLocation", "CleanupAreaPower.cpp")]);
+        Add("SpyVisionUpdate",
+        [
+            ..UpgradeMux(),
+            new("NeedsUpgrade", FieldType.Bool, Source: "SpyVisionUpdate.h"),
+            new("SelfPowered", FieldType.Bool, Source: "SpyVisionUpdate.h"),
+            new("SelfPoweredDuration", FieldType.DurationMs, Source: "SpyVisionUpdate.h"),
+            new("SelfPoweredInterval", FieldType.DurationMs, Source: "SpyVisionUpdate.h"),
+            new("SpyOnKindof", FieldType.Flags, Table: NameTables.KindOf, Source: "SpyVisionUpdate.h"),
+        ]);
+        Add("SpyVisionSpecialPower",
+        [
+            ..SpecialPowerBase(),
+            new("BaseDuration", FieldType.DurationMs, Source: "SpyVisionSpecialPower.cpp"),
+            new("BonusDurationPerCaptured", FieldType.DurationMs, Source: "SpyVisionSpecialPower.cpp"),
+            new("MaxDuration", FieldType.DurationMs, Source: "SpyVisionSpecialPower.cpp"),
+        ]);
+        Add("AssistedTargetingUpdate",
+        [
+            new("AssistingClipSize", FieldType.Integer, Min: 0, Source: "AssistedTargetingUpdate.cpp"),
+            new("AssistingWeaponSlot", FieldType.Enum, Table: NameTablesPhase5.WeaponSlot, Source: "AssistedTargetingUpdate.cpp"),
+            new("LaserFromAssisted", FieldType.Text, Source: "AssistedTargetingUpdate.cpp"),
+            new("LaserToTarget", FieldType.Text, Source: "AssistedTargetingUpdate.cpp"),
+        ]);
+        // BattlePlanUpdateModuleData (BattlePlanUpdate.cpp buildFieldParse). Messages, sounds and announcements are presentation (typed, no consumer); the rest drives the simulated plans.
+        Add("BattlePlanUpdate",
+        [
+            new("SpecialPowerTemplate", FieldType.Reference, ReferenceKind: DefinitionKind.SpecialPower, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentPlanAnimationTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLinePlanAnimationTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyPlanAnimationTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            new("TransitionIdleTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentPlanUnpackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentPlanPackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentMessageLabel", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("BombardmentAnnouncementName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyPlanUnpackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyPlanIdleLoopSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyPlanPackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyMessageLabel", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("SearchAndDestroyAnnouncementName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLinePlanUnpackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLinePlanPackSoundName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLineMessageLabel", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("HoldTheLineAnnouncementName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+            new("ValidMemberKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "BattlePlanUpdate.cpp"),
+            new("InvalidMemberKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "BattlePlanUpdate.cpp"),
+            new("BattlePlanChangeParalyzeTime", FieldType.DurationMs, Source: "BattlePlanUpdate.cpp"),
+            Real("HoldTheLinePlanArmorDamageScalar", "BattlePlanUpdate.cpp"),
+            Real("SearchAndDestroyPlanSightRangeScalar", "BattlePlanUpdate.cpp"),
+            Real("StrategyCenterSearchAndDestroySightRangeScalar", "BattlePlanUpdate.cpp"),
+            new("StrategyCenterSearchAndDestroyDetectsStealth", FieldType.Bool, Source: "BattlePlanUpdate.cpp"),
+            Real("StrategyCenterHoldTheLineMaxHealthScalar", "BattlePlanUpdate.cpp"),
+            new("StrategyCenterHoldTheLineMaxHealthChangeType", FieldType.Enum, Table: NameTablesPhase5.MaxHealthChangeType, Source: "BattlePlanUpdate.cpp"),
+            new("VisionObjectName", FieldType.Text, Source: "BattlePlanUpdate.cpp"),
+        ]);
+        // ===== END crates, collide modules and specials =====
+
         return builder.ToImmutable();
     }
 
