@@ -233,7 +233,7 @@ static partial class Tests
         var registry = ModuleRegistry.Default;
         ModuleBindingTable Build(IEnumerable<IModuleBinding> bindings, ModuleRegistry? custom = null) => new(bindings, custom ?? registry);
         var all = BuiltInModules.Bindings;
-        Check.That(Build(all).Bindings.Length == 107, "The production table binds one hundred and seven modules (twelve phase-4, twenty-four phase-5, fourteen reference-match unlock, eleven special-power, eight supply-economy, one spawner, two repair, three combat, three power-plant, three projectile, five transport/tunnel, two mission-blocker shells, three topple/height-die collision, seven mission-object modules of phase 12, four aircraft modules the particle uplink cannon and four vehicle modules of phase 13).");
+        Check.That(Build(all).Bindings.Length == 119, "The production table binds one hundred and nineteen modules (twelve phase-4, twenty-four phase-5, fourteen reference-match unlock, eleven special-power, eight supply-economy, one spawner, two repair, three combat, three power-plant, three projectile, five transport/tunnel, two mission-blocker shells, three topple/height-die collision, seven mission-object modules of phase 12, four aircraft modules the particle uplink cannon and four vehicle modules of phase 13, twelve slave/spawn/container modules of phase 14).");
         Check.That(all.Select(value => value.Name).SequenceEqual(all.Select(value => value.Name).Order(StringComparer.Ordinal)), "The built-in list is sorted ordinally.");
         Check.That(ModuleBindingTable.Default.TryGet("destroydie", out var binding) && binding.Name == "DestroyDie", "Lookup is case-insensitive.");
 
@@ -275,12 +275,12 @@ static partial class Tests
         // A module the simulation does not implement makes the object non-instantiable, and it is named.
         var files = new Dictionary<string, string>(SyntheticFixture.Files)
         {
-            ["Data/INI/Object/Blocked.ini"] = "Object Blocked\n  Behavior = ParkingPlaceBehavior Park01\n  End\n  Behavior = SlavedUpdate Slave01\n  End\nEnd\n",
+            ["Data/INI/Object/Blocked.ini"] = "Object Blocked\n  Behavior = ParkingPlaceBehavior Park01\n  End\n  Behavior = RailedTransportAIUpdate Rail01\n  End\nEnd\n",
         };
         var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new InMemoryDefinitionSource(files), ModuleRegistry.Default,
             CnCNew.Data.Compilation.DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true });
         var blockedCatalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
-        Check.That(blockedCatalog.TryGet("Blocked", out var blocked) && !blocked.IsInstantiable && blocked.MissingModules.SequenceEqual(["ParkingPlaceBehavior", "SlavedUpdate"]), "Missing modules are listed sorted and never dropped.");
+        Check.That(blockedCatalog.TryGet("Blocked", out var blocked) && !blocked.IsInstantiable && blocked.MissingModules.SequenceEqual(["ParkingPlaceBehavior", "RailedTransportAIUpdate"]), "Missing modules are listed sorted and never dropped.");
         var report = ModuleCoverage.Compute(blockedCatalog);
         Check.That(report.Blocked == 1 && report.Blockers.Length == 2 && report.Blockers.All(value => value.ObjectsBlocked == 1 && value.ObjectsBlockedOnlyByThisModule == 0), "Coverage names each blocker.");
     }

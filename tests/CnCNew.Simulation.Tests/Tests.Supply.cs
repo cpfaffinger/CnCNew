@@ -136,7 +136,7 @@ static partial class Tests
           End
           Behavior = DestroyDie Destroy01
           End
-          Behavior = SlavedUpdate Slave01
+          Behavior = RailedTransportAIUpdate Rail01
           End
         End
 
@@ -226,7 +226,7 @@ static partial class Tests
           Behavior = SpawnBehavior Spawn01
             SpawnNumber = 2
             SpawnTemplateName = Drone
-            AggregateHealth = Yes
+            CanReclaimOrphans = Yes
           End
         End
         """,
@@ -471,7 +471,7 @@ static partial class Tests
     public static void SpawnBehaviorUnsupportedConfiguration()
     {
         var fixture = new SyntheticFixture(files: SupplyFiles());
-        Check.That(fixture.Templates.TryGet("Colony", out var colony) && !colony.IsInstantiable && colony.MissingModules.Contains("SpawnBehavior[AggregateHealth]"), "AggregateHealth is reported as a missing feature.");
+        Check.That(fixture.Templates.TryGet("Colony", out var colony) && !colony.IsInstantiable && colony.MissingModules.Contains("SpawnBehavior[CanReclaimOrphans]"), "CanReclaimOrphans is reported as a missing feature.");
         Check.That(fixture.Templates.TryGet("Hive", out var hive) && hive.IsInstantiable && fixture.Templates.TryGet("Hauler", out var hauler) && hauler.IsInstantiable, "Supported spawners and haulers are instantiable.");
     }
 }
