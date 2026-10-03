@@ -107,7 +107,7 @@ static partial class Tests
           End
           Behavior = DestroyDie Destroy01
           End
-          Behavior = ParkingPlaceBehavior Parking01
+          Behavior = TensileFormationUpdate Parking01
           End
         End
 
@@ -159,7 +159,7 @@ static partial class Tests
         Check.That(participants.Select(value => value.Faction.Name).SequenceEqual(["FactionAlpha", "FactionBeta", "FactionGamma"]),
             $"Only playable factions with a base and an armed unit take part, in ordinal order (got {string.Join(", ", participants.Select(value => value.Faction.Name))}).");
         Check.That(participants[0].Substitution is null && participants[0].BaseBuilding == "AlphaBase", "A faction with an instantiable starting building keeps it.");
-        Check.That(participants[2].BaseBuilding == "AlphaBase" && participants[2].Substitution is { } why && why.Contains("ParkingPlaceBehavior"),
+        Check.That(participants[2].BaseBuilding == "AlphaBase" && participants[2].Substitution is { } why && why.Contains("TensileFormationUpdate"),
             "A faction whose starting building is not instantiable gets a same-side producer as a recorded stand-in.");
         Check.That(excluded.Length == 1 && excluded[0].Contains("FactionNobody") && excluded[0].Contains("no instantiable armed unit"), "A faction whose side cannot field a unit is listed as excluded, never dropped silently.");
         Check.That(ReferenceMatchScenario.DescribeCoverage(catalog).Any(line => line.Contains("side Alpha: 1/1 armed units")), "The coverage report counts instantiable armed units per side.");
