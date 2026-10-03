@@ -497,7 +497,7 @@ internal sealed partial class ObjectiveDriver
                 _world.MaterializePendingSpawns();
             }
             return true;
-        }) { Kind = _commandsOnly ? LeafKind.Order : LeafKind.World });
+        }) { Kind = _commandsOnly ? LeafKind.Order : LeafKind.World, Risky = area is not null && !(comparison is 0 or 1 || (comparison == 2 && n == 0)) });
     }
 }
 

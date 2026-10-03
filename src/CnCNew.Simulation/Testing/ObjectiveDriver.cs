@@ -36,6 +36,9 @@ internal sealed partial class ObjectiveDriver
         public Func<int, bool> Apply { get; } = apply;
         public bool Edge { get; } = edge;
         public bool Deferred { get; set; }
+
+        /// <summary>A leaf that moves the viewer's units into an area: it can start a script chain that cannot be undone (a capture that begins the other ending), so equally long plans without one are preferred.</summary>
+        public bool Risky { get; set; }
         /// <summary>Applying it destroys the side the run wants to win (see <see cref="ObjectiveDriver.WouldHarm"/>): held back until nothing else has made progress for a while.</summary>
         public bool Harm { get; set; }
         /// <summary>What applying it is: an order a player could give, a UI signal, or a direct write to the world (<c>docs/SCRIPT-ENGINE.md</c> §9, commands-only mode).</summary>
@@ -47,7 +50,7 @@ internal sealed partial class ObjectiveDriver
         public readonly List<Leaf> Leaves = [];
         public readonly SortedSet<string> Blockers = new(StringComparer.Ordinal);
         public bool Feasible => Blockers.Count == 0;
-        public int Cost => Blockers.Count * 1000 + Leaves.Count(leaf => leaf.Harm) * 100 + Leaves.Count;
+        public int Cost => Blockers.Count * 1000 + Leaves.Count(leaf => leaf.Harm) * 100 + Leaves.Count + Leaves.Count(leaf => leaf.Risky);
 
         public static Plan Blocked(string reason)
         {
