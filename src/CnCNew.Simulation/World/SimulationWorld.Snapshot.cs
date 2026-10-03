@@ -91,7 +91,8 @@ public sealed partial class SimulationWorld
                     pending.Has("launchWeapon")
                         ? new ProjectileLaunch(checked((int)pending.Int("launchWeapon")), new EntityId(checked((uint)pending.UInt("launcher"))), new EntityId(checked((uint)pending.UInt("launchVictim"))),
                             pending.Fixed("launchX"), pending.Fixed("launchY"), pending.Fixed("launchZ"), checked((uint)pending.UInt("launchConditions")))
-                        : null)));
+                        : null,
+                    pending.Has("enslaver") ? new EntityId(checked((uint)pending.UInt("enslaver"))) : default)));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
 

@@ -123,7 +123,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
-        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null);
+        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, EntityId Enslaver = default);
 
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
 
@@ -223,6 +223,8 @@ public sealed partial class SimulationWorld : IWorldServices
     }
 
     /// <summary><c>ExperienceTracker::addExperiencePoints</c>: a trainable object gains <c>(int)(amount * scalar)</c> and takes the highest level whose requirement it meets.</summary>
+    public void AddExperiencePoints(Entity entity, int amount) => AddExperience(entity, amount);
+
     private void AddExperience(Entity entity, int amount)
     {
         if (!entity.Template.IsTrainable) return;
@@ -475,7 +477,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));
         var id = Ids.AllocateEntity();
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
-            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY);
+            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY, Enslaver: extras.Enslaver);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }
@@ -1389,6 +1391,17 @@ public sealed partial class SimulationWorld : IWorldServices
         Register(entity);
         Emit(SimEventKind.EntitySpawned, entity.Id, EntityId.Invalid, template.Name, 0, pending.Owner);
         _spawnedTotal++;
+        // SlavedUpdateInterface::onEnslave, called by the creator (SpawnBehavior::createSpawn, the creation nugget) once the object exists.
+        if (setup.Enslaver.IsValid && FindEntity(setup.Enslaver) is { DestroyRequested: false } enslaver)
+        {
+            foreach (var module in entity.ModuleArray)
+                if (module is Modules.BuiltIn.ISlavedModule slaved)
+                {
+                    slaved.OnEnslave(this, enslaver);
+                    break;
+                }
+            MarkDirty(entity);
+        }
 
         if (setup.Container.IsValid && FindEntity(setup.Container) is { Container: { } group } holder && !holder.DestroyRequested
             && group.IsValidContainerFor(this, entity, true))
@@ -1705,6 +1718,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 writer.Fixed("launchZ", launch.Z);
                 writer.UInt("launchConditions", launch.Conditions);
             }
+            if (setup.Enslaver.IsValid) writer.UInt("enslaver", setup.Enslaver.Value);
             writer.EndObject();
         }
         writer.EndArray();
