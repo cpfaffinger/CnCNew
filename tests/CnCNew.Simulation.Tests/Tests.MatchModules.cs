@@ -59,7 +59,8 @@ static partial class Tests
               GeometryMajorRadius = 5.0
               GeometryMinorRadius = 5.0
               GeometryHeight = 2.0
-              Behavior = SmartBombTargetHomingUpdate Mine01
+              Behavior = LockWeaponCreate Mine01
+                SlotToLock = SECONDARY
               End
             End
             Object Wall

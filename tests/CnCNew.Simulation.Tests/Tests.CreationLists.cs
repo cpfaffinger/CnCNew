@@ -144,7 +144,8 @@ static partial class Tests
         End
         Object Pending
           KindOf = INFANTRY
-          Behavior = SalvageCrateCollide Collide01
+          Behavior = LockWeaponCreate Stand01
+            SlotToLock = SECONDARY
           End
         End
         Object Wreckable

@@ -287,6 +287,19 @@ run.Test("Collision: ToppleUpdate push, kill, stump and mid-fall snapshot contin
 run.Test("Collision: StructureToppleUpdate delayed collapse and reduced crushing sweep", Tests.CollisionStructureTopple);
 run.Test("Collision: HeightDieUpdate threshold, delay, structures and ground floor", Tests.CollisionHeightDie);
 run.Test("Collision: bounded local avoidance around another unit's footprint", Tests.CollisionLocalAvoidance);
+run.Test("Last nine modules: every module of the catalog is implemented", Tests.LastBlockerModulesAreImplemented);
+run.Test("Last nine modules: SalvageCrateCollide armor, weapon, level and money", Tests.LastBlockersSalvageCrate);
+run.Test("Last nine modules: SalvageCrateCollide random crates are deterministic", Tests.LastBlockersSalvageCrateIsDeterministic);
+run.Test("Last nine modules: UnitCrateCollide free units and the skipped creation", Tests.LastBlockersUnitCrate);
+run.Test("Last nine modules: SabotageFakeBuildingCrateCollide", Tests.LastBlockersSabotageFakeBuilding);
+run.Test("Last nine modules: SabotageInternetCenterCrateCollide disables spy vision and hackers", Tests.LastBlockersSabotageInternetCenter);
+run.Test("Last nine modules: SmartBombTargetHomingUpdate steers a falling bomb", Tests.LastBlockersSmartBombHoming);
+run.Test("Last nine modules: a smart bomb dropped by a plane lands on its target", Tests.LastBlockersSmartBombFromPlane);
+run.Test("Last nine modules: SupplyWarehouseCripplingBehavior blocks the dock and heals", Tests.LastBlockersCripplingBlocksAndHealsTheWarehouse);
+run.Test("Last nine modules: crippling kills a docker inside, rests on every hit, sleeps when whole", Tests.LastBlockersCripplingKillsADockerInsideAndRestsOnEveryHit);
+run.Test("Last nine modules: the ferry loads, sails, unloads and snapshots", Tests.LastBlockersFerryLoadsSailsAndUnloads);
+run.Test("Last nine modules: the ferry is deterministic and follows the evacuation rules", Tests.LastBlockersFerryDeterminismAndEvacuationRules);
+
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
@@ -294,6 +307,7 @@ if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));
 return run.Finish();
 
 /// <param name="only">With <c>--only TEXT</c>, just the tests whose name contains TEXT run (a development aid; the full run takes no argument).</param>

@@ -271,7 +271,11 @@ static void ModuleCatalogIsExplicitAndConsistent()
         "UpgradeDie", "StructureCollapseUpdate", "FireWeaponCollide", "FireSpreadUpdate", "DeployStyleAIUpdate", "FloatUpdate", "RailroadBehavior", "DemoTrapUpdate", "MinefieldBehavior",
         "BridgeBehavior", "BridgeTowerBehavior", "BridgeScaffoldBehavior", "OCLUpdate", "DynamicShroudClearingRangeUpdate", "FireOCLAfterWeaponCooldownUpdate", "WaveGuideUpdate", "DamDie",
         "CheckpointUpdate", "EnemyNearUpdate", "FirestormDynamicGeometryInfoUpdate", "WeaponBonusUpdate", "CostModifierUpgrade", "BoneFXDamage", "BoneFXUpdate",
+        // the last nine (docs/SIMULATION-CORE.md): salvage and unit crates, the fake-building and Internet-Center saboteurs, the MOAB's homing, the crippled warehouse and the ferry
+        "SalvageCrateCollide", "UnitCrateCollide", "SabotageFakeBuildingCrateCollide", "SabotageInternetCenterCrateCollide", "SmartBombTargetHomingUpdate", "SupplyWarehouseCripplingBehavior",
+        "RailedTransportAIUpdate", "RailedTransportContain", "RailedTransportDockUpdate",
     ];
+    Assert(catalog.Where(value => value.CompatibilityOnly && value.Category == ModuleCategory.Simulation).Count() == 0, "Every simulation module of the catalog is implemented.");
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");
     Assert(ModuleRegistry.Default.GetRequired("W3DModelDraw").Category == ModuleCategory.Presentation, "Draw modules are presentation.");
@@ -296,22 +300,23 @@ static void CompatibilityBaselineDetectsEveryDeviation()
     Assert(CompatibilityBaseline.Compare(baseline, changed.Audit.Compatibility).Any(value => value.StartsWith("CHANGED", StringComparison.Ordinal) && value.Contains("Terrain", StringComparison.Ordinal)),
         "A changed frequency must be reported.");
 
-    files["fixture.ini"] = "Object Tank\n  Behavior = SlowDeathBehavior A\n  End\n  Behavior = SmartBombTargetHomingUpdate B\n  End\nEnd\n";
+    files["fixture.ini"] = "Object Tank\n  Behavior = SlowDeathBehavior A\n  End\n  Draw = W3DModelDraw B\n  End\nEnd\n";
     var added = DefinitionCompiler.Compile(new MemorySource(files), ModuleRegistry.Default, strict);
     var differences = CompatibilityBaseline.Compare(baseline, added.Audit.Compatibility);
-    Assert(differences.Any(value => value.StartsWith("NEW", StringComparison.Ordinal) && value.Contains("SmartBombTargetHomingUpdate", StringComparison.Ordinal)), "A new entry must be reported.");
+    Assert(differences.Any(value => value.StartsWith("NEW", StringComparison.Ordinal) && value.Contains("W3DModelDraw", StringComparison.Ordinal)), "A new entry must be reported.");
     Assert(differences.Any(value => value.StartsWith("MISSING", StringComparison.Ordinal) && value.Contains("Terrain", StringComparison.Ordinal)), "A vanished entry must be reported.");
     Throws<InvalidDataException>(() => CompatibilityBaseline.Compare("{\"schemaVersion\":99,\"mode\":\"x\",\"entries\":[]}", graph.Audit.Compatibility), "Unsupported");
 }
 
 static void TypoInModuleNameIsDistinguishableFromKnownUnimplementedModule()
 {
-    var known = "Object Tank\n  Behavior = SmartBombTargetHomingUpdate A\n  End\nEnd\n";
+    // Every simulation module is implemented now; the known-but-not-instantiated modules are the presentation (Draw) ones.
+    var known = "Object Tank\n  Draw = W3DModelDraw A\n  End\nEnd\n";
     var typo = "Object Tank\n  Behavior = CreateCrateDei A\n  End\nEnd\n";
     var lenient = DefinitionCompilerOptions.Audit;
     var knownGraph = DefinitionCompiler.Compile(One(known), ModuleRegistry.Default, lenient);
     var typoGraph = DefinitionCompiler.Compile(One(typo), ModuleRegistry.Default, lenient);
-    Assert(knownGraph.Audit.Compatibility.Single(value => value.Category == "module").PlannedTarget == "phase-5-rules-combat-economy", "Known modules carry a planned target.");
+    Assert(knownGraph.Audit.Compatibility.Single(value => value.Category == "module").PlannedTarget == "phase-7-presentation", "Known modules carry a planned target.");
     Assert(typoGraph.Audit.Compatibility.Single(value => value.Category == "module").PlannedTarget == "unknown-module-not-in-catalog", "A typo must be marked as uncatalogued.");
     var strict = lenient with { StrictUnknownModules = true };
     DefinitionCompiler.Compile(One(known), ModuleRegistry.Default, strict);

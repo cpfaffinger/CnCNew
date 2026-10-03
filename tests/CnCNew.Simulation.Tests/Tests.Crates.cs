@@ -42,7 +42,8 @@ static partial class Tests
         End
         Object PendingCrate
           KindOf = CRATE
-          Behavior = SalvageCrateCollide Collide01
+          Behavior = LockWeaponCreate Stand01
+            SlotToLock = SECONDARY
           End
         End
 
@@ -150,7 +151,7 @@ static partial class Tests
         Check.That(requested.Count == 1 && requested[0].Text == "PendingCrate" && requested[0].Value == 2,
             "Killer science and kind-of pass: the crate is requested and owned by the victim's player; the elite-only entry is skipped.");
         world.Step();
-        Check.That(!world.Entities.Any(value => value.Template.Name == "PendingCrate"), "A crate whose modules are not implemented is reported but never spawned.");
+        Check.That(!world.Entities.Any(value => value.Template.Name == "PendingCrate"), "A crate whose modules are not fully implemented is reported but never spawned.");
 
         feeder.FireWeapon(2, f5, noScienceVictim);
         result = world.Step();
