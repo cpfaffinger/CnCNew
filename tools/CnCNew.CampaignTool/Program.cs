@@ -27,6 +27,7 @@ const string Usage = """
                                                 static: can the mission's own VICTORY/DEFEAT scripts fire with the implemented condition/action types? (clean / degraded / blocked chains)
       script <content-dir> --map TEXT --name SCRIPT
                                                 prints one script (conditions, actions) and every script whose actions name it
+      coverage                                  every script action and condition type the VM does not execute (missing), by name
       usage <content-dir> --action A[,B] [--condition]
                                                 every use of the named script action (or, with --condition, condition) types in the campaign maps: map, script, parameters
       teams <content-dir> --map TEXT [--filter TEXT]
@@ -68,6 +69,7 @@ try
         "reachability" => ReachabilityReport(content, campaigns, args),
         "script" => ScriptDump(content, campaigns, args),
         "usage" => ActionUsage(content, campaigns, args),
+        "coverage" => Coverage(),
         "drive" => Drive(content, campaigns, args),
         "template" => TemplateInfo(content, args),
         "objects" => ObjectInfo(content, campaigns, args),
@@ -517,5 +519,12 @@ static int ActionUsage(ContentFileSystem content, CampaignCatalog campaigns, str
                 Console.WriteLine($"{Path.GetFileNameWithoutExtension(mission.MapPath)}: '{unit.Name}': {action.TypeName}({string.Join(", ", action.Parameters.Select(Text))})");
         }
     }
+    return 0;
+}
+
+static int Coverage()
+{
+    Console.WriteLine("Missing actions: " + string.Join(", ", MapScriptCatalog.ScriptActionTypeNames.Where(name => ScriptCoverage.ActionSupport(name) == ScriptSupport.Missing)));
+    Console.WriteLine("Missing conditions: " + string.Join(", ", MapScriptCatalog.ConditionTypeNames.Where(name => ScriptCoverage.ConditionSupport(name) == ScriptSupport.Missing)));
     return 0;
 }

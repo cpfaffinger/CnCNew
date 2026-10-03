@@ -171,6 +171,7 @@ run.Test("Scripts: team facing a named object, selling everything and the record
 run.Test("Scripts: topple directions, buildability, skill set, local defeat", Tests.ScriptPhase13TablesAndOutcome);
 run.Test("Scripts: approach paths, nearest-object moves and unmanned capture", Tests.ScriptPhase13MovementActions);
 run.Test("Scripts: team state, container slots, power ratios, tech buildings, completed powers and upgrades", Tests.ScriptPhase13Conditions);
+run.Test("Scripts: facing, destroying cargo and more recorded settings", Tests.ScriptPhase13MoreActions);
 run.Test("Scripts: the driver moves counters the right way", Tests.ScriptObjectiveDriverMovesCountersTheRightWay);
 run.Test("Scripts: explaining a script leaves the engine untouched", Tests.ScriptExplainLeavesTheEngineUntouched);
 run.Test("Scripts: override relations between teams and players", Tests.ScriptOverrideRelations);

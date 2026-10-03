@@ -72,6 +72,9 @@ public sealed class Entity
 
     public long LastDamageTick { get; internal set; } = -1;
 
+    /// <summary><c>Object::isCaptured</c> (<c>setCaptured</c>, never cleared): the object was taken over by entering it (an unmanned vehicle); counted by the skirmish condition on captured units. Written only when set.</summary>
+    public bool Captured { get; internal set; }
+
     /// <summary>Tick of the object's last <c>FireWeaponCommand</c>, for phase-5's coarse "is firing" approximation (-1: never).</summary>
     public long LastFireTick { get; internal set; } = -1;
 
@@ -149,6 +152,7 @@ public sealed class Entity
         writer.Int("weaponReadyTick", WeaponReadyTick);
         writer.Int("lastDamageTick", LastDamageTick);
         writer.Int("lastFireTick", LastFireTick);
+        if (Captured) writer.Bool("captured", true);
         writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);
         writer.Bool("hasPlayerUpgradeWeapon", HasPlayerUpgradeWeapon);
         writer.Int("constructionWork", ConstructionWork);

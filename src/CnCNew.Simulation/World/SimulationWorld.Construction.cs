@@ -127,6 +127,14 @@ public sealed partial class SimulationWorld
     /// retail reference-match scenario's random production picks use it so a template whose tech building does not exist in that scenario is
     /// never attempted (`docs/SIMULATION-CORE.md` §7a); it is equally useful to a skirmish AI or to presentation's command-bar availability.
     /// </summary>
+    /// <summary><c>ObjectTypes::canBuildAny(player)</c> for one template: it is buildable at all for the player (the <c>Buildable</c> status after script overrides, the prerequisites) — no producer is needed.</summary>
+    public bool PlayerHasPrerequisitesFor(PlayerId player, string templateName)
+    {
+        if (!_players.TryGetValue(player.Value, out var owner) || !_templates.TryGet(templateName, out var template) || !template.IsInstantiable) return false;
+        if (BuildableOf(template).Equals("No", StringComparison.OrdinalIgnoreCase)) return false;
+        return BuildableOf(template).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) || PrerequisitesSatisfied(owner, template);
+    }
+
     public bool CanQueueProductionTemplate(PlayerId player, EntityId producerId, string templateName)
     {
         if (!_players.TryGetValue(player.Value, out var owner)) return false;

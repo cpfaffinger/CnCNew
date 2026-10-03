@@ -783,6 +783,10 @@ public sealed partial class SimulationWorld : IWorldServices
     }
 
     /// <summary><c>Player::isCapableOfPurchasingScience</c>.</summary>
+    /// <summary><c>Player::isCapableOfPurchasingScience</c>: not owned yet, prerequisites met, purchasable and enough purchase points.</summary>
+    public bool CanPurchaseScienceNow(PlayerId player, string scienceName)
+        => _players.TryGetValue(player.Value, out var state) && _templates.Sciences.TryGet(scienceName, out var science) && CanPurchaseScience(state, science, out _);
+
     private bool CanPurchaseScience(PlayerState player, Templates.ScienceInfo science, out CommandRejection reason)
     {
         if (player.CompletedSciences.Has(science.Index)) { reason = CommandRejection.AlreadyOwned; return false; }

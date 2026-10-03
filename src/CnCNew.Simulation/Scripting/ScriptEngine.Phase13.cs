@@ -89,6 +89,68 @@ public sealed partial class ScriptEngine
             case "TEAM_SET_STATE":
                 if (Has(type, p, 2)) foreach (var team in TeamsNamed(Str(p, 0))) _teamStates[team.Id] = Str(p, 1);
                 return true;
+            // ---- more actions, each with the reference it follows
+            // doNamedFaceNamed: the unit stops and faces the object (like TEAM_FACE_NAMED).
+            case "NAMED_FACE_NAMED":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } facer && NamedEntity(Str(p, 1)) is { } faceTarget) Face(facer, faceTarget.X, faceTarget.Y);
+                return true;
+            // doDestroyAllContained: every contained object is killed (killTheObject).
+            case "UNIT_DESTROY_ALL_CONTAINED":
+                if (Has(type, p, 1) && NamedEntity(Str(p, 0)) is { } containerEntity && containerEntity.Modules.OfType<IContainerModule>().FirstOrDefault() is { } carrier)
+                    foreach (var id in carrier.Contained.ToArray()) _world.Kill(id);
+                return true;
+            // doUnitReceiveUpgrade: Object::giveUpgrade.
+            case "NAMED_RECEIVE_UPGRADE":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } upgraded)
+                {
+                    if (!_world.Templates.Upgrades.TryGet(Str(p, 1), out var upgrade)) Diagnose($"unknown upgrade '{Str(p, 1)}'");
+                    else _world.CompleteUpgrade(upgraded.Owner, upgraded.Id, upgrade.Name);
+                }
+                return true;
+            // doPlayerRepairStructure -> Player::repairStructure: a dozer of the player is sent to repair the structure (the AI queues it; here the nearest builder gets the order).
+            case "PLAYER_REPAIR_NAMED_STRUCTURE":
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } repairer && NamedEntity(Str(p, 1)) is { } damaged)
+                {
+                    var owner = repairer.Id;
+                    var target = damaged.Id;
+                    var dozer = _world.Entities.Where(entity => entity.Owner == owner && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Template.IsKindOf("DOZER")).OrderBy(entity => Distance2(entity, damaged.X, damaged.Y)).ThenBy(entity => entity.Id.Value).FirstOrDefault();
+                    if (dozer is not null)
+                    {
+                        var dozerId = dozer.Id;
+                        if (!_issue(owner, (sequence, tick) => new RepairCommand(owner, sequence, tick, dozerId, target)).Accepted) Diagnose("repair order rejected");
+                    }
+                }
+                return true;
+            // doCreateTeamFromCapturedUnits and doCollectNearbyForTeam have empty bodies / only a debug crash in the original: nothing happens.
+            case "PLAYER_CREATE_TEAM_FROM_CAPTURED_UNITS":
+            case "TEAM_COLLECT_NEARBY_FOR_TEAM":
+            case "DEBUG_CRASH_BOX":
+                return true;
+            // settings without a consumer in the simulation (recorded): updateNamedSetAttitude, doTeamSetRepulsor, doSetStoppingDistance, doChooseVictimAlwaysUsesNormal, doSetCaveIndex, doPlayerAddSkillPoints
+            case "NAMED_SET_ATTITUDE":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } attitudeUnit) _recordedSettings[type + "|" + attitudeUnit.Id.Value] = Int(p, 1);
+                _recordedActions++;
+                return true;
+            case "TEAM_SET_REPULSOR":
+                if (Has(type, p, 2)) foreach (var team in TeamsNamed(Str(p, 0))) _recordedSettings[type + "|" + team.Id] = Int(p, 1) != 0 ? 1 : 0;
+                _recordedActions++;
+                return true;
+            case "SET_STOPPING_DISTANCE":
+                if (Has(type, p, 2) && Real(p, 1) >= Fixed.FromDecimal(0.5m)) foreach (var team in TeamsNamed(Str(p, 0))) _recordedSettings[type + "|" + team.Id] = Real(p, 1).Raw;
+                _recordedActions++;
+                return true;
+            case "CHOOSE_VICTIM_ALWAYS_USES_NORMAL":
+                if (Has(type, p, 1)) _recordedSettings[type + "|"] = Int(p, 0) != 0 ? 1 : 0;
+                _recordedActions++;
+                return true;
+            case "SET_CAVE_INDEX":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } cave) _recordedSettings[type + "|" + cave.Id.Value] = Int(p, 1);
+                _recordedActions++;
+                return true;
+            case "PLAYER_ADD_SKILLPOINTS":
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } skilled2) _recordedSettings[type + "|" + skilled2.Id.Value] = _recordedSettings.GetValueOrDefault(type + "|" + skilled2.Id.Value) + Int(p, 1);
+                _recordedActions++;
+                return true;
             // doGuardSupplyCenter -> AIPlayer::guardSupplyCenter
             case "TEAM_GUARD_SUPPLY_CENTER":
                 if (Has(type, p, 2))
@@ -163,7 +225,7 @@ public sealed partial class ScriptEngine
             var dy = member.Y - target.Y;
             if (dx * dx + dy * dy <= reach * reach)
             {
-                if (_world.TransferOwnership(target.Id, member.Owner)) _unmanned.Remove(targetId);
+                if (_world.TransferOwnership(target.Id, member.Owner)) { _unmanned.Remove(targetId); target.Captured = true; }
                 foreach (var key in _captureOrders.Where(pair => pair.Value == targetId).Select(pair => pair.Key).ToArray()) _captureOrders.Remove(key);
             }
             else if (!member.HasMoveTarget && tick % 30 == 0) MoveTo(member, target.X, target.Y);
@@ -507,6 +569,34 @@ public sealed partial class ScriptEngine
             case "PLAYER_COMPLETED_SPECIAL_POWER_FROM_NAMED":
                 result = ConsumeNotification(_completedPowers, type, p, type.EndsWith("NAMED", StringComparison.Ordinal));
                 return true;
+            // evaluateSciencePurchasePoints / evaluateCanPurchaseScience
+            case "PLAYER_HAS_SCIENCEPURCHASEPOINTS":
+                result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } pointed && _world.SciencePointsOf(pointed.Id) >= Int(p, 1);
+                return true;
+            case "PLAYER_CAN_PURCHASE_SCIENCE":
+                result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } buyer && _world.CanPurchaseScienceNow(buyer.Id, Str(p, 1));
+                return true;
+            // evaluateSkirmishSuppliesWithinDistancePerimeter: a neutral warehouse within the area's radius + distance of its centre holds more than the value.
+            case "SKIRMISH_SUPPLIES_VALUE_WITHIN_DISTANCE":
+                result = Has(type, p, 4) && ResolvePlayer(Str(p, 0)) is { } supplied && SuppliesWithin(supplied.Id, Int(p, 1), Str(p, 2), p[3].Real);
+                return true;
+            // evaluateSkirmishPlayerHasPrereqsToBuild -> ObjectTypes::canBuildAny: some listed type can be built by the player.
+            case "SKIRMISH_PLAYER_HAS_PREREQUISITE_TO_BUILD":
+                result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } builder && ObjectListTypes(Str(p, 1)) is var types && (types.Count > 0 ? types.Any(name => _world.PlayerHasPrerequisitesFor(builder.Id, name)) : _world.PlayerHasPrerequisitesFor(builder.Id, Str(p, 1)));
+                return true;
+            // evaluateSkirmishPlayerHasComparisonCapturedUnits: the player's objects that were taken over by entering them (Object::isCaptured).
+            case "SKIRMISH_PLAYER_HAS_COMPARISON_CAPTURED_UNITS":
+                result = Has(type, p, 3) && ResolvePlayer(Str(p, 0)) is { } captor && Compare(Int(p, 1), _world.Entities.Count(entity => entity.Owner == captor.Id && entity.Captured && !entity.EffectivelyDead && !entity.DestroyRequested), Int(p, 2));
+                return true;
+            // The original evaluates these types to false: OBSOLETE_SCRIPT_* and DEFUNCT_PLAYER_SELECTED_GENERAL* are dead (a debug crash), and the *_COMPLETED_SEQUENTIAL_EXECUTION
+            // types exist only in the enum (no evaluator, the switch falls through to false).
+            case "OBSOLETE_SCRIPT_1":
+            case "OBSOLETE_SCRIPT_2":
+            case "DEFUNCT_PLAYER_SELECTED_GENERAL":
+            case "DEFUNCT_PLAYER_SELECTED_GENERAL_FROM_NAMED":
+            case "UNIT_COMPLETED_SEQUENTIAL_EXECUTION":
+            case "TEAM_COMPLETED_SEQUENTIAL_EXECUTION":
+                return true;
             // evaluatePlayerSpecialPowerFromUnitMidway: the original has no caller of notifyOfMidwaySpecialPower, so its list stays empty and the condition never holds.
             case "PLAYER_MIDWAY_SPECIAL_POWER":
             case "PLAYER_MIDWAY_SPECIAL_POWER_FROM_NAMED":
@@ -530,6 +620,21 @@ public sealed partial class ScriptEngine
         if (index < 0) return false;
         list.RemoveAt(index);
         return true;
+    }
+
+    private bool SuppliesWithin(PlayerId player, int distance, string areaName, decimal value)
+    {
+        if (AreaOrDiagnose(areaName) is not { Points.Length: > 0 } area) return false;
+        long sumX = 0, sumY = 0;
+        foreach (var (x, y) in area.Points) { sumX += x; sumY += y; }
+        var centreX = Fixed.FromInt(sumX / area.Points.Length);
+        var centreY = Fixed.FromInt(sumY / area.Points.Length);
+        var farthest = area.Points.Max(point => (Fixed.FromInt(point.X) - centreX) * (Fixed.FromInt(point.X) - centreX) + (Fixed.FromInt(point.Y) - centreY) * (Fixed.FromInt(point.Y) - centreY));
+        var reach = Fixed.Sqrt(farthest) + Fixed.FromInt(distance);
+        var best = Fixed.Zero;
+        foreach (var warehouse in _world.Entities.Where(entity => entity.Template.IsKindOf("STRUCTURE") && entity.Owner.IsSystem && !entity.EffectivelyDead && Distance2(entity, centreX, centreY) <= reach * reach))
+            if (warehouse.Modules.OfType<SupplyWarehouseDockUpdate>().FirstOrDefault() is { } dock) best = Fixed.Max(best, Fixed.FromInt((long)_world.ValuePerSupplyBox * dock.Boxes));
+        return best > Fixed.FromDecimal(value);
     }
 
     private bool UnitHasEmptied(Entity entity)

@@ -41,6 +41,8 @@ static partial class Tests
                 Scr.Do("SKIRMISH_FOLLOW_APPROACH_PATH", Scr.Team("teamA"), Scr.SkirmishPath("Approach"), Scr.Int(1)),
                 Scr.Do("NAMED_SET_UNMANNED_STATUS", Scr.Unit("Empty")),
                 Scr.Do("TEAM_CAPTURE_NEAREST_UNOWNED_FACTION_UNIT", Scr.Team("teamPlayerA"))], oneShot: true),
+            Scr.Script("Captured", [Scr.And(Scr.If("SKIRMISH_PLAYER_HAS_COMPARISON_CAPTURED_UNITS", Scr.Side(PlayerA), Scr.Compare(Scr.GreaterEqual), Scr.Int(1)))], [Scr.Do("SET_FLAG", Scr.Flag("captured"), Scr.Bool(true))], oneShot: true),
+            Scr.Script("Points", [Scr.And(Scr.If("PLAYER_HAS_SCIENCEPURCHASEPOINTS", Scr.Side(PlayerA), Scr.Int(0)), Scr.If("OBSOLETE_SCRIPT_1"))], [Scr.Do("SET_FLAG", Scr.Flag("never"), Scr.Bool(true))], oneShot: true),
         ], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Hiker"), Placed("AlphaBunker", 150m, 100m, "teamB", "Bunker"), Placed("AlphaSoldier", 100m, 300m, "Squad", "Scout"),
                      Placed("BetaSoldier", 140m, 300m, "teamB", "Empty"), Placed("AlphaSoldier", 110m, 300m, "teamPlayerA", "Taker")],
             paths: [("Approach1", [("A", 130m, 100m), ("B", 220m, 100m), ("C", 300m, 100m)])]);
@@ -51,6 +53,7 @@ static partial class Tests
         var empty = NamedIn(session, "Empty")!;
         var taker = NamedIn(session, "Taker")!;
         Check.That(empty.Owner == taker.Owner, $"The capturing team takes over the unmanned object (owner {empty.Owner}, taker {taker.Owner}).");
+        Check.That(session.Engine.FlagValue("captured") && !session.Engine.FlagValue("never"), "The captured vehicle is counted; obsolete conditions never hold.");
         var again = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Run(again, 600);
         Check.That(again.StateHash() == session.StateHash(), "A second run reaches the same state.");
@@ -86,5 +89,30 @@ static partial class Tests
         Check.That(session.Engine.FlagValue("power") && session.Engine.FlagValue("upgrade") && !session.Engine.FlagValue("midway"), "The completed power and the built upgrade are seen once; the midway condition never fires.");
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches (team states, caches and notification lists survive).");
+    }
+
+    public static void ScriptPhase13MoreActions()
+    {
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("All", [Scr.And(Scr.If("CONDITION_TRUE"))], [
+                Scr.Do("NAMED_FACE_NAMED", Scr.Unit("Walker"), Scr.Unit("Beacon")),
+                Scr.Do("NAMED_SET_ATTITUDE", Scr.Unit("Walker"), Scr.Int(2)),
+                Scr.Do("TEAM_SET_REPULSOR", Scr.Team("teamA"), Scr.Int(1)),
+                Scr.Do("SET_STOPPING_DISTANCE", Scr.Team("teamA"), Scr.Real(5m)),
+                Scr.Do("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", Scr.Int(1)),
+                Scr.Do("PLAYER_ADD_SKILLPOINTS", Scr.Side(PlayerA), Scr.Int(3)),
+                Scr.Do("PLAYER_ADD_SKILLPOINTS", Scr.Side(PlayerA), Scr.Int(4)),
+                Scr.Do("UNIT_DESTROY_ALL_CONTAINED", Scr.Unit("Bunker")),
+                Scr.Do("PLAYER_CREATE_TEAM_FROM_CAPTURED_UNITS", Scr.Side(PlayerA), Scr.Team("teamA")),
+                Scr.Do("DEBUG_CRASH_BOX", Scr.Named(MapScriptParameterType.TextString, "x"))], oneShot: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Walker"), Placed("AlphaBunker", 300m, 200m, "teamA", "Bunker"), Placed("BetaSoldier", 100m, 400m, "teamB", "Beacon")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, 3);
+        var walker = NamedIn(session, "Walker")!;
+        Check.That((walker.Angle - Fixed.FromDecimal(1.5707963m)).Abs() < Fixed.FromDecimal(0.05m), $"NAMED_FACE_NAMED turns the unit towards the object ({walker.Angle}).");
+        var owner = walker.Owner.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Check.That(session.Engine.RecordedSetting("NAMED_SET_ATTITUDE", walker.Id.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) == 2
+                   && session.Engine.RecordedSetting("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", string.Empty) == 1 && session.Engine.RecordedSetting("PLAYER_ADD_SKILLPOINTS", owner) == 7, "The consumer-less settings are recorded (skill points add up).");
+        Check.That(session.Engine.MissingActionHits.Count == 0, "No missing actions: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
     }
 }

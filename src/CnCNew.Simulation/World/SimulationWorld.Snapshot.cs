@@ -157,6 +157,7 @@ public sealed partial class SimulationWorld
             WeaponReadyTick = reader.Int("weaponReadyTick"),
             LastDamageTick = reader.Int("lastDamageTick"),
             LastFireTick = reader.Int("lastFireTick"),
+            Captured = reader.Has("captured"),
             HasPlayerUpgradeArmor = reader.Bool("hasPlayerUpgradeArmor"),
             HasPlayerUpgradeWeapon = reader.Bool("hasPlayerUpgradeWeapon"),
             ConstructionWork = checked((int)reader.Int("constructionWork")),
