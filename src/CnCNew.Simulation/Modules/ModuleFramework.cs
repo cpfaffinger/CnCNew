@@ -352,6 +352,12 @@ public interface IProductionExit
 
     /// <summary><c>SupplyCenterProductionExitUpdate::exitObjectViaDoor</c>: units leaving this exit start gathering supplies immediately.</summary>
     bool ForcesSupplyWanting => false;
+
+    /// <summary><see cref="IsFreeToExit"/> for a specific product: <c>ParkingPlaceBehavior::hasAvailableSpaceFor</c> needs no parking space for a <c>PRODUCED_AT_HELIPAD</c> object.</summary>
+    bool IsFreeToExitFor(ObjectTemplate produced) => IsFreeToExit;
+
+    /// <summary><see cref="ClaimExit(IWorldServices)"/> for a specific product (<c>ParkingPlaceBehavior::reserveDoorForExit</c> reserves a door only for what needs one).</summary>
+    (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world, ObjectTemplate produced) => ClaimExit(world);
 }
 
 /// <summary>A module driven by the <see cref="UpgradeMux"/> state machine (<c>UpgradeModule</c> / any <c>UpgradeMux</c>-mixin module).</summary>

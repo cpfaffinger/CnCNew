@@ -396,6 +396,12 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     public EntityId Launcher => _launcher;
     internal MissileState State => _state;
 
+    /// <summary><c>AIUpdateInterface::getCurrentVictim</c> of the missile: the object it follows (invalid for a position shot).</summary>
+    public EntityId Victim => _victim;
+
+    /// <summary>The missile is in its kill-self wait after detonating (<c>OBJECT_STATUS_MISSILE_KILLING_SELF</c>).</summary>
+    internal bool IsKillingSelf => _state == MissileState.KillSelf;
+
     public override void OnSpawn(IWorldServices world)
     {
         _noTurnDistanceLeft = data.DistanceToTravelBeforeTurning;

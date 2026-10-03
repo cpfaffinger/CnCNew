@@ -164,6 +164,7 @@ public sealed partial class SimulationWorld
             ConstructionWork = checked((int)reader.Int("constructionWork")),
             BuilderId = new EntityId(checked((uint)reader.UInt("builder"))),
             SellCompleteTick = reader.Int("sellCompleteTick"),
+            EmpDisabledUntil = reader.Has("empDisabledUntil") ? reader.Int("empDisabledUntil") : 0,
         };
         if (entity.VeterancyLevel is < 0 or > 3) throw new InvalidDataException("Veterancy level out of range.");
         if (entity.WeaponBonusConditions >> NameTablesPhase5.WeaponBonusCondition.Count != 0) throw new InvalidDataException("Weapon bonus condition mask out of range.");

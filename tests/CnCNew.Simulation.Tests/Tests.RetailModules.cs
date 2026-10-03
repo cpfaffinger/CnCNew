@@ -220,7 +220,7 @@ static partial class Tests
         End
         Object HollowHole
           KindOf = STRUCTURE
-          Behavior = ParkingPlaceBehavior Parking01
+          Behavior = SmartBombTargetHomingUpdate Parking01
           End
         End
         Object HoleWorker

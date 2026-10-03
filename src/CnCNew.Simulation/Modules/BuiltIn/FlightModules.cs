@@ -271,6 +271,14 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
     public void TryReset(IWorldServices world, UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);
     public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
 
+    /// <summary><c>CountermeasuresBehavior::reloadCountermeasures</c>: <c>JetAIUpdate</c> restocks the flares the moment the aircraft has landed (<c>TO_PARKING</c> taxi).</summary>
+    public void ReloadAtAirfield()
+    {
+        _available = checked(data.NumberOfVolleys * data.VolleySize);
+        _reloadTick = 0;
+        _nextVolleyTick = 0;
+    }
+
     public void ReportMissile(IWorldServices world, Entity missile)
     {
         _incoming++;

@@ -531,7 +531,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private enum BuilderTask : byte { None, Construct, Repair }
 
     /// <summary><c>AIUpdateInterface::isIdle</c>: no move order, not docking, no builder task and no evacuation waiting (<c>AI_EVACUATE</c>).</summary>
-    public bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning;
+    public virtual bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning;
+
+    /// <summary>The locomotor the object moves with right now (<c>AIUpdateInterface::getCurLocomotor</c>); aircraft switch between their locomotor sets (<c>JetAIUpdate::chooseLocomotorSet</c>).</summary>
+    protected virtual LocomotorInfo? ActiveLocomotor => Entity.Template.Locomotor;
 
     /// <summary>Dozers and workers can raise structures (<c>DozerAIInterface</c>); every other AI cannot.</summary>
     public virtual bool CanBuild => false;
@@ -576,7 +579,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <c>aiEnter</c> (<c>AI_ENTER</c>): moves to the container and enters it on arrival if it still accepts the object. An immobile object
     /// or a missing container ignores the order, as <c>privateEnter</c> does.
     /// </summary>
-    public void OrderEnter(IWorldServices world, Entity container, bool fromPlayer)
+    public virtual void OrderEnter(IWorldServices world, Entity container, bool fromPlayer)
     {
         if (Entity.Template.Locomotor is null) return;
         OrderMove(world, container.X, container.Y, fromPlayer);
@@ -596,6 +599,19 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (!Entity.Template.IsKindOf("INFANTRY") || !pad.Template.IsKindOf("HEAL_PAD")) return;
         if (Entity.Body is { } body && body.Health == body.MaxHealth) return;
         OrderEnter(world, pad, fromPlayer);
+    }
+
+    /// <summary><c>aiIdle</c>: cancels whatever the object is doing (move, dock, builder task, pending evacuation).</summary>
+    public virtual void OrderIdle(IWorldServices world)
+    {
+        CancelDock(world);
+        ClearTask();
+        _enterTarget = EntityId.Invalid;
+        _evacuatePending = false;
+        _exitAfterEvacuate = false;
+        _returning = false;
+        StopInternalMove();
+        world.MarkDirty(Entity);
     }
 
     /// <summary><c>aiDock</c>: replaces the current state with <c>AI_DOCK</c>; a dock that cannot be entered ends at once and leaves the object idle.</summary>
@@ -756,11 +772,17 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     public virtual long Update(IWorldServices world)
     {
+        if (Entity.EmpDisabledUntil > world.Tick)
+        {
+            // DISABLED_EMP (EMPUpdate): the object cannot act until the disable runs out; its orders stay.
+            Entity.Speed = Fixed.Zero;
+            return SimulationTiming.SleepNone;
+        }
         if (_dock is not null && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
         if (_task != BuilderTask.None) UpdateTask(world);
         if (Entity.HasMoveTarget)
         {
-            if (Entity.Template.Locomotor is not { } locomotor)
+            if (ActiveLocomotor is not { } locomotor)
             {
                 // No locomotor resolved (e.g. only a non-SET_NORMAL set is defined): drop the stale order rather than spin forever.
                 Entity.HasMoveTarget = false;
@@ -1108,7 +1130,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         var head = _queue[0];
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
         var remaining = head.RemainingTicks - 1;
-        if (remaining <= 0 && exit is { IsFreeToExit: false })
+        if (remaining <= 0 && exit is not null && !exit.IsFreeToExitFor(world.Templates[head.TemplateIndex]))
         {
             // The door is closed (QueueProductionExitUpdate delay): the finished unit waits at the head of the queue.
             _queue[0] = head with { RemainingTicks = 1 };
@@ -1120,7 +1142,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
                 : _hasRally ? new SpawnExtras(Fixed.Zero, HasRally: true, RallyX: _rallyX, RallyY: _rallyY)
                 : default(SpawnExtras?);
-            var (x, y, z, angle) = exit is null ? (Entity.X, Entity.Y, Entity.Z, Entity.Angle) : exit.ClaimExit(world);
+            var (x, y, z, angle) = exit is null ? (Entity.X, Entity.Y, Entity.Z, Entity.Angle) : exit.ClaimExit(world, world.Templates[head.TemplateIndex]);
             if (extras is { } value) world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle, value);
             else world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle);
             world.Emit(SimEventKind.ProductionCompleted, Entity.Id, EntityId.Invalid, string.Empty, head.TemplateIndex);

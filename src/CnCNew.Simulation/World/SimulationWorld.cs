@@ -982,8 +982,9 @@ public sealed partial class SimulationWorld : IWorldServices
                 var bonuses = _templates.GlobalWeaponBonus;
                 source.LastFireTick = _tick;
                 if (source.WeaponClip != int.MaxValue) source.WeaponClip--;
+                // A RETURN_TO_BASE weapon that ran dry waits for the airfield reload (JetAIUpdate sets the clip and the ready tick then).
                 source.WeaponReadyTick = source.WeaponClip == 0
-                    ? _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
+                    ? weapon.ReloadsAtBase ? SimulationTiming.SleepForever : _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
                     : _tick + weapon.DelayBetweenShotsWith(bonuses, source.WeaponBonusConditions);
                 MarkDirty(source);
                 var damage = FireWeaponAt(source, weapon, fireTarget, fireTarget.X, fireTarget.Y, fireTarget.Z);

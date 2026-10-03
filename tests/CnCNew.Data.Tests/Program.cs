@@ -259,6 +259,9 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // phase 14, slaves/spawns/containers: drones, mobs, hives, propaganda, riders, overlords, hackers (docs/SIMULATION-CORE.md §29)
         "SlavedUpdate", "MobMemberSlavedUpdate", "HiveStructureBody", "SpawnPointProductionExitUpdate", "PropagandaTowerBehavior", "RiderChangeContain", "OverlordContain",
         "InternetHackContain", "PassengersFireUpgrade", "AssaultTransportAIUpdate", "HackInternetAIUpdate", "TensileFormationUpdate",
+        // air group: airfields and aircraft, silo doors, neutron missile, pulses, bunker busters, the Spectre gunship (docs/SIMULATION-CORE.md)
+        "JetAIUpdate", "ParkingPlaceBehavior", "SpectreGunshipUpdate", "MissileLauncherBuildingUpdate", "NeutronMissileUpdate", "NeutronMissileSlowDeathBehavior", "NeutronBlastBehavior",
+        "EMPUpdate", "LeafletDropBehavior", "BunkerBusterBehavior",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

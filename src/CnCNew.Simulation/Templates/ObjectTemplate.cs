@@ -42,6 +42,9 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
 
     /// <summary><c>Locomotor::m_speedLimitZ</c>: the fastest an airborne object descends under its own control, per tick (0 when the locomotor sets none).</summary>
     public Fixed SpeedLimitZ { get; init; }
+
+    /// <summary><c>Locomotor::m_lift</c>: the upward acceleration of an aircraft at full lift, per tick² (<c>Lift</c> in the data is per second²).</summary>
+    public Fixed Lift { get; init; }
 }
 
 /// <summary>
@@ -185,6 +188,9 @@ public sealed class ObjectTemplate
     /// <summary>Primary weapon of the <c>WeaponSet Conditions = VETERAN</c>/<c>ELITE</c>/<c>HERO</c> variant (index 1..3), or -1. See <see cref="VeteranArmor"/> for the selection simplification.</summary>
     public ImmutableArray<int> VeteranWeapon { get; }
     public LocomotorInfo? Locomotor { get; }
+
+    /// <summary>Every locomotor set the object declares (<c>Locomotor = SET_X Name</c>, the first resolvable name of each), by set name (<c>SET_TAXIING</c>, <c>SET_SUPERSONIC</c>, ...); <see cref="Locomotor"/> is the <c>SET_NORMAL</c> entry.</summary>
+    public ImmutableDictionary<string, LocomotorInfo> LocomotorSets { get; init; } = ImmutableDictionary<string, LocomotorInfo>.Empty;
     public ImmutableArray<PrerequisiteLine> Prerequisites { get; }
 
     /// <summary><c>ThingTemplate::m_crusherLevel</c> (<c>Object.cpp canCrushOrSquish</c>): crushes a <see cref="CrushableLevel"/> it exceeds; 0 (the reference default) crushes nothing.</summary>
@@ -362,7 +368,7 @@ public sealed class TemplateCatalog
                 foreach (var field in module.Fields.Where(value => value.Name.Equals("CommandSet", StringComparison.OrdinalIgnoreCase) || value.Name.Equals("CommandSetAlt", StringComparison.OrdinalIgnoreCase)))
                     if (field.Value.OriginalText.Trim() is { Length: > 0 } name && !commandSets.Contains(name)) commandSets.Add(name);
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
-                defaultArmor, playerUpgradeArmor, veteranArmor, defaultWeapon, playerUpgradeWeapon, veteranWeapon, locomotor, prerequisites, commandSets.ToImmutable()));
+                defaultArmor, playerUpgradeArmor, veteranArmor, defaultWeapon, playerUpgradeWeapon, veteranWeapon, locomotor, prerequisites, commandSets.ToImmutable()) { LocomotorSets = ResolveLocomotorSets(definition, locomotors) });
         }
         var commands = CommandCatalog.Build(graph);
         var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus)
@@ -561,9 +567,25 @@ public sealed class TemplateCatalog
             {
                 PreferredHeight = Fixed.FromDecimal(Get("PreferredHeight")),
                 SpeedLimitZ = SimulationTiming.PerSecondToPerTick(Get("SpeedLimitZ")),
+                Lift = SimulationTiming.PerSecondSquaredToPerTickSquared(Get("Lift")),
             };
         }
         return builder.ToImmutable();
+    }
+
+    /// <summary>All <c>Locomotor = SET_X ...</c> entries (<c>AIUpdateModuleData::parseLocomotorSet</c>): per set name the first listed locomotor that exists.</summary>
+    private static ImmutableDictionary<string, LocomotorInfo> ResolveLocomotorSets(ObjectDefinition definition, ImmutableDictionary<string, LocomotorInfo> locomotors)
+    {
+        var sets = ImmutableDictionary.CreateBuilder<string, LocomotorInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in definition.Fields.Where(value => value.Name.Equals("Locomotor", StringComparison.OrdinalIgnoreCase)))
+            if (field.Value.Value is TaggedReferenceList tagged)
+                foreach (var reference in tagged.References)
+                    if (locomotors.TryGetValue(reference.Name, out var info))
+                    {
+                        sets[tagged.Tag] = info;
+                        break;
+                    }
+        return sets.ToImmutable();
     }
 
     private static LocomotorInfo? ResolveLocomotor(ObjectDefinition definition, ImmutableDictionary<string, LocomotorInfo> locomotors)
