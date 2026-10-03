@@ -28,9 +28,10 @@ const string Usage = """
       script <content-dir> --map TEXT --name SCRIPT
                                                 prints one script (conditions, actions) and every script whose actions name it
       teams <content-dir> --map TEXT [--filter TEXT]
-      drive <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--explain] [--watch TEMPLATE-TEXT]
+      drive <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--explain] [--watch TEMPLATE-TEXT] [--commands-only] [--outcome victory|defeat]
                                                 objective driver: satisfies the world-state conditions of the scripts (kill named objects/teams, send units into areas, ...) one by one and
                                                 reports whether the mission's OWN VICTORY/DEFEAT action fired (no generic elimination)
+                                                --commands-only: no direct world writes (no kills, placements, money, spawns): the army is sent with orders and units are queued at producers
       template <content-dir> --name A[,B]          is the template instantiable, and which modules are missing
       transports <content-dir>                     the reinforcement transports the campaign maps name, and whether each can be created
       objects <content-dir> --map TEXT [--name N]  the named objects a map places: template, team, position, whether the template can be created
@@ -181,6 +182,8 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
     var filterMap = Arg(args, "--map");
     var watch = Arg(args, "--watch");
     var explain = args.Contains("--explain");
+    var commandsOnly = args.Contains("--commands-only");
+    var outcomeOnly = Arg(args, "--outcome");
     var (context, catalog, fingerprint) = Compile(content);
     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     int maps = 0, victories = 0, defeats = 0;
@@ -198,13 +201,13 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             var terrain = TerrainMap.Build(map, mission.MapPath);
             var options = MissionOptions.Standard with { HumanSideName = campaign.IsChallenge ? ChallengeSides.HumanSideFor(map) : string.Empty, HumanFaction = campaign.IsChallenge ? campaign.PlayerFaction : string.Empty };
             var cells = new List<string>();
-            foreach (var victory in new[] { true, false })
+            foreach (var victory in new[] { true, false }.Where(value => outcomeOnly is null || outcomeOnly.Equals(value ? "victory" : "defeat", StringComparison.OrdinalIgnoreCase)))
             {
                 ObjectiveDriveResult result;
-                try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks, observe: watch is null ? null : WatchEntities(watch, victory)); }
+                try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks, observe: watch is null ? null : WatchEntities(watch, victory), commandsOnly: commandsOnly); }
                 catch (Exception exception) when (exception is not OutOfMemoryException) { cells.Add($"{(victory ? "victory" : "defeat")} FAILED {exception.GetType().Name}: {exception.Message}"); continue; }
                 if (result.ReachedByScript) { if (victory) victories++; else defeats++; }
-                cells.Add($"{(victory ? "victory" : "defeat")} {(result.ReachedByScript ? $"REACHED by '{result.OutcomeScript}' @{result.OutcomeTick}" : "not reached")} ({result.Interventions} interventions)");
+                cells.Add($"{(victory ? "victory" : "defeat")} {(result.ReachedByScript ? $"REACHED by '{result.OutcomeScript}' @{result.OutcomeTick}" : "not reached")} ({result.Interventions} interventions: {result.Commands} commands, {result.WorldWrites} world writes)");
                 if (explain)
                 {
                     foreach (var line in result.Log.Take(40)) Console.WriteLine($"      {(victory ? "V" : "D")} {line}");

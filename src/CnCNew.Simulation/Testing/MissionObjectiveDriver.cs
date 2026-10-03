@@ -11,8 +11,12 @@ namespace CnCNew.Simulation.Testing;
 /// <param name="ReachedByScript">The mission ended with the wanted outcome by a script's own <c>VICTORY</c>/<c>DEFEAT</c> action (no generic elimination was applied).</param>
 /// <param name="OutcomeScript">The script whose action decided the mission (empty when none did).</param>
 /// <param name="Interventions">How many world changes the driver applied; <paramref name="Log"/> names each.</param>
+/// <param name="Commands">How many commands (orders, productions) the driver issued through the session.</param>
+/// <param name="WorldWrites">How many leaf applications wrote to the world directly; zero in a commands-only run.</param>
+/// <param name="Declined">Commands-only runs: the direct writes that were declined, so the run had to do without them.</param>
 /// <param name="Unmet">When the ending was not reached: per ending script what stayed open (blockers the driver cannot satisfy, leaves it kept applying, the chain of false timers/counters/flags).</param>
-public sealed record ObjectiveDriveResult(bool ReachedByScript, MissionOutcome Outcome, string OutcomeScript, long OutcomeTick, int Interventions, ImmutableArray<string> Log, ImmutableArray<string> Unmet);
+public sealed record ObjectiveDriveResult(bool ReachedByScript, MissionOutcome Outcome, string OutcomeScript, long OutcomeTick, int Interventions, ImmutableArray<string> Log, ImmutableArray<string> Unmet,
+    int Commands = 0, int WorldWrites = 0, ImmutableArray<string> Declined = default);
 
 /// <summary>
 /// A headless "objective driver" (<c>docs/SCRIPT-ENGINE.md</c> §9): instead of eliminating a side as <see cref="MissionProbe"/> does, it works backwards from the mission's own
@@ -28,14 +32,14 @@ public sealed record ObjectiveDriveResult(bool ReachedByScript, MissionOutcome O
 /// </summary>
 public static class MissionObjectiveDriver
 {
-    public static ObjectiveDriveResult Run(MissionOptions options, TemplateCatalog catalog, string fingerprint, TerrainMap terrain, MapData map, bool victory, long maxTicks = 4500, int spacing = 15, long settleTicks = 60, Action<MissionSession>? observe = null)
+    public static ObjectiveDriveResult Run(MissionOptions options, TemplateCatalog catalog, string fingerprint, TerrainMap terrain, MapData map, bool victory, long maxTicks = 4500, int spacing = 15, long settleTicks = 60, Action<MissionSession>? observe = null, bool commandsOnly = false)
     {
         var session = MissionSession.Start(options, catalog, fingerprint, terrain, map);
-        var driver = new ObjectiveDriver(session, victory);
+        var driver = new ObjectiveDriver(session, victory, commandsOnly);
         var world = session.World;
         var engine = session.Engine;
 
-        while (world.Tick < settleTicks && !session.IsOver) { session.Step(); observe?.Invoke(session); }
+        while (world.Tick < settleTicks && !session.IsOver) { driver.Act(); session.Step(); observe?.Invoke(session); }
         long nextAt = world.Tick;
         while (world.Tick < maxTicks && !session.IsOver && engine.Outcome == MissionOutcome.None)
         {
@@ -44,10 +48,12 @@ public static class MissionObjectiveDriver
                 driver.Round();
                 nextAt = world.Tick + spacing;
             }
+            driver.Act();
             session.Step();
             observe?.Invoke(session);
         }
         var wanted = victory ? MissionOutcome.Victory : MissionOutcome.Defeat;
-        return new ObjectiveDriveResult(engine.Outcome == wanted, engine.Outcome, engine.OutcomeScript, engine.OutcomeTick, driver.Interventions, driver.Log, engine.Outcome == wanted ? [] : [..driver.Unmet(), ..driver.Survivors(), ..driver.PowerCarriers()]);
+        return new ObjectiveDriveResult(engine.Outcome == wanted, engine.Outcome, engine.OutcomeScript, engine.OutcomeTick, driver.Interventions, driver.Log, engine.Outcome == wanted ? [] : [..driver.Unmet(), ..driver.Declined.Select(line => "declined world write: " + line), ..new[] { driver.AgentSummary() }.Where(line => line.Length > 0), ..driver.Survivors(), ..driver.PowerCarriers()],
+            driver.Commands + (driver.AgentStats?.Commands ?? 0), driver.WorldWrites, driver.Declined);
     }
 }

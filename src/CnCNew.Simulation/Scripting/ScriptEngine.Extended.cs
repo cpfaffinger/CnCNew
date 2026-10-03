@@ -208,6 +208,7 @@ public sealed partial class ScriptEngine
         DescribeSequences(writer);
         DescribePowerState(writer);
         DescribeTeamAbilityState(writer);
+        DescribeSettingState(writer);
         if (_pendingTeamScripts.Count > 0)
         {
             writer.BeginArray("pendingTeamScripts");
@@ -255,6 +256,7 @@ public sealed partial class ScriptEngine
         LoadSequences(reader);
         LoadPowerState(reader);
         LoadTeamAbilityState(reader);
+        LoadSettingState(reader);
         _pendingTeamScripts.Clear();
         if (reader.Has("pendingTeamScripts"))
             foreach (var item in reader.Array("pendingTeamScripts")) _pendingTeamScripts.Add((checked((int)item.Int("team")), item.Text("script")));

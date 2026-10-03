@@ -224,7 +224,7 @@ public sealed partial class ScriptEngine
                 _recordedActions++;
                 return true;
             default:
-                return false;
+                return TryExecuteSettingAction(action);
         }
     }
 

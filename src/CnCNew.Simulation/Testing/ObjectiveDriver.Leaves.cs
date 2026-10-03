@@ -101,12 +101,15 @@ internal sealed partial class ObjectiveDriver
         if (entity.Owner.IsSystem || entity.Template.Locomotor is null) return false;
         var owner = entity.Owner;
         var id = entity.Id;
-        return _session.Issue(owner, (sequence, tick) => new SetMoveTargetCommand(owner, sequence, tick, id, spot.X, spot.Y)).Accepted;
+        if (!_session.Issue(owner, (sequence, tick) => new SetMoveTargetCommand(owner, sequence, tick, id, spot.X, spot.Y)).Accepted) return false;
+        Commands++;
+        return true;
     }
 
     /// <summary>Puts an object on a spot (the fallback when an order does not get it there in time).</summary>
     private bool Place(Entity entity, (Fixed X, Fixed Y) spot)
     {
+        if (_commandsOnly) return false;
         // Only mobile objects: a structure's footprint is registered in the navigation grid at its spawn position and would be removed from the wrong cells on its death.
         if (entity.EffectivelyDead || entity.DestroyRequested || entity.ContainedBy.IsValid || entity.Template.Locomotor is null || entity.Template.IsKindOf("STRUCTURE")) return false;
         entity.X = spot.X;
@@ -119,24 +122,12 @@ internal sealed partial class ObjectiveDriver
 
     /// <summary>An order for the first two attempts (every few seconds), a placement after that.</summary>
     private bool GoTo(Entity entity, (Fixed X, Fixed Y) spot, int attempt)
-        => attempt < 2 ? Send(entity, spot) || Place(entity, spot) : Place(entity, spot);
+        => _commandsOnly ? Send(entity, spot) : attempt < 2 ? Send(entity, spot) || Place(entity, spot) : Place(entity, spot);
 
-    private Leaf KillTeamLeaf(string team) => new("killteam:" + team, $"destroy team '{team}'", 20, 30, _ =>
-    {
-        var members = LiveTeamMembers(team).Where(member => !WouldHarm(member.Owner) || _allowHarm).ToArray();
-        if (members.Length == 0) return false;
-        foreach (var member in members) _world.Kill(member.Id);
-        return true;
-    });
+    private Leaf KillTeamLeaf(string team) => Destroy("killteam:" + team, $"destroy team '{team}'", 20, 30, () => LiveTeamMembers(team).Where(member => !WouldHarm(member.Owner) || _allowHarm).ToArray());
 
-    private Leaf KillPlayerLeaf(string key, string name, PlayerId player, Func<Entity, bool> which) => new(key + ":" + name, $"destroy everything of '{name}'", 20, 60, _ =>
-    {
-        if (WouldHarm(player) && !_allowHarm) return false;
-        var victims = LiveOf(player).Where(which).Select(entity => entity.Id).ToArray();
-        if (victims.Length == 0) return false;
-        foreach (var id in victims) _world.Kill(id);
-        return true;
-    });
+    private Leaf KillPlayerLeaf(string key, string name, PlayerId player, Func<Entity, bool> which) => Destroy(key + ":" + name, $"destroy everything of '{name}'", 20, 60,
+        () => WouldHarm(player) && !_allowHarm ? [] : LiveOf(player).Where(which).ToArray());
 
     /// <summary>Whether destroying this side's objects would end the mission the wrong way: the viewer's own side in a victory run, the viewer's enemies in a defeat run.</summary>
     private bool WouldHarm(PlayerId owner)
@@ -179,13 +170,8 @@ internal sealed partial class ObjectiveDriver
             case "NAMED_TOTALLY_DEAD":
             {
                 var name = Text(0);
-                return Guarded(Named(name)?.Owner, () => Plan.Of(new Leaf("kill:" + name, $"destroy named '{name}'", 6, 30, _ =>
-                {
-                    if (Named(name) is not { } entity) return false;
-                    if (WouldHarm(entity.Owner) && !_allowHarm) return false;
-                    _world.Kill(entity.Id);
-                    return true;
-                })));
+                return Guarded(Named(name)?.Owner, () => Plan.Of(Destroy("kill:" + name, $"destroy named '{name}'", 6, 30,
+                    () => Named(name) is { } entity && (!WouldHarm(entity.Owner) || _allowHarm) ? [entity] : [])));
             }
             case "NAMED_NOT_DESTROYED": return Plan.Blocked($"named '{Text(0)}' must stay alive but is destroyed");
             case "NAMED_CREATED": return new Plan();
@@ -225,13 +211,13 @@ internal sealed partial class ObjectiveDriver
                 {
                     if (Named(name) is not { } entity || AreaSpot(area) is not { } spot) return false;
                     return GoTo(entity, spot, attempt);
-                }, edge: type == "NAMED_ENTERED_AREA");
+                }, edge: type == "NAMED_ENTERED_AREA") { Kind = LeafKind.Order };
                 return Edge(leaf);
             }
             case "NAMED_SELECTED":
             {
                 var name = Text(0);
-                return Plan.Of(new Leaf("select:" + name, $"select named '{name}'", 3, 15, _ => { _engine.SelectNamed(name); return true; }));
+                return Plan.Of(new Leaf("select:" + name, $"select named '{name}'", 3, 15, _ => { _engine.SelectNamed(name); return true; }) { Kind = LeafKind.Signal });
             }
 
             // ---- teams
@@ -252,7 +238,7 @@ internal sealed partial class ObjectiveDriver
                     var moved = false;
                     foreach (var member in LiveTeamMembers(team).ToArray()) moved |= GoTo(member, spot, attempt);
                     return moved;
-                }, edge: entering);
+                }, edge: entering) { Kind = LeafKind.Order };
                 return Edge(leaf);
             }
 
@@ -271,13 +257,8 @@ internal sealed partial class ObjectiveDriver
             }
             case "MULTIPLAYER_ALLIED_VICTORY":
                 if (!_victory) return Unhandled();
-                return Plan.Of(new Leaf("killenemies", "destroy every enemy object", 20, 60, _ =>
-                {
-                    var victims = _world.Entities.Where(entity => !entity.Owner.IsSystem && !entity.EffectivelyDead && _world.AreEnemies(_local, entity.Owner)).OrderBy(entity => entity.Id.Value).Select(entity => entity.Id).ToArray();
-                    if (victims.Length == 0) return false;
-                    foreach (var id in victims) _world.Kill(id);
-                    return true;
-                }));
+                return Plan.Of(Destroy("killenemies", "destroy every enemy object", 20, 60,
+                    () => _world.Entities.Where(entity => !entity.Owner.IsSystem && !entity.EffectivelyDead && _world.AreEnemies(_local, entity.Owner)).OrderBy(entity => entity.Id.Value).ToArray()));
             case "MULTIPLAYER_ALLIED_DEFEAT":
             case "MULTIPLAYER_PLAYER_DEFEAT":
                 return Plan.Of(new Leaf("killown", "destroy every object of the viewer and its allies", 20, 60, _ =>
@@ -487,6 +468,7 @@ internal sealed partial class ObjectiveDriver
             if (target < 0) return false;
             if (current > target)
             {
+                if (_commandsOnly) { _declined.Add($"destroy the surplus of '{typeParameter}{kind}' of '{playerName}'"); return false; }
                 foreach (var surplus in LiveOf(player).Where(Counts).Skip((int)target).ToArray()) _world.Kill(surplus.Id);
                 return true;
             }
@@ -503,11 +485,17 @@ internal sealed partial class ObjectiveDriver
                     if (mover is not null) { GoTo(mover, spot, attempt); continue; }
                 }
                 if (kind is not null || !_world.Templates.TryGet(FirstTemplate(typeParameter), out var template) || !template.IsInstantiable) return made > current;
+                if (_commandsOnly)
+                {
+                    if (Produce(player, template.Name)) continue;
+                    _declined.Add($"create '{template.Name}' for '{playerName}' (no producer can queue it)");
+                    return made > current;
+                }
                 _world.RequestSpawn(template.Index, player, spot.X + Fixed.FromInt(made - current), spot.Y, _world.GroundHeightAt(spot.X, spot.Y), Fixed.Zero);
                 _world.MaterializePendingSpawns();
             }
             return true;
-        }));
+        }) { Kind = _commandsOnly ? LeafKind.Order : LeafKind.World });
     }
 }
 

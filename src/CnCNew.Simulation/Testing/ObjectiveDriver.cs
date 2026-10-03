@@ -38,6 +38,8 @@ internal sealed partial class ObjectiveDriver
         public bool Deferred { get; set; }
         /// <summary>Applying it destroys the side the run wants to win (see <see cref="ObjectiveDriver.WouldHarm"/>): held back until nothing else has made progress for a while.</summary>
         public bool Harm { get; set; }
+        /// <summary>What applying it is: an order a player could give, a UI signal, or a direct write to the world (<c>docs/SCRIPT-ENGINE.md</c> §9, commands-only mode).</summary>
+        public LeafKind Kind { get; set; } = LeafKind.World;
     }
 
     internal sealed class Plan
@@ -81,6 +83,8 @@ internal sealed partial class ObjectiveDriver
     private readonly ScriptProgram _program;
     private readonly PlayerId _local;
     private readonly bool _victory;
+    private readonly bool _commandsOnly;
+    private readonly SortedSet<string> _declined = new(StringComparer.Ordinal);
 
     private readonly Dictionary<string, List<Producer>> _timers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(Producer Producer, char Kind, int Amount)>> _counters = new(StringComparer.Ordinal);
@@ -99,7 +103,7 @@ internal sealed partial class ObjectiveDriver
     private readonly Dictionary<string, long> _lastApplied = new(StringComparer.Ordinal);
     private readonly List<string> _log = [];
 
-    public ObjectiveDriver(MissionSession session, bool victory)
+    public ObjectiveDriver(MissionSession session, bool victory, bool commandsOnly = false)
     {
         _session = session;
         _world = session.World;
@@ -107,6 +111,8 @@ internal sealed partial class ObjectiveDriver
         _program = session.Program;
         _local = MissionSession.LocalPlayerOf(_program, session.Options.HumanSideName);
         _victory = victory;
+        _commandsOnly = commandsOnly;
+        if (commandsOnly) _agent = CreateAgent();
         Index();
     }
 
@@ -130,6 +136,12 @@ internal sealed partial class ObjectiveDriver
         return hash;
     }
     public int Interventions { get; private set; }
+    /// <summary>Commands issued through the session (orders, productions); the player-equivalent part of the run.</summary>
+    public int Commands { get; private set; }
+    /// <summary>Leaf applications that wrote to the world directly (kills, placements, money, ownership, spawns).</summary>
+    public int WorldWrites { get; private set; }
+    /// <summary>The direct world writes a commands-only run declined to make (distinct labels).</summary>
+    public ImmutableArray<string> Declined => [.._declined];
     public ImmutableArray<string> Log => [.._log];
 
     private bool Allowed(ScriptUnit unit) => _session.Options.Difficulty switch
@@ -295,6 +307,7 @@ internal sealed partial class ObjectiveDriver
             foreach (var leaf in plan.Leaves)
             {
                 if (leaf.Deferred || (leaf.Harm && !allowHarm) || !seen.Add(leaf.Key)) continue;
+                if (_commandsOnly && leaf.Kind == LeafKind.World) { _declined.Add(leaf.Label); continue; }
                 var count = _applications.GetValueOrDefault(leaf.Key);
                 if (count >= leaf.MaxApplications) continue;
                 if (_lastApplied.TryGetValue(leaf.Key, out var last) && tick - last < leaf.Cooldown) continue;
@@ -302,16 +315,18 @@ internal sealed partial class ObjectiveDriver
                 _applications[leaf.Key] = count + 1;
                 _lastApplied[leaf.Key] = tick;
                 Interventions++;
+                if (leaf.Kind == LeafKind.World) WorldWrites++;
                 _log.Add($"{tick}: {leaf.Label}");
             }
         var signature = Signature();
-        if (_victory)
+        if (_victory && !_commandsOnly)
             foreach (var leaf in _defense ??= BuildDefense())
             {
                 if (_lastApplied.TryGetValue(leaf.Key, out var lastDefence) && tick - lastDefence < leaf.Cooldown) continue;
                 if (!leaf.Apply(0)) continue;
                 _lastApplied[leaf.Key] = tick;
                 var times = _applications[leaf.Key] = _applications.GetValueOrDefault(leaf.Key) + 1;
+                WorldWrites++;
                 if (times <= 3) _log.Add($"{tick}: {leaf.Label}");
             }
         _idleRounds = Interventions == before && signature == _lastSignature ? _idleRounds + 1 : 0;
