@@ -489,9 +489,11 @@ static int TeamInfo(ContentFileSystem content, CampaignCatalog campaigns, string
 
 static int ActionUsage(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
 {
-    var wanted = (Arg(args, "--action") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.Ordinal);
-    if (wanted.Count == 0) return Fail("--action is required");
+    HashSet<string> wanted = (Arg(args, "--action") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.Ordinal);
+    var missing = args.Contains("--missing");
+    if (wanted.Count == 0 && !missing) return Fail("--action is required (or --missing)");
     var conditions = args.Contains("--condition");
+    if (missing) wanted = (conditions ? MapScriptCatalog.ConditionTypeNames.Where(name => ScriptCoverage.ConditionSupport(name) == ScriptSupport.Missing) : MapScriptCatalog.ScriptActionTypeNames.Where(name => ScriptCoverage.ActionSupport(name) == ScriptSupport.Missing)).ToHashSet(StringComparer.Ordinal);
     var (context, _, _) = Compile(content);
     static string Text(MapScriptParameter value) => value.Text.Length > 0 ? value.Text : value.Type is MapScriptParameterType.Real or MapScriptParameterType.Angle ? value.Real.ToString(CultureInfo.InvariantCulture) : value.Integer.ToString(CultureInfo.InvariantCulture);
     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

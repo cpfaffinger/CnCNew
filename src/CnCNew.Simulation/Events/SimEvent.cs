@@ -93,6 +93,14 @@ public enum SimEventKind : byte
     /// the new owner, <c>Value</c>: the old owner's id).
     /// </summary>
     StructureCaptured = 29,
+
+    // --------------------------------------------------------------------------------------------- script notifications (phase 13)
+
+    /// <summary>
+    /// A <c>SpecialPowerCompletionDie</c> carrier died (<c>SpecialPowerCompletionDie::notifyScriptEngine</c>): <c>Entity</c>: the carrier, <c>Other</c>: the creator (the object that used
+    /// the power), <c>Text</c>: the <c>SpecialPower</c> name, <c>Value</c>: the id of the carrier's owner.
+    /// </summary>
+    SpecialPowerCompleted = 60,
 }
 
 /// <summary>

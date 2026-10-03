@@ -227,6 +227,7 @@ public sealed partial class ScriptEngine
 
             default:
                 if (TryEvaluateExtendedCondition(condition, out var extended)) return extended;
+                if (TryEvaluatePhase13Condition(condition, out var phase13)) return phase13;
                 _missingConditions[type] = _missingConditions.GetValueOrDefault(type) + 1;
                 return false;
         }

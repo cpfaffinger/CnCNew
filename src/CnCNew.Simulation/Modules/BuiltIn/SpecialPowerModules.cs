@@ -453,14 +453,32 @@ public sealed record SpecialPowerCompletionDieData(DieMuxData Mux, string PowerN
 }
 
 /// <summary>
-/// <c>SpecialPowerCompletionDie</c>: tells the scripting engine that a special power's carrier died (<c>notifyOfCompletedSpecialPower</c>).
-/// Script notification is not simulated, so the module is deliberately inert.
+/// <c>SpecialPowerCompletionDie</c> (<c>SpecialPowerCompletionDie.cpp</c>): tells the scripting engine that a special power's carrier died
+/// (<c>notifyScriptEngine</c> -> <c>notifyOfCompletedSpecialPower(owner, power, creator)</c>), as a <see cref="SimEventKind.SpecialPowerCompleted"/> event the script engine
+/// reads. Only a carrier with a creator (<c>setCreator</c>, set by the delivery that made it; the first transport and payload of a formation only) reports.
 /// </summary>
 public sealed class SpecialPowerCompletionDie(SpecialPowerCompletionDieData data) : DieModuleBase(data.Mux)
 {
+    private EntityId _creator;
+
     public override string ModuleName => "SpecialPowerCompletionDie";
     public string PowerName => data.PowerName;
-    public override void OnDie(IWorldServices world, in DamageInfo info) { }
+
+    /// <summary><c>SpecialPowerCompletionDie::setCreator</c>.</summary>
+    public void SetCreator(EntityId creator) => _creator = creator;
+
+    public override void OnDie(IWorldServices world, in DamageInfo info)
+    {
+        if (!_creator.IsValid) return;
+        world.Emit(SimEventKind.SpecialPowerCompleted, Entity.Id, _creator, data.PowerName, Entity.Owner.Value);
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        if (_creator.IsValid) writer.UInt("creator", _creator.Value);
+    }
+
+    public override void Load(IStateReader reader) => _creator = reader.Has("creator") ? new EntityId(checked((uint)reader.UInt("creator"))) : EntityId.Invalid;
 }
 
 // ============================================================================================================ SpectreGunshipDeploymentUpdate

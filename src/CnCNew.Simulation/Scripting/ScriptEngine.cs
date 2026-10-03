@@ -408,6 +408,10 @@ public sealed partial class ScriptEngine
         var areaMemory = new Dictionary<string, bool>(_areaInside, StringComparer.Ordinal);
         var counterMemory = _counters.ToDictionary(pair => pair.Key, pair => (pair.Value.Value, pair.Value.IsTimer), StringComparer.Ordinal);
         var powerMemory = _triggeredPowers.ToArray();
+        var completedPowerMemory = _completedPowers.ToArray();
+        var completedUpgradeMemory = _completedUpgrades.ToArray();
+        var transportMemory = _transportStatus.ToDictionary(pair => pair.Key, pair => pair.Value);
+        var techMemory = _techBuildingAnswers.ToDictionary(pair => pair.Key, pair => pair.Value);
         var missingMemory = new Dictionary<string, long>(_missingConditions, StringComparer.Ordinal);
         var diagnosticMemory = new Dictionary<string, long>(_diagnostics, StringComparer.Ordinal);
         _callingTeam = team;
@@ -430,6 +434,14 @@ public sealed partial class ScriptEngine
             foreach (var (key, (value, isTimer)) in counterMemory) _counters[key] = new Counter { Value = value, IsTimer = isTimer };
             _triggeredPowers.Clear();
             _triggeredPowers.AddRange(powerMemory);
+            _completedPowers.Clear();
+            _completedPowers.AddRange(completedPowerMemory);
+            _completedUpgrades.Clear();
+            _completedUpgrades.AddRange(completedUpgradeMemory);
+            _transportStatus.Clear();
+            foreach (var (key, value) in transportMemory) _transportStatus[key] = value;
+            _techBuildingAnswers.Clear();
+            foreach (var (key, value) in techMemory) _techBuildingAnswers[key] = value;
         }
         return result.ToImmutable();
 

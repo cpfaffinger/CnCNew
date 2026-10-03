@@ -55,4 +55,36 @@ static partial class Tests
         Run(again, 600);
         Check.That(again.StateHash() == session.StateHash(), "A second run reaches the same state.");
     }
+
+    public static void ScriptPhase13Conditions()
+    {
+        MapScript Flag(string name, MapCondition condition) => Scr.Script(name, [Scr.And(condition)], [Scr.Do("SET_FLAG", Scr.Flag(name), Scr.Bool(true))], oneShot: true);
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Setup", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_SET_STATE", Scr.Team("Squad"), Scr.Named(MapScriptParameterType.TeamState, "IDLE")), Scr.Do("NAMED_SET_UNMANNED_STATUS", Scr.Unit("Empty"))], oneShot: true),
+            Flag("state", Scr.If("TEAM_STATE_IS", Scr.Team("Squad"), Scr.Named(MapScriptParameterType.TeamState, "IDLE"))),
+            Flag("notState", Scr.If("TEAM_STATE_IS_NOT", Scr.Team("Squad"), Scr.Named(MapScriptParameterType.TeamState, "BUSY"))),
+            Flag("slots", Scr.If("NAMED_HAS_FREE_CONTAINER_SLOTS", Scr.Unit("Bunker"))),
+            Flag("excess", Scr.If("PLAYER_EXCESS_POWER_COMPARE_VALUE", Scr.Side(PlayerA), Scr.Compare(Scr.GreaterEqual), Scr.Int(0))),
+            Flag("percent", Scr.If("PLAYER_POWER_COMPARE_PERCENT", Scr.Side(PlayerA), Scr.Compare(Scr.Less), Scr.Int(100))),
+            Flag("unowned", Scr.If("SKIRMISH_UNOWNED_FACTION_UNIT_EXISTS", Scr.Side(PlayerA), Scr.Compare(Scr.GreaterEqual), Scr.Int(1))),
+            Flag("tech", Scr.If("SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE", Scr.Side(PlayerA), Scr.Int(500), Scr.Area("LeftArea"))),
+            Flag("safe", Scr.If("SUPPLY_SOURCE_SAFE", Scr.Side(PlayerA), Scr.Int(100))),
+            Flag("power", Scr.If("PLAYER_COMPLETED_SPECIAL_POWER", Scr.Side(PlayerA), Scr.Named(MapScriptParameterType.SpecialPower, "SuperweaponTest"))),
+            Flag("upgrade", Scr.If("PLAYER_BUILT_UPGRADE", Scr.Side(PlayerA), Scr.Named(MapScriptParameterType.Upgrade, "Upgrade_Test"))),
+            Flag("midway", Scr.If("PLAYER_MIDWAY_SPECIAL_POWER", Scr.Side(PlayerA), Scr.Named(MapScriptParameterType.SpecialPower, "SuperweaponTest"))),
+        ], objects: [Placed("AlphaSoldier", 100m, 100m, "Squad", "Scout"), Placed("AlphaBunker", 150m, 100m, "teamA", "Bunker"), Placed("BetaSoldier", 140m, 300m, "teamB", "Empty"), Placed("AlphaTech", 120m, 150m, "teamB", "Tech")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, 5);
+        foreach (var name in new[] { "state", "notState", "slots", "excess", "percent", "unowned", "tech" })
+            Check.That(session.Engine.FlagValue(name), $"Condition '{name}' holds.");
+        Check.That(!session.Engine.FlagValue("power") && !session.Engine.FlagValue("upgrade") && !session.Engine.FlagValue("midway"), "Notification conditions are false before the notifications.");
+        var player = session.Program.FindPlayer(PlayerA)!.Id;
+        session.Engine.Observe([
+            new CnCNew.Simulation.Events.SimEvent(new CnCNew.Simulation.Ids.EventId(900), session.World.Tick, CnCNew.Simulation.Events.SimEventKind.SpecialPowerCompleted, new CnCNew.Simulation.Ids.EntityId(1), new CnCNew.Simulation.Ids.EntityId(2), default, "SuperweaponTest", player.Value),
+            new CnCNew.Simulation.Events.SimEvent(new CnCNew.Simulation.Ids.EventId(901), session.World.Tick, CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, new CnCNew.Simulation.Ids.EntityId(3), default, player, "Upgrade_Test", 0)]);
+        Run(session, 3);
+        Check.That(session.Engine.FlagValue("power") && session.Engine.FlagValue("upgrade") && !session.Engine.FlagValue("midway"), "The completed power and the built upgrade are seen once; the midway condition never fires.");
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches (team states, caches and notification lists survive).");
+    }
 }

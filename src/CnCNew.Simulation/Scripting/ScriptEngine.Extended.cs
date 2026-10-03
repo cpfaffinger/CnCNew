@@ -179,6 +179,7 @@ public sealed partial class ScriptEngine
 
     private void ObserveExtended(CnCNew.Simulation.Events.SimEvent item)
     {
+        ObservePhase13(item);
         switch (item.Kind)
         {
             case CnCNew.Simulation.Events.SimEventKind.EntityDamaged when item.Other.IsValid:

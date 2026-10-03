@@ -161,7 +161,7 @@ static partial class Tests
         End
         Object AlphaTech
           Side = Alpha
-          KindOf = SELECTABLE STRUCTURE
+          KindOf = SELECTABLE STRUCTURE TECH_BUILDING
           Geometry = BOX
           GeometryMajorRadius = 8.0
           GeometryMinorRadius = 8.0
@@ -479,12 +479,12 @@ static partial class Tests
         var session = StartMission([
             Scr.Script("Odd", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_CAVE_INDEX", Scr.Unit("x"), Scr.Int(0)), Scr.Do("SPEECH_PLAY", Scr.Named(MapScriptParameterType.Dialog, "Hello"), Scr.Bool(false)),
                 Scr.Do("CALL_SUBROUTINE", Scr.Script("Nope")), Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("u"), Scr.Type("NoSuchObject"), Scr.Team("teamA"), Scr.Waypoint("Spawn"))], oneShot: true),
-            Scr.Script("Sighted", [Scr.And(Scr.If("SUPPLY_SOURCE_SAFE", Scr.Side(PlayerA), Scr.Int(0)))], [Scr.Do("SET_FLAG", Scr.Flag("seen"), Scr.Bool(true))]),
+            Scr.Script("Sighted", [Scr.And(Scr.If("SKIRMISH_SUPPLIES_VALUE_WITHIN_DISTANCE", Scr.Side(PlayerA), Scr.Int(0), Scr.Int(0)))], [Scr.Do("SET_FLAG", Scr.Flag("seen"), Scr.Bool(true))]),
         ]);
         Run(session, 3);
         var engine = session.Engine;
         Check.That(engine.MissingActionHits.GetValueOrDefault("SET_CAVE_INDEX") == 1, "An unimplemented action is counted, not skipped silently.");
-        Check.That(engine.MissingConditionHits.GetValueOrDefault("SUPPLY_SOURCE_SAFE") == 3 && !engine.FlagValue("seen"), "An unimplemented condition is counted on every evaluation and evaluates to false.");
+        Check.That(engine.MissingConditionHits.GetValueOrDefault("SKIRMISH_SUPPLIES_VALUE_WITHIN_DISTANCE") == 3 && !engine.FlagValue("seen"), "An unimplemented condition is counted on every evaluation and evaluates to false.");
         Check.That(engine.ForwardedActions == 1, "Speech is forwarded.");
         var output = engine.DrainOutputs();
         Check.That(output.Length == 1 && output[0].Action == "SPEECH_PLAY" && output[0].Arguments[0] == "Hello", "The forwarded action reaches the client with its parameters.");
