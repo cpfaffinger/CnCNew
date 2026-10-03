@@ -619,16 +619,25 @@ der Challenge-Wahl (`docs/SCRIPT-ENGINE.md` §9, Blockerliste).
 
 **Bekannte Grenzen:**
 
-**Bekannte Grenzen (Stand nach Phase 13):**
+**Phase-14-Stand (3. Oktober 2026, frisch gemessen; Auftrag aus `docs/HANDOFF-PHASE14.md`, Vorbereitung für `docs/HANDOFF-PHASE15.md`):** Die Modulabdeckung ist geschlossen: **alle 183 Simulationsmodule des Katalogs sind implementiert, 2.115 von 2.115 Retail-Objekten
+instanziierbar**, Modulverwendungen abgedeckt 16.558 von 19.553 (84,7 %; der Rest sind die 22 Präsentationsmodule), Kompatibilitätsbasislinie 751. Vier unabhängig entwickelte Gruppen (Luft 10 Module, Kisten/Spezial/Kollision 21, Struktur/Welt 24,
+Sklaven/Spawn/Container 12) und die letzten neun Blocker (`SalvageCrateCollide`, `UnitCrateCollide`, zwei Sabotage-Kisten, `SmartBombTargetHomingUpdate`, `SupplyWarehouseCripplingBehavior`, `RailedTransport*`) sind gemergt (`docs/SIMULATION-CORE.md` §30);
+ein **Waffenslot-Modell** (Primär/Sekundär/Tertiär, Clips und Nachladen je Slot, Sperren, Satzwahl nach Bedingungen, Beste-Waffe-Wahl; §30.6) macht die aktive `WeaponSet`-Auswahl zur einzigen Quelle der gefeuerten Waffe (`WorldSnapshot` 7 → 8,
+Replay 7 → 8, `CommandTypes.Version` 10 → 11). Skriptseite: Formationen (`asTeam`), Pfadflug des Partikelstrahls, Luftlieferungen per OCL (`DeliverPayload`, Spezialkräfte am Kartenrand), Todeswaffen, `NAMED_SET_HELD`, deaktivierte Fabriken, Zughalt,
+Garnison-Ausstiegsseite, Sprengfallen, Brückenzustand und mitwandernde Skriptnamen; die VM führt **109 von 109 Bedingungen** und 187 Aktionstypen aus (129 weitergereicht, 19 aufgezeichnet, 9 fehlend – keine davon in einer Kampagnenkarte benutzt).
+Der Zielfahrer erreicht **Sieg und Niederlage auf dem Skriptweg bei 24/24 Karten**; `audit --ticks 900`: 24/24 deterministisch und identisch nach Speichern/Laden, 0 Treffer auf fehlende Typen, Ausschalt-Endproben 13/24 Siege und 15/24 Niederlagen; Erreichbarkeit
+sauber 24/24 und 24/24. Referenzwerte: Retail-Referenzmatch Sieger FactionGLA bei Tick 13.890, Endhash `76F22CB0CA79BEEF`; Stresstest `56882F763EABEF67`; sauberer Solution-Build 21 erklärte Warnungen. Nur-Befehle-Agent (`drive --commands-only`, 15.000 Ticks, ohne jede Weltschreibung): Sieg über die eigenen Skripte weiterhin nur auf **1 von 24 Karten** (`MD_GLA04`) – die neuen Module haben die Spielbarkeit nicht verbessert.
+
+**Bekannte Grenzen (Stand nach Phase 14):**
 
 - **Die Spielbarkeit der Missionen durch einen Menschen ist nicht belegt.** Belegt ist: die Endskripte jeder Karte sind statisch erreichbar (Sieg und Niederlage je 24/24 „sauber“), jede Karte läuft
   deterministisch und setzt nach Speichern/Laden identisch fort, und der zielgerichtete Fahrer erreicht Sieg auf dem eigenen Skriptweg bei 24/24 und Niederlage bei 24/24 Karten (seit Phase 13; vorher 22/24). Der Fahrer ersetzt jedoch Spielerhandlungen
   durch Welteingriffe (platzierte Einheiten, entfernte Gegner in Abwehrbereichen, UI-Signale); „ja“ belegt die Skriptkette, nicht, dass ein Spieler mit den implementierten Einheiten gewinnen kann. Die
-  Ausschalt-Endproben erreichen weiter nur 13/24 Siege und 15/24 Niederlagen. `MD_GLA03` und `MD_CHI04` sind seit Phase 13 geschlossen.
+  Ausschalt-Endproben erreichen weiter nur 13/24 Siege und 15/24 Niederlagen. `MD_GLA03` und `MD_CHI04` sind seit Phase 13 geschlossen; in Phase 14 mussten `MD_GLA03` (Sieg) und `MD_GLA04` (Niederlage) nach den neuen Gegnermodulen im Fahrer nachgezogen werden (`docs/SCRIPT-ENGINE.md` §9).
 - Noch fehlende Skriptaktionen (statisch, Skripte/Karten): `SKIRMISH_MOVE_TO_APPROACH_PATH` 10/3, `SKIRMISH_FOLLOW_APPROACH_PATH` 7/3, `AI_PLAYER_BUILD_SUPPLY_CENTER` 5/1, `SET_TRAIN_HELD` 5/1,
   `TEAM_CAPTURE_NEAREST_UNOWNED_FACTION_UNIT` 5/4, `TEAM_GUARD_SUPPLY_CENTER` 5/1, …; fehlende Bedingungen unverändert `PLAYER_COMPLETED/MIDWAY_SPECIAL_POWER`, `SUPPLY_SOURCE_SAFE/ATTACKED`,
   `PLAYER_BUILT_UPGRADE`, `TEAM_STATE_IS`, `PLAYER_POWER_COMPARE_PERCENT`, `SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE` (`docs/SCRIPT-ENGINE.md` §9). **Verstärkung mit Transport** ist seit Phase 13 für Flugzeuge, Fallschirm und `teamStartsFull` simuliert (offen: Chinook-Lieferung, `CINE_U06_CruiseMissileFLY`), Formationen/Angriffsmarsch sind nicht simuliert; zehn Aktionen werden nur aufgezeichnet (`SCRIPT-ENGINE.md` §8 Punkt 17).
-- Die verbliebenen VM-Semantiklücken (Stand Phase 13: „untätig“ ohne AI-Zustand, Pfadflug, `WeaponSlot`, Formationen) stehen in `docs/SCRIPT-ENGINE.md` §8 Punkt 23.
+- Die verbliebenen VM-Semantiklücken (Stand Phase 14: der vollständige Mannschafts-Zustandsautomat des Originals, Pfadflug für andere Flugkörper als den Partikelstrahl, die neun fehlenden Skirmish-/Waffenpfad-Aktionen) stehen in `docs/SCRIPT-ENGINE.md` §8 Punkt 23; Formationen, Pfadflug des Strahls und `WeaponSlot` sind seit Phase 14 umgesetzt.
 - Das Skirmish-Setup (Teil A Punkt 1) ist seit Phase 10 abgeschlossen (alle 64 Skirmish-Karten mit ≥2 Startpositionen starten und enden, `SimTool skirmish-sweep`); ein Skirmish-Speicherstand ist
   bewusst nicht unterstützt (`SkirmishMatchSession.CreateSave()` wirft; Replay/Checkpoint deckt Skirmish-Partien ab).
 - Objekte, deren Vorlage im Retail-Basisbestand fehlt (Kartenüberlagerungs-Definitionen wie Straßen, Zäune, Bäume), werden übersprungen und gezählt; `*_HUNT`/`*_ATTACK_*` sind Bewegungsaufträge plus
@@ -636,7 +645,7 @@ der Challenge-Wahl (`docs/SCRIPT-ENGINE.md` §9, Blockerliste).
 - Freischaltungen (Kampagnenreihenfolge der Challenge-Kampagnen, Profil) sind nicht modelliert; Menü, Briefing, Ladeliste, Speichern im Spiel und Missionsabschluss sind angeschlossen
   (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7), und der Stride-Client verarbeitet seit Phase 12 die Shell-Ausgaben (`ClientRuntime`, `docs/GAME-HUD.md` §15); die Verdrahtung ist headless per Rauchtest geprüft, nicht von einem Menschen gespielt.
 - Missionen sind keine Replays (Skriptaktionen sind keine aufgezeichneten Befehle); Wahrheit ist der Snapshot.
-- Referenzwerte nach Phase 13: Retail-Referenzmatch Sieger FactionGLA bei Tick 15.000, Endhash `532F19F360C59550` (Phase 10–12: Tick 19.200, `28BE35C1174E369F`); Stresstest `56882F763EABEF67`.
+- Referenzwerte nach Phase 14: Retail-Referenzmatch Sieger FactionGLA bei Tick 13.890, Endhash `76F22CB0CA79BEEF` (Phase 13: Tick 15.000, `532F19F360C59550`; Phase 10–12: Tick 19.200, `28BE35C1174E369F`); Stresstest `56882F763EABEF67`.
 
 ## 10. Patch-Integration, Qualität und auslieferbarer Abschluss
 
@@ -665,4 +674,4 @@ Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
 Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
 Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
 jedoch separat begründet und versioniert. Die Schritte 1 bis 8 sind abgeschlossen, Schritt 9 ist weit fortgeschritten, aber nicht im Sinne seiner Abnahme beendet (siehe oben „Bekannte Grenzen“).
-Der nächste Einstieg ist `docs/HANDOFF-PHASE14.md` (Spielbarkeit der Missionen, Formationen, Waffenslots, Pfadflug, restliche Blocker-Module).
+Der nächste Einstieg ist `docs/HANDOFF-PHASE15.md` (Spielbarkeit der Missionen durch einen Menschen, Nur-Befehle-Agent, Client durchklicken, Leistung, Näherungen der neuen Module).

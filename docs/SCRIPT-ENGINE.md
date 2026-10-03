@@ -521,3 +521,8 @@ Blätter als Befehle kennen. (d) 15.000 Ticks (8,3 Spielminuten) sind für Basis
 gewinnt, ist Gegenstand des nächsten Handoffs** (`docs/HANDOFF-PHASE14.md`): Angriffswellen mit Rückzug und Verstärkung, Eroberung (`CaptureCommand`), Spezialkräfte, eine KI, die Missionsziele liest.
 Der Normalmodus bleibt bei Sieg und Niederlage 24/24 mit Welteingriffen (`Interventions` je Karte: Tabelle oben); der Nur-Befehle-Modus ist der Maßstab, an dem sich der Abstand zur Spielbarkeit messen lässt
 (Tests `ScriptCommandsOnlyDriverUsesOrdersNotWrites`, `…DeclinesWhatOnlyAWriteCanDo`: auf einer synthetischen Karte erreicht er den Sieg nur mit Befehlen, und Geld wird abgelehnt und benannt).
+
+**Stand nach Phase 14 (4. Oktober 2026, Release, je Kampagne einzeln mit 15.000 Ticks gelaufen, `drive --commands-only --outcome victory`):** unverändert **1 von 24 Karten** (`MD_GLA04`, Skript endet selbst @1022, 0 Weltschreibungen, 86 Befehle); die
+anderen 23 Karten „nicht erreicht“, darunter alle Challenge-Karten (7 + `GC_AirGeneral`), `Training01`, `MD_CHI01–05`, `MD_GLA01/02/03/05`, `MD_USA01–05`. Die neuen Module (Flugzeuge, Kisten, Strukturen, Waffenslots) haben den Abstand zur Spielbarkeit damit
+nicht verkleinert: die Ursachen (a)–(d) oben gelten unverändert; hinzu kommt, dass der Gegner jetzt tatsächlich fliegt und schießt (Raptor, Comanche, Schlachtschiffe), was den Nur-Befehle-Agenten auf `MD_GLA03` und `MD_USA*` früher trifft. Die USA-Karten
+brauchen auch im Nur-Befehle-Modus über eine Stunde je Lauf (14.864 Befehle auf `MD_USA04`). Der Maßstab bleibt Gegenstand des nächsten Handoffs (`docs/HANDOFF-PHASE15.md`, Punkt 1).

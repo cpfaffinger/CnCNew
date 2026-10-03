@@ -6,7 +6,7 @@ Singleplayer, Skirmish und Kampagne. Nicht im Scope: Multiplayer, binäre Kompat
 Mods und Savegames. Das Repo ist rein lokal (Branch `main`, **kein Remote**).
 
 Die Gesamtplanung steht in `docs/IMPLEMENTATION-PLAN.md`. Die aktuell zu bearbeitende Phase steht
-als vollständiger Auftrag in `docs/HANDOFF-PHASE14.md` (Handoff-Datei der jeweils nächsten Phase).
+als vollständiger Auftrag in `docs/HANDOFF-PHASE15.md` (Handoff-Datei der jeweils nächsten Phase).
 Lies vor jeder Phase `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
 `docs/IMPLEMENTATION-PLAN.md` sowie die Fachdokumente der berührten Domäne
 (`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `SIMULATION-CORE.md`, `W3D-MATERIALS.md`).
