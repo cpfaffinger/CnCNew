@@ -1169,6 +1169,73 @@ public static class ModuleCatalog
             Real("DeliveryDecalRadius", "DeliverPayloadAIUpdate.h"),
         ]);
 
+        // ===== BEGIN crates, collide modules and specials (CrateModules.cs, SpecialsModules.cs) =====
+        // CrateCollide.cpp CrateCollideModuleData: the fields every *CrateCollide shares. ExecuteAnimation* drive a screen-space 2D animation (presentation, typed, no consumer).
+        ImmutableArray<FieldSchema> CrateCollide() =>
+        [
+            new("RequiredKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "CrateCollide.cpp"),
+            new("ForbiddenKindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "CrateCollide.cpp"),
+            new("ForbidOwnerPlayer", FieldType.Bool, Source: "CrateCollide.cpp"),
+            new("BuildingPickup", FieldType.Bool, Source: "CrateCollide.cpp"),
+            new("HumanOnly", FieldType.Bool, Source: "CrateCollide.cpp"),
+            new("PickupScience", FieldType.Reference, ReferenceKind: DefinitionKind.Science, Source: "CrateCollide.cpp"),
+            new("ExecuteFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "CrateCollide.cpp"),
+            new("ExecuteAnimation", FieldType.Text, Source: "CrateCollide.cpp"),
+            Real("ExecuteAnimationTime", "CrateCollide.cpp"),
+            Real("ExecuteAnimationZRise", "CrateCollide.cpp"),
+            new("ExecuteAnimationFades", FieldType.Bool, Source: "CrateCollide.cpp"),
+        ];
+        Add("MoneyCrateCollide",
+        [
+            ..CrateCollide(),
+            new("MoneyProvided", FieldType.Integer, Min: 0, Source: "MoneyCrateCollide.h"),
+            // "UpgradeType:<name> Boost:<int>" (parseUpgradePair), repeatable: a token pair the generic typer cannot read, parsed by the binding like AutoDepositUpdate's.
+            new("UpgradedBoost", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "MoneyCrateCollide.h"),
+        ]);
+        Add("VeterancyCrateCollide",
+        [
+            ..CrateCollide(),
+            new("EffectRange", FieldType.Integer, Min: 0, Source: "VeterancyCrateCollide.h"),
+            new("AddsOwnerVeterancy", FieldType.Bool, Source: "VeterancyCrateCollide.h"),
+            new("IsPilot", FieldType.Bool, Source: "VeterancyCrateCollide.h"),
+        ]);
+        Add("ConvertToCarBombCrateCollide", [..CrateCollide(), new("FXList", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "ConvertToCarBombCrateCollide.h")]);
+        Add("ConvertToHijackedVehicleCrateCollide", CrateCollide());
+        Add("HijackerUpdate",
+        [
+            new("AttachToTargetBone", FieldType.Text, Source: "HijackerUpdate.h"),
+            new("ParachuteName", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "HijackerUpdate.h"),
+        ]);
+        Add("SabotageCommandCenterCrateCollide", CrateCollide());
+        Add("SabotageSuperweaponCrateCollide", CrateCollide());
+        Add("SabotageMilitaryFactoryCrateCollide", [..CrateCollide(), new("SabotageDuration", FieldType.DurationMs, Source: "SabotageMilitaryFactoryCrateCollide.h")]);
+        Add("SabotagePowerPlantCrateCollide", [..CrateCollide(), new("SabotagePowerDuration", FieldType.DurationMs, Source: "SabotagePowerPlantCrateCollide.h")]);
+        Add("SabotageSupplyCenterCrateCollide", [..CrateCollide(), new("StealCashAmount", FieldType.Integer, Min: 0, Source: "SabotageSupplyCenterCrateCollide.h")]);
+        Add("PilotFindVehicleUpdate",
+        [
+            new("ScanRate", FieldType.DurationMs, Source: "PilotFindVehicleUpdate.cpp"),
+            Real("ScanRange", "PilotFindVehicleUpdate.cpp"),
+            Real("MinHealth", "PilotFindVehicleUpdate.cpp"),
+        ]);
+        Add("StickyBombUpdate",
+        [
+            new("AttachToTargetBone", FieldType.Text, Source: "StickyBombUpdate.h"),
+            Real("OffsetZ", "StickyBombUpdate.h"),
+            new("GeometryBasedDamageWeapon", FieldType.Reference, ReferenceKind: DefinitionKind.Weapon, Source: "StickyBombUpdate.h"),
+            new("GeometryBasedDamageFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "StickyBombUpdate.h"),
+        ]);
+        Add("GrantStealthBehavior",
+        [
+            Real("StartRadius", "GrantStealthBehavior.cpp"),
+            Real("FinalRadius", "GrantStealthBehavior.cpp"),
+            Real("RadiusGrowRate", "GrantStealthBehavior.cpp"),
+            new("RadiusParticleSystemName", FieldType.Opaque, Source: "GrantStealthBehavior.cpp"),
+            new("KindOf", FieldType.Flags, Table: NameTables.KindOf, Source: "GrantStealthBehavior.cpp"),
+        ]);
+        Add("WanderAIUpdate", AiBase("AIUpdate.cpp"), allowsNestedSections: true);
+        Add("ProjectileStreamUpdate", []);
+        // ===== END crates, collide modules and specials =====
+
         return builder.ToImmutable();
     }
 

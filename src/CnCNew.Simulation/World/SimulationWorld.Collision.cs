@@ -1,5 +1,6 @@
 using CnCNew.Data.Definitions;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 
@@ -36,27 +37,29 @@ public sealed partial class SimulationWorld
     public (Fixed Dx, Fixed Dy) AvoidLocalBlockers(Entity mover, Fixed dx, Fixed dy)
     {
         if (Navigation is null || (dx == Fixed.Zero && dy == Fixed.Zero)) return (dx, dy);
-        if (!StepBlocked(mover, dx, dy)) return (dx, dy);
+        // The object an approach order aims at is never an obstacle (the reference's AI ignores its goal object when it steers), or a hijacker could never touch its car.
+        var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
+        if (!StepBlocked(mover, dx, dy, goal)) return (dx, dy);
         foreach (var angle in AvoidanceAngles)
         {
             var cos = FixedTrig.Cos(angle);
             var sin = FixedTrig.Sin(angle);
             var rx = dx * cos - dy * sin;
             var ry = dx * sin + dy * cos;
-            if (!StepBlocked(mover, rx, ry)) return (rx, ry);
+            if (!StepBlocked(mover, rx, ry, goal)) return (rx, ry);
         }
         return (dx, dy);
     }
 
-    /// <summary>Whether stepping <paramref name="mover"/> to its position plus (<paramref name="dx"/>, <paramref name="dy"/>) would land inside another live, mobile entity's bounding circle.</summary>
-    private bool StepBlocked(Entity mover, Fixed dx, Fixed dy)
+    /// <summary>Whether stepping <paramref name="mover"/> to its position plus (<paramref name="dx"/>, <paramref name="dy"/>) would land inside another live, mobile entity's bounding circle (the <paramref name="goal"/> object excepted).</summary>
+    private bool StepBlocked(Entity mover, Fixed dx, Fixed dy, EntityId goal)
     {
         var x = mover.X + dx;
         var y = mover.Y + dy;
         var moverRadius = mover.Template.BoundingCircleRadius;
         foreach (var other in Entities)
         {
-            if (other.Id == mover.Id || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid) continue;
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid) continue;
             var limit = moverRadius + other.Template.BoundingCircleRadius;
             var ddx = other.X - x;
             var ddy = other.Y - y;
@@ -68,13 +71,64 @@ public sealed partial class SimulationWorld
     /// <inheritdoc cref="IWorldServices.ResolveFootprintCollisions"/>
     public void ResolveFootprintCollisions(Entity mover, Fixed stepX, Fixed stepY)
     {
-        if (mover.EffectivelyDead || mover.Template.CrusherLevel <= 0) return;
-        foreach (var other in Entities)
+        if (mover.EffectivelyDead) return;
+        if (mover.Template.CrusherLevel > 0)
+            foreach (var other in Entities)
+            {
+                if (other.Id == mover.Id || other.EffectivelyDead) continue;
+                if (!FootprintsOverlap(mover, other)) continue;
+                TryTopple(mover, other);
+                TrySquish(mover, other, stepX, stepY);
+            }
+        DeliverCollisions(mover);
+    }
+
+    // ------------------------------------------------------------------------------------------------ collide modules
+
+    /// <summary>Every registered entity that has at least one <see cref="ICollideModule"/> (crates, hijackers, saboteurs, ...), in registration order.</summary>
+    private readonly List<Entity> _collidables = [];
+
+    private void TrackCollidable(Entity entity)
+    {
+        entity.CollideModules = [..entity.ModuleArray.OfType<ICollideModule>()];
+        if (entity.CollideModules.Length > 0) _collidables.Add(entity);
+    }
+
+    private void UntrackCollidable(Entity entity)
+    {
+        if (entity.CollideModules.Length > 0) _collidables.Remove(entity);
+    }
+
+    /// <summary>
+    /// <c>PartitionManager::checkForCollisions</c> (<c>obj->onCollide(other)</c>, then <c>other->onCollide(obj)</c>) for a mover whose footprint now overlaps another
+    /// object's: the mover's own collide modules hear about every overlapping object, and every collide-module holder the mover overlaps hears about the mover.
+    /// Only movers are tested, so an object standing still on a crate collects it as soon as it moves, not when the crate appears.
+    /// </summary>
+    private void DeliverCollisions(Entity mover)
+    {
+        if (mover.CollideModules.Length > 0)
+            foreach (var other in Entities)
+            {
+                if (other.Id == mover.Id || !CanCollide(other) || !FootprintsOverlap(mover, other)) continue;
+                CallCollide(mover, other);
+            }
+        for (var index = 0; index < _collidables.Count; index++)
         {
-            if (other.Id == mover.Id || other.EffectivelyDead) continue;
-            if (!FootprintsOverlap(mover, other)) continue;
-            TryTopple(mover, other);
-            TrySquish(mover, other, stepX, stepY);
+            var holder = _collidables[index];
+            if (holder.Id == mover.Id || !CanCollide(holder) || !CanCollide(mover) || !FootprintsOverlap(mover, holder)) continue;
+            CallCollide(holder, mover);
+        }
+    }
+
+    private static bool CanCollide(Entity entity) => !entity.DestroyRequested && !entity.ContainedBy.IsValid && !entity.HasStatus(NoCollisionsBit);
+
+    /// <summary><c>Object::onCollide</c>: the entity's collide modules in module order; the loop ends the moment the object stops colliding (a module may set <c>NO_COLLISIONS</c> or destroy it).</summary>
+    internal void CallCollide(Entity self, Entity other)
+    {
+        foreach (var module in self.CollideModules)
+        {
+            if (self.DestroyRequested || other.DestroyRequested || self.HasStatus(NoCollisionsBit)) break;
+            module.OnCollide(this, other);
         }
     }
 

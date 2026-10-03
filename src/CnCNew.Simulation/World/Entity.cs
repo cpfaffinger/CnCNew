@@ -111,6 +111,8 @@ public sealed class Entity
     internal IEventReceiver[] Receivers { get; set; } = [];
     internal IUpgradeModule[] UpgradeModules { get; set; } = [];
     internal IDamageModule[] DamageModules { get; set; } = [];
+    /// <summary>The entity's collide modules (<see cref="ICollideModule"/>), filled when the world registers the entity.</summary>
+    internal ICollideModule[] CollideModules { get; set; } = [];
     internal UpdateNode[] Updates { get; set; } = [];
     internal List<Timers.SimTimer>? Timers { get; set; }
     internal bool Registered { get; set; }

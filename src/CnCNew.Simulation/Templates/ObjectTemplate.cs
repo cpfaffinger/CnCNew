@@ -184,6 +184,12 @@ public sealed class ObjectTemplate
     public int PlayerUpgradeWeapon { get; }
     /// <summary>Primary weapon of the <c>WeaponSet Conditions = VETERAN</c>/<c>ELITE</c>/<c>HERO</c> variant (index 1..3), or -1. See <see cref="VeteranArmor"/> for the selection simplification.</summary>
     public ImmutableArray<int> VeteranWeapon { get; }
+
+    /// <summary>
+    /// Primary weapon of the <c>WeaponSet Conditions = CARBOMB</c> variant, or -1 (<c>ThingTemplate::findWeaponTemplateSet(WEAPONSET_CARBOMB)</c>; every shipped
+    /// vehicle that has one declares it alone). Selected for an entity that <c>ConvertToCarBombCrateCollide</c> turned into a car bomb.
+    /// </summary>
+    public int CarBombWeapon { get; init; } = -1;
     public LocomotorInfo? Locomotor { get; }
     public ImmutableArray<PrerequisiteLine> Prerequisites { get; }
 
@@ -362,7 +368,10 @@ public sealed class TemplateCatalog
                 foreach (var field in module.Fields.Where(value => value.Name.Equals("CommandSet", StringComparison.OrdinalIgnoreCase) || value.Name.Equals("CommandSetAlt", StringComparison.OrdinalIgnoreCase)))
                     if (field.Value.OriginalText.Trim() is { Length: > 0 } name && !commandSets.Contains(name)) commandSets.Add(name);
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
-                defaultArmor, playerUpgradeArmor, veteranArmor, defaultWeapon, playerUpgradeWeapon, veteranWeapon, locomotor, prerequisites, commandSets.ToImmutable()));
+                defaultArmor, playerUpgradeArmor, veteranArmor, defaultWeapon, playerUpgradeWeapon, veteranWeapon, locomotor, prerequisites, commandSets.ToImmutable())
+            {
+                CarBombWeapon = ResolveCarBombWeapon(definition, weapons),
+            });
         }
         var commands = CommandCatalog.Build(graph);
         var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus)
@@ -511,6 +520,18 @@ public sealed class TemplateCatalog
             }
         }
         return (defaultArmor ?? ArmorInfo.Default, playerUpgrade, [..veteran]);
+    }
+
+    private static int ResolveCarBombWeapon(ObjectDefinition definition, WeaponCatalog weapons)
+    {
+        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (ConditionTokens(section) is not [var only] || !only.Equals("CARBOMB", StringComparison.OrdinalIgnoreCase)) continue;
+            var primary = section.Fields.Where(value => value.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase))
+                .FirstOrDefault(value => value.Value.OriginalText.TrimStart().StartsWith("PRIMARY", StringComparison.OrdinalIgnoreCase));
+            return primary?.Value.Value is DefinitionReference { IsNone: false } reference && weapons.TryGet(reference.Name, out var info) ? info.Index : -1;
+        }
+        return -1;
     }
 
     private static (int Default, int PlayerUpgrade, ImmutableArray<int> Veteran) ResolveWeapon(ObjectDefinition definition, WeaponCatalog weapons)

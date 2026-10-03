@@ -71,6 +71,7 @@ public sealed partial class SimulationWorld
             known.SharedReadyFrames.Clear();
             foreach (var shared in player.Array("sharedReadyFrames")) known.SharedReadyFrames[checked((int)shared.Int("power"))] = shared.Int("frame");
             known.Tunnels.Load(player);
+            known.PowerSabotagedUntil = player.Has("powerSabotagedUntil") ? player.Int("powerSabotagedUntil") : 0;
         }
         LoadDelayedDamage(state);
         var rejections = state.Array("rejections");

@@ -207,6 +207,27 @@ public interface IWorldServices
     /// effect that the reference's physics collision would have delivered.
     /// </summary>
     void ResolveFootprintCollisions(Entity mover, Fixed stepX, Fixed stepY);
+
+    // ------------------------------------------------------------------------------------ crates, collisions, sabotage (see SimulationWorld.CrateServices.cs)
+
+    /// <summary>
+    /// <c>ExperienceTracker::gainExpForLevel</c>: gives <paramref name="entity"/> exactly the experience it needs to rise <paramref name="levels"/> veterancy levels
+    /// (capped at heroic), scaled by its experience scalar when <paramref name="scaleForBonus"/>; false when no level can be gained. A non-trainable object takes
+    /// nothing (<c>addExperiencePoints</c> returns early) but still reports true when a level was available, as the reference does.
+    /// </summary>
+    bool GainExperienceForLevels(Entity entity, int levels, bool scaleForBonus);
+
+    /// <summary><c>ExperienceTracker::setVeterancyLevel</c>: sets the level exactly (up or down), the experience becomes the level's requirement and the level-change effects run.</summary>
+    void SetVeterancy(Entity entity, int level);
+
+    /// <summary>Re-reads the entity's active weapon set after something switched it (<c>Object::setWeaponSetFlag</c>): the clip is refilled for the new primary weapon.</summary>
+    void WeaponSetChanged(Entity entity);
+
+    /// <summary><c>Energy::setPowerSabotagedTillFrame</c>: the player's power counts as sabotaged until the given tick (overwrites any earlier value; unknown players are ignored).</summary>
+    void SetPowerSabotagedUntil(PlayerId player, long tick);
+
+    /// <summary><c>Energy::m_powerSabotagedTillFrame</c> as a tick; 0 when the player's power was never sabotaged.</summary>
+    long PowerSabotagedUntil(PlayerId player);
 }
 
 /// <summary>

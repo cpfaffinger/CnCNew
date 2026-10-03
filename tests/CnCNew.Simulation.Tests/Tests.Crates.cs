@@ -42,7 +42,7 @@ static partial class Tests
         End
         Object PendingCrate
           KindOf = CRATE
-          Behavior = MoneyCrateCollide Collide01
+          Behavior = SalvageCrateCollide Collide01
           End
         End
 

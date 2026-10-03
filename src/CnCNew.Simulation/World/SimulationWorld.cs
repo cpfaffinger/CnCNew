@@ -111,6 +111,9 @@ public sealed partial class SimulationWorld : IWorldServices
 
         /// <summary><c>Player::getTunnelSystem</c>.</summary>
         public TunnelTracker Tunnels { get; } = new();
+
+        /// <summary><c>Energy::m_powerSabotagedTillFrame</c> (<c>SabotagePowerPlantCrateCollide</c>): the tick until which the player's power counts as sabotaged; 0 = never.</summary>
+        public long PowerSabotagedUntil { get; set; }
     }
 
     /// <summary>
@@ -486,6 +489,8 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     private static int ActiveWeaponIndex(Entity entity)
     {
+        // WEAPONSET_CARBOMB: ConvertToCarBombCrateCollide sets the weapon-set flag together with IS_CARBOMB and nothing ever clears either, so the status bit is the flag.
+        if (entity.Template.CarBombWeapon >= 0 && entity.HasStatus(CarBombStatusBit)) return entity.Template.CarBombWeapon;
         if (entity.VeterancyLevel > 0 && entity.Template.VeteranWeapon[entity.VeterancyLevel] is var veteran and >= 0) return veteran;
         return entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
     }
@@ -1249,6 +1254,8 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         Emit(SimEventKind.EntityDied, entity.Id, info.Source, string.Empty, info.DeathType);
         ScoreTheKill(entity, info);
+        // Object::onDie starts with checkAndDetonateBoobyTrap(NULL): an object that dies while booby trapped sets its trap off.
+        if (entity.HasStatus(BoobyTrappedBit)) Modules.BuiltIn.StickyBombUpdate.CheckAndDetonateBoobyTrap(this, entity, null);
         foreach (var die in entity.Dies)
         {
             MarkDirty(entity);
@@ -1333,6 +1340,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
             _entitySum = unchecked(_entitySum - entity.CachedHash);
             _entities.Remove(entity.Id.Value);
+            UntrackCollidable(entity);
             entity.Registered = false;
             _moduleCount -= entity.ModuleArray.Length;
             _destroyedTotal++;
@@ -1477,6 +1485,7 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         _entities.Add(entity.Id.Value, entity);
         entity.Registered = true;
+        TrackCollidable(entity);
         _moduleCount += entity.ModuleArray.Length;
         // Energy::objectEnteringInfluence: incremental, not recomputed per frame.
         if (!entity.HasStatus(ObjectStatusBits.UnderConstruction) && _players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction += entity.Template.EnergyProduction;
@@ -1654,6 +1663,8 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             writer.EndArray();
             player.Tunnels.Describe(writer);
+            // Written only once a power plant was sabotaged, so every world without a saboteur keeps its serialized form (and hash).
+            if (player.PowerSabotagedUntil > 0) writer.Int("powerSabotagedUntil", player.PowerSabotagedUntil);
             writer.EndObject();
         }
         writer.EndArray();
