@@ -94,6 +94,9 @@ public interface IWorldServices
     /// <summary><c>ExperienceTracker::setMinVeterancyLevel</c>: raises the entity's veterancy level to at least <paramref name="level"/> and runs the level-change effects (also valid during <c>OnSpawn</c>).</summary>
     void SetMinVeterancyLevel(Entity entity, int level);
 
+    /// <summary><c>ExperienceTracker::addExperiencePoints</c>: a trainable object gains <c>amount</c> scaled by its experience scalar and takes the level its experience earns.</summary>
+    void AddExperiencePoints(Entity entity, int amount);
+
     /// <summary>Reserves and queues the creation of a fresh entity outside the command/validation path (engine-internal spawns: production, OCLs).</summary>
     EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle);
 
@@ -329,7 +332,8 @@ public static class SpecialPowerRouting
 /// supply-center exit tells a fresh truck to start supplying at once, <c>SupplyTruckAIUpdate::privateWanting</c>) and the rally point
 /// (<c>ProductionUpdate::setRallyPoint</c>): a mobile object walks there right after it appears.
 /// </summary>
-public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default);
+public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default,
+    EntityId Enslaver = default);
 
 /// <summary>A module told which template its object replaces when it is created by <see cref="IWorldServices.RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed, in SpawnExtras)"/>.</summary>
 public interface ISpawnOriginReceiver

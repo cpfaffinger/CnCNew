@@ -256,6 +256,9 @@ static void ModuleCatalogIsExplicitAndConsistent()
         "DeliverPayloadAIUpdate", "ParachuteContain", "JetSlowDeathBehavior", "CountermeasuresBehavior", "ParticleUplinkCannonUpdate",
         // phase 13: the Battle Bus and two animation-only modules (docs/SCRIPT-ENGINE.md §9)
         "UndeadBody", "BattleBusSlowDeathBehavior", "SubObjectsUpgrade", "AnimationSteeringUpdate",
+        // phase 14, slaves/spawns/containers: drones, mobs, hives, propaganda, riders, overlords, hackers (docs/SIMULATION-CORE.md §29)
+        "SlavedUpdate", "MobMemberSlavedUpdate", "HiveStructureBody", "SpawnPointProductionExitUpdate", "PropagandaTowerBehavior", "RiderChangeContain", "OverlordContain",
+        "InternetHackContain", "PassengersFireUpgrade", "AssaultTransportAIUpdate", "HackInternetAIUpdate", "TensileFormationUpdate",
     ];
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
     Assert(ModuleRegistry.Default.GetRequired("FXListDie").Interfaces == (ModuleInterfaces.Die | ModuleInterfaces.Upgrade), "FXListDie mask must match the reference (DIE|UPGRADE).");

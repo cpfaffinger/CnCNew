@@ -1169,6 +1169,114 @@ public static class ModuleCatalog
             Real("DeliveryDecalRadius", "DeliverPayloadAIUpdate.h"),
         ]);
 
+        // ------------------------------------------------------------------------- slaves, spawns and containers (phase 14)
+        // Field lists are the reference FieldParse tables (sources named per field), verified against every occurrence in .local/phase2-import-a.
+        Add("SlavedUpdate",
+        [
+            new("GuardMaxRange", FieldType.Integer, Source: "SlavedUpdate.h"),
+            new("GuardWanderRange", FieldType.Integer, Source: "SlavedUpdate.h"),
+            new("AttackRange", FieldType.Integer, Source: "SlavedUpdate.h"),
+            new("AttackWanderRange", FieldType.Integer, Source: "SlavedUpdate.h"),
+            new("ScoutRange", FieldType.Integer, Source: "SlavedUpdate.h"),
+            new("ScoutWanderRange", FieldType.Integer, Source: "SlavedUpdate.h"),
+            new("RepairRange", FieldType.Integer, Source: "SlavedUpdate.h"),
+            Real("RepairMinAltitude", "SlavedUpdate.h"),
+            Real("RepairMaxAltitude", "SlavedUpdate.h"),
+            new("DistToTargetToGrantRangeBonus", FieldType.Integer, Source: "SlavedUpdate.h"),
+            Real("RepairRatePerSecond", "SlavedUpdate.h"),
+            new("RepairWhenBelowHealth%", FieldType.Integer, Source: "SlavedUpdate.h"),
+            new("RepairMinReadyTime", FieldType.DurationMs, Source: "SlavedUpdate.h"),
+            new("RepairMaxReadyTime", FieldType.DurationMs, Source: "SlavedUpdate.h"),
+            new("RepairMinWeldTime", FieldType.DurationMs, Source: "SlavedUpdate.h"),
+            new("RepairMaxWeldTime", FieldType.DurationMs, Source: "SlavedUpdate.h"),
+            new("RepairWeldingSys", FieldType.Opaque, Source: "SlavedUpdate.h"),
+            new("RepairWeldingFXBone", FieldType.Opaque, Source: "SlavedUpdate.h"),
+            new("StayOnSameLayerAsMaster", FieldType.Bool, Source: "SlavedUpdate.h"),
+        ]);
+        Add("MobMemberSlavedUpdate",
+        [
+            new("MustCatchUpRadius", FieldType.Integer, Source: "MobMemberSlavedUpdate.h"),
+            new("CatchUpCrisisBailTime", FieldType.Integer, Min: 0, Source: "MobMemberSlavedUpdate.h"),
+            new("NoNeedToCatchUpRadius", FieldType.Integer, Source: "MobMemberSlavedUpdate.h"),
+            Real("Squirrelliness", "MobMemberSlavedUpdate.h"),
+        ]);
+        // HiveStructureBodyModuleData (HiveStructureBody.h) = StructureBody's fields + the two damage-type lists (default NONE).
+        Add("HiveStructureBody",
+        [
+            ..Body(),
+            new("PropagateDamageTypesToSlavesWhenExisting", FieldType.AllNoneDeltaFlags, Table: NameTables.DamageType, Source: "HiveStructureBody.h"),
+            new("SwallowDamageTypesIfSlavesNotExisting", FieldType.AllNoneDeltaFlags, Table: NameTables.DamageType, Source: "HiveStructureBody.h"),
+        ]);
+        Add("SpawnPointProductionExitUpdate", [new("SpawnPointBoneName", FieldType.Text, Source: "SpawnPointProductionExitUpdate.h")]);
+        // PropagandaTowerBehaviorModuleData (PropagandaTowerBehavior.cpp buildFieldParse).
+        Add("PropagandaTowerBehavior",
+        [
+            Real("Radius", "PropagandaTowerBehavior.cpp"),
+            new("DelayBetweenUpdates", FieldType.DurationMs, Source: "PropagandaTowerBehavior.cpp"),
+            new("HealPercentEachSecond", FieldType.Percent, Source: "PropagandaTowerBehavior.cpp"),
+            new("UpgradedHealPercentEachSecond", FieldType.Percent, Source: "PropagandaTowerBehavior.cpp"),
+            new("PulseFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "PropagandaTowerBehavior.cpp"),
+            new("UpgradedPulseFX", FieldType.Reference, ReferenceKind: DefinitionKind.FxList, Source: "PropagandaTowerBehavior.cpp"),
+            new("UpgradeRequired", FieldType.Reference, ReferenceKind: DefinitionKind.Upgrade, Source: "PropagandaTowerBehavior.cpp"),
+            new("AffectsSelf", FieldType.Bool, Source: "PropagandaTowerBehavior.cpp"),
+        ]);
+        // RiderChangeContainModuleData (RiderChangeContain.cpp): TransportContain's fields (InitialPayload typed: one <template> [count]) + Rider1..8
+        // (<template> <model condition> <weapon set flag> <object status> <command set> <locomotor set>) + the scuttle timing.
+        Add("RiderChangeContain",
+        [
+            ..OpenContainFields("OpenContain.cpp (unused: TransportContain::getContainMax reads Slots)"),
+            ..TransportContainFields().Where(field => field.Name != "InitialPayload"),
+            new("InitialPayload", FieldType.CountedReference, ReferenceKind: DefinitionKind.Object, Source: "TransportContain.cpp parseInitialPayload"),
+            new("Rider1", FieldType.TextList, Count: 6, Source: "RiderChangeContain.cpp parseRiderInfo"),
+            new("Rider2", FieldType.TextList, Count: 6, Source: "RiderChangeContain.cpp parseRiderInfo"),
+            new("Rider3", FieldType.TextList, Count: 6, Source: "RiderChangeContain.cpp parseRiderInfo"),
+            new("Rider4", FieldType.TextList, Count: 6, Source: "RiderChangeContain.cpp parseRiderInfo"),
+            new("Rider5", FieldType.TextList, Count: 6, Source: "RiderChangeContain.cpp parseRiderInfo"),
+            new("Rider6", FieldType.TextList, Count: 6, Source: "RiderChangeContain.cpp parseRiderInfo"),
+            new("Rider7", FieldType.TextList, Count: 6, Source: "RiderChangeContain.cpp parseRiderInfo"),
+            new("Rider8", FieldType.TextList, Count: 6, Source: "RiderChangeContain.cpp parseRiderInfo"),
+            new("ScuttleDelay", FieldType.DurationMs, Source: "RiderChangeContain.cpp"),
+            new("ScuttleStatus", FieldType.Opaque, Source: "RiderChangeContain.cpp"),
+        ]);
+        // OverlordContainModuleData (OverlordContain.cpp) = TransportContain's fields + the payload names (parseAsciiStringVectorAppend) + ExperienceSinkForRider.
+        Add("OverlordContain",
+        [
+            ..OpenContainFields("OpenContain.cpp (unused: TransportContain::getContainMax reads Slots)"), ..TransportContainFields(),
+            new("PayloadTemplateName", FieldType.ReferenceList, Repeat: RepeatPolicy.Accumulate, ReferenceKind: DefinitionKind.Object, Source: "OverlordContain.cpp"),
+            new("ExperienceSinkForRider", FieldType.Bool, Source: "OverlordContain.cpp"),
+        ]);
+        // InternetHackContainModuleData (InternetHackContain.cpp) adds nothing to TransportContain's table.
+        Add("InternetHackContain", [..OpenContainFields("OpenContain.cpp (unused: TransportContain::getContainMax reads Slots)"), ..TransportContainFields()]);
+        Add("PassengersFireUpgrade", [..UpgradeMux()]);
+        // AssaultTransportAIUpdateModuleData (AssaultTransportAIUpdate.h): the AIUpdate base plus two reals.
+        Add("AssaultTransportAIUpdate",
+        [
+            ..AiBase("AssaultTransportAIUpdate.cpp / AIUpdate.cpp"),
+            Real("MembersGetHealedAtLifeRatio", "AssaultTransportAIUpdate.h"),
+            Real("ClearRangeRequiredToContinueAttackMove", "AssaultTransportAIUpdate.h"),
+        ], allowsNestedSections: true);
+        // HackInternetAIUpdateModuleData (HackInternetAIUpdate.h): the AIUpdate base plus the cash and timing keys.
+        Add("HackInternetAIUpdate",
+        [
+            ..AiBase("HackInternetAIUpdate.cpp / AIUpdate.cpp"),
+            new("UnpackTime", FieldType.DurationMs, Source: "HackInternetAIUpdate.h"),
+            new("PackTime", FieldType.DurationMs, Source: "HackInternetAIUpdate.h"),
+            Real("PackUnpackVariationFactor", "HackInternetAIUpdate.h"),
+            new("CashUpdateDelay", FieldType.DurationMs, Source: "HackInternetAIUpdate.h"),
+            new("CashUpdateDelayFast", FieldType.DurationMs, Source: "HackInternetAIUpdate.h"),
+            new("RegularCashAmount", FieldType.Integer, Min: 0, Source: "HackInternetAIUpdate.h"),
+            new("VeteranCashAmount", FieldType.Integer, Min: 0, Source: "HackInternetAIUpdate.h"),
+            new("EliteCashAmount", FieldType.Integer, Min: 0, Source: "HackInternetAIUpdate.h"),
+            new("HeroicCashAmount", FieldType.Integer, Min: 0, Source: "HackInternetAIUpdate.h"),
+            new("XpPerCashUpdate", FieldType.Integer, Min: 0, Source: "HackInternetAIUpdate.h"),
+        ], allowsNestedSections: true);
+        // TensileFormationUpdateModuleData (TensileFormationUpdate.cpp): the avalanche's enabled flag and the crack sound (presentation).
+        Add("TensileFormationUpdate",
+        [
+            new("Enabled", FieldType.Bool, Source: "TensileFormationUpdate.cpp"),
+            new("CrackSound", FieldType.Opaque, Source: "TensileFormationUpdate.cpp"),
+        ]);
+
         return builder.ToImmutable();
     }
 

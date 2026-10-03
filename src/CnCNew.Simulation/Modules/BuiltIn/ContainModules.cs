@@ -74,6 +74,12 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     public int ContainCount => Riders.Count;
     public IReadOnlyList<EntityId> Contained => Riders;
 
+    /// <summary>
+    /// <c>OpenContain::m_passengersAllowedToFire</c> (<c>PassengersAllowedToFire</c> of the data, switched on by <c>PassengersFireUpgrade</c>). Recorded state: firing from inside a container
+    /// is not simulated anywhere yet, so nothing reads the flag; it is saved only when set.
+    /// </summary>
+    public bool PassengersAllowedToFire { get; set; }
+
     public abstract bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity);
 
     protected bool PassesKindOfAndRelationship(IWorldServices world, Entity candidate)
@@ -153,6 +159,7 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
             writer.EndObject();
         }
         writer.EndArray();
+        if (PassengersAllowedToFire) writer.Bool("passengersFire", true);
     }
 
     protected void LoadContained(IStateReader reader)
@@ -160,6 +167,7 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         _nextWake = reader.Int("nextWake");
         Riders.Clear();
         foreach (var entry in reader.Array("contained")) Riders.Add(new EntityId(checked((uint)entry.UInt("id"))));
+        PassengersAllowedToFire = reader.Has("passengersFire") && reader.Bool("passengersFire");
     }
 }
 

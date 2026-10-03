@@ -312,7 +312,8 @@ public sealed partial class SimulationWorld
         var setup = new SpawnSetup(true, checked((int)(healthPercent * Fixed.FromInt(100)).Floor()),
             nugget.InheritsVeterancy && template.IsTrainable, nugget.InheritsVeterancy ? source.VeterancyLevel : 0,
             lifetimeMax > 0 ? nugget.MinLifetimeTicks : 0, lifetimeMax > 0 ? lifetimeMax : 0,
-            EntityId.Invalid, nugget.ContainInsideSourceObject ? source.Id : EntityId.Invalid, Fixed.Zero, EntityId.Invalid);
+            EntityId.Invalid, nugget.ContainInsideSourceObject ? source.Id : EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
+            Enslaver: template.Modules.Any(spec => spec.Binding.Name is "SlavedUpdate" or "MobMemberSlavedUpdate") ? source.Id : EntityId.Invalid);
         return (setup, (x, y, z, angle));
     }
 
