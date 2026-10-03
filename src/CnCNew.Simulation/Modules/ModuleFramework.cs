@@ -140,8 +140,17 @@ public interface IWorldServices
     /// </summary>
     void FireTempWeapon(Entity source, string weaponName, Fixed x, Fixed y, Fixed z);
 
-    /// <summary><c>Object::fireCurrentWeapon(pos)</c>: fires the active weapon at a position when it is ready (false otherwise).</summary>
-    bool FireCurrentWeaponAtPosition(Entity source, Fixed x, Fixed y, Fixed z);
+    /// <summary><c>Object::fireCurrentWeapon(pos)</c>/<c>(victim)</c>: fires the current weapon (the locked slot, else the primary one) at a position (aimed at <paramref name="victim"/> when given) when it is ready (false otherwise).</summary>
+    bool FireCurrentWeaponAtPosition(Entity source, Fixed x, Fixed y, Fixed z, Entity? victim = null);
+
+    /// <summary><c>WeaponSet::setWeaponLock</c>: pins <paramref name="slot"/> as the weapon the object fires (a temporary lock never replaces a permanent one); false when the active weapon set has no weapon there.</summary>
+    bool SetWeaponLock(Entity entity, int slot, WeaponLockKind kind);
+
+    /// <summary><c>WeaponSet::releaseWeaponLock</c>: a permanent release clears every lock, a temporary one only a temporary lock.</summary>
+    void ReleaseWeaponLock(Entity entity, WeaponLockKind kind);
+
+    /// <summary>The object's weapon set flags changed (<c>WeaponSetUpgrade</c>, a salvage crate, a car bomb conversion): the weapons of the now active set are loaded and ready.</summary>
+    void WeaponSetFlagsChanged(Entity entity);
 
     EntityId LaunchProjectileObject(Entity launcher, int templateIndex, WeaponInfo weapon, Fixed startX, Fixed startY, Fixed startZ, Fixed targetX, Fixed targetY, Fixed targetZ);
 
@@ -248,9 +257,6 @@ public interface IWorldServices
     /// <summary><c>ExperienceTracker::setVeterancyLevel</c>: sets the level exactly (up or down), the experience becomes the level's requirement and the level-change effects run.</summary>
     void SetVeterancy(Entity entity, int level);
 
-    /// <summary>Re-reads the entity's active weapon set after something switched it (<c>Object::setWeaponSetFlag</c>): the clip is refilled for the new primary weapon.</summary>
-    void WeaponSetChanged(Entity entity);
-
     /// <summary><c>Energy::setPowerSabotagedTillFrame</c>: the player's power counts as sabotaged until the given tick (overwrites any earlier value; unknown players are ignored).</summary>
     void SetPowerSabotagedUntil(PlayerId player, long tick);
 
@@ -258,11 +264,20 @@ public interface IWorldServices
     long PowerSabotagedUntil(PlayerId player);
 
     /// <summary>
-    /// The attack half of a <c>FireWeaponCommand</c> for an object's own active weapon, issued by a module instead of the player: when the weapon is ready (clip, reload), the victim is
-    /// alive and within the weapon's range, spends a round, starts the next delay or reload and fires (<see cref="FireWeaponAt"/>); returns whether a shot was fired. There is no
-    /// visibility check (the module acts for the object itself, not for a player).
+    /// The attack half of a <c>FireWeaponCommand</c> for an object's own weapon choice, issued by a module instead of the player (<c>CMD_FROM_AI</c>): the best weapon of the active
+    /// weapon set against the victim fires when it is ready and the victim is alive and within its range (the slot's clip, reload and last-shot state are kept like the command keeps
+    /// them; <see cref="FireWeaponAt"/>); returns whether a shot was fired. There is no visibility check (the module acts for the object itself, not for a player).
     /// </summary>
     bool TryFireActiveWeapon(Entity source, Entity victim);
+
+    /// <summary>
+    /// One shot of weapon <paramref name="slot"/> (<c>WeaponSlot</c>) at the victim, for a module that locks that slot (<c>AssistedTargetingUpdate</c>): the slot's weapon must be loaded,
+    /// ready, able to hit the victim and have it in range; the slot's own clip and reload keep the bookkeeping. False when no shot goes out.
+    /// </summary>
+    bool TryFireWeaponSlot(Entity source, int slot, Entity victim);
+
+    /// <summary><c>Object::reloadAllAmmo(true)</c>: every clipped weapon of the active weapon set is full again and ready now (an aircraft that landed at its airfield).</summary>
+    void ReloadAllAmmo(Entity entity);
 
     /// <summary>Every player of the world in ascending id order, the neutral system player included (<c>ThePlayerList</c>).</summary>
     IReadOnlyList<PlayerId> PlayerIds { get; }

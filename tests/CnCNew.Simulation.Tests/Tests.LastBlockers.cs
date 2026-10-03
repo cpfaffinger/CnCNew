@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using CnCNew.Content;
+using CnCNew.Data.Definitions;
 using CnCNew.Data.Compilation;
 using CnCNew.Data.Registry;
 using CnCNew.Data.World;
@@ -220,8 +221,8 @@ static partial class Tests
         End
         Object LbBrokenUnit
           KindOf = SELECTABLE VEHICLE
-          Behavior = LockWeaponCreate Stand01
-            SlotToLock = SECONDARY
+          Behavior = SpawnBehavior Stand01
+            CanReclaimOrphans = Yes
           End
         End
 
@@ -486,10 +487,22 @@ static partial class Tests
         var fixture = new SyntheticFixture(files: LastBlockerFiles());
         var missing = fixture.Templates.Templates.Where(value => value.Name.StartsWith("Lb", StringComparison.Ordinal) && !value.IsInstantiable).Select(value => value.Name + ":" + string.Join(",", value.MissingModules)).ToArray();
         Check.That(missing.Length == 1 && missing[0].StartsWith("LbBrokenUnit", StringComparison.Ordinal), "Every fixture object instantiates except the deliberately broken one: " + string.Join("; ", missing));
-        Check.That(fixture.Templates.TryGet("LbSalvageTank", out var tank) && tank.CrateUpgradeWeapon.SequenceEqual([-1, tank.CrateUpgradeWeapon[1], tank.CrateUpgradeWeapon[2]]) && tank.CrateUpgradeWeapon[1] >= 0
-            && tank.CrateUpgradeWeapon[2] >= 0 && tank.CrateUpgradeWeapon[1] != tank.CrateUpgradeWeapon[2] && tank.CrateUpgradeArmor[1] is not null && tank.CrateUpgradeArmor[2] is not null && tank.CrateUpgradeArmor[0] is null,
+        Check.That(fixture.Templates.TryGet("LbSalvageTank", out var tank) && CrateWeapon(tank, 0) < 0 && CrateWeapon(tank, 1) >= 0
+            && CrateWeapon(tank, 2) >= 0 && CrateWeapon(tank, 1) != CrateWeapon(tank, 2) && tank.CrateUpgradeArmor[1] is not null && tank.CrateUpgradeArmor[2] is not null && tank.CrateUpgradeArmor[0] is null,
             "The CRATEUPGRADE weapon sets and CRATE_UPGRADE armor sets are resolved per level.");
-        Check.That(fixture.Templates.TryGet("LbPlainTank", out var plain) && plain.CrateUpgradeWeapon.All(index => index < 0) && plain.CrateUpgradeArmor.All(armor => armor is null), "An object without crate sets has none.");
+        Check.That(fixture.Templates.TryGet("LbPlainTank", out var plain) && CrateWeapon(plain, 1) < 0 && CrateWeapon(plain, 2) < 0 && plain.CrateUpgradeArmor.All(armor => armor is null), "An object without crate sets has none.");
+    }
+
+    /// <summary>The primary weapon of the weapon set that names exactly <c>CRATEUPGRADE_ONE</c> (level 1) or <c>CRATEUPGRADE_TWO</c> (level 2); -1 when there is none (level 0 never has one).</summary>
+    private static int CrateWeapon(ObjectTemplate template, int level) => level == 0 ? -1 : ExactSetPrimary(template, level == 1 ? "CRATEUPGRADE_ONE" : "CRATEUPGRADE_TWO");
+
+    /// <summary>The primary weapon of the weapon set that names exactly <c>CARBOMB</c>; -1 when there is none.</summary>
+    private static int CarBombWeapon(ObjectTemplate template) => ExactSetPrimary(template, "CARBOMB");
+
+    private static int ExactSetPrimary(ObjectTemplate template, string condition)
+    {
+        if (!NameTablesPhase5.WeaponSetCondition.TryIndexOf(condition, out var bit)) throw new InvalidOperationException(condition);
+        return template.WeaponSets.FirstOrDefault(set => set.Conditions == 1u << bit)?.Primary ?? -1;
     }
 
     // ============================================================================================================ SalvageCrateCollide
@@ -1030,8 +1043,8 @@ static partial class Tests
         });
         Collect("GLATankScorpion", "SalvageCrate", 1, scorpion =>
         {
-            Check.That(scorpion.CrateWeaponLevel == 1 && scorpion.CrateArmorLevel == 0 && scorpion.Template.CrateUpgradeWeapon[1] >= 0, $"The retail Scorpion (WEAPON_SALVAGER) took the first weapon set (weapon level {scorpion.CrateWeaponLevel}).");
-            Check.That(scorpion.WeaponClip == (catalog.Weapons[scorpion.Template.CrateUpgradeWeapon[1]].ClipSize is var clip and > 0 ? clip : int.MaxValue) && scorpion.Template.CrateUpgradeWeapon[1] != scorpion.Template.DefaultWeapon, "Its weapon set switched to the upgraded weapon and the clip was refilled for it.");
+            Check.That(scorpion.CrateWeaponLevel == 1 && scorpion.CrateArmorLevel == 0 && CrateWeapon(scorpion.Template, 1) >= 0, $"The retail Scorpion (WEAPON_SALVAGER) took the first weapon set (weapon level {scorpion.CrateWeaponLevel}).");
+            Check.That(scorpion.WeaponClip == (catalog.Weapons[CrateWeapon(scorpion.Template, 1)].ClipSize is var clip and > 0 ? clip : int.MaxValue) && CrateWeapon(scorpion.Template, 1) != scorpion.Template.DefaultWeapon, "Its weapon set switched to the upgraded weapon and the clip was refilled for it.");
         });
         Collect("GLAVehicleBattleBus", "SalvageCrate", 2, american => Check.That(american.CrateArmorLevel == 0, "Without SCIENCE_GLA (PickupScience) the crate stays."));
 

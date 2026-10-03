@@ -267,7 +267,8 @@ public sealed partial class ScriptEngine
     private IEnumerable<Entity> Carriers(IEnumerable<Entity> members, string ability)
     {
         if (!_world.Templates.Commands.TryGetSpecialPowerAbility(ability, out var power))
-            return _world.Templates.Commands.TryGetButton(ability, out var button) && button.Command.ToUpperInvariant() is "FIRE_WEAPON" or "SWITCH_WEAPON" ? members.Where(member => member.Template.DefaultWeapon >= 0) : members;
+            return _world.Templates.Commands.TryGetButton(ability, out var button) && button.Command.ToUpperInvariant() is "FIRE_WEAPON" or "SWITCH_WEAPON"
+                ? members.Where(member => SimulationWorld.WeaponIndexIn(member, Templates.WeaponSlot.TryParse(button.WeaponSlot, out var slot) ? slot : Templates.WeaponSlot.Primary) >= 0) : members;
         if (!_world.SpecialPowers.TryGet(power, out var info)) return [];
         return members.Where(member => SpecialPowerRouting.FindModule(member, info.Index) is not null);
     }

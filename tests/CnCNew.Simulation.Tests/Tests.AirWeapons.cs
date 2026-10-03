@@ -48,6 +48,7 @@ static partial class Tests
         End
         Weapon AirBusterBombGun
           PrimaryDamage = 0.0
+          DamageType = UNRESISTABLE
           AttackRange = 3000.0
           ProjectileObject = AirBusterBomb
           DelayBetweenShots = 1000
@@ -64,6 +65,7 @@ static partial class Tests
         End
         Weapon AirNeutronWeapon
           PrimaryDamage = 0.0
+          DamageType = UNRESISTABLE
           AttackRange = 5000.0
           ProjectileObject = AirNeutronMissile
           DelayBetweenShots = 100

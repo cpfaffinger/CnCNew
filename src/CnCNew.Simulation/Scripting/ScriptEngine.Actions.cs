@@ -333,7 +333,7 @@ public sealed partial class ScriptEngine
                 break;
             case "PLAYER_HUNT":
                 if (Has(type, p, 1) && ResolvePlayer(Str(p, 0)) is { } hunting)
-                    foreach (var entity in PlayerEntities(hunting.Id).Where(value => !value.Template.IsKindOf("STRUCTURE") && value.Template.Locomotor is not null && value.Template.DefaultWeapon >= 0).ToArray())
+                    foreach (var entity in PlayerEntities(hunting.Id).Where(value => !value.Template.IsKindOf("STRUCTURE") && value.Template.Locomotor is not null && SimulationWorld.ActiveWeaponSet(value) is { WeaponCount: > 0 }).ToArray())
                         StartFollowing(entity, HuntMode);
                 break;
 
@@ -469,7 +469,7 @@ public sealed partial class ScriptEngine
     /// <summary>
     /// A script-named button that is not a special power. <c>PLAYER_UPGRADE</c>/<c>OBJECT_UPGRADE</c> buy the upgrade the button names (the ordinary
     /// <see cref="PurchaseUpgradeCommand"/>, so funds and prerequisites apply); a <c>FIRE_WEAPON</c> button with a target object fires the carrier's weapon at it
-    /// (the button's <c>WeaponSlot</c> is not honoured: <see cref="FireWeaponCommand"/> uses the default weapon). Every other command type, a missing target and an
+    /// (fired from the button's <c>WeaponSlot</c>, pinning it like the reference); a <c>SWITCH_WEAPON</c> button pins its slot permanently. Every other command type, a missing target and an
     /// unknown button are counted as diagnostics under their own message, never executed and never confused with each other.
     /// </summary>
     private bool UseOtherCommandButton(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target)
@@ -495,14 +495,32 @@ public sealed partial class ScriptEngine
             case "FIRE_WEAPON":
             {
                 if (kind != SpecialPowerTargetKind.Object || !target.IsValid) { Diagnose($"fire-weapon button '{ability}' used without a target object"); return false; }
-                if (_issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target)).Accepted) return true;
+                if (!TryButtonSlot(button, ability, out var slot)) return false;
+                if (_issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target, slot, FireOrigin.Script)).Accepted) return true;
                 Diagnose($"fire-weapon button '{ability}' rejected");
+                return false;
+            }
+            case "SWITCH_WEAPON":
+            {
+                // GUI_COMMAND_SWITCH_WEAPON: setWeaponLock(slot, LOCKED_PERMANENTLY) until another switch or a release.
+                if (!TryButtonSlot(button, ability, out var slot)) return false;
+                if (_issue(owner, (sequence, tick) => new SetWeaponLockCommand(owner, sequence, tick, source, slot, WeaponLockKind.Permanent)).Accepted) return true;
+                Diagnose($"switch-weapon button '{ability}' rejected");
                 return false;
             }
             default:
                 Diagnose($"command button '{ability}' has command {button.Command}, not executed");
                 return false;
         }
+    }
+
+    /// <summary>The weapon slot a command button names (<c>CommandButton::m_weaponSlot</c>, <c>PRIMARY</c> when the key is absent); an unknown slot name is a diagnostic, never a guess.</summary>
+    private bool TryButtonSlot(CommandButtonInfo button, string ability, out int slot)
+    {
+        slot = WeaponSlot.Primary;
+        if (button.WeaponSlot.Length == 0 || WeaponSlot.TryParse(button.WeaponSlot, out slot)) return true;
+        Diagnose($"command button '{ability}' names the unknown weapon slot '{button.WeaponSlot}'");
+        return false;
     }
 
     // ------------------------------------------------------------------------------------------------ orders

@@ -77,7 +77,7 @@ public sealed class SalvageCrateCollide(SalvageCrateData data) : CrateCollideBas
         {
             other.CrateWeaponLevel = other.CrateWeaponLevel == 1 ? 2 : 1;
             value = other.CrateWeaponLevel;
-            world.WeaponSetChanged(other);
+            world.WeaponSetFlagsChanged(other);
         }
         else if (EligibleForLevel(other) && Chance(world, data.LevelChance))
         {

@@ -397,7 +397,7 @@ static partial class Tests
         var distant = CsSpawn(world, feeder, "NetTurret", 1, 500, 0);
         var enemyTurret = CsSpawn(world, feeder, "NetTurret", 2, 30, 0);
         var victim = CsSpawn(world, feeder, "NetVictim", 2, 50, 80);
-        Check.That(first.Template.SecondaryWeapon >= 0 && first.Template.SecondaryWeapon != first.Template.DefaultWeapon, "The turret has a primary and a secondary weapon.");
+        Check.That(SimulationWorld.WeaponIndexIn(first, CnCNew.Simulation.Templates.WeaponSlot.Secondary) >= 0 && SimulationWorld.WeaponIndexIn(first, CnCNew.Simulation.Templates.WeaponSlot.Secondary) != SimulationWorld.WeaponIndexIn(first, CnCNew.Simulation.Templates.WeaponSlot.Primary), "The turret has a primary and a secondary weapon.");
         Check.That(world.Weapons[first.Template.DefaultWeapon].RequestAssistRange == Fixed.FromInt(100), "RequestAssistRange is typed on the weapon.");
         var module = neighbour.Modules.OfType<AssistedTargetingUpdate>().Single();
         Check.That(module.IsFreeToAssist(world), "An idle turret is free to assist.");

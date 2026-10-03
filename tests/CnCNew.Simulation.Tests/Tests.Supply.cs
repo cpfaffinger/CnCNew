@@ -136,8 +136,8 @@ static partial class Tests
           End
           Behavior = DestroyDie Destroy01
           End
-          Behavior = LockWeaponCreate Rail01
-            SlotToLock = SECONDARY
+          Behavior = SpawnBehavior Rail01
+            CanReclaimOrphans = Yes
           End
         End
 

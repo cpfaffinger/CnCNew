@@ -204,7 +204,7 @@ public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModu
 
     protected override void Apply(IWorldServices world, in SpecialPowerTarget target)
     {
-        if (Entity.Template.DefaultWeapon < 0) return;
+        if (SimulationWorld.ActiveWeaponIndex(Entity) < 0) return;
         _shotsLeft = data.MaxShots;
         _target = target;
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
@@ -212,8 +212,8 @@ public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModu
 
     public long Update(IWorldServices world)
     {
-        if (_shotsLeft <= 0 || Entity.Template.DefaultWeapon < 0) return SimulationTiming.SleepForever;
-        var weapon = world.Weapons[Entity.Template.DefaultWeapon];
+        if (_shotsLeft <= 0 || SimulationWorld.ActiveWeaponIndex(Entity) < 0) return SimulationTiming.SleepForever;
+        var weapon = world.Weapons[SimulationWorld.ActiveWeaponIndex(Entity)];
         var victim = _target.Kind == SpecialPowerTargetKind.Object ? world.FindEntity(_target.Entity) : null;
         if (_target.Kind == SpecialPowerTargetKind.Object && (victim is null || victim.EffectivelyDead)) { _shotsLeft = 0; return SimulationTiming.SleepForever; }
         Fixed x = Entity.X, y = Entity.Y, z = Entity.Z;

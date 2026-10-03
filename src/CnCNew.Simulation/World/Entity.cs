@@ -70,6 +70,24 @@ public sealed class Entity
     /// <summary>Tick at which the weapon may fire again (reload or shot delay, whichever is later).</summary>
     public long WeaponReadyTick { get; internal set; }
 
+    /// <summary>Per-slot weapon state of an object with more than one weapon (<see cref="Templates.ObjectTemplate.HasMultipleWeaponSlots"/>); null for a single-weapon object, whose only slot lives in <see cref="WeaponClip"/>/<see cref="WeaponReadyTick"/>.</summary>
+    internal WeaponSlotState? WeaponSlots { get; set; }
+
+    /// <summary>Rounds left in <paramref name="slot"/>'s clip (-1: the slot holds no weapon, <see cref="int.MaxValue"/>: unlimited). Slot 0 is <see cref="WeaponClip"/>.</summary>
+    public int ClipOf(int slot) => slot == 0 ? WeaponClip : WeaponSlots?.Clip[slot] ?? -1;
+
+    /// <summary>Tick at which <paramref name="slot"/> may fire again. Slot 0 is <see cref="WeaponReadyTick"/>.</summary>
+    public long ReadyTickOf(int slot) => slot == 0 ? WeaponReadyTick : WeaponSlots?.Ready[slot] ?? 0;
+
+    /// <summary>Tick of the last shot fired from <paramref name="slot"/> (-1: never); for a single-weapon object that is <see cref="LastFireTick"/>.</summary>
+    public long LastFireTickOf(int slot) => WeaponSlots is { } slots ? slots.LastFire[slot] : slot == 0 ? LastFireTick : -1;
+
+    /// <summary><c>WeaponSet::m_curWeapon</c>: the slot the next unordered shot uses (the last chosen or locked one; primary for a single-weapon object).</summary>
+    public int CurrentWeaponSlot => WeaponSlots?.Current ?? 0;
+
+    /// <summary><c>WeaponSet::m_curWeaponLockedStatus</c>.</summary>
+    public WeaponLockKind WeaponLock => WeaponSlots?.Lock ?? WeaponLockKind.None;
+
     public long LastDamageTick { get; internal set; } = -1;
 
     /// <summary><c>Object::isCaptured</c> (<c>setCaptured</c>, never cleared): the object was taken over by entering it (an unmanned vehicle); counted by the skirmish condition on captured units. Written only when set.</summary>
@@ -81,7 +99,7 @@ public sealed class Entity
     /// <summary>Set by <c>ArmorUpgrade</c> once completed: damage resolution reads <see cref="Templates.ObjectTemplate.PlayerUpgradeArmor"/> instead of the default set.</summary>
     public bool HasPlayerUpgradeArmor { get; internal set; }
 
-    /// <summary>Set by <c>WeaponSetUpgrade</c> once completed: combat resolution reads <see cref="Templates.ObjectTemplate.PlayerUpgradeWeapon"/> instead of the default weapon.</summary>
+    /// <summary>Set by <c>WeaponSetUpgrade</c> once completed: the <c>PLAYER_UPGRADE</c> weapon set flag (<see cref="SimulationWorld.WeaponSetFlagsOf"/>), which selects the object's <c>PLAYER_UPGRADE</c> <c>WeaponSet</c>.</summary>
     public bool HasPlayerUpgradeWeapon { get; internal set; }
 
     /// <summary><c>WEAPONSET_CRATEUPGRADE_ONE</c> (1) / <c>_TWO</c> (2) of <c>SalvageCrateCollide</c>: the salvager's weapon-set upgrade level; 0 (the flag cleared) is never written.</summary>
@@ -178,6 +196,7 @@ public sealed class Entity
         writer.Fixed("moveTargetY", MoveTargetY);
         writer.Int("weaponClip", WeaponClip);
         writer.Int("weaponReadyTick", WeaponReadyTick);
+        WeaponSlots?.Describe(writer);
         writer.Int("lastDamageTick", LastDamageTick);
         writer.Int("lastFireTick", LastFireTick);
         if (Captured) writer.Bool("captured", true);

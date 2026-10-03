@@ -31,27 +31,27 @@ internal static class CleanupAndSpyModules
 // ============================================================================================================ CleanupHazardUpdate
 
 /// <summary>
-/// <c>CleanupHazardUpdateModuleData</c>: <c>WeaponSlot</c> (only <c>PRIMARY</c> is simulated: objects have a single weapon here, any other slot makes the object not instantiable),
-/// <c>ScanRate</c> and <c>ScanRange</c>.
+/// <c>CleanupHazardUpdateModuleData</c>: <c>WeaponSlot</c> (the weapon slot that cleans, default <c>PRIMARY</c>), <c>ScanRate</c> and <c>ScanRange</c>.
 /// </summary>
-public sealed record CleanupHazardData(long ScanTicks, Fixed ScanRange) : ModuleData
+public sealed record CleanupHazardData(long ScanTicks, Fixed ScanRange, int Slot) : ModuleData
 {
     public static CleanupHazardData Parse(ModuleConfiguration configuration)
     {
-        if (ModuleConfigReader.Find(configuration, "WeaponSlot")?.Value.Value is EnumValue slot && !slot.Name.Equals("PRIMARY", StringComparison.OrdinalIgnoreCase))
+        var slot = WeaponSlot.Primary;
+        if (ModuleConfigReader.Find(configuration, "WeaponSlot")?.Value.Value is EnumValue named && !WeaponSlot.TryParse(named.Name, out slot))
             throw new UnsupportedModuleConfigurationException("WeaponSlot");
-        return new CleanupHazardData(ModuleConfigReader.Ticks(configuration, "ScanRate", 0), ModuleConfigReader.Real(configuration, "ScanRange", Fixed.Zero));
+        return new CleanupHazardData(ModuleConfigReader.Ticks(configuration, "ScanRate", 0), ModuleConfigReader.Real(configuration, "ScanRange", Fixed.Zero), slot);
     }
 }
 
 /// <summary>
 /// <c>CleanupHazardUpdate.cpp</c> (the ambulance, the bio-hazard tech): every <c>ScanRate</c> it looks for the closest <c>CLEANUP_HAZARD</c> object within <c>ScanRange</c> and attacks it
 /// with its weapon until it is gone. The reference orders the AI to attack (<c>aiAttackObject</c>), which walks to weapon range and fires; here the module does both — it moves to
-/// three quarters of the weapon's range from the target and then fires every tick the weapon is ready (<see cref="IWorldServices.TryFireActiveWeapon"/>). <see cref="SetCleanupAreaParameters"/>
+/// three quarters of the weapon's range from the target and then fires every tick the weapon is ready (<see cref="IWorldServices.TryFireWeaponSlot"/>, with the slot locked temporarily as the reference does before its attack order). <see cref="SetCleanupAreaParameters"/>
 /// (from <see cref="CleanupAreaPower"/>) makes it clean an <em>area</em> instead: it walks to the point, scans around the point with <c>ScanRange + move range</c>, ignores weapon range while
 /// it is hunting and goes back to the point when nothing is left, ending the mode within 25 units of it; a new order from the player or a script (not issued by the module itself) abandons it.
 /// Not modelled: the reference sets the veteran weapon-set flag on creation (no shipped cleaner has such a set), the "busy" AI state that keeps a cleaning unit from reporting idle to
-/// scripts (the simulation has none), and the weapon lock.
+/// scripts (the simulation has none).
 /// </summary>
 public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUpdateModule
 {
@@ -87,7 +87,7 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
 
     public long Update(IWorldServices world)
     {
-        if (Entity.Template.DefaultWeapon < 0) return SimulationTiming.SleepForever;
+        if (SimulationWorld.WeaponIndexIn(Entity, data.Slot) < 0) return SimulationTiming.SleepForever;
         var ai = CrateModules.AiOf(Entity);
         if (_moveRange > Fixed.Zero && ai is not null && !ai.IsIdle && ai.LastCommandFromPlayer)
         {
@@ -116,7 +116,7 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
 
     private void FireWhenReady(IWorldServices world, AIUpdateInterface? ai)
     {
-        var weapon = world.Weapons[Entity.Template.DefaultWeapon];
+        var weapon = world.Weapons[SimulationWorld.WeaponIndexIn(Entity, data.Slot)];
         var target = _bestTarget.IsValid ? world.FindEntity(_bestTarget) : null;
         if (target is not null && target.DestroyRequested) target = null;
         if (target is not null && _moveRange == Fixed.Zero)
@@ -151,7 +151,9 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
         if (distance <= weapon.AttackRange)
         {
             if (Entity.HasMoveTarget) ai.StopInternalMove();
-            world.TryFireActiveWeapon(Entity, target);
+            // CleanupHazardUpdate::update: "lock it just till the weapon is empty or the attack is done" before the attack order.
+            world.SetWeaponLock(Entity, data.Slot, WeaponLockKind.Temporary);
+            world.TryFireWeaponSlot(Entity, data.Slot, target);
             return;
         }
         // Walk to three quarters of the range from the target along the line between them; re-plan only when the target moved away from the old stand-off point.
@@ -432,34 +434,33 @@ public sealed class SpyVisionSpecialPower(SpyVisionPowerData data) : SpecialPowe
 // ============================================================================================================ AssistedTargetingUpdate
 
 /// <summary>
-/// <c>AssistedTargetingUpdateModuleData</c>: <c>AssistingClipSize</c> (default 1) and <c>AssistingWeaponSlot</c> (default <c>PRIMARY</c>; <c>TERTIARY</c> is not simulated).
+/// <c>AssistedTargetingUpdateModuleData</c>: <c>AssistingClipSize</c> (default 1) and <c>AssistingWeaponSlot</c> (default <c>PRIMARY</c>).
 /// The two <c>Laser*</c> template names draw the feedback beams (presentation) and are typed but not read.
 /// </summary>
-public sealed record AssistedTargetingData(int ClipSize, bool SecondarySlot) : ModuleData
+public sealed record AssistedTargetingData(int ClipSize, int Slot) : ModuleData
 {
     public static AssistedTargetingData Parse(ModuleConfiguration configuration)
     {
-        var slot = ModuleConfigReader.Find(configuration, "AssistingWeaponSlot")?.Value.Value is EnumValue value ? value.Name.ToUpperInvariant() : "PRIMARY";
-        if (slot is not ("PRIMARY" or "SECONDARY")) throw new UnsupportedModuleConfigurationException("AssistingWeaponSlot");
-        return new AssistedTargetingData(checked((int)ModuleConfigReader.Int(configuration, "AssistingClipSize", 1)), slot == "SECONDARY");
+        var slot = WeaponSlot.Primary;
+        if (ModuleConfigReader.Find(configuration, "AssistingWeaponSlot")?.Value.Value is EnumValue value && !WeaponSlot.TryParse(value.Name, out slot))
+            throw new UnsupportedModuleConfigurationException("AssistingWeaponSlot");
+        return new AssistedTargetingData(checked((int)ModuleConfigReader.Int(configuration, "AssistingClipSize", 1)), slot);
     }
 }
 
 /// <summary>
 /// <c>AssistedTargetingUpdate.cpp</c> (the Patriot battery's network): when a neighbour of the same kind fires a weapon with a <c>RequestAssistRange</c> at a victim
 /// (<c>SimulationWorld.ProcessRequestAssistance</c>), every free one of these modules attacks the same victim with its assisting weapon slot for <c>AssistingClipSize</c> shots.
-/// "Free" is <c>isFreeToAssist</c>: able to attack (alive, complete, not sold) and its own weapon ready, and not already assisting. The reference gives the AI an attack order
-/// (<c>aiAttackObject</c> with a shot limit, the slot's weapon locked); this module fires the slot's weapon itself, one shot per <c>DelayBetweenShots</c> with the weapon's clip and reload kept
-/// here (an entity carries the state of one weapon only), and gives up when the victim is gone or out of the weapon's range (the shipped users are immobile, so the AI could not approach
-/// either). The feedback lasers of <c>makeFeedbackLaser</c> are presentation (a beam object needs end points the simulation cannot carry) and are not created.
+/// "Free" is <c>isFreeToAssist</c>: able to attack (alive, complete, not sold) and its current weapon ready, and not already assisting. The reference locks the slot temporarily
+/// (<c>setWeaponLock(slot, LOCKED_TEMPORARILY)</c>, ended by the weapon slot model when the clip empties) and gives the AI an attack order (<c>aiAttackObject</c> with a shot limit); this module fires the
+/// slot's weapon itself (<see cref="IWorldServices.TryFireWeaponSlot"/>: the slot's own clip, reload and last-shot state), one shot per ready weapon, and gives up when the victim is gone or out of the
+/// weapon's range (the shipped users are immobile, so the AI could not approach either). The feedback lasers of <c>makeFeedbackLaser</c> are presentation (a beam object needs end points the simulation cannot carry) and are not created.
 /// </summary>
 public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimModule, IUpdateModule
 {
     private long _nextWake = SimulationTiming.SleepForever;
     private EntityId _victim;
     private int _shotsLeft;
-    private int _clip = -1;
-    private long _readyTick;
 
     public override string ModuleName => "AssistedTargetingUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -467,12 +468,14 @@ public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimMod
     /// <summary>Shots still to fire for the current request (0 when idle).</summary>
     public int ShotsLeft => _shotsLeft;
 
-    private int WeaponIndex => data.SecondarySlot ? Entity.Template.SecondaryWeapon : Entity.Template.DefaultWeapon;
-
-    /// <summary><c>AssistedTargetingUpdate::isFreeToAssist</c>.</summary>
+    /// <summary>
+    /// <c>AssistedTargetingUpdate::isFreeToAssist</c> ("the reload times of my two weapons are tied together, so Ready is indicative of either"): <c>isAbleToAttack</c> and the
+    /// current weapon <c>READY_TO_FIRE</c>. The module also needs a weapon in its assisting slot and no request of its own under way.
+    /// </summary>
     public bool IsFreeToAssist(IWorldServices world)
         => !Entity.EffectivelyDead && !Entity.DestroyRequested && !Entity.HasStatus(ObjectStatusBits.UnderConstruction) && !Entity.HasStatus(ObjectStatusBits.Sold)
-           && CrateModules.AiOf(Entity) is not null && WeaponIndex >= 0 && Entity.Template.DefaultWeapon >= 0 && _shotsLeft == 0 && world.Tick >= Entity.WeaponReadyTick;
+           && CrateModules.AiOf(Entity) is not null && SimulationWorld.WeaponIndexIn(Entity, data.Slot) >= 0 && _shotsLeft == 0
+           && SimulationWorld.WeaponIndexIn(Entity, Entity.CurrentWeaponSlot) >= 0 && world.Tick >= Entity.ReadyTickOf(Entity.CurrentWeaponSlot);
 
     /// <summary><c>AssistedTargetingUpdate::assistAttack</c>: attack <paramref name="victim"/> for <c>AssistingClipSize</c> shots on behalf of <paramref name="requester"/>.</summary>
     public void AssistAttack(IWorldServices world, Entity requester, Entity victim)
@@ -480,6 +483,8 @@ public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimMod
         _ = requester;
         _victim = victim.Id;
         _shotsLeft = Math.Max(data.ClipSize, 0);
+        // assistAttack: "lock it just till the weapon is empty or the attack is done".
+        world.SetWeaponLock(Entity, data.Slot, WeaponLockKind.Temporary);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
         world.MarkDirty(Entity);
     }
@@ -488,23 +493,16 @@ public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimMod
     {
         if (_shotsLeft <= 0) return Stop();
         var victim = world.FindEntity(_victim);
-        if (victim is null || victim.DestroyRequested || victim.EffectivelyDead || WeaponIndex < 0) return Stop();
-        if (world.Tick < _readyTick) return _readyTick - world.Tick;
-        var weapon = world.Weapons[WeaponIndex];
-        var dx = victim.X - Entity.X;
-        var dy = victim.Y - Entity.Y;
-        if (dx * dx + dy * dy > weapon.AttackRange * weapon.AttackRange) return Stop();
-        if (_clip < 0) _clip = weapon.ClipSize == 0 ? int.MaxValue : weapon.ClipSize;
-        world.FireWeaponAt(Entity, weapon, victim, victim.X, victim.Y, victim.Z);
+        if (victim is null || victim.DestroyRequested || victim.EffectivelyDead || SimulationWorld.WeaponIndexIn(Entity, data.Slot) < 0) return Stop();
+        var ready = Entity.ReadyTickOf(data.Slot);
+        if (world.Tick < ready) return Math.Min(ready - world.Tick, ReloadWait);
+        if (!world.TryFireWeaponSlot(Entity, data.Slot, victim)) return Stop();
         _shotsLeft--;
-        if (_clip != int.MaxValue && --_clip == 0)
-        {
-            _clip = weapon.ClipSize;
-            _readyTick = world.Tick + Math.Max(weapon.ClipReloadTicks, SimulationTiming.SleepNone);
-        }
-        else _readyTick = world.Tick + Math.Max(weapon.DelayBetweenShotsTicks, SimulationTiming.SleepNone);
-        return _shotsLeft <= 0 ? Stop() : _readyTick - world.Tick;
+        return _shotsLeft <= 0 ? Stop() : Math.Max(Math.Min(Entity.ReadyTickOf(data.Slot) - world.Tick, ReloadWait), SimulationTiming.SleepNone);
     }
+
+    /// <summary>An upper bound for one sleep while the slot reloads: a weapon that reloads at an airfield never becomes ready by itself.</summary>
+    private const long ReloadWait = 1000;
 
     private long Stop()
     {
@@ -518,8 +516,6 @@ public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimMod
         writer.Int("nextWake", _nextWake);
         writer.UInt("victim", _victim.Value);
         writer.Int("shotsLeft", _shotsLeft);
-        writer.Int("clip", _clip);
-        writer.Int("readyTick", _readyTick);
     }
 
     public override void Load(IStateReader reader)
@@ -527,7 +523,5 @@ public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimMod
         _nextWake = reader.Int("nextWake");
         _victim = new EntityId(checked((uint)reader.UInt("victim")));
         _shotsLeft = checked((int)reader.Int("shotsLeft"));
-        _clip = checked((int)reader.Int("clip"));
-        _readyTick = reader.Int("readyTick");
     }
 }

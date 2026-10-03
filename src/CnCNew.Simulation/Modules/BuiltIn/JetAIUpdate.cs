@@ -207,18 +207,22 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
         return Array.Find(field.ModuleArray, module => module is ParkingPlaceBehavior) as ParkingPlaceBehavior;
     }
 
-    private static int ActiveWeaponIndex(Entity entity)
-    {
-        if (entity.CrateWeaponLevel > 0 && entity.Template.CrateUpgradeWeapon[entity.CrateWeaponLevel] is var crate and >= 0) return crate;
-        if (entity.VeterancyLevel > 0 && entity.Template.VeteranWeapon[entity.VeterancyLevel] is var veteran and >= 0) return veteran;
-        return entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
-    }
-
-    /// <summary><c>isOutOfSpecialReloadAmmo</c>: the weapon needs the airfield to reload (<c>RETURN_TO_BASE</c>) and its clip is empty.</summary>
+    /// <summary>
+    /// <c>isOutOfSpecialReloadAmmo</c>: the object has at least one weapon in its active set that needs the airfield to reload (<c>RETURN_TO_BASE</c>) and every such weapon is out of ammo
+    /// (a Raptor's missile slot empty, whatever its gun still holds).
+    /// </summary>
     public bool IsOutOfSpecialReloadAmmo(IWorldServices world)
     {
-        var index = ActiveWeaponIndex(Entity);
-        return index >= 0 && world.Weapons[index].ReloadsAtBase && Entity.WeaponClip == 0;
+        var specials = 0;
+        var empty = 0;
+        for (var slot = 0; slot < WeaponSlot.Count; slot++)
+        {
+            var index = SimulationWorld.WeaponIndexIn(Entity, slot);
+            if (index < 0 || !world.Weapons[index].ReloadsAtBase) continue;
+            specials++;
+            if (Entity.ClipOf(slot) == 0) empty++;
+        }
+        return specials > 0 && empty == specials;
     }
 
     private void Enter(JetPhase phase)
@@ -850,17 +854,17 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
 
     private void BeginReload(IWorldServices world)
     {
-        var index = ActiveWeaponIndex(Entity);
+        // JetOrHeliReloadAmmoState::onEnter: the slowest weapon sets the time, "bias by amount empty"; a weapon without a clip never needs a reload.
         long total = 0;
-        if (index >= 0)
+        for (var slot = 0; slot < WeaponSlot.Count; slot++)
         {
+            var index = SimulationWorld.WeaponIndexIn(Entity, slot);
+            if (index < 0) continue;
             var weapon = world.Weapons[index];
-            // JetOrHeliReloadAmmoState::onEnter: "bias by amount empty"; a weapon without a clip never needs a reload.
-            if (weapon.ClipSize > 0 && Entity.WeaponClip != int.MaxValue)
-            {
-                var time = weapon.ClipReloadWith(world.Templates.GlobalWeaponBonus, Entity.WeaponBonusConditions);
-                total = time * (weapon.ClipSize - Math.Max(Entity.WeaponClip, 0)) / weapon.ClipSize;
-            }
+            var clip = Entity.ClipOf(slot);
+            if (weapon.ClipSize <= 0 || clip == int.MaxValue) continue;
+            var time = weapon.ClipReloadWith(world.Templates.GlobalWeaponBonus, Entity.WeaponBonusConditions);
+            total = Math.Max(total, time * (weapon.ClipSize - Math.Max(clip, 0)) / weapon.ClipSize);
         }
         _reloadDoneTick = world.Tick + Math.Max(total, 1);
         _useReturnLocomotor = false;
@@ -870,13 +874,7 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
     {
         parking?.SetHealee(world, Entity, !_allowAir);
         if (world.Tick < _reloadDoneTick) return;
-        var index = ActiveWeaponIndex(Entity);
-        if (index >= 0 && Entity.WeaponClip != int.MaxValue && world.Weapons[index].ClipSize > 0)
-        {
-            Entity.WeaponClip = world.Weapons[index].ClipSize;
-            Entity.WeaponReadyTick = Math.Min(Entity.WeaponReadyTick, world.Tick);
-            world.MarkDirty(Entity);
-        }
+        world.ReloadAllAmmo(Entity);
         _returnTick = 0;
         // Idle again: a stored order (given while it reloaded) is carried out by IdleLogic.
         Enter(JetPhase.None);

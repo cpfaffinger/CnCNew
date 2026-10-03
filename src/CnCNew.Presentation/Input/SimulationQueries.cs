@@ -50,21 +50,20 @@ public static class SimulationQueries
 
     public static bool IsAlive(Entity entity) => !entity.DestroyRequested && !entity.EffectivelyDead;
 
-    /// <summary><c>SimulationWorld.ActiveWeaponIndex</c>: the upgraded weapon set once <c>WeaponSetUpgrade</c> completed, else the default one; -1 unarmed.</summary>
-    public static int ActiveWeapon(Entity entity)
-        => entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
+    /// <summary><c>SimulationWorld.ActiveWeaponIndex</c>: the primary weapon of the weapon set the object's veterancy and upgrades select; -1 when that slot is empty.</summary>
+    public static int ActiveWeapon(Entity entity) => SimulationWorld.ActiveWeaponIndex(entity);
 
-    public static Fixed WeaponRange(SimulationWorld world, Entity entity)
-    {
-        var index = ActiveWeapon(entity);
-        return index < 0 ? Fixed.Zero : world.Weapons[index].RangeWith(world.Templates.GlobalWeaponBonus, entity.WeaponBonusConditions);
-    }
+    /// <summary>Whether any slot of the active weapon set holds a weapon (an object can be armed through its secondary slot alone).</summary>
+    public static bool HasWeapon(Entity entity) => SimulationWorld.ActiveWeaponSet(entity) is { WeaponCount: > 0 };
 
-    /// <summary>The <c>FireWeaponCommand</c> preconditions: armed, reloaded, the target alive with a body, visible and within range.</summary>
-    public static bool CanFireAt(SimulationWorld world, Entity source, Entity target)
+    /// <summary>The longest range of the object's weapons (<see cref="SimulationWorld.MaxWeaponRange"/>): how close it must get to use any of them.</summary>
+    public static Fixed WeaponRange(SimulationWorld world, Entity entity) => world.MaxWeaponRange(entity);
+
+    /// <summary>The <c>FireWeaponCommand</c> preconditions: some weapon may be fired at the target now (<see cref="SimulationWorld.ChooseWeapon"/>, a player's order), the target alive with a body and visible.</summary>
+    public static bool CanFireAt(SimulationWorld world, Entity source, Entity target, FireOrigin origin = FireOrigin.Player)
     {
-        if (ActiveWeapon(source) < 0 || world.Tick < source.WeaponReadyTick || target.DestroyRequested || target.Body is null) return false;
-        return InRange(world, source, target) && world.CanPlayerSee(source.Owner, target);
+        if (target.DestroyRequested || target.Body is null) return false;
+        return world.ChooseWeapon(source, target, origin).CanFire && world.CanPlayerSee(source.Owner, target);
     }
 
     public static bool InRange(SimulationWorld world, Entity source, Entity target)

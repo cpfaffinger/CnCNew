@@ -57,7 +57,7 @@ public sealed class ObjectTemplate
     internal ObjectTemplate(int index, ObjectDefinition definition, ImmutableArray<ModuleSpec> modules,
         ImmutableArray<string> presentationModules, ImmutableArray<string> missingModules,
         ArmorInfo defaultArmor, ArmorInfo? playerUpgradeArmor, ImmutableArray<ArmorInfo?> veteranArmor,
-        int defaultWeapon, int playerUpgradeWeapon, ImmutableArray<int> veteranWeapon, LocomotorInfo? locomotor,
+        ImmutableArray<WeaponSetInfo> weaponSets, LocomotorInfo? locomotor,
         ImmutableArray<PrerequisiteLine> prerequisites, ImmutableArray<string> commandSets)
     {
         CommandSets = commandSets;
@@ -92,14 +92,32 @@ public sealed class ObjectTemplate
         DefaultArmor = defaultArmor;
         PlayerUpgradeArmor = playerUpgradeArmor;
         VeteranArmor = veteranArmor;
-        DefaultWeapon = defaultWeapon;
-        PlayerUpgradeWeapon = playerUpgradeWeapon;
-        VeteranWeapon = veteranWeapon;
+        WeaponSets = weaponSets;
+        DefaultWeaponSet = WeaponSetResolver.Find(weaponSets, 0);
+        DefaultWeapon = DefaultWeaponSet?.Primary ?? -1;
+        HasMultipleWeaponSlots = weaponSets.Any(set => set.WeaponCount > 1);
         Locomotor = locomotor;
         Prerequisites = prerequisites;
         CrusherLevel = definition.Fields.LastOrDefault(field => field.Name.Equals("CrusherLevel", StringComparison.OrdinalIgnoreCase))?.Value.Value is long crusher ? checked((int)crusher) : 0;
         CrushableLevel = definition.Fields.LastOrDefault(field => field.Name.Equals("CrushableLevel", StringComparison.OrdinalIgnoreCase))?.Value.Value is long crushable ? checked((int)crushable) : 255;
+        // WeaponSet.cpp getVictimAntiMask, split at its "isAirborneTarget" test so the per-shot choice needs no KindOf scan.
+        if (IsKindOf("SMALL_MISSILE")) GroundTargetAntiMask = AirborneTargetAntiMask = WeaponInfo.AntiMaskSmallMissile;
+        else if (IsKindOf("BALLISTIC_MISSILE")) GroundTargetAntiMask = AirborneTargetAntiMask = WeaponInfo.AntiMaskBallisticMissile;
+        else if (IsKindOf("PROJECTILE")) GroundTargetAntiMask = AirborneTargetAntiMask = WeaponInfo.AntiMaskProjectile;
+        else if (IsKindOf("MINE") || IsKindOf("DEMOTRAP")) GroundTargetAntiMask = AirborneTargetAntiMask = WeaponInfo.AntiMaskMine | WeaponInfo.AntiMaskGround;
+        else
+        {
+            GroundTargetAntiMask = WeaponInfo.AntiMaskGround;
+            AirborneTargetAntiMask = IsKindOf("VEHICLE") ? WeaponInfo.AntiMaskAirborneVehicle : IsKindOf("INFANTRY") ? WeaponInfo.AntiMaskAirborneInfantry
+                : IsKindOf("PARACHUTE") ? WeaponInfo.AntiMaskParachute : 0;
+        }
     }
+
+    /// <summary>The <c>WeaponAntiMaskType</c> a weapon needs to fire at this object while it is on the ground (<c>getVictimAntiMask</c>).</summary>
+    public int GroundTargetAntiMask { get; }
+
+    /// <summary>The <c>WeaponAntiMaskType</c> a weapon needs to fire at this object while it is airborne (equal to <see cref="GroundTargetAntiMask"/> for missiles, projectiles and mines; 0 for an airborne object that is neither vehicle, infantry nor parachute).</summary>
+    public int AirborneTargetAntiMask { get; }
 
     /// <summary>Position in the ordinally sorted list of all object definitions (stable for one definition graph).</summary>
     public int Index { get; }
@@ -181,34 +199,24 @@ public sealed class ObjectTemplate
     /// single-condition match, a named simplification with no effect on the shipped game.
     /// </summary>
     public ImmutableArray<ArmorInfo?> VeteranArmor { get; }
-    /// <summary>Index into the world's <see cref="WeaponCatalog"/> of the <c>WeaponSet Conditions=None</c> primary weapon, or -1.</summary>
+    /// <summary>
+    /// Every <c>WeaponSet</c> block in declaration order (<c>ThingTemplate::m_weaponTemplateSets</c>), each with its three weapon slots. The set an object
+    /// uses is picked from its weapon set flags (veterancy, <c>PLAYER_UPGRADE</c>, <c>CRATEUPGRADE_ONE/TWO</c>, <c>CARBOMB</c>; <see cref="World.SimulationWorld.WeaponSetFlagsOf"/>) by
+    /// <see cref="WeaponSetResolver.Find"/>; the remaining conditions (<c>MINE_CLEARING_DETAIL</c>, <c>WEAPON_RIDER*</c>, <c>VEHICLE_HIJACK</c>) are parsed but nothing raises their flags.
+    /// </summary>
+    public ImmutableArray<WeaponSetInfo> WeaponSets { get; }
+    /// <summary>The set an object without any weapon set flag uses (<c>findWeaponTemplateSet</c> of the empty mask); null when the object declares no weapon set.</summary>
+    public WeaponSetInfo? DefaultWeaponSet { get; }
+    /// <summary>
+    /// Index into the world's <see cref="WeaponCatalog"/> of the <see cref="DefaultWeaponSet"/>'s <em>primary</em> weapon, or -1: an alias kept for code that only needs
+    /// "is it armed, and with what range", not the slot model.
+    /// </summary>
     public int DefaultWeapon { get; }
-    /// <summary>Primary weapon of the <c>WeaponSet Conditions = PLAYER_UPGRADE</c> variant, if any, else -1.</summary>
-    public int PlayerUpgradeWeapon { get; }
-    /// <summary>Primary weapon of the <c>WeaponSet Conditions = VETERAN</c>/<c>ELITE</c>/<c>HERO</c> variant (index 1..3), or -1. See <see cref="VeteranArmor"/> for the selection simplification.</summary>
-    public ImmutableArray<int> VeteranWeapon { get; }
-
-    /// <summary>
-    /// Primary weapon of the <c>WeaponSet Conditions = CARBOMB</c> variant, or -1 (<c>ThingTemplate::findWeaponTemplateSet(WEAPONSET_CARBOMB)</c>; every shipped
-    /// vehicle that has one declares it alone). Selected for an entity that <c>ConvertToCarBombCrateCollide</c> turned into a car bomb.
-    /// </summary>
-    public int CarBombWeapon { get; init; } = -1;
-
-    /// <summary>
-    /// Primary weapon of the <c>WeaponSet Conditions = CRATEUPGRADE_ONE</c> (index 1) / <c>CRATEUPGRADE_TWO</c> (index 2) variant, or -1 (index 0 is unused); selected for a salvager
-    /// that picked up weapon crates (<see cref="World.Entity.CrateWeaponLevel"/>). Only the single-condition sets are resolved, like <see cref="VeteranWeapon"/>: the
-    /// <c>CRATEUPGRADE_x PLAYER_UPGRADE</c> sets (which differ in the unsimulated secondary weapon only) fall back to the single-condition one.
-    /// </summary>
-    public ImmutableArray<int> CrateUpgradeWeapon { get; init; } = [-1, -1, -1];
+    /// <summary>Whether any weapon set holds more than one weapon: only then does an entity carry per-slot weapon state (<see cref="Entity.WeaponSlots"/>); single-weapon objects keep the one-weapon fields and snapshot shape.</summary>
+    public bool HasMultipleWeaponSlots { get; }
 
     /// <summary><c>ArmorSet Conditions = CRATE_UPGRADE_ONE</c> (index 1) / <c>CRATE_UPGRADE_TWO</c> (index 2) variant, or <see langword="null"/>; the <c>SECOND_LIFE</c> combinations are not modeled.</summary>
     public ImmutableArray<ArmorInfo?> CrateUpgradeArmor { get; init; } = [null, null, null];
-
-    /// <summary>
-    /// The <c>SECONDARY</c> weapon of the unconditional <c>WeaponSet</c>, or -1. Entities fire one weapon here (<see cref="DefaultWeapon"/>); the secondary is only used by modules that
-    /// address a weapon slot themselves (<c>AssistedTargetingUpdate</c>), with their own clip bookkeeping.
-    /// </summary>
-    public int SecondaryWeapon { get; init; } = -1;
     public LocomotorInfo? Locomotor { get; }
 
     /// <summary>Every locomotor set the object declares (<c>Locomotor = SET_X Name</c>, the first resolvable name of each), by set name (<c>SET_TAXIING</c>, <c>SET_SUPERSONIC</c>, ...); <see cref="Locomotor"/> is the <c>SET_NORMAL</c> entry.</summary>
@@ -381,7 +389,7 @@ public sealed class TemplateCatalog
             }
 
             var (defaultArmor, playerUpgradeArmor, veteranArmor) = ResolveArmor(definition, armors);
-            var (defaultWeapon, playerUpgradeWeapon, veteranWeapon) = ResolveWeapon(definition, weapons);
+            var weaponSets = WeaponSetResolver.Resolve(definition, weapons);
             var locomotor = ResolveLocomotor(definition, locomotors);
             var prerequisites = ResolvePrerequisites(definition);
             var commandSets = ImmutableArray.CreateBuilder<string>();
@@ -390,12 +398,9 @@ public sealed class TemplateCatalog
                 foreach (var field in module.Fields.Where(value => value.Name.Equals("CommandSet", StringComparison.OrdinalIgnoreCase) || value.Name.Equals("CommandSetAlt", StringComparison.OrdinalIgnoreCase)))
                     if (field.Value.OriginalText.Trim() is { Length: > 0 } name && !commandSets.Contains(name)) commandSets.Add(name);
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
-                defaultArmor, playerUpgradeArmor, veteranArmor, defaultWeapon, playerUpgradeWeapon, veteranWeapon, locomotor, prerequisites, commandSets.ToImmutable())
+                defaultArmor, playerUpgradeArmor, veteranArmor, weaponSets, locomotor, prerequisites, commandSets.ToImmutable())
             {
                 LocomotorSets = ResolveLocomotorSets(definition, locomotors),
-                CarBombWeapon = ResolveCarBombWeapon(definition, weapons),
-                SecondaryWeapon = ResolveSecondaryWeapon(definition, weapons),
-                CrateUpgradeWeapon = ResolveCrateUpgradeWeapon(definition, weapons),
                 CrateUpgradeArmor = ResolveCrateUpgradeArmor(definition, armors),
             });
         }
@@ -548,32 +553,6 @@ public sealed class TemplateCatalog
         return (defaultArmor ?? ArmorInfo.Default, playerUpgrade, [..veteran]);
     }
 
-    private static int ResolveSecondaryWeapon(ObjectDefinition definition, WeaponCatalog weapons)
-    {
-        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)))
-        {
-            if (!ConditionTokens(section).IsEmpty) continue;
-            var secondary = section.Fields.Where(value => value.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase))
-                .FirstOrDefault(value => value.Value.OriginalText.TrimStart().StartsWith("SECONDARY", StringComparison.OrdinalIgnoreCase));
-            return secondary?.Value.Value is DefinitionReference { IsNone: false } reference && weapons.TryGet(reference.Name, out var info) ? info.Index : -1;
-        }
-        return -1;
-    }
-
-    /// <summary><c>WeaponSet Conditions = CRATEUPGRADE_ONE</c>/<c>CRATEUPGRADE_TWO</c> alone: the primary weapon of each level.</summary>
-    private static ImmutableArray<int> ResolveCrateUpgradeWeapon(ObjectDefinition definition, WeaponCatalog weapons)
-    {
-        var levels = new[] { -1, -1, -1 };
-        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)))
-        {
-            if (ConditionTokens(section) is not [var only] || CrateConditionIndex(only, "CRATEUPGRADE_") is not (> 0 and var level) || levels[level] >= 0) continue;
-            var primary = section.Fields.Where(value => value.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase))
-                .FirstOrDefault(value => value.Value.OriginalText.TrimStart().StartsWith("PRIMARY", StringComparison.OrdinalIgnoreCase));
-            if (primary?.Value.Value is DefinitionReference { IsNone: false } reference && weapons.TryGet(reference.Name, out var info)) levels[level] = info.Index;
-        }
-        return [..levels];
-    }
-
     /// <summary><c>ArmorSet Conditions = CRATE_UPGRADE_ONE</c>/<c>CRATE_UPGRADE_TWO</c> alone: the armor of each level.</summary>
     private static ImmutableArray<ArmorInfo?> ResolveCrateUpgradeArmor(ObjectDefinition definition, ImmutableDictionary<string, ArmorInfo> armors)
     {
@@ -596,40 +575,6 @@ public sealed class TemplateCatalog
     {
         if (condition.Equals(prefix + "ONE", StringComparison.OrdinalIgnoreCase)) return 1;
         return condition.Equals(prefix + "TWO", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
-    }
-
-    private static int ResolveCarBombWeapon(ObjectDefinition definition, WeaponCatalog weapons)
-    {
-        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)))
-        {
-            if (ConditionTokens(section) is not [var only] || !only.Equals("CARBOMB", StringComparison.OrdinalIgnoreCase)) continue;
-            var primary = section.Fields.Where(value => value.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase))
-                .FirstOrDefault(value => value.Value.OriginalText.TrimStart().StartsWith("PRIMARY", StringComparison.OrdinalIgnoreCase));
-            return primary?.Value.Value is DefinitionReference { IsNone: false } reference && weapons.TryGet(reference.Name, out var info) ? info.Index : -1;
-        }
-        return -1;
-    }
-
-    private static (int Default, int PlayerUpgrade, ImmutableArray<int> Veteran) ResolveWeapon(ObjectDefinition definition, WeaponCatalog weapons)
-    {
-        var defaultWeapon = -1;
-        var playerUpgradeWeapon = -1;
-        var veteran = new[] { -1, -1, -1, -1 };
-        foreach (var section in definition.Sections.Where(value => value.Declaration.Equals("WeaponSet", StringComparison.OrdinalIgnoreCase)))
-        {
-            var primary = section.Fields.Where(value => value.Name.Equals("Weapon", StringComparison.OrdinalIgnoreCase))
-                .FirstOrDefault(value => value.Value.OriginalText.TrimStart().StartsWith("PRIMARY", StringComparison.OrdinalIgnoreCase));
-            var weaponName = primary?.Value.Value switch { DefinitionReference { IsNone: false } reference => reference.Name, _ => null };
-            var index = weaponName is not null && weapons.TryGet(weaponName, out var info) ? info.Index : -1;
-            var conditions = ConditionTokens(section);
-            if (conditions.Length == 0) { if (defaultWeapon < 0) defaultWeapon = index; }
-            else if (conditions is [var only])
-            {
-                if (only.Equals("PLAYER_UPGRADE", StringComparison.OrdinalIgnoreCase)) { if (playerUpgradeWeapon < 0) playerUpgradeWeapon = index; }
-                else if (VeterancyConditionIndex(only) is > 0 and var level) { if (veteran[level] < 0) veteran[level] = index; }
-            }
-        }
-        return (defaultWeapon, playerUpgradeWeapon, [..veteran]);
     }
 
     private static ImmutableDictionary<string, LocomotorInfo> BuildLocomotors(CompiledDefinitionGraph graph)

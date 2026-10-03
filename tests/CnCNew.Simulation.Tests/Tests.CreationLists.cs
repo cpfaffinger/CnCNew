@@ -144,8 +144,8 @@ static partial class Tests
         End
         Object Pending
           KindOf = INFANTRY
-          Behavior = LockWeaponCreate Stand01
-            SlotToLock = SECONDARY
+          Behavior = SpawnBehavior Stand01
+            CanReclaimOrphans = Yes
           End
         End
         Object Wreckable
