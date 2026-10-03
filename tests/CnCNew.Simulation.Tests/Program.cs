@@ -312,6 +312,11 @@ run.Test("Weapon slots: LockWeaponCreate and veteran weapon sets with slots", Te
 run.Test("Weapon slots: snapshot mid-reload and determinism", Tests.WeaponSlotsSnapshotMidReloadAndDeterminism);
 run.Test("Weapon slots: commands in replays (format 8, command table 11)", Tests.WeaponSlotsCommandsRoundTripInReplays);
 run.Test("Weapon slots: script command buttons honour the slot", Tests.WeaponSlotsScriptCommandButtonsHonourTheSlot);
+run.Test("Weapon slots: the car bomb weapon set feeds the slots", Tests.WeaponSlotsCarBombSetFeedsTheSlots);
+run.Test("Weapon slots: salvage crate weapon sets feed the slots", Tests.WeaponSlotsCrateUpgradeSetsFeedTheSlots);
+run.Test("Weapon slots: FireOCLAfterWeaponCooldownUpdate watches the secondary slot", Tests.WeaponSlotsFireOclAfterCooldownWatchesTheSecondarySlot);
+run.Test("Weapon slots: AssistedTargetingUpdate fires the real secondary slot", Tests.WeaponSlotsAssistedTargetingUsesTheRealSlot);
+run.Test("Weapon slots: a jet reloads every slot at the airfield", Tests.WeaponSlotsJetReloadsEverySlotAtTheAirfield);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
