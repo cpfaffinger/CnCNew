@@ -142,6 +142,15 @@ public interface IWorldServices
     /// <summary><c>Object::fireCurrentWeapon(pos)</c>: fires the active weapon at a position when it is ready (false otherwise).</summary>
     bool FireCurrentWeaponAtPosition(Entity source, Fixed x, Fixed y, Fixed z);
 
+    /// <summary><c>WeaponSet::setWeaponLock</c>: pins <paramref name="slot"/> as the weapon the object fires (a temporary lock never replaces a permanent one); false when the active weapon set has no weapon there.</summary>
+    bool SetWeaponLock(Entity entity, int slot, WeaponLockKind kind);
+
+    /// <summary><c>WeaponSet::releaseWeaponLock</c>: a permanent release clears every lock, a temporary one only a temporary lock.</summary>
+    void ReleaseWeaponLock(Entity entity, WeaponLockKind kind);
+
+    /// <summary><c>WeaponSetUpgrade</c> changed the object's weapon set flags: the weapons of the now active set are loaded and ready.</summary>
+    void WeaponSetFlagsChanged(Entity entity);
+
     EntityId LaunchProjectileObject(Entity launcher, int templateIndex, WeaponInfo weapon, Fixed startX, Fixed startY, Fixed startZ, Fixed targetX, Fixed targetY, Fixed targetZ);
 
     ObjectCreationListCatalog CreationLists { get; }

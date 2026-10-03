@@ -269,8 +269,8 @@ public sealed class MissionSession
         foreach (var entity in World.Entities.OrderBy(value => value.Id.Value).ToArray())
         {
             if ((tick + entity.Id.Value) % interval != 0) continue;
-            if (entity.Owner.IsSystem || entity.Template.DefaultWeapon < 0 || !ScriptEngine.CountsAsObject(entity) || tick < entity.WeaponReadyTick) continue;
-            var range = World.Weapons[entity.Template.DefaultWeapon].RangeWith(World.Templates.GlobalWeaponBonus, entity.WeaponBonusConditions);
+            if (entity.Owner.IsSystem || !ScriptEngine.CountsAsObject(entity) || !World.IsAnyWeaponReady(entity)) continue;
+            var range = World.MaxWeaponRange(entity);
             if (range <= Fixed.Zero) continue;
             targets ??= [..World.Entities.Where(value => !value.Owner.IsSystem && value.Body is not null && ScriptEngine.CountsAsObject(value)).OrderBy(value => value.Id.Value)];
             var limit = range * range;
@@ -287,6 +287,8 @@ public sealed class MissionSession
                 // Highest attack priority first (scripts may give an object a priority set), nearest among equals.
                 var priority = Engine.AttackPriority(entity, target);
                 if (priority < bestPriority || (priority == bestPriority && distance >= bestDistance)) continue;
+                // An idle unit picks its own weapon (CMD_FROM_AI); a target none of its weapons can hit and fire this tick is not worth an order.
+                if (!World.ChooseWeapon(entity, target, FireOrigin.Ai).CanFire) continue;
                 best = target;
                 bestPriority = priority;
                 bestDistance = distance;
@@ -295,7 +297,7 @@ public sealed class MissionSession
             var owner = entity.Owner;
             var source = entity.Id;
             var victim = best.Id;
-            if (Issue(owner, (sequence, at) => new FireWeaponCommand(owner, sequence, at, source, victim)).Accepted) _shots++;
+            if (Issue(owner, (sequence, at) => new FireWeaponCommand(owner, sequence, at, source, victim, WeaponSlot.Best, FireOrigin.Ai)).Accepted) _shots++;
             else _rejectedShots++;
         }
     }

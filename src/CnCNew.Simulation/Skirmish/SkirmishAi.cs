@@ -748,9 +748,9 @@ public sealed class SkirmishAi
         if (_enemyTargets.Count == 0) return;
         foreach (var entity in _structures.Concat(_units))
         {
-            if (entity.Template.DefaultWeapon < 0 || _tick < entity.WeaponReadyTick) continue;
+            if (!_world.IsAnyWeaponReady(entity)) continue;
             if (entity.Template.IsKindOf("STRUCTURE") && (RoleOf(entity.Template) & Role.Defense) == 0) continue;
-            var range = _world.Weapons[entity.Template.DefaultWeapon].RangeWith(_catalog.GlobalWeaponBonus, entity.WeaponBonusConditions);
+            var range = _world.MaxWeaponRange(entity);
             if (range <= Fixed.Zero) continue;
             var limit = range * range;
             Entity? best = null;
@@ -759,11 +759,13 @@ public sealed class SkirmishAi
             {
                 var distance = DistanceSquared(entity.X, entity.Y, target.X, target.Y);
                 if (distance > limit || distance >= bestDistance) continue;
+                // The AI picks the weapon (CMD_FROM_AI); skip targets none of the unit's weapons can fire at right now.
+                if (!_world.ChooseWeapon(entity, target, FireOrigin.Ai).CanFire) continue;
                 best = target;
                 bestDistance = distance;
             }
             if (best is null) continue;
-            if (Send(sequence => new FireWeaponCommand(_player, sequence, _tick, entity.Id, best.Id)).Accepted) Stats.Shots++;
+            if (Send(sequence => new FireWeaponCommand(_player, sequence, _tick, entity.Id, best.Id, WeaponSlot.Best, FireOrigin.Ai)).Accepted) Stats.Shots++;
         }
     }
 
@@ -906,8 +908,7 @@ public sealed class SkirmishAi
             if (distance < best) { best = distance; nearest = target; }
         }
         if (nearest is null) return destination;
-        var weapon = unit.Template.DefaultWeapon;
-        var range = weapon >= 0 ? _world.Weapons[weapon].RangeWith(_catalog.GlobalWeaponBonus, unit.WeaponBonusConditions) : Fixed.Zero;
+        var range = _world.MaxWeaponRange(unit);
         var distanceToTarget = Fixed.Sqrt(best);
         var stand = range * Fixed.FromDecimal(0.7m);
         if (distanceToTarget <= stand || distanceToTarget <= Fixed.Zero) return (unit.X, unit.Y);

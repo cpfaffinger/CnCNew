@@ -27,8 +27,8 @@ sealed class Feeder(SimulationWorld world)
 
     private ulong Next(int player) => _sequence[player] = _sequence.GetValueOrDefault(player) + 1;
 
-    public SubmitResult Spawn(int player, string template, long? tick = null, int owner = 0, int x = 0, int y = 0)
-        => world.Submit(new SpawnCommand(new PlayerId(player), Next(player), tick ?? world.Tick, template, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero));
+    public SubmitResult Spawn(int player, string template, long? tick = null, int owner = 0, int x = 0, int y = 0, int z = 0)
+        => world.Submit(new SpawnCommand(new PlayerId(player), Next(player), tick ?? world.Tick, template, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.FromInt(z), Fixed.Zero));
 
     public SubmitResult Kill(uint id, long? tick = null, int player = 0)
         => world.Submit(new KillCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(id)));
@@ -64,6 +64,12 @@ sealed class Feeder(SimulationWorld world)
 
     public SubmitResult FireWeapon(int player, uint source, uint target, long? tick = null)
         => world.Submit(new FireWeaponCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(source), new EntityId(target)));
+
+    public SubmitResult FireWeaponSlot(int player, uint source, uint target, int slot, FireOrigin origin = FireOrigin.Player, long? tick = null)
+        => world.Submit(new FireWeaponCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(source), new EntityId(target), slot, origin));
+
+    public SubmitResult SetWeaponLock(int player, uint source, int slot, WeaponLockKind kind, long? tick = null)
+        => world.Submit(new SetWeaponLockCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(source), slot, kind));
 
     public SubmitResult GiveSciencePoints(int target, int amount, long? tick = null)
         => world.Submit(new GiveSciencePointsCommand(PlayerId.System, Next(0), tick ?? world.Tick, new PlayerId(target), amount));

@@ -272,7 +272,7 @@ static partial class Tests
         End
         CommandButton Cmd_AlphaFire
           Command = FIRE_WEAPON
-          WeaponSlot = SECONDARY
+          WeaponSlot = PRIMARY
         End
         CommandButton Cmd_AlphaSellNotPower
           Command = SELL
@@ -285,9 +285,9 @@ static partial class Tests
     /// A 60x40-cell map with three sides (neutral, PlayerA human, PlayerB enemy of A), two waypoints, an area around the left spawn and two teams;
     /// <paramref name="scripts"/> run in PlayerA's list (index 1), <paramref name="neutral"/> in the neutral list (index 0).
     /// </summary>
-    private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) MissionMap(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null)
+    private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) MissionMap(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null, IReadOnlyDictionary<string, string>? extraFiles = null)
     {
-        var fixture = new SyntheticFixture(files: ScriptFiles());
+        var fixture = new SyntheticFixture(files: extraFiles is null ? ScriptFiles() : new Dictionary<string, string>(ScriptFiles()).Concat(extraFiles).ToDictionary(pair => pair.Key, pair => pair.Value));
         var area = new MapPolygonTrigger("LeftArea", string.Empty, 7, false, false, 0, [new MapPoint(0, 0, 0), new MapPoint(200, 0, 0), new MapPoint(200, 400, 0), new MapPoint(0, 400, 0)]);
         var baseMap = SyntheticMaps.Build(60, 40, 1, triggers: [area], waypoints: [("Spawn", 100m, 200m, 0m), ("Far", 400m, 200m, 0m), ("Mid", 250m, 200m, 0m)]);
         // Waypoint paths: extra waypoints, the first labelled with the path name (waypointPathLabel1), linked in order by waypointID.
@@ -337,9 +337,9 @@ static partial class Tests
         return new MapObject(template, x, y, 0m, 0m, 0, new MapProperties(properties.ToImmutable()));
     }
 
-    private static MissionSession StartMission(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MissionOptions? options = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null)
+    private static MissionSession StartMission(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MissionOptions? options = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null, IReadOnlyDictionary<string, string>? extraFiles = null)
     {
-        var (map, fixture, terrain) = MissionMap(scripts, groups, objects, neutral, paths);
+        var (map, fixture, terrain) = MissionMap(scripts, groups, objects, neutral, paths, extraFiles);
         return MissionSession.Start(options ?? MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
     }
 
@@ -667,7 +667,9 @@ static partial class Tests
         };
         var fixture = new SyntheticFixture(files: files);
         Check.That(fixture.Templates.TryGet("Hunter", out var hunter) && hunter.IsInstantiable, "An object with the command-button hunt shell and a locked primary slot can be created.");
-        Check.That(fixture.Templates.TryGet("Switcher", out var switcher) && !switcher.IsInstantiable && switcher.MissingModules.Any(name => name.StartsWith("LockWeaponCreate", StringComparison.Ordinal)),
-            "Locking any other slot is an unsupported configuration and named as missing: " + string.Join(",", switcher?.MissingModules ?? []));
+        // With the weapon slot model the module locks whichever slot it names (locks are tested in Tests.WeaponSlots.cs); an unknown slot name is a build error, not a guess.
+        Check.That(fixture.Templates.TryGet("Switcher", out var switcher) && switcher.IsInstantiable, "Locking another slot is supported: " + string.Join(",", switcher?.MissingModules ?? []));
+        files["Data/INI/Object/Shells.ini"] += "\nObject Typo\n  KindOf = INFANTRY\n  Behavior = LockWeaponCreate Lock01\n    SlotToLock = QUATERNARY\n  End\nEnd\n";
+        Check.Throws<FormatException>(() => _ = new SyntheticFixture(files: files).Templates, "QUATERNARY"); // an unknown SlotToLock is already rejected by the strictly typed module schema
     }
 }

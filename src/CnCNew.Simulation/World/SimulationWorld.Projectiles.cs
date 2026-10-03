@@ -103,17 +103,12 @@ public sealed partial class SimulationWorld
     /// </summary>
     public bool FireCurrentWeaponAtPosition(Entity source, Fixed x, Fixed y, Fixed z)
     {
-        var weaponIndex = ActiveWeaponIndex(source);
-        if (weaponIndex < 0 || _tick < source.WeaponReadyTick) return false;
-        var weapon = _templates.Weapons[weaponIndex];
-        if (source.WeaponClip == 0) source.WeaponClip = ClipCapacity(weapon);
-        var bonuses = _templates.GlobalWeaponBonus;
-        source.LastFireTick = _tick;
-        if (source.WeaponClip != int.MaxValue) source.WeaponClip--;
-        source.WeaponReadyTick = source.WeaponClip == 0
-            ? _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
-            : _tick + weapon.DelayBetweenShotsWith(bonuses, source.WeaponBonusConditions);
-        MarkDirty(source);
+        UpdateWeaponSet(source);
+        if (ActiveWeaponSet(source) is not { } set) return false;
+        // WeaponSet::chooseBestWeaponForTarget without a victim: "only Primary attack the ground" unless a weapon lock pins another slot.
+        var slot = source.WeaponLock != WeaponLockKind.None ? source.CurrentWeaponSlot : WeaponSlot.Primary;
+        if (!set.HasWeapon(slot) || _tick < source.ReadyTickOf(slot)) return false;
+        var weapon = ConsumeShot(source, slot);
         var damage = FireWeaponAt(source, weapon, null, x, y, z);
         Emit(SimEventKind.WeaponFired, source.Id, EntityId.Invalid, weapon.Name, damage.Raw, source.Owner);
         return true;

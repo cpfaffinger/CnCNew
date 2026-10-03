@@ -69,6 +69,7 @@ static partial class Tests
           PrimaryDamageRadius = 5.0
           AttackRange = 450.0
           ProjectileObject = FlightMissile
+          AntiAirborneVehicle = Yes
           DelayBetweenShots = 3000
         End
         Object FlightMissile

@@ -3,6 +3,7 @@ using System.Numerics;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Presentation.Input;
@@ -123,13 +124,13 @@ public sealed class StandingOrders
     /// <summary>The nearest visible enemy in weapon range (ties: lower id), fired at when the weapon is ready.</summary>
     private static void FireAtNearestEnemy(SimulationWorld world, PlayerId player, Entity unit, Func<Func<ulong, long, SimCommand>, SubmitResult> issue)
     {
-        if (SimulationQueries.ActiveWeapon(unit) < 0 || world.Tick < unit.WeaponReadyTick) return;
+        if (!world.IsAnyWeaponReady(unit)) return;
         Entity? best = null;
         var bestDistance = Fixed.MaxValue;
         foreach (var candidate in world.Entities)
         {
             if (!world.AreEnemies(player, candidate.Owner) || !SimulationQueries.IsAlive(candidate) || candidate.Body is null) continue;
-            if (!SimulationQueries.CanFireAt(world, unit, candidate)) continue;
+            if (!SimulationQueries.CanFireAt(world, unit, candidate, FireOrigin.Ai)) continue;
             var dx = candidate.X - unit.X;
             var dy = candidate.Y - unit.Y;
             var distance = dx * dx + dy * dy;
@@ -139,6 +140,6 @@ public sealed class StandingOrders
                 bestDistance = distance;
             }
         }
-        if (best is not null) issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, best.Id));
+        if (best is not null) issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, best.Id, WeaponSlot.Best, FireOrigin.Ai));
     }
 }

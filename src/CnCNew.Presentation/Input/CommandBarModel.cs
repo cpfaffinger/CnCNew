@@ -295,9 +295,13 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 // Only object targets exist in the simulation (FireWeaponCommand); position and mine-clearing shots have no command.
                 if (button.Has(CommandOptions.UsesMineClearingWeaponset) || (!button.Has(CommandOptions.NeedTargetEnemyObject) && !button.Has(CommandOptions.NeedTargetNeutralObject)))
                     return State(ButtonAvailability.Restricted, ButtonReason.NotSupportedBySimulation);
-                if (SimulationQueries.ActiveWeapon(entity) < 0) return State(ButtonAvailability.Restricted, ButtonReason.NoWeapon);
-                if (world.Tick < entity.WeaponReadyTick) return State(ButtonAvailability.NotReady, ButtonReason.Reloading);
+            {
+                // The button's own weapon slot (CommandButton::m_weaponSlot, PRIMARY when absent).
+                var slot = Simulation.Templates.WeaponSlot.TryParse(button.WeaponSlot, out var parsed) ? parsed : Simulation.Templates.WeaponSlot.Primary;
+                if (SimulationWorld.WeaponIndexIn(entity, slot) < 0) return State(ButtonAvailability.Restricted, ButtonReason.NoWeapon);
+                if (world.Tick < entity.ReadyTickOf(slot)) return State(ButtonAvailability.NotReady, ButtonReason.Reloading);
                 return State(ButtonAvailability.Available, ButtonReason.None);
+            }
             case GuiCommandKind.SpecialPower or GuiCommandKind.SpecialPowerFromShortcut:
             {
                 var source = button.Kind == GuiCommandKind.SpecialPowerFromShortcut ? MostReadyCarrier(world, player, power!) : entity;

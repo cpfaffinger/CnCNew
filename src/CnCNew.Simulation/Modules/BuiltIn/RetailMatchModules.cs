@@ -215,23 +215,33 @@ public sealed class CommandButtonHuntUpdate(CommandButtonHuntData data) : SimMod
 
 // ============================================================================================================ LockWeaponCreate
 
-public sealed record LockWeaponCreateData : ModuleData
+public sealed record LockWeaponCreateData(int Slot) : ModuleData
 {
     public static LockWeaponCreateData Parse(ModuleConfiguration configuration)
     {
-        // The simulation fires one weapon (the default, or the player-upgraded one) and has no weapon-slot switching, so locking the primary slot for good
-        // changes nothing; any other slot would pin the object to a weapon it never selects, which is not modelled.
+        // LockWeaponCreateModuleData: m_slotToLock defaults to PRIMARY_WEAPON; SlotToLock is a TheWeaponSlotTypeNames lookup.
         var slot = ModuleConfigReader.Text(configuration, "SlotToLock");
-        if (slot.Length > 0 && !slot.Equals("PRIMARY", StringComparison.OrdinalIgnoreCase)) throw new UnsupportedModuleConfigurationException("SlotToLock " + slot);
-        return new LockWeaponCreateData();
+        if (slot.Length == 0) return new(Templates.WeaponSlot.Primary);
+        return Templates.WeaponSlot.TryParse(slot, out var index) ? new(index) : throw new InvalidDataException($"LockWeaponCreate: unknown SlotToLock '{slot}'.");
     }
 }
 
-/// <summary><c>LockWeaponCreate.cpp</c>: <c>onBuildComplete</c> locks a weapon slot permanently. With a single modelled weapon slot a locked primary slot is the normal state, so the module keeps no state (see <see cref="LockWeaponCreateData"/>).</summary>
+/// <summary>
+/// <c>LockWeaponCreate.cpp</c>: <c>onBuildComplete</c> locks a weapon slot permanently (<c>setWeaponLock(slot, LOCKED_PERMANENTLY)</c>), so automatic weapon choice never leaves it
+/// (the data's comment: "prevents indeterminate state plus two unpickable weapons equaling no attack"). The lock is taken when the object spawns, which is when a produced or
+/// placed unit is complete; an object spawned under construction (a structure placed by a builder) is not locked. The module keeps no state of its own: the lock lives in the
+/// entity's weapon slots, and an object whose weapon sets hold one weapon has no choice to lock (<see cref="IWorldServices.SetWeaponLock"/> accepts it without storing anything).
+/// </summary>
 public sealed class LockWeaponCreate(LockWeaponCreateData data) : SimModule
 {
     public override string ModuleName => "LockWeaponCreate";
     public LockWeaponCreateData Data => data;
+
+    public override void OnSpawn(IWorldServices world)
+    {
+        if (!Entity.HasStatus(ObjectStatusBits.UnderConstruction)) world.SetWeaponLock(Entity, data.Slot, WeaponLockKind.Permanent);
+    }
+
     public override void Describe(IStateWriter writer) { }
     public override void Load(IStateReader reader) { }
 }

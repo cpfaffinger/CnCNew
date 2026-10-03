@@ -305,7 +305,7 @@ public sealed class ArmorUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(dat
     protected override void Deactivate() => Entity.HasPlayerUpgradeArmor = false;
 }
 
-/// <summary><c>WeaponSetUpgrade</c>: switches to <see cref="Templates.ObjectTemplate.PlayerUpgradeWeapon"/> and refills its clip.</summary>
+/// <summary><c>WeaponSetUpgrade</c>: raises the <c>PLAYER_UPGRADE</c> weapon set flag, which selects the object's <c>PLAYER_UPGRADE</c> <c>WeaponSet</c>, and loads its weapons.</summary>
 public sealed class WeaponSetUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(data.Mux)
 {
     public override string ModuleName => "WeaponSetUpgrade";
@@ -313,11 +313,7 @@ public sealed class WeaponSetUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule
     protected override void Activate(IWorldServices world)
     {
         Entity.HasPlayerUpgradeWeapon = true;
-        var index = Entity.Template.PlayerUpgradeWeapon >= 0 ? Entity.Template.PlayerUpgradeWeapon : Entity.Template.DefaultWeapon;
-        if (index < 0) return;
-        var weapon = world.Weapons[index];
-        Entity.WeaponClip = weapon.ClipSize == 0 ? int.MaxValue : weapon.ClipSize;
-        Entity.WeaponReadyTick = world.Tick;
+        world.WeaponSetFlagsChanged(Entity);
     }
 
     protected override void Deactivate() => Entity.HasPlayerUpgradeWeapon = false;

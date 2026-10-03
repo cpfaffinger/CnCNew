@@ -107,6 +107,12 @@ public static class ModelConditions
     public static readonly ModelConditionFlag BetweenFiringShotsA = Parse("BETWEEN_FIRING_SHOTS_A");
     public static readonly ModelConditionFlag ReloadingA = Parse("RELOADING_A");
     public static readonly ModelConditionFlag UsingWeaponA = Parse("USING_WEAPON_A");
+
+    // Per weapon slot (A = primary, B = secondary, C = tertiary): WeaponSet::getModelConditionForWeaponSlot.
+    public static readonly ModelConditionFlag[] Firing = [FiringA, Parse("FIRING_B"), Parse("FIRING_C")];
+    public static readonly ModelConditionFlag[] BetweenFiringShots = [BetweenFiringShotsA, Parse("BETWEEN_FIRING_SHOTS_B"), Parse("BETWEEN_FIRING_SHOTS_C")];
+    public static readonly ModelConditionFlag[] Reloading = [ReloadingA, Parse("RELOADING_B"), Parse("RELOADING_C")];
+    public static readonly ModelConditionFlag[] UsingWeapon = [UsingWeaponA, Parse("USING_WEAPON_B"), Parse("USING_WEAPON_C")];
     public static readonly ModelConditionFlag Moving = Parse("MOVING");
     public static readonly ModelConditionFlag Dying = Parse("DYING");
     public static readonly ModelConditionFlag AwaitingConstruction = Parse("AWAITING_CONSTRUCTION");

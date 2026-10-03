@@ -74,8 +74,9 @@ public sealed partial class SimulationWorld
         }
         LoadDelayedDamage(state);
         var rejections = state.Array("rejections");
-        if (rejections.Count != _rejections.Length) throw new InvalidDataException("Rejection table size mismatch.");
+        if (rejections.Count != LegacyRejectionEntries) throw new InvalidDataException("Rejection table size mismatch.");
         for (var index = 0; index < rejections.Count; index++) _rejections[index] = rejections[index].Int("count");
+        for (var index = LegacyRejectionEntries; index < _rejections.Length; index++) _rejections[index] = state.Has("rejection" + index) ? state.Int("rejection" + index) : 0;
 
         foreach (var pending in state.Array("spawnQueue"))
         {
@@ -166,6 +167,10 @@ public sealed partial class SimulationWorld
             SellCompleteTick = reader.Int("sellCompleteTick"),
         };
         if (entity.VeterancyLevel is < 0 or > 3) throw new InvalidDataException("Veterancy level out of range.");
+        // Weapon slot state exists exactly for objects whose weapon sets hold more than one weapon; any other shape is a snapshot of different data.
+        if (reader.Has("weaponSlots") != template.HasMultipleWeaponSlots)
+            throw new InvalidDataException($"Entity {entity.Id} ('{template.Name}') {(template.HasMultipleWeaponSlots ? "lacks" : "carries")} weapon slot state its template {(template.HasMultipleWeaponSlots ? "needs" : "does not have")}.");
+        if (template.HasMultipleWeaponSlots) entity.WeaponSlots = WeaponSlotState.Load(reader.Object("weaponSlots"), template);
         if (entity.WeaponBonusConditions >> NameTablesPhase5.WeaponBonusCondition.Count != 0) throw new InvalidDataException("Weapon bonus condition mask out of range.");
         AttachModules(entity, template);
         var modules = reader.Array("modules");

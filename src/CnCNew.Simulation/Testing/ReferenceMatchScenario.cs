@@ -58,7 +58,7 @@ public sealed class ReferenceMatchScenario
     private ulong[] _sequence = [];
     private int _alive;
 
-    private readonly record struct UnitClass(bool Armed, bool Mobile, Fixed Range);
+    private readonly record struct UnitClass(bool Armed, bool Mobile);
 
     public ReferenceMatchScenario(ReferenceMatchOptions options)
     {
@@ -251,8 +251,8 @@ public sealed class ReferenceMatchScenario
     private UnitClass Classify(SimulationWorld world, Entity entity)
     {
         if (_classes.TryGetValue(entity.Template.Index, out var known)) return known;
-        var weapon = entity.Template.DefaultWeapon;
-        var classified = new UnitClass(weapon >= 0, entity.Modules.Any(module => module is AIUpdateInterface), weapon >= 0 ? world.Weapons[weapon].AttackRange : Fixed.Zero);
+        var armed = entity.Template.WeaponSets.Any(set => set.WeaponCount > 0);
+        var classified = new UnitClass(armed, entity.Modules.Any(module => module is AIUpdateInterface));
         _classes[entity.Template.Index] = classified;
         return classified;
     }
@@ -401,14 +401,19 @@ public sealed class ReferenceMatchScenario
                 var dx = candidate.X - unit.X;
                 var dy = candidate.Y - unit.Y;
                 var distance = dx * dx + dy * dy;
-                if (distance < best) { best = distance; nearest = candidate; }
+                if (distance >= best) continue;
+                // Only a target one of the unit's weapons can ever damage is worth walking to (an anti-ground unit ignores aircraft, an anti-air unit ground troops).
+                if (world.ChooseWeapon(unit, candidate, FireOrigin.Ai).Rejection is CommandRejection.InvalidWeaponTarget or CommandRejection.NoWeapon) continue;
+                best = distance;
+                nearest = candidate;
             }
             if (nearest is null) continue;
-            if (best <= kind.Range * kind.Range)
+            var range = world.MaxWeaponRange(unit);
+            if (best <= range * range)
             {
-                if (tick >= unit.WeaponReadyTick)
+                if (world.ChooseWeapon(unit, nearest, FireOrigin.Ai).CanFire)
                 {
-                    Add(world, new FireWeaponCommand(unit.Owner, Next(unit.Owner), tick, unit.Id, nearest.Id));
+                    Add(world, new FireWeaponCommand(unit.Owner, Next(unit.Owner), tick, unit.Id, nearest.Id, WeaponSlot.Best, FireOrigin.Ai));
                     Shots++;
                 }
             }

@@ -52,6 +52,15 @@ public sealed record WeaponInfo(
     /// <summary><c>WEAPON_ANTI_GROUND</c> of <c>m_antiMask</c> (<c>AntiGround = Yes</c>); read by <c>PointDefenseLaserUpdate</c> for targets on the ground.</summary>
     public bool AntiGround { get; init; }
 
+    /// <summary>
+    /// <c>WeaponTemplate::m_antiMask</c> (<c>WeaponAntiMaskType</c>): which kinds of target the weapon may be fired at. The constructor default is
+    /// <see cref="AntiMaskGround"/> alone ("but not air or projectile"); each <c>Anti*</c> key sets or clears its bit (<c>INI::parseBitInInt32</c>).
+    /// </summary>
+    public int AntiMask { get; init; } = AntiMaskGround;
+
+    public const int AntiMaskAirborneVehicle = 0x01, AntiMaskGround = 0x02, AntiMaskProjectile = 0x04, AntiMaskSmallMissile = 0x08, AntiMaskMine = 0x10,
+        AntiMaskAirborneInfantry = 0x20, AntiMaskBallisticMissile = 0x40, AntiMaskParachute = 0x80;
+
     public Fixed RadiusWith(WeaponBonusTable global, uint conditions, Fixed baseRadius) => baseRadius * Multiplier(global, conditions, WeaponBonusTable.Radius);
 
     // Weapon.cpp Weapon::computeBonus: the multiplier of a field is 1 plus the sum of the (entry - 1) deltas of every set condition,
@@ -125,6 +134,13 @@ public sealed class WeaponBonusTable
 
 public sealed class WeaponCatalog
 {
+    private static readonly (string Key, int Bit)[] AntiKeys =
+    [
+        ("AntiAirborneVehicle", WeaponInfo.AntiMaskAirborneVehicle), ("AntiGround", WeaponInfo.AntiMaskGround), ("AntiProjectile", WeaponInfo.AntiMaskProjectile),
+        ("AntiSmallMissile", WeaponInfo.AntiMaskSmallMissile), ("AntiMine", WeaponInfo.AntiMaskMine), ("AntiParachute", WeaponInfo.AntiMaskParachute),
+        ("AntiAirborneInfantry", WeaponInfo.AntiMaskAirborneInfantry), ("AntiBallisticMissile", WeaponInfo.AntiMaskBallisticMissile),
+    ];
+
     private readonly ImmutableDictionary<string, WeaponInfo> _byName;
 
     private WeaponCatalog(ImmutableArray<WeaponInfo> weapons)
@@ -189,6 +205,18 @@ public sealed class WeaponCatalog
                 var other => throw new InvalidDataException($"{definition.OriginalName}: '{key}' has the unexpected value {other}."),
             };
             Fixed Speed(string key) => Field(key)?.Value.Value is decimal perSecond ? SimulationTiming.PerSecondToPerTick(perSecond) : WeaponInfo.InstantSpeed;
+            // Weapon.cpp TheWeaponTemplateFieldParseTable: one boolean key per m_antiMask bit, starting from WEAPON_ANTI_GROUND.
+            int AntiMaskOf()
+            {
+                var mask = WeaponInfo.AntiMaskGround;
+                foreach (var (key, bit) in AntiKeys)
+                    if (Field(key)?.Value.Value is { } value)
+                    {
+                        if (value is not bool enabled) throw new InvalidDataException($"{definition.OriginalName}: '{key}' has the unexpected value {value}.");
+                        mask = enabled ? mask | bit : mask & ~bit;
+                    }
+                return mask;
+            }
             var projectile = Name("ProjectileObject");
             weapons.Add(new WeaponInfo(index++, definition.OriginalName, damage, damageType, deathType, range, clipSize, reload, Math.Max(SimulationTiming.SleepNone, delay), WeaponBonusTable.From(definition),
                 primaryRadius, secondaryDamage, secondaryRadius, affects)
@@ -205,6 +233,7 @@ public sealed class WeaponCatalog
                 DamageDealtAtSelfPosition = Flag("DamageDealtAtSelfPosition"),
                 DieOnDetonate = Flag("MissileCallsOnDie"),
                 AntiGround = Flag("AntiGround"),
+                AntiMask = AntiMaskOf(),
             });
         }
         return new WeaponCatalog(weapons.ToImmutable());
