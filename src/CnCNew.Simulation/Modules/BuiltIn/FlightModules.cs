@@ -849,7 +849,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         var dz = FlightModules.GroundOrDefault(world, _targetX, _targetY, Fixed.Zero) - Entity.Z;
         var distance = Fixed.Sqrt(dx * dx + dy * dy + dz * dz);
         if (distance <= run.DiveEndDistance) { _dive = Dive.Post; return; }
-        if (!run.Strafes || Entity.Template.DefaultWeapon < 0 || run.DiveStartDistance <= run.DiveEndDistance) return;
+        if (!run.Strafes || SimulationWorld.ActiveWeaponIndex(Entity) < 0 || run.DiveStartDistance <= run.DiveEndDistance) return;
         // strafePoint = target - 0.33 * v + v with v = heading * diveRatio * 100 (the plane flies on at constant speed, so the heading is the velocity direction).
         var ratio = (run.DiveStartDistance - distance) / (run.DiveStartDistance - run.DiveEndDistance);
         var reach = ratio * Fixed.FromInt(100) * Fixed.FromDecimal(0.67m);

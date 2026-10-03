@@ -283,8 +283,8 @@ public sealed class AssaultTransportAIUpdate(AssaultTransportData data) : AIUpda
     {
         if (Entity.LastFireTick < 0 || Entity.LastFireTick == _lastShot) return;
         _lastShot = Entity.LastFireTick;
-        if (Entity.Template.DefaultWeapon < 0) return;
-        var weapon = world.Weapons[Entity.Template.DefaultWeapon];
+        if (SimulationWorld.WeaponIndexIn(Entity, Entity.CurrentWeaponSlot) < 0) return;
+        var weapon = world.Weapons[SimulationWorld.WeaponIndexIn(Entity, Entity.CurrentWeaponSlot)];
         if (weapon.DamageType != DeployDamage) return;
         var range = weapon.RangeWith(world.Templates.GlobalWeaponBonus, Entity.WeaponBonusConditions);
         Entity? nearest = null;
