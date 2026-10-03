@@ -59,8 +59,8 @@ static partial class Tests
               GeometryMajorRadius = 5.0
               GeometryMinorRadius = 5.0
               GeometryHeight = 2.0
-              Behavior = LockWeaponCreate Mine01
-                SlotToLock = SECONDARY
+              Behavior = SpawnBehavior Mine01
+                CanReclaimOrphans = Yes
               End
             End
             Object Wall

@@ -68,7 +68,7 @@ internal static class AirWeaponModules
     {
         victim.EmpDisabledUntil = until;
         // A weapon cannot become ready while the object is disabled (the movement is stopped by the AI update itself).
-        if (victim.Template.DefaultWeapon >= 0 && victim.WeaponReadyTick < until) victim.WeaponReadyTick = until;
+        SimulationWorld.DelayWeaponsUntil(victim, until, true);
         world.MarkDirty(victim);
     }
 
@@ -89,13 +89,6 @@ internal static class AirWeaponModules
         if (entity.CrateArmorLevel > 0 && entity.Template.CrateUpgradeArmor[entity.CrateArmorLevel] is { } crate) return crate;
         if (entity.VeterancyLevel > 0 && entity.Template.VeteranArmor[entity.VeterancyLevel] is { } veteran) return veteran;
         return entity.HasPlayerUpgradeArmor && entity.Template.PlayerUpgradeArmor is { } upgraded ? upgraded : entity.Template.DefaultArmor;
-    }
-
-    public static int ActiveWeaponIndex(Entity entity)
-    {
-        if (entity.CrateWeaponLevel > 0 && entity.Template.CrateUpgradeWeapon[entity.CrateWeaponLevel] is var crate and >= 0) return crate;
-        if (entity.VeterancyLevel > 0 && entity.Template.VeteranWeapon[entity.VeterancyLevel] is var veteran and >= 0) return veteran;
-        return entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
     }
 
     /// <summary>A duration in milliseconds as unrounded ticks (<c>INI::parseDurationReal</c>).</summary>
@@ -1229,21 +1222,8 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         return best;
     }
 
-    /// <summary>One shot of the gattling's weapon when it is ready (the bookkeeping of the fire command: ready tick, clip, last fire tick).</summary>
-    private static void FireGattling(IWorldServices world, Entity gattling, Entity? victim, Fixed x, Fixed y, Fixed z)
-    {
-        var index = AirWeaponModules.ActiveWeaponIndex(gattling);
-        if (index < 0 || world.Tick < gattling.WeaponReadyTick) return;
-        var weapon = world.Weapons[index];
-        var bonuses = world.Templates.GlobalWeaponBonus;
-        if (gattling.WeaponClip == 0) gattling.WeaponClip = weapon.ClipSize == 0 ? int.MaxValue : weapon.ClipSize;
-        gattling.LastFireTick = world.Tick;
-        if (gattling.WeaponClip != int.MaxValue) gattling.WeaponClip--;
-        gattling.WeaponReadyTick = gattling.WeaponClip == 0 ? world.Tick + weapon.ClipReloadWith(bonuses, gattling.WeaponBonusConditions) : world.Tick + weapon.DelayBetweenShotsWith(bonuses, gattling.WeaponBonusConditions);
-        world.MarkDirty(gattling);
-        var damage = world.FireWeaponAt(gattling, weapon, victim, x, y, z);
-        world.Emit(SimEventKind.WeaponFired, gattling.Id, victim?.Id ?? EntityId.Invalid, weapon.Name, damage.Raw);
-    }
+    /// <summary>One shot of the gattling's current weapon when it is ready (<c>Object::fireCurrentWeapon</c>: the slot's own clip, ready tick and last-shot bookkeeping).</summary>
+    private static void FireGattling(IWorldServices world, Entity gattling, Entity? victim, Fixed x, Fixed y, Fixed z) => world.FireCurrentWeaponAtPosition(gattling, x, y, z, victim);
 
     /// <summary>Straight ahead along the heading until the ship has left the map, then it is deleted (without a terrain: once it is far from the target).</summary>
     private void Depart(IWorldServices world)

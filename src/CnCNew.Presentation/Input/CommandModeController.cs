@@ -166,7 +166,7 @@ public sealed class CommandModeController
 
         if (ForceAttack)
         {
-            var armed = own.Any(entity => SimulationQueries.ActiveWeapon(entity) >= 0);
+            var armed = own.Any(entity => SimulationQueries.HasWeapon(entity));
             if (target is not null && target.Body is not null && armed && !own.Contains(target)) return Hint(ContextAction.ForceAttackObject, CursorKind.ForceAttackObj);
             if (target is null && ground is not null && armed) return Hint(ContextAction.ForceAttackGround, CursorKind.ForceAttackGround);
         }
@@ -181,7 +181,7 @@ public sealed class CommandModeController
 
         if (target is not null && world.AreEnemies(Player, target.Owner) && target.Body is not null)
         {
-            var armed = own.Where(entity => SimulationQueries.ActiveWeapon(entity) >= 0).ToList();
+            var armed = own.Where(entity => SimulationQueries.HasWeapon(entity)).ToList();
             if (armed.Any(entity => SimulationQueries.InRange(world, entity, target))) return Hint(ContextAction.AttackObject, CursorKind.AttackObj);
             if (armed.Any(SimulationQueries.CanMove)) return Hint(ContextAction.AttackObjectAfterMoving, CursorKind.OutRange);
             return Hint(ContextAction.Invalid, CursorKind.GenericInvalid);
@@ -259,7 +259,7 @@ public sealed class CommandModeController
             case ContextAction.AttackObject or ContextAction.AttackObjectAfterMoving or ContextAction.ForceAttackObject when target is not null:
             {
                 var any = false;
-                foreach (var unit in own.Where(entity => SimulationQueries.ActiveWeapon(entity) >= 0))
+                foreach (var unit in own.Where(entity => SimulationQueries.HasWeapon(entity)))
                 {
                     Orders.Set(unit.Id, new StandingOrder(StandingOrderKind.Attack, target.Id, SimulationQueries.GroundOf(target), [], world.Tick));
                     any = true;
@@ -454,7 +454,7 @@ public sealed class CommandModeController
             }
             case GuiCommandKind.FireWeapon when button.Has(CommandOptions.NeedTargetEnemyObject) || button.Has(CommandOptions.NeedTargetNeutralObject):
             {
-                var armed = sources.Where(entity => SimulationQueries.ActiveWeapon(entity) >= 0).Select(entity => entity.Id).ToImmutableArray();
+                var armed = sources.Where(entity => SimulationQueries.HasWeapon(entity)).Select(entity => entity.Id).ToImmutableArray();
                 return armed.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, armed);
             }
             default:

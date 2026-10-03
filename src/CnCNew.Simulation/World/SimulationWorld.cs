@@ -63,7 +63,10 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[(int)CommandRejection.CannotToggleOvercharge + 1];
+    private readonly long[] _rejections = new long[(int)CommandRejection.InvalidWeaponTarget + 1];
+
+    /// <summary>Size of the rejection table when the state hash first covered it (reasons up to <see cref="CommandRejection.CannotToggleOvercharge"/>); later reasons are hashed only when they occurred.</summary>
+    private const int LegacyRejectionEntries = (int)CommandRejection.CannotToggleOvercharge + 1;
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
     private long _tick;
@@ -258,9 +261,9 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <summary>
     /// <c>Object::onVeterancyLevelChanged</c>: the body's max health is scaled by the ratio of the GameData health bonuses (health keeps its
     /// ratio), the VETERAN/ELITE/HERO weapon bonus condition follows the level, and the engine-made <c>Upgrade_Veterancy_*</c> of the new
-    /// level is granted (none for level 0). <see cref="ActiveWeaponIndex"/>/<see cref="ActiveArmor"/> also switch to the level's
-    /// <c>WeaponSet</c>/<c>ArmorSet</c> when the template declares one (see <see cref="Templates.ObjectTemplate.VeteranArmor"/>); no change is
-    /// needed here, as they read <see cref="World.Entity.VeterancyLevel"/> directly.
+    /// level is granted (none for level 0). <see cref="ActiveWeaponSet"/>/<see cref="ActiveArmor"/> also switch to the level's
+    /// <c>WeaponSet</c>/<c>ArmorSet</c> when the template declares one (see <see cref="Templates.ObjectTemplate.VeteranArmor"/>), as they read
+    /// <see cref="World.Entity.VeterancyLevel"/> directly; an object with several weapons builds the new set's weapons fresh (<see cref="UpdateWeaponSet"/>).
     /// </summary>
     private void OnVeterancyLevelChanged(Entity entity, int newLevel)
     {
@@ -275,6 +278,7 @@ public sealed partial class SimulationWorld : IWorldServices
         var conditions = entity.WeaponBonusConditions & ~WeaponBonusTable.VeterancyConditions;
         if (newLevel > 0) conditions |= 1u << (WeaponBonusTable.VeteranCondition + newLevel - 1);
         entity.WeaponBonusConditions = conditions;
+        UpdateWeaponSet(entity);
         MarkDirty(entity);
         if (newLevel > 0 && _templates.Upgrades.VeterancyUpgrade(newLevel) is var upgrade && !entity.CompletedUpgrades.Has(upgrade.Index))
             CompleteObjectUpgrade(entity, upgrade, entity.Owner);
@@ -508,21 +512,7 @@ public sealed partial class SimulationWorld : IWorldServices
         return id;
     }
 
-    /// <summary>
-    /// <c>ActiveBody::getWeaponSet</c>/<c>SparseMatchFinder</c> (reduced, see <see cref="Templates.ObjectTemplate.VeteranWeapon"/>): a veterancy-
-    /// conditioned <c>WeaponSet</c> for the entity's current rank wins over <c>PLAYER_UPGRADE</c>, which wins over the default set.
-    /// </summary>
-    private static int ActiveWeaponIndex(Entity entity)
-    {
-        // WEAPONSET_CARBOMB: ConvertToCarBombCrateCollide sets the weapon-set flag together with IS_CARBOMB and nothing ever clears either, so the status bit is the flag.
-        if (entity.Template.CarBombWeapon >= 0 && entity.HasStatus(CarBombStatusBit)) return entity.Template.CarBombWeapon;
-        // WEAPONSET_CRATEUPGRADE_ONE/TWO (SalvageCrateCollide): the salvager's crate level, when the template declares a set for it.
-        if (entity.CrateWeaponLevel > 0 && entity.Template.CrateUpgradeWeapon[entity.CrateWeaponLevel] is var crate and >= 0) return crate;
-        if (entity.VeterancyLevel > 0 && entity.Template.VeteranWeapon[entity.VeterancyLevel] is var veteran and >= 0) return veteran;
-        return entity.HasPlayerUpgradeWeapon && entity.Template.PlayerUpgradeWeapon >= 0 ? entity.Template.PlayerUpgradeWeapon : entity.Template.DefaultWeapon;
-    }
-
-    /// <summary>Armor counterpart of <see cref="ActiveWeaponIndex"/>; see <see cref="Templates.ObjectTemplate.VeteranArmor"/>.</summary>
+    /// <summary>Armor counterpart of <see cref="ActiveWeaponSet"/>; see <see cref="Templates.ObjectTemplate.VeteranArmor"/>.</summary>
     private static ArmorInfo ActiveArmor(Entity entity)
     {
         // ARMORSET_CRATE_UPGRADE_ONE/TWO (SalvageCrateCollide).
@@ -675,15 +665,20 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_entities.TryGetValue(fire.Source.Value, out var source) || source.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (source.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (!_entities.TryGetValue(fire.Target.Value, out var fireTarget) || fireTarget.DestroyRequested || fireTarget.Body is null) return CommandRejection.UnknownEntity;
-                var weaponIndex = ActiveWeaponIndex(source);
-                if (weaponIndex < 0) return CommandRejection.NoWeapon;
-                if (_tick < source.WeaponReadyTick) return CommandRejection.WeaponNotReady;
-                var weapon = _templates.Weapons[weaponIndex];
-                var dx = fireTarget.X - source.X;
-                var dy = fireTarget.Y - source.Y;
-                var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
-                if (dx * dx + dy * dy > reach * reach) return CommandRejection.OutOfRange;
+                if (fire.Slot is < WeaponSlot.Best or >= WeaponSlot.Count || !Enum.IsDefined(fire.Origin)) return CommandRejection.InvalidArguments;
+                var choice = ChooseWeapon(source, fireTarget, fire.Origin, fire.Slot);
+                if (choice.Rejection != 0) return choice.Rejection;
                 if (!CanPlayerSee(command.Player, fireTarget)) return CommandRejection.TargetNotVisible;
+                break;
+            }
+            case SetWeaponLockCommand lockOrder:
+            {
+                if (!_entities.TryGetValue(lockOrder.Source.Value, out var lockSource) || lockSource.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (lockSource.Owner != command.Player && !command.Player.IsSystem) return CommandRejection.NotPermitted;
+                if (!Enum.IsDefined(lockOrder.Lock)) return CommandRejection.InvalidArguments;
+                if (lockOrder.Lock == WeaponLockKind.None) break;
+                if (lockOrder.Slot is < 0 or >= WeaponSlot.Count) return CommandRejection.InvalidArguments;
+                if (ActiveWeaponSet(lockSource) is not { } lockSet || !lockSet.HasWeapon(lockOrder.Slot)) return CommandRejection.NoWeapon;
                 break;
             }
             case GiveSciencePointsCommand giveScience:
@@ -961,6 +956,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (target is null || target.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
                 if (target.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
                 if (!CanMove(target)) { RecordRejection(command, CommandRejection.CannotMove); break; }
+                // GameLogicDispatch doMoveTo: a move order releases any temporary weapon lock.
+                ReleaseWeaponLock(target, WeaponLockKind.Temporary);
                 AiOf(target)!.OrderMove(this, move.X, move.Y, true);
                 break;
             }
@@ -986,27 +983,24 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (source.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
                 var fireTarget = FindEntity(fire.Target);
                 if (fireTarget is null || fireTarget.DestroyRequested || fireTarget.Body is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
-                var weaponIndex = ActiveWeaponIndex(source);
-                if (weaponIndex < 0) { RecordRejection(command, CommandRejection.NoWeapon); break; }
-                if (_tick < source.WeaponReadyTick) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
-                var weapon = _templates.Weapons[weaponIndex];
-                var dx = fireTarget.X - source.X;
-                var dy = fireTarget.Y - source.Y;
-                var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
-                if (dx * dx + dy * dy > reach * reach) { RecordRejection(command, CommandRejection.OutOfRange); break; }
+                UpdateWeaponSet(source);
+                var choice = ChooseWeapon(source, fireTarget, fire.Origin, fire.Slot);
+                if (choice.Rejection != 0) { RecordRejection(command, choice.Rejection); break; }
                 if (!GateAllowsFire(source, fireTarget)) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
-                // _tick >= WeaponReadyTick was just confirmed above: an empty clip has finished its ClipReloadTime by now.
-                if (source.WeaponClip == 0) source.WeaponClip = ClipCapacity(weapon);
-                var bonuses = _templates.GlobalWeaponBonus;
-                source.LastFireTick = _tick;
-                if (source.WeaponClip != int.MaxValue) source.WeaponClip--;
-                // A RETURN_TO_BASE weapon that ran dry waits for the airfield reload (JetAIUpdate sets the clip and the ready tick then).
-                source.WeaponReadyTick = source.WeaponClip == 0
-                    ? weapon.ReloadsAtBase ? SimulationTiming.SleepForever : _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
-                    : _tick + weapon.DelayBetweenShotsWith(bonuses, source.WeaponBonusConditions);
-                MarkDirty(source);
+                // A command button's weapon slot pins the slot until its clip empties (Object::doCommandButton: setWeaponLock(LOCKED_TEMPORARILY) before the attack).
+                if (fire.Slot >= 0) SetWeaponLock(source, fire.Slot, WeaponLockKind.Temporary);
+                var weapon = ConsumeShot(source, choice.Slot);
                 var damage = FireWeaponAt(source, weapon, fireTarget, fireTarget.X, fireTarget.Y, fireTarget.Z);
                 Emit(SimEventKind.WeaponFired, source.Id, fireTarget.Id, weapon.Name, damage.Raw, command.Player);
+                break;
+            }
+            case SetWeaponLockCommand lockOrder:
+            {
+                var lockSource = FindEntity(lockOrder.Source);
+                if (lockSource is null || lockSource.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (lockSource.Owner != command.Player && !command.Player.IsSystem) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                if (lockOrder.Lock == WeaponLockKind.None) { ReleaseWeaponLock(lockSource, WeaponLockKind.Permanent); break; }
+                if (!SetWeaponLock(lockSource, lockOrder.Slot, lockOrder.Lock)) RecordRejection(command, CommandRejection.NoWeapon);
                 break;
             }
             case GiveSciencePointsCommand giveScience:
@@ -1533,11 +1527,23 @@ public sealed partial class SimulationWorld : IWorldServices
         entity.UpgradeModules = [..upgrades];
     }
 
-    /// <summary>Weapon clip starts full for whichever weapon is active (<c>WeaponSetUpgrade</c> re-initializes it if it switches later). Fresh spawns only: a restored entity already carries its saved clip.</summary>
+    /// <summary>
+    /// Every weapon of the active set starts with a full clip (<c>WeaponSet::updateWeaponSet</c>: <c>loadAmmoNow</c> for each slot; <c>WeaponSetUpgrade</c> re-initializes
+    /// them if the set switches later). Fresh spawns only: a restored entity already carries its saved weapon state. An object with a single weapon keeps it in
+    /// <see cref="Entity.WeaponClip"/>; one with several gets <see cref="Entity.WeaponSlots"/>.
+    /// </summary>
     private void InitializeWeaponClip(Entity entity)
     {
-        var weaponIndex = ActiveWeaponIndex(entity);
-        entity.WeaponClip = weaponIndex < 0 ? -1 : ClipCapacity(_templates.Weapons[weaponIndex]);
+        var set = ActiveWeaponSet(entity);
+        if (!entity.Template.HasMultipleWeaponSlots)
+        {
+            var weaponIndex = set?.Primary ?? -1;
+            entity.WeaponClip = weaponIndex < 0 ? -1 : ClipCapacity(_templates.Weapons[weaponIndex]);
+            return;
+        }
+        var state = new WeaponSlotState { SetIndex = set!.Index };
+        entity.WeaponSlots = state;
+        FillSlots(entity, set, 0);
     }
 
     private static int ClipCapacity(Templates.WeaponInfo weapon) => weapon.ClipSize == 0 ? int.MaxValue : weapon.ClipSize;
@@ -1735,13 +1741,16 @@ public sealed partial class SimulationWorld : IWorldServices
         writer.EndArray();
         DescribeDelayedDamage(writer);
         writer.BeginArray("rejections");
-        foreach (var count in _rejections)
+        for (var index = 0; index < LegacyRejectionEntries; index++)
         {
             writer.BeginObject(null);
-            writer.Int("count", count);
+            writer.Int("count", _rejections[index]);
             writer.EndObject();
         }
         writer.EndArray();
+        // Reasons added after this table was frozen are written only once they occurred, so a run without them hashes exactly as it did before.
+        for (var index = LegacyRejectionEntries; index < _rejections.Length; index++)
+            if (_rejections[index] != 0) writer.Int("rejection" + index, _rejections[index]);
         writer.BeginArray("spawnQueue");
         foreach (var pending in _spawnQueue)
         {

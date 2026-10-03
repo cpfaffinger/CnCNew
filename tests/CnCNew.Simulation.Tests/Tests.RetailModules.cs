@@ -220,8 +220,8 @@ static partial class Tests
         End
         Object HollowHole
           KindOf = STRUCTURE
-          Behavior = LockWeaponCreate Parking01
-            SlotToLock = SECONDARY
+          Behavior = SpawnBehavior Parking01
+            CanReclaimOrphans = Yes
           End
         End
         Object HoleWorker

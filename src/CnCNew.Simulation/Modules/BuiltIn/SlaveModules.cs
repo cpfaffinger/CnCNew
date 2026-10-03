@@ -303,8 +303,8 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
     /// <summary>Stands in for <c>AIUpdateInterface::getCurrentVictim</c> of the master (see the class summary).</summary>
     private static Entity? MasterTarget(IWorldServices world, Entity master)
     {
-        if (master.LastFireTick < 0 || world.Tick - master.LastFireTick > RecentFireTicks || master.Template.DefaultWeapon < 0) return null;
-        var range = world.Weapons[master.Template.DefaultWeapon].RangeWith(world.Templates.GlobalWeaponBonus, master.WeaponBonusConditions);
+        if (master.LastFireTick < 0 || world.Tick - master.LastFireTick > RecentFireTicks || SimulationWorld.WeaponIndexIn(master, master.CurrentWeaponSlot) < 0) return null;
+        var range = world.Weapons[SimulationWorld.WeaponIndexIn(master, master.CurrentWeaponSlot)].RangeWith(world.Templates.GlobalWeaponBonus, master.WeaponBonusConditions);
         Entity? best = null;
         var bestDistance = range * range;
         foreach (var candidate in world.Entities)

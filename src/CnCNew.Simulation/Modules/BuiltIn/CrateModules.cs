@@ -258,19 +258,23 @@ public sealed record ConvertToCarBombData(CrateCollideData Crate, string Fx) : M
 public sealed class ConvertToCarBombCrateCollide(ConvertToCarBombData data) : CrateCollideBase(data.Crate)
 {
     private static readonly int CarBombBit = ObjectStatusBits.Index("IS_CARBOMB");
+    private static readonly uint CarBombSetMask = 1u << (NameTablesPhase5.WeaponSetCondition.TryIndexOf("CARBOMB", out var carBombBit) ? carBombBit : throw new InvalidOperationException("CARBOMB is not a weapon set condition."));
+
+    /// <summary>The vehicle declares a <c>WeaponSet</c> that names <c>CARBOMB</c> and holds a weapon (<c>ThingTemplate::findWeaponTemplateSet</c> picks it once the flag is raised).</summary>
+    private static bool HasCarBombWeaponSet(ObjectTemplate template) => template.WeaponSets.Any(set => (set.Conditions & CarBombSetMask) != 0 && set.WeaponCount > 0);
 
     public override string ModuleName => "ConvertToCarBombCrateCollide";
 
     protected override bool IsValidToExecute(IWorldServices world, Entity other)
         => base.IsValidToExecute(world, other) && !other.EffectivelyDead && !other.Template.IsKindOf("AIRCRAFT") && !other.Template.IsKindOf("BOAT")
-           && !other.HasStatus(CarBombBit) && other.Template.CarBombWeapon >= 0;
+           && !other.HasStatus(CarBombBit) && HasCarBombWeaponSet(other.Template);
 
     protected override bool ExecuteCrateBehavior(IWorldServices world, Entity other)
     {
         if (!CrateModules.GoalAllows(Entity, other)) return false;
         if (StickyBombUpdate.CheckAndDetonateBoobyTrap(world, other, Entity) && (other.EffectivelyDead || Entity.EffectivelyDead)) return false;
         other.Status |= 1UL << CarBombBit;
-        world.WeaponSetChanged(other);
+        world.WeaponSetFlagsChanged(other);
         if (data.Fx.Length > 0) world.Emit(SimEventKind.FxRequested, other.Id, Entity.Id, data.Fx, 0);
         CrateModules.Defect(world, other, Entity.Owner);
         world.Emit(SimEventKind.ObjectNameTransferred, Entity.Id, other.Id, string.Empty, 0);

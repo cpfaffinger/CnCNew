@@ -100,24 +100,20 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// <c>Object::fireCurrentWeapon(const Coord3D*)</c>: fires the object's active weapon at a position if it is ready (the clip and the delay between shots are kept exactly as
-    /// <see cref="FireWeaponCommand"/> keeps them); false when it has no weapon or is still reloading. No range check, as the reference has none for a position shot.
+    /// <c>Object::fireCurrentWeapon(const Coord3D*)</c> / <c>fireCurrentWeapon(victim)</c>: fires the object's current weapon (the locked slot, else the primary one) at a position, or at
+    /// <paramref name="victim"/> when one is given, if it is ready (clip and delay are kept exactly as <see cref="FireWeaponCommand"/> keeps them); false when the slot holds no weapon or is
+    /// still reloading. No range check, as the reference has none for these.
     /// </summary>
-    public bool FireCurrentWeaponAtPosition(Entity source, Fixed x, Fixed y, Fixed z)
+    public bool FireCurrentWeaponAtPosition(Entity source, Fixed x, Fixed y, Fixed z, Entity? victim = null)
     {
-        var weaponIndex = ActiveWeaponIndex(source);
-        if (weaponIndex < 0 || _tick < source.WeaponReadyTick) return false;
-        var weapon = _templates.Weapons[weaponIndex];
-        if (source.WeaponClip == 0) source.WeaponClip = ClipCapacity(weapon);
-        var bonuses = _templates.GlobalWeaponBonus;
-        source.LastFireTick = _tick;
-        if (source.WeaponClip != int.MaxValue) source.WeaponClip--;
-        source.WeaponReadyTick = source.WeaponClip == 0
-            ? _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
-            : _tick + weapon.DelayBetweenShotsWith(bonuses, source.WeaponBonusConditions);
-        MarkDirty(source);
-        var damage = FireWeaponAt(source, weapon, null, x, y, z);
-        Emit(SimEventKind.WeaponFired, source.Id, EntityId.Invalid, weapon.Name, damage.Raw, source.Owner);
+        UpdateWeaponSet(source);
+        if (ActiveWeaponSet(source) is not { } set) return false;
+        // WeaponSet::chooseBestWeaponForTarget without a victim: "only Primary attack the ground" unless a weapon lock pins another slot.
+        var slot = source.WeaponLock != WeaponLockKind.None ? source.CurrentWeaponSlot : WeaponSlot.Primary;
+        if (!set.HasWeapon(slot) || _tick < source.ReadyTickOf(slot)) return false;
+        var weapon = ConsumeShot(source, slot);
+        var damage = FireWeaponAt(source, weapon, victim, x, y, z);
+        Emit(SimEventKind.WeaponFired, source.Id, victim?.Id ?? EntityId.Invalid, weapon.Name, damage.Raw, source.Owner);
         return true;
     }
 

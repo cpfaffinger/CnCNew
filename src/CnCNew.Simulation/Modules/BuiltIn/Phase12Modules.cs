@@ -188,9 +188,10 @@ public sealed record FireWeaponPowerData(SpecialPowerBaseData Base, int MaxShots
 }
 
 /// <summary>
-/// <c>FireWeaponPower::doSpecialPower*</c>: reloads the weapon and orders the object to attack the target (an object, a position, or its own position) for
-/// <see cref="FireWeaponPowerData.MaxShots"/> shots. The reference gives an AI attack order and aims the turrets; the simulation fires the object's default weapon at
-/// the target, one shot per <c>DelayBetweenShots</c>, without the approach or turn time.
+/// <c>FireWeaponPower::doSpecialPower*</c>: reloads every weapon (<c>reloadAllAmmo</c>) and orders the object to attack the target (an object, a position, or its own position) for
+/// <see cref="FireWeaponPowerData.MaxShots"/> shots. The reference gives an AI attack order and aims the turrets; the simulation fires the object's current weapon (the locked
+/// slot, else the primary one of the active weapon set; <see cref="IWorldServices.FireCurrentWeaponAtPosition"/>, so the slot's clip, reload and last shot are kept) at the target
+/// whenever that slot is ready, without the approach or turn time.
 /// </summary>
 public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModuleBase(data.Base), IUpdateModule
 {
@@ -204,7 +205,8 @@ public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModu
 
     protected override void Apply(IWorldServices world, in SpecialPowerTarget target)
     {
-        if (Entity.Template.DefaultWeapon < 0) return;
+        if (SimulationWorld.ActiveWeaponIndex(Entity) < 0) return;
+        world.ReloadAllAmmo(Entity);
         _shotsLeft = data.MaxShots;
         _target = target;
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
@@ -212,16 +214,25 @@ public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModu
 
     public long Update(IWorldServices world)
     {
-        if (_shotsLeft <= 0 || Entity.Template.DefaultWeapon < 0) return SimulationTiming.SleepForever;
-        var weapon = world.Weapons[Entity.Template.DefaultWeapon];
+        var slot = Entity.WeaponLock != WeaponLockKind.None ? Entity.CurrentWeaponSlot : WeaponSlot.Primary;
+        if (_shotsLeft <= 0 || SimulationWorld.WeaponIndexIn(Entity, slot) < 0) return SimulationTiming.SleepForever;
+        var weapon = world.Weapons[SimulationWorld.WeaponIndexIn(Entity, slot)];
+        // A slot that is still between shots (or reloading) waits; one that reloads at an airfield never becomes ready by itself, so the power gives up.
+        if (world.Tick < Entity.ReadyTickOf(slot)) return Entity.ReadyTickOf(slot) >= SimulationTiming.SleepForever ? StopShooting() : Entity.ReadyTickOf(slot) - world.Tick;
         var victim = _target.Kind == SpecialPowerTargetKind.Object ? world.FindEntity(_target.Entity) : null;
         if (_target.Kind == SpecialPowerTargetKind.Object && (victim is null || victim.EffectivelyDead)) { _shotsLeft = 0; return SimulationTiming.SleepForever; }
         Fixed x = Entity.X, y = Entity.Y, z = Entity.Z;
         if (victim is not null) (x, y, z) = (victim.X, victim.Y, victim.Z);
         else if (_target.Kind == SpecialPowerTargetKind.Location) (x, y) = (_target.X, _target.Y);
-        world.FireWeaponAt(Entity, weapon, victim, x, y, z);
+        if (!world.FireCurrentWeaponAtPosition(Entity, x, y, z, victim)) return StopShooting();
         _shotsLeft--;
         return _shotsLeft <= 0 ? SimulationTiming.SleepForever : Math.Max(weapon.DelayBetweenShotsTicks, SimulationTiming.SleepNone);
+    }
+
+    private long StopShooting()
+    {
+        _shotsLeft = 0;
+        return SimulationTiming.SleepForever;
     }
 
     public override void Describe(IStateWriter writer)

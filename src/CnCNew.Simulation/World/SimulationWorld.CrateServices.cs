@@ -41,13 +41,6 @@ public sealed partial class SimulationWorld
         SetVeterancyLevel(entity, level);
     }
 
-    /// <inheritdoc cref="IWorldServices.WeaponSetChanged"/>
-    public void WeaponSetChanged(Entity entity)
-    {
-        InitializeWeaponClip(entity);
-        MarkDirty(entity);
-    }
-
     /// <inheritdoc cref="IWorldServices.SetPowerSabotagedUntil"/>
     public void SetPowerSabotagedUntil(PlayerId player, long tick)
     {
@@ -56,31 +49,6 @@ public sealed partial class SimulationWorld
 
     /// <inheritdoc cref="IWorldServices.PowerSabotagedUntil"/>
     public long PowerSabotagedUntil(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.PowerSabotagedUntil : 0;
-
-    /// <inheritdoc cref="IWorldServices.TryFireActiveWeapon"/>
-    public bool TryFireActiveWeapon(Entity source, Entity victim)
-    {
-        if (source.DestroyRequested || source.EffectivelyDead || victim.DestroyRequested || victim.Body is null) return false;
-        var weaponIndex = ActiveWeaponIndex(source);
-        if (weaponIndex < 0 || _tick < source.WeaponReadyTick) return false;
-        var weapon = _templates.Weapons[weaponIndex];
-        var bonuses = _templates.GlobalWeaponBonus;
-        var dx = victim.X - source.X;
-        var dy = victim.Y - source.Y;
-        var reach = weapon.RangeWith(bonuses, source.WeaponBonusConditions);
-        if (dx * dx + dy * dy > reach * reach) return false;
-        // The same bookkeeping as the player's FireWeaponCommand: an empty clip has finished its reload by now, a shot spends a round and starts the next delay or the reload.
-        if (source.WeaponClip == 0) source.WeaponClip = ClipCapacity(weapon);
-        source.LastFireTick = _tick;
-        if (source.WeaponClip != int.MaxValue) source.WeaponClip--;
-        source.WeaponReadyTick = source.WeaponClip == 0
-            ? _tick + weapon.ClipReloadWith(bonuses, source.WeaponBonusConditions)
-            : _tick + weapon.DelayBetweenShotsWith(bonuses, source.WeaponBonusConditions);
-        MarkDirty(source);
-        var damage = FireWeaponAt(source, weapon, victim, victim.X, victim.Y, victim.Z);
-        Emit(SimEventKind.WeaponFired, source.Id, victim.Id, weapon.Name, damage.Raw, source.Owner);
-        return true;
-    }
 
     /// <summary>
     /// <c>Weapon::processRequestAssistance</c>: every other object of the firing player that is equivalent to <paramref name="source"/> (here: the same template), within

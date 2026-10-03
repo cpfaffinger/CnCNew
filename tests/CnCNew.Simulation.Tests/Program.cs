@@ -282,7 +282,7 @@ run.Test("Transports: walk in, drive and unload at a position", Tests.TransportL
 run.Test("Chinook: flight height, supply trips, Supply Lines boost and landing to unload", Tests.ChinookSupplyFlightAndLanding);
 run.Test("Chinook: helicopter slow death falls, crashes and leaves a hull", Tests.HelicopterSlowDeathFall);
 run.Test("Helix: portable structure rides free, follows and dies with it", Tests.HelixPortableStructure);
-run.Test("Transports: snapshot v7, determinism and replay v7 commands", Tests.TransportSnapshotAndReplay);
+run.Test("Transports: snapshot v8, determinism and replay v8 commands", Tests.TransportSnapshotAndReplay);
 run.Test("Collision: real CrushDie/SquishCollide footprint overlap", Tests.CollisionCrushAndSquish);
 run.Test("Collision: ToppleUpdate push, kill, stump and mid-fall snapshot continuation", Tests.CollisionTopple);
 run.Test("Collision: StructureToppleUpdate delayed collapse and reduced crushing sweep", Tests.CollisionStructureTopple);
@@ -300,7 +300,23 @@ run.Test("Last nine modules: SupplyWarehouseCripplingBehavior blocks the dock an
 run.Test("Last nine modules: crippling kills a docker inside, rests on every hit, sleeps when whole", Tests.LastBlockersCripplingKillsADockerInsideAndRestsOnEveryHit);
 run.Test("Last nine modules: the ferry loads, sails, unloads and snapshots", Tests.LastBlockersFerryLoadsSailsAndUnloads);
 run.Test("Last nine modules: the ferry is deterministic and follows the evacuation rules", Tests.LastBlockersFerryDeterminismAndEvacuationRules);
-
+run.Test("Weapon slots: template model, strict parsing and anti masks", Tests.WeaponSlotsTemplateModel);
+run.Test("Weapon slots: both slots fire at different targets with their own timers", Tests.WeaponSlotsBothSlotsFireAtDifferentTargets);
+run.Test("Weapon slots: best weapon against armor, anti-air and ground targets", Tests.WeaponSlotsBestWeaponAgainstArmor);
+run.Test("Weapon slots: AutoChooseSources and PreferredAgainst", Tests.WeaponSlotsAutoChooseSourcesAndPreferredAgainst);
+run.Test("Weapon slots: a preferred weapon is kept while it reloads", Tests.WeaponSlotsPreferredWeaponWaitsWhileReloading);
+run.Test("Weapon slots: independent clips and reload per slot", Tests.WeaponSlotsIndependentClipsAndReload);
+run.Test("Weapon slots: ShareWeaponReloadTime", Tests.WeaponSlotsSharedReloadTime);
+run.Test("Weapon slots: explicit slot, temporary and permanent weapon locks", Tests.WeaponSlotsExplicitSlotAndWeaponLock);
+run.Test("Weapon slots: LockWeaponCreate and veteran weapon sets with slots", Tests.WeaponSlotsLockWeaponCreateAndVeteranSets);
+run.Test("Weapon slots: snapshot mid-reload and determinism", Tests.WeaponSlotsSnapshotMidReloadAndDeterminism);
+run.Test("Weapon slots: commands in replays (format 8, command table 11)", Tests.WeaponSlotsCommandsRoundTripInReplays);
+run.Test("Weapon slots: script command buttons honour the slot", Tests.WeaponSlotsScriptCommandButtonsHonourTheSlot);
+run.Test("Weapon slots: the car bomb weapon set feeds the slots", Tests.WeaponSlotsCarBombSetFeedsTheSlots);
+run.Test("Weapon slots: salvage crate weapon sets feed the slots", Tests.WeaponSlotsCrateUpgradeSetsFeedTheSlots);
+run.Test("Weapon slots: FireOCLAfterWeaponCooldownUpdate watches the secondary slot", Tests.WeaponSlotsFireOclAfterCooldownWatchesTheSecondarySlot);
+run.Test("Weapon slots: AssistedTargetingUpdate fires the real secondary slot", Tests.WeaponSlotsAssistedTargetingUsesTheRealSlot);
+run.Test("Weapon slots: a jet reloads every slot at the airfield", Tests.WeaponSlotsJetReloadsEverySlotAtTheAirfield);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
@@ -309,6 +325,7 @@ if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Coma
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: weapon sets, multi-weapon objects and the Gattling Tank's weapon choice", () => Tests.RealWeaponSlots(contentDirectory));
 return run.Finish();
 
 /// <param name="only">With <c>--only TEXT</c>, just the tests whose name contains TEXT run (a development aid; the full run takes no argument).</param>

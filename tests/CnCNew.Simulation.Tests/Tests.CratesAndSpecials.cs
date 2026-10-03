@@ -757,7 +757,7 @@ static partial class Tests
         var car = CsSpawn(world, feeder, "FixtureCar", 2, 60);
         var truck = CsSpawn(world, feeder, "PlainTruck", 2, 60, 80);
         var victim = CsSpawn(world, feeder, "PlainTruck", 2, 300, 0);
-        Check.That(car.Template.CarBombWeapon >= 0 && truck.Template.CarBombWeapon < 0, "Only the car has a CARBOMB weapon set.");
+        Check.That(CarBombWeapon(car.Template) >= 0 && CarBombWeapon(truck.Template) < 0, "Only the car has a CARBOMB weapon set.");
         Check.That(car.Template.DefaultWeapon < 0, "Its normal weapon set is empty.");
         Check.That(!feeder.FireWeapon(2, car.Id.Value, victim.Id.Value).Accepted || world.Step().Events.Any(value => value.Kind == SimEventKind.CommandRejected), "An unconverted car cannot fire.");
 

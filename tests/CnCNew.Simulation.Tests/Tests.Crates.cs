@@ -42,8 +42,8 @@ static partial class Tests
         End
         Object PendingCrate
           KindOf = CRATE
-          Behavior = LockWeaponCreate Stand01
-            SlotToLock = SECONDARY
+          Behavior = SpawnBehavior Stand01
+            CanReclaimOrphans = Yes
           End
         End
 

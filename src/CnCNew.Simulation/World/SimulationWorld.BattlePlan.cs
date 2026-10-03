@@ -175,7 +175,7 @@ public sealed partial class SimulationWorld
             if (entity.Owner != player || entity.DestroyRequested || !validKinds.Any(entity.Template.IsKindOf) || invalidKinds.Any(entity.Template.IsKindOf)) continue;
             foreach (var module in entity.ModuleArray)
                 if (module is AIUpdateInterface ai) ai.ParalyzeUntil(this, untilTick);
-            if (entity.WeaponReadyTick < untilTick) entity.WeaponReadyTick = untilTick;
+            DelayWeaponsUntil(entity, untilTick, false);
             MarkDirty(entity);
         }
     }

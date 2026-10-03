@@ -109,16 +109,19 @@ public static class ConditionDeriver
     }
 
     /// <summary>
-    /// Slot A only: the simulation models one (primary) weapon. <c>WeaponSet::getModelConditionForWeaponSlot</c> maps the weapon status to
-    /// FIRING (the shot happened on the last simulated tick), RELOADING (empty clip, not ready) or BETWEEN_FIRING_SHOTS (not ready),
-    /// each with USING_WEAPON_A.
+    /// The current weapon slot only (<c>Object::adjustModelConditionForWeaponStatus</c> sets nothing for a slot that is not the current weapon).
+    /// <c>WeaponSet::getModelConditionForWeaponSlot</c> maps the weapon status to FIRING (the shot happened on the last simulated tick),
+    /// RELOADING (empty clip, not ready) or BETWEEN_FIRING_SHOTS (not ready), each with USING_WEAPON_A/B/C for the slot.
     /// </summary>
     private static ModelConditionSet Weapon(Entity entity, SimulationWorld world, ModelConditionSet set)
     {
-        if (entity.WeaponClip < 0 || entity.LastFireTick < 0) return set;
-        if (entity.LastFireTick == world.Tick - 1) return set.With(ModelConditions.FiringA).With(ModelConditions.UsingWeaponA);
-        if (world.Tick >= entity.WeaponReadyTick) return set;
-        return set.With(entity.WeaponClip == 0 ? ModelConditions.ReloadingA : ModelConditions.BetweenFiringShotsA).With(ModelConditions.UsingWeaponA);
+        var slot = entity.CurrentWeaponSlot;
+        var clip = entity.ClipOf(slot);
+        var lastFire = entity.LastFireTickOf(slot);
+        if (clip < 0 || lastFire < 0) return set;
+        if (lastFire == world.Tick - 1) return set.With(ModelConditions.Firing[slot]).With(ModelConditions.UsingWeapon[slot]);
+        if (world.Tick >= entity.ReadyTickOf(slot)) return set;
+        return set.With(clip == 0 ? ModelConditions.Reloading[slot] : ModelConditions.BetweenFiringShots[slot]).With(ModelConditions.UsingWeapon[slot]);
     }
 
     /// <summary>

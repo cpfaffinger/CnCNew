@@ -29,7 +29,7 @@ internal sealed partial class ObjectiveDriver
 {
     /// <summary>Own armed objects that can walk (the viewer's army).</summary>
     private IEnumerable<Entity> Army()
-        => LiveOf(_local).Where(entity => entity.Template.DefaultWeapon >= 0 && entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE")
+        => LiveOf(_local).Where(entity => SimulationWorld.ActiveWeaponSet(entity) is { WeaponCount: > 0 } && entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE")
                                           && !entity.ContainedBy.IsValid && ScriptEngine.CountsAsObject(entity));
 
     /// <summary>Orders the army toward the nearest of <paramref name="victims"/> (units already in weapon range are left to the combat loop). False when no order could be given.</summary>
@@ -41,7 +41,7 @@ internal sealed partial class ObjectiveDriver
         var any = false;
         foreach (var unit in Army().ToArray())
         {
-            var range = _world.Weapons[unit.Template.DefaultWeapon].RangeWith(_world.Templates.GlobalWeaponBonus, unit.WeaponBonusConditions);
+            var range = _world.MaxWeaponRange(unit);
             Entity? nearest = null;
             var best = Fixed.MaxValue;
             foreach (var victim in victims)

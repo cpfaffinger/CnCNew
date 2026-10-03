@@ -1,6 +1,7 @@
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Timers;
 using CnCNew.Simulation.World;
 
@@ -12,7 +13,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 10;
+    public const int Version = 11;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -65,7 +66,11 @@ public static class CommandTypes
     /// </summary>
     public const ushort Capture = 29;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= Capture;
+    // --------------------------------------------------------------------------------------------------- weapon slots (v11)
+    /// <summary><c>Object::setWeaponLock</c>/<c>releaseWeaponLock</c> (<c>GUI_COMMAND_SWITCH_WEAPON</c>): pins or releases the weapon slot an object fires.</summary>
+    public const ushort SetWeaponLock = 30;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= SetWeaponLock;
 }
 
 /// <summary>
@@ -115,7 +120,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), reader.Text("template")),
             CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("producer"))), checked((int)reader.Int("slot"))),
             CommandTypes.SetMoveTarget => new SetMoveTargetCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
-            CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), new EntityId(checked((uint)reader.UInt("target")))),
+            CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), new EntityId(checked((uint)reader.UInt("target"))),
+                reader.Has("slot") ? checked((int)reader.Int("slot")) : WeaponSlot.Best, reader.Has("origin") ? (FireOrigin)checked((byte)reader.Int("origin")) : FireOrigin.Player),
             CommandTypes.GiveSciencePoints => new GiveSciencePointsCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("target"))), checked((int)reader.Int("amount"))),
             CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, reader.Text("science")),
             CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("container")))),
@@ -136,6 +142,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Evacuate => new EvacuateCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("container"))), reader.Bool("hasPosition"), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.Overcharge => new OverchargeCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("target")))),
+            CommandTypes.SetWeaponLock => new SetWeaponLockCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), checked((int)reader.Int("slot")),
+                (WeaponLockKind)checked((byte)reader.Int("lock"))),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -211,8 +219,14 @@ public sealed record SetMoveTargetCommand(PlayerId Player, ulong Sequence, long 
     }
 }
 
-/// <summary>Direct-target weapon fire (no auto-acquire, no line of sight, no projectile travel time or splash — see <see cref="Templates.WeaponInfo"/>).</summary>
-public sealed record FireWeaponCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Source, EntityId Target) : SimCommand(Player, Sequence, Tick)
+/// <summary>
+/// Direct-target weapon fire (no auto-acquire, no line of sight, no projectile travel time or splash — see <see cref="Templates.WeaponInfo"/>). One shot from
+/// one weapon slot: with <see cref="Slot"/> = <see cref="WeaponSlot.Best"/> the world chooses among the slots like <c>WeaponSet::chooseBestWeaponForTarget</c>
+/// (<see cref="Origin"/> decides which slots the unit may pick by itself, <c>AutoChooseSources</c>); an explicit slot is a <c>FIRE_WEAPON</c> command button's
+/// <c>WeaponSlot</c> and also pins the slot (<c>setWeaponLock(LOCKED_TEMPORARILY)</c>) until its clip empties or the unit is ordered to move.
+/// </summary>
+public sealed record FireWeaponCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Source, EntityId Target, int Slot = WeaponSlot.Best, FireOrigin Origin = FireOrigin.Player)
+    : SimCommand(Player, Sequence, Tick)
 {
     public override ushort TypeCode => CommandTypes.FireWeapon;
 
@@ -220,6 +234,25 @@ public sealed record FireWeaponCommand(PlayerId Player, ulong Sequence, long Tic
     {
         writer.UInt("source", Source.Value);
         writer.UInt("target", Target.Value);
+        // Written only when they differ from the defaults (best weapon, a player's order), so an ordinary fire command describes itself exactly as before the slot model.
+        if (Slot != WeaponSlot.Best) writer.Int("slot", Slot);
+        if (Origin != FireOrigin.Player) writer.Int("origin", (long)Origin);
+    }
+}
+
+/// <summary>
+/// <c>Object::setWeaponLock</c> (<paramref name="Lock"/> temporary or permanent: the slot becomes the current weapon and automatic weapon choice leaves it alone) or
+/// <c>releaseWeaponLock</c> (<see cref="WeaponLockKind.None"/>: every lock is released, <paramref name="Slot"/> is ignored). A temporary lock never overrides a permanent one.
+/// </summary>
+public sealed record SetWeaponLockCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Source, int Slot, WeaponLockKind Lock) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.SetWeaponLock;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("source", Source.Value);
+        writer.Int("slot", Slot);
+        writer.Int("lock", (long)Lock);
     }
 }
 
@@ -614,6 +647,13 @@ public enum CommandRejection : byte
     CannotCapture = 37,
     /// <summary>The target has no <c>OverchargeBehavior</c> module, is not the issuer's, is dead, or is still under construction.</summary>
     CannotToggleOvercharge = 38,
+
+    // --------------------------------------------------------------------------------------------------- weapon slots
+    /// <summary>
+    /// No weapon the object may fire at this target: every candidate weapon either cannot target its kind (<c>WeaponAntiMaskType</c> against
+    /// <c>getVictimAntiMask</c>) or would do no damage through the victim's armor (<c>estimateWeaponDamage</c>, unresistable weapons excepted).
+    /// </summary>
+    InvalidWeaponTarget = 39,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

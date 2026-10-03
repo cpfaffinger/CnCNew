@@ -54,7 +54,7 @@ internal static class WorldEffectModules
             if (other.Id == me.Id || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid || other.Owner.IsSystem && !enemies) continue;
             var relationship = world.RelationshipOf(me.Owner, other.Owner);
             if (enemies ? relationship != Relationship.Enemies : relationship != Relationship.Allies) continue;
-            if (other.Template.IsKindOf("STRUCTURE") && other.Template.DefaultWeapon < 0) continue;
+            if (other.Template.IsKindOf("STRUCTURE") && SimulationWorld.ActiveWeaponSet(other) is not { WeaponCount: > 0 }) continue;
             if (enemies && other.HasStatus(stealthed) && !other.HasStatus(detected)) continue;
             var distance = EdgeDistance2D(me, other);
             if (distance > range || distance > bestDistance || (distance == bestDistance && best is not null && other.Id.Value > best.Id.Value)) continue;
@@ -319,8 +319,8 @@ public sealed record FireOclAfterCooldownData(UpgradeMuxData UpgradeMux, int Wea
 /// weapon could have fired and did not (its reload went by), or the weapon was switched away from, and at least <c>MinShotsToCreateOCL</c> shots were fired, the creation list runs with the
 /// created objects living <c>seconds fired · OCLLifetimePerSecond / 1000</c> seconds, at most <c>OCLLifetimeMaxCap</c> (the anthrax cloud a SCUD leaves). Only while the upgrade
 /// conditions of the <c>UpgradeMux</c> hold (the object's and its player's upgrades together; the shipped data names the upgrades that pick the stronger list). The simulation gives an object
-/// one weapon — slot <c>PRIMARY</c>, with the last-shot and ready ticks of the entity — so a module watching another slot (every shipped use watches <c>SECONDARY</c>) never sees a weapon and
-/// never fires; the reference's slot model is not part of this simulation.
+/// weapon slot of the weapon slot model (<c>SimulationWorld.WeaponSlots.cs</c>) it watches, with that slot's last-shot and ready ticks; "the weapon selected" is the object's current slot
+/// (the one that fired last or is locked), so a SCUD Launcher that fires its toxin slot in a series and then reloads, or switches to its other weapon, creates the cloud.
 /// </summary>
 public sealed class FireOCLAfterWeaponCooldownUpdate(FireOclAfterCooldownData data) : SimModule, IUpdateModule, IUpgradeModule
 {
@@ -342,9 +342,9 @@ public sealed class FireOCLAfterWeaponCooldownUpdate(FireOclAfterCooldownData da
     {
         var validThisFrame = true;
         var validToFire = true;
-        var hasWeapon = Entity.Template.DefaultWeapon >= 0;
-        if (hasWeapon) { if (data.WeaponSlot != 0) validThisFrame = false; }
-        else validThisFrame = false;
+        var slot = data.WeaponSlot;
+        // FireOCLAfterWeaponCooldownUpdate::update: the current weapon must be the watched slot's; no weapon selected means a switch or a finished shot.
+        if (SimulationWorld.WeaponIndexIn(Entity, Entity.CurrentWeaponSlot) < 0 || Entity.CurrentWeaponSlot != slot) validThisFrame = false;
 
         var mask = world.UpgradeKeyMaskOf(Entity);
         if (validThisFrame && !_mux.TestUpgradeConditions(mask))
@@ -356,14 +356,14 @@ public sealed class FireOCLAfterWeaponCooldownUpdate(FireOclAfterCooldownData da
         var now = world.Tick;
         if (validThisFrame)
         {
-            if (Entity.LastFireTick == now - 1)
+            if (Entity.LastFireTickOf(slot) == now - 1)
             {
                 _consecutiveShots++;
                 if (_consecutiveShots == 1) _startTick = now;
             }
-            else if (Entity.WeaponReadyTick < now && data.MinShots <= _consecutiveShots) FireOcl(world);
+            else if (Entity.ReadyTickOf(slot) < now && data.MinShots <= _consecutiveShots) FireOcl(world);
         }
-        else if (validToFire && data.WeaponSlot == 0 && hasWeapon && data.MinShots <= _consecutiveShots) FireOcl(world);
+        else if (validToFire && SimulationWorld.WeaponIndexIn(Entity, slot) >= 0 && data.MinShots <= _consecutiveShots) FireOcl(world);
 
         if (validThisFrame != _valid)
         {

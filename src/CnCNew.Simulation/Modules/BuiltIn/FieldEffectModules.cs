@@ -192,12 +192,8 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
         _claims.Insert(position < 0 ? _claims.Count : position, (target, expiry));
     }
 
-    /// <summary><c>Object::hasAnyDamageWeapon</c>, for the weapon this simulation fires with.</summary>
-    private static bool HasDamageWeapon(IWorldServices world, Entity target)
-    {
-        var index = target.Template.DefaultWeapon;
-        return index >= 0 && (world.Weapons[index].PrimaryDamage > Fixed.Zero || world.Weapons[index].SecondaryDamage > Fixed.Zero);
-    }
+    /// <summary><c>Object::hasAnyDamageWeapon</c>: some slot of the target's active weapon set deals damage.</summary>
+    private static bool HasDamageWeapon(IWorldServices world, Entity target) => World.SimulationWorld.HasAnyDamageWeapon(target, world.Weapons);
 
     /// <summary><c>effectLogic(not giving)</c>: both weapon bonuses go.</summary>
     private static void Take(IWorldServices world, Entity target)

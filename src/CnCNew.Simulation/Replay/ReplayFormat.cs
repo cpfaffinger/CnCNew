@@ -4,6 +4,7 @@ using System.Text;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Timers;
 using CnCNew.Simulation.World;
 
@@ -34,7 +35,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -231,6 +232,13 @@ public static class ReplayFormat
             case FireWeaponCommand fire:
                 writer.Write(fire.Source.Value);
                 writer.Write(fire.Target.Value);
+                writer.Write((sbyte)fire.Slot);
+                writer.Write((byte)fire.Origin);
+                break;
+            case SetWeaponLockCommand weaponLock:
+                writer.Write(weaponLock.Source.Value);
+                writer.Write((sbyte)weaponLock.Slot);
+                writer.Write((byte)weaponLock.Lock);
                 break;
             case GiveSciencePointsCommand givePoints:
                 writer.Write(givePoints.Target.Value);
@@ -332,7 +340,8 @@ public static class ReplayFormat
             CommandTypes.QueueProduction => new QueueProductionCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), ReadString(reader)),
             CommandTypes.CancelProduction => new CancelProductionCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), reader.ReadInt32()),
             CommandTypes.SetMoveTarget => new SetMoveTargetCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
-            CommandTypes.FireWeapon => new FireWeaponCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
+            CommandTypes.FireWeapon => ReadFireWeapon(reader, player, sequence, tick),
+            CommandTypes.SetWeaponLock => new SetWeaponLockCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), reader.ReadSByte(), (WeaponLockKind)reader.ReadByte()),
             CommandTypes.GiveSciencePoints => new GiveSciencePointsCommand(player, sequence, tick, new PlayerId(reader.ReadInt32()), reader.ReadInt32()),
             CommandTypes.PurchaseScience => new PurchaseScienceCommand(player, sequence, tick, ReadString(reader)),
             CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
@@ -362,6 +371,16 @@ public static class ReplayFormat
         var kind = (SpecialPowerTargetKind)reader.ReadByte();
         return new UseSpecialPowerCommand(player, sequence, tick, source, power, kind, new EntityId(reader.ReadUInt32()),
             Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()));
+    }
+
+    private static FireWeaponCommand ReadFireWeapon(BinaryReader reader, PlayerId player, ulong sequence, long tick)
+    {
+        var source = new EntityId(reader.ReadUInt32());
+        var target = new EntityId(reader.ReadUInt32());
+        int slot = reader.ReadSByte();
+        var origin = reader.ReadByte();
+        if (slot is < WeaponSlot.Best or >= WeaponSlot.Count || !Enum.IsDefined((FireOrigin)origin)) throw new ReplayFormatException($"FireWeapon command with slot {slot} and origin {origin} is invalid.");
+        return new FireWeaponCommand(player, sequence, tick, source, target, slot, (FireOrigin)origin);
     }
 
     private static PurchaseUpgradeCommand ReadPurchaseUpgrade(BinaryReader reader, PlayerId player, ulong sequence, long tick)
