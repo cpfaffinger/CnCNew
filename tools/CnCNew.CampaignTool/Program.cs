@@ -467,7 +467,9 @@ static Action<MissionSession> WatchFlags(string[] names, bool victory)
     {
         foreach (var name in names)
         {
-            var now = $"flag={session.Engine.FlagValue(name)} scriptActive={session.Engine.IsScriptActive(name)}";
+            var now = name.StartsWith("area:", StringComparison.Ordinal) && session.Program.FindArea(name[5..]) is { } area
+                ? $"entities inside: {string.Join(", ", session.World.Entities.Where(entity => !entity.EffectivelyDead && area.Contains(entity.X, entity.Y) && entity.Template.Locomotor is not null).GroupBy(entity => (entity.Template.Name, entity.Owner.Value)).Select(group => $"{group.Key.Name}/owner{group.Key.Value} x{group.Count()}").Take(8))}"
+                : $"flag={session.Engine.FlagValue(name)} scriptActive={session.Engine.IsScriptActive(name)}";
             if (known.TryGetValue(name, out var before) && before == now) continue;
             known[name] = now;
             Console.WriteLine($"      {(victory ? "V" : "D")} @{session.World.Tick} {name}: {now}");

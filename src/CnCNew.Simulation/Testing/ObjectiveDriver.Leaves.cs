@@ -333,12 +333,13 @@ internal sealed partial class ObjectiveDriver
             {
                 var name = Text(0);
                 var area = Text(1);
+                // Only once the script that asks is live: an area full of hostile units (now including aircraft) kills the unit long before an inactive script would look at it.
                 return Plan.Of(new Leaf($"present:{name}:{area}", $"bring a unit of '{name}' into area '{area}'", 4, 90, attempt =>
                 {
                     if (PlayerOf(name) is not { } player || AreaSpot(area) is not { } spot) return false;
                     var unit = LiveOf(player).FirstOrDefault(entity => entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE") && ScriptEngine.CountsAsObject(entity));
                     return unit is not null && GoTo(unit, spot, attempt);
-                }));
+                }) { Deferred = !ready });
             }
             case "SKIRMISH_PLAYER_IS_OUTSIDE_AREA":
             {

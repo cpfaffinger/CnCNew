@@ -330,7 +330,7 @@ internal sealed partial class ObjectiveDriver
                 WorldWrites++;
                 if (times <= 3) _log.Add($"{tick}: {leaf.Label}");
             }
-        if (_victory && !_commandsOnly) KeepCapturedCarriersAlive(tick);
+        if (!_commandsOnly) KeepCapturedCarriersAlive(tick);
         _idleRounds = Interventions == before && signature == _lastSignature ? _idleRounds + 1 : 0;
         _lastSignature = signature;
     }
