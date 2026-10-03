@@ -159,11 +159,22 @@ public sealed partial class ScriptEngine
                 return true;
             case "NAMED_USE_COMMANDBUTTON_ABILITY_USING_WAYPOINT_PATH":
             {
-                // doNamedUseCommandButtonAbilityUsingWaypointPath starts the ability at the path waypoint closest to the unit and lets it follow the path; only
-                // the start waypoint is used here (docs/SCRIPT-ENGINE.md §8).
+                // doNamedUseCommandButtonAbilityUsingWaypointPath starts the ability at the path waypoint closest to the unit; a Particle Uplink Cannon then drives its
+                // beam along the rest of the path (ParticleUplinkCannonUpdate::initiateIntentToDoSpecialPower with a waypoint), any other ability is only started there.
                 if (!Has(type, p, 3) || NamedEntity(Str(p, 0)) is not { } pathUser) return true;
                 if (_program.FindPath(Str(p, 2)) is not { } path || path.Waypoints.IsDefaultOrEmpty) { Diagnose($"unknown waypoint path '{Str(p, 2)}'"); return true; }
-                var closest = path.Waypoints.OrderBy(waypoint => DistanceSquared(pathUser, waypoint.X, waypoint.Y)).First();
+                var closestIndex = 0;
+                var closestDistance = Fixed.MaxValue;
+                for (var index = 0; index < path.Waypoints.Length; index++)
+                {
+                    var distance = DistanceSquared(pathUser, path.Waypoints[index].X, path.Waypoints[index].Y);
+                    if (distance >= closestDistance) continue;
+                    closestDistance = distance;
+                    closestIndex = index;
+                }
+                var closest = path.Waypoints[closestIndex];
+                if (pathUser.Modules.OfType<ParticleUplinkCannonUpdate>().FirstOrDefault() is { } uplink)
+                    uplink.PrepareScriptedPath(_world, [..path.Waypoints.Skip(closestIndex).Select(waypoint => new Point3(waypoint.X, waypoint.Y, _world.GroundHeightAt(waypoint.X, waypoint.Y)))]);
                 UseCommandButtonAbility(pathUser, Str(p, 1), SpecialPowerTargetKind.Location, EntityId.Invalid, closest.X, closest.Y);
                 return true;
             }

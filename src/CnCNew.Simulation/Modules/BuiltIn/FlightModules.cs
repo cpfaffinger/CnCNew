@@ -1039,7 +1039,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
 /// </summary>
 public sealed record ParticleUplinkData(string PowerName, string BeamObject, string RemnantObject, string GroundHitFx, string BeamLaunchFx, long LaunchFxTicks, long WidthGrowTicks, long BeamTravelTicks,
     long TotalFiringTicks, Fixed SwathDistance, Fixed SwathAmplitude, long TotalScorchMarks, int TotalDamagePulses, Fixed DamagePerSecond, int DamageType, int DeathType, Fixed DamageRadiusScalar,
-    Fixed ManualDrivingSpeed) : ModuleData
+    Fixed ManualDrivingSpeed, Fixed ManualFastDrivingSpeed = default) : ModuleData
 {
     public static ParticleUplinkData Parse(ModuleConfiguration configuration)
     {
@@ -1054,7 +1054,8 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
             ModuleConfigReader.Real(configuration, "DamagePerSecond", Fixed.Zero),
             damageType.Length == 0 ? DamageTypes.Explosion : NameTables.DamageType.TryIndexOf(damageType, out var damageIndex) ? damageIndex : throw new InvalidDataException($"Unknown damage type '{damageType}'."),
             deathType.Length == 0 ? DeathTypes.Normal : NameTables.DeathType.TryIndexOf(deathType, out var deathIndex) ? deathIndex : throw new InvalidDataException($"Unknown death type '{deathType}'."),
-            ModuleConfigReader.Real(configuration, "DamageRadiusScalar", Fixed.Zero), ModuleConfigReader.Real(configuration, "ManualDrivingSpeed", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond));
+            ModuleConfigReader.Real(configuration, "DamageRadiusScalar", Fixed.Zero), ModuleConfigReader.Real(configuration, "ManualDrivingSpeed", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond),
+            ModuleConfigReader.Real(configuration, "ManualFastDrivingSpeed", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond));
     }
 }
 
@@ -1067,7 +1068,8 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
 /// (<c>SwathOfDeathDistance</c> long, <c>SwathOfDeathAmplitude</c> wide, along the line from the building to the target, with the reference's own rotation formula); a human owner
 /// drives it, and without a driving command the beam stays where it was aimed. The ground-hit effect and the remnant object follow each pulse. Not modeled: the antenna/charge
 /// stages (presentation, only visible through the power's own readiness), the shroud reveal around the beam, the abort of a beam whose building is underpowered or disabled, the
-/// scripted waypoint path, the sounds and the scorch marks.
+/// sounds and the scorch marks. A script can fire it along a waypoint path (<see cref="PrepareScriptedPath"/>): the beam then starts at the first waypoint and drives from waypoint to
+/// waypoint at <c>ManualFastDrivingSpeed</c> (the path is followed in order; the reference picks a random link at a fork) and stays at the last one.
 /// </summary>
 public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimModule, IUpdateModule, ISpecialPowerHandler
 {
@@ -1079,6 +1081,10 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     private long _decayStart;
     private Beam _beam;
     private bool _manual;
+    private List<Point3>? _pendingPath;
+    private long _pendingPathTick;
+    private List<Point3>? _path;
+    private int _pathIndex;
     private Point3 _initial;
     private Point3 _current;
     private Point3 _destination;
@@ -1101,16 +1107,31 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
 
     public bool Handles(IWorldServices world, int powerIndex) => world.SpecialPowers.TryGet(data.PowerName, out var info) && info.Index == powerIndex;
 
+    /// <summary>
+    /// <c>initiateIntentToDoSpecialPower(…, way, COMMAND_FIRED_BY_SCRIPT)</c>: the next use (the command a script is about to submit) follows these waypoints instead of sweeping; the offer expires
+    /// after a few ticks if no use arrives.
+    /// </summary>
+    public void PrepareScriptedPath(IWorldServices world, IReadOnlyList<Point3> waypoints)
+    {
+        _pendingPath = [..waypoints];
+        _pendingPathTick = world.Tick;
+    }
+
     public void Initiate(IWorldServices world, int powerIndex, in SpecialPowerTarget target)
     {
+        _path = null;
+        _pathIndex = 0;
+        if (_pendingPath is { Count: > 0 } offered && world.Tick - _pendingPathTick <= 3) _path = offered;
+        _pendingPath = null;
         var aimed = target.Kind == SpecialPowerTargetKind.Object ? world.FindEntity(target.Entity) : null;
-        var x = aimed?.X ?? target.X;
-        var y = aimed?.Y ?? target.Y;
+        var x = _path is null ? aimed?.X ?? target.X : _path[0].X;
+        var y = _path is null ? aimed?.Y ?? target.Y : _path[0].Y;
         _initial = new Point3(x, y, world.GroundHeightAt(x, y));
         _current = _initial;
-        _destination = _initial;
-        // All human players "drive" the beam; a computer-controlled owner (and so a scripted use) lets it sweep.
-        _manual = !world.IsComputerPlayer(Entity.Owner);
+        _destination = _path is { Count: > 1 } ? _path[1] : _initial;
+        _pathIndex = _path is { Count: > 1 } ? 1 : 0;
+        // All human players "drive" the beam; a computer-controlled owner (and so a scripted use) lets it sweep; a scripted waypoint path drives it as well.
+        _manual = _path is not null || !world.IsComputerPlayer(Entity.Owner);
         _startAttack = Math.Max(world.Tick, 1);
         _startDecay = _startAttack + data.TotalFiringTicks;
         _decayStart = 0;
@@ -1189,6 +1210,8 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         _startAttack = 0;
         _startDecay = 0;
         _beam = Beam.None;
+        _path = null;
+        _pathIndex = 0;
     }
 
     /// <summary><c>LaserUpdate::getCurrentLaserRadius</c>: the beam object's template radius times the width scalar (growing after birth, shrinking after the decay began).</summary>
@@ -1231,7 +1254,8 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
             var dx = _destination.X - _current.X;
             var dy = _destination.Y - _current.Y;
             var distance = Fixed.Sqrt(dx * dx + dy * dy);
-            var speed = Fixed.Min(data.ManualDrivingSpeed, distance);
+            var speed = Fixed.Min(_path is null ? data.ManualDrivingSpeed : data.ManualFastDrivingSpeed, distance);
+            if (_path is not null && distance <= speed && _pathIndex + 1 < _path.Count) _destination = _path[++_pathIndex];
             if (distance > Fixed.Zero) _current = _current with { X = _current.X + dx * speed / distance, Y = _current.Y + dy * speed / distance };
         }
         _current = _current with { Z = world.GroundHeightAt(_current.X, _current.Y) };
@@ -1261,12 +1285,26 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     public override void Describe(IStateWriter writer)
     {
         writer.Int("nextWake", _nextWake);
+        if (_pendingPath is not null)
+        {
+            writer.Int("pendingPathTick", _pendingPathTick);
+            writer.BeginArray("pendingPath");
+            foreach (var point in _pendingPath) { writer.BeginObject(null); DumbProjectileBehavior.WritePoint(writer, "p", point); writer.EndObject(); }
+            writer.EndArray();
+        }
         if (_startAttack == 0) return;
         writer.Int("startAttack", _startAttack);
         writer.Int("startDecay", _startDecay);
         writer.Int("decayStart", _decayStart);
         writer.Int("beam", (int)_beam);
         writer.Bool("manual", _manual);
+        if (_path is not null)
+        {
+            writer.Int("pathIndex", _pathIndex);
+            writer.BeginArray("path");
+            foreach (var point in _path) { writer.BeginObject(null); DumbProjectileBehavior.WritePoint(writer, "p", point); writer.EndObject(); }
+            writer.EndArray();
+        }
         DumbProjectileBehavior.WritePoint(writer, "initial", _initial);
         DumbProjectileBehavior.WritePoint(writer, "current", _current);
         DumbProjectileBehavior.WritePoint(writer, "destination", _destination);
@@ -1281,6 +1319,13 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     {
         _nextWake = reader.Int("nextWake");
         Reset();
+        _pendingPath = null;
+        if (reader.Has("pendingPath"))
+        {
+            _pendingPathTick = reader.Int("pendingPathTick");
+            _pendingPath = [];
+            foreach (var item in reader.Array("pendingPath")) _pendingPath.Add(DumbProjectileBehavior.ReadPoint(item, "p"));
+        }
         if (!reader.Has("startAttack")) return;
         _startAttack = reader.Int("startAttack");
         _startDecay = reader.Int("startDecay");
@@ -1289,6 +1334,12 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         if (beam < 0 || beam > (int)Beam.Dead) throw new InvalidDataException("Uplink beam state out of range.");
         _beam = (Beam)beam;
         _manual = reader.Bool("manual");
+        if (reader.Has("path"))
+        {
+            _pathIndex = checked((int)reader.Int("pathIndex"));
+            _path = [];
+            foreach (var item in reader.Array("path")) _path.Add(DumbProjectileBehavior.ReadPoint(item, "p"));
+        }
         _initial = DumbProjectileBehavior.ReadPoint(reader, "initial");
         _current = DumbProjectileBehavior.ReadPoint(reader, "current");
         _destination = DumbProjectileBehavior.ReadPoint(reader, "destination");

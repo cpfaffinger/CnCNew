@@ -60,6 +60,10 @@ static partial class Tests
           Command = PLAYER_UPGRADE
           Upgrade = Upgrade_AlphaFlares
         End
+        CommandButton Cmd_FireUplink
+          Command = SPECIAL_POWER
+          SpecialPower = UplinkPower
+        End
         Weapon FlightMissileGun
           PrimaryDamage = 60
           PrimaryDamageRadius = 5.0
@@ -228,6 +232,8 @@ static partial class Tests
             ParticleBeamLaserName = UplinkBeam
             SwathOfDeathDistance = 0.0
             SwathOfDeathAmplitude = 0.0
+            ManualDrivingSpeed = 60.0
+            ManualFastDrivingSpeed = 600.0
           End
           Behavior = DestroyDie Destroy01
           End
@@ -622,5 +628,27 @@ static partial class Tests
         var restored = MissionSnapshot.Restore(mid!, fixture.Templates, fixture.Fingerprint, terrain, map);
         for (var tick = 0; tick < 700; tick++) restored.Step();
         Check.That(restored.World.Entities.Count(entity => entity.Template.Name == "AlphaBomber") == 0 && restored.Engine.FlagValue("done"), "A delivery restored from a snapshot during the run ends the same way.");
+    }
+
+    public static void FlightUplinkFollowsAScriptedWaypointPath()
+    {
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Fire", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY_USING_WAYPOINT_PATH", Scr.Unit("Cannon"), Scr.Ability("Cmd_FireUplink"), Scr.Named(MapScriptParameterType.WaypointPath, "Route"))], oneShot: true)],
+            objects: [Placed("BetaCannon", 100m, 200m, "teamB", "Cannon"), Placed("AlphaTrooper", 130m, 200m, "teamA", "AtStart"), Placed("AlphaTrooper", 330m, 200m, "teamA", "AtEnd"), Placed("AlphaTrooper", 220m, 360m, "teamA", "Off")],
+            paths: [("Route", [("A", 130m, 200m), ("B", 230m, 200m), ("C", 330m, 200m)])]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(session.SkippedObjects.IsEmpty, "The cannon instantiates: " + string.Join(",", session.SkippedObjects));
+        var module = NamedIn(session, "Cannon")!.Modules.OfType<ParticleUplinkCannonUpdate>().Single();
+        var positions = new List<(Fixed X, Fixed Y)>();
+        for (var tick = 0; tick < 80; tick++)
+        {
+            session.Step();
+            if (module.InUse) positions.Add((module.BeamPosition.X, module.BeamPosition.Y));
+        }
+        Check.That(positions.Count > 10, $"The scripted use runs ({positions.Count} ticks).");
+        Check.That(positions.Any(point => (point.X - Fixed.FromInt(230)).Abs() < Fixed.FromInt(30)) && positions.Any(point => point.X >= Fixed.FromInt(325)), "The beam drives along the waypoints to the end of the path.");
+        Check.That(positions.All(point => (point.Y - Fixed.FromInt(200)).Abs() < Fixed.FromInt(1)), "It stays on the path line.");
+        Check.That(NamedIn(session, "Off")!.Body!.Health == Fixed.FromInt(100), "An object off the path is untouched.");
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        for (var tick = 0; tick < 60; tick++) Check.That(session.Step().StateHash == restored.Step().StateHash, $"A path-driven beam restored from a snapshot continues identically (tick {tick}).");
     }
 }

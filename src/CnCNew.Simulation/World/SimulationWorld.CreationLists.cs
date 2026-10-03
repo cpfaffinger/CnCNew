@@ -32,7 +32,15 @@ public sealed partial class SimulationWorld
         var first = EntityId.Invalid;
         foreach (var nugget in list.Nuggets)
         {
-            var created = nugget.Kind == CreationNuggetKind.DeliverPayload ? ExecuteDeliverPayload(source, nugget, origin, target, createOwner) : ExecuteNugget(source, nugget, origin);
+            EntityId created;
+            if (nugget.Kind == CreationNuggetKind.DeliverPayload) created = ExecuteDeliverPayload(source, nugget, origin, target, createOwner);
+            else if (nugget.Kind == CreationNuggetKind.FireWeapon && nugget.Weapon.Length > 0)
+            {
+                // FireWeaponNugget::create: createAndFireTempWeapon(weapon, primaryObj, secondary): the source fires once at the second point.
+                FireTempWeapon(source, nugget.Weapon, target.X, target.Y, target.Z);
+                created = EntityId.Invalid;
+            }
+            else created = ExecuteNugget(source, nugget, origin);
             if (!first.IsValid) first = created;
         }
 
