@@ -32,10 +32,10 @@ public sealed record ObjectiveDriveResult(bool ReachedByScript, MissionOutcome O
 /// </summary>
 public static class MissionObjectiveDriver
 {
-    public static ObjectiveDriveResult Run(MissionOptions options, TemplateCatalog catalog, string fingerprint, TerrainMap terrain, MapData map, bool victory, long maxTicks = 4500, int spacing = 15, long settleTicks = 60, Action<MissionSession>? observe = null, bool commandsOnly = false)
+    public static ObjectiveDriveResult Run(MissionOptions options, TemplateCatalog catalog, string fingerprint, TerrainMap terrain, MapData map, bool victory, long maxTicks = 4500, int spacing = 15, long settleTicks = 60, Action<MissionSession>? observe = null, bool commandsOnly = false, int agentThreshold = 0)
     {
         var session = MissionSession.Start(options, catalog, fingerprint, terrain, map);
-        var driver = new ObjectiveDriver(session, victory, commandsOnly);
+        var driver = new ObjectiveDriver(session, victory, commandsOnly, agentThreshold);
         var world = session.World;
         var engine = session.Engine;
 

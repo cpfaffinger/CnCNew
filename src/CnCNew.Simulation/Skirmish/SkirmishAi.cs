@@ -17,7 +17,7 @@ namespace CnCNew.Simulation.Skirmish;
 /// <param name="Side">Side of the player's faction; only objects of this side are built or produced.</param>
 /// <param name="FamilyPrefix">Name prefix of the faction's own object variants (<c>AirF_America</c>); such variants are preferred over the shared ones of the side.</param>
 /// <param name="HintPositions">Start positions of the other players; public map knowledge the AI may attack before it has seen anything.</param>
-public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions);
+public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions, int AttackThreshold = 0, int MaxAttackThreshold = 0);
 
 /// <summary>Counters an AI keeps about itself; the match report and the tests read them.</summary>
 public sealed class SkirmishAiStats
@@ -136,6 +136,7 @@ public sealed class SkirmishAi
     private List<Entity> _enemyTargets = [];
     private bool _attacking;
     private int _threshold = MinAttackThreshold;
+    private int _maxThreshold = MaxAttackThreshold;
     private (Fixed X, Fixed Y)? _rally;
     private (Fixed X, Fixed Y)? _scout;
     private long _scoutAt = -1;
@@ -156,6 +157,8 @@ public sealed class SkirmishAi
         _random = new SageRandom(options.Seed);
         _phase = options.Player.Value % FireInterval;
         _side = options.Side;
+        if (options.AttackThreshold > 0) _threshold = options.AttackThreshold;
+        if (options.MaxAttackThreshold > 0) _maxThreshold = Math.Max(options.MaxAttackThreshold, _threshold);
     }
 
     public SkirmishAiStats Stats { get; } = new();
@@ -785,7 +788,7 @@ public sealed class SkirmishAi
             else if (_attacking && army.Count < Math.Max(3, _threshold / 3))
             {
                 _attacking = false;
-                _threshold = Math.Min(MaxAttackThreshold, _threshold + 2);
+                _threshold = Math.Min(_maxThreshold, _threshold + 2);
             }
             goal = _attacking ? AttackTarget(army) : _rally;
         }

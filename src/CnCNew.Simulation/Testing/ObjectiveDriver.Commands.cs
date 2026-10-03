@@ -89,6 +89,7 @@ internal sealed partial class ObjectiveDriver
 internal sealed partial class ObjectiveDriver
 {
     private CnCNew.Simulation.Skirmish.SkirmishAi? _agent;
+    private readonly int _agentThreshold;
 
     /// <summary>The skirmish AI's statistics when the commands-only agent plays for the viewer.</summary>
     public CnCNew.Simulation.Skirmish.SkirmishAiStats? AgentStats => _agent?.Stats;
@@ -108,7 +109,7 @@ internal sealed partial class ObjectiveDriver
         var hints = _world.Entities.Where(entity => !entity.Owner.IsSystem && entity.Template.IsKindOf("STRUCTURE") && _world.AreEnemies(_local, entity.Owner) && ScriptEngine.CountsAsObject(entity))
             .OrderBy(entity => entity.Id.Value).Select(entity => (entity.X, entity.Y)).ToImmutableArray();
         var options = new CnCNew.Simulation.Skirmish.SkirmishAiOptions(_local, 0x5EEDu, own.X, own.Y, building.Side,
-            CnCNew.Simulation.Skirmish.SkirmishMatchSession.FamilyPrefix(faction), hints);
+            CnCNew.Simulation.Skirmish.SkirmishMatchSession.FamilyPrefix(faction), hints, _agentThreshold, _agentThreshold * 3);
         return new CnCNew.Simulation.Skirmish.SkirmishAi(_world, catalog, options, command => _session.Issue(command.Player, (sequence, tick) => command with { Sequence = sequence, Tick = tick }));
     }
 

@@ -103,7 +103,7 @@ internal sealed partial class ObjectiveDriver
     private readonly Dictionary<string, long> _lastApplied = new(StringComparer.Ordinal);
     private readonly List<string> _log = [];
 
-    public ObjectiveDriver(MissionSession session, bool victory, bool commandsOnly = false)
+    public ObjectiveDriver(MissionSession session, bool victory, bool commandsOnly = false, int agentThreshold = 0)
     {
         _session = session;
         _world = session.World;
@@ -112,6 +112,7 @@ internal sealed partial class ObjectiveDriver
         _local = MissionSession.LocalPlayerOf(_program, session.Options.HumanSideName);
         _victory = victory;
         _commandsOnly = commandsOnly;
+        _agentThreshold = agentThreshold;
         if (commandsOnly) _agent = CreateAgent();
         Index();
     }
