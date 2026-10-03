@@ -630,10 +630,14 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
         Enter(JetPhase.None);
         _allowAir = true;
         _returnTick = 0;
-        if (parking is null) return;
-        parking.ReleaseRunway(world, Entity.Id);
-        if (!HelipadKind && !data.KeepsParkingSpaceWhenAirborne) parking.ReleaseSpace(world, Entity);
-        parking.SetHealee(world, Entity, false);
+        if (parking is not null)
+        {
+            parking.ReleaseRunway(world, Entity.Id);
+            if (!HelipadKind && !data.KeepsParkingSpaceWhenAirborne) parking.ReleaseSpace(world, Entity);
+            parking.SetHealee(world, Entity, false);
+        }
+        // The stored order is carried out at once (the reference does it in the next idle update): no tick in which the aircraft looks idle in the air.
+        if (_pending != PendingKind.None) ExecutePending(world);
     }
 
     // ------------------------------------------------------------------------------------------------------------------ return and landing

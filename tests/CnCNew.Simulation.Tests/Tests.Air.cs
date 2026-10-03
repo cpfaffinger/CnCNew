@@ -124,6 +124,8 @@ static partial class Tests
         Object AirTestJet
           Side = Alpha
           KindOf = SELECTABLE AIRCRAFT CAN_ATTACK VEHICLE
+          VisionRange = 600.0
+          ShroudClearingRange = 600.0
           BuildCost = 100
           BuildTime = 1
           Locomotor = SET_NORMAL AirJetLoco
@@ -183,10 +185,11 @@ static partial class Tests
         """,
     };
 
-    private static SimulationWorld AirWorld(out SyntheticFixture fixture, out Feeder feeder)
+    private static SimulationWorld AirWorld(out SyntheticFixture fixture, out Feeder feeder, bool terrain = false)
     {
         fixture = new SyntheticFixture(files: AirFixtureFiles);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var map = terrain ? CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(300, 300, 1, (_, _) => 0), "air") : null;
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
         feeder = new Feeder(world);
         return world;
     }
@@ -204,9 +207,9 @@ static partial class Tests
     private static JetAIUpdate JetOf(Entity entity) => entity.Modules.OfType<JetAIUpdate>().Single();
 
     /// <summary>An airfield with one jet produced at it, parked and ready: (world, feeder, airfield, parking module, jet).</summary>
-    private static (SimulationWorld World, Feeder Feeder, Entity Airfield, ParkingPlaceBehavior Parking, Entity Jet, SyntheticFixture Fixture) ParkedJet(bool dummy = true)
+    private static (SimulationWorld World, Feeder Feeder, Entity Airfield, ParkingPlaceBehavior Parking, Entity Jet, SyntheticFixture Fixture) ParkedJet(bool dummy = true, bool terrain = false)
     {
-        var world = AirWorld(out var fixture, out var feeder);
+        var world = AirWorld(out var fixture, out var feeder, terrain);
         Check.That(fixture.Templates.TryGet("AirTestJet", out var jet) && jet.IsInstantiable && fixture.Templates.TryGet("AirTestAirfield", out var field) && field.IsInstantiable,
             "The airfield and the jet bind (nothing missing): " + string.Join(",", fixture.Templates.Templates.Where(value => !value.IsInstantiable).SelectMany(value => value.MissingModules)));
         feeder.Spawn(1, "AirTestAirfield", owner: 1, x: 500, y: 500);
@@ -226,9 +229,14 @@ static partial class Tests
     /// A produced jet leaves the hangar to its space (the airfield's reservation), takes off on an order through the runway states, flies at its preferred height, empties its clip on the enemy,
     /// returns for ammunition, lands, taxis back to its space and reloads; the airfield heals it while it stands there; the whole run survives a snapshot at every phase.
     /// </summary>
-    public static void AirJetFlightLifecycle()
+    public static void AirJetFlightLifecycle() => JetLifecycle(false);
+
+    /// <summary>The same lifecycle on a map with terrain (navigation grid, ground heights): the aircraft taxi and fly the same way.</summary>
+    public static void AirJetFlightLifecycleOnTerrain() => JetLifecycle(true);
+
+    private static void JetLifecycle(bool terrain)
     {
-        var (world, feeder, airfield, parking, jet, fixture) = ParkedJet();
+        var (world, feeder, airfield, parking, jet, fixture) = ParkedJet(terrain: terrain);
         var ai = JetOf(jet);
         var info = parking.InfoOfSpace(world, 0);
         Check.That(parking.OccupantOf(0) == jet.Id && ai.Airfield == airfield.Id && !ai.AllowAirLoco, "The jet holds the first space of its airfield and may not fly yet.");
@@ -281,7 +289,7 @@ static partial class Tests
                 back.Add(ai.Phase);
                 if (snapshots++ < 14)
                 {
-                    var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+                    var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, world.Terrain);
                     Check.That(restored.StateHash == world.StateHash, $"A snapshot in phase {ai.Phase} restores to the same hash.");
                     for (var follow = 0; follow < 40; follow++)
                         Check.That(restored.Step().StateHash == world.Step().StateHash, $"The restored world follows the original through phase {ai.Phase} (step {follow}).");

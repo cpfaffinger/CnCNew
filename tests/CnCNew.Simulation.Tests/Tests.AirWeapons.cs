@@ -423,6 +423,26 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
         End
+        Object AirGunshipCarrier
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE
+          Body = StructureBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = SpecialAbility Power01
+            SpecialPowerTemplate = AirGunshipPower
+            UpdateModuleStartsAttack = Yes
+          End
+          Behavior = SpectreGunshipDeploymentUpdate Deploy01
+            SpecialPowerTemplate = AirGunshipPower
+            GunshipTemplateName = AirGunship
+            AttackAreaRadius = 80.0
+            CreateLocation = CREATE_AT_EDGE_FARTHEST_FROM_TARGET
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
         Object AirGattling
           Side = Alpha
           KindOf = PORTABLE_STRUCTURE CAN_ATTACK
@@ -440,10 +460,11 @@ static partial class Tests
         """,
     };
 
-    private static SimulationWorld AirWeaponWorld(out SyntheticFixture fixture, out Feeder feeder)
+    private static SimulationWorld AirWeaponWorld(out SyntheticFixture fixture, out Feeder feeder, bool terrain = false)
     {
         fixture = new SyntheticFixture(files: AirWeaponFixtureFiles);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 13, AirPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var map = terrain ? CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(200, 200, 1, (_, _) => 0), "airweapons") : null;
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 13, AirPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
         feeder = new Feeder(world);
         return world;
     }
@@ -788,5 +809,37 @@ static partial class Tests
         second.Kill(other.Id);
         for (var i = 0; i < 4; i++) second.Step();
         Check.That(second.FindEntity(otherGattling) is null, "The gattling is deleted with its gunship.");
+    }
+
+    /// <summary>
+    /// On a map with terrain the carrier's deployment creates the gunship at the edge farthest from the target (pushed back by the orbit radius, facing the target, at the preferred height), the
+    /// gunship takes the target over when it appears and strikes; without a terrain nothing is created (the old report), and the whole flight survives a snapshot.
+    /// </summary>
+    public static void AirSpectreDeployedByCarrier()
+    {
+        var world = AirWeaponWorld(out var fixture, out var feeder, terrain: true);
+        feeder.Spawn(1, "AirGunshipCarrier", owner: 1, x: 300, y: 300);
+        feeder.Spawn(2, "AirDummy", owner: 2, x: 1000, y: 1005);
+        world.Step();
+        var carrier = Get(world, "AirGunshipCarrier");
+        for (var i = 0; i < 125; i++) world.Step();
+        Check.That(world.Terrain is { } terrain && terrain.ExtentX > Fixed.FromInt(1500), "Setup: a map with terrain.");
+        Check.That(feeder.UseSpecialPower(1, carrier.Id.Value, "AirGunshipPower", SpecialPowerTargetKind.Location, x: 1000, y: 1000).Accepted, "The carrier's power is used.");
+        world.Step();
+        var ship = world.Entities.SingleOrDefault(value => value.Template.Name == "AirGunship");
+        Check.That(ship is not null, "The gunship was created.");
+        Check.That(!feeder.UseSpecialPower(1, carrier.Id.Value, "AirGunshipPower", SpecialPowerTargetKind.Location, x: 1000, y: 1000).Accepted, "The carrier's power is recharging.");
+        var spectre = ship!.Modules.OfType<SpectreGunshipUpdate>().Single();
+        Check.That(spectre.Status == SpectreGunshipUpdate.GunshipStatus.Inserting && spectre.InitialTarget.X == Fixed.FromInt(1000) && spectre.InitialTarget.Y == Fixed.FromInt(1000), "It knows its target from its first moment.");
+        Check.That(ship.Owner.Value == 1 && ship.Z >= Fixed.FromInt(40), $"It belongs to the carrier's owner and flies ({ship.X}, {ship.Y}, {ship.Z}).");
+        // farthest from the target (1000, 1000) on a map that is about 2000 wide: the far corner, pushed back by the orbit radius (100)
+        Check.That(ship.X < Fixed.Zero || ship.Y < Fixed.Zero || ship.X > world.Terrain!.ExtentX || ship.Y > world.Terrain.ExtentY, $"It starts beyond the edge of the map ({ship.X}, {ship.Y}).");
+        var dummy = Get(world, "AirDummy");
+        var health = dummy.Body!.Health;
+        StepUntil(world, () => spectre.Status == SpectreGunshipUpdate.GunshipStatus.Orbiting, 600, "It reaches the target area and starts to orbit: " + spectre.Status);
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, world.Terrain);
+        Check.That(restored.StateHash == world.StateHash, "The orbiting gunship restores to the same hash.");
+        for (var i = 0; i < 120; i++) Check.That(restored.Step().StateHash == world.Step().StateHash, "The restored gunship follows the original (step " + i + ").");
+        Check.That(dummy.Body.Health < health, "The gunship hurt the enemy.");
     }
 }

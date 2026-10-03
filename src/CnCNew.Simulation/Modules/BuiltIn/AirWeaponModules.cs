@@ -1023,6 +1023,9 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
             : throw new InvalidOperationException($"'{Entity.Template.Name}': special power '{data.PowerName}' is not a SpecialPower definition.");
         _satellite = new Point3(Entity.X, Entity.Y, Entity.Z);
         _nextWake = SimulationTiming.SleepForever;
+        // Created by a carrier's SpectreGunshipDeploymentUpdate: the carrier fired the gunship's power at the target right after creating it.
+        if (SpectreGunshipDeploymentUpdate.TryTakePending(world, Entity, out var x, out var y))
+            Initiate(world, _power, new SpecialPowerTarget(SpecialPowerTargetKind.Location, EntityId.Invalid, x, y));
     }
 
     public bool Handles(IWorldServices world, int powerIndex) => powerIndex == _power;
@@ -1046,8 +1049,13 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
             _gattlingPlaced = false;
         }
         SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world);
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
-        world.MarkDirty(Entity);
+        // A gunship that is still being created is scheduled when it is registered; a registered one is woken through the world (which compares with the current wake tick).
+        if (Entity.Registered)
+        {
+            world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+            world.MarkDirty(Entity);
+        }
+        else _nextWake = world.Tick + SimulationTiming.SleepNone;
     }
 
     private LocomotorInfo? Transit => Entity.Template.LocomotorSets.TryGetValue("SET_PANIC", out var panic) ? panic : Entity.Template.Locomotor;

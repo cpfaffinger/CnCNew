@@ -6,6 +6,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -488,6 +489,11 @@ public sealed record SpectreGunshipData(string PowerName, string RequiredScience
 /// </summary>
 public sealed class SpectreGunshipDeploymentUpdate(SpectreGunshipData data) : SimModule, ISpecialPowerHandler
 {
+    /// <summary>A gunship that was asked for this tick and does not exist yet: where it flies to (the entity appears at the end of the tick, <see cref="SpectreGunshipUpdate.OnSpawn"/> collects this).</summary>
+    private sealed record PendingGunship(int Template, Fixed TargetX, Fixed TargetY, long Tick);
+
+    private readonly List<PendingGunship> _pending = [];
+
     public override string ModuleName => "SpectreGunshipDeploymentUpdate";
 
     public bool Handles(IWorldServices world, int powerIndex)
@@ -498,12 +504,87 @@ public sealed class SpectreGunshipDeploymentUpdate(SpectreGunshipData data) : Si
         return world.PlayerSciences(Entity.Owner).Has(science.Index);
     }
 
+    /// <summary>
+    /// <c>initiateIntentToDoSpecialPower</c>: with a terrain (the map's edge) and an instantiable gunship template (<c>GunshipTemplateName</c>) the gunship is created at the edge point
+    /// <c>CreateLocation</c> chooses (<c>findClosestEdgePoint</c>/<c>findFarthestEdgePoint</c>), pushed back along the line to the target by the gunship's orbit radius (the reference reads an
+    /// uninitialised field here; the gunship's own <c>GunshipOrbitRadius</c> is used), at its locomotor's preferred height, facing the target; its <see cref="SpectreGunshipUpdate"/> takes the
+    /// target over when it appears. An earlier gunship of this carrier is let go (it flies on). Without a terrain or a usable template the use reports why it created nothing. The
+    /// carrier's power recharges either way.
+    /// </summary>
     public void Initiate(IWorldServices world, int powerIndex, in SpecialPowerTarget target)
     {
-        world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, NameTablesPhase5.GunshipCreateLocation.Canonical(data.CreateLocation), CreationSkipReasons.NoTerrainEdge);
+        var targetX = target.X;
+        var targetY = target.Y;
+        if (target.Kind == SpecialPowerTargetKind.Object && world.FindEntity(target.Entity) is { } victim) (targetX, targetY) = (victim.X, victim.Y);
+        if (world.Terrain is null)
+            world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, NameTablesPhase5.GunshipCreateLocation.Canonical(data.CreateLocation), CreationSkipReasons.NoTerrainEdge);
+        else if (!world.Templates.TryGet(data.GunshipTemplate, out var gunship))
+            world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, data.GunshipTemplate, CreationSkipReasons.UnknownTemplate);
+        else if (!gunship.IsInstantiable)
+            world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, data.GunshipTemplate, CreationSkipReasons.TemplateNotInstantiable);
+        else CreateGunship(world, gunship, targetX, targetY);
         SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world);
     }
 
-    public override void Describe(IStateWriter writer) { }
-    public override void Load(IStateReader reader) { }
+    private void CreateGunship(IWorldServices world, ObjectTemplate gunship, Fixed targetX, Fixed targetY)
+    {
+        var terrain = world.Terrain!;
+        // CREATE_AT_EDGE_NEAR_SOURCE, ..._FARTHEST_FROM_SOURCE, ..._NEAR_TARGET, ..._FARTHEST_FROM_TARGET (the module's default)
+        var (fromX, fromY) = data.CreateLocation is 0 or 1 ? (Entity.X, Entity.Y) : (targetX, targetY);
+        var (edgeX, edgeY) = data.CreateLocation is 0 or 2
+            ? FlightModules.ClosestEdgePoint(world, fromX, fromY)
+            : (fromX < terrain.ExtentX / Fixed.FromInt(2) ? terrain.ExtentX : Fixed.Zero, fromY < terrain.ExtentY / Fixed.FromInt(2) ? terrain.ExtentY : Fixed.Zero);
+        var orbit = gunship.Modules.FirstOrDefault(module => module.Data is SpectreData)?.Data is SpectreData spectre ? spectre.GunshipOrbitRadius : Fixed.Zero;
+        // "THE POINT FURTHER OFF THE MAP SO WE CANT SEE THE LAME HOVER AND ACCELLERATE BEHAVIOR"
+        var dx = targetX - edgeX;
+        var dy = targetY - edgeY;
+        var distance = Fixed.Sqrt(dx * dx + dy * dy);
+        var (x, y) = distance > Fixed.Zero ? (targetX - dx / distance * (distance + orbit), targetY - dy / distance * (distance + orbit)) : (edgeX, edgeY);
+        var angle = FixedTrig.Atan2(targetY - y, targetX - x);
+        world.RequestSpawn(gunship.Index, Entity.Owner, x, y, gunship.Locomotor?.PreferredHeight ?? Fixed.Zero, angle);
+        _pending.Add(new PendingGunship(gunship.Index, targetX, targetY, world.Tick));
+    }
+
+    /// <summary>
+    /// The new gunship asks its carrier (same owner) for the target it was created for (<c>spModule->doSpecialPowerAtLocation</c> right after creating it in the reference); false when it
+    /// was not created by a deployment.
+    /// </summary>
+    internal static bool TryTakePending(IWorldServices world, Entity gunship, out Fixed targetX, out Fixed targetY)
+    {
+        (targetX, targetY) = (Fixed.Zero, Fixed.Zero);
+        foreach (var candidate in world.Entities.Where(value => value.Owner == gunship.Owner).OrderBy(value => value.Id.Value))
+            foreach (var module in candidate.ModuleArray)
+            {
+                if (module is not SpectreGunshipDeploymentUpdate deployment) continue;
+                var found = deployment._pending.Find(value => value.Template == gunship.Template.Index && world.Tick - value.Tick <= 2);
+                if (found is null) continue;
+                deployment._pending.Remove(found);
+                (targetX, targetY) = (found.TargetX, found.TargetY);
+                return true;
+            }
+        return false;
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        if (_pending.Count == 0) return;
+        writer.BeginArray("pendingGunships");
+        foreach (var entry in _pending)
+        {
+            writer.BeginObject(null);
+            writer.Int("template", entry.Template);
+            writer.Fixed("x", entry.TargetX);
+            writer.Fixed("y", entry.TargetY);
+            writer.Int("tick", entry.Tick);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        _pending.Clear();
+        if (!reader.Has("pendingGunships")) return;
+        foreach (var item in reader.Array("pendingGunships")) _pending.Add(new PendingGunship(checked((int)item.Int("template")), item.Fixed("x"), item.Fixed("y"), item.Int("tick")));
+    }
 }

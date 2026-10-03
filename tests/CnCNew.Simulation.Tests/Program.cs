@@ -184,6 +184,7 @@ run.Test("Flight: the particle uplink cannon burns its target and restores mid-b
 run.Test("Flight: a battle bus has two lives and is thrown by the first death", Tests.FlightBattleBusHasTwoLives);
 run.Test("Scripts: an upgrade command button is ready until the upgrade is owned", Tests.FlightUpgradeButtonReadiness);
 run.Test("Air: a jet leaves its airfield, takes off, fires, returns, lands and reloads", Tests.AirJetFlightLifecycle);
+run.Test("Air: the same jet lifecycle on a map with terrain", Tests.AirJetFlightLifecycleOnTerrain);
 run.Test("Air: two jets share one runway, idle jets return and a full airfield holds production back", Tests.AirRunwayQueueIdleReturnAndFullAirfield);
 run.Test("Air: a destroyed airfield kills what is parked and leaves a dry jet to burn", Tests.AirDestroyedAirfield);
 run.Test("Air: a helicopter uses the pad without space or runway", Tests.AirHelicopterUsesThePad);
@@ -194,6 +195,7 @@ run.Test("Air: a neutron blast kills crews and leaves unmanned vehicles", Tests.
 run.Test("Air: the neutron missile climbs, turns, dives, dies and blasts with falling damage", Tests.AirNeutronMissile);
 run.Test("Air: a missile silo's door follows the recharge of its power", Tests.AirMissileSiloDoors);
 run.Test("Air: the Spectre gunship inserts, orbits, fires, departs and cleans up", Tests.AirSpectreGunship);
+run.Test("Air: a carrier's deployment creates the gunship at the map edge on a map with terrain", Tests.AirSpectreDeployedByCarrier);
 run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
@@ -233,6 +235,7 @@ var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1)
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 return run.Finish();
 
