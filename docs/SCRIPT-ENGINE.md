@@ -224,9 +224,10 @@ geskriptet).
 5. **Befehle als Bewegung:** `*_HUNT`, `*_ATTACK_*`, `*_GUARD_*` und Pfadfolge bewegen die Einheit; Schießen übernimmt das automatische
    Gefecht der Sitzung. `*_STOP`/`*_GUARD` (ohne Ziel) halten an. Formationen, Teamgeschwindigkeit (`asTeam`) und Angriffsbewegung mit
    Zwischenzielen gibt es nicht.
-6. **Verstärkung** (`CREATE_REINFORCEMENT_TEAM`): die Einheiten des Teams (je `teamUnitMaxCount`) erscheinen am Ursprung (oder am Ziel) und
-   laufen zum Ziel; der Transport samt Beladung (`teamTransport`, `teamStartsFull`) wird **nicht** simuliert (Diagnose
-   `reinforcement transport not simulated`).
+6. **Verstärkung** (`CREATE_REINFORCEMENT_TEAM`, `ScriptEngine.Reinforcements.cs`, Phase 13): ohne `teamTransport` erscheinen die Einheiten des Teams (je `teamUnitMaxCount`) am Ursprung (oder am Ziel) und
+   laufen zum Ziel; mit `teamTransport` entstehen die Transporter am Ursprung, das Team wird eingeladen (`teamStartsFull`: schon beim Spawn; sonst steigt es am Ziel zu), `DeliverPayloadAIUpdate` fliegt
+   den Anflug und setzt ab (Landung oder Fallschirm über `ParachuteContain`), und `teamTransportsExit` schickt den Transporter danach von der Karte. Fallschirmspringer landen auf dem Boden unter dem
+   Absetzpunkt; die Reste des Originals (Formationsversatz beim Absetzen, Chinook-Landung mit Rampe) sind nicht nachgebildet.
 7. **Hüllenmodule** `CommandButtonHuntUpdate` (seit Phase 12 durch `TEAM_HUNT_WITH_COMMAND_BUTTON` ausgelöst und ausgeführt, §5) und `LockWeaponCreate` (Primär-Slot;
    andere Slots: nicht unterstützte Konfiguration): das Objekt kann existieren. `SpecialAbilityUpdate` ist seit dieser Phase ebenfalls eine Hülle:
    das Modul trägt nur den geteilten Nachlademechanismus jeder Spezialkraft (`SpecialPowerModuleBase`); die eigentliche Anreise-/Verpackungs-/
@@ -242,24 +243,28 @@ geskriptet).
 11. Karten- und Kampagnen-Anforderungen, die das Original aus dem Spiellauf bezieht (Schwierigkeit pro Spieler, Kamera-/Film-Zeiten,
    Fortschrittsprofil), kommen aus `MissionOptions`/Host.
 
-12. **`getTeamNamed`:** die Aufrufer-Instanz eines Teams (Skript-/Sequenzkontext) hat Vorrang vor anderen Instanzen desselben Prototyps (`FindTeam`/`TeamsNamed` tun das jetzt). Die
-    übrigen Fälle des Originals (ein nicht aktives Singleton-Team ist `NULL`) sind nicht nachgebildet: `Created` wird auch von Team-Bau und Rekrutierung gesetzt, vorher wirken Aktionen auf
-    die schon vorhandenen Mitglieder.
+12. **`getTeamNamed`:** die Aufrufer-Instanz eines Teams (Skript-/Sequenzkontext) hat Vorrang vor anderen Instanzen desselben Prototyps (`FindTeam`/`TeamsNamed` tun das). Seit Phase 13 gilt auch die übrige Regel
+    des Originals: ein **nicht aktives** Singleton-Team (`ScriptTeam.Created` = `isActive`) ist `NULL` – `TEAM_DESTROYED`, Mitgliederabfragen und Aktionen sehen es nicht; Singletons werden beim Laden ohne
+    Startaktionen vorab angelegt und erst durch Aktivierung (`TEAM_CREATED`-Ereignis) sichtbar.
 13. **Spezialkräfte:** `NAMED_FIRE_SPECIAL_POWER_AT_*` und die Wegpunkt-Fähigkeiten gehen als gewöhnlicher `UseSpecialPowerCommand` durch die üblichen Bereitschafts-, Wissenschafts- und
     Zielprüfungen (das Original ruft `doSpecialPowerAtLocation` am Modul und prüft die Bereitschaft nicht); `…_USING_WAYPOINT_PATH` nutzt nur den nächsten Pfadpunkt als Ort.
     `SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST` sucht den Ort unter den Positionen feindlicher Objekte (Summe `BuildCost` im Wirkradius, mindestens 50) statt auf dem 10×10-Raster des Originals
     in zufälliger Richtung und nimmt alle Feinde des Spielers statt `getSkirmishEnemyPlayer`.
 14. **Garnison:** `MayGarrison` bildet `isKindOf(STRUCTURE) && player == 0 || player == eigener` mit „zuletzt eingetreten“ ab; `…NEAREST_BUILDING` sortiert nach Abstand zum Anführer/zur Einheit
     (Internet-Zentren nur für Geldhacker); `PLAYER_GARRISON_ALL_BUILDINGS` zählt freie Plätze über den Auftrag, das Original prüft nur den Stand beim Befehl.
-15. **`BUILD_TEAM`:** vereinfachte `AIPlayer::buildSpecificAITeam`: jede fertige Fabrik des Teambesitzers, die die Einheit herstellen darf (`CanQueueProductionTemplate`), ein Befehl je Tick je
-    Auftrag, bevorzugt eine untätige; keine Baulistenzuordnung, keine Priorität/kein Vordrängeln, kein `teamExecutesActionsOnCreate`-Startskript, kein Sammeln am Ursprung. Das Team gilt als
-    erstellt, sobald jede `MinCount` erfüllt ist; weitere bis `MaxCount` kommen nach. Produzierte Einheiten treten über `EntitySpawned` bei (`AIPlayer::onUnitProduced`).
-16. **`RECRUIT_TEAM`:** wie `Team::tryToRecruit` (Priorität, `teamIsAIRecruitable`, `TEAM_AVAILABLE_FOR_RECRUITMENT`, Standardteam = `team<Spielername>` immer rekrutierbar), aber das Team ist sofort
-    erstellt (das Original sammelt am Heimatort und aktiviert nach Leerlauf/60 s); „Bauvarianten“ und gehaltene Einheiten sind nicht berücksichtigt; ohne `teamHome` wird nichts rekrutiert.
+15. **`BUILD_TEAM`** (Phase 13: `ScriptEngine.TeamQueues.cs`, nach `AIPlayer::buildSpecificAITeam`/`checkQueuedTeams`/`checkReadyTeams`): jede fertige Fabrik des Teambesitzers, die die Einheit herstellen darf
+    (`CanQueueProductionTemplate`), ein Befehl je Tick je Auftrag, bevorzugt eine untätige; das Team steht in der **Bauwarteschlange** und ist unsichtbar (`Created` falsch). Eine gebaute Einheit tritt über
+    `EntitySpawned` bei und läuft zum Heimatort (`aiFollowExitProductionPath`). Sind alle Typen fertig, geht das Team in die **Bereitschaftswarteschlange**; laufen `teamInitialIdleFrames` ab (0: nie), ohne dass
+    das Minimum gebaut oder in Produktion ist, wird das Team aufgelöst. Solange ein Mitglied untätig ist, führt ein Team mit `teamExecutesActionsOnCreate` die Wahr-Aktionen seines
+    `teamProductionCondition`-Skripts aus (`<This Team>` = das Team). Weiterhin ohne Baulistenzuordnung und Priorität/Vordrängeln.
+16. **`RECRUIT_TEAM`:** wie `Team::tryToRecruit` (Priorität, `teamIsAIRecruitable`, `TEAM_AVAILABLE_FOR_RECRUITMENT`, Standardteam = `team<Spielername>` immer rekrutierbar); seit Phase 13 beginnt das Team in der
+    Bereitschaftswarteschlange: die Mitglieder gehen zum Heimatort, aktiv wird es, wenn alle untätig sind, nach 60 Sekunden oder – mit Startaktionen – sobald ein Mitglied untätig ist. „Bauvarianten“ und gehaltene
+    Einheiten sind nicht berücksichtigt; ohne `teamHome` wird nichts rekrutiert.
 17. **Aufgezeichnet statt ausgeführt:** `PLAYER_AFFECT_RECEIVING_EXPERIENCE`, `OBJECT_ALLOW_BONUSES` und seit Phase 12 `TEAM_SET_ATTITUDE`, `TEAM_WANDER(_IN_PLACE)`, `NAMED_SET_HELD`, `PLAYER_SET_RANKLEVELLIMIT`,
     `PLAYER_SET_RANKLEVEL`, `PLAYER_ADD_RANKLEVEL`, `SCRIPTING_OVERRIDE_HULK_LIFETIME` (§5; Lesezugriffe `AttitudeOf`, `RankLevelOf`, `RankLimit`, `HulkLifetimeOverrideTicks`, `SkillPointsModifierOf`). Wer sie später
     auswertet, führt einen Verbraucher ein (KI-Haltung, Rangsystem, Wrackliste, Erfahrungsgewinn); bis dahin zählen sie weder als ausgeführt noch als fehlend.
-18. **Knopf-Bereitschaft** (`SKIRMISH_COMMAND_BUTTON_READY_*`, `SKIRMISH_WAIT_FOR_COMMANDBUTTON_AVAILABLE_*`) kennt nur Spezialkraft-Knöpfe (`isReady` für Upgrade-Knöpfe fehlt).
+18. **Knopf-Bereitschaft** (`SKIRMISH_COMMAND_BUTTON_READY_*`, `SKIRMISH_WAIT_FOR_COMMANDBUTTON_AVAILABLE_*`): Spezialkraft-Knöpfe über die Kraft; seit Phase 13 auch Upgrade-Knöpfe (`PLAYER_UPGRADE`/`OBJECT_UPGRADE`),
+    deren Bereitschaft `IUpgradeModule.WouldUpgrade` der Module des Trägers meldet (Original: `isReady` → `canUpgrade`); andere Knopftypen sind nicht bereit.
 19. **Überschreibungs-Beziehungen** (Phase 12): die Tabellen (Team→Team, Team→Spieler, Spieler→Team) gehören dem `ScriptEngine`, die Welt fragt sie über `RelationshipOverride`; die Teamzuordnung eines Objekts wird je Tick
     und Mitgliederzahl zwischengespeichert (`TeamOfEntity`, erstes Team nach Id gewinnt bei Mehrfachzugehörigkeit). Das Original hängt die Überschreibung an das `Team`-Objekt, das ein Objekt nur einmal besitzt.
 20. **Befehlsknopf-Familie** (Phase 12): `…ON_NEAREST_*` nimmt als Mitte den ganzzahligen Mittelwert der lebenden Mitglieder, prüft die acht nächsten Kandidaten der Reihe nach, bis die Welt den Knopf für den ersten Träger
@@ -272,9 +277,10 @@ geskriptet).
     `NAMED/TEAM_SET_UNMANNED_STATUS` überträgt das Objekt an den neutralen Spieler (kein `DISABLED_UNMANNED`-Zustand), `DELETE_ALL_UNMANNED` entfernt es danach; `NAMED/TEAM_SET_STEALTH_ENABLED` setzt einen Schalter am
     `StealthUpdate` (`ScriptUnstealthed`, nur gespeichert, wenn gesetzt); `TEAM_INCREASE/DECREASE_PRIORITY` ändert die Priorität nur für `RECRUIT_TEAM`, `BUILD_TEAM` liest sie nicht (Punkt 15);
     `TEAM_GUARD_IN_TUNNEL_NETWORK` geht in den nächsten eigenen Tunnel und betritt ihn (ohne Wachzustand im Netz).
-23. **Offene VM-Semantik (Handoff Phase 12 Punkt 6, nicht behoben, bewusst belassen):** `getTeamNamed` für nicht aktive Singleton-Teams liefert hier die Mitglieder (Punkt 12), Team-Bau ohne Baulistenzuordnung/Startskript
-    (Punkt 15), Rekrutierung ohne Sammeln am Heimatort (Punkt 16), „untätig“ ohne AI-Zustand (§5a), Bereitschaft von Upgrade-Knöpfen (Punkt 18), `…_USING_WAYPOINT_PATH` ohne Pfadflug (Punkt 13), `FIRE_WEAPON` ohne
-    `WeaponSlot` (§5). Begründung: Kein Zielfahrer-Blocker hängt an ihnen (§9); jede Änderung würde bestehende Läufe und Hashes ändern und gehört in eine eigene, vermessene Phase.
+23. **Offene VM-Semantik (Stand Phase 13):** erledigt sind `getTeamNamed` für nicht aktive Singleton-Teams (Punkt 12), Team-Bau mit Warteschlange und Startskript (Punkt 15), Rekrutierung mit Sammeln am Heimatort
+    (Punkt 16) und die Bereitschaft von Upgrade-Knöpfen (Punkt 18). Bewusst offen: „untätig“ ohne AI-Zustand (§5a: die Simulation führt keinen Zustandsautomaten der Teams, „untätig“ ist „kein Bewegungs-/Angriffsziel“),
+    `…_USING_WAYPOINT_PATH` ohne Pfadflug (Punkt 13: Luftlokomotoren fliegen gerade zu einem Ziel, ein Pfad aus mehreren Wegpunkten braucht Pfadzustand im Flugmodell), `FIRE_WEAPON` ohne `WeaponSlot` (§5: eine
+    Vorlage trägt genau eine Standardwaffe, ein Waffenslot-Modell ändert Vorlagen, Waffensätze und Hashes) und Formationen/Angriffsmarsch (`asTeam`). Kein Zielfahrer-Blocker hängt an ihnen (§9).
 
 ## 9. Headless-Prüfung (Messung)
 
@@ -300,7 +306,7 @@ erreichen kann, **kein** Beweis, dass ein Spieler gewinnen kann: Zustandsbedingu
 | Treffer auf fehlende Aktionstypen (Anteil der Ausführungen) | 116 (1,1 %) | **27 (0,3 %)** |
 | Treffer auf fehlende Bedingungstypen | 6.411 | 6.411 |
 | Endproben durch Ausschalten: Sieg / Niederlage | 10/24 / 15/24 | **13/24** / 15/24 |
-| **Zielfahrer auf dem Skriptweg: Sieg / Niederlage** (Standard 12.000 Ticks) | 10/24 / 16/24 | **22/24 / 24/24** |
+| **Zielfahrer auf dem Skriptweg: Sieg / Niederlage** (Standard 12.000 Ticks; Phase 13: 60.000) | 10/24 / 16/24 | **22/24 / 24/24** (Phase 13: 24/24 / 24/24) |
 | Statische Erreichbarkeit der Siegskripte: sauber / eingeschränkt / blockiert | 21 / 3 / 0 | **24 / 0 / 0** |
 | Statische Erreichbarkeit der Niederlageskripte: sauber / eingeschränkt / blockiert | 24 / 0 / 0 | 24 / 0 / 0 |
 | Deterministisch (zwei Läufe) / identisch nach Speichern+Laden | 24/24 / 24/24 | 24/24 / 24/24 |
@@ -310,6 +316,10 @@ erreichen kann, **kein** Beweis, dass ein Spieler gewinnen kann: Zustandsbedingu
 Die 25. Karte der Liste, `Maps/CampEADemo/CampEADemo.map`, fehlt im Retail-Bestand.) Vorher/nachher je
 Einzelmessung, 3.000 Ticks ohne Fortsetzungsprobe: siehe unten.
 
+**Stand nach Phase 13 (3. Oktober 2026, Release, 900 Ticks, frisch gemessen):** 24/24 deterministisch, 24/24 identisch nach Speichern/Laden; 2.406 Skripte, 7.828 Aktionen ausgeführt, 2.452 weitergereicht,
+27 Treffer auf fehlende Aktionstypen (0,3 %), 6.411 auf fehlende Bedingungstypen; Ausschalt-Endproben Sieg 13/24, Niederlage 15/24 (alle unverändert gegenüber Ende Phase 12, die Team-Warteschlangen
+verändern die Probenergebnisse nicht); Zielfahrer **Sieg 24/24, Niederlage 24/24** (60.000 Ticks); statische Erreichbarkeit Sieg und Niederlage sauber 24/24.
+
 **Je Karte** (Audit mit 900 Ticks; Endproben: `@N` = Ergebnis N Ticks nach der Probe erreicht, „nicht erreicht“ = Endskripte vorhanden, Ende nicht erreicht; Aktionen = ausgeführt / weitergereicht / fehlende Treffer;
 Objekte = erzeugt/platziert; je Kampagne mit der Persona-Fraktion aus `ChallengeMode.ini`, `CampaignTool audit` reicht sie durch):
 
@@ -318,32 +328,32 @@ Objekte = erzeugt/platziert; je Kampagne mit der Persona-Fraktion aus `Challenge
 | TRAINING | Mission01 | Training01 | 1448/2040 | 43 | 43 / 57 / 4 | @360 | nicht erreicht |
 | CHALLENGE_0 | Mission01 | GC_ChemGeneral | 682/983 | 59 | 753 / 21 / 0 | @210 | @90 |
 | CHALLENGE_0 | Mission02 | GC_NukeGeneral | 1642/2300 | 71 | 553 / 33 / 0 | @180 | @90 |
-| CHALLENGE_0 | Mission03 | GC_SuperWeaponsGeneral | 579/681 | 75 | 547 / 21 / 0 | @180 | @90 |
+| CHALLENGE_0 | Mission03 | GC_SuperWeaponsGeneral | 584/681 | 75 | 547 / 21 / 0 | @180 | @90 |
 | CHALLENGE_0 | Mission04 | GC_TankGeneral | 1563/1573 | 932 | 505 / 926 / 0 | @180 | @90 |
 | CHALLENGE_0 | Mission05 | GC_Stealth | 770/961 | 81 | 486 / 20 / 0 | @180 | @90 |
-| CHALLENGE_0 | Mission06 | GC_LaserGeneral | 1831/4556 | 96 | 520 / 44 / 0 | @180 | @90 |
-| CHALLENGE_0 | Mission07 | GC_ChinaBoss | 1244/1551 | 63 | 661 / 18 / 0 | @300 | nicht erreicht |
+| CHALLENGE_0 | Mission06 | GC_LaserGeneral | 1837/4556 | 94 | 516 / 44 / 0 | @180 | @90 |
+| CHALLENGE_0 | Mission07 | GC_ChinaBoss | 1245/1551 | 63 | 661 / 18 / 0 | @300 | nicht erreicht |
 | CHALLENGE_1 | Mission06 | GC_AirGeneral | 994/1077 | 51 | 563 / 29 / 0 | @210 | @90 |
-| MD_USA_1_DEMO | Mission01 | MD_USA01 | 1702/2846 | 38 | 77 / 102 / 1 | nicht erreicht | @151 |
-| MD_USA_2_DEMO | Mission01 | MD_USA02 | 1217/3158 | 59 | 111 / 134 / 0 | nicht erreicht | nicht erreicht |
-| MD_GLA_3_DEMO | Mission01 | MD_GLA03 | 1191/1753 | 61 | 383 / 78 / 0 | nicht erreicht | @182 |
-| USA | Mission03 | MD_USA03 | 1623/2153 | 42 | 103 / 70 / 0 | nicht erreicht | @181 |
-| USA | Mission04 | MD_USA04 | 1195/2027 | 79 | 306 / 49 / 6 | @243 | nicht erreicht |
+| MD_USA_1_DEMO | Mission01 | MD_USA01 | 1703/2846 | 38 | 77 / 102 / 1 | nicht erreicht | @151 |
+| MD_USA_2_DEMO | Mission01 | MD_USA02 | 1221/3158 | 59 | 110 / 134 / 0 | nicht erreicht | nicht erreicht |
+| MD_GLA_3_DEMO | Mission01 | MD_GLA03 | 1193/1753 | 61 | 383 / 78 / 0 | nicht erreicht | @182 |
+| USA | Mission03 | MD_USA03 | 1628/2153 | 42 | 103 / 70 / 0 | nicht erreicht | @181 |
+| USA | Mission04 | MD_USA04 | 1195/2027 | 85 | 320 / 49 / 6 | @243 | nicht erreicht |
 | USA | Mission05 | MD_USA05 | 1689/2757 | 74 | 222 / 108 / 0 | nicht erreicht | nicht erreicht |
-| GLA | Mission01 | MD_GLA01 | 1314/1780 | 110 | 239 / 172 / 2 | nicht erreicht | @181 |
+| GLA | Mission01 | MD_GLA01 | 1315/1780 | 110 | 239 / 172 / 2 | nicht erreicht | @181 |
 | GLA | Mission02 | MD_GLA02 | 661/1923 | 55 | 263 / 49 / 4 | @180 | nicht erreicht |
-| GLA | Mission04 | MD_GLA04 | 2498/4271 | 88 | 294 / 97 / 4 | nicht erreicht | nicht erreicht |
-| GLA | Mission05 | MD_GLA05 | 2120/5813 | 78 | 340 / 60 / 0 | nicht erreicht | nicht erreicht |
+| GLA | Mission04 | MD_GLA04 | 2503/4271 | 88 | 294 / 97 / 4 | nicht erreicht | nicht erreicht |
+| GLA | Mission05 | MD_GLA05 | 2122/5813 | 78 | 340 / 60 / 0 | nicht erreicht | nicht erreicht |
 | China | Mission01 | MD_CHI01 | 1156/3168 | 17 | 53 / 42 / 0 | @241 | @181 |
-| China | Mission02 | MD_CHI02 | 1637/2321 | 85 | 260 / 161 / 4 | @241 | @241 |
+| China | Mission02 | MD_CHI02 | 1646/2321 | 85 | 260 / 161 / 4 | @241 | @241 |
 | China | Mission03 | MD_CHI03 | 1475/2768 | 44 | 286 / 25 / 0 | nicht erreicht | nicht erreicht |
 | China | Mission04 | MD_CHI04 | 1624/2038 | 22 | 20 / 37 / 0 | nicht erreicht | @213 |
-| China | Mission05 | MD_CHI05 | 1864/2749 | 80 | 233 / 99 / 2 | nicht erreicht | @181 |
+| China | Mission05 | MD_CHI05 | 1867/2749 | 79 | 231 / 99 / 2 | nicht erreicht | @181 |
 
 **Ehrliche Einordnung:** jede Karte lädt, läuft deterministisch, setzt nach Speichern/Laden identisch fort, die Endskripte aller 24 Karten sind statisch mit lauter implementierten Typen erreichbar, und der
-**Zielfahrer erreicht auf 22 von 24 Karten den Sieg und auf allen 24 die Niederlage auf dem eigenen Skriptweg** (Tabelle weiter unten). Die Ausschalt-Endproben (nur Auslöschung) sind weiterhin schwächer (Sieg 13/24),
-weil viele Karten Ziele verlangen (z. B. `MD_USA03`: `END_Final_`/`Win` hängen an `TIMER_EXPIRED`, den Zielzähler stellen), die eine Auslöschung nicht abfährt – der Fahrer fährt sie ab. Zwei Siege fehlen
-(`MD_GLA03` braucht `ParticleUplinkCannonUpdate`, `MD_CHI04` ist eine sehr lange Wellenmission). **Das belegt die Skriptkette, nicht die Spielbarkeit:** der Fahrer ersetzt Spielerhandlungen durch Welteingriffe.
+**Zielfahrer erreicht auf allen 24 Karten den Sieg und die Niederlage auf dem eigenen Skriptweg** (Tabelle weiter unten). Die Ausschalt-Endproben (nur Auslöschung) sind weiterhin schwächer (Sieg 13/24),
+weil viele Karten Ziele verlangen (z. B. `MD_USA03`: `END_Final_`/`Win` hängen an `TIMER_EXPIRED`, den Zielzähler stellen), die eine Auslöschung nicht abfährt – der Fahrer fährt sie ab. Die zwei Siege, die in
+Phase 12 fehlten (`MD_GLA03`: `ParticleUplinkCannonUpdate`, `MD_CHI04`: Wellenmission), sind seit Phase 13 erreicht. **Das belegt die Skriptkette, nicht die Spielbarkeit:** der Fahrer ersetzt Spielerhandlungen durch Welteingriffe.
 
 **Blockerliste (Stand Ende Phase 12; statisch Skripte/Karten laut `CampaignTool reachability`).** Noch fehlende Aktionen (alle in den Ketten ohne Wirkung auf die 24 Endwege):
 `SKIRMISH_MOVE_TO_APPROACH_PATH` 10/3, `SKIRMISH_FOLLOW_APPROACH_PATH` 7/3, `AI_PLAYER_BUILD_SUPPLY_CENTER` 5/1, `SET_TRAIN_HELD` 5/1, `TEAM_CAPTURE_NEAREST_UNOWNED_FACTION_UNIT` 5/4,
@@ -353,13 +363,15 @@ weil viele Karten Ziele verlangen (z. B. `MD_USA03`: `END_Final_`/`Win` hängen 
 `PLAYER_SELECT_SKILLSET` 4. Fehlende Bedingungen zur Laufzeit: `SUPPLY_SOURCE_SAFE` 3.600, `PLAYER_BUILT_UPGRADE` 900, `PLAYER_COMPLETED_SPECIAL_POWER` 900, `SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE` 900,
 `PLAYER_POWER_COMPARE_PERCENT` 81, `TEAM_STATE_IS` 30 (jeweils eine Karte; unverändert). Vor Phase 12 standen die Gruppen `TEAM_HUNT_WITH_COMMAND_BUTTON` 53/12, `TEAM_SET_ATTITUDE` 42/11,
 `TEAM_LOAD_TRANSPORTS` 33/8, `TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_OBJECTTYPE` 30/5, `TEAM_SET_OVERRIDE_RELATION_TO_PLAYER` 27/5, `PLAYER_SET_OVERRIDE_RELATION_TO_TEAM` 19/6, `TEAM_PANIC` 18/4 an der Spitze; sie sind
-ausgeführt oder aufgezeichnet (§5). Nicht auflösbare Verweise: Verstärkungstransport `CINE_U04_AmericaJetCargoPlane_LOW/HIGH` und `CINE_U06_CruiseMissileFLY` nicht instanziierbar, `AmericaJetRaptor`,
+ausgeführt oder aufgezeichnet (§5). Nicht auflösbare Verweise (Stand Phase 12; die `CINE_U04_AmericaJetCargoPlane_*`-Transporter sind seit Phase 13 instanziierbar, `CINE_U06_CruiseMissileFLY` bleibt an `JetAIUpdate` blockiert): `AmericaJetRaptor`,
 `ChinaVehicleHelix`, `FirestormSmall` u. a.; Angriffsprioritäts-Mengen aus der nicht geladenen Skirmish-Skriptbibliothek `SkirmishScripts.scb`; `BUILD_TEAM: no factory for …`; abgelehnte Upgrade-Knöpfe.
 Kartenobjekte mit fehlender Vorlage (Straßen, Bürgersteige, Bäume aus Kartenüberlagerungen, `GLADemoTrap`/`GLAStingerSite` u. a.) werden weiter übersprungen und gezählt (je Karte mehrere hundert).
-**Verstärkung mit Transport** (Handoff Punkt 3) ist **nicht** umgesetzt: alle Transportflugzeuge sind nicht instanziierbar, die Chinook-Lieferung von `CreateReinforcementTeam` fehlt; die Missionen, die darauf warten
-(`CampaignTool transports` zeigt sie), erreichen ihr Ende auf dem Skriptweg trotzdem (Fahrer), ohne dass die Verstärkung simuliert wäre.
+**Verstärkung mit Transport** (Handoff Punkt 3, Phase 13): `CREATE_REINFORCEMENT_TEAM` mit `teamTransport`/`teamStartsFull` erzeugt die Transporter am Startpunkt (`ScriptEngine.Reinforcements.cs`),
+lädt das Team ein (`LoadIntoTeamTransports`) und schickt sie über `DeliverPayloadAIUpdate` (Anflug, Absetzen, Neuanflug, Rückflug von der Karte; `ParachuteContain` für Fallschirmabsetzer, Besatzung
+stirbt mit abgeschossenem Flugzeug); `JetSlowDeathBehavior` und `CountermeasuresBehavior` (Täuschkörper lenken Lenkwaffen ab) gehören dazu (`SIMULATION-CORE.md` §28). Nicht umgesetzt bleiben
+Formationen/Angriffsmarsch (`*_FOLLOW_WAYPOINTS` mit `asTeam`: die Mitglieder laufen einzeln) und der Pfadflug von `NAMED_USE_COMMANDBUTTON_ABILITY_USING_WAYPOINT_PATH`.
 
-**Zielfahrer (`CampaignTool drive`, `MissionObjectiveDriver` + `ObjectiveDriver`/`ObjectiveDriver.Leaves`; Phase 11 erster Entwurf, Phase 12 zielgerichtet; Standard 12.000 Ticks je Lauf):** der Fahrer
+**Zielfahrer (`CampaignTool drive`, `MissionObjectiveDriver` + `ObjectiveDriver`/`ObjectiveDriver.Leaves`; Phase 11 erster Entwurf, Phase 12 zielgerichtet; Standard seit Phase 13 60.000 Ticks je Lauf, vorher 12.000):** der Fahrer
 erreicht den Ausgang einer Mission auf dem **eigenen Skriptweg**, ohne eine Seite auszulöschen: gezählt wird nur, wenn eine `VICTORY`/`DEFEAT`-Aktion eines Missionsskripts selbst feuert. Er ist
 Test-/Werkzeugcode (er schreibt wie `MissionProbe` direkt in die Welt, Befehle laufen über den Sitzungszähler) und deterministisch (Test `ScriptObjectiveDriverPlansBackwards`,
 `…MovesCountersTheRightWay`, `ScriptExplainLeavesTheEngineUntouched`).
@@ -386,8 +398,8 @@ Kräfte, fehlende Bedingungen und Diagnosen nach der Auswertung wieder her):
    Seiten am Ende (`Survivors`: Vorlagenzahlen, häufigste zuerst – was ein „alles zerstören“-Blatt nicht entfernen konnte). `CampaignTool drive --explain --trace` gibt das aus; `template`, `objects` und
    `transports` zeigen Karteninhalt, Objektlisten und Transporter.
 
-**Messung (final, `CampaignTool drive`, Release, 12.000 Ticks, Persona wie im Spiel; frisch gemessen am 2. Oktober 2026):** **Sieg auf dem Skriptweg 22/24, Niederlage 24/24** (Stand Ende Phase 11 und
-Ende Phase 12 erster Entwurf: Sieg 10/24, Niederlage 16/24):
+**Messung (final, `CampaignTool drive`, Release, 60.000 Ticks, Persona wie im Spiel; frisch gemessen am 3. Oktober 2026):** **Sieg auf dem Skriptweg 24/24, Niederlage 24/24** (Stand Ende Phase 12: Sieg 22/24;
+Ende Phase 11: Sieg 10/24, Niederlage 16/24):
 
 | Kampagne | Mission | Karte | Sieg auf dem Skriptweg | Niederlage auf dem Skriptweg |
 | --- | --- | --- | --- | --- |
@@ -401,8 +413,8 @@ Ende Phase 12 erster Entwurf: Sieg 10/24, Niederlage 16/24):
 | CHALLENGE_0 | Mission07 | GC_ChinaBoss | ja – `End the mission` @360 (4 Eingriffe) | ja – `Lose_END_Final_USA` @2431 (2 Eingriffe) |
 | CHALLENGE_1 | Mission06 | GC_AirGeneral | ja – `END_Final_GLA` @270 (1 Eingriff) | ja – `Lose_END_Final_GLA` @150 (1 Eingriff) |
 | MD_USA_1_DEMO | Mission01 | MD_USA01 | ja – `END_Final_USA` @785 (1 Eingriff) | ja – `Lose_END_Final_USA` @211 (1 Eingriff) |
-| MD_USA_2_DEMO | Mission01 | MD_USA02 | ja – `END_Final_` @2718 (4 Eingriffe) | ja – `Lose_END_Final_` @11476 (30 Eingriffe) |
-| MD_GLA_3_DEMO | Mission01 | MD_GLA03 | nein (10 Eingriffe) | ja – `Lose_END_Final_` @242 (1 Eingriff) |
+| MD_USA_2_DEMO | Mission01 | MD_USA02 | ja – `END_Final_` @2718 (4 Eingriffe) | ja – `Lose_END_Final_` @12361 (30 Eingriffe) |
+| MD_GLA_3_DEMO | Mission01 | MD_GLA03 | ja – `CINE_ENDVictory` @3613 (12 Eingriffe) | ja – `Lose_END_Final_` @242 (1 Eingriff) |
 | USA | Mission03 | MD_USA03 | ja – `CINE_AVVictory` @1509 (3 Eingriffe) | ja – `Lose_END_Final_` @241 (1 Eingriff) |
 | USA | Mission04 | MD_USA04 | ja – `END_Final_USA` @303 (9 Eingriffe) | ja – `Lose_END_Final_USA` @617 (20 Eingriffe) |
 | USA | Mission05 | MD_USA05 | ja – `END_Fade 04` @1443 (4 Eingriffe) | ja – `Lose_END_Final_` @1280 (6 Eingriffe) |
@@ -413,16 +425,15 @@ Ende Phase 12 erster Entwurf: Sieg 10/24, Niederlage 16/24):
 | China | Mission01 | MD_CHI01 | ja – `END_Final_` @301 (1 Eingriff) | ja – `Lose_END_Final_` @241 (1 Eingriff) |
 | China | Mission02 | MD_CHI02 | ja – `END_Final_` @301 (4 Eingriffe) | ja – `Lose_END_Final_` @301 (1 Eingriff) |
 | China | Mission03 | MD_CHI03 | ja – `Cheer1Done` @1722 (6 Eingriffe) | ja – `Lose_END_Final_` @4471 (1 Eingriff) |
-| China | Mission04 | MD_CHI04 | nein (0 Eingriffe) | ja – `Lose_END_Final_` @661 (3 Eingriffe) |
-| China | Mission05 | MD_CHI05 | ja – `CINE_ENDVictory` @2662 (19 Eingriffe) | ja – `Lose_END_Final_` @241 (1 Eingriff) |
+| China | Mission04 | MD_CHI04 | ja – `END_Final_` @48348 (13 Eingriffe) | ja – `Lose_END_Final_` @661 (3 Eingriffe) |
+| China | Mission05 | MD_CHI05 | ja – `CINE_ENDVictory` @2662 (20 Eingriffe) | ja – `Lose_END_Final_` @241 (1 Eingriff) |
 
-**Warum die zwei „nein“ (ehrlich benannt, nicht behoben):**
+**Wie die zwei früheren „nein“ geschlossen wurden (Phase 13):**
 
-- **`MD_GLA03` (Sieg):** das Siegskript wartet darauf, dass der Partikel-Uplink-Strahl (`ParticleUplinkCannonUpdate`, nicht implementiert) den Träger trifft; der Träger trägt `ImmortalBody`, kein
-  anderer Weg zerstört ihn. Der Fahrer meldet den Blocker und ändert nichts an der Welt (das wäre „auslöschen statt erfüllen“). Abhilfe: das Modul.
-- **`MD_CHI04` (Sieg):** eine lange Wellenmission. `END_Final_` hängt an `Winning Condition 1` (`TIMER_EXPIRED`), den die Zähler der Wellen stellen; im Lauf bis 70.000 Ticks (Handmessung, kein Standardlauf)
-  erreicht der Wellenzähler nur 11 von 15, die Blätter „ein Mitglied eines `Wave 6a Team …` zerstören“ werden 11-mal angewandt, ohne dass der Zeitgeber startet. Der Fahrer hält das Ende deshalb nicht für
-  erreicht; ob die Karte Teams der späten Wellen aus der nicht ladbaren Überlagerung oder dem Verstärkungstransport braucht, ist nicht geklärt.
+- **`MD_GLA03` (Sieg):** das Siegskript wartet darauf, dass der Partikel-Uplink-Strahl den unsterblichen Träger trifft. `ParticleUplinkCannonUpdate` (`SIMULATION-CORE.md` §28) stellt Strahlzeiten, Schwenk und Schadenspulse
+  bereit, der Fahrer fängt den Träger (`SKIRMISH_SPECIAL_POWER_READY`-Blatt: Kraft beim Träger erfassen, aufladen und auslösen) – 12 Eingriffe, Sieg `CINE_ENDVictory` @3.613.
+- **`MD_CHI04` (Sieg):** die Wellenmission braucht `UndeadBody` (zwei Leben), `BattleBusSlowDeathBehavior`, `SubObjectsUpgrade` und `AnimationSteeringUpdate` auf den Wellenfahrzeugen; mit ihnen schließen sich die
+  Wellenketten, `END_Final_` feuert bei Tick 48.348 (13 Eingriffe). Deshalb ist der Standard von `drive` jetzt 60.000 Ticks (vorher 12.000).
 
 **Was „ja“ nicht heißt:** der Fahrer ersetzt Spielerhandlungen durch Welteingriffe (platzierte Einheiten, entfernte Gegner in Abwehrbereichen, gesetzte Besitzer, Signale für UI-Flags, z. B. bei `Training01`);
 „ja“ belegt, dass die *Skriptkette* der Mission bis zum Ausgang läuft und die VM alle Typen auf diesem Weg beherrscht – nicht, dass ein Spieler die Mission mit den implementierten Einheiten tatsächlich
@@ -434,3 +445,7 @@ auf fehlende Aktionstypen (0,3 %)**, 21.181 auf fehlende Bedingungstypen (davon 
 Aktionstypen (0,8 %), 21.181 auf fehlende Bedingungstypen. Häufigste fehlende Aktionen jetzt: `TEAM_SET_BOOBYTRAPPED` 6, `NAMED_SET_TOPPLE_DIRECTION` 6, `TECHTREE_MODIFY_BUILDABILITY_OBJECT` 5, `RESUME_SUPPLY_TRUCKING` 4,
 `PLAYER_SELECT_SKILLSET` 4 (vorher `AI_PLAYER_BUILD_UPGRADE` 25/9, `NAMED_SET_HELD` 13/4, `NAMED_SET_UNMANNED_STATUS` 10/1, `TEAM_SET_OVERRIDE_RELATION_TO_PLAYER` 10/1, `TEAM_SET_OVERRIDE_RELATION_TO_TEAM` 9/5, `TEAM_WANDER` 9/2,
 `PLAYER_SET_RANKLEVELLIMIT` 8/8 – alle seither implementiert oder aufgezeichnet).
+
+**Wiederholung nach Phase 13 (3. Oktober 2026, `audit --ticks 3000 --no-continuation`, je Kampagne parallel, 24 Karten):** 24/24 deterministisch und identisch nach Speichern/Wiederherstellen; 7.124 Skripte, 13.016 Aktionen
+ausgeführt, 7.155 weitergereicht, 35 Treffer auf fehlende Aktionstypen (0,3 %), 21.181 auf fehlende Bedingungstypen; Ausschalt-Endproben Sieg 13/24, Niederlage 15/24 – gegenüber Phase 12 praktisch unverändert; die
+Team-Warteschlangen und die `getTeamNamed`-Regel verschieben die Karten also nicht.

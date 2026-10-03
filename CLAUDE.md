@@ -6,7 +6,7 @@ Singleplayer, Skirmish und Kampagne. Nicht im Scope: Multiplayer, binäre Kompat
 Mods und Savegames. Das Repo ist rein lokal (Branch `main`, **kein Remote**).
 
 Die Gesamtplanung steht in `docs/IMPLEMENTATION-PLAN.md`. Die aktuell zu bearbeitende Phase steht
-als vollständiger Auftrag in `docs/HANDOFF-PHASE13.md` (Handoff-Datei der jeweils nächsten Phase).
+als vollständiger Auftrag in `docs/HANDOFF-PHASE14.md` (Handoff-Datei der jeweils nächsten Phase).
 Lies vor jeder Phase `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
 `docs/IMPLEMENTATION-PLAN.md` sowie die Fachdokumente der berührten Domäne
 (`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `SIMULATION-CORE.md`, `W3D-MATERIALS.md`).
@@ -254,3 +254,13 @@ und die Client-Verdrahtung (`ClientRuntime`, `StrideInputTranslator`, Befehlslei
 (`WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10); 21 erklärte Warnungen. **Nicht erledigt:** Verstärkung mit Transport/Formationen und die VM-Semantiklücken (`docs/HANDOFF-PHASE13.md`).
 Der Zielfahrer ersetzt Spielerhandlungen durch Welteingriffe – „ja“ belegt die Skriptkette, nicht die Spielbarkeit. Zeilenenden: Bash-`git show > Datei` und Perl/`awk`-Umschreiben verändern CRLF-Dateien in dieser Umgebung; für
 `README.md`/`docs/ARCHITECTURE.md`/`docs/ROADMAP.md`/`docs/IMPLEMENTATION-PLAN.md` PowerShell mit `[IO.File]::ReadAllText/WriteAllText` (UTF-8 ohne BOM, `` `r`n ``) benutzen und danach `git ls-files --eol -m` prüfen.
+
+Phase 13 (Stand 3. Oktober 2026; neu messen; `docs/SIMULATION-CORE.md` §28, `docs/SCRIPT-ENGINE.md` §5/§8/§9): `CampaignTool drive` (jetzt Standard 60.000 Ticks) erreicht auf dem eigenen Skriptweg **Sieg 24/24, Niederlage 24/24**
+(`MD_GLA03` über `ParticleUplinkCannonUpdate`, `MD_CHI04` über `UndeadBody`/`BattleBusSlowDeathBehavior`/`SubObjectsUpgrade`/`AnimationSteeringUpdate`, Sieg bei Tick ~48.000); `reachability` unverändert sauber 24/24 und 24/24;
+Ausschalt-Endproben unverändert Sieg 13/24, Niederlage 15/24; Audit 24/24 deterministisch und identisch nach Speichern/Laden. Neu: Verstärkung mit Transport (`DeliverPayloadAIUpdate`, `ParachuteContain`,
+`JetSlowDeathBehavior`, `CountermeasuresBehavior`, `ScriptEngine.Reinforcements.cs`), die KI-Team-Warteschlangen (`ScriptEngine.TeamQueues.cs`: `BUILD_TEAM`/`RECRUIT_TEAM`, Startaktionen, inaktive Singleton-Teams sind `NULL`) und
+Upgrade-Knopf-Bereitschaft (`IUpgradeModule.WouldUpgrade`). Modulkatalog **107 von 205**, Instanziierbarkeit **1.735 von 2.115 (82,0 %)**, Modulverwendungen abgedeckt 16.085 von 19.553 (82,3 %), Kompatibilitätsbasislinie
+**771** Einträge; Skript-VM unverändert 80/109 Bedingungen und 160 Aktionstypen. **Neue Referenzwerte:** Retail-Referenzmatch Sieger FactionGLA bei **Tick 15.000**, Endhash `532F19F360C59550` (die älteren Angaben Tick 19.200 /
+`28BE35C1174E369F` oben sind überholt; Ursache sind die neuen Flug-/Fahrzeugmodule); Stresstest unverändert `56882F763EABEF67`; keine Versionssprünge (`WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10).
+**Nicht erledigt (bewusst, begründet):** Formationen/Angriffsmarsch (`asTeam`), Pfadflug (`…_USING_WAYPOINT_PATH`), `FIRE_WEAPON` mit `WeaponSlot` (braucht ein Waffenslot-Modell), „untätig“ ohne AI-Zustand, `JetAIUpdate`
+(34 Objekte), `RiderChangeContain`; die Spielbarkeit durch einen Menschen ist weiter nicht belegt (`docs/HANDOFF-PHASE14.md`).

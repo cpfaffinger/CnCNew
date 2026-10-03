@@ -1100,3 +1100,31 @@ solange keine Überschreibung gesetzt ist – Läufe ohne sie bleiben byteidenti
 
 **`IWorldServices.TransferOwnership`:** die Modulschnittstelle bietet jetzt den Besitzerwechsel an (für `TechBuildingBehavior`; `SimulationWorld.TransferOwnership` aus §22 verschiebt auch die Energieproduktion).
 **`StealthUpdate.ScriptUnstealthed`:** Schalter für `NAMED/TEAM_SET_STEALTH_ENABLED`, nur gespeichert, wenn gesetzt.
+
+## 28. Phase 13: Flugzeug-, Fallschirm-, Uplink- und Fahrzeugmodule, Team-Warteschlangen
+
+Phase 13 (`git log b620a50..HEAD`) schließt die Missionsmodule, an denen die Verstärkungs- und Siegketten der Kampagne hingen. Alle Module stehen mit Katalogschema (`ModuleCatalog`), Bindung (`BuiltInModules`),
+`Describe`/`Load` (Zustand nur, wenn er vom Anfangswert abweicht) und Test (`Tests.Flight.cs`) im Projekt; was das Original über Physik oder Knochentransformationen löst, ist durch Kinematik ersetzt und am Modul benannt.
+Fliegende Lokomotoren fahren weiterhin geradeaus zu einem Zielpunkt (`PreferredHeight`, neu `SpeedLimitZ`).
+
+| Modul | Quelle | Verhalten |
+| --- | --- | --- |
+| `DeliverPayloadAIUpdate` | `DeliverPayloadAIUpdate.cpp` | Zustandsautomat des Transportflugzeugs: Anflug auf den Lieferpunkt (`DeliveryDistance`, `DoorDelay`, `DropDelay`, `DropOffset`/`DropVariance`, `PutInContainer`), Absetzen der Fracht (Fallschirm über `ParachuteContain`, `IOverrideDestination` für den genauen Ort), `ConsiderNewApproach` (`MaxAttempts`), Verlassen der Karte (`RecoverFromOffMap`, `HeadOffMap`, `ClosestEdgePoint`); stirbt das Flugzeug, stirbt die Besatzung (`TransportContain.OnDie`) |
+| `ParachuteContain` | `ParachuteContain.cpp` | der Fallschirm trägt die Fracht: freier Fall bis `OpenDistance`, dann Sinkflug; Landung im Wasser tötet, Fallschaden `FreeFallDamagePercent`; Schwank-/Dämpfungsfelder sind Präsentation |
+| `JetSlowDeathBehavior` | `JetSlowDeathBehavior.cpp` | `SlowDeathBehavior` für Flugzeuge: am Boden nur Bodeneffekte und Verschwinden; in der Luft Teilnahme an der Lotterie (`ISlowDeathCandidate`/`SlowDeathLottery`), danach geradeaus weiter mit dem Anteil `FallHowFast` der Schwerkraft, Sekundäreffekte `DelaySecondaryFromInitialDeath`, Aufschlag `FXHitGround`/`OCLHitGround` |
+| `CountermeasuresBehavior` | `CountermeasuresBehavior.cpp` | nach dem Upgrade `NumberOfVolleys · VolleySize` Täuschkörper; eine Lenkwaffe auf das Flugzeug (`ICountermeasuresModule.ReportMissile`) wird mit `EvasionRate` markiert (ein Zug des Logikstroms), lenkt nach `MissileDecoyDelay` auf den nächsten Täuschkörper um und richtet dann keinen Schaden an (`DetonateProjectile(damage:false)`); Täuschkörper sind echte Entitäten, kinematisch bewegt |
+| `ParticleUplinkCannonUpdate` | `ParticleUplinkCannonUpdate.cpp` | Spezialkraft-Handler (`ISpecialPowerHandler`): Ablauf Ladung/Ausrichtung/Strahl/Abklingen, Strahlzeiten (`WidthGrowTime`, `BeamTravelTime`, `TotalFiringTime`), Schwenk (`SwathOfDeathDistance`/`Amplitude`, Rotationsformel und S-Kurve der Quelle), `TotalDamagePulses` Schadenspulse (`DamagePerSecond`, `DamageRadiusScalar`, Strahlradius `LaserBeamRadius` neu im Vorlagenmodell) entlang des Streifens; `ParticleUplinkCannonUpdate` war der einzige Blocker von 8 Objekten und des Siegziels von `MD_GLA03` |
+| `UndeadBody` | `UndeadBody.cpp` | `ActiveBody` mit zwei Leben: tödlicher Schaden lässt einen Trefferpunkt übrig, startet das zweite Leben (`SecondLifeMaxHealth`, volle Gesundheit) und lässt die passenden Langsamtod-Module losen, welches *beginnt* |
+| `BattleBusSlowDeathBehavior` | `BattleBusSlowDeathBehavior.cpp` | der erste Tod des Busses: Wurf (`ThrowForce` durch Masse), Landung und Effekte, danach das zweite Leben |
+| `SubObjectsUpgrade`, `AnimationSteeringUpdate` | `SubObjectsUpgrade.cpp`, `AnimationSteeringUpdate.cpp` | reine Modellanimation: ehrliche Hüllen mit `WouldUpgrade` bzw. ohne Zustand (das Objekt kann existieren) |
+
+Begleitende Änderungen: `LocomotorInfo.SpeedLimitZ`; `AIUpdateInterface.OrderMove` ist virtuell, `OrderEvacuate(…, thenExit)` für den Rückflug; `IUpgradeModule.WouldUpgrade` (Standardmethode, überschrieben von
+den Upgrade-Modulen) liefert die Bereitschaft der Upgrade-Knöpfe (`docs/SCRIPT-ENGINE.md` §8 Punkt 18); `DetonateProjectile(…, damage)`; die Skriptseite (Verstärkung mit Transport, Team-Warteschlangen,
+Startaktionen) steht in `docs/SCRIPT-ENGINE.md` §5/§8.
+
+Messung (3. Oktober 2026, `.local/phase2-import-a`; ohne Versionssprung: `WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10): Modulkatalog **107 von 205** implementiert (183 Simulations-,
+22 Präsentationsmodule), **1.735 von 2.115** Retail-Objekten instanziierbar (82,0 %), Modulverwendungen abgedeckt 16.085 von 19.553 (82,3 %), Kompatibilitätsbasislinie **771** Einträge. Größte verbleibende
+Blocker nach Objekten (davon nur durch dieses Modul): `JetAIUpdate` 34/34, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `SlavedUpdate` 20/7, `PropagandaTowerBehavior` 14/13, `UpgradeDie` 13/0,
+`HiveStructureBody` 11/4, `RiderChangeContain` 11/11, `DeployStyleAIUpdate` 10/10, `StructureCollapseUpdate` 10/10, `ParkingPlaceBehavior` 9/9. Retail-Referenzmatch: Sieger FactionGLA bei Tick 15.000,
+`final hash` (Run 1) `532F19F360C59550` (vorher Tick 19.200, `28BE35C1174E369F`: die neuen Module – am Stand `5416d81` bereits gemessen, vor den Team-Warteschlangen – verändern das Szenario;
+Wiederholung und Snapshot-Fortsetzung identisch über 15.301 Ticks, Kettenhash `5B799AA9398CE305`); Stresstest (216.000 Ticks) unverändert `56882F763EABEF67`, Kettenhash `B8E663493F2C73D5`.
