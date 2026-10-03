@@ -112,6 +112,7 @@ internal sealed partial class ObjectiveDriver
         if (_commandsOnly) return false;
         // Only mobile objects: a structure's footprint is registered in the navigation grid at its spawn position and would be removed from the wrong cells on its death.
         if (entity.EffectivelyDead || entity.DestroyRequested || entity.ContainedBy.IsValid || entity.Template.Locomotor is null || entity.Template.IsKindOf("STRUCTURE")) return false;
+        _keptAlive.Add(entity.Id.Value);
         entity.X = spot.X;
         entity.Y = spot.Y;
         entity.Z = _world.GroundHeightAt(spot.X, spot.Y);
@@ -426,7 +427,7 @@ internal sealed partial class ObjectiveDriver
                         : Plan.Of(new Leaf($"recharge:{playerName}:{powerName}", $"finish recharging '{powerName}' of '{playerName}'", 2, 60, _ => Recharge(own[0])));
                 return Plan.Of(new Leaf($"carrier:{playerName}:{powerName}", $"capture a carrier of '{powerName}' for '{playerName}'", 2, 60, _ =>
                     _world.Entities.Where(entity => entity.Owner != owner && !entity.Owner.IsSystem && Carries(entity)).OrderBy(entity => entity.Id.Value).FirstOrDefault() is { } carrier
-                    && _world.TransferOwnership(carrier.Id, owner) && _capturedCarriers.Add(carrier.Id.Value) && Recharge(carrier)));
+                    && _world.TransferOwnership(carrier.Id, owner) && _keptAlive.Add(carrier.Id.Value) && Recharge(carrier)));
             }
             case "SKIRMISH_COMMAND_BUTTON_READY_ALL":
             case "SKIRMISH_COMMAND_BUTTON_READY_PARTIAL":

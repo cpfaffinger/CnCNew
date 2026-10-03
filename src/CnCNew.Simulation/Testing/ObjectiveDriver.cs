@@ -335,16 +335,16 @@ internal sealed partial class ObjectiveDriver
         _lastSignature = signature;
     }
 
-    private readonly SortedSet<uint> _capturedCarriers = [];
+    private readonly SortedSet<uint> _keptAlive = [];
 
     /// <summary>
-    /// A superweapon the driver handed to the viewer (<c>SKIRMISH_SPECIAL_POWER_READY</c>) stands in a map where the opponent's units (now including aircraft) shoot at it while the driver is
+    /// A superweapon the driver handed to the viewer (<c>SKIRMISH_SPECIAL_POWER_READY</c>) or a unit it placed into an area stands in a map where the opponent's units (now including aircraft) shoot at it while the driver is
     /// still working through the chain; a player would defend it, the driver repairs it (a world write, counted) so the power can still be fired.
     /// </summary>
     private void KeepCapturedCarriersAlive(long tick)
     {
-        if (_capturedCarriers.Count == 0 || tick % 30 != 0) return;
-        foreach (var id in _capturedCarriers)
+        if (_keptAlive.Count == 0) return;
+        foreach (var id in _keptAlive)
         {
             if (_world.FindEntity(new CnCNew.Simulation.Ids.EntityId(id)) is not { EffectivelyDead: false, DestroyRequested: false, Body: { } body } carrier || body.Health >= body.MaxHealth) continue;
             _world.Damage(carrier.Id, new DamageInfo(carrier.Id, body.MaxHealth - body.Health, DamageTypes.Healing, DeathTypes.None, false));

@@ -186,6 +186,7 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
     var filterCampaign = Arg(args, "--campaign");
     var filterMap = Arg(args, "--map");
     var watch = Arg(args, "--watch");
+    var watchFlags = (Arg(args, "--watch-flag") ?? string.Empty).Split(",", StringSplitOptions.RemoveEmptyEntries);
     var explain = args.Contains("--explain");
     var commandsOnly = args.Contains("--commands-only");
     var outcomeOnly = Arg(args, "--outcome");
@@ -210,7 +211,7 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             foreach (var victory in new[] { true, false }.Where(value => outcomeOnly is null || outcomeOnly.Equals(value ? "victory" : "defeat", StringComparison.OrdinalIgnoreCase)))
             {
                 ObjectiveDriveResult result;
-                try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks, observe: watch is null ? null : WatchEntities(watch, victory), commandsOnly: commandsOnly, agentThreshold: agentThreshold); }
+                try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks, observe: watch is null && watchFlags.Length == 0 ? null : CombineWatches(watch is null ? null : WatchEntities(watch, victory), WatchFlags(watchFlags, victory)), commandsOnly: commandsOnly, agentThreshold: agentThreshold); }
                 catch (Exception exception) when (exception is not OutOfMemoryException) { cells.Add($"{(victory ? "victory" : "defeat")} FAILED {exception.GetType().Name}: {exception.Message}"); continue; }
                 if (result.ReachedByScript) { if (victory) victories++; else defeats++; }
                 cells.Add($"{(victory ? "victory" : "defeat")} {(result.ReachedByScript ? $"REACHED by '{result.OutcomeScript}' @{result.OutcomeTick}" : "not reached")} ({result.Interventions} interventions: {result.Commands} commands, {result.WorldWrites} world writes)");
@@ -458,6 +459,24 @@ static int TransportInfo(ContentFileSystem content, CampaignCatalog campaigns, s
     return 0;
 }
 
+/// <summary>Prints a line whenever one of the named script flags or scripts changes state (drive --watch-flag NAME[,NAME]; a name that is an active script is reported as script state).</summary>
+static Action<MissionSession> WatchFlags(string[] names, bool victory)
+{
+    var known = new Dictionary<string, string>();
+    return session =>
+    {
+        foreach (var name in names)
+        {
+            var now = $"flag={session.Engine.FlagValue(name)} scriptActive={session.Engine.IsScriptActive(name)}";
+            if (known.TryGetValue(name, out var before) && before == now) continue;
+            known[name] = now;
+            Console.WriteLine($"      {(victory ? "V" : "D")} @{session.World.Tick} {name}: {now}");
+        }
+    };
+}
+
+static Action<MissionSession>? CombineWatches(Action<MissionSession>? first, Action<MissionSession> second) => first is null ? second : session => { first(session); second(session); };
+
 /// <summary>Prints a line whenever one of the objects whose template name contains <paramref name="text"/> appears, changes owner, loses health class or disappears (drive --watch).</summary>
 static Action<MissionSession> WatchEntities(string text, bool victory)
 {
@@ -467,7 +486,7 @@ static Action<MissionSession> WatchEntities(string text, bool victory)
         var world = session.World;
         var now = new Dictionary<uint, string>();
         foreach (var entity in world.Entities.Where(entity => entity.Template.Name.Contains(text, StringComparison.OrdinalIgnoreCase)))
-            now[entity.Id.Value] = $"{entity.Template.Name} #{entity.Id.Value} owner={entity.Owner.Value} health={entity.Body?.Health.ToString() ?? "-"} dead={entity.EffectivelyDead}";
+            now[entity.Id.Value] = $"{entity.Template.Name} #{entity.Id.Value} owner={entity.Owner.Value} health={entity.Body?.Health.ToString() ?? "-"} dead={entity.EffectivelyDead} at=({entity.X.Floor()},{entity.Y.Floor()})";
         foreach (var (id, line) in now.Where(pair => !known.TryGetValue(pair.Key, out var before) || before != pair.Value))
         {
             Console.WriteLine($"      {(victory ? "V" : "D")} @{world.Tick} watch {line}");
