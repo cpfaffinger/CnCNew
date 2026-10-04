@@ -3,6 +3,10 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The synthetic .cur/.ani builders of the decoder tests, shared so that the cursor set is tested against real file bytes. -->
+    <Compile Include="../CnCNew.Images.Tests/CursorFixtures.cs" Link="CursorFixtures.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Presentation/CnCNew.Presentation.csproj" />
     <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
     <ProjectReference Include="../../src/CnCNew.Data/CnCNew.Data.csproj" />

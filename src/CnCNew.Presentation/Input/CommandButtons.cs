@@ -141,6 +141,20 @@ public sealed class CommandButtonCatalog
     }
 
     public int ButtonCount => _buttons.Count;
+
+    /// <summary>Every button, in name order (for audits over the whole table, such as the cursors the buttons name).</summary>
+    public ImmutableArray<CommandButtonInfo> Buttons => [.._buttons.Values.OrderBy(button => button.Name, StringComparer.Ordinal)];
+
+    /// <summary>
+    /// <c>CursorName</c>/<c>InvalidCursorName</c> values that are not engine cursor names, in name order. The original shows the cross for such a
+    /// button (<c>InGameUI::evaluateContextCommand</c>: <c>getCursorIndex</c> fails, <c>Mouse::CROSS</c>), and so does
+    /// <see cref="CommandModeController.Hover"/>; they are listed here so that the case stays visible.
+    /// </summary>
+    public ImmutableArray<string> UnknownCursorNames =>
+    [
+        .._buttons.Values.SelectMany(button => new[] { button.CursorName, button.InvalidCursorName })
+            .Where(name => name.Length > 0 && !CursorNames.TryParse(name, out _)).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal),
+    ];
     public int SetCount => _sets.Count;
     public ImmutableArray<CommandButtonIssue> Issues { get; }
 

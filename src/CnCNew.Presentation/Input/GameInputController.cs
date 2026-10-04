@@ -94,7 +94,41 @@ public sealed class GameInputController
         Commands.Update(world);
     }
 
-    public CameraIntent UpdateCamera(IViewProjection view, float deltaSeconds) => Camera.Update(State, Hotkeys, view.ViewportSize, deltaSeconds);
+    public CameraIntent UpdateCamera(IViewProjection view, float deltaSeconds)
+    {
+        var intent = Camera.Update(State, Hotkeys, view.ViewportSize, deltaSeconds);
+        // The intent's y is "forward" (up the screen); the cursor direction is a screen offset with y down, like InGameUI::getScrollAmount.
+        ScrollOffset = new Vector2(intent.Scroll.X, -intent.Scroll.Y);
+        IsScrolling = intent.Scroll != Vector2.Zero || (Camera.Settings.RightDragScrolls && State.IsDragging(MouseButton.Right));
+        return intent;
+    }
+
+    /// <summary>The view scrolled in the last <see cref="UpdateCamera"/> (keys, screen edge or right drag): <c>InGameUI::isScrolling</c>.</summary>
+    public bool IsScrolling { get; private set; }
+
+    /// <summary>The scroll of the last <see cref="UpdateCamera"/> as a screen offset (x right, y down); only its direction matters.</summary>
+    public Vector2 ScrollOffset { get; private set; }
+
+    /// <summary>
+    /// Re-evaluates what is under the resting pointer; the world moves under it (a unit walks in, a target dies) and the selection can change
+    /// without any input event. Issues nothing.
+    /// </summary>
+    public void RefreshHint(SimulationWorld world, IViewProjection view)
+    {
+        if (State.HasMouse) Hint = Commands.Hover(world, view, State.MousePosition);
+    }
+
+    /// <summary>
+    /// The cursor to show (<c>InGameUI::setScrolling</c>, <c>InGameUI::evaluateContextCommand</c>'s cursor switch): the directional scroll cursor
+    /// while the view scrolls, the arrow over a window, otherwise the cursor of the pending command mode or of the context under the pointer.
+    /// Modifier keys act through <see cref="Process"/>, which re-evaluates the hint on every event, so the cursor follows them without a mouse move.
+    /// </summary>
+    public CursorState Cursor(bool pointerOverWindow)
+    {
+        if (IsScrolling) return new CursorState(CursorKind.Scroll, ScrollOffset);
+        if (pointerOverWindow || !State.HasMouse) return CursorState.Arrow;
+        return new CursorState(Hint.Cursor, Vector2.Zero);
+    }
 
     public CommandBarView? BuildCommandBar(SimulationWorld world) => CommandBar?.Build(world, Selection);
 

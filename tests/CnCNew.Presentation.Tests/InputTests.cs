@@ -50,7 +50,7 @@ static class InputTests
     internal static readonly PlayerId Me = new(1);
     internal static readonly PlayerId Enemy = new(2);
 
-    private const string CommandMapText = """
+    internal const string CommandMapText = """
         ; synthetic command map
         CommandMap STOP
           Key = KEY_S
