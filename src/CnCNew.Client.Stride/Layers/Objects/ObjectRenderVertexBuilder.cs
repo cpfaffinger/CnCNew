@@ -33,8 +33,9 @@ internal static class ObjectRenderVertexBuilder
         {
             var triangle = mesh.Triangles[triangleIndex];
             AddVertex(vertices, sourceIndices, ref cursor, mesh, batch, triangleIndex, 0, triangle.Vertex0, totalSeconds);
-            AddVertex(vertices, sourceIndices, ref cursor, mesh, batch, triangleIndex, 1, triangle.Vertex1, totalSeconds);
+            // W3D lists front faces counter-clockwise in its right-handed Z-up space; the client's view and Stride's rasteriser (clockwise front, as the terrain mesh) need the other order.
             AddVertex(vertices, sourceIndices, ref cursor, mesh, batch, triangleIndex, 2, triangle.Vertex2, totalSeconds);
+            AddVertex(vertices, sourceIndices, ref cursor, mesh, batch, triangleIndex, 1, triangle.Vertex1, totalSeconds);
         }
 
         return new BuiltBatch(vertices, sourceIndices);

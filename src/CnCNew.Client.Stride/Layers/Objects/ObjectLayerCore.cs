@@ -116,7 +116,10 @@ internal sealed class ObjectLayerCore : IWorldLayer
         if (_smokeTest && !_summaryPrinted && _frameCounter >= _frameLimit)
         {
             _summaryPrinted = true;
+            stats.GpuResourceProblems = _assets.CountGpuResourceProblems();
             Console.WriteLine($"object layer: {stats}");
+            if (stats.GpuResourceProblems > 0)
+                throw new InvalidDataException($"{stats.GpuResourceProblems} mesh buffer(s) of the object layer are disposed or too small; triangles would be missing.");
         }
     }
 
@@ -253,7 +256,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
             var nodeWorld = boneWorld * instanceMatrix;
             ref var node = ref skeleton.NodeTransformations[rigidPart.NodeIndex];
             node.WorldMatrix = nodeWorld.ToStride();
-            var visible = ComputeVisible(rigidPart.FullName, rigidPart.DefaultVisible, state.SubObjects);
+            // HLodClass::Update_Sub_Object_Transforms: Set_Animation_Hidden(!HTree->Get_Visibility(bone)) - the animation's visibility channel shows and hides the sub-objects of its bones.
+            var visible = pose.IsBoneVisible(rigidPart.BoneIndex) && ComputeVisible(rigidPart.FullName, rigidPart.DefaultVisible, state.SubObjects);
             node.Flags = visible ? node.Flags | global::Stride.Rendering.ModelNodeFlags.EnableRender : node.Flags & ~global::Stride.Rendering.ModelNodeFlags.EnableRender;
         }
 
@@ -281,7 +285,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         for (var i = 0; i < part.Skins.Count; i++)
         {
             var skin = part.Skins[i];
-            var visible = ComputeVisible(skin.Part.FullName, skin.Part.DefaultVisible, state.SubObjects);
+            var visible = pose.IsBoneVisible(skin.Part.BoneIndex) && ComputeVisible(skin.Part.FullName, skin.Part.DefaultVisible, state.SubObjects);
             skin.Entity.Component.Enabled = visible;
             if (!visible) continue;
 

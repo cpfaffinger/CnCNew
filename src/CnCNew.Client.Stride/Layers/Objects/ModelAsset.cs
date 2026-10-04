@@ -23,6 +23,7 @@ internal sealed record MeshInfo(W3dMesh Mesh, W3dRenderBatch Batch, int Material
 internal sealed class SkinPart
 {
     public required string FullName { get; init; }
+    public required int BoneIndex { get; init; }
     public required W3dMesh Mesh { get; init; }
     public required bool DefaultVisible { get; init; }
     public required IReadOnlyList<SkinBatchTemplate> Batches { get; init; }
@@ -157,6 +158,27 @@ internal sealed class ModelAsset
 
         _teamMaterials[key] = built;
         return built;
+    }
+
+    /// <summary>
+    /// Meshes whose index or vertex buffer was disposed or is smaller than the draw they issue (the failure mode of the old shared index buffer, which disposed a buffer
+    /// that earlier meshes still bound: triangles silently vanished, docs/DEMO-FINDINGS.md #2). Zero for a healthy asset.
+    /// </summary>
+    public int CountGpuResourceProblems()
+    {
+        var problems = 0;
+        foreach (var model in _teamModels.Values.Prepend(NeutralModel))
+        {
+            foreach (var mesh in model.Meshes)
+            {
+                var draw = mesh.Draw;
+                if (draw.IndexBuffer is { } index && (index.Buffer.IsDisposed || index.Count > index.Buffer.ElementCount || draw.DrawCount > index.Count)) problems++;
+                foreach (var vertexBuffer in draw.VertexBuffers)
+                    if (vertexBuffer.Buffer.IsDisposed || draw.DrawCount > vertexBuffer.Count) problems++;
+            }
+        }
+
+        return problems;
     }
 
     /// <summary>Recomputes every rigid batch with an animated texture mapper once per distinct frame time (shared by all instances of this asset).</summary>
@@ -306,7 +328,7 @@ internal sealed class ModelAsset
             minimum = System.Numerics.Vector3.Min(minimum, skinMin);
             maximum = System.Numerics.Vector3.Max(maximum, skinMax);
             maxHeight = Math.Max(maxHeight, skinMax.Z);
-            skinParts.Add(new SkinPart { FullName = sub.Name, Mesh = mesh, DefaultVisible = sub.IsVisibleByDefault, Batches = templates, Model = skinModel });
+            skinParts.Add(new SkinPart { FullName = sub.Name, BoneIndex = sub.BoneIndex, Mesh = mesh, DefaultVisible = sub.IsVisibleByDefault, Batches = templates, Model = skinModel });
         }
 
         var extent = maximum - minimum;

@@ -54,5 +54,8 @@ internal sealed class ModelAssetCache : IDisposable
         return asset;
     }
 
+    /// <summary>Sum of <see cref="ModelAsset.CountGpuResourceProblems"/> over every loaded asset.</summary>
+    public int CountGpuResourceProblems() => _assets.Values.Sum(asset => asset.CountGpuResourceProblems());
+
     public void Dispose() => _indices.Dispose();
 }

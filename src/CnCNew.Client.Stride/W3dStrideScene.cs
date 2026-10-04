@@ -148,8 +148,8 @@ internal sealed class W3dStrideScene : IDisposable
         {
             var triangle = mesh.Triangles[triangleIndex];
             AddVertex(output, mesh, batch, triangleIndex, 0, triangle.Vertex0, center, scale, totalSeconds);
-            AddVertex(output, mesh, batch, triangleIndex, 1, triangle.Vertex1, center, scale, totalSeconds);
             AddVertex(output, mesh, batch, triangleIndex, 2, triangle.Vertex2, center, scale, totalSeconds);
+            AddVertex(output, mesh, batch, triangleIndex, 1, triangle.Vertex1, center, scale, totalSeconds);
         }
 
         return output.ToArray();

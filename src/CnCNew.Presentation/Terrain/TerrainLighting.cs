@@ -18,7 +18,15 @@ public sealed record TerrainLighting(string TimeOfDay, ImmutableArray<TerrainLig
     /// <summary><c>GlobalData.cpp</c>: <c>m_numGlobalLights = 3</c> unless <c>NumberGlobalLights</c> is given.</summary>
     public const int EngineDefaultGlobalLights = 3;
 
-    public static TerrainLighting FromDefinitions(CompiledDefinitionGraph graph)
+    public static TerrainLighting FromDefinitions(CompiledDefinitionGraph graph) => Read(graph, "TerrainLighting");
+
+    /// <summary>
+    /// The lights of objects (<c>TerrainObjectsLighting&lt;TimeOfDay&gt;*</c> keys, <c>GlobalData::m_terrainObjectsLighting</c>): what <c>RTS3DScene</c> hands to the W3D renderer for
+    /// every model, with its own ambient and the same light directions. Only the diffuse of the second and third afternoon lights differs from the terrain.
+    /// </summary>
+    public static TerrainLighting ObjectsFromDefinitions(CompiledDefinitionGraph graph) => Read(graph, "TerrainObjectsLighting");
+
+    private static TerrainLighting Read(CompiledDefinitionGraph graph, string key)
     {
         var gameData = WorldDefinitionReader.GameData(graph);
         var timeOfDay = WorldDefinitionReader.Text(gameData, "TimeOfDay");
@@ -37,12 +45,12 @@ public sealed record TerrainLighting(string TimeOfDay, ImmutableArray<TerrainLig
         var lights = ImmutableArray.CreateBuilder<TerrainLight>(count);
         for (var index = 0; index < count; index++)
         {
-            var key = "TerrainLighting" + suffix;
+            var keyed = key + suffix;
             var number = index == 0 ? string.Empty : (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
             lights.Add(new TerrainLight(
-                WorldDefinitionReader.UnitColor(gameData, key + "Ambient" + number),
-                WorldDefinitionReader.UnitColor(gameData, key + "Diffuse" + number),
-                WorldDefinitionReader.Vector(gameData, key + "LightPos" + number)));
+                WorldDefinitionReader.UnitColor(gameData, keyed + "Ambient" + number),
+                WorldDefinitionReader.UnitColor(gameData, keyed + "Diffuse" + number),
+                WorldDefinitionReader.Vector(gameData, keyed + "LightPos" + number)));
         }
         return new TerrainLighting(suffix.ToUpperInvariant(), lights.MoveToImmutable());
     }

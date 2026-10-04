@@ -30,9 +30,7 @@ internal sealed class LiveMatchHost : IDisposable
         };
         Scene.Entities.Add(new Entity("Camera") { _camera });
 
-        var sun = new Entity("Sun") { new LightComponent { Type = new LightDirectional() } };
-        sun.Transform.Rotation = Quaternion.RotationYawPitchRoll(-0.8f, -0.9f, 0);
-        Scene.Entities.Add(sun);
+        SceneLighting.Install(Scene, CnCNew.Presentation.Terrain.TerrainLighting.ObjectsFromDefinitions(data.Graph));
 
         _layers = WorldLayers.CreateAll();
         foreach (var layer in _layers) layer.Attach(Services, match);

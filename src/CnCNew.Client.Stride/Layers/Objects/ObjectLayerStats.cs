@@ -39,6 +39,9 @@ internal sealed class ObjectLayerStats
     /// <summary>Instances currently drawn with the placeholder box because their model is missing.</summary>
     public int Placeholders;
 
+    /// <summary>Meshes with a disposed or too small buffer (checked once when the smoke-test summary is written; must be zero).</summary>
+    public int GpuResourceProblems;
+
     /// <summary>CPU time spent in <see cref="ObjectLayer.Update"/> this frame.</summary>
     public double FrameMilliseconds;
 
@@ -62,6 +65,6 @@ internal sealed class ObjectLayerStats
 
     public override string ToString() =>
         $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} triangles={Triangles} " +
-        $"models={ModelsLoaded} missingModels={ModelsMissing} missingTextures={TexturesMissing} missingAnimations={MissingAnimations} placeholders={Placeholders} " +
+        $"models={ModelsLoaded} missingModels={ModelsMissing} missingTextures={TexturesMissing} missingAnimations={MissingAnimations} placeholders={Placeholders} gpuProblems={GpuResourceProblems} " +
         $"frameMs={FrameMilliseconds:F3} avgMs={AverageFrameMilliseconds:F3} allocB={FrameAllocatedBytes}";
 }
