@@ -53,6 +53,7 @@ public sealed class FrameProjector
     private readonly bool[] _claimed;
     private readonly bool[] _explored;
     private readonly TurretTracker _turrets = new();
+    private readonly StructureConditionTracker _structures = new();
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
     private readonly SortedDictionary<uint, Capture> _ghosts = [];
     private readonly HashSet<uint> _known = [];
@@ -108,6 +109,7 @@ public sealed class FrameProjector
         }
         _currentOrdered = ordered.ToImmutable();
         if (world.Tick % 150 == 0) _turrets.Prune(id => world.FindEntity(new EntityId(id)) is not null);
+        if (world.Tick % 150 == 0) _structures.Prune(id => world.FindEntity(new EntityId(id)) is not null);
         if (_options.Viewer is { } fogViewer)
         {
             UpdateGhosts(world, fogViewer);
@@ -172,6 +174,7 @@ public sealed class FrameProjector
     {
         var conditions = ConditionDeriver.Derive(entity, world, visual,
             new ConditionContext(_options.Night, _options.Snow, previous?.ConstructionWork));
+        conditions = conditions.Union(_structures.Update(entity, world));
         var health = entity.Body is { } body && body.MaxHealth > Fixed.Zero ? ToFloat(body.Health) / ToFloat(body.MaxHealth) : 1f;
         var construction = entity.HasStatus(ObjectStatusBits.UnderConstruction)
             ? Math.Min(1f, entity.ConstructionWork / (float)Math.Max(entity.Template.BuildTicks, 1))

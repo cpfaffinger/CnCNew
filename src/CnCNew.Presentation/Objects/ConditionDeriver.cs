@@ -40,6 +40,12 @@ public static class ConditionDeriver
         "WEAPONSET_VETERAN", "WEAPONSET_ELITE", "WEAPONSET_HERO", "WEAPONSET_PLAYER_UPGRADE", "WEAPONSET_CRATEUPGRADE_ONE", "WEAPONSET_CRATEUPGRADE_TWO",
         "ARMORSET_CRATEUPGRADE_ONE", "ARMORSET_CRATEUPGRADE_TWO", "GARRISONED", "LOADED", "CARRYING", "DOCKING", "ACTIVELY_CONSTRUCTING",
         "RADAR_UPGRADED", "RADAR_EXTENDING", "POWER_PLANT_UPGRADED", "POWER_PLANT_UPGRADING",
+        // Buildings, docks, doors and packing equipment (StructureConditions, StructureConditionTracker; docs/MODEL-CONDITIONS-BUILDINGS.md).
+        "DOOR_1_OPENING", "DOOR_1_WAITING_OPEN", "DOOR_1_WAITING_TO_CLOSE", "DOOR_1_CLOSING",
+        "DOOR_2_OPENING", "DOOR_2_WAITING_OPEN", "DOOR_2_WAITING_TO_CLOSE", "DOOR_2_CLOSING",
+        "DOOR_3_OPENING", "DOOR_3_WAITING_OPEN", "DOOR_3_WAITING_TO_CLOSE", "DOOR_3_CLOSING",
+        "DOOR_4_OPENING", "DOOR_4_WAITING_OPEN", "DOOR_4_CLOSING",
+        "CONSTRUCTION_COMPLETE", "DOCKING_ACTIVE", "PACKING", "UNPACKING", "CAPTURED", "SMOLDERING", "POST_COLLAPSE", "SPECIAL_DAMAGED", "ENEMYNEAR", "OVER_WATER",
     };
 
     public static ModelConditionSet Derive(Entity entity, SimulationWorld world, ObjectVisual? visual, in ConditionContext context)
@@ -121,6 +127,7 @@ public static class ConditionDeriver
                 if (upgrade.RequiresAllTriggers ? keys.TestForAll(activation) : keys.TestForAny(activation)) set = set.With(upgrade.Flag);
             }
         }
+        set = StructureConditions.Apply(entity, world, set);
         return set;
     }
 
