@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Regression check for "the dozer cannot build": replays select dozer -> construct button -> ground click through the real client
-  (headless smoke test with --input-script, see docs/GAME-HUD.md section 16) and asserts on the client's exit report.
+  (headless smoke test with --input-script, see docs/GAME-HUD.md section 17) and asserts on the client's exit report.
 
 .DESCRIPTION
   Runs the Release client five times, each bounded in time:

@@ -3,6 +3,20 @@ N+1-Handoff (Phase 17): Phase 9 abschließen (Fortsetzung 7) – Spielbarkeit du
 Du arbeitest autonom am lokalen Projekt `C:\Users\cp\RiderProjects\CnCNew`. Lies zuerst `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§9 „Phase 9“ samt „Bekannte Grenzen“), `docs/SCRIPT-ENGINE.md` (§5, §8, §9), `docs/SIMULATION-CORE.md` (§29, §30), `docs/CAMPAIGN-AND-SAVEGAMES.md` und `docs/GAME-HUD.md` §14/§15.
 Voraussetzung: Phase 15 (Welt-Darstellung, Sicherheit) und Phase 16 (Bedienung, Ton, Mission im Client) sind abgeschlossen; ohne sie ist „Spielbarkeit“ nicht beurteilbar (`docs/DEMO-FINDINGS.md`). Dieser Auftrag setzt `IMPLEMENTATION-PLAN.md` §9 fort. §9 ist **noch nicht abgeschlossen**: die Abnahme verlangt „jede Kampagnenmission besteht ihre wesentlichen Erfolgs- und Fehlerpfade“. Belegt ist die Skriptkette (Zielfahrer, Erreichbarkeit, Determinismus, Speichern/Laden), **nicht** dass ein Mensch mit den implementierten Einheiten gewinnen kann.
 
+## Neu gemessen am 4. Oktober 2026 abends (ersetzt die Zahlen unten, wo sie abweichen)
+
+- **Versionen und Referenzwerte:** `WorldSnapshot` 9, Replay 10, `CommandTypes.Version` 13, `MissionSnapshot` 2; Retail-Referenzmatch Sieger FactionGLA bei Tick 13.500, Endhash `0946FB676DEC615C`, Kette
+  `EA6D12F180930D71`; Stresstest `56882F763EABEF67` / `B8E663493F2C73D5`; sauberer Solution-Build **11** Warnungen; Kompatibilitätsbasislinie 751; 183/205 Module, 2.115/2.115 Objekte.
+- **Kampagne (je Karte einzeln, 24 Karten einschließlich `Training01`):** `drive` (60.000 Ticks) Sieg 24/24, Niederlage 24/24; `audit --ticks 900` 24/24 deterministisch und identisch nach Speichern/Laden,
+  0 Treffer auf fehlende Typen, Ausschalt-Endproben Sieg 13/24, Niederlage 15/24 (Stand `096290b`).
+- **Nur-Befehle-Agent** (`drive --commands-only --outcome victory --ticks 15000`, je 2.400 s Zeitgrenze): weiter **1 Karte** (`MD_GLA04`); 22 nicht erreicht, `MD_USA01` nach 2.400 s abgebrochen. Mit
+  `--ticks 60000` auf `GC_ChemGeneral`, `GC_NukeGeneral`, `GC_TankGeneral`, `MD_CHI01`: ebenfalls kein Sieg. Die Zeitgrenze ist also nicht der Engpass (`docs/SCRIPT-ENGINE.md` §9).
+- **Skirmish-KI:** Versorgungszentrum am Lager (`AIPlayer::buildBySupplies`) und Angriff in Gruppen heben die 16 KI-Läufe von 5–7 auf **12 entschiedene**; offen bleiben dreimal ChinaTankGeneral gegen
+  AmericaAirForceGeneral und Bitter Winter America/China (`docs/SIMULATION-CORE.md` §32). `SimTool ai-match … --trace N` zeigt Geld, Armee, Sammler und Strecke über die Zeit – damit zuerst messen.
+- **Für den Agenten folgt daraus:** er baut und greift an, erfüllt aber keine Missionsziele. Der nächste Schritt in Punkt 1 ist nicht „mehr Zeit“, sondern je Karte die erste unerfüllte Bedingung der
+  Siegkette (`CampaignTool drive --explain`) als Befehl auszudrücken.
+- **Aus Phase 16 hierher verschoben:** Leerlauf-Zielerwerb und Angriffsmarsch der Einheiten (`friend_checkForIdleMoodTarget`, `docs/SIM-TURRET-AIM.md` §6/§8a) – erst damit verliert eine marschierende Einheit ihr
+  Ziel nicht bis zum nächsten Denkschritt des Befehlsgebers.
 ## Ehrlicher Status (Ausgangslage, Stand nach Phase 14, 4. Oktober 2026; Phase 16 ist hier noch nicht eingerechnet)
 
 **Änderungen durch Phase 15, die die Zahlen unten verschieben (alle neu messen!):** `CommandTypes.Version` 12 und Replay 9 (typisierte Kampfplan-Option; `WorldSnapshot` 8 und `MissionSnapshot` 2 unverändert); Wegsuche um stehende Einheiten und ein von Gebäuden freier KI-Sammelpunkt

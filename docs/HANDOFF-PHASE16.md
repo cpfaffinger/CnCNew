@@ -5,6 +5,31 @@ Voraussetzung: Phase 15 (Welt-Darstellung, Sicherheit) ist **technisch abgeschlo
 
 **Was Phase 15 schon für diese Phase getan hat (nicht doppelt bauen):** das HUD-Overlay wird gezeichnet (`CnCNew.Game/Hud/HudOverlayRenderer`: Auswahlrahmen, Ringe/Eckklammern, Lebensbalken, Befehlslinien zu Ziel und Wegpunkten, Sammelpunkt-Flaggen, Bauvorschau, Heilsymbole; `UiLineDraw` im Draw-Listen-Vertrag, `--select-own` und Szene `match-selected` zur Sichtprüfung). Punkt 3 unten bleibt deshalb nur für das, was dort noch fehlt: gesetzte Wegpunkte *mit Alt* über mehrere Stationen und das Halten-von-Strg/Alt-Verhalten gegen das Original prüfen, Zielmarke bei Befehlsausgabe. Punkt 2 (Cursor) und Punkt 1 (Ton) sind unberührt.
 
+## Stand nach der ersten Sitzung (4. Oktober 2026 abends) – lies das zuerst
+
+Die Phase ist **begonnen, nicht abgeschlossen**. Technisch erledigt und gemessen, aber **von keinem Menschen gehört oder gesehen**:
+
+| Punkt | Stand | Wo beschrieben | Was der Mensch prüfen muss |
+|---|---|---|---|
+| 1 Ton | verdrahtet (`ClientAudio`/`GameAudio`), Zähler, `--audio-capture`, `--mute`; Tickton der Übernahme; Skripttöne der Missionen | `docs/GAME-AUDIO.md` | ob überhaupt etwas zu hören ist (alle Läufe waren gerätefrei) und wie es klingt; EVA „Upgrade fertig“ beim Start, viele `NoCanDoSound`, Übersteuern |
+| 2 Mauszeiger | Software-Cursor aus den Originaldateien, Wechsel nach Kontext/Modus/Modifikator | `docs/PRESENTATION-INPUT.md` §11, `docs/GAME-HUD.md` §16 | Größe, Verzögerung, Verhalten am Fensterrand; beim Platzieren gibt es keinen Zeiger (keine Definition in `Mouse.ini`) |
+| 3 Wegpunkte | Pfad mit Stationen (Auswahl + Alt), Zielmarken | `docs/PRESENTATION-INPUT.md` §12 | Aussehen gegen das Original (2D statt 3D-Marken) |
+| 4 Texte | **offen** bis auf eine Ursache (Vorlagenschriften gegen 800 Pixel, Shell mit Renderer-Textmaß) | `docs/GAME-SHELL.md` §11 | der Capture-Satz und die Tabelle „Element × Abweichung × Ursache“ fehlen ganz |
+| 5 Mission im Client | Director stellt Kamera, Letterbox, Blenden, Eingabesperre, Untertitel, Zähler, Banner, Skripttöne dar; Zähler je Ausgabetyp | `docs/SCRIPT-ENGINE.md` §7a, `docs/GAME-HUD.md` §14/§17 | Intro, Ziel und Abschluss auf `GC_ChemGeneral`, `MD_USA01`, `MD_GLA03` im Fenster; nicht dargestellte Typen (Bildeffekte, Kamerapfade, Sprach-Untertitel) |
+| 6 Durchklicken | **offen** (braucht den Menschen) | – | Shell → Kampagne → Mission → Speichern/Laden → Abschluss; Skirmish-Setup → Match → Ergebnis |
+
+Befunde des Menschen aus dieser Sitzung (`docs/DEMO-FINDINGS.md` Nr. 16–19) sind bearbeitet: Blinken und Tickton der Übernahme, Shell-Knopfzustände, Schieberegler, Hover, versteckte Speicherknöpfe, Schriftgröße,
+Kamerascrollen, Dozer in der Mission. **Offen daraus:** die Übergangsanimationen der Shell (`GameWindowTransitions`, `WindowTransitions.ini`), die Kampfszene im Menühintergrund (zurückgestellt), ein
+Vorschaumodell beim Platzieren.
+
+Aus dem Vorauftrag (Restlücken der Turm-/Jet-/Übernahme-Arbeit) **begründet zurückgestellt:** Leerlauf-Zielerwerb der Türme (`friend_checkForIdleMoodTarget`; gehört mit Angriffsmarsch in Phase 17,
+`docs/SIM-TURRET-AIM.md` §6), Landeanflug-Bogen der Jets (erst nach Sichtabnahme der Jet-Demo), Black-Lotus-Datenstrom (`BinaryDataStream`) und die Töne der Fähigkeit (die Simulation meldet diese Momente
+nicht), gezeichnete Fallschirmjäger (`FrameProjector` überspringt Insassen), die acht Modellzustände ohne Simulationsverhalten (`EXPLODED_*`, `JAMMED`, `PANICKING`, `RAPPELLING`, `PREORDER`,
+`DOCKING_BEGINNING`). Erledigt wurden: Nebel-Test des Turmziels, Fähigkeit beendet Angriff (`OrderEvacuate` ohne Bewegung beendet ihn auch in der Referenz nicht), Blinken, beschädigte Locomotoren,
+Werkzeuge mit Bone-Tabelle, `StructureToppleUpdate`, Feuerstufen mit Feuerrate, `PREATTACK_A/B/C`.
+
+**Nächster Schritt:** der Mensch startet `scripts/demo-capture-building.ps1`, `demo-shell.ps1`, `demo-mission.ps1`, `demo-skirmish.ps1` und meldet je Zeile der Tabelle „ging / ging nicht / ging mit Mängeln“; erst danach
+Punkt 4 (Texte) und Punkt 6.
 ## Ehrlicher Status (Ausgangslage)
 
 Die Tech-Demos starten, aber die Bedienung ist unvollständig: **es gibt keinen Ton** – `docs/GAME-AUDIO.md` und das README behaupten, der Client spiele Musik, EVA und Sound; tatsächlich werden `AudioDirector` und `AudioOutput` im Client **nirgends erzeugt** (nur `Game.Tests` benutzt sie). Es gibt keinen sichtbaren Mauszeiger-Wechsel
