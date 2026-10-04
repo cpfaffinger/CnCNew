@@ -260,8 +260,10 @@ static (MissionContext Context, TemplateCatalog Catalog, string Fingerprint) Com
 {
     var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
     var graph = DefinitionCompiler.Compile(new ContentDefinitionSource(content), ModuleRegistry.Default, options);
-    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
-    var fingerprint = DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256;
+    // The same world the client simulates (GameData.Load): the airfields' parking and runway points come from the draw models' bones and are part of the fingerprint.
+    var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
+    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, geometry);
+    var fingerprint = geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256);
     return (new MissionContext(catalog, fingerprint, path =>
     {
         using var stream = content.OpenRead(path);

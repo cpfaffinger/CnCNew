@@ -7,5 +7,6 @@
     <ProjectReference Include="../../src/CnCNew.Data/CnCNew.Data.csproj" />
     <ProjectReference Include="../../src/CnCNew.Formats/CnCNew.Formats.csproj" />
     <ProjectReference Include="../../src/CnCNew.Simulation/CnCNew.Simulation.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Game/CnCNew.Game.csproj" />
   </ItemGroup>
 </Project>

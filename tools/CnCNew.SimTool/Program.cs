@@ -244,8 +244,10 @@ static (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, string Fingerpri
     var source = new ContentSource(content);
     var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
     var graph = DefinitionCompiler.Compile(source, ModuleRegistry.Default, options);
-    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
-    return (graph, catalog, DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256);
+    // The same world the client simulates (GameData.Load): the airfields' parking and runway points come from the draw models' bones and are part of the fingerprint.
+    var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
+    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, geometry);
+    return (graph, catalog, geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256));
 }
 
 static int AuditCoverage(string directory, string[] args)
