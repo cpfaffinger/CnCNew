@@ -231,8 +231,12 @@ Wahrscheinliche Ursache des Eindrucks waren Windung und Beleuchtung (Punkte 2 un
 
 `scripts/capture-world.ps1` nimmt einen festen Satz von Szenen auf (`--smoke-test --capture`, feste
 Karte, Seed, Kamera; die Bilder liegen unter `%TEMP%\cncnew-captures`, nie im Repo; Szenen laufen
-nacheinander, nicht parallel). `manifest.txt` enthält **vorläufige** SHA-256: sie belegen
-Reproduzierbarkeit, nicht Richtigkeit; Golden Hashes entstehen erst nach der Abnahme. Jede Zeile unten
+nacheinander, nicht parallel). `manifest.txt` enthält **vorläufige** SHA-256 über die dekodierten Pixel (nicht über die
+PNG-Datei: deren Bytes schwanken bei gleichen Pixeln); sie belegen Reproduzierbarkeit, nicht Richtigkeit, und Golden Hashes entstehen erst nach der Abnahme.
+**Gemessene Grenze der Reproduzierbarkeit (4. Oktober 2026):** neun der elf Szenen liefern über wiederholte Läufe denselben Pixel-Hash; die beiden Autoplay-Szenen `match-base-late` und
+`match-combat` weichen zwischen Läufen um 1–11 Pixel ab (Flaggen-/Partikelkanten). Das Phänomen ist nicht neu – derselbe Autoplay-Lauf am Stand vor Phase 15 weicht um bis zu 93 Pixel ab –, die Ursache ist nicht gefunden
+(Stride-/GPU-Zeitabhängigkeit vermutet, nicht belegt). Für diese beiden Szenen taugt ein Hash daher nicht als Golden Hash; ein Pixelvergleich mit Toleranz wäre nötig. Die früheren Aussagen „identischer SHA-256
+über zwei Läufe“ (Phase 7, unten) galten für die damals verglichenen Paare, nicht allgemein. Jede Zeile unten
 ist von einem Menschen gegen die Aufnahme abzuhaken; ohne diese Abnahme gilt Phase 15 nicht als bestätigt.
 
 | Szene | Zu sehen | Abgenommen |

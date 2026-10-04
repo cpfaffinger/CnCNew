@@ -7,7 +7,7 @@ Voraussetzung: Phase 15 (Welt-Darstellung, Sicherheit) und Phase 16 (Bedienung, 
 
 **Änderungen durch Phase 15, die die Zahlen unten verschieben (alle neu messen!):** `CommandTypes.Version` 12 und Replay 9 (typisierte Kampfplan-Option; `WorldSnapshot` 8 und `MissionSnapshot` 2 unverändert); Wegsuche um stehende Einheiten und ein von Gebäuden freier KI-Sammelpunkt
 verschieben das Verhalten der Skirmish-KI (16 KI-gegen-KI-Läufe: 8 statt 10 entschieden, alle deterministisch); Retail-Referenzmatch weiter Sieger FactionGLA bei Tick 13.890, Endhash `76F22CB0CA79BEEF`; Stresstest `56882F763EABEF67`. Die Spielbarkeitszahlen dieses
-Handoffs (Nur-Befehle-Agent 1/24, Zielfahrer 24/24, Audit-Endproben 13/24 und 15/24) wurden nach den Sim-Änderungen der Phase 15 **nicht neu gemessen** – vor jeder Aussage neu erheben. Die Darstellung (Phase 15) ist technisch fertig, aber von keinem Menschen abgenommen
+Handoffs wurden nach den Sim-Änderungen der Phase 15 nur zum Teil neu gemessen: der Nur-Befehle-Agent (`drive --commands-only`, 15.000 Ticks, 6 Läufe parallel, je 1.500 s Zeitgrenze) erreicht den Sieg über die eigenen Skripte weiter nur auf **1 Karte** (`MD_GLA04`, Tick 1.022); 22 weitere Karten enden ohne Sieg, `MD_USA01` wurde nach 1.500 s abgebrochen (kein Ergebnis). **Nicht neu gemessen:** Zielfahrer 24/24, Audit-Endproben 13/24 und 15/24 – vor jeder Aussage neu erheben. Die Darstellung (Phase 15) ist technisch fertig, aber von keinem Menschen abgenommen
 (Checkliste in `docs/CLIENT-OBJECTS.md`).
 
 Phase 14 (`git log 5428d89..HEAD` bzw. die Merge-Commits „air modules“, „crate, special and collide modules“, „structures and world modules“, „last nine blocker modules“, „weapon slot model“) hat den Handoff-14-Auftrag zu einem großen Teil erledigt:

@@ -4,7 +4,8 @@
 
 .DESCRIPTION
   Jede Szene ist ein reproduzierbarer `--smoke-test --capture`-Lauf des Stride-Clients (feste Karte, Seed, Frameanzahl, Kamera). Die Bilder
-  gehoeren NICHT ins Repo (Originalassets liegen nur lokal); der Standardausgabeort ist ein Verzeichnis unter %TEMP%. Die Checkliste, die ein Mensch
+  gehoeren NICHT ins Repo (Originalassets liegen nur lokal); der Standardausgabeort ist ein Verzeichnis unter %TEMP%.
+  Die Autoplay-Szenen (match-base-late, match-combat) sind zwischen Laeufen nicht pixelgenau gleich (1-11 Pixel, auch vor Phase 15); ihre Pruefsumme ist kein Golden Hash. Die Checkliste, die ein Mensch
   gegen die Bilder abhakt, steht in docs/CLIENT-OBJECTS.md ("Sichtpruefung der Weltdarstellung"). Die Pruefsummen in manifest.txt sind
   *vorlaeufig*: sie belegen Reproduzierbarkeit, nicht Richtigkeit, und werden erst nach der Abnahme durch einen Menschen als Golden Hashes verwendet.
 
@@ -52,8 +53,23 @@ $scenes = @(
     @('mission-start', @('--mission', 'Maps/GC_ChemGeneral/GC_ChemGeneral.map', '--frames', '120'), 'Missionsstart (Generals Challenge): Basis mit Gebaeuden, Beleuchtung wie im Gefecht.')
 )
 
+# SHA-256 of the decoded pixels, not of the PNG file: the encoder's output differs by a few bytes between runs for identical pixels (seen on match-base-late, 4 runs, 4 file hashes, 0 differing pixels).
+Add-Type -AssemblyName System.Drawing
+function Get-PixelHash([string]$path) {
+    $bitmap = [System.Drawing.Bitmap]::FromFile($path)
+    try {
+        $rect = New-Object System.Drawing.Rectangle 0, 0, $bitmap.Width, $bitmap.Height
+        $data = $bitmap.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        try {
+            $bytes = New-Object byte[] ($data.Stride * $bitmap.Height)
+            [System.Runtime.InteropServices.Marshal]::Copy($data.Scan0, $bytes, 0, $bytes.Length)
+        } finally { $bitmap.UnlockBits($data) }
+        return [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::HashData($bytes)).Replace('-', '')
+    } finally { $bitmap.Dispose() }
+}
+
 $manifest = New-Object System.Collections.Generic.List[string]
-$manifest.Add("# cncnew world capture set, size $Size, VORLAEUFIGE Pruefsummen (Reproduzierbarkeit, nicht Richtigkeit)")
+$manifest.Add("# cncnew world capture set, size $Size, VORLAEUFIGE Pruefsummen ueber die Pixel (Reproduzierbarkeit, nicht Richtigkeit)")
 foreach ($scene in $scenes) {
     $name = $scene[0]
     $png = Join-Path $OutDir "$name.png"
@@ -62,7 +78,7 @@ foreach ($scene in $scenes) {
     Write-Host "== $name" -ForegroundColor Cyan
     dotnet run --project $project -c Release --no-build -- @clientArgs | Out-Null
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $png)) { throw "Szene '$name' fehlgeschlagen (Exitcode $LASTEXITCODE)." }
-    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $png).Hash
+    $hash = Get-PixelHash $png
     $manifest.Add("$hash  $name.png  | $($scene[2])")
 }
 
