@@ -1,21 +1,40 @@
 using CnCNew.Game.Tests;
 
 // Each suite exposes `static int Run(string[] args)` returning its failure count; one registration per line.
-Func<string[], int>[] suites =
+// `--only <Suite>[,<Suite>...]` runs just those suites (the whole program takes many minutes on real data).
+(string Name, Func<string[], int> Run)[] suites =
 [
-    LiveMatchTests.Run,
-    AudioDirectorTests.Run,
-    ShellTests.Run,
-    HudTests.Run,
-    CampaignTests.Run,
-    CampaignShellTests.Run,
-    MissionPresentationTests.Run,
-    MissionHudTests.Run,
-    ScenarioTests.Run,
-    ModelGeometryTests.Run,
+    (nameof(LiveMatchTests), LiveMatchTests.Run),
+    (nameof(AudioDirectorTests), AudioDirectorTests.Run),
+    (nameof(ShellTests), ShellTests.Run),
+    (nameof(HudTests), HudTests.Run),
+    (nameof(CampaignTests), CampaignTests.Run),
+    (nameof(CampaignShellTests), CampaignShellTests.Run),
+    (nameof(MissionPresentationTests), MissionPresentationTests.Run),
+    (nameof(MissionHudTests), MissionHudTests.Run),
+    (nameof(ScenarioTests), ScenarioTests.Run),
+    (nameof(ModelGeometryTests), ModelGeometryTests.Run),
 ];
 
+var onlyIndex = Array.IndexOf(args, "--only");
+var only = onlyIndex >= 0 && onlyIndex + 1 < args.Length ? args[onlyIndex + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : null;
+if (only is not null && only.Except(suites.Select(suite => suite.Name), StringComparer.OrdinalIgnoreCase).ToArray() is { Length: > 0 } unknown)
+{
+    Console.WriteLine($"Unknown suite(s) {string.Join(", ", unknown)}. Known: {string.Join(", ", suites.Select(suite => suite.Name))}.");
+    return 2;
+}
+
 var failures = 0;
-foreach (var suite in suites) failures += suite(args);
-Console.WriteLine(failures == 0 ? "All game tests passed." : $"{failures} game test(s) failed.");
+var skipped = 0;
+foreach (var suite in suites)
+{
+    if (only is not null && !only.Contains(suite.Name, StringComparer.OrdinalIgnoreCase))
+    {
+        skipped++;
+        continue;
+    }
+    failures += suite.Run(args);
+}
+if (skipped > 0) Console.WriteLine($"{skipped} suite(s) not run (--only).");
+Console.WriteLine(failures == 0 ? (skipped == 0 ? "All game tests passed." : "The selected game tests passed.") : $"{failures} game test(s) failed.");
 return failures == 0 ? 0 : 1;
