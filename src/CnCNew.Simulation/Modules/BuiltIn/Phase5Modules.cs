@@ -591,6 +591,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>The main machine is in <c>AI_DOCK</c>.</summary>
     public bool IsDocking => _dock is not null;
 
+    /// <summary>The object has reached its dock's entry and not yet left through the exit: the span in which the reference shows the <c>DOCKING</c> model condition (the net of a supply Chinook).</summary>
+    public bool IsInsideDock => _dock is { Inside: true };
+
     /// <summary><c>getLastCommandSource() == CMD_FROM_PLAYER</c>.</summary>
     public bool LastCommandFromPlayer => _lastCommandFromPlayer;
 

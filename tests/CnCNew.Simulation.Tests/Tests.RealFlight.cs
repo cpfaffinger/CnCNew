@@ -8,6 +8,7 @@ using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.World;
@@ -96,6 +97,11 @@ static partial class Tests
                     if (simEvent.Kind == SimEventKind.EntityUncontained && simEvent.Other == tunnelB.Id) facts.TryAdd("tunnelExit", result.Tick);
                 }
                 if (chinook.Z > Fixed.Zero) facts["chinookAirborne"] = 1;
+                if (chinook.Modules.OfType<AIUpdateInterface>().FirstOrDefault() is { IsInsideDock: true })
+                {
+                    facts["chinookInsideDock"] = facts.GetValueOrDefault("chinookInsideDock") + 1;
+                    if (chinook.HasMoveTarget) facts["chinookDockWhileMoving"] = facts.GetValueOrDefault("chinookDockWhileMoving") + 1;
+                }
             }
             facts["shellDamage"] = (shellHealth - shellTarget.Body.Health).Raw;
             facts["missileDamage"] = (missileHealth - missileTarget.Body.Health).Raw;
@@ -111,6 +117,8 @@ static partial class Tests
         Check.That(facts.GetValueOrDefault("impact:" + catalog.Weapons[shellLauncher.DefaultWeapon].Name) > facts["fire"] + 1 && facts["shellDamage"] > 0, "The shell flies for more than a tick and hurts the Crusader.");
         Check.That(facts.GetValueOrDefault("impact:" + catalog.Weapons[missileLauncher.DefaultWeapon].Name) > facts["fire"] + 1 && facts["missileDamage"] > 0, "The missile flies for more than a tick and hurts the Crusader.");
         Check.That(facts.GetValueOrDefault("deposits") >= 1 && facts.ContainsKey("chinookAirborne"), "The Chinook flies and delivers supplies.");
+        Check.That(facts.GetValueOrDefault("chinookInsideDock") > 0 && facts.GetValueOrDefault("chinookDockWhileMoving") == 0,
+            $"The Chinook shows the dock state ({Fact("chinookInsideDock")} ticks) only while it hovers at the dock, never on the way ({Fact("chinookDockWhileMoving")} moving ticks).");
         Check.That(facts.ContainsKey("tunnelExit"), "The GLA unit leaves through the other tunnel.");
         var (second, _) = Run();
         Check.That(first.SequenceEqual(second), "Two runs are hash identical on every tick.");

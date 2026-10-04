@@ -95,7 +95,7 @@ public static class ConditionDeriver
         {
             switch (module)
             {
-                case AIUpdateInterface { IsDocking: true }:
+                case AIUpdateInterface { IsInsideDock: true }:
                     set = set.With(ModelConditions.Docking);
                     break;
                 case AIUpdateInterface { IsBuilding: true } when entity.Speed == Fixed.Zero && !entity.HasMoveTarget:

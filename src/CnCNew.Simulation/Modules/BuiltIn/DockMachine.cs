@@ -31,6 +31,12 @@ internal sealed class DockMachine(EntityId dockId)
 
     public EntityId DockId { get; } = dockId;
 
+    /// <summary>
+    /// The docker is between the dock's entry and exit (<c>DockUpdate::onEnterReached</c> .. <c>onExitReached</c>), where the reference sets <c>MODELCONDITION_DOCKING</c> on dock and docker:
+    /// not during the approach, the wait for clearance or the move to the rally point.
+    /// </summary>
+    public bool Inside => _state is DockState.MoveToDock or DockState.ProcessDock or DockState.MoveToExit;
+
     /// <summary><c>StateMachine::initDefaultState</c>: enters the first state and reports its raw answer, without resolving transitions.</summary>
     public DockStatus Enter(IWorldServices world, AIUpdateInterface ai)
     {

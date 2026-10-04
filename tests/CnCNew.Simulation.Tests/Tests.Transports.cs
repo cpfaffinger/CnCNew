@@ -333,6 +333,8 @@ static partial class Tests
         feeder.Dock(1, chinook.Id.Value, Get(world, "Stockpile").Id.Value);
         var deposits = new List<long>();
         var bought = false;
+        var ai = chinook.Modules.OfType<AIUpdateInterface>().First();
+        var insideTicks = 0;
         for (var tick = 0; tick < 2000 && deposits.Count < 3; tick++)
         {
             foreach (var simEvent in world.Step().Events.Where(value => value.Kind == SimEventKind.SupplyDeposited)) deposits.Add(simEvent.Value);
@@ -343,7 +345,11 @@ static partial class Tests
                 bought = feeder.PurchaseUpgrade(1, "Upgrade_AmericaSupplyLines").Accepted;
             }
             Check.That(chinook.Z == Fixed.FromInt(100), "The Chinook supplies in flight.");
+            // The net animation (DOCKING) belongs to the time at the dock, not to the flight there (demo finding: unloading was shown while the Chinook was still on its way).
+            Check.That(!(ai.IsInsideDock && chinook.HasMoveTarget), "The Chinook does not show the dock state while it is still flying to the dock.");
+            if (ai.IsInsideDock) insideTicks++;
         }
+        Check.That(insideTicks > 0, $"The Chinook is inside the dock while it unloads ({insideTicks} ticks).");
         Check.That(deposits.Count == 3 && deposits[0] == 200 && deposits[2] == 260, $"Two boxes pay 200, with Supply Lines 260 (got {string.Join(", ", deposits)}).");
 
         var grunt = new PlayerId(1);
