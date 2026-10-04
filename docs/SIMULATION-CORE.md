@@ -1292,3 +1292,14 @@ KI-Angriffsbefehl und keinen An-/Abmarsch; `AssistedTargetingUpdate` bleibt ein 
 - Retail-Referenzmatch: Sieger FactionGLA bei **Tick 13.890**, `final hash` (Run 1) `76F22CB0CA79BEEF`, Kettenhash `35F54CAD40A43E6E`; zweiter Lauf und Snapshot-Fortsetzung bei Tick 7.095 identisch (die Werte der Phase 13 – Tick 15.000,
   `532F19F360C59550` – sind überholt: mehr produzierbare Objekte und die Slot-Waffenwahl verändern das Szenario). Stresstest (216.000 Ticks) unverändert `56882F763EABEF67`, Kettenhash `B8E663493F2C73D5`.
 - Versionen: `WorldSnapshot` 8, Replay 8, `CommandTypes.Version` 11, `MissionSnapshot` 2.
+
+## 31. Nachtrag Phase 15 (4. Oktober 2026): Turmzustand, gestufte Übernahme, Flügelflug
+
+Drei Verhaltenslücken, die die gestellten Demos (`docs/DEMO-SCENARIOS.md`) aufdeckten, sind geschlossen; die Einzelheiten stehen in eigenen Dokumenten:
+
+- **Turmzustand mit Feuerfreigabe** (`docs/SIM-TURRET-AIM.md`): typisierte `Turret`/`AltTurret`-Blöcke, `TurretState` je Turm, die Waffe eines vom Turm gesteuerten Slots wartet auf die Ausrichtung;
+  `WorldSnapshot` 8 → 9. Die Bemerkung „Turm- und Neigungsbedingungen fehlen“ weiter oben ist damit überholt. Referenzmatch jetzt Tick 13.875, Endhash `482FC8C52D507662`, Kette `34AB50A397B0125C`.
+- **Gestufte Gebäudeübernahme** (`docs/SIM-STAGED-CAPTURE.md`): `SpecialAbilityUpdate` führt für `SPECIAL_INFANTRY_CAPTURE_BUILDING` und `SPECIAL_BLACKLOTUS_CAPTURE_BUILDING` Anlaufen, Auspacken, Vorbereiten
+  (Flagge), Besitzerwechsel und Einpacken aus; die Erwähnungen von `SpecialAbilityUpdate` als Hülle in §11, §23, §25 und §30 gelten nur noch für die übrigen Fähigkeiten.
+- **Flügelflug und Flugplatzgeometrie** (`docs/SIM-JET-FLIGHT.md`): `Appearance = WINGS` fliegt mit Mindestgeschwindigkeit, begrenzter Kurvenrate und kreist bei `CirclingRadius`; die Start- und Landebahn
+  des Flugplatzes kommt aus einer eingespeisten Knochentabelle der Flugplatzmodelle (`ModelGeometry`, Teil von `GameData.Fingerprint`).

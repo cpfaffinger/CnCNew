@@ -195,11 +195,9 @@ unabhängige Fehler der Darstellung:
 
 Dazu die Zustände, die vorher nicht existierten:
 
-- **Türme** (`TurretMotion`, `TurretTracker`): die Simulation hat keinen Turmzustand. Die Präsentation
-  leitet den Zielwinkel aus den `WeaponFired`-Ereignissen ab; Drehrate, Ruhestellung und Höhenwinkel
-  stammen aus den `Turret`/`AltTurret`-Blöcken des `AIUpdateInterface` und steuern die Turm- und
-  Höhen-Bones (`Capture_Bone/Control_Bone`-Technik). Der zweite Turm (`AltTurret`) ist getrennt. Das ist
-  eine Näherung: der Turm folgt dem Schuss, nicht dem Zielen vor dem Schuss.
+- **Türme:** seit dem 4. Oktober 2026 hat die Simulation einen Turmzustand (`docs/SIM-TURRET-AIM.md`): der Turm dreht sich vor dem Schuss zum Ziel, die Waffe wartet auf die Ausrichtung.
+  `TurretTracker` liest nur noch `Entity.TurretOf`; Drehrate, Ruhestellung und Höhenwinkel kommen aus den typisierten `Turret`/`AltTurret`-Blöcken und steuern die Turm- und
+  Höhen-Bones (`Capture_Bone/Control_Bone`-Technik). Der zweite Turm (`AltTurret`) ist getrennt.
 - **Reifen** (`W3DTruckDraw`): Drehwinkel = Multiplikator · zurückgelegte Strecke (`WheelTravel` aus
   den Positionsänderungen); Lenkung und Federung fehlen (siehe Einschränkungen).
 - **Mündungsfeuer** (`MuzzleFlashTicks`, `FiredSlots`): Unterobjekte `MUZZLEFX*`/`BARRELFX*` nur kurz
