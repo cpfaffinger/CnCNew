@@ -119,6 +119,19 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
             }
         }
 
+        // The layouts authored at 1920x1080 (control bar, in-game quit menu) in the scale mode the HUD uses by default:
+        // their header template fonts and their window fonts scale by different bases (see UiScaler.ScaleFontSize).
+        foreach (var (name, file) in new[] { ("controlbar-anchor", "Window/ControlBar.wnd"), ("quitmenu-anchor", "Window/Menus/QuitMenu.wnd") })
+        {
+            var layout = WndParser.Parse(content.OpenRead(file), file);
+            foreach (var (width, height) in Sizes)
+            {
+                var tree = new UiWindowTree(new UiViewport(width, height), UiScaleOptions.Original with { Mode = UiScaleMode.Anchor }, services);
+                tree.AddLayout(layout);
+                Capture(renderer, tree.BuildDrawList(), width, height, $"{name}-{width}x{height}", manifest);
+            }
+        }
+
         foreach (var (width, height) in Sizes)
         {
             var viewport = new UiViewport(width, height);
@@ -127,6 +140,8 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
             Capture(renderer, SyntheticScenes.Images(viewport, plainImage), width, height, $"images-{width}x{height}", manifest);
             Capture(renderer, SyntheticScenes.Transform(viewport, rotatedImage), width, height, $"transform-{width}x{height}", manifest);
         }
+
+        ShellScenes.Capture(_data, renderer.TextMeasure, outputDirectory, (list, width, height, name) => Capture(renderer, list, width, height, name, manifest));
 
         File.WriteAllLines(Path.Combine(outputDirectory, "manifest.txt"), manifest);
         var totals = renderer.Stats;

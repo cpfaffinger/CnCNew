@@ -42,6 +42,10 @@ public static class WndTests
         Test(TooltipStateMachine);
         Test(DrawListGolden);
         Test(ThreePieceButtonsTileTheirCenter);
+        Test(PushButtonStatesPickTheirDrawData);
+        Test(HiliteFollowsThePointerOnly);
+        Test(StaticTextHasNoHiliteState);
+        Test(HorizontalSliderDrawsBoxesAndThumb);
 
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null) Test(() => RealData(contentDirectory));
@@ -408,6 +412,14 @@ public static class WndTests
         Check(UiScaler.ScaleFontSize(12, false, hd, UiScaleOptions.Original, 800, 600) == 12, "Window FONT stays unscaled in Stretch.");
         Check(UiScaler.ScaleFontSize(12, false, hd, new UiScaleOptions { Mode = UiScaleMode.Uniform }, 800, 600) == 21, "Uniform: 12 * 1.8 = 21.6 -> 21.");
         Check(UiScaler.ScaleFontSize(12, false, hd, new UiScaleOptions { Mode = UiScaleMode.Anchor }, 1920, 1080) == 12, "Uniform scale relative to the window's creation resolution.");
+        // A header template point size is measured against 800x600 whatever the layout's creation resolution
+        // (GlobalLanguage::adjustFontSize): a 1920x1080 layout must not shrink its template fonts to 800/1920.
+        foreach (var mode in new[] { UiScaleMode.Uniform, UiScaleMode.Anchor })
+        {
+            Check(UiScaler.ScaleFontSize(8, true, hd, new UiScaleOptions { Mode = mode }, 1920, 1080) == 14, $"{mode}: template 8 * 1.8 = 14.4 -> 14 in a 1920x1080 layout.");
+            Check(UiScaler.ScaleFontSize(8, true, new UiViewport(1280, 720), new UiScaleOptions { Mode = mode }, 1920, 1080) == 9, $"{mode}: template 8 * 1.2 = 9.6 -> 9.");
+            Check(UiScaler.ScaleFontSize(8, true, hd, new UiScaleOptions { Mode = mode }, 800, 600) == 14, $"{mode}: the same template size in an 800x600 layout.");
+        }
         Check(UiScaler.ScaleFontSize(12, false, hd, new UiScaleOptions { TextScale = 1.5m }, 800, 600) == 18, "Accessibility text scale.");
         Check(UiScaler.ScaleFontSize(1, false, new UiViewport(640, 480), new UiScaleOptions { Mode = UiScaleMode.Uniform, TextScale = 0.1m }, 800, 600) == 1, "Font size floor is 1.");
     }
@@ -494,8 +506,10 @@ public static class WndTests
         Check(button.IsSelected && tree.Grabbed == button, "Down must press and grab.");
         tree.MouseUp(150, 120, UiMouseButton.Left);
         tree.Dispatch();
-        Check(received.Select(e => e.Kind).SequenceEqual([UiEventKind.ButtonMouseEntering, UiEventKind.FocusChange, UiEventKind.ButtonSelected]),
+        // A click does not move the keyboard focus to a button (GadgetPushButtonInput never calls winSetFocus).
+        Check(received.Select(e => e.Kind).SequenceEqual([UiEventKind.ButtonMouseEntering, UiEventKind.ButtonSelected]),
             $"Click events: {string.Join(", ", received.Select(e => e.Kind))}");
+        Check(tree.Focus is null, "Clicking a button must not focus it.");
         Check(received.Last() == new UiEvent(UiEventKind.ButtonSelected, "B.wnd:Button", 0, null, "B.wnd:Root"), $"Selected event: {received.Last()}");
         received.Clear();
 
@@ -578,8 +592,11 @@ public static class WndTests
         var selected = deliveries.Single(delivery => delivery.Event.Kind == UiEventKind.ButtonSelected);
         Check(selected.Outcome == UiDeliveryOutcome.Handled && selected.Callback == "RootSystem" && selected.Event.Target == "R.wnd:Root",
             $"PassSelectedButtonsToParentSystem must forward GBM_SELECTED: {selected}");
-        Check(deliveries.Single(delivery => delivery.Event.Kind == UiEventKind.FocusChange).Outcome == UiDeliveryOutcome.Filtered,
+        tree.SetFocus(Find(tree, "R.wnd:A"));
+        Check(tree.Dispatch().Single(delivery => delivery.Event.Kind == UiEventKind.FocusChange).Outcome == UiDeliveryOutcome.Filtered,
             "PassSelectedButtonsToParentSystem must stop other kinds.");
+        tree.SetFocus(null);
+        tree.Dispatch();
 
         tree.MouseDown(50, 60, UiMouseButton.Left);
         tree.MouseUp(50, 60, UiMouseButton.Left);
@@ -654,7 +671,7 @@ public static class WndTests
         var tree = Tree(text);
         tree.Register("SSystem", (_, _) => { });
         var slider = Find(tree, "S.wnd:H");
-        Check(slider.Slider!.Value == 0 && UiGadgetGeometry.SliderThumb(slider) == new UiRect(100, 100, 13, 20), $"Initial thumb {UiGadgetGeometry.SliderThumb(slider)}.");
+        Check(slider.Slider!.Value == 0 && UiGadgetGeometry.SliderThumb(slider) == new UiRect(100, 110, 13, 16), $"Initial thumb {UiGadgetGeometry.SliderThumb(slider)}.");
         // Travel is 200 px for 100 steps: pointer at the thumb centre of value 50 is 100 + 100 + 6.
         tree.MouseDown(206, 110, UiMouseButton.Left);
         Check(slider.Slider.Value == 50, $"Value after press: {slider.Slider.Value}");
@@ -664,6 +681,8 @@ public static class WndTests
         var events = Handled(tree).Where(e => e.Source == "S.wnd:H" && e.Kind is UiEventKind.SliderTrack or UiEventKind.SliderDone).ToArray();
         Check(events.Select(e => (e.Kind, e.Value)).SequenceEqual([(UiEventKind.SliderTrack, 50), (UiEventKind.SliderTrack, 100), (UiEventKind.SliderDone, 100)]),
             $"Slider events: {string.Join(", ", events.Select(e => $"{e.Kind}:{e.Value}"))}");
+        Check(tree.Focus is null, "Dragging a slider must not focus it (GadgetHorizontalSliderInput never calls winSetFocus).");
+        tree.SetFocus(slider);
         tree.KeyDown(UiKey.Left);
         Check(slider.Slider.Value == 99, "Left arrow decreases.");
 
@@ -954,6 +973,221 @@ public static class WndTests
         Check(dump == expected.Replace("\r\n", "\n", StringComparison.Ordinal), $"Three-piece mismatch:\n{dump}");
         var unresolved = Tree(text).BuildDrawList();
         Check(unresolved.Statistics.UnresolvedImageSizes == 3, $"Unknown image sizes must be counted: {unresolved.Statistics.UnresolvedImageSizes}");
+    }
+
+    private static string StateLayout(string status) => WndFile(Window(new Spec("USER", "S.wnd:Root", 0, 0, 800, 600)
+    {
+        System = "SSystem",
+        Children =
+        [
+            new Spec("PUSHBUTTON", "S.wnd:Three", 100, 100, 200, 130)
+            {
+                Status = status + "+IMAGE",
+                Text = "GUI:Three",
+                DrawData = Draw("ENABLEDDRAWDATA", Entry("L", "0 0 0 0", "0 0 0 0"), Undefined, Undefined, Undefined, Undefined, Entry("M", "0 0 0 0", "0 0 0 0"), Entry("R", "0 0 0 0", "0 0 0 0"))
+                    + Draw("DISABLEDDRAWDATA", Entry("DL", "0 0 0 0", "0 0 0 0"), Undefined, Undefined, Undefined, Undefined, Entry("DM", "0 0 0 0", "0 0 0 0"), Entry("DR", "0 0 0 0", "0 0 0 0"))
+                    + Draw("HILITEDRAWDATA", Entry("HL", "0 0 0 0", "0 0 0 0"), Entry("PL", "0 0 0 0", "0 0 0 0"), Undefined, Entry("PM", "0 0 0 0", "0 0 0 0"), Entry("PR", "0 0 0 0", "0 0 0 0"),
+                        Entry("HM", "0 0 0 0", "0 0 0 0"), Entry("HR", "0 0 0 0", "0 0 0 0")),
+            },
+            new Spec("PUSHBUTTON", "S.wnd:One", 100, 200, 200, 230)
+            {
+                Status = status + "+IMAGE",
+                DrawData = Draw("ENABLEDDRAWDATA", Entry("E", "0 0 0 0", "0 0 0 0")) + Draw("DISABLEDDRAWDATA", Entry("D", "0 0 0 0", "0 0 0 0"))
+                    + Draw("HILITEDRAWDATA", Entry("H", "0 0 0 0", "0 0 0 0"), Entry("P", "0 0 0 0", "0 0 0 0")),
+            },
+            new Spec("PUSHBUTTON", "S.wnd:Color", 100, 300, 200, 330)
+            {
+                Status = status,
+                DrawData = Draw("ENABLEDDRAWDATA", Entry("NoImage", "1 1 1 255", "2 2 2 255")) + Draw("DISABLEDDRAWDATA", Entry("NoImage", "3 3 3 255", "4 4 4 255"))
+                    + Draw("HILITEDRAWDATA", Entry("NoImage", "5 5 5 255", "6 6 6 255"), Entry("NoImage", "7 7 7 255", "8 8 8 255")),
+            },
+            new Spec("PUSHBUTTON", "S.wnd:Other", 400, 100, 500, 130),
+        ],
+    }));
+
+    private static string[] ImagesOf(UiWindowTree tree) => tree.BuildDrawList().Commands.OfType<UiImageDraw>().Select(draw => draw.Image).Distinct().ToArray();
+
+    /// <summary>
+    /// The image and colour a push button draws per state, like <c>W3DGadgetPushButtonImageDrawThree</c>,
+    /// <c>W3DGadgetPushButtonImageDrawOne</c> and <c>W3DGadgetPushButtonDraw</c>: enabled 0/5/6, hilite 0/5/6 under the
+    /// pointer, hilite 1/3/4 while pressed, disabled 0/5/6; the text takes the matching <c>TEXTCOLOR</c>.
+    /// </summary>
+    private static void PushButtonStatesPickTheirDrawData()
+    {
+        var images = new FakeImages(new() { ["L"] = (10, 30), ["M"] = (40, 30), ["R"] = (10, 30), ["HL"] = (10, 30), ["HM"] = (40, 30), ["HR"] = (10, 30),
+            ["PL"] = (10, 30), ["PM"] = (40, 30), ["PR"] = (10, 30), ["DL"] = (10, 30), ["DM"] = (40, 30), ["DR"] = (10, 30) });
+        var services = new UiTreeServices(new MonoMeasure()) { Images = images, Text = new FakeText(new() { ["GUI:Three"] = "Go" }) };
+        var tree = Tree(StateLayout("ENABLED"), services: services);
+        WndColor TextColor() => tree.BuildDrawList().Commands.OfType<UiTextDraw>().Single().Color;
+        WndColor[] Fills() => tree.BuildDrawList().Commands.OfType<UiFillRect>().Select(fill => fill.Color).ToArray();
+
+        Check(ImagesOf(tree).SequenceEqual(["M", "L", "R", "E"]), $"Enabled images: {string.Join(",", ImagesOf(tree))}");
+        Check(TextColor() == new WndColor(255, 255, 255, 255) && Fills().Contains(new WndColor(1, 1, 1, 255)), "Enabled text and fill colour.");
+
+        tree.MouseMove(150, 115);
+        Check(ImagesOf(tree).SequenceEqual(["HM", "HL", "HR", "E"]), $"Hovered three-piece images: {string.Join(",", ImagesOf(tree))}");
+        Check(TextColor() == new WndColor(255, 255, 0, 255), "Hovered text takes the hilite colour.");
+        tree.MouseDown(150, 115, UiMouseButton.Left);
+        Check(ImagesOf(tree).SequenceEqual(["PM", "PL", "PR", "E"]), $"Pressed three-piece images: {string.Join(",", ImagesOf(tree))}");
+        tree.MouseUp(150, 115, UiMouseButton.Left);
+        Check(ImagesOf(tree).SequenceEqual(["HM", "HL", "HR", "E"]), "Released over the button: hilite again.");
+
+        tree.MouseMove(150, 215);
+        Check(ImagesOf(tree).SequenceEqual(["M", "L", "R", "H"]), $"Hovered single image: {string.Join(",", ImagesOf(tree))}");
+        tree.MouseDown(150, 215, UiMouseButton.Left);
+        Check(ImagesOf(tree).SequenceEqual(["M", "L", "R", "P"]), $"Pressed single image: {string.Join(",", ImagesOf(tree))}");
+        tree.MouseUp(150, 215, UiMouseButton.Left);
+
+        tree.MouseMove(150, 315);
+        Check(Fills().Contains(new WndColor(5, 5, 5, 255)), "Hovered colour button takes hilite entry 0.");
+        tree.MouseDown(150, 315, UiMouseButton.Left);
+        Check(Fills().Contains(new WndColor(7, 7, 7, 255)), "Pressed colour button takes hilite entry 1.");
+        tree.MouseUp(150, 315, UiMouseButton.Left);
+        tree.MouseMove(700, 500);
+        Check(ImagesOf(tree).SequenceEqual(["M", "L", "R", "E"]) && Fills().Contains(new WndColor(1, 1, 1, 255)), "Everything returns to the enabled look once the pointer has left.");
+
+        // No ENABLED status bit: the DISABLED* set, also under the pointer.
+        var disabled = Tree(StateLayout("NOFOCUS"), services: services);
+        disabled.MouseMove(150, 115);
+        Check(ImagesOf(disabled).SequenceEqual(["DM", "DL", "DR", "D"]), $"Disabled images: {string.Join(",", ImagesOf(disabled))}");
+        Check(disabled.BuildDrawList().Commands.OfType<UiTextDraw>().Single().Color == new WndColor(128, 128, 128, 255), "Disabled text colour.");
+    }
+
+    /// <summary>
+    /// The hilite is the pointer's: it ends when the pointer leaves, also after a click (a click must not leave the button
+    /// focused and hilited), when the button is hidden while hovered, and when another screen takes the pointer.
+    /// </summary>
+    private static void HiliteFollowsThePointerOnly()
+    {
+        var tree = Tree(StateLayout("ENABLED"));
+        tree.Register("SSystem", (_, _) => { });
+        var button = Find(tree, "S.wnd:Color");
+        var other = Find(tree, "S.wnd:Other");
+        Click(tree, button);
+        Check(button.IsHilited && !button.IsSelected, "Still under the pointer after the click.");
+        tree.MouseMove(450, 115);
+        Check(!button.IsHilited && other.IsHilited, "A clicked button loses its hilite when the pointer moves to another button.");
+        tree.MouseMove(700, 500);
+        Check(!other.IsHilited, "Leaving clears the hilite.");
+
+        // Keyboard focus hilites; the pointer leaving the focused button still clears it (GWM_MOUSE_LEAVING is unconditional).
+        tree.SetFocus(button);
+        Check(button.IsHilited, "Focus hilites.");
+        tree.MouseMove(150, 315);
+        tree.MouseMove(700, 500);
+        Check(!button.IsHilited, "Leaving clears the hilite of the focused button too.");
+        tree.SetFocus(null);
+
+        // Hidden while hovered and pressed (a sub-menu switch), shown again later: must come back in the enabled look.
+        tree.MouseMove(150, 315);
+        tree.MouseDown(150, 315, UiMouseButton.Left);
+        Check(button.IsHilited && button.IsSelected, "Hovered and pressed.");
+        button.SetHidden(true);
+        button.SetHidden(false);
+        Check(!button.IsHilited && !button.IsSelected && tree.Hovered is null && tree.Grabbed is null, "Hiding a button drops its hilite and pressed state.");
+        tree.MouseUp(150, 315, UiMouseButton.Left);
+
+        // Another screen covers the tree.
+        tree.MouseMove(150, 315);
+        tree.MouseDown(150, 315, UiMouseButton.Left);
+        tree.Dispatch();
+        tree.PointerLeft();
+        Check(!button.IsHilited && !button.IsSelected && tree.Hovered is null && tree.Grabbed is null, "PointerLeft drops hilite, pressed state and grab.");
+        Check(Handled(tree).Select(e => e.Kind).SequenceEqual([UiEventKind.ButtonMouseLeaving]), "PointerLeft sends the leaving message.");
+    }
+
+    /// <summary>
+    /// Static texts ship with <c>MOUSETRACK</c> and a bright <c>HILITEDRAWDATA</c> fill, but <c>GadgetStaticTextInput</c>
+    /// ignores <c>GWM_MOUSE_ENTERING</c>: hovering one changes nothing and sends nothing. The same holds for progress bars.
+    /// </summary>
+    private static void StaticTextHasNoHiliteState()
+    {
+        var text = WndFile(Window(new Spec("USER", "T.wnd:Root", 0, 0, 800, 600)
+        {
+            System = "TSystem",
+            Children =
+            [
+                new Spec("STATICTEXT", "T.wnd:Label", 100, 100, 300, 130) { Text = "GUI:Label" },
+                new Spec("PROGRESSBAR", "T.wnd:Bar", 100, 200, 300, 220),
+            ],
+        }));
+        var tree = Tree(text);
+        var received = new List<UiEvent>();
+        tree.Register("TSystem", (_, uiEvent) => received.Add(uiEvent));
+        Check((Find(tree, "T.wnd:Label").Definition.Style & WndStyle.MouseTrack) != 0, "The fixture label carries MOUSETRACK like the shipped ones.");
+        var before = tree.BuildDrawList().Dump();
+        Check(before.Contains("fill 101,101 198x28 10,20,30,255", StringComparison.Ordinal), $"Label draws its enabled fill:\n{before}");
+        foreach (var (x, y) in new[] { (150, 115), (150, 210) })
+        {
+            Check(tree.MouseMove(x, y), "The pointer is over the window.");
+            tree.Dispatch();
+            Check(tree.BuildDrawList().Dump() == before, $"Hovering at {x},{y} must not change the picture:\n{tree.BuildDrawList().Dump()}");
+        }
+        Check(!Find(tree, "T.wnd:Label").IsHilited && !Find(tree, "T.wnd:Bar").IsHilited && received.Count == 0, $"No hilite, no messages: {string.Join(", ", received)}");
+    }
+
+    /// <summary>
+    /// The image look of a horizontal slider (<c>W3DGadgetHorizontalSliderImageDraw</c>): a centred row of boxes, filled up
+    /// to the value (disabled image 0) and blank after it (disabled image 1), the frame image (hilite 0) behind the row
+    /// and the thumb arrow only while hilited. Window 213 wide, box 11 wide plus 2 gap: 16 boxes, 5 pixels left over.
+    /// </summary>
+    private static void HorizontalSliderDrawsBoxesAndThumb()
+    {
+        var text = WndFile(Window(new Spec("USER", "H.wnd:Root", 0, 0, 800, 600)
+        {
+            System = "HSystem",
+            DrawData = string.Empty,
+            Children =
+            [
+                new Spec("HORZSLIDER", "H.wnd:Slider", 100, 100, 313, 126)
+                {
+                    Status = "ENABLED+IMAGE",
+                    DrawData = Draw("ENABLEDDRAWDATA", Entry("NoImage", "255 0 0 255", "255 128 128 255"))
+                        + Draw("DISABLEDDRAWDATA", Entry("Full", "0 0 0 0", "0 0 0 0"), Entry("Empty", "0 0 0 0", "0 0 0 0"))
+                        + Draw("HILITEDRAWDATA", Entry("Frame", "0 0 0 0", "0 0 0 0"), Entry("Arrow", "0 0 0 0", "0 0 0 0")),
+                    Extra = "  SLIDERDATA = MINVALUE: 0,\n    MAXVALUE: 100;\n"
+                        + Draw("SLIDERTHUMBENABLEDDRAWDATA", Entry("NoImage", "1 1 1 255", "2 2 2 255"))
+                        + Draw("SLIDERTHUMBDISABLEDDRAWDATA", Entry("NoImage", "1 1 1 255", "2 2 2 255"))
+                        + Draw("SLIDERTHUMBHILITEDRAWDATA", Entry("Arrow", "0 0 0 0", "0 0 0 0"), Entry("ArrowDown", "0 0 0 0", "0 0 0 0")),
+                },
+            ],
+        }));
+        var images = new FakeImages(new() { ["Full"] = (11, 13), ["Empty"] = (11, 13), ["Frame"] = (13, 15), ["Arrow"] = (13, 16) });
+        var tree = Tree(text, services: new UiTreeServices(new MonoMeasure()) { Images = images });
+        tree.Register("HSystem", (_, _) => { });
+        var slider = Find(tree, "H.wnd:Slider");
+        UiImageDraw[] Draws() => tree.BuildDrawList().Commands.OfType<UiImageDraw>().ToArray();
+        int Count(string image) => Draws().Count(draw => draw.Image == image);
+
+        Check(Count("Full") == 0 && Count("Empty") == 16 && Draws().Length == 16, $"At the minimum every box is blank: {tree.BuildDrawList().Dump()}");
+        Check(Draws()[0].Destination == new UiRect(102, 100, 11, 11) && Draws()[15].Destination == new UiRect(297, 100, 11, 11), $"Row is centred: {Draws()[0].Destination} .. {Draws()[15].Destination}");
+        Check(!tree.BuildDrawList().Commands.Any(command => command is UiFillRect or UiBorderRect), "The image look draws no colour bar and no coloured thumb.");
+
+        slider.SetSliderValue(50);
+        Check(Count("Full") == 9 && Count("Empty") == 7, $"Value 50 fills the boxes that start up to the middle: {Count("Full")}/{Count("Empty")}");
+        slider.SetSliderValue(100);
+        Check(Count("Full") == 16 && Count("Empty") == 0, "The maximum fills every box.");
+
+        // Hovering: the frame row behind the boxes (one more than boxes) and the thumb arrow below the value.
+        slider.SetSliderValue(50);
+        tree.MouseMove(110, 104);
+        Check(slider.IsHilited && Count("Frame") == 17 && Count("Arrow") == 1, $"Hovered slider: {Count("Frame")} frames, {Count("Arrow")} arrows");
+        Check(Draws()[0] is { Image: "Frame", Destination: { X: 96, Y: 103, Width: 13, Height: 13 } }, $"Frames come first, half a step left and a third down: {Draws()[0]}");
+        Check(Draws()[^1] is { Image: "Arrow" } && Draws()[^1].Destination == new UiRect(200, 110, 13, 16) && Draws()[^1].Destination == UiGadgetGeometry.SliderThumb(slider),
+            $"Thumb last, 13x16, ten below the top: {Draws()[^1]}");
+
+        // Dragging: the value follows the pointer, the thumb shows its pressed image, the boxes follow.
+        tree.MouseDown(306, 104, UiMouseButton.Left);
+        Check(slider.Slider!.Value == 100 && Count("Full") == 16 && Count("ArrowDown") == 1 && Count("Arrow") == 0, $"Pressed at the right end: value {slider.Slider.Value}");
+        tree.MouseMove(156, 300);
+        Check(slider.Slider.Value == 25 && Count("Full") == 5, $"Dragged (pointer outside the window): value {slider.Slider.Value}, {Count("Full")} filled");
+        tree.MouseUp(156, 300, UiMouseButton.Left);
+        var kinds = Handled(tree).Where(e => e.Source == "H.wnd:Slider" && e.Kind is UiEventKind.SliderTrack or UiEventKind.SliderDone).Select(e => (e.Kind, e.Value)).ToArray();
+        Check(kinds.SequenceEqual([(UiEventKind.SliderTrack, 100), (UiEventKind.SliderTrack, 25), (UiEventKind.SliderDone, 25)]), $"Slider messages: {string.Join(", ", kinds)}");
+        Check(!slider.IsHilited && Count("Frame") == 0 && Count("Arrow") == 0 && Count("ArrowDown") == 0, "Released outside: no hilite, no thumb.");
+
+        var unknown = Tree(text);
+        Check(unknown.BuildDrawList().Statistics.UnresolvedImageSizes == 1, "An unknown box size is counted.");
     }
 
     // ------------------------------------------------------------------------------------------------------------------

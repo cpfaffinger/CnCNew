@@ -12,6 +12,10 @@ public static class UiGadgetGeometry
 {
     public const int GadgetSize = 16;
     public const int HorizontalThumbWidth = 13;
+    /// <summary><c>HORIZONTAL_SLIDER_THUMB_HEIGHT</c>.</summary>
+    public const int HorizontalThumbHeight = 16;
+    /// <summary><c>HORIZONTAL_SLIDER_THUMB_POSITION</c> = thumb height * 2 / 3.</summary>
+    public const int HorizontalThumbOffsetY = HorizontalThumbHeight * 2 / 3;
     public const int TextInset = 4;
 
     public static int RowHeight(UiWindow window) => Math.Max(1, window.Tree.Services.TextMeasure.LineHeight(window.Font));
@@ -101,7 +105,8 @@ public static class UiGadgetGeometry
         {
             var width = Math.Min(rect.Width, window.Transform.X.Length(HorizontalThumbWidth));
             var x = rect.X + (int)((long)(rect.Width - width) * (slider.Value - slider.Minimum) / range);
-            return new UiRect(x, rect.Y, width, rect.Height);
+            // gogoGadgetSlider: the thumb button is 13x16 and hangs HORIZONTAL_SLIDER_THUMB_POSITION below the top edge.
+            return new UiRect(x, rect.Y + window.Transform.Y.Length(HorizontalThumbOffsetY), width, window.Transform.Y.Length(HorizontalThumbHeight));
         }
         var height = Math.Min(rect.Height, window.Transform.Y.Length(GadgetSize));
         var y = rect.Y + (int)((long)(rect.Height - height) * (slider.Maximum - slider.Value) / range);

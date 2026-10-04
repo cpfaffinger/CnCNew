@@ -41,14 +41,15 @@ internal sealed class ClientRuntime : IDisposable
     private readonly SpriteBatch _minimapBatch;
     private readonly ClientAudio _audio;
 
-    private ClientRuntime(global::Stride.Engine.Game game, GameData data, GameSettings settings, GameShell? shell, ClientAudioOptions audio)
+    private ClientRuntime(global::Stride.Engine.Game game, GameData data, GameSettings settings, Func<UiRenderer, GameShell>? shell, ClientAudioOptions audio)
     {
         _game = game;
         _data = data;
-        _settings = settings;
-        _shell = shell;
-        _audio = new ClientAudio(data, settings.Audio, audio);
         _ui = new UiRenderer(game.GraphicsDevice, data.Content, data.Images, "English");
+        // The shell lays its text out with the renderer's own glyph metrics; with any other measure labels sit off centre.
+        _shell = shell?.Invoke(_ui);
+        _settings = _shell?.Settings ?? settings;
+        _audio = new ClientAudio(data, _settings.Audio, audio);
         _minimapBatch = new SpriteBatch(game.GraphicsDevice);
         _ui.CustomDraw = DrawCustom;
     }
@@ -56,8 +57,8 @@ internal sealed class ClientRuntime : IDisposable
     /// <summary>The shell (main menu and everything behind it); it starts matches and missions itself.</summary>
     public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio)
     {
-        var shell = GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height));
-        var runtime = new ClientRuntime(game, data, shell.Settings, shell, audio);
+        var runtime = new ClientRuntime(game, data, GameSettings.Default,
+            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure), audio);
         runtime._audio.Game.EnterShell();
         return runtime;
     }

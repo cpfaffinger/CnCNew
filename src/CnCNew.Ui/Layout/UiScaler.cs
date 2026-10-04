@@ -139,8 +139,12 @@ public static class UiScaler
     /// <summary>
     /// Point size of a window font. <see cref="UiScaleMode.Stretch"/> reproduces the original: header template fonts grow
     /// with <c>GlobalLanguage::adjustFontSize</c> (classic method: <c>1 + (width / 800 - 1) * adjustment</c>, clamped to
-    /// [1, 2], floored), window <c>FONT</c> sizes stay as authored. Uniform and Anchor scale every font with the window's
-    /// uniform scale. The accessibility <see cref="UiScaleOptions.TextScale"/> multiplies the result; the size is at least 1.
+    /// [1, 2], floored), window <c>FONT</c> sizes stay as authored. Uniform and Anchor scale a window <c>FONT</c> with the
+    /// window's uniform scale (it is authored in pixels of the creation resolution). A header template point size is not
+    /// tied to the layout: <c>adjustFontSize</c> always measures against the 800 pixel wide default display, whatever
+    /// <c>CREATIONRESOLUTION</c> the window carries, so it scales with the uniform scale of 800x600. Scaling it by the
+    /// creation resolution instead shrinks every template font of a layout authored at 1920x1080 to 800/1920 of its size.
+    /// The accessibility <see cref="UiScaleOptions.TextScale"/> multiplies the result; the size is at least 1.
     /// </summary>
     public static int ScaleFontSize(int size, bool fromHeaderTemplate, UiViewport viewport, UiScaleOptions options, int creationWidth, int creationHeight)
     {
@@ -157,7 +161,9 @@ public static class UiScaler
         }
         else
         {
-            var (numerator, denominator) = UniformScale(viewport, creationWidth, creationHeight);
+            var (numerator, denominator) = fromHeaderTemplate
+                ? UniformScale(viewport, DefaultDisplayWidth, DefaultDisplayHeight)
+                : UniformScale(viewport, creationWidth, creationHeight);
             scaled = size * (decimal)numerator / denominator;
         }
         return Math.Max(1, (int)Math.Floor(scaled * options.TextScale));

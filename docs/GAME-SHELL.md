@@ -51,7 +51,7 @@ registrierte Callbacks, 0 nicht aufgelöste Labels** über alle acht besuchten S
 
 | Screen (Datei) | Registrierte Callbacks | Zweck |
 |---|---|---|
-| `MainMenuScreen` (`MainMenu.wnd`) | `MainMenuSystem`, `MainMenuInput` | Eine gestapelte Datei mit allen Untermenüs; keine davon ist im WND-File selbst `Hidden` – das entspricht `W3DMainMenuInit`, das die Hülle direkt im Konstruktor nachbildet (Einstiegsgruppe zeigen, Rest verstecken). |
+| `MainMenuScreen` (`MainMenu.wnd`) | `MainMenuSystem`, `MainMenuInput` | Eine gestapelte Datei mit allen Untermenüs; keine davon ist im WND-File selbst `Hidden` – das entspricht `MainMenuInit` (`MainMenu.cpp`), das die Hülle direkt im Konstruktor nachbildet: Einstiegsgruppe `MapBorder2` zeigen, die vier anderen Gruppen verstecken, dazu die sechs Fraktions-Schaltflächen „Recent Save“/„Load Game“ links neben der Spalte (`showSelectiveButtons(SHOW_NONE)`; im Original erscheint ein Paar nur, solange die Maus über der zugehörigen Fraktionsschaltfläche steht – hier nie, siehe §11). |
 | `OptionsScreen` (`OptionsMenu.wnd`) | `OptionsMenuSystem`, `OptionsMenuInput` | Auflösung, drei Lautstärkeregler, Scrollgeschwindigkeit; Accept/Cancel/Defaults. |
 | `SkirmishSetupScreen` (`SkirmishGameOptionsMenu.wnd`) | `SkirmishGameOptionsMenuSystem`, `SkirmishGameOptionsMenuInput` | Karte, menschliche Fraktion/Name, bis zu 7 Computergegner, Startkapital → `MatchSetup`. |
 | `SkirmishMapSelectScreen` (`SkirmishMapSelectMenu.wnd`) | `SkirmishMapSelectMenuSystem`, `SkirmishMapSelectMenuInput` | Kartenliste aus `Maps/MapCache.ini` (nur `isMultiplayer = yes`). |
@@ -205,10 +205,41 @@ davon neu.
 * Kein Mausklick beendet den Abspann (nur Escape) – `WinTextDraw` ist ein einfaches `USER`-Fenster, und diese Laufzeit
   routet nur Gadget- und Tastaturnachrichten (siehe `docs/UI-WND.md`); eine „beliebiger Mausklick auf ein Nicht-
   Gadget-Fenster“-Nachricht existiert im Nachrichtenmodell bislang nicht.
-* `ShellTextMeasure` liefert synthetische, deterministische Zeichenbreiten (keine echte Glyphenmetrik); ein Stride-
-  Host sollte eine eigene `IUiTextMeasure`-Implementierung auf Basis der echten Schriftart einsetzen.
+* `ShellTextMeasure` liefert synthetische, deterministische Zeichenbreiten (keine echte Glyphenmetrik) und ist nur
+  noch der Standard für kopflose Tests. Ein Host übergibt `GameShell.Create(…, textMeasure)` die Metrik der Schrift,
+  mit der er zeichnet; der Stride-Client tut das seit dem Befundpaket in §11 (`ClientRuntime.ForShell` reicht
+  `UiRenderer.TextMeasure` durch) – vorher saßen alle zentrierten Texte sichtbar neben der Mitte.
 * Anzeigemodus/Sprache/Seitenverhältnis/Barrierefreiheits-Textskalierung sind in `GameSettings` vorhanden, aber von
   keinem Gadget der ausgelieferten `OptionsMenu.wnd` aus erreichbar.
 * **Phase 12:** die Shell-Ausgaben (`StartMatchOutput`, `StartMissionOutput`, `ExitRequestedOutput`, Anzeige-/Einstellungsänderungen) und die Rückmeldungen
   (`MatchFinished`/`MissionFinished`) sind im Stride-Client angeschlossen (`ClientRuntime`, `docs/GAME-HUD.md` §15). `GameShell` liest beim Start `Data/INI/ChallengeMode.ini` und setzt über
   `CampaignCatalog.WithPersonas` die Persona-Fraktion jeder Challenge-Kampagne (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
+
+## 11. Befunde der ersten Sichtprüfung (Demo `shell`, 4. Oktober 2026)
+
+Ein Mensch hat `scripts/demo-shell.ps1` gespielt und fünf Auffälligkeiten gemeldet. Ursachen, Behebung und Tests:
+
+| Befund | Ursache | Behebung | Test | Was ein Mensch noch prüfen muss |
+|---|---|---|---|---|
+| Schaltflächen ohne sichtbaren Zustandswechsel | Die Auswahl der Zeichendaten war bereits richtig (`W3DGadgetPushButtonImageDrawThree/One`, `W3DGadgetPushButtonDraw`: Hilite 0/5/6 unter der Maus, Hilite 1/3/4 gedrückt, Disabled 0/5/6) und zeichnete kopflos einen Wechsel. Falsch war der Zustand selbst: (a) ein Klick gab der Schaltfläche den Tastaturfokus (im Original ruft `GadgetPushButtonInput` nie `winSetFocus`), und die Fokus-Hervorhebung überlebte das Verlassen – jede einmal geklickte Schaltfläche blieb hervorgehoben, Überfahren änderte an ihr nichts mehr; (b) eine Schaltfläche, die beim Gruppenwechsel versteckt wurde, behielt Hilite/Pressed und kam hervorgehoben zurück; (c) der von einem Dialog verdeckte Screen erfuhr nie, dass die Maus weg ist. | `UiWindowTree`: Fokus per Klick nur noch für Combo-Box, List-Box und Texteingabe; `GWM_MOUSE_LEAVING` löscht die Hervorhebung unbedingt; Verstecken löscht Hilite/Pressed; neues `PointerLeft()`, das `GameShell.Push` für den verdeckten Screen aufruft. | `WndTests.PushButtonStatesPickTheirDrawData`, `WndTests.HiliteFollowsThePointerOnly`; `ShellTests` „Buttons draw hilite and pushed images …“ | Ob Überfahren und Drücken im laufenden Client jetzt deutlich genug sind (die ausgelieferten Bilder `Buttons-HiLite-*` und `Buttons-Pushed-*` unterscheiden sich nur wenig). Ein vollständiges Ausbleiben jeder Hervorhebung ließ sich kopflos **nicht** nachstellen. |
+| Regler im Optionsmenü unsichtbar | Der horizontale Regler mit `IMAGE`-Status wurde als dreiteiliger Balken aus Enabled 0/2/1 gezeichnet; diese Einträge sind `NoImage`. Das Original (`W3DGadgetHorizontalSliderImageDraw`) zeichnet keinen Balken, sondern eine zentrierte Reihe quadratischer Kästchen aus festen Plätzen: Disabled 0 = gefüllt, Disabled 1 = leer, Hilite 0 = Rahmen hinter der Reihe bei Hervorhebung. | `UiDrawBuilder.SliderBoxes`; Daumen wie der Kindknopf aus `gogoGadgetSlider` (13×16, 10 unter der Oberkante, Hilite-Bild nur bei Hervorhebung, gedrückt Eintrag 1). Ziehen funktionierte schon. | `WndTests.HorizontalSliderDrawsBoxesAndThumb`; `ShellTests` „Options: sliders draw their boxes and drag …“ | Farben und Abstand der Kästchen gegen das Original; der Rahmen (`linebox`) beim Überfahren. |
+| Grüner Hintergrund hinter Überschriften beim Überfahren | Jedes Gadget mit `MOUSETRACK` wurde hervorgehoben. Statische Texte tragen in den Dateien `MOUSETRACK` und eine grelle `HILITEDRAWDATA`-Füllung, aber `GadgetStaticTextInput` behandelt `GWM_MOUSE_ENTERING` nicht – der Zustand entsteht im Original nie. | Hervorhebung und Enter/Leave-Nachrichten nur für Gadgets, deren Eingabefunktion sie behandelt (Knopf, Check-Box, Radio, Regler, List-Box, Combo-Box, Texteingabe). | `WndTests.StaticTextHasNoHiliteState`; `ShellTests` (sieben Beschriftungen des Optionsmenüs) | Nichts Offenes bekannt. |
+| Graue Texte mit Schaltflächen links neben der Spalte | Die sechs Schaltflächen `Button{USA,GLA,China}{RecentSave,LoadGame}`. Sie sind in `MainMenu.wnd` nicht `HIDDEN`; `MainMenuInit` versteckt sie über `showSelectiveButtons(SHOW_NONE)`. Die Hülle hatte sie nur deaktiviert. | `MainMenuScreen` versteckt sie. | `ShellTests` „Main menu shows only what MainMenuInit leaves visible“ | Im Original erscheint ein Paar beim Überfahren von USA/GLA/China; das ist nicht umgesetzt (Speicherstände tragen keine Fraktion). |
+| Text im Beenden-Dialog zu klein | `QuitMessageBox.wnd` ist bei 1920×1080 verfasst, die übrigen Shell-Screens bei 800×600. `UiScaler.ScaleFontSize` skalierte im Modus `Uniform`/`Anchor` auch Header-Template-Schriften mit der Erstellungsauflösung des Fensters; Template-Punktgrößen beziehen sich aber immer auf 800 Pixel Breite (`GlobalLanguage::adjustFontSize`). Folge bei 16:9: nur 600/1080 = 56 % der gemeinten Größe (LabelSmall 8 → 5 statt 9 bei 1280×720, 8 statt 14 bei 1920×1080). | Template-Schriften skalieren mit dem gleichförmigen Faktor gegen 800×600, `FONT` des Fensters weiter gegen die Erstellungsauflösung. | `WndTests.FontScalingFollowsModeAndAccessibilityFactor`; `ShellTests` „Quit dialog text takes the header template size …“ | Dieselbe Ursache traf **alle** bei 1920×1080 verfassten Layouts mit Template-Schrift: `ControlBar.wnd` (HUD), `QuitMenu.wnd`, `MessageBox.wnd`, `Diplomacy`, `GeneralsExpPoints`, die Kurzbefehlsleisten, `Victorious`/`Defeat`. Deren Texte sind jetzt bei 16:9 1,8-mal so groß wie vorher – im HUD nachsehen, ob etwas überläuft. |
+
+Dazu behoben, nicht gemeldet: Die Hülle setzte ihre Texte mit `ShellTextMeasure` (synthetische Breiten), gezeichnet
+wurde mit der echten Schrift; zentrierte Beschriftungen saßen deshalb rechts der Mitte (§10).
+
+**Nicht gemacht:** die Übergangsanimationen des Originals (`GameWindowTransitions`, `WindowTransitions.ini`,
+`TheTransitionHandler->setGroup(...)`: Einblenden der Schaltflächen, Aufklappen der Gruppen), das Aufblitzen des
+Logos und die animierte Gefechtsszene hinter dem Hauptmenü. Gruppenwechsel sind harte Schnitte.
+
+**Goldene Hashes:** 42 der 54 Werte in `baselines/screens.txt` haben sich geändert – alle Screens, die das Hauptmenü
+enthalten oder über ihm liegen (versteckte Fraktions-Schaltflächen), dazu die Regler der Skirmish-Einrichtung und die
+Schrift des Beenden-Dialogs; `MatchLoading` und `ScoreScreen` sind unverändert. `baselines/hud-drawlist-1280x720.sha256`
+hat sich wegen der Template-Schriften von `ControlBar.wnd` geändert. Die Hashes belegen Reproduzierbarkeit, nicht
+Richtigkeit.
+
+**Sichtmittel:** `tools/CnCNew.UiRenderTool` zeichnet seitdem auch die Hülle selbst (`shell-*.png`, über
+`GameShell.Create` und echte Eingabeereignisse): Hauptmenü, überfahrene und gedrückte Schaltfläche, Optionen mit
+Reglern (überfahren, gezogen), Beenden-Dialog – siehe `docs/CLIENT-UI-RENDERING.md` §5.

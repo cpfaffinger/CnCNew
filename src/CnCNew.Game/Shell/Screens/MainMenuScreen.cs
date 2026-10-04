@@ -11,7 +11,7 @@ namespace CnCNew.Game.Shell.Screens;
 /// <para>
 /// USA/GLA/China/Challenge and Load Game are wired to the campaign/savegame flow (<c>docs/CAMPAIGN-AND-SAVEGAMES.md</c>
 /// §7). The three faction "recent save" shortcuts on the root have no equivalent in this build (there is no concept of
-/// "most recent save per faction") and stay disabled; <c>ButtonMultiplayer</c> stays out of scope (see
+/// "most recent save per faction") and stay hidden like after <c>MainMenuInit</c>; <c>ButtonMultiplayer</c> stays out of scope (see
 /// <c>docs/GAME-SHELL.md</c>) and stays disabled too.
 /// </para>
 /// </summary>
@@ -37,15 +37,22 @@ public sealed class MainMenuScreen : ShellScreen
         W("ButtonChina").SetEnabled(hasCampaigns && Shell.Campaigns!.Find("China") is not null);
         W("ButtonChallenge").SetEnabled(hasCampaigns && Shell.Campaigns!.Campaigns.Any(campaign => campaign.IsChallenge));
         W("ButtonLoadReplay").SetEnabled(true);
-        // Campaign "recent save" shortcuts sit directly on the root (not inside any submenu group); this build has no
-        // concept of a "most recent save per faction" (saves are not tagged by faction at all), so they stay inert.
-        W("ButtonUSARecentSave").SetEnabled(false);
-        W("ButtonUSALoadGame").SetEnabled(false);
-        W("ButtonGLARecentSave").SetEnabled(false);
-        W("ButtonGLALoadGame").SetEnabled(false);
-        W("ButtonChinaRecentSave").SetEnabled(false);
-        W("ButtonChinaLoadGame").SetEnabled(false);
+        // The campaign "recent save"/"load game" shortcuts sit directly on the root, left of the button column, and are
+        // not Hidden in the WND file: MainMenuInit hides all six (showSelectiveButtons(SHOW_NONE)) and the original only
+        // shows one pair while its faction button is hovered. This build has no "most recent save per faction" (saves are
+        // not tagged by faction), so the pairs never come up; disabling them instead of hiding left six grey buttons
+        // visible next to the main menu.
+        foreach (var name in FactionSaveButtons)
+        {
+            W(name).SetEnabled(false);
+            W(name).SetHidden(true);
+        }
     }
+
+    private static readonly string[] FactionSaveButtons =
+    [
+        "ButtonUSARecentSave", "ButtonUSALoadGame", "ButtonGLARecentSave", "ButtonGLALoadGame", "ButtonChinaRecentSave", "ButtonChinaLoadGame",
+    ];
 
     private bool SinglePlayerSubmenuOpen => !W("MapBorder").IsHidden;
     private bool LoadReplaySubmenuOpen => !W("MapBorder3").IsHidden;
