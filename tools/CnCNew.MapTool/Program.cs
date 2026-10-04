@@ -103,6 +103,10 @@ try
     var actionTypes = new SortedDictionary<string, int>(StringComparer.Ordinal);
     var parameterTypes = new SortedDictionary<MapScriptParameterType, int>();
     var pathDigest = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+    // Object angle statistics (docs/CLIENT-OBJECTS.md): the file stores radians (GameLogic.cpp: normalizeAngle(pMapObj->getAngle()) -> Object::setOrientation).
+    long angleObjects = 0, angleZero = 0, angleWithinPi = 0, angleOutside = 0;
+    decimal angleMin = decimal.MaxValue, angleMax = decimal.MinValue;
+    var angleBuckets = new long[8];
 
     foreach (var path in paths)
     {
@@ -114,6 +118,17 @@ try
             blendVersions[map.BlendTiles.Version] = blendVersions.GetValueOrDefault(map.BlendTiles.Version) + 1;
             vertices += map.HeightField.Heights.Length;
             objects += map.Objects.Length;
+            foreach (var placed in map.Objects.Where(o => !o.IsWaypoint))
+            {
+                angleObjects++;
+                if (placed.Angle == 0m) angleZero++;
+                if (placed.Angle >= -3.1416m && placed.Angle <= 3.1416m) angleWithinPi++; else angleOutside++;
+                angleMin = Math.Min(angleMin, placed.Angle);
+                angleMax = Math.Max(angleMax, placed.Angle);
+                var normalized = ((double)placed.Angle % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+                angleBuckets[Math.Min(7, (int)(normalized / (2 * Math.PI) * 8))]++;
+            }
+
             waypoints += map.Objects.Count(o => o.IsWaypoint);
             links += map.WaypointLinks.Length;
             triggers += map.Triggers.Length;
@@ -230,6 +245,7 @@ try
     Console.WriteLine($"containers: {string.Join(", ", containers.Select(pair => $"{pair.Key}={pair.Value}"))}");
     Console.WriteLine($"blend tile versions: {string.Join(", ", blendVersions.Select(pair => $"v{pair.Key}={pair.Value}"))}");
     Console.WriteLine($"height vertices {N(vertices)}, cells {N(cells)}, cliff cells {N(cliffCells)}");
+    Console.WriteLine($"object angles: {N(angleObjects)} placed objects, {N(angleZero)} at exactly 0, {N(angleWithinPi)} within [-pi, pi], {N(angleOutside)} outside, range [{angleMin}, {angleMax}] (radians); by eighth of a turn from +X counter-clockwise: {string.Join(" ", angleBuckets.Select(N))}");
     Console.WriteLine($"objects {N(objects)} (dropped for z range {N(droppedObjects)}), waypoints {N(waypoints)}, waypoint links {N(links)}, max start waypoints {maxStart}, maps without start waypoint {mapsWithoutStart}");
     Console.WriteLine($"polygon triggers {N(triggers)} (water {N(waterAreas)}), sides {N(sides)}, teams {N(teams)}, build list entries {N(buildEntries)}");
     Console.WriteLine($"terrain: {terrainMaps} maps built, {N(terrainCells)} path cells ({N(terrainCliffCells)} cliff, {N(terrainWaterCells)} water), {terrainSimStarts} start waypoints, largest extent {maxExtent} cells, {terrainRejected.Count} rejected");

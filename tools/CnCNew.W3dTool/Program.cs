@@ -66,9 +66,50 @@ if (args is ["audit-skeletons", var skeletonContentDirectory])
     }
 }
 
+if (args is ["model", var modelContentDirectory, var modelName])
+{
+    try
+    {
+        var content = ContentFileSystem.Open(modelContentDirectory);
+        var library = new W3dAssetLibrary(path => content.Exists(path) ? content.OpenRead(path) : null);
+        var model = library.GetModel(modelName);
+        Console.WriteLine($"{model.Name}: hierarchy '{model.Skeleton.Name}' ({model.HierarchySource}), {model.Skeleton.BoneCount} bones, {model.LodCount} LOD(s)");
+        for (var lod = 0; lod < model.LodCount; lod++)
+        {
+            Console.WriteLine($"  LOD {lod}{(lod == model.LodCount - 1 ? " (most detailed, the one drawn)" : "")}");
+            foreach (var sub in model.GetLod(lod))
+            {
+                var flags = new List<string>();
+                if (!sub.IsRenderable) flags.Add("NOT-RENDERABLE");
+                if (sub.Mesh?.IsHidden == true) flags.Add("hidden");
+                if (sub.IsTwoSided) flags.Add("two-sided");
+                if (sub.IsSkinned) flags.Add("skin");
+                if (sub.IsCameraFacing) flags.Add("camera-facing");
+                if (sub.IsCollisionOnly) flags.Add("collision-only");
+                if (sub.IsShadowOnly) flags.Add("shadow-only");
+                var bone = sub.BoneIndex < model.Skeleton.BoneCount ? model.Skeleton.BoneNames[sub.BoneIndex] : "?";
+                Console.WriteLine($"    {sub.Kind,-10} {sub.Name,-34} bone {sub.BoneIndex}:{bone,-20} tris {sub.Mesh?.Triangles.Count ?? 0,5} sort {sub.SortLevel} winding {Winding(sub.Mesh)} {string.Join(" ", flags)}");
+            }
+        }
+
+        foreach (var entry in model.Aggregates) Console.WriteLine($"  AGGREGATE bone {entry.BoneIndex}: {entry.Name}");
+        foreach (var entry in model.Proxies) Console.WriteLine($"  PROXY bone {entry.BoneIndex}: {entry.Name}");
+        foreach (var entry in model.UnresolvedSubObjects) Console.WriteLine($"  UNRESOLVED bone {entry.BoneIndex}: {entry.Name}");
+        foreach (var entry in model.UnreferencedMeshes) Console.WriteLine($"  UNREFERENCED mesh: {entry}");
+        foreach (var chunk in model.IgnoredChunks) Console.WriteLine($"  IGNORED chunk {chunk.Kind} (0x{chunk.Type:X})");
+        return 0;
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"error: {exception.Message}");
+        return 1;
+    }
+}
+
 if (args is not ["audit", var contentDirectory])
 {
     Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  CnCNew.W3dTool model <content-directory> <model-name>");
     Console.Error.WriteLine("  CnCNew.W3dTool audit <content-directory>");
     Console.Error.WriteLine("  CnCNew.W3dTool audit-skeletons <content-directory>");
     Console.Error.WriteLine("  CnCNew.W3dTool inspect <content-directory> <virtual-w3d-path>");
@@ -305,3 +346,22 @@ static void Increment<TKey>(Dictionary<TKey, long> counts, TKey value) where TKe
 
 static string FormatCounts<TKey>(Dictionary<TKey, long> counts) where TKey : notnull
     => string.Join(", ", counts.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key}={pair.Value}"));
+
+/// <summary>Share of triangles whose counter-clockwise geometric normal agrees with the stored vertex normals (about 1 = counter-clockwise faces outward, about 0 = clockwise).</summary>
+static string Winding(W3dMesh? mesh)
+{
+    if (mesh is null || mesh.Normals.Count != mesh.Vertices.Count || mesh.Triangles.Count == 0) return "n/a";
+    int agree = 0, disagree = 0;
+    foreach (var triangle in mesh.Triangles)
+    {
+        var a = mesh.Vertices[(int)triangle.Vertex0];
+        var b = mesh.Vertices[(int)triangle.Vertex1];
+        var c = mesh.Vertices[(int)triangle.Vertex2];
+        var geometric = System.Numerics.Vector3.Cross(b - a, c - a);
+        if (geometric.LengthSquared() < 1e-12f) continue;
+        var stored = mesh.Normals[(int)triangle.Vertex0] + mesh.Normals[(int)triangle.Vertex1] + mesh.Normals[(int)triangle.Vertex2];
+        if (System.Numerics.Vector3.Dot(geometric, stored) >= 0) agree++; else disagree++;
+    }
+    var total = agree + disagree;
+    return total == 0 ? "degenerate" : $"{agree * 100 / total}% ccw";
+}

@@ -6,6 +6,8 @@ using CnCNew.Presentation.Objects;
 const string Usage = """
     Usage: CnCNew.PresentationTool <command> [arguments]
       object-audit <content-dir>   Draw modules, model states, condition names, draw keys and Art/W3D references of every retail object.
+      model-audit <content-dir> [--structures] [--model NAME] [--parts]   Mesh-by-mesh draw accounting of every selected model, plus the animation handles the model states name.
+      angle-audit <content-dir> [--maps N]   Which convention (sign, quarter turn) of the stored map object angle lines up rows of fences and walls.
       fx-audit <content-dir>       FX inventory, references, textures and an execution sweep.
       terrain-audit <content-dir> [--map <virtual map path>]   Terrain render data, atlas and GPU memory of every retail map.
     """;
@@ -21,6 +23,8 @@ try
     switch (args[0])
     {
         case "object-audit" when args.Length == 2: return ObjectAuditCommand(args[1]);
+        case "model-audit": return ModelAuditCommand.Run(args);
+        case "angle-audit": return AngleAuditCommand.Run(args);
         case "fx-audit": return FxAuditCommand.Run(args);
         case "terrain-audit": return CnCNew.PresentationTool.TerrainAudit.Run(args[1..]);
         default:
