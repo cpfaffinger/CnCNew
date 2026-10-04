@@ -1,0 +1,6 @@
+# During the opening cinematic of GC_ChemGeneral (frames 1..750) its script has the input disabled: these clicks - on the
+# middle of the screen, on the first command button and on the ground - must change nothing. Before the fix they reached
+# the world while the scripted camera moved underneath. Used by scripts/check-dozer-build.ps1.
+40   click left screen:640,344
+100  click left screen:474,640
+160  click left screen:1044,360

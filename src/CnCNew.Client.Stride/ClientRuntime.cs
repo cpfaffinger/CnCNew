@@ -92,6 +92,42 @@ internal sealed class ClientRuntime : IDisposable
 
     private bool _selectOwnPending;
 
+    private CnCNew.Client.Stride.Testing.InputScript? _script;
+    private int _frame;
+
+    /// <summary>Replays a scripted input sequence into the running game (<c>--input-script</c>, a test facility; see <see cref="CnCNew.Client.Stride.Testing.InputScript"/>).</summary>
+    public void UseInputScript(CnCNew.Client.Stride.Testing.InputScript script)
+    {
+        if (_running is not { } running) throw new InvalidOperationException("--input-script needs a running match or mission (--match, --mission or --scenario).");
+        _script = script;
+        script.Attach(running.Host.Match, running.Hud);
+    }
+
+    /// <summary>
+    /// What the mission did in this run, for the console: whether the session (and with it the script VM) stepped every logic tick, the viewer's side, the outcome, and per
+    /// <c>ScriptOutput</c> type how often the scripts emitted it and how often the client showed it (<c>docs/SCRIPT-ENGINE.md</c> §7a). Empty without a mission.
+    /// </summary>
+    public IReadOnlyList<string> FinishMission(int journalLines)
+    {
+        if (_running?.Host.Match is not LiveMission mission) return [];
+        var session = mission.Session;
+        var engine = session.Engine;
+        var lines = new List<string>
+        {
+            $"mission: map {mission.Run.MapPath}, human side '{session.Program.Players.FirstOrDefault(player => player.Id == mission.Human)?.Name}' (player {mission.Human.Value}, faction {mission.HumanFaction}), presentation latency {session.Options.PresentationLatencyTicks} ticks",
+            $"mission: {_frame} frames, world tick {mission.Tick}, session steps {_running.MissionSteps} (script VM updates), outcome {mission.Outcome}, over {mission.IsOver}, missing action hits {engine.MissingActionHits.Values.Sum()}, missing condition hits {engine.MissingConditionHits.Values.Sum()}",
+        };
+        lines.AddRange(mission.Director.Report());
+        foreach (var entry in mission.Director.Journal.Take(journalLines)) lines.Add($"mission journal: {entry}");
+        return lines;
+    }
+
+    /// <summary>The input replay's report for the console, or nothing without a script; call at exit.</summary>
+    public IReadOnlyList<string> FinishInputScript() => _script?.Report() ?? [];
+
+    /// <summary>Targets of the input script that could not be resolved (the process then exits with an error code).</summary>
+    public int UnresolvedInputSteps => _script?.Unresolved ?? 0;
+
     private void ApplyPendingSelection()
     {
         if (!_selectOwnPending || _running?.Match is not { } hud) return;
@@ -119,15 +155,24 @@ internal sealed class ClientRuntime : IDisposable
         _clockMs += (long)Math.Round(seconds * 1000);
         // A fixed-step run (smoke test, captures) takes no device input: wherever the real mouse happens to be must not scroll the camera, or neither the
         // picture nor the sound (the listener follows the camera) of two runs would be the same.
-        var events = fixedSeconds is null && (input.HasMouse || input.Events.Count > 0) ? _input.Poll(input, _clockMs) : [];
+        var events = fixedSeconds is null && (input.HasMouse || input.Events.Count > 0) ? _input.Poll(input, _clockMs, width, height) : [];
+        _frame++;
+        // Scripted input enters exactly where the device's does, so it meets the same HUD layout, text measure and update/draw order.
+        if (_script is not null && _running is not null) events.AddRange(_script.EventsFor(_frame, _clockMs));
         if (_running is { } running)
         {
             running.Step(events, seconds, width, height, gameTime, _game.GraphicsContext.CommandList, fixedSeconds);
+            _script?.Observe();
             ApplyPendingSelection();
             if (_clockMs >= _nextDots)
             {
                 _nextDots = _clockMs + 250;
-                running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, MinimapDots(running.Host.Match.Frame));
+                var dots = MinimapDots(running.Host.Match.Frame);
+                // Radar events of the mission scripts: a white dot that blinks at the minimap's refresh rate while the event lives.
+                if (running.Host.Match is LiveMission mission && _clockMs / 250 % 2 == 0)
+                    foreach (var blip in mission.Director.RadarBlipsForDisplay())
+                        dots.Add(new CnCNew.Presentation.Minimap.MinimapDot(new Vector2(blip.X, blip.Y), new CnCNew.Presentation.Terrain.Rgba32(255, 255, 255, 255)));
+                running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, dots);
             }
             if (running.TakeFinished() && _shell is not null) FinishRunning(running);
             _audio.Update(seconds);
@@ -205,6 +250,8 @@ internal sealed class ClientRuntime : IDisposable
         };
         running.Attach();
         _audio.Game.Attach(game, running.Hud);
+        // The mission scripts' speech, sounds and music go to the same director as everything else.
+        if (game is LiveMission scripted) scripted.Director.Audio = _audio.Game.PlayScripted;
         return running;
     }
 
@@ -267,7 +314,11 @@ internal sealed class ClientRuntime : IDisposable
         public void Attach()
         {
             if (Host.Match is LiveMatch) Host.Match.TickStepped += result => Statistics.Record(result);
+            if (Host.Match is LiveMission) Host.Match.TickStepped += _ => MissionSteps++;
         }
+
+        /// <summary>How often the mission session stepped (each step runs the script VM once): equal to the world tick when the scripts ran every logic tick.</summary>
+        public long MissionSteps { get; private set; }
 
         public LiveMatchHost Host { get; } = host;
         public MatchController? Match { get; } = match;

@@ -27,6 +27,8 @@ var scenario = scenarioName is null ? null : CnCNew.Game.Live.DemoScenarios.Find
     ?? throw new ArgumentException($"Unknown scenario '{scenarioName}'. Known: {string.Join(", ", CnCNew.Game.Live.DemoScenarios.All.Select(value => value.Name))}.");
 if (scenario is not null) matchMap = scenario.Map;
 var missionMap = GetArgument(args, "--mission");
+// --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §16); fixed time steps only.
+var inputScriptPath = GetArgument(args, "--input-script");
 // --audio-capture DIR renders the mixer into DIR/audio.wav instead of a device; a smoke test never opens a device (it renders and discards unless a capture is asked for).
 var audioOptions = new CnCNew.Client.Stride.Audio.ClientAudioOptions(smokeTest, GetArgument(args, "--audio-capture"), args.Contains("--mute", StringComparer.OrdinalIgnoreCase));
 var shellMode = args.Contains("--shell", StringComparer.OrdinalIgnoreCase) || (contentDirectory is not null && modelPath is null && matchMap is null && missionMap is null);
@@ -68,6 +70,11 @@ if (modelPath is not null && contentDirectory is null)
     throw new ArgumentException("--model-path requires --content-dir.");
 }
 
+if (inputScriptPath is not null && (!smokeTest || (matchMap ?? missionMap) is null))
+{
+    throw new ArgumentException("--input-script requires --smoke-test and one of --match, --mission or --scenario.");
+}
+
 if (capturePath is not null && !smokeTest)
 {
     throw new ArgumentException("--capture requires --smoke-test.");
@@ -83,9 +90,11 @@ if (contentDirectory is not null)
 }
 
 using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),
-    audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30")))
+    audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30"), inputScriptPath is null ? null : CnCNew.Client.Stride.Testing.InputScript.Load(inputScriptPath),
+    int.Parse(GetArgument(args, "--mission-journal") ?? "0")))
 {
     game.Run();
+    if (game.UnresolvedInputSteps > 0) Environment.ExitCode = 3;
 }
 
 if (capturePath is not null)
@@ -138,8 +147,12 @@ internal sealed class CnCNewGame(
     int smokeFrames,
     CnCNew.Client.Stride.Audio.ClientAudioOptions audioOptions,
     string? filmstripDirectory = null,
-    int filmstripEvery = 30) : Game
+    int filmstripEvery = 30,
+    CnCNew.Client.Stride.Testing.InputScript? inputScript = null,
+    int missionJournalLines = 0) : Game
 {
+    public int UnresolvedInputSteps { get; private set; }
+
     private ClientRuntime? _runtime;
     private int _renderedFrames;
     private bool _captured;
@@ -159,9 +172,12 @@ internal sealed class CnCNewGame(
     protected override async Task LoadContent()
     {
         await base.LoadContent();
+        // The UI and the pointer live in back-buffer pixels; a window client area of another size (desktop too small, display scaling) is worth knowing about.
+        Console.WriteLine($"display: back buffer {GraphicsDevice.Presenter.BackBuffer.Width}x{GraphicsDevice.Presenter.BackBuffer.Height}, window client area {Window.ClientBounds.Width}x{Window.ClientBounds.Height}");
         if (liveOptions is not null)
         {
             LoadLiveMatch(liveOptions);
+            if (inputScript is not null) _runtime!.UseInputScript(inputScript);
             return;
         }
 
@@ -241,7 +257,8 @@ internal sealed class CnCNewGame(
         if (options.IsMission)
         {
             var viewport = GraphicsDevice.Presenter.BackBuffer;
-            var run = MissionRun.Load(MissionContext.From(data), mapPath, MissionOptions.Standard with { HumanSideName = options.HumanSide });
+            // The director reports when a scripted camera move, speech or movie really ended (CompletePresentation); the latency is only the bound after which the VM stops waiting.
+            var run = MissionRun.Load(MissionContext.From(data), mapPath, MissionOptions.Standard with { HumanSideName = options.HumanSide, PresentationLatencyTicks = LiveMission.ClientPresentationLatencyTicks });
             var text = data.LoadText("English");
             var mission = LiveMission.Create(data, run, new System.Numerics.Vector2(viewport.Width, viewport.Height), label => text.TryGet(label, out var resolved) ? resolved : label);
             ApplyCamera(mission.Camera, options);
@@ -290,7 +307,12 @@ internal sealed class CnCNewGame(
     protected override void UnloadContent()
     {
         if (_runtime is not null)
+        {
             foreach (var line in _runtime.FinishAudio()) Console.WriteLine(line);
+            foreach (var line in _runtime.FinishMission(missionJournalLines)) Console.WriteLine(line);
+            foreach (var line in _runtime.FinishInputScript()) Console.WriteLine(line);
+            UnresolvedInputSteps = _runtime.UnresolvedInputSteps;
+        }
         _runtime?.Dispose();
         _runtime = null;
         _w3dScene?.Dispose();
