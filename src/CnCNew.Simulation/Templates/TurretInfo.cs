@@ -19,8 +19,12 @@ namespace CnCNew.Simulation.Templates;
 public sealed record TurretInfo(
     int Index, Fixed TurnRate, Fixed PitchRate, Fixed NaturalAngle, Fixed NaturalPitch, Fixed FirePitch, Fixed MinPitch, Fixed GroundUnitPitch,
     int WeaponSlotMask, long RecenterTicks, bool AllowsPitch, bool InitiallyDisabled, bool FiresWhileTurning,
-    ImmutableArray<Fixed> SweepAngle, ImmutableArray<Fixed> SweepSpeed)
+    ImmutableArray<Fixed> SweepAngle, ImmutableArray<Fixed> SweepSpeed,
+    Fixed MinScanAngle = default, Fixed MaxScanAngle = default, long MinScanIntervalTicks = TurretInfo.NeverScanTicks, long MaxScanIntervalTicks = TurretInfo.NeverScanTicks)
 {
+    /// <summary><c>TurretAIData::m_minIdleScanInterval</c>/<c>m_maxIdleScanInterval</c> default (frames): practically never.</summary>
+    public const long NeverScanTicks = 9999999;
+
     /// <summary><c>DEFAULT_TURN_RATE</c>/<c>DEFAULT_PITCH_RATE</c> (TurretAI.h), radians per frame.</summary>
     public static readonly Fixed DefaultRate = Fixed.FromDecimal(0.01m);
 
@@ -33,6 +37,11 @@ public sealed record TurretInfo(
     /// (<c>InitiallyDisabled</c>, switched on by <c>BattlePlanUpdate</c>/<c>DeployStyleAIUpdate</c>) does not aim either.
     /// </summary>
     public bool Gates => TurnRate > Fixed.Zero && !InitiallyDisabled;
+
+    /// <summary>
+    /// The turret glances around while idle: it takes part in turning, a scan angle is set (<c>TurretAIIdleScanState::onEnter</c> ends at once when both angles are zero) and the interval is a real one.
+    /// </summary>
+    public bool CanScan => Gates && (MinScanAngle > Fixed.Zero || MaxScanAngle > Fixed.Zero) && MaxScanIntervalTicks < NeverScanTicks;
 
     /// <summary><c>TurretAI::getTurretFireAngleSweepForWeaponSlot</c>: the half-width of the sweep while firing the slot's weapon, 0 for none.</summary>
     public Fixed SweepOf(int slot) => SweepAngle[slot];
@@ -147,13 +156,21 @@ public sealed class TurretSet
                 sweepSpeed[slot] = coefficient.Value.Value is decimal speed ? Fixed.FromDecimal(speed) : coefficient.Value.Value is long whole ? Fixed.FromInt(whole) : throw Unexpected(field);
         }
 
+        var scanMinInterval = Find("MinIdleScanInterval") is { } minInterval
+            ? minInterval.Value.Value is GameTime minTime ? SimulationTiming.DurationMillisecondsToTicks(minTime.Milliseconds) : throw Unexpected(minInterval)
+            : TurretInfo.NeverScanTicks;
+        var scanMaxInterval = Find("MaxIdleScanInterval") is { } maxInterval
+            ? maxInterval.Value.Value is GameTime maxTime ? SimulationTiming.DurationMillisecondsToTicks(maxTime.Milliseconds) : throw Unexpected(maxInterval)
+            : TurretInfo.NeverScanTicks;
+
         return new TurretInfo(
             index,
             Find("TurretTurnRate") is null ? TurretInfo.DefaultRate : SimulationTiming.DegreesPerSecondToRadiansPerTick(Number("TurretTurnRate", 0m)),
             Find("TurretPitchRate") is null ? TurretInfo.DefaultRate : SimulationTiming.DegreesPerSecondToRadiansPerTick(Number("TurretPitchRate", 0m)),
             SimulationTiming.DegreesToRadians(Degrees("NaturalTurretAngle")), SimulationTiming.DegreesToRadians(Degrees("NaturalTurretPitch")),
             SimulationTiming.DegreesToRadians(Degrees("FirePitch")), SimulationTiming.DegreesToRadians(Degrees("MinPhysicalPitch")), SimulationTiming.DegreesToRadians(Degrees("GroundUnitPitch")),
-            mask, recenter, Bool("AllowsPitch"), Bool("InitiallyDisabled"), Bool("FiresWhileTurning"), [..sweepAngle], [..sweepSpeed]);
+            mask, recenter, Bool("AllowsPitch"), Bool("InitiallyDisabled"), Bool("FiresWhileTurning"), [..sweepAngle], [..sweepSpeed],
+            SimulationTiming.DegreesToRadians(Degrees("MinIdleScanAngle")), SimulationTiming.DegreesToRadians(Degrees("MaxIdleScanAngle")), scanMinInterval, scanMaxInterval);
     }
 
     private static NameTable SlotNames => NameTablesPhase5.WeaponSlot;
