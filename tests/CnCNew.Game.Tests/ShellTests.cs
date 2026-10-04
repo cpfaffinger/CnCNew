@@ -11,6 +11,7 @@ using CnCNew.Simulation.Testing;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
 using CnCNew.Ui.Settings;
+using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Game.Tests;
 
@@ -47,6 +48,10 @@ internal static class ShellTests
         harness.Run("Menu shell walks every screen and draws cleanly", () => WalkScreens(data, baselines, updating));
         harness.Run("Options persist and reload", () => OptionsPersist(data));
         harness.Run("Boot loading screen reaches the main menu", () => BootFlow(contentDir));
+        harness.Run("Main menu shows only what MainMenuInit leaves visible", () => MainMenuInitialState(data));
+        harness.Run("Buttons draw hilite and pushed images under the pointer and drop them when it leaves", () => ButtonStates(data));
+        harness.Run("Options: sliders draw their boxes and drag, static texts have no hover fill", () => OptionsSlidersAndLabels(data));
+        harness.Run("Quit dialog text takes the header template size, not the 1920x1080 layout scale", () => QuitDialogFonts(data));
 
         if (updating) SaveBaselines(baselines);
         return harness.Failures;
@@ -143,6 +148,154 @@ internal static class ShellTests
             TestHarness.Assert(screen.Tree.UnregisteredCallbacks.Count == 0,
                 $"{name}: unregistered callback(s) {string.Join(", ", screen.Tree.UnregisteredCallbacks.Keys)}");
         shell.Resize(NavWidth, NavHeight);
+    }
+
+    // ------------------------------------------------------------------------------------------------- demo findings (shell look)
+
+    private static readonly string[] MainGroupLabels = ["GUI:Credits", "GUI:Exit", "GUI:Multiplayer", "GUI:Options", "GUI:ReplayMenu", "GUI:SinglePlayer"];
+
+    private static string[] LabelsDrawn(GameShell shell)
+        => [.. shell.BuildDrawList().Commands.OfType<UiTextDraw>().Select(text => text.LabelKey ?? text.Text).Distinct().OrderBy(key => key, StringComparer.Ordinal)];
+
+    /// <summary>
+    /// <c>MainMenuInit</c> hides every drop-down group but the main one and (<c>showSelectiveButtons(SHOW_NONE)</c>) the six
+    /// per-faction "recent save"/"load game" buttons left of the button column; none of them is <c>HIDDEN</c> in the file.
+    /// </summary>
+    private static void MainMenuInitialState(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var tree = shell.CurrentScreen.Tree;
+        foreach (var name in new[] { "ButtonUSARecentSave", "ButtonUSALoadGame", "ButtonGLARecentSave", "ButtonGLALoadGame", "ButtonChinaRecentSave", "ButtonChinaLoadGame",
+                     "MapBorder", "MapBorder1", "MapBorder3", "MapBorder4", "ButtonGetUpdate", "ButtonGetMapPack" })
+            TestHarness.Assert(!tree.FindByName($"MainMenu.wnd:{name}")!.IsVisible, $"{name} is hidden in the initial main menu");
+        TestHarness.Assert(tree.FindByName("MainMenu.wnd:MapBorder2")!.IsVisible, "the main button group is visible");
+        var labels = LabelsDrawn(shell);
+        TestHarness.Assert(labels.SequenceEqual(MainGroupLabels), $"the initial main menu draws exactly its six buttons' texts, got: {string.Join(", ", labels)}");
+
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        TestHarness.Assert(!LabelsDrawn(shell).Contains("GUI:RecentSave") && !LabelsDrawn(shell).Contains("GUI:LoadGame"), "the faction save buttons stay hidden in the single-player group");
+        Click(shell, "MainMenu.wnd:ButtonSingleBack");
+        labels = LabelsDrawn(shell);
+        TestHarness.Assert(labels.SequenceEqual(MainGroupLabels), $"back in the main group: {string.Join(", ", labels)}");
+    }
+
+    private static HashSet<string> ImagesOver(UiDrawList list, UiRect rect)
+        => [.. list.Commands.OfType<UiImageDraw>().Where(draw => draw.Destination.Intersects(rect)).Select(draw => draw.Image)];
+
+    private static void ButtonStates(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var tree = shell.CurrentScreen.Tree;
+        var button = tree.FindByName("MainMenu.wnd:ButtonSinglePlayer")!;
+        var enabled = button.Definition.GetDrawData(WndDrawDataKind.Enabled)[0].Image!;
+        var hilite = button.Definition.GetDrawData(WndDrawDataKind.Hilite)[0].Image!;
+        var pushed = button.Definition.GetDrawData(WndDrawDataKind.Hilite)[1].Image!;
+        TestHarness.Assert(new[] { enabled, hilite, pushed }.Distinct().Count() == 3, $"the shipped button has three different left images ({enabled}, {hilite}, {pushed})");
+        HashSet<string> Images() => ImagesOver(shell.BuildDrawList(), button.Rect);
+        WndColor TextColor() => shell.BuildDrawList().Commands.OfType<UiTextDraw>().Single(text => text.LabelKey == "GUI:SinglePlayer").Color;
+        var (x, y) = (button.Rect.CenterX, button.Rect.CenterY);
+
+        TestHarness.Assert(Images().Contains(enabled) && !Images().Contains(hilite) && !Images().Contains(pushed), "idle: ENABLEDDRAWDATA");
+        TestHarness.Assert(TextColor() == button.Definition.TextColors.Enabled, "idle: enabled text colour");
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(x, y)));
+        TestHarness.Assert(Images().Contains(hilite) && !Images().Contains(enabled) && !Images().Contains(pushed), "hovered: HILITEDRAWDATA");
+        TestHarness.Assert(TextColor() == button.Definition.TextColors.Hilite && TextColor() != button.Definition.TextColors.Enabled, "hovered: hilite text colour");
+        shell.HandleInput(new MouseButtonEvent(++_clockMs, MouseButton.Left, true, new Vector2(x, y)));
+        TestHarness.Assert(Images().Contains(pushed) && !Images().Contains(enabled) && !Images().Contains(hilite), "pressed: the pushed images of HILITEDRAWDATA");
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(4, 4)));
+        shell.HandleInput(new MouseButtonEvent(++_clockMs, MouseButton.Left, false, new Vector2(4, 4)));
+        TestHarness.Assert(Images().Contains(enabled) && !Images().Contains(hilite) && !Images().Contains(pushed), "released outside: back to ENABLEDDRAWDATA");
+        TestHarness.Assert(tree.FindByName("MainMenu.wnd:MapBorder2")!.IsVisible, "released outside: no click");
+
+        // A click that switches the group hides the button while it is hovered; it must not come back hilited.
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonSingleBack");
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(4, 4)));
+        foreach (var name in new[] { "ButtonSinglePlayer", "ButtonExit", "ButtonOptions" })
+            TestHarness.Assert(!tree.FindByName($"MainMenu.wnd:{name}")!.IsHilited, $"{name} is not left hilited after the sub-menu round trip");
+        TestHarness.Assert(Images().Contains(enabled) && !Images().Contains(hilite), "the single-player button draws enabled again");
+
+        // A dialog on top takes the pointer: the button underneath loses its hilite, also after the dialog closes.
+        var options = tree.FindByName("MainMenu.wnd:ButtonOptions")!;
+        Click(shell, "MainMenu.wnd:ButtonOptions");
+        TestHarness.Assert(shell.CurrentScreen is OptionsScreen && !options.IsHilited && !options.IsSelected, "the options button under the options screen is not hilited");
+        Click(shell, "OptionsMenu.wnd:ButtonBack");
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(4, 4)));
+        TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && tree.AllWindows.All(window => !window.IsHilited && !(window.Type == WndWindowType.PushButton && window.IsSelected)),
+            "no main menu window is hilited or pressed with the pointer away");
+    }
+
+    private static void OptionsSlidersAndLabels(GameData data)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-shell-tests-" + Guid.NewGuid().ToString("N"));
+        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonOptions");
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(4, 4)));
+        var tree = shell.CurrentScreen.Tree;
+
+        foreach (var name in new[] { "SliderMusicVolume", "SliderSFXVolume", "SliderVoiceVolume", "SliderScrollSpeed", "SliderGamma" })
+        {
+            var window = tree.FindByName($"OptionsMenu.wnd:{name}")!;
+            var filled = window.Definition.GetDrawData(WndDrawDataKind.Disabled)[0].Image!;
+            var blank = window.Definition.GetDrawData(WndDrawDataKind.Disabled)[1].Image!;
+            var boxes = shell.BuildDrawList().Commands.OfType<UiImageDraw>().Where(draw => draw.Destination.Intersects(window.Rect) && (draw.Image == filled || draw.Image == blank)).ToArray();
+            TestHarness.Assert(window.IsVisible && boxes.Length >= 8, $"{name} draws its row of boxes ({boxes.Length})");
+            TestHarness.Assert(boxes.All(box => box.Destination.X >= window.Rect.X && box.Destination.Right <= window.Rect.Right), $"{name}: the boxes stay inside the slider");
+        }
+
+        // Static texts carry MOUSETRACK and a green hilite fill in the shipped file; hovering them must not draw it.
+        var idle = shell.BuildDrawList().Dump();
+        foreach (var name in new[] { "MusicVolumeLabel", "SFXVolumeLabel", "VoiceVolumeLabel", "ScrollSpeedLabel", "GammaLabel", "ResolutionLabel", "DetailLabel" })
+        {
+            var label = tree.FindByName($"OptionsMenu.wnd:{name}")!;
+            TestHarness.Assert(label.Type == WndWindowType.StaticText && (label.Definition.Style & WndStyle.MouseTrack) != 0, $"{name} is a static text with MOUSETRACK");
+            shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(label.Rect.X + 12, label.Rect.CenterY)));
+            TestHarness.Assert(!label.IsHilited && shell.BuildDrawList().Dump() == idle, $"hovering {name} changes nothing");
+        }
+
+        // Drag the music slider from a quarter to three quarters: value, boxes and the working settings follow.
+        var slider = tree.FindByName("OptionsMenu.wnd:SliderMusicVolume")!;
+        var full = slider.Definition.GetDrawData(WndDrawDataKind.Disabled)[0].Image!;
+        int Filled() => shell.BuildDrawList().Commands.OfType<UiImageDraw>().Count(draw => draw.Image == full && draw.Destination.Intersects(slider.Rect));
+        var rowY = slider.Rect.Y + 3;
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(slider.Rect.X + slider.Rect.Width / 4, rowY)));
+        TestHarness.Assert(slider.IsHilited && shell.BuildDrawList().Dump() != idle, "hovering a slider hilites it (frame row and thumb)");
+        shell.HandleInput(new MouseButtonEvent(++_clockMs, MouseButton.Left, true, new Vector2(slider.Rect.X + slider.Rect.Width / 4, rowY)));
+        var (quarterValue, quarterFilled) = (slider.Slider!.Value, Filled());
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(slider.Rect.X + slider.Rect.Width * 3 / 4, rowY)));
+        shell.HandleInput(new MouseButtonEvent(++_clockMs, MouseButton.Left, false, new Vector2(slider.Rect.X + slider.Rect.Width * 3 / 4, rowY)));
+        TestHarness.Assert(quarterValue is > 15 and < 35 && slider.Slider.Value is > 65 and < 85, $"the slider follows the pointer ({quarterValue} -> {slider.Slider.Value})");
+        TestHarness.Assert(Filled() > quarterFilled && quarterFilled > 0, $"more boxes are filled after the drag ({quarterFilled} -> {Filled()})");
+        var dragged = slider.Slider.Value;
+        Click(shell, "OptionsMenu.wnd:ButtonAccept");
+        TestHarness.Assert(Math.Abs(shell.Settings.Audio.Music - dragged / 100f) < 0.011f, $"the dragged value is applied ({shell.Settings.Audio.Music} for {dragged})");
+        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+    }
+
+    /// <summary>
+    /// <c>QuitMessageBox.wnd</c>/<c>MessageBox.wnd</c> are authored at 1920x1080 (the other shell screens at 800x600) and take
+    /// their fonts from header templates. Template point sizes are relative to the 800 pixel wide default display
+    /// (<c>GlobalLanguage::adjustFontSize</c>), so at 1920x1080 LabelSmall (8) is 14, not 8, and Title (20) is 36.
+    /// </summary>
+    private static void QuitDialogFonts(GameData data)
+    {
+        foreach (var (width, height, title, message, button) in new[] { (1920, 1080, 36, 14, 21), (1280, 720, 24, 9, 14), (800, 600, 20, 8, 12) })
+        {
+            var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(width, height));
+            var mainButton = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonExit")!;
+            Click(shell, "MainMenu.wnd:ButtonExit");
+            var tree = shell.CurrentScreen.Tree;
+            var titleWindow = tree.FindByName("QuitMessageBox.wnd:StaticTextTitle")!;
+            var messageWindow = tree.FindByName("QuitMessageBox.wnd:StaticTextMessage")!;
+            TestHarness.Assert(messageWindow.Definition.Rect.CreationWidth == 1920 && messageWindow.Definition.HeaderTemplate == "LabelSmall" && titleWindow.Definition.HeaderTemplate == "Title",
+                "the quit dialog is a 1920x1080 layout with header template fonts");
+            TestHarness.Assert(titleWindow.Font.Size == title && messageWindow.Font.Size == message && tree.FindByName("QuitMessageBox.wnd:ButtonYes")!.Font.Size == button,
+                $"{width}x{height}: title {titleWindow.Font.Size} (want {title}), message {messageWindow.Font.Size} (want {message}), button {tree.FindByName("QuitMessageBox.wnd:ButtonYes")!.Font.Size} (want {button})");
+            var drawn = shell.BuildDrawList().Commands.OfType<UiTextDraw>().Where(text => text.LabelKey == "GUI:QuitPopupMessage").ToArray();
+            TestHarness.Assert(drawn.Length > 0 && drawn.All(text => text.Font.Size == message), $"{width}x{height}: the message is drawn at size {message}");
+            // The same template family in an 800x600 layout: MainButton (15) on the main menu scales by the same factor.
+            TestHarness.Assert(mainButton.Font.Size * 20 / 15 == title, $"{width}x{height}: dialog and main menu fonts share one scale (MainButton {mainButton.Font.Size}, Title {title})");
+        }
     }
 
     // ------------------------------------------------------------------------------------------------- options persistence
