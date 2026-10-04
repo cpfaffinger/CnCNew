@@ -50,6 +50,7 @@ public sealed class NavigationGrid
     private readonly int[] _closedStamp;
     private int _currentStamp;
     private readonly HashSet<int> _escape = [];
+    private readonly HashSet<int> _temporary = [];
     private long[] _heap = new long[256];
     private int _heapCount;
 
@@ -186,7 +187,37 @@ public sealed class NavigationGrid
     }
 
     private bool IsOpen(int cx, int cy, LocomotorSurfaces surfaces)
-        => IsPassable(cx, cy, surfaces) || (_escape.Count > 0 && Terrain.IsInside(cx, cy) && _escape.Contains(cy * Terrain.CellsX + cx));
+        => (IsPassable(cx, cy, surfaces) && (_temporary.Count == 0 || !_temporary.Contains(cy * Terrain.CellsX + cx)))
+           || (_escape.Count > 0 && Terrain.IsInside(cx, cy) && _escape.Contains(cy * Terrain.CellsX + cx));
+
+    /// <summary>
+    /// <see cref="FindPath(Fixed, Fixed, Fixed, Fixed, LocomotorSurfaces)"/> that also treats the cells under the given circles as blocked for this one search (units that
+    /// stand still where a mover's path leads: the static obstacle set does not know them). The cells next to the start and the goal stay open, so a mover that is
+    /// touching a blocker, or a goal beside one, is not walled in.
+    /// </summary>
+    public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks)
+    {
+        _temporary.Clear();
+        var start = ClampedCell(startX, startY);
+        var goal = ClampedCell(goalX, goalY);
+        foreach (var (x, y, radius) in temporaryBlocks)
+        {
+            var centreX = TerrainMap.CellOf(x);
+            var centreY = TerrainMap.CellOf(y);
+            var reach = TerrainMap.CellOf(radius) + 1;
+            for (var cy = centreY - reach; cy <= centreY + reach; cy++)
+                for (var cx = centreX - reach; cx <= centreX + reach; cx++)
+                {
+                    if (!Terrain.IsInside(cx, cy) || Math.Abs(cx - start.X) <= 1 && Math.Abs(cy - start.Y) <= 1 || Math.Abs(cx - goal.X) <= 1 && Math.Abs(cy - goal.Y) <= 1) continue;
+                    var ddx = TerrainMap.CellCenter(cx) - x;
+                    var ddy = TerrainMap.CellCenter(cy) - y;
+                    if (ddx * ddx + ddy * ddy <= radius * radius) _temporary.Add(cy * Terrain.CellsX + cx);
+                }
+        }
+
+        try { return FindPath(startX, startY, goalX, goalY, surfaces); }
+        finally { _temporary.Clear(); }
+    }
 
     /// <summary>
     /// An object that stands inside a footprint (a unit that just left a factory whose approximated footprint covers its exit), or

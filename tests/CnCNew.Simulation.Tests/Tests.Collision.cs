@@ -447,6 +447,48 @@ static partial class Tests
     }
 
     /// <summary>
+    /// Demo finding #12: a group walks against a unit that stands still (a dozer at work) and rubs along it before it finds the way round. A row of standing units across the
+    /// straight line forces a detour; the mover has to plan around the row (<c>StationaryBlockersAhead</c> + the temporary blocks of the path search) instead of shoving
+    /// along it: it never overlaps a standing unit, does not stand still on the way, and arrives within a bounded time.
+    /// </summary>
+    public static void CollisionReplansAroundStandingUnits()
+    {
+        (long Arrival, int Stalled, int Overlaps) Run()
+        {
+            var (world, feeder) = CollisionWorld();
+            feeder.Spawn(1, "NonCrusher", x: 0, y: 0);
+            for (var row = -4; row <= 4; row++) feeder.Spawn(2, "Blocker", x: 45, y: row * 6);
+            world.Step();
+            feeder.SetMoveTarget(1, 1, 110, 0);
+            long arrival = -1;
+            int stalled = 0, overlaps = 0;
+            for (var tick = 0; tick < 400 && arrival < 0; tick++)
+            {
+                var result = world.Step();
+                if (result.Events.Any(value => value.Kind == SimEventKind.MoveArrived && value.Entity.Value == 1)) arrival = world.Tick;
+                var mover = world.FindEntity(new EntityId(1))!;
+                if (mover.HasMoveTarget && mover.Speed == Fixed.Zero && tick > 5) stalled++;
+                foreach (var other in world.Entities.Where(value => value.Template.Name == "Blocker"))
+                {
+                    var dx = mover.X - other.X;
+                    var dy = mover.Y - other.Y;
+                    var limit = mover.Template.BoundingCircleRadius + other.Template.BoundingCircleRadius;
+                    if (dx * dx + dy * dy < limit * limit - Fixed.One) overlaps++;
+                }
+            }
+
+            return (arrival, stalled, overlaps);
+        }
+
+        var (arrival, stalled, overlaps) = Run();
+        Console.WriteLine($"       replan around a row of standing units: arrival tick {arrival}, {stalled} ticks standing still, {overlaps} overlapping ticks");
+        Check.That(arrival > 0 && arrival < 300, $"The mover reaches the far side of the row ({arrival}).");
+        Check.That(overlaps == 0, $"It never drives into a standing unit ({overlaps} ticks overlapping).");
+        Check.That(stalled <= 3, $"It does not stand still before it finds the way round ({stalled} ticks).");
+        Check.That(Run() == (arrival, stalled, overlaps), "The detour is deterministic.");
+    }
+
+    /// <summary>
     /// Local collision avoidance (<c>SimulationWorld.Collision.cs</c>, <c>AvoidLocalBlockers</c>): a bounded nudge-and-retry around another
     /// unit's footprint, not steering. Documented limit: it looks one step ahead and does not coordinate with the blocker.
     /// </summary>

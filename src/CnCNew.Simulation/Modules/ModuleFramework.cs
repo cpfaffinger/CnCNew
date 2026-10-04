@@ -236,6 +236,12 @@ public interface IWorldServices
     (Fixed Dx, Fixed Dy) AvoidLocalBlockers(Entity mover, Fixed dx, Fixed dy);
 
     /// <summary>
+    /// When the step (<paramref name="dx"/>, <paramref name="dy"/>) of <paramref name="mover"/> would land in a unit that stands still, the bounding circles of the standing units around the mover
+    /// (the goal object excepted), else an empty list: what a path search has to route around, because the static obstacle set does not know units.
+    /// </summary>
+    IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAhead(Entity mover, Fixed dx, Fixed dy);
+
+    /// <summary>
     /// <c>SquishCollide.cpp onCollide</c> / <c>ToppleUpdate.cpp onCollide</c>: after <paramref name="mover"/>'s position
     /// changed this tick by (<paramref name="stepX"/>, <paramref name="stepY"/>) — the exact displacement just applied, used
     /// to tell a closing mover from a receding one without rebuilding velocity from <c>Angle</c>/<c>Speed</c> — checks every

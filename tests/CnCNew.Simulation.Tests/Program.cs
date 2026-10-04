@@ -288,6 +288,7 @@ run.Test("Collision: ToppleUpdate push, kill, stump and mid-fall snapshot contin
 run.Test("Collision: StructureToppleUpdate delayed collapse and reduced crushing sweep", Tests.CollisionStructureTopple);
 run.Test("Collision: HeightDieUpdate threshold, delay, structures and ground floor", Tests.CollisionHeightDie);
 run.Test("Collision: bounded local avoidance around another unit's footprint", Tests.CollisionLocalAvoidance);
+run.Test("Collision: a mover plans around a row of standing units instead of rubbing along it", Tests.CollisionReplansAroundStandingUnits);
 run.Test("Last nine modules: every module of the catalog is implemented", Tests.LastBlockerModulesAreImplemented);
 run.Test("Last nine modules: SalvageCrateCollide armor, weapon, level and money", Tests.LastBlockersSalvageCrate);
 run.Test("Last nine modules: SalvageCrateCollide random crates are deterministic", Tests.LastBlockersSalvageCrateIsDeterministic);
@@ -322,6 +323,7 @@ if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and s
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));

@@ -1022,6 +1022,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         Entity.Speed = Entity.Speed < goalSpeed
             ? Fixed.Min(goalSpeed, Entity.Speed + locomotor.Acceleration)
             : Fixed.Max(goalSpeed, Entity.Speed - locomotor.Braking);
+        // Standing units on the way (a dozer at work, a halted group) are unknown to the static path: plan once around them instead of rubbing along them while the local avoidance
+        // below shoves the step aside (docs/DEMO-FINDINGS.md #12). At most once per 30 ticks; a plan that no longer reaches the goal is dropped and the old path kept.
+        if (!air && world.Tick - _blockerReplanTick >= 30 && Entity.Speed > Fixed.Zero)
+        {
+            // Look-ahead: about 25 ticks of travel (a walking infantry sees 17 units, a fast vehicle 60).
+            var ahead = world.StationaryBlockersAhead(Entity, FixedTrig.Cos(Entity.Angle) * Entity.Speed * Fixed.FromInt(25), FixedTrig.Sin(Entity.Angle) * Entity.Speed * Fixed.FromInt(25));
+            if (ahead.Count > 0) ReplanAround(navigation, locomotor, ahead, world.Tick);
+        }
+
         // phase 10 (docs/SIMULATION-CORE.md, CnCNew.Simulation/World/SimulationWorld.Collision.cs): bounded local avoidance
         // against another unit's footprint, then the crush/topple collision check — both own-file, additive world services.
         var (stepX, stepY) = air
@@ -1034,6 +1043,19 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
             world.ResolveFootprintCollisions(Entity, stepX, stepY);
         }
+    }
+
+    private long _blockerReplanTick = -1000;
+
+    private void ReplanAround(NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)
+    {
+        _blockerReplanTick = tick;
+        var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, blockers);
+        if (result.Status != PathStatus.Found || result.Points.IsDefaultOrEmpty) return;
+        _path.Clear();
+        _path.AddRange(result.Points);
+        _pathIndex = 0;
+        _pathComplete = true;
     }
 
     private void PlanPath(NavigationGrid navigation, LocomotorInfo locomotor, bool air)
@@ -1126,6 +1148,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             writer.Fixed("exitX", _exitX);
             writer.Fixed("exitY", _exitY);
         }
+        if (_blockerReplanTick > -1000) writer.Int("blockerReplanTick", _blockerReplanTick);
         if (_pathValid)
         {
             writer.Bool("pathValid", true);
@@ -1163,6 +1186,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _returning = reader.Has("returning") && reader.Bool("returning");
         _exitX = reader.Has("exitX") ? reader.Fixed("exitX") : Fixed.Zero;
         _exitY = reader.Has("exitY") ? reader.Fixed("exitY") : Fixed.Zero;
+        _blockerReplanTick = reader.Has("blockerReplanTick") ? reader.Int("blockerReplanTick") : -1000;
         InvalidatePath();
         if (reader.Has("pathValid"))
         {

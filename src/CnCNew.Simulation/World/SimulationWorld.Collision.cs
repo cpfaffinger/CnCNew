@@ -51,6 +51,46 @@ public sealed partial class SimulationWorld
         return (dx, dy);
     }
 
+    /// <summary>Clearance around a standing unit that a detour keeps (about half a path cell), so the path cells do not clip its circle.</summary>
+    private static readonly Fixed StandingBlockerMargin = Fixed.FromInt(5);
+
+    /// <inheritdoc cref="IWorldServices.StationaryBlockersAhead"/>
+    public IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAhead(Entity mover, Fixed dx, Fixed dy)
+    {
+        if (Navigation is null || (dx == Fixed.Zero && dy == Fixed.Zero)) return [];
+        var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
+        var moverRadius = mover.Template.BoundingCircleRadius;
+        var blocked = false;
+        foreach (var other in Entities)
+        {
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
+            var limit = moverRadius + other.Template.BoundingCircleRadius + StandingBlockerMargin;
+            // The step is the look-ahead; the line from the mover to its end is tested at four points.
+            for (var sample = 1; sample <= 4 && !blocked; sample++)
+            {
+                var ddx = other.X - (mover.X + dx * Fixed.FromInt(sample) / Fixed.FromInt(4));
+                var ddy = other.Y - (mover.Y + dy * Fixed.FromInt(sample) / Fixed.FromInt(4));
+                if (ddx * ddx + ddy * ddy < limit * limit) blocked = true;
+            }
+
+            if (blocked) break;
+        }
+
+        if (!blocked) return [];
+        var circles = new List<(Fixed X, Fixed Y, Fixed Radius)>();
+        var around = Fixed.FromInt(150);
+        foreach (var other in Entities)
+        {
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
+            var ddx = other.X - mover.X;
+            var ddy = other.Y - mover.Y;
+            if (ddx * ddx + ddy * ddy > around * around) continue;
+            circles.Add((other.X, other.Y, other.Template.BoundingCircleRadius + moverRadius + StandingBlockerMargin));
+        }
+
+        return circles;
+    }
+
     /// <summary>Whether stepping <paramref name="mover"/> to its position plus (<paramref name="dx"/>, <paramref name="dy"/>) would land inside another live, mobile entity's bounding circle (the <paramref name="goal"/> object excepted).</summary>
     private bool StepBlocked(Entity mover, Fixed dx, Fixed dy, EntityId goal)
     {
