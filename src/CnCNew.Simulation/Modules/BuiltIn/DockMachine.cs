@@ -37,6 +37,13 @@ internal sealed class DockMachine(EntityId dockId)
     /// </summary>
     public bool Inside => _state is DockState.MoveToDock or DockState.ProcessDock or DockState.MoveToExit;
 
+    /// <summary>
+    /// The docker has reached the dock point and the dock works on it (<c>DockUpdate::onDockReached</c> .. <c>onExitReached</c>, where the reference sets <c>MODELCONDITION_DOCKING_ACTIVE</c>): <see cref="DockState.ProcessDock"/>.
+    /// The entry, dock and exit points coincide here, so <see cref="DockState.MoveToDock"/> and <see cref="DockState.MoveToExit"/> pass within one tick and the stretch before the dock point
+    /// (<c>MODELCONDITION_DOCKING_BEGINNING</c>) has no duration that could be observed.
+    /// </summary>
+    public bool Active => _state == DockState.ProcessDock;
+
     /// <summary><c>StateMachine::initDefaultState</c>: enters the first state and reports its raw answer, without resolving transitions.</summary>
     public DockStatus Enter(IWorldServices world, AIUpdateInterface ai)
     {

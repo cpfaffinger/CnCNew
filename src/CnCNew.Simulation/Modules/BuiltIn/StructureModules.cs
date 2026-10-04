@@ -353,6 +353,12 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
     /// <summary>The unit is packed and may move.</summary>
     public bool IsPacked => _state == DeployState.ReadyToMove;
 
+    /// <summary><c>DEPLOY</c>: the reference shows <c>MODELCONDITION_UNPACKING</c> for exactly this state (<c>setMyState</c>).</summary>
+    public bool IsUnpacking => _state == DeployState.Deploy;
+
+    /// <summary><c>UNDEPLOY</c>: the reference shows <c>MODELCONDITION_PACKING</c> for exactly this state (<c>setMyState</c>).</summary>
+    public bool IsPacking => _state == DeployState.Undeploy;
+
     public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
     {
         if (_state == DeployState.ReadyToMove)

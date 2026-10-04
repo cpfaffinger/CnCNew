@@ -172,7 +172,8 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
     private static readonly int UnselectableBit = ObjectStatusBits.Index("UNSELECTABLE");
     private static readonly int DroneSpottingBit = SlaveSupport.WeaponBonusBit("DRONE_SPOTTING");
 
-    private enum RepairState { None, Unpacking, Packing, Ready, Extending, Retracting, Welding }
+    /// <summary><c>RepairStates</c> of the repair arm; the presentation derives the model conditions <c>PACKING</c>, <c>UNPACKING</c>, <c>FIRING_B</c> and <c>FIRING_C</c> from it (<c>setRepairModelConditionStates</c>).</summary>
+    public enum RepairState { None, Unpacking, Packing, Ready, Extending, Retracting, Welding }
 
     private long _nextWake = -1;
     private EntityId _slaver;
@@ -187,6 +188,12 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
     public EntityId Slaver => _slaver;
     public bool IsSelfTasking => false;
     public bool IsRepairing => _repairing;
+
+    /// <summary>The state of the repair arm (<c>m_repairState</c>).</summary>
+    public RepairState Repair => _repairState;
+
+    /// <summary>The slave can repair its master (<c>RepairRatePerSecond</c> above zero): the reference packs such an object up when it is created (<c>onObjectCreated</c>).</summary>
+    public bool CanRepair => data.RepairRatePerSecond > Fixed.Zero;
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 

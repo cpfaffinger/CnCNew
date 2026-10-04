@@ -88,6 +88,9 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
     public TransitionStatus Status => _status;
     public BattlePlanKind DesiredPlan => _desiredPlan;
 
+    /// <summary><c>m_currentPlan</c>: the plan the center is unpacking, running or packing (none while idle); the door model conditions follow it (<c>BattlePlanUpdate::setStatus</c>).</summary>
+    public BattlePlanKind CurrentPlan => _currentPlan;
+
     /// <summary><c>getActiveBattlePlan</c>: the plan that is unpacked and working, <see cref="BattlePlanKind.None"/> while in transition.</summary>
     public BattlePlanKind ActivePlan => _status == TransitionStatus.Active ? _planAffectingArmy : BattlePlanKind.None;
 

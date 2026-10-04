@@ -74,6 +74,12 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
     /// <summary><c>isHacking</c>: in the cash-making state.</summary>
     public bool IsHacking => _state == HackState.Hacking;
 
+    /// <summary><c>UnpackingState</c>: the reference keeps <c>MODELCONDITION_UNPACKING</c> set while it runs.</summary>
+    public bool IsUnpacking => _state == HackState.Unpacking;
+
+    /// <summary><c>PackingState</c>: the reference shows <c>MODELCONDITION_PACKING</c> while it runs.</summary>
+    public bool IsPacking => _state == HackState.Packing;
+
     /// <summary><c>isHackingPackingOrUnpacking</c>.</summary>
     public bool IsHackingPackingOrUnpacking => _state != HackState.None;
 
