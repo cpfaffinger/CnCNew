@@ -199,6 +199,33 @@ static partial class Tests
         Check.That(feeder.Capture(1, 1, 2).Reason == CommandRejection.CannotCapture, "The building is already the Capturer's: nothing left to capture.");
     }
 
+    /// <summary><c>DoCaptureFX</c>: the building flashes while the flag goes up, faster and faster (<c>m_captureFlashPhase</c>).</summary>
+    public static void StagedCaptureFlashesTheBuilding()
+    {
+        var world = StagedWorld(out var fixture, out var feeder);
+        Check.That(feeder.Capture(1, 1, 2).Accepted, "The capture is accepted.");
+        var flashes = new List<long>();
+        var preparing = new List<long>();
+        SimulationWorld? restored = null;
+        for (var index = 0; index < 600; index++)
+        {
+            var result = world.Step();
+            if (restored is not null) Check.That(restored.Step().StateHash == result.StateHash, "The restored capture flashes identically at tick " + result.Tick + ".");
+            foreach (var flash in result.Events.Where(value => value.Kind == SimEventKind.CaptureFlash))
+            {
+                Check.That(flash.Entity == new EntityId(2) && flash.Other == new EntityId(1), "The flash names the building and the capturing unit.");
+                flashes.Add(result.Tick);
+            }
+            if (world.FindEntity(new EntityId(1))!.Modules.OfType<SpecialAbilityUpdate>().Single().Stage == AbilityStage.Preparing) preparing.Add(result.Tick);
+            if (restored is null && preparing.Count == 20) restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+        }
+        // The phase grows by (elapsed fraction) / 3 per tick: over 60 ticks it reaches 59 * 60 / 2 / 60 / 3 = 9.83, crossing 2, 4, 6 and 8.
+        Check.That(flashes.Count == 4, "Four flashes during a preparation of 60 ticks: " + string.Join(",", flashes));
+        Check.That(flashes.All(tick => tick > preparing[0] && tick <= preparing[^1] + 1), "All of them while the flag goes up.");
+        var gaps = flashes.Zip(flashes.Skip(1), (a, b) => b - a).ToArray();
+        Check.That(gaps[0] >= gaps[1] && gaps[1] >= gaps[2] && gaps[0] > gaps[2], "The flashes come faster toward the end: gaps " + string.Join(",", gaps));
+    }
+
     public static void StagedCaptureFacesItsTargetAndLotusStartsFromAfar()
     {
         var world = StagedWorld(out _, out var feeder, stationX: 100, stationY: 190, capturer: "StagedLotus", upgrade: false);

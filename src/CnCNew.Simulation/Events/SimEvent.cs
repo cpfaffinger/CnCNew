@@ -118,6 +118,12 @@ public enum SimEventKind : byte
 
     /// <summary><c>ScriptEngine::transferObjectName</c> was asked for (<c>Entity</c>: the object that held the script name, <c>Other</c>: the object that takes it over); only the mission layer can act on it.</summary>
     ObjectNameTransferred = 83,
+
+    /// <summary>
+    /// A building that is being captured flashes (<c>SpecialAbilityUpdate::continuePreparation</c> with <c>DoCaptureFX</c>: <c>flashAsSelected</c> in the capturer's colour plus the
+    /// <c>DefectorTimerTickSound</c>); the flashes come faster as the capture nears its end. <c>Entity</c>: the building, <c>Other</c>: the capturing unit (its owner's colour is the flash colour).
+    /// </summary>
+    CaptureFlash = 84,
 }
 
 /// <summary>

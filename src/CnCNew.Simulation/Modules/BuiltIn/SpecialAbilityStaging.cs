@@ -1,5 +1,6 @@
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Commands;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
@@ -100,6 +101,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     private bool _facingInitiated;
     private bool _facingComplete;
     private int _approachOrders;
+    private Fixed _flashPhase;
 
     public override string ModuleName => "SpecialAbilityUpdate";
     public override bool AcceptsTarget(SpecialPowerTargetKind kind) => true;
@@ -346,16 +348,29 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
 
     /// <summary>
     /// <c>continuePreparation</c>: false aborts the preparation (outside <c>AbilityAbortRange</c>, the target is gone, or became an ally's). The infantry capture restarts the power's
-    /// recharge on every tick of the preparation, so it only starts counting down when the capture is over; the Black Lotus recharges in <see cref="TriggerEffect"/>. (The capture
-    /// flash of <c>DoCaptureFX</c> is a presentation effect and not simulated.)
+    /// recharge on every tick of the preparation, so it only starts counting down when the capture is over; the Black Lotus recharges in <see cref="TriggerEffect"/>.
     /// </summary>
     private bool ContinuePreparation(IWorldServices world, Entity? target, ISpecialPowerModule power)
     {
         if (data.AbilityAbortRange < SpecialAbilityUpdateData.HugeDistance && target is not null && !WithinSpheres(target, data.AbilityAbortRange)) return false;
         if (target is null) return false;
         if (world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return false;
+        if (data.DoCaptureFx) StepCaptureFlash(world, target);
         if (CaptureKind(world) == CaptureType.Infantry) power.Trigger(world);
         return true;
+    }
+
+    /// <summary>
+    /// The <c>DoCaptureFX</c> part of <c>continuePreparation</c>: the flash phase grows every tick by a third of the fraction of the preparation that is over, so it grows faster
+    /// and faster; each time its integer part goes from odd to even the target flashes (and ticks). The simulation only reports the moment (<see cref="SimEventKind.CaptureFlash"/>);
+    /// colour and sound are the presentation's. The reference never resets the phase; here every capture starts it at zero (it is part of the run's state).
+    /// </summary>
+    private void StepCaptureFlash(IWorldServices world, Entity target)
+    {
+        var wasOdd = (_flashPhase.Floor() & 1) != 0;
+        var denominator = Math.Max(1, data.PreparationTicks);
+        _flashPhase += (Fixed.One - Fixed.FromInt(_prepFrames) / Fixed.FromInt(denominator)) / Fixed.FromInt(3);
+        if (wasOdd && (_flashPhase.Floor() & 1) == 0) world.Emit(SimEventKind.CaptureFlash, target.Id, Entity.Id, string.Empty, 0);
     }
 
     /// <summary>
@@ -407,6 +422,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         _facingInitiated = false;
         _facingComplete = false;
         _approachOrders = 0;
+        _flashPhase = Fixed.Zero;
     }
 
     // ------------------------------------------------------------------------------------------------------------ approach and facing
@@ -483,6 +499,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         writer.Bool("abilityFacingStarted", _facingInitiated);
         writer.Bool("abilityFacingDone", _facingComplete);
         writer.Int("abilityApproaches", _approachOrders);
+        if (_flashPhase != Fixed.Zero) writer.Fixed("abilityFlash", _flashPhase);
         writer.Int("nextWake", _nextWake);
     }
 
@@ -503,6 +520,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         _facingInitiated = reader.Bool("abilityFacingStarted");
         _facingComplete = reader.Bool("abilityFacingDone");
         _approachOrders = checked((int)reader.Int("abilityApproaches"));
+        _flashPhase = reader.Has("abilityFlash") ? reader.Fixed("abilityFlash") : Fixed.Zero;
         _nextWake = reader.Int("nextWake");
     }
 }
