@@ -10,6 +10,7 @@ const string Usage = """
       angle-audit <content-dir> [--maps N]   Which convention (sign, quarter turn) of the stored map object angle lines up rows of fences and walls.
       fx-audit <content-dir>       FX inventory, references, textures and an execution sweep.
       terrain-audit <content-dir> [--map <virtual map path>]   Terrain render data, atlas and GPU memory of every retail map.
+      scenario-audit <content-dir> [--name NAME] [--every N] [--ticks N]   Runs a staged demo (capture-building, tank-duel, jet-strafe) headless and checks what it is meant to show; without --name lists them.
       road-audit <content-dir> [--map <virtual map path>]      Road layout (segments, curves, tees, crossings, joins), templates and textures of every retail map.
     """;
 
@@ -28,6 +29,7 @@ try
         case "angle-audit": return AngleAuditCommand.Run(args);
         case "fx-audit": return FxAuditCommand.Run(args);
         case "terrain-audit": return CnCNew.PresentationTool.TerrainAudit.Run(args[1..]);
+        case "scenario-audit": return CnCNew.PresentationTool.ScenarioAudit.Run(args[1..]);
         case "road-audit": return CnCNew.PresentationTool.RoadAudit.Run(args[1..]);
         default:
             Console.Error.WriteLine(Usage);

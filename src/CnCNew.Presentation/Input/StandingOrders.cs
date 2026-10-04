@@ -106,13 +106,15 @@ public sealed class StandingOrders
             Clear(unit.Id);
             return;
         }
+        // An aircraft cannot stop in the air: it keeps flying at the target and fires whenever the weapon may (inside its range, past its minimum range, aimed), as an attack run.
+        var flying = unit.Template.IsKindOf("AIRCRAFT");
         if (SimulationQueries.InRange(world, unit, target))
         {
-            if (_chaseGoal.Remove(unit.Id.Value) && unit.HasMoveTarget)
+            if (!flying && _chaseGoal.Remove(unit.Id.Value) && unit.HasMoveTarget)
                 issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, unit.X, unit.Y));
             if (SimulationQueries.CanFireAt(world, unit, target))
                 issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, target.Id));
-            return;
+            if (!flying) return;
         }
         if (!SimulationQueries.CanMove(unit)) return;
         var goal = SimulationQueries.GroundOf(target);

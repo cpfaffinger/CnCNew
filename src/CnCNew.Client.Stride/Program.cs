@@ -22,6 +22,10 @@ var contentDirectory = GetArgument(args, "--content-dir");
 var modelPath = GetArgument(args, "--model-path");
 var capturePath = GetArgument(args, "--capture");
 var matchMap = GetArgument(args, "--match");
+var scenarioName = GetArgument(args, "--scenario");
+var scenario = scenarioName is null ? null : CnCNew.Game.Live.DemoScenarios.Find(scenarioName)
+    ?? throw new ArgumentException($"Unknown scenario '{scenarioName}'. Known: {string.Join(", ", CnCNew.Game.Live.DemoScenarios.All.Select(value => value.Name))}.");
+if (scenario is not null) matchMap = scenario.Map;
 var missionMap = GetArgument(args, "--mission");
 var shellMode = args.Contains("--shell", StringComparer.OrdinalIgnoreCase) || (contentDirectory is not null && modelPath is null && matchMap is null && missionMap is null);
 var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
@@ -39,6 +43,7 @@ var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
 {
     IsMission = missionMap is not null,
     HumanSide = GetArgument(args, "--human-side") ?? string.Empty,
+    Scenario = scenario,
     SelectOwn = args.Contains("--select-own", StringComparer.OrdinalIgnoreCase),
 };
 if (matchMap is not null && missionMap is not null)
@@ -114,6 +119,9 @@ internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<st
 
     /// <summary>Selects everything the human owns once the match has started (--select-own; for captures of the selection feedback, a player would click).</summary>
     public bool SelectOwn { get; init; }
+
+    /// <summary>A staged demonstration instead of a skirmish (--scenario NAME; the map is the scenario's).</summary>
+    public CnCNew.Game.Live.DemoScenario? Scenario { get; init; }
 }
 
 internal sealed class CnCNewGame(
@@ -234,8 +242,22 @@ internal sealed class CnCNewGame(
             Window.Title = $"CnCNew — mission {mapPath} — {mission.HumanFaction}";
             return;
         }
-        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed, AutoPlay = options.AutoPlay };
         var back = GraphicsDevice.Presenter.BackBuffer;
+        if (options.Scenario is { } scenario)
+        {
+            var staged = LiveScenario.Create(data, scenario, new System.Numerics.Vector2(back.Width, back.Height));
+            staged.Camera.CenterOn(staged.Anchor + new System.Numerics.Vector2(scenario.LookX, scenario.LookY));
+            staged.Camera.SetAngle((options.Angle is { } angleText ? float.Parse(angleText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraAngleDegrees) * MathF.PI / 180);
+            staged.Camera.SetPitch((options.Pitch is { } pitchText ? float.Parse(pitchText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraPitchDegrees) * MathF.PI / 180);
+            staged.Camera.SetHeightAboveGround(options.Height is { } heightText ? float.Parse(heightText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraHeight);
+            staged.Camera.SettleZoom();
+            ApplyCamera(staged.Camera, options with { Angle = null, Pitch = null, Height = null });
+            _runtime = ClientRuntime.ForScenario(this, data, staged);
+            if (options.SelectOwn) _runtime.SelectOwn();
+            Window.Title = $"CnCNew — {scenario.Name}: {scenario.Title}";
+            return;
+        }
+        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed, AutoPlay = options.AutoPlay };
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
         ApplyCamera(match.Camera, options);
         _runtime = ClientRuntime.ForMatch(this, data, match);

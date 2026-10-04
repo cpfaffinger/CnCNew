@@ -50,6 +50,9 @@ $scenes = @(
     @('match-fog-unexplored', @('--match', $alpine, '--frames', '120', '--look', '2002,1349'), 'Kamera auf unerkundetem Gelaende mit einer Oelquelle: alles schwarz, kein Gebaeude im Schwarz.'),
     @('match-base-late', @('--match', $alpine, '--autoplay', '--frames', '4000'), 'Ausgebaute Basis: Gebaeude mit Teamfarbe, Geschuetztuerme, Zaeune ausgerichtet an den Gebaeudekanten.'),
     @('match-combat', @('--match', $alpine, '--autoplay', '--frames', '7500'), 'Gefecht: Patriot-Rohr zeigt auf das Ziel, Muendungsfeuer; Reifen/Tuerme nicht in Ruhepose.'),
+    @('scenario-tank-duel', @('--scenario', 'tank-duel', '--frames', '30'), 'Gestellte Demo Panzer gegen Panzer, Tick 30: der Crusader hat seinen Turm bereits zum Gegner gedreht (vor dem ersten Schuss muss er das; PresentationTool scenario-audit prueft es).'),
+    @('scenario-capture', @('--scenario', 'capture-building', '--frames', '400'), 'Gestellte Demo Gebaeude einnehmen, Tick 400: der Ranger steht an der Kaserne (Flagge hissen sichtbar, sobald die Faehigkeit gestuft ist).'),
+    @('scenario-jet', @('--scenario', 'jet-strafe', '--frames', '900'), 'Gestellte Demo Jet gegen Raketentruppen, Tick 900: Raptor im Anflug auf die Missile Defender.'),
     @('mission-start', @('--mission', 'Maps/GC_ChemGeneral/GC_ChemGeneral.map', '--frames', '120'), 'Missionsstart (Generals Challenge): Basis mit Gebaeuden, Beleuchtung wie im Gefecht.'),
     # Vierte Angabe 'reveal': die Szene laeuft mit CNCNEW_TERRAIN_REVEAL=1 (ganze Karte sichtbar), weil Strassen ausserhalb der Startsicht liegen.
     @('roads-junctions', @('--match', $alpine, '--frames', '120', '--pitch', '60', '--height', '150', '--look', '1177,968'), 'Strassen (docs/CLIENT-ROADS.md): Y-Kreuzung mit Zebrastreifen, zusammenhaengende Fahrbahn mit gelber Mittellinie, Raender weich ueberblendet (keine grauen Rechtecke an den Ecken), Strasse folgt dem Gelaende.', 'reveal'),

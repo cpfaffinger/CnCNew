@@ -6,6 +6,7 @@
     <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
     <ProjectReference Include="../../src/CnCNew.Data/CnCNew.Data.csproj" />
     <ProjectReference Include="../../src/CnCNew.Formats/CnCNew.Formats.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Game/CnCNew.Game.csproj" />
     <ProjectReference Include="../../src/CnCNew.Images/CnCNew.Images.csproj" />
     <ProjectReference Include="../../src/CnCNew.Simulation/CnCNew.Simulation.csproj" />
     <ProjectReference Include="../../src/CnCNew.Presentation/CnCNew.Presentation.csproj" />

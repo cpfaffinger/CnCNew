@@ -5,19 +5,22 @@
 .DESCRIPTION
   skirmish  Live-Gefecht auf einer Skirmish-Karte (Befehlsleiste, Eingabe, Minimap, Musik, EVA) gegen KI-Gegner.
   mission   Kampagnenmission hinter der Befehlsleiste (Skripte, Missions-HUD, Briefing-Ablauf der Karte).
+  scenario  Gestellte Einzeldemo zum Auditieren (-Scenario capture-building | tank-duel | jet-strafe): kleine Szene auf einer echten Karte,
+            die ein Verhalten isoliert; dieselbe Szene prueft `PresentationTool scenario-audit`.
   shell     Hauptmenue-Shell aus den echten WND-Layouts (Kampagne waehlen, Briefing, Mission, Speichern/Laden, Abschluss).
 
 .EXAMPLE
   .\scripts\demo.ps1 skirmish
   .\scripts\demo.ps1 skirmish -Faction FactionChina -Opponent FactionGLA,FactionAmerica -Map "Maps/Tournament Desert/Tournament Desert.map"
   .\scripts\demo.ps1 mission -Map "Maps/GC_ChemGeneral/GC_ChemGeneral.map"
+  .\scripts\demo.ps1 scenario -Scenario tank-duel
   .\scripts\demo.ps1 shell -Size 1920x1080
   .\scripts\demo.ps1 skirmish -SmokeTest      # headless Rauchtest statt Fenster
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory, Position = 0)]
-    [ValidateSet('skirmish', 'mission', 'shell')]
+    [ValidateSet('skirmish', 'mission', 'shell', 'scenario')]
     [string]$Demo,
 
     # Schema-2-Runtimebestand (Originalassets, nicht im Repo).
@@ -29,6 +32,10 @@ param(
     # Spielerfraktion und Gegner (nur skirmish); mehrere Gegner mit Komma.
     [string]$Faction = 'FactionAmerica',
     [string[]]$Opponent = @('FactionChina'),
+
+    # Name der gestellten Demo (nur scenario).
+    [ValidateSet('capture-building', 'tank-duel', 'jet-strafe')]
+    [string]$Scenario = 'tank-duel',
 
     # Spielerseite (nur mission; leer = Standard der Karte).
     [string]$HumanSide,
@@ -77,6 +84,9 @@ switch ($Demo) {
     }
     'shell' {
         $clientArgs += '--shell'
+    }
+    'scenario' {
+        $clientArgs += @('--scenario', $Scenario)
     }
 }
 if ($PSBoundParameters.ContainsKey('Seed')) { $clientArgs += @('--seed', "$Seed") }

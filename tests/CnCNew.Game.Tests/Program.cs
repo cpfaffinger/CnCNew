@@ -11,6 +11,7 @@ Func<string[], int>[] suites =
     CampaignShellTests.Run,
     MissionPresentationTests.Run,
     MissionHudTests.Run,
+    ScenarioTests.Run,
 ];
 
 var failures = 0;

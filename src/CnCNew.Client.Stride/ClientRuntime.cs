@@ -65,6 +65,14 @@ internal sealed class ClientRuntime : IDisposable
         return runtime;
     }
 
+    /// <summary>A staged demonstration (<c>--scenario</c>), with the skirmish HUD.</summary>
+    public static ClientRuntime ForScenario(global::Stride.Engine.Game game, GameData data, LiveScenario scenario)
+    {
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null);
+        runtime._running = runtime.Start(scenario, null);
+        return runtime;
+    }
+
     /// <summary>A campaign mission started from the command line, with its HUD.</summary>
     public static ClientRuntime ForMission(global::Stride.Engine.Game game, GameData data, LiveMission mission)
     {
