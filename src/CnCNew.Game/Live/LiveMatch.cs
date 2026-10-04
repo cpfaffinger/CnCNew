@@ -29,7 +29,6 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
 /// </summary>
 public sealed class LiveMatch : LiveGame
 {
-    private ICommandSink? _commands;
 
     private LiveMatch(GameData data, MatchSetup setup, SkirmishMatchSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
         : base(data, session.World, map, setup.MapPath, terrain, session.Players, new PlayerId(1), fxSeed, viewport,
@@ -48,7 +47,7 @@ public sealed class LiveMatch : LiveGame
     public override ImmutableArray<PlayerConfiguration> Players => Session.Players;
 
     /// <summary>Command sink of the human player: everything the human changes goes through it, so <see cref="SkirmishMatchSession.ToReplay"/> reproduces the match.</summary>
-    public override ICommandSink Commands => _commands ??= new SkirmishSessionCommandSink(Session, Human);
+    protected override ICommandSink CreateCommandSink() => new SkirmishSessionCommandSink(Session, Human);
 
     protected override TickResult StepSimulation() => Session.Step();
 

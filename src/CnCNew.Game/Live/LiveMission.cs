@@ -23,7 +23,6 @@ namespace CnCNew.Game.Live;
 /// </summary>
 public sealed class LiveMission : LiveGame
 {
-    private ICommandSink? _commands;
     private readonly string _humanFaction;
     private readonly ImmutableArray<PlayerConfiguration> _players;
 
@@ -36,6 +35,12 @@ public sealed class LiveMission : LiveGame
         Director = new MissionPresentationDirector(run.Session, resolveText);
         Bridge = new MissionUiBridge(run.Session);
     }
+
+    /// <summary>
+    /// The <c>PresentationLatencyTicks</c> a client with a <see cref="MissionPresentationDirector"/> starts a mission with (60 seconds): the director ends camera moves,
+    /// speech and movies at their own time, the latency only bounds how long the scripts wait for something nobody completed.
+    /// </summary>
+    public const int ClientPresentationLatencyTicks = 60 * CnCNew.Simulation.Time.SimulationTiming.LogicFramesPerSecond;
 
     public MissionRun Run { get; }
     public MissionSession Session => Run.Session;
@@ -56,7 +61,7 @@ public sealed class LiveMission : LiveGame
 
     public override ImmutableArray<PlayerConfiguration> Players => _players;
 
-    public override ICommandSink Commands => _commands ??= new MissionCommandSink(Session, Human);
+    protected override ICommandSink CreateCommandSink() => new MissionCommandSink(Session, Human);
 
     /// <summary>One tick: the director completes due presentations, the mission steps (scripts, combat, world), the director applies what the scripts asked for.</summary>
     protected override TickResult StepSimulation()
@@ -67,7 +72,7 @@ public sealed class LiveMission : LiveGame
         return result;
     }
 
-    protected override void OnAdvanced() => Director.ApplyCameraTo(Camera);
+    protected override void OnAdvanced(double gameSeconds) => Director.ApplyCameraTo(Camera, gameSeconds);
 
     public static LiveMission Create(GameData data, MissionRun run, Vector2 viewport, Func<string, string>? resolveText = null)
     {

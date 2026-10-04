@@ -761,6 +761,23 @@ public sealed class AudioDirector : IDisposable
         AdvancePlaylist();
     }
 
+    /// <summary>
+    /// <c>MUSIC_SET_TRACK</c> of a mission script (<c>ScriptActions::doMusicTrackChange</c>): the named track of <c>Music.ini</c> replaces what plays; afterwards the
+    /// side's playlist goes on. False (and counted as an unknown event or a failed track) when the track does not exist or does not decode.
+    /// </summary>
+    public bool SetMusicTrack(string trackName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(trackName);
+        if (_disposed) return false;
+        var track = _catalog.Find(trackName);
+        if (track is null)
+        {
+            _unresolved[trackName] = _unresolved.GetValueOrDefault(trackName) + 1;
+            return false;
+        }
+        return StartTrack(track, loop: false);
+    }
+
     public void StopMusic()
     {
         _musicMode = MusicMode.None;

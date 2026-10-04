@@ -25,6 +25,18 @@ public sealed class MissionController
         Hud = new MatchController(mission, settings, language, textMeasure);
         Hud.Input.Selection.SelectionChanged += mission.Bridge.OnSelectionChanged;
         Hud.MatchEnded += OnEnded;
+        mission.Director.InputDisabled += OnInputDisabled;
+        mission.Director.TextMeasure = textMeasure ?? new MonospaceTextMeasure();
+    }
+
+    private long _lastInputTime;
+
+    /// <summary><c>ScriptActions::doDisableInput</c>: besides dropping input the original clears the selection, the pending command modes and every held key and button.</summary>
+    private void OnInputDisabled()
+    {
+        Hud.Process(new FocusLostEvent(_lastInputTime));
+        Hud.Input.Commands.Cancel();
+        Hud.Input.Selection.Clear();
     }
 
     public LiveMission Mission { get; }
@@ -38,12 +50,19 @@ public sealed class MissionController
     /// <summary>Raised once when the mission is over (victory or defeat plus the end-game delay): the host then calls <c>GameShell.MissionFinished</c>.</summary>
     public event Action<MissionOutcome>? MissionEnded;
 
-    public void Process(InputEvent inputEvent) => Hud.Process(inputEvent);
+    public void Process(InputEvent inputEvent)
+    {
+        ArgumentNullException.ThrowIfNull(inputEvent);
+        _lastInputTime = inputEvent.TimeMs;
+        Hud.Process(inputEvent);
+    }
 
     /// <summary>One rendered frame: advances the mission (<see cref="LiveGame.Advance"/>, which steps the simulation at 30 Hz), then the HUD's own clocks (ticker, quit menu).</summary>
     public void Update(double deltaSeconds)
     {
         Mission.Advance(deltaSeconds);
+        // After the ticks of this frame: a script that disabled the input in them already cleared selection and modes (OnInputDisabled) while the HUD still took events.
+        Hud.WorldInputEnabled = !Director.InputLocked;
         Hud.Update(deltaSeconds);
     }
 
@@ -54,7 +73,9 @@ public sealed class MissionController
     public UiDrawList BuildDrawList(int width, int height)
     {
         var hud = Hud.BuildDrawList(width, height);
-        return hud with { Commands = hud.Commands.AddRange(Director.BuildOverlayCommands(width, height)) };
+        var overlay = Director.BuildOverlayCommands(width, height);
+        // CAMERA_LETTERBOX_BEGIN hides the control bar (ScriptActions::doLetterBoxMode: HideControlBar); the in-game menu, when open, stays.
+        return hud with { Commands = Director.Letterbox && !Hud.IsMenuOpen ? overlay : hud.Commands.AddRange(overlay) };
     }
 
     private void OnEnded(MatchResult _)
