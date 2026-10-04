@@ -36,12 +36,13 @@ public sealed partial class SimulationWorld
     private static readonly Fixed CaptureReachCells = Fixed.FromInt(2 * TerrainMap.CellSize);
 
     /// <summary>
-    /// Reduced <c>ActionManager::canCaptureBuilding</c> (see <see cref="CommandTypes.Capture"/> for what is intentionally not ported: the
-    /// channeled <c>SpecialAbilityUpdate</c> ability, its science/recharge gate and its stealth-detection check). What remains: the actor is the
-    /// issuer's own, has an AI (so it is a mobile unit, not a static prop) and is not itself under construction; the target is a complete,
-    /// unsold, alive <c>STRUCTURE</c> the issuer can see, owned by an enemy, or (<c>KINDOF_CAPTURABLE</c> and not an ally's); and the actor
-    /// already stands within <see cref="CaptureReachCells"/> of it (no automatic walk-to-target, matching <c>FireWeaponCommand</c>'s own
-    /// "direkter, expliziter" simplification in <c>docs/GAME-RULES.md</c> §3).
+    /// Reduced <c>ActionManager::canCaptureBuilding</c> (see <see cref="CommandTypes.Capture"/>). The actor is the issuer's own, has an AI (so it
+    /// is a mobile unit, not a static prop) and is not itself under construction; the target is a complete, unsold, alive <c>STRUCTURE</c> the
+    /// issuer can see, owned by an enemy, or (<c>KINDOF_CAPTURABLE</c> and not an ally's) (<see cref="StagedCaptureRules.CanCapture"/>). An actor
+    /// that carries the channeled <c>SpecialAbilityUpdate</c> capture ability (<c>docs/SIM-STAGED-CAPTURE.md</c>) additionally needs that power
+    /// ready (its <c>UnpauseSpecialPowerUpgrade</c> applied, recharged) and walks to the building itself; any other actor must already stand
+    /// within <see cref="CaptureReachCells"/> of it (no automatic walk-to-target, matching <c>FireWeaponCommand</c>'s own "direkter, expliziter"
+    /// simplification in <c>docs/GAME-RULES.md</c> §3) and captures instantly.
     /// </summary>
     private CommandRejection CheckCapture(PlayerId issuer, CaptureCommand command, out Entity? actor, out Entity? target)
     {
@@ -52,19 +53,36 @@ public sealed partial class SimulationWorld
         if (AiOf(actor) is null || actor.HasStatus(ObjectStatusBits.UnderConstruction)) return CommandRejection.CannotCapture;
         target = FindEntity(command.Target);
         if (target is null || target.DestroyRequested || target.EffectivelyDead) return CommandRejection.UnknownEntity;
-        if (!target.Template.IsKindOf("STRUCTURE") || target.HasStatus(ObjectStatusBits.UnderConstruction) || target.HasStatus(ObjectStatusBits.Sold))
-            return CommandRejection.CannotCapture;
-        if (target.Owner == actor.Owner) return CommandRejection.CannotCapture;
-        var relationship = RelationshipOf(actor.Owner, target.Owner);
-        var capturable = relationship == Relationship.Enemies || (target.Template.IsKindOf("CAPTURABLE") && relationship != Relationship.Allies);
-        if (!capturable) return CommandRejection.CannotCapture;
+        if (!StagedCaptureRules.CanCapture(this, actor, target)) return CommandRejection.CannotCapture;
         if (!CanPlayerSee(issuer, target)) return CommandRejection.TargetNotVisible;
+        // A unit that carries the staged capture ability (SpecialAbilityUpdate) walks to the building itself and needs its power unpaused and recharged;
+        // everything else keeps the reduced instant capture and must already stand in reach.
+        if (StagedCaptureOf(actor) is { } staged)
+            return SpecialPowerRouting.FindModule(actor, staged.PowerIndex) is { } power && power.IsReady(this) ? 0 : CommandRejection.SpecialPowerNotReady;
         var dx = target.X - actor.X;
         var dy = target.Y - actor.Y;
         var reach = target.Template.BoundingCircleRadius + CaptureReachCells;
         if (dx * dx + dy * dy > reach * reach) return CommandRejection.CannotCapture;
         return 0;
     }
+
+    /// <summary>The staged capture ability (<see cref="SpecialAbilityUpdate"/> of an infantry or Black Lotus capture power) of <paramref name="actor"/>, or null for a unit without one.</summary>
+    internal SpecialAbilityUpdate? StagedCaptureOf(Entity actor)
+    {
+        foreach (var module in actor.ModuleArray)
+            if (module is SpecialAbilityUpdate ability && ability.IsCapture(this)) return ability;
+        return null;
+    }
+
+    /// <summary>An accepted <see cref="CaptureCommand"/>: the staged ability when the actor has one (approach, unpack, raise the flag, change owner, pack), otherwise the instant <see cref="ExecuteCapture"/>.</summary>
+    private void ExecuteCaptureCommand(Entity actor, Entity target)
+    {
+        if (StagedCaptureOf(actor) is { } staged) staged.Begin(this, target);
+        else ExecuteCapture(actor, target);
+    }
+
+    /// <summary><see cref="IWorldServices.CaptureStructure"/>.</summary>
+    public void CaptureStructure(Entity actor, Entity target) => ExecuteCapture(actor, target);
 
     /// <summary>
     /// <c>Object::onCapture</c>'s power-pool effect (the only effect this reduced capture models, see <see cref="CommandTypes.Capture"/>): the

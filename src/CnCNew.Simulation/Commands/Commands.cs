@@ -63,6 +63,9 @@ public static class CommandTypes
     /// that module is a 64-object blocker spanning unrelated channeled abilities (disguise, hijack, hack, paradrop, capture) and is out of scope
     /// here. This command approximates only the capture <em>outcome</em> for any of the issuer's own mobile units already standing next to the
     /// target, without the ability's channel timer, science gate or stealth-detection requirement — a documented simplification, not a port.
+    /// A unit that carries the capture ability itself (<c>SpecialAbilityUpdate</c> of <c>SPECIAL_INFANTRY_CAPTURE_BUILDING</c> /
+    /// <c>SPECIAL_BLACKLOTUS_CAPTURE_BUILDING</c>) takes the staged path instead: it walks to the target and unpacks, raises the flag and packs
+    /// (<c>docs/SIM-STAGED-CAPTURE.md</c>); the command then needs that power ready, not the unit in reach.
     /// </summary>
     public const ushort Capture = 29;
 

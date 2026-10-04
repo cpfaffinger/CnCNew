@@ -202,6 +202,9 @@ public interface IWorldServices
     bool TryGetSharedReadyFrame(PlayerId player, int powerIndex, out long readyFrame);
     void SetSharedReadyFrame(PlayerId player, int powerIndex, long readyFrame);
 
+    /// <summary><c>SpecialAbilityUpdate::triggerAbilityEffect</c> for the capture powers (<c>Object::defect</c> into the capturer's team): <paramref name="target"/> changes to <paramref name="actor"/>'s owner, its power-pool bonus moves with it and <see cref="SimEventKind.StructureCaptured"/> is emitted.</summary>
+    void CaptureStructure(Entity actor, Entity target);
+
     /// <summary><c>Player::m_cashBountyPercent</c> as a ratio (0: no bounty); <c>CashBountyPower</c> only ever raises it.</summary>
     Fixed CashBountyOf(PlayerId player);
     void RaiseCashBounty(PlayerId player, Fixed ratio);
@@ -404,6 +407,9 @@ public interface ISpecialPowerHandler
     /// <summary>True when this module serves the power for its entity's owner right now (matching template and, where configured, owned science).</summary>
     bool Handles(IWorldServices world, int powerIndex);
     void Initiate(IWorldServices world, int powerIndex, in SpecialPowerTarget target);
+
+    /// <summary>Whether the handler can carry out a use on this target (a capture needs an enemy structure); a refused use is rejected with <c>InvalidSpecialPowerTarget</c> before anything starts.</summary>
+    bool ValidatesTarget(IWorldServices world, int powerIndex, in SpecialPowerTarget target) => true;
 }
 
 public static class SpecialPowerRouting

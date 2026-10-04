@@ -683,8 +683,9 @@ public static class ModuleCatalog
             new("ScriptedSpecialPowerOnly", FieldType.Bool, Source: "SpecialPowerModule.cpp"),
         ];
         Add("SpecialAbility", SpecialPowerBase());
-        // SpecialAbilityUpdate.h: the packing/preparation/special-object staging fields are recognized (so the shipped data compiles without an
-        // unknown-field error) but not read; the module only carries the shared recharge state (see CnCNew.Simulation SpecialAbilityUpdate).
+        // SpecialAbilityUpdate.h: the staging fields of the capture powers (StartAbilityRange, AbilityAbortRange, UnpackTime, PreparationTime, PackTime,
+        // PackUnpackVariationFactor, NeedToFaceTarget, DoCaptureFX, AwardXPForTriggering) are read by CnCNew.Simulation SpecialAbilityUpdate
+        // (docs/SIM-STAGED-CAPTURE.md); the special-object fields are recognized (so the shipped data compiles without an unknown-field error) but not read.
         Add("SpecialAbilityUpdate",
         [
             ..SpecialPowerBase(),
@@ -694,6 +695,7 @@ public static class ModuleCatalog
             new("PersistentPrepTime", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
             new("PackTime", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
             new("UnpackTime", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
+            Real("PackUnpackVariationFactor", "SpecialAbilityUpdate.cpp"),
             new("PreTriggerUnstealthTime", FieldType.DurationMs, Source: "SpecialAbilityUpdate.cpp"),
             new("SkipPackingWithNoTarget", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
             new("SpecialObject", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: "SpecialAbilityUpdate.cpp"),

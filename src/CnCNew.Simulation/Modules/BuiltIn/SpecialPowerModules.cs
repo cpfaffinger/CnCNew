@@ -23,7 +23,7 @@ internal static class SpecialPowerModules
     public static ImmutableArray<IModuleBinding> Bindings { get; } =
     [
         new ModuleBinding<SpecialPowerBaseData>("SpecialAbility", ModuleOwnerKind.Object, (configuration, _) => SpecialPowerBaseData.Parse(configuration), data => new SpecialAbility(data)),
-        new ModuleBinding<SpecialPowerBaseData>("SpecialAbilityUpdate", ModuleOwnerKind.Object, (configuration, _) => SpecialPowerBaseData.Parse(configuration), data => new SpecialAbilityUpdate(data)),
+        new ModuleBinding<SpecialAbilityUpdateData>("SpecialAbilityUpdate", ModuleOwnerKind.Object, (configuration, _) => SpecialAbilityUpdateData.Parse(configuration), data => new SpecialAbilityUpdate(data)),
         new ModuleBinding<OclSpecialPowerData>("OCLSpecialPower", ModuleOwnerKind.Object, (configuration, _) => OclSpecialPowerData.Parse(configuration), data => new OclSpecialPower(data)),
         new ModuleBinding<CashBountyPowerData>("CashBountyPower", ModuleOwnerKind.Object, (configuration, _) => CashBountyPowerData.Parse(configuration), data => new CashBountyPower(data)),
         new ModuleBinding<CashHackData>("CashHackSpecialPower", ModuleOwnerKind.Object, (configuration, _) => CashHackData.Parse(configuration), data => new CashHackSpecialPower(data)),
@@ -187,19 +187,7 @@ public sealed class SpecialAbility(SpecialPowerBaseData data) : SpecialPowerModu
     public override bool AcceptsTarget(SpecialPowerTargetKind kind) => true;
 }
 
-/// <summary>
-/// <c>SpecialAbilityUpdate.cpp</c>: the generic handler behind command-button-triggered unit abilities (the Ranger's flashbang, Colonel Burton's
-/// demo charge, Jarmen Kell's snipe, the GLA rebel's building capture/booby trap, the hacker's cash hack, ...). The reference drives a
-/// packing/unpacking/approach/preparation state machine before the effect fires and can spawn persistent "special objects" (planted charges,
-/// deployed gear); none of that per-ability staging is modelled. The module only carries the recharge state every special power shares
-/// (<see cref="SpecialPowerModuleBase"/>), which is enough for the object to be instantiable and for <c>*_USE_COMMANDBUTTON_ABILITY*</c>
-/// (<c>ScriptEngine.Actions.cs</c>) to trigger and recharge the power; the staged effect itself is not simulated (<c>docs/SCRIPT-ENGINE.md</c> §8).
-/// </summary>
-public sealed class SpecialAbilityUpdate(SpecialPowerBaseData data) : SpecialPowerModuleBase(data)
-{
-    public override string ModuleName => "SpecialAbilityUpdate";
-    public override bool AcceptsTarget(SpecialPowerTargetKind kind) => true;
-}
+// SpecialAbilityUpdate (the generic handler behind command-button unit abilities; staged for the two capture powers) is in SpecialAbilityStaging.cs.
 
 // ============================================================================================================ OCLSpecialPower
 
