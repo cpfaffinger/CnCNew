@@ -252,6 +252,12 @@ run.Test("Air: a neutron blast kills crews and leaves unmanned vehicles", Tests.
 run.Test("Air: the neutron missile climbs, turns, dives, dies and blasts with falling damage", Tests.AirNeutronMissile);
 run.Test("Air: a missile silo's door follows the recharge of its power", Tests.AirMissileSiloDoors);
 run.Test("Air: the Spectre gunship inserts, orbits, fires, departs and cleans up", Tests.AirSpectreGunship);
+run.Test("Wings: a winged jet never falls below its minimum speed and does not stop at the end of its order; a helicopter does", Tests.WingMinimumSpeedAndNoStopping);
+run.Test("Wings: turning is limited by the turn rate and a destination behind is reached by a loop", Tests.WingTurnRateIsLimited);
+run.Test("Wings: a jet circles its destination at CirclingRadius (clockwise, counter-clockwise, smallest)", Tests.WingCirclesItsDestination);
+run.Test("Wings: the circle survives snapshots and a new order leaves it", Tests.WingCircleSurvivesSnapshots);
+run.Test("Wings: the full airfield lifecycle with a winged locomotor", Tests.WingJetFlightLifecycle);
+run.Test("Air: an airfield uses the injected model bones (hangar, parking, runway), refuses a mismatching table and survives snapshots", Tests.AirAirfieldUsesTheModelBones);
 run.Test("Air: a carrier's deployment creates the gunship at the map edge on a map with terrain", Tests.AirSpectreDeployedByCarrier);
 run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
