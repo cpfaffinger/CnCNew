@@ -75,17 +75,21 @@ static partial class Tests
             var heliAi = comanche!.Modules.OfType<JetAIUpdate>().Single();
             Check.That(jetAi.Phase == JetAIUpdate.JetPhase.None && !jetAi.AllowAirLoco && jetAi.Airfield == airfield.Id, $"The Raptor is parked at the airfield ({jetAi.Phase}).");
             log.Add($"raptor parked at tick {world.Tick} at ({raptor.X}, {raptor.Y}, {raptor.Z})");
+            Check.That(jetAi.IsIdle, "A parked Raptor without a stored order is idle (the scripts ask AIUpdateInterface.IsIdle, which the jet overrides).");
             var weapon = catalog.Weapons[raptor.Template.DefaultWeapon];
             Check.That(weapon.ReloadsAtBase && weapon.ClipSize > 0 && raptor.WeaponClip == weapon.ClipSize, $"The Raptor's weapon returns to base to reload (clip {weapon.ClipSize}).");
 
             Check.That(Send(1, next => new SetMoveTargetCommand(new PlayerId(1), next, world.Tick, raptor.Id, Fixed.FromInt(4600) - weapon.AttackRange / Fixed.FromInt(2), Fixed.FromInt(2000))).Accepted, "The Raptor is ordered out.");
             hashes.Add(world.Step().StateHash);
             var phases = new List<JetAIUpdate.JetPhase>();
+            var idleInAirfieldState = false;
             for (var tick = 0; tick < 3000 && !(jetAi.AllowAirLoco && jetAi.Phase == JetAIUpdate.JetPhase.None && !raptor.HasMoveTarget); tick++)
             {
                 hashes.Add(world.Step().StateHash);
                 if (phases.Count == 0 || phases[^1] != jetAi.Phase) phases.Add(jetAi.Phase);
+                idleInAirfieldState |= jetAi.Phase != JetAIUpdate.JetPhase.None && ((AIUpdateInterface)jetAi).IsIdle;
             }
+            Check.That(!idleInAirfieldState, "The jet is never idle between the order and take-off, through any airfield state, seen through the base type the scripts use.");
             Check.That(jetAi.AllowAirLoco && !raptor.HasMoveTarget, "The Raptor took off and reached its destination: " + string.Join(">", phases));
             Check.That(phases.Contains(JetAIUpdate.JetPhase.TaxiToTakeoff) && phases.Contains(JetAIUpdate.JetPhase.TakingOff), "It took off through the runway states: " + string.Join(">", phases));
             log.Add($"raptor at its destination at tick {world.Tick} ({raptor.X}, {raptor.Y}, {raptor.Z})");
@@ -179,6 +183,38 @@ static partial class Tests
             Console.WriteLine($"       real air: neutron missile peaked at z={maxZ}, tanks at 0/90/400: " + string.Join(" / ", tanks.Select(value => world.Entities.Contains(value) ? value.Body!.Health.ToString() : "destroyed")));
         }
         Nuke();
+
+        void NukeFromSilo()
+        {
+            // Through the real chain: UseSpecialPowerCommand -> OCLSpecialPower -> SUPERWEAPON_NeutronMissile (FireWeapon nugget) -> the silo is the weapon's source.
+            var terrain = CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(400, 400, 1, (_, _) => 0), "real-air-silo"); // the silo OCL is created at the map edge near the source: it needs a terrain, as every match and mission has one
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 5, players, "real-air-silo", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var sequence = new Dictionary<int, ulong>();
+            SubmitResult Send(int player, Func<ulong, SimCommand> make) => world.Submit(make(sequence[player] = sequence.GetValueOrDefault(player) + 1));
+            Check.That(Send(1, next => new SpawnCommand(new PlayerId(1), next, world.Tick, "ChinaNuclearMissileLauncher", new PlayerId(1), Fixed.FromInt(1000), Fixed.FromInt(3000), Fixed.Zero, Fixed.Zero)).Accepted, "The silo spawns.");
+            Check.That(Send(2, next => new SpawnCommand(new PlayerId(2), next, world.Tick, "AmericaTankCrusader", new PlayerId(2), Fixed.FromInt(3000), Fixed.FromInt(3000), Fixed.Zero, Fixed.Zero)).Accepted, "The target spawns.");
+            world.Step();
+            var silo = world.Entities.First(value => value.Template.Name == "ChinaNuclearMissileLauncher");
+            var tank = world.Entities.First(value => value.Template.Name == "AmericaTankCrusader");
+            var power = silo.Modules.OfType<SpecialPowerModuleBase>().First();
+            for (var tick = 0; tick < 12000 && !power.IsReady(world); tick++) world.Step();
+            Check.That(power.IsReady(world), "The silo's superweapon becomes ready by recharging.");
+            var launch = Send(1, next => new UseSpecialPowerCommand(new PlayerId(1), next, world.Tick, silo.Id, "SuperweaponNeutronMissile", SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(3000), Fixed.FromInt(3000)));
+            Check.That(launch.Accepted, "The launch command is accepted (" + launch + ").");
+            Entity? missile = null;
+            for (var tick = 0; tick < 40 && missile is null; tick++)
+            {
+                world.Step();
+                missile = world.Entities.FirstOrDefault(value => value.Template.Name == "NeutronMissile");
+            }
+            Check.That(missile is not null, "The missile exists shortly after the launch.");
+            var dx = missile!.X - silo.X;
+            var dy = missile.Y - silo.Y;
+            Check.That(dx * dx + dy * dy < Fixed.FromInt(120 * 120), $"It starts at the silo ({dx},{dy} away), not at the target.");
+            for (var tick = 0; tick < 900 && world.Entities.Contains(missile); tick++) world.Step();
+            Check.That(tank.EffectivelyDead || !world.Entities.Contains(tank), "The target at ground zero is destroyed by the silo's missile.");
+        }
+        NukeFromSilo();
 
         var first = Run();
         var second = Run();
