@@ -75,7 +75,7 @@ internal static class ScenarioAudit
         var failures = scenario.Name switch
         {
             "tank-duel" => CheckTankDuel(shotsAt, history, events, live),
-            "capture-building" => CheckCapture(history, events, live),
+            "capture-building" => CheckCapture(history, events, live, SelectionFlashSettings.FromDefinitions(data.Graph)),
             "jet-strafe" => CheckJet(history, events, live),
             _ => [],
         };
@@ -86,7 +86,7 @@ internal static class ScenarioAudit
 
     // ------------------------------------------------------------------------------------------------------------------------ sampling
 
-    private sealed record UnitSample(string Tag, bool Alive, float X, float Y, float Z, float Health, float Speed, float YawDegrees, float? TurretWorldDegrees, int Owner, string Conditions, float? TurretRelativeDegrees = null);
+    private sealed record UnitSample(string Tag, bool Alive, float X, float Y, float Z, float Health, float Speed, float YawDegrees, float? TurretWorldDegrees, int Owner, string Conditions, float? TurretRelativeDegrees = null, Vector3 FlashTint = default);
 
     private sealed record Sample(long Tick, Dictionary<string, UnitSample> Units);
 
@@ -108,7 +108,7 @@ internal static class ScenarioAudit
             var health = entity.Body is { } body && body.MaxHealth.Raw != 0 ? ToFloat(body.Health) / ToFloat(body.MaxHealth) * 100f : 100f;
             float? relative = entity.TurretOf(0) is { } reading ? ToFloat(reading.Angle) * 180f / MathF.PI : null;
             units[tag] = new UnitSample(tag, !entity.EffectivelyDead, ToFloat(entity.X) - live.Anchor.X, ToFloat(entity.Y) - live.Anchor.Y, ToFloat(entity.Z), health,
-                ToFloat(entity.Speed) * 30f, yaw, turret, entity.Owner.Value, drawable?.Conditions.ToString() ?? "(not drawn)", relative);
+                ToFloat(entity.Speed) * 30f, yaw, turret, entity.Owner.Value, drawable?.Conditions.ToString() ?? "(not drawn)", relative, drawable?.FlashTint ?? Vector3.Zero);
         }
 
         return new Sample(live.Tick, units);
@@ -322,7 +322,7 @@ internal static class ScenarioAudit
         if (rotateWithoutChange > 0) failures.Add($"TURRET_ROTATE is set in {rotateWithoutChange} samples in which the turret did not turn");
     }
 
-    private static List<string> CheckCapture(List<Sample> history, List<SimEvent> events, LiveScenario live)
+    private static List<string> CheckCapture(List<Sample> history, List<SimEvent> events, LiveScenario live, SelectionFlashSettings flashSettings)
     {
         var failures = new List<string>();
         Console.WriteLine("ranger model condition stages");
@@ -353,10 +353,48 @@ internal static class ScenarioAudit
             if (unpack >= 0 && raise >= 0 && !(unpack < raise)) failures.Add("the stages are out of order (unpack must come before raising the flag)");
         }
 
+        CheckCaptureFlash(history, events, live, flashSettings, stages, failures);
+
         var owner = history[^1].Units["barracks"].Owner;
         Console.WriteLine($"  the barracks belongs to player {owner} at the end");
         if (owner != 1) failures.Add($"the barracks belongs to player {owner} instead of the Ranger's player 1");
         return failures;
+    }
+
+    /// <summary>
+    /// The barracks flashes while the flag goes up (<c>DoCaptureFX</c>): every <c>CaptureFlash</c> event shows in the projected frames as a tint of the barracks' drawable in the Ranger's
+    /// saturated house colour, the tint is gone again before the next flash or within the envelope's five ticks, and nothing is tinted outside the flashes.
+    /// </summary>
+    private static void CheckCaptureFlash(List<Sample> history, List<SimEvent> events, LiveScenario live, SelectionFlashSettings settings, List<(long Tick, string Conditions)> stages, List<string> failures)
+    {
+        var barracks = live.Tags["barracks"];
+        var flashes = events.Where(value => value.Kind == SimEventKind.CaptureFlash && value.Entity == barracks).Select(value => value.Tick).ToArray();
+        var tinted = history.Where(sample => sample.Units["barracks"].FlashTint != Vector3.Zero).ToArray();
+        var peak = SelectionFlashTracker.Saturate(live.Colors.Of(new PlayerId(1)), settings.SaturationFactor);
+        Console.WriteLine($"  capture flashes at ticks {string.Join(", ", flashes)}; the barracks' drawable is tinted in {tinted.Length} frames, peak ({peak.X:F3}, {peak.Y:F3}, {peak.Z:F3}) of the Ranger's house colour");
+        if (flashes.Length < 2) { failures.Add($"the barracks flashes {flashes.Length} time(s) while the flag goes up, expected several"); return; }
+
+        // Model conditions are sampled after each tick; the event carries the tick it happened in. The sample that follows the event is the first frame that can show it.
+        var raising = stages.Where(stage => stage.Conditions.Split(' ').Contains("RAISING_FLAG")).Select(stage => stage.Tick).DefaultIfEmpty(-1).First();
+        var after = stages.Where(stage => stage.Tick > raising && !stage.Conditions.Split(' ').Contains("RAISING_FLAG")).Select(stage => stage.Tick).DefaultIfEmpty(long.MaxValue).First();
+        var peaks = 0;
+        foreach (var tick in flashes)
+        {
+            var index = history.FindIndex(sample => sample.Tick > tick);
+            if (index < 0) { failures.Add($"no frame was projected after the flash of tick {tick}"); continue; }
+            var shown = history[index].Units["barracks"].FlashTint;
+            if (Vector3.Distance(shown, peak) < 1e-4f) peaks++;
+            else failures.Add($"the frame after the flash of tick {tick} tints the barracks ({shown.X:F3}, {shown.Y:F3}, {shown.Z:F3}) instead of the peak of the Ranger's colour");
+            if (history[index].Tick < raising || history[index].Tick > after) failures.Add($"the flash of tick {tick} is outside RAISING_FLAG ({raising}..{after})");
+            if (history[index].Units["ranger"].FlashTint != Vector3.Zero) failures.Add($"the Ranger itself is tinted at tick {tick}");
+        }
+
+        var stray = tinted.Count(sample => !flashes.Any(tick => sample.Tick > tick && sample.Tick <= tick + 1 + SelectionFlashTracker.LastVisibleAge));
+        if (stray > 0) failures.Add($"the barracks is tinted in {stray} frames that follow no flash");
+        var gaps = flashes.Zip(flashes.Skip(1), (a, b) => b - a).ToArray();
+        // The phase is stepped in whole ticks, so neighbouring gaps jitter by one tick; over the whole preparation they shrink.
+        if (gaps[^1] >= gaps[0] || gaps.Zip(gaps.Skip(1), (a, b) => b > a + 1).Any(slower => slower)) failures.Add($"the flashes do not come faster toward the end (gaps {string.Join(", ", gaps)})");
+        Console.WriteLine($"  {peaks} of {flashes.Length} flashes show at their peak in the frame that follows, gaps {string.Join(", ", gaps)} ticks, {stray} tinted frames without a flash");
     }
 
     private static List<string> CheckJet(List<Sample> history, List<SimEvent> events, LiveScenario live)
