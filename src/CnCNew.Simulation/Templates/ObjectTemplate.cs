@@ -54,6 +54,18 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
 
     /// <summary><c>Locomotor::m_circlingRadius</c> (<c>CirclingRadius</c>): the radius of the circle a winged aircraft flies to hold a position, positive clockwise, negative counter-clockwise, 0 the smallest circle its speed and turn rate allow.</summary>
     public Fixed CirclingRadius { get; init; }
+
+    /// <summary>
+    /// The constants of a damaged object (<c>SpeedDamaged</c>, <c>TurnRateDamaged</c>, <c>AccelerationDamaged</c>, <c>LiftDamaged</c>; an absent key keeps the normal value, as
+    /// <c>LocomotorTemplate::validate</c> does); null when none of them differs.
+    /// </summary>
+    public LocomotorInfo? Damaged { get; init; }
+
+    /// <summary><c>GlobalData::m_movementPenaltyDamageState</c> (<c>GameData.ini MovementPenaltyDamageState</c>, default <c>REALLYDAMAGED</c>) as a <c>BodyDamageStates</c> value: from this damage state on <see cref="Damaged"/> applies.</summary>
+    public int PenaltyDamageState { get; init; } = 2;
+
+    /// <summary><c>Locomotor::getMaxSpeedForCondition</c>/<c>getMaxTurnRate</c>/<c>getMaxAcceleration</c>/<c>getMaxLift</c>: the normal constants while the body is in a better state than the penalty state, the damaged ones from there on.</summary>
+    public LocomotorInfo ForCondition(int bodyDamageState) => Damaged is not null && bodyDamageState >= PenaltyDamageState ? Damaged : this;
 }
 
 /// <summary>
@@ -603,6 +615,17 @@ public sealed class TemplateCatalog
     private static ImmutableDictionary<string, LocomotorInfo> BuildLocomotors(CompiledDefinitionGraph graph)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, LocomotorInfo>(StringComparer.OrdinalIgnoreCase);
+        // TheBodyDamageTypeNames; GlobalData's constructor default is BODY_REALLYDAMAGED.
+        var penaltyText = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields.LastOrDefault(field => field.Name.Equals("MovementPenaltyDamageState", StringComparison.OrdinalIgnoreCase))
+            ?.Value.OriginalText.Split([' ', '\t', ';'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        var penaltyState = penaltyText?.ToUpperInvariant() switch
+        {
+            null or "REALLYDAMAGED" => Modules.BuiltIn.BodyDamageStates.ReallyDamaged,
+            "PRISTINE" => Modules.BuiltIn.BodyDamageStates.Pristine,
+            "DAMAGED" => Modules.BuiltIn.BodyDamageStates.Damaged,
+            "RUBBLE" => Modules.BuiltIn.BodyDamageStates.Rubble,
+            var other => throw new TemplateBuildException($"GameData: unknown MovementPenaltyDamageState {other}."),
+        };
         foreach (var definition in graph.Definitions.OfType<LocomotorDefinition>())
         {
             decimal Get(string name) => definition.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal value ? value : 0m;
@@ -631,7 +654,26 @@ public sealed class TemplateCatalog
             if (definition.Fields.LastOrDefault(field => field.Name.Equals("Surfaces", StringComparison.OrdinalIgnoreCase))?.Value.Value is FlagsValue surfaceFlags)
                 foreach (var name in surfaceFlags.Names)
                     surfaces |= Enum.Parse<LocomotorSurfaces>(name, ignoreCase: true);
-            builder[definition.OriginalName] = new LocomotorInfo(
+            // The damaged constants: an absent key means "as undamaged" (LocomotorTemplate::validate turns the -1 default into the normal value).
+            decimal? Optional(string name)
+            {
+                var field = definition.Fields.LastOrDefault(item => item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                return field?.Value.Value switch
+                {
+                    null => null,
+                    decimal number => number,
+                    long integer => integer,
+                    _ => decimal.TryParse(field.Value.OriginalText.Split([' ', '\t', ';'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+                        ? parsed
+                        : throw new TemplateBuildException($"Locomotor '{definition.OriginalName}': {name} expects a number, got '{field.Value.OriginalText.Trim()}'."),
+                };
+            }
+            var speedDamaged = Optional("SpeedDamaged") is { } sd && sd >= 0 ? sd : speed;
+            var turnRateDamaged = Optional("TurnRateDamaged") is { } td && td >= 0 ? td : turnRate;
+            var accelerationDamaged = Optional("AccelerationDamaged") is { } ad && ad >= 0 ? ad : acceleration;
+            var lift = Get("Lift");
+            var liftDamaged = Optional("LiftDamaged") is { } ld && ld >= 0 ? ld : lift;
+            var normal = new LocomotorInfo(
                 SimulationTiming.PerSecondToPerTick(speed), SimulationTiming.PerSecondSquaredToPerTickSquared(acceleration),
                 SimulationTiming.DegreesPerSecondToRadiansPerTick(turnRate),
                 braking > 0 ? SimulationTiming.PerSecondSquaredToPerTickSquared(braking) : SimulationTiming.PerSecondSquaredToPerTickSquared(acceleration),
@@ -641,11 +683,26 @@ public sealed class TemplateCatalog
             {
                 PreferredHeight = Fixed.FromDecimal(Get("PreferredHeight")),
                 SpeedLimitZ = SimulationTiming.PerSecondToPerTick(Get("SpeedLimitZ")),
-                Lift = SimulationTiming.PerSecondSquaredToPerTickSquared(Get("Lift")),
+                Lift = SimulationTiming.PerSecondSquaredToPerTickSquared(lift),
                 IsHover = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("HOVER", StringComparison.OrdinalIgnoreCase) == true,
                 IsWings = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("WINGS", StringComparison.OrdinalIgnoreCase) == true,
                 CirclingRadius = Fixed.FromDecimal(Signed("CirclingRadius")),
+                PenaltyDamageState = penaltyState,
             };
+            if (speedDamaged != speed || turnRateDamaged != turnRate || accelerationDamaged != acceleration || liftDamaged != lift)
+                normal = normal with
+                {
+                    Damaged = normal with
+                    {
+                        Speed = SimulationTiming.PerSecondToPerTick(speedDamaged),
+                        TurnRatePerTick = SimulationTiming.DegreesPerSecondToRadiansPerTick(turnRateDamaged),
+                        Acceleration = SimulationTiming.PerSecondSquaredToPerTickSquared(accelerationDamaged),
+                        // Braking has no damaged key; a locomotor without Braking brakes with its acceleration, damaged or not.
+                        Braking = braking > 0 ? normal.Braking : SimulationTiming.PerSecondSquaredToPerTickSquared(accelerationDamaged),
+                        Lift = SimulationTiming.PerSecondSquaredToPerTickSquared(liftDamaged),
+                    },
+                };
+            builder[definition.OriginalName] = normal;
         }
         return builder.ToImmutable();
     }

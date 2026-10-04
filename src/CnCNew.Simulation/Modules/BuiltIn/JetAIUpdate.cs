@@ -146,7 +146,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     /// <summary>The <c>HeliAIStateMachine</c> flies it: vertical take-off and landing instead of a runway.</summary>
     private bool Helicopter => !data.NeedsRunway || HelipadKind;
 
-    protected override LocomotorInfo? ActiveLocomotor
+    protected override LocomotorInfo? SelectedLocomotor
     {
         get
         {

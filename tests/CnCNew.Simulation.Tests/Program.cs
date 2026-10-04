@@ -345,6 +345,7 @@ run.Test("Turret attack: starting a unit ability ends the attack and the move", 
 run.Test("Turret attack: snapshot mid-pursuit, determinism and the replay of PursueCommand", Tests.TurretAttackSnapshotAndReplay);
 run.Test("Firing tracker: consecutive shots spin the weapon up, a victim change coasts, idling cools it down", Tests.FiringTrackerSpinsUpCoastsAndCoolsDown);
 run.Test("Pre-attack delay: the weapon winds up per shot, per attack or per clip; an order drops it", Tests.PreAttackDelayWindsUpBeforeTheShot);
+run.Test("Damaged locomotor: a really damaged object moves with SpeedDamaged", Tests.DamagedLocomotorSlowsAReallyDamagedObject);
 run.Test("Turret idle scan: random angle and interval, hold, return, determinism, snapshot", Tests.TurretIdleScanGlancesAroundDeterministically);
 run.Test("Turret idle scan: an attack interrupts it and it resumes afterwards", Tests.TurretIdleScanYieldsToAnAttackAndResumes);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();

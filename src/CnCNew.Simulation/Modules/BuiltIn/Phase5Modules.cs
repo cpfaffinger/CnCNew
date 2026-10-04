@@ -573,7 +573,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public virtual bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning;
 
     /// <summary>The locomotor the object moves with right now (<c>AIUpdateInterface::getCurLocomotor</c>); aircraft switch between their locomotor sets (<c>JetAIUpdate::chooseLocomotorSet</c>).</summary>
-    protected virtual LocomotorInfo? ActiveLocomotor => Entity.Template.Locomotor;
+    /// <summary>The locomotor set the object moves with right now (a jet picks its taxi, attack or return set).</summary>
+    protected virtual LocomotorInfo? SelectedLocomotor => Entity.Template.Locomotor;
+
+    /// <summary>The constants the object moves with: <see cref="SelectedLocomotor"/>, in its damaged form once the body is as damaged as <c>MovementPenaltyDamageState</c> (<c>Locomotor::getMaxSpeedForCondition</c> and its siblings).</summary>
+    protected LocomotorInfo? ActiveLocomotor => SelectedLocomotor?.ForCondition(Entity.Body is ActiveBody body ? body.DamageState : BodyDamageStates.Pristine);
 
     /// <summary>
     /// The object flies <paramref name="locomotor"/> as a fixed-wing aircraft (<c>Appearance = WINGS</c>): <see cref="MoveWinged"/> instead of the ordinary air movement. Only <see cref="JetAIUpdate"/>
