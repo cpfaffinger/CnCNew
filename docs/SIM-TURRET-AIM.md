@@ -239,6 +239,8 @@ Alle `ai-match`-Läufe: zwei unabhängige Läufe und die Fortsetzung ab einem Sn
 KI-Spiels China/GLA kippt von „Sieg in Tick 43.965“ zu „Patt“; die Ursache ist in Abschnitt 8a aufgeschlüsselt (die Regel „ein neuer Befehl beendet das Zielen“; das Spiel war schon vorher knapp vor dem Tick-Limit). Es wurde nichts
 aus anderem Anlass verändert.
 
+Die Werte der Spalte „jetzt“ sind seit den Feuerstufen, der Vorangriffsverzögerung, den beschädigten Locomotoren und der Platzierung des KI-Versorgungszentrums überholt; aktuelle Referenzwerte stehen in `docs/SIMULATION-CORE.md` §32.
+
 ## 8a. Aufschlüsselung der KI-Verschiebung (4. Oktober 2026, gemessen)
 
 Offen war, warum `ai-match` China/GLA auf Alpine Assault seit dem Angriffszustand im Patt endet (vorher China bei Tick 43.965). Die Effekte wurden einzeln aus- und eingeschaltet: ein Wegwerf-Worktree

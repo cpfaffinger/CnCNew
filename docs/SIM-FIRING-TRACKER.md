@@ -81,7 +81,7 @@ Nicht erfasst: Objekte, die ihren Locomotor nicht über `AIUpdateInterface` lese
 
 | Lauf | vorher (`2b854d3`) | jetzt |
 |---|---|---|
-| `SimTool reference-match` | Sieger FactionGLA, Tick 15.000, Endhash `01C01E3B91EAE18C`, Kette `045DA5259A104F01` | siehe README / `docs/SIMULATION-CORE.md` §19 (nach jeder Simulationsänderung neu gemessen) |
+| `SimTool reference-match` | Sieger FactionGLA, Tick 15.000, Endhash `01C01E3B91EAE18C`, Kette `045DA5259A104F01` | nach Feuerstufen und Vorangriff Tick 14.490, `1104C4CD97A0D4CA`; mit beschädigten Locomotoren Tick **13.500**, Endhash `0946FB676DEC615C`, Kette `EA6D12F180930D71` |
 | `SimTool stress` (216.000 Ticks, synthetisch) | Endhash `56882F763EABEF67` | **unverändert** |
 
 ## 7. Bekannte Grenzen
