@@ -314,7 +314,7 @@ public sealed class FireSpreadUpdate(FireSpreadData data) : SimModule, IUpdateMo
 
 // ================================================================================================================ DeployStyleAIUpdate
 
-/// <summary><c>DeployStyleAIUpdate.h</c>: the AI base plus the time to unpack and to pack (ticks). The turret options and the manual animations are typed; there is no turret model.</summary>
+/// <summary><c>DeployStyleAIUpdate.h</c>: the AI base plus the time to unpack and to pack (ticks). The turret options and the manual animations are typed; the turrets themselves are the simulation's (docs/SIM-TURRET-AIM.md), the deploy-specific turret options are not modeled.</summary>
 public sealed record DeployStyleData(AIUpdateData Base, long UnpackTicks, long PackTicks) : ModuleData
 {
     public static DeployStyleData Parse(ModuleConfiguration configuration) => new(
@@ -329,7 +329,7 @@ public sealed record DeployStyleData(AIUpdateData Base, long UnpackTicks, long P
 /// re-issue of the fire order (<c>MissionSession</c>'s combat drive, the skirmish AI) succeeds afterwards — and a move order (<see cref="OrderMove"/>) starts undeploying and is carried out
 /// when the unit is packed. An attack wanted while packing reverses the pack where it stands (<c>setMyState(DEPLOY, reverseDeploy)</c>, both directions take <c>UnpackTime</c> as in the
 /// reference) and drops the pending move; an unpacking unit asked to move reverses likewise. While unpacking or packing the unit stands still. Not modeled: the idle-guard auto deploy
-/// (no guard state), turret recentering (<c>ALIGNING_TURRETS</c> is never entered: turrets are always considered centered), <c>TurretsFunctionOnlyWhenDeployed</c>, the model conditions,
+/// (no guard state), turret recentering (<c>ALIGNING_TURRETS</c> is never entered: a packing unit does not wait for its turret to centre), <c>TurretsFunctionOnlyWhenDeployed</c>, the model conditions,
 /// animations and sounds.
 /// </summary>
 public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterface(data.Base), IFireGate

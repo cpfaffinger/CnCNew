@@ -56,7 +56,7 @@ müsste. Die Referenz setzt die Bits imperativ an vielen Stellen; hier ist jedes
 | 37 | BETWEEN_FIRING_SHOTS_A | `world.Tick < WeaponReadyTick` bei nicht leerem Magazin |
 | 38 | RELOADING_A | `world.Tick < WeaponReadyTick` bei leerem Magazin |
 | 39–46 | PREATTACK/FIRING/BETWEEN_FIRING_SHOTS/RELOADING _B und _C | nicht modelliert: die Simulation kennt nur die Primärwaffe |
-| 47 | TURRET_ROTATE | nicht modelliert: kein Turmwinkel in der Simulation |
+| 47 | TURRET_ROTATE | `Entity.TurretOf(i).Rotating`: der Turm der Simulation dreht noch (`TurretAI::friend_turnTowardsAngle`, `docs/SIM-TURRET-AIM.md`) |
 | 48 | POST_COLLAPSE | nicht modelliert: `StructureCollapseUpdate` |
 | 49 | MOVING | `Speed ≠ 0` oder aktiver Bewegungsbefehl |
 | 50 | DYING | `EffectivelyDead`, Körper ist kein `InactiveBody`, Objekt noch in der Welt |
@@ -210,8 +210,8 @@ Vertrag:
   Erfassung; sterbende Objekte bleiben mit `DYING`, solange die Simulation sie hält. Insassen werden nicht gezeichnet.
 - Reihenfolge im `RenderFrame`: Objekte nach aufsteigender Id (Geister eingereiht), danach die Kulisse nach Index.
 - `DrawableInstance` trägt `Visual` (Vorlage, Maßstab, Schatten, Auswahlradius, `KindOf`, `IsStructure`, `IsUnit`),
-  `Selections` parallel zu `Visual.Draws`, Hausfarbe, `IsStatic`, `IsGhost`. `TurretYaw/TurretPitch` sind `null`,
-  weil die Simulation keinen Turmwinkel führt.
+  `Selections` parallel zu `Visual.Draws`, Hausfarbe, `IsStatic`, `IsGhost`. `TurretYaw/TurretPitch` (und `AltTurret…`) kommen aus dem
+  Turmzustand der Simulation (`Entity.TurretOf`, `docs/SIM-TURRET-AIM.md`) und sind `null` nur bei Objekten ohne Turm.
 - Nebel (`FrameProjectorOptions.Viewer`): gezeichnet wird, was `world.EntitiesVisibleTo(viewer)` liefert (eigene,
   verbündete und sichtbare fremde Objekte). Fremde Gebäude (`STRUCTURE`, nicht eigen, nicht verbündet), die aus der Sicht
   fallen, bleiben mit ihrer letzten Erfassung als Geist (`IsGhost`), bis der Betrachter ihre Position wieder sieht –
@@ -283,7 +283,7 @@ als Fehler gewertet; der Renderer muss einen Zustand ohne ladbares Modell übers
   `missing-model` und zeichnen kein Modell, bis der Datencompiler solche Zeilen als Eigenschaften führt.
 - Partikelsystemnamen aus `ParticleSysBone` werden nicht gegen Partikeldefinitionen geprüft (Sache des FX-Pakets).
 - Modulschlüssel außerhalb des Präsentationsbedarfs (Reifen, Ketten, Laser, Baumphysik) bleiben Text in `Settings`.
-- Turmwinkel, zweite/dritte Waffe, Türen, Dockphasen und die übrigen „nicht modelliert“-Flags aus Abschnitt 2 fehlen
+- Zweite/dritte Waffe, Türen, Dockphasen und die übrigen „nicht modelliert“-Flags aus Abschnitt 2 fehlen
   in der Simulation; das zugehörige Verhalten der Modelle bleibt bis dahin aus.
 - `ACTIVELY_CONSTRUCTING` ist eine Näherung (Bauaufgabe und Stillstand).
 

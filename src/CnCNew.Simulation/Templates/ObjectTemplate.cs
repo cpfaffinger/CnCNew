@@ -106,6 +106,7 @@ public sealed class ObjectTemplate
         DefaultWeapon = DefaultWeaponSet?.Primary ?? -1;
         HasMultipleWeaponSlots = weaponSets.Any(set => set.WeaponCount > 1);
         Locomotor = locomotor;
+        Turrets = TurretSet.Read(definition.Modules);
         Prerequisites = prerequisites;
         CrusherLevel = definition.Fields.LastOrDefault(field => field.Name.Equals("CrusherLevel", StringComparison.OrdinalIgnoreCase))?.Value.Value is long crusher ? checked((int)crusher) : 0;
         CrushableLevel = definition.Fields.LastOrDefault(field => field.Name.Equals("CrushableLevel", StringComparison.OrdinalIgnoreCase))?.Value.Value is long crushable ? checked((int)crushable) : 255;
@@ -227,6 +228,9 @@ public sealed class ObjectTemplate
     /// <summary><c>ArmorSet Conditions = CRATE_UPGRADE_ONE</c> (index 1) / <c>CRATE_UPGRADE_TWO</c> (index 2) variant, or <see langword="null"/>; the <c>SECOND_LIFE</c> combinations are not modeled.</summary>
     public ImmutableArray<ArmorInfo?> CrateUpgradeArmor { get; init; } = [null, null, null];
     public LocomotorInfo? Locomotor { get; }
+
+    /// <summary>The <c>Turret</c>/<c>AltTurret</c> blocks of the object's AI update module (<c>AIUpdateInterface::m_turretAI</c>); null for an object without a turret, which fires without aiming (docs/SIM-TURRET-AIM.md).</summary>
+    public TurretSet? Turrets { get; }
 
     /// <summary>Every locomotor set the object declares (<c>Locomotor = SET_X Name</c>, the first resolvable name of each), by set name (<c>SET_TAXIING</c>, <c>SET_SUPERSONIC</c>, ...); <see cref="Locomotor"/> is the <c>SET_NORMAL</c> entry.</summary>
     public ImmutableDictionary<string, LocomotorInfo> LocomotorSets { get; init; } = ImmutableDictionary<string, LocomotorInfo>.Empty;

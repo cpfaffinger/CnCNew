@@ -452,7 +452,9 @@ public static class DefinitionCompiler
         var fields = fieldBuilder.ToImmutable();
         var sectionBuilder = ImmutableArray.CreateBuilder<DefinitionSection>();
         foreach (var child in active.OfType<IniBlock>())
-            sectionBuilder.Add(CompileSection(c, child, doc));
+            sectionBuilder.Add(implemented && TurretSchema.Declarations.Contains(child.Declaration.Trim(), Names)
+                ? CompileTypedBlock(c, child, doc, TurretSchema.Turret, [], $"{declaration.Name}/{child.Declaration.Trim()}")
+                : CompileSection(c, child, doc));
         var sections = sectionBuilder.ToImmutable();
 
         if (descriptor is null)
@@ -508,7 +510,7 @@ public static class DefinitionCompiler
         return CompileTypedBlock(c, block, doc, nugget.Fields, nugget.ChildBlocks);
     }
 
-    private static DefinitionSection CompileTypedBlock(Context c, IniBlock block, LoadedDocument doc, SchemaSet schema, ImmutableArray<string> childBlocks)
+    private static DefinitionSection CompileTypedBlock(Context c, IniBlock block, LoadedDocument doc, SchemaSet schema, ImmutableArray<string> childBlocks, string owner = "ObjectCreationList")
     {
         var active = SelectActive(block.Children, c.Options.Conditions, doc.Document.Source).ToArray();
         var fields = new List<DefinitionField>();
@@ -529,13 +531,16 @@ public static class DefinitionCompiler
                 value = value with { Value = relative.ResolveAgainst(null) };
             if (!seen.Add(field.Name) && field.Repeat == RepeatPolicy.Overwrite)
             {
-                CountCompat(c.DuplicateKeys, $"{schema.Name}/{field.Name}", "ObjectCreationList", "last-wins");
+                CountCompat(c.DuplicateKeys, $"{schema.Name}/{field.Name}", owner, "last-wins");
                 c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-duplicate-key",
                     $"Key '{field.Name}' occurs more than once in one '{schema.Name}' block; the last value wins.", property.Location));
                 fields.RemoveAll(existing => existing.Name.Equals(field.Name, StringComparison.Ordinal));
             }
             fields.Add(new DefinitionField(field.Name, value, property.Location));
         }
+        foreach (var required in schema.Fields.Where(value => value.Required))
+            if (!seen.Contains(required.Name))
+                throw new DefinitionCompileException($"{owner} requires key '{required.Name}'.", block.Location);
         var children = ImmutableArray.CreateBuilder<DefinitionSection>();
         foreach (var nested in active.OfType<IniBlock>())
         {

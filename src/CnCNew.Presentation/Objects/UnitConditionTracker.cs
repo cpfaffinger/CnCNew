@@ -10,13 +10,13 @@ namespace CnCNew.Presentation.Objects;
 
 /// <summary>
 /// The model condition bits of units that depend on a history the simulation does not keep: a presentation-side port of the reference's small state machines, driven once per simulated tick
-/// by the sim events (<see cref="Observe"/>) and the captured entity state (<see cref="Update"/>) exactly like <see cref="TurretTracker"/>. It only draws; it never influences the simulation and
+/// by the sim events (<see cref="Observe"/>) and the captured entity state (<see cref="Update"/>). It only draws; it never influences the simulation and
 /// holds no simulation state (a world restored from a snapshot starts it empty, so the bits restart from "no history"). docs/MODEL-CONDITIONS-UNITS.md names the reference function behind each bit.
 /// <list type="bullet">
 /// <item><description><c>FiringTracker::shotFired/update/speedUp/coolDown</c>: CONTINUOUS_FIRE_SLOW/MEAN/FAST from the shots fired at one victim (<c>ContinuousFireOne/Two/Coast</c> of the weapon).</description></item>
 /// <item><description><c>AnimationSteeringUpdate::update</c>: CENTER_TO_LEFT/RIGHT and LEFT/RIGHT_TO_CENTER from the turning direction (the heading changed by a full turn rate in one tick, <c>Locomotor::rotateObjAroundLocoPivot</c>'s <c>TURN_POSITIVE/NEGATIVE</c>).</description></item>
 /// <item><description><c>PhysicsBehavior::update</c> (SPLATTED after a falling death) and <c>CrushDie::onDie</c> (FRONTCRUSHED/BACKCRUSHED from the crush point nearest to the crusher): from the <see cref="SimEventKind.EntityDied"/> event.</description></item>
-/// <item><description><c>TurretAI::friend_turnTowardsAngle</c>: TURRET_ROTATE from <see cref="TurretTracker.IsRotating"/>.</description></item>
+/// <item><description><c>TurretAI::friend_turnTowardsAngle</c>: TURRET_ROTATE from the simulation's turret state (<see cref="TurretTracker.IsRotating"/>).</description></item>
 /// <item><description><c>Object::setSpecialModelConditionState</c> (<see cref="Cheer"/>): SPECIAL_CHEERING for three seconds.</description></item>
 /// <item><description><c>TensileFormationUpdate::update</c>: FREEFALL while an avalanche rock drops.</description></item>
 /// </list>

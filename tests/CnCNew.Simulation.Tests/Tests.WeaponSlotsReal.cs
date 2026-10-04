@@ -69,9 +69,14 @@ static partial class Tests
             var fired = new List<string>();
             foreach (var victim in new[] { infantry, air, infantry, air })
             {
-                sequence[1]++;
-                Check.That(world.Submit(new FireWeaponCommand(tank.Owner, sequence[1], world.Tick, tank.Id, victim.Id)).Accepted, $"The Gattling Tank fires at {victim.Template.Name}.");
-                fired.AddRange(world.Step().Events.Where(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id).Select(value => value.Text));
+                // A standing attack repeats its fire order every tick; the tank's turret first turns toward the victim (docs/SIM-TURRET-AIM.md), the shot follows.
+                var shots = fired.Count;
+                for (var attempt = 0; attempt < 40 && fired.Count == shots; attempt++)
+                {
+                    sequence[1]++;
+                    Check.That(world.Submit(new FireWeaponCommand(tank.Owner, sequence[1], world.Tick, tank.Id, victim.Id)).Accepted, $"The Gattling Tank fires at {victim.Template.Name}.");
+                    fired.AddRange(world.Step().Events.Where(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id).Select(value => value.Text));
+                }
                 for (var i = 0; i < 20; i++) world.Step();
             }
             var names = $"{catalog.Weapons[set.Weapons[WeaponSlot.Primary]].Name}/{catalog.Weapons[set.Weapons[WeaponSlot.Secondary]].Name}";
@@ -88,9 +93,15 @@ static partial class Tests
             world.ReleaseWeaponLock(scud, WeaponLockKind.Permanent);
             Check.That(world.ChooseWeapon(scud, scudInfantry, FireOrigin.Ai) is { CanFire: true, Slot: WeaponSlot.Secondary }, "Unpinned, the Scud Launcher prefers its toxin warhead against infantry.");
             Check.That(world.ChooseWeapon(scud, scudTank, FireOrigin.Ai) is { CanFire: true, Slot: WeaponSlot.Primary }, "...and its explosive warhead against a tank.");
-            sequence[1]++;
-            Check.That(world.Submit(new FireWeaponCommand(scud.Owner, sequence[1], world.Tick, scud.Id, scudInfantry.Id, WeaponSlot.Best, FireOrigin.Ai)).Accepted, "The toxin shot is ordered.");
-            Check.That(world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == scud.Id && value.Text.Contains("Toxin", StringComparison.OrdinalIgnoreCase)), "The Scud fired its toxin warhead.");
+            // The order is repeated every tick like a standing attack: the Scud first raises its launcher to the firing pitch (TurretAI), then the warhead leaves.
+            var toxin = false;
+            for (var attempt = 0; attempt < 120 && !toxin; attempt++)
+            {
+                sequence[1]++;
+                Check.That(world.Submit(new FireWeaponCommand(scud.Owner, sequence[1], world.Tick, scud.Id, scudInfantry.Id, WeaponSlot.Best, FireOrigin.Ai)).Accepted, "The toxin shot is ordered.");
+                toxin = world.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == scud.Id && value.Text.Contains("Toxin", StringComparison.OrdinalIgnoreCase));
+            }
+            Check.That(toxin, "The Scud fired its toxin warhead.");
             Check.That(scud.ReadyTickOf(WeaponSlot.Primary) == scud.ReadyTickOf(WeaponSlot.Secondary) && scud.ReadyTickOf(WeaponSlot.Primary) > world.Tick - 1, "The shared reload time holds the explosive warhead back as well.");
             return world.StateHash;
         }

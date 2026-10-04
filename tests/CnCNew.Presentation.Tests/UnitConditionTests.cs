@@ -139,6 +139,28 @@ internal static class UnitConditionTests
           Behavior = DestroyDie Destroy01
           End
         End
+        Object UnitTurret
+          KindOf = SELECTABLE VEHICLE CAN_ATTACK
+          VisionRange = 250.0
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          Behavior = AIUpdateInterface AI01
+            Turret
+              TurretTurnRate = 180
+              AllowsPitch = No
+              RecenterTime = 500
+              ControlledWeaponSlots = PRIMARY
+            End
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY UnitPlainGun
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
         Object UnitPlainGunner
           KindOf = SELECTABLE VEHICLE CAN_ATTACK
           Body = ActiveBody Body01
@@ -461,29 +483,27 @@ internal static class UnitConditionTests
     private static void TurretRotate()
     {
         var rig = new Rig(Fixture(), Terrain());
-        var scout = rig.Spawn("UnitGatling", 1, 100, 100);
-        var victim = rig.Spawn("UnitTarget", 2, 100, 200); // due +y of a body facing +x: the turret turns +90 degrees
-        var motion = new TurretMotion(6f * MathF.PI / 180f, 0.01f, 0f, 0f, 0f, false, 20);
-        var visual = rig.Catalog["UnitGatling"] with { Turrets = [motion, null] };
-        var turrets = new TurretTracker();
-        var units = new UnitConditionTracker();
-        var entity = rig.Get(scout);
-        var tick = rig.World.Tick;
+        var gunner = rig.Spawn("UnitTurret", 1, 100, 100);
+        var victim = rig.Spawn("UnitTarget", 2, 100, 170); // due +y of a body facing +x: the turret turns +90 degrees at 6 degrees per tick
 
-        Assert(!turrets.IsRotating(scout.Value), "a turret that was never updated does not rotate");
-        turrets.Update(entity, visual, 0, tick, rig.World);
-        Assert(!units.Update(entity, rig.World, tick, turrets).Contains(UnitFlags.TurretRotate), "a turret at its natural angle rests");
+        Assert(!rig.Bits(gunner).Contains(UnitFlags.TurretRotate), "a turret at its natural angle rests");
 
-        turrets.Observe(new SimEvent(default, tick, SimEventKind.WeaponFired, scout, victim, new PlayerId(1), "W", 0), rig.World);
+        // The standing attack's fire order every tick: the turret rotates toward the victim, then the shot goes out and the turret holds, finally it turns back.
         var rotating = new List<bool>();
+        long shotTick = -1;
         for (var step = 1; step <= 90; step++)
         {
-            turrets.Update(entity, visual, 0, tick + step, rig.World);
-            rotating.Add(units.Update(entity, rig.World, tick + step, turrets).Contains(UnitFlags.TurretRotate));
+            var tick = rig.World.Tick;
+            if (shotTick < 0) rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, tick, gunner, victim));
+            rig.Step();
+            if (shotTick < 0 && rig.Get(gunner).LastFireTick == tick) shotTick = tick;
+            rotating.Add(rig.Bits(gunner).Contains(UnitFlags.TurretRotate));
         }
+
+        Assert(shotTick >= 0, $"the weapon fired once the turret pointed at the victim (waits {rig.World.TurretWaits}, rejections {string.Join(",", rig.World.RejectionCounts)})");
         Assert(rotating.Take(14).All(value => value), "TURRET_ROTATE while the turret turns toward the victim (14 full steps, the 15th arrives)");
-        Assert(rotating.Skip(14).Take(6).All(value => !value), "it stops when the turret has arrived and holds the aim");
-        Assert(rotating.Skip(22).Take(14).Any(value => value) && !rotating[^1], "after the recentre time it turns back (rotating again) and rests at the natural angle");
+        Assert(rotating.Skip(16).Take(6).All(value => !value), "it stops when the turret has arrived and holds the aim");
+        Assert(rotating.Skip(22).Any(value => value) && !rotating[^1], "after the recentre time it turns back (rotating again) and rests at the natural angle");
     }
 
     private static void JetBits()

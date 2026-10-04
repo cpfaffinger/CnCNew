@@ -329,6 +329,12 @@ run.Test("Weapon slots: salvage crate weapon sets feed the slots", Tests.WeaponS
 run.Test("Weapon slots: FireOCLAfterWeaponCooldownUpdate watches the secondary slot", Tests.WeaponSlotsFireOclAfterCooldownWatchesTheSecondarySlot);
 run.Test("Weapon slots: AssistedTargetingUpdate fires the real secondary slot", Tests.WeaponSlotsAssistedTargetingUsesTheRealSlot);
 run.Test("Weapon slots: a jet reloads every slot at the airfield", Tests.WeaponSlotsJetReloadsEverySlotAtTheAirfield);
+run.Test("Turrets: template model, defaults and strict parsing", Tests.TurretsTemplateModelAndStrictParsing);
+run.Test("Turrets: they turn at their rate toward the victim and the shot waits", Tests.TurretsTurnAtTheirRateAndTheShotWaits);
+run.Test("Turrets: objects without aiming turrets, uncontrolled slots and script commands fire at once", Tests.TurretsSomeWeaponsNeverWait);
+run.Test("Turrets: hold, recentre, rest and a victim that dies", Tests.TurretsHoldRecentreAndRest);
+run.Test("Turrets: two turrets, firing pitch, sweep and linked turrets", Tests.TurretsTwoTurretsPitchAndSweep);
+run.Test("Turrets: snapshot mid-turn and determinism", Tests.TurretsSnapshotMidTurnAndDeterminism);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
@@ -341,6 +347,7 @@ if (contentDirectory is not null) run.Test("Real data: retail reference match, d
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: weapon sets, multi-weapon objects and the Gattling Tank's weapon choice", () => Tests.RealWeaponSlots(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: Ranger, Red Guard, Rebel and Black Lotus capture a barracks in the stages of their data", () => Tests.RealStagedCapture(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: turrets of the Crusader, the Battlemaster, the sweeping guns and the linked battleships", () => Tests.RealTurrets(contentDirectory));
 return run.Finish();
 
 /// <param name="only">With <c>--only TEXT</c>, just the tests whose name contains TEXT run (a development aid; the full run takes no argument).</param>

@@ -27,8 +27,8 @@ sealed class Feeder(SimulationWorld world)
 
     private ulong Next(int player) => _sequence[player] = _sequence.GetValueOrDefault(player) + 1;
 
-    public SubmitResult Spawn(int player, string template, long? tick = null, int owner = 0, int x = 0, int y = 0, int z = 0)
-        => world.Submit(new SpawnCommand(new PlayerId(player), Next(player), tick ?? world.Tick, template, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.FromInt(z), Fixed.Zero));
+    public SubmitResult Spawn(int player, string template, long? tick = null, int owner = 0, int x = 0, int y = 0, int z = 0, Fixed angle = default)
+        => world.Submit(new SpawnCommand(new PlayerId(player), Next(player), tick ?? world.Tick, template, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.FromInt(z), angle));
 
     public SubmitResult Kill(uint id, long? tick = null, int player = 0)
         => world.Submit(new KillCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(id)));

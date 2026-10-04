@@ -42,6 +42,7 @@ public sealed partial class SimulationWorld
         Streams.LoadLogic(state);
         _spawnedTotal = state.Int("spawnedTotal");
         _destroyedTotal = state.Int("destroyedTotal");
+        _turretWaits = state.Has("turretWaits") ? state.Int("turretWaits") : 0;
 
         foreach (var player in state.Array("players"))
         {
@@ -188,6 +189,7 @@ public sealed partial class SimulationWorld
         if (template.HasMultipleWeaponSlots) entity.WeaponSlots = WeaponSlotState.Load(reader.Object("weaponSlots"), template);
         if (entity.WeaponBonusConditions >> NameTablesPhase5.WeaponBonusCondition.Count != 0) throw new InvalidDataException("Weapon bonus condition mask out of range.");
         AttachModules(entity, template);
+        LoadTurrets(entity, reader);
         var modules = reader.Array("modules");
         if (modules.Count != entity.ModuleArray.Length) throw new InvalidDataException($"Entity {entity.Id} has {modules.Count} module states but its template has {entity.ModuleArray.Length}.");
         for (var index = 0; index < modules.Count; index++)

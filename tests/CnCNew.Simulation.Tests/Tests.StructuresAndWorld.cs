@@ -217,6 +217,7 @@ static partial class Tests
             Turret
               TurretTurnRate = 180
               AllowsPitch = No
+              ControlledWeaponSlots = PRIMARY
             End
             AutoAcquireEnemiesWhenIdle = Yes
             PackTime = 500

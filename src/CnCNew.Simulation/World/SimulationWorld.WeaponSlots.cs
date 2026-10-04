@@ -388,9 +388,12 @@ public sealed partial class SimulationWorld
         if (ActiveWeaponSet(source) is not { } set || !set.HasWeapon(slot)) return false;
         var weapon = _templates.Weapons[set.Weapons[slot]];
         if (_tick < EffectiveReadyTick(source, slot, set) || !CanTarget(source, weapon, victim, VictimAntiMask(victim)) || !WithinWeaponRange(source, weapon, victim)) return false;
+        // The module runs its own attack sequence (it gives up when a shot fails), so the turret is told to turn but never holds the shot back.
+        AimTurretsAt(source, slot, victim);
         var fired = ConsumeShot(source, slot);
         var damage = FireWeaponAt(source, fired, victim, victim.X, victim.Y, victim.Z);
         Emit(SimEventKind.WeaponFired, source.Id, victim.Id, fired.Name, damage.Raw, source.Owner);
+        NoteTurretShot(source, slot);
         return true;
     }
 
@@ -404,9 +407,11 @@ public sealed partial class SimulationWorld
         UpdateWeaponSet(source);
         var choice = ChooseWeapon(source, victim, FireOrigin.Ai);
         if (!choice.CanFire || !GateAllowsFire(source, victim)) return false;
+        if (!AimTurretsAt(source, choice.Slot, victim)) { _turretWaits++; return false; }
         var weapon = ConsumeShot(source, choice.Slot);
         var damage = FireWeaponAt(source, weapon, victim, victim.X, victim.Y, victim.Z);
         Emit(SimEventKind.WeaponFired, source.Id, victim.Id, weapon.Name, damage.Raw, source.Owner);
+        NoteTurretShot(source, choice.Slot);
         return true;
     }
 

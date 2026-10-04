@@ -21,7 +21,6 @@ public sealed record ObjectVisual(
     string? ButtonImage,
     ImmutableArray<DrawSpec> Draws,
     ImmutableArray<ConditionUpgradeSpec> ConditionUpgrades,
-    ImmutableArray<TurretMotion?> Turrets = default,
     SuspensionMotion? Suspension = null)
 {
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
@@ -96,7 +95,7 @@ public sealed class ObjectVisualCatalog
         var isBox = Field(definition.Fields, "Geometry")?.Value.Value is EnumValue { Name: "BOX" };
         var radius = isBox ? Math.Sqrt((double)(major * major + minor * minor)) : (double)major;
         return new ObjectVisual(definition.OriginalName, kindOf, (float)(Number(definition.Fields, "Scale") ?? 1m), shadow, (float)radius,
-            Text(definition.Fields, "SelectPortrait"), Text(definition.Fields, "ButtonImage"), draws, upgrades.ToImmutable(), TurretMotion.FromModules(definition.Modules),
+            Text(definition.Fields, "SelectPortrait"), Text(definition.Fields, "ButtonImage"), draws, upgrades.ToImmutable(),
             locomotors is null ? null : NormalSuspension(definition, locomotors));
     }
 

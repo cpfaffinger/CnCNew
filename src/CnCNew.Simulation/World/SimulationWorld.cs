@@ -1003,10 +1003,14 @@ public sealed partial class SimulationWorld : IWorldServices
                 var choice = ChooseWeapon(source, fireTarget, fire.Origin, fire.Slot);
                 if (choice.Rejection != 0) { RecordRejection(command, choice.Rejection); break; }
                 if (!GateAllowsFire(source, fireTarget)) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
+                // The turret of the slot turns to the victim first and the weapon waits until it points there (TurretAI). The order stays accepted — the attack goes on and the next
+                // order of the stream fires — so this is neither a rejection (no "cannot do" cue) nor a shot. A script's one-off command button fires its single shot regardless.
+                if (!AimTurretsAt(source, choice.Slot, fireTarget) && fire.Origin != FireOrigin.Script) { _turretWaits++; break; }
                 // A command button's weapon slot pins the slot until its clip empties (Object::doCommandButton: setWeaponLock(LOCKED_TEMPORARILY) before the attack).
                 if (fire.Slot >= 0) SetWeaponLock(source, fire.Slot, WeaponLockKind.Temporary);
                 var weapon = ConsumeShot(source, choice.Slot);
                 var damage = FireWeaponAt(source, weapon, fireTarget, fireTarget.X, fireTarget.Y, fireTarget.Z);
+                NoteTurretShot(source, choice.Slot);
                 Emit(SimEventKind.WeaponFired, source.Id, fireTarget.Id, weapon.Name, damage.Raw, command.Player);
                 break;
             }
@@ -1392,6 +1396,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
             _entitySum = unchecked(_entitySum - entity.CachedHash);
             UnregisterStructureHooks(entity);
+            _activeTurrets.Remove(entity.Id.Value);
             _entities.Remove(entity.Id.Value);
             UntrackCollidable(entity);
             entity.Registered = false;
@@ -1513,6 +1518,7 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private void AttachModules(Entity entity, ObjectTemplate template)
     {
+        InitializeTurrets(entity);
         var modules = new SimModule[template.Modules.Length];
         var dies = new List<IDieModule>();
         var receivers = new List<IEventReceiver>();
@@ -1577,6 +1583,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
             navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
         RegisterStructureHooks(entity);
+        RegisterTurrets(entity);
         foreach (var module in entity.ModuleArray)
             if (module is IWorldAttached attached) attached.Attach(this);
         foreach (var node in entity.Updates)
@@ -1606,6 +1613,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ExecuteCommands(tick);
         FireTimers(tick);
         RunUpdates(tick);
+        StepTurrets(tick);
         DeliverEvents();
         ProcessSales(tick);
         ProcessDestroys();
@@ -1709,6 +1717,8 @@ public sealed partial class SimulationWorld : IWorldServices
         writer.Int("pendingCommands", _pendingCommandCount);
         writer.Int("spawnedTotal", _spawnedTotal);
         writer.Int("destroyedTotal", _destroyedTotal);
+        // Written only once a fire order waited for a turret, so a world without turrets keeps its serialized form (and hash).
+        if (_turretWaits != 0) writer.Int("turretWaits", _turretWaits);
         if (_vision is not null) writer.UInt("visionHash", _visionHash);
         writer.BeginArray("players");
         foreach (var player in _playerList)
