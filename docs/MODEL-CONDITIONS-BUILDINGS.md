@@ -137,11 +137,12 @@ nie Türbits, obwohl ihre Modelle Türzustände enthalten: `ProductionUpdate::up
 
 ## 6. Auffälligkeiten und Grenzen
 
-* **`StructureToppleUpdate` erreicht nie `TOPPLESTATE_DONE`.** Bei der Retail-`StructuralIntegrity` von 0,75 beträgt die Winkelbeschleunigung
-  des ersten Ticks `0,02 · sin(0,001) · 0,25 ≈ 5 · 10⁻⁶` und liegt unter der Auflösung von `Fixed` (1/65536); die Geschwindigkeit bleibt
-  null, der Winkel bei 0,001. Der gemessene Fall: `TallTower02` nach `Kill` – nach 60.000 Ticks noch `Toppling`. Ein umgestürzter Turm
-  zeigt deshalb nie `POST_COLLAPSE`, obwohl die Ableitung (`IsToppled`) steht. Behebung gehört in die Simulation (eigene Messung, Hashes der
-  Missionen ändern sich), nicht hierher; der Test prüft die Bedingung nur, falls der Turm fertig wird.
+* **`StructureToppleUpdate` erreicht `TOPPLESTATE_DONE` (behoben).** Bei der Retail-`StructuralIntegrity` von 0,75 beträgt die Winkelbeschleunigung
+  des ersten Ticks `0,02 · sin(0,001) · 0,25 ≈ 5 · 10⁻⁶` und liegt unter der Auflösung von `Fixed` (1/65536); mit `Fixed`-Feldern blieb die
+  Geschwindigkeit null (`TallTower02` war nach 60.000 Ticks noch `Toppling`). Winkel und Winkelgeschwindigkeit führen jetzt 32 zusätzliche
+  Nachkommabits (das Produkt der drei `Fixed`-Rohwerte ist bei 48 Bits exakt); ein Turm mit den Retailwerten liegt nach rund 104 Ticks Fall
+  flach (`ln(π/2 / 0,001) / √(0,02 · 0,25)`), der Snapshot schreibt die Zusatzbits nur, wenn sie ungleich null sind (stehende Gebäude
+  behalten ihren Zustandshash). Der Test verlangt `POST_COLLAPSE` für `TallTower02` jetzt unbedingt.
 * **Die Produktionstüren sind eine Näherung** (Abschnitt 3): um `DoorOpeningTime` nach vorn verschoben, Einheit erscheint durch die offene Tür.
   Ein Mensch muss prüfen, ob das Öffnen der Tür gegen die Animationslänge der Modelle (`DoorOpeningTime` ist die Spielzeit, das
   Modell spielt seine Animation in dieser Zeit) stimmt.

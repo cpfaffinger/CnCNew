@@ -981,19 +981,15 @@ internal static class StructureConditionTests
         var down = ConditionDeriver.Derive(bank, world, null, default);
         Check(collapse.IsCollapsed && down.Contains(StructureConditions.PostCollapse) && !down.Contains(ModelConditions.Rubble), $"The collapsed bank shows POST_COLLAPSE instead of RUBBLE ({down}).");
 
-        // A tower topples: the same replacement once it lies flat. Known simulation limit (docs/MODEL-CONDITIONS-BUILDINGS.md): with the retail StructuralIntegrity of 0.75 the angular acceleration
-        // of the first tick (0.02 * sin(0.001) * 0.25) is below the resolution of Fixed, the velocity stays zero and the tower never reaches TOPPLESTATE_DONE; the condition is checked when it does.
+        // A tower topples: the same replacement once it lies flat.
         var tower = spawn("TallTower02", 0, 5500, 1000);
         var topple = tower.Modules.OfType<StructureToppleUpdate>().Single();
         world.Kill(tower.Id);
+        world.Step();
+        Check(!ConditionDeriver.Derive(tower, world, null, default).Contains(StructureConditions.PostCollapse), "A tower that is still toppling is not POST_COLLAPSE.");
         for (var i = 0; i < 600 && !topple.IsToppled; i++) world.Step();
         var flat = ConditionDeriver.Derive(tower, world, null, default);
-        if (topple.IsToppled) Check(flat.Contains(StructureConditions.PostCollapse) && !flat.Contains(ModelConditions.Rubble), $"The toppled tower shows POST_COLLAPSE instead of RUBBLE ({flat}).");
-        else
-        {
-            Check(!flat.Contains(StructureConditions.PostCollapse), "A tower that is still toppling is not POST_COLLAPSE.");
-            Console.WriteLine("       real data: StructureToppleUpdate did not finish within 600 ticks (fixed-point underflow of the first acceleration), POST_COLLAPSE of toppled towers is untested");
-        }
+        Check(topple.IsToppled && flat.Contains(StructureConditions.PostCollapse) && !flat.Contains(ModelConditions.Rubble), $"The toppled tower shows POST_COLLAPSE instead of RUBBLE ({flat}).");
 
         // A hacker: UNPACKING while it sets up, FIRING_A while it hacks, PACKING when it is told to move on.
         var hacker = spawn("ChinaInfantryHacker", 2, 6000, 1000);

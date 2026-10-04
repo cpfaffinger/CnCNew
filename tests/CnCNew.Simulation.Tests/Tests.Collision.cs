@@ -171,6 +171,23 @@ static partial class Tests
             CrushingWeaponName = CrushWeapon
           End
         End
+        Object StiffTower
+          KindOf = STRUCTURE
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 10.0
+          GeometryHeight = 80.0
+          Body = StructureBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = StructureToppleUpdate Topple01
+            MinToppleDelay = 100
+            MaxToppleDelay = 100
+            StructuralIntegrity = 0.75
+            StructuralDecay = 1.0
+          End
+        End
         Object TallHider
           KindOf = STRUCTURE
           Geometry = CYLINDER
@@ -391,6 +408,30 @@ static partial class Tests
         runB.Step();
         feederB.Damage(1, 1000);
         for (var tick = 0; tick < 400; tick++) Check.That(runA.Step().StateHash == runB.Step().StateHash, "The structure's collapse is deterministic at tick " + tick + ".");
+        Check.That(world.FindEntity(new EntityId(1))!.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.StructureToppleUpdate>().Single().IsToppled, "The building lies flat (TOPPLESTATE_DONE).");
+
+        // The retail values (StructuralIntegrity 0.75, no decay): the first acceleration is about 5e-6 rad per tick squared, below the resolution of Fixed. The tower still falls:
+        // slowly at first, flat after roughly ln(pi/2 / 0.001) / sqrt(0.02 * 0.25) = 104 ticks; a snapshot taken mid-fall continues identically.
+        var (stiff, stiffFeeder) = CollisionWorld();
+        stiffFeeder.Spawn(1, "StiffTower", x: 0, y: 0);
+        stiff.Step();
+        stiffFeeder.Damage(1, 1000);
+        var topple = stiff.FindEntity(new EntityId(1))!.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.StructureToppleUpdate>().Single();
+        var fallen = -1;
+        SimulationWorld? resumed = null;
+        for (var tick = 0; tick < 300; tick++)
+        {
+            var hash = stiff.Step().StateHash;
+            if (resumed is not null) Check.That(resumed.Step().StateHash == hash, "The fall continues identically from a snapshot at tick " + tick + ".");
+            if (tick == 60)
+            {
+                Check.That(topple.Angle > Fixed.Zero && !topple.IsToppled, "Mid-fall the tower leans but is not down: " + topple.Angle.ToDecimal());
+                resumed = WorldSnapshot.Restore(WorldSnapshot.Write(stiff), CollisionFixture.Templates, CollisionFixture.Fingerprint, CollisionTerrain());
+            }
+            if (fallen < 0 && topple.IsToppled) fallen = tick;
+        }
+        Check.That(fallen is > 90 and < 130, "A tower with the retail structural integrity reaches the ground after about 104 ticks of falling: " + fallen);
+        Check.That(topple.Angle == FixedTrig.HalfPi, "It lies at a quarter turn.");
     }
 
     /// <summary><c>HeightDieUpdate.cpp</c>: height-threshold death, the initial delay, the structure-height escalation and the "never below ground" floor.</summary>
