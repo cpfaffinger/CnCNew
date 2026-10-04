@@ -41,7 +41,24 @@ public sealed partial class UiWindowTree
         return null;
     }
 
-    private static bool Tracks(UiWindow window) => (window.Definition.Style & WndStyle.MouseTrack) != 0;
+    /// <summary>
+    /// Whether the pointer hilites the window: <c>MOUSETRACK</c> style on a gadget whose input function handles
+    /// <c>GWM_MOUSE_ENTERING</c>. <c>GadgetStaticTextInput</c>, the progress bar and the tab control ignore the message, so
+    /// their <c>HILITE*</c> draw data is never used however the style is set (shipped static texts carry <c>MOUSETRACK</c>
+    /// and a bright hilite fill).
+    /// </summary>
+    private static bool Tracks(UiWindow window) => (window.Definition.Style & WndStyle.MouseTrack) != 0
+        && window.Type is WndWindowType.PushButton or WndWindowType.CheckBox or WndWindowType.RadioButton
+            or WndWindowType.HorizontalSlider or WndWindowType.VerticalSlider or WndWindowType.ScrollListBox
+            or WndWindowType.EntryField or WndWindowType.ComboBox;
+
+    /// <summary>
+    /// The gadgets that take the keyboard focus when clicked (<c>winSetFocus</c> in <c>GadgetComboBoxInput</c>,
+    /// <c>GadgetListBoxInput</c>, <c>GadgetTextEntryInput</c>). Buttons, check boxes, radio buttons and sliders do not:
+    /// a clicked button would otherwise keep its focus hilite after the pointer has left it.
+    /// </summary>
+    private static bool FocusesOnClick(UiWindow window)
+        => window.Type is WndWindowType.ComboBox or WndWindowType.ScrollListBox or WndWindowType.EntryField;
 
     /// <summary>Moves the pointer; returns true when a window lies under it (the game should not handle the event).</summary>
     public bool MouseMove(int x, int y)
@@ -66,16 +83,17 @@ public sealed partial class UiWindowTree
 
     private void Enter(UiWindow window)
     {
-        if (!window.IsGadget || !Tracks(window)) return;
+        if (!Tracks(window)) return;
         window.IsHilited = true;
         Emit(UiEventKind.ButtonMouseEntering, window);
     }
 
     private void Leave(UiWindow window)
     {
-        if (window.IsGadget && Tracks(window))
+        if (Tracks(window))
         {
-            if (Focus != window) window.IsHilited = false;
+            // GWM_MOUSE_LEAVING clears the hilite unconditionally, also on the focused gadget.
+            window.IsHilited = false;
             Emit(UiEventKind.ButtonMouseLeaving, window);
         }
         if (window.Type == WndWindowType.PushButton && (window.Status & WndStatus.CheckLike) == 0) window.IsSelected = false;
@@ -90,7 +108,7 @@ public sealed partial class UiWindowTree
         var gadget = Interactive(target);
         if (button == UiMouseButton.Left) _grab = gadget ?? target;
         if (gadget is null || !gadget.IsEffectivelyEnabled) return true;
-        if (button == UiMouseButton.Left && IsFocusable(gadget)) SetFocus(gadget);
+        if (button == UiMouseButton.Left && FocusesOnClick(gadget) && IsFocusable(gadget)) SetFocus(gadget);
 
         switch (gadget.Type)
         {
@@ -180,6 +198,20 @@ public sealed partial class UiWindowTree
         }
         MouseMove(x, y);
         return target is not null || inside;
+    }
+
+    /// <summary>
+    /// The pointer no longer belongs to this tree (another screen covers it): the hovered window gets its leaving
+    /// message and loses hilite and pressed state, a drag ends without a value message. The original sends
+    /// <c>GWM_MOUSE_LEAVING</c> to the old mouse region as soon as a modal window takes the pointer.
+    /// </summary>
+    public void PointerLeft()
+    {
+        if (_grab?.Slider is { } slider) slider.Dragging = false;
+        _grab = null;
+        if (_hover is null) return;
+        Leave(_hover);
+        _hover = null;
     }
 
     /// <summary>Wheel notches (positive = up) scroll the list box or open combo box under the pointer.</summary>

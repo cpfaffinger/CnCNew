@@ -257,6 +257,11 @@ public sealed partial class UiWindowTree
             if (_openCombo == descendant) _openCombo = null;
             if (_grab == descendant) _grab = null;
             if (_hover == descendant) _hover = null;
+            // The original delivers GWM_MOUSE_LEAVING to a hidden mouse region with the next mouse event; without it a
+            // button hidden while hovered or pressed (a sub-menu switch) would come back hilited.
+            descendant.IsHilited = false;
+            if (descendant.Type == WndWindowType.PushButton && (descendant.Status & WndStatus.CheckLike) == 0) descendant.IsSelected = false;
+            if (descendant.Slider is { } slider) slider.Dragging = false;
         }
     }
 
