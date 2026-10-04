@@ -21,6 +21,9 @@ internal sealed class ObjectLayerStats
     /// <summary>Skinned instances re-skinned on the CPU this frame.</summary>
     public int SkinnedDrawn;
 
+    /// <summary>Drawn parts this frame whose turret angle the presentation supplied (the turret bone was written into the pose).</summary>
+    public int TurretsDriven;
+
     /// <summary>Triangles submitted this frame (sum of visible mesh draw counts / 3).</summary>
     public long Triangles;
 
@@ -64,7 +67,7 @@ internal sealed class ObjectLayerStats
     }
 
     public override string ToString() =>
-        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} triangles={Triangles} " +
+        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} triangles={Triangles} " +
         $"models={ModelsLoaded} missingModels={ModelsMissing} missingTextures={TexturesMissing} missingAnimations={MissingAnimations} placeholders={Placeholders} gpuProblems={GpuResourceProblems} " +
         $"frameMs={FrameMilliseconds:F3} avgMs={AverageFrameMilliseconds:F3} allocB={FrameAllocatedBytes}";
 }

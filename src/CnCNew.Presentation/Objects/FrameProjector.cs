@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
@@ -45,6 +46,7 @@ public sealed class FrameProjector
     private readonly ImmutableArray<ImmutableArray<DrawModuleSelection>> _scenerySelections;
     private readonly bool[] _claimed;
     private readonly bool[] _explored;
+    private readonly TurretTracker _turrets = new();
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
     private readonly SortedDictionary<uint, Capture> _ghosts = [];
     private readonly HashSet<uint> _known = [];
@@ -72,6 +74,12 @@ public sealed class FrameProjector
 
     public int ClaimedScenery => _claimed.Count(value => value);
 
+    /// <summary>Feeds the events of the tick that was just simulated (the turrets follow the shots, <see cref="TurretTracker"/>); call before <see cref="Advance"/>.</summary>
+    public void Observe(IEnumerable<SimEvent> events, SimulationWorld world)
+    {
+        foreach (var simEvent in events) _turrets.Observe(simEvent, world);
+    }
+
     public void Advance(SimulationWorld world)
     {
         ArgumentNullException.ThrowIfNull(world);
@@ -93,6 +101,7 @@ public sealed class FrameProjector
             if (_known.Add(entity.Id.Value)) Claim(capture);
         }
         _currentOrdered = ordered.ToImmutable();
+        if (world.Tick % 150 == 0) _turrets.Prune(id => world.FindEntity(new EntityId(id)) is not null);
         if (_options.Viewer is { } fogViewer)
         {
             UpdateGhosts(world, fogViewer);
@@ -130,7 +139,7 @@ public sealed class FrameProjector
                 position = Vector3.Lerp(previous.Position, capture.Position, alpha);
                 yaw = LerpAngle(previous.Yaw, capture.Yaw, alpha);
             }
-            drawables.Add(ToDrawable(capture, position, yaw, false));
+            drawables.Add(ToDrawable(capture, position, yaw, false, _previous.GetValueOrDefault(capture.Id), alpha));
         }
         for (; nextGhost < ghosts.Length; nextGhost++)
             drawables.Add(ToDrawable(ghosts[nextGhost], ghosts[nextGhost].Position, ghosts[nextGhost].Yaw, true));
@@ -161,9 +170,11 @@ public sealed class FrameProjector
         var construction = entity.HasStatus(ObjectStatusBits.UnderConstruction)
             ? Math.Min(1f, entity.ConstructionWork / (float)Math.Max(entity.Template.BuildTicks, 1))
             : 1f;
+        var main = _turrets.Update(entity, visual, 0, world.Tick, world);
+        var alt = _turrets.Update(entity, visual, 1, world.Tick, world);
         return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, Select(visual, conditions),
-            entity.ConstructionWork);
+            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch);
     }
 
     private void UpdateGhosts(SimulationWorld world, PlayerId viewer)
@@ -194,9 +205,13 @@ public sealed class FrameProjector
         }
     }
 
-    private DrawableInstance ToDrawable(Capture capture, Vector3 position, float yaw, bool ghost) => new(
+    private DrawableInstance ToDrawable(Capture capture, Vector3 position, float yaw, bool ghost, Capture? previous = null, float alpha = 1f) => new(
         new EntityId(capture.Id), -1, capture.Visual, position, yaw, capture.Owner, _options.Colors?.Of(capture.Owner) ?? TeamColors.Neutral,
-        capture.Health01, capture.Construction01, capture.Conditions, capture.Selections, null, null, false, ghost);
+        capture.Health01, capture.Construction01, capture.Conditions, capture.Selections,
+        Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
+        Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha));
+
+    private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
     private static ImmutableArray<DrawModuleSelection> Select(ObjectVisual visual, ModelConditionSet conditions)
         => [..visual.Draws.Select(draw => BestStateSelector.FindBest(draw, conditions) is var index and >= 0
@@ -215,5 +230,6 @@ public sealed class FrameProjector
 
     private sealed record Capture(
         uint Id, ObjectVisual Visual, PlayerId Owner, Vector3 Position, float Yaw, Fixed FixedX, Fixed FixedY, float Health01,
-        float Construction01, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections, int ConstructionWork);
+        float Construction01, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections, int ConstructionWork,
+        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null);
 }

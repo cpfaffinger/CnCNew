@@ -162,6 +162,7 @@ public abstract class LiveGame
 
     private void SyncAfterTick(TickResult result)
     {
+        if (result.Events is not null) _projector.Observe(result.Events, World);
         _projector.Advance(World);
         _fxView.Refresh();
         if (result.Events is not null) Fx.ExecuteEvents(result.Events, _fxView);

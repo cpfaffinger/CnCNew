@@ -73,6 +73,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         stats.Drawn = 0;
         stats.Culled = 0;
         stats.SkinnedDrawn = 0;
+        stats.TurretsDriven = 0;
         stats.Triangles = 0;
         stats.Placeholders = 0;
 
@@ -216,6 +217,11 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
         part.ElapsedInState += frame.DeltaSeconds;
         var pose = part.Pose!;
+        if (drawable.TurretYaw is not null && !state.Turret.IsEmpty) Stats.TurretsDriven++;
+        // W3DModelDraw::handleClientTurretPositioning: Capture_Bone + Control_Bone on the turret bones; a changed angle needs the pose evaluated again.
+        if (ApplyTurret(state.Turret, drawable.TurretYaw, drawable.TurretPitch, asset, pose, part.TurretApplied, 0)
+            | ApplyTurret(state.AltTurret, drawable.AltTurretYaw, drawable.AltTurretPitch, asset, pose, part.TurretApplied, 2))
+            part.LastFrame = float.NaN;
         if (part.Binding is not null)
         {
             var mode = (W3dAnimationMode)(int)state.Mode;
@@ -272,6 +278,36 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
         UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, frame);
         Stats.Drawn++;
+    }
+
+    private static bool ApplyTurret(TurretSpec spec, float? yaw, float? pitch, ModelAsset asset, W3dPose pose, float[] applied, int slot)
+    {
+        if (spec.IsEmpty) return false;
+        const float DegreesToRadians = MathF.PI / 180f;
+        var changed = false;
+        if (spec.AngleBone is { } angleBone && yaw is { } turretYaw && asset.Model.FindBone(angleBone) is > 0 and var yawBone)
+        {
+            var angle = turretYaw + (float)spec.ArtAngleDegrees * DegreesToRadians;
+            if (float.IsNaN(applied[slot]) || MathF.Abs(angle - applied[slot]) > 1e-4f)
+            {
+                pose.SetTurretYaw(yawBone, angle);
+                applied[slot] = angle;
+                changed = true;
+            }
+        }
+
+        if (spec.PitchBone is { } pitchBone && pitch is { } turretPitch && asset.Model.FindBone(pitchBone) is > 0 and var pitchBoneIndex)
+        {
+            var angle = turretPitch + (float)spec.ArtPitchDegrees * DegreesToRadians;
+            if (float.IsNaN(applied[slot + 1]) || MathF.Abs(angle - applied[slot + 1]) > 1e-4f)
+            {
+                pose.SetTurretPitch(pitchBoneIndex, angle);
+                applied[slot + 1] = angle;
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
     private void UpdateSkins(
@@ -359,6 +395,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         part.Binding = null;
         part.Animation = null;
         part.LastFrame = float.NaN;
+        Array.Fill(part.TurretApplied, float.NaN);
         part.ElapsedInState = 0;
 
         if (part.Asset is not null)

@@ -8,6 +8,7 @@ using CnCNew.Data.World;
 using CnCNew.Formats;
 using CnCNew.Presentation.Objects;
 using CnCNew.Simulation.Commands;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
@@ -35,6 +36,7 @@ static class ObjectTests
         run.Test("Frame projector fog of war and structure ghosts", Ghosts);
         run.Test("Static scenery and the claim rule", Scenery);
         run.Test("Static scenery follows the shroud: nothing in unexplored ground, kept once explored", SceneryFollowsTheShroud);
+        run.Test("Turrets turn toward the victim of a shot at their turn rate, hold, and recentre", TurretFollowsShots);
         run.Test("Team colors", Colors);
         var contentDir = ContentDir(args);
         if (contentDir is not null) run.Test("Real data: draw specs, audit, projection and scenery", () => RealData(contentDir));
@@ -664,6 +666,36 @@ static class ObjectTests
         Check.That(omniscient.Project(1f).Drawables.Count(drawable => drawable.IsStatic) == 3 && omniscient.ShroudedScenery == 0, "Without a viewer all scenery is drawn.");
     }
 
+    private static void TurretFollowsShots()
+    {
+        var fixture = Fixture();
+        var catalog = ObjectVisualCatalog.Build(fixture.Graph);
+        var world = NewWorld(fixture, FlatTerrain());
+        var gunner = Spawn(world, "Scout", 1, 100, 100);
+        var victim = Spawn(world, "Bunker", 2, 100, 200); // due north of the gunner: the turret has to turn +90 degrees from a body facing +X
+        var motion = new TurretMotion(6f * MathF.PI / 180f, 0.01f, 0f, 0f, 0f, false, 20);
+        var visual = catalog[ "Scout" ] with { Turrets = [motion, null] };
+        var tracker = new TurretTracker();
+        var entity = world.FindEntity(gunner)!;
+        Check.That(tracker.Update(entity, visual, 0, world.Tick, world) is { Angle: 0f }, "A turret at rest sits at its natural angle.");
+        Check.That(tracker.Update(entity, visual, 1, world.Tick, world) is null, "A missing alternate turret reports nothing.");
+        Check.That(tracker.Update(entity, catalog["Scout"], 0, world.Tick, world) is null, "An object without turret data has no turret.");
+
+        tracker.Observe(new SimEvent(default, world.Tick, SimEventKind.WeaponFired, gunner, victim, new PlayerId(1), "W", 0), world);
+        var first = tracker.Update(entity, visual, 0, world.Tick, world)!.Value.Angle;
+        Check.That(Math.Abs(first - motion.TurnRadiansPerTick) < 1e-4f, $"It turns by its rate per tick ({first} rad).");
+        var angle = first;
+        for (var tick = 1; tick <= 15; tick++) angle = tracker.Update(entity, visual, 0, world.Tick + tick, world)!.Value.Angle;
+        Check.That(Math.Abs(angle - MathF.PI / 2) < 1e-3f, $"It reaches the victim at +90 degrees after 15 ticks ({angle}).");
+        for (var tick = 16; tick <= motion.RecenterTicks; tick++) angle = tracker.Update(entity, visual, 0, world.Tick + tick, world)!.Value.Angle;
+        Check.That(Math.Abs(angle - MathF.PI / 2) < 1e-3f, $"It holds the aim for the recentre time after the last shot ({angle}).");
+        for (var tick = motion.RecenterTicks + 1; tick < motion.RecenterTicks + 40; tick++) angle = tracker.Update(entity, visual, 0, world.Tick + tick, world)!.Value.Angle;
+        Check.That(Math.Abs(angle) < 1e-3f, $"After the recentre time without a shot it turns back to its natural angle ({angle}).");
+
+        var motions = TurretMotion.Default;
+        Check.That(Math.Abs(motions.TurnRadiansPerTick - 0.01f) < 1e-6f && motions.RecenterTicks == 60, "Defaults are the reference's: 0.01 rad per frame, two seconds.");
+    }
+
     private static void Colors()
     {
         var fixture = Fixture();
@@ -692,6 +724,13 @@ static class ObjectTests
         Check.That(tank.States[BestStateSelector.FindBest(tank, ModelConditionSet.Parse("DAMAGED MOVING"))].Model == "avleopard", "DAMAGED has no state: the default wins.");
         Check.That(tank.States[BestStateSelector.FindBest(tank, ModelConditionSet.Parse("RUBBLE"))].Turret.AngleBone == "turret", "Damaged states keep the default's turret.");
         Check.That(tank.TrackMarks == "extnktrack.tga" && tank.OkToChangeModelColor, "Crusader module keys.");
+
+        var crusaderTurret = crusader.Turrets.IsDefaultOrEmpty ? null : crusader.Turrets[0];
+        Check.That(crusaderTurret is not null && Math.Abs(crusaderTurret.TurnRadiansPerTick - 180f * MathF.PI / 180f / 30f) < 1e-5f && crusader.Turrets[1] is null,
+            "The Crusader's AI Turret block (TurretTurnRate = 180 degrees per second) is read.");
+        var withTurret = catalog.Visuals.Count(visual => !visual.Turrets.IsDefaultOrEmpty && visual.Turrets.Any(motion => motion is not null));
+        Check.That(withTurret >= 200, $"The turret blocks of the retail objects are read ({withTurret}).");
+        Console.WriteLine($"       real data: {withTurret} objects carry turret motion data; {catalog.Visuals.Count(visual => !visual.Turrets.IsDefaultOrEmpty && visual.Turrets.Length > 1 && visual.Turrets[1] is not null)} an alternate turret");
 
         var barracks = catalog["AmericaBarracks"].Draws[0];
         string? Model(string conditions) => barracks.States[BestStateSelector.FindBest(barracks, ModelConditionSet.Parse(conditions))].Model;

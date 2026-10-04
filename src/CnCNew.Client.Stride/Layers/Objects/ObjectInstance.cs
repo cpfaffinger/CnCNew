@@ -36,6 +36,9 @@ internal sealed class DrawPartState
     public double Speed = 1.0;
     public double ElapsedInState;
     public float LastFrame = float.NaN;
+
+    /// <summary>The turret angles last written into <see cref="Pose"/> (main yaw/pitch, alternate yaw/pitch); NaN until the first write.</summary>
+    public float[] TurretApplied = [float.NaN, float.NaN, float.NaN, float.NaN];
     public bool InScene;
 
     /// <summary>True once <see cref="ModelName"/> was set to something and the asset failed to load (drawn as a placeholder).</summary>
