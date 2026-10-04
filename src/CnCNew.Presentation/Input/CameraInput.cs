@@ -114,8 +114,10 @@ public sealed class CameraInputController(CameraSettings? settings = null)
             var ratio = new Vector2(half.X > 0 ? Math.Clamp(offset.X / half.X, -1, 1) : 0, half.Y > 0 ? Math.Clamp(-offset.Y / half.Y, -1, 1) : 0);
             scroll += Scaled(ratio);
         }
-        else if (Settings.EdgeScrollEnabled && input.HasMouse && keyboard == Vector2.Zero)
+        else if (Settings.EdgeScrollEnabled && input.HasMouse && keyboard == Vector2.Zero
+                 && input.MousePosition is { X: >= 0, Y: >= 0 } inside && inside.X < viewportSize.X && inside.Y < viewportSize.Y)
         {
+            // Only a cursor on the view scrolls: in a window the pointer can be reported outside it (the original confines the cursor to its full screen).
             var edge = Vector2.Zero;
             var position = input.MousePosition;
             var margin = Settings.EdgeScrollMarginPixels;

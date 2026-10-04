@@ -20,8 +20,11 @@ internal sealed class StrideInputTranslator
         var position = new Vector2(input.AbsoluteMousePosition.X, input.AbsoluteMousePosition.Y);
         if (input.HasMouse && position != _lastPosition)
         {
+            // The first position seen is where the device happens to report the pointer (0,0 in a headless run), not a movement: taking it as one would park the cursor on the
+            // window's corner and scroll the camera there for ever. Only a change after that is a move.
+            var first = float.IsNaN(_lastPosition.X);
             _lastPosition = position;
-            events.Add(new PresentationInput.MouseMoveEvent(timeMs, position));
+            if (!first) events.Add(new PresentationInput.MouseMoveEvent(timeMs, position));
         }
         foreach (var inputEvent in input.Events)
         {
