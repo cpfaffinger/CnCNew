@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Content;
 using CnCNew.Data.Compilation;
+using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
 using CnCNew.Presentation.Objects;
 using CnCNew.Simulation.Commands;
@@ -427,7 +428,7 @@ internal static class StructureConditionTests
         harness.Run("Supply dock: DOCKING on both sides, DOCKING_ACTIVE only while the dock works", SupplyDock);
         harness.Run("A bomber's doors: DOOR_1_OPENING while it delivers, DOOR_1_CLOSING after, until the next delivery", BomberDoors);
         harness.Run("Particle uplink cannon: UNPACKING while the antenna rises, DEPLOYED until the beam is gone, PACKING while it decays", UplinkCannon);
-        harness.Run("Repair drone: packed at creation, UNPACKING from the first repair on, packed again when the repair is over", RepairDrone);
+        harness.Run("Repair drone: packed at creation, then UNPACKING, FIRING_B and FIRING_C as the arm works, packed again when the repair is over", RepairDrone);
         harness.Run("A hover locomotor shows OVER_WATER over a water area and not on land", HoverOverWater);
         harness.Run("The tracker forgets entities that are gone and survives gaps between samples", TrackerHousekeeping);
         var contentDir = ContentDir(args);
@@ -788,7 +789,12 @@ internal static class StructureConditionTests
         TestHarness.Assert(unpacking is not null, $"The first repair unpacks the arm ({text}).");
         TestHarness.Assert(timeline.All(item => !(item.Set.Contains(StructureConditions.Packing) && item.Set.Contains(StructureConditions.Unpacking))), "Never both at once.");
         TestHarness.Assert(unpacking!.Value.Last - unpacking.Value.First >= 14, "UNPACKING lasts at least the 15 ticks of the unpack and stays through the ready state.");
-        TestHarness.Assert(timeline.Any(item => item.Tick > unpacking.Value.Last && item.Set == ModelConditionSet.Empty), "While it extends and welds neither bit is set.");
+        var arm = new[] { StructureConditions.Packing, StructureConditions.Unpacking, ModelConditions.Firing[1], ModelConditions.Firing[2] };
+        TestHarness.Assert(timeline.All(item => arm.Count(item.Set.Contains) <= 1), $"One arm bit at a time ({text}).");
+        var extending = Span(timeline, ModelConditions.Firing[1]);
+        var retracting = Span(timeline, ModelConditions.Firing[2]);
+        TestHarness.Assert(extending is not null && retracting is not null && unpacking.Value.First < extending.Value.First && extending.Value.First < retracting.Value.First,
+            $"The arm unpacks, extends (FIRING_B, through the weld) and retracts (FIRING_C) in this order ({text}).");
         TestHarness.Assert(master.Body!.Health == master.Body.MaxHealth && timeline[^1].Set == ModelConditionSet.Of(StructureConditions.Packing), $"The repair is over and the arm is packed again ({timeline[^1].Set}).");
     }
 
@@ -892,6 +898,7 @@ internal static class StructureConditionTests
 
         // The modules of the other retail names answer with their states.
         RealModules(world, tracker, Spawn, ref sequence);
+        RealSweep(graph, templates, fingerprint, players);
     }
 
     private static void RealModules(SimulationWorld world, StructureConditionTracker tracker, Func<string, int, int, int, Entity> spawn, ref ulong sequence)
@@ -1033,6 +1040,31 @@ internal static class StructureConditionTests
         foreach (var name in new[] { "DOCKING_BEGINNING", "PREORDER", "DOOR_4_WAITING_TO_CLOSE" })
             Check(!ConditionDeriver.ProducedNames.Contains(name), $"{name} is documented as not derivable and stays out of the produced names.");
         _ = tracker;
+    }
+
+    /// <summary>Every instantiable retail object goes through the frame projector for a few ticks: the derivation and the tracker never throw and show the conditions a fresh object should show.</summary>
+    private static void RealSweep(CompiledDefinitionGraph graph, TemplateCatalog templates, string fingerprint, ImmutableArray<PlayerConfiguration> players)
+    {
+        var catalog = ObjectVisualCatalog.Build(graph);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 3, players, "presentation-structure-sweep", fingerprint), templates);
+        var instantiable = templates.Templates.Where(template => template.IsInstantiable).OrderBy(template => template.Name, StringComparer.Ordinal).ToArray();
+        var sequence = 0UL;
+        for (var index = 0; index < instantiable.Length; index++)
+            world.Submit(new SpawnCommand(PlayerId.System, ++sequence, 0, instantiable[index].Name, new PlayerId(1 + index % 2), Fixed.FromInt(index % 60 * 50), Fixed.FromInt(index / 60 * 50), Fixed.Zero, Fixed.Zero));
+        var projector = new FrameProjector(catalog, new FrameProjectorOptions { Colors = TeamColors.Resolve(world.Configuration.Players, graph) });
+        var counts = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        for (var tick = 0; tick < 6; tick++)
+        {
+            world.Step();
+            projector.Advance(world);
+        }
+        var frame = projector.Project(1f);
+        foreach (var drawable in frame.Drawables)
+            foreach (var flag in drawable.Conditions.Flags())
+                if (flag.Name.StartsWith("DOOR_", StringComparison.Ordinal) || flag.Name is "PACKING" or "UNPACKING" or "DOCKING_ACTIVE" or "CONSTRUCTION_COMPLETE" or "CAPTURED" or "SMOLDERING" or "POST_COLLAPSE" or "SPECIAL_DAMAGED" or "ENEMYNEAR" or "OVER_WATER")
+                    counts[flag.Name] = counts.GetValueOrDefault(flag.Name) + 1;
+        Check(frame.Drawables.Length > 1500, $"The sweep projects the retail objects ({frame.Drawables.Length} of {instantiable.Length}).");
+        Console.WriteLine($"       real data: sweep of {instantiable.Length} objects, fresh objects show: {string.Join(", ", counts.Select(pair => $"{pair.Key} x{pair.Value}"))}");
     }
 
     private static void Check(bool condition, string message)

@@ -210,7 +210,7 @@ public sealed class StructureConditionTracker
         public bool CheckpointAlly;
         public bool CheckpointEnemy;
         public int CheckpointDoor;
-        public bool DroneUnpacked;
+        public ModelConditionFlag? DroneArm;
     }
 
     private readonly Dictionary<uint, Entry> _entries = [];
@@ -400,9 +400,9 @@ public sealed class StructureConditionTracker
     }
 
     /// <summary>
-    /// <c>SlavedUpdate</c>: a drone that can repair is packed up when it is created and after every repair (<c>onObjectCreated</c>, <c>endRepair</c>); the repair states set UNPACKING
-    /// (<c>setRepairState(READY)</c> from none) or FIRING_B/FIRING_C (extending, retracting) through <c>setRepairModelConditionStates</c>, which clears the previous bit. Going from unpacking to ready
-    /// or from welding to ready sets nothing, so the bit of the last such call stays: UNPACKING after the unpack, nothing after a weld.
+    /// <c>SlavedUpdate</c>: a drone that can repair is packed up when it is created and after every repair (<c>onObjectCreated</c>, <c>endRepair</c>). <c>setRepairState</c> sets one bit of the arm
+    /// through <c>setRepairModelConditionStates</c>, which clears the previous one: UNPACKING when the arm comes out of its packed state, FIRING_B when it extends, FIRING_C when it retracts.
+    /// Going from unpacking to ready, from extending to welding and from retracting to ready sets nothing, so the bit of the last call stays.
     /// </summary>
     private static ModelConditionSet Drone(Entry entry, SlavedUpdate drone, ModelConditionSet set)
     {
@@ -410,18 +410,20 @@ public sealed class StructureConditionTracker
         switch (drone.Repair)
         {
             case SlavedUpdate.RepairState.Unpacking:
-                entry.DroneUnpacked = true;
-                return set.With(StructureConditions.Unpacking);
-            case SlavedUpdate.RepairState.Ready:
-                return entry.DroneUnpacked ? set.With(StructureConditions.Unpacking) : set;
+                entry.DroneArm = StructureConditions.Unpacking;
+                break;
             case SlavedUpdate.RepairState.Extending:
+                entry.DroneArm = ModelConditions.Firing[1];
+                break;
             case SlavedUpdate.RepairState.Retracting:
-            case SlavedUpdate.RepairState.Welding:
-                entry.DroneUnpacked = false;
-                return set;
+                entry.DroneArm = ModelConditions.Firing[2];
+                break;
+            case SlavedUpdate.RepairState.Ready or SlavedUpdate.RepairState.Welding:
+                break;
             default:
-                entry.DroneUnpacked = false;
-                return set.With(StructureConditions.Packing);
+                entry.DroneArm = StructureConditions.Packing;
+                break;
         }
+        return entry.DroneArm is { } arm ? set.With(arm) : set;
     }
 }
