@@ -96,6 +96,44 @@ static partial class Tests
             End
           End
         End
+        Object FogSpotter
+          KindOf = SELECTABLE VEHICLE
+          VisionRange = 40.0
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+        End
+        SpecialPower SPECIAL_TurretAbility
+          Enum = SPECIAL_BLACKLOTUS_STEAL_CASH_HACK
+          ReloadTime = 0
+        End
+        Object AbilityTank
+          KindOf = SELECTABLE VEHICLE
+          Locomotor = SET_NORMAL ChaseLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY TurretGun
+          End
+          Behavior = AIUpdateInterface AI01
+            Turret
+              TurretTurnRate = 180
+              AllowsPitch = No
+              RecenterTime = 500
+              ControlledWeaponSlots = PRIMARY
+            End
+          End
+          Behavior = SpecialAbility Ability01
+            SpecialPowerTemplate = SPECIAL_TurretAbility
+          End
+          Behavior = SpecialAbilityUpdate AbilityUpdate01
+            SpecialPowerTemplate = SPECIAL_TurretAbility
+          End
+        End
         """,
     };
 
@@ -325,6 +363,57 @@ static partial class Tests
         Check.That(!world.AttackTargetOf(tank).IsValid, "A victim that is no longer attackable for its attacker's player (here: stealthed) ends the aim.");
         for (var i = 0; i < 60; i++) world.Step();
         Check.That(tank.TurretOf(0)!.Value.Angle == Fixed.Zero, "The turret recentres after the hold.");
+    }
+
+    /// <summary>The fog half of the visibility rule: the victim stays in weapon range and unstealthed, but the only object that saw it is gone.</summary>
+    public static void TurretAttackEndsWhenTheVictimFallsIntoTheFog()
+    {
+        var fixture = new SyntheticFixture(files: TurretAttackFiles());
+        var terrain = NavTerrain();
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "TurretTank", owner: 1, x: 20, y: 20);
+        feeder.Spawn(2, "TurretTarget", owner: 2, x: 20, y: 100);
+        feeder.Spawn(1, "FogSpotter", owner: 1, x: 30, y: 110);
+        world.Step();
+        world.Step();
+        var tank = Slotted(world, "TurretTank");
+        var target = Slotted(world, "TurretTarget");
+        var player = new PlayerId(1);
+        Check.That(world.CanPlayerSee(player, target), "The spotter shows the victim to its player; the tank itself sees nothing.");
+        Check.That(TicksUntilShot(world, feeder, tank.Id.Value, target.Id.Value) >= 0 && world.AttackTargetOf(tank) == target.Id, "The attack on a victim another object sees stands.");
+        for (var i = 0; i < 30; i++) world.Step();
+        Check.That(world.AttackTargetOf(tank) == target.Id, "...as long as the spotter lives (the victim is in range, so nothing else ends the attack).");
+
+        feeder.Destroy(IdOf(world, "FogSpotter"));
+        var ended = -1;
+        for (var i = 0; i < 10 && ended < 0; i++)
+        {
+            world.Step();
+            if (!world.AttackTargetOf(tank).IsValid) ended = i;
+        }
+        Check.That(!world.CanPlayerSee(player, target), "Without the spotter the victim is in the fog.");
+        Check.That(ended >= 0, "A victim in the fog ends the aim although it is in range and not stealthed.");
+        Check.That(!feeder.FireWeapon(1, tank.Id.Value, target.Id.Value).Accepted || world.Step().Events.All(value => value.Kind != SimEventKind.WeaponFired), "No shot at a victim in the fog.");
+        Check.That(!world.AttackTargetOf(tank).IsValid, "...and a refused fire order does not start the attack again.");
+        for (var i = 0; i < 80; i++) world.Step();
+        Check.That(tank.TurretOf(0)!.Value.Angle == Fixed.Zero, "The turret recentres after the hold.");
+    }
+
+    /// <summary><c>SpecialAbilityUpdate::initiateIntentToDoSpecialPower</c> idles the unit: its move and its attack end when it starts a unit ability.</summary>
+    public static void TurretAttackEndsWhenTheUnitStartsAnAbility()
+    {
+        var (world, feeder, _) = AttackWorld(1, ("AbilityTank", 1, 0, 0, 0m), ("RunnerTarget", 2, 0, 100, 0m));
+        var tank = Slotted(world, "AbilityTank");
+        var target = IdOf(world, "RunnerTarget");
+        feeder.Pursue(1, tank.Id.Value, target, 300, 0);
+        world.Step();
+        world.Step();
+        Check.That(world.AttackTargetOf(tank).Value == target && tank.HasMoveTarget, "The tank pursues its victim.");
+        Check.That(feeder.UseSpecialPower(1, tank.Id.Value, "SPECIAL_TurretAbility").Accepted, "The ability is accepted.");
+        world.Step();
+        Check.That(!world.AttackTargetOf(tank).IsValid, "Starting a unit ability ends the unit's attack...");
+        Check.That(!tank.HasMoveTarget, "...and its move.");
     }
 
     public static void TurretAttackSnapshotAndReplay()

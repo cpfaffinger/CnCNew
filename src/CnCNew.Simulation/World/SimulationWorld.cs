@@ -1098,6 +1098,10 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (reason != 0) { RecordRejection(command, reason); break; }
                 MarkDirty(source!);
                 Emit(SimEventKind.SpecialPowerUsed, source!.Id, use.TargetKind == SpecialPowerTargetKind.Object ? use.Target : EntityId.Invalid, info!.Name, info.Index, command.Player);
+                // SpecialAbilityUpdate::initiateIntentToDoSpecialPower ("Clear any old AI before starting this special ability"): a unit ability idles its unit, which ends a move and
+                // the unit's attack. The staged capture does so itself when it begins.
+                foreach (var candidate in source.ModuleArray)
+                    if (candidate is Modules.BuiltIn.SpecialAbilityUpdate ability && ability.PowerIndex == info.Index && !ability.IsCapture(this)) { AiOf(source)?.OrderIdle(this, false); break; }
                 module!.Use(this, use.AsTarget);
                 break;
             }

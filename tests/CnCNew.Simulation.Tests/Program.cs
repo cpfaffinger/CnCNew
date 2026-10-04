@@ -339,6 +339,8 @@ run.Test("Turret attack: the aim survives order gaps and a chase; another order 
 run.Test("Turret attack: a dead or departing victim ends it, a dead attacker leaves nothing", Tests.TurretAttackEndsWhenTheVictimDiesOrIsLost);
 run.Test("Turret attack: only attack orders start one, a new fire order moves it", Tests.TurretAttackOnlyFromAnAttackOrder);
 run.Test("Turret attack: a victim that is no longer visible ends the aim", Tests.TurretAttackEndsWhenTheVictimIsNoLongerVisible);
+run.Test("Turret attack: a victim that falls into the fog ends the aim", Tests.TurretAttackEndsWhenTheVictimFallsIntoTheFog);
+run.Test("Turret attack: starting a unit ability ends the attack and the move", Tests.TurretAttackEndsWhenTheUnitStartsAnAbility);
 run.Test("Turret attack: snapshot mid-pursuit, determinism and the replay of PursueCommand", Tests.TurretAttackSnapshotAndReplay);
 run.Test("Turret idle scan: random angle and interval, hold, return, determinism, snapshot", Tests.TurretIdleScanGlancesAroundDeterministically);
 run.Test("Turret idle scan: an attack interrupts it and it resumes afterwards", Tests.TurretIdleScanYieldsToAnAttackAndResumes);
