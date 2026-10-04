@@ -29,14 +29,18 @@ public static class DemoScenarios
         PowersReady = true,
     };
 
-    /// <summary>Two tanks start at an angle to each other: each turret has to turn to the other tank before the first shot.</summary>
+    /// <summary>
+    /// Two tanks start at an angle to each other: each turret has to turn to the other tank before the first shot, keeps its aim through every reload until the victim dies and then turns back
+    /// after its recentre time. A Sentry Drone stands far outside everybody's weapon range and glances around while idle (<c>TurretAIIdleScanState</c>).
+    /// </summary>
     public static DemoScenario TankDuel { get; } = new(
         "tank-duel", "Panzer gegen Panzer",
-        "Ein Crusader und ein Battlemaster stehen schräg zueinander. Beide Türme müssen sich dem Gegner zuwenden, bevor geschossen wird; das Audit misst den Winkelfehler bei jedem Schuss.",
+        "Ein Crusader und ein Battlemaster stehen schräg zueinander. Beide Türme müssen sich dem Gegner zuwenden, bevor geschossen wird, und bleiben bis zum Tod des Gegners auf ihn gerichtet (auch zwischen den Schüssen); danach drehen sie nach der Rückstellzeit zurück. Die Sentry-Drohne weit abseits dreht den Turm im Leerlauf zufällig umher. Das Audit misst den Winkelfehler in jedem Tick.",
         900,
         [
             new("crusader", "AmericaTankCrusader", 1, 0, 0, 0f),
             new("battlemaster", "ChinaTankBattleMaster", 2, 85, 85, 225f),
+            new("sentinel", "AmericaVehicleSentryDrone", 1, 30, -190, 0f),
         ],
         [
             new(5, "crusader", ScenarioOrderKind.Attack, "battlemaster"),

@@ -74,7 +74,7 @@ internal static class ScenarioAudit
         Console.WriteLine();
         var failures = scenario.Name switch
         {
-            "tank-duel" => CheckTankDuel(shotsAt, history),
+            "tank-duel" => CheckTankDuel(shotsAt, history, events, live),
             "capture-building" => CheckCapture(history, events, live),
             "jet-strafe" => CheckJet(history, events, live),
             _ => [],
@@ -86,7 +86,7 @@ internal static class ScenarioAudit
 
     // ------------------------------------------------------------------------------------------------------------------------ sampling
 
-    private sealed record UnitSample(string Tag, bool Alive, float X, float Y, float Z, float Health, float Speed, float YawDegrees, float? TurretWorldDegrees, int Owner, string Conditions);
+    private sealed record UnitSample(string Tag, bool Alive, float X, float Y, float Z, float Health, float Speed, float YawDegrees, float? TurretWorldDegrees, int Owner, string Conditions, float? TurretRelativeDegrees = null);
 
     private sealed record Sample(long Tick, Dictionary<string, UnitSample> Units);
 
@@ -106,8 +106,9 @@ internal static class ScenarioAudit
             var yaw = ToFloat(entity.Angle) * 180f / MathF.PI;
             float? turret = drawable?.TurretYaw is { } turretYaw ? Wrap(ToFloat(entity.Angle) + turretYaw) * 180f / MathF.PI : null;
             var health = entity.Body is { } body && body.MaxHealth.Raw != 0 ? ToFloat(body.Health) / ToFloat(body.MaxHealth) * 100f : 100f;
+            float? relative = entity.TurretOf(0) is { } reading ? ToFloat(reading.Angle) * 180f / MathF.PI : null;
             units[tag] = new UnitSample(tag, !entity.EffectivelyDead, ToFloat(entity.X) - live.Anchor.X, ToFloat(entity.Y) - live.Anchor.Y, ToFloat(entity.Z), health,
-                ToFloat(entity.Speed) * 30f, yaw, turret, entity.Owner.Value, drawable?.Conditions.ToString() ?? "(not drawn)");
+                ToFloat(entity.Speed) * 30f, yaw, turret, entity.Owner.Value, drawable?.Conditions.ToString() ?? "(not drawn)", relative);
         }
 
         return new Sample(live.Tick, units);
@@ -159,7 +160,7 @@ internal static class ScenarioAudit
 
     private const float AlignmentToleranceDegrees = 5f;
 
-    private static List<string> CheckTankDuel(List<(long Tick, string Shooter, string Victim, float Bearing, float Turret, bool HasTurret)> shots, List<Sample> history)
+    private static List<string> CheckTankDuel(List<(long Tick, string Shooter, string Victim, float Bearing, float Turret, bool HasTurret)> shots, List<Sample> history, List<SimEvent> events, LiveScenario live)
     {
         var failures = new List<string>();
         Console.WriteLine($"turret alignment at the moment of each shot (tolerance {AlignmentToleranceDegrees} degrees)");
@@ -182,7 +183,143 @@ internal static class ScenarioAudit
             Console.WriteLine($"  {shooter}: turret world angle from {turrets.First():F0} to {turrets.Last():F0} (range {turrets.Min():F0}..{turrets.Max():F0})");
         }
 
+        CheckDuelTracking(history, events, live, failures);
+        CheckSentinelScan(history, live, failures);
         return failures;
+    }
+
+    /// <summary>Everything the persistent attack and the recentre hold promise, measured in every tick and not only at the shots.</summary>
+    private static void CheckDuelTracking(List<Sample> history, List<SimEvent> events, LiveScenario live, List<string> failures)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"turret on the victim in every tick between the order and the victim's death (tolerance {AlignmentToleranceDegrees} degrees)");
+        var pairs = new[] { ("crusader", "battlemaster"), ("battlemaster", "crusader") };
+        var deaths = new Dictionary<string, long>();
+        foreach (var simEvent in events)
+            if (simEvent.Kind == SimEventKind.EntityDied)
+                foreach (var tag in new[] { "crusader", "battlemaster" })
+                    if (live.Tags.TryGetValue(tag, out var id) && id == simEvent.Entity) deaths[tag] = simEvent.Tick;
+        foreach (var (shooterTag, victimTag) in pairs)
+        {
+            var victimDeath = deaths.TryGetValue(victimTag, out var tick) ? tick : long.MaxValue;
+            var ownDeath = deaths.TryGetValue(shooterTag, out var own) ? own : long.MaxValue;
+            // The order was given at tick 5 and takes effect in that tick; a sample carries the state after the step of the tick before it.
+            var window = history.Where(sample => sample.Tick > 5 && sample.Tick <= Math.Min(victimDeath, ownDeath) && sample.Units[shooterTag].Alive && sample.Units[victimTag].Alive).ToArray();
+            if (window.Length == 0) { failures.Add($"{shooterTag}: no sample between the order and the victim's death"); continue; }
+            var aligned = window.Where(sample => TrackingError(sample, shooterTag, victimTag) <= AlignmentToleranceDegrees).Select(sample => sample.Tick).DefaultIfEmpty(-1).Min();
+            var after = window.Where(sample => sample.Tick >= aligned && aligned >= 0).ToArray();
+            var worst = after.Select(sample => TrackingError(sample, shooterTag, victimTag)).DefaultIfEmpty(float.NaN).Max();
+            var off = after.Count(sample => TrackingError(sample, shooterTag, victimTag) > AlignmentToleranceDegrees);
+            Console.WriteLine($"  {shooterTag,-13}-> {victimTag,-13} aligned from tick {aligned}, {after.Length} ticks until {(victimDeath == long.MaxValue ? "the end" : "the victim's death at " + victimDeath)}, worst error {worst:F1}, ticks off {off}");
+            if (aligned < 0) failures.Add($"{shooterTag}'s turret never pointed at {victimTag}");
+            else if (off > 0) failures.Add($"{shooterTag}'s turret was off its victim in {off} ticks after it had aimed (worst {worst:F1} degrees), e.g. during a reload");
+            if (aligned > 5 + 20) failures.Add($"{shooterTag} took until tick {aligned} to aim");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("after the victim's death the turret holds for RecenterTime, then turns back to its natural angle");
+        foreach (var (shooterTag, victimTag) in pairs)
+        {
+            if (!deaths.TryGetValue(victimTag, out var death) || deaths.ContainsKey(shooterTag)) continue;
+            var entity = live.World.FindEntity(live.Tags[shooterTag]);
+            if (entity?.Template.Turrets?[0] is not { } info) { failures.Add($"{shooterTag} has no turret template"); continue; }
+            var recenter = info.RecenterTicks;
+            var natural = ToFloat(info.NaturalAngle) * 180f / MathF.PI;
+            // sample k carries the state after the step of tick k-1; the death is noticed in the step of tick `death` (or the next one) and starts the hold there
+            var series = history.Where(sample => sample.Tick > death && sample.Units[shooterTag].TurretRelativeDegrees is not null).Select(sample => (sample.Tick, Angle: sample.Units[shooterTag].TurretRelativeDegrees!.Value)).ToArray();
+            if (series.Length == 0) { failures.Add($"{shooterTag}: no samples after the victim's death"); continue; }
+            var held = series[0].Angle;
+            var firstMove = series.FirstOrDefault(item => Math.Abs(item.Angle - held) > 0.05f);
+            var moved = firstMove.Tick != 0;
+            var rate = ToFloat(info.TurnRate) * 180f / MathF.PI * 0.5f;
+            var rest = series.FirstOrDefault(item => Math.Abs(item.Angle - natural) < 0.05f && item.Tick >= firstMove.Tick);
+            Console.WriteLine($"  {shooterTag,-13}died victim at {death}, RecenterTime {recenter} ticks, angle held {held:F1}; first moves at tick {(moved ? firstMove.Tick.ToString(CultureInfo.InvariantCulture) : "never")} (earliest {death + recenter + 2}); rests at {natural:F0} from tick {(rest.Tick != 0 ? rest.Tick.ToString(CultureInfo.InvariantCulture) : "never")}");
+            if (!moved) { failures.Add($"{shooterTag}'s turret never turns back after the victim died"); continue; }
+            if (firstMove.Tick < death + recenter + 2) failures.Add($"{shooterTag}'s turret turned back at tick {firstMove.Tick}, before the recentre time was over (tick {death + recenter + 2})");
+            if (firstMove.Tick > death + recenter + 3) failures.Add($"{shooterTag}'s turret waited until tick {firstMove.Tick} to turn back (due at {death + recenter + 2})");
+            var expectedRest = firstMove.Tick + (int)MathF.Ceiling(Math.Abs(held - natural) / rate) + 2;
+            if (rest.Tick == 0 || rest.Tick > expectedRest) failures.Add($"{shooterTag}'s turret did not come to rest by tick {expectedRest} (rest {rest.Tick})");
+        }
+    }
+
+    private static float TrackingError(Sample sample, string shooterTag, string victimTag)
+    {
+        var shooter = sample.Units[shooterTag];
+        var victim = sample.Units[victimTag];
+        if (shooter.TurretWorldDegrees is not { } turret) return float.NaN;
+        var bearing = Wrap(MathF.Atan2(victim.Y - shooter.Y, victim.X - shooter.X));
+        return Math.Abs(Wrap((bearing - turret * MathF.PI / 180f))) * 180f / MathF.PI;
+    }
+
+    /// <summary>
+    /// The bystander Sentry Drone (turret scan 0..360 degrees every 250 ms, recentre time 1000 ms) stands out of everyone's weapon range: its turret has to glance around on its own, hold each angle
+    /// for the recentre time, return to the natural angle and wait the (fixed) scan interval; the drawn turret and TURRET_ROTATE follow.
+    /// </summary>
+    private static void CheckSentinelScan(List<Sample> history, LiveScenario live, List<string> failures)
+    {
+        Console.WriteLine();
+        Console.WriteLine("idle scan of the bystander");
+        var entity = live.World.FindEntity(live.Tags["sentinel"]);
+        if (entity?.Template.Turrets?[0] is not { CanScan: true } info) { failures.Add("the sentinel has no turret that scans"); return; }
+        var series = history.Where(sample => sample.Units["sentinel"].TurretRelativeDegrees is not null).Select(sample => (sample.Tick, Unit: sample.Units["sentinel"])).ToArray();
+        if (series.Length < 600) { failures.Add($"only {series.Length} samples of the sentinel"); return; }
+        var natural = ToFloat(info.NaturalAngle) * 180f / MathF.PI;
+        var maxScan = ToFloat(info.MaxScanAngle) * 180f / MathF.PI;
+        var minScan = ToFloat(info.MinScanAngle) * 180f / MathF.PI;
+        // excursions: runs of samples away from the natural angle
+        var excursions = new List<(int Start, int End, float Peak, int AtPeak)>();
+        var index = 0;
+        while (index < series.Length)
+        {
+            if (Math.Abs(series[index].Unit.TurretRelativeDegrees!.Value - natural) < 0.05f) { index++; continue; }
+            var start = index;
+            var peak = 0f;
+            while (index < series.Length && Math.Abs(series[index].Unit.TurretRelativeDegrees!.Value - natural) >= 0.05f)
+            {
+                if (Math.Abs(series[index].Unit.TurretRelativeDegrees!.Value) > Math.Abs(peak)) peak = series[index].Unit.TurretRelativeDegrees!.Value;
+                index++;
+            }
+            excursions.Add((start, index, peak, series.Skip(start).Take(index - start).Count(item => Math.Abs(item.Unit.TurretRelativeDegrees!.Value - peak) < 0.05f)));
+        }
+
+        var complete = excursions.Where(value => value.End < series.Length).ToArray();
+        Console.WriteLine($"  {series.Length} ticks: {complete.Count()} scans, relative turret angle {series.Min(item => item.Unit.TurretRelativeDegrees!.Value):F0}..{series.Max(item => item.Unit.TurretRelativeDegrees!.Value):F0} degrees, world angle {series.Where(item => item.Unit.TurretWorldDegrees is not null).Min(item => item.Unit.TurretWorldDegrees!.Value):F0}..{series.Where(item => item.Unit.TurretWorldDegrees is not null).Max(item => item.Unit.TurretWorldDegrees!.Value):F0}");
+        if (complete.Length < 4) failures.Add($"the sentinel scanned only {complete.Length} times in {series.Length} ticks");
+        if (complete.Any(value => Math.Abs(value.Peak) < minScan - 0.1f || Math.Abs(value.Peak) > maxScan + 0.1f)) failures.Add("a scan angle lies outside MinIdleScanAngle..MaxIdleScanAngle");
+        var holds = complete.Select(value => value.AtPeak).ToArray();
+        Console.WriteLine($"  scan angles: {string.Join(", ", complete.Take(10).Select(value => value.Peak.ToString("F0", CultureInfo.InvariantCulture)))}; ticks held at the angle: {string.Join(", ", holds.Take(10))} (RecenterTime {info.RecenterTicks} ticks)");
+        if (holds.Any(value => value < info.RecenterTicks || value > info.RecenterTicks + 2)) failures.Add($"a scan angle was not held for RecenterTime ({info.RecenterTicks} ticks): {string.Join(", ", holds)}");
+        var gaps = complete.Zip(complete.Skip(1), (left, right) => right.Start - left.End).ToArray();
+        Console.WriteLine($"  rest between the scans: {string.Join(", ", gaps.Take(10))} ticks (MinIdleScanInterval {info.MinScanIntervalTicks}, MaxIdleScanInterval {info.MaxScanIntervalTicks})");
+        if (gaps.Any(gap => gap < info.MinScanIntervalTicks || gap > info.MaxScanIntervalTicks)) failures.Add("the rest between two scans lies outside the scan interval");
+
+        // the drawn turret and TURRET_ROTATE come from the simulation
+        var mismatched = 0;
+        for (var i = 0; i < series.Length; i++)
+        {
+            if (series[i].Unit.TurretWorldDegrees is not { } world) continue;
+            float Off(int at) => Math.Abs(Wrap((world - series[at].Unit.YawDegrees - series[at].Unit.TurretRelativeDegrees!.Value) * MathF.PI / 180f)) * 180f / MathF.PI;
+            // the frame the presentation draws may still carry the previous tick's turret: it has to equal the simulated angle of this sample or of the one before
+            if (i == 0 || Off(i) <= 0.6f || Off(i - 1) <= 0.6f) continue;
+            mismatched++;
+            if (mismatched < 4) Console.WriteLine($"    mismatch t={series[i].Tick}: drawn {world:F1}, simulated {series[i].Unit.TurretRelativeDegrees:F1} (previous {series[i - 1].Unit.TurretRelativeDegrees:F1}), yaw {series[i].Unit.YawDegrees:F1}");
+        }
+
+        var changed = 0;
+        var rotateOnChange = 0;
+        var rotateWithoutChange = 0;
+        for (var i = 1; i < series.Length; i++)
+        {
+            var moved = Math.Abs(series[i].Unit.TurretRelativeDegrees!.Value - series[i - 1].Unit.TurretRelativeDegrees!.Value) > 0.001f;
+            var rotating = series[i].Unit.Conditions.Split(' ').Contains("TURRET_ROTATE");
+            if (moved) { changed++; if (rotating) rotateOnChange++; }
+            else if (rotating) rotateWithoutChange++;
+        }
+
+        Console.WriteLine($"  drawn turret off the simulated angle in {mismatched} samples; TURRET_ROTATE on {rotateOnChange} of {changed} turning samples, {rotateWithoutChange} samples with TURRET_ROTATE and no turning");
+        if (mismatched > 0) failures.Add($"the drawn turret deviates from the simulated angle in {mismatched} samples");
+        if (changed == 0 || rotateOnChange < changed * 0.8) failures.Add($"TURRET_ROTATE is set in only {rotateOnChange} of {changed} samples in which the scanning turret turned");
+        if (rotateWithoutChange > 0) failures.Add($"TURRET_ROTATE is set in {rotateWithoutChange} samples in which the turret did not turn");
     }
 
     private static List<string> CheckCapture(List<Sample> history, List<SimEvent> events, LiveScenario live)
