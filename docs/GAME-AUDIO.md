@@ -1,10 +1,11 @@
 # Audio (AudioDirector, Eva-Ansage, Musik, Stride-Ausgabe)
 
-Stand: 30. September 2026 (Paket S5)
+Stand: 4. Oktober 2026 (Paket S5 vom 30. September 2026; Verdrahtung im Client: Phase 16, Punkt 1)
 
-> **Richtigstellung (4. Oktober 2026, `docs/DEMO-FINDINGS.md` #7):** dieses Dokument beschreibt eine **Bibliothek**. `AudioDirector` und `AudioOutput` sind gebaut und in `CnCNew.Game.Tests`/`CnCNew.Audio.Tests`
-> getestet, werden aber im Stride-Client (`Program.cs`, `ClientRuntime`, `LiveMatchHost`) **nirgends erzeugt**: die Demos sind stumm. Wo unten „spielt“ steht, ist das Verhalten des Directors im Test gemeint,
-> nicht das des laufenden Clients. Die Verdrahtung ist Phase 16, Punkt 1 (`docs/HANDOFF-PHASE16.md`).
+> **Stand der Verdrahtung (4. Oktober 2026, `docs/DEMO-FINDINGS.md` #7):** bis Phase 15 beschrieb dieses Dokument nur eine **Bibliothek** – `AudioDirector` und `AudioOutput` wurden im Stride-Client
+> nirgends erzeugt, die Demos waren stumm. Seit Phase 16, Punkt 1 erzeugt `ClientRuntime` den Ton für `--match`, `--mission`, `--scenario` und `--shell` (Abschnitt „Verdrahtung im Client“).
+> **Belegt ist das durch Zähler, Tests und reproduzierbare WAV-Mitschnitte – nicht durch Hören:** niemand hat das Ergebnis bisher an einem Lautsprecher beurteilt (Lautstärkeverhältnisse,
+> Verständlichkeit, Latenz, ob das Gerät überhaupt klingt). Wo unten „spielt“ steht, heißt das: Die Anfrage erreicht den Mixer und ist im Mitschnitt enthalten.
 
 `CnCNew.Game.Audio` macht das Spiel hörbar: Es übersetzt `SoundCue`s (aus `CnCNew.Presentation.Fx`), Auswahl-/Befehls-
 Ereignisse der Präsentation und den Logiktakt der laufenden Partie (`CnCNew.Game.Live.LiveMatch`) in Befehle für den
@@ -24,7 +25,15 @@ keine weitere Kopplung: `CnCNew.Game.Audio` kennt kein Stride, `AudioOutput` ken
 | `director.NotifyInsufficientFunds()` / `OnMovieRequested(name)` | Hooks, die `LiveMatch` nicht selbst auslöst (siehe Lücken) |
 | `director.ApplySettings(settings)` | Lautstärkeregler des Optionsbildschirms |
 | `director.Mixer` / `director.Stats` | `SoftwareMixer` für die Ausgabeschicht, Zähler für jede nicht gespielte Anfrage |
+| `director.Muted` | Mastervolumen 0, ohne die Regler anzufassen; Anfragen und Zähler laufen weiter |
+| `GameAudio.Create(data, settings?)` | Ein Objekt je Client: `EnterShell()`, `Attach(live, hud)`/`Detach()`, `Update(dt)`, `PlayUi(name)`, `PlayHook(miscAudioKey)`, `ApplySettings`, `Muted`, `Report()` |
+| `OfflineAudioRenderer(mixer, wavPath?)` | Rendert den Mixer ohne Gerät (`Pump(dt)`), optional in eine WAV-Datei; `Finish()` liefert die SHA-256 der Samples |
 | `AudioOutput(mixer)` (`CnCNew.Client.Stride`) | `Start()` öffnet das Gerät und startet den Streaming-Thread, `Dispose()` räumt auf |
+| `ClientAudio` (`CnCNew.Client.Stride`) | Wählt den Abnehmer des Mixers (Gerät, Mitschnitt, verwerfen) und druckt den Audiobericht |
+
+Über dem Director liegt `GameAudio` (`CnCNew.Game/Audio/GameAudio.cs`, kein Stride): ein Objekt je Clientprozess, das den Director
+besitzt und ihn an das hängt, was gerade auf dem Bildschirm ist (Shell oder laufendes Spiel). Der Client spricht nur mit `GameAudio`
+(Abschnitt „Verdrahtung im Client“).
 
 Der Integrator ruft `AudioDirector.Update` einmal pro `LiveMatch.Advance`-Aufruf und reicht dieselbe `LiveMatch`-Instanz
 hinein. `Update` liest die Kamera (`live.Camera.Target`/`Eye`), das Terrain (`live.Heights`), die Pause
@@ -32,6 +41,100 @@ hinein. `Update` liest die Kamera (`live.Camera.Target`/`Eye`), das Terrain (`li
 Auswahl/Befehle, EVA-Ereignisse ohne Soundcue-Ursprung und Filmsequenzen kommen nicht aus `LiveMatch` und müssen von
 der UI-/Eingabeschicht explizit gemeldet werden (`OnUnitSelected`, `OnUnitOrdered`, `NotifyInsufficientFunds`,
 `OnMovieRequested`).
+
+## Verdrahtung im Client (Phase 16, Punkt 1)
+
+**Lebensdauer.** `ClientRuntime` erzeugt in seinem Konstruktor genau ein `ClientAudio` (`CnCNew.Client.Stride/Audio/ClientAudio.cs`) und gibt es in
+`Dispose` frei. `ClientAudio` besitzt ein `GameAudio` (Director + Mixer) und **genau einen** Abnehmer des Mixers:
+
+| Aufruf | Abnehmer | Gerät geöffnet |
+|---|---|---|
+| normal (Fenster) | `AudioOutput` (Strides Audiolayer, eigener Streaming-Thread) | ja |
+| normal, Gerät lässt sich nicht öffnen | eine Konsolenzeile `warning: no audio device available, the game runs silently (…)`, danach `OfflineAudioRenderer` ohne Datei (rendert und verwirft) | nein |
+| `--smoke-test` | `OfflineAudioRenderer` ohne Datei | nein |
+| `--audio-capture <verzeichnis>` (mit oder ohne `--smoke-test`) | `OfflineAudioRenderer`, schreibt `<verzeichnis>/audio.wav` (16 Bit, Stereo, Mixerrate) | nein |
+
+Der Ersatzabnehmer ist nötig, nicht kosmetisch: ohne `Render`-Aufrufe würde die Befehlswarteschlange des Mixers nie geleert und die Zähler blieben stehen.
+„Kein Gerät geöffnet“ gilt für den Code dieses Projekts; ob Strides eigenes `AudioSystem` (Teil jeder `Stride.Engine.Game`-Instanz) beim Start ein Gerät anfasst, ist **nicht untersucht**.
+`--mute` startet stumm (`GameAudio.Muted`). Pro Frame ruft `ClientRuntime.Update` nach dem Spiel- bzw. Shell-Schritt `ClientAudio.Update(sekunden)`:
+erst `GameAudio.Update` (mit laufendem Spiel `AudioDirector.Update(live, dt)`, sonst `AudioDirector.Tick(null, dt)` für Musik und Busse), dann – ohne Gerät –
+`OfflineAudioRenderer.Pump(dt)`.
+
+**Quellen.** Was den Director erreicht und woher:
+
+| Quelle | Weg | Zähler (`AudioSource`) |
+|---|---|---|
+| Simulationsereignisse (Schüsse, Explosionen/Tode über FXList-`Sound`-Nuggets, Bau, Produktion fertig, Upgrade, Spezialkraft, Betreten/Verlassen, Geld, `VoiceCreated`/`VoiceTaskComplete`/`VoiceFear`, abgelehnte Befehle, **Einnahme-Tick**) | `LiveGame.Advance` führt je Tick `FxExecutor.ExecuteEvents` aus; `SoundCueDeriver` leitet die Cues ab (Tabelle in `docs/PRESENTATION-FX.md`); `AudioDirector.Update` holt sie mit `live.DrainSoundCues()` | `Simulation` |
+| EVA (`BaseUnderAttack`, `UnitLost`, `BuildingLost`, `UpgradeComplete` aus Cues; `LowPower` je Tick aus der Energiebilanz; `InsufficientFunds` aus einer abgelehnten Bestellung) | Cues der Art `Eva` → `EvaAnnouncer`; `InsufficientFunds` über `MatchController.CommandFeedbackObserved` | `Eva` |
+| Einheitenstimme bei Auswahl | `SelectionModel.SelectionChanged` des HUD: die erste **eigene** Einheit, die neu in die Auswahl kommt, spricht (`VoiceSelect`/`VoiceGroupSelect`); eine schrumpfende Auswahl schweigt | `UnitVoice` |
+| Einheitenstimme bei Befehl | `MatchController.CommandFeedbackObserved` (jede `CommandFeedback` des Frames): `MoveMarker`/`WaypointMarker` → `VoiceMove`, `AttackMarker` → `VoiceAttack`, `EnterMarker` → `VoiceEnter`; Sprecher ist die erste eigene ausgewählte Einheit | `UnitVoice` |
+| UI im Spiel | `MatchController.ButtonClicked` (Befehlsleiste, Spielmenü) → MiscAudio `GUIClickSound`; `InvalidOrder`/`Unsupported` → MiscAudio `NoCanDoSound` | `Ui` |
+| UI in der Shell | `PlayUiSoundOutput` der Shell (`GUIClick`, `GUIComboBoxClick`) → `GameAudio.PlayUi` | `Ui` |
+| Umgebungsschleifen (`SoundAmbient`) | `AudioDirector.UpdateAmbient` aus dem projizierten Frame | `Ambient` |
+| Musik | Shell: `Shell` in Schleife (`GameAudio.EnterShell`, auch nach Spielende); Spiel: gemischte `Game_<SEITE>_*`-Liste der Spielerseite (`GameAudio.Attach` → `StartMatchMusic`) | `Music` |
+| Regler | `SettingsChangedOutput` der Shell → `GameAudio.ApplySettings` (wirkt mit dem nächsten gerenderten Block) | – |
+
+**Einnahme-Tick.** Die Simulation meldet `SimEventKind.CaptureFlash` (`Entity` = Gebäude, `Other` = einnehmende Einheit) jedes Mal, wenn das Gebäude während der
+Einnahme aufblitzt. `SoundCueDeriver` macht daraus einen positionierten Effekt-Cue mit dem Eventnamen aus MiscAudio `DefectorTimerTickSound` (Retail: `DefectorTimerTick`,
+`world shrouded everyone`) an der Position des **Gebäudes**, ohne Spielerindex – wie `SpecialAbilityUpdate::continuePreparation` (`SpecialAbilityUpdate.cpp`), das dem Event die
+Objekt-Id des Ziels gibt. Fehlt der MiscAudio-Schlüssel, heißt der Cue wie der Schlüssel und landet in `UnresolvedEvents` statt zu schweigen.
+
+**Stummschaltung und Regler.** `GameSettings.Audio` hat fünf Regler und **kein** Stummfeld, der Optionsbildschirm keinen Stummschalter. Stumm ist deshalb ein Laufzeitzustand
+(`AudioDirector.Muted`/`GameAudio.Muted`, `--mute`): Mastervolumen 0, alle Anfragen werden weiter gestellt, gemischt und gezählt (ein stummer Lauf hat dieselben Zähler).
+Die Regler wirken beim Übernehmen im Optionsbildschirm der Shell; ein Schieben ohne Übernehmen ist nicht hörbar (die Shell meldet erst dann `SettingsChangedOutput`).
+`--match`/`--mission`/`--scenario` starten mit `GameSettings.Default`, nicht mit den gespeicherten Einstellungen.
+
+**Messbarkeit.** Beim Beenden (auch im `--smoke-test`) druckt der Client den Audiobericht (`ClientAudio.Finish`, Zeilen beginnen mit `audio `):
+
+- `audio output:` Abnehmer; ohne Gerät Frames, Spitzenpegel und SHA-256 der gerenderten 16-Bit-Samples, mit Gerät die Unterläufe;
+- `audio source <Quelle>: requested, started, ended, dropped` je `AudioSource` – *requested*: Anfragen, die den Director erreichten; *started*: an den Mixer übergeben;
+  *ended*: vom Mixer nicht mehr gespielt (fertig, gestoppt, verdrängt **oder vom Mixer abgewiesen** – die Aufteilung steht nur mixerweit in der nächsten Zeile);
+  *dropped*: nie eine Stimme geworden (unbekanntes Event, fehlende Datei, Entfernung, Ratenbegrenzung, nicht für den lokalen Spieler, fehlender Stimmschlüssel …).
+  Eine EVA-Anfrage aus einem Cue zählt bei `Simulation` als *requested*, aber weder als gestartet noch als verworfen: sie läuft unter `Eva` weiter;
+- `audio mixer:` gerenderte Frames, gestartete/beendete/gestoppte/verdrängte/abgewiesene Stimmen, geclippte Samples;
+- `audio outcomes:` jedes Ergebnis nach Namen (`played`, `dropped:*`, `eva:requested`, `note:*`);
+- `audio started events:` gestartete Stimmen je Eventname (hier steht z. B. `DefectorTimerTick=46`);
+- `audio unknown event names`, `audio missing or undecodable sound files` (Pfad und Fehler), `audio missing unit voice keys`, `audio unknown eva events`,
+  `audio unknown MiscAudio keys`, `audio skipped movies` – jeweils nach Namen, `none`, wenn leer.
+
+**Reproduzierbarer Mitschnitt.** `OfflineAudioRenderer.Pump(dt)` rendert je Frame genau die Frames, die bis zur neuen Gesamtzeit fehlen, als **einen** Mixerblock. Mit festen
+Zeitschritten (`--smoke-test`: 1/30 s) sind Blockgrößen und Befehlsfolge in jedem Lauf gleich, der Mixer ist dafür bitidentisch. Damit das auch für den Client gilt, liest
+`ClientRuntime` in einem Lauf mit festen Zeitschritten **keine Geräteeingabe**: vorher verschob die zufällige Position der echten Maus (Randscrollen) die Kamera und damit den
+Hörer, und zwei Läufe unterschieden sich genau in den positionierten Klängen (gemessen: Musik identisch, Unterschiede nur im Zeitraum der Einnahme-Ticks). Gemessen am
+4. Oktober 2026 (Release, `--scenario capture-building --smoke-test --frames 1500 --audio-capture <dir>`): zwei Läufe, dieselbe Datei. Die konkreten Prüfsummen hängen von
+Daten, Szene, Bildzahl und Rechner/Laufzeit ab (Gleitkomma des Mixers) und werden deshalb nicht als Sollwert geführt. Ein Lauf mit echter Frame-Zeit (`--audio-capture` ohne
+`--smoke-test`) ist **nicht** reproduzierbar; die Geräteausgabe ohnehin nicht (eigener Thread, Blockgrenzen nach Gerätetakt).
+
+**Gemessen (4. Oktober 2026, Release, gerätefrei; neu messen):**
+
+| Lauf | Simulation (req/start/end/drop) | Sonstiges | Mixer | fehlend/unbekannt |
+|---|---|---|---|---|
+| `--scenario capture-building --smoke-test --frames 1500` | 50 / 49 / 49 / 0 | `DefectorTimerTick=49`, EVA 1 (`EvaUSA_UpgradeComplete`), Musik 1 (`Game_USA_05`) | 51 gestartet, 36 fertig, 14 durch `Limit` ersetzt, 0 geclippt, Spitze 0,71 | 0 |
+| `--match "Maps/Alpine Assault/Alpine Assault.map" --smoke-test` (90 Bilder) | 2 / 0 / 0 / 1 | EVA 1, Musik 1 | 2 gestartet, Spitze 0,67 | 0 |
+| derselbe Match, `--autoplay --select-own --frames 2700` | 60 / 35 / 35 / 24 (`not-local` 13, `ui-other-player` 11) | Auswahlstimme 1 (`CommandCenterUSASelect`), Umgebung 2, EVA 1, Musik 1 | 40 gestartet, **189 geclippte Samples, Spitze 1,00** | 0 |
+
+Auffällig und nicht bewertet: die EVA-Ansage „Upgrade complete“ gleich zu Spielbeginn (ein zum Start vergebenes Upgrade meldet `UpgradeCompleted`), elf `NoCanDoSound` im
+Autoplay-Lauf (abgelehnte Befehle der KI, die den Menschenplatz spielt) und das Clipping im längeren Match. Ob das so klingen soll, kann nur eine Hörprobe entscheiden.
+
+**Tests** (`tests/CnCNew.Game.Tests/AudioDirectorTests.cs`, Präfix „Wiring“): `CaptureFlash` → Cue am Gebäude → gestartete Stimme und fehlender Schlüssel → unbekanntes Event;
+Auswahl/Befehl/Klick/Ablehnung → Director; fehlende Datei je Quelle gezählt, kein Ersatzton; Stumm und Regler auf 0 ergeben digitale Stille bei gleichen Zählern, Aufheben wirkt
+im nächsten Block; Offline-Rendering ohne Gerät wirft nicht und schreibt bei festen Schritten zweimal dieselbe WAV-Datei; Realdaten: die Szene `capture-building` läuft mit HUD und
+`GameAudio`, der Tick startet, der Ranger antwortet auf die Auswahl, und der Welt-Hash ist mit und ohne Ton derselbe.
+
+**Nicht verdrahtet / offen:**
+
+- **Skript-Ton in Missionen** (`SPEECH_PLAY`, `SOUND_PLAY_NAMED`, `MUSIC_SET_TRACK` u. a. `ScriptOutput`s): `MissionPresentationDirector` zeigt dafür weiter nur den
+  Untertitel-Platzhalter; eine Mission spielt die Playlist ihrer Seite statt der Skriptmusik (Phase 16, Punkt 5).
+- **Klänge der Spezialfähigkeit selbst** (`UnpackSound`, `PackSound`, `TriggerSound`, `PrepSoundLoop` von `SpecialAbilityUpdate`; Retail: Black Lotus, Hacker, Colonel Burton –
+  die Infanterie-Einnahme hat keine) und die Abschlussstimmen (`VoiceCaptureBuildingComplete` …): die Simulation meldet die Zeitpunkte nicht als Ereignis.
+- `VoiceGarrison`/`VoiceGuard` bei Befehlen (die Rückmeldung unterscheidet Betreten und Besetzen nicht), Gebäudeauswahl (Gebäude ohne `VoiceSelect` erscheinen als
+  `dropped:no-voice-key`), die Terroristen-im-Auto-Stimmen aus MiscAudio.
+- Die Shell-Konstante `GUISliderMoved` gibt es im Retailbestand nicht (dort `GUISliderBeep`); sie wird derzeit von keinem Bildschirm gesendet und würde als unbekanntes Event gezählt.
+- Der Optionsdialog im laufenden Spiel (`MenuAction.Options`) ist im Client nicht verdrahtet, also auch keine Regler dort.
+- Der Fehlerpfad von `AudioOutput` (Gerät lässt sich nicht öffnen) hat keinen automatischen Test – dafür bräuchte es einen Rechner ohne Audiogerät; getestet ist der
+  gerätefreie Ersatzweg.
+- Referenzstelle des Klick-Klangs: `MiscAudio.h` beschreibt `m_guiClickSound` als „snd to play when user presses button in GUI“; die Aufrufstelle im Original wurde nicht
+  gesucht, die Regel „Befehlsleisten-/Menüknopf → `GUIClickSound`“ ist eine eigene.
 
 ## Bus-Zuordnung
 
@@ -189,16 +292,17 @@ Wiedergabe dereferenziert, konstruiert `AudioOutput.Start()` `MixerSoundSource` 
 echte `SoundInstance` (die nur `MaxNumberOfBuffers` braucht, eine von `MixerSoundSource` überschriebene Eigenschaft
 ohne Bezug zur Instanz) und übergibt sie über `MixerSoundSource.BindInstance` zurück, bevor `Play()` aufgerufen wird.
 
-Ein eigener, niedrigpriorer Thread (`AudioOutput.Pump`) ruft `AudioEngine.Update()` alle 10&nbsp;ms auf; Strides
-Dokumentation verlangt dafür "denselben Thread wie die Hauptschleife", die dieses Paket aber nicht besitzt (Programm-
-Einstiegspunkt und Renderschleife gehören anderen Paketen). Das native Nachfüllen der Ringpuffer selbst übernimmt
-Strides eigener `DynamicSoundSource`-Hintergrundtask, unabhängig von diesem Thread.
+Ein eigener, niedrigpriorer Thread (`AudioOutput.Pump`) ruft `AudioEngine.Update()` der eigenen Engine alle 10&nbsp;ms auf; Strides
+Dokumentation verlangt dafür "denselben Thread wie die Hauptschleife". Daran hat die Verdrahtung in Phase 16 nichts geändert
+(nicht auf die Hauptschleife umgezogen, weil das Ergebnis ohne Hörprobe nicht beurteilbar wäre). Das native Nachfüllen der Ringpuffer
+selbst übernimmt Strides eigener `DynamicSoundSource`-Hintergrundtask, unabhängig von diesem Thread.
 
 **Kein Gerät verfügbar:** `AudioEngine`-Konstruktion (native Bibliothek, Gerätezugriff) kann fehlschlagen (fehlende
 `libstrideaudio`, keine Hardware). `Start()` fängt das an dieser einen Gerätegrenze ab (`catch (Exception) when
 (exception is not OutOfMemoryException)`, siehe `docs`-Konvention für Gerätegrenzen in `CnCNew.Audio.Mp3PcmStream`),
-zählt es in `DeviceFailures` und lässt den Client stumm weiterlaufen; `IsAvailable` bleibt `false`, kein Zustand wird
-vorgetäuscht. **Unterläufe** (`Underruns`, in `MixerSoundSource`): Da OpenAL/AudioLayer aus Managed-Code keinen
+zählt es in `DeviceFailures`, merkt sich den Grund in `FailureReason` und lässt den Client stumm weiterlaufen; `IsAvailable` bleibt `false`, kein Zustand wird
+vorgetäuscht. Der Fehlerzweig fasst `Stride.Audio` selbst nicht mehr an (früher protokollierte er über `AudioEngine.Logger` – bei fehlender nativer Bibliothek
+hätte genau dieser Zugriff erneut geworfen); die eine Konsolenwarnung druckt `ClientAudio`. **Unterläufe** (`Underruns`, in `MixerSoundSource`): Da OpenAL/AudioLayer aus Managed-Code keinen
 direkten Unterlaufzähler liefert, misst `MixerSoundSource` die tatsächliche Zeit zwischen Füllaufrufen gegen die
 erwartete Zeit aus den bereits gelieferten Frames; ein Rückstand von mehr als einer Pufferdauer zählt als ein
 Unterlauf und synchronisiert die Messung neu. Das ist eine Näherung (kein Beleg, dass das native Gerät wirklich

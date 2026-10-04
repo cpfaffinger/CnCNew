@@ -200,6 +200,7 @@ lokalen Spieler; `Player` ist der Spieler, den die Referenz adressiert. `NoSound
 | `EntityDied` (nicht selbst verursacht) | EVA `BuildingLost` (STRUCTURE + MP_COUNT_FOR_VICTORY) oder `UnitLost` (INFANTRY/VEHICLE) | `Object::onDie` |
 | `EntityDamaged` durch Fremde | EVA `BaseUnderAttack` + Radar-Strukturton, Einheiten Radar-Struktur-/Harvesterton, sonst allgemeiner Radarton; je Spieler höchstens einmal pro 250 Einheiten und 10 s | `Radar::tryUnderAttackEvent`, `Radar::tryEvent` |
 | `CommandRejected` | MiscAudio `NoCanDoSound` (eigene Regel) | – |
+| `CaptureFlash` | MiscAudio `DefectorTimerTickSound` als Weltklang an der Position des Gebäudes, das gerade eingenommen wird (kein Spielerindex); fehlt der Schlüssel, trägt der Cue den Schlüsselnamen und wird von der Audioschicht als unbekanntes Event gezählt | `SpecialAbilityUpdate::continuePreparation` (`SpecialAbilityUpdate.cpp`) |
 
 Der Radar-Abstandstest der Referenz hat einen Klammerfehler; implementiert ist der beabsichtigte Abstand. Die Referenz
 spielt für angegriffene Nicht-Harvester-Einheiten den Strukturton; übernommen.
