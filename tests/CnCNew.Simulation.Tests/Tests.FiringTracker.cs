@@ -1,3 +1,4 @@
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
@@ -8,7 +9,7 @@ using CnCNew.Simulation.World;
 static partial class Tests
 {
     // 600 ms between shots = 18 ticks; the mean stage halves it, the fast stage quarters it. Coast 1000 ms = 30 ticks.
-    private static IReadOnlyDictionary<string, string> FiringTrackerFiles() => new Dictionary<string, string>(TurretFiles())
+    private static IReadOnlyDictionary<string, string> FiringTrackerFiles() => new Dictionary<string, string>(TurretAttackFiles())
     {
         ["Data/INI/Object/FiringTrackerFixture.ini"] = """
         Weapon SpinGun
@@ -32,6 +33,74 @@ static partial class Tests
           WeaponSet
             Conditions = None
             Weapon = PRIMARY SpinGun
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Weapon WindupGun
+          PrimaryDamage = 1
+          AttackRange = 150.0
+          DamageType = EXPLOSION
+          ClipSize = 0
+          DelayBetweenShots = 1000
+          PreAttackDelay = 500
+          PreAttackType = PER_SHOT
+        End
+        Weapon AttackWindupGun
+          PrimaryDamage = 1
+          AttackRange = 150.0
+          DamageType = EXPLOSION
+          ClipSize = 0
+          DelayBetweenShots = 1000
+          PreAttackDelay = 500
+          PreAttackType = PER_ATTACK
+        End
+        Weapon ClipWindupGun
+          PrimaryDamage = 1
+          AttackRange = 150.0
+          DamageType = EXPLOSION
+          ClipSize = 3
+          ClipReloadTime = 2000
+          DelayBetweenShots = 200
+          PreAttackDelay = 500
+          PreAttackType = PER_CLIP ; once per clip
+        End
+        Object WindupTank
+          KindOf = SELECTABLE VEHICLE
+          Locomotor = SET_NORMAL ChaseLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY WindupGun
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object AttackWindupTank
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY AttackWindupGun
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object ClipWindupTank
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY ClipWindupGun
           End
           Behavior = AIUpdateInterface AI01
           End
@@ -116,5 +185,82 @@ static partial class Tests
             world.Step();
         }
         Check.That(SimulationWorld.ContinuousFireOf(plain) == ContinuousFireStage.None && plain.WeaponBonusConditions == 0, "A weapon without ContinuousFireOne/Two has no stages.");
+    }
+
+    /// <summary><c>PreAttackDelay</c>: the weapon winds up before the shot (<c>Weapon::preFireWeapon</c>), per shot, per attack or per clip.</summary>
+    public static void PreAttackDelayWindsUpBeforeTheShot()
+    {
+        var fixture = new SyntheticFixture(files: FiringTrackerFiles());
+        Check.That(fixture.Templates.Weapons.TryGet("ClipWindupGun", out var clipGun) && clipGun.PreAttackDelayTicks == 15 && clipGun.PreAttackType == WeaponPrefire.PerClip, "PreAttackDelay (500 ms = 15 ticks) and PreAttackType are read.");
+        Check.That(fixture.Templates.Weapons.TryGet("SpinGun", out var spinGun) && spinGun.PreAttackDelayTicks == 0 && spinGun.PreAttackType == WeaponPrefire.PerShot, "A weapon without the keys has no delay (default PER_SHOT).");
+
+        List<long> Shots(string template, int ticks, out SimulationWorld world, out Feeder feeder, Action<SimulationWorld, Feeder, Entity, int>? each = null, bool twoVictims = false)
+        {
+            world = NewWorld(fixture);
+            feeder = new Feeder(world);
+            feeder.Spawn(1, template, owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "TurretTarget", owner: 2, x: 0, y: 100);
+            feeder.Spawn(2, "TurretTarget", owner: 2, x: 100, y: 0);
+            world.Step();
+            var tank = Slotted(world, template);
+            var north = IdOf(world, "TurretTarget", 0);
+            var east = IdOf(world, "TurretTarget", 1);
+            var shots = new List<long>();
+            var start = world.Tick;
+            for (var i = 0; i < ticks; i++)
+            {
+                each?.Invoke(world, feeder, tank, i);
+                feeder.FireWeapon(1, tank.Id.Value, twoVictims && i >= ticks / 2 ? east : north);
+                var result = world.Step();
+                if (result.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id)) shots.Add(result.Tick - start);
+            }
+            return shots;
+        }
+
+        // Per shot: 15 ticks of wind-up before every shot, on top of the 30 ticks between shots.
+        var windup = new List<int>();
+        var perShot = Shots("WindupTank", 100, out _, out _, (world, _, tank, i) => windup.Add(world.PreAttackSlotOf(tank)));
+        Check.That(perShot.SequenceEqual([15L, 60L]), "PER_SHOT: the first shot after the wind-up, the next after reload plus wind-up: " + string.Join(",", perShot));
+        Check.That(windup.Skip(1).Take(15).All(slot => slot == 0) && windup[16] == -1 && windup[30] == -1 && windup[46] == 0, "While it winds up the object reports its slot (PREATTACK_A), not afterwards: " + string.Join("", windup.Take(50).Select(slot => slot < 0 ? "-" : "A")));
+
+        // Per attack: only the first shot at a victim waits; another victim waits again.
+        var perAttack = Shots("AttackWindupTank", 200, out _, out _, twoVictims: true);
+        Check.That(perAttack.Take(3).SequenceEqual([15L, 45L, 75L]), "PER_ATTACK: only the first shot at the victim winds up: " + string.Join(",", perAttack));
+        var afterSwitch = perAttack.Where(tick => tick >= 100).ToArray();
+        // The weapon is ready 30 ticks after the last shot at the first victim; from then (or from the switch at tick 100) the new victim costs a wind-up.
+        Check.That(afterSwitch.Length >= 2 && afterSwitch[0] - Math.Max(100, perAttack.Last(tick => tick < 100) + 30) == 15, "A new victim winds up again: " + string.Join(",", perAttack));
+        Check.That(afterSwitch[1] - afterSwitch[0] == 30, "...once: " + string.Join(",", perAttack));
+
+        // Per clip: the first shot of each clip of three waits.
+        var perClip = Shots("ClipWindupTank", 150, out _, out _);
+        Check.That(perClip.Take(6).SequenceEqual([15L, 21L, 27L, 102L, 108L, 114L]), "PER_CLIP: wind-up, three shots 6 ticks apart, 60 ticks of reload, wind-up again: " + string.Join(",", perClip));
+
+        // Another order drops the wind-up; the next attack starts it afresh. A snapshot taken mid-wind-up continues identically.
+        var moved = Shots("WindupTank", 60, out var world2, out var feeder2, (world, feeder, tank, i) =>
+        {
+            if (i == 8) feeder.SetMoveTarget(1, tank.Id.Value, 5, 0);
+        });
+        Check.That(moved.SequenceEqual([8L + 15L]), "A move order during the wind-up drops it; the fire order of the same tick winds up afresh: " + string.Join(",", moved));
+        var tank2 = Slotted(world2, "WindupTank");
+        var victim2 = IdOf(world2, "TurretTarget", 0);
+        while (world2.PreAttackSlotOf(tank2) < 0) { feeder2.FireWeapon(1, tank2.Id.Value, victim2); world2.Step(); }
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world2), fixture.Templates, fixture.Fingerprint);
+        var fork = feeder2.ForkTo(restored);
+        Check.That(restored.PreAttackSlotOf(restored.FindEntity(tank2.Id)!) == 0, "The wind-up is part of the snapshot.");
+        for (var i = 0; i < 60; i++)
+        {
+            feeder2.FireWeapon(1, tank2.Id.Value, victim2);
+            fork.FireWeapon(1, tank2.Id.Value, victim2);
+            Check.That(world2.Step().StateHash == restored.Step().StateHash, "The restored world winds up and fires identically at step " + i + ".");
+        }
+
+        // A script's one-off command fires at once.
+        var scripted = NewWorld(fixture);
+        var scriptFeeder = new Feeder(scripted);
+        scriptFeeder.Spawn(1, "WindupTank", owner: 1, x: 0, y: 0);
+        scriptFeeder.Spawn(2, "TurretTarget", owner: 2, x: 0, y: 100);
+        scripted.Step();
+        scriptFeeder.FireWeaponSlot(1, IdOf(scripted, "WindupTank"), IdOf(scripted, "TurretTarget"), WeaponSlot.Best, FireOrigin.Script);
+        Check.That(scripted.Step().Events.Any(value => value.Kind == SimEventKind.WeaponFired), "A script command button fires without the wind-up.");
     }
 }

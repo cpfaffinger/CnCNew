@@ -34,7 +34,7 @@ public static partial class ConditionDeriver
     {
         "NIGHT", "SNOW", "DAMAGED", "REALLYDAMAGED", "RUBBLE", "DYING", "MOVING", "ATTACKING",
         "FIRING_A", "FIRING_B", "FIRING_C", "USING_WEAPON_A", "USING_WEAPON_B", "USING_WEAPON_C",
-        "RELOADING_A", "RELOADING_B", "RELOADING_C", "BETWEEN_FIRING_SHOTS_A", "BETWEEN_FIRING_SHOTS_B", "BETWEEN_FIRING_SHOTS_C",
+        "RELOADING_A", "RELOADING_B", "RELOADING_C", "BETWEEN_FIRING_SHOTS_A", "BETWEEN_FIRING_SHOTS_B", "BETWEEN_FIRING_SHOTS_C", "PREATTACK_A", "PREATTACK_B", "PREATTACK_C",
         "AWAITING_CONSTRUCTION", "PARTIALLY_CONSTRUCTED", "ACTIVELY_BEING_CONSTRUCTED", "SOLD", "PARACHUTING", "AFLAME", "BURNED", "DEPLOYED", "DISGUISED",
         "RIDER1", "RIDER2", "RIDER3", "RIDER4", "RIDER5", "RIDER6", "RIDER7", "RIDER8",
         "WEAPONSET_VETERAN", "WEAPONSET_ELITE", "WEAPONSET_HERO", "WEAPONSET_PLAYER_UPGRADE", "WEAPONSET_CRATEUPGRADE_ONE", "WEAPONSET_CRATEUPGRADE_TWO",
@@ -143,10 +143,12 @@ public static partial class ConditionDeriver
     /// <summary>
     /// The current weapon slot only (<c>Object::adjustModelConditionForWeaponStatus</c> sets nothing for a slot that is not the current weapon).
     /// <c>WeaponSet::getModelConditionForWeaponSlot</c> maps the weapon status to FIRING (the shot happened on the last simulated tick),
-    /// RELOADING (empty clip, not ready) or BETWEEN_FIRING_SHOTS (not ready), each with USING_WEAPON_A/B/C for the slot.
+    /// RELOADING (empty clip, not ready), BETWEEN_FIRING_SHOTS (not ready) or PREATTACK (winding up), each with USING_WEAPON_A/B/C for the slot.
     /// </summary>
     private static ModelConditionSet Weapon(Entity entity, SimulationWorld world, ModelConditionSet set)
     {
+        // PRE_ATTACK: the weapon winds up (Weapon::preFireWeapon); it is the slot the attack chose, which becomes the current weapon with the shot.
+        if (world.PreAttackSlotOf(entity) is >= 0 and var winding) return set.With(ModelConditions.PreAttack[winding]).With(ModelConditions.UsingWeapon[winding]);
         var slot = entity.CurrentWeaponSlot;
         var clip = entity.ClipOf(slot);
         var lastFire = entity.LastFireTickOf(slot);

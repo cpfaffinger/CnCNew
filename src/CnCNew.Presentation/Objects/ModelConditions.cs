@@ -117,6 +117,7 @@ public static class ModelConditions
     public static readonly ModelConditionFlag[] BetweenFiringShots = [BetweenFiringShotsA, Parse("BETWEEN_FIRING_SHOTS_B"), Parse("BETWEEN_FIRING_SHOTS_C")];
     public static readonly ModelConditionFlag[] Reloading = [ReloadingA, Parse("RELOADING_B"), Parse("RELOADING_C")];
     public static readonly ModelConditionFlag[] UsingWeapon = [UsingWeaponA, Parse("USING_WEAPON_B"), Parse("USING_WEAPON_C")];
+    public static readonly ModelConditionFlag[] PreAttack = [Parse("PREATTACK_A"), Parse("PREATTACK_B"), Parse("PREATTACK_C")];
     public static readonly ModelConditionFlag Moving = Parse("MOVING");
     public static readonly ModelConditionFlag Dying = Parse("DYING");
     public static readonly ModelConditionFlag AwaitingConstruction = Parse("AWAITING_CONSTRUCTION");

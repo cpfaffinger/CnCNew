@@ -1,4 +1,5 @@
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
@@ -26,7 +27,25 @@ internal sealed class FiringState
     /// <summary><c>MODELCONDITION_CONTINUOUS_FIRE_SLOW</c>: the weapon spins down. A model condition only; mean and fast are weapon bonus conditions of the object.</summary>
     public bool Slow;
 
-    public bool IsDefault => Shots == 0 && !Victim.IsValid && CooldownFrame == 0 && !Slow;
+    /// <summary>The slot whose weapon winds up (<c>Weapon::m_whenPreAttackFinished</c> of the reference lives on the weapon); -1 for none.</summary>
+    public int PreSlot = -1;
+
+    /// <summary>The victim the wind-up is for.</summary>
+    public EntityId PreVictim;
+
+    /// <summary>The first tick the wound-up weapon may fire.</summary>
+    public long PreFinish;
+
+    public bool CountersAtRest => Shots == 0 && !Victim.IsValid && CooldownFrame == 0 && !Slow;
+
+    public bool IsDefault => CountersAtRest && PreSlot < 0;
+
+    public void ClearPreAttack()
+    {
+        PreSlot = -1;
+        PreVictim = EntityId.Invalid;
+        PreFinish = 0;
+    }
 
     public void Describe(IStateWriter writer)
     {
@@ -35,6 +54,12 @@ internal sealed class FiringState
         writer.UInt("victim", Victim.Value);
         writer.Int("cooldownFrame", CooldownFrame);
         writer.Bool("slow", Slow);
+        if (PreSlot >= 0)
+        {
+            writer.Int("preSlot", PreSlot);
+            writer.UInt("preVictim", PreVictim.Value);
+            writer.Int("preFinish", PreFinish);
+        }
         writer.EndObject();
     }
 
@@ -47,6 +72,13 @@ internal sealed class FiringState
             CooldownFrame = reader.Int("cooldownFrame"),
             Slow = reader.Bool("slow"),
         };
+        if (reader.Has("preSlot"))
+        {
+            state.PreSlot = checked((int)reader.Int("preSlot"));
+            state.PreVictim = new EntityId(checked((uint)reader.UInt("preVictim")));
+            state.PreFinish = reader.Int("preFinish");
+            if (state.PreSlot is < 0 or >= WeaponSlot.Count || state.PreFinish < 0) throw new InvalidDataException("Pre-attack state out of range in snapshot.");
+        }
         if (state.Shots < 0 || state.CooldownFrame < 0) throw new InvalidDataException("Negative firing tracker counter in snapshot.");
         return state;
     }
@@ -82,12 +114,17 @@ public sealed partial class SimulationWorld
     private void NoteShotFired(Entity source, WeaponInfo weapon, int slot, EntityId victim)
     {
         var state = source.Firing;
-        if (state is null)
+        state?.ClearPreAttack();
+        // Only weapons with stages, or with a wind-up that depends on the shots at the victim, need the counters; for every other weapon an object without counters stays without.
+        var counted = weapon.ContinuousFireOneShots != int.MaxValue || weapon.ContinuousFireTwoShots != int.MaxValue
+                      || (weapon.PreAttackDelayTicks != 0 && weapon.PreAttackType == WeaponPrefire.PerAttack);
+        if (!counted && (state is null || state.CountersAtRest))
         {
-            // A weapon without stages never changes anything on an object that has no tracker state.
-            if (weapon.ContinuousFireOneShots == int.MaxValue && weapon.ContinuousFireTwoShots == int.MaxValue) return;
-            source.Firing = state = new FiringState();
+            if (state is not null) source.Firing = null;
+            return;
         }
+
+        state ??= source.Firing = new FiringState();
 
         if (victim == state.Victim) state.Shots++;
         else if (_tick < state.CooldownFrame)
@@ -121,6 +158,48 @@ public sealed partial class SimulationWorld
 
         if (state.CooldownFrame != 0) _coolingTrackers.Add(source.Id.Value);
         MarkDirty(source);
+    }
+
+    // ------------------------------------------------------------------------------------------------------ the wind-up before a shot
+
+    /// <summary>A wind-up nobody followed up on (the attack was dropped without an order the simulation sees) is forgotten after this long past its end.</summary>
+    private const long PreAttackStaleTicks = SimulationTiming.LogicFramesPerSecond;
+
+    /// <summary>
+    /// <c>Object::preFireCurrentWeapon</c> / <c>Weapon::preFireWeapon</c> and the wait of <c>AIAttackFireWeaponState::update</c> (<c>PRE_ATTACK</c> → continue): a weapon with a
+    /// <c>PreAttackDelay</c> that is otherwise ready to fire at <paramref name="victim"/> first winds up for the delay — every shot (<c>PER_SHOT</c>), the first shot at a victim
+    /// (<c>PER_ATTACK</c>: no consecutive shot at it yet) or the first shot of a clip (<c>PER_CLIP</c>). False while the weapon winds up: the fire order stays accepted and a later
+    /// order of the attack fires. The wind-up is dropped when the unit gets another order (<see cref="EndAttack"/>, the reference's <c>onExit</c>) or aims at another victim.
+    /// </summary>
+    private bool PreAttackDone(Entity source, WeaponInfo weapon, int slot, Entity victim)
+    {
+        if (weapon.PreAttackDelayTicks == 0) return true;
+        var state = source.Firing;
+        if (state is not null && state.PreSlot == slot && state.PreVictim == victim.Id && _tick <= state.PreFinish + PreAttackStaleTicks) return _tick >= state.PreFinish;
+
+        // Weapon::getPreAttackDelay: "Look for a reason to return zero and have no delay."
+        if (weapon.PreAttackType == WeaponPrefire.PerClip && weapon.ClipSize > 0 && source.ClipOf(slot) is var clip && clip != 0 && clip < weapon.ClipSize) return true;
+        if (weapon.PreAttackType == WeaponPrefire.PerAttack && state is not null && state.Victim == victim.Id && state.Shots > 0) return true;
+        var delay = weapon.PreAttackDelayWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
+        if (delay <= 0) return true;
+
+        state ??= source.Firing = new FiringState();
+        state.PreSlot = slot;
+        state.PreVictim = victim.Id;
+        state.PreFinish = _tick + delay;
+        MarkDirty(source);
+        return false;
+    }
+
+    /// <summary>The slot whose weapon is winding up right now (<c>MODELCONDITION_PREATTACK_A/B/C</c>), or -1.</summary>
+    public int PreAttackSlotOf(Entity entity) => entity.Firing is { PreSlot: >= 0 } state && _tick <= state.PreFinish ? state.PreSlot : -1;
+
+    private void EndPreAttack(Entity entity)
+    {
+        if (entity.Firing is not { PreSlot: >= 0 } state) return;
+        state.ClearPreAttack();
+        if (state.IsDefault) entity.Firing = null;
+        MarkDirty(entity);
     }
 
     /// <summary><c>FiringTracker::speedUp</c>: none → mean → fast.</summary>

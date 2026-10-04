@@ -166,6 +166,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     public void EndAttack(Entity entity)
     {
+        EndPreAttack(entity);
         if (entity.Turrets is not { } states || entity.Template.Turrets is not { } set) return;
         var changed = false;
         for (var index = 0; index < states.Length; index++)

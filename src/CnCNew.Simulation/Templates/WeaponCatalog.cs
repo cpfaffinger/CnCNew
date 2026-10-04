@@ -70,6 +70,20 @@ public sealed record WeaponInfo(
     /// <summary><c>ContinuousFireCoast</c> (<c>m_continuousFireCoastFrames</c>): how long after the next possible shot the stages are kept without firing; 0 = the stages end at once when the weapon stops.</summary>
     public long ContinuousFireCoastTicks { get; init; }
 
+    /// <summary><c>PreAttackDelay</c> (<c>m_preAttackDelay</c>): how long the weapon winds up (<c>PRE_ATTACK</c>, the model's <c>PREATTACK_A/B/C</c>) before a shot; 0 for none.</summary>
+    public long PreAttackDelayTicks { get; init; }
+
+    /// <summary><c>PreAttackType</c> (<c>m_prefireType</c>): whether the delay applies to every shot, to the first shot at a victim or to the first shot of a clip.</summary>
+    public WeaponPrefire PreAttackType { get; init; } = WeaponPrefire.PerShot;
+
+    /// <summary><c>WeaponTemplate::getPreAttackDelay(bonus)</c>: the delay times the <c>PRE_ATTACK</c> bonus multiplier (truncated, as the reference's integer return does).</summary>
+    public long PreAttackDelayWith(WeaponBonusTable global, uint conditions)
+    {
+        if (PreAttackDelayTicks == 0) return 0;
+        var multiplier = Multiplier(global, conditions, WeaponBonusTable.PreAttack);
+        return multiplier <= Fixed.Zero ? 0 : (Fixed.FromInt(PreAttackDelayTicks) * multiplier).Floor();
+    }
+
     /// <summary>
     /// <c>WeaponTemplate::m_antiMask</c> (<c>WeaponAntiMaskType</c>): which kinds of target the weapon may be fired at. The constructor default is
     /// <see cref="AntiMaskGround"/> alone ("but not air or projectile"); each <c>Anti*</c> key sets or clears its bit (<c>INI::parseBitInInt32</c>).
@@ -103,6 +117,9 @@ public sealed record WeaponInfo(
         return Math.Max(SimulationTiming.SleepNone, (Fixed.FromInt(ticks) / multiplier).Floor());
     }
 }
+
+/// <summary><c>WeaponPrefireType</c> (<c>TheWeaponPrefireNames</c>).</summary>
+public enum WeaponPrefire : byte { PerShot, PerAttack, PerClip }
 
 /// <summary>
 /// The <c>WeaponBonus = &lt;CONDITION&gt; &lt;FIELD&gt; &lt;percent&gt;</c> lines of one definition (a weapon or GameData) as per-condition,
@@ -264,6 +281,15 @@ public sealed class WeaponCatalog
                 ContinuousFireOneShots = Number("ContinuousFireOne") is { } one ? checked((int)one) : int.MaxValue,
                 ContinuousFireTwoShots = Number("ContinuousFireTwo") is { } two ? checked((int)two) : int.MaxValue,
                 ContinuousFireCoastTicks = Number("ContinuousFireCoast") is { } coast ? SimulationTiming.DurationMillisecondsToTicks(coast) : 0,
+                PreAttackDelayTicks = Number("PreAttackDelay") is { } preAttack ? SimulationTiming.DurationMillisecondsToTicks(preAttack) : 0,
+                // TheWeaponPrefireNames; the constructor default is PREFIRE_PER_SHOT.
+                PreAttackType = Name("PreAttackType").Split([' ', '\t', ';'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToUpperInvariant() switch
+                {
+                    null or "PER_SHOT" => WeaponPrefire.PerShot,
+                    "PER_ATTACK" => WeaponPrefire.PerAttack,
+                    "PER_CLIP" => WeaponPrefire.PerClip,
+                    var other => throw new InvalidDataException($"{definition.OriginalName}: unknown PreAttackType {other}."),
+                },
             });
         }
         return new WeaponCatalog(weapons.ToImmutable());

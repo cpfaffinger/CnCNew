@@ -29,6 +29,7 @@ internal static class UnitConditionTests
     {
         var t = new TestHarness("UnitConditions");
         t.Run("continuous fire stages follow the shots at one victim and cool down", ContinuousFire);
+        t.Run("a weapon with a PreAttackDelay shows PREATTACK_A while it winds up", PreAttack);
         t.Run("a turning bike leans: CENTER_TO_x, x_TO_CENTER", TurnLean);
         t.Run("TURRET_ROTATE while a turret turns toward its aim", TurretRotate);
         t.Run("jet exhaust and afterburner follow the take-off states", JetBits);
@@ -121,6 +122,28 @@ internal static class UnitConditionTests
           DamageType = EXPLOSION
           ClipSize = 0
           DelayBetweenShots = 100
+        End
+        Weapon UnitWindupGun
+          PrimaryDamage = 1
+          AttackRange = 200.0
+          DamageType = EXPLOSION
+          ClipSize = 0
+          DelayBetweenShots = 1000
+          PreAttackDelay = 500
+        End
+        Object UnitWindup
+          KindOf = SELECTABLE VEHICLE CAN_ATTACK
+          VisionRange = 100.0
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY UnitWindupGun
+          End
         End
 
         Object UnitGatling
@@ -444,6 +467,24 @@ internal static class UnitConditionTests
         Assert(!rig.Bits(gun).Contains(UnitFlags.ContinuousFireSlow), "no stage is left at the end");
     }
 
+    private static void PreAttack()
+    {
+        var rig = new Rig(Fixture());
+        var gun = rig.Spawn("UnitWindup", 1, 100, 100);
+        var target = rig.Spawn("UnitTarget", 2, 150, 100);
+        var states = new List<string>();
+        var flag = ModelConditions.PreAttack[0];
+        for (var tick = 0; tick < 40; tick++)
+        {
+            rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, gun, target));
+            rig.Step();
+            var bits = rig.Bits(gun);
+            AddIfNew(states, bits.Contains(flag) ? (bits.Contains(ModelConditions.UsingWeapon[0]) ? "PREATTACK_A" : "PREATTACK_A without USING_WEAPON_A") : bits.Contains(ModelConditions.Firing[0]) ? "FIRING_A" : bits.Contains(ModelConditions.BetweenFiringShots[0]) ? "BETWEEN" : "none");
+        }
+        Assert(states.SequenceEqual(["PREATTACK_A", "FIRING_A", "BETWEEN"]), $"the weapon winds up (PREATTACK_A), fires and waits ({string.Join(" > ", states)})");
+        Assert(ConditionDeriver.ProducedNames.Contains("PREATTACK_A") && ConditionDeriver.ProducedNames.Contains("PREATTACK_C"), "the produced names list PREATTACK_A/B/C");
+    }
+
     private static void TurnLean()
     {
         var rig = new Rig(Fixture(), Terrain());
@@ -751,10 +792,10 @@ internal static class UnitConditionTests
         string[] implemented =
         [
             "CONTINUOUS_FIRE_SLOW", "CONTINUOUS_FIRE_MEAN", "CONTINUOUS_FIRE_FAST", "JETAFTERBURNER", "JETEXHAUST", "FREEFALL", "SPLATTED", "FRONTCRUSHED", "BACKCRUSHED", "TOPPLED",
-            "CLIMBING", "OVER_WATER", "CENTER_TO_LEFT", "CENTER_TO_RIGHT", "LEFT_TO_CENTER", "RIGHT_TO_CENTER", "TURRET_ROTATE", "SECOND_LIFE", "SPECIAL_CHEERING", "RAISING_FLAG",
+            "CLIMBING", "OVER_WATER", "CENTER_TO_LEFT", "CENTER_TO_RIGHT", "LEFT_TO_CENTER", "RIGHT_TO_CENTER", "TURRET_ROTATE", "SECOND_LIFE", "SPECIAL_CHEERING", "RAISING_FLAG", "PREATTACK_A", "PREATTACK_B", "PREATTACK_C",
         ];
         // The simulation has no model of the behaviour behind these (docs/MODEL-CONDITIONS-UNITS.md): setting them would be invention.
-        string[] notDerivable = ["PREATTACK_A", "PREATTACK_B", "PREATTACK_C", "EXPLODED_FLAILING", "EXPLODED_BOUNCING", "JAMMED", "PANICKING", "RAPPELLING"];
+        string[] notDerivable = ["EXPLODED_FLAILING", "EXPLODED_BOUNCING", "JAMMED", "PANICKING", "RAPPELLING"];
         foreach (var name in implemented) Assert(ConditionDeriver.ProducedNames.Contains(name), $"{name} is produced");
         foreach (var name in notDerivable) Assert(!ConditionDeriver.ProducedNames.Contains(name), $"{name} is not produced (the simulation does not model it)");
     }
