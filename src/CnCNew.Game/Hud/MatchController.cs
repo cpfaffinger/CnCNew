@@ -123,6 +123,12 @@ public sealed class MatchController
     /// <summary>A button of the in-game menu was clicked. <see cref="MenuAction.Resume"/> is also handled internally (the menu closes).</summary>
     public event Action<MenuAction>? MenuActionRequested;
 
+    /// <summary>Every command feedback of the frame before it becomes ticker text: the audio layer turns it into unit acknowledgements and the no-can-do sound.</summary>
+    public event Action<CommandFeedback>? CommandFeedbackObserved;
+
+    /// <summary>A button of the control bar or of the in-game menu was clicked (the click sound).</summary>
+    public event Action? ButtonClicked;
+
     /// <summary>Raised exactly once, the first frame <see cref="Simulation.Skirmish.SkirmishMatchSession.IsOver"/> is observed.</summary>
     public event Action<MatchResult>? MatchEnded;
 
@@ -251,6 +257,7 @@ public sealed class MatchController
     private void OnQuitMenuSystem(UiWindowTree tree, UiEvent uiEvent)
     {
         if (uiEvent.Kind != UiEventKind.ButtonSelected) return;
+        ButtonClicked?.Invoke();
         switch (uiEvent.Source)
         {
             case "QuitMenu.wnd:ButtonReturn": CloseMenu(); break;
@@ -264,6 +271,7 @@ public sealed class MatchController
     private void OnControlBarSystem(UiWindowTree tree, UiEvent uiEvent)
     {
         if (uiEvent.Kind is not (UiEventKind.ButtonSelected or UiEventKind.ButtonSelectedRight)) return;
+        ButtonClicked?.Invoke();
         var name = uiEvent.Source;
         if (SlotOf(name, "ControlBar.wnd:ButtonCommand") is { } slot && slot >= 1 && slot <= CommandBarModel.GridSlots)
         {
@@ -372,6 +380,7 @@ public sealed class MatchController
     {
         foreach (var feedback in Input.Commands.DrainFeedback())
         {
+            CommandFeedbackObserved?.Invoke(feedback);
             var text = feedback.Kind switch
             {
                 FeedbackKind.Rejected => $"Rejected: {feedback.Detail}",

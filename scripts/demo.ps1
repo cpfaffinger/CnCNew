@@ -46,6 +46,10 @@ param(
     [ValidateSet('Release', 'Debug')]
     [string]$Configuration = 'Release',
 
+    # Ton: stumm starten bzw. die Mixer-Ausgabe statt auf das Geraet nach <Verzeichnis>udio.wav schreiben (ausserhalb des Repos; siehe docs/GAME-AUDIO.md).
+    [switch]$Mute,
+    [string]$AudioCapture,
+
     [switch]$NoBuild,
     [switch]$SmokeTest
 )
@@ -91,6 +95,8 @@ switch ($Demo) {
 }
 if ($PSBoundParameters.ContainsKey('Seed')) { $clientArgs += @('--seed', "$Seed") }
 if ($SmokeTest) { $clientArgs += '--smoke-test' }
+if ($Mute) { $clientArgs += '--mute' }
+if ($AudioCapture) { $clientArgs += @('--audio-capture', $AudioCapture) }
 
 Write-Host "== Starte Demo '$Demo': $($clientArgs -join ' ')" -ForegroundColor Cyan
 dotnet run --project $project -c $Configuration --no-build -- @clientArgs

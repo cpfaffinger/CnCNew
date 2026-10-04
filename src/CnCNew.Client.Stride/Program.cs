@@ -27,6 +27,8 @@ var scenario = scenarioName is null ? null : CnCNew.Game.Live.DemoScenarios.Find
     ?? throw new ArgumentException($"Unknown scenario '{scenarioName}'. Known: {string.Join(", ", CnCNew.Game.Live.DemoScenarios.All.Select(value => value.Name))}.");
 if (scenario is not null) matchMap = scenario.Map;
 var missionMap = GetArgument(args, "--mission");
+// --audio-capture DIR renders the mixer into DIR/audio.wav instead of a device; a smoke test never opens a device (it renders and discards unless a capture is asked for).
+var audioOptions = new CnCNew.Client.Stride.Audio.ClientAudioOptions(smokeTest, GetArgument(args, "--audio-capture"), args.Contains("--mute", StringComparer.OrdinalIgnoreCase));
 var shellMode = args.Contains("--shell", StringComparer.OrdinalIgnoreCase) || (contentDirectory is not null && modelPath is null && matchMap is null && missionMap is null);
 var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
     (matchMap ?? missionMap)!,
@@ -81,7 +83,7 @@ if (contentDirectory is not null)
 }
 
 using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),
-    GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30")))
+    audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30")))
 {
     game.Run();
 }
@@ -134,6 +136,7 @@ internal sealed class CnCNewGame(
     bool shellMode,
     string windowSize,
     int smokeFrames,
+    CnCNew.Client.Stride.Audio.ClientAudioOptions audioOptions,
     string? filmstripDirectory = null,
     int filmstripEvery = 30) : Game
 {
@@ -166,7 +169,7 @@ internal sealed class CnCNewGame(
         {
             var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"));
             var back = GraphicsDevice.Presenter.BackBuffer;
-            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height);
+            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions);
             Window.Title = "CnCNew";
             return;
         }
@@ -242,7 +245,7 @@ internal sealed class CnCNewGame(
             var text = data.LoadText("English");
             var mission = LiveMission.Create(data, run, new System.Numerics.Vector2(viewport.Width, viewport.Height), label => text.TryGet(label, out var resolved) ? resolved : label);
             ApplyCamera(mission.Camera, options);
-            _runtime = ClientRuntime.ForMission(this, data, mission);
+            _runtime = ClientRuntime.ForMission(this, data, mission, audioOptions);
             Window.Title = $"CnCNew — mission {mapPath} — {mission.HumanFaction}";
             return;
         }
@@ -256,7 +259,7 @@ internal sealed class CnCNewGame(
             staged.Camera.SetHeightAboveGround(options.Height is { } heightText ? float.Parse(heightText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraHeight);
             staged.Camera.SettleZoom();
             ApplyCamera(staged.Camera, options with { Angle = null, Pitch = null, Height = null });
-            _runtime = ClientRuntime.ForScenario(this, data, staged);
+            _runtime = ClientRuntime.ForScenario(this, data, staged, audioOptions);
             if (options.SelectOwn) _runtime.SelectOwn();
             Window.Title = $"CnCNew — {scenario.Name}: {scenario.Title}";
             return;
@@ -264,7 +267,7 @@ internal sealed class CnCNewGame(
         var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed, AutoPlay = options.AutoPlay };
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
         ApplyCamera(match.Camera, options);
-        _runtime = ClientRuntime.ForMatch(this, data, match);
+        _runtime = ClientRuntime.ForMatch(this, data, match, audioOptions);
         if (options.SelectOwn) _runtime.SelectOwn();
         Window.Title = $"CnCNew — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)}";
     }
@@ -286,6 +289,8 @@ internal sealed class CnCNewGame(
 
     protected override void UnloadContent()
     {
+        if (_runtime is not null)
+            foreach (var line in _runtime.FinishAudio()) Console.WriteLine(line);
         _runtime?.Dispose();
         _runtime = null;
         _w3dScene?.Dispose();

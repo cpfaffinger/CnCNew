@@ -23,6 +23,9 @@ public sealed class SoundCueDeriver(FxCatalog catalog)
 {
     private const float UnderAttackDistance = 250f;
     private const long UnderAttackFrames = 30 * 10;
+
+    /// <summary>The <c>MiscAudio</c> key of the tick a building gives while it is being captured.</summary>
+    public const string CaptureTickHook = "DefectorTimerTickSound";
     private readonly List<(long Tick, string Template)> _pendingProduction = [];
     private readonly List<(PlayerId Player, long Tick, Vector3 Position)> _underAttack = [];
 
@@ -89,6 +92,17 @@ public sealed class SoundCueDeriver(FxCatalog catalog)
                 break;
             case SimEventKind.CommandRejected:
                 Misc(output, tick, "NoCanDoSound", simEvent.Player, "CommandRejected (own rule: NoCanDoSound)");
+                break;
+            case SimEventKind.CaptureFlash:
+                // SpecialAbilityUpdate::continuePreparation: the tick is MiscAudio's DefectorTimerTickSound with the object id of the building being
+                // captured and no player index, so it is a world sound at the building. A data set without the hook yields a cue under the hook's
+                // own name, which the audio layer reports as unresolved instead of staying silent.
+                if (view.GetPose(simEvent.Entity) is { } captured)
+                {
+                    var tickSound = catalog.MiscAudio.TryGetValue(CaptureTickHook, out var hooked) ? hooked : CaptureTickHook;
+                    if (FxCatalog.IsAudible(tickSound))
+                        Add(output, tick, tickSound, SoundCueKind.Effect, captured.Position, simEvent.Entity, PlayerId.System, $"MiscAudio.{CaptureTickHook} (SpecialAbilityUpdate::continuePreparation)");
+                }
                 break;
         }
     }

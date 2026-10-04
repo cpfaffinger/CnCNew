@@ -11,12 +11,12 @@ namespace CnCNew.Client.Stride.Audio;
 /// mixer already produces finished interleaved stereo float, so this class carries no per-voice or spatialization state:
 /// it is one continuous stream, refilled from a single block of the mixer every time Stride's own streaming worker
 /// thread (<see cref="DynamicSoundSource"/>'s static background task) asks for data. An own low-latency thread polls
-/// <see cref="AudioEngine.Update"/>, since the main render loop that would otherwise host that call belongs to files
-/// this package does not own (see <c>docs/GAME-AUDIO.md</c>).
+/// <see cref="AudioEngine.Update"/> of this class's own engine (see <c>docs/GAME-AUDIO.md</c>).
 /// <para>
 /// When no audio device is available — missing native library, no hardware, or any other failure at the device
-/// boundary — <see cref="Start"/> catches it once, counts it in <see cref="DeviceFailures"/>, and every other member
-/// becomes a no-op: the client keeps running silently instead of crashing.
+/// boundary — <see cref="Start"/> catches it once, counts it in <see cref="DeviceFailures"/>, keeps the reason in
+/// <see cref="FailureReason"/> and every other member becomes a no-op: the client keeps running silently instead of
+/// crashing (<see cref="ClientAudio"/> prints the one warning and renders the mixer without a device from then on).
 /// </para>
 /// </summary>
 internal sealed class AudioOutput : IDisposable
@@ -46,6 +46,9 @@ internal sealed class AudioOutput : IDisposable
     /// <summary>Failed device opens (missing native library, no hardware, ...); 0 means the device came up on the first try.</summary>
     public long DeviceFailures => Interlocked.Read(ref _deviceFailures);
 
+    /// <summary>Why the device did not open, or <see langword="null"/>.</summary>
+    public string? FailureReason { get; private set; }
+
     /// <summary>
     /// Detected gaps in the refill cadence (see <see cref="MixerSoundSource.Underruns"/>): the streaming thread could
     /// not keep the native ring buffer fed, so the device likely played a stale or silent buffer. 0 before <see cref="Start"/>
@@ -72,15 +75,23 @@ internal sealed class AudioOutput : IDisposable
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            AudioEngine.Logger.Warning($"No audio device available; the game will run silently ({exception.Message}).");
+            // Nothing of Stride.Audio is touched here beyond releasing what was built: when the native library is missing, the type itself failed to load.
+            FailureReason = $"{exception.GetType().Name}: {exception.Message}";
             Interlocked.Increment(ref _deviceFailures);
             _instance = null;
             _source = null;
-            _listener?.Dispose();
-            _listener = null;
-            _engine?.Dispose();
-            _engine = null;
             _running = false;
+            try
+            {
+                _listener?.Dispose();
+                _engine?.Dispose();
+            }
+            catch (Exception cleanup) when (cleanup is not OutOfMemoryException)
+            {
+                FailureReason += $" (cleanup: {cleanup.Message})";
+            }
+            _listener = null;
+            _engine = null;
         }
     }
 
