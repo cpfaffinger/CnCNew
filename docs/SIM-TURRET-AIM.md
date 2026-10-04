@@ -187,16 +187,21 @@ der Sentry-Drohne; das gezeichnete Bild kann dem Simulationsstand um einen Tick 
 * **Der Angriff lebt nur in den Türmen.** Eine Einheit ohne Turm hat keinen Angriffszustand; wer ihn braucht, müsste ihn auf die Einheit heben. Die Verfolgung selbst (Fahren zum Opfer, Anhalten in
   Reichweite, Neuberechnen) macht weiter die Darstellung (`StandingOrders`) bzw. die Befehlsgeber; die Simulation kennt nur „Verfolgung läuft“ (`PursueCommand`).
 * **Annäherungen am Angriffsende:** Aufgeben nach 45 Ticks außerhalb jeder Reichweite statt der Zustandsregeln der Referenz (`isAllowedToChase`, Stealth, Garnison, Zeit in `AIAttackApproachTargetState`);
-  die Bewegungsbefehle, die die Referenz als „neuer AI-Befehl“ kennt, sind die der `AIUpdateInterface`-Methoden (`OrderMove`, `OrderIdle`, `OrderDock`, Bauen); `OrderEvacuate` ohne Bewegung beendet
-  den Angriff nicht. Einen Spezialkraft-/Fähigkeitsbefehl behandelt die Simulation nicht als Ende.
-* **Kein Selbstzielen im Leerlauf:** `friend_checkForIdleMoodTarget` (ein ruhender Turm wählt von sich aus ein Opfer in Reichweite) und `AutoAcquireEnemiesWhenIdle` sind nicht nachgebildet.
+  die Bewegungsbefehle, die die Referenz als „neuer AI-Befehl“ kennt, sind die der `AIUpdateInterface`-Methoden (`OrderMove`, `OrderIdle`, `OrderDock`, Bauen). `OrderEvacuate` ohne Bewegung beendet
+  den Angriff nicht – wie in der Referenz: `AIUpdateInterface::privateEvacuate` ruft nur `orderAllPassengersToExit` und wechselt den AI-Zustand nicht (mit Ziel, `aiMoveToAndEvacuate`, läuft es über
+  `OrderMove` und beendet ihn). Eine Einheitenfähigkeit beendet Angriff und Bewegung: `SpecialAbilityUpdate::initiateIntentToDoSpecialPower` ruft `aiIdle` („Clear any old AI before starting this special
+  ability“), umgesetzt beim `UseSpecialPowerCommand` für jedes Objekt mit einem `SpecialAbilityUpdate` der Kraft (die gestufte Übernahme tat es schon selbst; Test `TurretAttackEndsWhenTheUnitStartsAnAbility`).
+  Spezialkräfte ohne `SpecialAbilityUpdate` (Gebäudekräfte, OCL-Kräfte) berühren den AI-Zustand auch in der Referenz nicht.
+* **Kein Selbstzielen im Leerlauf (bewusst zurückgestellt):** `friend_checkForIdleMoodTarget` (ein ruhender Turm wählt von sich aus ein Opfer in Reichweite) und `AutoAcquireEnemiesWhenIdle` sind nicht nachgebildet.
+  Grund: die Zielwahl liegt in dieser Simulation bei den Befehlsgebern (`SkirmishAi.Fire`, `MissionSession`, `StandingOrders` für die Einheiten des Menschen); ein zweiter Zielerwerb in der Simulation würde mit ihnen
+  doppelt schießen lassen, bis sie umgebaut sind, und verschiebt jeden Referenzwert. Er gehört zusammen mit Angriffsmarsch und Stimmung (`AttitudeType`) in ein eigenes, vermessenes Paket (Phase 17, Abschnitt 8a).
 * **Eigener Zufallsstrom für das Abtasten:** gleiche Verteilung wie die Referenz, andere Werte (3.5). Die Abtastung wartet nicht auf Aktivierung durch Energie, EMP oder Deaktivierung
   (`m_enabled` der Referenz entspricht nur `Gates`).
 * **Körper zielt nicht:** Waffen ohne Turm feuern weiter ohne Drehung des Körpers (`AcceptableAimDelta` bleibt `deferred-field`); fahrende Einheiten drehen den Körper nur durch ihre Bewegung.
 * `DeployStyleAIUpdate`: `ALIGNING_TURRETS` (Turm vor dem Einpacken mittig) wird nicht betreten; `TurretsFunctionOnlyWhenDeployed` ist weiter nur durch das Feuer-Gate (Waffen) umgesetzt.
 * Bei `TurretsLinked` (3 der 4 Schlachtschiffe) feuert jede Waffe erst, wenn beide Türme zeigen; die Referenz lässt den jeweils ausgerichteten Turm feuern.
 * Das Feuern geschieht im Tick nach dem Ausrichten (der Befehl prüft den Zustand am Ende des Vortags gegen die aktuelle Zielrichtung); die Referenz feuert einen Update später im Turm-Automaten.
-* Die Sichtbarkeitsregel (Opfer unsichtbar beendet das Zielen) ist mit `STEALTHED` getestet; die Nebel-Zellen laufen über dieselbe `CanPlayerSee`-Funktion, haben aber keinen eigenen Test.
+* Die Sichtbarkeitsregel (Opfer unsichtbar beendet das Zielen) ist mit `STEALTHED` und mit Nebel getestet (`TurretAttackEndsWhenTheVictimFallsIntoTheFog`: das Opfer bleibt in Reichweite und ungetarnt, das einzige Objekt, das es sah, verschwindet).
 * Sicht- und Darstellungsänderungen brauchen weiter eine Sichtprüfung durch einen Menschen (Rauchtests beweisen Reproduzierbarkeit, nicht Richtigkeit).
 
 ## 7. Tests und Audits
@@ -231,9 +236,66 @@ der Sentry-Drohne; das gezeichnete Bild kann dem Simulationsstand um einen Tick 
 Alle `ai-match`-Läufe: zwei unabhängige Läufe und die Fortsetzung ab einem Snapshot in der Mitte sind tickgenau identisch. Die Hashes ändern sich aus zwei Gründen: Türme folgen ihrem Opfer jetzt ununterbrochen
 (auch zwischen den Schüssen und beim Anmarsch, dadurch andere Treffzeitpunkte), und alle abtastenden Türme (Patriot, Gattling-Kanone, Feuerbasis, Sentry-Drohne …) drehen sich im Leerlauf, was den Zustandshash jedes Ticks
 ändert, auch wenn kein Kampf stattfindet; der Stresstest hat keine Türme und bleibt gleich. Beim Referenzspiel kommt hinzu, dass das Szenario seine Annäherung jetzt als `PursueCommand` sendet. Der Ausgang des
-KI-Spiels China/GLA kippt von „Sieg in Tick 43.965“ zu „Patt“; die Ursache wurde nicht untersucht (das Spiel war schon vorher knapp vor dem Tick-Limit; GLA hält mit Tunnelnetzen und Waffenhändler aus). Es wurde nichts
+KI-Spiels China/GLA kippt von „Sieg in Tick 43.965“ zu „Patt“; die Ursache ist in Abschnitt 8a aufgeschlüsselt (die Regel „ein neuer Befehl beendet das Zielen“; das Spiel war schon vorher knapp vor dem Tick-Limit). Es wurde nichts
 aus anderem Anlass verändert.
 
+## 8a. Aufschlüsselung der KI-Verschiebung (4. Oktober 2026, gemessen)
+
+Offen war, warum `ai-match` China/GLA auf Alpine Assault seit dem Angriffszustand im Patt endet (vorher China bei Tick 43.965). Die Effekte wurden einzeln aus- und eingeschaltet: ein Wegwerf-Worktree
+auf dem Stand `2b854d3` bekam je Variante einen Ein-Zeilen-Patch, das Werkzeug wurde je Variante in ein eigenes Verzeichnis gebaut, dann liefen alle 16 Paarungen aus `SIMULATION-CORE.md` §19
+(`--max-ticks 45000`, Standardseeds). Jeder der 128 Läufe (acht Stände) ist mit Lauf 2 und der Snapshot-Fortsetzung identisch.
+
+| Variante | Stand | Patch |
+|---|---|---|
+| G | `8b8c8a7` (erste Turmfassung) | – |
+| I | `2b854d3` | Idle-Scan aus, Angriffszustand aus, `EndAttack` ohne Wirkung |
+| D | `2b854d3` | Idle-Scan aus, Angriffszustand aus |
+| B | `2b854d3` | Idle-Scan aus (`TurretInfo.CanScan` = falsch) |
+| C | `2b854d3` | Angriffszustand aus (`FireWeaponCommand` zielt wie ein Einzelschuss, `TurretAimOrder.Shot`) |
+| J | `2b854d3` | `EndAttack` ohne Wirkung (ein neuer Befehl beendet das Zielen nicht) |
+| A | `2b854d3` | – (auch `d713531` gemessen: in allen 16 Läufen hashgleich) |
+
+Ergebnis je Lauf (Sieger und Tick oder Patt, dahinter die ersten acht Stellen des Endhashes):
+
+| Karte | Paarung | G | I | D | B | C | J | A |
+|---|---|---|---|---|---|---|---|---|
+| Alpine Assault | China, GLA | China 43.965 `AE34F942` | China 43.965 `AE34F942` | Patt `553A2186` | Patt `553A2186` | Patt `BE5A7A4A` | China 44.100 `A8EC7BF4` | Patt `BE5A7A4A` |
+| Alpine Assault | America, China | Patt `63EEA99F` | Patt `63EEA99F` | Patt `63EEA99F` | Patt `2616F0B2` | Patt `131253B5` | Patt `B748B8DD` | Patt `B748B8DD` |
+| Alpine Assault | GLA, America | America 12.120 `5BADFE2A` | America 12.120 `5BADFE2A` | America 12.120 `5BADFE2A` | America 12.120 `5BADFE2A` | America 12.120 `83FA72B7` | America 12.120 `83FA72B7` | America 12.120 `83FA72B7` |
+| Alpine Assault | ChinaTank, AirForce | Patt `36BD9041` | Patt `36BD9041` | Patt `36BD9041` | Patt `F6C1297B` | Patt `61CB3CC2` | Patt `710439C5` | Patt `710439C5` |
+| Armored Fury | China, GLA | Patt `1DA176CF` | Patt `1DA176CF` | Patt `1DA176CF` | Patt `F8B0885E` | Patt `7B9BC049` | Patt `6F0CA3F1` | Patt `6F0CA3F1` |
+| Armored Fury | America, China | America 41.130 `12495B5C` | America 41.130 `12495B5C` | America 44.325 `871BA9DA` | America 35.175 `C8675A5A` | America 40.875 `D8620C00` | Patt `4035F8F0` | America 36.375 `D3A4AAD6` |
+| Armored Fury | GLA, America | America 22.410 `B5CD779E` | America 22.410 `B5CD779E` | America 22.410 `B5CD779E` | America 22.410 `B5CD779E` | America 22.410 `29601DCA` | America 22.410 `29601DCA` | America 22.410 `29601DCA` |
+| Armored Fury | ChinaTank, AirForce | AirForce 9.405 `2261402C` | AirForce 9.405 `2261402C` | AirForce 9.405 `2261402C` | AirForce 9.405 `2261402C` | AirForce 9.405 `DF5D46B1` | AirForce 9.405 `DF5D46B1` | AirForce 9.405 `DF5D46B1` |
+| Bitter Winter | China, GLA | Patt `C9F239FC` | Patt `C9F239FC` | Patt `C9F239FC` | Patt `C9F239FC` | Patt `94F023A5` | Patt `2C65DC45` | Patt `2C65DC45` |
+| Bitter Winter | America, China | Patt `D660891B` | Patt `D660891B` | Patt `D660891B` | Patt `A64316B6` | Patt `C9D7E892` | Patt `781E31A8` | Patt `781E31A8` |
+| Bitter Winter | GLA, America | America 14.565 `752A8CA8` | America 14.565 `752A8CA8` | America 14.565 `752A8CA8` | America 14.565 `752A8CA8` | America 14.565 `3922E188` | America 14.565 `3922E188` | America 14.565 `3922E188` |
+| Bitter Winter | ChinaTank, AirForce | Patt `4F07AF52` | Patt `4F07AF52` | Patt `4F07AF52` | Patt `E61AB63B` | Patt `92F1F0A9` | Patt `75A58BD4` | Patt `75A58BD4` |
+| Death Valley | China, GLA | China 8.805 `DFB8BB3F` | China 8.805 `DFB8BB3F` | China 8.805 `DFB8BB3F` | China 8.805 `DFB8BB3F` | China 8.805 `4F687B3B` | China 8.805 `4F687B3B` | China 8.805 `4F687B3B` |
+| Death Valley | America, China | Patt `B27C7202` | Patt `B27C7202` | Patt `B27C7202` | Patt `B27C7202` | Patt `82DEB8C7` | China 35.985 `4A4BF443` | China 35.985 `4A4BF443` |
+| Death Valley | GLA, America | Patt `2C7EE0E2` | Patt `2C7EE0E2` | Patt `2C7EE0E2` | Patt `C0947735` | Patt `8252C18F` | Patt `41808E02` | Patt `41808E02` |
+| Death Valley | ChinaTank, AirForce | Patt `2BF5DE1C` | Patt `2BF5DE1C` | Patt `2BF5DE1C` | Patt `2BF5DE1C` | Patt `A619B93E` | Patt `5532EEC9` | Patt `5532EEC9` |
+
+Befunde:
+
+* **Die Zerlegung ist vollständig.** Variante I ist in allen 16 Läufen hashgleich mit der ersten Turmfassung G. Zwischen den beiden Ständen gibt es also genau drei wirksame Änderungen für KI-Spiele:
+  den Idle-Scan, den dauerhaften Angriffszustand und – bisher nicht als eigener Effekt benannt – **„ein neuer Befehl beendet das Zielen“** (`EndAttack` in `OrderMove`/`OrderIdle`/`OrderDock`/Bauauftrag;
+  es wirkt auch auf das einmalige Zielen, deshalb unterscheidet sich D von G).
+* **`PursueCommand` spielt in `ai-match` keine Rolle:** `SkirmishAi` sendet ihn nie (nur `StandingOrders` der Darstellung und das Referenzszenario). Im Referenzspiel dagegen ist er der Haupteffekt:
+  ohne ihn (`SetMoveTargetCommand` für die Annäherung) endet es bei Tick 15.225 statt 15.000, ohne alle drei Effekte bei Tick 13.875 wie die erste Turmfassung; der Idle-Scan ändert dort nichts
+  (Endhash und Kette gleich), der Angriffszustand der Feuerbefehle nur die Kette.
+* **China/GLA auf Alpine Assault kippt allein durch „Befehl beendet das Zielen“:** mit der Regel Patt (A, B, C, D), ohne sie China bei Tick 43.965 (G, I) bzw. 44.100 (J). In diesem Spiel hat der Angriffszustand
+  keinen Einfluss (A = C, B = D), der Idle-Scan ändert nur den Hash. Das Spiel war schon vorher 1.035 Ticks vom Limit entfernt; eine verlorene Schussgelegenheit (der Turm einer Einheit, die einen neuen
+  Marschbefehl bekommt, hält seinen Winkel, statt dem letzten Ziel zu folgen) reicht für die Verschiebung.
+* **Kein systematischer Effekt:** G, I, J und A entscheiden 7 von 16 Läufen, B, C und D 6; einzelne knappe Spiele kippen in beide Richtungen (Death Valley America/China: Patt in G, China bei 35.985 in A;
+  Armored Fury America/China: America zwischen 35.175 und 44.325, Patt in J). 13 der 16 Paarungen haben in jeder Variante denselben Ausgang.
+* **Die Patts haben eine andere Ursache.** In jedem Patt stehen beide Seiten am Ende mit 0 bis wenigen hundert Credits und wenigen Objekten da (die Kartenvorräte sind erschöpft, 2–4 Angriffswellen in 45.000 Ticks):
+  ein Befund der Skirmish-KI (Wirtschaft, Angriffsschwelle), nicht der Türme. Er besteht seit Phase 15 (8 statt 10 entschiedene Läufe nach der Wegsuche um stehende Einheiten) und gehört zu Phase 17.
+
+**Entscheidung:** keine Verhaltenskorrektur an Haltezeit, Sichtregel oder Idle-Scan. „Ein neuer Befehl beendet das Zielen“ ist das Verhalten der Referenz (`AIAttackState::onExit` setzt die Turmziele auf `NULL`,
+sobald ein anderer AI-Zustand den Angriff ersetzt); es zurückzunehmen würde ein KI-Ergebnis reparieren, indem ein belegtes Verhalten gefälscht wird. Der Idle-Scan während eines Angriffs ist schon ausgeschlossen
+(ein Ziel unterbricht ihn). Was der Referenz gegenüber fehlt, ist der Zielerwerb durch die Einheit selbst (Angriffsmarsch, `friend_checkForIdleMoodTarget`): dort verliert eine marschierende Einheit ihr Ziel nicht
+dauerhaft, weil sie sich das nächste selbst sucht. Hier übernimmt das der Befehlsgeber im nächsten Denkschritt; siehe Abschnitt 6.
 ## 9. Nachziehen in anderen Dokumenten (nicht Teil dieser Änderung)
 
 `docs/SIMULATION-CORE.md` (Waffenwahl-Näherungen „Turm- und Neigungsbedingungen fehlen“, Abschnitt zur Waffenwahl), `docs/PRESENTATION-OBJECTS.md` (Zeile 47 `TURRET_ROTATE`, Abschnitt zu `TurretYaw`: „null, weil die Simulation
