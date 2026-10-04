@@ -143,9 +143,9 @@ Stand Phase 15 (neu gemessen mit `PresentationTool model-audit`, siehe unten); f
 Rückseiten und fehlenden Türmen sind durch die Phase-15-Korrekturen überholt.
 
 - **Nicht gesetzte Modellzustände:** nach den Zusatzarbeiten vom 4. Oktober 2026 setzt die Präsentation 95 von 106 Zustandsnamen (vorher 52; Einzelheiten und Näherungen in
-  `docs/MODEL-CONDITIONS-BUILDINGS.md`, `docs/MODEL-CONDITIONS-UNITS.md`). Elf bleiben ungesetzt, jeweils weil die Simulation das Verhalten nicht kennt: `PREATTACK_A/B/C` (keine
-  Vorangriffsverzögerung), `EXPLODED_BOUNCING/FLAILING` (nichts wird weggeschleudert), `JAMMED` (kein Störsender), `RAISING_FLAG` (die Fähigkeit „Gebäude einnehmen“ ist nicht gestuft),
-  `PANICKING`, `RAPPELLING` (kein Seilabstieg), `PREORDER` (Online-Profilmerkmal), `DOCKING_BEGINNING` (Ein- und Ausfahrt fallen in einen Tick). Türen von Fabriken sind eine
+  `docs/MODEL-CONDITIONS-BUILDINGS.md`, `docs/MODEL-CONDITIONS-UNITS.md`). Acht bleiben ungesetzt, jeweils weil die Simulation das Verhalten nicht kennt: `EXPLODED_BOUNCING/FLAILING` (nichts wird weggeschleudert), `JAMMED` (kein Störsender),
+  `PANICKING`, `RAPPELLING` (kein Seilabstieg), `PREORDER` (Online-Profilmerkmal), `DOCKING_BEGINNING` (Ein- und Ausfahrt fallen in einen Tick). `PREATTACK_A/B/C` setzt die Simulation seit dem 4. Oktober 2026
+  (`PreAttackDelay`, `docs/SIM-FIRING-TRACKER.md`), `RAISING_FLAG` seit der gestuften Übernahme. Türen von Fabriken sind eine
   Näherung (die Simulation hat keine Tür; die Öffnung beginnt `DoorOpeningTime` vor dem Erscheinen der Einheit).
 - **Federung und Lenkung** sind seit dem 4. Oktober 2026 gebaut (`SuspensionTracker`: Neigung zum Gelände und beim Beschleunigen, Lenkwinkel, vier Federwege, Kabinenschwung); es fehlen
   der Hubeffekt beim Überrollen, der Powerslide und die Wegbegrenzung der Kabine.

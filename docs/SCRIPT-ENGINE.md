@@ -526,3 +526,12 @@ Der Normalmodus bleibt bei Sieg und Niederlage 24/24 mit Welteingriffen (`Interv
 anderen 23 Karten „nicht erreicht“, darunter alle Challenge-Karten (7 + `GC_AirGeneral`), `Training01`, `MD_CHI01–05`, `MD_GLA01/02/03/05`, `MD_USA01–05`. Die neuen Module (Flugzeuge, Kisten, Strukturen, Waffenslots) haben den Abstand zur Spielbarkeit damit
 nicht verkleinert: die Ursachen (a)–(d) oben gelten unverändert; ob der Gegner, der jetzt tatsächlich fliegt und schießt (Raptor, Comanche, Schlachtschiffe), den Agenten früher trifft, wurde nicht untersucht. Die USA-Karten
 brauchen auch im Nur-Befehle-Modus über eine Stunde je Lauf (14.864 Befehle auf `MD_USA04`). Der Maßstab bleibt Gegenstand des nächsten Handoffs (`docs/HANDOFF-PHASE15.md`, Punkt 1).
+
+**Stand 4. Oktober 2026 abends (Release, je Karte einzeln, `drive --commands-only --outcome victory --ticks 15000`, je 2.400 s Zeitgrenze; `SkirmishAi` mit Versorgungszentrum am Lager, `docs/SIMULATION-CORE.md` §32):**
+unverändert **1 Karte** (`MD_GLA04`, @1022, 92 Befehle, 0 Weltschreibungen); 22 Karten „nicht erreicht“ mit 0 Weltschreibungen (`Training01`: 0 Befehle – der Agent findet dort nichts zu tun), `MD_USA01` nach 2.400 s
+abgebrochen (kein Ergebnis). Die Zeitgrenze von 15.000 Ticks ist **nicht** der Grund: vier Karten (`GC_ChemGeneral`, `GC_NukeGeneral`, `GC_TankGeneral`, `MD_CHI01`) liefen mit `--ticks 60000` (und der in Gruppen
+angreifenden KI) ebenfalls ohne Sieg, mit 1.945 bis 11.243 Befehlen. Die KI-Korrekturen, die 12 statt 5 von 16 Skirmish-Läufen entscheiden, verändern diese Zahl also nicht: der Agent baut und greift an, aber er
+erfüllt keine Missionsziele – das bleibt der Kern von Phase 17.
+
+Neu gemessen am selben Tag (Stand `096290b`, vor den KI-Korrekturen; der Fahrer und das Audit benutzen `SkirmishAi` nicht): `drive` (60.000 Ticks) **Sieg 24/24, Niederlage 24/24**; `audit --ticks 900` 24/24
+deterministisch, 24/24 identisch nach Speichern/Laden, 0 Treffer auf fehlende Typen, Ausschalt-Endproben **Sieg 13/24, Niederlage 15/24** (je Karte einzeln gelaufen, 24 Karten einschließlich `Training01`).
