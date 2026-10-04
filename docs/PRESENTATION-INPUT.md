@@ -17,7 +17,9 @@ Referenzquellen (gelesen, nicht kopiert; Pfade relativ zu `references/generals-g
 
 | Typ | Aufgabe |
 |---|---|
-| `GameInputController` | Pipeline: `Process(InputEvent, world, view)` pro Geräteereignis, `Tick(world)` einmal pro Logiktick **vor** `Step`, `UpdateCamera(view, dt)` pro Frame, `BuildCommandBar(world)`, Ereignis `UiRequest(MetaAction)` für Menü/Pause/Chat/Screenshot usw., `Hint` (Cursor und Aktion unter der Maus). |
+| `GameInputController` | Pipeline: `Process(InputEvent, world, view)` pro Geräteereignis, `Tick(world)` einmal pro Logiktick **vor** `Step`, `UpdateCamera(view, dt)` pro Frame, `BuildCommandBar(world)`, Ereignis `UiRequest(MetaAction)` für Menü/Pause/Chat/Screenshot usw., `Hint` (Cursor und Aktion unter der Maus), `RefreshHint(world, view)` (Kontext unter dem ruhenden Zeiger neu lesen), `Cursor(pointerOverWindow)`, `IsScrolling`/`ScrollOffset` (§11). |
+| `MouseCursorCatalog`, `CursorSet`, `CursorAnimator` | Cursortabelle aus `Mouse.ini`, dekodierte Cursordateien, Animationsuhr (§11). |
+| `OrderMarkers`, `OrderHintBook` | Wegpunktpfade der Auswahl und kurzlebige Befehlsmarken in Weltkoordinaten (§12). |
 | `InputState`, `InputEvent`-Records | Rohereignisse (Maus, Rad, Tasten mit `KeyCode`, Text, Fokusverlust) mit vom Aufrufer gelieferter Millisekundenuhr. |
 | `HotkeyMap` | `CommandMap.ini` aus Text (`Parse`) oder Definitionsgraph (`FromGraph`), `WithEngineDefaults`, `Rebind`, `Unbind`, `ToSettings`/`ApplySettings`, `Conflicts`, `Issues`, `Compatibility`. |
 | `SelectionModel` | Auswahl, Gruppen, `SelectionChanged`, `Prune`. |
@@ -179,7 +181,9 @@ die Prüfung „schneller Pfad vorhanden“ für den Bewegungscursor.
   Warteschlangensymbol → `CancelProduction`, Abbrechen einer Baustelle → `CancelConstruction`.
 * Zielmodus (`NEED_TARGET_*`): `ATTACK_MOVE`, `GUARD*`, `SET_RALLY_POINT`, Spezialkräfte mit Objekt- oder Positionsziel, `FIRE_WEAPON` mit
   Objektziel. Ein zu den Optionen passendes Objekt (Feind/Neutral/Verbündet, eigene zählen als verbündet) hat Vorrang vor der Position; der
-  Cursor ist `CursorName` bzw. `InvalidCursorName`, sonst `Target`/`GenericInvalid`. Rechtsklick/Escape/Auswahlwechsel brechen ab.
+  Cursor ist `CursorName` bzw. `InvalidCursorName`, sonst `Target`/`GenericInvalid` (wie `InGameUI::evaluateContextCommand`: liefert `getCursorIndex`
+  keinen Cursor, gilt `Mouse::CROSS`). Ein Name, der kein Engine-Cursor ist, steht in `CommandButtonCatalog.UnknownCursorNames`; in den Retaildaten ist das
+  genau `DaisyCutter` (§11). Rechtsklick/Escape/Auswahlwechsel brechen ab.
 * `SPECIAL_POWER_FROM_SHORTCUT`: Quelle ist das eigene Objekt mit dem bereitesten Modul (bereit zuerst, dann kleinste Id;
   `findMostReadyShortcutSpecialPowerOfType`), unabhängig von der Auswahl.
 * Nicht unterstützte Knopfarten (Hack, Entführen, Sabotage, Autobombe, Kampfabsprung, Waffenwechsel, Überladung, Leuchtfeuer, Schienentransport,
@@ -196,7 +200,9 @@ wiederholt die Einzelschritte in `Tick`, wie die Skirmish-KI; jeder wiederholte 
   Einheit steht; in Reichweite angekommen → Halt an Ort. Endet, wenn das Ziel stirbt oder unsichtbar wird.
 * **Angriffsbewegung**: bewegen und auf den nächsten sichtbaren Feind in Waffenreichweite feuern (gleich weit: kleinere Id); endet bei Ankunft.
 * **Wachen** (alle drei Guard-Arten gleich, ohne Verfolgung): zur Position, dort auf Feinde in Reichweite feuern.
-* **Wegpunkte**: nächster Punkt bei Ankunft.
+* **Wegpunkte** (`MSG_ADD_WAYPOINT`): der erste Alt-Klick ordnet die Bewegung sofort an und beginnt den Befehl (`Destination`), jeder weitere hängt eine
+  Station an (`Waypoints`); bei Ankunft (kein Bewegungsziel mehr) wird die nächste Station als `SetMoveTargetCommand` angeordnet, nach der letzten endet der
+  Befehl. Die Simulation kennt keinen Wegpunktpfad; die Warteschlange ist reine Eingabeschicht, jeder Schritt steht im Replay. Anzeige: §12.
 * **Stop** (`groupIdle`): stehende Befehle löschen und `SetMoveTargetCommand` auf die eigene Position.
 * **Streuen** (`AIGroup::groupScatter`): Schwerpunkt der beweglichen Einheiten, fernste zuerst, der Schwerpunkt wandert pro Einheit 0,01 m
   nach Westen; Ziel = Position + Richtung × 4 × Begrenzungsradius.
@@ -205,6 +211,7 @@ wiederholt die Einzelschritte in `Tick`, wie die Skirmish-KI; jeder wiederholte 
 
 `CommandFeedback` (für kurzlebige Anzeigen): `MoveMarker` (40 Client-Frames, `W3DInGameUI::drawMoveHints`), `WaypointMarker`, `RallyMarker`,
 `AttackMarker` (am Ziel), `EnterMarker`, `InvalidOrder`, `Unsupported` (mit Bezeichnung) und `Rejected` (mit `CommandRejection` der Simulation).
+Die fünf Marken werden über `OrderHintBook` zu sichtbaren Befehlsmarken (§12); die drei Ablehnungen bleiben Text und Ton.
 
 ## 7. Platzierung
 
@@ -212,7 +219,7 @@ wiederholt die Einzelschritte in `Tick`, wie die Skirmish-KI; jeder wiederholte 
 Linksdruck verankert (außerhalb des Geländes: Abbruch), Ziehen um mindestens 5 px (`PLACEMENT_DRAG_THRESHOLD_DIST`) dreht auf die
 Richtung Anker → Cursor (`InGameUI.cpp`), Loslassen platziert: gültig → `ConstructCommand(builder, template, x, y, angle)`, ungültig →
 `InvalidOrder` mit Grund, Anker gelöst, Modus bleibt (`PlaceEventTranslator.cpp`). Cursor `Build`/`InvalidBuild` (Engine-Cursor ohne
-`MouseCursor`-Block).
+`MouseCursor`-Block: beim Platzieren ist wie im Original kein Cursor zu sehen, §11).
 
 `SimulationQueries.CheckPlacement` ist ein Trockenlauf von `SimulationWorld.CheckConstruct` in gleicher Reihenfolge: Bauer verfügbar →
 Template bekannt → instanziierbar → baubar (`STRUCTURE`, `Buildable`, Seite) → Voraussetzungen (`Ignore_Prerequisites`) → Geld →
@@ -289,3 +296,113 @@ Doppelklick/`E` per Template-Name; `DOUBLEDOWN` nie ausgelöst; `GUARD_FLYING_UN
 `SELECT_NEXT_IDLE_WORKER`, Kamera-Lesezeichen (`SAVE/VIEW_VIEW`) und `VIEW_LAST_RADAR_EVENT` werden als `UiRequest` weitergereicht.
 
 Keine neue NuGet-Abhängigkeit.
+
+## 11. Mauszeiger (Phase 16)
+
+Referenzquellen (gelesen, nicht kopiert; `references/ea-generals-zero-hour/GeneralsMD/Code`): `GameEngine/Source/GameClient/Input/Mouse.cpp`
+(`TheMouseCursorFieldParseTable`, `CursorInfo::CursorInfo`, `CursorININames`, `Mouse::parseIni`), `GameEngineDevice/Source/Win32Device/GameClient/Win32Mouse.cpp`
+(`initCursorResources`, `setCursor`), `GameEngineDevice/Source/W3DDevice/GameClient/W3DMouse.cpp` (`setCursor`, `setCursorDirection`),
+`GameEngine/Source/GameClient/InGameUI.cpp` (`setMouseCursor`, `setScrolling`, der Cursor-Schalter am Ende von `evaluateContextCommand`s Hinweisbehandlung),
+`GameEngine/Source/GameClient/MessageStream/LookAtXlat.cpp` (`setScrolling`/`stopScrolling`, `MSG_FRAME_TICK`).
+
+### Daten und Dekodierung
+
+* **`Mouse.ini`:** `MouseCursor`-Blöcke sind für den Compiler unbekannte Top-Level-Typen und liegen als `CompatibilityDefinition` mit Id `mousecursor/NAME` vor
+  (Basislinie unverändert). `MouseCursorCatalog.FromGraph` liest sie wie `Mouse::parseIni`: `Texture` (Dateiname), `Image`, `Directions`, `Frames`, `FPS`, `HotSpot`
+  (`X:.. Y:..`); die Felder der im Retailspiel ungenutzten 3D-/Textmodi (`W3DModel`, `W3DAnim`, `W3DScale`, `Loop`, `CursorText`, `CursorTextColor`,
+  `CursorTextDropColor`) werden erkannt und nicht ausgewertet. **Nie still:** ein Blockname außerhalb von `CursorININames`, ein unbekanntes Feld, ein unlesbarer Wert
+  oder ein Block ohne `Texture` ist ein `MouseCursorIssue`, und der Block wird nicht benutzt. `WithoutDefinition` nennt die Engine-Cursor ohne Block.
+* **Dateien:** `Data/Cursors/<Texture>.ani`, bei `Directions > 1` `Data/Cursors/<Texture><Richtung>.ani` (`Win32Mouse::initCursorResources`). Der Laufzeitcode öffnet sie
+  über `CnCNew.Content` (`GameData.LoadCursors()`); `CursorSet.Load` selbst nimmt nur zwei Delegaten (existiert, öffne), die Präsentationsschicht bleibt ohne Dateizugriff.
+* **Dekoder:** `CnCNew.Images/CursorReader.cs` (bei `TgaReader`, weil er wie dieser Pixel liefert; `CnCNew.Formats` prüft beim Import weiter nur die RIFF-Struktur).
+  `ReadAni` liest `RIFF ACON`: Kopf `anih` (Frames, Schritte, Standardrate in Jiffies = 1/60 s, Flags), optionale Tabellen `rate` und `seq `, `LIST fram` mit je einem
+  `icon`-Chunk pro Frame; `ReadCur` liest das Bildverzeichnis einer `.cur`/`.ico`-Datei und die Bitmaps (1, 4, 8, 24 oder 32 Bit, Farb- und Maskenzeilen von unten nach
+  oben, auf vier Byte aufgefüllt, Hotspot aus dem Verzeichniseintrag). Ergebnis: `AniCursor` (Frames als RGBA mit Hotspot, Schrittfolge mit Dauer, `FrameIndexAt(ms)`).
+  Geschrieben nach den öffentlichen Formatbeschreibungen, nicht aus fremdem Code. Alles Unverstandene ist eine `InvalidDataException`: unbekannter Chunk, Rohbitmap-Frames
+  (`AF_ICON` fehlt), komprimierte oder PNG-Bitmaps, falsche Tabellenlängen, Schritt auf einen nicht vorhandenen Frame, Hotspot außerhalb des Bildes, abgeschnittene Datei.
+  Zwei erklärte Sonderfälle: die Retailcursor schreiben die volle Dateilänge in das RIFF-Größenfeld (wie `LegacyAssetReaders.ReadRiff`); eine Rate von 0 gilt als ein Jiffy.
+  „Bildschirm invertieren“-Pixel (Maske gesetzt, Farbe nicht schwarz) kann ein überblendeter Cursor nicht darstellen: sie werden deckend in ihrer Farbe dekodiert und gezählt
+  (`CursorImage.InvertedPixels`).
+* **Hotspot und Tempo** kommen aus der Cursordatei, wie im Windows-Cursormodus des Originals (`LoadCursorFromFile`); `HotSpot`/`Frames`/`FPS` aus `Mouse.ini` gehören zu den
+  Texturmodi (`RM_DX8`, `RM_POLYGON`) und stehen in den Retaildaten nicht.
+* **Geladener Bestand:** `CursorSet` hält je Cursorart die Datei(en), teilt mehrfach benutzte Dateien und führt `MissingFiles`, `UndecodableFiles` (mit Grund), `Unusable`
+  (Arten ohne Bild). `Resolve(state, ms, out frame)` liefert `false`, wenn eine Art keinen Block hat oder ihre Datei fehlt – **kein anderer Cursor springt ein**.
+  `CursorAnimator` führt die Uhr: ein Cursorwechsel (auch ein Richtungswechsel) beginnt die Animation neu, und ein definierter Cursor ohne Bild wird je Art gezählt.
+
+### Welcher Cursor (`GameInputController.Cursor`)
+
+Reihenfolge (die erste passende Zeile gilt):
+
+| Lage | Cursor | Original |
+|---|---|---|
+| Die Sicht scrollt (Pfeiltasten, Bildrand, Rechtsziehen; `IsScrolling` aus dem letzten `UpdateCamera`) | `Scroll` in der Richtung des Scrolls | `InGameUI::setScrolling` setzt `Mouse::SCROLL`, `W3DMouse::setCursorDirection` wählt die Richtung |
+| Zeiger über einem Fenster (Befehlsleiste, Minimap, Menü) oder noch kein Mausereignis | `Arrow` | `underWindow` → `Mouse::ARROW` |
+| Platzierungsmodus | `Build` / `InvalidBuild` | `MOUSEMODE_BUILD_PLACE` |
+| Zielmodus eines Knopfes | `CursorName` bzw. `InvalidCursorName`, sonst `Target` / `GenericInvalid`; Angriffsbewegung `AttackMove`, Wachen `Target` | `MOUSEMODE_GUI_COMMAND` |
+| sonst | der Cursor des Kontexts unter dem Zeiger (Tabelle §6) | `MOUSEMODE_DEFAULT` |
+
+**Richtung des Scrollcursors** (`CursorSet.DirectionIndex`, nach `setCursorDirection`): Winkel des Scrollversatzes im Bildschirmraum (y nach unten), gerundet auf
+`Directions` Schritte; Frame 0 zeigt nach rechts, die Frames laufen im Uhrzeigersinn (0 rechts, 2 unten, 4 links, 6 oben). An den Bildern geprüft: `SCCScroll0` zeigt nach
+rechts, `SCCScroll2` nach unten. Ohne Versatz (Rechtsdruck ohne Bewegung) gilt Frame 0.
+
+**Modifikatortasten wirken sofort:** `Process` wertet nach *jedem* Ereignis – auch einem Tastenereignis – den Kontext unter dem Zeiger neu aus; Strg (`BEGIN_FORCEATTACK`),
+Alt (`BEGIN_WAYPOINTS`) und Umschalt (`BEGIN_PREFER_SELECTION`) ändern den Cursor also ohne Mausbewegung, ihr Loslassen und ein Fokusverlust stellen ihn zurück.
+Reihenfolge wie `evaluateContextCommand`: Umschalt über eigenem Objekt → `Select`; Alt über Boden mit beweglicher Auswahl → `Waypoint` (übersteuert jedes Ziel unter dem
+Zeiger, auch einen Feind); Strg → `ForceAttackObj` über einem Objekt, `ForceAttackGround` über Boden. Zusätzlich liest `RefreshHint` den Kontext je Frame neu, weil sich die
+Welt unter einem ruhenden Zeiger bewegt (das HUD ruft es auf, `docs/GAME-HUD.md` §16).
+
+### Kontext → Block → Datei (Retaildaten, gemessen 4. Oktober 2026)
+
+| Kontext (`ContextAction` / Modus) | `CursorKind` (Block in `Mouse.ini`) | Datei | Frames |
+|---|---|---|---|
+| nichts ausgewählt, Shell, über Fenstern | `Normal` / `Arrow` | `SCCPointer.ani` | 1 |
+| eigenes oder sonstiges Objekt, Umschalt | `Select` | `SCCSelect.ani` | 8 |
+| Bewegen | `Move` | `SCCMove.ani` | 7 |
+| Wegpunkt (Alt) | `Waypoint` | `SCCWaypoint.ani` | 2 |
+| Angriffsbewegung (Modus) | `AttackMove` | `SCCAttMov.ani` | 7 |
+| Angriff in Reichweite, außer Reichweite, Zwangsangriff (Strg) auf Objekt und Boden, Zielmodus ohne Cursornamen | `AttackObj`, `OutRange`, `ForceAttackObj`, `ForceAttackGround`, `Target` | `SCCAttack.ani` (der Block `OutRange` nennt `SCCAttack`; `SCCOutRange` ist dort auskommentiert) | 8 |
+| nicht erlaubt | `GenericInvalid` | `SCCNoAction.ani` | 1 |
+| Betreten, Andocken, Reparatur holen | `EnterFriendly`, `Dock`, `GetRepaired` | `SCCEnter.ani` | 3 |
+| Reparieren (Bauer) | `DoRepair` | `SCCRepair.ani` | 7 |
+| Bau fortsetzen | `ResumeConstruction` | `SCCResumeC.ani` | 23 |
+| Sammelpunkt setzen | `SetRallyPoint` | `SCCRallyPnt.ani` | 5 |
+| Gebäude einnehmen (nur über Knopf) | `CaptureBuilding` | `SCCHostile2.ani` | 11 |
+| Scrollen | `Scroll` (`Directions = 8`) | `SCCScroll0.ani` … `SCCScroll7.ani` | je 1 |
+| Platzieren | `Build`, `InvalidBuild` | **kein Block**: kein Cursor (`Win32Mouse::setCursor` setzt dann eine nie geladene Ressource, also keinen Cursor; aus dem Quelltext gelesen, nicht am laufenden Original beobachtet) | – |
+
+Gesamtbestand: 37 Blöcke, 0 Probleme; 34 Dateien geladen (von 52 unter `Data/Cursors`; die übrigen, etwa die `*_S`-Varianten, nennt kein Block), 235 Frames, 0 invertierende
+Pixel, keine fehlende oder undekodierbare Datei; ohne Block nur `Build` und `InvalidBuild`. Die Eingabeschicht kann von sich aus 19 Arten zeigen, die Befehlsknöpfe nennen 20
+Cursornamen (19 davon Engine-Cursor) – zusammen 33 Arten, alle mit Bild. Der eine Name ohne Engine-Cursor ist `DaisyCutter` (`Command_CrateDrop`,
+`Command_CrateDropFromShortcut`): das Original zeigt dafür das Kreuz (`Mouse::CROSS`), die Eingabeschicht `Target` – gezählt in `CommandButtonCatalog.UnknownCursorNames`.
+
+### Tests
+
+* `tests/CnCNew.Images.Tests` (`CursorReaderTests`, synthetische Dateien aus `CursorFixtures`, kein Auszug einer Originaldatei): 24-Bit- und 4-Bit-Cursor, Maske,
+  invertierende Pixel, ANI mit und ohne `seq `/`rate`, Frame nach Zeit, der Größenfeld-Sonderfall und zehn abgelehnte Dateien.
+* `tests/CnCNew.Presentation.Tests` (`CursorTests`): Blöcke und Probleme der Tabelle; geteilte, fehlende und undekodierbare Dateien; Richtungstabelle; Animation mit
+  Neustart; Cursor je Kontext, Modus und Modifikatortaste **ohne Mausbewegung**, über Fenstern, beim Scrollen an Rand, Ecke, per Taste und Rechtsziehen – und dabei kein
+  einziger Befehl; mit `--content-dir` der Realdatentest (Zahlen oben; jede zeigbare Art hat einen Block, jede Richtung ihre Datei, ein Bild mit Hotspot im Bild und keinen
+  völlig durchsichtigen Frame).
+
+## 12. Wegpunkt- und Befehlsmarken (Phase 16)
+
+Referenzquellen: `GameEngineDevice/Source/W3DDevice/GameClient/W3dWaypointBuffer.cpp` (`drawWaypoints`, `setDefaultLineStyle`),
+`GameEngineDevice/Source/W3DDevice/GameClient/W3DInGameUI.cpp` (`drawMoveHints`, `drawAttackHints`), `GameEngine/Source/GameClient/InGameUI.cpp` (`createMoveHint`,
+`MAX_MOVE_HINTS`), `GameEngine/Source/GameClient/MessageStream/CommandXlat.cpp` (Wegpunktmodus in `evaluateContextCommand`, `issueMoveToLocationCommand`).
+
+* **`OrderMarkers.WaypointPaths(world, selection, orders, waypointMode)`** liefert je ausgewählter eigener Einheit mit Wegpunktbefehl einen `WaypointPath`: Startpunkt
+  (wo die Einheit steht) und die noch vor ihr liegenden Stationen (`Destination`, dann `Waypoints`). Wie `drawWaypoints` nur im Wegpunktmodus (Alt gehalten) und nur für die
+  Auswahl. Drei Wegpunkte ergeben drei Stationen – drei Marken, das Segment ab der Einheit und zwei zwischen den Stationen. Eine erreichte Station fällt heraus (der stehende
+  Befehl rückt vor), ein anderer Befehl oder der Tod der Einheit entfernt den Pfad, nach der letzten Station endet er.
+* **`OrderHintBook`** macht aus `CommandFeedback` kurzlebige Marken (`OrderHint`: Art, Weltposition, Zielobjekt, Geburtszeit, Lebensdauer): `MoveMarker`, `WaypointMarker`,
+  `RallyMarker`, `AttackMarker`, `EnterMarker`. Lebensdauer = `DurationFrames` Client-Frames bei 30 pro Sekunde, also 40 Frames = 1333 ms (`drawMoveHints`: `elapsed <= 40`);
+  höchstens 256 Marken, die älteste weicht (`MAX_MOVE_HINTS`, Ringpuffer). `InvalidOrder`, `Unsupported` und `Rejected` sind keine Marken (`Observe` liefert `false`).
+  Eine Marke je Befehl, nicht je Einheit (ein Gruppenbefehl ist eine Nachricht, `createMoveHint`).
+* **Strg und Alt gegen das Original geprüft:** Alt zeigt den Wegpunktcursor und – solange gehalten – die Pfade der Auswahl; jeder Klick im Wegpunktmodus ist ein
+  Wegpunkt, auch auf ein Objekt (`evaluateContextCommand`: „Override any other commands with waypoint commands“). Strg ändert nur Cursor und Befehl (Zwangsangriff), das
+  Original zeichnet dafür nichts. **Abweichungen:** die Stations- und Befehlsmarken sind 2D-Zeichnungen im Overlay statt der 3D-Modelle (`docs/GAME-HUD.md` §16); die
+  Angriffsmarke ist eine Ergänzung (`drawAttackHints` ist leer); die Linien stehender Angriffs-/Wachbefehle der Auswahl bleiben als Hilfe (das Original zeichnet keine);
+  das Original lässt im Wegpunktmodus die Bewegungsstimme aus, wenn die Einheit schon fährt (`CommandXlat.cpp`, `isEffectivelyMoving`) – hier nicht nachgebildet.
+* **Tests** (`CursorTests`): drei Alt-Klicks → ein Befehl an die Simulation, Pfad mit Start und drei Stationen, drei Markenrückmeldungen; nicht ausgewählt oder Alt los →
+  kein Pfad; Ankunft an Station 1 → zwei Stationen, Start an der Einheit; ein weiterer Alt-Klick hängt an, ein einfacher Befehl entfernt den Pfad, nach der letzten Station
+  ist er weg; keine abgelehnten Kommandos. Marken: Lebensdauer 1333 ms, Alter 0,5 zur Halbzeit, Ablauf je Marke, Sammelpunktmarke, Ablehnungen sind keine Marken, Ring von 256.

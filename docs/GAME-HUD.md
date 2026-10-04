@@ -167,7 +167,9 @@ Skripte gegen diese Schicht).
 | `SelectionBox` | `InputState.IsDragging(Left)`/`PressPosition(Left)` – reines Ablesen des laufenden Ziehvorgangs, keine eigene Zustandsverfolgung. |
 | `Selected` (`UnitMarker`) | `SelectionModel.Selected` projiziert über `EntityPicker.TryProject`; Lebensanteil aus `IBodyModule.Health/MaxHealth`. |
 | `RallyPoints` | Für jede ausgewählte Einheit mit `ProductionUpdate`: `SimulationQueries.Describe(production)` liest `hasRally`/`rallyX`/`rallyY` (als `Fixed` im `StateNode`) – der einzige öffentliche Weg an diesen Zustand. |
-| `OrderLines` | `CommandModeController.Orders.All` (stehende Befehle: Angriffsbewegung, Wache, Wegpunkte); die Punktliste ist Startposition → `Destination` → verbleibende `Waypoints`, projiziert. Ein einfacher Bewegungsbefehl (`ContextAction.Move`) erzeugt **keinen** `StandingOrder` (er ist ein Einzelbefehl) und taucht deshalb hier nicht auf. |
+| `OrderLines` | Stehende Befehle **der ausgewählten eigenen Einheiten** (Angriff, Angriffsbewegung, Wache; seit Phase 16 nicht mehr die aller Einheiten): eine Linie Einheit → Ziel (beim Angriff die aktuelle Position des Opfers). Ein einfacher Bewegungsbefehl (`ContextAction.Move`) erzeugt **keinen** `StandingOrder` und hat deshalb keine Linie, sondern eine Befehlsmarke. Wegpunkte stehen in `WaypointPaths`. |
+| `WaypointPaths` (`WaypointPathOverlay`) | `OrderMarkers.WaypointPaths` (§16): je ausgewählter Einheit mit Wegpunktbefehl die Punktliste Einheit → Stationen, nur solange Alt gehalten wird. |
+| `OrderHints` (`OrderHintMarker`) | `OrderHintBook` (§16): die Marken frisch erteilter Befehle mit ihrem Alter 0..1. |
 | `Placement` | `CommandModeController.Ghost` plus eine selbst berechnete Grundfläche (`Footprint`): bei `Geometry == BOX` die um `Angle` gedrehten Eckpunkte aus `GeometryMajorRadius`/`MinorRadius`, sonst ein Quadrat aus `BoundingCircleRadius` (die Simulation liefert für Nicht-Box-Geometrien keine Kantenlängen). |
 | `HintText` | grobe Textform von `GameInputController.Hint.Action` (kein String-Tabellen-Label – nur ein technischer Platzhaltertext für einen Host, der noch keine eigene Übersetzung hat). |
 | `Ticker` | Siehe unten. |
@@ -247,6 +249,10 @@ ausschließlich Felder aus, die die Simulation bereits über `SimEvent` offenleg
 * Strg+1 speichert, `1` ruft die Gruppe ab.
 * Goldener Hash von `BuildDrawList(1280, 720).Dump()` gegen `tests/CnCNew.Game.Tests/baselines/hud-drawlist-1280x720.sha256`
   (wird beim ersten Lauf ohne vorhandene Datei geschrieben; danach ein Review-Gegenstand wie jede andere Baseline).
+* Mauszeiger und Marken (Phase 16, §16): Cursor je Kontext, Alt-Wegpunkte als Pfad mit drei Stationsmarken, verblassende Befehlsmarke.
+
+`dotnet run --project tests/CnCNew.Game.Tests -- --content-dir <dir> --only HudTests` führt nur diese Suite aus (das ganze Programm braucht auf
+Realdaten viele Minuten; `--only` nimmt eine kommagetrennte Liste von Suitennamen, ein unbekannter Name ist ein Fehler mit Exitcode 2).
 
 ## 13. Anfragen an Simulation/Präsentation
 
@@ -306,3 +312,69 @@ nur, was die Controller zeigen, und gibt typisierte Eingaben weiter:
   die Verdrahtung ist headless per Rauchtest geprüft, nicht von einem Menschen gespielt.
 - **Bildprobe (2. Oktober 2026):** `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --frames 60 --capture <png>` zeigt über der Welt die Minimap mit Teampunkten im Rahmen, die Befehlsleiste mit Geldanzeige, Fortschrittsbalken und
   leerem Befehlsraster sowie den Sprach-Untertitel der Mission (`(speech: Taunts_Toxin102)`); das Porträtfenster rechts bleibt leer. Die Shell (`--shell`) zeichnet 172 Befehle ohne fehlende Bilder/Texturen/Beschriftungen/Glyphen.
+
+## 16. Phase 16: Mauszeiger, Wegpunkte und Befehlsmarken
+
+Befund aus der ersten Tech-Demo (`docs/DEMO-FINDINGS.md` Punkt 8): der Client zeigte den Pfeil des Betriebssystems, Alt änderte nichts Sichtbares, gesetzte Wegpunkte waren unsichtbar. Die Regeln (welcher Cursor, welche
+Marken) stehen in `docs/PRESENTATION-INPUT.md` §11/§12; dieser Abschnitt beschreibt, was das HUD und der Client daraus machen. Nichts davon schreibt in die Simulation: Cursor und Marken lesen Auswahl, `StandingOrders`
+und die Welt; Befehle gehen weiter nur als typisierte Kommandos durch die Senke.
+
+### Cursor im HUD (`MatchController`)
+
+| Mitglied | Bedeutung |
+|---|---|
+| `Cursor` (`CursorState`) | Der Cursor dieses Frames: im geöffneten Spielmenü der Pfeil, sonst `GameInputController.Cursor(PointerOverWindow)`. |
+| `PointerOverWindow` | Zeiger über Befehlsleiste, Minimap oder Menü, oder ein dort begonnener Druck wird noch gehalten (`UiWindowTree.InputTarget`, `TryMinimapWorld`). Dann gilt der Pfeil (`InGameUI`: `underWindow`). |
+| `PointerPosition` | Zeigerposition in Fensterpixeln, `null` vor dem ersten Mausereignis. |
+
+`Update` liest den Kontext unter dem ruhenden Zeiger in jedem Frame neu (`GameInputController.RefreshHint`), solange der Zeiger über der Welt steht: die Welt bewegt sich unter ihm, und die Auswahl kann sich ohne
+Eingabeereignis ändern. Für Missionen gilt dasselbe über `MissionController.Hud`.
+
+### Software-Cursor im Client (`CnCNew.Client.Stride/Ui/SoftwareCursor.cs`)
+
+Das Original lässt Windows die ANI-Dateien zeichnen (`Win32Mouse::setCursor`, `LoadCursorFromFile`). Der Client zeichnet dieselben Dateien selbst als letztes Sprite über der Zeichenliste (`ClientRuntime.Draw`), damit der
+Cursor in Captures erscheint und nicht vom Fenstersystem abhängt: `GameData.LoadCursors()` dekodiert die Cursor über `CnCNew.Content`, je Frame entsteht bei Bedarf eine Textur (`R8G8B8A8_UNorm` wie alle UI-Texturen),
+gezeichnet 1:1 mit dem Hotspot der Datei auf der Zeigerposition. Die Animationsuhr (`CursorAnimator`) beginnt bei jedem Cursorwechsel neu.
+
+* Der Betriebssystem-Cursor wird versteckt (`Game.IsMouseVisible = false`), solange der Software-Cursor verfügbar ist. Lässt sich der Pfeil aus `Mouse.ini` nicht laden, bleibt der Betriebssystem-Cursor sichtbar
+  und der Client schreibt **eine** Warnung auf die Konsole. Außerhalb des Fensters zeichnet der Client nichts.
+* Shell und Spielmenü zeigen den Pfeil; ein laufendes Spiel den Cursor des HUD.
+* Ein Cursor ohne Bild wird nicht ersetzt: `Build`/`InvalidBuild` haben in den Retaildaten keinen `MouseCursor`-Block, beim Platzieren ist also wie im Original kein Cursor zu sehen (die Bauvorschau steht unter dem
+  Zeiger). Ein definierter Cursor, dessen Datei fehlt oder nicht dekodierbar ist, wird je Art gezählt (`unresolved` in der Berichtszeile).
+* `--smoke-test` läuft weiter ohne Geräteeingabe und druckt eine Zeile `cursor: software; 37 definitions, issues [], 34 files loaded, 235 frames, 0 inverting pixels, missing files [], undecodable [], engine cursors
+  without a definition [Build, InvalidBuild]; N frames drawn, …; current <Name> (<Datei> frame i/n, hot spot x,y)` (gemessen 4. Oktober 2026; ohne Zeiger: `current none (no pointer position yet)`).
+* Capture-Hilfen eines Festschritt-Laufs: `--cursor-at x,y` setzt den Zeiger über ein synthetisches Mausereignis je Frame (derselbe Ereignisweg wie eine echte Maus); `--waypoints "dx,dy;dx,dy;…"` (mit
+  `--select-own`) hält Alt und ordnet je Versatz (Meter ab der ersten beweglichen ausgewählten Einheit) einen Wegpunkt über die Eingabeschicht an.
+
+### Wegpunktpfad und Befehlsmarken (`HudOverlayRenderer`)
+
+| Marke | Zeichnung | Original |
+|---|---|---|
+| Wegpunktpfad | Linie Einheit → Station 1 → … in (64, 128, 255), 2 px; je Station eine Raute mit Mittelring. Drei Wegpunkte = drei Marken, das Segment ab der Einheit plus zwei zwischen den Stationen. | `W3DWaypointBuffer::drawWaypoints`: Linie in (0,25; 0,5; 1,0), additiv, 1,5 breit, mit `EXLaser.tga`; je Station das Modell `SCMNode`. Der Client hat noch keine 3D-Markenmodelle, die Station ist deshalb eine 2D-Raute im Overlay. |
+| Befehlsmarke Bewegen / Wegpunkt / Sammelpunkt / Betreten | Ring, der sich von 20 px auf 6 px Radius zusammenzieht und dabei verblasst, mit Mittelkreuz; Farbe wie die jeweilige Linie. | `W3DInGameUI::drawMoveHints`: das Modell `MoveHintName` spielt seine Animation einmal und verschwindet nach 40 Frames. |
+| Befehlsmarke Angriff | Vier rote Eckwinkel, die sich um das Ziel schließen; die Marke folgt dem Ziel, solange es existiert. | `drawAttackHints` ist im Original leer; das Ziel blinkt dort (`SelectionFlash`, schon vorhanden). Die Marke ist eine Ergänzung. |
+| Sammelpunkt | unverändert die gelbe Fahne am Sammelpunkt des ausgewählten Produktionsgebäudes. | `W3DWaypointBuffer` zeichnet außerhalb des Wegpunktmodus die Sammelpunktlinie der Auswahl. |
+
+Bodenpunkte (Stationen, Sammelpunkt, Marken, Befehlslinien) werden jetzt auf Geländehöhe projiziert (`LiveGame.Heights`), vorher auf z = 0 – auf einer hügeligen Karte lag die Fahne sonst neben dem Punkt. Ein Punkt
+hinter der Kamera beendet den Pfad an dieser Stelle.
+
+**Sichtbarkeit wie im Original:** der Wegpunktpfad erscheint nur für ausgewählte Einheiten und nur, solange Alt gehalten wird; lässt der Spieler Alt los, läuft die Einheit den Pfad weiter ab, er wird aber nicht mehr
+gezeichnet. Eine erreichte Station verschwindet aus dem Pfad, ein anderer Befehl (oder der Tod der Einheit) entfernt ihn ganz.
+
+### Tests und Bildproben
+
+* `tests/CnCNew.Game.Tests/HudTests.cs` „Cursor and markers“ (Realdaten, Alpine Assault): Pfeil ohne Zeiger; `Normal` ohne Auswahl; `Move` mit ausgewählter Planierraupe; Alt schaltet ohne Mausbewegung auf
+  `Waypoint`; drei Alt-Klicks ergeben einen Pfad mit vier Punkten, dessen Stationen höchstens 2,5 px neben den Klickpunkten liegen, 33 blaue Linien (3 Segmente + 3 × 10 Markenlinien) und drei Marken, die nach 40
+  Frames weg sind; Alt los: Pfad verborgen; ein einfacher Bewegungsbefehl ersetzt den Pfad und hinterlässt eine Marke, die mit der Zeit verblasst; über der Befehlsleiste der Pfeil; am rechten Bildrand der
+  Scrollcursor Richtung 0, für den `GameData.LoadCursors()` das Bild `SCCScroll0.ani` hat.
+* `scripts/capture-world.ps1`: Szenen `match-cursor-move` und `match-waypoints`. Beide Bilder wurden headless erzeugt und angesehen (4. Oktober 2026): der Bewegungscursor (vier grüne Pfeile nach innen) steht
+  über dem Boden, der Auswahlcursor über der Kommandozentrale, die Scrollpfeile zeigen am rechten und unteren Rand nach rechts bzw. unten; die blaue Wegpunktlinie führt von der Planierraupe über drei Rauten,
+  um jede Station liegt der verblassende Ring. Zwei Läufe der Wegpunktszene lieferten dieselbe Prüfsumme.
+
+### Nicht belegt, nicht getan
+
+* **Kein Mensch hat Cursor und Marken im laufenden Client gesehen** (Wirkung, Größe, Lesbarkeit, Verzögerung des Software-Cursors gegenüber der echten Maus, Verhalten beim Verlassen des Fensters und im Vollbild).
+* Der Radius-Cursor der Spezialkräfte (`RadiusCursorType`, die Wirkkreis-Decals) und der Cursor-Text (`CursorText`) werden nicht gezeichnet.
+* 3D-Marken (`SCMNode`, das Bewegungsmarken-Modell) fehlen; die Marken sind 2D-Ersatz im Overlay.
+* Die Einnahme-, Hack-, Entführungs- und Scharfschützen-Cursor kommen nur über Befehlsknöpfe, die die Eingabeschicht noch als „nicht unterstützt“ führt (`docs/PRESENTATION-INPUT.md` §6); ihre Bilder sind geladen,
+  gezeigt werden sie heute nur von Knöpfen mit Zielmodus.
