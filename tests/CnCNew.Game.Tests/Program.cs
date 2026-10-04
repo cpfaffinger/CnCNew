@@ -15,7 +15,16 @@ Func<string[], int>[] suites =
     ModelGeometryTests.Run,
 ];
 
+// --suite NAME runs one suite (for example --suite MissionHudTests); the whole run with real content takes many minutes.
+var only = Array.IndexOf(args, "--suite") is var at and >= 0 && at + 1 < args.Length ? args[at + 1] : null;
+if (only is not null && !suites.Any(suite => suite.Method.DeclaringType!.Name.Equals(only, StringComparison.OrdinalIgnoreCase)))
+{
+    Console.WriteLine($"Unknown suite '{only}'. Known: {string.Join(", ", suites.Select(suite => suite.Method.DeclaringType!.Name))}.");
+    return 2;
+}
+
 var failures = 0;
-foreach (var suite in suites) failures += suite(args);
+foreach (var suite in suites)
+    if (only is null || suite.Method.DeclaringType!.Name.Equals(only, StringComparison.OrdinalIgnoreCase)) failures += suite(args);
 Console.WriteLine(failures == 0 ? "All game tests passed." : $"{failures} game test(s) failed.");
 return failures == 0 ? 0 : 1;
