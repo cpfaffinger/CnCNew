@@ -21,6 +21,11 @@ public sealed record FrameProjectorOptions
 
     public ImmutableArray<SceneryItem> Scenery { get; init; } = [];
 
+    /// <summary>
+    /// The game data of the selection flash; null projects no flash tint at all (<see cref="DrawableInstance.FlashTint"/> stays zero), for callers without the game's GameData.
+    /// </summary>
+    public SelectionFlashSettings? SelectionFlash { get; init; }
+
     /// <summary>A move longer than this within one tick is a teleport and is not interpolated.</summary>
     public float SnapDistance { get; init; } = 100f;
 }
@@ -57,6 +62,7 @@ public sealed class FrameProjector
     private readonly SuspensionTracker _suspension = new();
     private readonly UnitConditionTracker _units = new();
     private readonly StructureConditionTracker _structures = new();
+    private readonly SelectionFlashTracker _flashes = new();
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
     private readonly SortedDictionary<uint, Capture> _ghosts = [];
     private readonly HashSet<uint> _known = [];
@@ -88,7 +94,11 @@ public sealed class FrameProjector
     /// <summary>Feeds the events of the tick that was just simulated (deaths, crushes, ...; the turrets need none, the simulation owns them); call before <see cref="Advance"/>.</summary>
     public void Observe(IEnumerable<SimEvent> events, SimulationWorld world)
     {
-        foreach (var simEvent in events) _units.Observe(simEvent, world);
+        foreach (var simEvent in events)
+        {
+            _units.Observe(simEvent, world);
+            if (_options.SelectionFlash is { } flash) _flashes.Observe(simEvent, world, _options.Colors, flash);
+        }
     }
 
     /// <summary><c>AIGroup::groupCheer</c> (the <c>ALL_CHEER</c> meta action): the objects show SPECIAL_CHEERING for <see cref="UnitConditionTracker.CheerTicks"/> ticks.</summary>
@@ -121,6 +131,7 @@ public sealed class FrameProjector
             _suspension.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _units.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _structures.Prune(id => world.FindEntity(new EntityId(id)) is not null);
+            _flashes.Prune(Tick, id => world.FindEntity(new EntityId(id)) is not null);
         }
         if (_options.Viewer is { } fogViewer)
         {
@@ -271,7 +282,7 @@ public sealed class FrameProjector
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
         Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel, capture.FiredSlots,
         capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= HealingIconTicks && capture.Health01 < 1f && Tick > HealingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
-        ghost, capture.Chassis);
+        ghost, capture.Chassis, ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, Tick));
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 

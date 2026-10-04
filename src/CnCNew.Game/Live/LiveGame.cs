@@ -65,7 +65,7 @@ public abstract class LiveGame
         Minimap = MinimapImage.Build(TerrainModel, Heights, terrain, water, 256);
         Colors = TeamColors.Resolve(players, graph);
         var scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
-        _projector = new FrameProjector(data.Visuals, new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery });
+        _projector = new FrameProjector(data.Visuals, new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph) });
         Fx = new FxExecutor(data.Fx, fxSeed, new ParticleBudget());
         _fxView = new SimulationFxWorldView(world);
         Frame = RenderFrame.Empty;
