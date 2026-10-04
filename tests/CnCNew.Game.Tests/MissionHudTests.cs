@@ -63,7 +63,13 @@ internal static class MissionHudTests
             {
                 controller.Process(new MouseMoveEvent(time += 16, at));
                 controller.Process(new MouseButtonEvent(time += 16, MouseButton.Left, true, at));
-                controller.Process(new MouseButtonEvent(time += 50, MouseButton.Left, false, at));
+                // As in the client: the press and the release arrive in different frames, each of which updates the game and rebuilds the draw list.
+                controller.Update(1.0 / 30);
+                controller.BuildDrawList(1280, 720);
+                controller.Process(new MouseMoveEvent(time += 16, at + new Vector2(1, 1)));
+                controller.Update(1.0 / 30);
+                controller.BuildDrawList(1280, 720);
+                controller.Process(new MouseButtonEvent(time += 50, MouseButton.Left, false, at + new Vector2(1, 1)));
                 time += 1000;
             }
             Vector2 Screen(Vector3 world)
