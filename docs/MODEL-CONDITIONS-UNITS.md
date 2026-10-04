@@ -54,13 +54,13 @@ Alle Namen stehen in `ConditionDeriver.ProducedNames` (eigene Zeilen am Ende der
 
 | Bit | Wer setzt es im Original | Was die Simulation nicht kennt |
 |---|---|---|
-| `PREATTACK_A/B/C` | `Weapon::preFireWeapon` (Status `PRE_ATTACK` für `PreAttackDelay`, je nach `PreAttackType` je Schuss/Angriff/Magazin), `Object::adjustModelConditionForWeaponStatus` | Die Simulation kennt keine Vorfeuerphase: ein Schuss geschieht im Tick des Befehls, ohne Verzögerung und ohne Angriffszustandsautomaten (`AIAttackState`: Anlauf, Zielen, Feuern). Ein Bit nach dem Schuss wäre falsch, eines davor bräuchte das vorgezogene Ziel. Voraussetzung: `PreAttackDelay` im Waffenmodell und ein Angriffszustand mit Zielphase |
 | `EXPLODED_FLAILING`, `EXPLODED_BOUNCING` | `SlowDeathBehavior::beginSlowDeath` (`FlingForce`: Impuls, `MODELCONDITION_EXPLODED_FLAILING`) und `update` (FLAILING → BOUNCING beim Bodenkontakt, `isAboveTerrain`) | `FlingForce`/`FlingPitch` sind getippt, aber unbenutzt (Kommentar von `SlowDeathBehavior`: ein Physikimpuls beim Tod): das Objekt wird nie in die Luft geschleudert, es gibt keinen Flug und keinen Aufprall. Voraussetzung: Wurfphysik des `PhysicsBehavior` mit Höhe |
 | `JAMMED` | `ActiveBody::onSubdualChange` → `MissileAIUpdate::projectileNowJammed` (Rakete durch ECM mit Subdual-Schaden ≥ Maximalleben gestört) | Subdual-Schaden wird nicht modelliert (`ActiveBody` meldet `NoEffect`); `MissileAIUpdate` kennt keine Störung |
 | `PANICKING` | `AIPanicState`/`AIMoveAwayFromRepulsorsState` (`AIStates.cpp`) | `TEAM_PANIC` startet in der Skript-VM einen gewöhnlichen Wegpunktfolger (nicht unterscheidbar von `FOLLOW_WAYPOINTS`); die Flucht vor Abstoßern gibt es nicht. Voraussetzung: ein eigener Panikzustand im Skriptfolger (`MissionSnapshot`) bzw. in der KI |
 | `RAPPELLING` | `AIRappelState` (Chinook-Kampfabwurf `AI_RAPPEL_INTO`), außerdem rückwärts auf Klippen (`AIFollowPathState`) | Kampfabwurf und Abseilen sind nicht simuliert (`ChinookAIUpdate`: „the drop is not simulated“); es gibt keine Rückwärtsfahrt |
 
 `RAISING_FLAG` stand hier bis zur gestuften Gebäudeübernahme; seitdem leitet `CaptureConditions` es ab (`docs/SIM-STAGED-CAPTURE.md` §5).
+`PREATTACK_A/B/C` stand hier bis zur Vorangriffsverzögerung der Simulation (`PreAttackDelay`, `docs/SIM-FIRING-TRACKER.md` §3); `ConditionDeriver.Weapon` setzt es jetzt aus `SimulationWorld.PreAttackSlotOf`.
 
 ## 4. Prüfung
 
@@ -76,11 +76,11 @@ Alle Namen stehen in `ConditionDeriver.ProducedNames` (eigene Zeilen am Ende der
 
 ## 5. Grenzen und Befunde
 
-* **Die Tracker sind Darstellung, nicht Simulation.** Sie kennen nur, was seit dem Start der Projektion geschah: nach dem Laden eines Spielstands beginnen Feuerstufen,
+* **Die Tracker sind Darstellung, nicht Simulation.** Sie kennen nur, was seit dem Start der Projektion geschah: nach dem Laden eines Spielstands beginnen
   Lehnzustand, `SPLATTED`/`CRUSHED`-Merker und Jubel leer (die abgeleiteten Bits kommen aus dem Simulationszustand und überleben das Laden). Objekte außerhalb der Sicht
   werden nicht erfasst; ein Feuerstufen-Abfall wird beim nächsten Erfassen nachgeholt.
-* **`CONTINUOUS_FIRE_*` ist nur Bild.** Das Original koppelt die Stufen an `WEAPONBONUSCONDITION_CONTINUOUS_FIRE_MEAN/FAST` (Feuerrate); die Simulation modelliert diese
-  Waffenbonusbedingungen nicht (`Entity.WeaponBonusConditions`: nur Veteranenstufe und `PLAYER_UPGRADE`). Der Gattling-Panzer dreht den Lauf schneller, ohne schneller zu schießen.
+* **`CONTINUOUS_FIRE_*` kommt aus der Simulation** (`docs/SIM-FIRING-TRACKER.md` §2): die Stufen sind die Waffenbonusbedingungen `CONTINUOUS_FIRE_MEAN/FAST` des Objekts und beschleunigen die Waffe
+  (Gattling: 200 % und 400 %); der `UnitConditionTracker` zählt nicht mehr selbst, die Stufen überleben das Laden eines Spielstands.
 * **`ATTACKING` wird von der Simulation nie gesetzt** (`IS_ATTACKING` hat keinen Schreiber), obwohl `ConditionDeriver` das Bit ableitet. Viele Zustände heißen
   `ATTACKING <X>` (z. B. `ATTACKING CONTINUOUS_FIRE_MEAN`); die Zustandswahl nimmt dann den besten Teiltreffer, was für die Gattling-Zustände reicht, aber nicht alle Kombinationen trifft.
 * **`SPLATTED` und `FRONTCRUSHED`/`BACKCRUSHED` sind in der heutigen Simulation kaum erreichbar** (der Code ist getestet und bereit): `ParachuteContain.OnDie` tötet den Insassen nach dem

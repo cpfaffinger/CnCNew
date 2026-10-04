@@ -147,10 +147,10 @@ Jet und töteten ihn; so bleibt der Ablauf "starten, feuern, zurückfliegen, lan
 ## 7. Bekannte Grenzen
 
 * Die Flugbahn ist kinematisch (kein Physikmodell mit Auftrieb/Rollen/Nicken); das Kreisen hat die Eigenschaft der Referenz (Jagd auf einen Kreispunkt),
-  nicht ihre Zahlen auf die Float-Stelle genau. Beschädigte Locomotoren (`SpeedDamaged`, `TurnRateDamaged`) sind weiterhin nicht modelliert.
+  nicht ihre Zahlen auf die Float-Stelle genau. Beschädigte Locomotoren (`SpeedDamaged`, `TurnRateDamaged`, `AccelerationDamaged`, `LiftDamaged`) wirken seit dem 4. Oktober 2026 ab `MovementPenaltyDamageState` (`docs/SIM-FIRING-TRACKER.md` §4), auch auf den gewählten Jet-Satz.
 * Der Marschflugkörper `CINE_U06_CruiseMissileFLY` ist ein `JetAIUpdate`-Objekt mit WINGS-Locomotor und kreist jetzt am Ziel, statt stehen zu bleiben.
-* Die Landung richtet den Kurs weiter am Landebahnbeginn aus (kein eigener Anflugbogen); der Anflugpunkt wird durch den Wendekreis nur grob eingehalten.
-* `SimTool`/`CampaignTool` bauen den Katalog ohne Modell-Bones (berechnetes Layout); ihre Werte sind untereinander und mit den Referenzzahlen
-  vergleichbar, aber nicht mit dem Client, solange sie die Tabelle nicht laden.
+* Die Landung richtet den Kurs weiter am Landebahnbeginn aus (kein eigener Anflugbogen); der Anflugpunkt wird durch den Wendekreis nur grob eingehalten. Bewusst zurückgestellt: ein Anflugbogen ändert nur die Flugbahn der letzten Sekunden und ist ohne Sichtabnahme der Jet-Demo (`scripts/demo-jet-strafe.ps1`) nicht beurteilbar; er kommt nach dieser Abnahme.
+* `SimTool` und `CampaignTool` bauen den Katalog seit dem 4. Oktober 2026 mit der Modell-Bone-Tabelle (`ModelGeometryLoader`, wie `GameData.Load`); ihr Welt-Fingerabdruck stimmt mit dem des Clients überein.
+  Das Referenzspiel blieb dabei tick- und hashgleich (kein Flugplatz im Szenario).
 * Das Einsinken am Boden (Modell-Tiefgang 1,95) ist nur in der Zeichnung zu beheben (Abschnitt 4).
 * Die Spielbarkeit durch einen Menschen ist damit nicht belegt; Rauchtests und Audits beweisen Reproduzierbarkeit, nicht Richtigkeit.
