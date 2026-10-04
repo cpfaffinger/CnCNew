@@ -80,7 +80,8 @@ if (contentDirectory is not null)
     }
 }
 
-using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90")))
+using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),
+    GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30")))
 {
     game.Run();
 }
@@ -132,11 +133,14 @@ internal sealed class CnCNewGame(
     LiveOptions? liveOptions,
     bool shellMode,
     string windowSize,
-    int smokeFrames) : Game
+    int smokeFrames,
+    string? filmstripDirectory = null,
+    int filmstripEvery = 30) : Game
 {
     private ClientRuntime? _runtime;
     private int _renderedFrames;
     private bool _captured;
+    private int _lastFilmFrame = -1;
     private W3dStrideScene? _w3dScene;
 
     protected override void Initialize()
@@ -325,6 +329,15 @@ internal sealed class CnCNewGame(
     {
         base.Draw(gameTime);
         _runtime?.Draw(GraphicsContext, GraphicsDevice);
+        // --filmstrip DIR --every N: a PNG every N rendered frames (frame-00030.png ...), so a staged demo can be judged as a sequence without a window.
+        if (filmstripDirectory is not null && filmstripEvery > 0 && _renderedFrames > 0 && _renderedFrames % filmstripEvery == 0 && _lastFilmFrame != _renderedFrames)
+        {
+            _lastFilmFrame = _renderedFrames;
+            Directory.CreateDirectory(Path.GetFullPath(filmstripDirectory));
+            using var film = File.Create(Path.Combine(Path.GetFullPath(filmstripDirectory), $"frame-{_renderedFrames:D5}.png"));
+            GraphicsDevice.Presenter.BackBuffer.Save(GraphicsContext.CommandList, film, ImageFileType.Png);
+        }
+
         if (!_captured && capturePath is not null && _renderedFrames >= (liveOptions?.Frames ?? (shellMode ? smokeFrames : 12)))
         {
             var fullPath = Path.GetFullPath(capturePath);

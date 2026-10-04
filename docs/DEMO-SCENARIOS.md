@@ -17,6 +17,11 @@ deckt die Karte für beide Seiten auf und gibt Befehle über dasselbe `StandingO
 
 ```powershell
 .\scripts\demo-scenario.ps1 -Scenario tank-duel          # Fenster, Skirmish-HUD (Befehle des Spielers sind möglich)
+.\scripts\demo-capture-building.ps1                      # optischer Test im Fenster, je Szene ein Skript
+.\scripts\demo-tank-duel.ps1
+.\scripts\demo-jet-strafe.ps1
+.\scripts\capture-scenarios.ps1                          # alle drei als Bildfolge (PNG alle N Ticks) + index.html unter %TEMP%\cncnew-scenario-frames
+.\scripts\capture-scenarios.ps1 -Scenario tank-duel -Every 5 -Size 1920x1080
 .\scripts\demo.ps1 scenario -Scenario jet-strafe -SmokeTest
 .\scripts\audit-scenarios.ps1                            # alle drei headless prüfen, Ausgaben unter %TEMP%\cncnew-scenarios
 .\scripts\audit-scenarios.ps1 -Scenario tank-duel -Every 10
