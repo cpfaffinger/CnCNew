@@ -760,17 +760,18 @@ static class ObjectTests
         Check.That(shotTick - orderTick == 15, $"The shot waits until the turret has turned 90 degrees at 6 degrees per tick: tick {shotTick - orderTick} after the order.");
         Check.That(Math.Abs(angles[^1] - MathF.PI / 2) < 0.035f && world.TurretWaits == 15, $"It points at the victim when the shot goes out ({angles[^1]} rad, {world.TurretWaits} orders waited).");
 
-        // No more orders: the turret keeps its aim (ready tick of BigGun + the recentre time), then turns back at half speed.
+        // No more orders: the attack goes on, so the turret keeps its aim while the victim lives; when the victim is dead it holds for the recentre time, then turns back at half speed.
         var held = 0;
-        for (var i = 0; i < 20; i++)
+        for (var i = 0; i < 60; i++)
         {
             world.Step();
             if (Math.Abs(tracker.Update(entity, 0)!.Value.Angle - MathF.PI / 2) < 1e-3f) held++;
         }
 
-        Check.That(held >= 18, $"It holds the aim after the last shot ({held} of 20 ticks).");
+        Check.That(held >= 58, $"It holds the aim after the last shot ({held} of 60 ticks).");
+        Submit(world, sequence => new KillCommand(PlayerId.System, sequence, world.Tick, victim));
         var angle = 0f;
-        for (var i = 0; i < 80; i++)
+        for (var i = 0; i < 160; i++)
         {
             world.Step();
             angle = tracker.Update(entity, 0)!.Value.Angle;

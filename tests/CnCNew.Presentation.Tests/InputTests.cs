@@ -1013,7 +1013,7 @@ static class InputTests
             foreach (var command in arena.Sink.Issued.Skip(before))
             {
                 if (command is FireWeaponCommand fire) { shots++; Assert(fire.Source == ranger.Id && fire.Target == target.Id, "fires at the ordered target"); }
-                if (command is SetMoveTargetCommand) moves++;
+                if (command is SetMoveTargetCommand or PursueCommand) moves++;
             }
             arena.Step();
         }
