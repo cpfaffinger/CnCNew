@@ -106,6 +106,39 @@ public sealed class TerrainHeightSampler
         return Vector3.Normalize(new Vector3(-slopeX * CellSize, -slopeY * CellSize, CellSize * CellSize));
     }
 
+    /// <summary>
+    /// <c>BaseHeightMapRenderObjClass::getMaxCellHeight</c>: the largest of the four corner heights of the cell under the point. The cell index
+    /// truncates towards zero (so the strip just left of / below world 0 belongs to cell 0) and is clamped to the field.
+    /// </summary>
+    public float MaxCellHeight(float x, float y)
+    {
+        var ix = Math.Clamp((int)(x / CellSize) + Border, 0, VertexWidth - 2);
+        var iy = Math.Clamp((int)(y / CellSize) + Border, 0, VertexHeight - 2);
+        var p0 = _heights[iy * VertexWidth + ix];
+        var p1 = _heights[iy * VertexWidth + ix + 1];
+        var p2 = _heights[(iy + 1) * VertexWidth + ix + 1];
+        var p3 = _heights[(iy + 1) * VertexWidth + ix];
+        return Math.Max(Math.Max((int)p0, p1), Math.Max((int)p2, p3)) * HeightScale;
+    }
+
+    /// <summary>
+    /// Unit normal of height vertex (<paramref name="vertexX"/>, <paramref name="vertexY"/>): central differences over two cells, clamped at the field
+    /// edge (<c>updateVB</c> / <c>getStaticDiffuse</c>); the normal the terrain's static lighting uses.
+    /// </summary>
+    public Vector3 VertexNormal(int vertexX, int vertexY)
+    {
+        vertexX = Math.Clamp(vertexX, 0, VertexWidth - 1);
+        vertexY = Math.Clamp(vertexY, 0, VertexHeight - 1);
+        var left = Math.Max(vertexX - 1, 0);
+        var right = Math.Min(vertexX + 1, VertexWidth - 1);
+        var down = Math.Max(vertexY - 1, 0);
+        var up = Math.Min(vertexY + 1, VertexHeight - 1);
+        const float run = 2 * CellSize;
+        var dx = (_heights[vertexY * VertexWidth + right] - _heights[vertexY * VertexWidth + left]) * HeightScale;
+        var dy = (_heights[up * VertexWidth + vertexX] - _heights[down * VertexWidth + vertexX]) * HeightScale;
+        return Vector3.Normalize(Vector3.Cross(new Vector3(run, 0, dx), new Vector3(0, run, dy)));
+    }
+
     private void Locate(float x, float y, out int ix, out int iy, out float fx, out float fy)
     {
         var gx = Math.Clamp(x / CellSize + Border, 0f, VertexWidth - 1);

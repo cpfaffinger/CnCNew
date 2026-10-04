@@ -54,8 +54,14 @@ public sealed record MapObject(string Name, decimal X, decimal Y, decimal Z, dec
 {
     public const int FlagRoadPoint1 = 0x02;
     public const int FlagRoadPoint2 = 0x04;
+    /// <summary><c>FLAG_ROAD_CORNER_ANGLED</c>: the road corner at this point is mitred instead of curved.</summary>
+    public const int FlagRoadCornerAngled = 0x08;
     public const int FlagBridgePoint1 = 0x10;
     public const int FlagBridgePoint2 = 0x20;
+    /// <summary><c>FLAG_ROAD_CORNER_TIGHT</c>: the curve at a road corner uses the tight radius.</summary>
+    public const int FlagRoadCornerTight = 0x40;
+    /// <summary><c>FLAG_ROAD_JOIN</c>: an open road end does a generic alpha join.</summary>
+    public const int FlagRoadJoin = 0x80;
 
     /// <summary><c>MO_WAYPOINT</c>: the object carries an integer <c>waypointID</c> key.</summary>
     public bool IsWaypoint => Properties.Find("waypointID") is { Type: MapPropertyType.Int };
