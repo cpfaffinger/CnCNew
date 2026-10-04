@@ -1299,6 +1299,7 @@ Drei Verhaltenslücken, die die gestellten Demos (`docs/DEMO-SCENARIOS.md`) aufd
 
 - **Turmzustand mit Feuerfreigabe** (`docs/SIM-TURRET-AIM.md`): typisierte `Turret`/`AltTurret`-Blöcke, `TurretState` je Turm, die Waffe eines vom Turm gesteuerten Slots wartet auf die Ausrichtung;
   `WorldSnapshot` 8 → 9. Die Bemerkung „Turm- und Neigungsbedingungen fehlen“ weiter oben ist damit überholt. Referenzmatch jetzt Tick 13.875, Endhash `482FC8C52D507662`, Kette `34AB50A397B0125C`.
+  Nachtrag: dauerhafter Angriffszustand (in `TurretState`, `PursueCommand` Typ 31 für die Verfolgung, Replay 10, `CommandTypes.Version` 13) und Idle-Scan (`TurretAI`-Leerlauf, Zufall aus einem eigenen Hash-Strom statt `LogicRandom`) – Referenzmatch jetzt Tick 15.000, `01C01E3B91EAE18C`, Kette `045DA5259A104F01`.
 - **Gestufte Gebäudeübernahme** (`docs/SIM-STAGED-CAPTURE.md`): `SpecialAbilityUpdate` führt für `SPECIAL_INFANTRY_CAPTURE_BUILDING` und `SPECIAL_BLACKLOTUS_CAPTURE_BUILDING` Anlaufen, Auspacken, Vorbereiten
   (Flagge), Besitzerwechsel und Einpacken aus; die Erwähnungen von `SpecialAbilityUpdate` als Hülle in §11, §23, §25 und §30 gelten nur noch für die übrigen Fähigkeiten.
 - **Flügelflug und Flugplatzgeometrie** (`docs/SIM-JET-FLIGHT.md`): `Appearance = WINGS` fliegt mit Mindestgeschwindigkeit, begrenzter Kurvenrate und kreist bei `CirclingRadius`; die Start- und Landebahn
