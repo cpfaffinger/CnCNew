@@ -36,7 +36,7 @@ static class ObjectTests
         run.Test("Frame projector fog of war and structure ghosts", Ghosts);
         run.Test("Static scenery and the claim rule", Scenery);
         run.Test("Static scenery follows the shroud: nothing in unexplored ground, kept once explored", SceneryFollowsTheShroud);
-        run.Test("Turrets turn toward the victim of a shot at their turn rate, hold, and recentre", TurretFollowsShots);
+        run.Test("Turrets are the simulation's: they turn toward the victim of the fire order at their turn rate, the shot waits, they hold and recentre", TurretFollowsOrders);
         run.Test("Wheeled chassis: acceleration tilts the body, straight driving keeps the wheels straight, no spring extends past its limit", ChassisFollowsMotion);
         run.Test("Team colors", Colors);
         var contentDir = ContentDir(args);
@@ -195,6 +195,34 @@ static class ObjectTests
             InitialHealth = 200.0
           End
           Behavior = DestroyDie Destroy01
+          End
+        End
+
+        Object Gunner
+          KindOf = SELECTABLE INFANTRY
+          VisionRange = 250.0
+          Draw = W3DModelDraw ModuleTag_Draw
+            DefaultConditionState
+              Model = Scout
+            End
+          End
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = AIUpdateInterface AI01
+            Turret
+              TurretTurnRate = 180
+              AllowsPitch = No
+              RecenterTime = 500
+              ControlledWeaponSlots = PRIMARY
+            End
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY BigGun
           End
         End
 
@@ -529,7 +557,7 @@ static class ObjectTests
         var first = projector.Project(0f).Drawables.Single();
         Check.That(first.Entity == rover && first.Position == new Vector3(0, 10, 0) && first.PrimaryModel == "roverbody" && first.Health01 == 1f && first.ConstructionProgress01 == 1f,
             "A new entity appears at its current transform without interpolation.");
-        Check.That(!first.IsStatic && !first.IsGhost && first.Scale == 1.5f && first.TurretYaw is null, "Entity drawables are dynamic; the simulation has no turret angle yet.");
+        Check.That(!first.IsStatic && !first.IsGhost && first.Scale == 1.5f && first.TurretYaw is null, "Entity drawables are dynamic; an object without a turret has no turret angle.");
 
         Submit(world, sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, world.Tick, rover, Fixed.FromInt(100), Fixed.FromInt(10)));
         for (var i = 0; i < 4; i++) { world.Step(); projector.Advance(world); }
@@ -702,34 +730,53 @@ static class ObjectTests
         Check.That(again.FrontLeft >= motion.MaxWheelExtension && again.RearRight >= motion.MaxWheelExtension, "No wheel extends past the maximum extension.");
     }
 
-    private static void TurretFollowsShots()
+    private static void TurretFollowsOrders()
     {
         var fixture = Fixture();
         var catalog = ObjectVisualCatalog.Build(fixture.Graph);
         var world = NewWorld(fixture, FlatTerrain());
-        var gunner = Spawn(world, "Scout", 1, 100, 100);
-        var victim = Spawn(world, "Bunker", 2, 100, 200); // due north of the gunner: the turret has to turn +90 degrees from a body facing +X
-        var motion = new TurretMotion(6f * MathF.PI / 180f, 0.01f, 0f, 0f, 0f, false, 20);
-        var visual = catalog[ "Scout" ] with { Turrets = [motion, null] };
+        var gunner = Spawn(world, "Gunner", 1, 100, 100);
+        var victim = Spawn(world, "Bunker", 2, 100, 170); // due north of the gunner: the turret has to turn +90 degrees from a body facing +X
         var tracker = new TurretTracker();
         var entity = world.FindEntity(gunner)!;
-        Check.That(tracker.Update(entity, visual, 0, world.Tick, world) is { Angle: 0f }, "A turret at rest sits at its natural angle.");
-        Check.That(tracker.Update(entity, visual, 1, world.Tick, world) is null, "A missing alternate turret reports nothing.");
-        Check.That(tracker.Update(entity, catalog["Scout"], 0, world.Tick, world) is null, "An object without turret data has no turret.");
+        const float step = 6f * MathF.PI / 180f; // TurretTurnRate = 180 degrees per second, 30 ticks per second
+        Check.That(tracker.Update(entity, 0) is { Angle: 0f, Pitch: 0f } && !tracker.IsRotating(gunner.Value), "A turret at rest sits at its natural angle.");
+        Check.That(tracker.Update(entity, 1) is null, "A missing alternate turret reports nothing.");
+        Check.That(tracker.Update(world.FindEntity(victim)!, 0) is null && catalog["Scout"].IsUnit, "An object without a turret has none.");
 
-        tracker.Observe(new SimEvent(default, world.Tick, SimEventKind.WeaponFired, gunner, victim, new PlayerId(1), "W", 0), world);
-        var first = tracker.Update(entity, visual, 0, world.Tick, world)!.Value.Angle;
-        Check.That(Math.Abs(first - motion.TurnRadiansPerTick) < 1e-4f, $"It turns by its rate per tick ({first} rad).");
-        var angle = first;
-        for (var tick = 1; tick <= 15; tick++) angle = tracker.Update(entity, visual, 0, world.Tick + tick, world)!.Value.Angle;
-        Check.That(Math.Abs(angle - MathF.PI / 2) < 1e-3f, $"It reaches the victim at +90 degrees after 15 ticks ({angle}).");
-        for (var tick = 16; tick <= motion.RecenterTicks; tick++) angle = tracker.Update(entity, visual, 0, world.Tick + tick, world)!.Value.Angle;
-        Check.That(Math.Abs(angle - MathF.PI / 2) < 1e-3f, $"It holds the aim for the recentre time after the last shot ({angle}).");
-        for (var tick = motion.RecenterTicks + 1; tick < motion.RecenterTicks + 40; tick++) angle = tracker.Update(entity, visual, 0, world.Tick + tick, world)!.Value.Angle;
-        Check.That(Math.Abs(angle) < 1e-3f, $"After the recentre time without a shot it turns back to its natural angle ({angle}).");
+        // The fire order of a standing attack, once per tick: the turret turns, the weapon waits until it points at the victim.
+        var orderTick = world.Tick;
+        long shotTick = -1;
+        var angles = new List<float>();
+        for (var i = 0; i < 40 && shotTick < 0; i++)
+        {
+            Submit(world, sequence => new FireWeaponCommand(new PlayerId(1), sequence, world.Tick, gunner, victim));
+            var result = world.Step();
+            angles.Add(tracker.Update(entity, 0)!.Value.Angle);
+            if (result.Events.Any(simEvent => simEvent.Kind == SimEventKind.WeaponFired)) shotTick = result.Tick;
+        }
 
-        var motions = TurretMotion.Default;
-        Check.That(Math.Abs(motions.TurnRadiansPerTick - 0.01f) < 1e-6f && motions.RecenterTicks == 60, "Defaults are the reference's: 0.01 rad per frame, two seconds.");
+        Check.That(Math.Abs(angles[0] - step) < 1e-3f && tracker.IsRotating(gunner.Value) == (shotTick < 0), $"It turns by its rate per tick ({angles[0]} rad).");
+        Check.That(shotTick - orderTick == 15, $"The shot waits until the turret has turned 90 degrees at 6 degrees per tick: tick {shotTick - orderTick} after the order.");
+        Check.That(Math.Abs(angles[^1] - MathF.PI / 2) < 0.035f && world.TurretWaits == 15, $"It points at the victim when the shot goes out ({angles[^1]} rad, {world.TurretWaits} orders waited).");
+
+        // No more orders: the turret keeps its aim (ready tick of BigGun + the recentre time), then turns back at half speed.
+        var held = 0;
+        for (var i = 0; i < 20; i++)
+        {
+            world.Step();
+            if (Math.Abs(tracker.Update(entity, 0)!.Value.Angle - MathF.PI / 2) < 1e-3f) held++;
+        }
+
+        Check.That(held >= 18, $"It holds the aim after the last shot ({held} of 20 ticks).");
+        var angle = 0f;
+        for (var i = 0; i < 80; i++)
+        {
+            world.Step();
+            angle = tracker.Update(entity, 0)!.Value.Angle;
+        }
+
+        Check.That(Math.Abs(angle) < 1e-3f && !tracker.IsRotating(gunner.Value), $"After the recentre time without an order it has turned back to its natural angle ({angle}).");
     }
 
     private static void Colors()
@@ -761,12 +808,11 @@ static class ObjectTests
         Check.That(tank.States[BestStateSelector.FindBest(tank, ModelConditionSet.Parse("RUBBLE"))].Turret.AngleBone == "turret", "Damaged states keep the default's turret.");
         Check.That(tank.TrackMarks == "extnktrack.tga" && tank.OkToChangeModelColor, "Crusader module keys.");
 
-        var crusaderTurret = crusader.Turrets.IsDefaultOrEmpty ? null : crusader.Turrets[0];
-        Check.That(crusaderTurret is not null && Math.Abs(crusaderTurret.TurnRadiansPerTick - 180f * MathF.PI / 180f / 30f) < 1e-5f && crusader.Turrets[1] is null,
-            "The Crusader's AI Turret block (TurretTurnRate = 180 degrees per second) is read.");
-        var withTurret = catalog.Visuals.Count(visual => !visual.Turrets.IsDefaultOrEmpty && visual.Turrets.Any(motion => motion is not null));
-        Check.That(withTurret >= 200, $"The turret blocks of the retail objects are read ({withTurret}).");
-        Console.WriteLine($"       real data: {withTurret} objects carry turret motion data; {catalog.Visuals.Count(visual => !visual.Turrets.IsDefaultOrEmpty && visual.Turrets.Length > 1 && visual.Turrets[1] is not null)} an alternate turret");
+        // The Turret/AltTurret blocks are typed data now (TurretSchema) and live in the simulation's templates; the presentation reads the simulated turret.
+        var turretSections = graph.Definitions.OfType<ObjectDefinition>().SelectMany(definition => definition.Modules).SelectMany(module => module.Sections.IsDefaultOrEmpty ? [] : module.Sections)
+            .Where(section => section.Declaration is "Turret" or "AltTurret").ToArray();
+        Check.That(turretSections.Length >= 200 && turretSections.All(section => section.Fields.First(field => field.Name == "ControlledWeaponSlots").Value.Kind == DefinitionValueKind.Flags),
+            $"The turret blocks of the retail objects are typed ({turretSections.Length}).");
 
         var barracks = catalog["AmericaBarracks"].Draws[0];
         string? Model(string conditions) => barracks.States[BestStateSelector.FindBest(barracks, ModelConditionSet.Parse(conditions))].Model;

@@ -480,6 +480,6 @@ static partial class Tests
         var old = (byte[])bytes.Clone();
         BitConverter.GetBytes(6u).CopyTo(old, 8);
         Check.Throws<ReplayFormatException>(() => ReplayFormat.Read(old), "Unsupported replay format version 6");
-        Check.That(WorldSnapshot.Version == 8, "Snapshots are version 8.");
+        Check.That(WorldSnapshot.Version == 9, "Snapshots are version 9.");
     }
 }
