@@ -250,6 +250,9 @@ internal static class ScenarioAudit
 
             Console.WriteLine($"{tag}: built at tick {series[0].Tick}, took off at {takeoff}, max height {maxZ:F1}, max speed {maxSpeed:F1}/s, shots {shots} (first at {firstShot}), alive at the end {last.Alive}, landed again {landedAfter}");
             Console.WriteLine($"  phases: {string.Join(" > ", phases)}");
+            var hover = series.Count(item => item.Unit.Alive && item.Unit.Z > 25f && item.Unit.Speed < 5f);
+            Console.WriteLine($"  ticks standing still in the air: {hover}");
+            if (hover > 10) failures.Add($"{tag} hangs motionless in the air for {hover} ticks (a fighter has a minimum speed and circles; the simulation lets it stop at the end of its move order)");
             if (takeoff < 0) failures.Add($"{tag} never takes off");
             if (shots == 0) failures.Add($"{tag} never fires");
             if (last.Alive && !landedAfter) failures.Add($"{tag} survived but never came back down");

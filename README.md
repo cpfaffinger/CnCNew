@@ -48,6 +48,8 @@ Die Skripte in `scripts/` bauen den Stride-Client aus dem Quelltext (Release) un
 - `.\scripts\demo-mission.ps1` – Kampagnenmission hinter der Befehlsleiste (Standard: `GC_ChemGeneral`; `-Map "Maps/…/….map"`, `-HumanSide`)
 - `.\scripts\demo-shell.ps1` – Hauptmenü-Shell (Kampagne wählen, Briefing, Mission, Speichern/Laden)
 
+Gestellte Einzeldemos zum Auditieren (Gebäude einnehmen, Panzer gegen Panzer, Jet gegen Raketentruppen): `scripts\demo-scenario.ps1`, headless `scriptsudit-scenarios.ps1`, Beschreibung und aktueller Befund in `docs/DEMO-SCENARIOS.md`.
+
 Gemeinsame Schalter (`scripts\demo.ps1 skirmish|mission|shell`): `-Size 1920x1080`, `-Seed N`, `-Configuration Debug`, `-NoBuild`, `-SmokeTest` (headless statt Fenster). Die Demos sind headless rauchgetestet, aber noch nicht von einem Menschen durchgespielt (`docs/HANDOFF-PHASE15.md`).
 ## Lokale Verzeichnisse
 
