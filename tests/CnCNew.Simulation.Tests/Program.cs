@@ -262,6 +262,11 @@ run.Test("Power: PowerPlantUpgrade adds and removes the energy bonus", Tests.Pow
 run.Test("Power: OverchargeBehavior toggles, drains and switches itself off", Tests.OverchargeTogglesDrainsAndSwitchesItselfOff);
 run.Test("Power: the TOGGLE_OVERCHARGE command reaches the module", Tests.OverchargeCommandTogglesTheModule);
 run.Test("Power: CaptureCommand transfers ownership and the power pool", Tests.CaptureTransfersOwnershipAndThePowerPool);
+run.Test("Capture: the staged ability approaches, unpacks, raises the flag, captures and packs on time", Tests.StagedCaptureRunsThroughItsStages);
+run.Test("Capture: the unit faces its target; the Black Lotus starts from afar and her other abilities stay unstaged", Tests.StagedCaptureFacesItsTargetAndLotusStartsFromAfar);
+run.Test("Capture: the ability aborts when the target dies, the player re-orders, the unit dies or a colleague captured first", Tests.StagedCaptureAbortRules);
+run.Test("Capture: the capture power as a special power command runs the same stages", Tests.StagedCaptureViaTheSpecialPowerCommand);
+run.Test("Capture: snapshots in every stage continue identically, idle objects save nothing new, two runs agree", Tests.StagedCaptureSnapshotAndDeterminism);
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
 run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);
@@ -328,6 +333,7 @@ if (contentDirectory is not null) run.Test("Real data: structures and world modu
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: weapon sets, multi-weapon objects and the Gattling Tank's weapon choice", () => Tests.RealWeaponSlots(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: Ranger, Red Guard, Rebel and Black Lotus capture a barracks in the stages of their data", () => Tests.RealStagedCapture(contentDirectory));
 return run.Finish();
 
 /// <param name="only">With <c>--only TEXT</c>, just the tests whose name contains TEXT run (a development aid; the full run takes no argument).</param>

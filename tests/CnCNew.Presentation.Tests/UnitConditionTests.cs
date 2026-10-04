@@ -728,10 +728,10 @@ internal static class UnitConditionTests
         string[] implemented =
         [
             "CONTINUOUS_FIRE_SLOW", "CONTINUOUS_FIRE_MEAN", "CONTINUOUS_FIRE_FAST", "JETAFTERBURNER", "JETEXHAUST", "FREEFALL", "SPLATTED", "FRONTCRUSHED", "BACKCRUSHED", "TOPPLED",
-            "CLIMBING", "OVER_WATER", "CENTER_TO_LEFT", "CENTER_TO_RIGHT", "LEFT_TO_CENTER", "RIGHT_TO_CENTER", "TURRET_ROTATE", "SECOND_LIFE", "SPECIAL_CHEERING",
+            "CLIMBING", "OVER_WATER", "CENTER_TO_LEFT", "CENTER_TO_RIGHT", "LEFT_TO_CENTER", "RIGHT_TO_CENTER", "TURRET_ROTATE", "SECOND_LIFE", "SPECIAL_CHEERING", "RAISING_FLAG",
         ];
         // The simulation has no model of the behaviour behind these (docs/MODEL-CONDITIONS-UNITS.md): setting them would be invention.
-        string[] notDerivable = ["PREATTACK_A", "PREATTACK_B", "PREATTACK_C", "EXPLODED_FLAILING", "EXPLODED_BOUNCING", "JAMMED", "RAISING_FLAG", "PANICKING", "RAPPELLING"];
+        string[] notDerivable = ["PREATTACK_A", "PREATTACK_B", "PREATTACK_C", "EXPLODED_FLAILING", "EXPLODED_BOUNCING", "JAMMED", "PANICKING", "RAPPELLING"];
         foreach (var name in implemented) Assert(ConditionDeriver.ProducedNames.Contains(name), $"{name} is produced");
         foreach (var name in notDerivable) Assert(!ConditionDeriver.ProducedNames.Contains(name), $"{name} is not produced (the simulation does not model it)");
     }
