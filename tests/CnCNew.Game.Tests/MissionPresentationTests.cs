@@ -32,6 +32,7 @@ internal static class MissionPresentationTests
         harness.Run("Radar events and on-screen text are captured with real positions and resolved text", RadarAndCaptionOutputsAreCaptured);
         harness.Run("Selecting a named unit reaches NAMED_SELECTED; a UI interaction reaches FLAG", UiBridgeReachesTheEngine);
         harness.Run("A camera move pans a real RtsCamera once, not every frame; caption/placeholder text becomes draw commands", OverlayAndCameraApplication);
+        harness.Run("Letterbox, input lock, cinematic text, counters and the pan over time are state and draw commands; displayed needs a host", CinematicOutputsAreShownAndCounted);
         return harness.Failures;
     }
 
@@ -170,6 +171,62 @@ internal static class MissionPresentationTests
     }
 
     // ---------------------------------------------------------------------------------------------------- overlay commands and camera application
+
+    private static void CinematicOutputsAreShownAndCounted()
+    {
+        var waypoint = Waypoint("Target", 1, 150m, 150m);
+        var intro = Script("Intro", If("CONDITION_TRUE"),
+        [
+            Do("CAMERA_LETTERBOX_BEGIN"),
+            Do("DISABLE_INPUT"),
+            Do("ROTATE_CAMERA", Real(0.5m), Real(4), Real(0), Real(0)),
+            Do("DISPLAY_CINEMATIC_TEXT", Named(MapScriptParameterType.ObjectType, "GUI:Cine"), Named(MapScriptParameterType.ObjectType, "Arial"), Int(4)),
+            Do("SET_COUNTER", Named(MapScriptParameterType.Counter, "kills"), Int(7)),
+            Do("DISPLAY_COUNTER", Named(MapScriptParameterType.Counter, "kills"), Named(MapScriptParameterType.ObjectType, "GUI:Kills")),
+            Do("SOUND_PLAY_NAMED", Named(MapScriptParameterType.ObjectType, "SomeSound"), Named(MapScriptParameterType.Unit, "Nobody")),
+            Do("SET_FPS_LIMIT", Int(20)),
+        ]);
+        var (map, fixture, terrain) = Mission([intro], [waypoint]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var director = new MissionPresentationDirector(session);
+        var disabled = 0;
+        director.InputDisabled += () => disabled++;
+
+        director.BeforeStep();
+        session.Step();
+        director.AfterStep();
+
+        var counts = director.Counts().ToDictionary(count => count.Action);
+        TestHarness.Assert(counts["CAMERA_LETTERBOX_BEGIN"] is { Emitted: 1, Forwarded: 1, Displayed: 0 }, "without a host that draws the overlay the letterbox is forwarded, not displayed");
+        TestHarness.Assert(counts["SOUND_PLAY_NAMED"] is { Emitted: 1, Forwarded: 0, Displayed: 0 } && director.Problems.Keys.Any(key => key.StartsWith("SOUND_PLAY_NAMED", StringComparison.Ordinal)), "a sound without connected audio is counted as not played, with the reason");
+        TestHarness.Assert(counts["SET_FPS_LIMIT"] is { Emitted: 1, Forwarded: 0, Displayed: 0 }, "an output nothing shows is counted as not displayed");
+
+        TestHarness.Assert(director.Letterbox && disabled == 1 && director.InputLocked, "letterbox and input lock are state the host reads; the lock is announced once");
+        var commands = director.BuildOverlayCommands(1280, 720);
+        TestHarness.Assert(commands.OfType<UiFillRect>().Count(fill => fill.Rect.Width == 1280) == 2, "the letterbox draws two bars across the screen");
+        TestHarness.Assert(commands.OfType<UiTextDraw>().Any(text => text.Text == "GUI:Cine"), "the cinematic text is drawn");
+        TestHarness.Assert(commands.OfType<UiTextDraw>().Any(text => text.Text == "GUI:Kills 7"), $"the counter shows its label and value ({string.Join(" | ", commands.OfType<UiTextDraw>().Select(text => text.Text))})");
+
+        var camera = new RtsCamera(MinimalCameraSettings(), new TerrainHeightSampler(map.HeightField), new Vector2(1280, 720));
+        // The synthetic map is smaller than the camera's footprint, so the pivot cannot move on it; the half turn of ROTATE_CAMERA shows the same timing.
+        camera.SetAngle(0f);
+        director.ApplyCameraTo(camera, 2.0);
+        TestHarness.Assert(Math.Abs(Math.Abs(camera.Angle) - MathF.PI / 2) < 0.05f, $"half way through its four seconds the half turn is a quarter turn (angle {camera.Angle})");
+        director.ApplyCameraTo(camera, 0);
+        var paused = camera.Angle;
+        director.ApplyCameraTo(camera, 0);
+        TestHarness.Assert(camera.Angle == paused, "a paused game does not advance the move");
+        director.ApplyCameraTo(camera, 2.5);
+        TestHarness.Assert(Math.Abs(Math.Abs(camera.Angle) - MathF.PI) < 0.05f, $"after its duration the camera has made the half turn (angle {camera.Angle})");
+        camera.SetAngle(1f);
+        director.ApplyCameraTo(camera, 1.0);
+        TestHarness.Assert(camera.Angle == 1f, "a finished move leaves the camera to the player");
+
+        counts = director.Counts().ToDictionary(count => count.Action);
+        TestHarness.Assert(counts["CAMERA_LETTERBOX_BEGIN"].Displayed == 1 && counts["ROTATE_CAMERA"].Displayed == 1 && counts["DISABLE_INPUT"].Displayed == 1 && counts["DISPLAY_COUNTER"].Displayed == 1,
+            "once the host drew the overlay, applied the camera and asked for the lock, those outputs count as displayed");
+        TestHarness.Assert(director.Report().Any(line => line.StartsWith("mission outputs:", StringComparison.Ordinal)), "the report has a totals line");
+    }
 
     private static RtsCameraSettings MinimalCameraSettings() => new(
         PitchDegrees: -34f, YawDegrees: 0f, CameraHeight: 200f, MaxHeightAboveGround: 300f, MinHeightAboveGround: 100f,

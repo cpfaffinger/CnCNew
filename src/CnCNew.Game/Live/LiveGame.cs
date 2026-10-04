@@ -115,7 +115,26 @@ public abstract class LiveGame
     /// Command sink of the human player: everything the human changes in the world goes through it, so the simulation's recording (a skirmish's replay, a mission's
     /// per-player sequence counter) sees every order. Created lazily; one instance per game.
     /// </summary>
-    public abstract ICommandSink Commands { get; }
+    public ICommandSink Commands => _observedCommands ??= new ObservedCommandSink(this, CreateCommandSink());
+
+    /// <summary>The sink of the simulation behind this game (a skirmish session, a mission session, a staged scene); called once.</summary>
+    protected abstract ICommandSink CreateCommandSink();
+
+    /// <summary>Raised for every order the human submitted through <see cref="Commands"/>, with the simulation's answer (accepted, or why not): for sound, diagnostics and the client's input replay report.</summary>
+    public event Action<CnCNew.Simulation.Commands.SimCommand, CnCNew.Simulation.Commands.SubmitResult>? CommandIssued;
+
+    private ICommandSink? _observedCommands;
+
+    private sealed class ObservedCommandSink(LiveGame game, ICommandSink inner) : ICommandSink
+    {
+        public CnCNew.Simulation.Commands.SubmitResult Issue(Func<ulong, long, CnCNew.Simulation.Commands.SimCommand> make)
+        {
+            CnCNew.Simulation.Commands.SimCommand? made = null;
+            var result = inner.Issue((sequence, tick) => made = make(sequence, tick));
+            if (made is not null) game.CommandIssued?.Invoke(made, result);
+            return result;
+        }
+    }
 
     /// <summary>Invoked immediately before every simulation step of <see cref="Advance"/> (per-tick input bookkeeping).</summary>
     public Action<SimulationWorld>? BeforeTick { get; set; }
@@ -153,12 +172,12 @@ public abstract class LiveGame
             if (steps == MaxTicksPerFrame) _accumulator = Math.Min(_accumulator, TickSeconds);
         }
         Fog.Advance((float)seconds);
-        OnAdvanced();
+        OnAdvanced(Paused ? 0 : seconds * Speed);
         Frame = _projector.Project(Paused ? 1f : (float)Math.Clamp(_accumulator / TickSeconds, 0, 1));
     }
 
-    /// <summary>Called once per <see cref="Advance"/> after the ticks, before the frame is projected (a mission applies its scripted camera here).</summary>
-    protected virtual void OnAdvanced() { }
+    /// <summary>Called once per <see cref="Advance"/> after the ticks, before the frame is projected, with the game time that passed (0 while paused); a mission plays its scripted camera here.</summary>
+    protected virtual void OnAdvanced(double gameSeconds) { }
 
     private void SyncAfterTick(TickResult result)
     {

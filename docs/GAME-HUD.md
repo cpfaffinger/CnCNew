@@ -274,11 +274,11 @@ Schichten wanderte unverändert in die Basisklasse, `LiveMatch` blieb für seine
 
 - **`LiveMission`** (`Live/LiveMission.cs`) setzt eine `MissionRun` (`MissionSession`) dahinter. Der Betrachter ist die lokale Seite der Mission (`MissionSession.LocalPlayerOf`,
   einschließlich der von `ChallengeSides` gewählten Seite); die Kamera startet über dem Schwerpunkt seiner Objekte. Ein Tick ist `MissionPresentationDirector.BeforeStep` → `Session.Step()`
-  (Skripte, automatisches Gefecht, Welt) → `AfterStep`; die vom Skript bestellte Kamera wird einmal je neuem Ziel auf die `RtsCamera` übertragen (`OnAdvanced`). Befehle des Menschen laufen
+  (Skripte, automatisches Gefecht, Welt) → `AfterStep`; die vom Skript bestellte Kamera fährt je Frame über die Dauer des Skripts (`OnAdvanced` → `ApplyCameraTo`, seit Phase 16; vorher ein Sprung je neuem Ziel – `docs/SCRIPT-ENGINE.md` §7a). Befehle des Menschen laufen
   über `MissionCommandSink` (`Presentation/Input/CommandSink.cs`) in `MissionSession.Issue`, also durch denselben Sequenzzähler je Spieler wie die der Skripte.
   `Winner` ist der Betrachter bei einem Missionssieg, sonst `null` (die Gegner sind geskriptet, kein konkurrierender Mensch).
 - **`MissionController`** (`Hud/MissionController.cs`) setzt ein `MatchController` über die `LiveMission`, hängt `SelectionModel.SelectionChanged` an `MissionUiBridge.OnSelectionChanged`
-  (die Auswahl erreicht `NAMED_SELECTED`), liefert `BuildDrawList` mit dem Bildschirmtext des Directors (Caption/Untertitel/Filmplatzhalter) über dem HUD und meldet das Missionsende
+  (die Auswahl erreicht `NAMED_SELECTED`), liefert `BuildDrawList` mit dem Bildschirmtext des Directors (Caption/Untertitel/Filmplatzhalter, seit Phase 16 auch Letterbox, Blenden, Zähler, Ergebnisbanner; während der Letterbox ohne Befehlsleiste) über dem HUD, sperrt die Welteingabe, solange das Skript sie gesperrt hat (`MatchController.WorldInputEnabled`), und meldet das Missionsende
   einmal (`MissionEnded`); danach ruft der Host `GameShell.MissionFinished(run, controller)`.
 - **Stride:** `LiveMatchHost` und alle Weltschichten nehmen ein `LiveGame`; `CnCNew.Client.Stride --mission <Karte> [--human-side <Name>]` startet eine Kampagnenkarte (Rauchtest:
   `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/phase2-import-a`). Seit Phase 12 zeichnet die Stride-Hülle auch die HUD-Zeichenliste
@@ -378,3 +378,61 @@ gezeichnet. Eine erreichte Station verschwindet aus dem Pfad, ein anderer Befehl
 * 3D-Marken (`SCMNode`, das Bewegungsmarken-Modell) fehlen; die Marken sind 2D-Ersatz im Overlay.
 * Die Einnahme-, Hack-, Entführungs- und Scharfschützen-Cursor kommen nur über Befehlsknöpfe, die die Eingabeschicht noch als „nicht unterstützt“ führt (`docs/PRESENTATION-INPUT.md` §6); ihre Bilder sind geladen,
   gezeigt werden sie heute nur von Knöpfen mit Zielmodus.
+
+## 17. Phase 16: Eingabe-Wiedergabe im Client (`--input-script`) und der Befund „Dozer baut nicht“
+
+### 17.1 Die Testeinrichtung
+
+`src/CnCNew.Client.Stride/Testing/InputScript.cs` spielt eine Folge von Zeiger- und Tastenereignissen **an der Stelle ein, an der sonst `StrideInputTranslator.Poll` in `ClientRuntime.Update`
+mündet**. Ein Skript läuft damit durch den echten Clientweg: das HUD ist für den echten Backbuffer gelegt, die Textmaße kommen vom Renderer, pro Frame gibt es ein Update und eine Zeichenliste –
+nichts davon sieht ein Headless-Test des `MatchController`. Die Einrichtung schreibt nie in die Simulation: alles ist ein `InputEvent`; die einzige Ausnahme `look` bewegt nur die Kamera.
+
+Aufruf (nur mit festen Zeitschritten): `--smoke-test --frames N --input-script <Datei>` zusammen mit `--match`, `--mission` oder `--scenario`.
+
+Format: eine Zeile je Schritt, `#` beginnt einen Kommentar, `FRAME VERB ARGUMENTE` (Frames zählen die Updates der Laufzeit ab 1).
+
+| Verb | Bedeutung |
+| --- | --- |
+| `move ZIEL` | Zeiger auf das Ziel |
+| `down [left\|right\|middle] [ZIEL]`, `up […]` | Taste drücken/loslassen (ohne Ziel an der aktuellen Zeigerposition) |
+| `click [left\|right\|middle] ZIEL` | Bewegen und Drücken in diesem Frame, Loslassen zwei Frames später auf demselben Pixel |
+| `key down\|up KEYCODE` | Taste (`KeyCode`-Name) |
+| `look ZIEL` | Kamera auf das Ziel zentrieren (Testhilfe, keine Eingabe) |
+
+Ziele werden im Frame ihrer Verwendung aufgelöst: `screen:X,Y`; `own:KINDOF[#N]` und `template:NAME[#N]` (das N-te eigene lebende Objekt nach Id, an seinem Auswahl-Mittelpunkt);
+`button:FENSTER` (Mitte eines HUD-Fensters, z. B. `ControlBar.wnd:ButtonOptions`); `command:ART[:OBJEKT]` (der erste freigeschaltete Befehlsleisten-Platz dieser `GuiCommandKind`);
+`ground:X,Y`; `ground:+DX,+DY from OBJEKT`; `placement from OBJEKT` (die erste Stelle um das Objekt, an der die anstehende Platzierung angenommen würde). Wie beim echten Gerät gibt es **eine**
+Zeigerposition je Frame: zuerst ein Bewegungsereignis, wenn sie sich änderte, dann die Tastenereignisse des Frames mit dieser Position.
+
+Bericht am Ende (Konsole, Präfix `input-script:`): jeder Schritt mit aufgelöstem Pixel und Ziel, jede Auswahländerung, jeder Wechsel des Befehlsmodus und der Bauvorschau (gültig/ungültig mit
+Grund, gezeichnet oder nicht), jeder abgesetzte Befehl mit Antwort der Simulation (`LiveGame.CommandIssued`: angenommen oder Ablehnungsgrund), ungültige Klicks, entstandene und fertige
+Baustellen, der Zustand am Ende und eine Summenzeile (`input-script summary: steps=… events=… unresolved=… selectionChanges=… commandsAccepted=… commandsRejected=… invalidOrders=… sitesCreated=…
+sitesCompleted=…`). Ein Ziel, das sich nicht auflösen lässt, wird gemeldet und gezählt, nie still übergangen; der Prozess endet dann mit Exitcode 3.
+
+Regressionsprüfung: `scripts/check-dozer-build.ps1 [-Quick] [-NoBuild]` (Skripte unter `scripts/input/`) fährt den Release-Client fünfmal, jeweils zeitbegrenzt, und prüft die Summenzeile:
+Mission `GC_ChemGeneral` und Gefecht `Alpine Assault` je in 1280x720 und 1920x1080 (Gebäude platziert und fertig gebaut) sowie Klicks während der Eröffnungssequenz der Mission (müssen
+verworfen werden, die Sperre muss enden). Gemessen 4. Oktober 2026: 5 von 5 bestanden.
+
+### 17.2 Befund: „im Mission-Demo kann ich keine Gebäude mit dem Dozer bauen“
+
+Mit der Wiedergabe „Dozer wählen → Bauknopf → Zeiger über den Boden → Klick“ im echten Client gemessen:
+
+- **Nach der Eröffnungssequenz funktioniert der Bau** in `--mission GC_ChemGeneral` und in `--match Alpine Assault`, jeweils in 1280x720 und 1920x1080: Auswahl, Knopf
+  (`ButtonCommand01` bei 445,617 59x47 in 1280x720), Platzierungsmodus, gültige Vorschau, `ConstructCommand` angenommen, Baustelle entsteht, Dozer baut fertig (407 Ticks). UI-Skalierung,
+  Renderer-Textmaß und die Update-/Zeichenreihenfolge des Clients sind also nicht die Ursache.
+- **In den ersten 25 Sekunden der Mission scheiterte er**: dieselbe Folge ab Frame 40 ergab im alten Client eine gültige Vorschau bei Frame 60 und zehn Frames später am selben Pixel
+  `BlockedFootprint` – der Klick wurde als „Cannot do that“ abgewiesen und der Platzierungsmodus blieb stehen. Ursache: `GC_ChemGeneral` beginnt mit einer Kamerafahrt über die gegnerische Basis
+  (Tick 0–750: `CAMERA_LETTERBOX_BEGIN`, `DISABLE_INPUT`, `SETUP_CAMERA`, `MOVE_CAMERA_TO` bei Tick 60 und 330, `RESET_CAMERA` bei 681, `ENABLE_INPUT` bei 750). Der Client hat davon nur die
+  Kameraziele übernommen – als harten Sprung –, aber weder die Eingabesperre noch die Letterbox: die Befehlsleiste blieb bedienbar, während das Skript die Kamera unter dem Zeiger wegzog. Wer
+  in dieser Zeit baute, klickte auf eine andere Weltstelle als die, die er sah.
+- **Behoben** (§7a in `docs/SCRIPT-ENGINE.md`): die Skriptkamera fährt jetzt über die Dauer des Skripts, `DISABLE_INPUT`/`ENABLE_INPUT` sperren die Welteingabe (`MatchController.WorldInputEnabled`;
+  wie `ScriptActions::doDisableInput` werden Auswahl, Befehlsmodi und gehaltene Tasten gelöscht, das Spielmenü bleibt mit Esc erreichbar), die Letterbox blendet die Befehlsleiste aus und zeigt
+  Balken mit dem Hinweis, dass das Missionsskript die Eingabe gesperrt hat.
+- **Rückmeldung beim Bauen** (Bildprobe, PNGs außerhalb des Repos angesehen): die Bauvorschau war ein dünner Rahmen mit Diagonalen; sie ist jetzt zusätzlich schraffiert
+  (`HudOverlayRenderer`, grün = erlaubt, rot = nicht erlaubt). Ein Geistermodell des Gebäudes gibt es weiterhin nicht. Die Baustelle ist während des Baus sichtbar (Zaun und Gerüstteile des
+  Modells), der Dozer fährt sichtbar hin.
+- **Zusätzlich gehärtet:** `StrideInputTranslator` skaliert die normalisierte Zeigerposition jetzt mit dem Backbuffer statt mit der Fenstergröße; weicht die Fensterfläche vom Backbuffer ab
+  (ein 1920x1080-Fenster, das der Desktop nicht fasst; Anzeigeskalierung), trifft ein Klick trotzdem den Knopf unter dem Zeiger. Der Client schreibt beide Größen beim Start
+  (`display: back buffer …, window client area …`). Das ließ sich headless nicht nachstellen und ist **nicht** als Ursache belegt.
+- **Nicht belegt:** ob der Tester genau in diesen 25 Sekunden gebaut hat. Die Eröffnungssequenz ist der einzige Weg, auf dem die Wiedergabe im echten Client scheiterte; ein Mensch muss im
+  laufenden Client bestätigen, dass der Bau jetzt geht (Fenster, echte Maus, echte Frametimes sind headless nicht prüfbar).

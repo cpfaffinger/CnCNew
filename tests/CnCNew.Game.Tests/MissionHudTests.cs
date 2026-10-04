@@ -36,6 +36,8 @@ internal static class MissionHudTests
             TestHarness.Assert(live.Players.Length >= 2 && !live.HumanFaction.Equals(string.Empty), $"the players and the viewer's faction are known (faction '{live.HumanFaction}')");
             for (var frame = 0; frame < 60; frame++) controller.Update(1.0 / 30);
             TestHarness.Assert(live.Tick >= 55, $"the mission advanced at 30 Hz (tick {live.Tick})");
+            // The control bar is hidden while the opening cinematic's letterbox is up (CAMERA_LETTERBOX_BEGIN); the HUD is judged after it.
+            for (var frame = 0; frame < 1500 && controller.Director.Letterbox; frame++) controller.Update(1.0 / 30);
             var list = controller.BuildDrawList(1280, 720);
             TestHarness.Assert(list.Commands.Any(command => command is CnCNew.Ui.Runtime.UiCustomDraw { Callback: "Viewport3D" }), $"the HUD draw list is built over the mission ({list.Commands.Length} commands)");
 
@@ -77,7 +79,9 @@ internal static class MissionHudTests
                 TestHarness.Assert(live.Camera.TryWorldToScreen(world, out var screen), "the point projects onto the screen");
                 return screen;
             }
-            for (var frame = 0; frame < 30; frame++) controller.Update(1.0 / 30);
+            // The mission opens with a cinematic: its script disables the input and flies the camera over the enemy base (next test). The player builds afterwards.
+            for (var frame = 0; frame < 1500 && (frame < 30 || controller.Director.InputLocked || controller.Director.CameraMoveActive); frame++) controller.Update(1.0 / 30);
+            TestHarness.Assert(!controller.Director.InputLocked, $"the opening cinematic hands the input back (tick {live.Tick})");
 
             var dozer = live.World.Entities.First(entity => entity.Owner == live.Human && entity.Template.IsKindOf("DOZER"));
             var ground = SimulationQueries.GroundOf(dozer);
@@ -116,6 +120,60 @@ internal static class MissionHudTests
             for (var frame = 0; frame < 2400 && site!.HasStatus(underConstruction); frame++) controller.Update(1.0 / 30);
             TestHarness.Assert(!site!.HasStatus(underConstruction) && !site.EffectivelyDead, $"the dozer builds it to the end (work {site.ConstructionWork}, dozer at {dozer.X.ToDecimal():F0},{dozer.Y.ToDecimal():F0}, site at {site.X.ToDecimal():F0},{site.Y.ToDecimal():F0}, tick {live.Tick})");
         });
+        harness.Run("The opening cinematic locks the input, hides the control bar, flies the camera and gives everything back", () =>
+        {
+            var run = MissionRun.Load(MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyTicks });
+            var live = LiveMission.Create(data, run, viewport);
+            var controller = new MissionController(live, GameSettings.Default);
+            var start = live.Camera.Pivot;
+            long time = 10_000;
+            void Click(Vector2 at)
+            {
+                controller.Process(new MouseMoveEvent(time += 16, at));
+                controller.Process(new MouseButtonEvent(time += 16, MouseButton.Left, true, at));
+                controller.Update(1.0 / 30);
+                controller.BuildDrawList(1280, 720);
+                controller.Process(new MouseButtonEvent(time += 50, MouseButton.Left, false, at));
+                time += 1000;
+            }
+            for (var frame = 0; frame < 90; frame++) controller.Update(1.0 / 30);
+            var director = controller.Director;
+            TestHarness.Assert(director.InputLocked && director.Letterbox, $"the intro disables the input and opens the letterbox (locked {director.InputLocked}, letterbox {director.Letterbox}, tick {live.Tick})");
+            TestHarness.Assert(Vector2.Distance(live.Camera.Pivot, start) > 100f, $"the scripted camera left the player's base (from {start} to {live.Camera.Pivot})");
+            var cinematic = controller.BuildDrawList(1280, 720);
+            TestHarness.Assert(!cinematic.Commands.Any(command => command is CnCNew.Ui.Runtime.UiCustomDraw) && cinematic.Commands.OfType<CnCNew.Ui.Runtime.UiFillRect>().Count() >= 2,
+                $"during the letterbox the control bar is hidden and the bars are drawn ({cinematic.Commands.Length} commands)");
+
+            // A click in the middle of the screen during the cinematic: before the fix it reached the world while the camera was being moved by the script.
+            var dozer = live.World.Entities.First(entity => entity.Owner == live.Human && entity.Template.IsKindOf("DOZER"));
+            var before = live.Camera.Pivot;
+            Click(new Vector2(640, 344));
+            TestHarness.Assert(controller.Hud.Input.Selection.Selected.Count() == 0 && controller.Hud.Input.Commands.Mode == CommandModeKind.None, "input is dropped while the script has it disabled");
+            controller.Process(new MouseMoveEvent(time += 16, new Vector2(0, 0)));
+            for (var frame = 0; frame < 20; frame++) controller.Update(1.0 / 30);
+            TestHarness.Assert(director.CameraMoveActive || Vector2.Distance(live.Camera.Pivot, before) < 400f, "the pointer does not scroll the camera away from the scripted move");
+
+            var frames = 0;
+            for (; frames < 1500 && (director.InputLocked || director.CameraMoveActive); frames++) controller.Update(1.0 / 30);
+            TestHarness.Assert(!director.InputLocked && !director.Letterbox, $"the script enables the input and closes the letterbox again (tick {live.Tick})");
+            TestHarness.Assert(live.Tick is > 600 and < 1200, $"the cinematic takes its scripted time, about 25 seconds (ended at tick {live.Tick})");
+            var hud = controller.BuildDrawList(1280, 720);
+            TestHarness.Assert(hud.Commands.Any(command => command is CnCNew.Ui.Runtime.UiCustomDraw { Callback: "Viewport3D" }), "the control bar is back");
+            TestHarness.Assert(Vector2.Distance(live.Camera.Pivot, SimulationQueries.GroundOf(dozer)) < 600f, $"the camera ends at the player's base (camera {live.Camera.Pivot}, dozer {SimulationQueries.GroundOf(dozer)})");
+
+            live.Camera.CenterOn(SimulationQueries.GroundOf(dozer));
+            controller.Update(1.0 / 30);
+            TestHarness.Assert(live.Camera.TryWorldToScreen(EntityPicker.CenterOf(dozer), out var at), "the dozer is on screen");
+            Click(at);
+            controller.Update(1.0 / 30);
+            TestHarness.Assert(controller.Hud.Input.Selection.Contains(dozer.Id), "after the cinematic a click selects the dozer");
+
+            var counts = director.Counts().ToDictionary(count => count.Action);
+            foreach (var action in (ReadOnlySpan<string>)["DISABLE_INPUT", "ENABLE_INPUT", "CAMERA_LETTERBOX_BEGIN", "CAMERA_LETTERBOX_END", "SETUP_CAMERA", "MOVE_CAMERA_TO", "RESET_CAMERA"])
+                TestHarness.Assert(counts.TryGetValue(action, out var count) && count.Emitted > 0 && count.Displayed == count.Emitted, $"{action} is emitted and displayed ({(counts.TryGetValue(action, out var value) ? $"{value.Emitted}/{value.Displayed}" : "never emitted")})");
+            TestHarness.Assert(counts["SPEECH_PLAY"].Emitted > 0 && counts["SPEECH_PLAY"].Displayed == counts["SPEECH_PLAY"].Emitted, "speech without audio is shown as its placeholder subtitle");
+            TestHarness.Assert(counts.Values.Any(count => count.NotDisplayed > 0 && count.How == CnCNew.Game.Shell.MissionPresentationDirector.HowDisplayed("SET_FPS_LIMIT")), "outputs without a display are counted as not displayed, not dropped");
+        });
         harness.Run("The mission ends through the HUD controller exactly once", () =>
         {
             var run = MissionRun.Load(MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", MissionOptions.Standard);
@@ -129,6 +187,10 @@ internal static class MissionHudTests
             for (var frame = 0; frame < 30; frame++) controller.Update(1.0 / 30);
             TestHarness.Assert(ended.Count == 1 && ended[0] == MissionOutcome.Victory, $"the scripted victory ended the mission once (events: {string.Join(",", ended)}, outcome {live.Outcome})");
             TestHarness.Assert(live.Winner == live.Human, "the viewer is the winner of a won mission");
+            TestHarness.Assert(controller.Director.OutcomeBanner == "MISSION ACCOMPLISHED" && controller.BuildDrawList(1280, 720).Commands.OfType<CnCNew.Ui.Runtime.UiTextDraw>().Any(text => text.Text == "MISSION ACCOMPLISHED"),
+                $"the scripted victory is shown as a banner (banner '{controller.Director.OutcomeBanner}')");
+            var victory = controller.Director.Counts().Single(count => count.Action == "VICTORY");
+            TestHarness.Assert(victory is { Emitted: 1, Displayed: 1 }, $"the VICTORY output is counted as displayed ({victory.Emitted}/{victory.Displayed})");
         });
         return harness.Failures;
     }

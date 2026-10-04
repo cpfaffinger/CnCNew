@@ -48,6 +48,13 @@ internal sealed class ModelAssetCache : IDisposable
             Console.Error.WriteLine($"warning: object layer could not load model '{modelName}': {ex.Message}");
             return null;
         }
+        catch (InvalidDataException ex)
+        {
+            // A file the W3D layer cannot turn into a model (MD_GLA03's 'cineexplbox' holds one collision box and no mesh): nothing to draw, but no reason to end the game either.
+            _missing.Add(modelName);
+            Console.Error.WriteLine($"warning: object layer cannot use model '{modelName}': {ex.Message}");
+            return null;
+        }
 
         var asset = ModelAsset.Build(modelName, model, _services, _indices);
         _assets[modelName] = asset;

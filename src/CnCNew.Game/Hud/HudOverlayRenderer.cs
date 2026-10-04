@@ -32,6 +32,7 @@ public static class HudOverlayRenderer
     private static readonly WndColor BarBack = new(0, 0, 0, 170);
 
     private const int RingSegments = 28;
+    private const int PlacementHatchLines = 8;
     private const int WrenchFrames = 10;
     private const int CrossFrames = 16;
 
@@ -99,6 +100,18 @@ public static class HudOverlayRenderer
             // The diagonals make the footprint readable on any ground.
             commands.Add(new UiLineDraw(corners[0].X, corners[0].Y, corners[2].X, corners[2].Y, 1f, color with { A = 150 }));
             commands.Add(new UiLineDraw(corners[1].X, corners[1].Y, corners[corners.Length - 1].X, corners[corners.Length - 1].Y, 1f, color with { A = 150 }));
+
+            // There is no ghost model yet: a hatching across the footprint stands in for it, so the preview reads as an area (green: legal, red: not) and not as a thin frame.
+            if (corners.Length == 4)
+            {
+                for (var line = 1; line < PlacementHatchLines; line++)
+                {
+                    var t = line / (float)PlacementHatchLines;
+                    var from = Vector2.Lerp(corners[0], corners[3], t);
+                    var to = Vector2.Lerp(corners[1], corners[2], t);
+                    commands.Add(new UiLineDraw(from.X, from.Y, to.X, to.Y, 2f, color with { A = 110 }));
+                }
+            }
         }
 
         if (!overlay.HealIcons.IsDefaultOrEmpty)

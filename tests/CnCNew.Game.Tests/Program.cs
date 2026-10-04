@@ -1,7 +1,7 @@
 using CnCNew.Game.Tests;
 
 // Each suite exposes `static int Run(string[] args)` returning its failure count; one registration per line.
-// `--only <Suite>[,<Suite>...]` runs just those suites (the whole program takes many minutes on real data).
+// `--only <Suite>[,<Suite>...]` (or `--suite`) runs just those suites (the whole program takes many minutes on real data).
 (string Name, Func<string[], int> Run)[] suites =
 [
     (nameof(LiveMatchTests), LiveMatchTests.Run),
@@ -16,7 +16,8 @@ using CnCNew.Game.Tests;
     (nameof(ModelGeometryTests), ModelGeometryTests.Run),
 ];
 
-var onlyIndex = Array.IndexOf(args, "--only");
+// --suite is accepted as another spelling of --only.
+var onlyIndex = Array.IndexOf(args, "--only") is var onlyAt and >= 0 ? onlyAt : Array.IndexOf(args, "--suite");
 var only = onlyIndex >= 0 && onlyIndex + 1 < args.Length ? args[onlyIndex + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : null;
 if (only is not null && only.Except(suites.Select(suite => suite.Name), StringComparer.OrdinalIgnoreCase).ToArray() is { Length: > 0 } unknown)
 {

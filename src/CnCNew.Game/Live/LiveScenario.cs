@@ -90,7 +90,7 @@ public sealed class LiveScenario : LiveGame
     public override bool IsOver => World.Tick >= Scenario.Ticks;
     public override PlayerId? Winner => null;
     public override ImmutableArray<PlayerConfiguration> Players => _players;
-    public override ICommandSink Commands => _commands;
+    protected override ICommandSink CreateCommandSink() => _commands;
 
     /// <summary>Submits a command of <paramref name="player"/> with that player's next sequence number.</summary>
     public SubmitResult Issue(PlayerId player, Func<ulong, long, SimCommand> make)

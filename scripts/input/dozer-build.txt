@@ -1,0 +1,8 @@
+# Replay of the tester's report (docs/GAME-HUD.md §17): select the dozer, press a construct button of the control bar,
+# move over the ground until the placement is legal, click. Used by scripts/check-dozer-build.ps1.
+# The steps start after frame 750: GC_ChemGeneral opens with a 25 second cinematic during which its script disables the input.
+800  look own:DOZER
+810  click left own:DOZER
+830  click left command:DozerConstruct
+850  move placement from own:DOZER
+880  click left placement from own:DOZER

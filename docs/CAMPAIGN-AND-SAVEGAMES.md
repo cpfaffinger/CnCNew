@@ -146,8 +146,8 @@ und Endproben: `docs/SCRIPT-ENGINE.md` §9). Die Größe eines Missionszustands 
   Weltposition). Kamerabewegungen (`MOVE_CAMERA_TO` u. a.) werden mit ihrer echten Sekundenparameter-Dauer verfolgt und
   `CompletePresentation` wird exakt zu diesem Zeitpunkt aufgerufen (`BeforeStep`/`AfterStep`, zeitlich genauso wie die
   eigene `PresentationLatencyTicks`-Selbstauflösung der Engine) – mit Test gegen eine echte Kamerabewegungssequenz
-  (`CnCNew.Game.Tests` → `MissionPresentationTests`). `ApplyCameraTo` überträgt das Ziel einmalig auf eine echte
-  `RtsCamera`; `BuildOverlayCommands` liefert den Bildschirmtext als `UiDrawCommand`s, die der vorhandene
+  (`CnCNew.Game.Tests` → `MissionPresentationTests`). `ApplyCameraTo` spielt die Skriptkamera auf einer echten
+  `RtsCamera` ab (seit Phase 16 über die Dauer des Skripts, dazu Eingabesperre, Letterbox, Blenden, Zähler, Skript-Ton und Zähler je Ausgabetyp: `docs/SCRIPT-ENGINE.md` §7a); `BuildOverlayCommands` liefert den Bildschirmtext als `UiDrawCommand`s, die der vorhandene
   `CnCNew.Client.Stride`-`UiRenderer` bereits zeichnen kann (kein neuer Renderer nötig). `MissionUiBridge` leitet
   Selektionsänderungen an `ScriptEngine.SelectNamed` weiter (`NAMED_SELECTED`) und reicht `SignalUiInteraction` direkt durch
   (`FLAG`); eine feste Zuordnung „dieser Knopf → dieses Flag“ gibt es nicht (die Mission-Metadaten tragen das nirgends),

@@ -5,19 +5,23 @@ using PresentationInput = CnCNew.Presentation.Input;
 namespace CnCNew.Client.Stride.Ui;
 
 /// <summary>
-/// Turns one frame of Stride input (<see cref="InputManager.Events"/> and the absolute mouse position) into the device-neutral
-/// <see cref="PresentationInput.InputEvent"/>s the presentation layer and the shell consume. Positions are window pixels with the origin top-left, which is the
-/// back-buffer space the UI is laid out in. Keys the input layer has no name for are dropped (they cannot be bound), text goes through as characters.
+/// Turns one frame of Stride input (<see cref="InputManager.Events"/> and the mouse position) into the device-neutral
+/// <see cref="PresentationInput.InputEvent"/>s the presentation layer and the shell consume. Positions are back-buffer pixels with the origin top-left, the space
+/// the UI is laid out in: the normalized pointer position is scaled by the back buffer, not by the window, so a window whose client area differs from the back buffer
+/// (a 1920x1080 window the desktop cannot hold, display scaling) still puts a click on the button under the pointer.
+/// Keys the input layer has no name for are dropped (they cannot be bound), text goes through as characters.
 /// </summary>
 internal sealed class StrideInputTranslator
 {
     private Vector2 _lastPosition = new(float.NaN, float.NaN);
 
     /// <summary>The events of this frame in the order Stride delivered them; a move event first when the pointer moved.</summary>
-    public List<PresentationInput.InputEvent> Poll(InputManager input, long timeMs)
+    public List<PresentationInput.InputEvent> Poll(InputManager input, long timeMs, int backBufferWidth, int backBufferHeight)
     {
         var events = new List<PresentationInput.InputEvent>();
-        var position = new Vector2(input.AbsoluteMousePosition.X, input.AbsoluteMousePosition.Y);
+        var position = backBufferWidth > 0 && backBufferHeight > 0
+            ? new Vector2(input.MousePosition.X * backBufferWidth, input.MousePosition.Y * backBufferHeight)
+            : new Vector2(input.AbsoluteMousePosition.X, input.AbsoluteMousePosition.Y);
         if (input.HasMouse && position != _lastPosition)
         {
             // The first position seen is where the device happens to report the pointer (0,0 in a headless run), not a movement: taking it as one would park the cursor on the

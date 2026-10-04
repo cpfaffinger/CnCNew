@@ -120,6 +120,14 @@ public sealed class GameAudio : IDisposable
         return FxCatalog.IsAudible(name) && Director.PlayUi(name);
     }
 
+    /// <summary>
+    /// A sound a mission script asked for (<c>MissionPresentationDirector.Audio</c>): <c>MUSIC_SET_TRACK</c> changes the track, every other action
+    /// (<c>SPEECH_PLAY</c>, <c>SOUND_PLAY_NAMED</c>, <c>PLAY_SOUND_EFFECT</c>, <c>PLAY_SOUND_EFFECT_AT</c>) plays the named event without a position. Returns whether a
+    /// voice started; an unknown name is counted by the director like any other.
+    /// </summary>
+    public bool PlayScripted(string action, string eventName)
+        => !string.IsNullOrWhiteSpace(eventName) && (action == "MUSIC_SET_TRACK" ? Director.SetMusicTrack(eventName) : Director.PlayUi(eventName));
+
     private void OnButtonClicked() => PlayHook("GUIClickSound");
 
     private void OnSelectionChanged(ImmutableArray<EntityId> selected)

@@ -117,6 +117,12 @@ public sealed class MatchController
     public HudOverlay Overlay { get; private set; }
     public bool IsMenuOpen { get; private set; }
 
+    /// <summary>
+    /// <see langword="false"/> while a mission script has disabled the input (<c>InGameUI::setInputEnabled</c>): every event except the menu key is dropped and the
+    /// pointer no longer scrolls the camera; the in-game menu stays reachable and works as usual.
+    /// </summary>
+    public bool WorldInputEnabled { get; set; } = true;
+
     /// <summary>Meta actions the controller does not handle itself (pause, screenshot, chat, diplomacy, control bar toggle, time scale, ...).
     /// <see cref="MetaAction.Options"/> is handled internally (opens/closes the in-game menu) and never appears here.</summary>
     public event Action<MetaAction>? UiRequest;
@@ -138,6 +144,7 @@ public sealed class MatchController
     public void Process(InputEvent inputEvent)
     {
         ArgumentNullException.ThrowIfNull(inputEvent);
+        if (!WorldInputEnabled && !IsMenuOpen && inputEvent is not KeyEvent { Key: KeyCode.Escape }) return;
         switch (inputEvent)
         {
             case MouseMoveEvent move:
@@ -324,6 +331,7 @@ public sealed class MatchController
         if (!IsMenuOpen)
         {
             var intent = Input.UpdateCamera(Match.Camera, (float)deltaSeconds);
+            if (!WorldInputEnabled) intent = intent with { Scroll = Vector2.Zero, RotateDelta = 0f, ZoomDelta = 0f, Reset = false, CenterOn = null };
             ApplyCamera(intent);
             Match.Camera.Update((float)deltaSeconds, intent.Scroll != Vector2.Zero);
         }
