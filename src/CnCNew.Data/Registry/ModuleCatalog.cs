@@ -232,8 +232,8 @@ public static class ModuleCatalog
         // exactly these four top-level fields occur; AIUpdate.cpp's full FieldParse table is much larger (idle-scan timing,
         // mood, etc.) but nothing else appears in the shipped data, so nothing else is typed (avoids guessing spellings for
         // fields that cannot be checked against real usage). Turret/AltTurret are nested blocks (167/4 occurrences: aim,
-        // traverse and weapon-slot control) kept generically as DefinitionSections, not read by phase 5's straight-line
-        // movement model (see docs/GAME-RULES.md known limits) — hence AllowsNestedSections.
+        // traverse and weapon-slot control) compiled with TurretSchema (every key of TurretAI.cpp's table typed, unknown keys are
+        // errors) and read by the simulation's turret model (docs/SIM-TURRET-AIM.md) — hence AllowsNestedSections.
         Add("AIUpdateInterface",
         [
             new("AutoAcquireEnemiesWhenIdle", FieldType.Bool, Source: "AIUpdate.cpp"),
@@ -1278,7 +1278,7 @@ public static class ModuleCatalog
         ]);
 
         // ---- Air group: aircraft, airfields, missiles and pulse objects (src/CnCNew.Simulation/Modules/BuiltIn/AirModules.cs, AirWeaponModules.cs).
-        // JetAIUpdateModuleData (JetAIUpdate.cpp buildFieldParse) on top of the AIUpdate base; the nested Turret block of the Comanche is allowed (no consumer).
+        // JetAIUpdateModuleData (JetAIUpdate.cpp buildFieldParse) on top of the AIUpdate base; the nested Turret block of the Comanche is allowed (typed by TurretSchema; a turret without a turn rate does not gate fire, as in the reference).
         Add("JetAIUpdate",
         [
             ..AiBase("JetAIUpdate.cpp / AIUpdate.cpp"),
@@ -1588,7 +1588,7 @@ public static class ModuleCatalog
             new("OCL", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "StructureCollapseUpdate.cpp"),
             new("FXList", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "StructureCollapseUpdate.cpp"),
         ]);
-        // DeployStyleAIUpdate.h on top of the AIUpdate base: the Turret block is a nested section, turret behaviour itself is not simulated.
+        // DeployStyleAIUpdate.h on top of the AIUpdate base: the Turret block is a nested section typed by TurretSchema (turrets are simulated, docs/SIM-TURRET-AIM.md; the deploy-only options stay as before).
         Add("DeployStyleAIUpdate",
         [
             ..AiBase("DeployStyleAIUpdate.cpp / AIUpdate.cpp"),

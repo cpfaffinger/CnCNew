@@ -6038,7 +6038,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-ignored-tokens",
-      "count": 132,
+      "count": 208,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
