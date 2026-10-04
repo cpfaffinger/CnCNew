@@ -1351,6 +1351,11 @@ static class InputTests
         Console.WriteLine($"       command buttons: {buttons.ButtonCount} buttons ({buttons.ButtonsWithoutCommand} without Command), {buttons.SetCount} sets, {buttons.SlotsBeyondGrid} set entries beyond slot 14, {buttons.Issues.Length} issues");
         foreach (var issue in buttons.Issues.Take(10)) Console.WriteLine($"         issue {issue.Definition}: {issue.Detail}");
         Assert(buttons.Issues.IsEmpty, "every retail command button and set is understood");
+        Assert(buttons.TryGetButton("Command_InitiateBattlePlanBombardment", out var plan1) && plan1.SpecialPowerOption == 1
+               && buttons.TryGetButton("Command_InitiateBattlePlanHoldTheLine", out var plan2) && plan2.SpecialPowerOption == 2
+               && buttons.TryGetButton("Command_InitiateBattlePlanSearchAndDestroy", out var plan3) && plan3.SpecialPowerOption == 3
+               && buttons.TryGetButton("Command_ConstructAmericaDozer", out var dozerButton) && dozerButton.SpecialPowerOption == 0,
+            "the strategy center's three battle plan buttons carry OPTION_ONE/TWO/THREE as the command's option");
 
         var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);

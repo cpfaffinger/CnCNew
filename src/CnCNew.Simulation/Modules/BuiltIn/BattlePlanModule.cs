@@ -56,8 +56,8 @@ public sealed record BattlePlanUpdateData(
 
 /// <summary>
 /// <c>BattlePlanUpdate.cpp</c> (the strategy center): the unpack / active / pack / idle cycle of one battle plan and the bonuses it hands out. A plan is chosen with <see cref="SelectPlan"/>
-/// (the special power's <see cref="ISpecialPowerHandler.Initiate"/> reads it from the target's <c>X</c>: 1 = bombardment, 2 = hold the line, 3 = search and destroy, the command button's
-/// <c>OPTION_ONE/TWO/THREE</c>, because <c>UseSpecialPowerCommand</c> carries no option of its own). The module unpacks for the plan's animation time, then <em>activates</em>:
+/// (the special power's <see cref="ISpecialPowerHandler.Initiate"/> reads it from <see cref="SpecialPowerTarget.Option"/>: 1 = bombardment, 2 = hold the line, 3 = search and destroy, the command button's
+/// <c>OPTION_ONE/TWO/THREE</c>, carried by <c>UseSpecialPowerCommand.Option</c>). The module unpacks for the plan's animation time, then <em>activates</em>:
 /// <c>changeBattlePlan(+1)</c> on the player, which sets the <c>BATTLEPLAN_*</c> weapon bonus on every qualifying object and gives hold the line its damage scalar and search and destroy its sight
 /// scalar (see <c>SimulationWorld.BattlePlan.cs</c>), the center itself gets its own bonus (double maximum health for hold the line, a wider shroud and active stealth detection for search and
 /// destroy). Choosing another plan makes it pack: the bonuses are removed again and every qualifying troop of the player is <em>paralyzed</em> for <c>BattlePlanChangeParalyzeTime</c> (it
@@ -101,8 +101,7 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
     void ISpecialPowerHandler.Initiate(IWorldServices world, int powerIndex, in SpecialPowerTarget target)
     {
         // initiateIntentToDoSpecialPower: OPTION_ONE/TWO/THREE choose the plan; anything else is "an unsupported strategy" and does nothing.
-        var option = (int)target.X.Floor();
-        if (option is >= 1 and <= 3 && target.X == Fixed.FromInt(option)) _desiredPlan = (BattlePlanKind)option;
+        if (target.Option is >= 1 and <= 3) _desiredPlan = (BattlePlanKind)target.Option;
     }
 
     public long Update(IWorldServices world)

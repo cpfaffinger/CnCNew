@@ -435,7 +435,7 @@ public sealed class CommandModeController
                 var source = SpecialPowerSource(world, button, sources);
                 if (source is null) return ActivationResult.NoSource;
                 if (button.NeedsTarget) return EnterButtonMode(button, [source.Id]);
-                return Result(Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, source.Id, button.SpecialPower, SpecialPowerTargetKind.None, EntityId.Invalid, Fixed.Zero, Fixed.Zero)));
+                return Result(Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, source.Id, button.SpecialPower, SpecialPowerTargetKind.None, EntityId.Invalid, Fixed.Zero, Fixed.Zero, button.SpecialPowerOption)));
             }
             case GuiCommandKind.AttackMove or GuiCommandKind.Guard or GuiCommandKind.GuardWithoutPursuit or GuiCommandKind.GuardFlyingUnitsOnly:
             {
@@ -602,11 +602,11 @@ public sealed class CommandModeController
         var source = sources[0];
         SubmitResult result;
         if (objectTarget is not null)
-            result = Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, source.Id, button.SpecialPower, SpecialPowerTargetKind.Object, objectTarget.Id, Fixed.Zero, Fixed.Zero));
+            result = Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, source.Id, button.SpecialPower, SpecialPowerTargetKind.Object, objectTarget.Id, Fixed.Zero, Fixed.Zero, button.SpecialPowerOption));
         else
         {
             var (x, y) = (SimulationQueries.ToFixed(position!.Value.X), SimulationQueries.ToFixed(position.Value.Y));
-            result = Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, source.Id, button.SpecialPower, SpecialPowerTargetKind.Location, EntityId.Invalid, x, y));
+            result = Issue((sequence, tick) => new UseSpecialPowerCommand(Player, sequence, tick, source.Id, button.SpecialPower, SpecialPowerTargetKind.Location, EntityId.Invalid, x, y, button.SpecialPowerOption));
         }
         if (result.Accepted) Feedback(FeedbackKind.AttackMarker, world, objectTarget is null ? position!.Value : EntityPicker.CenterOf(objectTarget), objectTarget?.Id ?? EntityId.Invalid, Settings.MarkerFrames);
         return result.Accepted;

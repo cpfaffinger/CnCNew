@@ -71,6 +71,9 @@ public sealed record CommandButtonInfo(
 {
     public bool Has(CommandOptions option) => (Options & option) == option;
     public bool NeedsTarget => (Options & CommandOptions.NeedTarget) != 0;
+
+    /// <summary>The button's <c>OPTION_ONE/TWO/THREE</c> as 1..3 (0 without one): the strategy center's battle plan choice, carried by <c>UseSpecialPowerCommand.Option</c>.</summary>
+    public int SpecialPowerOption => Has(CommandOptions.OptionOne) ? 1 : Has(CommandOptions.OptionTwo) ? 2 : Has(CommandOptions.OptionThree) ? 3 : 0;
 }
 
 /// <summary>A <c>CommandSet</c>: <see cref="MaxSlots"/> slots (<c>MAX_COMMANDS_PER_SET</c>), null where the set names no button.</summary>

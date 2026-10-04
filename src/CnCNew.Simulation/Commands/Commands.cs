@@ -13,7 +13,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 11;
+    public const int Version = 12;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -127,7 +127,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.EnterContainer => new EnterContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("container")))),
             CommandTypes.ExitContainer => new ExitContainerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor")))),
             CommandTypes.UseSpecialPower => new UseSpecialPowerCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), reader.Text("power"),
-                (SpecialPowerTargetKind)checked((byte)reader.Int("targetKind")), new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y")),
+                (SpecialPowerTargetKind)checked((byte)reader.Int("targetKind")), new EntityId(checked((uint)reader.UInt("target"))), reader.Fixed("x"), reader.Fixed("y"), reader.Has("option") ? checked((int)reader.Int("option")) : 0),
             CommandTypes.SetRelationship => new SetRelationshipCommand(player, sequence, tick, new PlayerId(checked((int)reader.Int("from"))), new PlayerId(checked((int)reader.Int("to"))),
                 (Relationship)checked((int)reader.Int("relationship"))),
             CommandTypes.Dock => new DockCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("dock")))),
@@ -312,7 +312,8 @@ public enum SpecialPowerTargetKind : byte
 }
 
 /// <summary>The target of a special power use: <see cref="Entity"/> for <see cref="SpecialPowerTargetKind.Object"/>, (<see cref="X"/>, <see cref="Y"/>) for <see cref="SpecialPowerTargetKind.Location"/>.</summary>
-public readonly record struct SpecialPowerTarget(SpecialPowerTargetKind Kind, EntityId Entity, Fixed X, Fixed Y);
+/// <summary>The target of a special power; <paramref name="Option"/> is the command button's option (0 none, 1-3 OPTION_ONE..OPTION_THREE: the strategy center's battle plan).</summary>
+public readonly record struct SpecialPowerTarget(SpecialPowerTargetKind Kind, EntityId Entity, Fixed X, Fixed Y, int Option = 0);
 
 /// <summary>
 /// Fires the special power named <see cref="SpecialPower"/> (a <c>SpecialPower</c> definition) from the module of <see cref="Source"/> that
@@ -320,11 +321,11 @@ public readonly record struct SpecialPowerTarget(SpecialPowerTargetKind Kind, En
 /// required science owned, and — for powers whose effect lives in an update module (<c>UpdateModuleStartsAttack</c>) — a handler must exist.
 /// </summary>
 public sealed record UseSpecialPowerCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Source, string SpecialPower, SpecialPowerTargetKind TargetKind,
-    EntityId Target, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+    EntityId Target, Fixed X, Fixed Y, int Option = 0) : SimCommand(Player, Sequence, Tick)
 {
     public override ushort TypeCode => CommandTypes.UseSpecialPower;
 
-    public SpecialPowerTarget AsTarget => new(TargetKind, Target, X, Y);
+    public SpecialPowerTarget AsTarget => new(TargetKind, Target, X, Y, Option);
 
     protected override void DescribeBody(IStateWriter writer)
     {
@@ -334,6 +335,7 @@ public sealed record UseSpecialPowerCommand(PlayerId Player, ulong Sequence, lon
         writer.UInt("target", Target.Value);
         writer.Fixed("x", X);
         writer.Fixed("y", Y);
+        if (Option != 0) writer.Int("option", Option);
     }
 }
 

@@ -35,7 +35,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 8;
+    public const int CurrentVersion = 9;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -261,6 +261,7 @@ public static class ReplayFormat
                 writer.Write(power.Target.Value);
                 writer.Write(power.X.Raw);
                 writer.Write(power.Y.Raw);
+                writer.Write((byte)power.Option);
                 break;
             case DockCommand dock:
                 writer.Write(dock.Actor.Value);
@@ -370,7 +371,7 @@ public static class ReplayFormat
         var power = ReadString(reader);
         var kind = (SpecialPowerTargetKind)reader.ReadByte();
         return new UseSpecialPowerCommand(player, sequence, tick, source, power, kind, new EntityId(reader.ReadUInt32()),
-            Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()));
+            Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadByte());
     }
 
     private static FireWeaponCommand ReadFireWeapon(BinaryReader reader, PlayerId player, ulong sequence, long tick)
