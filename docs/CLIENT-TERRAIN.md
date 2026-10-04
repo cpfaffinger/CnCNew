@@ -230,4 +230,4 @@ Screenshots lagen im Scratchpad der Session (`…/scratchpad/s1/`), nicht im Rep
   mit den Objektwerten aus `GameData`, nicht aus dem `GlobalLighting`-Chunk der Karte, der übersprungen wird);
   `FogTexture`/`FogUvScale` liegen bereit, aber niemand konsumiert sie bisher – Objekte im Nebel werden
   nicht abgedunkelt.
-- Straßen (Karten-Straßenobjekte) werden nicht gezeichnet.
+- Straßen (Karten-Straßenobjekte) zeichnet der Layer als alpha-geblendete Streifen auf dem Gelände (`docs/CLIENT-ROADS.md`); Brücken (`FLAG_BRIDGE_POINT*`) sind keine Straßen und werden hier nicht gezeichnet.
