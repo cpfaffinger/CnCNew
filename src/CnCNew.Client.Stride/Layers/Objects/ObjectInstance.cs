@@ -41,6 +41,9 @@ internal sealed class DrawPartState
     public float[] TurretApplied = [float.NaN, float.NaN, float.NaN, float.NaN];
     public bool InScene;
 
+    /// <summary>Bone index of every muzzle flash sub-object of the current state (<c>WeaponMuzzleFlash</c>) to the weapon slot whose shot shows it; rebuilt when the state changes.</summary>
+    public Dictionary<int, int>? MuzzleBoneSlots;
+
     /// <summary>W3DTruckDraw: the tire bones of the bound model (resolved once per model), the module's rotation multiplier and the wheel angle last written into the pose.</summary>
     public int[]? WheelBones;
     public float WheelMultiplier;

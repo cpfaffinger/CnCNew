@@ -26,6 +26,22 @@ public static class ConditionDeriver
     private static readonly int DisguisedStatus = ObjectStatusBits.Index("DISGUISED");
     private static readonly int Rider1Status = ObjectStatusBits.Index("STATUS_RIDER1");
 
+    /// <summary>
+    /// The condition names <see cref="Derive"/> can set (plus whatever an object's <c>ModelConditionUpgrade</c> sets, which depends on its definition). A name used by a
+    /// model state that is in neither place can never select that state: <c>CnCNew.PresentationTool model-audit</c> lists them by use.
+    /// </summary>
+    public static IReadOnlySet<string> ProducedNames { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "NIGHT", "SNOW", "DAMAGED", "REALLYDAMAGED", "RUBBLE", "DYING", "MOVING", "ATTACKING",
+        "FIRING_A", "FIRING_B", "FIRING_C", "USING_WEAPON_A", "USING_WEAPON_B", "USING_WEAPON_C",
+        "RELOADING_A", "RELOADING_B", "RELOADING_C", "BETWEEN_FIRING_SHOTS_A", "BETWEEN_FIRING_SHOTS_B", "BETWEEN_FIRING_SHOTS_C",
+        "AWAITING_CONSTRUCTION", "PARTIALLY_CONSTRUCTED", "ACTIVELY_BEING_CONSTRUCTED", "SOLD", "PARACHUTING", "AFLAME", "BURNED", "DEPLOYED", "DISGUISED",
+        "RIDER1", "RIDER2", "RIDER3", "RIDER4", "RIDER5", "RIDER6", "RIDER7", "RIDER8",
+        "WEAPONSET_VETERAN", "WEAPONSET_ELITE", "WEAPONSET_HERO", "WEAPONSET_PLAYER_UPGRADE", "WEAPONSET_CRATEUPGRADE_ONE", "WEAPONSET_CRATEUPGRADE_TWO",
+        "ARMORSET_CRATEUPGRADE_ONE", "ARMORSET_CRATEUPGRADE_TWO", "GARRISONED", "LOADED", "CARRYING", "DOCKING", "ACTIVELY_CONSTRUCTING",
+        "RADAR_UPGRADED", "RADAR_EXTENDING", "POWER_PLANT_UPGRADED", "POWER_PLANT_UPGRADING",
+    };
+
     public static ModelConditionSet Derive(Entity entity, SimulationWorld world, ObjectVisual? visual, in ConditionContext context)
     {
         ArgumentNullException.ThrowIfNull(entity);

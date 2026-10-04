@@ -123,6 +123,25 @@ static class ModelAuditCommand
             }
         }
 
+        // Conditions: how many model states name each flag, and which of them nothing ever sets.
+        var flagUse = new SortedDictionary<string, (int States, SortedSet<string> Objects)>(StringComparer.Ordinal);
+        foreach (var visual in visuals.Visuals)
+            foreach (var draw in visual.Draws)
+                foreach (var state in draw.States.Concat(draw.Transitions))
+                    foreach (var set in state.Conditions)
+                        foreach (var flag in Enumerable.Range(0, ModelConditions.Count).Where(id => set.Contains(new ModelConditionFlag(id))))
+                        {
+                            var name = ModelConditions.Names[flag];
+                            var entry = flagUse.TryGetValue(name, out var found) ? found : (0, new SortedSet<string>(StringComparer.Ordinal));
+                            entry.Item2.Add(visual.TemplateName);
+                            flagUse[name] = (entry.Item1 + 1, entry.Item2);
+                        }
+        var upgradeFlags = new HashSet<string>(visuals.Visuals.SelectMany(visual => visual.ConditionUpgrades).Select(upgrade => upgrade.Flag.Name), StringComparer.OrdinalIgnoreCase);
+        var neverSet = flagUse.Where(pair => !ConditionDeriver.ProducedNames.Contains(pair.Key) && !upgradeFlags.Contains(pair.Key)).OrderByDescending(pair => pair.Value.Objects.Count).ToArray();
+        Console.WriteLine();
+        Console.WriteLine($"model condition names used by states: {flagUse.Count}; set by the presentation or a ModelConditionUpgrade: {flagUse.Count - neverSet.Length}; never set: {neverSet.Length}");
+        foreach (var (name, (states, objects)) in neverSet) Console.WriteLine($"  never set: {name,-26} {states,6} states in {objects.Count,4} objects (e.g. {string.Join(", ", objects.Take(3))})");
+
         Console.WriteLine();
         Console.WriteLine($"animation handles named by model states: {animationUsers.Count}; loaded {loaded}; missing {missingAnimations.Count}");
         foreach (var line in missingAnimations.Take(40)) Console.WriteLine("  missing animation: " + line);

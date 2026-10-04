@@ -41,6 +41,9 @@ public sealed class FrameProjector
     /// <summary>A scenery item within this distance of a live entity of the same template is replaced by it for good.</summary>
     public const float ClaimRadius = 1f;
 
+    /// <summary>How long a muzzle flash stays visible after a shot, in ticks (the original shows it for the first drawn frame of the recoil; at 30 ticks per second this is about 0.13 s).</summary>
+    public const int MuzzleFlashTicks = 4;
+
     private readonly ObjectVisualCatalog _catalog;
     private readonly FrameProjectorOptions _options;
     private readonly ImmutableArray<ImmutableArray<DrawModuleSelection>> _scenerySelections;
@@ -182,11 +185,14 @@ public sealed class FrameProjector
             travel %= 100000f;
         }
 
+        var fired = 0;
+        for (var slot = 0; slot < 3; slot++)
+            if (entity.LastFireTickOf(slot) is >= 0 and var lastFire && world.Tick - lastFire <= MuzzleFlashTicks) fired |= 1 << slot;
         var main = _turrets.Update(entity, visual, 0, world.Tick, world);
         var alt = _turrets.Update(entity, visual, 1, world.Tick, world);
         return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, Select(visual, conditions),
-            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel);
+            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired);
     }
 
     private void UpdateGhosts(SimulationWorld world, PlayerId viewer)
@@ -221,7 +227,7 @@ public sealed class FrameProjector
         new EntityId(capture.Id), -1, capture.Visual, position, yaw, capture.Owner, _options.Colors?.Of(capture.Owner) ?? TeamColors.Neutral,
         capture.Health01, capture.Construction01, capture.Conditions, capture.Selections,
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
-        Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel);
+        Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel, capture.FiredSlots);
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
@@ -243,5 +249,5 @@ public sealed class FrameProjector
     private sealed record Capture(
         uint Id, ObjectVisual Visual, PlayerId Owner, Vector3 Position, float Yaw, Fixed FixedX, Fixed FixedY, float Health01,
         float Construction01, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections, int ConstructionWork,
-        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f);
+        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f, int FiredSlots = 0);
 }

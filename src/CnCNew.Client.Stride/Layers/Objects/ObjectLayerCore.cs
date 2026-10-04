@@ -75,6 +75,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
         stats.SkinnedDrawn = 0;
         stats.TurretsDriven = 0;
         stats.WheelsDriven = 0;
+        stats.MuzzleFlashesHidden = 0;
+        stats.MuzzleFlashesShown = 0;
         stats.Triangles = 0;
         stats.Placeholders = 0;
 
@@ -181,6 +183,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         {
             part.StateIndex = selection.StateIndex;
             ChooseAnimation(drawable, asset, state, part);
+            part.MuzzleBoneSlots = MuzzleBones(state, asset);
         }
 
         var scale = drawable.Scale > 0 ? drawable.Scale : 1f;
@@ -269,6 +272,12 @@ internal sealed class ObjectLayerCore : IWorldLayer
             node.WorldMatrix = nodeWorld.ToStride();
             // HLodClass::Update_Sub_Object_Transforms: Set_Animation_Hidden(!HTree->Get_Visibility(bone)) - the animation's visibility channel shows and hides the sub-objects of its bones.
             var visible = pose.IsBoneVisible(rigidPart.BoneIndex) && ComputeVisible(rigidPart.FullName, rigidPart.DefaultVisible, state.SubObjects);
+            // W3DModelDraw::hideAllMuzzleFlashes / setMuzzleFlashHidden: the sub-object on a WeaponMuzzleFlash bone is hidden until the weapon fires.
+            if (part.MuzzleBoneSlots is { Count: > 0 } flashes && flashes.TryGetValue(rigidPart.BoneIndex, out var flashSlot))
+            {
+                visible = pose.IsBoneVisible(rigidPart.BoneIndex) && drawable.HasFired(flashSlot);
+                if (visible) Stats.MuzzleFlashesShown++; else Stats.MuzzleFlashesHidden++;
+            }
             node.Flags = visible ? node.Flags | global::Stride.Rendering.ModelNodeFlags.EnableRender : node.Flags & ~global::Stride.Rendering.ModelNodeFlags.EnableRender;
         }
 
@@ -283,6 +292,19 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
         UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, frame);
         Stats.Drawn++;
+    }
+
+    private static Dictionary<int, int>? MuzzleBones(ModelStateSpec state, ModelAsset? asset)
+    {
+        if (asset is null || state.WeaponBones.IsDefaultOrEmpty) return null;
+        Dictionary<int, int>? result = null;
+        for (var slot = 0; slot < state.WeaponBones.Length; slot++)
+        {
+            if (state.WeaponBones[slot].MuzzleFlash is not { } name) continue;
+            foreach (var match in asset.Model.FindBones(name)) (result ??= [])[match.BoneIndex] = slot;
+        }
+
+        return result;
     }
 
     private static readonly string[] TireBoneKeys =

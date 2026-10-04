@@ -27,6 +27,10 @@ internal sealed class ObjectLayerStats
     /// <summary>Drawn parts this frame with tire bones turned by their distance rolled (W3DTruckDraw).</summary>
     public int WheelsDriven;
 
+    /// <summary>Muzzle flash sub-objects of drawn parts this frame: hidden because the weapon did not just fire / shown by a shot.</summary>
+    public int MuzzleFlashesHidden;
+    public int MuzzleFlashesShown;
+
     /// <summary>Triangles submitted this frame (sum of visible mesh draw counts / 3).</summary>
     public long Triangles;
 
@@ -70,7 +74,7 @@ internal sealed class ObjectLayerStats
     }
 
     public override string ToString() =>
-        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} wheels={WheelsDriven} triangles={Triangles} " +
+        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} wheels={WheelsDriven} flashes={MuzzleFlashesShown}/{MuzzleFlashesShown + MuzzleFlashesHidden} triangles={Triangles} " +
         $"models={ModelsLoaded} missingModels={ModelsMissing} missingTextures={TexturesMissing} missingAnimations={MissingAnimations} placeholders={Placeholders} gpuProblems={GpuResourceProblems} " +
         $"frameMs={FrameMilliseconds:F3} avgMs={AverageFrameMilliseconds:F3} allocB={FrameAllocatedBytes}";
 }

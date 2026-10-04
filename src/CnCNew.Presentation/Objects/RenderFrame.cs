@@ -32,8 +32,12 @@ public sealed record DrawableInstance(
     bool IsGhost,
     float? AltTurretYaw = null,
     float? AltTurretPitch = null,
-    float WheelTravel = 0f)
+    float WheelTravel = 0f,
+    int FiredSlots = 0)
 {
+    /// <summary>Muzzle flash sub-objects are shown for the weapon slots whose bit is set here (<see cref="FrameProjector.MuzzleFlashTicks"/> after the last shot).</summary>
+    public bool HasFired(int slot) => (FiredSlots & (1 << slot)) != 0;
+
     public string TemplateName => Visual.TemplateName;
     public float Scale => Visual.Scale;
     public float SelectionRadius => Visual.SelectionRadius;
