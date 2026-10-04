@@ -35,7 +35,10 @@ internal static class LiveMatchTests
             var build = Stopwatch.StartNew();
             var live = LiveMatch.Create(data, setup, new Vector2(1280, 720));
             Console.WriteLine($"  LiveMatch.Create: {build.Elapsed.TotalSeconds:F1} s, {live.TerrainModel.Chunks.Length} chunks, {live.Frame.Drawables.Length} drawables at start");
-            TestHarness.Assert(live.Frame.Drawables.Length > 0, "drawables at start");
+            // Scenery follows the shroud and the first vision pass runs a few ticks in: the very first frame is empty, the base shows up within a second.
+            live.Advance(1.0);
+            Console.WriteLine($"  after one second: {live.Frame.Drawables.Length} drawables");
+            TestHarness.Assert(live.Frame.Drawables.Length > 0, "drawables after the first second");
             var advance = Stopwatch.StartNew();
             for (var frame = 0; frame < 30 * 20; frame++) live.Advance(1.0 / 30);
             Console.WriteLine($"  600 frames: {advance.Elapsed.TotalMilliseconds / 600:F2} ms/frame, tick {live.Tick}, {live.Frame.Drawables.Length} drawables, {live.Fx.Particles.ParticleCount} particles");

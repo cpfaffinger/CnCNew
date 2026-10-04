@@ -14,7 +14,9 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Scripting;
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
+using CnCNew.Simulation.Skirmish;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
@@ -39,6 +41,8 @@ const string Usage = """
                                                            reports which start and end (by victory or the tick budget) without crashing
       mission-run <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N]
                                                            run a campaign/scripted mission headless: two fresh runs, save/restore continuation, script and combat report
+      unit-audit <content-dir> --map <virtual-map-path> [--factions A,B] [--max-ticks N] [--seed N]
+                                                           AI skirmish; samples every 15 ticks: units standing inside a structure footprint, units with a move order that do not move (stuck), longest stalls
       stress [--ticks N] [--population N] [--out replay.bin]
                                                            record + two fresh runs + snapshot continuation, leak and budget checks
     """;
@@ -62,6 +66,7 @@ try
         "reference-match" when args.Length >= 2 => ReferenceMatch(args[1], args),
         "ai-match" when args.Length >= 2 => AiMatch(args[1], args),
         "skirmish-sweep" when args.Length >= 2 => SkirmishSweep(args[1], args),
+        "unit-audit" when args.Length >= 2 => UnitAudit(args[1], args),
         "mission-run" when args.Length >= 2 => MissionRun(args[1], args),
         _ => Fail(Usage),
     };
@@ -71,6 +76,111 @@ catch (Exception exception)
     Console.Error.WriteLine($"error: {exception.Message}");
     return 1;
 }
+
+/// <summary>
+/// Demo finding #12/#13 (docs/DEMO-FINDINGS.md): a unit that stands inside a structure and a unit that bumps into an obstacle and stands there before it finds a way round.
+/// Plays a skirmish between AIs and samples every 15 ticks: a mobile ground unit whose cell is blocked by a structure footprint (inside), and a unit with a move
+/// order whose speed is zero (stalled), with the longest runs per template.
+/// </summary>
+static int UnitAudit(string directory, string[] args)
+{
+    var mapPath = Arg(args, "--map") ?? throw new ArgumentException("--map <virtual-map-path> is required.");
+    var options = SkirmishMatchOptions.Standard with { MaxTicks = long.Parse(Arg(args, "--max-ticks") ?? "9000", CultureInfo.InvariantCulture) };
+    if (Arg(args, "--seed") is { } seed) options = options with { AiSeed = uint.Parse(seed, CultureInfo.InvariantCulture), WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) ^ 0xC0FFEE06 };
+    var (_, catalog, fingerprint) = CompileShipped(directory);
+    var content = ContentFileSystem.Open(directory);
+    using var mapStream = content.OpenRead(mapPath);
+    var map = SageMapDecoder.Decode(mapStream);
+    var terrain = TerrainMap.Build(map, mapPath);
+    var everyone = ReferenceMatchScenario.Participants(catalog, out _);
+    var wanted = Arg(args, "--factions")?.Split(",", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var chosen = wanted is null ? everyone.Take(2).ToImmutableArray()
+        : [..wanted.Select(name => everyone.FirstOrDefault(value => value.Faction.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ?? throw new ArgumentException($"Unknown or unplayable faction {name}."))];
+    var session = SkirmishMatchSession.Start(options, catalog, fingerprint, terrain, map.Objects, [..chosen.Select(participant => new SkirmishSlot(participant))]);
+    var world = session.World;
+    var insideRun = new Dictionary<uint, (long Start, string Template, string Structure)>();
+    var stallRun = new Dictionary<uint, (long Start, string Template)>();
+    var insideReports = new List<string>();
+    var detail = new List<string>();
+    var idleInside = new SortedDictionary<string, int>(StringComparer.Ordinal);
+    var longestStall = new SortedDictionary<string, long>(StringComparer.Ordinal);
+    long samples = 0, insideSamples = 0, stallSamples = 0;
+    var insideTemplates = new SortedDictionary<string, int>(StringComparer.Ordinal);
+    while (!session.IsOver)
+    {
+        session.Step();
+        if (world.Tick % 15 != 0 || world.Navigation is not { } grid) continue;
+        var seenInside = new HashSet<uint>();
+        var seenStalled = new HashSet<uint>();
+        foreach (var entity in world.Entities)
+        {
+            if (entity.EffectivelyDead || entity.ContainedBy.IsValid || entity.Template.IsKindOf("STRUCTURE") || entity.Template.IsKindOf("AIRCRAFT") || entity.Template.Locomotor is null) continue;
+            samples++;
+            if (grid.IsBlockedByObstacle(TerrainMap.CellOf(entity.X), TerrainMap.CellOf(entity.Y)) && !entity.Template.IsKindOf("PROJECTILE"))
+            {
+                insideSamples++;
+                seenInside.Add(entity.Id.Value);
+                if (entity.Speed == Fixed.Zero && !entity.HasMoveTarget && !entity.Template.IsKindOf("HARVESTER"))
+                {
+                    var owner = world.Entities.Where(other => other.Template.IsKindOf("STRUCTURE") && !other.EffectivelyDead && Math.Abs(D(other.X - entity.X)) < 90 && Math.Abs(D(other.Y - entity.Y)) < 90).Select(other => other.Template.Name).FirstOrDefault() ?? "?";
+                    var rally = session.Ais.ElementAtOrDefault(entity.Owner.Value - 1)?.RallyPoint;
+                    var key = $"{entity.Template.Name} idle at ({entity.X.Floor()},{entity.Y.Floor()}) near {owner}, own rally {(rally is { } point ? $"({point.X.Floor()},{point.Y.Floor()})" : "none")}, attacking {session.Ais.ElementAtOrDefault(entity.Owner.Value - 1)?.Attacking}";
+                    idleInside[key] = idleInside.GetValueOrDefault(key) + 1;
+                }
+                if (!insideRun.TryGetValue(entity.Id.Value, out var run))
+                {
+                    // The structure whose box really contains the unit (a rotated half-extent test), else the nearest one.
+                    bool Contains(Entity other)
+                    {
+                        var dx = D(entity.X - other.X);
+                        var dy = D(entity.Y - other.Y);
+                        var cos = Math.Cos(D(other.Angle));
+                        var sin = Math.Sin(D(other.Angle));
+                        var lx = dx * cos + dy * sin;
+                        var ly = -dx * sin + dy * cos;
+                        return other.Template.IsBox ? Math.Abs(lx) <= D(other.Template.GeometryMajorRadius) && Math.Abs(ly) <= D(other.Template.GeometryMinorRadius) : lx * lx + ly * ly <= D(other.Template.GeometryMajorRadius) * D(other.Template.GeometryMajorRadius);
+                    }
+
+                    var structures = world.Entities.Where(other => other.Template.IsKindOf("STRUCTURE") && !other.EffectivelyDead).ToArray();
+                    var near = structures.Where(Contains).OrderBy(other => (other.X - entity.X) * (other.X - entity.X) + (other.Y - entity.Y) * (other.Y - entity.Y)).FirstOrDefault()
+                               ?? structures.OrderBy(other => (other.X - entity.X) * (other.X - entity.X) + (other.Y - entity.Y) * (other.Y - entity.Y)).FirstOrDefault();
+                    insideRun[entity.Id.Value] = (world.Tick, entity.Template.Name, near?.Template.Name ?? "?");
+                    if (near is not null && !near.Template.Name.Contains("SupplyDock", StringComparison.Ordinal) && !(entity.Template.IsKindOf("INFANTRY") && near.Template.IsKindOf("FS_BARRACKS")) && !(entity.Template.IsKindOf("VEHICLE") && near.Template.IsKindOf("FS_WARFACTORY")) && detail.Count < 24)
+                        detail.Add($"  @{world.Tick} #{entity.Id.Value} {entity.Template.Name} at ({entity.X.Floor()},{entity.Y.Floor()}) speed {entity.Speed} move {(entity.HasMoveTarget ? $"({entity.MoveTargetX.Floor()},{entity.MoveTargetY.Floor()})" : "none")} in {near.Template.Name} at ({near.X.Floor()},{near.Y.Floor()}) angle {near.Angle} geometry {near.Template.GeometryMajorRadius}x{near.Template.GeometryMinorRadius}");
+                    insideTemplates[entity.Template.Name + " in " + (near?.Template.Name ?? "?")] = insideTemplates.GetValueOrDefault(entity.Template.Name + " in " + (near?.Template.Name ?? "?")) + 1;
+                }
+            }
+            if (entity.HasMoveTarget && entity.Speed == Fixed.Zero)
+            {
+                stallSamples++;
+                seenStalled.Add(entity.Id.Value);
+                if (!stallRun.ContainsKey(entity.Id.Value)) stallRun[entity.Id.Value] = (world.Tick, entity.Template.Name);
+                var length = world.Tick - stallRun[entity.Id.Value].Start;
+                if (length > longestStall.GetValueOrDefault(entity.Template.Name)) longestStall[entity.Template.Name] = length;
+            }
+        }
+        foreach (var id in insideRun.Keys.Where(id => !seenInside.Contains(id)).ToArray())
+        {
+            var run = insideRun[id];
+            if (world.Tick - run.Start >= 60) insideReports.Add($"unit #{id} {run.Template} inside {run.Structure} for {world.Tick - run.Start} ticks (from {run.Start})");
+            insideRun.Remove(id);
+        }
+        foreach (var id in stallRun.Keys.Where(id => !seenStalled.Contains(id)).ToArray()) stallRun.Remove(id);
+    }
+    foreach (var (id, run) in insideRun) insideReports.Add($"unit #{id} {run.Template} inside {run.Structure} since tick {run.Start} (still at the end, {world.Tick - run.Start} ticks)");
+    Console.WriteLine($"unit audit on {mapPath}, {world.Tick} ticks, {samples} unit samples (every 15 ticks): inside a structure footprint {insideSamples}, move order without movement {stallSamples}");
+    foreach (var pair in insideTemplates) Console.WriteLine($"  first seen inside: {pair.Key} x{pair.Value}");
+    foreach (var line in insideReports.Take(30)) Console.WriteLine("  " + line);
+    Console.WriteLine($"idle (no order, not moving) inside a structure footprint cell: {idleInside.Values.Sum()} samples");
+    foreach (var (key, count) in idleInside.OrderByDescending(pair => pair.Value).Take(12)) Console.WriteLine($"  {count,4} samples: {key}");
+    Console.WriteLine("inside structures that produce nothing (first sightings):");
+    foreach (var line in detail) Console.WriteLine(line);
+    Console.WriteLine("longest run of a move order without movement per template (ticks):");
+    foreach (var (name, ticks) in longestStall.OrderByDescending(pair => pair.Value).Take(15)) Console.WriteLine($"  {name,-40} {ticks}");
+    return 0;
+}
+
+static double D(Fixed value) => value.Raw / (double)Fixed.ScaleRaw;
 
 static int Fail(string message)
 {

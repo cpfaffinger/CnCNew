@@ -163,6 +163,9 @@ public sealed class SkirmishAi
 
     public SkirmishAiStats Stats { get; } = new();
     public bool Attacking => _attacking;
+
+    /// <summary>Where the army gathers while it is not attacking (diagnostics).</summary>
+    public (Fixed X, Fixed Y)? RallyPoint => _rally;
     public int KnownEnemyStructures => _enemies.Values.Count(value => value.IsStructure);
 
     /// <summary>One line about the economy and the army, for diagnostics (observed state of the last think).</summary>
@@ -577,6 +580,8 @@ public sealed class SkirmishAi
             if (DistanceSquared(spotX, spotY, x, y) < Fixed.FromInt(900)) return false;
         foreach (var warehouse in _warehouses.Values)
             if (DistanceSquared(warehouse.X, warehouse.Y, x, y) < Fixed.FromInt(3600)) return false;
+        // The army gathers on the rally point: no structure goes up on it.
+        if (_rally is { } rally && DistanceSquared(rally.X, rally.Y, x, y) < (radius + Fixed.FromInt(15)) * (radius + Fixed.FromInt(15))) return false;
         return true;
     }
 
@@ -713,6 +718,13 @@ public sealed class SkirmishAi
 
     private void SetRallyPoints()
     {
+        // A structure raised later on the rally point (or beside it) leaves the army idling inside a building footprint: the point is chosen again and told to the producers.
+        if (_rally is { } current && !RallyUsable(current, 0))
+        {
+            _rally = null;
+            _rallySet.Clear();
+        }
+
         _rally ??= ChooseRally();
         if (_rally is not { } rally) return;
         foreach (var producer in _structures)
@@ -720,6 +732,18 @@ public sealed class SkirmishAi
             if ((RoleOf(producer.Template) & (Role.Barracks | Role.Factory)) == 0 || !_rallySet.Add(producer.Id.Value)) continue;
             Send(sequence => new SetRallyPointCommand(_player, sequence, _tick, producer.Id, rally.X, rally.Y));
         }
+    }
+
+    /// <summary>The rally point and the cells within <paramref name="margin"/> cells of it are free of structure footprints, so units gathered there do not stand inside a building.</summary>
+    private bool RallyUsable((Fixed X, Fixed Y) point, int margin)
+    {
+        if (_world.Navigation is not { } grid) return true;
+        var cx = TerrainMap.CellOf(point.X);
+        var cy = TerrainMap.CellOf(point.Y);
+        for (var dy = -margin; dy <= margin; dy++)
+            for (var dx = -margin; dx <= margin; dx++)
+                if (grid.IsBlockedByObstacle(cx + dx, cy + dy)) return false;
+        return true;
     }
 
     /// <summary>A passable point between the base and the nearest opponent's start.</summary>
@@ -737,13 +761,33 @@ public sealed class SkirmishAi
         var dy = toward.Y - _options.HomeY;
         var length = Fixed.Sqrt(dx * dx + dy * dy);
         if (length <= Fixed.Zero) return null;
+        // Straight toward the opponent first (the original choice); only a crowded base widens the search to the sides and further out (the first free point wins).
         for (var distance = 180; distance >= 60; distance -= 20)
         {
             var x = _options.HomeX + dx / length * Fixed.FromInt(distance);
             var y = _options.HomeY + dy / length * Fixed.FromInt(distance);
-            if (_world.Navigation is not { } grid || grid.IsPassable(TerrainMap.CellOf(x), TerrainMap.CellOf(y), LocomotorSurfaces.Ground) && !grid.IsBlockedByObstacle(TerrainMap.CellOf(x), TerrainMap.CellOf(y)))
+            if (_world.Navigation is not { } grid || grid.IsPassable(TerrainMap.CellOf(x), TerrainMap.CellOf(y), LocomotorSurfaces.Ground) && RallyUsable((x, y), 0))
                 return (x, y);
         }
+
+        var turns = new[] { 0, 25, -25, 50, -50, 75, -75, 100, -100, 130, -130, 160, -160, 180 };
+        var distances = new[] { 180, 160, 140, 120, 100, 80, 60, 220, 260, 300, 360 };
+        foreach (var degrees in turns)
+        {
+            var angle = FixedTrig.TwoPi * Fixed.FromInt(degrees) / Fixed.FromInt(360);
+            var cos = FixedTrig.Cos(angle);
+            var sin = FixedTrig.Sin(angle);
+            var ux = (dx * cos - dy * sin) / length;
+            var uy = (dx * sin + dy * cos) / length;
+            foreach (var distance in distances)
+            {
+                var x = _options.HomeX + ux * Fixed.FromInt(distance);
+                var y = _options.HomeY + uy * Fixed.FromInt(distance);
+                if (_world.Navigation is not { } grid || grid.IsPassable(TerrainMap.CellOf(x), TerrainMap.CellOf(y), LocomotorSurfaces.Ground) && RallyUsable((x, y), 1) && _world.IsPositionExploredBy(_player, x, y))
+                    return (x, y);
+            }
+        }
+
         return null;
     }
 
