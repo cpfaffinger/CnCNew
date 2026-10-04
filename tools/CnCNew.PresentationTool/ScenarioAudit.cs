@@ -31,7 +31,8 @@ internal static class ScenarioAudit
         var scenario = DemoScenarios.Find(name) ?? throw new ArgumentException($"Unknown scenario '{name}'.");
         var every = int.Parse(Option("--every") ?? "30", CultureInfo.InvariantCulture);
         var ticks = long.Parse(Option("--ticks") ?? scenario.Ticks.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
-        var data = GameData.Load(contentDir);
+        // --synthetic-airfield: the airfield without the model's bones (the computed layout the simulation used before the bones were read); the jet checks then fail, which shows what they detect.
+        var data = GameData.Load(contentDir, null, !args.Contains("--synthetic-airfield"));
         var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
 
         var events = new List<SimEvent>();
@@ -224,6 +225,8 @@ internal static class ScenarioAudit
     private static List<string> CheckJet(List<Sample> history, List<SimEvent> events, LiveScenario live)
     {
         var failures = new List<string>();
+        var runways = AirfieldRunways(live);
+        var apronZ = live.World.FindEntity(live.Tags["airfield"]) is { } field ? ToFloat(field.Z) : 0f;
         var trooperIds = live.Tags.Where(pair => pair.Key.StartsWith("trooper", StringComparison.Ordinal)).Select(pair => pair.Value).ToHashSet();
         foreach (var tag in live.Tags.Keys.Where(tag => tag.StartsWith("raptor", StringComparison.Ordinal)).OrderBy(tag => tag, StringComparer.Ordinal))
         {
@@ -253,6 +256,12 @@ internal static class ScenarioAudit
             var hover = series.Count(item => item.Unit.Alive && item.Unit.Z > 25f && item.Unit.Speed < 5f);
             Console.WriteLine($"  ticks standing still in the air: {hover}");
             if (hover > 10) failures.Add($"{tag} hangs motionless in the air for {hover} ticks (a fighter has a minimum speed and circles; the simulation lets it stop at the end of its move order)");
+            // RaptorJetLocomotor: MinSpeed 60/s. A little slack for the sampled value; the take-off roll and the landing roll-out stay below 25 height units.
+            var slowest = series.Where(item => item.Unit.Alive && item.Unit.Z > 25f).Select(item => item.Unit.Speed).DefaultIfEmpty(float.MaxValue).Min();
+            var slow = series.Count(item => item.Unit.Alive && item.Unit.Z > 25f && item.Unit.Speed < 55f);
+            Console.WriteLine($"  slowest airborne speed {slowest:F1}/s (minimum speed 60/s), ticks below 55/s in the air: {slow}");
+            if (slow > 0) failures.Add($"{tag} flies slower than its minimum speed for {slow} ticks while airborne");
+            CheckAirfieldGeometry(tag, series, runways, apronZ, failures);
             if (takeoff < 0) failures.Add($"{tag} never takes off");
             if (shots == 0) failures.Add($"{tag} never fires");
             if (last.Alive && !landedAfter) failures.Add($"{tag} survived but never came back down");
@@ -264,6 +273,69 @@ internal static class ScenarioAudit
         if (trooperShots == 0) failures.Add("the Missile Defender soldiers never fire back");
         if (dead == 0) failures.Add("no Missile Defender soldier dies");
         return failures;
+    }
+
+    /// <summary>The runway segments of the airfield from the model's bones (RunwayStart/RunwayEnd per column), in the scenario's frame (metres from the origin), independent of what the simulation used.</summary>
+    private static List<(Vector2 Start, Vector2 End)> AirfieldRunways(LiveScenario live)
+    {
+        var result = new List<(Vector2, Vector2)>();
+        var airfield = live.World.FindEntity(live.Tags["airfield"]);
+        if (airfield is null) return result;
+        var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(live.Data.Graph, live.Data.Visuals, live.Data.Content);
+        if (!geometry.Airfields.TryGetValue(airfield.Template.Name, out var layout)) return result;
+        var angle = ToFloat(airfield.Angle);
+        var (cos, sin) = (MathF.Cos(angle), MathF.Sin(angle));
+        Vector2 ToScenario(CnCNew.Simulation.Templates.BonePose bone)
+            => new(ToFloat(airfield.X) + ToFloat(bone.X) * cos - ToFloat(bone.Y) * sin - live.Anchor.X, ToFloat(airfield.Y) + ToFloat(bone.X) * sin + ToFloat(bone.Y) * cos - live.Anchor.Y);
+        for (var index = 0; index < layout.RunwayStart.Length; index++) result.Add((ToScenario(layout.RunwayStart[index]), ToScenario(layout.RunwayEnd[index])));
+        return result;
+    }
+
+    private static float DistanceToRunways(List<(Vector2 Start, Vector2 End)> runways, float x, float y)
+    {
+        var best = float.MaxValue;
+        foreach (var (start, end) in runways)
+        {
+            var along = end - start;
+            var t = Math.Clamp(Vector2.Dot(new Vector2(x, y) - start, along) / along.LengthSquared(), 0f, 1f);
+            best = Math.Min(best, Vector2.Distance(new Vector2(x, y), start + along * t));
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// The jet uses the airfield it belongs to: it rolls on the apron (its height is the airfield's), takes off on one of the runways of the model (the take-off point and the whole roll lie on the
+    /// runway segment) and touches down on it again.
+    /// </summary>
+    private static void CheckAirfieldGeometry(string tag, (long Tick, UnitSample Unit)[] series, List<(Vector2 Start, Vector2 End)> runways, float apronZ, List<string> failures)
+    {
+        if (runways.Count == 0) { failures.Add("the airfield model has no runway bones to check against"); return; }
+        const float Tolerance = 12f;
+        var onGround = series.Where(item => item.Unit.Alive && item.Unit.Z <= apronZ + 5f && item.Unit.Conditions != "(not drawn)").ToArray();
+        var offApron = onGround.Where(item => item.Unit.Speed <= 51f && !item.Unit.Conditions.Contains("JETAFTERBURNER", StringComparison.Ordinal) && Math.Abs(item.Unit.Z - apronZ) > 0.1f).ToArray();
+        Console.WriteLine($"  on the ground {onGround.Length} ticks, of which taxiing and not at the apron height {apronZ:F1}: {offApron.Length}");
+        if (offApron.Length > 0) failures.Add($"{tag} rolls at height {offApron[0].Unit.Z:F2} instead of the apron's {apronZ:F2} (tick {offApron[0].Tick})");
+
+        var takeoff = series.FirstOrDefault(item => item.Unit.Alive && item.Unit.Z > apronZ + 5f);
+        if (takeoff.Unit is null) return;
+        var takeoffDistance = DistanceToRunways(runways, takeoff.Unit.X, takeoff.Unit.Y);
+        Console.WriteLine($"  lifts off at tick {takeoff.Tick} at ({takeoff.Unit.X:F1}, {takeoff.Unit.Y:F1}), {takeoffDistance:F1} from the runway line");
+        if (takeoffDistance > Tolerance) failures.Add($"{tag} lifts off {takeoffDistance:F0} units from the airfield's runway, at ({takeoff.Unit.X:F0}, {takeoff.Unit.Y:F0}) (tolerance {Tolerance})");
+        // the roll: the grounded ticks right before the lift-off at more than taxi speed
+        var roll = series.TakeWhile(item => item.Tick < takeoff.Tick).Reverse().TakeWhile(item => item.Unit.Speed > 52f && item.Unit.Z <= apronZ + 5f).ToArray();
+        var worst = roll.Select(item => DistanceToRunways(runways, item.Unit.X, item.Unit.Y)).DefaultIfEmpty(0f).Max();
+        Console.WriteLine($"  take-off roll {roll.Length} ticks, farthest from the runway line {worst:F1}");
+        if (worst > Tolerance) failures.Add($"{tag}'s take-off roll leaves the runway line by {worst:F0} units");
+
+        // touchdown: the first grounded tick after the last airborne one
+        var airborne = series.Where(item => item.Unit.Alive && item.Unit.Z > apronZ + 5f).ToArray();
+        var lastAir = airborne[^1];
+        var down = series.FirstOrDefault(item => item.Tick > lastAir.Tick && item.Unit.Alive);
+        if (down.Unit is null) return;
+        var landingDistance = DistanceToRunways(runways, down.Unit.X, down.Unit.Y);
+        Console.WriteLine($"  touches down at tick {down.Tick} at ({down.Unit.X:F1}, {down.Unit.Y:F1}), {landingDistance:F1} from the runway line");
+        if (landingDistance > Tolerance) failures.Add($"{tag} touches down {landingDistance:F0} units from the airfield's runway");
     }
 
     private static float ToFloat(CnCNew.Simulation.Numerics.Fixed value) => (float)(value.Raw / 65536.0);

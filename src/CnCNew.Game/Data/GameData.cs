@@ -50,7 +50,7 @@ public sealed class GameData
     public ImmutableArray<string> Maps { get; }
 
     /// <summary>Compiles the retail base data (map overlays excluded) and builds every catalog; the slow part of starting the game.</summary>
-    public static GameData Load(string contentDirectory, Action<string>? progress = null)
+    public static GameData Load(string contentDirectory, Action<string>? progress = null, bool modelGeometry = true)
     {
         progress?.Invoke("Opening content");
         var content = ContentFileSystem.Open(contentDirectory);
@@ -60,9 +60,11 @@ public sealed class GameData
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new ContentDefinitionSource(content), ModuleRegistry.Default, options);
         progress?.Invoke("Building catalogs");
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
-        var fingerprint = DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256;
         var visuals = ObjectVisualCatalog.Build(graph);
+        // The airfields' parking and runway points come from the draw models' bones, which the simulation cannot read: they enter the world as fingerprinted data (docs/SIM-JET-FLIGHT.md).
+        var geometry = modelGeometry ? ModelGeometryLoader.Load(graph, visuals, content) : ModelGeometry.None;
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, geometry);
+        var fingerprint = geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256);
         var fx = FxCatalog.Build(graph);
         var audio = AudioCatalog.FromGraph(graph, content.Exists);
         var images = MappedImageTable.FromGraph(graph);
