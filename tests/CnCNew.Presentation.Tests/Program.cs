@@ -12,6 +12,7 @@ Func<string[], int>[] suites =
     MinimapTests.Run,
     WorldRealDataTests.Run,
     InputTests.Run,
+    StructureConditionTests.Run,
 ];
 
 var failures = 0;
