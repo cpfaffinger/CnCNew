@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Stride's build-only asset compiler (Stride.Core.Assets.CompilerApp) restores these tooling packages transitively at versions with known advisories
+    (docs/DEMO-FINDINGS.md #1): Microsoft.Build.Tasks.Core 17.7.2 (GHSA-h4j7-5rxr-p4wc), SSH.NET 2023.0.1 (GHSA-mggc-4xg6-vcxf, GHSA-q939-rpr3-3284),
+    NuGet.Packaging / NuGet.Protocol 7.0.0 (GHSA-g4vj-cjjj-v7hg). Direct references pin patched versions (nearest wins); System.Security.Cryptography.Xml is
+    pinned because the patched Tasks.Core brings in a vulnerable 9.0.0. PrivateAssets keeps them out of anything that references the project; NuGetAudit stays on.
+    Checked by scripts/audit-vulnerable.ps1.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.14.28" PrivateAssets="all" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" PrivateAssets="all" />
+    <PackageReference Include="NuGet.Packaging" Version="7.0.3" PrivateAssets="all" />
+    <PackageReference Include="NuGet.Protocol" Version="7.0.3" PrivateAssets="all" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.12" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

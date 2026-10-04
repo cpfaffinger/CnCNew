@@ -11,8 +11,6 @@
     <StridePlatform>Windows</StridePlatform>
     <StrideGraphicsApi>Direct3D11</StrideGraphicsApi>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- Stride's build-only asset compiler currently restores audited transitive tooling packages (same as the client). -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1903</WarningsNotAsErrors>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
@@ -37,4 +35,5 @@
     <ProjectReference Include="../../src/CnCNew.Audio/CnCNew.Audio.csproj" />
     <ProjectReference Include="../../src/CnCNew.Game/CnCNew.Game.csproj" />
   </ItemGroup>
+  <Import Project="../../build/StrideToolingPins.props" />
 </Project>
