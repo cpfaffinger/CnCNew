@@ -134,11 +134,15 @@ internal sealed class TerrainLayer : IWorldLayer
         }
 
         CreateWater(services, match, atlas, linear, fogScale);
+        var roadWatch = Stopwatch.StartNew();
+        var roads = CreateRoads(services, match, linear, fogScale, lightTable);
+        roadWatch.Stop();
         watch.Stop();
         AttachMilliseconds = watch.Elapsed.TotalMilliseconds;
         Console.WriteLine(
             $"terrain: {match.Fog.CellsX}x{match.Fog.CellsY} playable cells, {model.Chunks.Length} chunks, {blendCells} blend cells, {extraCells} 3-way cells ({mismatches} with a different diagonal), " +
-            $"{_waterDraws.Count} water batches, color space {device.ColorSpace}, attach {AttachMilliseconds:F0} ms, gpu {_gpuBytes / (1024.0 * 1024.0):F1} MiB");
+            $"{_waterDraws.Count} water batches, {roads.Batches} road batches ({roads.Segments} segments, {roads.Triangles} triangles, {roadWatch.Elapsed.TotalMilliseconds:F0} ms), color space {device.ColorSpace}, " +
+            $"attach {AttachMilliseconds:F0} ms, gpu {_gpuBytes / (1024.0 * 1024.0):F1} MiB");
     }
 
     public void Update(in WorldFrame frame)
@@ -316,6 +320,43 @@ internal sealed class TerrainLayer : IWorldLayer
             _waterDraws.Add(new WaterDraw(batch, vertexBuffer));
             Console.WriteLine($"terrain: water batch '{batch.Texture}' river={batch.IsRiver} scroll={batch.Scroll} {batch.Vertices.Length} vertices, bounds {batch.BoundsMin.X:F0},{batch.BoundsMin.Y:F0}..{batch.BoundsMax.X:F0},{batch.BoundsMax.Y:F0} z {batch.BoundsMin.Z:F1}");
         }
+    }
+
+    /// <summary>
+    /// The map's roads (<c>docs/CLIENT-ROADS.md</c>): one alpha-blended mesh per road template, drawn in stacking order, lit by the terrain's static lighting and darkened
+    /// by the same fog texture as terrain and water. A template whose texture does not resolve fails the attach (no magenta substitute for roads).
+    /// </summary>
+    private (int Batches, int Segments, int Triangles) CreateRoads(RenderServices services, LiveGame match, bool linear, System.Numerics.Vector2 fogScale, byte[] lightTable)
+    {
+        if (Environment.GetEnvironmentVariable("CNCNEW_ROADS") == "0") return (0, 0, 0);
+        var graph = match.Data.Graph;
+        var model = RoadModel.Build(match.Map.Objects, match.Heights, RoadCatalog.FromDefinitions(graph), TerrainRenderOptions.FromDefinitions(graph).Lighting);
+        if (model.Meshes.IsDefaultOrEmpty) return (0, 0, 0);
+        var batches = RoadMeshBuilder.Build(model, fogScale, lightTable);
+        var materials = new Dictionary<string, Material>(StringComparer.OrdinalIgnoreCase);
+        var device = services.GraphicsDevice;
+        // Roads of different templates overlap (markings on asphalt) and are blended in stacking order. Stride sorts transparent meshes by the distance of their
+        // bounding box, so every road mesh gets the same box: equal keys keep the submission order, which is the stacking order.
+        var allMin = batches.Aggregate(new System.Numerics.Vector3(float.MaxValue), (min, batch) => System.Numerics.Vector3.Min(min, batch.BoundsMin));
+        var allMax = batches.Aggregate(new System.Numerics.Vector3(float.MinValue), (max, batch) => System.Numerics.Vector3.Max(max, batch.BoundsMax));
+        var sharedBounds = new BoundingBox(ToStride(allMin), ToStride(allMax));
+        foreach (var batch in batches)
+        {
+            if (!materials.TryGetValue(batch.Texture, out var material))
+            {
+                if (!W3dTexturePathResolver.Resolve(batch.Texture, services.Content.Exists).Found)
+                    throw new InvalidDataException($"Road '{batch.Template}': texture '{batch.Texture}' is not in the content.");
+                var texture = services.Textures.Resolve(new W3dTextureReference(batch.Texture));
+                material = TerrainMaterials.CreateRoad(device, texture, FogTexture, linear, services.DepthWrites);
+                materials.Add(batch.Texture, material);
+            }
+            var vertexBuffer = StrideBuffer.Vertex.New(device, batch.Vertices, GraphicsResourceUsage.Immutable);
+            var indexBuffer = StrideBuffer.Index.New(device, batch.Indices, GraphicsResourceUsage.Immutable);
+            Track(vertexBuffer, batch.Vertices.Length * WaterVertex.SizeInBytes);
+            Track(indexBuffer, batch.Indices.Length * sizeof(uint));
+            CreateModel($"road {batch.Template}", material, vertexBuffer, WaterLayout, batch.Vertices.Length, indexBuffer, true, batch.Indices.Length, sharedBounds);
+        }
+        return (batches.Count, model.Stats.Segments, model.Stats.Triangles);
     }
 
     private ModelComponent CreateModel(string name, Material material, StrideBuffer vertexBuffer, VertexDeclaration layout, int vertexCount,

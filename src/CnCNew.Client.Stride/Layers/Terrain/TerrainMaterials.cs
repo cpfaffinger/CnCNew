@@ -84,6 +84,43 @@ internal static class TerrainMaterials
     }
 
     /// <summary>
+    /// Road material (<c>ST_ROAD_BASE</c> of <c>W3DShaderManager</c>): the road texture times the static terrain lighting of the vertex colour times the fog,
+    /// blended into the terrain by the texture's alpha (<c>SRCALPHA</c>/<c>INVSRCALPHA</c>), depth-tested (less or equal) but not depth-writing, repeating in
+    /// both directions, double-sided. The alpha must reach the blend stage: the emissive feature drops it unless <c>UseAlpha</c> is set (the Y and H junction
+    /// pieces cover transparent texels). The reference's optional cloud and noise passes are not reproduced.
+    /// </summary>
+    public static Material CreateRoad(GraphicsDevice device, Texture road, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites)
+    {
+        IComputeColor color = new ComputeTextureColor(road, Uv0, Vector2.One, Vector2.Zero)
+        {
+            Filtering = TextureFilter.Anisotropic,
+            AddressModeU = TextureAddressMode.Wrap,
+            AddressModeV = TextureAddressMode.Wrap,
+        };
+        var modulated = new ComputeBinaryColor(color, VertexColor(0), BinaryOperator.Multiply);
+        var fogged = new ComputeBinaryColor(modulated, FogFactor(fog, linearSpace), BinaryOperator.Multiply);
+        // The fog multiplication scales alpha too; keep the modulated alpha so shrouded roads stay as opaque as unshrouded roads.
+        var surface = SubstituteAlpha(fogged, modulated);
+
+        var material = Material.New(device, new MaterialDescriptor
+        {
+            Attributes =
+            {
+                Emissive = new MaterialEmissiveMapFeature(surface) { UseAlpha = true },
+                CullMode = CullMode.None,
+            },
+        });
+        var pass = material.Passes[0];
+        pass.CullMode = CullMode.None;
+        pass.HasTransparency = true;
+        pass.BlendState = new BlendStateDescription(Blend.SourceAlpha, Blend.InverseSourceAlpha);
+        pass.DepthFunction = CompareFunction.LessEqual;
+        pass.AlphaToCoverage = false;
+        depthWrites[pass] = false;
+        return material;
+    }
+
+    /// <summary>
     /// Fog level (red channel, 0..1) replicated to all channels. The reference multiplies in gamma space; in a linear colour space the
     /// factor is squared so a fogged cell (0.5) ends up at the same display brightness ratio.
     /// </summary>
