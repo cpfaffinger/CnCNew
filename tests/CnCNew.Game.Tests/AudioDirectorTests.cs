@@ -11,8 +11,12 @@ using CnCNew.Data.Compilation;
 using CnCNew.Data.Ini;
 using CnCNew.Game.Audio;
 using CnCNew.Game.Data;
+using CnCNew.Game.Hud;
 using CnCNew.Game.Live;
 using CnCNew.Presentation.Fx;
+using CnCNew.Presentation.Input;
+using CnCNew.Simulation.Commands;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.World;
@@ -42,6 +46,18 @@ file sealed class FakeView : IAudioGameView
     public bool IsShrouded(Vector3 position) => Shrouded;
 }
 
+/// <summary>A world with exactly the poses a test places, for <see cref="SoundCueDeriver"/>.</summary>
+file sealed class FakeFxView : IFxWorldView
+{
+    public Dictionary<uint, FxEntityPose> Poses { get; } = [];
+    public FxEntityPose? GetPose(EntityId entity) => Poses.TryGetValue(entity.Value, out var pose) ? pose : null;
+    public Vector3? GetBonePosition(EntityId entity, string boneName) => null;
+    public Vector3? GetWeaponMuzzle(EntityId entity, string weaponName) => null;
+    public string? GetTemplateName(int templateIndex) => null;
+    public float GroundHeight(float x, float y) => 0f;
+    public bool IsShrouded(Vector3 position) => false;
+}
+
 internal static class AudioDirectorTests
 {
     public static int Run(string[] args)
@@ -52,6 +68,11 @@ internal static class AudioDirectorTests
         harness.Run("Music playlist: side filter, silent/unresolved skipped, no immediate repeat", MusicPlaylistBehaviour);
         harness.Run("Director: bus mapping and shouldPlayLocally", DirectorCueDispatch);
         harness.Run("Director: rate limiting, unit voice interruption, missing voice keys", DirectorLimitsAndUnitVoices);
+        harness.Run("Wiring: CaptureFlash becomes the MiscAudio DefectorTimerTickSound at the building", CaptureFlashTicksAtTheBuilding);
+        harness.Run("Wiring: selection, orders, clicks and refusals reach the director", SelectionOrdersAndClicks);
+        harness.Run("Wiring: a missing sound file is counted per source, never replaced", MissingFileIsCounted);
+        harness.Run("Wiring: mute and the volume sliders silence the output live, counters unchanged", MuteAndSlidersSilence);
+        harness.Run("Wiring: without a device the mixer renders offline; fixed steps give the same WAV bytes", OfflineRenderIsReproducible);
 
         var contentDir = ContentDir(args);
         if (contentDir is null)
@@ -59,7 +80,10 @@ internal static class AudioDirectorTests
             Console.WriteLine("SKIP AudioDirectorTests real-data (pass --content-dir <dir> to run against real data)");
             return harness.Failures;
         }
-        harness.Run("Director drives a real match: deterministic, audible, bounded, WAV dump", () => RealDataRun(contentDir));
+        var watch = Stopwatch.StartNew();
+        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step} ({watch.Elapsed.TotalSeconds:F1} s)"));
+        harness.Run("Director drives a real match: deterministic, audible, bounded, WAV dump", () => RealDataRun(data));
+        harness.Run("Wiring on real data: the capture-building scenario ticks at the barracks, the Ranger answers, the world hash is untouched", () => RealCaptureScenario(data));
         return harness.Failures;
     }
 
@@ -287,6 +311,14 @@ internal static class AudioDirectorTests
             AudioEvent NoFile
               Type = ui everyone
             End
+            AudioEvent CaptureTick
+              Sounds = tone
+              Type = world shrouded everyone
+            End
+            AudioEvent Broken
+              Sounds = gone
+              Type = ui everyone
+            End
             """,
         ["Data/INI/Speech.ini"] = """
             DialogEvent Ack
@@ -298,7 +330,7 @@ internal static class AudioDirectorTests
               Type = ui everyone
             End
             """,
-        ["Data/INI/MiscAudio.ini"] = "MiscAudio\n  GUIClickSound = UiClick\nEnd\n",
+        ["Data/INI/MiscAudio.ini"] = "MiscAudio\n  GUIClickSound = UiClick\n  DefectorTimerTickSound = CaptureTick\nEnd\n",
         ["Data/INI/Object.ini"] = """
             Object Tank
               KindOf = SELECTABLE VEHICLE
@@ -312,6 +344,8 @@ internal static class AudioDirectorTests
     private static readonly HashSet<string> DirectorFiles = new(StringComparer.OrdinalIgnoreCase)
     {
         "Data/Audio/Sounds/tone.wav", "Data/Audio/Sounds/click.wav", "Data/Audio/Speech/ack.wav", "Data/Audio/Speech/ackmove.wav",
+        // Listed (so the catalog resolves it) but not openable: the file a broken installation lacks.
+        "Data/Audio/Sounds/gone.wav",
     };
 
     private static (AudioCatalog Catalog, FxCatalog Fx, Func<string, Stream> Open) BuildDirectorFixture()
@@ -414,12 +448,238 @@ internal static class AudioDirectorTests
         TestHarness.Assert(director.Stats.SkippedMovies["MPL_Intro"] == 2, "movies are counted, never faked");
     }
 
+    // ------------------------------------------------------------------------------------------ wiring
+
+    private static SimEvent Flash(EntityId building, EntityId capturer)
+        => new(new EventId(1), 5, SimEventKind.CaptureFlash, building, capturer, PlayerId.System, string.Empty, 0);
+
+    private static void CaptureFlashTicksAtTheBuilding()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+        using var director = NewDirector(catalog, fx);
+        var building = new EntityId(7);
+        var ranger = new EntityId(8);
+        var at = new Vector3(120, 40, 3);
+        var world = new FakeFxView();
+        world.Poses[building.Value] = new FxEntityPose(at, 0f, "Barracks", new PlayerId(2), 0, 30f);
+        world.Poses[ranger.Value] = new FxEntityPose(new Vector3(90, 40, 3), 0f, "Ranger", new PlayerId(1), 0, 5f);
+
+        var cues = new List<SoundCue>();
+        new SoundCueDeriver(fx).Derive(Flash(building, ranger), world, cues);
+        TestHarness.Assert(cues.Count == 1, "one cue per flash");
+        var cue = cues[0];
+        TestHarness.Assert(cue.EventName == "CaptureTick", $"the cue is the event MiscAudio names for DefectorTimerTickSound (was {cue.EventName})");
+        TestHarness.Assert(cue.Kind == SoundCueKind.Effect && cue.Position == at && cue.Entity == building, "a world sound at the building being captured, not at the capturing unit");
+        TestHarness.Assert(cue.Player.IsSystem, "the reference sets no player index on the tick");
+
+        // The local player is neither owner: the event's EVERYONE type lets the tick through, SHROUDED lets it through fog.
+        director.Submit([..cues], new FakeView { Shrouded = true });
+        var stats = director.Stats;
+        TestHarness.Assert(stats.StartedEvents.GetValueOrDefault("CaptureTick") == 1, "the director started the tick");
+        var source = stats.Sources[nameof(AudioSource.Simulation)];
+        TestHarness.Assert(source is { Requested: 1, Started: 1, Dropped: 0 }, $"counted for the simulation source ({source})");
+
+        // A building that is gone gives no cue; a data set without the hook gives a cue the director reports as unknown.
+        cues.Clear();
+        new SoundCueDeriver(fx).Derive(Flash(new EntityId(99), ranger), world, cues);
+        TestHarness.Assert(cues.Count == 0, "no pose, no cue");
+        var without = new Dictionary<string, string>(DirectorFixture, StringComparer.OrdinalIgnoreCase) { ["Data/INI/MiscAudio.ini"] = "MiscAudio\n  GUIClickSound = UiClick\nEnd\n" };
+        var bare = FxCatalog.Build(DefinitionCompiler.Compile(new MemorySource(without)));
+        new SoundCueDeriver(bare).Derive(Flash(building, ranger), world, cues);
+        TestHarness.Assert(cues.Count == 1 && cues[0].EventName == SoundCueDeriver.CaptureTickHook, "a missing hook is not silent: the cue carries the hook's own name");
+        director.Submit([..cues], new FakeView());
+        TestHarness.Assert(director.Stats.UnresolvedEvents.GetValueOrDefault(SoundCueDeriver.CaptureTickHook) == 1, "and the director reports it as an unknown event");
+    }
+
+    private static void SelectionOrdersAndClicks()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+        using var audio = new GameAudio(NewDirector(catalog, fx), fx);
+        CommandFeedback Feedback(FeedbackKind kind, CommandRejection rejection = 0) => new(kind, Vector3.Zero, EntityId.Invalid, 1, 30, rejection);
+
+        TestHarness.Assert(audio.SelectionAcknowledged("Tank", 1), "a newly selected own unit answers with VoiceSelect");
+        TestHarness.Assert(audio.Director.Stats.StartedEvents.GetValueOrDefault("Ack") == 1, "the select line is the template's VoiceSelect");
+
+        audio.CommandAcknowledged(Feedback(FeedbackKind.MoveMarker), "Tank");
+        TestHarness.Assert(audio.Director.Stats.StartedEvents.GetValueOrDefault("AckMove") == 1, "a move order is confirmed with VoiceMove");
+        audio.CommandAcknowledged(Feedback(FeedbackKind.AttackMarker), "Tank");
+        var voices = audio.Director.Stats.Sources[nameof(AudioSource.UnitVoice)];
+        TestHarness.Assert(audio.Director.Stats.MissingUnitVoices.GetValueOrDefault("VoiceAttack") == 1 && voices is { Requested: 3, Started: 2, Dropped: 1 },
+            $"a template without VoiceAttack is a counted drop ({voices})");
+        audio.CommandAcknowledged(Feedback(FeedbackKind.MoveMarker), null);
+        TestHarness.Assert(audio.Director.Stats.Sources[nameof(AudioSource.UnitVoice)].Requested == 3, "an order without an own selected unit has no speaker");
+        audio.CommandAcknowledged(Feedback(FeedbackKind.RallyMarker), "Tank");
+        TestHarness.Assert(audio.Director.Stats.Sources[nameof(AudioSource.UnitVoice)].Requested == 3, "a rally point is not acknowledged by a voice");
+
+        TestHarness.Assert(audio.PlayHook("GUIClickSound"), "the click hook plays the event MiscAudio names");
+        TestHarness.Assert(audio.Director.Stats.StartedEvents.GetValueOrDefault("UiClick") == 1 && audio.Director.Stats.Sources[nameof(AudioSource.Ui)].Started == 1, "counted for the UI source");
+        audio.CommandAcknowledged(Feedback(FeedbackKind.InvalidOrder), "Tank");
+        TestHarness.Assert(audio.UnknownHooks.GetValueOrDefault("NoCanDoSound") == 1, "a hook the data lacks is counted by key, not skipped");
+        TestHarness.Assert(!audio.PlayUi("GUISliderMoved") && audio.Director.Stats.UnresolvedEvents.GetValueOrDefault("GUISliderMoved") == 1, "an unknown shell sound name is reported");
+
+        audio.CommandAcknowledged(Feedback(FeedbackKind.Rejected, CommandRejection.InsufficientFunds), "Tank");
+        TestHarness.Assert(audio.Director.Stats.Count(AudioOutcomes.EvaRequested) == 1, "an order refused for lack of money asks Eva");
+        audio.CommandAcknowledged(Feedback(FeedbackKind.Rejected, CommandRejection.QueueFull), "Tank");
+        TestHarness.Assert(audio.Director.Stats.Count(AudioOutcomes.EvaRequested) == 1, "any other refusal is left to the simulation's CommandRejected cue");
+
+        TestHarness.Assert(audio.Report().Any(line => line.StartsWith("audio source UnitVoice: requested 3, started 2", StringComparison.Ordinal)), "the report prints the per-source counters");
+    }
+
+    private static void MissingFileIsCounted()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+        using var director = NewDirector(catalog, fx);
+        TestHarness.Assert(!director.PlayUi("Broken"), "an event whose only file cannot be opened does not play");
+        TestHarness.Assert(!director.PlayUi("Broken"), "and is not retried into success");
+        var stats = director.Stats;
+        TestHarness.Assert(stats.Count(AudioOutcomes.DecodeFailed) == 2, "each request is counted as a drop");
+        TestHarness.Assert(stats.DecodeFailures.Count == 1 && stats.DecodeFailures.ContainsKey("Data/Audio/Sounds/gone.wav"), "the file is named once with its error");
+        TestHarness.Assert(stats.Sources[nameof(AudioSource.Ui)] is { Requested: 2, Started: 0, Dropped: 2 }, "per-source counters show the drops");
+        TestHarness.Assert(stats.Mixer.Started == 0 && !stats.StartedEvents.ContainsKey("Broken"), "nothing reached the mixer: no placeholder tone");
+    }
+
+    private static void MuteAndSlidersSilence()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+
+        float PeakOf(Action<AudioDirector> configure, out AudioDirectorStats stats)
+        {
+            using var director = NewDirector(catalog, fx);
+            configure(director);
+            using var render = new OfflineAudioRenderer(director.Mixer);
+            director.PlayUi("UiClick");
+            director.OnUnitSelected("Tank", 1);
+            for (var frame = 0; frame < 6; frame++)
+            {
+                director.Tick(null, 1.0 / 30);
+                render.Pump(1.0 / 30);
+            }
+            stats = director.Stats;
+            return render.Peak;
+        }
+
+        var loud = PeakOf(_ => { }, out var loudStats);
+        var muted = PeakOf(director => director.Muted = true, out var mutedStats);
+        var zero = PeakOf(director => director.ApplySettings(CnCNew.Ui.Settings.GameSettings.Default.Audio with { Effects = 0f, Voice = 0f }), out _);
+        TestHarness.Assert(loud > 0.01f, $"the unmuted run is audible (peak {loud:F4})");
+        TestHarness.Assert(muted == 0f, $"mute gives digital silence (peak {muted:F6})");
+        TestHarness.Assert(zero == 0f, $"effects and voice sliders at zero silence a click and a unit voice (peak {zero:F6})");
+        TestHarness.Assert(mutedStats.StartedEvents.SequenceEqual(loudStats.StartedEvents) && mutedStats.Mixer.Started == loudStats.Mixer.Started,
+            "a muted run requests and mixes the same voices; only the master volume differs");
+
+        // Live: unmuting in the middle of a sound makes the rest of it audible.
+        using var live = NewDirector(catalog, fx);
+        using var output = new OfflineAudioRenderer(live.Mixer);
+        live.Muted = true;
+        live.PlayUi("UiClick");
+        output.Pump(0.01);
+        TestHarness.Assert(output.Peak == 0f, "muted start");
+        live.Muted = false;
+        output.Pump(0.02);
+        TestHarness.Assert(output.Peak > 0.01f, "unmuting takes effect with the next rendered block");
+    }
+
+    private static void OfflineRenderIsReproducible()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+        var directory = Path.Combine(Path.GetTempPath(), $"cncnew-audio-wiring-{Environment.ProcessId}");
+
+        (string Hash, byte[] File, long Frames) Capture(string name)
+        {
+            using var director = NewDirector(catalog, fx);
+            var path = Path.Combine(directory, name);
+            using var render = new OfflineAudioRenderer(director.Mixer, path);
+            for (var frame = 0; frame < 30; frame++)
+            {
+                if (frame == 3) director.PlayUi("UiClick");
+                if (frame == 9) director.OnUnitSelected("Tank", 1);
+                director.Tick(null, 1.0 / 30);
+                render.Pump(1.0 / 30);
+            }
+            var hash = render.Finish();
+            return (hash, File.ReadAllBytes(path), render.Frames);
+        }
+
+        try
+        {
+            var first = Capture("a.wav");
+            var second = Capture("b.wav");
+            // Thirty steps of 1/30 s sum to one second give or take a rounding error, so the last frame may wait for the next step.
+            TestHarness.Assert(first.Frames is 22049 or 22050 && first.Frames == second.Frames, $"one second of fixed steps renders one second of frames ({first.Frames}, {second.Frames})");
+            TestHarness.Assert(first.File.Length == 44 + first.Frames * 4, "16-bit stereo data behind a 44-byte header");
+            TestHarness.Assert(first.File.AsSpan(0, 4).SequenceEqual("RIFF"u8) && BitConverter.ToInt32(first.File, 40) == first.Frames * 4, "the header carries the final data size");
+            TestHarness.Assert(first.Hash == second.Hash && first.File.AsSpan().SequenceEqual(second.File), "two runs with the same fixed steps write identical files");
+            TestHarness.Assert(first.Hash == Convert.ToHexString(SHA256.HashData(first.File.AsSpan(44))), "the reported checksum is the SHA-256 of the samples");
+            TestHarness.Assert(first.File.AsSpan(44).ContainsAnyExcept((byte)0), "the capture is not silent");
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+
+        // No device and no file: the mixer is still drained, nothing throws, the counters keep working.
+        using var silent = NewDirector(catalog, fx);
+        using var discard = new OfflineAudioRenderer(silent.Mixer);
+        silent.PlayUi("UiClick");
+        discard.Pump(0.5);
+        discard.Pump(0);
+        TestHarness.Assert(discard.Path is null && discard.Frames == 11025 && silent.Stats.Mixer.Started == 1, "a device-free run renders and counts");
+    }
+
+    private static void RealCaptureScenario(GameData data)
+    {
+        var scenario = DemoScenarios.CaptureBuilding;
+        const int frames = 900;
+        const double step = 1.0 / 30;
+
+        ulong Run(bool withAudio, out AudioDirectorStats? stats, out int flashes, out string report)
+        {
+            var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+            var hud = new MatchController(live, CnCNew.Ui.Settings.GameSettings.Default);
+            var seen = 0;
+            live.TickStepped += result => seen += result.Events.Count(simEvent => simEvent.Kind == SimEventKind.CaptureFlash);
+            using var audio = withAudio ? GameAudio.Create(data) : null;
+            using var output = audio is null ? null : new OfflineAudioRenderer(audio.Mixer);
+            audio?.Attach(live, hud);
+            for (var frame = 0; frame < frames; frame++)
+            {
+                live.Advance(step);
+                hud.Update(step);
+                audio?.Update(step);
+                output?.Pump(step);
+            }
+            if (audio is not null)
+            {
+                hud.Input.Selection.Replace([live.Tags["ranger"]]);
+                audio.Update(step);
+                output!.Pump(step);
+            }
+            stats = audio?.Director.Stats;
+            flashes = seen;
+            report = audio is null ? string.Empty : string.Join(Environment.NewLine, audio.Report().Select(line => "  " + line));
+            return live.World.StateHash;
+        }
+
+        var withHash = Run(true, out var stats, out var flashes, out var report);
+        var withoutHash = Run(false, out _, out var plainFlashes, out _);
+        Console.WriteLine(report);
+        Console.WriteLine($"  capture flashes {flashes}, world hash with audio {withHash:X16}, without {withoutHash:X16}");
+
+        TestHarness.Assert(flashes > 0 && flashes == plainFlashes, $"the scenario flashes the barracks ({flashes}) the same with and without audio ({plainFlashes})");
+        TestHarness.Assert(withHash == withoutHash, "attaching the audio does not change the simulation");
+        var tick = data.Fx.MiscAudio[SoundCueDeriver.CaptureTickHook];
+        var started = stats!.StartedEvents.GetValueOrDefault(tick);
+        TestHarness.Assert(started > 0 && started <= flashes, $"{tick} was started for the flashes ({started} of {flashes})");
+        TestHarness.Assert(stats.Sources[nameof(AudioSource.Simulation)].Requested >= flashes, "every flash reached the director as a cue");
+        TestHarness.Assert(!stats.UnresolvedEvents.ContainsKey(tick) && stats.DecodeFailures.IsEmpty, "the tick resolves and its file decodes");
+        TestHarness.Assert(stats.MusicStarted == 1 && stats.MusicTrack is not null, "the side's playlist started with the game");
+        TestHarness.Assert(stats.UnitVoicesPlayed == 1, "selecting the Ranger through the HUD's selection model makes him answer");
+    }
+
     // ------------------------------------------------------------------------------------------ real data
 
-    private static void RealDataRun(string contentDir)
+    private static void RealDataRun(GameData data)
     {
-        var watch = Stopwatch.StartNew();
-        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step} ({watch.Elapsed.TotalSeconds:F1} s)"));
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard) { AutoPlay = true };
 
