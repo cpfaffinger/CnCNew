@@ -46,8 +46,22 @@ internal sealed class DrawPartState
 
     /// <summary>W3DTruckDraw: the tire bones of the bound model (resolved once per model), the module's rotation multiplier and the wheel angle last written into the pose.</summary>
     public int[]? WheelBones;
+
+    /// <summary>Per entry of <see cref="WheelBones"/>: bit 0 front axle (steers), bit 1 right side.</summary>
+    public byte[] WheelRoles = [];
     public float WheelMultiplier;
-    public float WheelApplied = float.NaN;
+
+    /// <summary>Spin, steering angle, the four spring offsets, cab and trailer angle last written into the pose (NaN until the first write).</summary>
+    public float[] WheelApplied = [float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN];
+
+    /// <summary>W3DTruckDraw <c>CabBone</c>/<c>TrailerBone</c> (0 when absent), their rotation multipliers and damping, and the angles they currently stand at.</summary>
+    public int CabBone;
+    public int TrailerBone;
+    public float CabFactor;
+    public float TrailerFactor;
+    public float RotationDamping = 1f;
+    public float CabAngle;
+    public float TrailerAngle;
 
     /// <summary>True once <see cref="ModelName"/> was set to something and the asset failed to load (drawn as a placeholder).</summary>
     public bool IsPlaceholder => Placeholder is not null;

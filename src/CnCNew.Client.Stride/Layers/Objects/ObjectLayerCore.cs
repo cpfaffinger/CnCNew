@@ -197,7 +197,11 @@ internal sealed class ObjectLayerCore : IWorldLayer
         }
 
         var position = new Vector3(drawable.Position.X, drawable.Position.Y, z);
-        var instanceMatrix = Matrix4x4.CreateScale(scale) * Matrix4x4.CreateRotationZ(drawable.Yaw) * Matrix4x4.CreateTranslation(position);
+        // Drawable::applyPhysicsXform: Translate(0, 0, lift), Rotate_Y(pitch), Rotate_X(-roll) in the object's own frame, before the placement.
+        var chassis = drawable.Chassis.IsLevel
+            ? Matrix4x4.Identity
+            : Matrix4x4.CreateRotationX(-drawable.Chassis.Roll) * Matrix4x4.CreateRotationY(drawable.Chassis.Pitch) * Matrix4x4.CreateTranslation(0f, 0f, drawable.Chassis.LiftZ);
+        var instanceMatrix = Matrix4x4.CreateScale(scale) * chassis * Matrix4x4.CreateRotationZ(drawable.Yaw) * Matrix4x4.CreateTranslation(position);
         var radius = asset?.Radius ?? Math.Max(drawable.SelectionRadius, 2f);
         var aabb = new Aabb(new Vector3(position.X - radius, position.Y - radius, position.Z - radius),
             new Vector3(position.X + radius, position.Y + radius, position.Z + radius));
@@ -226,7 +230,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         // W3DModelDraw::handleClientTurretPositioning: Capture_Bone + Control_Bone on the turret bones; a changed angle needs the pose evaluated again.
         if (ApplyTurret(state.Turret, drawable.TurretYaw, drawable.TurretPitch, asset, pose, part.TurretApplied, 0)
             | ApplyTurret(state.AltTurret, drawable.AltTurretYaw, drawable.AltTurretPitch, asset, pose, part.TurretApplied, 2)
-            | (draw.ModuleType == "W3DTruckDraw" && ApplyWheels(draw, drawable.WheelTravel, asset, pose, part)))
+            | (draw.ModuleType == "W3DTruckDraw" && ApplyWheels(draw, drawable, asset, pose, part, frame.DeltaSeconds)))
             part.LastFrame = float.NaN;
         if (part.Binding is not null)
         {
@@ -310,34 +314,84 @@ internal sealed class ObjectLayerCore : IWorldLayer
         return result;
     }
 
-    private static readonly string[] TireBoneKeys =
+    /// <summary>The tire bone settings of <c>W3DTruckDraw</c> with their axle (front steers) and side; the "Mid" bones follow the nearest axle.</summary>
+    private static readonly (string Key, bool Front, bool Right)[] TireBoneKeys =
     [
-        "LeftFrontTireBone", "RightFrontTireBone", "LeftRearTireBone", "RightRearTireBone", "MidLeftFrontTireBone", "MidRightFrontTireBone",
-        "MidLeftRearTireBone", "MidRightRearTireBone", "MidLeftMidTireBone", "MidRightMidTireBone",
+        ("LeftFrontTireBone", true, false), ("RightFrontTireBone", true, true), ("LeftRearTireBone", false, false), ("RightRearTireBone", false, true),
+        ("MidLeftFrontTireBone", true, false), ("MidRightFrontTireBone", true, true), ("MidLeftRearTireBone", false, false), ("MidRightRearTireBone", false, true),
+        ("MidLeftMidTireBone", false, false), ("MidRightMidTireBone", false, true),
     ];
 
     /// <summary>
-    /// <c>W3DTruckDraw::doDrawModule</c>: every tire bone turns about its axle (<c>Rotate_Y</c>) by the module's <c>TireRotationMultiplier</c> times the distance rolled.
-    /// Steering, suspension and the powerslide addition are not modelled (they need the drawable wheel info of the original's physics).
+    /// <c>W3DTruckDraw::doDrawModule</c>: every tire bone turns about its axle (<c>Rotate_Y</c>) by the module's <c>TireRotationMultiplier</c> times the distance rolled; the front
+    /// wheels also steer (<c>Rotate_Z</c> by the wheel angle of the locomotor's <c>FrontWheelTurnAngle</c>) and every wheel follows its spring offset (<c>Adjust_Z_Translation</c>,
+    /// <see cref="CnCNew.Presentation.Objects.SuspensionTracker"/>); a cab or trailer bone swings with the steering angle times its multiplier, damped by <c>RotationDamping</c>.
+    /// Left out: the powerslide addition and the path clamp of the cab angle.
     /// </summary>
-    private static bool ApplyWheels(DrawSpec draw, float travel, ModelAsset asset, W3dPose pose, DrawPartState part)
+    private static bool ApplyWheels(DrawSpec draw, DrawableInstance drawable, ModelAsset asset, W3dPose pose, DrawPartState part, double deltaSeconds)
     {
+        float Number(string key, float fallback) => draw.Setting(key) is { } text && float.TryParse(Tokens(text).FirstOrDefault(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : fallback;
         if (part.WheelBones is null)
         {
             var bones = new List<int>();
-            foreach (var key in TireBoneKeys)
-                if (draw.Setting(key) is { } name && Tokens(name).FirstOrDefault() is { } token && asset.Model.FindBone(token) is > 0 and var bone) bones.Add(bone);
+            var roles = new List<byte>();
+            foreach (var (key, front, right) in TireBoneKeys)
+                if (draw.Setting(key) is { } name && Tokens(name).FirstOrDefault() is { } token && asset.Model.FindBone(token) is > 0 and var bone)
+                {
+                    bones.Add(bone);
+                    roles.Add((byte)((front ? 1 : 0) | (right ? 2 : 0)));
+                }
+
             part.WheelBones = [.. bones];
-            part.WheelMultiplier = draw.Setting("TireRotationMultiplier") is { } text
-                && float.TryParse(Tokens(text).FirstOrDefault(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var factor) ? factor : 0f;
+            part.WheelRoles = [.. roles];
+            part.WheelMultiplier = Number("TireRotationMultiplier", 0f);
+            part.CabBone = draw.Setting("CabBone") is { } cab && Tokens(cab).FirstOrDefault() is { } cabToken && asset.Model.FindBone(cabToken) is > 0 and var cabIndex ? cabIndex : 0;
+            part.TrailerBone = draw.Setting("TrailerBone") is { } trailer && Tokens(trailer).FirstOrDefault() is { } trailerToken && asset.Model.FindBone(trailerToken) is > 0 and var trailerIndex ? trailerIndex : 0;
+            part.CabFactor = Number("CabRotationMultiplier", 0f);
+            part.TrailerFactor = Number("TrailerRotationMultiplier", 0f);
+            part.RotationDamping = Number("RotationDamping", 1f);
         }
 
-        if (part.WheelBones.Length == 0 || part.WheelMultiplier == 0f) return false;
-        var angle = (part.WheelMultiplier * travel) % MathF.Tau;
-        if (!float.IsNaN(part.WheelApplied) && MathF.Abs(angle - part.WheelApplied) < 1e-4f) return false;
-        part.WheelApplied = angle;
-        var rotation = Matrix4x4.CreateRotationY(angle);
-        foreach (var bone in part.WheelBones) pose.SetBoneOverride(bone, rotation);
+        var changed = false;
+        var chassis = drawable.Chassis;
+        if (part.CabBone > 0)
+        {
+            // The original damps once per drawn frame at 30 frames per second; here the same fraction per elapsed 1/30 s.
+            var blend = 1f - MathF.Pow(1f - Math.Clamp(part.RotationDamping, 0f, 1f), (float)(deltaSeconds * 30.0));
+            var cabStep = (chassis.WheelAngle * part.CabFactor - part.CabAngle) * blend;
+            var trailerStep = part.TrailerBone > 0 ? (-chassis.WheelAngle * part.TrailerFactor - part.TrailerAngle) * blend : 0f;
+            if (MathF.Abs(cabStep) > 1e-5f || MathF.Abs(trailerStep) > 1e-5f || float.IsNaN(part.WheelApplied[6]))
+            {
+                part.CabAngle += cabStep;
+                pose.SetBoneOverride(part.CabBone, Matrix4x4.CreateRotationZ(part.CabAngle));
+                if (part.TrailerBone > 0)
+                {
+                    part.TrailerAngle += trailerStep;
+                    pose.SetBoneOverride(part.TrailerBone, Matrix4x4.CreateRotationZ(part.TrailerAngle));
+                }
+
+                part.WheelApplied[6] = 0f;
+                changed = true;
+            }
+        }
+
+        if (part.WheelBones.Length == 0 || part.WheelMultiplier == 0f) return changed;
+        var spin = (part.WheelMultiplier * drawable.WheelTravel) % MathF.Tau;
+        var applied = part.WheelApplied;
+        if (!float.IsNaN(applied[0]) && MathF.Abs(spin - applied[0]) < 1e-4f && MathF.Abs(chassis.WheelAngle - applied[1]) < 1e-4f
+            && MathF.Abs(chassis.FrontLeft - applied[2]) < 1e-4f && MathF.Abs(chassis.FrontRight - applied[3]) < 1e-4f
+            && MathF.Abs(chassis.RearLeft - applied[4]) < 1e-4f && MathF.Abs(chassis.RearRight - applied[5]) < 1e-4f) return changed;
+        applied[0] = spin; applied[1] = chassis.WheelAngle; applied[2] = chassis.FrontLeft; applied[3] = chassis.FrontRight; applied[4] = chassis.RearLeft; applied[5] = chassis.RearRight;
+        for (var i = 0; i < part.WheelBones.Length; i++)
+        {
+            var role = part.WheelRoles[i];
+            var front = (role & 1) != 0;
+            var right = (role & 2) != 0;
+            var offset = front ? (right ? chassis.FrontRight : chassis.FrontLeft) : (right ? chassis.RearRight : chassis.RearLeft);
+            var matrix = Matrix4x4.CreateRotationY(spin) * (front ? Matrix4x4.CreateRotationZ(chassis.WheelAngle) : Matrix4x4.Identity) * Matrix4x4.CreateTranslation(0f, 0f, offset);
+            pose.SetBoneOverride(part.WheelBones[i], matrix);
+        }
+
         return true;
     }
 
@@ -460,7 +514,9 @@ internal sealed class ObjectLayerCore : IWorldLayer
         part.LastFrame = float.NaN;
         Array.Fill(part.TurretApplied, float.NaN);
         part.WheelBones = null;
-        part.WheelApplied = float.NaN;
+        Array.Fill(part.WheelApplied, float.NaN);
+        part.CabAngle = 0f;
+        part.TrailerAngle = 0f;
         part.ElapsedInState = 0;
 
         if (part.Asset is not null)

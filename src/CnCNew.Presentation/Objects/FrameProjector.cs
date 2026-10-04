@@ -54,6 +54,7 @@ public sealed class FrameProjector
     private readonly bool[] _explored;
     private readonly bool[] _sceneryFogged;
     private readonly TurretTracker _turrets = new();
+    private readonly SuspensionTracker _suspension = new();
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
     private readonly SortedDictionary<uint, Capture> _ghosts = [];
     private readonly HashSet<uint> _known = [];
@@ -109,7 +110,11 @@ public sealed class FrameProjector
             if (_known.Add(entity.Id.Value)) Claim(capture);
         }
         _currentOrdered = ordered.ToImmutable();
-        if (world.Tick % 150 == 0) _turrets.Prune(id => world.FindEntity(new EntityId(id)) is not null);
+        if (world.Tick % 150 == 0)
+        {
+            _turrets.Prune(id => world.FindEntity(new EntityId(id)) is not null);
+            _suspension.Prune(id => world.FindEntity(new EntityId(id)) is not null);
+        }
         if (_options.Viewer is { } fogViewer)
         {
             UpdateGhosts(world, fogViewer);
@@ -217,9 +222,10 @@ public sealed class FrameProjector
             if (entity.LastFireTickOf(slot) is >= 0 and var lastFire && world.Tick - lastFire <= MuzzleFlashTicks) fired |= 1 << slot;
         var main = _turrets.Update(entity, visual, 0, world.Tick, world);
         var alt = _turrets.Update(entity, visual, 1, world.Tick, world);
+        var chassis = _suspension.Update(entity, visual, world, _options.SnapDistance) ?? ChassisPose.Level;
         return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, Select(visual, conditions),
-            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt);
+            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis);
     }
 
     private void UpdateGhosts(SimulationWorld world, PlayerId viewer)
@@ -256,7 +262,7 @@ public sealed class FrameProjector
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
         Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel, capture.FiredSlots,
         capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= HealingIconTicks && capture.Health01 < 1f && Tick > HealingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
-        ghost);
+        ghost, capture.Chassis);
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
@@ -278,5 +284,5 @@ public sealed class FrameProjector
     private sealed record Capture(
         uint Id, ObjectVisual Visual, PlayerId Owner, Vector3 Position, float Yaw, Fixed FixedX, Fixed FixedY, float Health01,
         float Construction01, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections, int ConstructionWork,
-        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f, int FiredSlots = 0, long HealedAtTick = -1);
+        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f, int FiredSlots = 0, long HealedAtTick = -1, ChassisPose Chassis = default);
 }

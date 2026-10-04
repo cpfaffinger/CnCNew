@@ -35,8 +35,11 @@ public sealed record DrawableInstance(
     float WheelTravel = 0f,
     int FiredSlots = 0,
     bool ShowsHealing = false,
-    bool Fogged = false)
+    bool Fogged = false,
+    ChassisPose Chassis = default)
 {
+    // Chassis: the body tilt/lift and the wheel steering and spring offsets of a treaded or wheeled vehicle (SuspensionTracker); level for everything else.
+
     // Fogged: explored but not currently visible to the viewer (remembered structure, scenery out of sight). The original draws such objects through the shroud texture, darkened like the ground.
 
     /// <summary>Muzzle flash sub-objects are shown for the weapon slots whose bit is set here (<see cref="FrameProjector.MuzzleFlashTicks"/> after the last shot).</summary>

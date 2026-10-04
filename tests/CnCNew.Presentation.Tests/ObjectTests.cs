@@ -37,6 +37,7 @@ static class ObjectTests
         run.Test("Static scenery and the claim rule", Scenery);
         run.Test("Static scenery follows the shroud: nothing in unexplored ground, kept once explored", SceneryFollowsTheShroud);
         run.Test("Turrets turn toward the victim of a shot at their turn rate, hold, and recentre", TurretFollowsShots);
+        run.Test("Wheeled chassis: acceleration tilts the body, straight driving keeps the wheels straight, no spring extends past its limit", ChassisFollowsMotion);
         run.Test("Team colors", Colors);
         var contentDir = ContentDir(args);
         if (contentDir is not null) run.Test("Real data: draw specs, audit, projection and scenery", () => RealData(contentDir));
@@ -670,6 +671,37 @@ static class ObjectTests
         Check.That(omniscient.Project(1f).Drawables.Count(drawable => drawable.IsStatic) == 3 && omniscient.ShroudedScenery == 0, "Without a viewer all scenery is drawn.");
     }
 
+    private static void ChassisFollowsMotion()
+    {
+        var fixture = Fixture();
+        var catalog = ObjectVisualCatalog.Build(fixture.Graph);
+        var world = NewWorld(fixture);
+        var rover = Spawn(world, "Rover", 1, 20, 20);
+        var entity = world.FindEntity(rover)!;
+        var motion = new SuspensionMotion(SuspensionKind.Wheels, 0.1f, 0.1f, 0.9f, 0.9f, 4f, 4f, 1f, 0.3f, 0f, true, 0.4f, -2.3f);
+        var visual = catalog["Rover"] with { Suspension = motion };
+        var tracker = new SuspensionTracker();
+        Check.That(tracker.Update(entity, catalog["Rover"], world, 50f) is null, "An object without chassis dynamics gets no pose.");
+
+        Submit(world, sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, world.Tick, rover, Fixed.FromInt(170), Fixed.FromInt(20)));
+        float maxPitch = 0f, maxSteer = 0f;
+        for (var tick = 0; tick < 25; tick++)
+        {
+            world.Step();
+            var pose = tracker.Update(entity, visual, world, 50f)!.Value;
+            maxPitch = Math.Max(maxPitch, Math.Abs(pose.Pitch));
+            maxSteer = Math.Max(maxSteer, Math.Abs(pose.WheelAngle));
+        }
+
+        Check.That(maxPitch > 0.005f && maxPitch <= motion.AccelPitchLimit + 0.1f, $"Setting off tilts the body by acceleration ({maxPitch} rad; at {entity.X},{entity.Y} speed {entity.Speed}).");
+        Check.That(maxSteer < 0.05f, $"Driving straight keeps the wheels straight ({maxSteer}).");
+
+        var exact = new SuspensionTracker();
+        var other = world.FindEntity(rover)!;
+        var again = exact.Update(other, visual, world, 50f)!.Value;
+        Check.That(again.FrontLeft >= motion.MaxWheelExtension && again.RearRight >= motion.MaxWheelExtension, "No wheel extends past the maximum extension.");
+    }
+
     private static void TurretFollowsShots()
     {
         var fixture = Fixture();
@@ -764,6 +796,40 @@ static class ObjectTests
         Check.That(projector.MissingVisuals == 0 && frame.Drawables.Length == 2, "Both spawned objects are projected.");
         Check.That(frame.Drawables[0].Selections.Any(selection => selection.Model == "avleopard") && frame.Drawables[1].PrimaryModel == "abbarracks_n",
             "Real templates select their models (the barracks at night).");
+
+        var wheeled = catalog.Visuals.Count(visual => visual.Suspension is { Kind: SuspensionKind.Wheels });
+        var treaded = catalog.Visuals.Count(visual => visual.Suspension is { Kind: SuspensionKind.Treads });
+        Check.That(catalog["AmericaVehicleHumvee"].Suspension is { Kind: SuspensionKind.Wheels, HasSuspension: true } humveeMotion && Math.Abs(humveeMotion.WheelTurnAngle - 22f * MathF.PI / 180f) < 1e-4f
+                   && catalog["AmericaTankCrusader"].Suspension is { Kind: SuspensionKind.Treads }, "The Humvee's wheels (22 degrees of steering) and the Crusader's treads are read from their locomotors.");
+        Console.WriteLine($"       real data: {wheeled} objects with wheeled and {treaded} with treaded chassis dynamics");
+        {
+            var driveTerrain = FlatTerrain();
+            var driveWorld = new SimulationWorld(new WorldConfiguration(new WorldId(2), 1, Players, "presentation-chassis", fingerprint, driveTerrain.Fingerprint), templates, driveTerrain);
+            driveWorld.Submit(new SpawnCommand(PlayerId.System, ++sequence, 0, "AmericaVehicleHumvee", new PlayerId(1), Fixed.FromInt(30), Fixed.FromInt(30), Fixed.Zero, Fixed.Zero));
+            driveWorld.Step();
+            var humvee = driveWorld.Entities.Single(entity => entity.Template.Name == "AmericaVehicleHumvee");
+            var humveeTracker = new SuspensionTracker();
+            driveWorld.Submit(new SetMoveTargetCommand(new PlayerId(1), ++sequence, driveWorld.Tick, humvee.Id, Fixed.FromInt(150), Fixed.FromInt(30)));
+            float steerMax = 0f, steerMin = 0f;
+            for (var tick = 0; tick < 40; tick++)
+            {
+                driveWorld.Step();
+                var pose = humveeTracker.Update(humvee, catalog["AmericaVehicleHumvee"], driveWorld, 50f)!.Value;
+                steerMax = Math.Max(steerMax, pose.WheelAngle);
+                steerMin = Math.Min(steerMin, pose.WheelAngle);
+            }
+
+            Check.That(steerMax < 0.05f && steerMin > -0.05f, $"Driving straight leaves the Humvee's wheels straight ({steerMin}..{steerMax}).");
+            driveWorld.Submit(new SetMoveTargetCommand(new PlayerId(1), ++sequence, driveWorld.Tick, humvee.Id, Fixed.FromInt(150), Fixed.FromInt(150)));
+            for (var tick = 0; tick < 50; tick++)
+            {
+                driveWorld.Step();
+                var pose = humveeTracker.Update(humvee, catalog["AmericaVehicleHumvee"], driveWorld, 50f)!.Value;
+                steerMax = Math.Max(steerMax, pose.WheelAngle);
+            }
+
+            Check.That(steerMax > 0.02f && steerMax <= 22f * MathF.PI / 180f + 1e-4f, $"A left turn steers the Humvee's front wheels toward the turn, within the 22 degree limit ({steerMax}).");
+        }
 
         var mapPath = "Maps/Alpine Assault/Alpine Assault.map";
         if (content.Exists(mapPath))

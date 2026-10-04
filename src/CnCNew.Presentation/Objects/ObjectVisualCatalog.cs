@@ -21,7 +21,8 @@ public sealed record ObjectVisual(
     string? ButtonImage,
     ImmutableArray<DrawSpec> Draws,
     ImmutableArray<ConditionUpgradeSpec> ConditionUpgrades,
-    ImmutableArray<TurretMotion?> Turrets = default)
+    ImmutableArray<TurretMotion?> Turrets = default,
+    SuspensionMotion? Suspension = null)
 {
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
     public bool IsStructure => IsKindOf("STRUCTURE");
@@ -60,14 +61,16 @@ public sealed class ObjectVisualCatalog
     {
         ArgumentNullException.ThrowIfNull(graph);
         var diagnostics = new List<DrawDiagnostic>();
+        var locomotors = new Dictionary<string, SuspensionMotion?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var locomotor in graph.Definitions.OfType<LocomotorDefinition>()) locomotors[locomotor.OriginalName] = SuspensionMotion.FromLocomotor(locomotor);
         var visuals = graph.Definitions.OfType<ObjectDefinition>()
             .OrderBy(definition => definition.OriginalName, StringComparer.Ordinal)
-            .Select(definition => Compile(definition, diagnostics))
+            .Select(definition => Compile(definition, diagnostics, locomotors))
             .ToImmutableArray();
         return new ObjectVisualCatalog(visuals, [..diagnostics]);
     }
 
-    public static ObjectVisual Compile(ObjectDefinition definition, List<DrawDiagnostic> diagnostics)
+    public static ObjectVisual Compile(ObjectDefinition definition, List<DrawDiagnostic> diagnostics, IReadOnlyDictionary<string, SuspensionMotion?>? locomotors = null)
     {
         var draws = definition.Modules.Where(module => module.BlockKind == ModuleBlockKind.Draw)
             .Select(module => DrawSpecCompiler.Compile(module, diagnostics)).ToImmutableArray();
@@ -93,7 +96,18 @@ public sealed class ObjectVisualCatalog
         var isBox = Field(definition.Fields, "Geometry")?.Value.Value is EnumValue { Name: "BOX" };
         var radius = isBox ? Math.Sqrt((double)(major * major + minor * minor)) : (double)major;
         return new ObjectVisual(definition.OriginalName, kindOf, (float)(Number(definition.Fields, "Scale") ?? 1m), shadow, (float)radius,
-            Text(definition.Fields, "SelectPortrait"), Text(definition.Fields, "ButtonImage"), draws, upgrades.ToImmutable(), TurretMotion.FromModules(definition.Modules));
+            Text(definition.Fields, "SelectPortrait"), Text(definition.Fields, "ButtonImage"), draws, upgrades.ToImmutable(), TurretMotion.FromModules(definition.Modules),
+            locomotors is null ? null : NormalSuspension(definition, locomotors));
+    }
+
+    /// <summary>The chassis dynamics of the <c>SET_NORMAL</c> locomotor (the first listed name that exists), or null when it has none.</summary>
+    private static SuspensionMotion? NormalSuspension(ObjectDefinition definition, IReadOnlyDictionary<string, SuspensionMotion?> locomotors)
+    {
+        foreach (var field in definition.Fields)
+            if (field.Name.Equals("Locomotor", StringComparison.OrdinalIgnoreCase) && field.Value.Value is TaggedReferenceList { Tag: "SET_NORMAL" } tagged)
+                foreach (var reference in tagged.References)
+                    if (locomotors.TryGetValue(reference.Name, out var motion)) return motion;
+        return null;
     }
 
     private static DefinitionField? Field(ImmutableArray<DefinitionField> fields, string name)
