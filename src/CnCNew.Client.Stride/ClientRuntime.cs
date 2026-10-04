@@ -38,13 +38,14 @@ internal sealed class ClientRuntime : IDisposable
     private double _nextDots;
     private readonly SpriteBatch _minimapBatch;
 
-    private ClientRuntime(global::Stride.Engine.Game game, GameData data, GameSettings settings, GameShell? shell)
+    private ClientRuntime(global::Stride.Engine.Game game, GameData data, GameSettings settings, Func<UiRenderer, GameShell>? shell)
     {
         _game = game;
         _data = data;
-        _settings = settings;
-        _shell = shell;
         _ui = new UiRenderer(game.GraphicsDevice, data.Content, data.Images, "English");
+        // The shell lays its text out with the renderer's own glyph metrics; with any other measure labels sit off centre.
+        _shell = shell?.Invoke(_ui);
+        _settings = _shell?.Settings ?? settings;
         _minimapBatch = new SpriteBatch(game.GraphicsDevice);
         _ui.CustomDraw = DrawCustom;
     }
@@ -52,9 +53,8 @@ internal sealed class ClientRuntime : IDisposable
     /// <summary>The shell (main menu and everything behind it); it starts matches and missions itself.</summary>
     public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height)
     {
-        var shell = GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height));
-        var runtime = new ClientRuntime(game, data, shell.Settings, shell);
-        return runtime;
+        return new ClientRuntime(game, data, GameSettings.Default,
+            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure));
     }
 
     /// <summary>A skirmish match started from the command line, with its HUD.</summary>

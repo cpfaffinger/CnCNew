@@ -63,8 +63,11 @@ public sealed class GameShell
     private double _briefingElapsed;
     private double _briefingDuration;
 
-    private GameShell(IShellEnvironment environment, string language, UiViewport viewport)
+    private readonly IUiTextMeasure _textMeasure;
+
+    private GameShell(IShellEnvironment environment, string language, UiViewport viewport, IUiTextMeasure? textMeasure)
     {
+        _textMeasure = textMeasure ?? new ShellTextMeasure();
         Environment = environment;
         Language = language;
         Viewport = viewport;
@@ -110,26 +113,31 @@ public sealed class GameShell
         _ => _loadTask?.IsCompletedSuccessfully == true ? 100 : 0,
     };
 
-    /// <summary>Starts already past Boot, with <paramref name="data"/> compiled; used by tests and by a host that loads content itself.</summary>
-    public static GameShell Create(GameData data, IShellEnvironment environment, string language = "English", UiViewport? viewport = null)
+    /// <summary>
+    /// Starts already past Boot, with <paramref name="data"/> compiled; used by tests and by a host that loads content itself.
+    /// <paramref name="textMeasure"/> must be the metrics of the font the host draws with: text is centred and wrapped
+    /// from these widths, so the synthetic <see cref="ShellTextMeasure"/> (the default, for headless tests) puts every
+    /// label off centre under a real rasterizer.
+    /// </summary>
+    public static GameShell Create(GameData data, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null)
     {
-        var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height));
+        var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure);
         if (viewport is null) shell.Viewport = FitViewport(environment, shell.Settings);
         shell.FinishLoading(data);
         return shell;
     }
 
     /// <summary>Starts in <see cref="ShellPhase.Boot"/>: <see cref="GameData.Load"/> runs on a worker thread while the boot load screen shows its stage.</summary>
-    public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null)
+    public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null)
     {
-        var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height));
+        var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure);
         if (viewport is null) shell.Viewport = FitViewport(environment, shell.Settings);
         var bootContent = ContentFileSystem.Open(contentDirectory);
         shell._bootContent = bootContent;
         shell.Layouts = ShellLayouts.Load(bootContent, language, ShellLayoutNames.ShellGameLoadScreen);
         shell.RawText = GameData.LoadText(bootContent, language);
         shell.TextSource = new ShellTextSource(shell.RawText);
-        shell.TreeServices = new UiTreeServices(new ShellTextMeasure()) { Text = shell.TextSource, HeaderTemplates = shell.Layouts.HeaderTemplates };
+        shell.TreeServices = new UiTreeServices(shell._textMeasure) { Text = shell.TextSource, HeaderTemplates = shell.Layouts.HeaderTemplates };
         shell.Phase = ShellPhase.Boot;
         shell.Push(new LoadingScreen(shell, ShellLayoutNames.ShellGameLoadScreen));
         shell._loadTask = Task.Run(() => GameData.Load(contentDirectory, stage => shell._loadStage = stage));
@@ -150,7 +158,7 @@ public sealed class GameShell
         Layouts = ShellLayouts.Load(data.Content, Language, [.. ShellLayoutNames.All]);
         RawText = data.LoadText(Language);
         TextSource = new ShellTextSource(RawText);
-        TreeServices = new UiTreeServices(new ShellTextMeasure())
+        TreeServices = new UiTreeServices(_textMeasure)
         {
             Text = TextSource,
             HeaderTemplates = Layouts.HeaderTemplates,
@@ -400,7 +408,12 @@ public sealed class GameShell
 
     internal string FormatMoney(int amount) => RawText is { } text && text.TryGet("GUI:StartingMoneyFormat", out _) ? text.Format("GUI:StartingMoneyFormat", amount) : $"${amount}";
 
-    private void Push(ShellScreen screen) => _stack.Add(screen);
+    private void Push(ShellScreen screen)
+    {
+        // The covered screen no longer sees the pointer; without this its last hovered button stays hilited underneath.
+        if (_stack.Count > 0) CurrentScreen.Tree.PointerLeft();
+        _stack.Add(screen);
+    }
 
     private void Pop()
     {
