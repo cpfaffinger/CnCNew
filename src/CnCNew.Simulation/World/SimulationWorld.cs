@@ -430,6 +430,21 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     public bool IsDock(EntityId id) => FindEntity(id) is { } entity && Modules.BuiltIn.DockModules.DockOf(entity) is not null;
 
+    /// <summary>
+    /// What the dock side of a docking shows (<c>DockUpdate::onEnterReached</c> / <c>onDockReached</c> / <c>onExitReached</c> set the same model conditions on the dock and on the docker):
+    /// <paramref name="dockerInside"/> while the active docker is between the entry and the exit (<c>DOCKING</c>), <paramref name="dockActive"/> while that docker is at the dock point and the dock works
+    /// on it (<c>DOCKING_ACTIVE</c>). False for both when <paramref name="dock"/> is no dock.
+    /// </summary>
+    public void GetDockActivity(Entity dock, out bool dockerInside, out bool dockActive)
+    {
+        ArgumentNullException.ThrowIfNull(dock);
+        dockerInside = false;
+        dockActive = false;
+        if (Modules.BuiltIn.DockModules.DockOf(dock) is not Modules.BuiltIn.DockUpdateBase { DockerInside: true } module) return;
+        dockerInside = true;
+        dockActive = FindEntity(module.ActiveDocker)?.Modules.OfType<Modules.BuiltIn.AIUpdateInterface>().FirstOrDefault() is { IsDockActive: true, DockingAt: var at } && at == dock.Id;
+    }
+
     /// <summary><c>Money::withdraw</c>: clamps to the available balance and returns the amount actually withdrawn.</summary>
     public Fixed WithdrawMoney(PlayerId player, Fixed amount)
     {

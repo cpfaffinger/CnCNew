@@ -696,6 +696,9 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     /// <summary>The plane is on its delivery run.</summary>
     public bool Delivering => _phase != Phase.None;
 
+    /// <summary><c>DeliveringState</c>: the doors are opening or open (<c>onEnter</c> sets <c>MODELCONDITION_DOOR_1_OPENING</c>, <c>onExit</c> swaps it for <c>DOOR_1_CLOSING</c>).</summary>
+    public bool DoorsOpen => _phase == Phase.Delivering;
+
     /// <summary><c>getPutInContainerTemplateViaModuleData</c>: the template riders are packed into (the parachute), empty for none.</summary>
     public string PutInContainer => data.PutInContainer;
 
@@ -1050,7 +1053,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
 /// </summary>
 public sealed record ParticleUplinkData(string PowerName, string BeamObject, string RemnantObject, string GroundHitFx, string BeamLaunchFx, long LaunchFxTicks, long WidthGrowTicks, long BeamTravelTicks,
     long TotalFiringTicks, Fixed SwathDistance, Fixed SwathAmplitude, long TotalScorchMarks, int TotalDamagePulses, Fixed DamagePerSecond, int DamageType, int DeathType, Fixed DamageRadiusScalar,
-    Fixed ManualDrivingSpeed, Fixed ManualFastDrivingSpeed = default) : ModuleData
+    Fixed ManualDrivingSpeed, Fixed ManualFastDrivingSpeed = default, long BeginChargeTicks = 0, long RaiseAntennaTicks = 0, long ReadyDelayTicks = 0) : ModuleData
 {
     public static ParticleUplinkData Parse(ModuleConfiguration configuration)
     {
@@ -1066,7 +1069,8 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
             damageType.Length == 0 ? DamageTypes.Explosion : NameTables.DamageType.TryIndexOf(damageType, out var damageIndex) ? damageIndex : throw new InvalidDataException($"Unknown damage type '{damageType}'."),
             deathType.Length == 0 ? DeathTypes.Normal : NameTables.DeathType.TryIndexOf(deathType, out var deathIndex) ? deathIndex : throw new InvalidDataException($"Unknown death type '{deathType}'."),
             ModuleConfigReader.Real(configuration, "DamageRadiusScalar", Fixed.Zero), ModuleConfigReader.Real(configuration, "ManualDrivingSpeed", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond),
-            ModuleConfigReader.Real(configuration, "ManualFastDrivingSpeed", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond));
+            ModuleConfigReader.Real(configuration, "ManualFastDrivingSpeed", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond),
+            ModuleConfigReader.Ticks(configuration, "BeginChargeTime", 0), ModuleConfigReader.Ticks(configuration, "RaiseAntennaTime", 0), ModuleConfigReader.Ticks(configuration, "ReadyDelayTime", 0));
     }
 }
 
@@ -1113,6 +1117,35 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
 
     /// <summary>Where the beam burns right now (valid while <see cref="InUse"/> and the beam is born).</summary>
     public Point3 BeamPosition => _current;
+
+    /// <summary><c>PUCStatus</c>: the logical stage of the cannon (<c>setLogicalStatus</c>); the reference derives the antenna stages from the clock alone, so they are read here and not stored.</summary>
+    public enum UplinkStatus : byte { Idle, Charging, Preparing, AlmostReady, ReadyToFire, Firing, PostFire, Packing }
+
+    /// <summary>
+    /// The stage <c>ParticleUplinkCannonUpdate::update</c> would put the cannon into at <paramref name="world"/>'s tick, without changing anything: a beam in progress is firing, then post-firing while it
+    /// decays and packing until the beam is gone; otherwise the clock decides from the power's ready tick backwards (<c>ReadyDelayTime</c> almost ready, <c>RaiseAntennaTime</c> before that preparing,
+    /// <c>BeginChargeTime</c> before that charging). A sold, unfinished or destroyed cannon is idle. The reference's reset case (a ready cannon whose timer was reset packs up) is not read: it is idle.
+    /// <c>UNPACKING</c> belongs to <see cref="UplinkStatus.Preparing"/>, <c>DEPLOYED</c> to almost ready through post-fire and <c>PACKING</c> to <see cref="UplinkStatus.Packing"/>.
+    /// </summary>
+    public UplinkStatus StatusAt(IWorldServices world)
+    {
+        if (Entity.HasStatus(ObjectStatusBits.Sold) || Entity.HasStatus(ObjectStatusBits.UnderConstruction) || Entity.EffectivelyDead) return UplinkStatus.Idle;
+        var now = world.Tick;
+        if (_startAttack != 0 && _startAttack <= now)
+        {
+            if (_startDecay + data.WidthGrowTicks <= now) return UplinkStatus.Packing;
+            return _startDecay <= now ? UplinkStatus.PostFire : UplinkStatus.Firing;
+        }
+        if (!world.SpecialPowers.TryGet(data.PowerName, out var info) || SpecialPowerRouting.FindModule(Entity, info.Index) is not SpecialPowerModuleBase power) return UplinkStatus.Idle;
+        var readyToFire = power.IsReady(world) ? now : power.AvailableOnFrame(world);
+        var almostReady = readyToFire - data.ReadyDelayTicks;
+        var raiseAntenna = almostReady - data.RaiseAntennaTicks;
+        var beginCharge = raiseAntenna - data.BeginChargeTicks;
+        if (readyToFire <= now) return UplinkStatus.ReadyToFire;
+        if (almostReady <= now) return UplinkStatus.AlmostReady;
+        if (raiseAntenna <= now) return UplinkStatus.Preparing;
+        return beginCharge <= now ? UplinkStatus.Charging : UplinkStatus.Idle;
+    }
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 

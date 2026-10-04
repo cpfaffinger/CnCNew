@@ -15,6 +15,7 @@ Func<string[], int>[] suites =
     RoadRealDataTests.Run,
     InputTests.Run,
     UnitConditionTests.Run,
+    StructureConditionTests.Run,
 ];
 
 var failures = 0;

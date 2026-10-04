@@ -594,6 +594,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>The object has reached its dock's entry and not yet left through the exit: the span in which the reference shows the <c>DOCKING</c> model condition (the net of a supply Chinook).</summary>
     public bool IsInsideDock => _dock is { Inside: true };
 
+    /// <summary>The dock works on this object (<c>onDockReached</c> .. <c>onExitReached</c>): the span of <c>MODELCONDITION_DOCKING_ACTIVE</c> on the docker and on the dock.</summary>
+    public bool IsDockActive => _dock is { Active: true };
+
+    /// <summary>The dock this object is docking at (invalid when it is not between approach and the end of the dock machine).</summary>
+    public EntityId DockingAt => _dock?.DockId ?? EntityId.Invalid;
+
     /// <summary><c>getLastCommandSource() == CMD_FROM_PLAYER</c>.</summary>
     public bool LastCommandFromPlayer => _lastCommandFromPlayer;
 
@@ -1205,13 +1211,34 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
 // ============================================================================================= ProductionUpdate
 
-/// <summary><c>ProductionUpdate.h</c>. <c>QuantityModifier</c> and the door-animation timing fields are typed but not applied: phase 5 spawns one unit per completed queue entry at the producer's own position (no exit-point geometry, no rally points — see docs/GAME-RULES.md).</summary>
-public sealed record ProductionData(int MaxQueueEntries) : ModuleData
+/// <summary>
+/// <c>ProductionUpdate.h</c>. <c>QuantityModifier</c> is typed but not applied: phase 5 spawns one unit per completed queue entry at the producer's own position (no exit-point geometry, no rally points — see docs/GAME-RULES.md).
+/// The door-animation timing fields (<c>NumDoorAnimations</c>, <c>DoorOpeningTime</c>, <c>DoorWaitOpenTime</c>, <c>DoorCloseTime</c>, <c>ConstructionCompleteDuration</c>; milliseconds in the INI, ticks here) change no
+/// simulation behaviour — nothing waits for a door — and are kept for the presentation only (docs/MODEL-CONDITIONS-BUILDINGS.md); the catalog carries them as Opaque, so they are read from the original text.
+/// </summary>
+public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations = 0, long DoorOpeningTicks = 0, long DoorWaitOpenTicks = 0, long DoorCloseTicks = 0, long ConstructionCompleteTicks = 0) : ModuleData
 {
     public static ProductionData Parse(ModuleConfiguration configuration)
     {
         var max = ModuleConfigReader.Int(configuration, "MaxQueueEntries", 0);
-        return new ProductionData(max <= 0 ? int.MaxValue : checked((int)max));
+        return new ProductionData(
+            max <= 0 ? int.MaxValue : checked((int)max),
+            checked((int)OpaqueNumber(configuration, "NumDoorAnimations")),
+            SimulationTiming.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorOpeningTime")),
+            SimulationTiming.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorWaitOpenTime")),
+            SimulationTiming.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorCloseTime")),
+            SimulationTiming.DurationMillisecondsToTicks(OpaqueNumber(configuration, "ConstructionCompleteDuration")));
+    }
+
+    /// <summary><c>INI::parseInt</c>/<c>parseDurationUnsignedInt</c> input of a field the catalog keeps Opaque: the first token as a whole number; absent: zero (the constructor default).</summary>
+    private static long OpaqueNumber(ModuleConfiguration configuration, string name)
+    {
+        var field = ModuleConfigReader.Find(configuration, name);
+        if (field is null) return 0;
+        var token = field.Value.OriginalText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
+        return long.TryParse(token, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var number) && number >= 0
+            ? number
+            : throw new InvalidDataException($"{field.Location.Source}({field.Location.Line}): ProductionUpdate {name} expects a non-negative whole number, got '{field.Value.OriginalText.Trim()}'.");
     }
 }
 
@@ -1240,6 +1267,9 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public bool HasRoom => _queue.Count < data.MaxQueueEntries;
 
+    /// <summary>The module's data, for the door timings the presentation reads (<see cref="ProductionData.DoorOpeningTicks"/> and its siblings).</summary>
+    public ProductionData Data => data;
+
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
     public void Enqueue(int templateIndex, Fixed cost, long totalTicks) => _queue.Add(new ProductionEntry(templateIndex, cost, Math.Max(totalTicks, 1)));
@@ -1259,6 +1289,19 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     /// remaining ticks of work, head first. Only the head entry (index 0) progresses.
     /// </summary>
     public ImmutableArray<ProductionQueueItem> Queue => [.._queue.Select(entry => new ProductionQueueItem(entry.TemplateIndex, entry.Cost, entry.RemainingTicks))];
+
+    /// <summary>The entry that is being built (the only one that progresses); false for an empty queue. Unlike <see cref="Queue"/> this allocates nothing, for readers that look at every producer every tick.</summary>
+    public bool TryGetHead(out ProductionQueueItem head)
+    {
+        if (_queue.Count == 0)
+        {
+            head = default;
+            return false;
+        }
+        var entry = _queue[0];
+        head = new ProductionQueueItem(entry.TemplateIndex, entry.Cost, entry.RemainingTicks);
+        return true;
+    }
 
     public bool TryCancel(int slot, out Fixed refund)
     {

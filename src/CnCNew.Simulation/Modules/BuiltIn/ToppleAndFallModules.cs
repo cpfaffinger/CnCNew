@@ -247,6 +247,9 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     public override string ModuleName => "StructureToppleUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
+    /// <summary><c>TOPPLESTATE_DONE</c>: the building lies flat and the reference has set <c>MODELCONDITION_POST_COLLAPSE</c> (and cleared <c>RUBBLE</c>).</summary>
+    public bool IsToppled => _state == State.Done;
+
     public override void OnSpawn(IWorldServices world)
     {
         _buildingHeight = ToppleAndFallModules.MaxHeightAbovePosition(Entity.Template);

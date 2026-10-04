@@ -179,6 +179,9 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     public bool IsApplicable(in DamageInfo info) => Mux.IsApplicable(Entity, info);
     public int ProbabilityWeight => Math.Max(data.Base.ProbabilityModifier, 1);
 
+    /// <summary>The wreck has hit the ground and is held there (<c>m_hitGroundFrame</c> set): the reference sets <c>MODELCONDITION_SPECIAL_DAMAGED</c> ("has the blades no on anymore") at that moment and never clears it.</summary>
+    public bool HasHitGround => _hitGroundTick != 0;
+
     public override void OnDie(IWorldServices world, in DamageInfo info) => SlowDeathLottery.Run(world, Entity, info, IsApplicable(info));
 
     public void BeginSlowDeath(IWorldServices world)

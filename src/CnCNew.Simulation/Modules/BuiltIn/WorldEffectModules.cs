@@ -650,6 +650,11 @@ public sealed class CheckpointUpdate(ScanData data) : SimModule, IUpdateModule
     public bool IsOpen => !_enemyNear && _allyNear;
     public Fixed GateRadius => _gateRadius;
 
+    /// <summary><c>m_allyNear</c>/<c>m_enemyNear</c> of the last scan: the reference changes the door model condition only when one of them changes, so presentation needs both, not just <see cref="IsOpen"/>.</summary>
+    public bool AllyNear => _allyNear;
+
+    public bool EnemyNear => _enemyNear;
+
     public override void OnSpawn(IWorldServices world)
     {
         _gateRadius = Entity.Template.GeometryMinorRadius;
