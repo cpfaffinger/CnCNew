@@ -55,8 +55,12 @@ internal sealed class FxLayer : IWorldLayer
         }
     }
 
+    /// <summary>Debug switch for screenshot checks: <c>CNCNEW_FX=0</c> skips drawing the particle/decal layer (to tell model parts from effects).</summary>
+    private static readonly bool DisabledByEnvironment = Environment.GetEnvironmentVariable("CNCNEW_FX") == "0";
+
     public void Update(in WorldFrame frame)
     {
+        if (DisabledByEnvironment) return;
         var builder = _builder ?? throw new InvalidOperationException("The effect layer is not attached.");
         var geometry = _geometry!;
         var pool = _pool!;

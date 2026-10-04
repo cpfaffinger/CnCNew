@@ -273,7 +273,6 @@ internal sealed class ObjectLayerCore : IWorldLayer
             var boneWorld = pose.GetBoneWorldTransform(rigidPart.BoneIndex);
             var nodeWorld = boneWorld * instanceMatrix;
             ref var node = ref skeleton.NodeTransformations[rigidPart.NodeIndex];
-            node.WorldMatrix = nodeWorld.ToStride();
             // HLodClass::Update_Sub_Object_Transforms: Set_Animation_Hidden(!HTree->Get_Visibility(bone)) - the animation's visibility channel shows and hides the sub-objects of its bones.
             var visible = pose.IsBoneVisible(rigidPart.BoneIndex) && ComputeVisible(rigidPart.FullName, rigidPart.DefaultVisible, state.SubObjects);
             // W3DModelDraw::hideAllMuzzleFlashes / setMuzzleFlashHidden: the sub-object on a WeaponMuzzleFlash bone is hidden until the weapon fires.
@@ -282,6 +281,9 @@ internal sealed class ObjectLayerCore : IWorldLayer
                 visible = pose.IsBoneVisible(rigidPart.BoneIndex) && drawable.HasFired(flashSlot);
                 if (visible) Stats.MuzzleFlashesShown++; else Stats.MuzzleFlashesHidden++;
             }
+            // The EnableRender bit alone did not hide the mesh in the running client (hiding every part of a tank left it fully drawn, 4 Oct 2026): a hidden part also gets a
+            // degenerate world matrix, which no triangle survives.
+            node.WorldMatrix = visible ? nodeWorld.ToStride() : default;
             node.Flags = visible ? node.Flags | global::Stride.Rendering.ModelNodeFlags.EnableRender : node.Flags & ~global::Stride.Rendering.ModelNodeFlags.EnableRender;
         }
 

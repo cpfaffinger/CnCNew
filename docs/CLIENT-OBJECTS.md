@@ -153,6 +153,10 @@ Rückseiten und fehlenden Türmen sind durch die Phase-15-Korrekturen überholt.
   (`TerrainObjectsLighting*`), nicht aus der Karte.
 - **Nebel:** Kartenobjekte ohne Simulationsentität werden bis zur Erkundung ihres Bodens ausgeblendet; erinnerte Gebäude und erkundete, gerade nicht sichtbare Szenerie werden
   abgedunkelt (`DrawableInstance.Fogged`, Helligkeit 0,25 wie der quadrierte Nebelwert des Geländes; Prüfhilfe `CNCNEW_OBJECT_FOG=1`). Geskinnte Teile (Infanterie) werden nicht abgedunkelt.
+- **Verstecken von Teilen (Korrektur 4. Oktober 2026):** das Umschalten des `EnableRender`-Bits eines Skelettknotens versteckt im laufenden Client **kein** Mesh (ein Test, der alle Teile eines
+  Panzers versteckte, ließ ihn voll gezeichnet). Dadurch standen Mündungsfeuer und jedes `HideSubObject` aller Objekte dauerhaft sichtbar. Ein verstecktes Teil bekommt jetzt zusätzlich eine
+  entartete (Null-)Weltmatrix; Aufnahmen belegen es (Tick 30 ohne, Tick 66 – ein Tick nach dem Schuss – mit Mündungsfeuer). Prüfhilfe: `CNCNEW_FX=0` blendet die Partikelschicht aus, um Modellteile
+  von Effekten zu unterscheiden.
 - Kamera-ausgerichtete Billboards, HLOD-Aggregate/-Proxies werden nicht gezeichnet (gezählt in
   `W3dModel.UnresolvedSubObjects`/`Aggregates`/`Proxies`; `model-audit`: 10 Modelle mit nicht
   auflösbaren Einträgen; 47 Modelle laden nicht, weil die Datei in den Assets fehlt – Kartenszenerie `cb…`).
