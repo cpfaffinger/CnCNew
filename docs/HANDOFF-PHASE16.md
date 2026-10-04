@@ -1,7 +1,9 @@
 N+1-Handoff (Phase 16): Tech-Demo-Reife II – Bedienung (Ton, Cursor, Wegpunkte, Text) und Mission im Client
 
 Du arbeitest autonom am lokalen Projekt `C:\Users\cp\RiderProjects\CnCNew`. Lies zuerst `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, **`docs/DEMO-FINDINGS.md`** (dieser Auftrag setzt die Punkte 7–10 davon um), `docs/GAME-AUDIO.md`, `docs/PRESENTATION-INPUT.md`, `docs/GAME-HUD.md`, `docs/GAME-SHELL.md`, `docs/CLIENT-UI-RENDERING.md`, `docs/SCRIPT-ENGINE.md` §6/§7 (Host-Schnittstelle, Missionssitzung) und `docs/CAMPAIGN-AND-SAVEGAMES.md` §7.
-Voraussetzung: Phase 15 (Welt-Darstellung, Sicherheit) ist abgeschlossen. Ohne richtige Modelle ist Bedienung nicht beurteilbar.
+Voraussetzung: Phase 15 (Welt-Darstellung, Sicherheit) ist **technisch abgeschlossen, aber nicht von einem Menschen abgenommen**: die Checkliste „Sichtprüfung der Weltdarstellung“ in `docs/CLIENT-OBJECTS.md` ist nicht abgehakt. Lasse sie zu Beginn von einem Menschen gegen `scripts/capture-world.ps1` abhaken; abgelehnte Zeilen gehen vor die Bedienung. Ohne richtige Modelle ist Bedienung nicht beurteilbar.
+
+**Was Phase 15 schon für diese Phase getan hat (nicht doppelt bauen):** das HUD-Overlay wird gezeichnet (`CnCNew.Game/Hud/HudOverlayRenderer`: Auswahlrahmen, Ringe/Eckklammern, Lebensbalken, Befehlslinien zu Ziel und Wegpunkten, Sammelpunkt-Flaggen, Bauvorschau, Heilsymbole; `UiLineDraw` im Draw-Listen-Vertrag, `--select-own` und Szene `match-selected` zur Sichtprüfung). Punkt 3 unten bleibt deshalb nur für das, was dort noch fehlt: gesetzte Wegpunkte *mit Alt* über mehrere Stationen und das Halten-von-Strg/Alt-Verhalten gegen das Original prüfen, Zielmarke bei Befehlsausgabe. Punkt 2 (Cursor) und Punkt 1 (Ton) sind unberührt.
 
 ## Ehrlicher Status (Ausgangslage)
 

@@ -356,6 +356,8 @@ Golden-Image-Budgets auf Zielhardware eingehalten werden.
 Fachdokumenten der Pakete übernommen; Details in `docs/CLIENT-TERRAIN.md`, `docs/CLIENT-OBJECTS.md`,
 `docs/CLIENT-FX.md`, `docs/GAME-AUDIO.md`.
 
+**Einschränkung (nachträglich, 4. Oktober 2026):** „abgeschlossen“ gilt für die Bibliotheken und Rauchtests. Die erste Sichtprüfung durch einen Menschen fand grobe Darstellungsfehler (fehlende Wände, schwarze Flächen, Gebäude im Nebel ohne Gelände), und `AudioDirector`/`AudioOutput` werden im Client nie erzeugt – die Demos sind stumm. Korrekturen der Welt: Phase 15 (`docs/DEMO-FINDINGS.md`, `docs/CLIENT-OBJECTS.md`); Ton, Cursor, Wegpunkte, Text: Phase 16.
+
 **Umgesetzt:**
 
 - **Welt-Layer-Nahtstelle:** `RenderServices`/`IWorldLayer`/`LiveMatchHost`/`StrideConvert` trennen die Stride-Szene in
@@ -377,7 +379,7 @@ Fachdokumenten der Pakete übernommen; Details in `docs/CLIENT-TERRAIN.md`, `doc
   1.516 gezeichnet, 9 Streaks, 4 Decals, 7 Batches, 0,23 ms CPU (Mittel 0,50 ms), SHA-256 über zwei Läufe identisch;
   Realdaten-Skirmish (12.000 Frames) 0 verworfene Quads, 0 unbekannte Batches, SHA-256 identisch; Bench mit 10.000
   aktiven Partikeln: 1,735 ms je Build (Mittel über 400 Wiederholungen).
-- **Audio:** `CnCNew.Game/Audio` (`AudioDirector`, `EvaCatalog`, `MusicPlaylist`) wählt Musik, EVA-Ansagen (u. a.
+- **Audio (Bibliothek; im Client nicht verdrahtet, die Demos sind stumm – `docs/DEMO-FINDINGS.md` #7):** `CnCNew.Game/Audio` (`AudioDirector`, `EvaCatalog`, `MusicPlaylist`) wählt Musik, EVA-Ansagen (u. a.
   `BuildingLost`, `UnitLost`, `BaseUnderAttack`, `UpgradeComplete`, `LowPower`, `InsufficientFunds`) und Sound über
   fünf Busse (Music/Sfx/Voice/Ambient/Ui) deterministisch aus Snapshot-Ereignissen aus; `Audio/AudioOutput` speist
   `Stride.Audio`-`DynamicSoundSource`-Instanzen aus dem rendererunabhängigen Mixer (Blockgröße 882 Frames bei
@@ -394,9 +396,8 @@ Fachdokumenten der Pakete übernommen; Details in `docs/CLIENT-TERRAIN.md`, `doc
   und steuern ein laufendes Skirmish-Match, mehrfach deterministisch reproduziert (identische Hashes über
   wiederholte Läufe in Terrain-, Objekt- und FX-Layer).
 - *Alle sichtbaren Objektzustände wechseln korrekt:* erfüllt mit Einschränkung – `ModelConditionState`-Wechsel
-  (Bewegung, Angriff, Schaden, Bau-/Verkaufsfortschritt) werden dargestellt, aber Türme bleiben in Ruhepose, weil
-  `DrawableInstance.TurretYaw/TurretPitch` von der Präsentation aktuell immer `null` liefert
-  (`W3DModelDraw::handleClientTurretPositioning` ist nicht nachgebildet).
+  (Bewegung, Angriff, Schaden, Bau-/Verkaufsfortschritt) werden dargestellt, (Stand Phase 7: Türme blieben in Ruhepose; seit Phase 15 folgen sie den Schüssen, Türen/Vorangriff/Packen
+  werden weiter nicht dargestellt, 54 von 106 Zustandsnamen setzt die Präsentation nie).
 - *Definierte Performance-/Speicher-/Golden-Image-Budgets eingehalten:* erfüllt für die gemessenen Layer (Terrain
   0,266 ms, Objekte 0,19–0,60 ms, FX ≤ 1,735 ms für 10.000 Partikel – deutlich unter dem ursprünglich genannten
   Richtwert von 4 ms für ~600 Drawables); Golden-Image-/Drawlist-Hashes sind über wiederholte Läufe byteidentisch.
@@ -409,8 +410,8 @@ Fachdokumenten der Pakete übernommen; Details in `docs/CLIENT-TERRAIN.md`, `doc
 **Bekannte Grenzen:**
 
 - Kein Bink-Videodecoder (siehe oben) – dauerhafte Grenze, keine SDK verfügbar.
-- Türme rendern in Ruhepose (siehe oben).
-- Einige dünne, zweiseitige W3D-Meshes (`mesh.IsTwoSided` → `CullMode.None`) zeigen von der Rückseite eine
+- Türme rendern in Ruhepose – überholt: seit Phase 15 folgen sie den Schüssen (`docs/CLIENT-OBJECTS.md`).
+- *(Überholt: die schwarzen Flächen waren der invertierte Windungssinn der Objekt-Meshes und fehlende Beleuchtung, behoben in Phase 15.)* Einige dünne, zweiseitige W3D-Meshes (`mesh.IsTwoSided` → `CullMode.None`) zeigen von der Rückseite eine
   unbeleuchtete (schwarze) Fläche, weil `MaterialDiffuseLambertModelFeature` die Normalen für Rückseiten nicht
   spiegelt – ein Verhalten der geteilten Stride-Materialpipeline, nicht des Objektlayers selbst.
 - Kein Blob-/Kontaktschatten: aus Zeitgründen in dieser Phase nicht umgesetzt.
@@ -674,4 +675,6 @@ Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
 Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
 Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
 jedoch separat begründet und versioniert. Die Schritte 1 bis 8 sind abgeschlossen, Schritt 9 ist weit fortgeschritten, aber nicht im Sinne seiner Abnahme beendet (siehe oben „Bekannte Grenzen“).
-Der nächste Einstieg ist `docs/HANDOFF-PHASE15.md` (Tech-Demo-Reife I: Sicherheitsadvisories, Modellteile, Bones/Animationszustände, Kartenwinkel, Nebel des Krieges), danach `docs/HANDOFF-PHASE16.md` (Ton, Cursor, Wegpunkte, Text, Mission im Client) und `docs/HANDOFF-PHASE17.md` (Spielbarkeit der Missionen durch einen Menschen, Nur-Befehle-Agent, Leistung, Näherungen der neuen Module). Die Befunde der ersten Tech-Demo stehen in `docs/DEMO-FINDINGS.md`; die Aussage „Phase 7 abgeschlossen“ gilt nur für die Bibliotheken und Rauchtests, nicht für die Darstellungstreue.
+**Phase 15 „Tech-Demo-Reife I – Welt-Darstellung und Sicherheit der Abhängigkeiten“ (4. Oktober 2026, frisch gemessen; `docs/DEMO-FINDINGS.md`, `docs/CLIENT-OBJECTS.md`): **Sicherheit:** die vier verwundbaren transitiven Werkzeugpakete von Stride sind über `build/StrideToolingPins.props` auf Patch-Versionen angehoben, `scripts/audit-vulnerable.ps1` meldet keine bekannte Anfälligkeit, die Unterdrückung von `NU1901`/`NU1903` ist entfernt, der saubere Solution-Build hat **11** Warnungen (10 `YamlAssemblyRegistry`- und 1 `AssetCompiler`-Hinweis von Strides Werkzeug, vorher 21). **Welt:** die „halben Gebäude“ hatten drei Darstellungsursachen (Freigabe des geteilten Index-Puffers, invertierter Windungssinn der Objekt-Meshes, fehlende Beleuchtung) plus ignorierte Bone-Sichtbarkeit – behoben; `PresentationTool model-audit` zeichnet 1.585.401 von 1.585.417 Dreiecken (0 im Renderplan verloren); Türme folgen den Schüssen, Reifen drehen mit der Strecke, Mündungsfeuer erscheint nur nach einem Schuss, unerkundete Szenerie bleibt verborgen, das bisher nie gezeichnete HUD-Overlay (Auswahl, Lebensbalken, Befehlslinien, Sammelpunkte, Heilsymbole) wird gezeichnet, der Versorgungs-Chinook zeigt die Abladeanimation erst am Depot. Der gemeldete Befund falsch gedrehter Kartenobjekte wurde **nicht reproduziert** (`angle-audit`: gespeicherter Winkel richtet 64,6 % der Zaunreihen aus). Nebenbei: Wegfindung um stehende Einheiten (488 → 0 Überlappungs-Ticks), KI-Sammelpunkt frei von Gebäuden, Kampfplan als typisierte Option (`CommandTypes.Version` 12, Replay 9). **Nicht belegt:** die Sichtabnahme durch einen Menschen (Checkliste in `docs/CLIENT-OBJECTS.md` ist nicht abgehakt, die Prüfsummen von `scripts/capture-world.ps1` sind vorläufig), Ton, Cursor, Wegpunkte, Text und Mission im Client (Phase 16), die Spielbarkeit (Phase 17); 54 Modellzustände (Türen, Vorangriff, Packen, Nachbrenner …) werden nie gesetzt, Lenkung/Federung, Straßen und die Abdunklung von Objekten im Nebel fehlen.**
+
+Der nächste Einstieg ist `docs/HANDOFF-PHASE16.md` (Ton, Cursor, Wegpunkte, Text, Mission im Client), danach `docs/HANDOFF-PHASE17.md` (Spielbarkeit der Missionen durch einen Menschen, Nur-Befehle-Agent, Leistung, Näherungen der neuen Module). Die Befunde der ersten Tech-Demo stehen in `docs/DEMO-FINDINGS.md`; die Aussage „Phase 7 abgeschlossen“ gilt nur für die Bibliotheken und Rauchtests, nicht für die Darstellungstreue.

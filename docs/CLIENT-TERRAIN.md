@@ -91,7 +91,9 @@ Fog-Texel (127/255 ≈ 0,5) auf dem Bildschirm denselben Helligkeitsabfall ergib
 Referenzrenderer, der im Gammaraum multipliziert.
 
 `FogTexture` ist öffentlich (`TerrainLayer.FogTexture`, `FogUvScale`), damit der ObjektLayer
-Einheiten und Gebäude mit demselben Nebel abdunkeln kann, ohne eine zweite Fog-Textur zu pflegen.
+Einheiten und Gebäude mit demselben Nebel abdunkeln kann, ohne eine zweite Fog-Textur zu pflegen. Stand Phase 15
+verwendet der Objekt-Layer sie **nicht**: statische Kartenszenerie wird stattdessen in der Präsentation
+(`FrameProjector`) ausgeblendet, bis ihr Boden erkundet ist, und danach unabgedunkelt gezeichnet.
 
 **Debug-Umgebungsvariable** `CNCNEW_TERRAIN_REVEAL=1`: überschreibt jeden Sample mit 255 (voll
 sichtbar), ohne die Simulation zu berühren – nur für Screenshot-Verifikation gedacht.
@@ -224,5 +226,8 @@ Screenshots lagen im Scratchpad der Session (`…/scratchpad/s1/`), nicht im Rep
   visuell auffällig.
 - Der erste gerenderte Frame nach `Attach` zeigt vollständigen Shroud, bevor der erste
   `Update`-Tick den Fog-Sample hochlädt (siehe Fog-Abschnitt).
-- Objektbeleuchtung (Einheiten/Gebäude) ist nicht Teil dieses Layers; `FogTexture`/`FogUvScale`
-  liegen bereit, aber niemand konsumiert sie bisher.
+- Objektbeleuchtung (Einheiten/Gebäude) ist nicht Teil dieses Layers (seit Phase 15: `Rendering/SceneLighting`
+  mit den Objektwerten aus `GameData`, nicht aus dem `GlobalLighting`-Chunk der Karte, der übersprungen wird);
+  `FogTexture`/`FogUvScale` liegen bereit, aber niemand konsumiert sie bisher – Objekte im Nebel werden
+  nicht abgedunkelt.
+- Straßen (Karten-Straßenobjekte) werden nicht gezeichnet.

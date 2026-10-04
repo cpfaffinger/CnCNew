@@ -38,17 +38,17 @@ Import → Runtime-Content → Datenmodelle → Simulation → Präsentation. Sc
   brauchen Katalogschema, Bindung, Tests und einen Eintrag in `SIMULATION-CORE.md`.
 - Determinismus: kanonische Sortierung, keine absoluten Pfade, Zeitstempel oder
   Dictionary-/HashSet-Reihenfolgen in Artefakten. Zwei unabhängige Läufe müssen byteidentisch sein.
-- `TreatWarningsAsErrors=true`. Bekannt und erklärt sind ausschließlich `NU1901`/`NU1903` aus den
-  transitiven Stride-4.3-Buildwerkzeugen sowie, seit `CnCNew.Client.Stride` in Phase 7/8 auf Data, Simulation,
-  Presentation, Ui, Audio, Game und Formats verweist, die dadurch ausgelösten `EXEC`-Konsolenzeilen von Strides eigenem
-  `Stride.Core.Assets.CompilerApp` (`[YamlAssemblyRegistry] Assembly … has not been processed by assembly processor
-  with --serialization flags`, je eine pro referenziertem Projekt ohne Stride-Assets, plus einmal
-  `[AssetCompiler] Could not find game settings asset …`) – informative Werkzeugausgaben, kein `Fehler`, sie tauchen nur
-  bei einem sauberen Build auf (inkrementell cacht der Asset-Compiler-Schritt sie weg) und wachsen 1:1 mit jedem neu
-  referenzierten Projekt. Referenzzahl bei sauberem `dotnet build CnCNew.slnx` (`bin`/`obj` von `CnCNew.Client.Stride`
-  gelöscht, sonst inkrementell und die Zahl irreführend niedrig): **21 Warnungen** (10 `NU1901`/`NU1903` + 11 Stride-
-  Konsolennotizen; vor Phase 7/8 waren es bei drei referenzierten Projekten 14). Jede andere neue Warnung ist ein Fehler,
-  bis sie erklärt ist. **Achtung (4. Oktober 2026):** `NU1901`/`NU1903` sind keine harmlosen Werkzeughinweise, sondern echte Advisories (`Microsoft.Build.Tasks.Core` 17.7.2, `SSH.NET` 2023.0.1, `NuGet.Packaging`/`NuGet.Protocol` 7.0.0, transitiv aus Strides Buildwerkzeugen); sie werden in Phase 15 behoben (`docs/HANDOFF-PHASE15.md` Punkt 1), danach gilt die Referenzzahl 11 statt 21.
+- `TreatWarningsAsErrors=true`. Bekannt und erklärt sind ausschließlich die `EXEC`-Konsolenzeilen von Strides eigenem
+  `Stride.Core.Assets.CompilerApp`, die seit Phase 7/8 durch die Projektverweise von `CnCNew.Client.Stride` ausgelöst werden
+  (`[YamlAssemblyRegistry] Assembly … has not been processed by assembly processor with --serialization flags`, je eine pro
+  referenziertem Projekt ohne Stride-Assets, plus einmal `[AssetCompiler] Could not find game settings asset …`) – informative
+  Werkzeugausgaben, kein `Fehler`, sie tauchen nur bei einem sauberen Build auf (inkrementell cacht der Asset-Compiler-Schritt sie weg)
+  und wachsen 1:1 mit jedem neu referenzierten Projekt. Referenzzahl bei sauberem `dotnet build CnCNew.slnx` (`bin`/`obj` von
+  `CnCNew.Client.Stride` gelöscht, sonst inkrementell und die Zahl irreführend niedrig): **11 Warnungen** (10 `YamlAssemblyRegistry` +
+  1 `AssetCompiler`; gemessen 4. Oktober 2026). `NU1901`/`NU1903` sind **keine** erklärten Warnungen mehr: sie waren echte Advisories der
+  transitiven Stride-Werkzeugpakete und sind seit Phase 15 durch `build/StrideToolingPins.props` behoben (nicht wieder unterdrücken);
+  `scripts/audit-vulnerable.ps1` prüft die Solution und `CnCNew.UiRenderTool` auf bekannte Anfälligkeiten und gehört zum Phasenabschluss.
+  Jede andere neue Warnung ist ein Fehler, bis sie erklärt ist.
 - Kein Vertrauen auf Zahlen aus Docs oder früheren Berichten: Bestandszahlen immer neu messen.
 - Fremder Code (EA-Quellen, GeneralsGameCode, GeneralsGamePatch unter `references/`) darf gelesen,
   aber nicht unbesehen kopiert werden. Algorithmen werden verstanden, neu geschrieben und im
@@ -279,3 +279,12 @@ Retail-Referenzmatch Sieger FactionGLA bei **Tick 13.890**, Endhash `76F22CB0CA7
 Quelländerungen neu bauen (`--no-build` zeigt sonst Zahlen des alten Stands); `Entity.cs` hat gemischte Zeilenenden (Merge-Konflikt über die ganze Datei: `main`-Fassung nehmen und Hunks von Hand anwenden); PowerShell-Skripte mit Umlauten nur mit `pwsh`.
 Nicht belegt: die Spielbarkeit der Missionen durch einen Menschen (kein interaktives Durchklicken, Nur-Befehle-Agent 1/24).
 Erste Tech-Demo (4. Oktober 2026, Rückmeldung eines Menschen, `docs/DEMO-FINDINGS.md`): Die Demos (`scripts/demo-*.ps1`) starten, zeigen aber fehlende Modellteile, falsche Bones/Animationszustände, falsch gedrehte Kartenobjekte, Nebel-Fehler, **keinen Ton** (`AudioDirector`/`AudioOutput` sind im Client nicht verdrahtet, die frühere Aussage „spielt Musik“ war falsch), keinen Cursorwechsel, keine Wegpunktanzeige, auffällige Texte und eine Mission ohne erkennbar laufende Skripte. Reihenfolge der nächsten Aufträge: Phase 15 (Sicherheit, Welt-Darstellung), Phase 16 (Ton, Cursor, Wegpunkte, Text, Mission im Client), Phase 17 (Spielbarkeit; früher 15). Rauchtests und Golden Hashes beweisen Reproduzierbarkeit, nicht Richtigkeit: Darstellungsänderungen brauchen eine Sichtprüfung durch einen Menschen.
+
+Phase 15 (Stand 4. Oktober 2026; neu messen; `docs/DEMO-FINDINGS.md`, `docs/CLIENT-OBJECTS.md`, Handoff `docs/HANDOFF-PHASE16.md`): Sicherheit der Werkzeugpakete behoben (11 statt 21 Warnungen). Welt-Darstellung: die „halben Gebäude“ kamen vom
+Freigeben des geteilten Index-Puffers, vom invertierten Windungssinn der Objekt-Meshes und von fehlender Beleuchtung (`Rendering/SceneLighting`); `PresentationTool model-audit` zeichnet 1.585.401 von 1.585.417 Dreiecken. Türme folgen den Schüssen
+(`TurretTracker`), Reifen drehen mit der Strecke, Mündungsfeuer nur nach Schüssen, unerkundete Szenerie bleibt verborgen, das HUD-Overlay (`Game/Hud/HudOverlayRenderer`) wird erstmals gezeichnet (vorher berechnet, aber nie gezeichnet), `DOCKING` gilt nur zwischen
+Einfahrt und Ausfahrt (`AIUpdateInterface.IsInsideDock`). Sim-seitig: typisierte Kampfplan-Option (`UseSpecialPowerCommand.Option`, `CommandTypes.Version` **12**, Replay **9**; `WorldSnapshot` 8, `MissionSnapshot` 2 unverändert), Wegsuche um stehende Einheiten
+(`NavigationGrid` mit temporär blockierten Zellen, `StationaryBlockersAhead`), KI-Sammelpunkt frei von Gebäuden (`SimTool unit-audit`). Unverändert gemessen: Retail-Referenzmatch Sieger FactionGLA bei Tick 13.890, Endhash `76F22CB0CA79BEEF` (Kette
+`35F54CAD40A43E6E`); Stresstest `56882F763EABEF67`. 16 KI-gegen-KI-Läufe: 8 entschieden (vorher 10), alle deterministisch (die Tabelle in `docs/SIMULATION-CORE.md` §19 ist nicht neu erhoben). **Nicht belegt:** die Sichtabnahme durch einen Menschen
+(Checkliste in `docs/CLIENT-OBJECTS.md`, Prüfsummen von `scripts/capture-world.ps1` sind vorläufig), Ton (im Client nicht verdrahtet), Cursor, Wegpunkte, Text, Mission im Client, Spielbarkeit; 54 Modellzustände werden nie gesetzt (Türen, Vorangriff …).
+Fallstricke: Nach Quelländerungen die Release-Werkzeuge einzeln bauen (`dotnet build -c Release tools/<Projekt>`, nicht mehrere Projekte in einem Aufruf); ein hängender Hintergrundlauf sperrt die DLLs (mit `Stop-Process` beenden); `capture-world.ps1`-Szenen nur nacheinander.

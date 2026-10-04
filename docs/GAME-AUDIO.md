@@ -2,6 +2,10 @@
 
 Stand: 30. September 2026 (Paket S5)
 
+> **Richtigstellung (4. Oktober 2026, `docs/DEMO-FINDINGS.md` #7):** dieses Dokument beschreibt eine **Bibliothek**. `AudioDirector` und `AudioOutput` sind gebaut und in `CnCNew.Game.Tests`/`CnCNew.Audio.Tests`
+> getestet, werden aber im Stride-Client (`Program.cs`, `ClientRuntime`, `LiveMatchHost`) **nirgends erzeugt**: die Demos sind stumm. Wo unten „spielt“ steht, ist das Verhalten des Directors im Test gemeint,
+> nicht das des laufenden Clients. Die Verdrahtung ist Phase 16, Punkt 1 (`docs/HANDOFF-PHASE16.md`).
+
 `CnCNew.Game.Audio` macht das Spiel hörbar: Es übersetzt `SoundCue`s (aus `CnCNew.Presentation.Fx`), Auswahl-/Befehls-
 Ereignisse der Präsentation und den Logiktakt der laufenden Partie (`CnCNew.Game.Live.LiveMatch`) in Befehle für den
 gerätefreien `SoftwareMixer` (`CnCNew.Audio`). `CnCNew.Client.Stride/Audio/AudioOutput.cs` liest den Mixer aus und

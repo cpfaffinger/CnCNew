@@ -1175,8 +1175,7 @@ Näherung benannt. Beim Zusammenführen wurden zwei parallel entstandene Kollisi
 
 Begleitende Änderungen: `AIUpdateInterface.IsIdle`/`OrderEnter` virtuell, `ActiveLocomotor` virtuell, `OrderIdle` neu, `Update` ruht unter EMP; `IProductionExit` mit schablonenbewussten Standardmethoden
 (`IsFreeToExitFor`, `ClaimExit(world, template)`); `ObjectTemplate.LocomotorSets`, `LocomotorInfo.Lift`, `WeaponInfo.ReloadsAtBase` (ein trockenes `RETURN_TO_BASE`-Magazin lädt nur am Flugplatz nach);
-`Entity.EmpDisabledUntil`; `MissileAIUpdate.Victim`/`IsKillingSelf`. **Grenzen:** die Atomraketen starten noch nicht aus dem Silo (das `FireWeapon`-Nugget der Silo-OCL wird übersprungen; der Echtdatentest feuert
-`NeutronMissileWeapon` direkt); ein Jet mit gespeichertem Befehl erscheint dem Skript als „untätig“ (die Skript-`IsIdle` kennt `JetAIUpdate.IsIdle` nicht); Deaktivierung wirkt nur auf Bewegung und Waffen;
+`Entity.EmpDisabledUntil`; `MissileAIUpdate.Victim`/`IsKillingSelf`. **Grenzen:** ~~die Atomraketen starten noch nicht aus dem Silo~~ und ~~ein Jet mit gespeichertem Befehl erscheint dem Skript als „untätig“~~ sind seit Phase 15 **widerlegt** (Echtdatentests: der Start über `UseSpecialPowerCommand` und `OCLSpecialPower` beginnt am Silo und tötet das Ziel; der `IsIdle`-Override des Jets wird über den Basistyp `AIUpdateInterface` gesehen, den die Skripte benutzen); Deaktivierung wirkt nur auf Bewegung und Waffen;
 nicht modelliert: Überlaufen eroberter Flugplätze, Trägerdecks, Nebel des Krieges für das Gunship, die Patch-1.01-Einschränkung des EMP (braucht eine Erzeugerverknüpfung).
 
 ### 30.2 Kisten-, Kollisions- und Spezialgruppe (`CrateModules.cs`, `SpecialsModules.cs`, `CleanupAndSpyModules.cs`, `BattlePlanModule.cs`)
@@ -1203,7 +1202,7 @@ nicht modelliert: Überlaufen eroberter Flugplätze, Trägerdecks, Nebel des Kri
 
 Schnittstellen: Hijack-, Autobomben-, Sabotage- und Pilotenaufträge laufen über `AIUpdateInterface.OrderApproachGoal(world, goal, fromPlayer)` (kein neuer `SimCommand`); neue Ereignisse `CrateCollected` 80,
 `ObjectConverted` 81, `Sabotaged` 82, `ObjectNameTransferred` 83 (das Skript nimmt den Namen mit, §30.4). **Näherungen:** Kollisionen feuern nur für Bewegende (wer auf einer Kiste steht, sammelt sie erst beim
-nächsten Zug); Hijack und Autobombe übernehmen die Sichtweite nicht; Pilot kehrt nicht zur Basis zurück; Spionagesicht wechselt bei Eroberung nicht den Besitzer; Kampfplan skaliert nur die Aufdeckungsreichweite
+nächsten Zug); Hijack und Autobombe übernehmen die Sichtweite nicht; Pilot kehrt nicht zur Basis zurück; Spionagesicht wechselt bei Eroberung nicht den Besitzer; Kampfplan (seit Phase 15 mit typisiertem Feld `UseSpecialPowerCommand.Option` = `OPTION_ONE/TWO/THREE` des Befehlsknopfs, `CommandTypes.Version` 12, Replay 9) skaliert nur die Aufdeckungsreichweite
 (nicht die Sichtweite je Einheit), das Bombardement-Geschütz gilt als immer zentriert; Panzerung/Sicht-Skalare werden abgeleitet statt multipliziert, um Festkomma-Drift zu vermeiden.
 
 ### 30.3 Struktur- und Weltgruppe (`StructureModules.cs`, `RailroadModules.cs`, `MineModules.cs`, `BridgeModules.cs`, `WorldEffectModules.cs`)
