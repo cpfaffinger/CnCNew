@@ -3,6 +3,7 @@ using CnCNew.Game.Campaign;
 using CnCNew.Game.Data;
 using CnCNew.Game.Hud;
 using CnCNew.Game.Live;
+using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
@@ -52,6 +53,63 @@ internal static class MissionHudTests
             }
         });
 
+        harness.Run("In a mission the human's dozer places a building through the control bar (clicks only)", () =>
+        {
+            var run = MissionRun.Load(MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", MissionOptions.Standard);
+            var live = LiveMission.Create(data, run, viewport);
+            var controller = new MissionController(live, GameSettings.Default);
+            long time = 10_000;
+            void Click(Vector2 at)
+            {
+                controller.Process(new MouseMoveEvent(time += 16, at));
+                controller.Process(new MouseButtonEvent(time += 16, MouseButton.Left, true, at));
+                controller.Process(new MouseButtonEvent(time += 50, MouseButton.Left, false, at));
+                time += 1000;
+            }
+            Vector2 Screen(Vector3 world)
+            {
+                TestHarness.Assert(live.Camera.TryWorldToScreen(world, out var screen), "the point projects onto the screen");
+                return screen;
+            }
+            for (var frame = 0; frame < 30; frame++) controller.Update(1.0 / 30);
+
+            var dozer = live.World.Entities.First(entity => entity.Owner == live.Human && entity.Template.IsKindOf("DOZER"));
+            var ground = SimulationQueries.GroundOf(dozer);
+            live.Camera.CenterOn(ground);
+            controller.Update(1.0 / 30);
+            Click(Screen(EntityPicker.CenterOf(dozer)));
+            controller.Update(1.0 / 30);
+            TestHarness.Assert(controller.Hud.Input.Selection.Contains(dozer.Id), "a click selects the human's dozer");
+            controller.BuildDrawList(1280, 720);
+
+            var slot = Enumerable.Range(1, CommandBarModel.GridSlots).First(index => controller.Hud.CommandBar[index] is { Button.Kind: GuiCommandKind.DozerConstruct, IsEnabled: true });
+            var template = controller.Hud.CommandBar[slot]!.Button.Object;
+            var rect = controller.Hud.WindowRect($"ControlBar.wnd:ButtonCommand{slot:00}") ?? throw new InvalidOperationException("button window missing");
+            Click(new Vector2(rect.CenterX, rect.CenterY));
+            controller.Update(1.0 / 30);
+            TestHarness.Assert(controller.Hud.Input.Commands.Mode == CommandModeKind.Placement, $"the construct button for '{template}' enters placement mode (mode {controller.Hud.Input.Commands.Mode})");
+
+            PlacementGhost? ghost = null;
+            var reasons = new List<string>();
+            foreach (var offset in (ReadOnlySpan<Vector2>)[new(150, 0), new(-150, 0), new(0, 150), new(0, -150), new(110, 110), new(-110, -110), new(250, 0), new(0, 250)])
+            {
+                var candidate = ground + offset;
+                if (!live.Camera.TryWorldToScreen(new Vector3(candidate.X, candidate.Y, 0f), out var at)) continue;
+                controller.Process(new MouseMoveEvent(time += 16, at));
+                if (controller.Hud.Input.Commands.Ghost is { IsValid: true } valid) { ghost = valid; break; }
+                reasons.Add(controller.Hud.Input.Commands.Ghost?.Reason.ToString() ?? "no ghost");
+            }
+            TestHarness.Assert(ghost is not null, $"a buildable spot for '{template}' exists near the dozer ({string.Join(", ", reasons)})");
+            Click(Screen(ghost!.Position));
+            controller.Update(1.0 / 30);
+            TestHarness.Assert(controller.Hud.Input.Commands.Mode == CommandModeKind.None, "the click places the structure");
+            for (var frame = 0; frame < 60; frame++) controller.Update(1.0 / 30);
+            var site = live.World.Entities.FirstOrDefault(entity => entity.Owner == live.Human && entity.Template.Name == template);
+            TestHarness.Assert(site is not null, $"the construction site of '{template}' exists");
+            var underConstruction = CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction;
+            for (var frame = 0; frame < 2400 && site!.HasStatus(underConstruction); frame++) controller.Update(1.0 / 30);
+            TestHarness.Assert(!site!.HasStatus(underConstruction) && !site.EffectivelyDead, $"the dozer builds it to the end (work {site.ConstructionWork}, dozer at {dozer.X.ToDecimal():F0},{dozer.Y.ToDecimal():F0}, site at {site.X.ToDecimal():F0},{site.Y.ToDecimal():F0}, tick {live.Tick})");
+        });
         harness.Run("The mission ends through the HUD controller exactly once", () =>
         {
             var run = MissionRun.Load(MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", MissionOptions.Standard);
