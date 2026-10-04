@@ -135,6 +135,7 @@ public sealed class SkirmishAi
     private List<Entity> _sites = [];
     private List<Entity> _enemyTargets = [];
     private bool _attacking;
+    private readonly SortedSet<uint> _wave = [];
     private int _threshold = MinAttackThreshold;
     private int _maxThreshold = MaxAttackThreshold;
     private (Fixed X, Fixed Y)? _rally;
@@ -940,6 +941,10 @@ public sealed class SkirmishAi
         }
         (Fixed X, Fixed Y)? goal;
         var threat = FindThreat();
+        // A wave is the units that marched together (the reference's computer player sends teams, not single units): units produced while it is under way gather at the rally
+        // point and follow as a group of their own instead of walking into the enemy one by one.
+        _wave.RemoveWhere(id => !army.Any(unit => unit.Id.Value == id));
+        var waiting = army.Count - _wave.Count;
         if (threat is not null) goal = threat;
         else
         {
@@ -947,19 +952,27 @@ public sealed class SkirmishAi
             {
                 _attacking = true;
                 Stats.Waves++;
+                foreach (var unit in army) _wave.Add(unit.Id.Value);
             }
-            else if (_attacking && army.Count < Math.Max(3, _threshold / 3))
+            else if (_attacking && waiting >= Math.Max(3, _threshold / 2))
+            {
+                foreach (var unit in army) _wave.Add(unit.Id.Value);
+            }
+            else if (_attacking && _wave.Count < Math.Max(3, _threshold / 3))
             {
                 _attacking = false;
+                _wave.Clear();
                 _threshold = Math.Min(_maxThreshold, _threshold + 2);
             }
-            goal = _attacking ? AttackTarget(army) : _rally;
+            goal = _attacking ? AttackTarget(army.Where(unit => _wave.Contains(unit.Id.Value)).ToList()) : _rally;
         }
         _armyGoal = goal;
-        if (goal is not { } destination) return;
+        if (goal is not { } armyGoal) return;
         foreach (var unit in army)
         {
             if (_boarding.TryGetValue(unit.Id.Value, out var boardingUntil) && boardingUntil > _tick) continue;
+            // Defence takes everybody; an attack only the wave, the others wait at the rally point.
+            var destination = threat is null && _attacking && !_wave.Contains(unit.Id.Value) ? _rally ?? armyGoal : armyGoal;
             var (x, y) = MoveGoalFor(unit, destination);
             if (DistanceSquared(unit.X, unit.Y, x, y) < Fixed.FromInt(1600)) continue;
             if (_orders.TryGetValue(unit.Id.Value, out var order))
