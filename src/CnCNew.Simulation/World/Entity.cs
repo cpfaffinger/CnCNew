@@ -88,6 +88,16 @@ public sealed class Entity
     /// <summary><c>WeaponSet::m_curWeaponLockedStatus</c>.</summary>
     public WeaponLockKind WeaponLock => WeaponSlots?.Lock ?? WeaponLockKind.None;
 
+    /// <summary>The state of the object's turrets (<c>AIUpdateInterface::m_turretAI</c>), indexed like <see cref="Templates.TurretSet.Turrets"/>; null when the template declares none.</summary>
+    internal TurretState?[]? Turrets { get; set; }
+
+    /// <summary>
+    /// The angle (relative to the body) and pitch of one turret and whether it is still turning (<c>AIUpdateInterface::getTurretRotAndPitch</c>, <c>MODELCONDITION_TURRET_ROTATE</c>);
+    /// null when the object has no such turret. 0 is the main <c>Turret</c>, 1 the <c>AltTurret</c>.
+    /// </summary>
+    public TurretReading? TurretOf(int index)
+        => Turrets is { } turrets && index >= 0 && index < turrets.Length && turrets[index] is { } state ? new TurretReading(state.Angle, state.Pitch, state.Rotating) : null;
+
     public long LastDamageTick { get; internal set; } = -1;
 
     /// <summary><c>Object::isCaptured</c> (<c>setCaptured</c>, never cleared): the object was taken over by entering it (an unmanned vehicle); counted by the skirmish condition on captured units. Written only when set.</summary>
@@ -168,6 +178,20 @@ public sealed class Entity
 
     public bool HasStatus(int bit) => (Status & (1UL << bit)) != 0;
 
+    /// <summary>Written only while some turret is away from rest, so an object whose turrets never moved keeps its serialized form (and hash).</summary>
+    private void DescribeTurrets(IStateWriter writer)
+    {
+        if (Turrets is not { } turrets || Template.Turrets is not { } set) return;
+        var any = false;
+        for (var index = 0; index < turrets.Length; index++)
+            if (turrets[index] is { } state && set[index] is { } info && !state.IsPristine(info)) { any = true; break; }
+        if (!any) return;
+        writer.BeginArray("turrets");
+        for (var index = 0; index < turrets.Length; index++)
+            if (turrets[index] is { } state && set[index] is { } info && !state.IsPristine(info)) state.Describe(writer, index);
+        writer.EndArray();
+    }
+
     public void Describe(IStateWriter writer)
     {
         writer.BeginObject(null);
@@ -199,6 +223,7 @@ public sealed class Entity
         WeaponSlots?.Describe(writer);
         writer.Int("lastDamageTick", LastDamageTick);
         writer.Int("lastFireTick", LastFireTick);
+        DescribeTurrets(writer);
         if (Captured) writer.Bool("captured", true);
         if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
