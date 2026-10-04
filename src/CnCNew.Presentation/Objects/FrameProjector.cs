@@ -53,6 +53,7 @@ public sealed class FrameProjector
     private readonly bool[] _claimed;
     private readonly bool[] _explored;
     private readonly TurretTracker _turrets = new();
+    private readonly UnitConditionTracker _units = new();
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
     private readonly SortedDictionary<uint, Capture> _ghosts = [];
     private readonly HashSet<uint> _known = [];
@@ -83,8 +84,15 @@ public sealed class FrameProjector
     /// <summary>Feeds the events of the tick that was just simulated (the turrets follow the shots, <see cref="TurretTracker"/>); call before <see cref="Advance"/>.</summary>
     public void Observe(IEnumerable<SimEvent> events, SimulationWorld world)
     {
-        foreach (var simEvent in events) _turrets.Observe(simEvent, world);
+        foreach (var simEvent in events)
+        {
+            _turrets.Observe(simEvent, world);
+            _units.Observe(simEvent, world);
+        }
     }
+
+    /// <summary><c>AIGroup::groupCheer</c> (the <c>ALL_CHEER</c> meta action): the objects show SPECIAL_CHEERING for <see cref="UnitConditionTracker.CheerTicks"/> ticks.</summary>
+    public void Cheer(IEnumerable<EntityId> entities) => _units.Cheer(entities, Tick);
 
     public void Advance(SimulationWorld world)
     {
@@ -107,7 +115,11 @@ public sealed class FrameProjector
             if (_known.Add(entity.Id.Value)) Claim(capture);
         }
         _currentOrdered = ordered.ToImmutable();
-        if (world.Tick % 150 == 0) _turrets.Prune(id => world.FindEntity(new EntityId(id)) is not null);
+        if (world.Tick % 150 == 0)
+        {
+            _turrets.Prune(id => world.FindEntity(new EntityId(id)) is not null);
+            _units.Prune(id => world.FindEntity(new EntityId(id)) is not null);
+        }
         if (_options.Viewer is { } fogViewer)
         {
             UpdateGhosts(world, fogViewer);
@@ -196,6 +208,7 @@ public sealed class FrameProjector
             if (entity.LastFireTickOf(slot) is >= 0 and var lastFire && world.Tick - lastFire <= MuzzleFlashTicks) fired |= 1 << slot;
         var main = _turrets.Update(entity, visual, 0, world.Tick, world);
         var alt = _turrets.Update(entity, visual, 1, world.Tick, world);
+        conditions = conditions.Union(_units.Update(entity, world, world.Tick - 1, _turrets));
         return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, Select(visual, conditions),
             entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt);

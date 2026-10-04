@@ -72,9 +72,17 @@ public sealed class TurretTracker
         public float TargetY;
         public float TargetZ;
         public bool HasTarget;
+        public bool Rotating;
     }
 
     private readonly Dictionary<(uint Entity, int Turret), Aim> _aims = [];
+
+    /// <summary>
+    /// <c>TurretAI::friend_turnTowardsAngle</c> sets <c>MODELCONDITION_TURRET_ROTATE</c> on the owner while a turret has not reached the angle it turns to and clears it as soon as it snaps there:
+    /// true when either turret of the object turned in the last <see cref="Update"/> without arriving.
+    /// </summary>
+    public bool IsRotating(uint entity)
+        => (_aims.TryGetValue((entity, 0), out var main) && main.Rotating) || (_aims.TryGetValue((entity, 1), out var alt) && alt.Rotating);
 
     /// <summary>Remembers where an object shot (victim position at the time of the shot).</summary>
     public void Observe(SimEvent simEvent, SimulationWorld world)
@@ -126,6 +134,8 @@ public sealed class TurretTracker
         }
         else aim.HasTarget = false;
 
+        // TurretAI.cpp: a turret that is closer than one step snaps to the angle (no rotation), otherwise it turns by one step.
+        aim.Rotating = Math.Abs(Normalize(desiredAngle - aim.Angle)) > motion.TurnRadiansPerTick;
         aim.Angle = Toward(aim.Angle, desiredAngle, motion.TurnRadiansPerTick);
         aim.Pitch = Toward(aim.Pitch, desiredPitch, motion.PitchRadiansPerTick);
         _aims[key] = aim;

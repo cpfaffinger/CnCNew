@@ -16,7 +16,7 @@ public readonly record struct ConditionContext(bool Night = false, bool Snow = f
 /// <c>RadarUpdate</c>, <c>PowerPlantUpdate</c>, <c>ModelConditionUpgrade</c>); here each bit is a pure function of the state the simulation
 /// keeps. Bits whose driving state the simulation does not model yet are never set (listed in docs/PRESENTATION-OBJECTS.md).
 /// </summary>
-public static class ConditionDeriver
+public static partial class ConditionDeriver
 {
     private static readonly int ParachutingStatus = ObjectStatusBits.Index("PARACHUTING");
     private static readonly int AflameStatus = ObjectStatusBits.Index("AFLAME");
@@ -40,6 +40,10 @@ public static class ConditionDeriver
         "WEAPONSET_VETERAN", "WEAPONSET_ELITE", "WEAPONSET_HERO", "WEAPONSET_PLAYER_UPGRADE", "WEAPONSET_CRATEUPGRADE_ONE", "WEAPONSET_CRATEUPGRADE_TWO",
         "ARMORSET_CRATEUPGRADE_ONE", "ARMORSET_CRATEUPGRADE_TWO", "GARRISONED", "LOADED", "CARRYING", "DOCKING", "ACTIVELY_CONSTRUCTING",
         "RADAR_UPGRADED", "RADAR_EXTENDING", "POWER_PLANT_UPGRADED", "POWER_PLANT_UPGRADING",
+        // Units, weapons, movement and death (docs/MODEL-CONDITIONS-UNITS.md): derived by UnitStates (ConditionDeriver.Units.cs) or set by the UnitConditionTracker.
+        "JETAFTERBURNER", "JETEXHAUST", "FREEFALL", "TOPPLED", "SECOND_LIFE", "CLIMBING", "OVER_WATER",
+        "CONTINUOUS_FIRE_SLOW", "CONTINUOUS_FIRE_MEAN", "CONTINUOUS_FIRE_FAST", "TURRET_ROTATE", "SPLATTED", "FRONTCRUSHED", "BACKCRUSHED",
+        "CENTER_TO_LEFT", "LEFT_TO_CENTER", "CENTER_TO_RIGHT", "RIGHT_TO_CENTER", "SPECIAL_CHEERING",
     };
 
     public static ModelConditionSet Derive(Entity entity, SimulationWorld world, ObjectVisual? visual, in ConditionContext context)
@@ -109,6 +113,8 @@ public static class ConditionDeriver
                     break;
             }
         }
+
+        set = UnitStates(entity, world, set);
 
         if (visual is not null && !visual.ConditionUpgrades.IsEmpty)
         {
