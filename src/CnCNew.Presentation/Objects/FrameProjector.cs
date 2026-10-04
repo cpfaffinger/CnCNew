@@ -31,7 +31,9 @@ public sealed record FrameProjectorOptions
 /// previous capture (or moved further than <see cref="FrameProjectorOptions.SnapDistance"/>) appear at their current transform; entities
 /// the world no longer holds disappear with the capture that no longer contains them. Contained entities are not drawn.
 /// With a viewer, enemy and neutral structures that were seen once stay as ghosts (their last seen capture, <see cref="DrawableInstance.IsGhost"/>)
-/// until the viewer sees their position again (<c>Object::getShroudedStatus</c> / the reference's ghost objects).
+/// until the viewer sees their position again (<c>Object::getShroudedStatus</c> / the reference's ghost objects). Static scenery (map objects the simulation
+/// did not spawn: trees, props, civilian structures) follows the shroud too: the original draws every object through the shroud texture, where unexplored ground is
+/// black, so scenery stays hidden until the viewer has explored the ground it stands on (exploring is permanent) and is drawn from then on, also in the fog.
 /// </summary>
 public sealed class FrameProjector
 {
@@ -42,6 +44,7 @@ public sealed class FrameProjector
     private readonly FrameProjectorOptions _options;
     private readonly ImmutableArray<ImmutableArray<DrawModuleSelection>> _scenerySelections;
     private readonly bool[] _claimed;
+    private readonly bool[] _explored;
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
     private readonly SortedDictionary<uint, Capture> _ghosts = [];
     private readonly HashSet<uint> _known = [];
@@ -56,6 +59,7 @@ public sealed class FrameProjector
         var context = BaseConditions(_options);
         _scenerySelections = [.._options.Scenery.Select(item => Select(item.Visual, context))];
         _claimed = new bool[_options.Scenery.Length];
+        _explored = new bool[_options.Scenery.Length];
         _sceneryByTemplate = _options.Scenery.GroupBy(item => item.Visual.TemplateName, StringComparer.OrdinalIgnoreCase)
             .ToImmutableDictionary(group => group.Key, group => group.Select(item => item.Index).ToImmutableArray(), StringComparer.OrdinalIgnoreCase);
     }
@@ -89,8 +93,25 @@ public sealed class FrameProjector
             if (_known.Add(entity.Id.Value)) Claim(capture);
         }
         _currentOrdered = ordered.ToImmutable();
-        if (_options.Viewer is { } fogViewer) UpdateGhosts(world, fogViewer);
+        if (_options.Viewer is { } fogViewer)
+        {
+            UpdateGhosts(world, fogViewer);
+            UpdateSceneryExploration(world, fogViewer);
+        }
     }
+
+    /// <summary>Scenery counts as explored once the ground under it was seen (permanent, so a revealed item is not tested again).</summary>
+    private void UpdateSceneryExploration(SimulationWorld world, PlayerId viewer)
+    {
+        foreach (var item in _options.Scenery)
+        {
+            if (_explored[item.Index] || _claimed[item.Index]) continue;
+            _explored[item.Index] = world.IsPositionExploredBy(viewer, Fixed.FromDecimal((decimal)item.Position.X), Fixed.FromDecimal((decimal)item.Position.Y));
+        }
+    }
+
+    /// <summary>Scenery items hidden because the viewer has not explored their ground (0 without a viewer).</summary>
+    public int ShroudedScenery => _options.Viewer is null ? 0 : _options.Scenery.Count(item => !_claimed[item.Index] && !_explored[item.Index]);
 
     public RenderFrame Project(float alpha)
     {
@@ -116,7 +137,7 @@ public sealed class FrameProjector
         var baseConditions = BaseConditions(_options);
         foreach (var item in _options.Scenery)
         {
-            if (_claimed[item.Index]) continue;
+            if (_claimed[item.Index] || (_options.Viewer is not null && !_explored[item.Index])) continue;
             drawables.Add(new DrawableInstance(EntityId.Invalid, item.Index, item.Visual, item.Position, item.Yaw, PlayerId.System, TeamColors.Neutral,
                 1f, 1f, baseConditions, _scenerySelections[item.Index], null, null, true, false));
         }

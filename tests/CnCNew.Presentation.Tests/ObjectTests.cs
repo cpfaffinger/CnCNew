@@ -34,6 +34,7 @@ static class ObjectTests
         run.Test("Frame projector interpolation, spawn and removal", Interpolation);
         run.Test("Frame projector fog of war and structure ghosts", Ghosts);
         run.Test("Static scenery and the claim rule", Scenery);
+        run.Test("Static scenery follows the shroud: nothing in unexplored ground, kept once explored", SceneryFollowsTheShroud);
         run.Test("Team colors", Colors);
         var contentDir = ContentDir(args);
         if (contentDir is not null) run.Test("Real data: draw specs, audit, projection and scenery", () => RealData(contentDir));
@@ -630,6 +631,37 @@ static class ObjectTests
         frame = projector.Project(0.5f).Drawables;
         Check.That(projector.ClaimedScenery == 1 && frame.Count(drawable => drawable.IsStatic) == 2 && frame.Count(drawable => !drawable.IsStatic) == 1,
             "A live entity of the same template at the scenery position claims it.");
+    }
+
+    private static void SceneryFollowsTheShroud()
+    {
+        var fixture = Fixture();
+        var catalog = ObjectVisualCatalog.Build(fixture.Graph);
+        var terrain = FlatTerrain();
+        var world = NewWorld(fixture, terrain);
+        ImmutableArray<MapObject> objects =
+        [
+            new("Pine", 36m, 30m, 0m, 0m, 0, MapProperties.Empty),
+            new("Bunker", 190m, 190m, 0m, 0m, 0, MapProperties.Empty),
+            new("Crate", 150m, 40m, 0m, 0m, 0, MapProperties.Empty),
+        ];
+        var scenery = StaticScenery.Build(objects, catalog).Items;
+        var scout = Spawn(world, "Scout", 1, 30, 30);
+        void Settle() { for (var i = 0; i < SimulationWorld.VisionIntervalTicks + 1; i++) world.Step(); }
+        Settle();
+        var projector = new FrameProjector(catalog, new FrameProjectorOptions { Viewer = new PlayerId(1), Scenery = scenery });
+        projector.Advance(world);
+        var names = () => projector.Project(1f).Drawables.Where(drawable => drawable.IsStatic).Select(drawable => drawable.Visual.TemplateName).ToArray();
+        Check.That(names().SequenceEqual(["Pine"]) && projector.ShroudedScenery == 2, $"Only scenery on explored ground is drawn ({string.Join(",", names())}; shrouded {projector.ShroudedScenery}).");
+
+        Submit(world, sequence => new KillCommand(PlayerId.System, sequence, world.Tick, scout));
+        Settle();
+        projector.Advance(world);
+        Check.That(names().SequenceEqual(["Pine"]), "Once explored, the scenery stays drawn when the viewer loses sight of it (fog, not shroud).");
+
+        var omniscient = new FrameProjector(catalog, new FrameProjectorOptions { Scenery = scenery });
+        omniscient.Advance(world);
+        Check.That(omniscient.Project(1f).Drawables.Count(drawable => drawable.IsStatic) == 3 && omniscient.ShroudedScenery == 0, "Without a viewer all scenery is drawn.");
     }
 
     private static void Colors()
