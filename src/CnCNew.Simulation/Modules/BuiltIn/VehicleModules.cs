@@ -22,7 +22,7 @@ internal static class VehicleModules
         new ModuleBinding<UndeadBodyData>("UndeadBody", ModuleOwnerKind.Object, (configuration, _) => UndeadBodyData.Parse(configuration), data => new UndeadBody(data)),
         new ModuleBinding<BattleBusData>("BattleBusSlowDeathBehavior", ModuleOwnerKind.Object, (configuration, _) => BattleBusData.Parse(configuration), data => new BattleBusSlowDeathBehavior(data)),
         new ModuleBinding<ModelConditionUpgradeData>("SubObjectsUpgrade", ModuleOwnerKind.Object, ModelConditionUpgradeData.Parse, data => new SubObjectsUpgrade(data)),
-        new ModuleBinding<NoFieldsData>("AnimationSteeringUpdate", ModuleOwnerKind.Object, (_, _) => NoFieldsData.Instance, _ => new AnimationSteeringUpdate()),
+        new ModuleBinding<AnimationSteeringData>("AnimationSteeringUpdate", ModuleOwnerKind.Object, (configuration, _) => AnimationSteeringData.Parse(configuration), data => new AnimationSteeringUpdate(data)),
     ];
 }
 
@@ -142,6 +142,12 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
     public bool IsApplicable(in DamageInfo info) => Mux.IsApplicable(Entity, info);
     public int ProbabilityWeight => Math.Max(data.Base.ProbabilityModifier, 1);
 
+    /// <summary>
+    /// The bus has hit the ground after its throw: <c>update</c> sets <c>MODELCONDITION_SECOND_LIFE</c> at that moment and never clears it. No flag is kept for it; it is read off the state: the first
+    /// death has begun and ended (<c>_groundCheckTick</c> is set, <c>_inFirstDeath</c> is not) and the bus lies on the ground (a real death in mid-air ends the update, the bus stays up there).
+    /// </summary>
+    public bool HasLanded(IWorldServices world) => _groundCheckTick != 0 && !_inFirstDeath && !world.IsSignificantlyAboveTerrain(Entity);
+
     public override void OnSpawn(IWorldServices world) => _nextWake = data.EmptyHulkDelayTicks > 0 ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
 
     public override void OnDie(IWorldServices world, in DamageInfo info)
@@ -257,10 +263,22 @@ public sealed class SubObjectsUpgrade(ModelConditionUpgradeData data) : UpgradeM
     protected override void Activate(IWorldServices world) { }
 }
 
-/// <summary><c>AnimationSteeringUpdate.cpp</c>: switches the model between the turn animations (<c>CENTER_TO_LEFT</c>, …) from the physics' turning state — presentation only, no state and no effect here.</summary>
-public sealed class AnimationSteeringUpdate : SimModule
+/// <summary><c>AnimationSteeringUpdateModuleData</c>: <c>MinTransitionTime</c> (the reference's <c>m_transitionFrames</c>, a duration in whole ticks, default 0) is how long each turn animation state is held.</summary>
+public sealed record AnimationSteeringData(long MinTransitionTicks) : ModuleData
+{
+    public static AnimationSteeringData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "MinTransitionTime", 0));
+}
+
+/// <summary>
+/// <c>AnimationSteeringUpdate.cpp</c>: switches the model between the turn animations (<c>CENTER_TO_LEFT</c>, …) from the physics' turning state — presentation only, no state and no effect here.
+/// The presentation (<c>UnitConditionTracker</c>) ports the state machine and reads <see cref="MinTransitionTicks"/>.
+/// </summary>
+public sealed class AnimationSteeringUpdate(AnimationSteeringData data) : SimModule
 {
     public override string ModuleName => "AnimationSteeringUpdate";
+
+    /// <summary><c>MinTransitionTime</c> in ticks.</summary>
+    public long MinTransitionTicks => data.MinTransitionTicks;
     public override void Describe(IStateWriter writer) { }
     public override void Load(IStateReader reader) { }
 }

@@ -58,6 +58,18 @@ public sealed record WeaponInfo(
     public Fixed RequestAssistRange { get; init; }
 
     /// <summary>
+    /// <c>ContinuousFireOne</c>/<c>ContinuousFireTwo</c> (<c>WeaponTemplate::m_continuousFireOneShotsNeeded</c>/<c>…TwoShotsNeeded</c>, default <c>INT_MAX</c>): how many consecutive shots at one target start the
+    /// first and the second continuous-fire stage. Not applied by the simulation (no rate-of-fire bonus follows); the presentation's <c>FiringTracker</c> port shows the stages (<c>CONTINUOUS_FIRE_*</c>).
+    /// </summary>
+    public int ContinuousFireOneShots { get; init; } = int.MaxValue;
+
+    /// <summary><see cref="ContinuousFireOneShots"/>, second stage.</summary>
+    public int ContinuousFireTwoShots { get; init; } = int.MaxValue;
+
+    /// <summary><c>ContinuousFireCoast</c> (<c>m_continuousFireCoastFrames</c>): how long after the next possible shot the stages are kept without firing; 0 = the stages end at once when the weapon stops.</summary>
+    public long ContinuousFireCoastTicks { get; init; }
+
+    /// <summary>
     /// <c>WeaponTemplate::m_antiMask</c> (<c>WeaponAntiMaskType</c>): which kinds of target the weapon may be fired at. The constructor default is
     /// <see cref="AntiMaskGround"/> alone ("but not air or projectile"); each <c>Anti*</c> key sets or clears its bit (<c>INI::parseBitInInt32</c>).
     /// </summary>
@@ -222,6 +234,12 @@ public sealed class WeaponCatalog
                     }
                 return mask;
             }
+            // Deferred keys (docs: compatibility baseline) keep their generic typing; read their source text as an unsigned number.
+            decimal? Number(string key) => Field(key) is { } field
+                ? decimal.TryParse(field.Value.OriginalText.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(), System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var parsed) && parsed >= 0m
+                    ? parsed : throw new InvalidDataException($"{definition.OriginalName}: '{key}' has the unexpected value '{field.Value.OriginalText}'.")
+                : null;
             var projectile = Name("ProjectileObject");
             weapons.Add(new WeaponInfo(index++, definition.OriginalName, damage, damageType, deathType, range, clipSize, reload, Math.Max(SimulationTiming.SleepNone, delay), WeaponBonusTable.From(definition),
                 primaryRadius, secondaryDamage, secondaryRadius, affects)
@@ -241,6 +259,9 @@ public sealed class WeaponCatalog
                 ReloadsAtBase = Field("AutoReloadsClip")?.Value.Value is EnumValue { Name: var reloadName } && reloadName.Equals("RETURN_TO_BASE", StringComparison.OrdinalIgnoreCase),
                 RequestAssistRange = Length("RequestAssistRange"),
                 AntiMask = AntiMaskOf(),
+                ContinuousFireOneShots = Number("ContinuousFireOne") is { } one ? checked((int)one) : int.MaxValue,
+                ContinuousFireTwoShots = Number("ContinuousFireTwo") is { } two ? checked((int)two) : int.MaxValue,
+                ContinuousFireCoastTicks = Number("ContinuousFireCoast") is { } coast ? SimulationTiming.DurationMillisecondsToTicks(coast) : 0,
             });
         }
         return new WeaponCatalog(weapons.ToImmutable());

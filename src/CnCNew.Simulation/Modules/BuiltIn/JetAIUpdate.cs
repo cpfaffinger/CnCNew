@@ -125,6 +125,12 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
     /// <summary><c>HAS_PENDING_COMMAND</c>.</summary>
     public bool HasPendingCommand => _pending != PendingKind.None;
 
+    /// <summary>
+    /// <c>friend_enableAfterburners</c>: <c>JetPauseBeforeTakeoffState::update</c> switches them on once the countdown to take-off (re)starts (no aircraft ahead is still taxiing) and
+    /// <c>JetTakeoffOrLandingState::onExit</c> off again, so they burn from then to the end of the run on the runway. Only jets (<c>HeliAIStateMachine</c> has no pause state). Read by the presentation (<c>JETAFTERBURNER</c>).
+    /// </summary>
+    public bool AfterburnersOn => !Helicopter && (_phase == JetPhase.TakingOff || (_phase == JetPhase.PauseBeforeTakeoff && _resetTimer));
+
     /// <summary><c>isReloading</c>.</summary>
     public bool IsReloading => _phase == JetPhase.ReloadAmmo;
 
