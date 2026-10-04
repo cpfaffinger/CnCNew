@@ -38,7 +38,88 @@ internal static class HudTests
         harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));
 
+        harness.Run("Cursor and markers: Alt waypoints draw a path with a marker per station, an order leaves a fading hint, the cursor follows context and windows", () => CursorAndMarkers(data));
+
         return harness.Failures;
+    }
+
+    /// <summary>docs/DEMO-FINDINGS.md #8: neither the cursor nor the waypoints a player set were visible.</summary>
+    private static void CursorAndMarkers(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Advance(match, controller, 30);
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        Vector2 Ground(float dx, float dy)
+        {
+            var (x, y) = ((float)dozer.X.ToDecimal() + dx, (float)dozer.Y.ToDecimal() + dy);
+            return Screen(match, new Vector3(x, y, match.Heights.HeightAt(x, y)));
+        }
+
+        TestHarness.Assert(controller.Cursor == CursorState.Arrow && controller.PointerPosition is null, "no pointer yet: the arrow");
+        var open = Ground(-40, -50);
+        controller.Process(new MouseMoveEvent(time += 16, open));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Cursor.Kind == CursorKind.Normal && controller.PointerPosition == open, $"nothing selected over open ground: the plain pointer ({controller.Cursor.Kind})");
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        controller.Process(new MouseMoveEvent(time += 16, open));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Cursor.Kind == CursorKind.Move, $"the dozer selected, open ground: move ({controller.Cursor.Kind})");
+        TestHarness.Assert(controller.Overlay.OrderHints.IsEmpty && controller.Overlay.WaypointPaths.IsEmpty, "nothing ordered yet: no markers");
+
+        // Alt held: the cursor changes at once; three clicks queue three stations.
+        controller.Process(new KeyEvent(time += 16, KeyCode.LeftAlt, true));
+        TestHarness.Assert(controller.Cursor.Kind == CursorKind.Waypoint, "Alt switches to the waypoint cursor without a mouse move");
+        var stations = new[] { Ground(-10, -60), Ground(-90, -70), Ground(-170, -90) };
+        foreach (var station in stations) Click(controller, ref time, MouseButton.Left, station);
+        Advance(match, controller, 1);
+        var path = controller.Overlay.WaypointPaths.Single();
+        TestHarness.Assert(path.Unit == dozer.Id && path.Points.Length == 4, $"the path has the unit and three stations ({path.Points.Length} points)");
+        for (var index = 0; index < stations.Length; index++)
+            TestHarness.Assert(Vector2.Distance(path.Points[index + 1], stations[index]) < 2.5f, $"station {index + 1} is drawn where it was clicked ({path.Points[index + 1]} vs {stations[index]})");
+        TestHarness.Assert(controller.Overlay.OrderHints.Count(hint => hint.Kind == OrderHintKind.Waypoint) == 3, "each click left a hint");
+        var blue = new CnCNew.Ui.Wnd.WndColor(64, 128, 255, 235);
+        var lines = controller.BuildDrawList(1280, 720).Commands.OfType<UiLineDraw>().Where(line => line.Color == blue).ToList();
+        // Three segments plus per station a diamond (4 lines) and a centre ring (6 lines).
+        TestHarness.Assert(lines.Count == 3 + 3 * 10, $"the path is drawn: 3 segments and 3 station markers ({lines.Count} lines)");
+        TestHarness.Assert(lines[0].X0 == path.Points[0].X && lines[0].Y0 == path.Points[0].Y && lines[2].X1 == path.Points[3].X, "the first segment starts at the unit, the last ends at the third station");
+
+        Advance(match, controller, 45);
+        TestHarness.Assert(controller.Overlay.OrderHints.IsEmpty, "the hints are gone after 40 frames");
+        TestHarness.Assert(controller.Overlay.WaypointPaths.Length == 1, "the path stays while Alt is held");
+        controller.Process(new KeyEvent(time += 16, KeyCode.LeftAlt, false));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Overlay.WaypointPaths.IsEmpty && controller.Cursor.Kind == CursorKind.Move, "Alt released: the path is hidden and the cursor is the move cursor again");
+
+        // A plain move order: a move hint at the clicked point, fading.
+        Click(controller, ref time, MouseButton.Left, open);
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Overlay.OrderHints is [{ Kind: OrderHintKind.Move } hint] && Vector2.Distance(hint.Screen, open) < 2.5f && hint.Age < 0.1f, "a move hint at the destination");
+        Advance(match, controller, 20);
+        TestHarness.Assert(controller.Overlay.OrderHints is [{ Age: > 0.4f and < 0.7f }], "it fades with time");
+        controller.Process(new KeyEvent(time += 16, KeyCode.LeftAlt, true));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Overlay.WaypointPaths.IsEmpty, "the plain order replaced the waypoint path");
+        controller.Process(new KeyEvent(time += 16, KeyCode.LeftAlt, false));
+
+        // Over the control bar the cursor is the arrow whatever lies behind it; a press that began there keeps it.
+        var bar = controller.WindowRect("ControlBar.wnd:ControlBarParent") ?? throw new InvalidOperationException("no control bar");
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(bar.X + bar.Width / 2, bar.Y + bar.Height / 2)));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.PointerOverWindow && controller.Cursor == CursorState.Arrow, "over the control bar: the arrow");
+        controller.Process(new MouseMoveEvent(time += 16, open));
+        Advance(match, controller, 1);
+        TestHarness.Assert(!controller.PointerOverWindow && controller.Cursor.Kind == CursorKind.Move, "back over the world: the context cursor");
+
+        // The view's edge scrolls and shows the directional cursor.
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(1279, 300)));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Cursor.Kind == CursorKind.Scroll && CursorSet.DirectionIndex(controller.Cursor.Direction, 8) == 0, "at the right edge: the scroll cursor pointing right");
+
+        var cursors = data.LoadCursors();
+        TestHarness.Assert(cursors.MissingFiles.IsEmpty && cursors.UndecodableFiles.IsEmpty && cursors.Resolve(controller.Cursor, 0, out var frame) && frame.Cursor.File.EndsWith("SCCScroll0.ani", StringComparison.OrdinalIgnoreCase),
+            "the game data's cursor set has the picture for it");
+        Console.WriteLine($"  cursor and markers: {lines.Count} waypoint lines for three stations; cursors {cursors.Files.Length} files / {cursors.FrameCount} frames");
     }
 
     /// <summary>docs/DEMO-FINDINGS.md #8 and #14: the overlay existed but nothing turned it into draw commands.</summary>

@@ -14,6 +14,7 @@ Func<string[], int>[] suites =
     WorldRealDataTests.Run,
     RoadRealDataTests.Run,
     InputTests.Run,
+    CursorTests.Run,
     UnitConditionTests.Run,
     StructureConditionTests.Run,
     CaptureConditionTests.Run,

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using CnCNew.Presentation.Input;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
 using CnCNew.Ui.Wnd;
@@ -22,6 +23,8 @@ public static class HudOverlayRenderer
     private static readonly WndColor Neutral = new(255, 230, 80, 255);
     private static readonly WndColor MoveOrder = new(90, 255, 120, 220);
     private static readonly WndColor AttackOrder = new(255, 90, 80, 220);
+    /// <summary>The waypoint line colour of <c>W3DWaypointBuffer::setDefaultLineStyle</c> (0.25, 0.5, 1.0).</summary>
+    private static readonly WndColor WaypointColor = new(64, 128, 255, 235);
     private static readonly WndColor GhostValid = new(80, 255, 110, 255);
     private static readonly WndColor GhostInvalid = new(255, 70, 60, 255);
     private static readonly WndColor RallyColor = new(255, 235, 90, 255);
@@ -51,6 +54,18 @@ public static class HudOverlayRenderer
                 commands.Add(new UiLineDraw(order.Points[index - 1].X, order.Points[index - 1].Y, order.Points[index].X, order.Points[index].Y, 1.5f, color));
             if (!order.Points.IsDefaultOrEmpty) Ring(commands, order.Points[^1], 5f, 1.5f, color, 12);
         }
+
+        if (!overlay.WaypointPaths.IsDefaultOrEmpty)
+            foreach (var path in overlay.WaypointPaths)
+            {
+                for (var index = 1; index < path.Points.Length; index++)
+                    commands.Add(new UiLineDraw(path.Points[index - 1].X, path.Points[index - 1].Y, path.Points[index].X, path.Points[index].Y, 2f, WaypointColor));
+                for (var index = 1; index < path.Points.Length; index++) WaypointNode(commands, path.Points[index]);
+            }
+
+        if (!overlay.OrderHints.IsDefaultOrEmpty)
+            foreach (var hint in overlay.OrderHints)
+                DrawOrderHint(commands, hint);
 
         foreach (var rally in overlay.RallyPoints)
         {
@@ -91,6 +106,56 @@ public static class HudOverlayRenderer
                 HealIcon(commands, icon, clockMilliseconds);
 
         return commands.ToImmutable();
+    }
+
+    /// <summary>
+    /// The station marker of a waypoint path: a diamond with a centre ring (the original places the <c>SCMNode</c> model there, <c>W3DWaypointBuffer</c>; this
+    /// client has no 3D marker models yet, so the node is drawn in the overlay in the line's colour).
+    /// </summary>
+    private static void WaypointNode(ImmutableArray<UiDrawCommand>.Builder commands, Vector2 at)
+    {
+        const float size = 7f;
+        var corners = new[] { new Vector2(at.X, at.Y - size), new Vector2(at.X + size, at.Y), new Vector2(at.X, at.Y + size), new Vector2(at.X - size, at.Y) };
+        for (var index = 0; index < corners.Length; index++)
+        {
+            var next = corners[(index + 1) % corners.Length];
+            commands.Add(new UiLineDraw(corners[index].X, corners[index].Y, next.X, next.Y, 2f, WaypointColor));
+        }
+        Ring(commands, at, 2f, 2f, WaypointColor, 6);
+    }
+
+    /// <summary>
+    /// The marker of an order just given: a ring that closes in on the spot and fades (the original plays the move hint model's animation once and removes it
+    /// after 40 frames, <c>W3DInGameUI::drawMoveHints</c>); an attack is marked by four closing corner ticks instead.
+    /// </summary>
+    private static void DrawOrderHint(ImmutableArray<UiDrawCommand>.Builder commands, OrderHintMarker hint)
+    {
+        var age = Math.Clamp(hint.Age, 0f, 1f);
+        var alpha = (byte)MathF.Round(255f * (1f - age));
+        if (alpha == 0) return;
+        var baseColor = hint.Kind switch
+        {
+            OrderHintKind.Attack => AttackOrder,
+            OrderHintKind.Waypoint => WaypointColor,
+            OrderHintKind.RallyPoint => RallyColor,
+            _ => MoveOrder,
+        };
+        var color = baseColor with { A = alpha };
+        var radius = 20f - 14f * age;
+        if (hint.Kind == OrderHintKind.Attack)
+        {
+            foreach (var (sx, sy) in new[] { (-1f, -1f), (1f, -1f), (1f, 1f), (-1f, 1f) })
+            {
+                var cx = hint.Screen.X + sx * radius;
+                var cy = hint.Screen.Y + sy * radius;
+                commands.Add(new UiLineDraw(cx, cy, cx - sx * 7f, cy, 2.5f, color));
+                commands.Add(new UiLineDraw(cx, cy, cx, cy - sy * 7f, 2.5f, color));
+            }
+            return;
+        }
+        Ring(commands, hint.Screen, radius, 2.5f, color, 20);
+        commands.Add(new UiLineDraw(hint.Screen.X - 4f, hint.Screen.Y, hint.Screen.X + 4f, hint.Screen.Y, 2f, color));
+        commands.Add(new UiLineDraw(hint.Screen.X, hint.Screen.Y - 4f, hint.Screen.X, hint.Screen.Y + 4f, 2f, color));
     }
 
     /// <summary>The ring is a closed polyline; the bar sits above it: a dark plate, the health in a green-to-red ramp (blue-cyan is for objects under construction in the original; not tracked here).</summary>

@@ -79,6 +79,13 @@ public sealed class GameData
             .Where(path => path.StartsWith("Maps/", StringComparison.OrdinalIgnoreCase) && path.EndsWith(".map", StringComparison.OrdinalIgnoreCase))
             .OrderBy(path => path, StringComparer.Ordinal));
 
+    /// <summary>
+    /// Decodes the mouse cursors <c>Mouse.ini</c> names (<c>Data/Cursors/*.ani</c>). Never throws for a bad cursor: missing and undecodable files are listed in
+    /// the result, which the caller reports.
+    /// </summary>
+    public CnCNew.Presentation.Input.CursorSet LoadCursors()
+        => CnCNew.Presentation.Input.CursorSet.Load(CnCNew.Presentation.Input.MouseCursorCatalog.FromGraph(Graph), Content.Exists, Content.OpenRead);
+
     /// <summary>Loads the main string table of a language (<see cref="LanguageCatalog"/> probe order).</summary>
     public LocalizedText LoadText(string language) => LoadText(Content, language);
 

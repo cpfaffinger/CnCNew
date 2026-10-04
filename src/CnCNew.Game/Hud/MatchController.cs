@@ -49,6 +49,7 @@ public sealed class MatchController
     private readonly UiScaleOptions _scaleOptions;
     private readonly ControlBarSchemeInfo? _scheme;
     private readonly List<(string Text, long ExpiresAtMs)> _ticker = [];
+    private readonly OrderHintBook _hints = new();
     private const long TickerLifetimeMs = 8000;
     private const int TickerCapacity = 6;
 
@@ -327,6 +328,8 @@ public sealed class MatchController
             Match.Camera.Update((float)deltaSeconds, intent.Scroll != Vector2.Zero);
         }
 
+        // The world moved under a resting pointer: the context (and with it the cursor) is evaluated again every frame, not only on input events.
+        if (!PointerOverWindow) Input.RefreshHint(Match.World, Match.Camera);
         CommandBar = Input.CommandBar!.Build(Match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(Match.World, Match.Human);
         DrainFeedbackToTicker();
@@ -381,6 +384,7 @@ public sealed class MatchController
         foreach (var feedback in Input.Commands.DrainFeedback())
         {
             CommandFeedbackObserved?.Invoke(feedback);
+            _hints.Observe(feedback, _clockMs);
             var text = feedback.Kind switch
             {
                 FeedbackKind.Rejected => $"Rejected: {feedback.Detail}",
@@ -459,22 +463,44 @@ public sealed class MatchController
                 var state = SimulationQueries.Describe(production);
                 if (state.Bool("hasRally") && state.Values.TryGetValue("rallyX", out var rawX) && rawX is Fixed rallyX
                     && state.Values.TryGetValue("rallyY", out var rawY) && rawY is Fixed rallyY
-                    && view.TryWorldToScreen(new Vector3((float)rallyX.ToDecimal(), (float)rallyY.ToDecimal(), 0f), out var rallyScreen))
+                    && view.TryWorldToScreen(OnGround(new Vector2((float)rallyX.ToDecimal(), (float)rallyY.ToDecimal())), out var rallyScreen))
                     rally.Add(new RallyPointMarker(entity.Id, rallyScreen));
             }
         }
 
+        // Standing attack, attack-move and guard orders of the selected own units: a line to the goal (the original draws none; kept as an aid, for the selection only).
         var orderLines = ImmutableArray.CreateBuilder<OrderLine>();
-        foreach (var (unitId, order) in Input.Commands.Orders.All)
+        foreach (var unit in Input.Selection.OwnSelected(world))
         {
-            if (world.FindEntity(unitId) is not { } unit) continue;
-            var points = ImmutableArray.CreateBuilder<Vector2>();
+            if (!Input.Commands.Orders.TryGet(unit.Id, out var order) || order.Kind == StandingOrderKind.Waypoints) continue;
             var from = SimulationQueries.GroundOf(unit);
-            if (view.TryWorldToScreen(new Vector3(from.X, from.Y, 0f), out var fromScreen)) points.Add(fromScreen);
-            if (view.TryWorldToScreen(new Vector3(order.Destination.X, order.Destination.Y, 0f), out var toScreen)) points.Add(toScreen);
-            foreach (var waypoint in order.Waypoints)
-                if (view.TryWorldToScreen(new Vector3(waypoint.X, waypoint.Y, 0f), out var waypointScreen)) points.Add(waypointScreen);
-            if (points.Count >= 2) orderLines.Add(new OrderLine(unitId, points.ToImmutable(), order.Kind == StandingOrderKind.Attack));
+            var goal = order.Kind == StandingOrderKind.Attack && world.FindEntity(order.Target) is { } victim ? SimulationQueries.GroundOf(victim) : order.Destination;
+            if (view.TryWorldToScreen(OnGround(from), out var fromScreen) && view.TryWorldToScreen(OnGround(goal), out var toScreen))
+                orderLines.Add(new OrderLine(unit.Id, [fromScreen, toScreen], order.Kind == StandingOrderKind.Attack));
+        }
+
+        // Waypoint paths: only while Alt is held, for the selection (W3DWaypointBuffer::drawWaypoints).
+        var waypointPaths = ImmutableArray.CreateBuilder<WaypointPathOverlay>();
+        foreach (var path in OrderMarkers.WaypointPaths(world, Input.Selection, Input.Commands.Orders, Input.Commands.WaypointMode))
+        {
+            var points = ImmutableArray.CreateBuilder<Vector2>();
+            if (!view.TryWorldToScreen(OnGround(path.Start), out var startScreen)) continue;
+            points.Add(startScreen);
+            foreach (var station in path.Stations)
+            {
+                if (!view.TryWorldToScreen(OnGround(station), out var stationScreen)) break;
+                points.Add(stationScreen);
+            }
+            if (points.Count >= 2) waypointPaths.Add(new WaypointPathOverlay(path.Unit, points.ToImmutable()));
+        }
+
+        var hints = ImmutableArray.CreateBuilder<OrderHintMarker>();
+        foreach (var orderHint in _hints.Active(_clockMs))
+        {
+            var position = orderHint.Target.IsValid && world.FindEntity(orderHint.Target) is { } marked
+                ? OnGround(SimulationQueries.GroundOf(marked))
+                : OnGround(new Vector2(orderHint.Position.X, orderHint.Position.Y));
+            if (view.TryWorldToScreen(position, out var hintScreen)) hints.Add(new OrderHintMarker(orderHint.Kind, hintScreen, orderHint.Age(_clockMs)));
         }
 
         var placement = PlacementGhostOverlay.None;
@@ -500,8 +526,31 @@ public sealed class MatchController
         }
 
         var hint = DescribeHint(Input.Hint);
-        return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, TickerSnapshot(), heals.ToImmutable());
+        return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, TickerSnapshot(), heals.ToImmutable(),
+            waypointPaths.ToImmutable(), hints.ToImmutable());
+
+        Vector3 OnGround(Vector2 point) => new(point.X, point.Y, Match.Heights.HeightAt(point.X, point.Y));
     }
+
+    // ------------------------------------------------------------------------------------------------------------ cursor
+
+    /// <summary>The pointer is over the control bar, the minimap or the open in-game menu, or a press that began there is still held.</summary>
+    public bool PointerOverWindow
+    {
+        get
+        {
+            if (IsMenuOpen || _uiOwnsMouse) return true;
+            if (!Input.State.HasMouse) return false;
+            var position = Input.State.MousePosition;
+            return TryMinimapWorld(position, out _) || _tree.InputTarget(Round(position.X), Round(position.Y)) is not null;
+        }
+    }
+
+    /// <summary>The cursor to show this frame (<see cref="GameInputController.Cursor"/>): the arrow over the HUD and in the menu, otherwise scroll, mode or context cursor.</summary>
+    public CursorState Cursor => IsMenuOpen ? CursorState.Arrow : Input.Cursor(PointerOverWindow);
+
+    /// <summary>The pointer position in viewport pixels, or null before the first mouse event.</summary>
+    public Vector2? PointerPosition => Input.State.HasMouse ? Input.State.MousePosition : null;
 
     private static string? DescribeHint(ContextHint hint) => hint.Action switch
     {

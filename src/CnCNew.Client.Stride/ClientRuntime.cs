@@ -52,7 +52,28 @@ internal sealed class ClientRuntime : IDisposable
         _audio = new ClientAudio(data, _settings.Audio, audio);
         _minimapBatch = new SpriteBatch(game.GraphicsDevice);
         _ui.CustomDraw = DrawCustom;
+        _cursor = new SoftwareCursor(game.GraphicsDevice, data);
     }
+
+    private readonly SoftwareCursor _cursor;
+    private Vector2? _pointer;
+    private Vector2? _stagedPointer;
+    private (float X, float Y)[]? _stagedWaypoints;
+
+    /// <summary>The cursor line of the console report (cursors loaded, missing files, frames, the cursor of the last frame).</summary>
+    public string CursorReport => _cursor.Report();
+
+    /// <summary>
+    /// A capture aid (<c>--cursor-at x,y</c>): a fixed-step run takes no device input, so the pointer is put here by a synthetic mouse move every frame,
+    /// through the same event path a real mouse takes.
+    /// </summary>
+    public void StagePointer(Vector2 position) => _stagedPointer = position;
+
+    /// <summary>
+    /// A capture aid (<c>--waypoints "dx,dy;dx,dy;..."</c>, with <c>--select-own</c>): once the selection is made, Alt is held and one waypoint per offset
+    /// (metres from the first selected unit that can move) is ordered through the input layer, as a player's Alt-clicks would.
+    /// </summary>
+    public void StageWaypoints((float X, float Y)[] offsets) => _stagedWaypoints = offsets;
 
     /// <summary>The shell (main menu and everything behind it); it starts matches and missions itself.</summary>
     public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio)
@@ -100,6 +121,18 @@ internal sealed class ClientRuntime : IDisposable
         if (own.Length == 0) return; // the start objects appear with the first simulated tick
         _selectOwnPending = false;
         hud.Input.Selection.Replace(own);
+        if (_stagedWaypoints is not { } offsets) return;
+        _stagedWaypoints = null;
+        var world = _running.Host.Match.World;
+        if (hud.Input.Selection.OwnSelected(world).FirstOrDefault(SimulationQueries.CanMove) is not { } mover)
+        {
+            Console.Error.WriteLine("warning: --waypoints: nothing in the selection can move; no waypoint was ordered.");
+            return;
+        }
+        var origin = SimulationQueries.GroundOf(mover);
+        hud.Input.DispatchMeta(MetaAction.BeginWaypoints, world, _running.Host.Match.Camera);
+        foreach (var (dx, dy) in offsets)
+            hud.Input.Commands.IssueContext(world, new ContextHint(ContextAction.AddWaypoint, CursorKind.Waypoint, CnCNew.Simulation.Ids.EntityId.Invalid, new System.Numerics.Vector3(origin.X + dx, origin.Y + dy, 0f)), null);
     }
 
     public bool ExitRequested { get; private set; }
@@ -120,6 +153,18 @@ internal sealed class ClientRuntime : IDisposable
         // A fixed-step run (smoke test, captures) takes no device input: wherever the real mouse happens to be must not scroll the camera, or neither the
         // picture nor the sound (the listener follows the camera) of two runs would be the same.
         var events = fixedSeconds is null && (input.HasMouse || input.Events.Count > 0) ? _input.Poll(input, _clockMs) : [];
+        if (fixedSeconds is null)
+        {
+            // The cursor is drawn where the device says the pointer is, inside the window only; the operating system cursor is hidden while ours can stand in.
+            var position = new Vector2(input.AbsoluteMousePosition.X, input.AbsoluteMousePosition.Y);
+            _pointer = input.HasMouse && position.X >= 0 && position.Y >= 0 && position.X < width && position.Y < height ? position : null;
+            if (_game.IsMouseVisible == _cursor.Usable) _game.IsMouseVisible = !_cursor.Usable;
+        }
+        else if (_stagedPointer is { } staged)
+        {
+            events.Add(new CnCNew.Presentation.Input.MouseMoveEvent(_clockMs, staged));
+            _pointer = staged;
+        }
         if (_running is { } running)
         {
             running.Step(events, seconds, width, height, gameTime, _game.GraphicsContext.CommandList, fixedSeconds);
@@ -247,7 +292,12 @@ internal sealed class ClientRuntime : IDisposable
         commandList.SetRenderTargetAndViewport(null, back);
         if (_running is null) commandList.Clear(back, global::Stride.Core.Mathematics.Color.Black);
         var list = _running is { } running ? running.BuildDrawList(back.Width, back.Height) : _shell?.BuildDrawList();
-        if (list is not null) _ui.Draw(context, list, back.Width, back.Height);
+        _ui.Begin(context, back.Width, back.Height);
+        if (list is not null)
+            foreach (var command in list.Commands) _ui.Execute(command);
+        // The cursor lies on top of everything: the shell and the in-game menu show the arrow, a running game its context cursor.
+        if (_pointer is { } pointer) _cursor.Draw(_ui, _running?.Hud.Cursor ?? CursorState.Arrow, pointer, _clockMs);
+        _ui.End();
     }
 
     public void Dispose()
@@ -255,6 +305,7 @@ internal sealed class ClientRuntime : IDisposable
         _running?.Dispose();
         _running = null;
         _audio.Dispose();
+        _cursor.Dispose();
         _minimapBatch.Dispose();
         _ui.Dispose();
     }

@@ -83,7 +83,7 @@ if (contentDirectory is not null)
 }
 
 using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),
-    audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30")))
+    audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30"), GetArgument(args, "--cursor-at"), GetArgument(args, "--waypoints")))
 {
     game.Run();
 }
@@ -138,9 +138,33 @@ internal sealed class CnCNewGame(
     int smokeFrames,
     CnCNew.Client.Stride.Audio.ClientAudioOptions audioOptions,
     string? filmstripDirectory = null,
-    int filmstripEvery = 30) : Game
+    int filmstripEvery = 30,
+    string? cursorAt = null,
+    string? waypoints = null) : Game
 {
     private ClientRuntime? _runtime;
+
+    /// <summary>The capture aids of a fixed-step run: --cursor-at "x,y" (pointer in window pixels) and --waypoints "dx,dy;dx,dy;..." (with --select-own).</summary>
+    private void ApplyStaging()
+    {
+        static float Number(string text) => float.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        if (_runtime is null) return;
+        if (cursorAt is not null)
+        {
+            var parts = cursorAt.Split(',');
+            if (parts.Length != 2) throw new ArgumentException("--cursor-at expects \"x,y\".");
+            _runtime.StagePointer(new System.Numerics.Vector2(Number(parts[0]), Number(parts[1])));
+        }
+        if (waypoints is not null)
+        {
+            _runtime.StageWaypoints([..waypoints.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(pair =>
+            {
+                var parts = pair.Split(',');
+                if (parts.Length != 2) throw new ArgumentException("--waypoints expects \"dx,dy;dx,dy;...\".");
+                return (Number(parts[0]), Number(parts[1]));
+            })]);
+        }
+    }
     private int _renderedFrames;
     private bool _captured;
     private int _lastFilmFrame = -1;
@@ -162,6 +186,7 @@ internal sealed class CnCNewGame(
         if (liveOptions is not null)
         {
             LoadLiveMatch(liveOptions);
+            ApplyStaging();
             return;
         }
 
@@ -171,6 +196,7 @@ internal sealed class CnCNewGame(
             var back = GraphicsDevice.Presenter.BackBuffer;
             _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions);
             Window.Title = "CnCNew";
+            ApplyStaging();
             return;
         }
 
@@ -315,6 +341,7 @@ internal sealed class CnCNewGame(
             if (_runtime.ExitRequested || (smokeTest && ++_renderedFrames >= smokeFrames && (capturePath is null || _captured)))
             {
                 if (smokeTest) Console.WriteLine($"ui: {_runtime.LastFrame.Format()}; missing images [{string.Join(", ", _runtime.LastFrame.MissingImageNames.Take(12))}]; missing textures [{string.Join(", ", _runtime.LastFrame.MissingTextureFiles.Take(12))}]");
+                if (smokeTest) Console.WriteLine($"cursor: {_runtime.CursorReport}");
                 Exit();
             }
 

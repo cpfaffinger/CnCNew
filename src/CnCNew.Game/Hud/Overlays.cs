@@ -25,6 +25,15 @@ public sealed record RallyPointMarker(EntityId Producer, Vector2 Screen);
 /// <summary>A unit's current order path (move/attack-move/attack), as screen points from the unit to its destination.</summary>
 public sealed record OrderLine(EntityId Unit, ImmutableArray<Vector2> Points, bool IsAttack);
 
+/// <summary>
+/// A queued waypoint path on screen (<see cref="CnCNew.Presentation.Input.WaypointPath"/> projected): <see cref="Points"/>[0] is the unit, every further
+/// point a station with its marker. A point behind the camera ends the path there.
+/// </summary>
+public sealed record WaypointPathOverlay(EntityId Unit, ImmutableArray<Vector2> Points);
+
+/// <summary>A fading marker where an order was just given; <see cref="Age"/> runs from 0 (given) to 1 (gone).</summary>
+public sealed record OrderHintMarker(CnCNew.Presentation.Input.OrderHintKind Kind, Vector2 Screen, float Age);
+
 /// <summary>The construction ghost footprint while <see cref="CnCNew.Presentation.Input.CommandModeKind.Placement"/> is active.</summary>
 public sealed record PlacementGhostOverlay(bool Active, ImmutableArray<Vector2> FootprintScreen, bool IsValid)
 {
@@ -44,7 +53,9 @@ public sealed record HudOverlay(
     PlacementGhostOverlay Placement,
     string? HintText,
     ImmutableArray<string> Ticker,
-    ImmutableArray<HealIconMarker> HealIcons = default)
+    ImmutableArray<HealIconMarker> HealIcons = default,
+    ImmutableArray<WaypointPathOverlay> WaypointPaths = default,
+    ImmutableArray<OrderHintMarker> OrderHints = default)
 {
     public static readonly HudOverlay Empty = new(SelectionBoxOverlay.None, [], [], [], PlacementGhostOverlay.None, null, [], []);
 }

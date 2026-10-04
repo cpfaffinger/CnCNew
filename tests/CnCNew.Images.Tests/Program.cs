@@ -18,6 +18,7 @@ var rleImage = TgaReader.Read(rle);
 Assert(rleImage.RgbaPixels.SequenceEqual(new byte[] { 10, 20, 30, 40, 10, 20, 30, 40 }), "TGA RLE decode failed.");
 
 Console.WriteLine("All TGA image tests passed.");
+CnCNew.Images.Tests.CursorReaderTests.Run();
 return 0;
 
 static MemoryStream CreateTga(ushort width, ushort height, byte imageType, byte bitsPerPixel, byte descriptor, byte[] payload)
