@@ -1305,7 +1305,7 @@ Drei Verhaltenslücken, die die gestellten Demos (`docs/DEMO-SCENARIOS.md`) aufd
 - **Flügelflug und Flugplatzgeometrie** (`docs/SIM-JET-FLIGHT.md`): `Appearance = WINGS` fliegt mit Mindestgeschwindigkeit, begrenzter Kurvenrate und kreist bei `CirclingRadius`; die Start- und Landebahn
   des Flugplatzes kommt aus einer eingespeisten Knochentabelle der Flugplatzmodelle (`ModelGeometry`, Teil von `GameData.Fingerprint`).
 
-## 32. Nachtrag Phase 16 (4. Oktober 2026): Feuerstufen, Vorangriff, beschädigte Locomotoren, Versorgungszentrum der KI, KI-Übersicht neu
+## 32. Nachtrag Phase 16 (4. Oktober 2026): Feuerstufen, Vorangriff, beschädigte Locomotoren, Versorgungszentrum und Angriffsgruppen der KI, KI-Übersicht neu
 
 Fachdokumente: `docs/SIM-FIRING-TRACKER.md` (Feuerstufen `CONTINUOUS_FIRE_*` als Waffenbonus, `PreAttackDelay`, `SpeedDamaged` und Geschwister, `CaptureFlash`, Fähigkeit beendet Angriff) und
 `docs/SIM-TURRET-AIM.md` §8a (Aufschlüsselung der KI-Verschiebung nach Effekten). Außerdem: `StructureToppleUpdate` erreicht seinen Endzustand (Winkel und Winkelgeschwindigkeit mit 32 zusätzlichen
@@ -1327,35 +1327,38 @@ je 100 Sekunden; beide Seiten standen nach wenigen Minuten bei 0 Credits und fü
   `SUPPLY_CENTER_CLOSE_DIST`), mit Fußabdruck-, Abstands- und Erreichbarkeitsprüfung. Ein unerkundeter Platz kann nicht bebaut werden (`ConstructCommand`): der Bauarbeiter fährt zuerst hin.
 * Ohne jedes Lager auf der Karte bleibt es bei den Ringen um die Basis. Das zweite Versorgungszentrum (ab zehn Armee-Einheiten) entsteht am nächsten freien Lager.
 
-**Wirkung** (Alpine Assault, China gegen GLA, `--trace 3000`): Strecke 128 bzw. 107 statt 587 bzw. 393; China gewinnt bei Tick 7.425 statt Patt.
+**Wirkung** (Alpine Assault, China gegen GLA, `--trace 3000`): Strecke 128 bzw. 107 statt 587 bzw. 393; China gewinnt bei Tick 7.425 statt Patt. Über die 16 Läufe: 10 statt 5 entschieden.
 
 ### Die 16 KI-Läufe (§19) neu, 4. Oktober 2026
 
 Gleiche Aufrufe wie in §19 (`--max-ticks 45000`, Standardseeds); jeder Lauf ist mit Lauf 2 und Snapshot-Fortsetzung identisch.
 
-| Karte | Paarung | erste Turmfassung (`8b8c8a7`) | Angriffszustand (`2b854d3`) | + Feuerstufen, Vorangriff | **jetzt** (+ beschädigte Locomotoren, Versorgungszentrum am Lager) | Endhash jetzt |
-|---|---|---|---|---|---|---|
-| Alpine Assault | China, GLA | China, Tick 43.965 | Patt bei 45.000 | Patt bei 45.000 | **China, Tick 7.425** | `CAB11ACEBEA47470` |
-| Alpine Assault | America, China | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **America, Tick 15.615** | `1A9267A8EEF2EAA8` |
-| Alpine Assault | GLA, America | America, Tick 12.120 | America, Tick 12.120 | America, Tick 12.120 | **America, Tick 9.135** | `E56ECA16D82FA20F` |
-| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **AmericaAirForceGeneral, Tick 18.120** | `EF3658FB794B1C4C` |
-| Armored Fury | China, GLA | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **Patt bei 45.000** | `D743200D61491232` |
-| Armored Fury | America, China | America, Tick 41.130 | America, Tick 36.375 | Patt bei 45.000 | **Patt bei 45.000** | `E15B7A70601C93AE` |
-| Armored Fury | GLA, America | America, Tick 22.410 | America, Tick 22.410 | America, Tick 22.410 | **America, Tick 27.600** | `CBBC612409469FBA` |
-| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | AmericaAirForceGeneral, Tick 9.405 | AmericaAirForceGeneral, Tick 9.405 | AmericaAirForceGeneral, Tick 9.405 | **Patt bei 45.000** | `D6587AE968F07FFF` |
-| Bitter Winter | China, GLA | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **China, Tick 15.435** | `82E01EBEC816841F` |
-| Bitter Winter | America, China | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **Patt bei 45.000** | `03499BD06FF9C1CC` |
-| Bitter Winter | GLA, America | America, Tick 14.565 | America, Tick 14.565 | America, Tick 14.565 | **America, Tick 10.800** | `732AF6D282E6DC10` |
-| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **Patt bei 45.000** | `5A2F510B9CADF659` |
-| Death Valley | China, GLA | China, Tick 8.805 | China, Tick 8.805 | China, Tick 8.805 | **China, Tick 7.350** | `75FA305CF053D492` |
-| Death Valley | America, China | Patt bei 45.000 | China, Tick 35.985 | Patt bei 45.000 | **America, Tick 16.260** | `7B9AE45E367B03C1` |
-| Death Valley | GLA, America | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **America, Tick 10.110** | `910EB70953A07496` |
-| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **Patt bei 45.000** | `1BA362FAF60C0C48` |
+| Karte | Paarung | erste Turmfassung (`8b8c8a7`) | Angriffszustand (`2b854d3`) | + Feuerstufen, Vorangriff | + beschädigte Locomotoren, Versorgungszentrum am Lager | **jetzt** (+ Angriff in Gruppen) | Endhash jetzt |
+|---|---|---|---|---|---|---|---|
+| Alpine Assault | China, GLA | China, Tick 43.965 | Patt bei 45.000 | Patt bei 45.000 | China, Tick 7.425 | **China, Tick 7.545** | `39344016A5EE8F91` |
+| Alpine Assault | America, China | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | America, Tick 15.615 | **America, Tick 16.800** | `745839146322DDE6` |
+| Alpine Assault | GLA, America | America, Tick 12.120 | America, Tick 12.120 | America, Tick 12.120 | America, Tick 9.135 | **America, Tick 10.740** | `DDDFE22494F29A34` |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | AmericaAirForceGeneral, Tick 18.120 | **Patt bei 45.000** | `3CD8D8C4D53675C0` |
+| Armored Fury | China, GLA | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **China, Tick 11.460** | `6CAD71B81D3CE47A` |
+| Armored Fury | America, China | America, Tick 41.130 | America, Tick 36.375 | Patt bei 45.000 | Patt bei 45.000 | **America, Tick 33.255** | `63486D2572E76BCE` |
+| Armored Fury | GLA, America | America, Tick 22.410 | America, Tick 22.410 | America, Tick 22.410 | America, Tick 27.600 | **America, Tick 40.260** | `9801D2537695316C` |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | AmericaAirForceGeneral, Tick 9.405 | AmericaAirForceGeneral, Tick 9.405 | AmericaAirForceGeneral, Tick 9.405 | Patt bei 45.000 | **Patt bei 45.000** | `E5ED792B12D35CC0` |
+| Bitter Winter | China, GLA | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | China, Tick 15.435 | **China, Tick 12.930** | `CB890471FCB4B084` |
+| Bitter Winter | America, China | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **Patt bei 45.000** | `0FDEB99B1DEFAAA6` |
+| Bitter Winter | GLA, America | America, Tick 14.565 | America, Tick 14.565 | America, Tick 14.565 | America, Tick 10.800 | **America, Tick 14.430** | `A3A6295689F3F0E5` |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **Patt bei 45.000** | `0EC68A99E3ED5ACD` |
+| Death Valley | China, GLA | China, Tick 8.805 | China, Tick 8.805 | China, Tick 8.805 | China, Tick 7.350 | **China, Tick 11.160** | `DA30DBBC2434E499` |
+| Death Valley | America, China | Patt bei 45.000 | China, Tick 35.985 | Patt bei 45.000 | America, Tick 16.260 | **China, Tick 9.975** | `8DB4AA743B8F349A` |
+| Death Valley | GLA, America | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | America, Tick 10.110 | **America, Tick 13.755** | `2992C9E0876B2C95` |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **AmericaAirForceGeneral, Tick 32.280** | `C443660F229E157E` |
 
-Entschiedene Läufe: 7, 7, 5, **10** von 16. Die frühere Tabelle „Phase 10“ (16 von 16 entschieden) ist seit der Wegsuche um stehende Einheiten (Phase 15) überholt und wurde bis jetzt nicht neu erhoben.
-Die sechs verbleibenden Patts haben ein anderes Muster als vorher: die Kassen sind nicht mehr leer, aber eine Seite verliert Bauarbeiter und Versorgungszentrum und kann nicht nachbauen, während die andere mit
-8 bis 12 Einheiten unter ihrer Angriffsschwelle bleibt (Armored Fury, China gegen GLA: China ab Tick 25.000 ohne Dozer, GLA produziert 236 Einheiten und führt eine Welle). Das ist Verhalten der KI
-(Angriffsschwelle, Abschluss eines gewonnenen Spiels, Ersatz verlorener Bauarbeiter) und Gegenstand von Phase 17. Keine Balance-Aussage.
+Entschiedene Läufe: 7, 7, 5, 10, **12** von 16. Die frühere Tabelle „Phase 10“ (16 von 16 entschieden) ist seit der Wegsuche um stehende Einheiten (Phase 15) überholt und wurde bis jetzt nicht neu erhoben.
+**Angriff in Gruppen.** Nach dem Versorgungszentrum blieben sechs Patts mit anderem Muster: die Kassen waren nicht mehr leer, aber die während eines Angriffs produzierten Einheiten liefen einzeln in die
+gegnerische Verteidigung (Armored Fury, China gegen GLA: GLA produzierte 236 Einheiten und zählte eine einzige Welle, weil der Angriff nie endete). Die Referenz schickt Teams; `SkirmishAi.CommandArmy` führt
+deshalb jetzt die Welle als Menge der gemeinsam losmarschierten Einheiten: Nachzügler sammeln sich am Sammelpunkt und folgen, sobald sie mindestens die halbe Angriffsschwelle sind; die Welle gilt als
+gebrochen, wenn von ihr weniger als ein Drittel der Schwelle (mindestens drei) übrig ist. Verteidigung (`FindThreat`) nimmt weiter alle. Wirkung: 12 statt 10 entschiedene Läufe – drei gewonnen
+(Armored Fury China/GLA und America/China, Death Valley Tank/AirForce), einer verloren (Alpine Assault Tank/AirForce). Bei 16 Läufen ist das kein starker Beleg; übernommen wurde es, weil es dem Vorbild näher ist.
+Die vier verbleibenden Patts (dreimal ChinaTankGeneral gegen AmericaAirForceGeneral, Bitter Winter America/China) sind Gegenstand von Phase 17. Keine Balance-Aussage.
 
 Weitere Referenzwerte (4. Oktober 2026, `SimTool` Release, Welt-Fingerabdruck mit Bone-Tabelle `CC9641FC1D68F326…`):
 
@@ -1363,9 +1366,9 @@ Weitere Referenzwerte (4. Oktober 2026, `SimTool` Release, Welt-Fingerabdruck mi
 |---|---|
 | `reference-match` | Sieger FactionGLA, Tick 13.500, Endhash `0946FB676DEC615C`, Kette `EA6D12F180930D71`; Lauf 2 und Snapshot-Fortsetzung identisch |
 | `stress` (216.000 Ticks) | Endhash `56882F763EABEF67`, Kette `B8E663493F2C73D5` (unverändert) |
-| `ai-match` Alpine Assault, China/GLA | China, Tick 7.425, Endhash `CAB11ACEBEA47470`, Kette `AD81D8B9B8FCAF0C` |
-| `ai-match` Alpine Assault, AmericaAirForceGeneral/China | Patt, Endhash `FA0D831DC6689587`, Kette `D57CB95DD2075D54` |
-| `ai-match` Alpine Assault, America/GLA | America, Tick 15.030, Endhash `7F1B028B02BC50E2`, Kette `16474B85D1090A45` |
+| `ai-match` Alpine Assault, China/GLA | China, Tick 7.545, Endhash `39344016A5EE8F91`, Kette `FFF843E719A2C2DD` |
+| `ai-match` Alpine Assault, AmericaAirForceGeneral/China | Patt, Endhash `E222322067493EB4`, Kette `F6ED83919F0E7C8F` |
+| `ai-match` Alpine Assault, America/GLA | GLA, Tick 8.865, Endhash `542BE1D4891FEB71`, Kette `0B244A5DD2471633` |
 
 Der Weg des Referenzspiels über diesen Tag: Tick 15.000 (`01C01E3B91EAE18C`) → 14.490 (`1104C4CD97A0D4CA`; Feuerstufen und Vorangriffsverzögerung) → 13.500 (beschädigte Locomotoren). Das Referenzszenario benutzt
 `SkirmishAi` nicht; die Bone-Tabelle der Werkzeuge und die Fähigkeitsregel änderten es nicht.
