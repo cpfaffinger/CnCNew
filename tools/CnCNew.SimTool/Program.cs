@@ -35,7 +35,7 @@ const string Usage = """
       hash <replay.bin>                                    run a replay and print final hash and hash-chain digest
       reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--out replay.bin] [--diagnose]
                                                            headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
-      ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin]
+      ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin] [--trace N]
                                                            skirmish AIs on a real map: record, two fresh runs, snapshot continuation
       skirmish-sweep <content-dir> [--max-ticks N]        starts a short two-AI skirmish on every map with >= 2 start positions;
                                                            reports which start and end (by victory or the tick budget) without crashing
@@ -377,7 +377,37 @@ static int AiMatch(string directory, string[] args)
         Console.WriteLine($"  {participant.Faction.Name} (side {participant.Side}): base {participant.BaseBuilding}{(participant.Substitution is null ? "" : $" [stand-in, {participant.Substitution}]")}");
 
     var scenario = new SkirmishMatchScenario(options);
-    var recorded = scenario.Record(catalog, fingerprint, terrain, map.Objects, chosen);
+    // --trace N: every N ticks one line per player (money, structures, army, harvesters, attack waves) and the supply boxes left on the map: where a match's economy and armies go over time.
+    var trace = Arg(args, "--trace") is { } every ? long.Parse(every, CultureInfo.InvariantCulture) : 0;
+    var recorded = scenario.Record(catalog, fingerprint, terrain, map.Objects, chosen, trace <= 0 ? null : session =>
+    {
+        var world = session.World;
+        if (world.Tick % trace != 0) return;
+        var boxes = world.Entities.Sum(entity => (long)CnCNew.Simulation.Views.EntityPresentationView.WarehouseSupplyBoxes(entity));
+        var line = new System.Text.StringBuilder($"  trace {world.Tick,6}: map boxes {boxes,5}");
+        for (var index = 0; index < session.Players.Length; index++)
+        {
+            var player = session.Players[index];
+            var own = world.Entities.Where(entity => entity.Owner == player.Id && !entity.EffectivelyDead).ToList();
+            var structures = own.Count(entity => entity.Template.IsKindOf("STRUCTURE"));
+            var harvesters = own.Count(entity => entity.Template.IsKindOf("HARVESTER"));
+            var builders = own.Count(entity => entity.Template.IsKindOf("DOZER"));
+            var army = own.Count - structures - harvesters - builders;
+            var stats = session.Ais[index]?.Stats;
+            // How far the nearest stocked warehouse is from the player's nearest supply center (cash generators): the length of a gathering trip.
+            var trip = -1L;
+            foreach (var center in own.Where(entity => entity.Template.IsKindOf("CASH_GENERATOR") && entity.Template.IsKindOf("STRUCTURE")))
+                foreach (var warehouse in world.Entities.Where(entity => CnCNew.Simulation.Views.EntityPresentationView.WarehouseSupplyBoxes(entity) > 0))
+                {
+                    var dx = (warehouse.X - center.X).ToDecimal();
+                    var dy = (warehouse.Y - center.Y).ToDecimal();
+                    var distance = (long)Math.Sqrt((double)(dx * dx + dy * dy));
+                    if (trip < 0 || distance < trip) trip = distance;
+                }
+            line.Append($" | {player.Faction?.Replace("Faction", string.Empty)}: ${(long)world.MoneyOf(player.Id).Floor(),6} bld {structures,2} army {army,3} harv {harvesters,2} doz {builders} trip {trip,4} waves {stats?.Waves ?? 0} prod {stats?.Productions ?? 0}");
+        }
+        Console.WriteLine(line.ToString());
+    });
     Console.WriteLine($"Recorded {recorded.Commands.Length} commands over {recorded.Header.EndTick} ticks in {watch.Elapsed.TotalSeconds:F1} s; {scenario.WarehousesSpawned} map warehouses spawned.");
     foreach (var note in scenario.Notes) Console.WriteLine($"  note: {note}");
     for (var index = 0; index < scenario.Ais.Length; index++)

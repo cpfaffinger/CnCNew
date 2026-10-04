@@ -427,7 +427,7 @@ public sealed class SkirmishAi
         if (CountAlive(Role.Power, true) < 1) goals.Add(Role.Power);
         if (CountAlive(Role.Barracks, true) < 1) goals.Add(Role.Barracks);
         if (CountAlive(Role.Factory, true) < 1) goals.Add(Role.Factory);
-        if (CountAlive(Role.SupplyCenter, true) < 2 && army >= 10 && _warehouses.Count > 1) goals.Add(Role.SupplyCenter);
+        if (CountAlive(Role.SupplyCenter, true) < 2 && army >= 10 && FindSupplySource() is not null) goals.Add(Role.SupplyCenter);
         if (CountAlive(Role.Power, true) < 2 && producers >= 3) goals.Add(Role.Power);
         if (CountAlive(Role.Barracks, true) < 2 && _budget > Fixed.FromInt(1200)) goals.Add(Role.Barracks);
         if (CountAlive(Role.Factory, true) < 2 && _budget > Fixed.FromInt(1500)) goals.Add(Role.Factory);
@@ -509,7 +509,7 @@ public sealed class SkirmishAi
                 break;
             }
             if (Backoff(unchecked(0x40000000u + (uint)next.Index), RetryTicks)) continue;
-            var spot = FindPlacement(next, builder);
+            var spot = (RoleOf(next) & Role.SupplyCenter) != 0 ? FindSupplyPlacement(next, builder, used) : FindPlacement(next, builder);
             if (spot is null) continue;
             var (x, y) = spot.Value;
             var result = Send(sequence => new ConstructCommand(_player, sequence, _tick, builder.Id, next.Name, x, y, Fixed.Zero));
@@ -559,6 +559,119 @@ public sealed class SkirmishAi
                 if (_world.Navigation is { } grid && !Reachable(grid, builder, x, y)) continue;
                 return (x, y);
             }
+        }
+        return null;
+    }
+
+    /// <summary><c>SUPPLY_CENTER_CLOSE_DIST</c> (AIPlayer.cpp): 20 pathfinding cells.</summary>
+    private static readonly Fixed SupplyCenterCloseDistance = Fixed.FromInt(20 * TerrainMap.CellSize);
+
+    /// <summary>The cash a supply source should still hold to be worth a supply center; halved until a source qualifies (<c>findSupplyCenter</c>'s loop down to 100).</summary>
+    private const long SupplySourceMinimumCash = 1000;
+
+    /// <summary>
+    /// <c>AIPlayer::findSupplyCenter</c>: the stocked warehouse nearest to the base that is not an enemy's, has no own supply center within <see cref="SupplyCenterCloseDistance"/>
+    /// and is not much closer to the enemy than to us ("closer than 60/40 to enemy than to us"). Like the reference's computer player this looks at every warehouse on the map,
+    /// seen or not; the enemy's base is only what this player has seen of it.
+    /// </summary>
+    private Entity? FindSupplySource()
+    {
+        (Fixed X, Fixed Y)? enemyCenter = null;
+        var enemyStructures = _enemies.Values.Where(value => value.IsStructure).ToList();
+        if (enemyStructures.Count > 0)
+        {
+            var minX = enemyStructures.Min(value => value.X.Raw);
+            var maxX = enemyStructures.Max(value => value.X.Raw);
+            var minY = enemyStructures.Min(value => value.Y.Raw);
+            var maxY = enemyStructures.Max(value => value.Y.Raw);
+            enemyCenter = (Fixed.FromRaw((minX + maxX) / 2), Fixed.FromRaw((minY + maxY) / 2));
+        }
+
+        for (var minimumCash = SupplySourceMinimumCash; minimumCash > 100; minimumCash /= 2)
+        {
+            Entity? best = null;
+            var bestDistance = Fixed.MaxValue;
+            foreach (var entity in _world.Entities.OrderBy(value => value.Id.Value))
+            {
+                if ((RoleOf(entity.Template) & Role.Warehouse) == 0 || entity.EffectivelyDead || entity.DestroyRequested) continue;
+                if ((long)Views.EntityPresentationView.WarehouseSupplyBoxes(entity) * _catalog.ValuePerSupplyBox < minimumCash) continue;
+                if (!entity.Owner.IsSystem && _world.AreEnemies(_player, entity.Owner)) continue;
+                var reach = SupplyCenterCloseDistance + entity.Template.BoundingCircleRadius;
+                var taken = false;
+                foreach (var own in _structures.Concat(_sites))
+                {
+                    if ((RoleOf(own.Template) & Role.SupplyCenter) == 0) continue;
+                    var limit = reach + own.Template.BoundingCircleRadius;
+                    if (DistanceSquared(own.X, own.Y, entity.X, entity.Y) <= limit * limit) { taken = true; break; }
+                }
+                if (taken) continue;
+                var distance = DistanceSquared(entity.X, entity.Y, _options.HomeX, _options.HomeY);
+                if (enemyCenter is { } enemy && distance * Fixed.FromInt(4) > DistanceSquared(entity.X, entity.Y, enemy.X, enemy.Y) * Fixed.FromInt(6)) continue;
+                if (distance < bestDistance) { best = entity; bestDistance = distance; }
+            }
+            if (best is not null) return best;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::buildBySupplies</c>: a supply center goes next to a supply source — three cells from the warehouse toward the base, and if that spot is not legal the first legal
+    /// one on growing squares around it (two cells wider each time, up to twice <see cref="SupplyCenterCloseDistance"/>). A spot the player has not explored yet cannot be built on
+    /// (<c>ConstructCommand</c>), so the builder is first sent there to look. Without any supply source on the map the center goes up at the base like every other structure.
+    /// </summary>
+    private (Fixed X, Fixed Y)? FindSupplyPlacement(ObjectTemplate template, Entity builder, HashSet<uint> used)
+    {
+        if (FindSupplySource() is not { } source) return FindPlacement(template, builder);
+        var dx = source.X - _options.HomeX;
+        var dy = source.Y - _options.HomeY;
+        var length = Fixed.Sqrt(dx * dx + dy * dy);
+        var back = Fixed.FromInt(3 * TerrainMap.CellSize);
+        var originX = length > Fixed.Zero ? source.X - dx / length * back : source.X;
+        var originY = length > Fixed.Zero ? source.Y - dy / length * back : source.Y;
+        if (!_world.IsPositionExploredBy(_player, originX, originY))
+        {
+            // Look first: the builder walks to the source; the placement is tried again once the ground is known.
+            if (!Backoff(unchecked(0x48000000u + builder.Id.Value), 150)
+                && Send(sequence => new SetMoveTargetCommand(_player, sequence, _tick, builder.Id, originX, originY)).Accepted)
+            {
+                used.Add(builder.Id.Value);
+                Stats.MoveOrders++;
+            }
+            return null;
+        }
+
+        var radius = template.BoundingCircleRadius;
+        var gap = Fixed.FromInt(12);
+        var checks = 0;
+        var paths = 0;
+        (Fixed X, Fixed Y)? Try(Fixed x, Fixed y)
+        {
+            if (++checks > PlacementChecksPerThink) return null;
+            foreach (var entity in _structures) if (Clash(entity, radius, gap, x, y)) return null;
+            foreach (var entity in _sites) if (Clash(entity, radius, gap, x, y)) return null;
+            foreach (var (spotX, spotY) in _badSpots) if (DistanceSquared(spotX, spotY, x, y) < Fixed.FromInt(900)) return null;
+            if (_world.Navigation is { } navigation && !navigation.IsFootprintLegal(template, x, y, Fixed.Zero)) return null;
+            if (!_world.IsPositionExploredBy(_player, x, y)) return null;
+            if (_world.Navigation is { } grid && (++paths > 12 || !Reachable(grid, builder, x, y))) return null;
+            return (x, y);
+        }
+
+        if (Try(originX, originY) is { } direct) return direct;
+        var cell = Fixed.FromInt(TerrainMap.CellSize);
+        for (var size = Fixed.Zero; size < SupplyCenterCloseDistance * Fixed.FromInt(2); size += cell * Fixed.FromInt(2))
+        {
+            var half = size / Fixed.FromInt(2);
+            for (var x = originX - half; x <= originX + half; x += cell)
+            {
+                if (Try(x, originY - half) is { } low) return low;
+                if (Try(x, originY - half + size) is { } high) return high;
+            }
+            for (var y = originY - half; y <= originY + half; y += cell)
+            {
+                if (Try(originX - half, y) is { } left) return left;
+                if (Try(originX - half + size, y) is { } right) return right;
+            }
+            if (checks > PlacementChecksPerThink) break;
         }
         return null;
     }

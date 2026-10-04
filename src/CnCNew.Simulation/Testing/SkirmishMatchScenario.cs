@@ -44,10 +44,15 @@ public sealed class SkirmishMatchScenario
     public static string FamilyPrefix(FactionInfo faction) => SkirmishMatchSession.FamilyPrefix(faction);
 
     /// <summary>Plays the match and returns the recorded replay (without checkpoints).</summary>
-    public ReplayFile Record(TemplateCatalog catalog, string fingerprint, TerrainMap terrain, ImmutableArray<MapObject> mapObjects, ImmutableArray<MatchParticipant> participants)
+    public ReplayFile Record(TemplateCatalog catalog, string fingerprint, TerrainMap terrain, ImmutableArray<MapObject> mapObjects, ImmutableArray<MatchParticipant> participants,
+        Action<SkirmishMatchSession>? afterTick = null)
     {
         var session = SkirmishMatchSession.Start(_options, catalog, fingerprint, terrain, mapObjects, [..participants.Select(participant => new SkirmishSlot(participant))]);
-        while (!session.IsOver) session.Step();
+        while (!session.IsOver)
+        {
+            session.Step();
+            afterTick?.Invoke(session);
+        }
         var world = session.World;
         Players = session.Players;
         Ais = [..session.Ais.Select(ai => ai!)];
