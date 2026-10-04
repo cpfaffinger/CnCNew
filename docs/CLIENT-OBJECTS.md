@@ -142,21 +142,17 @@ Modelle, Texturen oder Animationen auf.
 Stand Phase 15 (neu gemessen mit `PresentationTool model-audit`, siehe unten); frühere Einträge zu schwarzen
 Rückseiten und fehlenden Türmen sind durch die Phase-15-Korrekturen überholt.
 
-- **Nicht gesetzte Modellzustände:** 54 der 106 in den Zuständen benannten `ModelCondition`-Namen setzt die
-  Präsentation nie (`model-audit` listet sie mit Zahl der betroffenen Objekte). Die sichtbarsten:
-  `DOOR_1_OPENING/CLOSING/WAITING_OPEN` (Fabrik-/Flugfeldtüren, Kommandozentrale), `PREATTACK_A/B/C`
-  (Anschlag der Infanterie), `PACKING/UNPACKING`, `FREEFALL`, `EXPLODED_BOUNCING/FLAILING`,
-  `SPECIAL_CHEERING`, `RAISING_FLAG`, `PANICKING`, `JETAFTERBURNER/JETEXHAUST`, `JAMMED`,
-  `TURRET_ROTATE`, `POST_COLLAPSE`. Das heißt: Türen öffnen sich nicht, Infanterie zeigt keine
-  Anschlagshaltung, Jets keinen Nachbrenner. Die Modelle haben diese Zustände, sie werden aber nicht
-  ausgelöst; die Simulation liefert für Türen/Vorangriff keinen Zustand.
-- **Federung und Lenkung fehlen:** `W3DTruckDraw`/`W3DTankDraw` bewegen außer den Reifen auch Lenkachsen
-  und Federungsbones (Schaukeln bei Beschleunigung). Nur die Raddrehung ist gebaut.
-- **Straßen werden nicht gezeichnet**, der `GlobalLighting`-Chunk der Karte wird übersprungen: die
-  Objektbeleuchtung kommt aus `GameData` (`TerrainObjectsLighting*`), nicht aus der Karte.
-- **Verhüllung nur für Szenerie:** Kartenobjekte ohne Simulationsentität werden bis zur Erkundung ihres
-  Bodens ausgeblendet; im Nebel (erkundet, nicht sichtbar) werden **Objekte nicht abgedunkelt** – die
-  Abdunklung kommt allein vom Nebel-Layer des Geländes.
+- **Nicht gesetzte Modellzustände:** nach den Zusatzarbeiten vom 4. Oktober 2026 setzt die Präsentation 95 von 106 Zustandsnamen (vorher 52; Einzelheiten und Näherungen in
+  `docs/MODEL-CONDITIONS-BUILDINGS.md`, `docs/MODEL-CONDITIONS-UNITS.md`). Elf bleiben ungesetzt, jeweils weil die Simulation das Verhalten nicht kennt: `PREATTACK_A/B/C` (keine
+  Vorangriffsverzögerung), `EXPLODED_BOUNCING/FLAILING` (nichts wird weggeschleudert), `JAMMED` (kein Störsender), `RAISING_FLAG` (die Fähigkeit „Gebäude einnehmen“ ist nicht gestuft),
+  `PANICKING`, `RAPPELLING` (kein Seilabstieg), `PREORDER` (Online-Profilmerkmal), `DOCKING_BEGINNING` (Ein- und Ausfahrt fallen in einen Tick). Türen von Fabriken sind eine
+  Näherung (die Simulation hat keine Tür; die Öffnung beginnt `DoorOpeningTime` vor dem Erscheinen der Einheit).
+- **Federung und Lenkung** sind seit dem 4. Oktober 2026 gebaut (`SuspensionTracker`: Neigung zum Gelände und beim Beschleunigen, Lenkwinkel, vier Federwege, Kabinenschwung); es fehlen
+  der Hubeffekt beim Überrollen, der Powerslide und die Wegbegrenzung der Kabine.
+- **Straßen** werden gezeichnet (`docs/CLIENT-ROADS.md`); der `GlobalLighting`-Chunk der Karte wird weiter übersprungen: die Objektbeleuchtung kommt aus `GameData`
+  (`TerrainObjectsLighting*`), nicht aus der Karte.
+- **Nebel:** Kartenobjekte ohne Simulationsentität werden bis zur Erkundung ihres Bodens ausgeblendet; erinnerte Gebäude und erkundete, gerade nicht sichtbare Szenerie werden
+  abgedunkelt (`DrawableInstance.Fogged`, Helligkeit 0,25 wie der quadrierte Nebelwert des Geländes; Prüfhilfe `CNCNEW_OBJECT_FOG=1`). Geskinnte Teile (Infanterie) werden nicht abgedunkelt.
 - Kamera-ausgerichtete Billboards, HLOD-Aggregate/-Proxies werden nicht gezeichnet (gezählt in
   `W3dModel.UnresolvedSubObjects`/`Aggregates`/`Proxies`; `model-audit`: 10 Modelle mit nicht
   auflösbaren Einträgen; 47 Modelle laden nicht, weil die Datei in den Assets fehlt – Kartenszenerie `cb…`).
@@ -270,7 +266,7 @@ Ursachenanalyse oben (Puffer, Windung, Licht), keine Zahl.
 | Dreiecke | 1.585.417 gesamt, **1.585.401 gezeichnet**, 16 standardmäßig versteckt, 0 im Renderplan verloren |
 | zweiseitig gezeichnete Teile | 246 |
 | nie gezeigte versteckte Unterobjekte | 4 (`NBGATTLING.MUZZLEFX01/02`, `UBUNDTUNN(_S).BARRELFX01`) |
-| Modellzustände nie gesetzt | 54 von 106 Namen (Liste in den Einschränkungen) |
+| Modellzustände nie gesetzt | 11 von 106 Namen (vorher 54; Liste in den Einschränkungen) |
 
 ## Gemessene Zahlen (Alpine Assault, `.local/phase2-import-a`, neu messen bei Bedarf)
 
