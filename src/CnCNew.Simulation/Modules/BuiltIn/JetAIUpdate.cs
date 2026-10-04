@@ -63,8 +63,8 @@ public sealed record JetAIData(AIUpdateData Base, Fixed OutOfAmmoDamageRatePerSe
 /// <b>Kinematics instead of physics and pathfinding</b>: ground movement follows straight segments between the layout points at the taxi locomotor's speed (turning in place at its turn
 /// rate, stopping on the spot — its braking is huge); take-off and landing set the height as a function of the covered distance (the reference's lift ramp
 /// <c>m_maxLift · ratio²</c> and the glide to the runway); free flight is the ordinary air movement of <see cref="AIUpdateInterface"/> with the height approaching the locomotor's
-/// <c>PreferredHeight</c> by the locomotor's lift (net of gravity) and a quarter of its speed on the way down. An aircraft that has nothing to do holds its position in the air instead of
-/// circling; the landing aligns the heading to the runway at its start (no turn onto the approach). Not modeled: the interrupt-and-resume of a guard/hunt order for reloading (there are no
+/// <c>PreferredHeight</c> by the locomotor's lift (net of gravity) and a quarter of its speed on the way down. A fixed-wing aircraft (WINGS locomotor) flies with a minimum speed, a limited turn rate and circles when it has nothing to do (<c>JetAIUpdate.Flight.cs</c>,
+/// <c>docs/SIM-JET-FLIGHT.md</c>); every other aircraft holds its position in the air; the landing aligns the heading to the runway at its start (no turn onto the approach). Not modeled: the interrupt-and-resume of a guard/hunt order for reloading (there are no
 /// such orders), <c>notifyVictimIsDead</c> (no attack state), the lock-on cursor, afterburners and landing sounds, aircraft-carrier decks, the sneaky targeting offset, the progressive
 /// refill of the clip while reloading (the clip is full when the reload time is over).
 /// </summary>
