@@ -18,6 +18,9 @@ internal sealed class W3dMaterialFactory(
     /// </summary>
     public float Dim { get; set; } = 1f;
 
+    /// <summary>A colour factor on the surface of every material created while it is not one (a flashing object, <c>Layers.Objects.FlashTint</c>); multiplies with <see cref="Dim"/>. Set by the caller around <see cref="Create"/>.</summary>
+    public System.Numerics.Vector3 Tint { get; set; } = System.Numerics.Vector3.One;
+
     public Material Create(W3dMesh mesh, W3dRenderBatch batch)
     {
         if (batch.Passes.Count == 0)
@@ -78,9 +81,10 @@ internal sealed class W3dMaterialFactory(
                 source.EffectiveDetailAlphaFunction);
         }
 
-        if (Dim < 1f)
+        var factor = Tint * Dim;
+        if (factor != System.Numerics.Vector3.One)
         {
-            surface = SubstituteAlpha(new ComputeBinaryColor(surface, new ComputeColor(new Color4(Dim, Dim, Dim, 1f)), BinaryOperator.Multiply), surface);
+            surface = SubstituteAlpha(new ComputeBinaryColor(surface, new ComputeColor(new Color4(factor.X, factor.Y, factor.Z, 1f)), BinaryOperator.Multiply), surface);
         }
 
         var attributes = new MaterialAttributes

@@ -89,6 +89,8 @@ internal sealed class ModelAsset
     private readonly Dictionary<uint, Model> _teamModels = [];
     private readonly Dictionary<(int MaterialIndex, uint TeamHex), Material> _teamMaterials = [];
     private readonly Dictionary<(int MaterialIndex, uint TeamHex), Material> _dimmedMaterials = [];
+    private readonly Dictionary<(int MaterialIndex, uint TeamHex, bool Dimmed, uint Flash), Material> _flashMaterials = [];
+    private readonly Dictionary<(int SkinPart, int Batch, uint Flash), Material> _flashSkinMaterials = [];
 
     /// <summary>The brightness of an object in the fog (a fog level of one half squared for the linear pipeline, as the terrain layer does).</summary>
     public const float FogBrightness = 0.25f;
@@ -149,10 +151,11 @@ internal sealed class ModelAsset
     /// The material to use for slot <paramref name="materialIndex"/> for a team, if it samples a ZHC texture or the object is in the fog (<paramref name="dimmed"/>: the same
     /// material darkened by <see cref="FogBrightness"/>, built lazily and cached); else null (use the shared one).
     /// </summary>
-    public Material? GetTeamMaterial(int materialIndex, ColorValue team, bool dimmed = false)
+    public Material? GetTeamMaterial(int materialIndex, ColorValue team, bool dimmed = false, uint flash = FlashTint.None)
     {
         var info = FindByMaterialIndex(materialIndex);
         if (info is null) return null;
+        if (flash != FlashTint.None) return GetFlashMaterial(materialIndex, info, team, dimmed, flash);
         if (dimmed) return GetDimmedMaterial(materialIndex, info, team);
         if (!info.UsesHouseColorTexture) return null;
         var key = (materialIndex, Hex(team));
@@ -169,6 +172,51 @@ internal sealed class ModelAsset
         }
 
         _teamMaterials[key] = built;
+        return built;
+    }
+
+    /// <summary>The material of slot <paramref name="materialIndex"/> with the flash factor <paramref name="flash"/> (<see cref="FlashTint"/>) on its surface, built lazily and cached: a flash has four levels per colour.</summary>
+    private Material GetFlashMaterial(int materialIndex, MeshInfo info, ColorValue team, bool dimmed, uint flash)
+    {
+        var key = (materialIndex, info.UsesHouseColorTexture ? Hex(team) : 0u, dimmed, flash);
+        if (_flashMaterials.TryGetValue(key, out var cached)) return cached;
+        if (info.UsesHouseColorTexture) _services.Textures.HouseColor = team;
+        if (dimmed) _services.Materials.Dim = FogBrightness;
+        _services.Materials.Tint = FlashTint.Factor(flash);
+        Material built;
+        try
+        {
+            built = _services.Materials.Create(info.Mesh, info.Batch);
+        }
+        finally
+        {
+            _services.Materials.Tint = Vector3.One;
+            _services.Materials.Dim = 1f;
+            _services.Textures.HouseColor = null;
+        }
+
+        _flashMaterials[key] = built;
+        return built;
+    }
+
+    /// <summary>The material of one batch of a skinned part with the flash factor on its surface; null without a flash (the instance then draws the part's shared material).</summary>
+    public Material? GetSkinMaterial(int skinPart, int batch, uint flash)
+    {
+        if (flash == FlashTint.None) return null;
+        var key = (skinPart, batch, flash);
+        if (_flashSkinMaterials.TryGetValue(key, out var cached)) return cached;
+        _services.Materials.Tint = FlashTint.Factor(flash);
+        Material built;
+        try
+        {
+            built = _services.Materials.Create(SkinParts[skinPart].Mesh, SkinParts[skinPart].Batches[batch].Batch);
+        }
+        finally
+        {
+            _services.Materials.Tint = Vector3.One;
+        }
+
+        _flashSkinMaterials[key] = built;
         return built;
     }
 
