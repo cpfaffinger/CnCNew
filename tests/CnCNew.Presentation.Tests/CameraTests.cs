@@ -145,6 +145,13 @@ internal static class CameraTests
         start = camera.Pivot;
         camera.ScrollBy(camera.KeyboardScrollDelta(false, false, false, true, 1f / 30f));
         Assert(camera.Pivot.Y > start.Y + 10 && MathF.Abs(camera.Pivot.X - start.X) < 1e-2f, "right scroll follows the rotated view");
+        // The input layer's amount (CameraIntent.Scroll: y forward, factors applied, per second) moves the camera exactly like the reference formula for the same key and time.
+        var byKey = new RtsCamera(Settings, Flat(), Viewport);
+        var byIntent = new RtsCamera(Settings, Flat(), Viewport);
+        var origin = byIntent.Pivot;
+        byKey.ScrollBy(byKey.KeyboardScrollDelta(true, false, false, true, 1f / 30f));
+        byIntent.ScrollByIntent(new Vector2(1.6f * 2.0f, 2.0f * 2.0f) / 30f);
+        Assert(Vector2.Distance(byKey.Pivot, byIntent.Pivot) < 1e-2f && Vector2.Distance(byIntent.Pivot, origin) > 5f, $"an input-layer scroll of one frame equals one frame of the up and right keys ({byKey.Pivot} vs {byIntent.Pivot})");
         Assert(camera.EdgeScrollDelta(new Vector2(1, 400), 1f / 30f).X < 0 && camera.EdgeScrollDelta(new Vector2(500, 400), 1f / 30f) == Vector2.Zero, "edge scrolling");
         Assert(Vector2.Distance(camera.RightMouseScrollDelta(new Vector2(100, 100), new Vector2(110, 90), 1f / 30f), new Vector2(16, -20)) < 1e-3f, "right mouse drag");
         Assert(Vector2.Distance(camera.KeyboardScrollDelta(false, false, true, false, 0.1f), new Vector2(-960, 0)) < 1e-2f, "speed scales with elapsed frames");

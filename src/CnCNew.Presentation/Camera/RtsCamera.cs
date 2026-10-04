@@ -188,6 +188,12 @@ public sealed class RtsCamera : IViewProjection
         ClampToConstraints();
     }
 
+    /// <summary>
+    /// Scrolls by an input-layer amount (<c>CameraIntent.Scroll</c>: x right, y forward, 1 = the base scroll speed for one second, the speed factors already applied):
+    /// <c>SCROLL_AMT</c> per 30 Hz frame in <see cref="ScrollBy"/>'s units, whose y points down the screen.
+    /// </summary>
+    public void ScrollByIntent(Vector2 amount) => ScrollBy(new Vector2(amount.X, -amount.Y) * (_settings.ScrollAmount * FrameRate));
+
     /// <summary>Key scrolling (<c>SCROLL_KEY</c>): <c>speedFactor * SCROLL_AMT * scrollFactor</c> per 30 Hz frame in each held direction.</summary>
     public Vector2 KeyboardScrollDelta(bool up, bool down, bool left, bool right, float dtSeconds)
     {

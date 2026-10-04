@@ -336,7 +336,7 @@ public sealed class MatchController
             Match.Camera.SetPitchToDefault();
         }
         if (intent.CenterOn is { } center) Match.Camera.CenterOn(center);
-        if (intent.Scroll != Vector2.Zero) Match.Camera.ScrollBy(intent.Scroll);
+        if (intent.Scroll != Vector2.Zero) Match.Camera.ScrollByIntent(intent.Scroll);
         if (intent.RotateDelta != 0f) Match.Camera.RotateBy(intent.RotateDelta);
         if (intent.ZoomDelta != 0f) Match.Camera.SetHeightAboveGround(Match.Camera.HeightAboveGround + intent.ZoomDelta);
     }
