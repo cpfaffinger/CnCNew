@@ -15,6 +15,9 @@ internal sealed class SkinRuntime
 
     /// <summary>One live copy per batch, seeded from <see cref="SkinBatchTemplate.Vertices"/>; only Position/Normal are rewritten per frame.</summary>
     public required W3dRenderVertex[][] LiveVertices { get; init; }
+
+    /// <summary>The flash factor (<see cref="FlashTint"/>) the entity's material overrides were last set for.</summary>
+    public uint Flash { get; set; } = FlashTint.None;
 }
 
 /// <summary>

@@ -95,8 +95,34 @@ Felder (`StartAbilityRange`, `AbilityAbortRange`, `UnpackTime`, `PreparationTime
 `UNPACKING` während `Unpacking`, `RAISING_FLAG` während `Preparing` (Original: `startPreparation` ersetzt `UNPACKING` durch `RAISING_FLAG`), beim Black Lotus stattdessen `FIRING_A`
 (die Hacker-Tippanimation, ebenfalls `startPreparation`), `PACKING` während `Packing`. `RAISING_FLAG` steht jetzt in `ConditionDeriver.ProducedNames`.
 
-Nicht umgesetzt: das Blinken des Gebäudes in der Farbe des Einnehmers (`DoCaptureFX`, `flashAsSelected`), der Ton (Entpack-/Pack-/Vorbereitungsschleife, EVA „Gebäude wird gestohlen“),
+Nicht umgesetzt: der Ton (Entpack-/Pack-/Vorbereitungsschleife, EVA „Gebäude wird gestohlen“; das Tick-Geräusch zum Blinken ist ein eigener Auftrag),
 der Datenstrom-Spezialobjekt `BinaryDataStream` des Black Lotus und die Radar-Infiltrationsmeldung. `Stage` und `StageTicksLeft` liefern die Grundlage dafür.
+
+### Blinken des Gebäudes (`DoCaptureFX`)
+
+Quellen (gelesen, neu geschrieben; `references/generals-game-code/GeneralsMD/Code/`): `SpecialAbilityUpdate::continuePreparation` (`GameLogic/Object/Update/SpecialAbilityUpdate.cpp`),
+`Drawable::flashAsSelected`, `Drawable::saturateRGB`, `Drawable::getSelectionColor`, `TintEnvelope::play`/`update` (`GameClient/Drawable.cpp`) und die Lichtaddition in `W3DScene.cpp`
+(Abschnitt „HANDLE THE SPECIAL DRAWABLE-LEVEL COLORING SETTINGS“ der Objektschleife von `RTS3DScene`).
+
+| Schicht | Umsetzung | Original |
+| --- | --- | --- |
+| Simulation | `SpecialAbilityUpdate.StepCaptureFlash` meldet `SimEventKind.CaptureFlash` (`Entity` = Gebäude, `Other` = Einnehmer) | `m_captureFlashPhase` in `continuePreparation` |
+| Präsentation | `SelectionFlashTracker` (`CnCNew.Presentation/Objects/SelectionFlash.cs`): je Ereignis startet die Hüllkurve des Gebäudes neu; `DrawableInstance.FlashTint` trägt die aktuelle Farbe | `flashAsSelected(&color)`, `getSelectionColor` |
+| Farbe | Hausfarbe des Besitzers des **Einnehmers** (`TeamColors`), gesättigt mit `Farbe * Faktor - Faktor / 2` je Kanal; Faktor ist `GameData/SelectionFlashSaturationFactor` (Retail 0,5), streng gelesen (`SelectionFlashSettings.FromDefinitions`) | `getIndicatorColor`, `saturateRGB`, `m_selectionFlashSaturationFactor` |
+| Hüllkurve | 0 Anstiegs- und 4 Abklingticks: zwei Ticks voller Wert, dann 3/4, 1/2, 1/4, danach nichts (`SelectionFlashTracker.Envelope`) | `TintEnvelope::play(color, 0, 4)`, `TintEnvelope::update` einmal je 30-Hz-Frame |
+| Client | `Layers/Objects/FlashTint.cs`: Faktor `1 + 2 * Farbton` je Kanal (nie unter 0) auf der Oberflächenfarbe aller starren und gehäuteten Meshes des Drawables, als zwischengespeicherte Materialvarianten (`ModelAsset.GetTeamMaterial`/`GetSkinMaterial`, `W3dMaterialFactory.Tint`) | Addition des Farbtons auf Umgebungslicht und alle globalen Lichter dieses einen Drawables |
+
+Der Farbton ist vorzeichenbehaftet: Bei Faktor 0,5 wird aus Weiß (0,25; 0,25; 0,25), aus reinem Rot (0,25; -0,25; -0,25) – der Blitz hebt also die Hausfarbe an und dunkelt die
+übrigen Kanäle ab. Geister (erinnerte Gebäude im Nebel) blinken nicht. Ohne `FrameProjectorOptions.SelectionFlash` (Aufrufer ohne GameData, z. B. synthetische Tests) wird
+ausdrücklich kein Farbton projiziert; `LiveGame` setzt die Einstellung immer. Der Farbton schaltet mit dem Tick, nicht mit dem interpolierten Frame (das Original aktualisiert die
+Hüllkurve ebenfalls je Logikframe).
+
+**Abweichung vom Original (bewusst, Näherung):** Die Szenenlichter sind hier allen Objekten gemeinsam, ein Farbton je Drawable lässt sich nicht auf die Lichter addieren. Der Client
+multipliziert deshalb die Oberflächenfarbe; die Verstärkung 2 ist aus typischen Lichtwerten (Umgebung etwa 0,4, Sonne etwa 0,8) abgeleitet, nicht gemessen. Schattenseiten hellt das
+Original relativ stärker auf als hier. Der Faktor ist auf 1/32 gerundet, damit die Materialvarianten (vier Stufen je Hausfarbe und Material) zwischengespeichert werden können.
+
+Prüfhilfen: Die Zeile `object layer:` der Client-Rauchtests zählt `tinted=` (Modellteile mit Farbton im letzten Frame) und `tintedTotal=` (seit Start).
+`CNCNEW_OBJECT_FLASH=r,g,b` (z. B. `-0.25,-0.25,0.25`) zeichnet alle Objekte dauerhaft mit diesem Farbton, weil ein echter Blitz nur fünf Ticks dauert.
 
 ## 6. Szenario `capture-building`
 
@@ -107,17 +133,26 @@ der Datenstrom-Spezialobjekt `BinaryDataStream` des Black Lotus und die Radar-In
 
 `PresentationTool scenario-audit --name capture-building`: **alle Checks bestehen.** Ranger geht ab Tick 12, bleibt bei x = 83,7 stehen (Kaserne bei 150), `UNPACKING` ab Tick 139 (90 Ticks),
 `RAISING_FLAG` ab Tick 229 (600 Ticks), Übernahme Tick 828, `PACKING` ab Tick 829 (60 Ticks), Ende Tick 889; die Kaserne gehört am Ende Spieler 1.
+Blinken (gemessen mit demselben Audit): 49 `CaptureFlash`-Ereignisse zwischen Tick 313 und 822, alle innerhalb `RAISING_FLAG`; Abstände von 35 Ticks am Anfang bis 6 Ticks am Ende; in 49 von 49
+Fällen trägt das Drawable der Kaserne im folgenden projizierten Frame den Spitzenwert (-0,25; -0,25; 0,25) der Hausfarbe des Rangers, insgesamt 245 gefärbte Frames, keiner ohne Blitz,
+der Ranger selbst nie gefärbt. Das Audit schlägt fehl, wenn eines davon nicht gilt.
 
 Tests: `Tests.StagedCapture.cs` (Simulation, synthetisch: Stufenfolge und Dauern, Drehen zum Ziel, Black Lotus aus der Ferne, Abbruch bei zerstörtem Ziel / Spielerbefehl in der
 Anreise und im Auspacken / totem Einnehmer / bereits übernommenem Ziel, Zielprüfung der Kraft, Ersetzen durch einen zweiten Befehl, Befehlsknopfweg, Snapshot in jeder Stufe, zwei Läufe);
 `RealStagedCapture` (Retail: Ranger, Red Guard, Rebell auf `ChinaBarracks` mit 90/600/60 Ticks, Black Lotus auf `AmericaBarracks` mit 202/180/84); `CaptureConditionTests.cs`
-(Darstellung). Unverändert: Retail-Referenzmatch (Sieger FactionGLA, Tick 13.890, Endhash `76F22CB0CA79BEEF`, Kette `35F54CAD40A43E6E`) und Stresstest (`56882F763EABEF67`, Kette `B8E663493F2C73D5`).
+(Darstellung); `CaptureFlashTests.cs` (Darstellung, synthetisch: Hüllkurve, Sättigung, Farbe des Einnehmers auf dem Gebäude, Abklingen auf null, Neustart durch den nächsten Blitz und
+mitten im Abklingen, kein Farbton auf anderen Drawables und ohne Einstellung). Unverändert: Retail-Referenzmatch (Sieger FactionGLA, Tick 13.890, Endhash `76F22CB0CA79BEEF`, Kette `35F54CAD40A43E6E`) und Stresstest (`56882F763EABEF67`, Kette `B8E663493F2C73D5`).
 
 ## 8. Bekannte Grenzen
 
 - Gestuft sind nur die zwei Übernahmekräfte; die übrigen `SpecialAbilityUpdate`-Fähigkeiten (Sprengladungen, Scharfschuss, Hackerangriffe, Geldraub ...) bleiben Aufladehüllen.
 - Fallen (`BOOBY_TRAPPED`, `checkAndDetonateBoobyTrap`), die Skill-/Rangpunkte (`SkillPointsForTriggering`), `FleeRangeAfterCompletion`, Sichtlinie der Annäherung und die Pflicht zur Kollision
-  bei Reichweiten unter 2,5 fehlen; das Original-Radar-/EVA-Signal und das Blinken fehlen.
+  bei Reichweiten unter 2,5 fehlen; das Original-Radar-/EVA-Signal fehlt.
+- Das Blinken ist bis zum `RenderFrame` geprüft (Tests, Szenario-Audit). **Nicht belegt ist das Bild:** Ob Helligkeit, Farbstich und Tempo des Blinkens im Client dem Original
+  entsprechen, muss ein Mensch ansehen (`scripts\demo-capture-building.ps1`, Blinken zwischen Tick 313 und 822, zuletzt fast durchgehend). Maschinell gesehen wurde nur der
+  Schalter `CNCNEW_OBJECT_FLASH` an Bäumen (deutlich umgefärbt); ein Bild der blinkenden Kaserne gibt es nicht, weil die Kamera der fensterlosen Szenenläufe
+  (`--scenario ... --smoke-test --filmstrip`) im geprüften Stand aus der Szene herauswandert (Tick 5 noch am Schauplatz, Tick 100 in der Kartenecke; nicht Teil dieser Änderung, nicht behoben).
+- Die Lichtaddition des Originals ist durch einen Faktor auf der Oberflächenfarbe angenähert (siehe §5); gehäutete Meshes blinken mit, tragen dabei aber wie bisher keine Hausfarbtextur.
 - Erkannt wird ein fremder Befehl nur über `AIUpdateInterface.LastCommandFromPlayer` (Bewegen, Andocken, Betreten, Bauen, Evakuieren). Ein reiner Feuerbefehl (`FireWeaponCommand`) fasst die KI nicht an und wurde nicht auf einen Abbruch geprüft.
 - Die Begrenzungskugel ist hier der 2D-Begrenzungskreis (`BoundingCircleRadius`); das Original rechnet mit der 3D-Kugel inklusive Höhe und lässt die Einheit daher etwas früher anhalten.
 - Das Anhalten in der gemessenen Entfernung (Ranger etwa 66 Einheiten vom Mittelpunkt einer Kaserne, ungefähr 20 vor der Wand) ist die Folge der Kugelregel. Ob es dem Original

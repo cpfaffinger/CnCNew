@@ -36,8 +36,13 @@ public sealed record DrawableInstance(
     int FiredSlots = 0,
     bool ShowsHealing = false,
     bool Fogged = false,
-    ChassisPose Chassis = default)
+    ChassisPose Chassis = default,
+    Vector3 FlashTint = default)
 {
+    // FlashTint: what Drawable::getSelectionColor returns while the selection flash envelope plays (SelectionFlashTracker): a signed colour added to the lights of this drawable; zero: none.
+
+    public bool HasFlashTint => FlashTint != Vector3.Zero;
+
     // Chassis: the body tilt/lift and the wheel steering and spring offsets of a treaded or wheeled vehicle (SuspensionTracker); level for everything else.
 
     // Fogged: explored but not currently visible to the viewer (remembered structure, scenery out of sight). The original draws such objects through the shroud texture, darkened like the ground.

@@ -77,6 +77,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         stats.WheelsDriven = 0;
         stats.MuzzleFlashesHidden = 0;
         stats.MuzzleFlashesShown = 0;
+        stats.FlashTinted = 0;
         stats.Triangles = 0;
         stats.Placeholders = 0;
 
@@ -270,9 +271,17 @@ internal sealed class ObjectLayerCore : IWorldLayer
             rigidComponent.Materials.Clear();
         }
 
+        // Drawable::flashAsSelected: the flash colours every mesh of the drawable (the original adds it to the drawable's lights).
+        var flash = ForceFlash ?? FlashTint.Key(drawable.FlashTint);
+        if (flash != FlashTint.None)
+        {
+            Stats.FlashTinted++;
+            Stats.FlashTintedTotal++;
+        }
+
         for (var m = 0; m < rigidModel.Materials.Count; m++)
         {
-            rigidComponent.Materials[m] = asset.GetTeamMaterial(m, team, drawable.Fogged || ForceFog)!;
+            rigidComponent.Materials[m] = asset.GetTeamMaterial(m, team, drawable.Fogged || ForceFog, flash)!;
         }
 
         var skeleton = rigidComponent.Skeleton;
@@ -304,12 +313,27 @@ internal sealed class ObjectLayerCore : IWorldLayer
             }
         }
 
-        UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, frame);
+        UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, flash, frame);
         Stats.Drawn++;
     }
 
     /// <summary>Debug switch for screenshot checks: <c>CNCNEW_OBJECT_FOG=1</c> draws every object as if it stood in the fog (like <c>CNCNEW_TERRAIN_REVEAL</c> for the terrain).</summary>
     private static readonly bool ForceFog = System.Environment.GetEnvironmentVariable("CNCNEW_OBJECT_FOG") == "1";
+
+    /// <summary>
+    /// Debug switch for screenshot checks: <c>CNCNEW_OBJECT_FLASH=r,g,b</c> (a tint like <c>0.25,-0.25,-0.25</c>, the peak of a red capture flash) draws every object with that
+    /// flash tint all the time, because a real flash lasts five ticks and is easy to miss in a film strip.
+    /// </summary>
+    private static readonly uint? ForceFlash = ParseForcedFlash(System.Environment.GetEnvironmentVariable("CNCNEW_OBJECT_FLASH"));
+
+    private static uint? ParseForcedFlash(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var parts = text.Split(',');
+        if (parts.Length != 3) throw new FormatException($"CNCNEW_OBJECT_FLASH must be 'r,g,b', got '{text}'.");
+        float Channel(int index) => float.Parse(parts[index], System.Globalization.CultureInfo.InvariantCulture);
+        return FlashTint.Key(new System.Numerics.Vector3(Channel(0), Channel(1), Channel(2)));
+    }
 
     private static Dictionary<int, int>? MuzzleBones(ModelStateSpec state, ModelAsset? asset)
     {
@@ -438,7 +462,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
     }
 
     private void UpdateSkins(
-        DrawPartState part, ModelAsset asset, W3dPose pose, ModelStateSpec state, DrawableInstance drawable, Matrix4x4 instanceMatrix, in WorldFrame frame)
+        DrawPartState part, ModelAsset asset, W3dPose pose, ModelStateSpec state, DrawableInstance drawable, Matrix4x4 instanceMatrix, uint flash, in WorldFrame frame)
     {
         if (part.Skins.Count != asset.SkinParts.Length)
         {
@@ -451,6 +475,15 @@ internal sealed class ObjectLayerCore : IWorldLayer
             var visible = pose.IsBoneVisible(skin.Part.BoneIndex) && ComputeVisible(skin.Part.FullName, skin.Part.DefaultVisible, state.SubObjects);
             skin.Entity.Component.Enabled = visible;
             if (!visible) continue;
+            if (skin.Flash != flash)
+            {
+                for (var b = 0; b < skin.Part.Batches.Count; b++)
+                {
+                    skin.Entity.Component.Materials[skin.Part.Batches[b].MaterialIndex] = asset.GetSkinMaterial(i, b, flash)!;
+                }
+
+                skin.Flash = flash;
+            }
 
             W3dModel.SkinVertices(skin.Part.Mesh, pose.BoneWorldTransforms, skin.Positions, skin.Normals);
             var runtimeModel = skin.Entity.Component.Model!;
