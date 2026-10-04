@@ -48,6 +48,12 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
 
     /// <summary><c>Appearance = HOVER</c> (<c>LOCO_HOVER</c>): <c>Locomotor::moveTowardsPositionHover</c> flags the object <c>OVER_WATER</c> while it is over water. Not used by the movement itself.</summary>
     public bool IsHover { get; init; }
+
+    /// <summary><c>Appearance = WINGS</c> (<c>LOCO_WINGS</c>): a fixed-wing aircraft that cannot hover (<c>Locomotor::moveTowardsPositionWings</c>/<c>maintainCurrentPositionWings</c>). Jets with such a locomotor never fall below <see cref="MinSpeed"/> and circle instead of stopping (<c>docs/SIM-JET-FLIGHT.md</c>).</summary>
+    public bool IsWings { get; init; }
+
+    /// <summary><c>Locomotor::m_circlingRadius</c> (<c>CirclingRadius</c>): the radius of the circle a winged aircraft flies to hold a position, positive clockwise, negative counter-clockwise, 0 the smallest circle its speed and turn rate allow.</summary>
+    public Fixed CirclingRadius { get; init; }
 }
 
 /// <summary>
@@ -332,7 +338,11 @@ public sealed class TemplateCatalog
     }
     public int InstantiableCount => Templates.Count(value => value.IsInstantiable);
 
-    public static TemplateCatalog Build(CompiledDefinitionGraph graph, ModuleBindingTable bindings)
+    /// <summary>
+    /// <paramref name="geometry"/>: the model-derived constants (airfield bones) the client layer read from the draw models; omitted, the airfields keep their computed layout.
+    /// A table that names an airfield this catalog does not know is refused.
+    /// </summary>
+    public static TemplateCatalog Build(CompiledDefinitionGraph graph, ModuleBindingTable bindings, ModelGeometry? geometry = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(bindings);
@@ -411,7 +421,10 @@ public sealed class TemplateCatalog
         var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus)
         {
             MaxTunnelCapacity = ResolveMaxTunnelCapacity(graph),
+            Geometry = geometry ?? ModelGeometry.None,
         };
+        foreach (var name in catalog.Geometry.Airfields.Keys)
+            if (!catalog.TryGet(name, out _)) throw new TemplateBuildException($"Model geometry names '{name}', which is not an Object definition.");
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))
@@ -440,6 +453,9 @@ public sealed class TemplateCatalog
 
     /// <summary><c>GlobalData::m_maxTunnelCapacity</c>: how many objects one player's tunnel network holds (<c>TunnelTracker::getContainMax</c>).</summary>
     public int MaxTunnelCapacity { get; private init; }
+
+    /// <summary>Airfield bones read from the models (<see cref="ModelGeometry.None"/> when the host supplied none).</summary>
+    public ModelGeometry Geometry { get; private init; } = ModelGeometry.None;
 
     /// <summary>Per weapon index, the index of its <see cref="WeaponInfo.ProjectileObject"/> template, or -1 when it fires none.</summary>
     public ImmutableArray<int> ProjectileTemplates { get; private set; } = [];
@@ -586,6 +602,21 @@ public sealed class TemplateCatalog
         foreach (var definition in graph.Definitions.OfType<LocomotorDefinition>())
         {
             decimal Get(string name) => definition.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal value ? value : 0m;
+            // CirclingRadius is a deferred field: the generic grammar types it by its name (a Distance), whatever the key, so every numeric form is accepted and anything else is a data error.
+            decimal Signed(string name)
+            {
+                var field = definition.Fields.LastOrDefault(item => item.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                return field?.Value.Value switch
+                {
+                    null => 0m,
+                    decimal number => number,
+                    long integer => integer,
+                    Distance distance => distance.Value,
+                    _ => decimal.TryParse(field.Value.OriginalText.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+                        ? parsed
+                        : throw new TemplateBuildException($"Locomotor '{definition.OriginalName}': {name} expects a number, got '{field.Value.OriginalText.Trim()}'."),
+                };
+            }
             var speed = Get("Speed");
             var acceleration = Get("Acceleration");
             var braking = Get("Braking");
@@ -608,6 +639,8 @@ public sealed class TemplateCatalog
                 SpeedLimitZ = SimulationTiming.PerSecondToPerTick(Get("SpeedLimitZ")),
                 Lift = SimulationTiming.PerSecondSquaredToPerTickSquared(Get("Lift")),
                 IsHover = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("HOVER", StringComparison.OrdinalIgnoreCase) == true,
+                IsWings = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("WINGS", StringComparison.OrdinalIgnoreCase) == true,
+                CirclingRadius = Fixed.FromDecimal(Signed("CirclingRadius")),
             };
         }
         return builder.ToImmutable();

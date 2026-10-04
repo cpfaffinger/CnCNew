@@ -68,7 +68,7 @@ public sealed record JetAIData(AIUpdateData Base, Fixed OutOfAmmoDamageRatePerSe
 /// such orders), <c>notifyVictimIsDead</c> (no attack state), the lock-on cursor, afterburners and landing sounds, aircraft-carrier decks, the sneaky targeting offset, the progressive
 /// refill of the clip while reloading (the clip is full when the reload time is over).
 /// </summary>
-public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
+public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
 {
     public enum JetPhase : byte
     {
@@ -240,6 +240,9 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
 
     private Fixed GroundHere(IWorldServices world) => world.GroundHeightAt(Entity.X, Entity.Y);
 
+    /// <summary>The height of the surface the aircraft stands or rolls on at its position: the apron of its airfield (the model's tarmac lies at the airfield's own height, which on a slope differs from the terrain under the aircraft), else the terrain.</summary>
+    private Fixed SurfaceHere(IWorldServices world) => ParkingOf(world) is { } parking ? parking.ApronHeight(world, Entity.X, Entity.Y) : GroundHere(world);
+
     /// <summary>
     /// One tick of ground movement along <see cref="_path"/> at the taxi locomotor's speed: the aircraft turns in place until it points within π/6 of the next point, then drives
     /// straight at it (<c>BasicJetTaxiLocomotor</c> brakes at once, so the last step lands on the point). True once the last point is reached; the aircraft then stands exactly on it.
@@ -273,7 +276,7 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
         Entity.Speed = step;
         Entity.X += FixedTrig.Cos(Entity.Angle) * step;
         Entity.Y += FixedTrig.Sin(Entity.Angle) * step;
-        Entity.Z = GroundHere(world);
+        Entity.Z = SurfaceHere(world);
         world.MarkDirty(Entity);
         return false;
     }
@@ -429,6 +432,9 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
 
         var flying = _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield or JetPhase.CirclingDeadAirfield;
         if (_allowAir && flying) ControlHeight(world);
+        // A fighter cannot stop in the air: with no destination (and while it waits for the runway) it circles.
+        if (ShouldCircle(_phase)) CircleStep(world);
+        else _circling = false;
         if (_phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield) base.Update(world);
         return SimulationTiming.SleepNone;
     }
@@ -583,7 +589,7 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
             _useReturnLocomotor = false;
             if (parking is null || flight is null) { Enter(JetPhase.None); return; }
             if (helicopter)
-                _path.Add(new Point3(Entity.X, Entity.Y, GroundHere(world) + parking.Data.ApproachHeight + parking.Data.LandingDeckHeightOffset));
+                _path.Add(new Point3(Entity.X, Entity.Y, parking.ApronHeight(world, Entity.X, Entity.Y) + parking.Data.ApproachHeight));
             else
             {
                 if (!parking.TryGetInfo(world, Entity.Id, out var info) && !parking.ReserveSpace(world, Entity, data.ParkingOffset, out info)) { Enter(JetPhase.None); return; }
@@ -632,7 +638,7 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
             var remaining = AirModules.Distance2D(Entity.X, Entity.Y, _leg.RunwayEnd.X, _leg.RunwayEnd.Y);
             ratio = Fixed.Min(Fixed.One, Fixed.Max(Fixed.Zero, Fixed.One - remaining / _leg.RunwayTakeoffDistance));
         }
-        Entity.Z = GroundHere(world) + parking.Data.LandingDeckHeightOffset + parking.Data.ApproachHeight * ratio * ratio;
+        Entity.Z = parking.ApronHeight(world, Entity.X, Entity.Y) + parking.Data.ApproachHeight * ratio * ratio;
         world.MarkDirty(Entity);
     }
 
@@ -750,9 +756,9 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
             Enter(JetPhase.Landing);
             return;
         }
-        if (!parking.ReserveRunway(world, Entity.Id, true)) return;
+        if (!parking.ReserveRunway(world, Entity.Id, true)) return; // the winged aircraft circles meanwhile (ShouldCircle)
         // From here on a straight glide to the runway end, then the roll-out to its start.
-        _glideHeight = Fixed.Max(Fixed.Zero, Entity.Z - GroundHere(world) - parking.Data.LandingDeckHeightOffset);
+        _glideHeight = Fixed.Max(Fixed.Zero, Entity.Z - parking.ApronHeight(world, Entity.X, Entity.Y));
         _glideLength = AirModules.Distance2D(Entity.X, Entity.Y, info.RunwayEnd.X, info.RunwayEnd.Y);
         Enter(JetPhase.Landing);
         Entity.Angle = FixedTrig.Atan2(info.RunwayEnd.Y - Entity.Y, info.RunwayEnd.X - Entity.X);
@@ -791,7 +797,6 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
             return;
         }
         var target = _path[_pathIndex];
-        var deck = parking.Data.LandingDeckHeightOffset;
         var minSpeed = Fixed.Max(flight.MinSpeed, Fixed.One / Fixed.FromInt(2));
         // loco->setMaxSpeed(loco->getMinSpeed()): the landing is flown at the minimum speed.
         Entity.Speed = Entity.Speed > minSpeed
@@ -805,7 +810,7 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
             Entity.X += (target.X - Entity.X) * step / distance;
             Entity.Y += (target.Y - Entity.Y) * step / distance;
         }
-        var ground = GroundHere(world) + deck;
+        var ground = parking.ApronHeight(world, Entity.X, Entity.Y);
         if (_pathIndex == 0)
         {
             var remaining = AirModules.Distance2D(Entity.X, Entity.Y, _leg.RunwayEnd.X, _leg.RunwayEnd.Y);
@@ -956,6 +961,7 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
         writer.Fixed("verticalSpeed", _verticalSpeed);
         writer.Fixed("glideHeight", _glideHeight);
         writer.Fixed("glideLength", _glideLength);
+        DescribeFlight(writer);
         writer.BeginObject("leg");
         WritePoint(writer, "parking", _leg.ParkingSpace);
         WritePoint(writer, "prep", _leg.RunwayPrep);
@@ -1020,6 +1026,7 @@ public sealed class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
         _verticalSpeed = reader.Fixed("verticalSpeed");
         _glideHeight = reader.Fixed("glideHeight");
         _glideLength = reader.Fixed("glideLength");
+        LoadFlight(reader);
         var leg = reader.Object("leg");
         _leg = new ParkingInfo(ReadPoint(leg, "parking"), ReadPoint(leg, "prep"), leg.Fixed("orientation"), ReadPoint(leg, "start"), ReadPoint(leg, "end"), ReadPoint(leg, "approach"),
             ReadPoint(leg, "exit"), ReadPoint(leg, "hangar"), leg.Fixed("hangarOrientation"), leg.Fixed("takeoffDistance"));
