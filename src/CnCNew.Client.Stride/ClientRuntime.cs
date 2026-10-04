@@ -1,4 +1,5 @@
 using System.Numerics;
+using CnCNew.Client.Stride.Audio;
 using CnCNew.Client.Stride.Rendering;
 using CnCNew.Client.Stride.Ui;
 using CnCNew.Game.Campaign;
@@ -24,6 +25,7 @@ namespace CnCNew.Client.Stride;
 /// <see cref="UiRenderer"/>. The shell's outputs (<see cref="StartMatchOutput"/>, <see cref="StartMissionOutput"/>, <see cref="ExitRequestedOutput"/>, the display and settings
 /// changes) are carried out here, and a finished match or mission is reported back to the shell exactly once (<see cref="GameShell.MatchFinished"/>,
 /// <see cref="GameShell.MissionFinished"/>). The runtime never touches simulation state; it only reads what the controllers expose and forwards typed input.
+/// Sound lives as long as the runtime (<see cref="ClientAudio"/>): the shell's menu theme and clicks, and for a running game everything <c>GameAudio.Attach</c> connects.
 /// </summary>
 internal sealed class ClientRuntime : IDisposable
 {
@@ -37,46 +39,49 @@ internal sealed class ClientRuntime : IDisposable
     private long _clockMs;
     private double _nextDots;
     private readonly SpriteBatch _minimapBatch;
+    private readonly ClientAudio _audio;
 
-    private ClientRuntime(global::Stride.Engine.Game game, GameData data, GameSettings settings, GameShell? shell)
+    private ClientRuntime(global::Stride.Engine.Game game, GameData data, GameSettings settings, GameShell? shell, ClientAudioOptions audio)
     {
         _game = game;
         _data = data;
         _settings = settings;
         _shell = shell;
+        _audio = new ClientAudio(data, settings.Audio, audio);
         _ui = new UiRenderer(game.GraphicsDevice, data.Content, data.Images, "English");
         _minimapBatch = new SpriteBatch(game.GraphicsDevice);
         _ui.CustomDraw = DrawCustom;
     }
 
     /// <summary>The shell (main menu and everything behind it); it starts matches and missions itself.</summary>
-    public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height)
+    public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio)
     {
         var shell = GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height));
-        var runtime = new ClientRuntime(game, data, shell.Settings, shell);
+        var runtime = new ClientRuntime(game, data, shell.Settings, shell, audio);
+        runtime._audio.Game.EnterShell();
         return runtime;
     }
 
     /// <summary>A skirmish match started from the command line, with its HUD.</summary>
-    public static ClientRuntime ForMatch(global::Stride.Engine.Game game, GameData data, LiveMatch match)
+    public static ClientRuntime ForMatch(global::Stride.Engine.Game game, GameData data, LiveMatch match, ClientAudioOptions audio)
     {
-        var runtime = new ClientRuntime(game, data, GameSettings.Default, null);
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio);
         runtime._running = runtime.Start(match, null);
         return runtime;
     }
 
     /// <summary>A staged demonstration (<c>--scenario</c>), with the skirmish HUD.</summary>
-    public static ClientRuntime ForScenario(global::Stride.Engine.Game game, GameData data, LiveScenario scenario)
+    public static ClientRuntime ForScenario(global::Stride.Engine.Game game, GameData data, LiveScenario scenario, ClientAudioOptions audio)
     {
-        var runtime = new ClientRuntime(game, data, GameSettings.Default, null);
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio);
         runtime._running = runtime.Start(scenario, null);
         return runtime;
     }
 
     /// <summary>A campaign mission started from the command line, with its HUD.</summary>
-    public static ClientRuntime ForMission(global::Stride.Engine.Game game, GameData data, LiveMission mission)
+    public static ClientRuntime ForMission(global::Stride.Engine.Game game, GameData data, LiveMission mission, ClientAudioOptions audio)
     {
-        var runtime = new ClientRuntime(game, data, GameSettings.Default, null);
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio);
         runtime._running = runtime.Start(mission, null);
         return runtime;
     }
@@ -111,7 +116,9 @@ internal sealed class ClientRuntime : IDisposable
     {
         var seconds = fixedSeconds ?? gameTime.Elapsed.TotalSeconds;
         _clockMs += (long)Math.Round(seconds * 1000);
-        var events = input.HasMouse || input.Events.Count > 0 ? _input.Poll(input, _clockMs) : [];
+        // A fixed-step run (smoke test, captures) takes no device input: wherever the real mouse happens to be must not scroll the camera, or neither the
+        // picture nor the sound (the listener follows the camera) of two runs would be the same.
+        var events = fixedSeconds is null && (input.HasMouse || input.Events.Count > 0) ? _input.Poll(input, _clockMs) : [];
         if (_running is { } running)
         {
             running.Step(events, seconds, width, height, gameTime, _game.GraphicsContext.CommandList, fixedSeconds);
@@ -122,14 +129,21 @@ internal sealed class ClientRuntime : IDisposable
                 running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, MinimapDots(running.Host.Match.Frame));
             }
             if (running.TakeFinished() && _shell is not null) FinishRunning(running);
+            _audio.Update(seconds);
             return;
         }
-        if (_shell is null) return;
-        if (width > 0 && height > 0 && (_shell.Viewport.Width != width || _shell.Viewport.Height != height)) _shell.Resize(width, height);
-        foreach (var inputEvent in events) _shell.HandleInput(inputEvent);
-        _shell.Update(seconds);
-        foreach (var output in _shell.DrainOutputs()) Carry(output);
+        if (_shell is not null)
+        {
+            if (width > 0 && height > 0 && (_shell.Viewport.Width != width || _shell.Viewport.Height != height)) _shell.Resize(width, height);
+            foreach (var inputEvent in events) _shell.HandleInput(inputEvent);
+            _shell.Update(seconds);
+            foreach (var output in _shell.DrainOutputs()) Carry(output);
+        }
+        _audio.Update(seconds);
     }
+
+    /// <summary>Closes an audio capture and returns the audio report of the run (output, sources, mixer, everything that could not be played) for the console; call at exit.</summary>
+    public IReadOnlyList<string> FinishAudio() => _audio.Finish();
 
     private void Carry(ShellOutput output)
     {
@@ -153,6 +167,10 @@ internal sealed class ClientRuntime : IDisposable
                 break;
             case SettingsChangedOutput changed:
                 _settings = changed.Settings;
+                _audio.Game.ApplySettings(changed.Settings.Audio);
+                break;
+            case PlayUiSoundOutput sound:
+                _audio.Game.PlayUi(sound.EventName);
                 break;
             case ApplyResolutionOutput resolution:
                 PendingResolution = (resolution.Width, resolution.Height);
@@ -185,6 +203,7 @@ internal sealed class ClientRuntime : IDisposable
             _ => new RunningGame(host, new MatchController(game, _settings, "English", _ui.TextMeasure), null, null),
         };
         running.Attach();
+        _audio.Game.Attach(game, running.Hud);
         return running;
     }
 
@@ -199,6 +218,7 @@ internal sealed class ClientRuntime : IDisposable
             _shell!.MatchFinished(match.Session, running.Statistics);
         _game.SceneSystem.SceneInstance = null;
         running.Dispose();
+        _audio.Game.EnterShell();
     }
 
     /// <summary>
@@ -233,6 +253,7 @@ internal sealed class ClientRuntime : IDisposable
     {
         _running?.Dispose();
         _running = null;
+        _audio.Dispose();
         _minimapBatch.Dispose();
         _ui.Dispose();
     }
@@ -254,7 +275,7 @@ internal sealed class ClientRuntime : IDisposable
 
         /// <summary>The per-player counts the score screen shows, fed by every simulated tick of a skirmish match.</summary>
         public MatchStatistics Statistics { get; } = new();
-        private MatchController Hud => Match ?? Mission!.Hud;
+        public MatchController Hud => Match ?? Mission!.Hud;
 
         /// <summary>Input first, then the simulation and HUD clocks, then the world layers; a mission's controller advances the match itself.</summary>
         public void Step(List<CnCNew.Presentation.Input.InputEvent> events, double seconds, int width, int height, GameTime gameTime, CommandList commandList, double? fixedSeconds)
