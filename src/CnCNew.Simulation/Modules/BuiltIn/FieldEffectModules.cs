@@ -293,6 +293,9 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public bool Enabled => _enabled;
 
+    /// <summary><c>m_life</c>: the updates the formation has moved so far (read by the presentation: the reference shows <c>FREEFALL</c> while it is below 100 and the rock drops).</summary>
+    public int Life => _life;
+
     public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
 
     /// <summary>A neighbour (or a hit on this rock) tells the formation to start sliding; takes effect at the next dormant check.</summary>

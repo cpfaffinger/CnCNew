@@ -45,6 +45,9 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
 
     /// <summary><c>Locomotor::m_lift</c>: the upward acceleration of an aircraft at full lift, per tick² (<c>Lift</c> in the data is per second²).</summary>
     public Fixed Lift { get; init; }
+
+    /// <summary><c>Appearance = HOVER</c> (<c>LOCO_HOVER</c>): <c>Locomotor::moveTowardsPositionHover</c> flags the object <c>OVER_WATER</c> while it is over water. Not used by the movement itself.</summary>
+    public bool IsHover { get; init; }
 }
 
 /// <summary>
@@ -604,6 +607,7 @@ public sealed class TemplateCatalog
                 PreferredHeight = Fixed.FromDecimal(Get("PreferredHeight")),
                 SpeedLimitZ = SimulationTiming.PerSecondToPerTick(Get("SpeedLimitZ")),
                 Lift = SimulationTiming.PerSecondSquaredToPerTickSquared(Get("Lift")),
+                IsHover = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("HOVER", StringComparison.OrdinalIgnoreCase) == true,
             };
         }
         return builder.ToImmutable();

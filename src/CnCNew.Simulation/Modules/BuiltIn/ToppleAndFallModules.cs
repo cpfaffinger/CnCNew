@@ -90,6 +90,12 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     /// <summary><c>ToppleUpdate::isAbleToBeToppled</c>.</summary>
     public bool IsAbleToBeToppled => _state == State.Upright;
 
+    /// <summary>
+    /// The object was pushed over (falling or down): <c>applyTopplingForce</c> sets <c>MODELCONDITION_TOPPLED</c> when the fall starts and never clears it. An object with
+    /// <c>KillWhenStartToppling</c> dies before that line, so it never shows it. Read by the presentation.
+    /// </summary>
+    public bool HasToppled => _state == State.Falling || (_state == State.Down && !data.KillWhenStartToppled);
+
     /// <summary><c>Object::topple</c> / <c>ToppleUpdate::applyTopplingForce</c>: <paramref name="directionX"/>/<paramref name="directionY"/> point from the pusher to this object; <paramref name="speed"/> is the pusher's speed.</summary>
     public void ApplyTopplingForce(IWorldServices world, Fixed directionX, Fixed directionY, Fixed speed)
     {
