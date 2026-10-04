@@ -7,7 +7,7 @@ deckt die Karte für beide Seiten auf und gibt Befehle über dasselbe `StandingO
 
 | Szene | Zeigt | Stand des Audits (4. Oktober 2026) |
 | --- | --- | --- |
-| `capture-building` | Ranger geht zur gegnerischen Kaserne, packt aus, hisst die Flagge (`RAISING_FLAG`), packt ein, Gebäude wechselt die Seite | **3 Checks scheitern:** die Übernahme geschieht sofort (`CaptureCommand`, Tick 10); `UNPACKING`, `RAISING_FLAG`, `PACKING` werden nie gesetzt, weil `SpecialAbilityUpdate` in der Simulation nur ein Aufladetimer ist (`docs/SIMULATION-CORE.md` §25) |
+| `capture-building` | Ranger geht zur gegnerischen Kaserne, packt aus, hisst die Flagge (`RAISING_FLAG`), packt ein, Gebäude wechselt die Seite | **besteht** (gestufte Fähigkeit, `docs/SIM-STAGED-CAPTURE.md`): `UNPACKING` ab Tick 139 (90 Ticks), `RAISING_FLAG` ab 229 (600), Übernahme Tick 828, `PACKING` ab 829 (60) |
 | `tank-duel` | Crusader gegen Battlemaster, schräg zueinander; der Turm muss sich vor dem ersten Schuss drehen | **1 Check scheitert:** der Crusader schießt in Tick 5 mit 45° Winkelfehler; die Simulation kennt keinen Turmzustand und schießt sofort, die Darstellung dreht den Turm erst nach dem Schuss. Danach stimmt der Winkel bei jedem Schuss (0°) |
 | `jet-strafe` | Der Flugplatz baut zwei Raptors; Start, Anflug, Raketen auf zwei Missile Defender, Beschuss, Rückflug, Landung, Nachladen | Start, Angriff (4 Schuss je Jet), Treffer, Rückflug, Landung bestehen. Beobachtung: der Jet bleibt am Ende des Angriffsflugs **bewegungslos in der Luft** stehen (`MinSpeed` 60 und `CirclingRadius` 100 des Raptor-Locomotors werden nicht umgesetzt) – der Audit meldet das als Fehlschlag |
 

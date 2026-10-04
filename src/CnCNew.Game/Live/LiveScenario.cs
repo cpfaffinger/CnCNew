@@ -6,6 +6,7 @@ using CnCNew.Game.Data;
 using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.World;
@@ -20,7 +21,7 @@ public enum ScenarioOrderKind
     /// <summary>A standing attack order (chase and fire until the target is gone), the order a player gives with a right click.</summary>
     Attack,
     MoveTo,
-    /// <summary>Capture the target structure: the command is retried every tick until the simulation accepts it (it needs the actor in reach).</summary>
+    /// <summary>Capture the target structure: the command is retried every tick until the simulation accepts it (a unit with the staged capture ability walks there itself; any other needs the actor in reach).</summary>
     Capture,
     /// <summary>Queue <see cref="ScenarioOrder.Template"/> at the actor (a producer); the unit that comes out is bound to the tag in <see cref="ScenarioOrder.Target"/>.</summary>
     Produce,
@@ -42,6 +43,12 @@ public sealed record DemoScenario(
 {
     /// <summary>Money the human player starts with (production scenarios).</summary>
     public int StartMoney { get; init; }
+
+    /// <summary>Player upgrades the human player owns from the start (the Ranger's capture ability stays paused until <c>Upgrade_InfantryCaptureBuilding</c>).</summary>
+    public ImmutableArray<string> Upgrades { get; init; } = [];
+
+    /// <summary>The special powers of the placed units are recharged at the start (a unit that has stood around for a while), instead of counting down from their creation.</summary>
+    public bool PowersReady { get; init; }
 
     public string Map { get; init; } = "Maps/Alpine Assault/Alpine Assault.map";
     public string HumanFaction { get; init; } = "FactionAmerica";
@@ -198,6 +205,12 @@ public sealed class LiveScenario : LiveGame
         var created = World.Entities.Where(entity => !before.Contains(entity.Id.Value)).OrderBy(entity => entity.Id.Value).ToArray();
         if (created.Length != Scenario.Units.Length) throw new InvalidOperationException($"Scenario '{Scenario.Name}' placed {created.Length} objects for {Scenario.Units.Length} units.");
         for (var index = 0; index < created.Length; index++) _tags[Scenario.Units[index].Tag] = created[index].Id;
+
+        foreach (var upgrade in Scenario.Upgrades) World.CompleteUpgrade(new PlayerId(1), null, upgrade);
+        if (Scenario.PowersReady)
+            foreach (var entity in created)
+                foreach (var module in entity.Modules)
+                    if (module is ISpecialPowerModule power) power.SetReadyFrame(World.Tick);
     }
 
     private sealed class ScenarioCommandSink(LiveScenario scenario, PlayerId player) : ICommandSink

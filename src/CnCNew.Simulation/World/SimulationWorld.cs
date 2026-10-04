@@ -807,6 +807,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (found.RequiredScience >= 0 && !owner.CompletedSciences.Has(found.RequiredScience)) return CommandRejection.MissingScience;
         if (source.HasStatus(ObjectStatusBits.UnderConstruction) || !module.IsReady(this)) return CommandRejection.SpecialPowerNotReady;
         if (module.StartsAttack && SpecialPowerRouting.FindHandler(source, this, found.Index) is null) return CommandRejection.SpecialPowerHandlerMissing;
+        if (SpecialPowerRouting.FindHandler(source, this, found.Index) is { } handler && !handler.ValidatesTarget(this, found.Index, use.AsTarget)) return CommandRejection.InvalidSpecialPowerTarget;
         return 0;
     }
 
@@ -1144,7 +1145,7 @@ public sealed partial class SimulationWorld : IWorldServices
             {
                 var reason = CheckCapture(command.Player, capture, out var actor, out var target);
                 if (reason != 0) { RecordRejection(command, reason); break; }
-                ExecuteCapture(actor!, target!);
+                ExecuteCaptureCommand(actor!, target!);
                 break;
             }
             default:

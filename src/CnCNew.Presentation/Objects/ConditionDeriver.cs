@@ -50,6 +50,8 @@ public static partial class ConditionDeriver
         "DOOR_3_OPENING", "DOOR_3_WAITING_OPEN", "DOOR_3_WAITING_TO_CLOSE", "DOOR_3_CLOSING",
         "DOOR_4_OPENING", "DOOR_4_WAITING_OPEN", "DOOR_4_CLOSING",
         "CONSTRUCTION_COMPLETE", "DOCKING_ACTIVE", "PACKING", "UNPACKING", "CAPTURED", "SMOLDERING", "POST_COLLAPSE", "SPECIAL_DAMAGED", "ENEMYNEAR", "OVER_WATER",
+        // A unit capturing a building (CaptureConditions, SpecialAbilityUpdate; docs/SIM-STAGED-CAPTURE.md). UNPACKING/PACKING are named above as well; the set takes each name once.
+        "RAISING_FLAG",
     };
 
     public static ModelConditionSet Derive(Entity entity, SimulationWorld world, ObjectVisual? visual, in ConditionContext context)
@@ -134,6 +136,7 @@ public static partial class ConditionDeriver
             }
         }
         set = StructureConditions.Apply(entity, world, set);
+        set = CaptureConditions.Apply(entity, world, set);
         return set;
     }
 

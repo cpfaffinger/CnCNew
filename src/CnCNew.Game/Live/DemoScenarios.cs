@@ -22,7 +22,12 @@ public static class DemoScenarios
             new("barracks", "ChinaBarracks", 2, 150, 0, 180f),
         ],
         [new(10, "ranger", ScenarioOrderKind.Capture, "barracks")],
-        75, 0, 0f, 30f, 140f);
+        75, 0, 0f, 30f, 140f)
+    {
+        // The ability is paused until the upgrade is researched, and a fresh Ranger has to recharge it first.
+        Upgrades = ["Upgrade_InfantryCaptureBuilding"],
+        PowersReady = true,
+    };
 
     /// <summary>Two tanks start at an angle to each other: each turret has to turn to the other tank before the first shot.</summary>
     public static DemoScenario TankDuel { get; } = new(
