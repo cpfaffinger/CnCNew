@@ -50,7 +50,11 @@ $scenes = @(
     @('match-fog-unexplored', @('--match', $alpine, '--frames', '120', '--look', '2002,1349'), 'Kamera auf unerkundetem Gelaende mit einer Oelquelle: alles schwarz, kein Gebaeude im Schwarz.'),
     @('match-base-late', @('--match', $alpine, '--autoplay', '--frames', '4000'), 'Ausgebaute Basis: Gebaeude mit Teamfarbe, Geschuetztuerme, Zaeune ausgerichtet an den Gebaeudekanten.'),
     @('match-combat', @('--match', $alpine, '--autoplay', '--frames', '7500'), 'Gefecht: Patriot-Rohr zeigt auf das Ziel, Muendungsfeuer; Reifen/Tuerme nicht in Ruhepose.'),
-    @('mission-start', @('--mission', 'Maps/GC_ChemGeneral/GC_ChemGeneral.map', '--frames', '120'), 'Missionsstart (Generals Challenge): Basis mit Gebaeuden, Beleuchtung wie im Gefecht.')
+    @('mission-start', @('--mission', 'Maps/GC_ChemGeneral/GC_ChemGeneral.map', '--frames', '120'), 'Missionsstart (Generals Challenge): Basis mit Gebaeuden, Beleuchtung wie im Gefecht.'),
+    # Vierte Angabe 'reveal': die Szene laeuft mit CNCNEW_TERRAIN_REVEAL=1 (ganze Karte sichtbar), weil Strassen ausserhalb der Startsicht liegen.
+    @('roads-junctions', @('--match', $alpine, '--frames', '120', '--pitch', '60', '--height', '150', '--look', '1177,968'), 'Strassen (docs/CLIENT-ROADS.md): Y-Kreuzung mit Zebrastreifen, zusammenhaengende Fahrbahn mit gelber Mittellinie, Raender weich ueberblendet (keine grauen Rechtecke an den Ecken), Strasse folgt dem Gelaende.', 'reveal'),
+    @('roads-crossing', @('--match', $alpine, '--frames', '120', '--pitch', '60', '--height', '150', '--look', '1217,1200'), 'Strassen: Vierwege-Kreuzung (45 Grad gedreht), Gehweg-Ecken, geschlossene Uebergaenge zwischen Kreuzung und Fahrbahn.', 'reveal'),
+    @('roads-overview', @('--match', $alpine, '--frames', '120', '--pitch', '45', '--height', '400', '--look', '1000,1080'), 'Strassen: Kiesstrasse mit Kurven und T-Stueck, Bahngleise, Asphaltstrasse mit Kreuzung; Strassentypen ueberlappen in der richtigen Reihenfolge.', 'reveal')
 )
 
 # SHA-256 of the decoded pixels, not of the PNG file: the encoder's output differs by a few bytes between runs for identical pixels (seen on match-base-late, 4 runs, 4 file hashes, 0 differing pixels).
@@ -76,7 +80,9 @@ foreach ($scene in $scenes) {
     if (Test-Path -LiteralPath $png) { Remove-Item -LiteralPath $png }
     $clientArgs = @('--smoke-test', '--content-dir', $ContentDir, '--size', $Size) + $scene[1] + @('--capture', $png)
     Write-Host "== $name" -ForegroundColor Cyan
+    if ($scene.Count -gt 3 -and $scene[3] -eq 'reveal') { $env:CNCNEW_TERRAIN_REVEAL = '1' } else { Remove-Item Env:CNCNEW_TERRAIN_REVEAL -ErrorAction SilentlyContinue }
     dotnet run --project $project -c Release --no-build -- @clientArgs | Out-Null
+    Remove-Item Env:CNCNEW_TERRAIN_REVEAL -ErrorAction SilentlyContinue
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $png)) { throw "Szene '$name' fehlgeschlagen (Exitcode $LASTEXITCODE)." }
     $hash = Get-PixelHash $png
     $manifest.Add("$hash  $name.png  | $($scene[2])")
