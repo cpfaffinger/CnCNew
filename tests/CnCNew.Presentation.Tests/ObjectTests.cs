@@ -655,11 +655,15 @@ static class ObjectTests
         projector.Advance(world);
         var names = () => projector.Project(1f).Drawables.Where(drawable => drawable.IsStatic).Select(drawable => drawable.Visual.TemplateName).ToArray();
         Check.That(names().SequenceEqual(["Pine"]) && projector.ShroudedScenery == 2, $"Only scenery on explored ground is drawn ({string.Join(",", names())}; shrouded {projector.ShroudedScenery}).");
+        Check.That(projector.Project(1f).Drawables.Single(drawable => drawable.IsStatic).Fogged == false && projector.FoggedScenery == 0, "Scenery in sight is not dimmed.");
 
         Submit(world, sequence => new KillCommand(PlayerId.System, sequence, world.Tick, scout));
         Settle();
         projector.Advance(world);
         Check.That(names().SequenceEqual(["Pine"]), "Once explored, the scenery stays drawn when the viewer loses sight of it (fog, not shroud).");
+        while (world.Tick % FrameProjector.SceneryFogInterval != 0) world.Step();
+        projector.Advance(world);
+        Check.That(projector.Project(1f).Drawables.Single(drawable => drawable.IsStatic).Fogged && projector.FoggedScenery == 1, "Out of sight but explored, the scenery is drawn dimmed (fogged).");
 
         var omniscient = new FrameProjector(catalog, new FrameProjectorOptions { Scenery = scenery });
         omniscient.Advance(world);

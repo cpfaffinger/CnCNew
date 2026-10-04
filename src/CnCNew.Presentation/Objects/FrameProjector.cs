@@ -52,6 +52,7 @@ public sealed class FrameProjector
     private readonly ImmutableArray<ImmutableArray<DrawModuleSelection>> _scenerySelections;
     private readonly bool[] _claimed;
     private readonly bool[] _explored;
+    private readonly bool[] _sceneryFogged;
     private readonly TurretTracker _turrets = new();
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
     private readonly SortedDictionary<uint, Capture> _ghosts = [];
@@ -68,6 +69,7 @@ public sealed class FrameProjector
         _scenerySelections = [.._options.Scenery.Select(item => Select(item.Visual, context))];
         _claimed = new bool[_options.Scenery.Length];
         _explored = new bool[_options.Scenery.Length];
+        _sceneryFogged = new bool[_options.Scenery.Length];
         _sceneryByTemplate = _options.Scenery.GroupBy(item => item.Visual.TemplateName, StringComparer.OrdinalIgnoreCase)
             .ToImmutableDictionary(group => group.Key, group => group.Select(item => item.Index).ToImmutableArray(), StringComparer.OrdinalIgnoreCase);
     }
@@ -115,15 +117,34 @@ public sealed class FrameProjector
         }
     }
 
-    /// <summary>Scenery counts as explored once the ground under it was seen (permanent, so a revealed item is not tested again).</summary>
+    /// <summary>How often (ticks) the visibility of explored scenery is re-read; the fog changes slowly and the dimming has no transition.</summary>
+    public const int SceneryFogInterval = 5;
+
+    /// <summary>
+    /// Scenery counts as explored once the ground under it was seen (permanent, so a revealed item is not tested again). Explored scenery that is not in sight right now is
+    /// fogged (drawn dimmed); that flag is refreshed every <see cref="SceneryFogInterval"/> ticks.
+    /// </summary>
     private void UpdateSceneryExploration(SimulationWorld world, PlayerId viewer)
     {
+        var refreshFog = world.Tick % SceneryFogInterval == 0;
         foreach (var item in _options.Scenery)
         {
-            if (_explored[item.Index] || _claimed[item.Index]) continue;
-            _explored[item.Index] = world.IsPositionExploredBy(viewer, Fixed.FromDecimal((decimal)item.Position.X), Fixed.FromDecimal((decimal)item.Position.Y));
+            if (_claimed[item.Index]) continue;
+            var x = Fixed.FromDecimal((decimal)item.Position.X);
+            var y = Fixed.FromDecimal((decimal)item.Position.Y);
+            var newlyExplored = false;
+            if (!_explored[item.Index])
+            {
+                _explored[item.Index] = world.IsPositionExploredBy(viewer, x, y);
+                newlyExplored = _explored[item.Index];
+            }
+
+            if (_explored[item.Index] && (refreshFog || newlyExplored)) _sceneryFogged[item.Index] = !world.IsPositionVisibleTo(viewer, x, y);
         }
     }
+
+    /// <summary>Explored scenery items currently drawn dimmed because they are out of sight (0 without a viewer).</summary>
+    public int FoggedScenery => _options.Viewer is null ? 0 : _options.Scenery.Count(item => !_claimed[item.Index] && _explored[item.Index] && _sceneryFogged[item.Index]);
 
     /// <summary>Scenery items hidden because the viewer has not explored their ground (0 without a viewer).</summary>
     public int ShroudedScenery => _options.Viewer is null ? 0 : _options.Scenery.Count(item => !_claimed[item.Index] && !_explored[item.Index]);
@@ -154,7 +175,7 @@ public sealed class FrameProjector
         {
             if (_claimed[item.Index] || (_options.Viewer is not null && !_explored[item.Index])) continue;
             drawables.Add(new DrawableInstance(EntityId.Invalid, item.Index, item.Visual, item.Position, item.Yaw, PlayerId.System, TeamColors.Neutral,
-                1f, 1f, baseConditions, _scenerySelections[item.Index], null, null, true, false));
+                1f, 1f, baseConditions, _scenerySelections[item.Index], null, null, true, false, Fogged: _options.Viewer is not null && _sceneryFogged[item.Index]));
         }
         return new RenderFrame(Tick, alpha, _options.Viewer, drawables.ToImmutable());
     }
@@ -234,7 +255,8 @@ public sealed class FrameProjector
         capture.Health01, capture.Construction01, capture.Conditions, capture.Selections,
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
         Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel, capture.FiredSlots,
-        capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= HealingIconTicks && capture.Health01 < 1f && Tick > HealingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold));
+        capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= HealingIconTicks && capture.Health01 < 1f && Tick > HealingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
+        ghost);
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 

@@ -12,6 +12,12 @@ internal sealed class W3dMaterialFactory(
     W3dTextureCache textures,
     Dictionary<MaterialPass, bool> depthWrites)
 {
+    /// <summary>
+    /// Brightness factor applied to the surface colour of every material created while it is below one (fogged objects: <c>RTS3DScene</c> draws objects through the shroud
+    /// texture, the terrain layer squares the fog level for the linear colour pipeline, so a fog level of one half darkens to a quarter). Set by the caller around <see cref="Create"/>.
+    /// </summary>
+    public float Dim { get; set; } = 1f;
+
     public Material Create(W3dMesh mesh, W3dRenderBatch batch)
     {
         if (batch.Passes.Count == 0)
@@ -70,6 +76,11 @@ internal sealed class W3dMaterialFactory(
                 TextureColor(mesh, detailId, passIndex * 2 + 1),
                 source.EffectiveDetailColorFunction,
                 source.EffectiveDetailAlphaFunction);
+        }
+
+        if (Dim < 1f)
+        {
+            surface = SubstituteAlpha(new ComputeBinaryColor(surface, new ComputeColor(new Color4(Dim, Dim, Dim, 1f)), BinaryOperator.Multiply), surface);
         }
 
         var attributes = new MaterialAttributes

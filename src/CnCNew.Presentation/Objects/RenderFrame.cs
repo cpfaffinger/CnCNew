@@ -34,8 +34,11 @@ public sealed record DrawableInstance(
     float? AltTurretPitch = null,
     float WheelTravel = 0f,
     int FiredSlots = 0,
-    bool ShowsHealing = false)
+    bool ShowsHealing = false,
+    bool Fogged = false)
 {
+    // Fogged: explored but not currently visible to the viewer (remembered structure, scenery out of sight). The original draws such objects through the shroud texture, darkened like the ground.
+
     /// <summary>Muzzle flash sub-objects are shown for the weapon slots whose bit is set here (<see cref="FrameProjector.MuzzleFlashTicks"/> after the last shot).</summary>
     public bool HasFired(int slot) => (FiredSlots & (1 << slot)) != 0;
 

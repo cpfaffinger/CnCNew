@@ -88,6 +88,10 @@ internal sealed class ModelAsset
     private readonly RenderServices _services;
     private readonly Dictionary<uint, Model> _teamModels = [];
     private readonly Dictionary<(int MaterialIndex, uint TeamHex), Material> _teamMaterials = [];
+    private readonly Dictionary<(int MaterialIndex, uint TeamHex), Material> _dimmedMaterials = [];
+
+    /// <summary>The brightness of an object in the fog (a fog level of one half squared for the linear pipeline, as the terrain layer does).</summary>
+    public const float FogBrightness = 0.25f;
     private double _animatedBatchesUpdatedAtSeconds = double.NaN;
 
     private ModelAsset(
@@ -138,11 +142,16 @@ internal sealed class ModelAsset
         return built;
     }
 
-    /// <summary>The material to use for slot <paramref name="materialIndex"/> for a team, if it samples a ZHC texture; else null (use the shared one).</summary>
-    public Material? GetTeamMaterial(int materialIndex, ColorValue team)
+    /// <summary>
+    /// The material to use for slot <paramref name="materialIndex"/> for a team, if it samples a ZHC texture or the object is in the fog (<paramref name="dimmed"/>: the same
+    /// material darkened by <see cref="FogBrightness"/>, built lazily and cached); else null (use the shared one).
+    /// </summary>
+    public Material? GetTeamMaterial(int materialIndex, ColorValue team, bool dimmed = false)
     {
         var info = FindByMaterialIndex(materialIndex);
-        if (info is null || !info.UsesHouseColorTexture) return null;
+        if (info is null) return null;
+        if (dimmed) return GetDimmedMaterial(materialIndex, info, team);
+        if (!info.UsesHouseColorTexture) return null;
         var key = (materialIndex, Hex(team));
         if (_teamMaterials.TryGetValue(key, out var cached)) return cached;
         _services.Textures.HouseColor = team;
@@ -157,6 +166,27 @@ internal sealed class ModelAsset
         }
 
         _teamMaterials[key] = built;
+        return built;
+    }
+
+    private Material GetDimmedMaterial(int materialIndex, MeshInfo info, ColorValue team)
+    {
+        var key = (materialIndex, info.UsesHouseColorTexture ? Hex(team) : 0u);
+        if (_dimmedMaterials.TryGetValue(key, out var cached)) return cached;
+        if (info.UsesHouseColorTexture) _services.Textures.HouseColor = team;
+        _services.Materials.Dim = FogBrightness;
+        Material built;
+        try
+        {
+            built = _services.Materials.Create(info.Mesh, info.Batch);
+        }
+        finally
+        {
+            _services.Materials.Dim = 1f;
+            _services.Textures.HouseColor = null;
+        }
+
+        _dimmedMaterials[key] = built;
         return built;
     }
 

@@ -260,7 +260,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
         for (var m = 0; m < rigidModel.Materials.Count; m++)
         {
-            rigidComponent.Materials[m] = asset.GetTeamMaterial(m, team)!;
+            rigidComponent.Materials[m] = asset.GetTeamMaterial(m, team, drawable.Fogged || ForceFog)!;
         }
 
         var skeleton = rigidComponent.Skeleton;
@@ -293,6 +293,9 @@ internal sealed class ObjectLayerCore : IWorldLayer
         UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, frame);
         Stats.Drawn++;
     }
+
+    /// <summary>Debug switch for screenshot checks: <c>CNCNEW_OBJECT_FOG=1</c> draws every object as if it stood in the fog (like <c>CNCNEW_TERRAIN_REVEAL</c> for the terrain).</summary>
+    private static readonly bool ForceFog = System.Environment.GetEnvironmentVariable("CNCNEW_OBJECT_FOG") == "1";
 
     private static Dictionary<int, int>? MuzzleBones(ModelStateSpec state, ModelAsset? asset)
     {
