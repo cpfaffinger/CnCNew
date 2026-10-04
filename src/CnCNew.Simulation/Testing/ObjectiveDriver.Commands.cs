@@ -125,6 +125,6 @@ internal sealed partial class ObjectiveDriver
         if (_agent is null) return string.Empty;
         var stats = _agent.Stats;
         var army = Army().Count();
-        return $"agent: {stats.Commands} commands ({stats.Rejected} rejected), {stats.Constructions} constructions, {stats.Productions} productions, {stats.Waves} attack waves, {stats.Shots} shots, attacking {stats.AttackTicks} ticks; money {_world.MoneyOf(_local)}, army now {army}";
+        return $"agent: {stats.Commands} commands ({stats.Rejected} rejected), {stats.Constructions} constructions, {stats.Productions} productions, {stats.Waves} attack waves, {stats.Shots} shots, attacking {stats.AttackTicks} ticks; money {_world.MoneyOf(_local)}, army now {army}; {_agent.DescribeState()}";
     }
 }

@@ -578,7 +578,7 @@ internal sealed partial class ObjectiveDriver
         var lines = ImmutableArray.CreateBuilder<string>();
         foreach (var player in _program.Players.Where(player => !player.Id.IsSystem && player.Name.Length > 0))
         {
-            var alive = LiveOf(player.Id).GroupBy(entity => entity.Template.Name).OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).Take(6).ToArray();
+            var alive = LiveOf(player.Id).GroupBy(entity => entity.Template.Name).OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal).Take(14).ToArray();
             if (alive.Length > 0) lines.Add($"alive of '{player.Name}': {string.Join(", ", alive.Select(group => $"{group.Key} x{group.Count()}"))}");
         }
         return lines.ToImmutable();

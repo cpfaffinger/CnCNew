@@ -191,6 +191,7 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
     var commandsOnly = args.Contains("--commands-only");
     var outcomeOnly = Arg(args, "--outcome");
     var agentThreshold = int.Parse(Arg(args, "--agent-threshold") ?? "0", CultureInfo.InvariantCulture);
+    var timeline = int.Parse(Arg(args, "--timeline") ?? "0", CultureInfo.InvariantCulture);
     var (context, catalog, fingerprint) = Compile(content);
     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     int maps = 0, victories = 0, defeats = 0;
@@ -211,7 +212,7 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             foreach (var victory in new[] { true, false }.Where(value => outcomeOnly is null || outcomeOnly.Equals(value ? "victory" : "defeat", StringComparison.OrdinalIgnoreCase)))
             {
                 ObjectiveDriveResult result;
-                try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks, observe: watch is null && watchFlags.Length == 0 ? null : CombineWatches(watch is null ? null : WatchEntities(watch, victory), WatchFlags(watchFlags, victory)), commandsOnly: commandsOnly, agentThreshold: agentThreshold); }
+                try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks, observe: watch is null && watchFlags.Length == 0 && timeline == 0 ? null : CombineWatches(CombineWatches(watch is null ? null : WatchEntities(watch, victory), watchFlags.Length == 0 ? null : WatchFlags(watchFlags, victory)), timeline == 0 ? null : Timeline(timeline)), commandsOnly: commandsOnly, agentThreshold: agentThreshold); }
                 catch (Exception exception) when (exception is not OutOfMemoryException) { cells.Add($"{(victory ? "victory" : "defeat")} FAILED {exception.GetType().Name}: {exception.Message}"); continue; }
                 if (result.ReachedByScript) { if (victory) victories++; else defeats++; }
                 cells.Add($"{(victory ? "victory" : "defeat")} {(result.ReachedByScript ? $"REACHED by '{result.OutcomeScript}' @{result.OutcomeTick}" : "not reached")} ({result.Interventions} interventions: {result.Commands} commands, {result.WorldWrites} world writes)");
@@ -477,7 +478,23 @@ static Action<MissionSession> WatchFlags(string[] names, bool victory)
     };
 }
 
-static Action<MissionSession>? CombineWatches(Action<MissionSession>? first, Action<MissionSession> second) => first is null ? second : session => { first(session); second(session); };
+static Action<MissionSession>? CombineWatches(Action<MissionSession>? first, Action<MissionSession>? second) => first is null ? second : second is null ? first : session => { first(session); second(session); };
+
+/// <summary>Every <paramref name="every"/> ticks one line per player: armed mobile units, structures, others (drive --timeline).</summary>
+static Action<MissionSession> Timeline(int every) => session =>
+{
+    var world = session.World;
+    if (world.Tick % every != 0) return;
+    var rows = world.Entities.Where(entity => !entity.EffectivelyDead && !entity.Owner.IsSystem && entity.Body is not null)
+        .GroupBy(entity => entity.Owner.Value).OrderBy(group => group.Key)
+        .Select(group =>
+        {
+            var armed = group.Where(entity => entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE") && CnCNew.Simulation.World.SimulationWorld.ActiveWeaponSet(entity) is { WeaponCount: > 0 }).ToList();
+            var centre = armed.Count == 0 ? string.Empty : $" c({armed.Average(entity => (double)entity.X.Floor()):F0},{armed.Average(entity => (double)entity.Y.Floor()):F0}) mv{armed.Count(entity => entity.HasMoveTarget)}";
+            return $"p{group.Key}: {armed.Count} armed{centre}/{group.Count(entity => entity.Template.IsKindOf("STRUCTURE"))} str/{group.Count()} all ${world.MoneyOf(new CnCNew.Simulation.Ids.PlayerId(group.Key))}";
+        });
+    Console.WriteLine($"      T @{world.Tick}: {string.Join("  ", rows)}");
+};
 
 /// <summary>Prints a line whenever one of the objects whose template name contains <paramref name="text"/> appears, changes owner, loses health class or disappears (drive --watch).</summary>
 static Action<MissionSession> WatchEntities(string text, bool victory)

@@ -165,6 +165,10 @@ public sealed class SkirmishAi
     public bool Attacking => _attacking;
     public int KnownEnemyStructures => _enemies.Values.Count(value => value.IsStructure);
 
+    /// <summary>One line about the economy and the army, for diagnostics (observed state of the last think).</summary>
+    public string DescribeState()
+        => $"carriers {CountAlive(Role.Carrier, false)}, builders {CountAlive(Role.Builder, false)}, supply centers {CountAlive(Role.SupplyCenter, false)}, power {CountAlive(Role.Power, false)}, barracks {CountAlive(Role.Barracks, false)}, factories {CountAlive(Role.Factory, false)}, defenses {CountAlive(Role.Defense, false)}, warehouses known {_warehouses.Count}, army {_units.Count(value => (RoleOf(value.Template) & Role.Army) != 0)}, threshold {_threshold}, attacking {_attacking}, known enemy structures {KnownEnemyStructures}";
+
     /// <summary>Roles of the given template, for diagnostics.</summary>
     public string DescribeRoles(ObjectTemplate template) => RoleOf(template).ToString();
 
