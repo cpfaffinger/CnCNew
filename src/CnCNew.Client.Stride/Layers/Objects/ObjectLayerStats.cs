@@ -24,6 +24,9 @@ internal sealed class ObjectLayerStats
     /// <summary>Drawn parts this frame whose turret angle the presentation supplied (the turret bone was written into the pose).</summary>
     public int TurretsDriven;
 
+    /// <summary>Drawn parts this frame with tire bones turned by their distance rolled (W3DTruckDraw).</summary>
+    public int WheelsDriven;
+
     /// <summary>Triangles submitted this frame (sum of visible mesh draw counts / 3).</summary>
     public long Triangles;
 
@@ -67,7 +70,7 @@ internal sealed class ObjectLayerStats
     }
 
     public override string ToString() =>
-        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} triangles={Triangles} " +
+        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} wheels={WheelsDriven} triangles={Triangles} " +
         $"models={ModelsLoaded} missingModels={ModelsMissing} missingTextures={TexturesMissing} missingAnimations={MissingAnimations} placeholders={Placeholders} gpuProblems={GpuResourceProblems} " +
         $"frameMs={FrameMilliseconds:F3} avgMs={AverageFrameMilliseconds:F3} allocB={FrameAllocatedBytes}";
 }

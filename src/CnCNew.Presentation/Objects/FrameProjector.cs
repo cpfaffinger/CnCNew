@@ -170,11 +170,23 @@ public sealed class FrameProjector
         var construction = entity.HasStatus(ObjectStatusBits.UnderConstruction)
             ? Math.Min(1f, entity.ConstructionWork / (float)Math.Max(entity.Template.BuildTicks, 1))
             : 1f;
+        // The distance rolled along the heading, signed (backwards is negative): a wheel rotates by TireRotationMultiplier times this (W3DTruckDraw accumulates multiplier * speed per frame).
+        var position = new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z));
+        var travel = previous?.Travel ?? 0f;
+        if (previous is not null)
+        {
+            var step = position - previous.Position;
+            var distance = MathF.Sqrt(step.X * step.X + step.Y * step.Y);
+            if (distance > 0f && distance <= _options.SnapDistance)
+                travel += (step.X * MathF.Cos(previous.Yaw) + step.Y * MathF.Sin(previous.Yaw) >= 0f ? distance : -distance);
+            travel %= 100000f;
+        }
+
         var main = _turrets.Update(entity, visual, 0, world.Tick, world);
         var alt = _turrets.Update(entity, visual, 1, world.Tick, world);
         return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, Select(visual, conditions),
-            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch);
+            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel);
     }
 
     private void UpdateGhosts(SimulationWorld world, PlayerId viewer)
@@ -209,7 +221,7 @@ public sealed class FrameProjector
         new EntityId(capture.Id), -1, capture.Visual, position, yaw, capture.Owner, _options.Colors?.Of(capture.Owner) ?? TeamColors.Neutral,
         capture.Health01, capture.Construction01, capture.Conditions, capture.Selections,
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
-        Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha));
+        Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel);
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
@@ -231,5 +243,5 @@ public sealed class FrameProjector
     private sealed record Capture(
         uint Id, ObjectVisual Visual, PlayerId Owner, Vector3 Position, float Yaw, Fixed FixedX, Fixed FixedY, float Health01,
         float Construction01, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections, int ConstructionWork,
-        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null);
+        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f);
 }

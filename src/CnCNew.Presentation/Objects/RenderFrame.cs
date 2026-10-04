@@ -31,7 +31,8 @@ public sealed record DrawableInstance(
     bool IsStatic,
     bool IsGhost,
     float? AltTurretYaw = null,
-    float? AltTurretPitch = null)
+    float? AltTurretPitch = null,
+    float WheelTravel = 0f)
 {
     public string TemplateName => Visual.TemplateName;
     public float Scale => Visual.Scale;

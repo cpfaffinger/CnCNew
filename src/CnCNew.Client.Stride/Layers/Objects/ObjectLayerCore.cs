@@ -74,6 +74,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         stats.Culled = 0;
         stats.SkinnedDrawn = 0;
         stats.TurretsDriven = 0;
+        stats.WheelsDriven = 0;
         stats.Triangles = 0;
         stats.Placeholders = 0;
 
@@ -218,15 +219,19 @@ internal sealed class ObjectLayerCore : IWorldLayer
         part.ElapsedInState += frame.DeltaSeconds;
         var pose = part.Pose!;
         if (drawable.TurretYaw is not null && !state.Turret.IsEmpty) Stats.TurretsDriven++;
+        if (part.WheelBones is { Length: > 0 } && part.WheelMultiplier != 0f) Stats.WheelsDriven++;
         // W3DModelDraw::handleClientTurretPositioning: Capture_Bone + Control_Bone on the turret bones; a changed angle needs the pose evaluated again.
         if (ApplyTurret(state.Turret, drawable.TurretYaw, drawable.TurretPitch, asset, pose, part.TurretApplied, 0)
-            | ApplyTurret(state.AltTurret, drawable.AltTurretYaw, drawable.AltTurretPitch, asset, pose, part.TurretApplied, 2))
+            | ApplyTurret(state.AltTurret, drawable.AltTurretYaw, drawable.AltTurretPitch, asset, pose, part.TurretApplied, 2)
+            | (draw.ModuleType == "W3DTruckDraw" && ApplyWheels(draw, drawable.WheelTravel, asset, pose, part)))
             part.LastFrame = float.NaN;
         if (part.Binding is not null)
         {
             var mode = (W3dAnimationMode)(int)state.Mode;
+            // A manual animation stands on one frame: the first, or the last with START_FRAME_LAST (W3DModelDraw::setAnimationFrame at the state change).
+            var manualFrame = state.Flags.HasFlag(AnimationFlags.StartFrameLast) ? part.Binding.Animation.FrameCount - 1 : 0;
             var animationFrame = W3dAnimationClock.GetFrame(
-                mode, part.Binding.Animation.FrameCount, part.Binding.Animation.FrameRate, part.ElapsedInState, part.Speed);
+                mode, part.Binding.Animation.FrameCount, part.Binding.Animation.FrameRate, part.ElapsedInState, part.Speed, manualFrame);
             if (float.IsNaN(part.LastFrame) || MathF.Abs(animationFrame - part.LastFrame) > 1e-3f)
             {
                 pose.Evaluate(part.Binding, animationFrame, Matrix4x4.Identity);
@@ -279,6 +284,39 @@ internal sealed class ObjectLayerCore : IWorldLayer
         UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, frame);
         Stats.Drawn++;
     }
+
+    private static readonly string[] TireBoneKeys =
+    [
+        "LeftFrontTireBone", "RightFrontTireBone", "LeftRearTireBone", "RightRearTireBone", "MidLeftFrontTireBone", "MidRightFrontTireBone",
+        "MidLeftRearTireBone", "MidRightRearTireBone", "MidLeftMidTireBone", "MidRightMidTireBone",
+    ];
+
+    /// <summary>
+    /// <c>W3DTruckDraw::doDrawModule</c>: every tire bone turns about its axle (<c>Rotate_Y</c>) by the module's <c>TireRotationMultiplier</c> times the distance rolled.
+    /// Steering, suspension and the powerslide addition are not modelled (they need the drawable wheel info of the original's physics).
+    /// </summary>
+    private static bool ApplyWheels(DrawSpec draw, float travel, ModelAsset asset, W3dPose pose, DrawPartState part)
+    {
+        if (part.WheelBones is null)
+        {
+            var bones = new List<int>();
+            foreach (var key in TireBoneKeys)
+                if (draw.Setting(key) is { } name && Tokens(name).FirstOrDefault() is { } token && asset.Model.FindBone(token) is > 0 and var bone) bones.Add(bone);
+            part.WheelBones = [.. bones];
+            part.WheelMultiplier = draw.Setting("TireRotationMultiplier") is { } text
+                && float.TryParse(Tokens(text).FirstOrDefault(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var factor) ? factor : 0f;
+        }
+
+        if (part.WheelBones.Length == 0 || part.WheelMultiplier == 0f) return false;
+        var angle = (part.WheelMultiplier * travel) % MathF.Tau;
+        if (!float.IsNaN(part.WheelApplied) && MathF.Abs(angle - part.WheelApplied) < 1e-4f) return false;
+        part.WheelApplied = angle;
+        var rotation = Matrix4x4.CreateRotationY(angle);
+        foreach (var bone in part.WheelBones) pose.SetBoneOverride(bone, rotation);
+        return true;
+    }
+
+    private static string[] Tokens(string text) => text.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
 
     private static bool ApplyTurret(TurretSpec spec, float? yaw, float? pitch, ModelAsset asset, W3dPose pose, float[] applied, int slot)
     {
@@ -396,6 +434,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
         part.Animation = null;
         part.LastFrame = float.NaN;
         Array.Fill(part.TurretApplied, float.NaN);
+        part.WheelBones = null;
+        part.WheelApplied = float.NaN;
         part.ElapsedInState = 0;
 
         if (part.Asset is not null)

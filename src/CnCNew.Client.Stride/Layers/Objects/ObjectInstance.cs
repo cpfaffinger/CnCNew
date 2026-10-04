@@ -41,6 +41,11 @@ internal sealed class DrawPartState
     public float[] TurretApplied = [float.NaN, float.NaN, float.NaN, float.NaN];
     public bool InScene;
 
+    /// <summary>W3DTruckDraw: the tire bones of the bound model (resolved once per model), the module's rotation multiplier and the wheel angle last written into the pose.</summary>
+    public int[]? WheelBones;
+    public float WheelMultiplier;
+    public float WheelApplied = float.NaN;
+
     /// <summary>True once <see cref="ModelName"/> was set to something and the asset failed to load (drawn as a placeholder).</summary>
     public bool IsPlaceholder => Placeholder is not null;
 }
