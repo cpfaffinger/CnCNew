@@ -13,7 +13,7 @@ namespace CnCNew.Presentation.Objects;
 /// by the sim events (<see cref="Observe"/>) and the captured entity state (<see cref="Update"/>). It only draws; it never influences the simulation and
 /// holds no simulation state (a world restored from a snapshot starts it empty, so the bits restart from "no history"). docs/MODEL-CONDITIONS-UNITS.md names the reference function behind each bit.
 /// <list type="bullet">
-/// <item><description><c>FiringTracker::shotFired/update/speedUp/coolDown</c>: CONTINUOUS_FIRE_SLOW/MEAN/FAST from the shots fired at one victim (<c>ContinuousFireOne/Two/Coast</c> of the weapon).</description></item>
+/// <item><description><c>FiringTracker</c>: CONTINUOUS_FIRE_SLOW/MEAN/FAST from the simulation's own tracker (<see cref="SimulationWorld.ContinuousFireOf"/>), which also speeds the weapon up.</description></item>
 /// <item><description><c>AnimationSteeringUpdate::update</c>: CENTER_TO_LEFT/RIGHT and LEFT/RIGHT_TO_CENTER from the turning direction (the heading changed by a full turn rate in one tick, <c>Locomotor::rotateObjAroundLocoPivot</c>'s <c>TURN_POSITIVE/NEGATIVE</c>).</description></item>
 /// <item><description><c>PhysicsBehavior::update</c> (SPLATTED after a falling death) and <c>CrushDie::onDie</c> (FRONTCRUSHED/BACKCRUSHED from the crush point nearest to the crusher): from the <see cref="SimEventKind.EntityDied"/> event.</description></item>
 /// <item><description><c>TurretAI::friend_turnTowardsAngle</c>: TURRET_ROTATE from the simulation's turret state (<see cref="TurretTracker.IsRotating"/>).</description></item>
@@ -25,9 +25,6 @@ public sealed class UnitConditionTracker
 {
     /// <summary><c>AIGroup::groupCheer</c>: <c>LOGICFRAMES_PER_SECOND * 3</c>.</summary>
     public const int CheerTicks = 3 * 30;
-
-    /// <summary><c>FiringTracker::update</c>: after a cool-down step the next one comes a second later.</summary>
-    private const int CooldownRepeatTicks = 30;
 
     /// <summary><c>TensileFormationUpdate::update</c>: FREEFALL only while <c>m_life &lt; 100</c> and the rock moved more than 0.2 vertically.</summary>
     private const int TensileFreefallLife = 100;
@@ -46,14 +43,6 @@ public sealed class UnitConditionTracker
 
     private sealed class UnitState
     {
-        // FiringTracker
-        public int ConsecutiveShots;
-        public uint Victim;
-        public long CooldownFrame;
-        public bool Mean;
-        public bool Fast;
-        public bool Slow;
-
         // AnimationSteeringUpdate
         public Steering Steer;
         public long NextSteerFrame;
@@ -75,33 +64,6 @@ public sealed class UnitConditionTracker
         public bool Resolved;
         public AnimationSteeringUpdate? SteeringModule;
         public TensileFormationUpdate? Tensile;
-
-        /// <summary><c>FiringTracker::speedUp</c>: none to MEAN, MEAN to FAST (the flags are exclusive, SLOW is cleared).</summary>
-        public void SpeedUp()
-        {
-            if (Fast) return;
-            Slow = false;
-            if (Mean) { Mean = false; Fast = true; }
-            else Mean = true;
-        }
-
-        /// <summary><c>FiringTracker::coolDown</c>: MEAN or FAST drop to SLOW, SLOW (nothing at all) drops to nothing and ends the countdown; the shot count starts over.</summary>
-        public void CoolDown()
-        {
-            if (Fast || Mean)
-            {
-                Slow = true;
-                Fast = false;
-                Mean = false;
-            }
-            else
-            {
-                Slow = false;
-                CooldownFrame = 0;
-            }
-            ConsecutiveShots = 0;
-            Victim = 0;
-        }
     }
 
     private readonly Dictionary<uint, UnitState> _states = [];
@@ -112,9 +74,6 @@ public sealed class UnitConditionTracker
     {
         switch (simEvent.Kind)
         {
-            case SimEventKind.WeaponFired:
-                ShotFired(simEvent, world);
-                break;
             case SimEventKind.EntityDied:
                 Died(simEvent, world);
                 break;
@@ -133,6 +92,14 @@ public sealed class UnitConditionTracker
         var set = ModelConditionSet.Empty;
         var id = entity.Id.Value;
         if (turrets.IsRotating(id)) set = set.With(UnitFlags.TurretRotate);
+        // FiringTracker: the stage is simulation state (mean and fast are the object's weapon bonus conditions).
+        set = SimulationWorld.ContinuousFireOf(entity) switch
+        {
+            ContinuousFireStage.Slow => set.With(UnitFlags.ContinuousFireSlow),
+            ContinuousFireStage.Mean => set.With(UnitFlags.ContinuousFireMean),
+            ContinuousFireStage.Fast => set.With(UnitFlags.ContinuousFireFast),
+            _ => set,
+        };
         if (!_states.TryGetValue(id, out var state))
         {
             if (!NeedsState(entity)) return set;
@@ -140,16 +107,6 @@ public sealed class UnitConditionTracker
             _states[id] = state;
         }
         if (!state.Resolved) Resolve(state, entity);
-
-        // FiringTracker::update: once the coast time is over the stage drops, a second later it drops again.
-        if (state.CooldownFrame != 0 && tick > state.CooldownFrame)
-        {
-            state.CooldownFrame = tick + CooldownRepeatTicks;
-            state.CoolDown();
-        }
-        if (state.Slow) set = set.With(UnitFlags.ContinuousFireSlow);
-        if (state.Mean) set = set.With(UnitFlags.ContinuousFireMean);
-        if (state.Fast) set = set.With(UnitFlags.ContinuousFireFast);
 
         if (state.SteeringModule is not null)
         {
@@ -190,51 +147,6 @@ public sealed class UnitConditionTracker
     {
         if (!_states.TryGetValue(id, out var state)) _states[id] = state = new UnitState();
         return state;
-    }
-
-    /// <summary><c>FiringTracker::shotFired</c>, for the weapons that have continuous-fire stages (the others never leave "nothing", their tracker only counts).</summary>
-    private void ShotFired(SimEvent simEvent, SimulationWorld world)
-    {
-        if (!world.Weapons.TryGet(simEvent.Text, out var weapon) || (weapon.ContinuousFireOneShots == int.MaxValue && weapon.ContinuousFireTwoShots == int.MaxValue)) return;
-        if (world.FindEntity(simEvent.Entity) is not { } shooter) return;
-
-        // The slot that fired is the one whose last shot is this tick's; its ready tick is Weapon::getPossibleNextShotFrame.
-        var slot = shooter.CurrentWeaponSlot;
-        for (var candidate = 0; candidate < 3; candidate++)
-            if (shooter.LastFireTickOf(candidate) == simEvent.Tick) { slot = candidate; break; }
-        var nextShot = shooter.ReadyTickOf(slot);
-
-        var state = StateOf(simEvent.Entity.Value);
-        var now = simEvent.Tick;
-        var victim = simEvent.Other.Value;
-        if (victim == state.Victim) state.ConsecutiveShots++;
-        else if (now < state.CooldownFrame)
-        {
-            // Switching targets within the coast time is valid, and we will not spin down.
-            state.ConsecutiveShots++;
-            state.Victim = victim;
-        }
-        else
-        {
-            state.ConsecutiveShots = 1;
-            state.Victim = victim;
-        }
-
-        state.CooldownFrame = weapon.ContinuousFireCoastTicks != 0 ? nextShot + weapon.ContinuousFireCoastTicks : 0;
-        var one = weapon.ContinuousFireOneShots;
-        var two = weapon.ContinuousFireTwoShots;
-        if (state.Mean)
-        {
-            // Can either go up or down from here.
-            if (state.ConsecutiveShots < one) state.CoolDown();
-            else if (state.ConsecutiveShots > two) state.SpeedUp();
-        }
-        else if (state.Fast)
-        {
-            // The only way from here is all the way down.
-            if (state.ConsecutiveShots < two) state.CoolDown();
-        }
-        else if (state.ConsecutiveShots > one) state.SpeedUp();
     }
 
     /// <summary>A falling death splats (<c>PhysicsBehavior::update</c> sets SPLATTED when fall damage kills); a crush death of a <c>CrushDie</c> object picks the crushed ends (<c>CrushDie::onDie</c>).</summary>

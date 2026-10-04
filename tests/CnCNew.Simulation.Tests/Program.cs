@@ -342,6 +342,7 @@ run.Test("Turret attack: a victim that is no longer visible ends the aim", Tests
 run.Test("Turret attack: a victim that falls into the fog ends the aim", Tests.TurretAttackEndsWhenTheVictimFallsIntoTheFog);
 run.Test("Turret attack: starting a unit ability ends the attack and the move", Tests.TurretAttackEndsWhenTheUnitStartsAnAbility);
 run.Test("Turret attack: snapshot mid-pursuit, determinism and the replay of PursueCommand", Tests.TurretAttackSnapshotAndReplay);
+run.Test("Firing tracker: consecutive shots spin the weapon up, a victim change coasts, idling cools it down", Tests.FiringTrackerSpinsUpCoastsAndCoolsDown);
 run.Test("Turret idle scan: random angle and interval, hold, return, determinism, snapshot", Tests.TurretIdleScanGlancesAroundDeterministically);
 run.Test("Turret idle scan: an attack interrupts it and it resumes afterwards", Tests.TurretIdleScanYieldsToAnAttackAndResumes);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();

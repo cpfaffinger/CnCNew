@@ -111,7 +111,7 @@ public sealed partial class SimulationWorld
         // WeaponSet::chooseBestWeaponForTarget without a victim: "only Primary attack the ground" unless a weapon lock pins another slot.
         var slot = source.WeaponLock != WeaponLockKind.None ? source.CurrentWeaponSlot : WeaponSlot.Primary;
         if (!set.HasWeapon(slot) || _tick < source.ReadyTickOf(slot)) return false;
-        var weapon = ConsumeShot(source, slot);
+        var weapon = ConsumeShot(source, slot, victim?.Id ?? EntityId.Invalid);
         var damage = FireWeaponAt(source, weapon, victim, x, y, z);
         Emit(SimEventKind.WeaponFired, source.Id, victim?.Id ?? EntityId.Invalid, weapon.Name, damage.Raw, source.Owner);
         return true;

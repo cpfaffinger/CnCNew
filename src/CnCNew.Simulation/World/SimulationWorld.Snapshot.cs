@@ -190,6 +190,7 @@ public sealed partial class SimulationWorld
         if (entity.WeaponBonusConditions >> NameTablesPhase5.WeaponBonusCondition.Count != 0) throw new InvalidDataException("Weapon bonus condition mask out of range.");
         AttachModules(entity, template);
         LoadTurrets(entity, reader);
+        if (reader.Has("firing")) entity.Firing = FiringState.Load(reader.Object("firing"));
         var modules = reader.Array("modules");
         if (modules.Count != entity.ModuleArray.Length) throw new InvalidDataException($"Entity {entity.Id} has {modules.Count} module states but its template has {entity.ModuleArray.Length}.");
         for (var index = 0; index < modules.Count; index++)

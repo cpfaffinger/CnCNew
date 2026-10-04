@@ -59,7 +59,8 @@ public sealed record WeaponInfo(
 
     /// <summary>
     /// <c>ContinuousFireOne</c>/<c>ContinuousFireTwo</c> (<c>WeaponTemplate::m_continuousFireOneShotsNeeded</c>/<c>…TwoShotsNeeded</c>, default <c>INT_MAX</c>): how many consecutive shots at one target start the
-    /// first and the second continuous-fire stage. Not applied by the simulation (no rate-of-fire bonus follows); the presentation's <c>FiringTracker</c> port shows the stages (<c>CONTINUOUS_FIRE_*</c>).
+    /// first and the second continuous-fire stage (<c>FiringTracker</c>, <c>SimulationWorld.FiringTracker.cs</c>): the stage is a weapon bonus condition, so the weapon's own
+    /// <c>WeaponBonus = CONTINUOUS_FIRE_MEAN/FAST RATE_OF_FIRE …</c> lines speed it up.
     /// </summary>
     public int ContinuousFireOneShots { get; init; } = int.MaxValue;
 
@@ -113,6 +114,7 @@ public sealed class WeaponBonusTable
     public const int Damage = 0, Radius = 1, Range = 2, RateOfFire = 3, PreAttack = 4;
     public const int VeteranCondition = 9, EliteCondition = 10, HeroCondition = 11, PlayerUpgradeCondition = 5;
     public const uint VeterancyConditions = (1u << VeteranCondition) | (1u << EliteCondition) | (1u << HeroCondition);
+    public const int ContinuousFireMeanCondition = 2, ContinuousFireFastCondition = 3;
 
     private static readonly int FieldCount = NameTablesPhase5.WeaponBonusField.Count;
     private readonly Fixed[] _delta;

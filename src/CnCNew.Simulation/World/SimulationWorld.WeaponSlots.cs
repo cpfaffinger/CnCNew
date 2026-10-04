@@ -315,7 +315,7 @@ public sealed partial class SimulationWorld
     /// (<c>ShareWeaponReloadTime</c> sets every slot's wait to that one), the slot becomes the current weapon, and an emptied clip releases a temporary lock
     /// (<c>Object::fireCurrentWeapon</c>: "if (reloaded) releaseWeaponLock(LOCKED_TEMPORARILY)"). Returns the weapon that fires.
     /// </summary>
-    private WeaponInfo ConsumeShot(Entity source, int slot)
+    private WeaponInfo ConsumeShot(Entity source, int slot, EntityId victim)
     {
         var set = ActiveWeaponSet(source)!;
         var weapon = _templates.Weapons[set.Weapons[slot]];
@@ -340,6 +340,7 @@ public sealed partial class SimulationWorld
                 for (var other = 0; other < WeaponSlot.Count; other++)
                     if (set.HasWeapon(other)) StoreReady(source, other, ready);
         }
+        NoteShotFired(source, weapon, slot, victim);
         MarkDirty(source);
         return weapon;
     }
@@ -390,7 +391,7 @@ public sealed partial class SimulationWorld
         if (_tick < EffectiveReadyTick(source, slot, set) || !CanTarget(source, weapon, victim, VictimAntiMask(victim)) || !WithinWeaponRange(source, weapon, victim)) return false;
         // The module runs its own attack sequence (it gives up when a shot fails), so the turret is told to turn but never holds the shot back.
         AimTurretsAt(source, slot, victim);
-        var fired = ConsumeShot(source, slot);
+        var fired = ConsumeShot(source, slot, victim.Id);
         var damage = FireWeaponAt(source, fired, victim, victim.X, victim.Y, victim.Z);
         Emit(SimEventKind.WeaponFired, source.Id, victim.Id, fired.Name, damage.Raw, source.Owner);
         NoteTurretShot(source, slot);
@@ -408,7 +409,7 @@ public sealed partial class SimulationWorld
         var choice = ChooseWeapon(source, victim, FireOrigin.Ai);
         if (!choice.CanFire || !GateAllowsFire(source, victim)) return false;
         if (!AimTurretsAt(source, choice.Slot, victim)) { _turretWaits++; return false; }
-        var weapon = ConsumeShot(source, choice.Slot);
+        var weapon = ConsumeShot(source, choice.Slot, victim.Id);
         var damage = FireWeaponAt(source, weapon, victim, victim.X, victim.Y, victim.Z);
         Emit(SimEventKind.WeaponFired, source.Id, victim.Id, weapon.Name, damage.Raw, source.Owner);
         NoteTurretShot(source, choice.Slot);

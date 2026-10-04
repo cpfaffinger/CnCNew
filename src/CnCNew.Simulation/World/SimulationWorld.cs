@@ -1031,7 +1031,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!AimTurretsAt(source, choice.Slot, fireTarget, fire.Origin != FireOrigin.Script ? TurretAimOrder.Attack : TurretAimOrder.Shot) && fire.Origin != FireOrigin.Script) { _turretWaits++; break; }
                 // A command button's weapon slot pins the slot until its clip empties (Object::doCommandButton: setWeaponLock(LOCKED_TEMPORARILY) before the attack).
                 if (fire.Slot >= 0) SetWeaponLock(source, fire.Slot, WeaponLockKind.Temporary);
-                var weapon = ConsumeShot(source, choice.Slot);
+                var weapon = ConsumeShot(source, choice.Slot, fireTarget.Id);
                 var damage = FireWeaponAt(source, weapon, fireTarget, fireTarget.X, fireTarget.Y, fireTarget.Z);
                 NoteTurretShot(source, choice.Slot);
                 Emit(SimEventKind.WeaponFired, source.Id, fireTarget.Id, weapon.Name, damage.Raw, command.Player);
@@ -1424,6 +1424,7 @@ public sealed partial class SimulationWorld : IWorldServices
             _entitySum = unchecked(_entitySum - entity.CachedHash);
             UnregisterStructureHooks(entity);
             _activeTurrets.Remove(entity.Id.Value);
+            _coolingTrackers.Remove(entity.Id.Value);
             _entities.Remove(entity.Id.Value);
             UntrackCollidable(entity);
             entity.Registered = false;
@@ -1611,6 +1612,7 @@ public sealed partial class SimulationWorld : IWorldServices
             navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
         RegisterStructureHooks(entity);
         RegisterTurrets(entity);
+        RegisterFiringTracker(entity);
         foreach (var module in entity.ModuleArray)
             if (module is IWorldAttached attached) attached.Attach(this);
         foreach (var node in entity.Updates)
@@ -1641,6 +1643,7 @@ public sealed partial class SimulationWorld : IWorldServices
         FireTimers(tick);
         RunUpdates(tick);
         StepTurrets(tick);
+        StepFiringTrackers(tick);
         DeliverEvents();
         ProcessSales(tick);
         ProcessDestroys();

@@ -91,6 +91,9 @@ public sealed class Entity
     /// <summary>The state of the object's turrets (<c>AIUpdateInterface::m_turretAI</c>), indexed like <see cref="Templates.TurretSet.Turrets"/>; null when the template declares none.</summary>
     internal TurretState?[]? Turrets { get; set; }
 
+    /// <summary>The continuous-fire counters (<c>FiringTracker</c>); null until the object fires a weapon with continuous-fire stages and again once they are back at rest.</summary>
+    internal FiringState? Firing { get; set; }
+
     /// <summary>
     /// The angle (relative to the body) and pitch of one turret and whether it is still turning (<c>AIUpdateInterface::getTurretRotAndPitch</c>, <c>MODELCONDITION_TURRET_ROTATE</c>);
     /// null when the object has no such turret. 0 is the main <c>Turret</c>, 1 the <c>AltTurret</c>.
@@ -224,6 +227,7 @@ public sealed class Entity
         writer.Int("lastDamageTick", LastDamageTick);
         writer.Int("lastFireTick", LastFireTick);
         DescribeTurrets(writer);
+        Firing?.Describe(writer);
         if (Captured) writer.Bool("captured", true);
         if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
