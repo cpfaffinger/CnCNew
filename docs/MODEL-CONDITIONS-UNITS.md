@@ -7,7 +7,7 @@ Namen der Einheiten; die Namen der Gebäude, Türen und Docks stehen in der Schw
 
 Das Original setzt diese Bits **imperativ** aus vielen Modulen (`Object::setModelConditionState`, `Drawable::clearAndSetModelConditionFlags`).
 Hier ist jedes Bit entweder eine reine Funktion des Simulationszustands (`ConditionDeriver`, Datei `ConditionDeriver.Units.cs`) oder wird von einem
-kleinen, rein darstellenden Zustandsautomaten gesetzt (`UnitConditionTracker`, `TurretTracker`), der wie der `TurretTracker` einmal je
+kleinen, rein darstellenden Zustandsautomaten gesetzt (`UnitConditionTracker`), der einmal je
 Simulationstick mit den Ereignissen (`FrameProjector.Observe`) und dem erfassten Objektzustand (`FrameProjector.Advance`) gefüttert wird. Beides ändert die
 Simulation nie; der Tracker hält **keinen** Simulationszustand (kein Snapshot, kein Hash). Wo das Bit einen Verlauf braucht, den die Simulation nicht
 führt, ist der Automat ein dokumentierter Nachbau der Referenzfunktion, nicht eine Erfindung. Wo die Simulation das auslösende Verhalten gar nicht kennt,
@@ -44,7 +44,7 @@ Außerdem wird `PARACHUTING` jetzt aus dem Fallschirm abgeleitet (vorher nur üb
 | `CLIMBING` | `AIStates.cpp` `AIFollowPathState::onEnter`/`update` (bewegtes Objekt auf `CELL_CLIFF`) | `ConditionDeriver.UnitStates` | `Speed != 0 || HasMoveTarget` und `TerrainMap.CellAt(...)` hat `CellFlags.Cliff` |
 | `OVER_WATER` | `Locomotor.cpp` `moveTowardsPositionHover`; `RailroadGuideAIUpdate.cpp` (Zug im Tunnel: `z < Boden - 3`) | `LocomotorInfo.IsHover` (`Appearance = HOVER`, nur gelesen), `ConditionDeriver.UnitStates` | Hover-Fortbewegung und `TerrainMap.IsUnderwater(x, y)`; Zug (`RailroadBehavior`) mit `Z < Boden - 3` |
 | `CENTER_TO_LEFT`, `LEFT_TO_CENTER`, `CENTER_TO_RIGHT`, `RIGHT_TO_CENTER` | `AnimationSteeringUpdate.cpp` `update`; Drehrichtung `PhysicsBehavior::getTurning` aus `Locomotor.cpp` `rotateObjAroundLocoPivot` (`TURN_POSITIVE`/`NEGATIVE`) | `UnitConditionTracker.StepSteering`/`TurnOf`; `AnimationSteeringUpdate.MinTransitionTicks` (`MinTransitionTime`, jetzt typisiert gelesen) | Zustandsautomat des Originals mit Mindesthaltezeit; „dreht“ heißt: die Blickrichtung hat sich in diesem Tick um genau die Drehrate des Locomotors geändert (so dreht `AIUpdateInterface` bei weiter entferntem Ziel); positiv = links |
-| `TURRET_ROTATE` | `TurretAI.cpp` `friend_turnTowardsAngle` | `TurretTracker.IsRotating` | der Turm liegt weiter als einen Schritt vom Zielwinkel (sonst rastet er ein) |
+| `TURRET_ROTATE` | `TurretAI.cpp` `friend_turnTowardsAngle` | `TurretTracker.IsRotating` (liest `Entity.TurretOf`) | der Turm liegt weiter als einen Schritt vom Zielwinkel (sonst rastet er ein) |
 | `SECOND_LIFE` | `BattleBusSlowDeathBehavior.cpp` `update` (nach der Landung des geworfenen Busses, nie gelöscht) | `BattleBusSlowDeathBehavior.HasLanded` (nur lesend) → `ConditionDeriver.UnitStates` | erster Tod hat begonnen und geendet und der Bus liegt am Boden (ein echter Tod in der Luft beendet den Update, der Bus bleibt oben: kein Bit) |
 | `SPECIAL_CHEERING` | `AIGroup.cpp` `groupCheer`, `Object.cpp` `setSpecialModelConditionState` (drei Sekunden) | `FrameProjector.Cheer(ids)` → `UnitConditionTracker.Cheer` | 90 Ticks ab dem Aufruf; ein neuer Aufruf startet die Zeit neu. Das Original löst es nur über die Testtaste `ALL_CHEER` aus; der Client ruft `Cheer` für die Auswahl noch nicht auf (`MetaAction.AllCheer` existiert) |
 
@@ -91,6 +91,6 @@ Alle Namen stehen in `ConditionDeriver.ProducedNames` (eigene Zeilen am Ende der
 * `OVER_WATER` kennt nur die Lage, nicht die Bewegungsgeschichte: ein Hover-Objekt, das nie bewegt wurde und im Wasser startet, hat das Bit hier schon, im Original erst nach der
   ersten Bewegung. Hubschrauber und Fallschirme tragen ebenfalls `Appearance = HOVER` und bekommen das Bit über Wasser, wie im Original (ohne Zustand, der es nutzt).
 * `CLIMBING` kennt den Zusatz „nicht eingeklemmt“ (`getPinched`) nicht; `RAPPELLING` (rückwärts auf Klippen) entfällt mangels Rückwärtsfahrt.
-* `TURRET_ROTATE` folgt dem `TurretTracker` (Annäherung an `TurretAI`: nur Schüsse bewegen den Turm, keine Leerlaufsuche): Türme ohne Schuss drehen nie.
+* `TURRET_ROTATE` folgt dem Turmzustand der Simulation (`docs/SIM-TURRET-AIM.md`): der Turm dreht, sobald ein Feuerbefehl ihn auf das Ziel richtet, hält, stellt sich zurück; keine Leerlaufsuche.
 * Die Lehnerkennung nimmt die Drehung aus der Blickrichtungsänderung je Tick. Andere Blickrichtungsänderungen (Taxi, Ausweichen) mit genau der Drehrate würden
   als Lenkung gelten; sie betreffen nur Objekte mit `AnimationSteeringUpdate` (Kampfmotorräder).

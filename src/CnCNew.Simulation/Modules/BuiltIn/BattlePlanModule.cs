@@ -61,7 +61,7 @@ public sealed record BattlePlanUpdateData(
 /// <c>changeBattlePlan(+1)</c> on the player, which sets the <c>BATTLEPLAN_*</c> weapon bonus on every qualifying object and gives hold the line its damage scalar and search and destroy its sight
 /// scalar (see <c>SimulationWorld.BattlePlan.cs</c>), the center itself gets its own bonus (double maximum health for hold the line, a wider shroud and active stealth detection for search and
 /// destroy). Choosing another plan makes it pack: the bonuses are removed again and every qualifying troop of the player is <em>paralyzed</em> for <c>BattlePlanChangeParalyzeTime</c> (it
-/// neither moves nor fires). Removing the center removes its plan. Turrets do not exist in the simulation, so the bombardment turret is always "centred" and the pack-up never waits for it.
+/// neither moves nor fires). Removing the center removes its plan. The bombardment turret (<c>InitiallyDisabled</c>, enabled by <c>BattlePlanUpdate::setTurretEnabled</c> in the reference) is not switched by the plan here: a disabled turret takes no part in aiming (docs/SIM-TURRET-AIM.md), so it is always "centred" and the pack-up never waits for it.
 /// Not modelled: the radar blip, messages, sounds and door animations; the unit sight <em>range</em> (only the shroud clearing range is scaled, the simulation has no per-object vision range);
 /// the move of a plan's bonuses to a new owner when the center is captured.
 /// </summary>
@@ -124,7 +124,7 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
                 SetStatus(world, TransitionStatus.Active);
                 break;
             case TransitionStatus.Active:
-                // A different plan was chosen: pack up. Bombardment needs the turret centred first; without a turret model it always is, but only an object with AI ever gets here.
+                // A different plan was chosen: pack up. Bombardment needs the turret centred first; the plan does not enable that turret, so it always is, but only an object with AI ever gets here.
                 if (_currentPlan != _desiredPlan && (_currentPlan != BattlePlanKind.Bombardment || CrateModules.AiOf(Entity) is not null)) SetStatus(world, TransitionStatus.Packing);
                 break;
             case TransitionStatus.Packing:
