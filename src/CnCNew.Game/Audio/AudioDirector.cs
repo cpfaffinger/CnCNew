@@ -93,10 +93,34 @@ public static class AudioOutcomes
     public const string WorldWithoutPosition = "note:world-without-position";
     public const string Paused = "dropped:paused";
     public const string RateLimited = "dropped:rate-limited";
+    public const string MissingVoiceKey = "dropped:no-voice-key";
 }
+
+/// <summary>Who asked for a sound; the director counts every request, start, end and drop per source (<see cref="AudioDirectorStats.Sources"/>).</summary>
+public enum AudioSource
+{
+    /// <summary>Derived cues of simulation events and FX lists (weapon fire, explosions, deaths, construction, the capture tick, ...).</summary>
+    Simulation,
+    /// <summary>Button clicks and other host requests (<see cref="AudioDirector.PlayUi"/>).</summary>
+    Ui,
+    /// <summary>Selection and order acknowledgements of the local player's units.</summary>
+    UnitVoice,
+    Eva,
+    /// <summary>Looping <c>SoundAmbient</c> of drawables.</summary>
+    Ambient,
+    Music,
+}
+
+/// <param name="Requested">Requests of this source that reached the director.</param>
+/// <param name="Started">Requests handed to the mixer as a voice (the mixer may still refuse or steal it: <see cref="MixerStatistics"/>).</param>
+/// <param name="Ended">Started voices the mixer no longer plays (finished, stopped, stolen or refused).</param>
+/// <param name="Dropped">Requests that never became a voice (unknown event, missing file, culled, rate limited, not for the local player, ...).</param>
+public readonly record struct AudioSourceCounters(long Requested, long Started, long Ended, long Dropped);
 
 /// <summary>Counters of a director; every sorted collection is a copy, so two identical runs produce equal statistics.</summary>
 public sealed record AudioDirectorStats(
+    ImmutableSortedDictionary<string, AudioSourceCounters> Sources,
+    ImmutableSortedDictionary<string, long> StartedEvents,
     ImmutableSortedDictionary<string, long> Outcomes,
     ImmutableSortedDictionary<string, int> UnresolvedEvents,
     ImmutableSortedDictionary<string, int> MissingUnitVoices,
@@ -137,7 +161,7 @@ public sealed class AudioDirector : IDisposable
     private const float BusChangeThreshold = 0.002f;
     private const float PositionChangeThreshold = 0.5f;
 
-    private sealed record Tracked(VoiceHandle Handle, long IssuedFrames);
+    private sealed record Tracked(VoiceHandle Handle, long IssuedFrames, AudioSource Source);
 
     private sealed class AmbientEntry(VoiceHandle handle, long issuedFrames, Vector3 position, double nextAllowed)
     {
@@ -159,6 +183,12 @@ public sealed class AudioDirector : IDisposable
     private readonly EvaAnnouncer _eva;
     private readonly Dictionary<string, SoundSelectionState> _states = new(StringComparer.OrdinalIgnoreCase);
     private readonly SortedDictionary<string, long> _outcomes = new(StringComparer.Ordinal);
+    private readonly SortedDictionary<string, long> _startedEvents = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly AudioSource[] AllSources = Enum.GetValues<AudioSource>();
+    private readonly long[] _requested = new long[AllSources.Length];
+    private readonly long[] _started = new long[AllSources.Length];
+    private readonly long[] _ended = new long[AllSources.Length];
+    private readonly long[] _dropped = new long[AllSources.Length];
     private readonly SortedDictionary<string, int> _unresolved = new(StringComparer.OrdinalIgnoreCase);
     private readonly SortedDictionary<string, int> _missingVoices = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, int> _movies = new(StringComparer.OrdinalIgnoreCase);
@@ -175,6 +205,7 @@ public sealed class AudioDirector : IDisposable
     private float _zoomVolume = 1f;
     private bool _listenerSent;
     private bool _paused;
+    private bool _muted;
     private double _now;
     private double _lastAmbient = double.NegativeInfinity;
     private long _lastEvaTick = -1;
@@ -231,7 +262,24 @@ public sealed class AudioDirector : IDisposable
     public bool IsPaused => _paused;
     public AudioListener Listener => new(_listenerPosition, _listenerForward, Vector3.UnitZ);
 
+    /// <summary>
+    /// Silences the whole output (master volume 0) without touching the slider values; everything keeps being requested, mixed and counted,
+    /// so a muted run has the same counters as an audible one.
+    /// </summary>
+    public bool Muted
+    {
+        get => _muted;
+        set
+        {
+            if (_muted == value) return;
+            _muted = value;
+            SyncBuses();
+        }
+    }
+
     public AudioDirectorStats Stats => new(
+        AllSources.ToImmutableSortedDictionary(source => source.ToString(), SourceCounters, StringComparer.Ordinal),
+        _startedEvents.ToImmutableSortedDictionary(StringComparer.OrdinalIgnoreCase),
         _outcomes.ToImmutableSortedDictionary(StringComparer.Ordinal),
         _unresolved.ToImmutableSortedDictionary(StringComparer.OrdinalIgnoreCase),
         _missingVoices.ToImmutableSortedDictionary(StringComparer.Ordinal),
@@ -242,6 +290,14 @@ public sealed class AudioDirector : IDisposable
         _musicStarted, _musicFailed, _musicEnded, !_musicDead, _musicTrack,
         _ambientStarted, _ambient.Count, _tracked.Count,
         _cache.Count, _cache.DecodedSamples, _cache.Failures, _mixer.Statistics);
+
+    private AudioSourceCounters SourceCounters(AudioSource source) => source switch
+    {
+        // The announcer keeps its own books: a request is an accepted event, a drop is one that expired, has no line for the side or no playable sound.
+        AudioSource.Eva => new AudioSourceCounters(_eva.Requested, _started[(int)source], _ended[(int)source], _eva.Expired + _eva.SideMissing + _dropped[(int)source]),
+        AudioSource.Music => new AudioSourceCounters(_musicStarted + _musicFailed, _musicStarted, _musicEnded, _musicFailed),
+        _ => new AudioSourceCounters(_requested[(int)source], _started[(int)source], _ended[(int)source], _dropped[(int)source]),
+    };
 
     // ---------------------------------------------------------------------------------------------- frame update
 
@@ -310,9 +366,17 @@ public sealed class AudioDirector : IDisposable
         _paused = paused;
         if (paused)
         {
-            foreach (var voice in _tracked) _mixer.Stop(voice.Handle, _options.PauseFadeSeconds);
+            foreach (var voice in _tracked)
+            {
+                _mixer.Stop(voice.Handle, _options.PauseFadeSeconds);
+                _ended[(int)voice.Source]++;
+            }
             _tracked.Clear();
-            foreach (var entry in _ambient.Values) _mixer.Stop(entry.Handle, _options.PauseFadeSeconds);
+            foreach (var entry in _ambient.Values)
+            {
+                _mixer.Stop(entry.Handle, _options.PauseFadeSeconds);
+                if (entry.Handle.IsValid) _ended[(int)AudioSource.Ambient]++;
+            }
             _ambient.Clear();
         }
         SyncBuses();
@@ -333,14 +397,15 @@ public sealed class AudioDirector : IDisposable
         ArgumentNullException.ThrowIfNull(view);
         if (cues.IsDefaultOrEmpty || _disposed) return;
         _cuesReceived += cues.Length;
+        _requested[(int)AudioSource.Simulation] += cues.Length;
         if (_paused)
         {
-            Count(AudioOutcomes.Paused, cues.Length);
+            Drop(AudioSource.Simulation, AudioOutcomes.Paused, cues.Length);
             return;
         }
         var before = _limiter.DroppedByRate + _limiter.DroppedByTickCap + _limiter.DroppedByDistance;
         var accepted = _limiter.Filter(cues, _listenerPosition);
-        Count(AudioOutcomes.RateLimited, _limiter.DroppedByRate + _limiter.DroppedByTickCap + _limiter.DroppedByDistance - before);
+        Drop(AudioSource.Simulation, AudioOutcomes.RateLimited, _limiter.DroppedByRate + _limiter.DroppedByTickCap + _limiter.DroppedByDistance - before);
         foreach (var cue in accepted) Dispatch(cue, view);
     }
 
@@ -349,15 +414,16 @@ public sealed class AudioDirector : IDisposable
         switch (cue.Kind)
         {
             case SoundCueKind.Eva:
-                if (cue.Player != view.Human) Count(AudioOutcomes.EvaOtherPlayer);
+                // An accepted request is neither a start nor a drop of the simulation source: the announcer's own counters (source Eva) continue it.
+                if (cue.Player != view.Human) Drop(AudioSource.Simulation, AudioOutcomes.EvaOtherPlayer);
                 else if (_eva.Request(cue.EventName)) Count(AudioOutcomes.EvaRequested);
-                else Count(AudioOutcomes.EvaUnknown);
+                else Drop(AudioSource.Simulation, AudioOutcomes.EvaUnknown);
                 return;
             case SoundCueKind.Music:
-                Count(AudioOutcomes.MusicCueUnsupported);
+                Drop(AudioSource.Simulation, AudioOutcomes.MusicCueUnsupported);
                 return;
             case SoundCueKind.UiSound when !cue.Player.IsSystem && cue.Player != view.Human:
-                Count(AudioOutcomes.UiOtherPlayer);
+                Drop(AudioSource.Simulation, AudioOutcomes.UiOtherPlayer);
                 return;
         }
 
@@ -365,7 +431,7 @@ public sealed class AudioDirector : IDisposable
         if (info is null)
         {
             _unresolved[cue.EventName] = _unresolved.GetValueOrDefault(cue.EventName) + 1;
-            Count(AudioOutcomes.Unresolved);
+            Drop(AudioSource.Simulation, AudioOutcomes.Unresolved);
             return;
         }
         if (cue.Kind != SoundCueKind.UiSound)
@@ -373,7 +439,7 @@ public sealed class AudioDirector : IDisposable
             var local = ShouldPlayLocally(info, cue.Player, view);
             if (local is not null)
             {
-                Count(local);
+                Drop(AudioSource.Simulation, local);
                 return;
             }
         }
@@ -386,18 +452,39 @@ public sealed class AudioDirector : IDisposable
         }
         if (position is { } where && (info.SoundTypes & SoundTypeFlags.Shrouded) == 0 && view.IsShrouded(where))
         {
-            Count(AudioOutcomes.Shrouded);
+            Drop(AudioSource.Simulation, AudioOutcomes.Shrouded);
             return;
         }
         if (position is { } heard && CullReason(info, heard) is { } culled)
         {
-            Count(culled);
+            Drop(AudioSource.Simulation, culled);
             return;
         }
 
-        var (handle, outcome) = Start(info, position, cue.Kind == SoundCueKind.Voice ? AudioBus.Voice : null, null);
+        Play(AudioSource.Simulation, info, position, cue.Kind == SoundCueKind.Voice ? AudioBus.Voice : null, null);
+    }
+
+    /// <summary>Starts the event for <paramref name="source"/> and books the result: a started voice is tracked until the mixer drops it, anything else is a counted drop.</summary>
+    private VoiceHandle Play(AudioSource source, AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming, bool track = true)
+    {
+        var (handle, outcome) = Start(info, position, bus, streaming);
+        if (!handle.IsValid)
+        {
+            Drop(source, outcome);
+            return handle;
+        }
         Count(outcome);
-        if (handle.IsValid) Track(handle);
+        _started[(int)source]++;
+        _startedEvents[info.Name] = _startedEvents.GetValueOrDefault(info.Name) + 1;
+        if (track) _tracked.Add(new Tracked(handle, _mixer.Statistics.RenderedFrames, source));
+        return handle;
+    }
+
+    private void Drop(AudioSource source, string outcome, long amount = 1)
+    {
+        if (amount <= 0) return;
+        _dropped[(int)source] += amount;
+        Count(outcome, amount);
     }
 
     /// <summary>
@@ -442,8 +529,6 @@ public sealed class AudioDirector : IDisposable
         return (_mixer.Play(request), AudioOutcomes.Played);
     }
 
-    private void Track(VoiceHandle handle) => _tracked.Add(new Tracked(handle, _mixer.Statistics.RenderedFrames));
-
     /// <summary>
     /// A voice counts as playing until the mixer has rendered a tenth of a second after the request: its membership is published only after
     /// the render that applied the command, which may be the one after the request was queued.
@@ -455,7 +540,12 @@ public sealed class AudioDirector : IDisposable
         return rendered < issuedFrames + _mixer.SampleRate / 10 || _mixer.IsActive(handle);
     }
 
-    private void PruneTracked() => _tracked.RemoveAll(voice => !IsLive(voice.Handle, voice.IssuedFrames));
+    private void PruneTracked() => _tracked.RemoveAll(voice =>
+    {
+        if (IsLive(voice.Handle, voice.IssuedFrames)) return false;
+        _ended[(int)voice.Source]++;
+        return true;
+    });
 
     private void Count(string outcome, long amount = 1)
     {
@@ -469,18 +559,16 @@ public sealed class AudioDirector : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(eventName);
         if (_disposed) return false;
+        _requested[(int)AudioSource.Ui]++;
         var info = _catalog.Find(eventName);
         if (info is null)
         {
             _unresolved[eventName] = _unresolved.GetValueOrDefault(eventName) + 1;
-            Count(AudioOutcomes.Unresolved);
+            Drop(AudioSource.Ui, AudioOutcomes.Unresolved);
             return false;
         }
-        var (handle, outcome) = Start(info, null, null, null);
-        Count(outcome);
-        if (!handle.IsValid) return false;
+        if (!Play(AudioSource.Ui, info, null, null, null).IsValid) return false;
         _uiPlayed++;
-        Track(handle);
         return true;
     }
 
@@ -508,27 +596,27 @@ public sealed class AudioDirector : IDisposable
     private bool PlayUnitVoice(string template, string key)
     {
         if (_disposed) return false;
+        _requested[(int)AudioSource.UnitVoice]++;
         var name = _fx.FindObject(template)?.Sound(key);
         if (name is null)
         {
             _missingVoices[key] = _missingVoices.GetValueOrDefault(key) + 1;
+            Drop(AudioSource.UnitVoice, AudioOutcomes.MissingVoiceKey);
             return false;
         }
         var info = _catalog.Find(name);
         if (info is null)
         {
             _unresolved[name] = _unresolved.GetValueOrDefault(name) + 1;
-            Count(AudioOutcomes.Unresolved);
+            Drop(AudioSource.UnitVoice, AudioOutcomes.Unresolved);
             return false;
         }
         // One acknowledgement at a time: the new line cuts the previous one of the same player (only one unit "speaks").
-        var (handle, outcome) = Start(info, null, AudioBus.Voice, true);
-        Count(outcome);
+        var handle = Play(AudioSource.UnitVoice, info, null, AudioBus.Voice, true);
         if (!handle.IsValid) return false;
         if (_unitVoice.IsValid) _mixer.Stop(_unitVoice, _options.UnitVoiceFadeSeconds);
         _unitVoice = handle;
         _unitVoicesPlayed++;
-        Track(handle);
         return true;
     }
 
@@ -551,15 +639,13 @@ public sealed class AudioDirector : IDisposable
         if (info is null)
         {
             _unresolved[dialog] = _unresolved.GetValueOrDefault(dialog) + 1;
-            Count(AudioOutcomes.Unresolved);
+            Drop(AudioSource.Eva, AudioOutcomes.Unresolved);
             return;
         }
-        var (handle, outcome) = Start(info, null, AudioBus.Voice, true);
-        Count(outcome);
+        var handle = Play(AudioSource.Eva, info, null, AudioBus.Voice, true);
         if (!handle.IsValid) return;
         _evaVoice = handle;
         _evaIssued = _mixer.Statistics.RenderedFrames;
-        Track(handle);
     }
 
     /// <summary>Cutscene movies are Bink video with an audio track; no decoder exists in the runtime, so the request is counted and skipped.</summary>
@@ -607,6 +693,7 @@ public sealed class AudioDirector : IDisposable
             if (finished || !wanted.Contains(key))
             {
                 if (!finished) _mixer.Stop(entry.Handle, 0.25f);
+                if (entry.Handle.IsValid) _ended[(int)AudioSource.Ambient]++;
                 _ambient.Remove(key);
                 // A one-shot ambient event is triggered again only after TimeBetweenDrawableSounds; remember the gap by keeping a dead entry.
                 if (finished && entry.NextAllowed > _now && wanted.Contains(key)) _ambient[key] = new AmbientEntry(VoiceHandle.None, 0, entry.Position, entry.NextAllowed);
@@ -624,10 +711,10 @@ public sealed class AudioDirector : IDisposable
                 if (existing.Handle.IsValid || existing.NextAllowed > _now) continue;
                 _ambient.Remove(key);
             }
-            var (handle, outcome) = Start(info, drawable.Position, AudioBus.Ambient, null);
+            _requested[(int)AudioSource.Ambient]++;
+            var handle = Play(AudioSource.Ambient, info, drawable.Position, AudioBus.Ambient, null, track: false);
             if (!handle.IsValid)
             {
-                Count(outcome);
                 // Keep the failure from being retried every 0.25 s.
                 _ambient[key] = new AmbientEntry(VoiceHandle.None, 0, drawable.Position, _now + _catalog.Settings.TimeBetweenDrawableSoundsMs / 1000.0);
                 continue;
@@ -762,10 +849,11 @@ public sealed class AudioDirector : IDisposable
             Voice: _settings.Voice,
             Ambient: _settings.Ambient * _zoomVolume,
             Ui: _settings.Effects * _uiRatio);
-        if (float.IsNaN(_sentMaster) || Math.Abs(_sentMaster - _settings.Master) > BusChangeThreshold)
+        var master = _muted ? 0f : _settings.Master;
+        if (float.IsNaN(_sentMaster) || Math.Abs(_sentMaster - master) > BusChangeThreshold)
         {
-            _sentMaster = _settings.Master;
-            _mixer.SetMasterVolume(_settings.Master);
+            _sentMaster = master;
+            _mixer.SetMasterVolume(master);
         }
         foreach (var bus in Enum.GetValues<AudioBus>())
         {
