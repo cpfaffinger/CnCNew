@@ -220,6 +220,155 @@ geskriptet).
   nach Objekt-ID) per `FireWeaponCommand` auf den Feind in Reichweite schießen, höchste Angriffspriorität zuerst, dann am nächsten.
   Neutrale schießen nie. Sicht/Reichweite prüft die normale Befehlsvalidierung.
 
+## 7a. Mission im Client: was `--mission` tut und was von den `ScriptOutput`s zu sehen ist (Phase 16, Punkt 5)
+
+**Ablauf.** `CnCNew.Client.Stride --mission <Karte>` lädt die Karte mit `MissionRun.Load` (dieselbe Sitzung wie die Headless-Tests und `CampaignTool`), die Seite des Menschen ist
+`MissionSession.LocalPlayerOf` (bzw. `--human-side`). Jeder Logiktick des Clients ist `MissionPresentationDirector.BeforeStep` → `MissionSession.Step()` → `AfterStep` (`LiveMission.StepSimulation`);
+der Konsolenbericht am Ende nennt Frames, Welt-Tick und Sitzungsschritte – in allen Messläufen gleich, die Skript-VM läuft also jeden Tick. Ein Ladebildschirm oder Briefing gehört zur Shell
+(`--shell`), `--mission` beginnt direkt mit Tick 0 der Karte.
+
+**Zeitverhalten.** `--mission` startet mit `PresentationLatencyTicks = LiveMission.ClientPresentationLatencyTicks` (1.800 Ticks = 60 s). Der Director meldet das echte Ende selbst
+(`CompletePresentation`): Kamerafahrten nach ihrer Skriptdauer, Sprache/Klang/Film nach einer Platzhalterdauer von 3 s (es gibt keine Längenangabe je Klangereignis), Musik sofort. Die Latenz ist nur
+die Grenze, nach der die VM nicht länger wartet, damit nichts ewig hängt. **Offen:** Missionen, die die Shell startet (`GameShell` → `CampaignController.StartCurrentMission()`), laufen weiter mit
+Latenz 0 – `CAMERA_MOVEMENT_FINISHED`/`HAS_FINISHED_*` gelten dort sofort, die Kamera fährt trotzdem (zeitgesteuerte Sequenzen wie die von `GC_ChemGeneral` sind davon nicht betroffen).
+
+**Was der Director aus den Ausgaben macht** (`src/CnCNew.Game/Shell/MissionPresentation.cs`, ohne Stride; der Client liest nur diesen Zustand):
+
+- **Kamera** (`ApplyCameraTo(RtsCamera, Sekunden)`, je Frame aus `LiveGame.OnAdvanced`; bei Pause 0): Fahrt zum Wegpunkt über die Skriptdauer mit weichem An- und Auslauf
+  (`ScriptActions::doMoveCameraTo` → `View::moveCameraTo`; die Ease-Zeiten des Skripts werden durch eine feste S-Kurve ersetzt), Schnitt mit Blickrichtung/Zoom/Neigung
+  (`doSetupCamera`), Zoom und Neigung als Faktor der Standardwerte (`doZoomCamera`, `doPitchCamera`, `cameraModFinalZoom/Pitch`), Drehung (`doRotateCamera`), Blick zum Wegpunkt
+  (`cameraModLookToward`; das Vorzeichen des Kamerawinkels wird an der Kamera gemessen, nicht angenommen), Zurücksetzen (`doResetCamera`), Verfolgen eines benannten Objekts
+  (`doCameraFollowNamed`). Ohne aktive Skriptfahrt bleibt die Kamera dem Spieler. Grenzen: Zoom und Neigung werden auf den spielbaren Bereich der `RtsCamera` begrenzt (Nahaufnahmen der
+  Zwischensequenzen sind dadurch weiter weg als im Original), `MOVE_CAMERA_ALONG_WAYPOINT_PATH` fährt geradlinig zum ersten Wegpunkt.
+- **Eingabesperre** (`DISABLE_INPUT`/`ENABLE_INPUT`, `ScriptActions::doDisableInput`): `MissionController` setzt `MatchController.WorldInputEnabled`; alles außer Esc (Spielmenü) wird verworfen, der
+  Zeiger scrollt nicht, beim Sperren werden Auswahl, Befehlsmodi und gehaltene Tasten gelöscht. Ein Sieg oder eine Niederlage hebt die Sperre auf.
+- **Letterbox und Blenden:** `CAMERA_LETTERBOX_BEGIN/END` blenden die Befehlsleiste aus und zeichnen zwei Balken (`doLetterBoxMode`: `HideControlBar`), `CAMERA_FADE_ADD/SUBTRACT/MULTIPLY` eine
+  bildschirmfüllende Fläche (Weiß bzw. Schwarz) mit dem Verlauf Anstieg – Halten – Abfall; `CAMERA_FADE_SATURATE` hat keine Darstellung.
+- **Text:** Titelzeilen (`DISPLAY_TEXT`, `SHOW_MILITARY_CAPTION`, `INGAME_POPUP_MESSAGE`) über die CSF-Auflösung, zentriert mit dem Textmaß des Renderers und an Wortgrenzen umbrochen (vorher begann
+  jede Zeile in der Bildmitte und lief rechts aus dem Bild), `DISPLAY_CINEMATIC_TEXT` im unteren Balken, Zähler und Countdown (`DISPLAY_COUNTER`, `DISPLAY_COUNTDOWN_TIMER`, Wert aus
+  `ScriptEngine.CounterValue`, Countdown als Minuten:Sekunden), Ergebnisbanner bei `VICTORY`/`DEFEAT` („MISSION ACCOMPLISHED“/„MISSION FAILED“, Platzhaltertext), Hinweiszeile während der Sperre.
+- **Ton** (`MissionPresentationDirector.Audio` ← `GameAudio.PlayScripted`): `SPEECH_PLAY`, `SOUND_PLAY_NAMED`, `PLAY_SOUND_EFFECT`, `PLAY_SOUND_EFFECT_AT` spielen das benannte Klangereignis ohne
+  Position (`AudioDirector.PlayUi`), `MUSIC_SET_TRACK` startet das Stück (`AudioDirector.SetMusicTrack`), danach läuft die Playlist der Seite weiter. Für Sprache bleibt der Platzhalter-Untertitel
+  mit dem Ereignisnamen (es gibt keinen Untertiteltext). Was nicht startet (unbekannter Name, keine Datei), steht mit Grund unter „problems“.
+- **Film:** `MOVIE_PLAY_FULLSCREEN`/`MOVIE_PLAY_RADAR` zeigen den Filmnamen als Textplatzhalter (kein Bink-Decoder, dauerhafte Grenze).
+- **Radar:** `RADAR_CREATE_EVENT`, `OBJECT_/TEAM_CREATE_RADAR_EVENT` werden als weißer, blinkender Punkt auf der Minimap gezeichnet (`RadarBlipsForDisplay`, 8 s). In den Messläufen kam genau ein
+  Radarereignis vor (`MD_USA01`, Tick 3.191); es wurde der Minimap übergeben, im Bild aber nicht eigens geprüft.
+
+**Zähler.** Der Director zählt je Ausgabetyp `emitted` (vom Skript ausgegeben), `forwarded` (an einen Verbraucher übergeben: Kamera, Overlay, Ton, Radar, Eingabe) und `displayed` (der Verbraucher
+existiert in diesem Host: die Kamera wurde angewendet, das Overlay gezeichnet, die Sperre abgefragt, die Minimap hat die Punkte geholt; Ton zählt nur, wenn wirklich eine Stimme startete). Ein
+Headless-Lauf ohne Host meldet deshalb „weitergereicht“, aber nie „dargestellt“. Der Client schreibt die Zähler beim Beenden und im Rauchtest auf die Konsole (`mission: …`, `mission outputs: …`,
+`mission output <TYP>: emitted …, forwarded …, displayed …, not displayed … (wie)`, `mission output problems: …`, `mission presentation: input locked for … ticks, locked at exit …`);
+`--mission-journal N` druckt zusätzlich die ersten N darstellbaren Ausgaben mit Tick.
+
+**Messung (4. Oktober 2026, `--smoke-test --mission … --size 1280x720`, Release, feste Zeitschritte):**
+
+| Karte | Frames = Ticks = VM-Schritte | Seite des Menschen | Typen | ausgegeben | weitergereicht | dargestellt | nicht dargestellt | Eingabe gesperrt (Ticks) | am Ende gesperrt | fehlende Aktions-/Bedingungstreffer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `GC_ChemGeneral` | 3000 / 3000 / 3000 | `ThePlayer` (FactionAmericaAirForceGeneral) | 14 | 29 | 17 | 17 | 12 | 750 | nein | 0 / 0 |
+| `MD_GLA03` | 3000 / 3000 / 3000 | `ThePlayer` (FactionGLA) | 43 | 124 | 35 | 35 | 89 | 1750 | nein | 0 / 0 |
+| `MD_USA01` | 3900 / 3900 / 3900 | `The_Player` (FactionAmerica) | 51 | 223 | 72 | 72 | 151 | 3132 | nein | 0 / 0 |
+
+Dargestellte Typen (je Karte „ausgegeben / dargestellt“):
+
+| `ScriptOutput`-Typ | `GC_ChemGeneral` | `MD_GLA03` | `MD_USA01` | Darstellung im Client |
+| --- | --- | --- | --- | --- |
+| `CAMERA_FADE_ADD` | – | 1 / 1 | 4 / 4 | bildschirmfüllende Blende nach Weiß |
+| `CAMERA_FADE_MULTIPLY` | – | 1 / 1 | 4 / 4 | bildschirmfüllende Blende nach Schwarz (Faktor invertiert) |
+| `CAMERA_LETTERBOX_BEGIN` | 1 / 1 | 1 / 1 | 2 / 2 | schwarze Balken, Befehlsleiste ausgeblendet |
+| `CAMERA_LETTERBOX_END` | 1 / 1 | 1 / 1 | 1 / 1 | Balken weg, Befehlsleiste wieder da |
+| `CAMERA_MOD_LOOK_TOWARD` | 2 / 2 | – | – | Kamera dreht zum Wegpunkt |
+| `CAMERA_MOD_SET_FINAL_PITCH` | – | 2 / 2 | 1 / 1 | Kameraneigung erreicht den Wert mit dem Ende der laufenden Fahrt (begrenzt) |
+| `CAMERA_MOD_SET_FINAL_ZOOM` | – | 3 / 3 | 2 / 2 | Kamerahöhe erreicht den Wert mit dem Ende der laufenden Fahrt (begrenzt) |
+| `DISABLE_INPUT` | 1 / 1 | 1 / 1 | 1 / 1 | Welteingabe wird verworfen, Auswahl gelöscht, Hinweiszeile |
+| `ENABLE_INPUT` | 1 / 1 | 1 / 1 | 1 / 1 | Welteingabe wieder frei |
+| `MOVE_CAMERA_ALONG_WAYPOINT_PATH` | – | 1 / 1 | – | Kamera fährt geradlinig zum ersten Wegpunkt des Pfads (der Pfad selbst wird nicht abgeflogen) |
+| `MOVE_CAMERA_TO` | 2 / 2 | 2 / 2 | 4 / 4 | Kamera fährt über die Skriptdauer zum Wegpunkt |
+| `MUSIC_SET_TRACK` | 1 / 1 | 3 / 3 | 5 / 4 | Musikstück gestartet |
+| `OBJECT_CREATE_RADAR_EVENT` | – | – | 1 / 1 | blinkender Punkt auf der Minimap |
+| `PITCH_CAMERA` | – | – | 1 / 1 | Kameraneigung ändert sich (auf den Neigungsbereich der Kamera begrenzt) |
+| `PLAY_SOUND_EFFECT` | – | 2 / 2 | 4 / 4 | Klangereignis gespielt (ohne Position) |
+| `PLAY_SOUND_EFFECT_AT` | – | – | 8 / 8 | Klangereignis gespielt (ohne Position) |
+| `RESET_CAMERA` | 1 / 1 | – | 1 / 1 | Kamera fährt zum Wegpunkt und kehrt zu Standardwinkel, -neigung und -zoom zurück |
+| `SETUP_CAMERA` | 1 / 1 | 6 / 6 | 16 / 16 | Schnitt auf den Wegpunkt, Blick zum zweiten Wegpunkt, Zoom und Neigung gesetzt |
+| `SHOW_MILITARY_CAPTION` | – | 3 / 3 | 5 / 5 | Titelzeile oben (zentriert, umbrochen) |
+| `SPEECH_PLAY` | 6 / 6 | 7 / 7 | 10 / 10 | Klangereignis gespielt; sein Name als Platzhalter-Untertitel |
+| `ZOOM_CAMERA` | – | – | 2 / 2 | Kamerahöhe ändert sich (auf den spielbaren Zoombereich begrenzt) |
+
+Ausgegebene Typen **ohne** Darstellung (je Karte „ausgegeben“, dargestellt immer 0):
+
+| `ScriptOutput`-Typ | `GC_ChemGeneral` | `MD_GLA03` | `MD_USA01` |
+| --- | --- | --- | --- |
+| `AUDIO_OVERRIDE_VOLUME_TYPE` | – | 3 | 10 |
+| `AUDIO_RESTORE_VOLUME_ALL_TYPE` | 3 | 1 | 1 |
+| `CAMERA_BW_MODE_BEGIN` | – | – | 1 |
+| `CAMERA_BW_MODE_END` | – | – | 1 |
+| `CAMERA_MOTION_BLUR_JUMP` | 1 | – | – |
+| `COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE` | – | 7 | 25 |
+| `DISABLE_BORDER_SHROUD` | – | 1 | 1 |
+| `DISABLE_OBJECT_SOUND` | – | 5 | 3 |
+| `DISABLE_SCORING` | – | 1 | 1 |
+| `DISABLE_SPECIAL_POWER_DISPLAY` | – | 1 | – |
+| `DRAW_SKYBOX_BEGIN` | – | 1 | 1 |
+| `DRAW_SKYBOX_END` | – | 1 | 2 |
+| `ENABLE_BORDER_SHROUD` | – | 1 | 3 |
+| `ENABLE_OBJECT_SOUND` | – | 7 | – |
+| `ENABLE_SCORING` | – | 1 | 1 |
+| `EVA_SET_ENABLED_DISABLED` | – | 2 | 2 |
+| `FREEZE_TIME` | – | – | 1 |
+| `MAP_SWITCH_BORDER` | – | – | 2 |
+| `MUSIC_SET_VOLUME` | 2 | – | 2 |
+| `NAMED_CUSTOM_COLOR` | – | 10 | – |
+| `NAMED_FLASH_WHITE` | – | – | 26 |
+| `NAMED_HIDE_SPECIAL_POWER_DISPLAY` | – | 1 | – |
+| `NAMED_SHOW_SPECIAL_POWER_DISPLAY` | – | 1 | – |
+| `OPTIONS_SET_DRAWICON_UI_MODE` | – | 3 | 2 |
+| `OPTIONS_SET_OCCLUSION_MODE` | – | 2 | 2 |
+| `OPTIONS_SET_PARTICLE_CAP_MODE` | – | 2 | 2 |
+| `OVERSIZE_TERRAIN` | – | 1 | 1 |
+| `PLAYER_EXCLUDE_FROM_SCORE_SCREEN` | – | 9 | 7 |
+| `PLAYER_SCIENCE_AVAILABILITY` | – | 8 | 18 |
+| `RADAR_FORCE_ENABLE` | – | 1 | – |
+| `RESIZE_VIEW_GUARDBAND` | – | 2 | 2 |
+| `SCREEN_SHAKE` | – | – | 11 |
+| `SET_FPS_LIMIT` | – | 2 | 3 |
+| `SOUND_DISABLE_TYPE` | – | 12 | 8 |
+| `SOUND_ENABLE_ALL` | – | 1 | 1 |
+| `SOUND_ENABLE_TYPE` | – | – | 2 |
+| `SOUND_REMOVE_ALL_DISABLED` | – | 2 | 5 |
+| `SOUND_SET_VOLUME` | 6 | – | – |
+| `UNFREEZE_TIME` | – | – | 1 |
+| `UNIT_AFFECT_OBJECT_PANEL_FLAGS` | – | – | 2 |
+
+Gemeldete Probleme der dargestellten Typen: `GC_ChemGeneral`: none; `MD_GLA03`: none; `MD_USA01`: MUSIC_SET_TRACK: 'Silence' did not start x1.
+
+Lesart: `GC_ChemGeneral` und `MD_GLA03` liefen 3.000 Frames, `MD_USA01` 3.900 (seine Eröffnungssequenz dauert 3.132 Ticks = 104 s). In allen drei Karten endet die Eingabesperre, die Letterbox ist
+am Ende zu, keine Kamerafahrt bleibt hängen, und kein fehlender Aktions- oder Bedingungstyp wird getroffen. Bildprobe (`--filmstrip`, PNGs außerhalb des Repos angesehen): Letterbox-Balken mit
+Hinweiszeile und Sprach-Platzhalter, Kamerafahrt über die gegnerische Basis in `GC_ChemGeneral`, Weißblende in `MD_GLA03`, nach der Sequenz Befehlsleiste und zentrierte Zielzeile
+(„MISSION OBJECTIVE #1: …“) in `MD_GLA03` und `MD_USA01`. Die Nahaufnahmen der Sequenzen in `MD_USA01` zeigen wegen der Zoom-/Neigungsgrenzen der Kamera oft nur Gelände.
+
+**Fund beim Messen:** `MD_GLA03` beendete den Client im ersten Frame mit einer unbehandelten `InvalidDataException` – das Modell `cineexplbox` enthält nur eine Kollisionsbox und kein Mesh.
+`ModelAssetCache` behandelt ein nicht verwendbares Modell jetzt wie ein fehlendes (einmal gemeldet, gezählt, nichts gezeichnet).
+
+**Offen (ausgegeben, aber nicht dargestellt – mit Grund):**
+
+- Ton-Steuerung (`SOUND_SET_VOLUME`, `MUSIC_SET_VOLUME`, `AUDIO_OVERRIDE_VOLUME_TYPE`, `AUDIO_RESTORE_VOLUME_*`, `SOUND_DISABLE_TYPE`/`SOUND_ENABLE_*`/`SOUND_REMOVE_*`,
+  `ENABLE_/DISABLE_OBJECT_SOUND`, `EVA_SET_ENABLED_DISABLED`): der `AudioDirector` hat keine Lautstärke je Ereignistyp und keinen Schalter je Typ; die Skriptklänge spielen mit Katalog-Lautstärke,
+  EVA spricht auch in Zwischensequenzen. `PLAY_SOUND_EFFECT_AT` und `SOUND_PLAY_NAMED` spielen ohne Position.
+- Bildeffekte (`SCREEN_SHAKE`, `CAMERA_ADD_SHAKER_AT`, `CAMERA_BW_MODE_*`, `CAMERA_MOTION_BLUR*`, `CAMERA_FADE_SATURATE`, `DRAW_SKYBOX_*`, `OVERSIZE_TERRAIN`, `RESIZE_VIEW_GUARDBAND`,
+  `MAP_SWITCH_BORDER`, `ENABLE_/DISABLE_BORDER_SHROUD`, `SET_FPS_LIMIT`, `OPTIONS_SET_*`): kein Filter-/Himmel-/Randmodell im Renderer.
+- `FREEZE_TIME`/`UNFREEZE_TIME`: das Original hält die Logik an; hier läuft die Simulation weiter (die VM reicht die Aktion nur weiter).
+- Befehlsleiste und Anzeige (`COMMANDBAR_REMOVE_/ADD_BUTTON_OBJECTTYPE*`, `PLAYER_SCIENCE_AVAILABILITY`, `*_SPECIAL_POWER_DISPLAY`, `UNIT_/TEAM_AFFECT_OBJECT_PANEL_FLAGS`, `NAMED_CUSTOM_COLOR`,
+  `NAMED_/TEAM_FLASH*`, `CAMEO_FLASH`, `*_SET_EMOTICON`, `OBJECT_FORCE_SELECT`, `RADAR_DISABLE/ENABLE/FORCE_ENABLE`): die Befehlsleiste liest keine Skriptüberschreibungen – ein Knopf, den die
+  Mission entfernt, ist im Client weiter da.
+- Wertung (`ENABLE_/DISABLE_SCORING`, `PLAYER_EXCLUDE_FROM_SCORE_SCREEN`): ein Missions-Ergebnisbildschirm mit Punkten existiert nicht.
+- Kamera: `CAMERA_MOD_FREEZE_TIME`, `CAMERA_MOD_FREEZE_ANGLE`, `CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER`, `CAMERA_MOD_SET_ROLLING_AVERAGE`, `CAMERA_TETHER_NAMED`, `CAMERA_SET_DEFAULT`,
+  `CAMERA_LOOK_TOWARD_OBJECT`, `CAMERA_ENABLE_/DISABLE_SLAVE_MODE`, `CAMERA_MOVE_HOME`, `MOVE_CAMERA_TO_SELECTION`, Kamerapfade entlang der Wegpunktverbindungen, die Ease-Zeiten des Skripts.
+- Sprache: keine Untertiteltexte und keine Klanglänge – `HAS_FINISHED_AUDIO` gilt nach 3 s, längere Ansagen überlappen die nächste.
+
+Tests: `tests/CnCNew.Game.Tests/MissionPresentationTests.cs` (Letterbox, Sperre, Text, Zähler, Zeitverlauf einer Kamerabewegung, „dargestellt braucht einen Host“) und `MissionHudTests.cs` (echte
+Karte `GC_ChemGeneral`: Sperre und Letterbox der Eröffnung, verworfene Klicks, Rückgabe nach rund 25 s, Kamera am Ende über der eigenen Basis, Ergebnisbanner); `scripts/check-dozer-build.ps1`
+prüft dasselbe im echten Client (`docs/GAME-HUD.md` §16).
+
 ## 8. Abweichungen und Näherungen (vollständig)
 
 1. **Bauanlage** (`ThingTemplate::isBuildFacility`): im Original aus den Voraussetzungen anderer Vorlagen berechnet; hier: Struktur mit

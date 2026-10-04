@@ -123,8 +123,11 @@ im nächsten Block; Offline-Rendering ohne Gerät wirft nicht und schreibt bei f
 
 **Nicht verdrahtet / offen:**
 
-- **Skript-Ton in Missionen** (`SPEECH_PLAY`, `SOUND_PLAY_NAMED`, `MUSIC_SET_TRACK` u. a. `ScriptOutput`s): `MissionPresentationDirector` zeigt dafür weiter nur den
-  Untertitel-Platzhalter; eine Mission spielt die Playlist ihrer Seite statt der Skriptmusik (Phase 16, Punkt 5).
+- **Skript-Ton in Missionen** ist seit Phase 16, Punkt 5 angeschlossen (`MissionPresentationDirector.Audio` ← `GameAudio.PlayScripted`): `SPEECH_PLAY`, `SOUND_PLAY_NAMED`,
+  `PLAY_SOUND_EFFECT` und `PLAY_SOUND_EFFECT_AT` spielen das benannte Ereignis ohne Position (`AudioDirector.PlayUi`, Quelle `Ui` im Bericht), `MUSIC_SET_TRACK` startet das Stück
+  (`AudioDirector.SetMusicTrack`), danach läuft die Playlist der Seite weiter. **Weiter offen:** die Lautstärke- und Typschalter der Skripte (`SOUND_SET_VOLUME`, `MUSIC_SET_VOLUME`,
+  `AUDIO_OVERRIDE_VOLUME_TYPE`, `SOUND_DISABLE_TYPE`, `EVA_SET_ENABLED_DISABLED` …), die Position von `PLAY_SOUND_EFFECT_AT`, Klanglängen für `HAS_FINISHED_AUDIO` (Platzhalter 3 s); Zähler und
+  Tabelle in `docs/SCRIPT-ENGINE.md` §7a.
 - **Klänge der Spezialfähigkeit selbst** (`UnpackSound`, `PackSound`, `TriggerSound`, `PrepSoundLoop` von `SpecialAbilityUpdate`; Retail: Black Lotus, Hacker, Colonel Burton –
   die Infanterie-Einnahme hat keine) und die Abschlussstimmen (`VoiceCaptureBuildingComplete` …): die Simulation meldet die Zeitpunkte nicht als Ereignis.
 - `VoiceGarrison`/`VoiceGuard` bei Befehlen (die Rückmeldung unterscheidet Betreten und Besetzen nicht), Gebäudeauswahl (Gebäude ohne `VoiceSelect` erscheinen als
