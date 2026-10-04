@@ -185,9 +185,9 @@ static partial class Tests
         """,
     };
 
-    private static SimulationWorld AirWorld(out SyntheticFixture fixture, out Feeder feeder, bool terrain = false)
+    private static SimulationWorld AirWorld(out SyntheticFixture fixture, out Feeder feeder, bool terrain = false, IReadOnlyDictionary<string, string>? files = null)
     {
-        fixture = new SyntheticFixture(files: AirFixtureFiles);
+        fixture = new SyntheticFixture(files: files ?? AirFixtureFiles);
         var map = terrain ? CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(300, 300, 1, (_, _) => 0), "air") : null;
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
         feeder = new Feeder(world);

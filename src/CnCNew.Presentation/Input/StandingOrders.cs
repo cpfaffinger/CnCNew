@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.World;
@@ -36,6 +37,9 @@ public sealed class StandingOrders
     private readonly SortedDictionary<uint, StandingOrder> _orders = [];
     private readonly Dictionary<uint, Vector2> _chaseGoal = [];
 
+    /// <summary>The point an attacking aircraft flies out to after it overflew its target: it cannot stop to turn, so it leaves far enough to turn around and come in for the next pass.</summary>
+    private readonly Dictionary<uint, Vector2> _egress = [];
+
     public int Count => _orders.Count;
 
     public bool TryGet(EntityId unit, out StandingOrder order) => _orders.TryGetValue(unit.Value, out order!);
@@ -46,12 +50,14 @@ public sealed class StandingOrders
     {
         _orders[unit.Value] = order;
         _chaseGoal.Remove(unit.Value);
+        _egress.Remove(unit.Value);
     }
 
     public void Clear(EntityId unit)
     {
         _orders.Remove(unit.Value);
         _chaseGoal.Remove(unit.Value);
+        _egress.Remove(unit.Value);
     }
 
     /// <summary>Appends a waypoint; a unit without a waypoint order starts one (the first point is ordered by the caller).</summary>
@@ -108,6 +114,13 @@ public sealed class StandingOrders
         }
         // An aircraft cannot stop in the air: it keeps flying at the target and fires whenever the weapon may (inside its range, past its minimum range, aimed), as an attack run.
         var flying = unit.Template.IsKindOf("AIRCRAFT");
+        if (flying && IsOutOfAirfieldAmmunition(world, unit))
+        {
+            // Nothing left to shoot until the airfield reloads it: the attack is over and the jet's own AI flies home (JetAIUpdate.IdleLogic) once it is idle, which a move to its own position makes it.
+            Clear(unit.Id);
+            issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, unit.X, unit.Y));
+            return;
+        }
         if (SimulationQueries.InRange(world, unit, target))
         {
             if (!flying && _chaseGoal.Remove(unit.Id.Value) && unit.HasMoveTarget)
@@ -117,10 +130,47 @@ public sealed class StandingOrders
             if (!flying) return;
         }
         if (!SimulationQueries.CanMove(unit)) return;
+        if (flying && unit.Template.Locomotor is { IsWings: true } && AttackRunEgress(world, player, unit, target, issue)) return;
         var goal = SimulationQueries.GroundOf(target);
         if (_chaseGoal.TryGetValue(unit.Id.Value, out var last) && unit.HasMoveTarget && Vector2.Distance(last, goal) <= ChaseRepathDistance) return;
         _chaseGoal[unit.Id.Value] = goal;
         issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, target.X, target.Y));
+    }
+
+    /// <summary>A jet whose weapons that reload only at an airfield are all empty (<see cref="JetAIUpdate.IsOutOfSpecialReloadAmmo"/>).</summary>
+    private static bool IsOutOfAirfieldAmmunition(SimulationWorld world, Entity unit)
+        => unit.Modules.OfType<JetAIUpdate>().FirstOrDefault() is { } jet && jet.IsOutOfSpecialReloadAmmo(world);
+
+    /// <summary>
+    /// The turn-around of an attack run (a fighter flies over its target and cannot stop): once the aircraft is past the target and still within weapon range it is sent straight ahead
+    /// for one weapon range (<see cref="_egress"/>); only when it is that far out does the order chase the target again, so the next pass starts outside the weapon's minimum range and
+    /// the aircraft has turned toward the target before it is in range. True while the aircraft is on the way out (the caller issues no approach).
+    /// </summary>
+    private bool AttackRunEgress(SimulationWorld world, PlayerId player, Entity unit, Entity target, Func<Func<ulong, long, SimCommand>, SubmitResult> issue)
+    {
+        var reach = (float)SimulationQueries.WeaponRange(world, unit).ToDecimal();
+        if (reach <= 0f) return false;
+        var toTarget = SimulationQueries.GroundOf(target) - SimulationQueries.GroundOf(unit);
+        var angle = (float)unit.Angle.ToDecimal();
+        var heading = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+        var distance = toTarget.Length();
+        if (_egress.ContainsKey(unit.Id.Value))
+        {
+            if (distance >= reach)
+            {
+                _egress.Remove(unit.Id.Value);
+                _chaseGoal.Remove(unit.Id.Value);
+                return false;
+            }
+            if (unit.HasMoveTarget) return true;
+        }
+        else if (distance >= reach || Vector2.Dot(heading, toTarget) >= 0f) return false;
+        var point = SimulationQueries.GroundOf(unit) + heading * reach;
+        _egress[unit.Id.Value] = point;
+        _chaseGoal.Remove(unit.Id.Value);
+        var (x, y) = (SimulationQueries.ToFixed(point.X), SimulationQueries.ToFixed(point.Y));
+        issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, x, y));
+        return true;
     }
 
     /// <summary>The nearest visible enemy in weapon range (ties: lower id), fired at when the weapon is ready.</summary>

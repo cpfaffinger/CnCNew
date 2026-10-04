@@ -17,6 +17,7 @@ Func<string[], int>[] suites =
     UnitConditionTests.Run,
     StructureConditionTests.Run,
     CaptureConditionTests.Run,
+    JetOrderTests.Run,
 ];
 
 var failures = 0;

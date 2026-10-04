@@ -66,7 +66,9 @@ public readonly record struct ParkingInfo(Point3 ParkingSpace, Point3 RunwayPrep
 /// (row, column) lies at <c>u = (row − (rows−1)/2)·a</c>, <c>v = side·b/2</c> with <c>side = −1</c> for the first and <c>+1</c> for the second half of the columns, facing outwards
 /// (<c>θ + side·π/2</c>); the hangar position is 40 % of that way from the centre; the taxi point (<c>Prep</c>) is 40 beyond the footprint on the same side; the runway of the column starts
 /// at <c>u = −a − 40</c> and ends <c>3a</c> further along the heading, <c>b + 80</c> off the centre, and the approach point lies <c>0.75</c> runway lengths past its end at
-/// <c>ApproachHeight</c>. The helipad is the building's centre. Documented synthetic layout; the reference reads all of it from the model.
+/// <c>ApproachHeight</c>. The helipad is the building's centre. Documented synthetic layout; the reference reads all of it from the model. Where the host supplies the model's bones
+/// (<see cref="ModelGeometry"/>, read from the base pose of the draw model by the client layer), the airfield uses exactly the points of <c>buildInfo</c> instead: the parking, hangar and
+/// taxi points per space, <c>RunwayStart</c>/<c>RunwayEnd</c> per runway, <c>HeliPark01</c> for the helipad, with the height of the apron (the airfield's own height plus the bone's).
 /// </para>
 /// Not modeled: <c>defectAllParkedUnits</c> (a captured airfield's parked units change sides: no module is told of an owner change), carrier decks (<c>FlightDeckBehavior</c> is a shell),
 /// the helicopter rally point, the door-hold of <c>ProductionUpdate::setHoldDoorOpen</c> (presentation).
@@ -129,12 +131,39 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         return new Point3(x, y, world.GroundHeightAt(x, y) + height);
     }
 
-    /// <summary>The helipad position of <c>PRODUCED_AT_HELIPAD</c> aircraft (<c>HeliPark01</c>): the building's centre.</summary>
-    public Point3 HeliPark(IWorldServices world) => ToWorld(world, Fixed.Zero, Fixed.Zero, Data.LandingDeckHeightOffset);
+    /// <summary>The model's points of this airfield, or null where the host supplied no model geometry (the computed layout then applies); a table without this airfield or with other dimensions is refused.</summary>
+    private AirfieldLayout? ModelLayout(IWorldServices world)
+    {
+        var geometry = world.Templates.Geometry;
+        if (geometry.IsEmpty) return null;
+        if (!geometry.Airfields.TryGetValue(Entity.Template.Name, out var layout)) throw new InvalidDataException($"The model geometry has no layout for the airfield '{Entity.Template.Name}'.");
+        if (layout.Rows != data.Rows || layout.Cols != data.Cols)
+            throw new InvalidDataException($"The model geometry of '{Entity.Template.Name}' is for {layout.Rows}x{layout.Cols} spaces, the module has {data.Rows}x{data.Cols}.");
+        return layout;
+    }
+
+    /// <summary>A bone of the airfield model in the world: the object's frame rotated by its heading, at the apron height (<c>Object::getSingleLogicalBonePosition</c>).</summary>
+    private Point3 FromBone(BonePose bone)
+    {
+        var cos = FixedTrig.Cos(Entity.Angle);
+        var sin = FixedTrig.Sin(Entity.Angle);
+        return new Point3(Entity.X + bone.X * cos - bone.Y * sin, Entity.Y + bone.X * sin + bone.Y * cos, Entity.Z + bone.Z + data.LandingDeckHeightOffset);
+    }
+
+    private Fixed BoneHeading(BonePose bone) => FixedTrig.Normalize(Entity.Angle + bone.Heading);
+
+    /// <summary>The height of the apron the aircraft taxi on: the airfield's own height (the model's tarmac lies at its origin) plus the deck offset. Terrain-relative where no model geometry exists.</summary>
+    public Fixed ApronHeight(IWorldServices world, Fixed x, Fixed y)
+        => world.Templates.Geometry.IsEmpty ? world.GroundHeightAt(x, y) + data.LandingDeckHeightOffset : Entity.Z + data.LandingDeckHeightOffset;
+
+    /// <summary>The helipad position of <c>PRODUCED_AT_HELIPAD</c> aircraft (<c>HeliPark01</c>): the model's bone, else the building's centre.</summary>
+    public Point3 HeliPark(IWorldServices world)
+        => ModelLayout(world) is { HeliPark: { } pad } ? FromBone(pad) : ToWorld(world, Fixed.Zero, Fixed.Zero, Data.LandingDeckHeightOffset);
 
     /// <summary><c>calcPPInfo</c> for the space at <paramref name="index"/> (the runway is the one of its column).</summary>
     public ParkingInfo InfoOfSpace(IWorldServices world, int index)
     {
+        if (ModelLayout(world) is { } layout) return InfoFromModel(world, layout, index);
         var (a, b) = Extents();
         var rows = Math.Max(data.Rows, 1);
         var cols = Math.Max(data.Cols, 1);
@@ -159,9 +188,27 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         return new ParkingInfo(data.ParkInHangars ? hangar : parking, prep, data.ParkInHangars ? orientation : orientation, start, end, approach, approach, hangar, orientation, takeoff);
     }
 
-    /// <summary>The parking orientation of an apron space as the offset of <c>reserveSpace</c> uses it.</summary>
-    private Fixed ApronOrientation(int index)
+    /// <summary><c>calcPPInfo</c> from the model's bones: the space's own points and its column's runway; the approach point lies 0.75 runway lengths past the end at <c>ApproachHeight</c>.</summary>
+    private ParkingInfo InfoFromModel(IWorldServices world, AirfieldLayout layout, int index)
     {
+        var cols = Math.Max(data.Cols, 1);
+        var column = index % cols;
+        var parking = FromBone(layout.Parking[index]);
+        var hangar = FromBone(layout.Hangar[index]);
+        var prep = FromBone(layout.Prep[index]);
+        var start = FromBone(layout.RunwayStart[column]);
+        var end = FromBone(layout.RunwayEnd[column]);
+        var approach = new Point3(end.X + (end.X - start.X) * Fixed.FromDecimal(0.75m), end.Y + (end.Y - start.Y) * Fixed.FromDecimal(0.75m), end.Z + data.ApproachHeight);
+        if (!data.HasRunways) { start = end = prep; approach = prep; }
+        var takeoff = AirModules.Distance2D(start.X, start.Y, end.X, end.Y);
+        var parkOrientation = BoneHeading(data.ParkInHangars ? layout.Hangar[index] : layout.Parking[index]);
+        return new ParkingInfo(data.ParkInHangars ? hangar : parking, prep, parkOrientation, start, end, approach, approach, hangar, BoneHeading(layout.Hangar[index]), takeoff);
+    }
+
+    /// <summary>The parking orientation of an apron space as the offset of <c>reserveSpace</c> uses it.</summary>
+    private Fixed ApronOrientation(IWorldServices world, int index)
+    {
+        if (ModelLayout(world) is { } layout) return BoneHeading(layout.Parking[index]);
         var cols = Math.Max(data.Cols, 1);
         var side = Fixed.FromInt(index % cols * 2 < cols ? -1 : 1);
         return FixedTrig.Normalize(Entity.Angle + side * FixedTrig.HalfPi);
@@ -237,7 +284,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         info = InfoOfSpace(world, index);
         if (parkingOffset != Fixed.Zero)
         {
-            var orientation = ApronOrientation(index);
+            var orientation = ApronOrientation(world, index);
             info = info with { ParkingSpace = info.ParkingSpace with { X = info.ParkingSpace.X + parkingOffset * FixedTrig.Cos(orientation), Y = info.ParkingSpace.Y + parkingOffset * FixedTrig.Sin(orientation) } };
         }
         return true;
@@ -372,7 +419,8 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         {
             if (world.FindEntity(id) is not { EffectivelyDead: false } aircraft) continue;
             var transitioning = Array.Find(aircraft.ModuleArray, module => module is JetAIUpdate) is JetAIUpdate jet && jet.TakeoffOrLandingInProgress;
-            if (aircraft.Z > world.GroundHeightAt(aircraft.X, aircraft.Y) && !transitioning) continue;
+            var airborne = Array.Find(aircraft.ModuleArray, module => module is JetAIUpdate) is JetAIUpdate { AllowAirLoco: true };
+            if (airborne && !transitioning) continue;
             world.Kill(aircraft.Id);
         }
         Purge(world);

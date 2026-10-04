@@ -575,6 +575,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>The locomotor the object moves with right now (<c>AIUpdateInterface::getCurLocomotor</c>); aircraft switch between their locomotor sets (<c>JetAIUpdate::chooseLocomotorSet</c>).</summary>
     protected virtual LocomotorInfo? ActiveLocomotor => Entity.Template.Locomotor;
 
+    /// <summary>
+    /// The object flies <paramref name="locomotor"/> as a fixed-wing aircraft (<c>Appearance = WINGS</c>): <see cref="MoveWinged"/> instead of the ordinary air movement. Only <see cref="JetAIUpdate"/>
+    /// answers yes; other aircraft AIs (bombers on a delivery run, gunships, drones, missiles) keep the movement they had (<c>docs/SIM-JET-FLIGHT.md</c>).
+    /// </summary>
+    protected virtual bool FliesWithWings(LocomotorInfo locomotor) => false;
+
+    /// <summary>A winged aircraft's move order ended at (<paramref name="x"/>, <paramref name="y"/>) without stopping: it has to keep flying, which the derived AI does by circling there.</summary>
+    protected virtual void OnWingedArrival(Fixed x, Fixed y) { }
+
     /// <summary>Dozers and workers can raise structures (<c>DozerAIInterface</c>); every other AI cannot.</summary>
     public virtual bool CanBuild => false;
 
@@ -970,6 +979,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     private void Move(IWorldServices world, LocomotorInfo locomotor)
     {
+        if ((locomotor.Surfaces & LocomotorSurfaces.Air) != 0 && FliesWithWings(locomotor))
+        {
+            MoveWinged(world, locomotor);
+            return;
+        }
         if (world.Navigation is not { } navigation)
         {
             MoveStraight(world, locomotor);
@@ -1052,6 +1066,61 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
             world.ResolveFootprintCollisions(Entity, stepX, stepY);
         }
+    }
+
+    /// <summary>
+    /// The move order of a fixed-wing aircraft (<c>Locomotor::moveTowardsPositionWings</c>, which is <c>moveTowardsPositionOther</c> for the 2D part): fly toward the target, turning by at most the
+    /// locomotor's turn rate per tick, at a speed that never drops below <see cref="LocomotorInfo.MinSpeed"/>. The order ends without stopping: an aircraft within one tick of travel of the target, or
+    /// one whose target lies behind it inside its turning circle (it cannot hit a point there; the reference lets it orbit until it slowed down), has "arrived" and carries on flying —
+    /// <see cref="OnWingedArrival"/> lets the derived AI circle. The reference slows an aircraft to its minimum speed once the distance to the goal fits the braking distance; so does this.
+    /// </summary>
+    private void MoveWinged(IWorldServices world, LocomotorInfo locomotor)
+    {
+        var targetX = Entity.MoveTargetX;
+        var targetY = Entity.MoveTargetY;
+        var distance = AirModules.Distance2D(Entity.X, Entity.Y, targetX, targetY);
+        var arrival = Fixed.Max(locomotor.CloseEnoughDist, locomotor.Speed);
+        var behind = distance > WingEpsilon && FixedTrig.AngleDifference(Entity.Angle, FixedTrig.Atan2(targetY - Entity.Y, targetX - Entity.X)).Abs() > FixedTrig.HalfPi;
+        var arrived = distance <= arrival || (behind && distance <= TurnRadius(locomotor, Fixed.Max(Entity.Speed, locomotor.MinSpeed)) * Fixed.FromInt(2));
+        var brakingDistance = Fixed.Zero;
+        if (locomotor.Braking > Fixed.Zero && Entity.Speed > locomotor.MinSpeed)
+            brakingDistance = (Entity.Speed * Entity.Speed - locomotor.MinSpeed * locomotor.MinSpeed) / (locomotor.Braking * Fixed.FromInt(2));
+        SteerWinged(locomotor, targetX, targetY, distance <= brakingDistance ? locomotor.MinSpeed : CappedSpeed(locomotor));
+        if (!arrived) return;
+        Entity.HasMoveTarget = false;
+        InvalidatePath();
+        world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
+        OnWingedArrival(targetX, targetY);
+    }
+
+    private static readonly Fixed WingEpsilon = Fixed.FromRaw(1024);
+
+    /// <summary><c>Locomotor::calcMinTurnRadius</c>: the radius of the circle an aircraft flies at <paramref name="speed"/> with its turn rate (a huge radius when it cannot turn).</summary>
+    protected static Fixed TurnRadius(LocomotorInfo locomotor, Fixed speed)
+        => locomotor.TurnRatePerTick > Fixed.Zero ? speed / locomotor.TurnRatePerTick : Fixed.FromInt(1_000_000);
+
+    /// <summary>
+    /// One tick of winged flight toward (<paramref name="targetX"/>, <paramref name="targetY"/>): the heading turns toward the target by at most the turn rate (the reference turns an aircraft at its
+    /// full turn rate whatever its speed: <c>MinTurnSpeed</c> is a wheeled-vehicle setting), the speed approaches <paramref name="goalSpeed"/> by the locomotor's acceleration or braking but never
+    /// leaves the range from <see cref="LocomotorInfo.MinSpeed"/> up, and the aircraft advances along its heading by that speed.
+    /// </summary>
+    protected void SteerWinged(LocomotorInfo locomotor, Fixed targetX, Fixed targetY, Fixed goalSpeed)
+    {
+        var dx = targetX - Entity.X;
+        var dy = targetY - Entity.Y;
+        if (dx.Abs() + dy.Abs() > WingEpsilon)
+        {
+            var desired = FixedTrig.Atan2(dy, dx);
+            var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
+            var turn = locomotor.TurnRatePerTick;
+            Entity.Angle = turn > Fixed.Zero && difference.Abs() > turn ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turn : turn)) : desired;
+        }
+        goalSpeed = Fixed.Max(goalSpeed, locomotor.MinSpeed);
+        var speed = Fixed.Max(Entity.Speed, locomotor.MinSpeed);
+        speed = speed < goalSpeed ? Fixed.Min(goalSpeed, speed + locomotor.Acceleration) : Fixed.Max(goalSpeed, speed - locomotor.Braking);
+        Entity.Speed = speed;
+        Entity.X += FixedTrig.Cos(Entity.Angle) * speed;
+        Entity.Y += FixedTrig.Sin(Entity.Angle) * speed;
     }
 
     private long _blockerReplanTick = -1000;

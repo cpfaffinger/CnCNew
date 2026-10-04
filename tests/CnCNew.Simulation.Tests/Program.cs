@@ -252,6 +252,12 @@ run.Test("Air: a neutron blast kills crews and leaves unmanned vehicles", Tests.
 run.Test("Air: the neutron missile climbs, turns, dives, dies and blasts with falling damage", Tests.AirNeutronMissile);
 run.Test("Air: a missile silo's door follows the recharge of its power", Tests.AirMissileSiloDoors);
 run.Test("Air: the Spectre gunship inserts, orbits, fires, departs and cleans up", Tests.AirSpectreGunship);
+run.Test("Wings: a winged jet never falls below its minimum speed and does not stop at the end of its order; a helicopter does", Tests.WingMinimumSpeedAndNoStopping);
+run.Test("Wings: turning is limited by the turn rate and a destination behind is reached by a loop", Tests.WingTurnRateIsLimited);
+run.Test("Wings: a jet circles its destination at CirclingRadius (clockwise, counter-clockwise, smallest)", Tests.WingCirclesItsDestination);
+run.Test("Wings: the circle survives snapshots and a new order leaves it", Tests.WingCircleSurvivesSnapshots);
+run.Test("Wings: the full airfield lifecycle with a winged locomotor", Tests.WingJetFlightLifecycle);
+run.Test("Air: an airfield uses the injected model bones (hangar, parking, runway), refuses a mismatching table and survives snapshots", Tests.AirAirfieldUsesTheModelBones);
 run.Test("Air: a carrier's deployment creates the gunship at the map edge on a map with terrain", Tests.AirSpectreDeployedByCarrier);
 run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
@@ -328,6 +334,7 @@ if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and s
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: winged jets fly a square, never below their minimum speed, circle, and the B-52 and helicopters keep their movement", () => Tests.RealWingedFlight(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));

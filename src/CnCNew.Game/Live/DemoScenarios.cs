@@ -60,7 +60,7 @@ public static class DemoScenarios
             new(1, "raptor1", ScenarioOrderKind.Attack, "trooper1"),
             new(1, "raptor2", ScenarioOrderKind.Attack, "trooper2"),
             new(1, "trooper1", ScenarioOrderKind.Attack, "raptor1"),
-            new(1, "trooper2", ScenarioOrderKind.Attack, "raptor1"),
+            new(1, "trooper2", ScenarioOrderKind.Attack, "raptor2"),
         ],
         350, 0, 0f, 45f, 520f)
     {

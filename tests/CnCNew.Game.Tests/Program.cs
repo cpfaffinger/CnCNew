@@ -12,6 +12,7 @@ Func<string[], int>[] suites =
     MissionPresentationTests.Run,
     MissionHudTests.Run,
     ScenarioTests.Run,
+    ModelGeometryTests.Run,
 ];
 
 var failures = 0;

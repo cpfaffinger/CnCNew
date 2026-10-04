@@ -106,9 +106,52 @@ if (args is ["model", var modelContentDirectory, var modelName])
     }
 }
 
+if (args is ["bones", var bonesContentDirectory, var bonesModelName, ..var bonesPrefixes])
+{
+    try
+    {
+        var content = ContentFileSystem.Open(bonesContentDirectory);
+        var library = new W3dAssetLibrary(path => content.Exists(path) ? content.OpenRead(path) : null);
+        var model = library.GetModel(bonesModelName);
+        // World position of every bone in the base pose with an identity root ("pristine" bones: ParkingPlaceBehavior reads its runway and parking points from them).
+        for (var index = 0; index < model.Skeleton.BoneCount; index++)
+        {
+            var name = model.Skeleton.BoneNames[index];
+            if (bonesPrefixes.Length > 0 && !bonesPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))) continue;
+            var matrix = model.Skeleton.RestWorldTransforms[index];
+            var heading = MathF.Atan2(matrix.M12, matrix.M11) * 180f / MathF.PI;
+            Console.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{index,4} {name,-24} pos ({matrix.M41,9:F3}, {matrix.M42,9:F3}, {matrix.M43,9:F3}) heading {heading,8:F2}"));
+        }
+
+        // Model-space extent of the drawn meshes in the base pose (how far the model reaches below its origin).
+        var low = new System.Numerics.Vector3(float.MaxValue);
+        var high = new System.Numerics.Vector3(float.MinValue);
+        foreach (var sub in model.GetLod(model.LodCount - 1))
+        {
+            if (!sub.IsRenderable || sub.Mesh is null || sub.Mesh.IsHidden || sub.IsCollisionOnly) continue;
+            var world = model.Skeleton.RestWorldTransforms[sub.BoneIndex];
+            foreach (var vertex in sub.Mesh.Vertices)
+            {
+                var point = System.Numerics.Vector3.Transform(vertex, world);
+                low = System.Numerics.Vector3.Min(low, point);
+                high = System.Numerics.Vector3.Max(high, point);
+            }
+        }
+
+        Console.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"mesh extent in model space: ({low.X:F2}, {low.Y:F2}, {low.Z:F2}) .. ({high.X:F2}, {high.Y:F2}, {high.Z:F2})"));
+        return 0;
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"error: {exception.Message}");
+        return 1;
+    }
+}
+
 if (args is not ["audit", var contentDirectory])
 {
     Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  CnCNew.W3dTool bones <content-directory> <model-name> [bone-name-prefix...]");
     Console.Error.WriteLine("  CnCNew.W3dTool model <content-directory> <model-name>");
     Console.Error.WriteLine("  CnCNew.W3dTool audit <content-directory>");
     Console.Error.WriteLine("  CnCNew.W3dTool audit-skeletons <content-directory>");
