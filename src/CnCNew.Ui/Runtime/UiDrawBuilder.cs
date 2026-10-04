@@ -273,10 +273,56 @@ public sealed partial class UiWindowTree
         private void DrawSlider(UiWindow window)
         {
             var set = Set(window, WndDrawDataKind.Enabled);
-            var horizontal = window.Type == WndWindowType.HorizontalSlider;
-            if ((window.Status & WndStatus.Image) != 0) ThreePiece(Offset(window, window.Rect), set[0].Image, set[2].Image, set[1].Image, horizontal);
-            else Box(window.Rect, set[0]);
-            DrawBackground(window, Set(window, WndDrawDataKind.SliderThumbEnabled), UiGadgetGeometry.SliderThumb(window));
+            var image = (window.Status & WndStatus.Image) != 0;
+            if (!image) Box(window.Rect, set[0]);
+            else if (window.Type == WndWindowType.HorizontalSlider) SliderBoxes(window);
+            else ThreePiece(Offset(window, window.Rect), set[0].Image, set[2].Image, set[1].Image, false);
+
+            // The thumb is a push button child in the original (gogoGadgetSlider) that shares the slider's hilite and is
+            // pressed while dragged; W3DGadgetPushButtonImageDrawOne shows an enabled, pressed button with the
+            // hilite-selected image.
+            var pressed = window.Slider!.Dragging;
+            var state = StateOf(window);
+            var thumb = image && pressed && state == DrawState.Enabled
+                ? Set(window, WndDrawDataKind.SliderThumbEnabled, DrawState.Hilite)
+                : Set(window, WndDrawDataKind.SliderThumbEnabled, state);
+            DrawBackground(window, thumb, UiGadgetGeometry.SliderThumb(window), pressed ? 1 : 0);
+        }
+
+        /// <summary>
+        /// The image look of a horizontal slider (<c>W3DGadgetHorizontalSliderImageDraw</c>): no bar, but a row of square
+        /// boxes, filled up to the value and blank after it, centred in the window. The images come from fixed draw data
+        /// slots whatever the window state: disabled 0 is the filled box, disabled 1 the blank box, hilite 0 the frame
+        /// drawn behind the row while the slider is hilited. The box edge is the filled image's width at the display
+        /// scale, the gap is two pixels.
+        /// </summary>
+        private void SliderBoxes(UiWindow window)
+        {
+            const int gap = 2;
+            var disabled = window.Definition.GetDrawData(WndDrawDataKind.Disabled);
+            // The original dereferences both images unchecked; a slider without them has nothing to draw.
+            if (disabled[0].Image is not { } filled || disabled[1].Image is not { } blank) return;
+            var rect = window.Rect;
+            int edge;
+            if (tree.Services.Images is { } images && images.TryGetSize(filled, out var imageWidth, out _)) edge = window.Transform.X.Length(imageWidth);
+            else
+            {
+                _unresolvedSizes++;
+                edge = Math.Max(1, rect.Height / 2);
+            }
+            var slider = window.Slider!;
+            var step = edge + gap;
+            var range = Math.Max(1, slider.Maximum - slider.Minimum);
+            var selectedUntil = rect.X + (int)((long)(slider.Value - slider.Minimum) * rect.Width / range);
+            int boxes = 0, selected = 0;
+            for (var start = rect.X; start + edge < rect.Right; start += step, boxes++)
+                if (start <= selectedUntil && slider.Value != slider.Minimum) selected++;
+            var left = rect.X + (rect.Width - boxes * step) / 2;
+            if (window.IsHilited && window.Definition.GetDrawData(WndDrawDataKind.Hilite)[0].Image is { } frame)
+                for (var index = 0; index <= boxes; index++)
+                    Image(frame, new UiRect(left - step / 2 + index * step, rect.Y + edge / 3, step, step));
+            for (var index = 0; index < boxes; index++)
+                Image(index < selected ? filled : blank, new UiRect(left + index * step, rect.Y, edge, edge));
         }
 
         private void DrawProgressBar(UiWindow window)
