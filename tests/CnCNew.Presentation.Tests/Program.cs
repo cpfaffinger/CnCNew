@@ -7,10 +7,12 @@ Func<string[], int>[] suites =
     ObjectTests.Run,
     FxTests.Run,
     TerrainTests.Run,
+    RoadTests.Run,
     CameraTests.Run,
     VisionTests.Run,
     MinimapTests.Run,
     WorldRealDataTests.Run,
+    RoadRealDataTests.Run,
     InputTests.Run,
 ];
 
