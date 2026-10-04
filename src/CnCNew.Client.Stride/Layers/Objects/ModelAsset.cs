@@ -129,6 +129,9 @@ internal sealed class ModelAsset
     /// <summary>Approximate <c>GeometryInfo::getMaxHeightAbovePosition</c> (max rest-pose Z above the pivot), for the construction-rise offset.</summary>
     public float Height { get; }
 
+    /// <summary>How far the lowest point of the rest pose lies below the model origin (0 when nothing does): a grounded aircraft is lifted by this much so its landing gear stands on the surface.</summary>
+    public float GroundClearance { get; private init; }
+
     public bool HasHouseColorMeshes { get; }
 
     /// <summary>The rigid model to assign for a team: <see cref="NeutralModel"/> unless the asset has HOUSECOLOR meshes, built and cached lazily.</summary>
@@ -366,7 +369,7 @@ internal sealed class ModelAsset
         var hasHouseColor = meshInfos.Any(info => info.IsHouseColor) || skinParts.Any(part => part.Batches.Any(batch => batch.IsHouseColor));
 
         return new ModelAsset(name, services, model, neutralModel, rigidParts.ToArray(), meshInfos.ToArray(), skinParts.ToArray(),
-            radius, maxHeight <= 0 ? radius : maxHeight, hasHouseColor);
+            radius, maxHeight <= 0 ? radius : maxHeight, hasHouseColor) { GroundClearance = minimum.Z < 0f && minimum.Z > -50f ? -minimum.Z : 0f };
     }
 
     private Model BuildTeamVariant(ColorValue team)

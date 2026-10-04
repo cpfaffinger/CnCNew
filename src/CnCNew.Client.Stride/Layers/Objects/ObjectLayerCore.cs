@@ -196,6 +196,14 @@ internal sealed class ObjectLayerCore : IWorldLayer
             z -= asset.Height * (1f - progress);
         }
 
+        // A grounded aircraft rolls on its landing gear: its model reaches below its origin (the Raptor by about 2 units), so it would sink into the apron. It is lifted by that
+        // clearance, fading out over the first four units of height as it takes off. The simulation keeps its object on the surface (it must count as grounded).
+        if (asset is { GroundClearance: > 0f } && drawable.Visual.IsKindOf("AIRCRAFT") && !drawable.IsStatic)
+        {
+            var above = drawable.Position.Z - frame.Match.Heights.HeightAt(drawable.Position.X, drawable.Position.Y);
+            z += asset.GroundClearance * Math.Clamp(1f - above / 4f, 0f, 1f);
+        }
+
         var position = new Vector3(drawable.Position.X, drawable.Position.Y, z);
         // Drawable::applyPhysicsXform: Translate(0, 0, lift), Rotate_Y(pitch), Rotate_X(-roll) in the object's own frame, before the placement.
         var chassis = drawable.Chassis.IsLevel
