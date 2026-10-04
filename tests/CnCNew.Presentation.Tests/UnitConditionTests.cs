@@ -491,10 +491,12 @@ internal static class UnitConditionTests
         // The standing attack's fire order every tick: the turret rotates toward the victim, then the shot goes out and the turret holds, finally it turns back.
         var rotating = new List<bool>();
         long shotTick = -1;
-        for (var step = 1; step <= 90; step++)
+        for (var step = 1; step <= 200; step++)
         {
             var tick = rig.World.Tick;
             if (shotTick < 0) rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, tick, gunner, victim));
+            // The attack goes on while the victim lives, whatever the order stream does; once it is dead the turret holds and turns back.
+            if (step == 40) rig.Send(sequence => new KillCommand(PlayerId.System, sequence, tick, victim));
             rig.Step();
             if (shotTick < 0 && rig.Get(gunner).LastFireTick == tick) shotTick = tick;
             rotating.Add(rig.Bits(gunner).Contains(UnitFlags.TurretRotate));
@@ -503,7 +505,8 @@ internal static class UnitConditionTests
         Assert(shotTick >= 0, $"the weapon fired once the turret pointed at the victim (waits {rig.World.TurretWaits}, rejections {string.Join(",", rig.World.RejectionCounts)})");
         Assert(rotating.Take(14).All(value => value), "TURRET_ROTATE while the turret turns toward the victim (14 full steps, the 15th arrives)");
         Assert(rotating.Skip(16).Take(6).All(value => !value), "it stops when the turret has arrived and holds the aim");
-        Assert(rotating.Skip(22).Any(value => value) && !rotating[^1], "after the recentre time it turns back (rotating again) and rests at the natural angle");
+        Assert(rotating.Skip(22).Take(18).All(value => !value), "it keeps its aim at the living victim without any further order");
+        Assert(rotating.Skip(40).Any(value => value) && !rotating[^1], "once the victim is dead and the recentre time has passed it turns back (rotating again) and rests at the natural angle");
     }
 
     private static void JetBits()

@@ -335,6 +335,13 @@ run.Test("Turrets: objects without aiming turrets, uncontrolled slots and script
 run.Test("Turrets: hold, recentre, rest and a victim that dies", Tests.TurretsHoldRecentreAndRest);
 run.Test("Turrets: two turrets, firing pitch, sweep and linked turrets", Tests.TurretsTwoTurretsPitchAndSweep);
 run.Test("Turrets: snapshot mid-turn and determinism", Tests.TurretsSnapshotMidTurnAndDeterminism);
+run.Test("Turret attack: the aim survives order gaps and a chase; another order or the victim's death ends it", Tests.TurretAttackSurvivesGapsChaseAndAnOrderEndsIt);
+run.Test("Turret attack: a dead or departing victim ends it, a dead attacker leaves nothing", Tests.TurretAttackEndsWhenTheVictimDiesOrIsLost);
+run.Test("Turret attack: only attack orders start one, a new fire order moves it", Tests.TurretAttackOnlyFromAnAttackOrder);
+run.Test("Turret attack: a victim that is no longer visible ends the aim", Tests.TurretAttackEndsWhenTheVictimIsNoLongerVisible);
+run.Test("Turret attack: snapshot mid-pursuit, determinism and the replay of PursueCommand", Tests.TurretAttackSnapshotAndReplay);
+run.Test("Turret idle scan: random angle and interval, hold, return, determinism, snapshot", Tests.TurretIdleScanGlancesAroundDeterministically);
+run.Test("Turret idle scan: an attack interrupts it and it resumes afterwards", Tests.TurretIdleScanYieldsToAnAttackAndResumes);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
@@ -348,6 +355,7 @@ if (contentDirectory is not null) run.Test("Real data: the last nine modules (sa
 if (contentDirectory is not null) run.Test("Real data: weapon sets, multi-weapon objects and the Gattling Tank's weapon choice", () => Tests.RealWeaponSlots(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: Ranger, Red Guard, Rebel and Black Lotus capture a barracks in the stages of their data", () => Tests.RealStagedCapture(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: turrets of the Crusader, the Battlemaster, the sweeping guns and the linked battleships", () => Tests.RealTurrets(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turret on a Battlemaster it chases; retail turrets scan while idle", () => Tests.RealTurretAttackAndScan(contentDirectory));
 return run.Finish();
 
 /// <param name="only">With <c>--only TEXT</c>, just the tests whose name contains TEXT run (a development aid; the full run takes no argument).</param>

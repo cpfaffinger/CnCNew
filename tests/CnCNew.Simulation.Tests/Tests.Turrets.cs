@@ -345,15 +345,19 @@ static partial class Tests
         Check.That(TicksUntilShot(world, feeder, tank.Id.Value, target) == 15, "The turret turned toward the target and fired.");
         Check.That(Encoding.UTF8.GetString(WorldSnapshot.Write(world)).Contains("\"turrets\""), "A turret away from rest is part of the snapshot.");
 
-        // Hold: the shot (delay 9 ticks) plus the recentre time (15 ticks) after it.
-        for (var i = 0; i < 23; i++) world.Step();
-        Check.That(Near(tank.TurretOf(0)!.Value.Angle, Degrees(90m), 1m) && !tank.TurretOf(0)!.Value.Rotating, "After the last order it keeps its aim until the weapon would be ready again plus the recentre time.");
-        for (var i = 0; i < 12; i++) world.Step();
-        var turning = tank.TurretOf(0)!.Value;
-        Check.That(turning.Angle > Degrees(5m) && turning.Angle < Degrees(85m) && turning.Rotating, $"Then it turns back ({turning.Angle.Raw} raw) ...");
-        for (var i = 0; i < 40; i++) world.Step();
-        Check.That(tank.TurretOf(0)!.Value.Angle == Fixed.Zero && !tank.TurretOf(0)!.Value.Rotating, "... at half speed, and rests at the natural angle.");
-        Check.That(!Encoding.UTF8.GetString(WorldSnapshot.Write(world)).Contains("\"turrets\""), "A turret at rest writes nothing: the snapshot is the one of an object without turret state.");
+        // The fire order started an attack: with the victim alive the turret keeps its aim without further orders (docs/SIM-TURRET-AIM.md §3a).
+        for (var i = 0; i < 100; i++) world.Step();
+        Check.That(Near(tank.TurretOf(0)!.Value.Angle, Degrees(90m), 1m) && !tank.TurretOf(0)!.Value.Rotating, "After the last order it still points at the living victim: the attack goes on.");
+
+        // An isolated shot that is not an attack order (a script's command button) keeps its aim for the reload plus the recentre time, then turns back.
+        var (shot, shotFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
+        var shooter = Slotted(shot, "TurretTank");
+        Check.That(TicksUntilShot(shot, shotFeeder, shooter.Id.Value, IdOf(shot, "TurretTarget"), origin: FireOrigin.Script) == 0, "A script's one-off shot goes out at once.");
+        for (var i = 0; i < 22; i++) shot.Step();
+        Check.That(Near(shooter.TurretOf(0)!.Value.Angle, Degrees(90m), 1m), "A one-off shot holds its aim for a while...");
+        for (var i = 0; i < 200; i++) shot.Step();
+        Check.That(shooter.TurretOf(0)!.Value.Angle == Fixed.Zero && !Encoding.UTF8.GetString(WorldSnapshot.Write(shot)).Contains("\"turrets\""),
+            "...then it turns back at half speed and rests: a turret at rest writes nothing, the snapshot is the one of an object without turret state.");
 
         // A victim that dies: the turret keeps its angle for the hold time, then recentres (TurretAI::friend_getTurretTarget clears dead targets).
         var (killing, killFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("FragileTarget", 2, 0, 100, 0m));

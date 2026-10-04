@@ -37,6 +37,9 @@ public sealed class StandingOrders
     private readonly SortedDictionary<uint, StandingOrder> _orders = [];
     private readonly Dictionary<uint, Vector2> _chaseGoal = [];
 
+    /// <summary>Units that were told, while reloading inside weapon range, to attack their victim from where they stand (so the order is not repeated every tick).</summary>
+    private readonly Dictionary<uint, EntityId> _standing = [];
+
     /// <summary>The point an attacking aircraft flies out to after it overflew its target: it cannot stop to turn, so it leaves far enough to turn around and come in for the next pass.</summary>
     private readonly Dictionary<uint, Vector2> _egress = [];
 
@@ -51,6 +54,7 @@ public sealed class StandingOrders
         _orders[unit.Value] = order;
         _chaseGoal.Remove(unit.Value);
         _egress.Remove(unit.Value);
+        _standing.Remove(unit.Value);
     }
 
     public void Clear(EntityId unit)
@@ -58,6 +62,7 @@ public sealed class StandingOrders
         _orders.Remove(unit.Value);
         _chaseGoal.Remove(unit.Value);
         _egress.Remove(unit.Value);
+        _standing.Remove(unit.Value);
     }
 
     /// <summary>Appends a waypoint; a unit without a waypoint order starts one (the first point is ordered by the caller).</summary>
@@ -123,10 +128,17 @@ public sealed class StandingOrders
         }
         if (SimulationQueries.InRange(world, unit, target))
         {
+            // The chase ends where the unit stands; it is still attacking (its turrets stay on the victim while the weapon reloads), so the stop is a pursuit of its own position.
             if (!flying && _chaseGoal.Remove(unit.Id.Value) && unit.HasMoveTarget)
-                issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, unit.X, unit.Y));
+                issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y));
             if (SimulationQueries.CanFireAt(world, unit, target))
                 issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, target.Id));
+            // In reach but not ready to shoot (reloading): the attack has begun all the same, so a turret that has no victim yet takes it now instead of waiting for the next shot.
+            else if (!flying && world.HasAimingTurret(unit) && world.AttackTargetOf(unit) != target.Id && !(_standing.TryGetValue(unit.Id.Value, out var told) && told == target.Id))
+            {
+                _standing[unit.Id.Value] = target.Id;
+                issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y));
+            }
             if (!flying) return;
         }
         if (!SimulationQueries.CanMove(unit)) return;
@@ -134,7 +146,9 @@ public sealed class StandingOrders
         var goal = SimulationQueries.GroundOf(target);
         if (_chaseGoal.TryGetValue(unit.Id.Value, out var last) && unit.HasMoveTarget && Vector2.Distance(last, goal) <= ChaseRepathDistance) return;
         _chaseGoal[unit.Id.Value] = goal;
-        issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, target.X, target.Y));
+        // The approach of an attack (AIAttackApproachTargetState): the turrets track the victim on the way; aircraft have none and just fly.
+        if (flying) issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, target.X, target.Y));
+        else issue((sequence, tick) => new PursueCommand(player, sequence, tick, unit.Id, target.Id, target.X, target.Y));
     }
 
     /// <summary>A jet whose weapons that reload only at an airfield are all empty (<see cref="JetAIUpdate.IsOutOfSpecialReloadAmmo"/>).</summary>

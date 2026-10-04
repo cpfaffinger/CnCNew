@@ -13,7 +13,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 12;
+    public const int Version = 13;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -73,7 +73,11 @@ public static class CommandTypes
     /// <summary><c>Object::setWeaponLock</c>/<c>releaseWeaponLock</c> (<c>GUI_COMMAND_SWITCH_WEAPON</c>): pins or releases the weapon slot an object fires.</summary>
     public const ushort SetWeaponLock = 30;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= SetWeaponLock;
+    // --------------------------------------------------------------------------------------------------- attack intent (v13)
+    /// <summary><c>AIAttackApproachTargetState</c>: moves toward a point to attack an object; the unit's turrets track the victim until the attack ends (docs/SIM-TURRET-AIM.md).</summary>
+    public const ushort Pursue = 31;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= Pursue;
 }
 
 /// <summary>
@@ -147,6 +151,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("actor"))), new EntityId(checked((uint)reader.UInt("target")))),
             CommandTypes.SetWeaponLock => new SetWeaponLockCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), checked((int)reader.Int("slot")),
                 (WeaponLockKind)checked((byte)reader.Int("lock"))),
+            CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), new EntityId(checked((uint)reader.UInt("victim"))), reader.Fixed("x"), reader.Fixed("y")),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -217,6 +222,24 @@ public sealed record SetMoveTargetCommand(PlayerId Player, ulong Sequence, long 
     protected override void DescribeBody(IStateWriter writer)
     {
         writer.UInt("target", Target.Value);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+    }
+}
+
+/// <summary>
+/// The approach half of an attack order (<c>AIAttackApproachTargetState</c>): the unit moves to (X, Y) — the victim's position to chase it, its own position to stand and wait — and from now on
+/// <em>attacks</em> <see cref="Victim"/>: its turrets track the victim while it approaches, reloads or waits, until the victim is gone, the unit gets another order, or the victim stays out of
+/// reach of every weapon while the unit stands still. A plain <see cref="SetMoveTargetCommand"/> ends an attack; this one carries it along. Firing stays <see cref="FireWeaponCommand"/>.
+/// </summary>
+public sealed record PursueCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Unit, EntityId Victim, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Pursue;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("unit", Unit.Value);
+        writer.UInt("victim", Victim.Value);
         writer.Fixed("x", X);
         writer.Fixed("y", Y);
     }

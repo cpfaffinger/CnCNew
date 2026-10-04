@@ -61,6 +61,12 @@ public interface IWorldServices
     /// <summary><c>friend_awakenUpdateModule</c>: moves the module's next wake tick.</summary>
     void WakeAt(Entity entity, IUpdateModule module, long tick);
 
+    /// <summary>
+    /// A new AI command replaces the entity's current AI state, which ends an attack (<c>AIAttackState::onExit</c> clears the turrets' targets): the turrets stop tracking their victim and
+    /// start their recentre hold. A no-op for objects without a turret that tracks.
+    /// </summary>
+    void EndAttack(Entity entity);
+
     // ------------------------------------------------------------------------------------ phase 5: economy, upgrades
 
     UpgradeCatalog Upgrades { get; }

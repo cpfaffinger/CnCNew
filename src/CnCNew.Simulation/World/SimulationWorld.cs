@@ -675,6 +675,15 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!CanMove(target)) return CommandRejection.CannotMove;
                 break;
             }
+            case PursueCommand pursue:
+            {
+                if (!_entities.TryGetValue(pursue.Unit.Value, out var pursuer) || pursuer.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (pursuer.Owner != command.Player) return CommandRejection.NotPermitted;
+                if (!_entities.TryGetValue(pursue.Victim.Value, out var pursued) || pursued.DestroyRequested || pursued.Body is null) return CommandRejection.UnknownEntity;
+                if (!CanMove(pursuer)) return CommandRejection.CannotMove;
+                if (!CanPlayerSee(command.Player, pursued)) return CommandRejection.TargetNotVisible;
+                break;
+            }
             case FireWeaponCommand fire:
             {
                 if (!_entities.TryGetValue(fire.Source.Value, out var source) || source.DestroyRequested) return CommandRejection.UnknownEntity;
@@ -992,6 +1001,20 @@ public sealed partial class SimulationWorld : IWorldServices
                 AiOf(actor)!.OrderDock(this, dockEntity, true);
                 break;
             }
+            case PursueCommand pursue:
+            {
+                var unit = FindEntity(pursue.Unit);
+                if (unit is null || unit.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (unit.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                var victim = FindEntity(pursue.Victim);
+                if (victim is null || victim.DestroyRequested || victim.Body is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (!CanMove(unit)) { RecordRejection(command, CommandRejection.CannotMove); break; }
+                ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
+                // The order replaces the unit's attack like any new AI command; the pursuit then starts the attack afresh against the victim.
+                AiOf(unit)!.OrderMove(this, pursue.X, pursue.Y, true);
+                BeginPursuit(unit, victim);
+                break;
+            }
             case FireWeaponCommand fire:
             {
                 var source = FindEntity(fire.Source);
@@ -1005,7 +1028,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!GateAllowsFire(source, fireTarget)) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
                 // The turret of the slot turns to the victim first and the weapon waits until it points there (TurretAI). The order stays accepted — the attack goes on and the next
                 // order of the stream fires — so this is neither a rejection (no "cannot do" cue) nor a shot. A script's one-off command button fires its single shot regardless.
-                if (!AimTurretsAt(source, choice.Slot, fireTarget) && fire.Origin != FireOrigin.Script) { _turretWaits++; break; }
+                if (!AimTurretsAt(source, choice.Slot, fireTarget, fire.Origin != FireOrigin.Script ? TurretAimOrder.Attack : TurretAimOrder.Shot) && fire.Origin != FireOrigin.Script) { _turretWaits++; break; }
                 // A command button's weapon slot pins the slot until its clip empties (Object::doCommandButton: setWeaponLock(LOCKED_TEMPORARILY) before the attack).
                 if (fire.Slot >= 0) SetWeaponLock(source, fire.Slot, WeaponLockKind.Temporary);
                 var weapon = ConsumeShot(source, choice.Slot);

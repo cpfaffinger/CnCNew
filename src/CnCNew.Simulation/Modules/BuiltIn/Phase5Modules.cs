@@ -617,6 +617,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary><c>aiMoveToPosition</c>: replaces the current state with a move.</summary>
     public virtual void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
     {
+        world.EndAttack(Entity);
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
@@ -665,6 +666,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary><c>aiIdle</c>: drops the move order and the goal object; the object stands where it is.</summary>
     public void OrderIdle(IWorldServices world, bool fromPlayer = false)
     {
+        world.EndAttack(Entity);
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
@@ -696,6 +698,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary><c>aiIdle</c>: cancels whatever the object is doing (move, dock, builder task, pending evacuation).</summary>
     public virtual void OrderIdle(IWorldServices world)
     {
+        world.EndAttack(Entity);
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
@@ -709,6 +712,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary><c>aiDock</c>: replaces the current state with <c>AI_DOCK</c>; a dock that cannot be entered ends at once and leaves the object idle.</summary>
     public virtual void OrderDock(IWorldServices world, Entity dock, bool fromPlayer)
     {
+        world.EndAttack(Entity);
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
@@ -764,6 +768,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     private void StartTask(IWorldServices world, BuilderTask task, Entity target)
     {
+        world.EndAttack(Entity);
         CancelDock(world);
         _enterTarget = EntityId.Invalid;
         _goal = EntityId.Invalid;

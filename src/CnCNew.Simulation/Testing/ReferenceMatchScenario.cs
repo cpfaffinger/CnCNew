@@ -419,7 +419,7 @@ public sealed class ReferenceMatchScenario
             }
             else if (kind.Mobile && (!_orders.TryGetValue(unit.Id.Value, out var order) || order.Target != nearest.Id.Value || tick - order.Tick >= OrderRefreshTicks))
             {
-                Add(world, new SetMoveTargetCommand(unit.Owner, Next(unit.Owner), tick, unit.Id, nearest.X, nearest.Y));
+                Add(world, new PursueCommand(unit.Owner, Next(unit.Owner), tick, unit.Id, nearest.Id, nearest.X, nearest.Y));
                 _orders[unit.Id.Value] = (nearest.Id.Value, tick);
                 Orders++;
             }
