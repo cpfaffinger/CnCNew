@@ -73,8 +73,10 @@ minus unendlich). Das Original rechnet `(Int)(x * (Real)W / (Real)cw)` in `float
 
 Schriften: `Stretch` folgt dem Original – Header-Template-Schriften wachsen mit `GlobalLanguage::adjustFontSize`
 (klassisch `1 + (W/800 − 1) · ResolutionFontAdjustment`, begrenzt auf [1, 2], abgerundet; `Language.ini`: 0,7), `FONT`
-des Fensters bleibt unverändert. `Uniform`/`Anchor` skalieren jede Schrift mit dem gleichförmigen Faktor der Erstellungsauflösung
-des Fensters. Danach multipliziert der Barrierefreiheitsfaktor `TextScale`; Mindestgröße 1 (`decimal`, abgerundet).
+des Fensters bleibt unverändert. `Uniform`/`Anchor` skalieren die `FONT` des Fensters mit dem gleichförmigen Faktor seiner
+Erstellungsauflösung, eine Header-Template-Schrift dagegen mit dem gleichförmigen Faktor gegen 800x600 – Template-Punktgrößen
+beziehen sich wie in `adjustFontSize` immer auf 800 Pixel Breite, auch in einem bei 1920x1080 verfassten Layout (sonst
+schrumpfen dessen Texte auf 800/1920). Danach multipliziert der Barrierefreiheitsfaktor `TextScale`; Mindestgröße 1 (`decimal`, abgerundet).
 `MinimumHitTarget` (Pixel, 0 = aus) vergrößert die Trefferfläche interaktiver Gadgets symmetrisch, ohne sie zu verschieben;
 Kinder bleiben auf den Elternbereich beschnitten.
 
@@ -105,8 +107,13 @@ Geprüfte Invarianten (Tabelle 640x480, 800x600, 1024x768, 1280x720, 1280x800, 1
   `[x, x+w)` (das Original prüft `<=`). Eingabeziel: zuerst die offene Combo-Liste („lone window"), `NOINPUT`-Fenster
   verschlucken das Ereignis außer als Teil einer Combo-Box (`winProcessMouseEvent`).
 - **Maus:** Grab-Fenster beim Linksdruck; das Loslassen zählt nur innerhalb des Grab-Fensters (Klick = Druck und Loslassen im
-  Button). Enter/Leave (`GBM_MOUSE_ENTERING/LEAVING`) nur für Gadgets mit `MOUSETRACK`; während eines Grabs ruht die
-  Hover-Verfolgung wie im Original.
+  Button). Enter/Leave (`GBM_MOUSE_ENTERING/LEAVING`) und die Hervorhebung nur für Gadgets mit `MOUSETRACK`, deren
+  Eingabefunktion `GWM_MOUSE_ENTERING` behandelt (Knopf, Check-Box, Radio, Regler, List-Box, Combo-Box, Texteingabe) –
+  nicht für Static Text, Fortschrittsbalken und Tab-Control, obwohl die Dateien ihnen `MOUSETRACK` und `HILITE*`-Daten
+  mitgeben. Das Verlassen löscht die Hervorhebung unbedingt (auch am fokussierten Gadget), Verstecken oder Deaktivieren
+  löscht Hilite und Pressed, `PointerLeft()` meldet dem Baum, dass ein anderer Screen die Maus übernommen hat. Während
+  eines Grabs ruht die Hover-Verfolgung wie im Original. Den Tastaturfokus nimmt ein Klick nur bei Combo-Box, List-Box
+  und Texteingabe (`winSetFocus` in deren Eingabefunktionen), nicht bei Knöpfen, Check-Boxen, Radios und Reglern.
 - **Gadgets:** Push-Button (Hover, gedrückt, Klick; `ON_MOUSE_DOWN`, `CHECK_LIKE`, `RIGHT_CLICK`), Check-Box (Umschalten beim
   Loslassen im Fenster), Radio-Gruppen (Gruppe + Datei wie `unselectOtherRadioOfGroup`), Slider (Ziehen, Klick springt,
   Pfeiltasten; Thumb 13 bzw. 16 Einheiten der Erstellungsauflösung, skaliert), List-Box (Auswahl, Mehrfachauswahl,
@@ -180,8 +187,12 @@ zeichnen nichts; `W3DGameWinDefaultDraw` zeichnet den Standardhintergrund. Zusta
 - Static Text: Umbruch bei Breite − 10, links 7 oder zentriert, vertikal zentriert, Clip auf das Fenster.
 - Texteingabe: dreiteilig 0/2/1, Auswahl in Hilite-Textfarbe, Caret (1 px) im Fokus; List-Box: Zeilen (Zeilenhöhe =
   `LineHeight` der Schrift), Auswahl dreiteilig 1/3/2 oder Farbe 1, Zellentext je Spalte, Scrollbar aus den
-  `LISTBOX*`-/`SLIDERTHUMB*`-Daten; Combo-Box: Editfeld, Pfeilknopf, offene Liste zuletzt (oben); Slider: Spur dreiteilig 0/2/1
-  und Thumb; Fortschritt: Hintergrund 0/2/1, Balken 4/6/5 im Clip der Füllbreite (Farbvariante Eintrag 0 und 4).
+  `LISTBOX*`-/`SLIDERTHUMB*`-Daten; Combo-Box: Editfeld, Pfeilknopf, offene Liste zuletzt (oben); horizontaler Slider mit
+  `IMAGE` (`W3DGadgetHorizontalSliderImageDraw`): zentrierte Reihe quadratischer Kästchen (Kante = Breite des gefüllten
+  Bildes im Anzeigemaßstab, Abstand 2), bis zum Wert Disabled 0, danach Disabled 1, bei Hervorhebung dahinter eine Reihe
+  Hilite 0; ohne `IMAGE` Rahmen und Füllung von Eintrag 0; vertikaler Slider mit `IMAGE` dreiteilig 0/2/1. Thumb des
+  horizontalen Sliders 13x16, 10 unter der Oberkante (`gogoGadgetSlider`), aus `SLIDERTHUMB*` nach Zustand, beim Ziehen
+  Eintrag 1; Fortschritt: Hintergrund 0/2/1, Balken 4/6/5 im Clip der Füllbreite (Farbvariante Eintrag 0 und 4).
 - Mittelteile werden unter einem Clip gekachelt (höchstens 256 Kacheln, sonst gestreckt). Unbekannte Bildgrößen werden in
   `UnresolvedImageSizes` gezählt (Enden dann halbe Höhe, Mitte gestreckt); unaufgelöste Labels in `UnresolvedLabels`.
 

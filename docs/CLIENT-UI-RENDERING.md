@@ -135,6 +135,22 @@ Offscreen-`Texture`-Render-Target (kein sichtbares Fenster nötig) in vier Aufl�
   rotierte Textur (`WatermarkGLA`, ein echtes `ROTATED_90_CLOCKWISE`-Bild aus `SCShellUserInterface512.INI`) neben
   einem absichtlich unbekannten Bildnamen.
 
+Seit der ersten Sichtprüfung der Hülle (`docs/GAME-SHELL.md` §11) kommen dazu:
+
+- `shell-*-{1280x720,1920x1080}.png` (`ShellScenes.cs`): die Hülle so, wie ein Spieler sie sieht – über
+  `GameShell.Create` mit der Textmetrik des Renderers und echten Eingabeereignissen, also mit dem Init-Code der Screens.
+  Szenen: `main`, `main-hover`, `main-pressed`, `options`, `options-label-hover`, `options-slider-hover`,
+  `options-slider-drag`, `options-slider-drag-outside`, `options-button-hover`, `main-after-options`, `quit`,
+  `quit-hover`. Die rohen `mainmenu-*`/`options-*`-Bilder darüber zeigen dagegen die WND-Datei ohne Init-Code.
+- `controlbar-anchor-*` und `quitmenu-anchor-*`: die bei 1920×1080 verfassten Layouts im Modus `Anchor`, um die
+  Schriftgrößen aus Header-Templates zu beurteilen.
+
+Lauf vom 4. Oktober 2026 mit diesen Szenen (64 PNGs): `commands=14296 sprites=30456 drawCalls=2231 batches=889
+missingImages=12 missingTextures=0 missingLabels=12 missingGlyphs=0 substitutedGlyphs=12 customDraws=52
+unbalancedClips=4` (die vier zusätzlichen fehlenden Bilder sind `HardCodedWithControlBarSchemeIni` in
+`controlbar-anchor`); zwei Läufe ergeben für alle 64 PNGs identische SHA-256-Summen. Die Zahlen des folgenden Absatzes
+gelten für den früheren Umfang.
+
 Letzter Lauf (32 PNGs, `.local/phase2-import-a`, neu messen): `commands=5778 sprites=12542 drawCalls=854 batches=361
 missingImages=8 missingTextures=0 missingLabels=12 missingGlyphs=0 substitutedGlyphs=12 customDraws=28
 unbalancedClips=4`. Die acht fehlenden Bilder sind das eine absichtlich falsche pro Auflösung (`transform`-Szene, 4×)
