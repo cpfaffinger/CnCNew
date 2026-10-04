@@ -85,14 +85,10 @@ public sealed class FrameProjector
 
     public int ClaimedScenery => _claimed.Count(value => value);
 
-    /// <summary>Feeds the events of the tick that was just simulated (the turrets follow the shots, <see cref="TurretTracker"/>); call before <see cref="Advance"/>.</summary>
+    /// <summary>Feeds the events of the tick that was just simulated (deaths, crushes, ...; the turrets need none, the simulation owns them); call before <see cref="Advance"/>.</summary>
     public void Observe(IEnumerable<SimEvent> events, SimulationWorld world)
     {
-        foreach (var simEvent in events)
-        {
-            _turrets.Observe(simEvent, world);
-            _units.Observe(simEvent, world);
-        }
+        foreach (var simEvent in events) _units.Observe(simEvent, world);
     }
 
     /// <summary><c>AIGroup::groupCheer</c> (the <c>ALL_CHEER</c> meta action): the objects show SPECIAL_CHEERING for <see cref="UnitConditionTracker.CheerTicks"/> ticks.</summary>
@@ -232,8 +228,8 @@ public sealed class FrameProjector
         var fired = 0;
         for (var slot = 0; slot < 3; slot++)
             if (entity.LastFireTickOf(slot) is >= 0 and var lastFire && world.Tick - lastFire <= MuzzleFlashTicks) fired |= 1 << slot;
-        var main = _turrets.Update(entity, visual, 0, world.Tick, world);
-        var alt = _turrets.Update(entity, visual, 1, world.Tick, world);
+        var main = _turrets.Update(entity, 0);
+        var alt = _turrets.Update(entity, 1);
         var chassis = _suspension.Update(entity, visual, world, _options.SnapDistance) ?? ChassisPose.Level;
         conditions = conditions.Union(_units.Update(entity, world, world.Tick - 1, _turrets));
         return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
