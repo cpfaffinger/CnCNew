@@ -44,6 +44,9 @@ public sealed class FrameProjector
     /// <summary>How long a muzzle flash stays visible after a shot, in ticks (the original shows it for the first drawn frame of the recoil; at 30 ticks per second this is about 0.13 s).</summary>
     public const int MuzzleFlashTicks = 4;
 
+    /// <summary><c>HEALING_ICON_DISPLAY_TIME</c> (<c>Drawable.cpp</c>): the wrench or cross over a healed object stays for three seconds after health last rose.</summary>
+    public const int HealingIconTicks = 3 * 30;
+
     private readonly ObjectVisualCatalog _catalog;
     private readonly FrameProjectorOptions _options;
     private readonly ImmutableArray<ImmutableArray<DrawModuleSelection>> _scenerySelections;
@@ -185,6 +188,9 @@ public sealed class FrameProjector
             travel %= 100000f;
         }
 
+        // Drawable::drawHealing: the icon shows while the object is hurt and was healed (health rose by attemptHealing) within HealingIconTicks; construction progress is not healing.
+        var healedAt = previous?.HealedAtTick ?? -1;
+        if (previous is not null && !entity.HasStatus(ObjectStatusBits.UnderConstruction) && Math.Clamp(health, 0f, 1f) > previous.Health01 + 1e-4f) healedAt = world.Tick;
         var fired = 0;
         for (var slot = 0; slot < 3; slot++)
             if (entity.LastFireTickOf(slot) is >= 0 and var lastFire && world.Tick - lastFire <= MuzzleFlashTicks) fired |= 1 << slot;
@@ -192,7 +198,7 @@ public sealed class FrameProjector
         var alt = _turrets.Update(entity, visual, 1, world.Tick, world);
         return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, Select(visual, conditions),
-            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired);
+            entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt);
     }
 
     private void UpdateGhosts(SimulationWorld world, PlayerId viewer)
@@ -227,7 +233,8 @@ public sealed class FrameProjector
         new EntityId(capture.Id), -1, capture.Visual, position, yaw, capture.Owner, _options.Colors?.Of(capture.Owner) ?? TeamColors.Neutral,
         capture.Health01, capture.Construction01, capture.Conditions, capture.Selections,
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
-        Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel, capture.FiredSlots);
+        Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel, capture.FiredSlots,
+        capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= HealingIconTicks && capture.Health01 < 1f && Tick > HealingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold));
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
@@ -249,5 +256,5 @@ public sealed class FrameProjector
     private sealed record Capture(
         uint Id, ObjectVisual Visual, PlayerId Owner, Vector3 Position, float Yaw, Fixed FixedX, Fixed FixedY, float Health01,
         float Construction01, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections, int ConstructionWork,
-        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f, int FiredSlots = 0);
+        float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null, float Travel = 0f, int FiredSlots = 0, long HealedAtTick = -1);
 }

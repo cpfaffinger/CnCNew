@@ -11,7 +11,13 @@ public sealed record SelectionBoxOverlay(bool Active, Vector2 Start, Vector2 Cur
 }
 
 /// <summary>A selected (or single foreign, for-information) unit's on-screen marker: a selection circle and a health bar.</summary>
-public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, float HealthFraction, bool IsOwn, bool IsEnemy);
+public sealed record UnitMarker(EntityId Entity, Vector2 Center, float Radius, float HealthFraction, bool IsOwn, bool IsEnemy, bool IsStructure = false);
+
+/// <summary>Which of the original's three healing animations (<c>Animation2D.ini</c>: <c>StructureHeal</c> wrench, <c>VehicleHeal</c> wrench, <c>DefaultHeal</c> cross) a healed object shows.</summary>
+public enum HealIconKind { Default, Structure, Vehicle }
+
+/// <summary>The healing icon over an object that was healed within the last three seconds (<c>Drawable::drawHealing</c>): where its health bar would sit, in viewport pixels.</summary>
+public sealed record HealIconMarker(EntityId Entity, Vector2 Anchor, float BarWidth, HealIconKind Kind);
 
 /// <summary>A producing structure's rally point, projected to screen space.</summary>
 public sealed record RallyPointMarker(EntityId Producer, Vector2 Screen);
@@ -37,7 +43,8 @@ public sealed record HudOverlay(
     ImmutableArray<OrderLine> OrderLines,
     PlacementGhostOverlay Placement,
     string? HintText,
-    ImmutableArray<string> Ticker)
+    ImmutableArray<string> Ticker,
+    ImmutableArray<HealIconMarker> HealIcons = default)
 {
-    public static readonly HudOverlay Empty = new(SelectionBoxOverlay.None, [], [], [], PlacementGhostOverlay.None, null, []);
+    public static readonly HudOverlay Empty = new(SelectionBoxOverlay.None, [], [], [], PlacementGhostOverlay.None, null, [], []);
 }

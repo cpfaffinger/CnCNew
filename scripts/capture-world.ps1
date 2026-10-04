@@ -45,6 +45,7 @@ $scenes = @(
     @('viewer-dozer', @('--model-path', 'Art/W3D/AVCONSTDOZ_A.W3D'), 'Planierraupe: vier Reifen unten, Schaufel vorn.'),
     @('match-start', @('--match', $alpine, '--frames', '120'), 'Startbasis: Kommandozentrale mit Wanddetails, Planierraupe, Rest der Karte schwarz (unerkundet), keine Gebaeude ohne Gelaende.'),
     @('match-lowangle', @('--match', $alpine, '--frames', '120', '--pitch', '30', '--height', '250'), 'Wie match-start, flache Kamera: Waende der Kommandozentrale sichtbar und beleuchtet (nicht schwarz).'),
+    @('match-selected', @('--match', $alpine, '--frames', '120', '--pitch', '30', '--height', '250', '--select-own'), 'Auswahl: gruene Eckklammern und Lebensbalken an der Kommandozentrale, Ring und Balken an der Planierraupe (Overlay, docs/GAME-HUD.md).'),
     @('match-fog-unexplored', @('--match', $alpine, '--frames', '120', '--look', '2002,1349'), 'Kamera auf unerkundetem Gelaende mit einer Oelquelle: alles schwarz, kein Gebaeude im Schwarz.'),
     @('match-base-late', @('--match', $alpine, '--autoplay', '--frames', '4000'), 'Ausgebaute Basis: Gebaeude mit Teamfarbe, Geschuetztuerme, Zaeune ausgerichtet an den Gebaeudekanten.'),
     @('match-combat', @('--match', $alpine, '--autoplay', '--frames', '7500'), 'Gefecht: Patriot-Rohr zeigt auf das Ziel, Muendungsfeuer; Reifen/Tuerme nicht in Ruhepose.'),

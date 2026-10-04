@@ -44,6 +44,12 @@ public sealed record UiTextDraw(string Text, string? LabelKey, UiFont Font, WndC
         => $"text \"{Text}\"{(LabelKey is null ? "" : $" key={LabelKey}")} font={Font} color={Color} shadow={ShadowColor} at {X},{Y} {Alignment.ToString().ToLowerInvariant()} clip {Clip}";
 }
 
+/// <summary>A straight line of <see cref="Thickness"/> pixels between two points in screen pixels (the selection ring, order paths and footprints of the in-game overlay).</summary>
+public sealed record UiLineDraw(float X0, float Y0, float X1, float Y1, float Thickness, WndColor Color) : UiDrawCommand
+{
+    public override string ToString() => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"line ({X0:F1},{Y0:F1})-({X1:F1},{Y1:F1}) width {Thickness:F1} {Color}");
+}
+
 public sealed record UiPushClip(UiRect Rect) : UiDrawCommand
 {
     public override string ToString() => $"clip-push {Rect}";

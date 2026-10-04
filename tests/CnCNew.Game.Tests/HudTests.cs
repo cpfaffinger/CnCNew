@@ -36,8 +36,50 @@ internal static class HudTests
         harness.Run("Control groups store and recall a selection", () => ControlGroupsWork(data));
         harness.Run("Control bar scheme art and the logo image", () => SchemeArt(data));
         harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
+        harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));
 
         return harness.Failures;
+    }
+
+    /// <summary>docs/DEMO-FINDINGS.md #8 and #14: the overlay existed but nothing turned it into draw commands.</summary>
+    private static void OverlayIsDrawn(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        var human = match.Human;
+        long time = 10_000;
+        Advance(match, controller, 120); // Drawable::drawHealing ignores the first three seconds of a game
+        var dozer = match.World.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("DOZER"));
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Input.Selection.Contains(dozer.Id) && !controller.Overlay.Selected.IsDefaultOrEmpty, "the dozer is selected and has an on-screen marker");
+        var list = controller.BuildDrawList(1280, 720);
+        var kinds = list.CountByKind();
+        TestHarness.Assert(kinds.GetValueOrDefault("UiLineDraw") >= 20, $"the selection ring is drawn as lines ({kinds.GetValueOrDefault("UiLineDraw")})");
+        TestHarness.Assert(list.Commands.OfType<UiFillRect>().Any(fill => fill.Color.G > 200 && fill.Color.R < 40 && fill.Rect.Height == 5), "a full green health bar is drawn");
+
+        // Healing shows a wrench (structure, vehicle) or a cross for three seconds after health last rose (Drawable::drawHealing). Every retail structure regenerates (BaseRegenerateUpdate
+        // heals through the same path, so a regenerating structure keeps its icon, as in the original); the dozer does not regenerate.
+        var center = match.World.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("COMMANDCENTER"));
+        var hurt = CnCNew.Simulation.Numerics.Fixed.FromInt(800);
+        match.World.Submit(new CnCNew.Simulation.Commands.DamageCommand(CnCNew.Simulation.Ids.PlayerId.System, 900_001, match.World.Tick, center.Id, hurt, CnCNew.Simulation.World.DamageTypes.Unresistable, 0));
+        match.World.Submit(new CnCNew.Simulation.Commands.DamageCommand(CnCNew.Simulation.Ids.PlayerId.System, 900_002, match.World.Tick, dozer.Id, CnCNew.Simulation.Numerics.Fixed.FromInt(40), CnCNew.Simulation.World.DamageTypes.Unresistable, 0));
+        Advance(match, controller, 3);
+        TestHarness.Assert(!controller.Overlay.HealIcons.Any(value => value.Entity == dozer.Id), "damage alone shows no healing icon");
+        match.World.Submit(new CnCNew.Simulation.Commands.DamageCommand(CnCNew.Simulation.Ids.PlayerId.System, 900_003, match.World.Tick, center.Id, CnCNew.Simulation.Numerics.Fixed.FromInt(100), CnCNew.Simulation.World.DamageTypes.Healing, 0));
+        match.World.Submit(new CnCNew.Simulation.Commands.DamageCommand(CnCNew.Simulation.Ids.PlayerId.System, 900_004, match.World.Tick, dozer.Id, CnCNew.Simulation.Numerics.Fixed.FromInt(20), CnCNew.Simulation.World.DamageTypes.Healing, 0));
+        Advance(match, controller, 3);
+        TestHarness.Assert(controller.Overlay.HealIcons.Any(value => value.Entity == center.Id && value.Kind == HealIconKind.Structure), "a healed structure gets the structure healing icon");
+        TestHarness.Assert(controller.Overlay.HealIcons.Any(value => value.Entity == dozer.Id && value.Kind == HealIconKind.Vehicle), "a healed vehicle gets the vehicle healing icon");
+        var wrench = controller.BuildDrawList(1280, 720).Commands.OfType<UiImageDraw>().FirstOrDefault(image => image.Image.StartsWith("SCPWrench", StringComparison.Ordinal));
+        TestHarness.Assert(wrench is not null, "the wrench frame is drawn");
+        Console.WriteLine($"  overlay: {kinds.GetValueOrDefault("UiLineDraw")} line commands for one selected dozer, healing icon {wrench?.Image}");
+        Advance(match, controller, 4 * 30);
+        TestHarness.Assert(!controller.Overlay.HealIcons.Any(value => value.Entity == dozer.Id), "the dozer's icon is gone three seconds after its last healing");
+
+        // The animation is a pure function of the clock: ten frames up and down, sixteen in a loop.
+        TestHarness.Assert(HudOverlayRenderer.Frame(10, 0, true) == 0 && HudOverlayRenderer.Frame(10, 9, true) == 9 && HudOverlayRenderer.Frame(10, 10, true) == 8 && HudOverlayRenderer.Frame(10, 18, true) == 0 && HudOverlayRenderer.Frame(16, 17, false) == 1,
+            "ping-pong and loop frame indices");
+        TestHarness.Assert(HudOverlayRenderer.HealthColor(1f) == new CnCNew.Ui.Wnd.WndColor(0, 255, 0, 255) && HudOverlayRenderer.HealthColor(0.5f) == new CnCNew.Ui.Wnd.WndColor(255, 255, 0, 255) && HudOverlayRenderer.HealthColor(0f).G == 0, "the health ramp");
     }
 
     private static string? ContentDir(string[] args)

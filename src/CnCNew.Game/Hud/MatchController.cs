@@ -443,7 +443,7 @@ public sealed class MatchController
             if (Input.Selection.Picker.TryProject(view, entity, out var projected))
             {
                 var health = entity.Body is { } body && body.MaxHealth.Raw != 0 ? (float)(body.Health / body.MaxHealth).ToDecimal() : 1f;
-                selected.Add(new UnitMarker(entity.Id, projected.Center, projected.Radius, health, entity.Owner == Match.Human, world.AreEnemies(Match.Human, entity.Owner)));
+                selected.Add(new UnitMarker(entity.Id, projected.Center, projected.Radius, health, entity.Owner == Match.Human, world.AreEnemies(Match.Human, entity.Owner), entity.Template.IsKindOf("STRUCTURE")));
             }
             if (SimulationQueries.ProductionOf(entity) is { } production)
             {
@@ -480,8 +480,18 @@ public sealed class MatchController
             if (ok) placement = new PlacementGhostOverlay(true, screenPoints.ToImmutable(), ghost.IsValid);
         }
 
+        // Healed objects in view show the wrench / cross over their health bar, selected or not (Drawable::drawHealing runs for every drawable).
+        var heals = ImmutableArray.CreateBuilder<HealIconMarker>();
+        foreach (var drawable in Match.Frame.Drawables)
+        {
+            if (!drawable.ShowsHealing || !drawable.Entity.IsValid || world.FindEntity(drawable.Entity) is not { } healed) continue;
+            if (!Input.Selection.Picker.TryProject(view, healed, out var projected)) continue;
+            var kind = drawable.IsStructure ? HealIconKind.Structure : drawable.Visual.IsKindOf("VEHICLE") ? HealIconKind.Vehicle : HealIconKind.Default;
+            heals.Add(new HealIconMarker(drawable.Entity, new Vector2(projected.Center.X, projected.Center.Y - projected.Radius), MathF.Max(24f, projected.Radius * 1.8f), kind));
+        }
+
         var hint = DescribeHint(Input.Hint);
-        return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, TickerSnapshot());
+        return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, TickerSnapshot(), heals.ToImmutable());
     }
 
     private static string? DescribeHint(ContextHint hint) => hint.Action switch
@@ -539,7 +549,8 @@ public sealed class MatchController
         var extra = BuildDynamicCommands();
         var viewportRect = new UiRect(0, 0, width, _controlBarRoot.Rect.Y);
         // The scheme art is the control bar's own background (W3DCommandBarBackgroundDraw in the original): it lies under the window tree, whose windows draw their own chrome on top.
-        var commands = BuildSchemeBackground().AddRange(ResolveHardCodedImages(baseList.Commands)).AddRange(extra).Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
+        // The world-space feedback (selection rings, health bars, orders, rally points, placement ghost, healing icons) lies between the 3D scene and the control bar chrome.
+        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BuildSchemeBackground()).AddRange(ResolveHardCodedImages(baseList.Commands)).AddRange(extra).Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
         return baseList with { Commands = commands };
     }
 

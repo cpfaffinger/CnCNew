@@ -33,7 +33,8 @@ public sealed record DrawableInstance(
     float? AltTurretYaw = null,
     float? AltTurretPitch = null,
     float WheelTravel = 0f,
-    int FiredSlots = 0)
+    int FiredSlots = 0,
+    bool ShowsHealing = false)
 {
     /// <summary>Muzzle flash sub-objects are shown for the weapon slots whose bit is set here (<see cref="FrameProjector.MuzzleFlashTicks"/> after the last shot).</summary>
     public bool HasFired(int slot) => (FiredSlots & (1 << slot)) != 0;

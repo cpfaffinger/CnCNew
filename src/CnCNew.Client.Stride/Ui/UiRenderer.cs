@@ -154,6 +154,7 @@ internal sealed class UiRenderer : IDisposable
         {
             case UiFillRect fill: DrawRect(fill.Rect, fill.Color); break;
             case UiBorderRect border: DrawBorder(border.Rect, border.Color); break;
+            case UiLineDraw line: DrawLine(line); break;
             case UiImageDraw image: DrawImage(image.Image, image.Destination, image.Tint, image.FlipHorizontal, image.FlipVertical); break;
             case UiTextDraw text: DrawText(text); break;
             case UiPushClip push: PushClip(push.Rect); break;
@@ -196,6 +197,31 @@ internal sealed class UiRenderer : IDisposable
         Solid(new UiRect(rect.X, rect.Bottom - 1, rect.Width, 1), color);
         Solid(new UiRect(rect.X, rect.Y + 1, 1, rect.Height - 2), color);
         Solid(new UiRect(rect.Right - 1, rect.Y + 1, 1, rect.Height - 2), color);
+    }
+
+    /// <summary>A line as one rotated quad of the white atlas block, pivoting on its left edge centre; clipped by the scissor of the current clip.</summary>
+    public void DrawLine(UiLineDraw line)
+    {
+        RequireFrame();
+        if (!line.Color.IsVisible || line.Thickness <= 0f) return;
+        var dx = line.X1 - line.X0;
+        var dy = line.Y1 - line.Y0;
+        var length = MathF.Sqrt(dx * dx + dy * dy);
+        if (length < 0.01f) return;
+        var clip = _clips.Current;
+        if (clip.IsEmpty) return;
+        var white = _atlas.White();
+        SelectScissor(clip);
+        var source = new RectangleF(white.X + 1, white.Y + 1, white.Width - 2, white.Height - 2);
+        var texture = _pageTextures.Page(white.Page);
+        if (!ReferenceEquals(texture, _lastTexture))
+        {
+            _lastTexture = texture;
+            _frame.DrawCalls++;
+        }
+
+        _frame.Sprites++;
+        _batch.Draw(texture, new RectangleF(line.X0, line.Y0, length, line.Thickness), source, ToColor(line.Color), MathF.Atan2(dy, dx), new Vector2(0f, source.Height / 2f), SpriteEffects.None, ImageOrientation.AsIs, 0f);
     }
 
     public void DrawImage(string name, UiRect destination, WndColor tint, bool flipHorizontal = false, bool flipVertical = false)

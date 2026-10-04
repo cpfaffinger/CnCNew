@@ -73,6 +73,21 @@ internal sealed class ClientRuntime : IDisposable
         return runtime;
     }
 
+    /// <summary>Selects every object the human owns in the running match (a capture aid, <c>--select-own</c>).</summary>
+    public void SelectOwn() => _selectOwnPending = true;
+
+    private bool _selectOwnPending;
+
+    private void ApplyPendingSelection()
+    {
+        if (!_selectOwnPending || _running?.Match is not { } hud) return;
+        var human = _running.Host.Match.Human;
+        var own = _running.Host.Match.World.Entities.Where(entity => entity.Owner == human && !entity.EffectivelyDead).OrderBy(entity => entity.Id.Value).Select(entity => entity.Id).ToArray();
+        if (own.Length == 0) return; // the start objects appear with the first simulated tick
+        _selectOwnPending = false;
+        hud.Input.Selection.Replace(own);
+    }
+
     public bool ExitRequested { get; private set; }
 
     /// <summary>The running game's world host, or <see langword="null"/> while the shell is showing (lets the caller title the window).</summary>
@@ -92,6 +107,7 @@ internal sealed class ClientRuntime : IDisposable
         if (_running is { } running)
         {
             running.Step(events, seconds, width, height, gameTime, _game.GraphicsContext.CommandList, fixedSeconds);
+            ApplyPendingSelection();
             if (_clockMs >= _nextDots)
             {
                 _nextDots = _clockMs + 250;

@@ -39,6 +39,7 @@ var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
 {
     IsMission = missionMap is not null,
     HumanSide = GetArgument(args, "--human-side") ?? string.Empty,
+    SelectOwn = args.Contains("--select-own", StringComparer.OrdinalIgnoreCase),
 };
 if (matchMap is not null && missionMap is not null)
 {
@@ -110,6 +111,9 @@ internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<st
 
     /// <summary>The side the human plays in a mission whose map marks none (--human-side; see <c>MissionOptions.HumanSideName</c>).</summary>
     public string HumanSide { get; init; } = string.Empty;
+
+    /// <summary>Selects everything the human owns once the match has started (--select-own; for captures of the selection feedback, a player would click).</summary>
+    public bool SelectOwn { get; init; }
 }
 
 internal sealed class CnCNewGame(
@@ -235,6 +239,7 @@ internal sealed class CnCNewGame(
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
         ApplyCamera(match.Camera, options);
         _runtime = ClientRuntime.ForMatch(this, data, match);
+        if (options.SelectOwn) _runtime.SelectOwn();
         Window.Title = $"CnCNew — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)}";
     }
 
