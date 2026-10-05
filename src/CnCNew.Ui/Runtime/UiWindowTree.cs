@@ -107,6 +107,11 @@ public sealed partial class UiWindowTree
     {
         Viewport = viewport;
         Options = options ?? Options;
+        Relayout();
+    }
+
+    internal void Relayout()
+    {
         foreach (var root in _roots) Place(root, null);
     }
 
@@ -292,7 +297,7 @@ public sealed partial class UiWindowTree
         var rect = window.Definition.Rect;
         var (transform, forChildren) = UiScaler.ForWindow(rect, inherited, Viewport, Options.Mode);
         window.Transform = transform;
-        window.Rect = transform.Map(rect);
+        window.Rect = window.ScreenRectOverride ?? transform.Map(rect);
         window.HitRect = Options.MinimumHitTarget > 0 && window.IsInteractive ? window.Rect.ExpandTo(Options.MinimumHitTarget) : window.Rect;
         window.Font = ResolveFont(window);
         foreach (var child in window.Children) Place(child, forChildren);

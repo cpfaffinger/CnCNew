@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CnCNew.Ui.Layout;
+using CnCNew.Ui.Rendering;
 using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Ui.Runtime;
@@ -55,6 +56,9 @@ public sealed partial class UiWindowTree
             }
             foreach (var child in window.Children) Draw(child);
         }
+
+        /// <summary>List box text always gets a black drop color (<c>W3DGadgetListBoxDraw</c>: <c>winMakeColor(0, 0, 0, 255)</c>), whatever the window's text colors say.</summary>
+        private static readonly WndColor ListShadow = new(0, 0, 0, 255);
 
         private static DrawState StateOf(UiWindow window)
             => !window.IsEnabled ? DrawState.Disabled : window.IsHilited ? DrawState.Hilite : DrawState.Enabled;
@@ -119,7 +123,8 @@ public sealed partial class UiWindowTree
                 }
             }
             else Box(window.Rect, set[selected ? 1 : 0]);
-            Text(window, window.Rect, UiTextAlignment.Center, window.Rect.Width, true);
+            // drawButtonText: wrap at the window width, no clip region.
+            Text(window, window.Rect, UiTextAlignment.Center, window.Rect.Width, true, tree.Viewport.Bounds);
         }
 
         private void DrawCheckBox(UiWindow window)
@@ -139,7 +144,8 @@ public sealed partial class UiWindowTree
                 if (window.IsSelected) Fill(box.Inset(Math.Max(1, side / 4)), TextColors(window).Color);
             }
             var textArea = UiRect.FromEdges(Math.Min(window.Rect.Right, window.Rect.X + window.Rect.Height), window.Rect.Y, window.Rect.Right, window.Rect.Bottom);
-            Text(window, textArea, UiTextAlignment.Left, 0, false);
+            // drawCheckBoxText: no wrap, no clip region.
+            Text(window, textArea, UiTextAlignment.Left, 0, false, tree.Viewport.Bounds);
         }
 
         private void DrawRadioButton(UiWindow window)
@@ -150,7 +156,8 @@ public sealed partial class UiWindowTree
             if ((window.Status & WndStatus.Image) != 0)
                 ThreePiece(Offset(window, window.Rect), set[first].Image, set[first + 1].Image, set[first + 2].Image, true);
             else Box(window.Rect, set[first]);
-            Text(window, window.Rect, UiTextAlignment.Center, window.Rect.Width, true);
+            // drawRadioButtonText: never sets a wrap width or a clip region.
+            Text(window, window.Rect, UiTextAlignment.Center, 0, false, tree.Viewport.Bounds);
         }
 
         /// <summary><c>drawStaticTextText</c>: wrap at width - 10, left margin 7 or centered, always vertically centered.</summary>
@@ -160,7 +167,7 @@ public sealed partial class UiWindowTree
             var centered = window.Definition.StaticText?.Centered ?? false;
             var margin = window.Transform.X.Length(7);
             var area = centered ? window.Rect : UiRect.FromEdges(Math.Min(window.Rect.Right, window.Rect.X + margin), window.Rect.Y, window.Rect.Right, window.Rect.Bottom);
-            Text(window, area, centered ? UiTextAlignment.Center : UiTextAlignment.Left, window.Rect.Width - window.Transform.X.Length(10), true);
+            Text(window, area, centered ? UiTextAlignment.Center : UiTextAlignment.Left, window.Rect.Width - window.Transform.X.Length(10), true, window.Rect);
         }
 
         private void DrawEntry(UiWindow window)
@@ -168,18 +175,39 @@ public sealed partial class UiWindowTree
             var set = Set(window, WndDrawDataKind.Enabled);
             if ((window.Status & WndStatus.Image) != 0) ThreePiece(Offset(window, window.Rect), set[0].Image, set[2].Image, set[1].Image, true);
             else Box(window.Rect, set[0]);
-            EditText(window, window.TextEntry!, window.Rect);
+            EditText(window, window.TextEntry!, window.Rect, false);
         }
 
-        private void EditText(UiWindow window, UiTextEditState edit, UiRect area)
+        /// <summary>
+        /// <c>W3DGadgetTextEntryDraw</c> / <c>drawTextEntryText</c>: the text starts 5 pixels in plus 2 (10 for the read-only edit box of a
+        /// combo box, <c>drawTextFromStart</c>), 5 pixels below the top (not centered), and is clipped to the window width minus 2 x 5;
+        /// text wider than that scrolls in steps of half the width so that its end stays visible.
+        /// </summary>
+        private void EditText(UiWindow window, UiTextEditState edit, UiRect area, bool fromStart)
         {
             var (color, shadow) = TextColors(window);
             var measure = tree.Services.TextMeasure;
-            var x = UiGadgetGeometry.TextOriginX(window, area);
+            var inset = window.Transform.X.Length(5);
             var height = measure.LineHeight(window.Font);
-            var y = area.Y + area.Height / 2 - height / 2;
+            var y = area.Y + window.Transform.Y.Length(5);
             var text = edit.DisplayText;
-            _commands.Add(new UiPushClip(area));
+            var width = Math.Max(1, area.Width - 2 * inset);
+            var textWidth = measure.MeasureWidth(text, window.Font);
+            int x;
+            UiRect clip;
+            if (fromStart)
+            {
+                x = area.X + inset + window.Transform.X.Length(5);
+                clip = area;
+            }
+            else
+            {
+                x = area.X + inset + window.Transform.X.Length(2);
+                var half = Math.Max(1, width / 2);
+                if (textWidth >= width) x -= (textWidth / half - 1) * half;
+                clip = new UiRect(area.X + inset, y, width, height);
+            }
+            _commands.Add(new UiPushClip(clip));
             if (edit.HasSelection)
             {
                 var start = x + measure.MeasureWidth(text[..edit.SelectionStart], window.Font);
@@ -187,9 +215,9 @@ public sealed partial class UiWindowTree
                 Fill(new UiRect(start, y, end - start, height), window.Definition.TextColors.Hilite);
             }
             if (text.Length > 0 && color.IsVisible)
-                _commands.Add(new UiTextDraw(text, null, window.Font, color, shadow, x, y, UiTextAlignment.Left, area));
+                _commands.Add(new UiTextDraw(text, null, window.Font, color, shadow, x, y, UiTextAlignment.Left, clip));
             if (window.IsFocused)
-                Fill(new UiRect(x + measure.MeasureWidth(text[..edit.Caret], window.Font), y, window.Transform.X.Length(1), height), color);
+                Fill(new UiRect(x + measure.MeasureWidth(text[..edit.Caret], window.Font), area.Y + window.Transform.Y.Length(3), window.Transform.X.Length(2), Math.Max(1, area.Height - 2 * window.Transform.Y.Length(3))), color);
             _commands.Add(new UiPopClip());
         }
 
@@ -201,7 +229,8 @@ public sealed partial class UiWindowTree
             var content = UiGadgetGeometry.ListContent(window);
             var rowHeight = UiGadgetGeometry.RowHeight(window);
             var visible = UiGadgetGeometry.VisibleRows(window);
-            var (color, shadow) = TextColors(window);
+            var (color, _) = TextColors(window);
+            var shadow = ListShadow;
             _commands.Add(new UiPushClip(content));
             for (var index = list.TopIndex; index < Math.Min(list.Rows.Count, list.TopIndex + visible + 1); index++)
             {
@@ -238,14 +267,13 @@ public sealed partial class UiWindowTree
             DrawBackground(window, Set(window, WndDrawDataKind.Enabled), window.Rect);
             var edit = UiGadgetGeometry.ComboEdit(window);
             DrawBackground(window, Set(window, WndDrawDataKind.ComboBoxEditBoxEnabled, state), edit);
-            if (combo.Data.IsEditable) EditText(window, combo.Edit, edit);
+            if (combo.Data.IsEditable) EditText(window, combo.Edit, edit, false);
             else if (combo.SelectedIndex >= 0)
             {
-                var (color, shadow) = TextColors(window);
-                var height = tree.Services.TextMeasure.LineHeight(window.Font);
-                if (color.IsVisible)
-                    _commands.Add(new UiTextDraw(combo.Entries[combo.SelectedIndex], null, window.Font, color, shadow,
-                        UiGadgetGeometry.TextOriginX(window, edit), edit.Y + edit.Height / 2 - height / 2, UiTextAlignment.Left, edit));
+                // The edit box of a read-only combo box is a text entry with drawTextFromStart.
+                var selected = new UiTextEditState(0, false, false, false, false);
+                selected.SetText(combo.Entries[combo.SelectedIndex]);
+                EditText(window, selected, edit, true);
             }
             DrawBackground(window, Set(window, WndDrawDataKind.ComboBoxDropDownButtonEnabled, state), UiGadgetGeometry.ComboButton(window));
         }
@@ -257,7 +285,8 @@ public sealed partial class UiWindowTree
             var set = Set(window, WndDrawDataKind.ComboBoxListBoxEnabled, StateOf(window));
             DrawBackground(window, set, area);
             var rowHeight = UiGadgetGeometry.RowHeight(window);
-            var (color, shadow) = TextColors(window);
+            var (color, _) = TextColors(window);
+            var shadow = ListShadow;
             _commands.Add(new UiPushClip(area));
             for (var index = combo.TopIndex; index < Math.Min(combo.Entries.Count, combo.TopIndex + UiGadgetGeometry.ComboVisibleRows(window)); index++)
             {
@@ -412,8 +441,12 @@ public sealed partial class UiWindowTree
             };
         }
 
-        /// <summary>Lays out the window text (label resolved through the text source) as vertically centered lines.</summary>
-        private void Text(UiWindow window, UiRect area, UiTextAlignment alignment, int wrapWidth, bool wrap)
+        /// <summary>
+        /// Lays out the window text (label resolved through the text source) as a vertically centered block with the word wrap
+        /// and line placement of <see cref="UiSentenceLayout"/>. <paramref name="wrapCenteredAllowed"/> is false for the gadgets whose
+        /// draw code never calls <c>setWordWrapCentered</c>; <paramref name="clip"/> is the clip region the original sets (none for buttons).
+        /// </summary>
+        private void Text(UiWindow window, UiRect area, UiTextAlignment alignment, int wrapWidth, bool wrapCenteredAllowed, UiRect clip)
         {
             if (window.Text is not { } value || value.Value.Length == 0) return;
             var (color, shadow) = TextColors(window);
@@ -432,19 +465,16 @@ public sealed partial class UiWindowTree
             }
             else text = value.Value;
             var measure = tree.Services.TextMeasure;
-            var lines = UiTextLayout.Wrap(text, wrap ? wrapWidth : 0, window.Font, measure);
+            var wrapCentered = wrapCenteredAllowed && (window.Status & WndStatus.WrapCentered) != 0;
+            var sentence = UiSentenceLayout.Layout(text, window.Font, measure, wrapWidth, wrapCentered);
             var lineHeight = measure.LineHeight(window.Font);
-            var y = area.Y + area.Height / 2 - lines.Length * lineHeight / 2;
-            var widths = lines.Select(line => measure.MeasureWidth(line, window.Font)).ToArray();
-            var block = widths.Length == 0 ? 0 : widths.Max();
-            var wrapCentered = (window.Status & WndStatus.WrapCentered) != 0;
-            for (var index = 0; index < lines.Length; index++, y += lineHeight)
+            var y = area.Y + area.Height / 2 - sentence.Height / 2;
+            var left = alignment == UiTextAlignment.Left ? area.X : area.X + area.Width / 2 - sentence.Width / 2;
+            for (var index = 0; index < sentence.Lines.Length; index++, y += lineHeight)
             {
-                if (lines[index].Length == 0) continue;
-                var x = alignment == UiTextAlignment.Left ? area.X
-                    : wrapCentered ? area.X + area.Width / 2 - widths[index] / 2
-                    : area.X + area.Width / 2 - block / 2;
-                _commands.Add(new UiTextDraw(lines[index], key, window.Font, color, shadow, x, y, alignment, window.Rect));
+                var line = sentence.Lines[index];
+                if (line.Text.Length == 0) continue;
+                _commands.Add(new UiTextDraw(line.Text, key, window.Font, color, shadow, left + line.X, y, alignment, clip));
             }
         }
 

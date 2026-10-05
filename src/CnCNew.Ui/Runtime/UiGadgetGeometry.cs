@@ -16,7 +16,7 @@ public static class UiGadgetGeometry
     public const int HorizontalThumbHeight = 16;
     /// <summary><c>HORIZONTAL_SLIDER_THUMB_POSITION</c> = thumb height * 2 / 3.</summary>
     public const int HorizontalThumbOffsetY = HorizontalThumbHeight * 2 / 3;
-    public const int TextInset = 4;
+    public const int TextInset = 5;
 
     public static int RowHeight(UiWindow window) => Math.Max(1, window.Tree.Services.TextMeasure.LineHeight(window.Font));
 

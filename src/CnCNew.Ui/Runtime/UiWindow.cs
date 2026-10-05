@@ -46,6 +46,23 @@ public sealed class UiWindow
     public UiWindow? Parent { get; }
     public IReadOnlyList<UiWindow> Children => _children;
     public UiRect Rect { get; internal set; }
+
+    /// <summary>
+    /// A screen rectangle that replaces the one derived from the layout (<c>winSetPosition</c>/<c>winSetSize</c> as the control bar
+    /// scheme code does for the money and power windows); it survives a relayout. Null: the layout decides.
+    /// </summary>
+    public UiRect? ScreenRectOverride { get; private set; }
+
+    public void SetScreenRect(UiRect? rect)
+    {
+        ScreenRectOverride = rect;
+        if (rect is { } value)
+        {
+            Rect = value;
+            HitRect = value;
+        }
+        else Tree.Relayout();
+    }
     /// <summary><see cref="Rect"/> grown to <see cref="UiScaleOptions.MinimumHitTarget"/> for gadgets.</summary>
     public UiRect HitRect { get; internal set; }
     public UiTransform Transform { get; internal set; }

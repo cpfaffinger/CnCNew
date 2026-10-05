@@ -6,6 +6,7 @@ Func<string[], int>[] suites =
     TextAndSettingsTests.Run,
     WndTests.Run,
     UiRenderingTests.Run,
+    SentenceLayoutTests.Run,
 ];
 
 var failures = 0;
