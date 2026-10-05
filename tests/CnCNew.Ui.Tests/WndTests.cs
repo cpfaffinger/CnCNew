@@ -893,6 +893,21 @@ public static class WndTests
         Check(tree.Tooltip?.Text == "dynamic T.wnd:Dynamic", "Registered tooltip callback.");
         tree.MouseMove(50, 180);
         Check(tree.Tooltip is null && tree.Tooltip is null && tree.UnregisteredCallbacks["MissingTooltip"] == 1, "Unregistered tooltip callback counted once per hover.");
+        // winProcessMouseEvent finds the tooltip window without the enabled check (winPointInAnyChild( x, y, TRUE, TRUE )): a disabled button still
+        // explains itself although it is not the mouse region; a hidden one does not.
+        var fast = tree.FindByName("T.wnd:Fast")!;
+        fast.SetEnabled(false);
+        tree.MouseMove(50, 61);
+        tree.AdvanceTo(5200);
+        Check(tree.Hovered?.Name == "T.wnd:Root", $"A disabled button is not the mouse region: {tree.Hovered?.Name}");
+        Check(tree.Tooltip is { Text: "Quick" } disabledTip && disabledTip == new UiTooltip("T.wnd:Fast", "Quick", "TOOLTIP:Fast", 50, 61, disabledTip.AgeMs), $"A disabled button shows its tooltip: {tree.Tooltip}");
+        fast.SetHidden(true);
+        Check(tree.Tooltip is null, "A hidden window has no tooltip.");
+        fast.SetHidden(false);
+        tree.PointerLeft();
+        Check(tree.Tooltip is null, "No tooltip once the pointer has left.");
+        fast.SetEnabled(true);
+        tree.MouseMove(50, 180);
         tree.MouseDown(50, 180, UiMouseButton.Left);
         Check(tree.Tooltip is null, "No tooltip while a button is held.");
         Check(ThrowsArgument(() => tree.AdvanceTo(10)), "The clock must not run backwards.");

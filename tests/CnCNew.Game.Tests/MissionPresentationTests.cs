@@ -204,7 +204,8 @@ internal static class MissionPresentationTests
 
         TestHarness.Assert(director.Letterbox && disabled == 1 && director.InputLocked, "letterbox and input lock are state the host reads; the lock is announced once");
         var commands = director.BuildOverlayCommands(1280, 720);
-        TestHarness.Assert(commands.OfType<UiFillRect>().Count(fill => fill.Rect.Width == 1280) == 2, "the letterbox draws two bars across the screen");
+        // W3DDisplay::renderLetterBox: no bars on a 16:9 screen, and on a 4:3 one they fade in from nothing (MissionTextTests.LetterboxFollowsTheOriginal has the numbers).
+        TestHarness.Assert(!commands.OfType<UiFillRect>().Any() && !director.BuildOverlayCommands(800, 600).OfType<UiFillRect>().Any() && director.LetterboxFadeLevel == 0f, "the letterbox draws no bar at 16:9 and none in its first step at 4:3");
         TestHarness.Assert(commands.OfType<UiTextDraw>().Any(text => text.Text == "GUI:Cine"), "the cinematic text is drawn");
         TestHarness.Assert(commands.OfType<UiTextDraw>().Any(text => text.Text == "GUI:Kills 7"), $"the counter shows its label and value ({string.Join(" | ", commands.OfType<UiTextDraw>().Select(text => text.Text))})");
 

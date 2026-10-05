@@ -38,7 +38,11 @@ internal static class HudTests
         harness.Run("Control bar scheme art and the logo image", () => SchemeArt(data));
         harness.Run("The money display shows the localized money at the scheme's rectangle, not the layout placeholder", () => MoneyDisplay(data));
         harness.Run("A command button shows its description as a pointer tooltip after the delay, and the icons carry no hot key or cost text", () => CommandButtonTooltip(data));
+        harness.Run("Command button description: missing prerequisites and sciences are listed after 'Requires:', too little money and owned upgrades are said, as populateBuildTooltipLayout does", () => CommandButtonRequirements(data));
+        harness.Run("The money and the power window describe themselves; the power text carries production and consumption", () => MoneyAndPowerTooltips(data));
         harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
+        harness.Run("Message list: refused orders, finished buildings and upgrades, attacks and defeats print the original's labels at the message position and fade; what has no line is counted", () => MessageList(data));
+        harness.Run("Message list through the real click path: a refused building spot prints 'You can't build here'", () => MessageListFromARefusedPlacement(data));
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));
 
         harness.Run("Cursor and markers: Alt waypoints draw a path with a marker per station, an order leaves a fading hint, the cursor follows context and windows", () => CursorAndMarkers(data));
@@ -598,6 +602,275 @@ internal static class HudTests
 
         controller.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX + 1, rect.CenterY)));
         TestHarness.Assert(!controller.BuildDrawList(1280, 720).Commands.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "moving the pointer hides the tooltip until it has been still for the delay again (1 ms here)");
+    }
+
+    /// <summary>
+    /// <c>InGameUI::message</c>: the game's own lines (docs/GAME-HUD.md section 8). The HUD computed a "ticker" of invented English texts every frame and nothing drew it; now the lines are the
+    /// original's labels, in the one message list, drawn by <c>InGameUI::postDraw</c>'s rules.
+    /// </summary>
+    private static void MessageList(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        Advance(match, controller, 5);
+        var feed = controller.Messages;
+        var text = data.LoadText("English");
+        var style = controller.TextStyle;
+        var font = style.Font(InGameUiFontRole.Message, new CnCNew.Ui.Layout.UiViewport(1280, 720), controller.ScaleOptions);
+        UiTextDraw[] Lines() => [..controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(draw => draw.Font == font && draw.X == style.Settings.MessagePosition.X && draw.Y >= style.Settings.MessagePosition.Y && draw.Y < 200)];
+        CommandFeedback Rejected(CnCNew.Simulation.Commands.CommandRejection reason, string command) => new(FeedbackKind.Rejected, Vector3.Zero, CnCNew.Simulation.Ids.EntityId.Invalid, match.Tick, 30, reason, command);
+
+        TestHarness.Assert(Lines().Length == 0 && controller.OwnsMessageList, "no message at the start; a skirmish HUD owns its list");
+
+        // Refusals (ControlBar::processCommandUI, PlaceEventTranslator, UpgradeCenter::canAffordUpgrade).
+        feed.Observe(Rejected(CnCNew.Simulation.Commands.CommandRejection.InsufficientFunds, nameof(CnCNew.Simulation.Commands.QueueProductionCommand)));
+        feed.Observe(Rejected(CnCNew.Simulation.Commands.CommandRejection.InsufficientFunds, nameof(CnCNew.Simulation.Commands.PurchaseUpgradeCommand)));
+        feed.Observe(Rejected(CnCNew.Simulation.Commands.CommandRejection.QueueFull, nameof(CnCNew.Simulation.Commands.QueueProductionCommand)));
+        feed.Observe(Rejected(CnCNew.Simulation.Commands.CommandRejection.ProductionLimitReached, nameof(CnCNew.Simulation.Commands.QueueProductionCommand)));
+        var lines = Lines();
+        TestHarness.Assert(lines.Select(line => line.Text).SequenceEqual(["You don't have enough money to build that", "You don't have enough money to make upgrade", "The unit's production queue is full", "You already have the maximum for this unit"]),
+            $"the four refusals print their labels, oldest at the top ({string.Join(" | ", lines.Select(line => line.Text))})");
+        var step = new MonospaceTextMeasure().LineHeight(font);
+        TestHarness.Assert(lines[0].Y == style.Settings.MessagePosition.Y && lines[1].Y == lines[0].Y + step && lines[3].Y == lines[0].Y + 3 * step, "from MessagePosition, one font height apart");
+        TestHarness.Assert(lines[0].Color == style.Settings.MessageColor1 && lines[1].Color == style.Settings.MessageColor2 && lines[2].Color == style.Settings.MessageColor1 && lines[0].ShadowColor == new WndColor(0, 0, 0, 255), "MessageColor1 and MessageColor2 alternate, black drop color");
+        TestHarness.Assert(controller.Overlay.Ticker.IsEmpty, "the overlay's text list follows with the next update");
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Overlay.Ticker.Length == 4, "and then carries the same lines");
+
+        // A refusal the original has no line for shows nothing and is counted.
+        feed.Observe(Rejected(CnCNew.Simulation.Commands.CommandRejection.NotPermitted, nameof(CnCNew.Simulation.Commands.SellCommand)));
+        feed.Observe(new CommandFeedback(FeedbackKind.InvalidOrder, Vector3.Zero, CnCNew.Simulation.Ids.EntityId.Invalid, match.Tick, 30));
+        feed.Observe(new CommandFeedback(FeedbackKind.MoveMarker, Vector3.Zero, CnCNew.Simulation.Ids.EntityId.Invalid, match.Tick, 30));
+        TestHarness.Assert(Lines().Length == 4 && feed.WithoutLine["rejected NotPermitted (SellCommand)"] == 1 && feed.WithoutLine["invalid order"] == 1, $"no line, but counted ({string.Join("; ", feed.WithoutLine.Select(pair => $"{pair.Key} x{pair.Value}"))})");
+
+        // Building spots (InGameUI::displayCantBuildMessage); the seventh line pushes the oldest out.
+        feed.Observe(new CommandFeedback(FeedbackKind.InvalidOrder, Vector3.Zero, CnCNew.Simulation.Ids.EntityId.Invalid, match.Tick, 30, Detail: nameof(PlacementIssue.Shroud)));
+        feed.Observe(new CommandFeedback(FeedbackKind.InvalidOrder, Vector3.Zero, CnCNew.Simulation.Ids.EntityId.Invalid, match.Tick, 30, Detail: nameof(PlacementIssue.BlockedFootprint)));
+        feed.Observe(new CommandFeedback(FeedbackKind.Unsupported, Vector3.Zero, CnCNew.Simulation.Ids.EntityId.Invalid, match.Tick, 30, Detail: "Beacon"));
+        lines = Lines();
+        TestHarness.Assert(lines.Length == 6 && lines[^3].Text == "You must explore there before building" && lines[^2].Text == "You can't build here" && lines[0].Text == "You don't have enough money to make upgrade",
+            $"six lines at most ({string.Join(" | ", lines.Select(line => line.Text))})");
+        TestHarness.Assert(lines[^1].Text == "(not supported in this build: Beacon)", "what this build cannot do is a line in parentheses, not a text of the game");
+
+        // Events of the simulation: the finished building of the local player, the attacked unit (once per place and ten seconds), nothing for the other player's.
+        var fresh = NewMatch(data, new Vector2(1280, 720));
+        (match, controller) = fresh;
+        feed = controller.Messages;
+        Advance(match, controller, 5);
+        var human = match.Human;
+        var center = match.World.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("COMMANDCENTER"));
+        var dozer = match.World.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("DOZER"));
+        var enemyCenter = match.World.Entities.First(entity => entity.Owner != human && !entity.Owner.IsSystem && entity.Template.IsKindOf("COMMANDCENTER"));
+        CnCNew.Simulation.Events.SimEvent Event(CnCNew.Simulation.Events.SimEventKind kind, CnCNew.Simulation.Ids.EntityId entity, CnCNew.Simulation.Ids.EntityId other, CnCNew.Simulation.Ids.PlayerId player, string name = "", long value = 0, long tick = -1)
+            => new(default, tick < 0 ? match.Tick : tick, kind, entity, other, player, name, value);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.ConstructionCompleted, center.Id, dozer.Id, human), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.ConstructionCompleted, enemyCenter.Id, default, enemyCenter.Owner), match.World, human);
+        var built = feed.Log.Lines;
+        TestHarness.Assert(built.Length == 1 && built[0].Text.StartsWith("Construction Complete: ", StringComparison.Ordinal) && built[0].Text.Length > "Construction Complete: ".Length && !built[0].Text.Contains("??", StringComparison.Ordinal) && !built[0].Text.Contains("MISSING", StringComparison.Ordinal),
+            $"DOZER:ConstructionComplete with the structure's display name, for the local player's building only ({string.Join(" | ", built.Select(line => line.Text))})");
+
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, dozer.Id, enemyCenter.Id, human, value: 100), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, dozer.Id, enemyCenter.Id, human, value: 100), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, center.Id, enemyCenter.Id, human, value: 100, tick: match.Tick + 200), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, dozer.Id, dozer.Id, human, value: 100, tick: match.Tick + 400), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, enemyCenter.Id, dozer.Id, enemyCenter.Owner, value: 100, tick: match.Tick + 400), match.World, human);
+        var dozerNearCenter = Vector2.Distance(SimulationQueries.GroundOf(dozer), SimulationQueries.GroundOf(center)) <= 250f;
+        var attacked = feed.Log.Lines.Skip(1).Select(line => line.Text).ToArray();
+        TestHarness.Assert(attacked[0] == text.Get(dozer.Template.IsKindOf("HARVESTER") ? "RADAR:HarvesterUnderAttack" : "RADAR:UnitUnderAttack"), $"the attacked dozer prints its radar line once ({string.Join(" | ", attacked)})");
+        TestHarness.Assert(attacked.Length == (dozerNearCenter ? 1 : 2) && (dozerNearCenter || attacked[1] == "Structure under attack"),
+            $"a second attack within 250 units and ten seconds prints nothing, own damage and the enemy's losses neither (dozer near the center: {dozerNearCenter}; {string.Join(" | ", attacked)})");
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, center.Id, enemyCenter.Id, human, value: 100, tick: match.Tick + 700), match.World, human);
+        TestHarness.Assert(feed.Log.Lines[^1].Text == "Structure under attack", "ten seconds later the same place reports again");
+
+        // A defeated player (VictoryConditions::update) is named by its army; a mission HUD would stay silent.
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.PlayerDefeated, default, default, enemyCenter.Owner, tick: match.Tick + 700), match.World, human);
+        var defeat = feed.Log.Lines[^1].Text;
+        TestHarness.Assert(defeat.EndsWith(" has been Defeated", StringComparison.Ordinal) && !defeat.StartsWith("Faction", StringComparison.Ordinal) && !defeat.Contains("??", StringComparison.Ordinal), $"GUI:PlayerHasBeenDefeated with the army's name ({defeat})");
+        var shown = feed.Shown;
+        feed.AnnounceDefeats = false;
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.PlayerDefeated, default, default, enemyCenter.Owner, tick: match.Tick + 700), match.World, human);
+        TestHarness.Assert(feed.Shown == shown, "no defeat line where the original runs no victory conditions");
+
+        // An upgrade the data names (UPGRADE:UpgradeComplete), and one without a display name (counted, no line).
+        var upgrade = match.World.Upgrades.Upgrades.First(info => !info.IsEngine && data.Graph.Definitions.Any(definition => definition.Id.Kind == CnCNew.Data.Definitions.DefinitionKind.Upgrade && definition.OriginalName == info.Name
+            && definition.Fields.Any(field => field.Name == "DisplayName")));
+        var granted = feed.Shown;
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, default, default, human, upgrade.Name, upgrade.Index), match.World, human);
+        TestHarness.Assert(feed.Shown == granted && feed.WithoutLine.GetValueOrDefault("upgrade granted, not ordered") >= 1, "an upgrade nobody ordered (granted at creation or by a script) prints nothing and is counted");
+        feed.ExpectUpgrade(upgrade.Name);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, default, default, human, upgrade.Name, upgrade.Index), match.World, human);
+        TestHarness.Assert(feed.Log.Lines[^1].Text.StartsWith("Upgrade Complete: ", StringComparison.Ordinal) && !feed.Log.Lines[^1].Text.Contains("??", StringComparison.Ordinal), $"the upgrade line carries the upgrade's display name ({feed.Log.Lines[^1].Text})");
+        feed.ExpectUpgrade("Upgrade_NoSuchName");
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, default, default, human, "Upgrade_NoSuchName", 0), match.World, human);
+        TestHarness.Assert(feed.WithoutLine.GetValueOrDefault("upgrade completed without DisplayName") == 1, "an upgrade without a display name prints nothing (as in the original) and is counted");
+        TestHarness.Assert(!controller.Assets.Text.MissingLabels.Any(label => label.StartsWith("RADAR:", StringComparison.Ordinal) || label.StartsWith("DOZER:", StringComparison.Ordinal) || label is "GUI:PlayerHasBeenDefeated" or "UPGRADE:UpgradeComplete"),
+            $"every message label used exists in the retail string table ({string.Join(", ", controller.Assets.Text.MissingLabels)})");
+
+        // The lines fade on the logic clock: about 9.2 seconds after the last one nothing is left.
+        Advance(match, controller, 120);
+        TestHarness.Assert(!feed.Log.IsEmpty && feed.Log.Lines.All(line => line.Color.A < 255), "after four seconds the lines have begun to fade");
+        Advance(match, controller, 200);
+        TestHarness.Assert(feed.Log.IsEmpty && !controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Any(draw => draw.Text.Contains("Defeated", StringComparison.Ordinal)), "and are gone after their 277 logic frames");
+    }
+
+    /// <summary>The player's own click: a structure placed on top of another one is refused and <c>InGameUI::displayCantBuildMessage</c> says so.</summary>
+    private static void MessageListFromARefusedPlacement(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Advance(match, controller, 1);
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        Refresh(controller);
+        var slot = FindConstructSlot(match, controller.CommandBar);
+        var rect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{slot:00}") ?? throw new InvalidOperationException("button window missing");
+        Click(controller, ref time, MouseButton.Left, new Vector2(rect.CenterX, rect.CenterY));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.Placement, "the construct button enters placement mode");
+
+        Vector2? refusedAt = null;
+        foreach (var structure in match.World.Entities.Where(entity => entity.Owner == match.Human && entity.Template.IsKindOf("STRUCTURE")).Take(4))
+        {
+            var ground = SimulationQueries.GroundOf(structure);
+            var at = Screen(match, new Vector3(ground.X, ground.Y, 0f));
+            if (controller.WindowRect("ControlBar.wnd:ControlBarParent") is { } bar && at.Y >= bar.Y) continue;
+            controller.Process(new MouseMoveEvent(time += 16, at));
+            if (controller.Input.Commands.Ghost is { IsValid: false, Reason: PlacementIssue.BlockedFootprint }) { refusedAt = at; break; }
+        }
+        TestHarness.Assert(refusedAt is not null, "a spot on top of an own structure is on screen and refused");
+        TestHarness.Assert(controller.Messages.Log.IsEmpty, "hovering prints nothing");
+        Click(controller, ref time, MouseButton.Left, refusedAt!.Value);
+        Advance(match, controller, 1);
+        var drawn = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(draw => draw.Text == "You can't build here").ToArray();
+        TestHarness.Assert(drawn is [{ X: 10, Y: 22 }], $"the click prints GUI:CantBuildThere at the message position ({string.Join(" | ", controller.Messages.Log.Lines.Select(line => line.Text))})");
+        TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.Placement, "and the placement stays on for another try");
+    }
+
+    /// <summary>
+    /// <c>ControlBar::populateBuildTooltipLayout</c> and <c>ProductionPrerequisite::getRequiresList</c>: the description names what a button still requires. The tooltip used to
+    /// show name, cost and description only, so a greyed-out button did not say why.
+    /// </summary>
+    private static void CommandButtonRequirements(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Advance(match, controller, 1);
+        var world = match.World;
+        var human = match.Human;
+        var text = data.LoadText("English");
+        var descriptions = new CommandButtonDescription(data.Graph, text);
+        var dozer = world.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("DOZER"));
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        Refresh(controller);
+
+        // Through the real HUD: a construct button whose prerequisite the fresh base lacks is greyed out, and its tooltip says what it requires.
+        var locked = controller.CommandBar.Slots.FirstOrDefault(button => button is { Reason: ButtonReason.MissingPrerequisite, Button.Kind: GuiCommandKind.DozerConstruct });
+        TestHarness.Assert(locked is not null, "the dozer of a fresh base has a structure it cannot build yet");
+        TestHarness.Assert(world.Templates.TryGet(locked!.Button.Object, out var template), "the template exists");
+        var missing = SimulationQueries.MissingPrerequisites(world, human, template);
+        TestHarness.Assert(missing.Length > 0 && !SimulationQueries.PrerequisitesSatisfied(world, human, template), "the model's reason and the missing lines agree");
+        var requires = descriptions.Requirements(world, human, template.Name);
+        var firstName = descriptions.DisplayName(missing[0].Alternatives[^1]);
+        TestHarness.Assert(requires.Length > 0 && requires.Contains(firstName, StringComparison.Ordinal) && !requires.Contains("MISSING", StringComparison.Ordinal) && !requires.Contains("??", StringComparison.Ordinal),
+            $"the requirement names the missing object by its display name: '{requires}' (first missing: {firstName})");
+        TestHarness.Assert(requires.Split(", ").Length == missing.Length, $"one entry per unmet Prerequisites line, joined by a comma ({requires}; {missing.Length} lines)");
+
+        var rect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{locked.Slot:00}")!.Value;
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX, rect.CenterY)));
+        Advance(match, controller, 30);
+        var tooltip = string.Join("\n", controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(draw => draw.Color == new WndColor(220, 220, 220, 255)).Select(draw => draw.Text.Trim()));
+        var flat = tooltip.Replace("\n", " ", StringComparison.Ordinal);
+        TestHarness.Assert(flat.Contains("Requires: " + requires.Split(' ')[0], StringComparison.Ordinal), $"the greyed-out button's tooltip carries the 'Requires:' line (CONTROLBAR:Requirements): {tooltip}");
+        TestHarness.Assert(flat.Contains("Cost: " + (int)locked.Cost.ToDecimal(), StringComparison.Ordinal), $"and still its cost: {tooltip}");
+        Console.WriteLine($"       {template.Name}: {tooltip.Replace("\n", " / ", StringComparison.Ordinal)}");
+
+        // Built directly: a satisfied button has no requirement line, and its texts are name, cost, description.
+        var open = controller.CommandBar.Slots.First(button => button is { Reason: ButtonReason.None, Button.Kind: GuiCommandKind.DozerConstruct })!;
+        var openTexts = descriptions.Build(open, world, human, dozer);
+        TestHarness.Assert(!openTexts.Description.Contains("Requires", StringComparison.Ordinal) && openTexts.Cost == "Cost: " + (int)open.Cost.ToDecimal() && openTexts.Name.Length > 0 && !openTexts.Name.Contains('&'),
+            $"a buildable structure: no requirement, its cost, its name without the hot key mark ({openTexts})");
+        TestHarness.Assert(openTexts.ToTooltip() == string.Join("\n", new[] { openTexts.Name, openTexts.Cost!, openTexts.Description }.Where(part => part.Length > 0)), "the tooltip is name, cost, description, one below the other");
+
+        // Every Prerequisites line of the retail data, as the player of a fresh base sees it: alternatives are 'A or B', a science is the General's Promotion.
+        var alternatives = world.Templates.Templates.FirstOrDefault(candidate => candidate.Prerequisites.Any(line => !line.IsScience && line.Alternatives.Length >= 2
+            && SimulationQueries.MissingPrerequisites(world, human, candidate).Contains(line)));
+        if (alternatives is not null)
+        {
+            var line = SimulationQueries.MissingPrerequisites(world, human, alternatives).First(candidate => !candidate.IsScience && candidate.Alternatives.Length >= 2);
+            var expected = $"{descriptions.DisplayName(line.Alternatives[^2])} or {descriptions.DisplayName(line.Alternatives[^1])}";
+            TestHarness.Assert(descriptions.Requirements(world, human, alternatives.Name).Split(", ").Contains(expected), $"alternatives read 'A or B' (CONTROLBAR:OrRequirement): {descriptions.Requirements(world, human, alternatives.Name)} should hold '{expected}'");
+            Console.WriteLine($"       {alternatives.Name}: Requires: {descriptions.Requirements(world, human, alternatives.Name)}");
+        }
+        else Console.WriteLine("       (no template with an unmet line of alternatives in this data set)");
+        var science = world.Templates.Templates.FirstOrDefault(candidate => SimulationQueries.MissingPrerequisites(world, human, candidate).Any(line => line.IsScience));
+        TestHarness.Assert(science is not null, "the retail data has a template behind a science the fresh player lacks");
+        TestHarness.Assert(descriptions.Requirements(world, human, science!.Name).Split(", ").Contains("General's Promotion"), $"a missing science reads CONTROLBAR:GeneralsPromotion: {descriptions.Requirements(world, human, science.Name)}");
+
+        // Too little money: 'Insufficient funds' after an empty line, before the requirements (canMakeUnit, then getRequiresList).
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var poorMatch = LiveMatch.Create(data, new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard with { StartMoney = 100 }), new Vector2(1280, 720));
+        var poor = new MatchController(poorMatch, GameSettings.Default);
+        Advance(poorMatch, poor, 1);
+        var poorDozer = poorMatch.World.Entities.First(entity => entity.Owner == poorMatch.Human && entity.Template.IsKindOf("DOZER"));
+        long poorTime = 10_000;
+        Click(poor, ref poorTime, MouseButton.Left, Screen(poorMatch, EntityPicker.CenterOf(poorDozer)));
+        Advance(poorMatch, poor, 1);
+        var costly = poor.CommandBar.Slots.First(button => button is { Button.Kind: GuiCommandKind.DozerConstruct, Button.DescriptLabel.Length: > 0 } && button.Cost.Raw > poorMatch.World.MoneyOf(poorMatch.Human).Raw)!;
+        var costlyTexts = descriptions.Build(costly, poorMatch.World, poorMatch.Human, poorDozer);
+        var body = text.Get(costly.Button.DescriptLabel);
+        TestHarness.Assert(costlyTexts.Description.StartsWith(body + "\n\nInsufficient funds", StringComparison.Ordinal), $"too little money: '{costlyTexts.Description}'");
+        TestHarness.Assert(descriptions.Build(costly, poorMatch.World, poorMatch.Human, null).Description.StartsWith(body, StringComparison.Ordinal) && !descriptions.Build(costly, poorMatch.World, poorMatch.Human, null).Description.Contains("Insufficient", StringComparison.Ordinal),
+            "without a selected object the original asks no canMakeUnit, so no reason is appended");
+
+        // Upgrades: an owned one shows its 'purchased' text instead of the description and no cost; one behind a science requires the General's Promotion.
+        var catalog = controller.Input.CommandBar!.Catalog;
+        var upgradeButtons = catalog.Buttons.Where(button => button.Kind is GuiCommandKind.PlayerUpgrade or GuiCommandKind.ObjectUpgrade && world.Upgrades.TryGet(button.Upgrade, out _)).ToArray();
+        CommandBarButton AsBarButton(CommandButtonInfo info) => new(1, info, ButtonAvailability.Restricted, ButtonReason.None, null, world.Upgrades.TryGet(info.Upgrade, out var known) ? known.BuildCost : default, 0, null, []);
+        var ownedButton = upgradeButtons.FirstOrDefault(button => world.Upgrades.TryGet(button.Upgrade, out var info) && world.Entities.Any(entity => entity.Owner == human && (entity.CompletedUpgrades.Has(info.Index) || world.PlayerUpgrades(human).Has(info.Index))));
+        if (ownedButton is not null)
+        {
+            world.Upgrades.TryGet(ownedButton.Upgrade, out var ownedInfo);
+            var holder = world.Entities.First(entity => entity.Owner == human && (entity.CompletedUpgrades.Has(ownedInfo.Index) || world.PlayerUpgrades(human).Has(ownedInfo.Index)));
+            var ownedTexts = descriptions.Build(AsBarButton(ownedButton), world, human, holder);
+            var purchasedLabel = data.Graph.Definitions.First(definition => definition.Id.Kind == CnCNew.Data.Definitions.DefinitionKind.CommandButton && definition.OriginalName == ownedButton.Name)
+                .Fields.FirstOrDefault(field => field.Name == "PurchasedLabel")?.Value.OriginalText.Trim().Trim('"');
+            var expected = text.Get(purchasedLabel is { Length: > 0 } ? purchasedLabel : "TOOLTIP:AlreadyUpgradedDefault");
+            TestHarness.Assert(ownedTexts.Description == expected && ownedTexts.Cost is null, $"an owned upgrade ({ownedButton.Name}): '{ownedTexts.Description}' should be '{expected}', without a cost");
+        }
+        else Console.WriteLine("       (the fresh base owns no upgrade a command button offers; the 'already purchased' text was not exercised)");
+        var scienceUpgrade = upgradeButtons.FirstOrDefault(button => button.Sciences.Length > 0 && world.Upgrades.TryGet(button.Upgrade, out var info) && !world.PlayerUpgrades(human).Has(info.Index));
+        if (scienceUpgrade is not null)
+        {
+            var texts = descriptions.Build(AsBarButton(scienceUpgrade), world, human, dozer);
+            TestHarness.Assert(texts.Description.EndsWith("Requires: General's Promotion", StringComparison.Ordinal), $"an upgrade behind a science ({scienceUpgrade.Name}): '{texts.Description}'");
+        }
+        else Console.WriteLine("       (no upgrade button with a science in this data set)");
+        Console.WriteLine($"       upgrades: owned {ownedButton?.Name ?? "-"}, behind a science {scienceUpgrade?.Name ?? "-"}");
+    }
+
+    /// <summary><c>populateBuildTooltipLayout</c> for a window: <c>CONTROLBAR:Money</c>/<c>MoneyDescription</c> and <c>CONTROLBAR:Power</c>/<c>PowerDescription</c> with the energy numbers.</summary>
+    private static void MoneyAndPowerTooltips(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Advance(match, controller, 1);
+        Refresh(controller);
+        string Hover(string window)
+        {
+            var rect = controller.WindowRect(window) ?? throw new InvalidOperationException($"{window} missing");
+            controller.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX, rect.CenterY)));
+            Advance(match, controller, 45);
+            return string.Join(" | ", controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(draw => draw.Color == new WndColor(220, 220, 220, 255)).Select(draw => draw.Text.Trim()));
+        }
+        var money = Hover("ControlBar.wnd:MoneyDisplay");
+        TestHarness.Assert(money.StartsWith("Money", StringComparison.Ordinal) && money.Contains("This is the amount of money you have", StringComparison.Ordinal), $"the money window: {money}");
+        var bar = controller.WindowRect("ControlBar.wnd:ControlBarParent")!.Value;
+        var powerRect = controller.WindowRect("ControlBar.wnd:PowerWindow")!.Value;
+        TestHarness.Assert(powerRect.Y >= bar.Y && powerRect.Width > 20, $"the power window lies at the scheme's power bar inside the control bar ({powerRect} in {bar})");
+        var power = Hover("ControlBar.wnd:PowerWindow");
+        TestHarness.Assert(power.StartsWith("Power", StringComparison.Ordinal) && power.Contains($"Current Power: {controller.Hud.EnergyProduction}", StringComparison.Ordinal) && power.Contains($"Required Power: {controller.Hud.EnergyConsumption}", StringComparison.Ordinal),
+            $"the power window names production {controller.Hud.EnergyProduction} and consumption {controller.Hud.EnergyConsumption}: {power}");
     }
 
     private static void GoldenDrawListHash(GameData data)
