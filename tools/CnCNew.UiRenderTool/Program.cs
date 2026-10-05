@@ -13,7 +13,14 @@ var contentDirectory = GetArgument(args, "--content-dir") ?? throw new ArgumentE
 var outputDirectory = GetArgument(args, "--out-dir") ?? throw new ArgumentException("--out-dir is required.");
 Directory.CreateDirectory(outputDirectory);
 
-using var game = new CaptureGame(contentDirectory, outputDirectory);
+var fontAudit = args.Contains("--font-audit", StringComparer.OrdinalIgnoreCase);
+var backend = (GetArgument(args, "--font-backend") ?? "gdi").ToLowerInvariant() switch
+{
+    "gdi" => UiFontBackend.Gdi,
+    "freetype" => UiFontBackend.FreeType,
+    var other => throw new ArgumentException($"--font-backend must be gdi or freetype, got '{other}'."),
+};
+using var game = new CaptureGame(contentDirectory, outputDirectory, fontAudit, backend);
 game.Run();
 return game.Failures == 0 ? 0 : 1;
 
@@ -30,7 +37,7 @@ static string? GetArgument(string[] arguments, string name)
 /// twice and diff the SHA-256 of every file to confirm the renderer is deterministic. Not part of any solution file and not
 /// referenced by the client — a standalone check, like the other <c>tools/*</c> programs.
 /// </summary>
-internal sealed class CaptureGame(string contentDirectory, string outputDirectory) : Game
+internal sealed class CaptureGame(string contentDirectory, string outputDirectory, bool fontAudit, UiFontBackend backend) : Game
 {
     private static readonly (int Width, int Height)[] Sizes = [(800, 600), (1280, 720), (1920, 1080), (2560, 1080)];
 
@@ -62,7 +69,7 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
         if (!_templates.Diagnostics.IsEmpty)
             throw new InvalidDataException($"HeaderTemplate.ini diagnostics: {string.Join("; ", _templates.Diagnostics)}");
 
-        _renderer = new UiRenderer(GraphicsDevice, _data.Content, _data.Images, "English");
+        _renderer = new UiRenderer(GraphicsDevice, _data.Content, _data.Images, "English", backend);
         Console.WriteLine($"Mapped images: {_data.Images.Count}, texture pages: {_data.Images.ImagesPerTexture().Length}");
     }
 
@@ -73,7 +80,8 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
         _done = true;
         try
         {
-            RunCaptures();
+            if (fontAudit) FontAudit.Run(_data!, _text!.Text, _templates, outputDirectory);
+            else RunCaptures();
         }
         catch (Exception exception)
         {
@@ -142,6 +150,7 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
         }
 
         ShellScenes.Capture(_data, renderer.TextMeasure, outputDirectory, (list, width, height, name) => Capture(renderer, list, width, height, name, manifest));
+        ShellFlowScenes.Capture(_data, renderer.TextMeasure, outputDirectory, (list, width, height, name) => Capture(renderer, list, width, height, name, manifest));
 
         File.WriteAllLines(Path.Combine(outputDirectory, "manifest.txt"), manifest);
         var totals = renderer.Stats;

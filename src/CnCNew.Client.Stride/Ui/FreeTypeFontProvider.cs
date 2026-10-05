@@ -13,7 +13,7 @@ namespace CnCNew.Client.Stride.Ui;
 /// <see cref="UiFontPolicy.FallbackFamilies"/>; every such replacement is recorded in <see cref="Substitutions"/>
 /// (and written once to stderr), a machine without any usable font fails loudly.
 /// </summary>
-internal sealed class FreeTypeFontProvider : IUiFontProvider, IDisposable
+internal sealed class FreeTypeFontProvider : IUiFontSource
 {
     private readonly Library _library = new();
     private readonly FontFileCatalog _catalog;
