@@ -195,6 +195,13 @@ public sealed partial class ScriptEngine
     /// <summary>The end-game delay is over: the script engine no longer runs and the client should leave the mission.</summary>
     public bool IsEnded { get; private set; }
 
+    /// <summary>
+    /// <c>FREEZE_TIME</c> ran and <c>UNFREEZE_TIME</c> has not (<c>ScriptEngine::m_freezeByScript</c>). <c>GameLogic::update</c> runs the scripts and then returns while it is set: objects, combat and the frame counter
+    /// stand still, script timers and sequential scripts go on. <see cref="CnCNew.Simulation.Mission.MissionSession.Step"/> does the same; the end of the mission lifts it
+    /// (<c>forceUnfreezeTime</c> on <c>MSG_CLEAR_GAME_DATA</c>).
+    /// </summary>
+    public bool TimeFrozen { get; private set; }
+
     public long ExecutedScripts => _executedScripts;
     public long ExecutedActions => _executedActions;
     public long ForwardedActions => _forwardedActions;
@@ -680,6 +687,7 @@ public sealed partial class ScriptEngine
         writer.Text("outcomeScript", OutcomeScript);
         writer.Int("endTimer", _endTimer);
         writer.Bool("ended", IsEnded);
+        if (TimeFrozen) writer.Bool("timeFrozen", true);
         writer.Int("nextTeamId", _nextTeamId);
         writer.UInt("pruneBelow", _pruneBelow);
         writer.Int("executedScripts", _executedScripts);
@@ -917,6 +925,7 @@ public sealed partial class ScriptEngine
         OutcomeScript = reader.Text("outcomeScript");
         _endTimer = reader.Int("endTimer");
         IsEnded = reader.Bool("ended");
+        TimeFrozen = reader.Has("timeFrozen") && reader.Bool("timeFrozen");
         _nextTeamId = checked((int)reader.Int("nextTeamId"));
         _pruneBelow = checked((uint)reader.UInt("pruneBelow"));
         _executedScripts = reader.Int("executedScripts");

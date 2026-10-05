@@ -243,6 +243,8 @@ public sealed class MissionSession
     {
         var tick = World.Tick;
         Engine.Update(tick);
+        // GameLogic::update: a game frozen by FREEZE_TIME ran the scripts and returns - no combat, no world step, the frame counter stays (a presentation clock keeps the cameras going).
+        if (Engine.TimeFrozen) return new TickResult(tick, World.StateHash, []);
         if (Options.CombatIntervalTicks > 0) DriveCombat(tick);
         var result = World.Step();
         Engine.Observe(result.Events);

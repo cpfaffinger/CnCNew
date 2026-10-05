@@ -232,6 +232,16 @@ der Konsolenbericht am Ende nennt Frames, Welt-Tick und Sitzungsschritte – in 
 die Grenze, nach der die VM nicht länger wartet, damit nichts ewig hängt. **Offen:** Missionen, die die Shell startet (`GameShell` → `CampaignController.StartCurrentMission()`), laufen weiter mit
 Latenz 0 – `CAMERA_MOVEMENT_FINISHED`/`HAS_FINISHED_*` gelten dort sofort, die Kamera fährt trotzdem (zeitgesteuerte Sequenzen wie die von `GC_ChemGeneral` sind davon nicht betroffen).
 
+**Angehaltene Zeit (`FREEZE_TIME`/`UNFREEZE_TIME`, zweite Sitzung).** Das ist ein Simulationsvorgang, kein Hostvorgang: `GameLogic::update` führt `ScriptEngine::UPDATE` aus und kehrt bei
+`isTimeFrozenScript()` zurück – Objekte, Kampf und der Bildzähler stehen, die Skripte laufen weiter (Zeitgeber `m_counters[i].value--` je Aufruf, Sequenzskripte, `UNFREEZE_TIME` selbst). Genau das tut
+`MissionSession.Step` jetzt (`ScriptEngine.TimeFrozen`, in `Forward` gesetzt und von `End` gelöscht = `forceUnfreezeTime`; gespeichert unter `timeFrozen`, nur solange gesetzt, also bleiben
+alle anderen Snapshots und Hashes unverändert). Der Host darf die Simulation dafür **nicht** selbst anhalten: dann gäbe es auch kein Skript mehr, das auftaut. Er braucht aber eine
+Uhr, die weiterläuft: `MissionPresentationDirector.Clock` = Welt-Tick + Zahl der eingefrorenen Schritte (ohne Einfrieren gleich dem Welt-Tick); Kamerafahrten, Blenden, Untertitel,
+Grauschleier und Bewegungsunschärfe laufen auf ihr, so gibt `CAMERA_MOVEMENT_FINISHED` auch bei stehender Welt frei. Grenzen: Befehle, die ein Skript in einem eingefrorenen Schritt gibt, werden
+in der Warteschlange gesammelt und beim Auftauen ausgeführt (das Original befiehlt direkt; ein wiederholter Bewegungsbefehl ist harmlos, ein wiederholter Spawn wäre es nicht); verzögert
+ausgewertete Skripte (`DelayEvaluationSeconds`) vergleichen mit dem Welt-Tick und warten wie im Original, bis die Zeit weiterläuft; `CAMERA_MOD_FREEZE_TIME` (die Sicht friert die Logik während
+einer Kamerafahrt ein) ist nicht abgebildet, keine Kampagnenkarte benutzt es.
+
 **Was der Director aus den Ausgaben macht** (`src/CnCNew.Game/Shell/MissionPresentation.cs`, ohne Stride; der Client liest nur diesen Zustand):
 
 - **Kamera** (`ApplyCameraTo(RtsCamera, Sekunden)`, je Frame aus `LiveGame.OnAdvanced`; bei Pause 0): Fahrt zum Wegpunkt über die Skriptdauer mit weichem An- und Auslauf
@@ -247,127 +257,212 @@ Latenz 0 – `CAMERA_MOVEMENT_FINISHED`/`HAS_FINISHED_*` gelten dort sofort, die
 - **Text:** Titelzeilen (`DISPLAY_TEXT`, `SHOW_MILITARY_CAPTION`, `INGAME_POPUP_MESSAGE`) über die CSF-Auflösung, zentriert mit dem Textmaß des Renderers und an Wortgrenzen umbrochen (vorher begann
   jede Zeile in der Bildmitte und lief rechts aus dem Bild), `DISPLAY_CINEMATIC_TEXT` im unteren Balken, Zähler und Countdown (`DISPLAY_COUNTER`, `DISPLAY_COUNTDOWN_TIMER`, Wert aus
   `ScriptEngine.CounterValue`, Countdown als Minuten:Sekunden), Ergebnisbanner bei `VICTORY`/`DEFEAT` („MISSION ACCOMPLISHED“/„MISSION FAILED“, Platzhaltertext), Hinweiszeile während der Sperre.
-- **Ton** (`MissionPresentationDirector.Audio` ← `GameAudio.PlayScripted`): `SPEECH_PLAY`, `SOUND_PLAY_NAMED`, `PLAY_SOUND_EFFECT`, `PLAY_SOUND_EFFECT_AT` spielen das benannte Klangereignis ohne
+- **Ton: Wiedergabe** (`MissionPresentationDirector.AudioControl.PlayScripted` ← `GameAudio.PlayScripted`): `SPEECH_PLAY`, `SOUND_PLAY_NAMED`, `PLAY_SOUND_EFFECT`, `PLAY_SOUND_EFFECT_AT` spielen das benannte Klangereignis ohne
   Position (`AudioDirector.PlayUi`), `MUSIC_SET_TRACK` startet das Stück (`AudioDirector.SetMusicTrack`), danach läuft die Playlist der Seite weiter. Für Sprache bleibt der Platzhalter-Untertitel
   mit dem Ereignisnamen (es gibt keinen Untertiteltext). Was nicht startet (unbekannter Name, keine Datei), steht mit Grund unter „problems“.
 - **Film:** `MOVIE_PLAY_FULLSCREEN`/`MOVIE_PLAY_RADAR` zeigen den Filmnamen als Textplatzhalter (kein Bink-Decoder, dauerhafte Grenze).
 - **Radar:** `RADAR_CREATE_EVENT`, `OBJECT_/TEAM_CREATE_RADAR_EVENT` werden als weißer, blinkender Punkt auf der Minimap gezeichnet (`RadarBlipsForDisplay`, 8 s). In den Messläufen kam genau ein
   Radarereignis vor (`MD_USA01`, Tick 3.191); es wurde der Minimap übergeben, im Bild aber nicht eigens geprüft.
 
-**Zähler.** Der Director zählt je Ausgabetyp `emitted` (vom Skript ausgegeben), `forwarded` (an einen Verbraucher übergeben: Kamera, Overlay, Ton, Radar, Eingabe) und `displayed` (der Verbraucher
-existiert in diesem Host: die Kamera wurde angewendet, das Overlay gezeichnet, die Sperre abgefragt, die Minimap hat die Punkte geholt; Ton zählt nur, wenn wirklich eine Stimme startete). Ein
-Headless-Lauf ohne Host meldet deshalb „weitergereicht“, aber nie „dargestellt“. Der Client schreibt die Zähler beim Beenden und im Rauchtest auf die Konsole (`mission: …`, `mission outputs: …`,
-`mission output <TYP>: emitted …, forwarded …, displayed …, not displayed … (wie)`, `mission output problems: …`, `mission presentation: input locked for … ticks, locked at exit …`);
-`--mission-journal N` druckt zusätzlich die ersten N darstellbaren Ausgaben mit Tick.
+Zweite Sitzung (alle Ausgabetypen, die Kampagnenkarten ausgeben, siehe die Tabellen unten; `Game/Shell/MissionOutputCatalog.cs` führt je Typ Zustand und Beschreibung/Grund):
 
-**Messung (4. Oktober 2026, `--smoke-test --mission … --size 1280x720`, Release, feste Zeitschritte):**
+- **Ton** (`IMissionAudioControl`, von `GameAudio` umgesetzt): Lautstärken, Ereignis-Override, Stummschaltung, Entfernen, Objektton, Eva-Schalter, Ambient-Pause – `docs/GAME-AUDIO.md`, Abschnitt „Skriptsteuerung des Tons“.
+- **Kamera** (`ApplyCameraTo`): `SCREEN_SHAKE(Typ 0..5)` ruft `RtsCamera.Shake` mit der `GameData`-Stärke des Typs (`ShakeSubtleIntensity` … `ShakeCineInsaneIntensity`, `CameraShakeIntensities`) am Blickpunkt
+  auf (`W3DView::shake`: volle Stärke, abklingend mit 0,75 je Logikbild und umkehrend; die Richtung zieht das Original aus dem Client-Zufall, hier eine Goldwinkelfolge); `MAP_SWITCH_BORDER(n)` setzt
+  `RtsCamera.ActiveBoundary` (die Kamera bleibt im Rahmen dieser Kartengrenze; eine Grenze, die die Karte nicht hat, wird gemeldet; die Minimap behält Grenze 0); `CAMERA_LOOK_TOWARD_OBJECT` dreht
+  zur Position des Objekts und hält `Dauer + Haltezeit` als Kamerabewegung; `CAMERA_TETHER_NAMED` ist als Verfolgen genähert (Spielraum ignoriert).
+- **Bildfilter** (`MissionPresentationDirector.PostEffects`, gezeichnet von `ScreenFilters` im Stride-Client über der fertigen Welt und unter dem HUD): `CAMERA_BW_MODE_BEGIN/END(Bilder)` rampt den
+  Grauanteil über die Bilder (`ScreenBWFilter::set`); `CAMERA_MOTION_BLUR_JUMP(Wegpunkt, Sättigen)` ist der Zählautomat von `ScreenMotionBlurFilter::postRender`: +5 je Logikbild bis 60 (12 Bilder), am
+  Scheitel Schnitt der Kamera zum Wegpunkt (`TheTacticalView->lookAt`), dann −5 bis 0 (Zoomfaktor `sqrt(1 − Zähler/60 · 0,9)`, bis zu 30 weitere Schichten mit 1 % Zoom und Alpha 0x15, bei der
+  sättigenden Variante 2 % und additiv). Ein Filter ersetzt den anderen (`setViewFilter`). **Näherungen, nicht Kopien:** der Grauschleier ist der **Rotkanal** allein (`SwizzleMode.RRRR` ist alles, was
+  der Sprite-Batch an Kanalmischung bietet; das Original mischt 0,30/0,59/0,11), das Bild wirkt wie durch ein Rotfilter fotografiert; die Unschärfe summiert die Schichten über Sprite-Zeichnungen
+  der kopierten Bildfläche statt über Texturkoordinaten im Shader. Ob beides gut aussieht, kann nur ein Mensch beurteilen (Bildprobe unten).
+- **Objekte** (`IMissionObjectEffects`, `LiveMission` → `FrameProjector`): `NAMED_FLASH`/`TEAM_FLASH` (Hausfarbe) und `…_WHITE` blitzen alle 15 Logikbilder `Sekunden · 2`-mal (`Drawable::setFlashCount`,
+  `DRAWABLE_FRAMES_PER_FLASH`), jedes Blitzen ist die Tint-Hüllkurve 0 Anstieg/4 Abfall der Einnahme (`SelectionFlashTracker.StartScripted/Advance`), die Farbe ungesättigt (`colorFlash(&color)`);
+  `NAMED_CUSTOM_COLOR` ersetzt die Hausfarbe eines Objekts (`FrameProjector.SetHouseColor`, Wert ARGB, 0 = zurück); das wirkt auch auf die Minimap-Punkte, wie im Original (`Radar.cpp`).
+- **Befehlsleiste und HUD** (`IMissionHudControl`, `MissionController`): `COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE(Knopf, Objekttyp)` entfernt den Knopf aus dem Befehlssatz des Objekttyps **für jedes Objekt, das
+  diesen Satz benutzt** (`GameLogic::setControlBarOverride`, Schlüssel Satzname + Platz; `CommandBarModel.RemoveButton/AddButton`, Zustand in `ControlBarScriptState`), `…_ADD_BUTTON_…_SLOT` setzt ihn in
+  einen Platz (1-basiert); `PLAYER_SCIENCE_AVAILABILITY` (nur für die lokale Seite) macht Wissenschaften in `PurchaseScience`-Knöpfen verborgen/gesperrt; `OPTIONS_SET_DRAWICON_UI_MODE` lässt die
+  Heilsymbole weg; `DISABLE_/ENABLE_SPECIAL_POWER_DISPLAY` und `NAMED_HIDE_/NAMED_SHOW_SPECIAL_POWER_DISPLAY` schalten die **Superwaffen-Liste** (oben rechts „Name: m:ss“ je Macht mit öffentlichem
+  Zeitgeber, neu in dieser Sitzung, `SuperweaponTimers`, `docs/GAME-HUD.md` §14) ganz oder je Objekt aus und ein; `UNIT_/TEAM_AFFECT_OBJECT_PANEL_FLAGS` hat für **Selectable** einen Verbraucher (`EntityPicker.SetScriptSelectable`: nicht wählbar, fliegt aus der Auswahl), die anderen Flags
+  (`Enabled`, `Powered`, `Indestructible`, `Unsellable`, `AI Recruitable`, `Player Targetable`) brauchen Simulationszustand und stehen als Problem im Bericht.
 
-| Karte | Frames = Ticks = VM-Schritte | Seite des Menschen | Typen | ausgegeben | weitergereicht | dargestellt | nicht dargestellt | Eingabe gesperrt (Ticks) | am Ende gesperrt | fehlende Aktions-/Bedingungstreffer |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `GC_ChemGeneral` | 3000 / 3000 / 3000 | `ThePlayer` (FactionAmericaAirForceGeneral) | 14 | 29 | 17 | 17 | 12 | 750 | nein | 0 / 0 |
-| `MD_GLA03` | 3000 / 3000 / 3000 | `ThePlayer` (FactionGLA) | 43 | 124 | 35 | 35 | 89 | 1750 | nein | 0 / 0 |
-| `MD_USA01` | 3900 / 3900 / 3900 | `The_Player` (FactionAmerica) | 51 | 223 | 72 | 72 | 151 | 3132 | nein | 0 / 0 |
+**Zähler.** Jeder Ausgabetyp hat im Katalog (`MissionOutputCatalog`) genau einen von drei Zuständen: *dargestellt* (ein Verbraucher im Client wirkt dort, wo der Spieler es sieht, hört oder dadurch
+eingeschränkt ist), *nicht dargestellt* (mit Grund, siehe unten) oder *anderswo erledigt* (die Simulation macht es selbst; nur `FREEZE_TIME`/`UNFREEZE_TIME`). Der Director zählt je Ausgabetyp `emitted`
+(vom Skript ausgegeben), `forwarded` (an einen Verbraucher übergeben: Kamera, Overlay, Ton, Radar, Eingabe, Befehlsleiste/HUD, Objektschicht, Bildfilter) und `displayed` (der Verbraucher existiert in diesem
+Host **und** der Typ hat einen Verbraucher: die Kamera wurde angewendet, das Overlay gezeichnet, die Sperre abgefragt, die Minimap hat die Punkte geholt, der Renderer hat die Filter abgefragt, eine
+Befehlsleiste/Objektschicht ist angeschlossen; Ton zählt nur, wenn eine Stimme startete oder die Steuerung wirkte). Ein Headless-Lauf ohne Host meldet deshalb „weitergereicht“, aber nie „dargestellt“; ein
+Typ ohne Verbraucher hat `displayed` 0, auch wenn ein Modell seinen Wert behält (`PLAYER_SCIENCE_AVAILABILITY`). `NotDisplayed = emitted − displayed − handledElsewhere`. Der Client schreibt die Zähler
+beim Beenden und im Rauchtest auf die Konsole (`mission: …`, `mission outputs: … displayed …, handled elsewhere …, not displayed …`,
+`mission output <TYP>: emitted …, forwarded …, displayed …, handled elsewhere …, not displayed … (wie/warum)`, `mission output problems: …`, `mission presentation: input locked for … ticks, locked at exit …`,
+`mission screen filters: …`, dazu die Zeile `audio script control: …` des Audioberichts); `--mission-journal N` druckt zusätzlich die ersten N darstellbaren Ausgaben mit Tick.
+`CampaignTool outputs <Inhalt> [--maps]` zählt statisch, welche weitergereichten Typen die 24 Kampagnenkarten verwenden und in welchem Zustand sie sind (Exitcode 1, wenn ein Typ im Katalog fehlt).
 
-Dargestellte Typen (je Karte „ausgegeben / dargestellt“):
+**Messung (5. Oktober 2026, zweite Sitzung; `--smoke-test --mission … --size 1280x720 --mute`, Release, feste Zeitschritte; frisch gemessen):**
 
-| `ScriptOutput`-Typ | `GC_ChemGeneral` | `MD_GLA03` | `MD_USA01` | Darstellung im Client |
-| --- | --- | --- | --- | --- |
-| `CAMERA_FADE_ADD` | – | 1 / 1 | 4 / 4 | bildschirmfüllende Blende nach Weiß |
-| `CAMERA_FADE_MULTIPLY` | – | 1 / 1 | 4 / 4 | bildschirmfüllende Blende nach Schwarz (Faktor invertiert) |
-| `CAMERA_LETTERBOX_BEGIN` | 1 / 1 | 1 / 1 | 2 / 2 | schwarze Balken, Befehlsleiste ausgeblendet |
-| `CAMERA_LETTERBOX_END` | 1 / 1 | 1 / 1 | 1 / 1 | Balken weg, Befehlsleiste wieder da |
-| `CAMERA_MOD_LOOK_TOWARD` | 2 / 2 | – | – | Kamera dreht zum Wegpunkt |
-| `CAMERA_MOD_SET_FINAL_PITCH` | – | 2 / 2 | 1 / 1 | Kameraneigung erreicht den Wert mit dem Ende der laufenden Fahrt (begrenzt) |
-| `CAMERA_MOD_SET_FINAL_ZOOM` | – | 3 / 3 | 2 / 2 | Kamerahöhe erreicht den Wert mit dem Ende der laufenden Fahrt (begrenzt) |
-| `DISABLE_INPUT` | 1 / 1 | 1 / 1 | 1 / 1 | Welteingabe wird verworfen, Auswahl gelöscht, Hinweiszeile |
-| `ENABLE_INPUT` | 1 / 1 | 1 / 1 | 1 / 1 | Welteingabe wieder frei |
-| `MOVE_CAMERA_ALONG_WAYPOINT_PATH` | – | 1 / 1 | – | Kamera fährt geradlinig zum ersten Wegpunkt des Pfads (der Pfad selbst wird nicht abgeflogen) |
-| `MOVE_CAMERA_TO` | 2 / 2 | 2 / 2 | 4 / 4 | Kamera fährt über die Skriptdauer zum Wegpunkt |
-| `MUSIC_SET_TRACK` | 1 / 1 | 3 / 3 | 5 / 4 | Musikstück gestartet |
-| `OBJECT_CREATE_RADAR_EVENT` | – | – | 1 / 1 | blinkender Punkt auf der Minimap |
-| `PITCH_CAMERA` | – | – | 1 / 1 | Kameraneigung ändert sich (auf den Neigungsbereich der Kamera begrenzt) |
-| `PLAY_SOUND_EFFECT` | – | 2 / 2 | 4 / 4 | Klangereignis gespielt (ohne Position) |
-| `PLAY_SOUND_EFFECT_AT` | – | – | 8 / 8 | Klangereignis gespielt (ohne Position) |
-| `RESET_CAMERA` | 1 / 1 | – | 1 / 1 | Kamera fährt zum Wegpunkt und kehrt zu Standardwinkel, -neigung und -zoom zurück |
-| `SETUP_CAMERA` | 1 / 1 | 6 / 6 | 16 / 16 | Schnitt auf den Wegpunkt, Blick zum zweiten Wegpunkt, Zoom und Neigung gesetzt |
-| `SHOW_MILITARY_CAPTION` | – | 3 / 3 | 5 / 5 | Titelzeile oben (zentriert, umbrochen) |
-| `SPEECH_PLAY` | 6 / 6 | 7 / 7 | 10 / 10 | Klangereignis gespielt; sein Name als Platzhalter-Untertitel |
-| `ZOOM_CAMERA` | – | – | 2 / 2 | Kamerahöhe ändert sich (auf den spielbaren Zoombereich begrenzt) |
+| Karte | Bilder / VM-Schritte | Welt-Tick am Ende | Seite des Menschen | Typen | ausgegeben | weitergereicht | dargestellt | anderswo | nicht dargestellt | Eingabe gesperrt (Ticks) | am Ende gesperrt |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `GC_ChemGeneral` | 3000 / 3000 | 3000 | `ThePlayer` (FactionAmericaAirForceGeneral) | 14 | 29 | 29 | **29** | 0 | **0** | 750 | nein |
+| `MD_GLA03` | 3000 / 3000 | 3000 | `ThePlayer` (FactionGLA) | 43 | 124 | 95 | **87** | 0 | **37** | 1750 | nein |
+| `MD_USA01` | 3900 / 3900 | **3223** | `The_Player` (FactionAmerica) | 51 | 223 | 191 | **173** | **2** | **48** | 3132 | nein |
 
-Ausgegebene Typen **ohne** Darstellung (je Karte „ausgegeben“, dargestellt immer 0):
+(Die Messung vom 4. Oktober, vor dieser Sitzung: dargestellt 17 / 35 / 72 und nicht dargestellt 12 / 89 / 151.) Fehlende Aktions- oder Bedingungstreffer: 0 auf allen drei Karten. Gemeldete
+Probleme: `GC_ChemGeneral` keine; `MD_GLA03`: `ENABLE_OBJECT_SOUND` nennt ein Objekt, das es dann nicht gibt (×1); `MD_USA01`: `MUSIC_SET_TRACK 'Silence'` startet nicht (×1, die Stille gibt es nicht als
+Stück), `PLAY_SOUND_EFFECT_AT 'Cin_CombatCycleMainLoop'` startet nicht (×1: dasselbe Skript hat das Ereignis bei Tick 75 mit `SOUND_DISABLE_TYPE` stummgeschaltet und erst bei Tick 555 per Override wieder laut gestellt), `UNIT_AFFECT_OBJECT_PANEL_FLAGS` „Indestructible“ ohne
+Verbraucher (×2). `MD_USA01` zeigt die angehaltene Zeit: 3900 Bilder, aber Welt-Tick 3223 – 677 Schritte stand die Welt, während der Grauschleier und die Kamerafahrt der Spionageaufnahme liefen (der
+Client meldet 677 durch den Filter gezeichnete Bilder). `GC_ChemGeneral` hat ab Tick 675 die Bewegungsunschärfe: 23 gefilterte Bilder, wie der Zählautomat vorgibt.
 
-| `ScriptOutput`-Typ | `GC_ChemGeneral` | `MD_GLA03` | `MD_USA01` |
-| --- | --- | --- | --- |
-| `AUDIO_OVERRIDE_VOLUME_TYPE` | – | 3 | 10 |
-| `AUDIO_RESTORE_VOLUME_ALL_TYPE` | 3 | 1 | 1 |
-| `CAMERA_BW_MODE_BEGIN` | – | – | 1 |
-| `CAMERA_BW_MODE_END` | – | – | 1 |
-| `CAMERA_MOTION_BLUR_JUMP` | 1 | – | – |
-| `COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE` | – | 7 | 25 |
-| `DISABLE_BORDER_SHROUD` | – | 1 | 1 |
-| `DISABLE_OBJECT_SOUND` | – | 5 | 3 |
-| `DISABLE_SCORING` | – | 1 | 1 |
-| `DISABLE_SPECIAL_POWER_DISPLAY` | – | 1 | – |
-| `DRAW_SKYBOX_BEGIN` | – | 1 | 1 |
-| `DRAW_SKYBOX_END` | – | 1 | 2 |
-| `ENABLE_BORDER_SHROUD` | – | 1 | 3 |
-| `ENABLE_OBJECT_SOUND` | – | 7 | – |
-| `ENABLE_SCORING` | – | 1 | 1 |
-| `EVA_SET_ENABLED_DISABLED` | – | 2 | 2 |
-| `FREEZE_TIME` | – | – | 1 |
-| `MAP_SWITCH_BORDER` | – | – | 2 |
-| `MUSIC_SET_VOLUME` | 2 | – | 2 |
-| `NAMED_CUSTOM_COLOR` | – | 10 | – |
-| `NAMED_FLASH_WHITE` | – | – | 26 |
-| `NAMED_HIDE_SPECIAL_POWER_DISPLAY` | – | 1 | – |
-| `NAMED_SHOW_SPECIAL_POWER_DISPLAY` | – | 1 | – |
-| `OPTIONS_SET_DRAWICON_UI_MODE` | – | 3 | 2 |
-| `OPTIONS_SET_OCCLUSION_MODE` | – | 2 | 2 |
-| `OPTIONS_SET_PARTICLE_CAP_MODE` | – | 2 | 2 |
-| `OVERSIZE_TERRAIN` | – | 1 | 1 |
-| `PLAYER_EXCLUDE_FROM_SCORE_SCREEN` | – | 9 | 7 |
-| `PLAYER_SCIENCE_AVAILABILITY` | – | 8 | 18 |
-| `RADAR_FORCE_ENABLE` | – | 1 | – |
-| `RESIZE_VIEW_GUARDBAND` | – | 2 | 2 |
-| `SCREEN_SHAKE` | – | – | 11 |
-| `SET_FPS_LIMIT` | – | 2 | 3 |
-| `SOUND_DISABLE_TYPE` | – | 12 | 8 |
-| `SOUND_ENABLE_ALL` | – | 1 | 1 |
-| `SOUND_ENABLE_TYPE` | – | – | 2 |
-| `SOUND_REMOVE_ALL_DISABLED` | – | 2 | 5 |
-| `SOUND_SET_VOLUME` | 6 | – | – |
-| `UNFREEZE_TIME` | – | – | 1 |
-| `UNIT_AFFECT_OBJECT_PANEL_FLAGS` | – | – | 2 |
+Bildprobe (`--filmstrip`, PNGs außerhalb des Repos angesehen): Grauschleier in `MD_USA01` (Rotkanal-Grau: Schnee und Gestein hell, Wasser/Vegetation dunkel – eine Spionagekamera-Anmutung, kein
+Luminanzbild), Strahlenunschärfe auf das Hauptquartier in `GC_ChemGeneral` zum Zeitpunkt des Schnitts. **Nicht beurteilt:** ob die Unschärfe der des Originals gleicht (Schichtsumme statt Shader), wie das
+Wackeln der Kamera im Bewegtbild wirkt (Einzelbilder zeigen eine Verschiebung von wenigen Pixeln nicht), und der Ton (kein Gehör). **Aufgefallen und nicht Gegenstand dieser Sitzung:** die erste Einstellung
+von `MD_USA01` (Tick 0–400, `SETUP_CAMERA(CINE_CameraPos01, 0.2, -0.45, …)`) zeigt über dem Fels nur die Löschfarbe (Cornflower-Blau) statt des Bodens – ob die Kamera dort so tief/flach liegt, dass das
+Gelände vor ihr nicht gezeichnet wird, oder ob es abgeschnitten wird, ist **nicht untersucht**; es ist keine der hier behandelten Ausgaben und gehört zu den Kamera-Befunden.
 
-Gemeldete Probleme der dargestellten Typen: `GC_ChemGeneral`: none; `MD_GLA03`: none; `MD_USA01`: MUSIC_SET_TRACK: 'Silence' did not start x1.
+**Alle Ausgabetypen der 24 Kampagnenkarten** (`CampaignTool outputs <Inhalt> [--maps]`: statische Zählung der weitergereichten Aktionstypen in den Skripten, dazu der Zustand aus
+`MissionOutputCatalog`; 92 Typen, 6.977 Verwendungen; **69 dargestellt, 2 von der Simulation erledigt, 21 nicht dargestellt**; vorher 35 mit und 57 ohne Verbraucher; 37 weitergereichte Typen
+kommen in keiner Kampagnenkarte vor und stehen nur im Katalog):
 
-Lesart: `GC_ChemGeneral` und `MD_GLA03` liefen 3.000 Frames, `MD_USA01` 3.900 (seine Eröffnungssequenz dauert 3.132 Ticks = 104 s). In allen drei Karten endet die Eingabesperre, die Letterbox ist
-am Ende zu, keine Kamerafahrt bleibt hängen, und kein fehlender Aktions- oder Bedingungstyp wird getroffen. Bildprobe (`--filmstrip`, PNGs außerhalb des Repos angesehen): Letterbox-Balken mit
-Hinweiszeile und Sprach-Platzhalter, Kamerafahrt über die gegnerische Basis in `GC_ChemGeneral`, Weißblende in `MD_GLA03`, nach der Sequenz Befehlsleiste und zentrierte Zielzeile
-(„MISSION OBJECTIVE #1: …“) in `MD_GLA03` und `MD_USA01`. Die Nahaufnahmen der Sequenzen in `MD_USA01` zeigen wegen der Zoom-/Neigungsgrenzen der Kamera oft nur Gelände.
+**Mit Verbraucher im Client** (Zustand „dargestellt“; Verwendungen = Aktionen in den Skripten aller Kampagnenkarten, Karten = Karten mit mindestens einer Verwendung):
 
-**Fund beim Messen:** `MD_GLA03` beendete den Client im ersten Frame mit einer unbehandelten `InvalidDataException` – das Modell `cineexplbox` enthält nur eine Kollisionsbox und kein Mesh.
-`ModelAssetCache` behandelt ein nicht verwendbares Modell jetzt wie ein fehlendes (einmal gemeldet, gezählt, nichts gezeichnet).
+| `ScriptOutput`-Typ | Verbraucher | Verw. | Karten |
+| --- | --- | ---: | --- |
+| `COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT` | Befehlsleiste (`ControlBarScriptState`) | 7 | MD_CHI02, MD_CHI04, MD_GLA02, MD_USA05 |
+| `COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE` | Befehlsleiste (`ControlBarScriptState`) | 148 | 14 von 24 |
+| `CAMERA_BW_MODE_BEGIN` | Bildfilter (`PostEffects`, Stride `ScreenFilters`) | 5 | MD_USA01, MD_USA05 |
+| `CAMERA_BW_MODE_END` | Bildfilter (`PostEffects`, Stride `ScreenFilters`) | 5 | MD_USA01, MD_USA05 |
+| `CAMERA_MOTION_BLUR_JUMP` | Bildfilter (`PostEffects`, Stride `ScreenFilters`) | 12 | GC_AirGeneral, GC_ChemGeneral, GC_LaserGeneral, GC_Stealth, GC_SuperWeaponsGeneral, GC_TankGeneral, MD_USA05, Training01 |
+| `DISABLE_INPUT` | Eingabesperre (`WorldInputEnabled`) | 139 | 24 von 24 |
+| `ENABLE_INPUT` | Eingabesperre (`WorldInputEnabled`) | 35 | 24 von 24 |
+| `OPTIONS_SET_DRAWICON_UI_MODE` | HUD (`IMissionHudControl`) | 65 | 16 von 24 |
+| `UNIT_AFFECT_OBJECT_PANEL_FLAGS` | HUD (`IMissionHudControl`) | 32 | GC_LaserGeneral, MD_CHI01, MD_GLA02, MD_GLA03, MD_GLA04, MD_USA01, MD_USA03, MD_USA04 |
+| `DISABLE_SPECIAL_POWER_DISPLAY` | HUD: Superwaffen-Liste (`SuperweaponTimers`) | 3 | GC_ChinaBoss, MD_GLA01, MD_GLA03 |
+| `ENABLE_SPECIAL_POWER_DISPLAY` | HUD: Superwaffen-Liste (`SuperweaponTimers`) | 3 | GC_ChinaBoss, MD_GLA03 |
+| `NAMED_HIDE_SPECIAL_POWER_DISPLAY` | HUD: Superwaffen-Liste (`SuperweaponTimers`) | 31 | GC_LaserGeneral, GC_NukeGeneral, GC_Stealth, GC_SuperWeaponsGeneral, MD_CHI01, MD_CHI04, MD_CHI05, MD_GLA03, MD_USA04 |
+| `NAMED_SHOW_SPECIAL_POWER_DISPLAY` | HUD: Superwaffen-Liste (`SuperweaponTimers`) | 20 | GC_LaserGeneral, GC_NukeGeneral, GC_Stealth, GC_SuperWeaponsGeneral, MD_CHI05, MD_GLA03, MD_USA04 |
+| `CAMERA_FOLLOW_NAMED` | Kamera (`ApplyCameraTo`) | 2 | MD_USA03 |
+| `CAMERA_LOOK_TOWARD_OBJECT` | Kamera (`ApplyCameraTo`) | 9 | GC_NukeGeneral, MD_GLA01, Training01 |
+| `CAMERA_LOOK_TOWARD_WAYPOINT` | Kamera (`ApplyCameraTo`) | 11 | GC_ChinaBoss, MD_CHI02, MD_CHI04, MD_GLA02, MD_GLA03, MD_GLA04, MD_USA01, MD_USA02, MD_USA03, MD_USA05 |
+| `CAMERA_MOD_FINAL_LOOK_TOWARD` | Kamera (`ApplyCameraTo`) | 3 | MD_GLA05, Training01 |
+| `CAMERA_MOD_LOOK_TOWARD` | Kamera (`ApplyCameraTo`) | 82 | 14 von 24 |
+| `CAMERA_MOD_SET_FINAL_PITCH` | Kamera (`ApplyCameraTo`) | 15 | GC_NukeGeneral, MD_CHI01, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA01, MD_USA03, Training01 |
+| `CAMERA_MOD_SET_FINAL_ZOOM` | Kamera (`ApplyCameraTo`) | 14 | MD_CHI01, MD_CHI03, MD_CHI05, MD_GLA03, MD_GLA04, MD_USA01, MD_USA03, Training01 |
+| `CAMERA_STOP_FOLLOW` | Kamera (`ApplyCameraTo`) | 4 | MD_USA03 |
+| `CAMERA_STOP_TETHER_NAMED` | Kamera (`ApplyCameraTo`) | 2 | Training01 |
+| `CAMERA_TETHER_NAMED` | Kamera (`ApplyCameraTo`) | 2 | Training01 |
+| `MOVE_CAMERA_ALONG_WAYPOINT_PATH` | Kamera (`ApplyCameraTo`) | 1 | MD_GLA03 |
+| `MOVE_CAMERA_TO` | Kamera (`ApplyCameraTo`) | 152 | 23 von 24 |
+| `PITCH_CAMERA` | Kamera (`ApplyCameraTo`) | 60 | MD_CHI02, MD_CHI04, MD_CHI05, MD_GLA01, MD_GLA03, MD_GLA05, MD_USA01, MD_USA02, MD_USA03, MD_USA04, MD_USA05, Training01 |
+| `RESET_CAMERA` | Kamera (`ApplyCameraTo`) | 25 | 17 von 24 |
+| `ROTATE_CAMERA` | Kamera (`ApplyCameraTo`) | 54 | 23 von 24 |
+| `SETUP_CAMERA` | Kamera (`ApplyCameraTo`) | 152 | 23 von 24 |
+| `ZOOM_CAMERA` | Kamera (`ApplyCameraTo`) | 91 | 17 von 24 |
+| `MAP_SWITCH_BORDER` | Kamera: Kartenrand (`ActiveBoundary`) | 31 | GC_ChinaBoss, MD_CHI01, MD_CHI04, MD_CHI05, MD_GLA01, MD_GLA05, MD_USA01, MD_USA03, MD_USA04, MD_USA05, Training01 |
+| `SCREEN_SHAKE` | Kamera: Wackeln (`RtsCamera.Shake`) | 96 | MD_CHI01, MD_GLA01, MD_GLA04, MD_USA01, MD_USA03, MD_USA05 |
+| `OBJECT_CREATE_RADAR_EVENT` | Minimap (blinkender Punkt) | 152 | GC_ChinaBoss, MD_CHI02, MD_CHI03, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA01, MD_USA03, MD_USA04, MD_USA05 |
+| `RADAR_CREATE_EVENT` | Minimap (blinkender Punkt) | 88 | MD_CHI02, MD_CHI04, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA02, MD_USA03, Training01 |
+| `TEAM_CREATE_RADAR_EVENT` | Minimap (blinkender Punkt) | 11 | MD_CHI05, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA03, MD_USA04 |
+| `NAMED_CUSTOM_COLOR` | Objektschicht (`FrameProjector`) | 198 | GC_LaserGeneral, MD_CHI05, MD_GLA01, MD_GLA03, MD_GLA04, MD_GLA05 |
+| `NAMED_FLASH` | Objektschicht (`FrameProjector`) | 76 | MD_CHI01, MD_CHI02, MD_GLA02, MD_GLA03, MD_USA04, MD_USA05, Training01 |
+| `NAMED_FLASH_WHITE` | Objektschicht (`FrameProjector`) | 32 | MD_GLA01, MD_GLA04, MD_GLA05, MD_USA01, MD_USA04, MD_USA05 |
+| `TEAM_FLASH` | Objektschicht (`FrameProjector`) | 3 | MD_CHI01, MD_GLA05 |
+| `TEAM_FLASH_WHITE` | Objektschicht (`FrameProjector`) | 1 | MD_GLA04 |
+| `CAMERA_FADE_ADD` | Overlay (Balken, Blende) | 14 | GC_ChinaBoss, GC_LaserGeneral, MD_CHI01, MD_GLA01, MD_GLA03, MD_USA01, MD_USA05, Training01 |
+| `CAMERA_FADE_MULTIPLY` | Overlay (Balken, Blende) | 166 | 24 von 24 |
+| `CAMERA_LETTERBOX_BEGIN` | Overlay (Balken, Blende) | 144 | 24 von 24 |
+| `CAMERA_LETTERBOX_END` | Overlay (Balken, Blende) | 37 | 24 von 24 |
+| `DISABLE_COUNTDOWN_TIMER_DISPLAY` | Overlay (Text) | 64 | 20 von 24 |
+| `DISPLAY_COUNTDOWN_TIMER` | Overlay (Text) | 3 | MD_CHI02, MD_GLA05, MD_USA05 |
+| `DISPLAY_COUNTER` | Overlay (Text) | 3 | MD_CHI03, MD_GLA04 |
+| `HIDE_COUNTDOWN_TIMER` | Overlay (Text) | 4 | MD_CHI02, MD_GLA05, MD_USA05 |
+| `HIDE_COUNTER` | Overlay (Text) | 7 | MD_CHI03, MD_GLA04, MD_GLA05 |
+| `INGAME_POPUP_MESSAGE` | Overlay (Text) | 14 | Training01 |
+| `SHOW_MILITARY_CAPTION` | Overlay (Text) | 269 | 17 von 24 |
+| `MUSIC_SET_VOLUME` | Ton: Busfaktor (`SetScriptVolume`) | 24 | GC_ChemGeneral, GC_LaserGeneral, GC_Stealth, GC_SuperWeaponsGeneral, GC_TankGeneral, MD_CHI05, MD_GLA02, MD_GLA05, MD_USA01, MD_USA03, MD_USA04, MD_USA05 |
+| `SOUND_SET_VOLUME` | Ton: Busfaktor (`SetScriptVolume`) | 281 | 23 von 24 |
+| `SPEECH_SET_VOLUME` | Ton: Busfaktor (`SetScriptVolume`) | 188 | GC_AirGeneral, GC_NukeGeneral, GC_TankGeneral, MD_CHI02, MD_GLA01, MD_GLA03, MD_GLA05, MD_USA03 |
+| `AUDIO_OVERRIDE_VOLUME_TYPE` | Ton: Schalter (`AudioDirector.Script`) | 63 | GC_LaserGeneral, MD_CHI01, MD_CHI04, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA01, MD_USA03, MD_USA04, MD_USA05 |
+| `AUDIO_RESTORE_VOLUME_ALL_TYPE` | Ton: Schalter (`AudioDirector.Script`) | 21 | 15 von 24 |
+| `DISABLE_OBJECT_SOUND` | Ton: Schalter (`AudioDirector.Script`) | 31 | MD_CHI01, MD_CHI03, MD_CHI05, MD_GLA01, MD_GLA03, MD_GLA05, MD_USA01, MD_USA03 |
+| `ENABLE_OBJECT_SOUND` | Ton: Schalter (`AudioDirector.Script`) | 64 | MD_CHI02, MD_CHI03, MD_CHI05, MD_GLA01, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA03 |
+| `EVA_SET_ENABLED_DISABLED` | Ton: Schalter (`AudioDirector.Script`) | 68 | 17 von 24 |
+| `SOUND_DISABLE_TYPE` | Ton: Schalter (`AudioDirector.Script`) | 300 | 14 von 24 |
+| `SOUND_ENABLE_ALL` | Ton: Schalter (`AudioDirector.Script`) | 20 | GC_ChinaBoss, GC_NukeGeneral, MD_CHI01, MD_CHI02, MD_CHI03, MD_CHI04, MD_GLA02, MD_GLA03, MD_GLA04, MD_USA01, MD_USA03, MD_USA04, MD_USA05 |
+| `SOUND_ENABLE_TYPE` | Ton: Schalter (`AudioDirector.Script`) | 21 | MD_CHI02, MD_USA01, MD_USA03 |
+| `SOUND_REMOVE_ALL_DISABLED` | Ton: Schalter (`AudioDirector.Script`) | 17 | MD_CHI01, MD_CHI04, MD_CHI05, MD_GLA02, MD_GLA03, MD_USA01, MD_USA03, MD_USA04, MD_USA05 |
+| `SOUND_REMOVE_TYPE` | Ton: Schalter (`AudioDirector.Script`) | 3 | MD_USA02 |
+| `MUSIC_SET_TRACK` | Ton: Wiedergabe (`GameAudio.PlayScripted`) | 710 | 24 von 24 |
+| `PLAY_SOUND_EFFECT` | Ton: Wiedergabe (`GameAudio.PlayScripted`) | 120 | 18 von 24 |
+| `PLAY_SOUND_EFFECT_AT` | Ton: Wiedergabe (`GameAudio.PlayScripted`) | 69 | GC_AirGeneral, MD_CHI02, MD_CHI04, MD_GLA03, MD_USA01, MD_USA03, MD_USA05 |
+| `SOUND_PLAY_NAMED` | Ton: Wiedergabe (`GameAudio.PlayScripted`) | 1 | MD_GLA02 |
+| `SPEECH_PLAY` | Ton: Wiedergabe (`GameAudio.PlayScripted`) | 1668 | 24 von 24 |
 
-**Offen (ausgegeben, aber nicht dargestellt – mit Grund):**
+**Von der Simulation erledigt** (Zustand „anderswo“):
 
-- Ton-Steuerung (`SOUND_SET_VOLUME`, `MUSIC_SET_VOLUME`, `AUDIO_OVERRIDE_VOLUME_TYPE`, `AUDIO_RESTORE_VOLUME_*`, `SOUND_DISABLE_TYPE`/`SOUND_ENABLE_*`/`SOUND_REMOVE_*`,
-  `ENABLE_/DISABLE_OBJECT_SOUND`, `EVA_SET_ENABLED_DISABLED`): der `AudioDirector` hat keine Lautstärke je Ereignistyp und keinen Schalter je Typ; die Skriptklänge spielen mit Katalog-Lautstärke,
-  EVA spricht auch in Zwischensequenzen. `PLAY_SOUND_EFFECT_AT` und `SOUND_PLAY_NAMED` spielen ohne Position.
-- Bildeffekte (`SCREEN_SHAKE`, `CAMERA_ADD_SHAKER_AT`, `CAMERA_BW_MODE_*`, `CAMERA_MOTION_BLUR*`, `CAMERA_FADE_SATURATE`, `DRAW_SKYBOX_*`, `OVERSIZE_TERRAIN`, `RESIZE_VIEW_GUARDBAND`,
-  `MAP_SWITCH_BORDER`, `ENABLE_/DISABLE_BORDER_SHROUD`, `SET_FPS_LIMIT`, `OPTIONS_SET_*`): kein Filter-/Himmel-/Randmodell im Renderer.
-- `FREEZE_TIME`/`UNFREEZE_TIME`: das Original hält die Logik an; hier läuft die Simulation weiter (die VM reicht die Aktion nur weiter).
-- Befehlsleiste und Anzeige (`COMMANDBAR_REMOVE_/ADD_BUTTON_OBJECTTYPE*`, `PLAYER_SCIENCE_AVAILABILITY`, `*_SPECIAL_POWER_DISPLAY`, `UNIT_/TEAM_AFFECT_OBJECT_PANEL_FLAGS`, `NAMED_CUSTOM_COLOR`,
-  `NAMED_/TEAM_FLASH*`, `CAMEO_FLASH`, `*_SET_EMOTICON`, `OBJECT_FORCE_SELECT`, `RADAR_DISABLE/ENABLE/FORCE_ENABLE`): die Befehlsleiste liest keine Skriptüberschreibungen – ein Knopf, den die
-  Mission entfernt, ist im Client weiter da.
-- Wertung (`ENABLE_/DISABLE_SCORING`, `PLAYER_EXCLUDE_FROM_SCORE_SCREEN`): ein Missions-Ergebnisbildschirm mit Punkten existiert nicht.
-- Kamera: `CAMERA_MOD_FREEZE_TIME`, `CAMERA_MOD_FREEZE_ANGLE`, `CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER`, `CAMERA_MOD_SET_ROLLING_AVERAGE`, `CAMERA_TETHER_NAMED`, `CAMERA_SET_DEFAULT`,
-  `CAMERA_LOOK_TOWARD_OBJECT`, `CAMERA_ENABLE_/DISABLE_SLAVE_MODE`, `CAMERA_MOVE_HOME`, `MOVE_CAMERA_TO_SELECTION`, Kamerapfade entlang der Wegpunktverbindungen, die Ease-Zeiten des Skripts.
-- Sprache: keine Untertiteltexte und keine Klanglänge – `HAS_FINISHED_AUDIO` gilt nach 3 s, längere Ansagen überlappen die nächste.
+| `ScriptOutput`-Typ | Verw. | Karten |
+| --- | ---: | --- |
+| `FREEZE_TIME` | 3 | MD_USA01, Training01 |
+| `UNFREEZE_TIME` | 3 | MD_USA01, Training01 |
 
-Tests: `tests/CnCNew.Game.Tests/MissionPresentationTests.cs` (Letterbox, Sperre, Text, Zähler, Zeitverlauf einer Kamerabewegung, „dargestellt braucht einen Host“) und `MissionHudTests.cs` (echte
+**Nicht dargestellt** (Zustand „nicht dargestellt“, Grund in der Liste darunter):
+
+| `ScriptOutput`-Typ | Verw. | Karten |
+| --- | ---: | --- |
+| `CAMEO_FLASH` | 4 | MD_GLA02 |
+| `CAMERA_ADD_SHAKER_AT` | 2 | MD_GLA01, MD_GLA02 |
+| `CAMERA_MOD_FREEZE_ANGLE` | 1 | GC_ChinaBoss |
+| `DEBUG_MESSAGE_BOX` | 3 | GC_LaserGeneral, MD_GLA03, MD_GLA04 |
+| `DISABLE_BORDER_SHROUD` | 27 | 14 von 24 |
+| `DISABLE_SCORING` | 24 | 15 von 24 |
+| `DRAW_SKYBOX_BEGIN` | 24 | 14 von 24 |
+| `DRAW_SKYBOX_END` | 19 | MD_CHI02, MD_CHI04, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA01, MD_USA03, MD_USA04, MD_USA05, Training01 |
+| `ENABLE_BORDER_SHROUD` | 19 | MD_CHI01, MD_CHI02, MD_CHI03, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_GLA05, MD_USA01, MD_USA02, MD_USA03, MD_USA04, MD_USA05 |
+| `ENABLE_SCORING` | 20 | 15 von 24 |
+| `OPTIONS_SET_OCCLUSION_MODE` | 73 | 18 von 24 |
+| `OPTIONS_SET_PARTICLE_CAP_MODE` | 70 | 18 von 24 |
+| `OVERSIZE_TERRAIN` | 52 | 15 von 24 |
+| `PLAYER_EXCLUDE_FROM_SCORE_SCREEN` | 60 | MD_CHI01, MD_CHI02, MD_CHI04, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA01, MD_USA02, MD_USA03, Training01 |
+| `PLAYER_SCIENCE_AVAILABILITY` | 201 | MD_CHI01, MD_CHI02, MD_CHI03, MD_CHI04, MD_GLA01, MD_GLA02, MD_GLA03, MD_GLA04, MD_USA01, MD_USA02, MD_USA03, MD_USA04, Training01 |
+| `RADAR_ENABLE` | 2 | MD_GLA04, Training01 |
+| `RADAR_FORCE_ENABLE` | 11 | MD_CHI01, MD_CHI02, MD_CHI04, MD_GLA01, MD_GLA03, MD_GLA04, MD_USA02, MD_USA03, MD_USA04 |
+| `RESIZE_VIEW_GUARDBAND` | 35 | MD_CHI02, MD_CHI04, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_USA01, MD_USA02, MD_USA03, MD_USA04, MD_USA05 |
+| `SET_FPS_LIMIT` | 49 | 15 von 24 |
+| `SHOW_WEATHER` | 7 | MD_CHI05, MD_USA03 |
+| `WATER_CHANGE_HEIGHT_OVER_TIME` | 2 | MD_CHI04, MD_GLA04 |
+
+**Gründe für „nicht dargestellt“** (je Typ steht der Wortlaut in `MissionOutputCatalog.cs`):
+
+- **Wertung** (`ENABLE_SCORING`, `DISABLE_SCORING`, `PLAYER_EXCLUDE_FROM_SCORE_SCREEN`): der Missions-Ergebnisbildschirm (`MissionResultScreen`) zeigt eine Zeile ohne Zahlen. Das Original zählt bei
+  ausgeschalteter Wertung nichts mit (`ScoreKeeper` fragt `isScoringEnabled()`) und listet Seiten mit `setListInScoreScreen(false)` nicht; der Director behält beides (`ScoringEnabled`,
+  `ScoreScreenExcluded`), ein Statistikbildschirm läse es dort.
+- **Wissenschaften** (`PLAYER_SCIENCE_AVAILABILITY`, 201 Verwendungen in 13 Karten): die Befehlsleiste kennt die Verfügbarkeit (`ControlBarScriptState`; „Hidden“ = der `PurchaseScience`-Knopf fehlt,
+  „Disabled“ = gesperrt; Test gegen die Retaildaten), aber der Client hat kein Generals-Powers-Fenster, in dem man Wissenschaften kauft – es gibt also nichts zu sehen. Gilt nur für die lokale Seite;
+  andere Seiten kaufen über die KI/Simulation, die das nicht liest (im Bericht als Problem „availability of a side other than the local player“).
+- **Radar** (`RADAR_ENABLE`, `RADAR_FORCE_ENABLE`, …): der Client kennt keine Radaranlagenregel, die Minimap ist immer an; es gibt nichts zu erzwingen.
+- **Himmel und Rand** (`DRAW_SKYBOX_*`, `ENABLE_/DISABLE_BORDER_SHROUD`, `OVERSIZE_TERRAIN`, `RESIZE_VIEW_GUARDBAND`): der Himmelskörper `new_skybox` wird von keiner Schicht gezeichnet (der Himmel
+  über dem Horizont ist die Löschfarbe); die Fog-Textur deckt nur die spielbare Fläche, das Gelände dahinter nimmt ihren Randwert, einen eigenen Schattenring für die aktive Grenze gibt es nicht;
+  die Geländeschicht zeichnet das ganze Höhenfeld samt Rand (nichts zu „übergrößern“); der Client schneidet keine Drawables an einem Guard-Band ab. Der Director behält `SkyboxRequested` und
+  `BorderShroudEnabled`.
+- **Render-Optionen** (`OPTIONS_SET_OCCLUSION_MODE`, `OPTIONS_SET_PARTICLE_CAP_MODE`, `SET_FPS_LIMIT`): Optionen des Originals (Marker für Einheiten hinter Gebäuden, dynamische Partikelgrenze,
+  Bildratenbegrenzung), die der Client nicht hat oder nicht von Skripten steuern lässt.
+- **Kamera und Welt** (`CAMERA_ADD_SHAKER_AT`: der Dreh-Wackler braucht einen Kamerarollversatz, den `RtsCamera` nicht hat; `CAMERA_MOD_FREEZE_ANGLE`; `WATER_CHANGE_HEIGHT_OVER_TIME`: die Wasserebene
+  hat eine feste Höhe, das Original verschiebt auch den logischen Wasserstand; `SHOW_WEATHER`: weder Schnee noch Regen werden gezeichnet; `CAMEO_FLASH`: kein Blinken von Knopfbildern; `DEBUG_MESSAGE_BOX`).
+
+Tests: `tests/CnCNew.Game.Tests/MissionEffectsTests.cs` (Katalog vollständig; Skriptausgaben → Ton, Objekte, HUD mit Attrappen, „dargestellt braucht den Verbraucher“; die Uhr läuft bei angehaltener Zeit;
+Wackeln; Kartenrand; die Zählautomaten von Grauschleier und Unschärfe; mit `--content-dir`: `MD_USA01` 3900 Bilder durch das echte HUD und die echte Kamera, entfernte und wieder eingesetzte Befehlsknöpfe
+in der Leiste eines gewählten Objekts, Wissenschaften und Auswahl, Hausfarbe und Blitzen im projizierten Bild), `AudioDirectorTests` (Skriptsteuerung am gerenderten Ausgang), `Audio.Tests`
+(`SetVoiceVolume`), `Presentation.Tests` (`SelectionFlashTracker.StartScripted`), `Simulation.Tests` (angehaltene Zeit, Speichern/Laden eingefroren), sowie
+`tests/CnCNew.Game.Tests/MissionPresentationTests.cs` (Letterbox, Sperre, Text, Zähler, Zeitverlauf einer Kamerabewegung, „dargestellt braucht einen Host“) und `MissionHudTests.cs` (echte
 Karte `GC_ChemGeneral`: Sperre und Letterbox der Eröffnung, verworfene Klicks, Rückgabe nach rund 25 s, Kamera am Ende über der eigenen Basis, Ergebnisbanner); `scripts/check-dozer-build.ps1`
 prüft dasselbe im echten Client (`docs/GAME-HUD.md` §17).
+
+**Fund beim Messen (erste Sitzung):** `MD_GLA03` beendete den Client im ersten Frame mit einer unbehandelten `InvalidDataException` – das Modell `cineexplbox` enthält nur eine Kollisionsbox und kein Mesh.
+`ModelAssetCache` behandelt ein nicht verwendbares Modell jetzt wie ein fehlendes (einmal gemeldet, gezählt, nichts gezeichnet).
+
+**Weiter offen (Sprache und Kamera):** keine Untertiteltexte und keine Klanglänge – `HAS_FINISHED_AUDIO` gilt nach 3 s, längere Ansagen überlappen die nächste; Kamerapfade entlang der
+Wegpunktverbindungen, die Ease-Zeiten des Skripts; `CAMERA_MOD_FREEZE_TIME`, `CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER`, `CAMERA_MOD_SET_ROLLING_AVERAGE`, `CAMERA_SET_DEFAULT`,
+`CAMERA_ENABLE_/DISABLE_SLAVE_MODE`, `CAMERA_MOVE_HOME`, `MOVE_CAMERA_TO_SELECTION` (von keiner Kampagnenkarte benutzt); die Zustände der Skriptänderungen (Befehlsleiste, Hausfarben, Auswahlsperre,
+Lautstärken) sind Hostzustand und gehen beim Speichern/Laden einer Mission **nicht** mit (`MissionSnapshot` kennt nur die Simulation und die Skript-VM): nach dem Laden gilt die Befehlsleiste wieder
+unverändert, bis das Skript den Zustand erneut setzt.
 
 ## 8. Abweichungen und Näherungen (vollständig)
 

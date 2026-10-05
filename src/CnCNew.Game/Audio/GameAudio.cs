@@ -3,6 +3,7 @@ using System.Globalization;
 using CnCNew.Game.Data;
 using CnCNew.Game.Hud;
 using CnCNew.Game.Live;
+using CnCNew.Game.Shell;
 using CnCNew.Presentation.Fx;
 using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Commands;
@@ -18,7 +19,7 @@ namespace CnCNew.Game.Audio;
 /// <see cref="Mixer"/> to a device or to an <see cref="OfflineAudioRenderer"/>. Nothing here writes to the simulation: it only reads the game through
 /// <see cref="LiveGame"/> and listens to events the HUD already raises. No Stride types; the whole class runs headless in tests.
 /// </summary>
-public sealed class GameAudio : IDisposable
+public sealed class GameAudio : IDisposable, IMissionAudioControl
 {
     private readonly FxCatalog _fx;
     private readonly SortedDictionary<string, int> _unknownHooks = new(StringComparer.Ordinal);
@@ -93,6 +94,8 @@ public sealed class GameAudio : IDisposable
             hud.ButtonClicked -= OnButtonClicked;
         }
         if (_live is not null) Director.StopMusic();
+        // What a mission script did to the volumes, muted events and Eva ends with the game (AudioManager::reset).
+        Director.ResetScriptState();
         _live = null;
         _hud = null;
         _selected = [];
@@ -127,6 +130,32 @@ public sealed class GameAudio : IDisposable
     /// </summary>
     public bool PlayScripted(string action, string eventName)
         => !string.IsNullOrWhiteSpace(eventName) && (action == "MUSIC_SET_TRACK" ? Director.SetMusicTrack(eventName) : Director.PlayUi(eventName));
+
+    // ---- what a mission script may do to the sound (IMissionAudioControl; AudioDirector.Script.cs holds the state)
+
+    /// <summary><c>MUSIC_SET_VOLUME</c>, <c>SOUND_SET_VOLUME</c> (the 2D and the 3D sound, as <c>AudioAffect_Sound | AudioAffect_Sound3D</c>) and <c>SPEECH_SET_VOLUME</c>, in percent.</summary>
+    public void SetVolume(MissionVolume which, float percent)
+    {
+        switch (which)
+        {
+            case MissionVolume.Music: Director.SetScriptVolume(ScriptVolumeKind.Music, percent); break;
+            case MissionVolume.Sound:
+                Director.SetScriptVolume(ScriptVolumeKind.Sound, percent);
+                Director.SetScriptVolume(ScriptVolumeKind.Sound3D, percent);
+                break;
+            default: Director.SetScriptVolume(ScriptVolumeKind.Speech, percent); break;
+        }
+    }
+
+    /// <summary>A script's per-event volume in percent (<c>doSoundOverrideVolume</c> divides by 100: -100 is the "restore" value, an empty name forgets every override).</summary>
+    public void OverrideEventVolume(string eventName, float percent) => Director.OverrideEventVolume(eventName, percent / 100f);
+
+    public void SetEventEnabled(string eventName, bool enabled) => Director.SetEventEnabled(eventName, enabled);
+    public int RemoveDisabledEvents() => Director.RemoveDisabledEvents();
+    public int RemoveEvent(string eventName) => Director.RemoveEvent(eventName);
+    public void SetEvaEnabled(bool enabled) => Director.EvaEnabled = enabled;
+    public bool SetObjectSoundEnabled(EntityId entity, bool enabled) => Director.SetObjectSoundEnabled(entity, enabled);
+    public void SetAmbientPaused(bool paused) => Director.SetAmbientPaused(paused);
 
     private void OnButtonClicked() => PlayHook("GUIClickSound");
 
@@ -211,6 +240,8 @@ public sealed class GameAudio : IDisposable
         lines.Add($"audio unknown eva events: {Join(stats.UnknownEvaEvents)}");
         lines.Add($"audio unknown MiscAudio keys: {Join(_unknownHooks)}");
         lines.Add($"audio skipped movies: {Join(stats.SkippedMovies)}");
+        var script = Director.ScriptState;
+        lines.Add(string.Create(culture, $"audio script control: volume music {script.MusicVolume:F2} sound {script.SoundVolume:F2}/{script.Sound3DVolume:F2} speech {script.SpeechVolume:F2}, {script.VolumeChanges} volume changes, {script.EventVolumes.Count} event overrides ({Join(script.EventVolumes)}), {script.ObjectsSilenced} objects silenced, eva {(script.EvaEnabled ? "on" : "off")}, ambient {(script.AmbientPaused ? "paused" : "on")}, {script.Muted} requests muted, {script.VoicesRemoved} voices removed"));
         return lines.ToImmutable();
     }
 

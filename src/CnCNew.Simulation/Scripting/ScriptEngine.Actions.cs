@@ -368,6 +368,7 @@ public sealed partial class ScriptEngine
     private void End(MissionOutcome outcome, long delay)
     {
         Outcome = outcome;
+        TimeFrozen = false;
         if (OutcomeTick < 0)
         {
             OutcomeTick = _tick;
@@ -391,6 +392,9 @@ public sealed partial class ScriptEngine
                 : parameter.Integer.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
         _outputs.Add(new ScriptOutput(_tick, action.TypeName, [..arguments]));
+        // ScriptActions::doFreezeTime/doUnfreezeTime set ScriptEngine::m_freezeByScript: still an output for the host's counters, but the world stands still too (MissionSession.Step).
+        if (action.TypeName == "FREEZE_TIME") TimeFrozen = true;
+        else if (action.TypeName == "UNFREEZE_TIME") TimeFrozen = false;
         if (_options.PresentationLatencyTicks <= 0) return;
         var key = action.TypeName switch
         {

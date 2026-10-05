@@ -1,6 +1,7 @@
 using CnCNew.Game.Live;
 using CnCNew.Game.Shell;
 using CnCNew.Presentation.Input;
+using CnCNew.Simulation.Ids;
 using CnCNew.Ui.Settings;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Ui.Layout;
@@ -14,7 +15,7 @@ namespace CnCNew.Game.Hud;
 /// script engine (<c>NAMED_SELECTED</c>). The skirmish classes stay skirmish typed; <see cref="MatchController"/> only needs a <see cref="LiveGame"/>, so nothing of it was
 /// copied.
 /// </summary>
-public sealed class MissionController
+public sealed class MissionController : IMissionHudControl
 {
     private bool _endedFired;
 
@@ -27,6 +28,46 @@ public sealed class MissionController
         Hud.MatchEnded += OnEnded;
         mission.Director.InputDisabled += OnInputDisabled;
         mission.Director.TextMeasure = textMeasure ?? new MonospaceTextMeasure();
+        Hud.Superweapons.HiddenByScript = id => _hiddenSuperweapons.Contains(id.Value);
+        mission.Director.Hud = this;
+    }
+
+    private readonly HashSet<uint> _hiddenSuperweapons = [];
+
+    public void SetSpecialPowerDisplay(bool enabled) => Hud.Superweapons.DisplayEnabled = enabled;
+
+    public bool SetObjectSpecialPowerDisplay(EntityId entity, bool visible)
+    {
+        if (Mission.World.FindEntity(entity) is null) return false;
+        if (visible) _hiddenSuperweapons.Remove(entity.Value);
+        else _hiddenSuperweapons.Add(entity.Value);
+        return true;
+    }
+
+    // ---- IMissionHudControl: what the mission's scripts may change about the control bar and the selection (docs/SCRIPT-ENGINE.md §7a)
+
+    private CommandBarModel ControlBar => Hud.Input.CommandBar ?? throw new InvalidOperationException("The HUD has no control bar model.");
+
+    public bool RemoveCommandButton(string buttonName, string objectType) => ControlBar.RemoveButton(buttonName, objectType);
+
+    public bool AddCommandButton(string buttonName, string objectType, int slot) => ControlBar.AddButton(buttonName, objectType, slot);
+
+    public bool SetScienceAvailability(string science, string availability)
+    {
+        if (!ControlBarScriptState.TryParseAvailability(availability, out var parsed) || !Mission.World.Sciences.TryGet(science, out _)) return false;
+        ControlBar.Script.SetAvailability(science, parsed);
+        return true;
+    }
+
+    public void SetIconUiEnabled(bool enabled) => Hud.IconUiEnabled = enabled;
+
+    public bool SetObjectSelectable(EntityId entity, bool selectable)
+    {
+        if (Mission.World.FindEntity(entity) is null) return false;
+        Hud.Input.Selection.Picker.SetScriptSelectable(entity, selectable);
+        // Object::setSelectable(false) drops the object from the selection.
+        if (!selectable) Hud.Input.Selection.Replace(Hud.Input.Selection.Selected);
+        return true;
     }
 
     private long _lastInputTime;

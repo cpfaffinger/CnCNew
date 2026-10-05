@@ -73,6 +73,7 @@ internal static class AudioDirectorTests
         harness.Run("Wiring: a missing sound file is counted per source, never replaced", MissingFileIsCounted);
         harness.Run("Wiring: mute and the volume sliders silence the output live, counters unchanged", MuteAndSlidersSilence);
         harness.Run("Wiring: without a device the mixer renders offline; fixed steps give the same WAV bytes", OfflineRenderIsReproducible);
+        harness.Run("Script control: the scripts' volumes multiply the sliders, muted and per-event volumes, removal, Eva, reset", ScriptControlsTheSound);
 
         var contentDir = ContentDir(args);
         if (contentDir is null)
@@ -318,6 +319,12 @@ internal static class AudioDirectorTests
             AudioEvent Broken
               Sounds = gone
               Type = ui everyone
+            End
+            AudioEvent LoopTone
+              Sounds = tone
+              Type = ui everyone
+              Control = loop
+              LoopCount = 0
             End
             """,
         ["Data/INI/Speech.ini"] = """
@@ -577,6 +584,134 @@ internal static class AudioDirectorTests
         live.Muted = false;
         output.Pump(0.02);
         TestHarness.Assert(output.Peak > 0.01f, "unmuting takes effect with the next rendered block");
+    }
+
+    /// <summary>
+    /// What a mission script does to the sound (<c>ScriptActions::doAudioSetVolume</c>, <c>doSoundOverrideVolume</c>, <c>doSoundEnableType</c>, <c>doSoundRemove*</c>, <c>doEvaEnabledDisabled</c>): measured on the
+    /// rendered output, not only on the director's state, so a volume that never reached the mixer cannot pass.
+    /// </summary>
+    private static void ScriptControlsTheSound()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+
+        float Peak(Action<AudioDirector> configure, Action<AudioDirector> play)
+        {
+            using var director = NewDirector(catalog, fx);
+            configure(director);
+            using var render = new OfflineAudioRenderer(director.Mixer);
+            play(director);
+            for (var frame = 0; frame < 6; frame++)
+            {
+                director.Tick(null, 1.0 / 30);
+                render.Pump(1.0 / 30);
+            }
+            return render.Peak;
+        }
+
+        // AudioManager::setVolume: the script factor multiplies the player's slider, per kind (2D sound = the UI bus, speech = the voice bus).
+        var click = Peak(_ => { }, director => director.PlayUi("UiClick"));
+        var clickHalf = Peak(director => director.SetScriptVolume(ScriptVolumeKind.Sound, 50), director => director.PlayUi("UiClick"));
+        var clickOff = Peak(director => director.SetScriptVolume(ScriptVolumeKind.Sound, 0), director => director.PlayUi("UiClick"));
+        var clickOtherKind = Peak(director => director.SetScriptVolume(ScriptVolumeKind.Speech, 0), director => director.PlayUi("UiClick"));
+        TestHarness.Assert(click > 0.01f && Math.Abs(clickHalf / click - 0.5f) < 0.03f, $"a script's sound volume of 50% halves the UI bus (full {click:F4}, half {clickHalf:F4})");
+        TestHarness.Assert(clickOff == 0f && Math.Abs(clickOtherKind - click) < 1e-6f, "0% silences its own kind and leaves the other kinds alone");
+        var voice = Peak(_ => { }, director => director.OnUnitSelected("Tank", 1));
+        var voiceHalf = Peak(director => director.SetScriptVolume(ScriptVolumeKind.Speech, 50), director => director.OnUnitSelected("Tank", 1));
+        var voiceMusicOff = Peak(director => director.SetScriptVolume(ScriptVolumeKind.Music, 0), director => director.OnUnitSelected("Tank", 1));
+        TestHarness.Assert(voice > 0.01f && Math.Abs(voiceHalf / voice - 0.5f) < 0.03f && Math.Abs(voiceMusicOff - voice) < 1e-6f, "the speech volume halves the voice bus; the music volume does not touch it");
+        using (var clamped = NewDirector(catalog, fx))
+        {
+            clamped.SetScriptVolume(ScriptVolumeKind.Music, 250);
+            TestHarness.Assert(clamped.ScriptVolume(ScriptVolumeKind.Music) == 1f, "a script cannot make the sound louder than the player set it (clamped to 100%)");
+            clamped.SetScriptVolume(ScriptVolumeKind.Music, -10);
+            TestHarness.Assert(clamped.ScriptVolume(ScriptVolumeKind.Music) == 0f, "nor below silence");
+        }
+
+        // SOUND_DISABLE_TYPE / SOUND_ENABLE_TYPE / SOUND_ENABLE_ALL: the event is culled as muted, counted, and a name nobody defines is counted as unresolved, not stored.
+        using (var director = NewDirector(catalog, fx))
+        {
+            director.SetEventEnabled("UiClick", false);
+            TestHarness.Assert(!director.PlayUi("UiClick"), "a disabled event does not start");
+            var stats = director.Stats;
+            TestHarness.Assert(stats.Count(AudioOutcomes.ScriptMuted) == 1 && director.ScriptState.Muted == 1 && stats.Sources["Ui"].Started == 0, "the refusal is counted as script-muted, not as an unknown event");
+            TestHarness.Assert(director.PlayUi("AudioEventThatDoesNotExist") == false, "an unknown event stays unknown");
+            director.SetEventEnabled("NoSuchEvent", false);
+            TestHarness.Assert(!director.ScriptState.EventVolumes.ContainsKey("NoSuchEvent") && director.Stats.UnresolvedEvents.ContainsKey("NoSuchEvent"), "disabling an event that does not exist is counted, not silently stored");
+            director.SetEventEnabled("UiClick", true);
+            TestHarness.Assert(director.PlayUi("UiClick"), "enabled again, it plays");
+            director.SetEventEnabled("UiClick", false);
+            director.SetEventEnabled("WorldEveryone", false);
+            director.SetEventEnabled(string.Empty, true);
+            TestHarness.Assert(director.ScriptState.EventVolumes.IsEmpty && director.PlayUi("UiClick"), "SOUND_ENABLE_ALL forgets every override");
+        }
+
+        // AUDIO_OVERRIDE_VOLUME_TYPE: the event takes the overridden volume (a factor, 0.5 = 50%); AUDIO_RESTORE_VOLUME_TYPE / _ALL_TYPE give it back.
+        var overridden = Peak(director => director.OverrideEventVolume("UiClick", 0.5f), director => director.PlayUi("UiClick"));
+        var restored = Peak(director => { director.OverrideEventVolume("UiClick", 0.5f); director.OverrideEventVolume("UiClick", AudioDirector.RestoreEventVolume); }, director => director.PlayUi("UiClick"));
+        var restoredAll = Peak(director => { director.OverrideEventVolume("UiClick", 0.5f); director.OverrideEventVolume(string.Empty, AudioDirector.RestoreEventVolume); }, director => director.PlayUi("UiClick"));
+        TestHarness.Assert(Math.Abs(overridden / click - 0.5f) < 0.03f, $"an event volume of 0.5 halves that event (full {click:F4}, overridden {overridden:F4})");
+        TestHarness.Assert(Math.Abs(restored - click) < 1e-6f && Math.Abs(restoredAll - click) < 1e-6f, "restoring one event, or all of them, brings the catalog volume back");
+
+        // A playing voice follows a new override at once (adjustVolumeOfPlayingAudio); SOUND_REMOVE_TYPE stops it; SOUND_REMOVE_ALL_DISABLED stops the muted ones.
+        using (var director = NewDirector(catalog, fx))
+        {
+            using var render = new OfflineAudioRenderer(director.Mixer);
+            director.PlayUi("LoopTone");
+            director.Tick(null, 0.05);
+            render.Pump(0.1);
+            var loud = render.Peak;
+            TestHarness.Assert(director.Mixer.ActiveVoiceCount == 1 && loud > 0.01f, "the looping event plays");
+            director.OverrideEventVolume("LoopTone", 0.25f);
+            render.Pump(0.05); // the mixer applies the command and ramps its gain; the peak is judged on the blocks after that
+            var quiet = new OfflineAudioRenderer(director.Mixer);
+            quiet.Pump(0.1);
+            TestHarness.Assert(quiet.Peak > 0.01f && quiet.Peak < loud * 0.4f, $"the playing loop became quieter when the script lowered its volume (before {loud:F4}, after {quiet.Peak:F4})");
+            TestHarness.Assert(director.RemoveEvent("LoopTone") == 1, "SOUND_REMOVE_TYPE stops the playing voice");
+            render.Pump(0.1);
+            TestHarness.Assert(director.Mixer.ActiveVoiceCount == 0, "the voice is gone from the mixer");
+
+            director.OverrideEventVolume("LoopTone", AudioDirector.RestoreEventVolume);
+            director.PlayUi("LoopTone");
+            director.Tick(null, 0.05);
+            render.Pump(0.1);
+            director.SetEventEnabled("LoopTone", false);
+            TestHarness.Assert(director.RemoveDisabledEvents() == 1 && director.ScriptState.VoicesRemoved == 2, "SOUND_REMOVE_ALL_DISABLED stops the voice of a muted event");
+        }
+
+        // EVA_SET_ENABLED_DISABLED (Eva::setEvaEnabled): a disabled announcer says nothing, the flags raised meanwhile are lost, and it speaks again once enabled.
+        using (var director = NewDirector(catalog, fx))
+        {
+            var view = new FakeView { Tick = 10 };
+            director.EvaEnabled = false;
+            director.NotifyInsufficientFunds();
+            director.Tick(view, 1.0 / 30);
+            view.Tick = 11;
+            director.Tick(view, 1.0 / 30);
+            TestHarness.Assert(director.Stats.EvaPlayed == 0, "Eva stays silent while disabled");
+            director.EvaEnabled = true;
+            view.Tick = 12;
+            director.Tick(view, 1.0 / 30);
+            TestHarness.Assert(director.Stats.EvaPlayed == 0, "the announcement raised while disabled was lost");
+            director.NotifyInsufficientFunds();
+            view.Tick = 13;
+            director.Tick(view, 1.0 / 30);
+            TestHarness.Assert(director.Stats.EvaPlayed == 1, "enabled again, Eva announces");
+        }
+
+        // Object sound and ambient pause are state the ambient pass reads; the game's end forgets all of it (AudioManager::reset).
+        using (var director = NewDirector(catalog, fx))
+        {
+            TestHarness.Assert(director.SetObjectSoundEnabled(new EntityId(7), false) && !director.SetObjectSoundEnabled(EntityId.Invalid, false), "a valid object's ambient loop can be switched off, an invalid one cannot");
+            director.SetAmbientPaused(true);
+            director.SetScriptVolume(ScriptVolumeKind.Music, 20);
+            director.OverrideEventVolume("UiClick", 0.3f);
+            director.EvaEnabled = false;
+            var state = director.ScriptState;
+            TestHarness.Assert(state.ObjectsSilenced == 1 && state.AmbientPaused && !state.EvaEnabled && state.EventVolumes.Count == 1 && state.MusicVolume == 0.2f, "the director keeps what the scripts did");
+            director.ResetScriptState();
+            state = director.ScriptState;
+            TestHarness.Assert(state is { ObjectsSilenced: 0, AmbientPaused: false, EvaEnabled: true, MusicVolume: 1f } && state.EventVolumes.IsEmpty, "a new game starts with nothing the last mission's scripts left behind");
+        }
     }
 
     private static void OfflineRenderIsReproducible()

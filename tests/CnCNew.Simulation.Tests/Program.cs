@@ -172,6 +172,8 @@ run.Test("Scripts: topple directions, buildability, skill set, local defeat", Te
 run.Test("Scripts: approach paths, nearest-object moves and unmanned capture", Tests.ScriptPhase13MovementActions);
 run.Test("Scripts: team state, container slots, power ratios, tech buildings, completed powers and upgrades", Tests.ScriptPhase13Conditions);
 run.Test("Scripts: facing, destroying cargo and more recorded settings", Tests.ScriptPhase13MoreActions);
+run.Test("Scripts: FREEZE_TIME stops the world and not the scripts; UNFREEZE_TIME and the end of the mission lift it", Tests.ScriptFreezeTimeStopsTheWorldNotTheScripts);
+run.Test("Scripts: a frozen mission is frozen again after save and load, and ends unfrozen", Tests.ScriptFrozenTimeSurvivesSaveAndEnds);
 run.Test("Scripts: a team follows a waypoint path as a formation", Tests.ScriptTeamFollowsAPathAsAFormation);
 run.Test("Scripts: held objects, disabled factories and the evacuation side", Tests.ScriptDisableHoldAndEvacuate);
 run.Test("Scripts: booby traps and bridge conditions", Tests.ScriptBoobyTrapsAndBridges);

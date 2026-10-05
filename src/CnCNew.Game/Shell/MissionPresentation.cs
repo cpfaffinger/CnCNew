@@ -19,10 +19,29 @@ namespace CnCNew.Game.Shell;
 public readonly record struct RadarBlip(float X, float Y, int EventType, long CreatedAtTick);
 
 /// <summary>What happened to one <see cref="ScriptOutput"/> type over a mission: how often the scripts emitted it, how often it was handed to a consumer
-/// (camera, overlay, audio, radar, input), and how often that consumer exists in the running host - so "displayed" is never claimed for a headless run.</summary>
-public readonly record struct MissionOutputCount(string Action, long Emitted, long Forwarded, long Displayed, string How)
+/// (camera, overlay, audio, radar, input, HUD, objects, post effects), and how often that consumer exists in the running host - so "displayed" is never claimed for a headless run.
+/// <see cref="State"/> is the type's entry in <see cref="MissionOutputCatalog"/>: a type that is not <see cref="MissionOutputState.Displayed"/> has <see cref="Displayed"/> 0 however often a model kept it.</summary>
+public readonly record struct MissionOutputCount(string Action, long Emitted, long Forwarded, long Displayed, string How, MissionOutputState State = MissionOutputState.Displayed)
 {
-    public long NotDisplayed => Emitted - Displayed;
+    /// <summary>Handled by the simulation, not by the host (<see cref="MissionOutputState.HandledElsewhere"/>).</summary>
+    public long HandledElsewhere => State == MissionOutputState.HandledElsewhere ? Emitted : 0;
+
+    public long NotDisplayed => Emitted - Displayed - HandledElsewhere;
+}
+
+/// <summary>The screen post effects the scripts switch on, for the host's renderer (<see cref="MissionPresentationDirector.PostEffects"/>).</summary>
+/// <param name="BlackWhite">0..1: how far the world is turned grey-scale (<c>ScreenBWFilter::m_curFadeValue</c>).</param>
+/// <param name="MotionBlurCount">0 when off, else 5..60 in steps of 5: how strong the zoom blur is (<c>ScreenMotionBlurFilter::m_maxCount</c>; the zoom factor is <c>sqrt(1 - count / 60 * 0.9)</c>).</param>
+/// <param name="MotionBlurAdditive">The saturating variant of the blur (the layers add up instead of blending).</param>
+public readonly record struct MissionPostEffects(float BlackWhite, int MotionBlurCount, bool MotionBlurAdditive)
+{
+    public const int MotionBlurMaxCount = 60;
+    public const int MotionBlurStep = 5;
+
+    public bool Any => BlackWhite > 0f || MotionBlurCount > 0;
+
+    /// <summary><c>ScreenMotionBlurFilter::postRender</c>: the texture coordinates of the full frame shrink about the centre by this factor (the view zooms in).</summary>
+    public float MotionBlurZoomFactor => MotionBlurCount <= 0 ? 1f : MathF.Sqrt(1f - MotionBlurCount / (float)MotionBlurMaxCount * 0.90f);
 }
 
 /// <summary>
@@ -50,7 +69,7 @@ public sealed class MissionPresentationDirector
     private const string CameraKey = "<camera>";
     private const int JournalCapacity = 4000;
 
-    private enum Channel { Camera, Overlay, Audio, Radar, Input }
+    private enum Channel { Camera, Overlay, Audio, Radar, Input, Hud, Objects, Post }
 
     private readonly MissionSession _session;
     private readonly Func<string, string> _resolveText;
@@ -61,7 +80,8 @@ public sealed class MissionPresentationDirector
     private readonly List<string> _journal = [];
     private readonly List<(string Key, long AtTick)> _completions = [];
     private readonly SortedDictionary<string, (string Label, bool IsTimer)> _counters = new(StringComparer.Ordinal);
-    private readonly bool[] _consumers = new bool[5];
+    private readonly bool[] _consumers = new bool[8];
+    private readonly PlayerId _human;
 
     private long _captionExpiresAtTick;
     private long _cinematicExpiresAtTick;
@@ -72,6 +92,8 @@ public sealed class MissionPresentationDirector
     private bool _countersVisible = true;
     private bool _inputLocked;
     private long _lastObservedTick;
+    private long _tickBeforeStep;
+    private long _frozenSteps;
 
     // Scripted camera: requests are recorded when the script fires and resolved against the real camera in ApplyCameraTo.
     private readonly Tween _moveX = new(), _moveY = new(), _zoom = new(), _pitch = new(), _angle = new();
@@ -90,7 +112,45 @@ public sealed class MissionPresentationDirector
         ArgumentNullException.ThrowIfNull(session);
         _session = session;
         _resolveText = resolveText ?? (label => label);
+        _human = MissionSession.LocalPlayerOf(session.Program, session.Options.HumanSideName);
     }
+
+    /// <summary>
+    /// The presentation clock: the world tick plus the steps in which the scripts froze time (<c>FREEZE_TIME</c>; <c>MissionSession.Step</c> runs the scripts but not the world then). Camera moves, fades,
+    /// captions, the blur and the grey-scale ramp run on it, so they go on while the world stands still, exactly as the original's views do; without a freeze it equals the world tick.
+    /// </summary>
+    public long Clock => _session.World.Tick + _frozenSteps;
+
+    /// <summary>The mission scripts' sound control (volumes, muted events, Eva, ambient loops); without it the output counts as not played.</summary>
+    public IMissionAudioControl? AudioControl { get; set; }
+
+    private IMissionObjectEffects? _objectEffects;
+    private IMissionHudControl? _hud;
+
+    /// <summary>The object layer (flashes, house colours); without it the output counts as not displayed. Connecting one is what makes the director count its outputs as displayed.</summary>
+    public IMissionObjectEffects? ObjectEffects
+    {
+        get => _objectEffects;
+        set
+        {
+            _objectEffects = value;
+            _consumers[(int)Channel.Objects] = value is not null;
+        }
+    }
+
+    /// <summary>The HUD (control bar overrides, icon overlay, selectability); without it the output counts as not displayed. Connecting one is what makes the director count its outputs as displayed.</summary>
+    public IMissionHudControl? Hud
+    {
+        get => _hud;
+        set
+        {
+            _hud = value;
+            _consumers[(int)Channel.Hud] = value is not null;
+        }
+    }
+
+    /// <summary>The <c>GameData</c> intensities of the camera shake types (<c>SCREEN_SHAKE</c>); without them a shake is a reported problem.</summary>
+    public CameraShakeIntensities? ShakeIntensities { get; set; }
 
     public string? CaptionText { get; private set; }
     public string? CinematicText { get; private set; }
@@ -131,6 +191,56 @@ public sealed class MissionPresentationDirector
     /// move is active, or for a move kind with no fixed target (<c>ROTATE_CAMERA</c>, <c>CAMERA_MOVE_HOME</c>,
     /// <c>MOVE_CAMERA_TO_SELECTION</c>).</summary>
     public (float X, float Y)? CameraTarget { get; private set; }
+
+    // ---- scripted switches the host (or a later screen) reads; none of them is part of the simulation
+    private readonly Queue<int> _pendingShakes = new();
+    private readonly SortedSet<string> _scoreScreenExcluded = new(StringComparer.Ordinal);
+    private readonly SortedSet<uint> _hiddenPowerDisplays = [];
+    private int _shakeCount;
+    private int? _pendingBoundary;
+
+    // The grey-scale and the motion blur are the two screen filters of W3DView (one filter at a time in the original: a new one replaces the other).
+    private bool _bwOn;
+    private int _bwDirection;
+    private int _bwFrames;
+    private int _bwFrame;
+    private float _bwLevel;
+    private bool _blurActive;
+    private bool _blurDecrement;
+    private bool _blurAdditive;
+    private int _blurCount;
+    private (float X, float Y)? _blurTarget;
+    private bool _blurJumpDue;
+
+    /// <summary>
+    /// The screen filters of the moment for the host's renderer (<c>CAMERA_BW_MODE_*</c>, <c>CAMERA_MOTION_BLUR_JUMP</c>); reading it tells the director the host draws them, which is what lets the
+    /// two output types count as displayed. A headless run never reads it.
+    /// </summary>
+    public MissionPostEffects PostEffects
+    {
+        get
+        {
+            _consumers[(int)Channel.Post] = true;
+            return new MissionPostEffects(_bwLevel, _blurActive ? _blurCount : 0, _blurAdditive);
+        }
+    }
+
+    /// <summary><c>ENABLE_SCORING</c>/<c>DISABLE_SCORING</c> (<c>GameLogic::enableScoring</c>): while off the original's score keeper counts nothing. Kept for a statistics screen; the client's mission result shows none yet.</summary>
+    public bool ScoringEnabled { get; private set; } = true;
+
+    /// <summary><c>PLAYER_EXCLUDE_FROM_SCORE_SCREEN</c>: the sides a mission result must not list (<c>Player::setListInScoreScreen(false)</c>).</summary>
+    public IReadOnlyCollection<string> ScoreScreenExcluded => _scoreScreenExcluded;
+
+    /// <summary><c>DISABLE_SPECIAL_POWER_DISPLAY</c> (<c>InGameUI::setSuperweaponDisplayEnabledByScript</c>): the superweapon timers are hidden as a whole.</summary>
+    public bool SpecialPowerDisplayEnabled { get; private set; } = true;
+
+    /// <summary><c>NAMED_HIDE_SPECIAL_POWER_DISPLAY</c>: the objects whose superweapon timer a script hid.</summary>
+    public IReadOnlyCollection<uint> SpecialPowerDisplayHidden => _hiddenPowerDisplays;
+
+    /// <summary><c>DRAW_SKYBOX_BEGIN</c>/<c>END</c> and <c>ENABLE_/DISABLE_BORDER_SHROUD</c>: the scripts' switches, kept for a renderer that draws them.</summary>
+    public bool SkyboxRequested { get; private set; }
+
+    public bool BorderShroudEnabled { get; private set; } = true;
 
     public ImmutableArray<RadarBlip> RadarBlips => [.._radar];
 
@@ -188,6 +298,35 @@ public sealed class MissionPresentationDirector
         ArgumentNullException.ThrowIfNull(camera);
         _consumers[(int)Channel.Camera] = true;
         if (seconds <= 0) return;
+
+        if (_pendingBoundary is { } boundary)
+        {
+            _pendingBoundary = null;
+            try
+            {
+                camera.ActiveBoundary = boundary;
+                Handled("MAP_SWITCH_BORDER", Channel.Camera);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                Problem("MAP_SWITCH_BORDER", $"the map has no border {boundary}");
+            }
+        }
+        if (_blurJumpDue)
+        {
+            // ScreenMotionBlurFilter::postRender at the apex: TheTacticalView->lookAt(zoomToPos) - the cut happens while the picture is at its most blurred.
+            _blurJumpDue = false;
+            if (_blurTarget is { } jump) camera.CenterOn(new Vector2(jump.X, jump.Y));
+        }
+        while (_pendingShakes.Count > 0)
+        {
+            // ScriptActions::doScreenShake -> W3DView::shake at the view position: the full intensity of the type, a random direction (the reference draws it from the client random stream; a golden-angle sequence here).
+            var type = _pendingShakes.Dequeue();
+            if (ShakeIntensities is not { } intensities) { Problem("SCREEN_SHAKE", "no shake intensities connected"); continue; }
+            var intensity = type switch { 0 => intensities.Subtle, 1 => intensities.Normal, 2 => intensities.Strong, 3 => intensities.Severe, 4 => intensities.CineExtreme, _ => intensities.CineInsane };
+            camera.Shake(camera.Pivot, intensity, _shakeCount++ * 2.3999632f);
+            Handled("SCREEN_SHAKE", Channel.Camera);
+        }
 
         if (_resetRequest is { } reset)
         {
@@ -363,7 +502,7 @@ public sealed class MissionPresentationDirector
     private (bool White, byte Alpha)? FadeAlpha()
     {
         if (_fade is not { } fade) return null;
-        var elapsed = _session.World.Tick - fade.Start;
+        var elapsed = Clock - fade.Start;
         float value;
         if (elapsed < fade.Increase) value = fade.Min + (fade.Max - fade.Min) * (elapsed / (float)Math.Max(1, fade.Increase));
         else if (elapsed < fade.Increase + fade.Hold) value = fade.Max;
@@ -385,7 +524,8 @@ public sealed class MissionPresentationDirector
     /// </summary>
     public void BeforeStep()
     {
-        _lastObservedTick = _session.World.Tick;
+        _tickBeforeStep = _session.World.Tick;
+        _lastObservedTick = _tickBeforeStep + _frozenSteps;
         var tick = _lastObservedTick;
         if (CaptionText is not null && tick >= _captionExpiresAtTick) CaptionText = null;
         if (CinematicText is not null && tick >= _cinematicExpiresAtTick) CinematicText = null;
@@ -416,10 +556,50 @@ public sealed class MissionPresentationDirector
         {
             _emitted[output.Action] = _emitted.GetValueOrDefault(output.Action) + 1;
             // Only what the client can show: the options, score-screen and command-bar outputs of a mission's first tick would bury the timeline.
-            if (_journal.Count < JournalCapacity && HowDisplayed(output.Action) != NoDisplay) _journal.Add($"{output.Tick} {output.Action}({string.Join(", ", output.Arguments)})");
+            if (_journal.Count < JournalCapacity && MissionOutputCatalog.Describe(output.Action).State == MissionOutputState.Displayed) _journal.Add($"{output.Tick} {output.Action}({string.Join(", ", output.Arguments)})");
             Apply(output, _lastObservedTick);
         }
-        _radar.RemoveAll(blip => _session.World.Tick - blip.CreatedAtTick > RadarBlipLifetimeTicks);
+        // A step that left the world tick where it was is a frozen one (FREEZE_TIME): the presentation clock goes on without it.
+        var worldStepped = _session.World.Tick != _tickBeforeStep;
+        if (!worldStepped) _frozenSteps++;
+        AdvanceFilters(worldStepped);
+        _radar.RemoveAll(blip => Clock - blip.CreatedAtTick > RadarBlipLifetimeTicks);
+    }
+
+    /// <summary>
+    /// The two screen filters advance once per logic step. The grey-scale ramps over its frames (<c>ScreenBWFilter::set</c> counts <c>m_curFadeFrame</c> per drawn frame; a logic step stands in for one);
+    /// the motion blur adds 5 to its count for 12 steps, cuts to the target at 60 and takes 5 off for 11 more (<c>ScreenMotionBlurFilter::postRender</c>, only on a frame the game logic has changed).
+    /// </summary>
+    private void AdvanceFilters(bool worldStepped)
+    {
+        if (_bwDirection > 0)
+        {
+            _bwFrame++;
+            if (_bwFrame < _bwFrames) _bwLevel = _bwFrame / (float)_bwFrames;
+            else { _bwFrame = 0; _bwLevel = 1f; _bwDirection = 0; }
+        }
+        else if (_bwDirection < 0)
+        {
+            _bwFrame++;
+            if (_bwFrame < _bwFrames) _bwLevel = 1f - _bwFrame / (float)_bwFrames;
+            else { _bwFrame = 0; _bwLevel = 0f; _bwOn = false; _bwDirection = 0; }
+        }
+        if (!_blurActive || !worldStepped) return;
+        if (!_blurDecrement)
+        {
+            _blurCount += MissionPostEffects.MotionBlurStep;
+            if (_blurCount >= MissionPostEffects.MotionBlurMaxCount)
+            {
+                _blurCount = MissionPostEffects.MotionBlurMaxCount;
+                _blurDecrement = true;
+                _blurJumpDue = true;
+            }
+        }
+        else
+        {
+            _blurCount -= MissionPostEffects.MotionBlurStep;
+            if (_blurCount < 1) { _blurCount = 0; _blurActive = false; _blurDecrement = false; }
+        }
     }
 
     private void Handled(string action, Channel channel)
@@ -580,9 +760,9 @@ public sealed class MissionPresentationDirector
             {
                 if (output.Arguments.Length == 0) { Problem(action, "event name missing"); return; }
                 var name = output.Arguments[0];
-                var played = Audio?.Invoke(action, name) == true;
+                var played = TryPlay(action, name) == true;
                 if (played) Handled(action, Channel.Audio);
-                else Problem(action, Audio is null ? "no audio connected" : $"'{name}' did not start");
+                else Problem(action, !HasAudio ? "no audio connected" : $"'{name}' did not start");
                 if (action is "SPEECH_PLAY" or "SOUND_PLAY_NAMED")
                 {
                     // No subtitle text exists for a speech event: its name is shown, marked as a placeholder, whether or not the sound plays.
@@ -598,8 +778,8 @@ public sealed class MissionPresentationDirector
             }
             case "MUSIC_SET_TRACK":
                 if (output.Arguments.Length == 0) { Problem(action, "track name missing"); return; }
-                if (Audio?.Invoke(action, output.Arguments[0]) == true) Handled(action, Channel.Audio);
-                else Problem(action, Audio is null ? "no audio connected" : $"'{output.Arguments[0]}' did not start");
+                if (TryPlay(action, output.Arguments[0]) == true) Handled(action, Channel.Audio);
+                else Problem(action, !HasAudio ? "no audio connected" : $"'{output.Arguments[0]}' did not start");
                 _completions.Add((output.Arguments[0], tick));
                 return;
             case "MOVIE_PLAY_FULLSCREEN" or "MOVIE_PLAY_RADAR":
@@ -679,61 +859,308 @@ public sealed class MissionPresentationDirector
                 _inputLocked = false;
                 Handled(action, Channel.Overlay);
                 return;
+            default:
+                ApplyScene(output, tick);
+                return;
+        }
+    }
+
+    private bool HasAudio => AudioControl is not null || Audio is not null;
+
+    /// <summary>Plays a scripted sound through the host's audio; <see langword="null"/> when no audio is connected.</summary>
+    private bool? TryPlay(string action, string eventName)
+    {
+        if (AudioControl is { } control) return control.PlayScripted(action, eventName);
+        return Audio?.Invoke(action, eventName);
+    }
+
+    private bool TryNamedId(string name, out EntityId id)
+    {
+        id = EntityId.Invalid;
+        foreach (var (named, value) in _session.Engine.NamedObjects)
+        {
+            if (!string.Equals(named, name, StringComparison.Ordinal)) continue;
+            id = new EntityId(value);
+            return _session.World.FindEntity(id) is not null;
+        }
+        return false;
+    }
+
+    private IEnumerable<EntityId> TeamMembers(string teamName)
+    {
+        var team = _session.Engine.TeamInstances.FirstOrDefault(instance => string.Equals(instance.Prototype, teamName, StringComparison.Ordinal) && instance.Members.Count > 0);
+        if (team is null) yield break;
+        foreach (var member in team.Members)
+            if (_session.World.FindEntity(new EntityId(member)) is not null) yield return new EntityId(member);
+    }
+
+    /// <summary>The object a script names, or the living members of the team it names.</summary>
+    private List<EntityId> Targets(bool namedObject, string name)
+    {
+        if (!namedObject) return [..TeamMembers(name)];
+        return TryNamedId(name, out var id) ? [id] : [];
+    }
+
+    private static string Argument(ScriptOutput output, int index) => output.Arguments.Length > index ? output.Arguments[index] : string.Empty;
+
+    /// <summary>
+    /// The outputs that change the sound, the control bar, single objects and the screen filters rather than the camera and the overlay (<c>docs/SCRIPT-ENGINE.md</c> §7a). Each case names the
+    /// <c>ScriptActions</c> function it follows; a consumer that is not connected leaves a reported problem, and the counter stays at "not displayed".
+    /// </summary>
+    private void ApplyScene(ScriptOutput output, long tick)
+    {
+        var action = output.Action;
+        switch (action)
+        {
+            // ---- sound control: ScriptActions::doAudioSetVolume, doSoundOverrideVolume, doSoundEnableType, doSoundRemoveAllDisabled, doSoundRemoveType, doEnableObjectSound, doEvaEnabledDisabled, doAmbientSoundsPause
+            case "MUSIC_SET_VOLUME" or "SOUND_SET_VOLUME" or "SPEECH_SET_VOLUME":
+            {
+                if (!Number(output, 0, out var percent)) { Problem(action, "volume argument missing"); return; }
+                if (AudioControl is not { } control) { Problem(action, "no audio control connected"); return; }
+                control.SetVolume(action == "MUSIC_SET_VOLUME" ? MissionVolume.Music : action == "SOUND_SET_VOLUME" ? MissionVolume.Sound : MissionVolume.Speech, percent);
+                Handled(action, Channel.Audio);
+                return;
+            }
+            case "AUDIO_OVERRIDE_VOLUME_TYPE" or "AUDIO_RESTORE_VOLUME_TYPE" or "AUDIO_RESTORE_VOLUME_ALL_TYPE" or "SOUND_DISABLE_TYPE" or "SOUND_ENABLE_TYPE" or "SOUND_ENABLE_ALL"
+                or "SOUND_REMOVE_ALL_DISABLED" or "SOUND_REMOVE_TYPE" or "EVA_SET_ENABLED_DISABLED" or "SOUND_AMBIENT_PAUSE" or "SOUND_AMBIENT_RESUME":
+            {
+                if (AudioControl is not { } control) { Problem(action, "no audio control connected"); return; }
+                var name = action is "AUDIO_RESTORE_VOLUME_ALL_TYPE" or "SOUND_ENABLE_ALL" or "SOUND_REMOVE_ALL_DISABLED" or "EVA_SET_ENABLED_DISABLED" or "SOUND_AMBIENT_PAUSE" or "SOUND_AMBIENT_RESUME" ? string.Empty : Argument(output, 0);
+                if (name.Length == 0 && action is "AUDIO_OVERRIDE_VOLUME_TYPE" or "AUDIO_RESTORE_VOLUME_TYPE" or "SOUND_DISABLE_TYPE" or "SOUND_ENABLE_TYPE" or "SOUND_REMOVE_TYPE") { Problem(action, "event name missing"); return; }
+                switch (action)
+                {
+                    case "AUDIO_OVERRIDE_VOLUME_TYPE":
+                        if (!Number(output, 1, out var percent)) { Problem(action, "volume argument missing"); return; }
+                        control.OverrideEventVolume(name, percent);
+                        break;
+                    case "AUDIO_RESTORE_VOLUME_TYPE" or "AUDIO_RESTORE_VOLUME_ALL_TYPE": control.OverrideEventVolume(name, -100f); break;
+                    case "SOUND_DISABLE_TYPE": control.SetEventEnabled(name, false); break;
+                    case "SOUND_ENABLE_TYPE" or "SOUND_ENABLE_ALL": control.SetEventEnabled(name, true); break;
+                    case "SOUND_REMOVE_ALL_DISABLED": control.RemoveDisabledEvents(); break;
+                    case "SOUND_REMOVE_TYPE": control.RemoveEvent(name); break;
+                    case "EVA_SET_ENABLED_DISABLED":
+                        if (!Number(output, 0, out var enabled)) { Problem(action, "flag argument missing"); return; }
+                        control.SetEvaEnabled(enabled != 0f);
+                        break;
+                    default: control.SetAmbientPaused(action == "SOUND_AMBIENT_PAUSE"); break;
+                }
+                Handled(action, Channel.Audio);
+                return;
+            }
+            case "ENABLE_OBJECT_SOUND" or "DISABLE_OBJECT_SOUND":
+            {
+                if (AudioControl is not { } control) { Problem(action, "no audio control connected"); return; }
+                if (!TryNamedId(Argument(output, 0), out var entity)) { Problem(action, "unknown named object"); return; }
+                if (control.SetObjectSoundEnabled(entity, action == "ENABLE_OBJECT_SOUND")) Handled(action, Channel.Audio);
+                else Problem(action, "the object has no ambient sound to switch");
+                return;
+            }
+
+            // ---- time: the simulation freezes the world itself (MissionSession.Step); nothing for the host to do
+            case "FREEZE_TIME" or "UNFREEZE_TIME":
+                return;
+
+            // ---- camera: ScriptActions::doScreenShake, doBorderSwitch, doRotateCameraTowardObject, doCameraTetherNamed
+            case "SCREEN_SHAKE":
+                if (!Number(output, 0, out var shake) || shake is < 0 or > 5) { Problem(action, "shake type must be 0..5"); return; }
+                _pendingShakes.Enqueue((int)shake);
+                return;
+            case "MAP_SWITCH_BORDER":
+                if (!Number(output, 0, out var border)) { Problem(action, "border argument missing"); return; }
+                _pendingBoundary = (int)border;
+                return;
+            case "CAMERA_LOOK_TOWARD_OBJECT":
+            {
+                // doRotateCameraTowardObject(name, sec, holdSec, easeIn, easeOut): a camera movement of its own that turns the view to the object and holds it there.
+                if (!TryNamedPosition(Argument(output, 0), out var x, out var y)) { Problem(action, "unknown named object"); return; }
+                Number(output, 1, out var seconds);
+                Number(output, 2, out var hold);
+                _cameraPending = true;
+                _cameraCompletesAtTick = tick + DurationTicks(seconds + Math.Max(0, hold));
+                _lookRequest = (new Vector2(x, y), seconds);
+                Handled(action, Channel.Camera);
+                return;
+            }
+            case "CAMERA_TETHER_NAMED":
+                // doCameraTetherNamed(unit, snapToUnit, play): approximated by the follow lock; the object is centred instead of being allowed a play radius.
+                if (!TryNamedPosition(Argument(output, 0), out _, out _)) { Problem(action, "unknown named object"); return; }
+                _followName = Argument(output, 0);
+                _moveX.Stop();
+                _moveY.Stop();
+                Handled(action, Channel.Camera);
+                return;
+            case "CAMERA_STOP_TETHER_NAMED":
+                _followName = null;
+                Handled(action, Channel.Camera);
+                return;
+
+            // ---- screen filters: ScriptActions::doBlackWhiteMode, doCameraMotionBlurJump
+            case "CAMERA_BW_MODE_BEGIN":
+                Number(output, 0, out var beginFrames);
+                _blurActive = false;
+                _blurCount = 0;
+                _bwOn = true;
+                _bwDirection = 1;
+                _bwFrames = Math.Max(0, (int)beginFrames);
+                _bwFrame = 0;
+                Handled(action, Channel.Post);
+                return;
+            case "CAMERA_BW_MODE_END":
+                // Only a grey-scale that is on can be faded out ("mode already set, turn it off").
+                Number(output, 0, out var endFrames);
+                if (_bwOn)
+                {
+                    _bwDirection = -1;
+                    _bwFrames = Math.Max(0, (int)endFrames);
+                    _bwFrame = 0;
+                }
+                Handled(action, Channel.Post);
+                return;
+            case "CAMERA_MOTION_BLUR_JUMP":
+            {
+                // The zoom blur replaces the grey-scale (one view filter at a time) and cuts the camera to the waypoint at its apex.
+                if (WaypointAt(output, 0) is not { } target) return;
+                Number(output, 1, out var saturate);
+                _bwOn = false;
+                _bwDirection = 0;
+                _bwLevel = 0f;
+                _blurActive = true;
+                _blurDecrement = false;
+                _blurAdditive = saturate != 0f;
+                _blurCount = 0;
+                _blurTarget = target;
+                _blurJumpDue = false;
+                Handled(action, Channel.Post);
+                return;
+            }
+
+            // ---- objects: ScriptActions::doNamedFlash, doTeamFlash, doNamedCustomColor
+            case "NAMED_FLASH" or "NAMED_FLASH_WHITE" or "TEAM_FLASH" or "TEAM_FLASH_WHITE":
+            {
+                if (ObjectEffects is not { } effects) { Problem(action, "no object layer connected"); return; }
+                Number(output, 1, out var seconds);
+                if (seconds <= 0) return;
+                var white = action.EndsWith("_WHITE", StringComparison.Ordinal);
+                var members = Targets(action.StartsWith("NAMED", StringComparison.Ordinal), Argument(output, 0));
+                if (members.Count == 0) { Problem(action, action.StartsWith("NAMED", StringComparison.Ordinal) ? "unknown named object" : "team has no living member"); return; }
+                var flashed = false;
+                foreach (var member in members) flashed |= effects.Flash(member, white ? Vector3.One : null, (int)seconds);
+                if (flashed) Handled(action, Channel.Objects);
+                else Problem(action, "the object is not drawn");
+                return;
+            }
+            case "NAMED_CUSTOM_COLOR":
+            {
+                if (ObjectEffects is not { } effects) { Problem(action, "no object layer connected"); return; }
+                if (!TryNamedId(Argument(output, 0), out var entity)) { Problem(action, "unknown named object"); return; }
+                if (!long.TryParse(Argument(output, 1), NumberStyles.Integer, CultureInfo.InvariantCulture, out var color)) { Problem(action, "color argument missing"); return; }
+                if (effects.SetHouseColor(entity, unchecked((uint)color))) Handled(action, Channel.Objects);
+                else Problem(action, "the object is not drawn");
+                return;
+            }
+
+            // ---- control bar and HUD: ScriptActions::doRemoveCommandBarButton, doAddCommandBarButton, doPlayerSetScienceAvailability, doSetDrawIconUIMode, changeObjectPanelFlagForSingleObject
+            case "COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE" or "COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT":
+            {
+                if (Hud is not { } hud) { Problem(action, "no HUD connected"); return; }
+                var ok = action == "COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE"
+                    ? hud.RemoveCommandButton(Argument(output, 0), Argument(output, 1))
+                    : Number(output, 2, out var slot) && hud.AddCommandButton(Argument(output, 0), Argument(output, 1), (int)slot);
+                if (ok) Handled(action, Channel.Hud);
+                else Problem(action, $"button '{Argument(output, 0)}' or object type '{Argument(output, 1)}' unknown to the command sets");
+                return;
+            }
+            case "PLAYER_SCIENCE_AVAILABILITY":
+            {
+                if (Hud is not { } hud) { Problem(action, "no HUD connected"); return; }
+                if (_session.Program.FindPlayer(Argument(output, 0)) is not { } player) { Problem(action, $"unknown player '{Argument(output, 0)}'"); return; }
+                if (player.Id != _human) { Problem(action, "availability of a side other than the local player (no UI for it)"); return; }
+                if (hud.SetScienceAvailability(Argument(output, 1), Argument(output, 2))) Handled(action, Channel.Hud);
+                else Problem(action, $"science '{Argument(output, 1)}' or availability '{Argument(output, 2)}' unknown");
+                return;
+            }
+            case "OPTIONS_SET_DRAWICON_UI_MODE":
+                if (Hud is not { } iconHud) { Problem(action, "no HUD connected"); return; }
+                if (!Number(output, 0, out var icons)) { Problem(action, "flag argument missing"); return; }
+                iconHud.SetIconUiEnabled(icons != 0f);
+                Handled(action, Channel.Hud);
+                return;
+            case "UNIT_AFFECT_OBJECT_PANEL_FLAGS" or "TEAM_AFFECT_OBJECT_PANEL_FLAGS":
+            {
+                if (Hud is not { } hud) { Problem(action, "no HUD connected"); return; }
+                var flag = Argument(output, 1);
+                if (!Number(output, 2, out var on)) { Problem(action, "flag value missing"); return; }
+                if (!flag.Equals("Selectable", StringComparison.OrdinalIgnoreCase)) { Problem(action, $"flag '{flag}' has no consumer (it needs simulation state)"); return; }
+                var targets = Targets(action.StartsWith("UNIT", StringComparison.Ordinal), Argument(output, 0));
+                if (targets.Count == 0) { Problem(action, "unknown named object or empty team"); return; }
+                var acted = false;
+                foreach (var target in targets) acted |= hud.SetObjectSelectable(target, on != 0f);
+                if (acted) Handled(action, Channel.Hud);
+                return;
+            }
+
+            // ---- state a later screen reads (no consumer in this client, see MissionOutputCatalog)
+            case "ENABLE_SCORING" or "DISABLE_SCORING":
+                ScoringEnabled = action == "ENABLE_SCORING";
+                return;
+            case "PLAYER_EXCLUDE_FROM_SCORE_SCREEN":
+                _scoreScreenExcluded.Add(Argument(output, 0));
+                return;
+            case "ENABLE_SPECIAL_POWER_DISPLAY" or "DISABLE_SPECIAL_POWER_DISPLAY":
+                // InGameUI::setSuperweaponDisplayEnabledByScript: the whole superweapon timer list.
+                SpecialPowerDisplayEnabled = action == "ENABLE_SPECIAL_POWER_DISPLAY";
+                if (Hud is not { } powerHud) { Problem(action, "no HUD connected"); return; }
+                powerHud.SetSpecialPowerDisplay(SpecialPowerDisplayEnabled);
+                Handled(action, Channel.Hud);
+                return;
+            case "NAMED_HIDE_SPECIAL_POWER_DISPLAY" or "NAMED_SHOW_SPECIAL_POWER_DISPLAY":
+            {
+                // InGameUI::hideObjectSuperweaponDisplayByScript / showObjectSuperweaponDisplayByScript: the timer of one object.
+                if (!TryNamedId(Argument(output, 0), out var powerObject)) { Problem(action, "unknown named object"); return; }
+                var visible = action == "NAMED_SHOW_SPECIAL_POWER_DISPLAY";
+                if (visible) _hiddenPowerDisplays.Remove(powerObject.Value);
+                else _hiddenPowerDisplays.Add(powerObject.Value);
+                if (Hud is not { } objectHud) { Problem(action, "no HUD connected"); return; }
+                if (objectHud.SetObjectSpecialPowerDisplay(powerObject, visible)) Handled(action, Channel.Hud);
+                return;
+            }
+            case "DRAW_SKYBOX_BEGIN" or "DRAW_SKYBOX_END":
+                SkyboxRequested = action == "DRAW_SKYBOX_BEGIN";
+                return;
+            case "ENABLE_BORDER_SHROUD" or "DISABLE_BORDER_SHROUD":
+                BorderShroudEnabled = action == "ENABLE_BORDER_SHROUD";
+                return;
         }
     }
 
     // ------------------------------------------------------------------------------------------------ counters
 
-    /// <summary>What the client does with an output type, for the report and <c>docs/SCRIPT-ENGINE.md</c> §7a.</summary>
-    public static string HowDisplayed(string action) => action switch
-    {
-        "MOVE_CAMERA_TO" => "camera pans to the waypoint over the script's duration",
-        "MOVE_CAMERA_ALONG_WAYPOINT_PATH" => "camera pans straight to the path's first waypoint (the path itself is not flown)",
-        "RESET_CAMERA" => "camera pans to the waypoint and returns to default angle, pitch and zoom",
-        "SETUP_CAMERA" => "camera cuts to the waypoint, looks at the second waypoint, takes zoom and pitch",
-        "ROTATE_CAMERA" => "camera rotates in place over the script's duration",
-        "ZOOM_CAMERA" or "CAMERA_MOD_SET_FINAL_ZOOM" => "camera height changes (clamped to the playable zoom range)",
-        "PITCH_CAMERA" or "CAMERA_MOD_SET_FINAL_PITCH" => "camera pitch changes (clamped to the camera's pitch range)",
-        "CAMERA_MOD_LOOK_TOWARD" or "CAMERA_MOD_FINAL_LOOK_TOWARD" or "CAMERA_LOOK_TOWARD_WAYPOINT" => "camera turns towards the waypoint",
-        "CAMERA_FOLLOW_NAMED" or "CAMERA_STOP_FOLLOW" => "camera stays on the named object",
-        "CAMERA_LETTERBOX_BEGIN" or "CAMERA_LETTERBOX_END" => "black bars, control bar hidden",
-        "CAMERA_FADE_ADD" or "CAMERA_FADE_SUBTRACT" or "CAMERA_FADE_MULTIPLY" => "full-screen white/black fade",
-        "DISABLE_INPUT" or "ENABLE_INPUT" => "the player's world input is dropped, with a notice on screen",
-        "SPEECH_PLAY" => "audio event played; its name on screen as a placeholder subtitle",
-        "SOUND_PLAY_NAMED" or "PLAY_SOUND_EFFECT" or "PLAY_SOUND_EFFECT_AT" => "audio event played (not positioned)",
-        "MUSIC_SET_TRACK" => "music track started",
-        "MOVIE_PLAY_FULLSCREEN" or "MOVIE_PLAY_RADAR" => "text placeholder with the movie name (no video decoder)",
-        "DISPLAY_TEXT" or "INGAME_POPUP_MESSAGE" or "SHOW_MILITARY_CAPTION" => "caption text at the top",
-        "DISPLAY_CINEMATIC_TEXT" => "text in the lower bar",
-        "DISPLAY_COUNTDOWN_TIMER" or "DISPLAY_COUNTER" or "HIDE_COUNTDOWN_TIMER" or "HIDE_COUNTER" or "ENABLE_COUNTDOWN_TIMER_DISPLAY" or "DISABLE_COUNTDOWN_TIMER_DISPLAY" => "named counter/timer line at the top right",
-        "RADAR_CREATE_EVENT" or "OBJECT_CREATE_RADAR_EVENT" or "TEAM_CREATE_RADAR_EVENT" => "blinking dot on the minimap",
-        "VICTORY" or "DEFEAT" => "outcome banner",
-        _ => NoDisplay,
-    };
+    /// <summary>What the client does with an output type, or why it does not (<see cref="MissionOutputCatalog"/>), for the report and <c>docs/SCRIPT-ENGINE.md</c> §7a.</summary>
+    public static string HowDisplayed(string action) => MissionOutputCatalog.Describe(action).Description;
 
-    private const string NoDisplay = "no display in this build";
-
-    /// <summary>Per output type: emitted by the scripts, handed to a consumer, displayed (the consumer exists in this host).</summary>
+    /// <summary>Per output type: emitted by the scripts, handed to a consumer, displayed (the consumer exists in this host and the type has a display at all).</summary>
     public ImmutableArray<MissionOutputCount> Counts()
     {
         var result = ImmutableArray.CreateBuilder<MissionOutputCount>();
         foreach (var (action, emitted) in _emitted)
         {
+            var info = MissionOutputCatalog.Describe(action);
             long forwarded = 0, displayed = 0;
             if (_handled.TryGetValue(action, out var counts))
             {
                 for (var channel = 0; channel < counts.Length; channel++)
                 {
                     forwarded += counts[channel];
-                    // Audio is only counted when a voice really started; the other channels need a host that asked for them.
+                    // Audio is only counted when a voice really started or a control was applied; the other channels need a host that asked for them.
                     if (channel == (int)Channel.Audio || _consumers[channel]) displayed += counts[channel];
                 }
             }
-            result.Add(new MissionOutputCount(action, emitted, forwarded, displayed, HowDisplayed(action)));
+            // A type without a display ("not displayed: reason") is never shown, however often a model kept its value; one the simulation handles is not the host's.
+            if (info.State != MissionOutputState.Displayed) displayed = 0;
+            result.Add(new MissionOutputCount(action, emitted, forwarded, displayed, info.Description, info.State));
         }
         return result.ToImmutable();
     }
-
     /// <summary>Why outputs of a handled type could not be shown (unknown waypoint, sound that did not start, ...), with counts.</summary>
     public ImmutableSortedDictionary<string, long> Problems => _problems.ToImmutableSortedDictionary(StringComparer.Ordinal);
 
@@ -743,9 +1170,9 @@ public sealed class MissionPresentationDirector
         var counts = Counts();
         var lines = ImmutableArray.CreateBuilder<string>();
         var culture = CultureInfo.InvariantCulture;
-        lines.Add(string.Create(culture, $"mission outputs: {counts.Length} types, emitted {counts.Sum(count => count.Emitted)}, forwarded {counts.Sum(count => count.Forwarded)}, displayed {counts.Sum(count => count.Displayed)}, not displayed {counts.Sum(count => count.NotDisplayed)}"));
+        lines.Add(string.Create(culture, $"mission outputs: {counts.Length} types, emitted {counts.Sum(count => count.Emitted)}, forwarded {counts.Sum(count => count.Forwarded)}, displayed {counts.Sum(count => count.Displayed)}, handled elsewhere {counts.Sum(count => count.HandledElsewhere)}, not displayed {counts.Sum(count => count.NotDisplayed)}"));
         foreach (var count in counts)
-            lines.Add(string.Create(culture, $"mission output {count.Action}: emitted {count.Emitted}, forwarded {count.Forwarded}, displayed {count.Displayed}, not displayed {count.NotDisplayed} ({count.How})"));
+            lines.Add(string.Create(culture, $"mission output {count.Action}: emitted {count.Emitted}, forwarded {count.Forwarded}, displayed {count.Displayed}, handled elsewhere {count.HandledElsewhere}, not displayed {count.NotDisplayed} ({count.How})"));
         lines.Add($"mission output problems: {(_problems.Count == 0 ? "none" : string.Join("; ", _problems.Select(pair => string.Create(culture, $"{pair.Key} x{pair.Value}"))))}");
         lines.Add(string.Create(culture, $"mission presentation: input locked for {InputLockedTicks} ticks, locked at exit {_inputLocked}, letterbox at exit {Letterbox}, camera move pending at exit {_cameraPending}, outcome banner {OutcomeBanner ?? "none"}"));
         return lines.ToImmutable();

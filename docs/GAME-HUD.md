@@ -296,6 +296,27 @@ Schichten wanderte unverändert in die Basisklasse, `LiveMatch` blieb für seine
 - **`MissionController`** (`Hud/MissionController.cs`) setzt ein `MatchController` über die `LiveMission`, hängt `SelectionModel.SelectionChanged` an `MissionUiBridge.OnSelectionChanged`
   (die Auswahl erreicht `NAMED_SELECTED`), liefert `BuildDrawList` mit dem Bildschirmtext des Directors (Caption/Untertitel/Filmplatzhalter, seit Phase 16 auch Letterbox, Blenden, Zähler, Ergebnisbanner; während der Letterbox ohne Befehlsleiste) über dem HUD, sperrt die Welteingabe, solange das Skript sie gesperrt hat (`MatchController.WorldInputEnabled`), und meldet das Missionsende
   einmal (`MissionEnded`); danach ruft der Host `GameShell.MissionFinished(run, controller)`.
+- **Was Skripte an Befehlsleiste und HUD ändern** (Phase 16, zweite Sitzung; `MissionController` setzt `IMissionHudControl`, Wortlaut je Ausgabetyp in `docs/SCRIPT-ENGINE.md` §7a):
+  `COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE`/`COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT` verändern den **Befehlssatz** des Objekttyps, nicht ein einzelnes Objekt: `ControlBarScriptState`
+  (`Presentation/Input/ControlBarScriptState.cs`) hält Überschreibungen je (Satzname, Platz) – ein entfernter Knopf ist eine Überschreibung ohne Knopf (`GameLogic::setControlBarOverride`,
+  `CommandSet::getCommandButton` fragt sie zuerst) –, und `CommandBarModel.Build` (Einzel- und Mehrfachauswahl) sowie die Bauschlangen-Bilder lesen sie über `ButtonOf`. Der Spieler sieht und
+  klickt den Knopf also bei **jedem** Objekt dieses Satzes nicht mehr; ein Knopf, der schon fehlt, bleibt weg, ein unbekannter Knopf oder Objekttyp wird abgewiesen und gemeldet. In `MD_USA01`
+  setzt das Skript in Tick 0 25 solcher Entfernungen (Rekrutierungs-/Aufrüstknöpfe der Fraktionen). `PLAYER_SCIENCE_AVAILABILITY` (nur für die lokale Seite) wirkt auf `PurchaseScience`-Knöpfe
+  („Hidden“ = Knopf verborgen, „Disabled“ = gesperrt, `ButtonReason.NotPurchasable`); sichtbar wird das erst mit einem Generals-Powers-Fenster, das der Client nicht hat. `OPTIONS_SET_DRAWICON_UI_MODE`
+  schaltet `MatchController.IconUiEnabled`: aus = keine Heilsymbole (Auswahlmarken bleiben). `UNIT_AFFECT_OBJECT_PANEL_FLAGS` „Selectable“ = `EntityPicker.SetScriptSelectable`: der Pick und die
+  Auswahl lassen das Objekt weg, eine bestehende Auswahl verliert es (`SelectionModel.Replace/Change`). Zustände gehen beim Speichern/Laden einer Mission nicht mit. Tests:
+  `MissionEffectsTests` (Attrappen; echte `MD_USA01`: Knopf verschwindet aus der Leiste eines gewählten Objekts und kommt zurück, Wissenschaft, Auswahl).
+- **Superwaffen-Liste** (`Hud/SuperweaponTimers.cs`, `MatchController.Superweapons`, gilt für Gefechte und Missionen): oben rechts, bei x = 0,90, y = 0,01 der Bildfläche (`SuperweaponCountdownPosition` der
+  Retail-`InGameUI.ini`), je Macht mit `PublicTimer` und je Objekt eine Zeile „Name: m:ss“ – der Name rechtsbündig bis x, die Zeit linksbündig ab x (`SuperweaponInfo::drawName/drawTime`), in der Hausfarbe
+  des Besitzers, **auch die gegnerischen** (ein feindlicher Atomschlag läuft auf dem eigenen Bildschirm herunter). Regeln nach `InGameUI::draw`: Spieler nach Index, Mächte nach Name, Objekte in
+  Anlegereihenfolge; eine Baustelle zeigt nichts; eine Macht mit gemeinsamem Zeitgeber (`SharedSyncedTimer`) steht je Spieler einmal; fehlt dem Besitzer die geforderte Wissenschaft, fehlt die Zeile;
+  die Zeit ist `(Bereitschaftsbild − Tick) / 30` ganzzahlig (`CommandBarModel.ReadyFrameOf`), eine bereite Macht ist **fett** und wechselt alle 15 Logikbilder (500 ms) zwischen Hausfarbe und Weiß; die Liste
+  hört über der Befehlsleiste (0,82 der Sichthöhe) mit „...“ auf. Der Name ist der Eintrag `GUI:<Machtname>` der Zeichenkettentabelle; fehlt er, steht der Schlüssel selbst da und
+  `SuperweaponTimers.MissingLabels` zählt ihn. Missionsskripte blenden die ganze Liste (`DisplayEnabled`) oder einzelne Objekte aus (`HiddenByScript`, über `IMissionHudControl`). Die Werte (Position,
+  500 ms, Arial 10, fett nur bereit) stehen als Konstanten im Code, weil die Datenschicht `InGameUI.ini` nicht typisiert; `MissionEffectsTests` vergleicht sie mit der Datei. **Nicht übernommen:**
+  die EVA-Ansage „Superwaffe bereit“, die `drawSuperweaponTimers` im Original mit auslöst (Eva meldet das hier über die Simulationsereignisse), der Wechsel der Schrift beim Bereitwerden mit eigenem
+  Textobjekt, die Wiederaufnahme des Zustands aus einem Spielstand. Die benannten Missionszeitgeber (`DISPLAY_COUNTDOWN_TIMER`) stehen weiter an der alten Stelle im Director, nicht bei
+  `NamedTimerCountdownPosition` (X:0,90 Y:0,666) der Retail-Datei.
 - **Stride:** `LiveMatchHost` und alle Weltschichten nehmen ein `LiveGame`; `CnCNew.Client.Stride --mission <Karte> [--human-side <Name>]` startet eine Kampagnenkarte (Rauchtest:
   `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/phase2-import-a`). Seit Phase 12 zeichnet die Stride-Hülle auch die HUD-Zeichenliste
   (`MissionController.BuildDrawList`) und verarbeitet die Shell-Ausgaben (`StartMissionOutput`), §15.

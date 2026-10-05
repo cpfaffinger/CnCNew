@@ -74,6 +74,9 @@ public sealed class SoftwareMixer : IDisposable
 
     public void Stop(VoiceHandle handle, float fadeOutSeconds = 0f) => _commands.Enqueue(new StopCommand(handle, fadeOutSeconds));
     public void SetVoicePosition(VoiceHandle handle, Vector3 position) => _commands.Enqueue(new PositionCommand(handle, position));
+
+    /// <summary>Changes the volume of a voice that is already playing (<c>AudioManager::adjustVolumeOfPlayingAudio</c>, a script's per-event volume); a handle that is gone is ignored.</summary>
+    public void SetVoiceVolume(VoiceHandle handle, float volume) => _commands.Enqueue(new VolumeCommand(handle, Math.Max(0f, volume)));
     public void SetListener(AudioListener listener) => _commands.Enqueue(new ListenerCommand(listener ?? throw new ArgumentNullException(nameof(listener))));
     public void SetBusVolume(AudioBus bus, float volume) => _commands.Enqueue(new BusCommand(bus, Math.Max(0f, volume)));
     public void SetMasterVolume(float volume) => _commands.Enqueue(new MasterCommand(Math.Max(0f, volume)));
@@ -163,6 +166,9 @@ public sealed class SoftwareMixer : IDisposable
             case PositionCommand position:
                 foreach (var voice in _voices.Where(value => value.Handle == position.Handle && value.Position is not null))
                     voice.Position = position.Position;
+                break;
+            case VolumeCommand volume:
+                foreach (var voice in _voices.Concat(_music).Where(value => value.Handle == volume.Handle)) voice.Volume = volume.Volume;
                 break;
             case ListenerCommand listener: _listener = listener.Listener; break;
             case BusCommand bus: _buses = _buses.With(bus.Bus, bus.Volume); break;
@@ -410,7 +416,7 @@ public sealed class SoftwareMixer : IDisposable
         public string? LimitGroup { get; } = limitGroup;
         public Resampler Resampler { get; } = resampler;
         public Vector3? Position { get; set; }
-        public float Volume { get; init; }
+        public float Volume { get; set; }
         public float Pitch { get; init; } = 1f;
         public float MinDistance { get; init; }
         public float MaxDistance { get; init; }
@@ -427,6 +433,7 @@ public sealed class SoftwareMixer : IDisposable
     private sealed record PlayCommand(VoiceHandle Handle, PlayRequest Request) : Command;
     private sealed record StopCommand(VoiceHandle Handle, float FadeOutSeconds) : Command;
     private sealed record PositionCommand(VoiceHandle Handle, Vector3 Position) : Command;
+    private sealed record VolumeCommand(VoiceHandle Handle, float Volume) : Command;
     private sealed record ListenerCommand(AudioListener Listener) : Command;
     private sealed record BusCommand(AudioBus Bus, float Volume) : Command;
     private sealed record MasterCommand(float Volume) : Command;

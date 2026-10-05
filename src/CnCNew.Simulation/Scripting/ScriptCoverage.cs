@@ -12,7 +12,10 @@ public enum ScriptSupport
     /// <summary>The engine keeps the value (saved and hashed) but the simulation has no consumer for it yet (player experience scale, difficulty bonuses): counted separately, never reported as executed or missing.</summary>
     Recorded,
 
-    /// <summary>A presentation/host concern (camera, sound, speech, movie, radar, UI text): the engine records it as a <see cref="ScriptOutput"/> for the client and does not touch the simulation.</summary>
+    /// <summary>
+    /// A presentation/host concern (camera, sound, speech, movie, radar, UI text): the engine records it as a <see cref="ScriptOutput"/> for the client and does not touch the simulation. The one exception is
+    /// <c>FREEZE_TIME</c>/<c>UNFREEZE_TIME</c>, which are also outputs (the host counts them) but set <see cref="ScriptEngine.TimeFrozen"/>, so <c>MissionSession.Step</c> leaves the world alone.
+    /// </summary>
     Forwarded,
 
     /// <summary>No implementation: executing it increments a per-type counter (<see cref="ScriptEngine.MissingActionHits"/>/<see cref="ScriptEngine.MissingConditionHits"/>); a missing condition evaluates to <see langword="false"/>.</summary>

@@ -51,11 +51,13 @@ internal sealed class ClientRuntime : IDisposable
         _settings = _shell?.Settings ?? settings;
         _audio = new ClientAudio(data, _settings.Audio, audio);
         _minimapBatch = new SpriteBatch(game.GraphicsDevice);
+        _filters = new ScreenFilters(game.GraphicsDevice);
         _ui.CustomDraw = DrawCustom;
         _cursor = new SoftwareCursor(game.GraphicsDevice, data);
     }
 
     private readonly SoftwareCursor _cursor;
+    private readonly ScreenFilters _filters;
     private Vector2? _pointer;
     private Vector2? _stagedPointer;
     private (float X, float Y)[]? _stagedWaypoints;
@@ -140,6 +142,7 @@ internal sealed class ClientRuntime : IDisposable
             $"mission: {_frame} frames, world tick {mission.Tick}, session steps {_running.MissionSteps} (script VM updates), outcome {mission.Outcome}, over {mission.IsOver}, missing action hits {engine.MissingActionHits.Values.Sum()}, missing condition hits {engine.MissingConditionHits.Values.Sum()}",
         };
         lines.AddRange(mission.Director.Report());
+        lines.Add($"mission screen filters: {_filters.FramesFiltered} frames drawn through the grey-scale or the motion blur; camera shake offset at exit {mission.Camera.ShakeOffset.Length():F2}, border {mission.Camera.ActiveBoundary}");
         foreach (var entry in mission.Director.Journal.Take(journalLines)) lines.Add($"mission journal: {entry}");
         return lines;
     }
@@ -296,8 +299,8 @@ internal sealed class ClientRuntime : IDisposable
         };
         running.Attach();
         _audio.Game.Attach(game, running.Hud);
-        // The mission scripts' speech, sounds and music go to the same director as everything else.
-        if (game is LiveMission scripted) scripted.Director.Audio = _audio.Game.PlayScripted;
+        // The mission scripts' speech, sounds, music and volumes go to the same director as everything else.
+        if (game is LiveMission scripted) scripted.Director.AudioControl = _audio.Game;
         return running;
     }
 
@@ -339,6 +342,8 @@ internal sealed class ClientRuntime : IDisposable
         var commandList = context.CommandList;
         commandList.SetRenderTargetAndViewport(null, back);
         if (_running is null) commandList.Clear(back, global::Stride.Core.Mathematics.Color.Black);
+        // The mission scripts' screen filters (grey-scale, motion blur) go over the finished world and under the HUD. Asking for them is what makes the director count them as displayed.
+        if (_running?.Host.Match is LiveMission filtered && filtered.Director.PostEffects is { Any: true } effects) _filters.Apply(context, back, effects);
         var list = _running is { } running ? running.BuildDrawList(back.Width, back.Height) : _shell?.BuildDrawList();
         _ui.Begin(context, back.Width, back.Height);
         if (list is not null)
@@ -354,6 +359,7 @@ internal sealed class ClientRuntime : IDisposable
         _running = null;
         _audio.Dispose();
         _cursor.Dispose();
+        _filters.Dispose();
         _minimapBatch.Dispose();
         _ui.Dispose();
     }

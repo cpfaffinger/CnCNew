@@ -38,32 +38,33 @@ internal static class MissionPresentationTests
 
     // ---------------------------------------------------------------------------------------------------- script builder (same idiom as CampaignTests)
 
-    private static MapScriptParameter Named(MapScriptParameterType type, string text) => new(type, 0, 0m, text, 0m, 0m, 0m);
-    private static MapScriptParameter Int(int value) => new(MapScriptParameterType.Int, value, 0m, string.Empty, 0m, 0m, 0m);
-    private static MapScriptParameter Bool(bool value) => new(MapScriptParameterType.Boolean, value ? 1 : 0, 0m, string.Empty, 0m, 0m, 0m);
-    private static MapScriptParameter Real(decimal value) => new(MapScriptParameterType.Real, 0, value, string.Empty, 0m, 0m, 0m);
-    private static MapScriptParameter Coord(decimal x, decimal y, decimal z) => new(MapScriptParameterType.Coord3D, 0, 0m, string.Empty, x, y, z);
+    internal static MapScriptParameter Named(MapScriptParameterType type, string text) => new(type, 0, 0m, text, 0m, 0m, 0m);
+    internal static MapScriptParameter Int(int value) => new(MapScriptParameterType.Int, value, 0m, string.Empty, 0m, 0m, 0m);
+    internal static MapScriptParameter Bool(bool value) => new(MapScriptParameterType.Boolean, value ? 1 : 0, 0m, string.Empty, 0m, 0m, 0m);
+    internal static MapScriptParameter Real(decimal value) => new(MapScriptParameterType.Real, 0, value, string.Empty, 0m, 0m, 0m);
+    internal static MapScriptParameter Coord(decimal x, decimal y, decimal z) => new(MapScriptParameterType.Coord3D, 0, 0m, string.Empty, x, y, z);
 
-    private static MapCondition If(string name, params MapScriptParameter[] parameters) => new(MapScriptCatalog.ConditionTypeNames.IndexOf(name), name, [..parameters]);
-    private static MapScriptAction Do(string name, params MapScriptParameter[] parameters) => new(MapScriptCatalog.ScriptActionTypeNames.IndexOf(name), name, [..parameters]);
+    internal static MapCondition If(string name, params MapScriptParameter[] parameters) => new(MapScriptCatalog.ConditionTypeNames.IndexOf(name), name, [..parameters]);
+    internal static MapScriptAction Do(string name, params MapScriptParameter[] parameters) => new(MapScriptCatalog.ScriptActionTypeNames.IndexOf(name), name, [..parameters]);
 
-    private static MapScript Script(string name, MapCondition condition, MapScriptAction[] actions, bool oneShot = true)
+    internal static MapScript Script(string name, MapCondition condition, MapScriptAction[] actions, bool oneShot = true)
         => new(name, string.Empty, string.Empty, string.Empty, true, oneShot, true, true, true, false, 0, [new MapOrCondition([condition])], [..actions], []);
 
-    private static MapObject Waypoint(string name, int id, decimal x, decimal y) => new("*Waypoints/Waypoint", x, y, 0m, 0m, 0, new MapProperties([
+    internal static MapObject Waypoint(string name, int id, decimal x, decimal y) => new("*Waypoints/Waypoint", x, y, 0m, 0m, 0, new MapProperties([
         new MapProperty("waypointID", MapPropertyType.Int, id, 0m, string.Empty),
         new MapProperty("waypointName", MapPropertyType.Ascii, 0, 0m, name),
     ]));
 
-    private static MapObject Placed(string template, decimal x, decimal y, string team, string name) => new(template, x, y, 0m, 0m, 0, new MapProperties([
+    internal static MapObject Placed(string template, decimal x, decimal y, string team, string name) => new(template, x, y, 0m, 0m, 0, new MapProperties([
         new MapProperty("originalOwner", MapPropertyType.Ascii, 0, 0m, team),
         new MapProperty("objectName", MapPropertyType.Ascii, 0, 0m, name),
     ]));
 
     /// <summary>A 30x30-cell map with a human side, one team, the given waypoints/objects and <paramref name="scripts"/> in the human's list.</summary>
-    private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) Mission(MapScript[] scripts, MapObject[]? objects = null)
+    internal static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) Mission(MapScript[] scripts, MapObject[]? objects = null, int boundaries = 1, int cells = 30)
     {
-        const int cells = 30, border = 1, width = cells + 2 * border;
+        const int border = 1;
+        var width = cells + 2 * border;
         var stride = (width + 7) / 8;
         var blend = new MapBlendTiles(8, [], [], [], [], [..new byte[stride * width]], stride, 0, 0, [], [], [], []);
         MapProperty Text(string key, string value) => new(key, MapPropertyType.Ascii, 0, 0m, value);
@@ -71,13 +72,13 @@ internal static class MissionPresentationTests
             new MapSide(new MapProperties([Text("playerName", string.Empty)]), []),
             new MapSide(new MapProperties([Text("playerName", "Hero"), new MapProperty("playerIsHuman", MapPropertyType.Bool, 1, 0m, string.Empty)]), []));
         var teams = ImmutableArray.Create(new MapProperties([Text("teamName", "teamHero"), Text("teamOwner", "Hero"), new MapProperty("teamIsSingleton", MapPropertyType.Bool, 1, 0m, string.Empty)]));
-        var map = new MapData("mission-presentation", new MapHeightField(width, width, border, [new MapBoundary(cells, cells)], [..new byte[width * width]]), blend, MapProperties.Empty,
+        var map = new MapData("mission-presentation", new MapHeightField(width, width, border, [..Enumerable.Repeat(new MapBoundary(cells, cells), boundaries)], [..new byte[width * width]]), blend, MapProperties.Empty,
             sides, teams, [..objects ?? []], [], [], [new MapScriptList([], []), new MapScriptList([..scripts], [])], []);
         var fixture = new SyntheticFixture();
         return (map, fixture, TerrainMap.Build(map, "mission-presentation"));
     }
 
-    private static MissionSession Start(MapScript[] scripts, MapObject[]? objects, MissionOptions? options = null)
+    internal static MissionSession Start(MapScript[] scripts, MapObject[]? objects, MissionOptions? options = null)
     {
         var (map, fixture, terrain) = Mission(scripts, objects);
         return MissionSession.Start(options ?? MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
@@ -228,7 +229,7 @@ internal static class MissionPresentationTests
         TestHarness.Assert(director.Report().Any(line => line.StartsWith("mission outputs:", StringComparison.Ordinal)), "the report has a totals line");
     }
 
-    private static RtsCameraSettings MinimalCameraSettings() => new(
+    internal static RtsCameraSettings MinimalCameraSettings() => new(
         PitchDegrees: -34f, YawDegrees: 0f, CameraHeight: 200f, MaxHeightAboveGround: 300f, MinHeightAboveGround: 100f,
         AdjustSpeed: 0.1f, ScrollAmountCutoff: 0.01f, EnforceMaxCameraHeight: true, HorizontalScrollSpeedFactor: 1f,
         VerticalScrollSpeedFactor: 1f, KeyboardScrollFactor: 1f, KeyboardRotateSpeed: 1f, MaxShakeIntensity: 1f, MaxShakeRange: 1f);

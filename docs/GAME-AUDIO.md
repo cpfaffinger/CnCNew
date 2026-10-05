@@ -125,9 +125,8 @@ im nächsten Block; Offline-Rendering ohne Gerät wirft nicht und schreibt bei f
 
 - **Skript-Ton in Missionen** ist seit Phase 16, Punkt 5 angeschlossen (`MissionPresentationDirector.Audio` ← `GameAudio.PlayScripted`): `SPEECH_PLAY`, `SOUND_PLAY_NAMED`,
   `PLAY_SOUND_EFFECT` und `PLAY_SOUND_EFFECT_AT` spielen das benannte Ereignis ohne Position (`AudioDirector.PlayUi`, Quelle `Ui` im Bericht), `MUSIC_SET_TRACK` startet das Stück
-  (`AudioDirector.SetMusicTrack`), danach läuft die Playlist der Seite weiter. **Weiter offen:** die Lautstärke- und Typschalter der Skripte (`SOUND_SET_VOLUME`, `MUSIC_SET_VOLUME`,
-  `AUDIO_OVERRIDE_VOLUME_TYPE`, `SOUND_DISABLE_TYPE`, `EVA_SET_ENABLED_DISABLED` …), die Position von `PLAY_SOUND_EFFECT_AT`, Klanglängen für `HAS_FINISHED_AUDIO` (Platzhalter 3 s); Zähler und
-  Tabelle in `docs/SCRIPT-ENGINE.md` §7a.
+  (`AudioDirector.SetMusicTrack`), danach läuft die Playlist der Seite weiter. Die Lautstärke- und Typschalter der Skripte sind seit der zweiten Sitzung angeschlossen (Abschnitt „Skriptsteuerung
+  des Tons“ unten). **Weiter offen:** die Position von `PLAY_SOUND_EFFECT_AT`, Klanglängen für `HAS_FINISHED_AUDIO` (Platzhalter 3 s); Zähler und Tabelle in `docs/SCRIPT-ENGINE.md` §7a.
 - **Klänge der Spezialfähigkeit selbst** (`UnpackSound`, `PackSound`, `TriggerSound`, `PrepSoundLoop` von `SpecialAbilityUpdate`; Retail: Black Lotus, Hacker, Colonel Burton –
   die Infanterie-Einnahme hat keine) und die Abschlussstimmen (`VoiceCaptureBuildingComplete` …): die Simulation meldet die Zeitpunkte nicht als Ereignis.
 - `VoiceGarrison`/`VoiceGuard` bei Befehlen (die Rückmeldung unterscheidet Betreten und Besetzen nicht), Gebäudeauswahl (Gebäude ohne `VoiceSelect` erscheinen als
@@ -139,6 +138,35 @@ im nächsten Block; Offline-Rendering ohne Gerät wirft nicht und schreibt bei f
 - Referenzstelle des Klick-Klangs: `MiscAudio.h` beschreibt `m_guiClickSound` als „snd to play when user presses button in GUI“; die Aufrufstelle im Original wurde nicht
   gesucht, die Regel „Befehlsleisten-/Menüknopf → `GUIClickSound`“ ist eine eigene.
 
+## Skriptsteuerung des Tons (Phase 16, Punkt 5, zweite Sitzung)
+
+Missionsskripte stellen den Ton laut, leise, stumm und aus (die Kinosequenzen der Kampagne tun das fast durchgehend: in den 24 Kampagnenkarten sind `SOUND_SET_VOLUME` 281-mal,
+`SPEECH_SET_VOLUME` 188-mal, `SOUND_DISABLE_TYPE` 300-mal, `EVA_SET_ENABLED_DISABLED` 68-mal gesetzt). Der Zustand liegt in `AudioDirector.Script.cs`, das Skript erreicht ihn über
+`MissionPresentationDirector.AudioControl` (`IMissionAudioControl`, von `GameAudio` umgesetzt); nichts davon berührt die Simulation. Referenz: `ScriptActions.cpp`
+(`doAudioSetVolume`, `doSoundOverrideVolume`, `doSoundEnableType`, `doSoundRemoveAllDisabled`, `doSoundRemoveType`, `doEnableObjectSound`, `doEvaEnabledDisabled`, `doAmbientSoundsPause`)
+und `GameAudio.cpp` (`AudioManager::setVolume`, `setAudioEventVolumeOverride`, `setAudioEventEnabled`, `addAudioEvent`).
+
+| Ausgabe | Wirkung im Client |
+|---|---|
+| `MUSIC_SET_VOLUME`, `SOUND_SET_VOLUME`, `SPEECH_SET_VOLUME` (Prozent) | Faktor 0..1 (begrenzt), der den Regler des Spielers je Bus **multipliziert** (`m_musicVolume = m_scriptMusicVolume * m_systemMusicVolume`). Musik → Bus `Music`; `SOUND_SET_VOLUME` setzt wie `AudioAffect_Sound \| AudioAffect_Sound3D` den 2D-Ton (`Ui`) und den 3D-Ton (`Sfx`, `Ambient`); Sprache → `Voice` (EVA, Einheitenstimmen, Missionssprache) |
+| `AUDIO_OVERRIDE_VOLUME_TYPE(Ereignis, Prozent)` | Die Lautstärke des Katalogereignisses wird **ersetzt** (200 = doppelt so laut wie im Katalog; der zufällige Lautstärkeversatz der Instanz kommt wie im Original dazu): für alle ab jetzt gestarteten Stimmen und – über `SoftwareMixer.SetVoiceVolume` – für die gerade spielenden (`adjustVolumeOfPlayingAudio`) |
+| `AUDIO_RESTORE_VOLUME_TYPE(Ereignis)`, `AUDIO_RESTORE_VOLUME_ALL_TYPE` | Override entfernen (alle). Laufende Stimmen bleiben, wie sie sind (das Original rührt sie hier ebenfalls nicht an) |
+| `SOUND_DISABLE_TYPE`, `SOUND_ENABLE_TYPE`, `SOUND_ENABLE_ALL` | Stummschalten ist ein Override von 0: `Start` wirft die Anfrage als `dropped:script-muted` weg (`AudioManager::addAudioEvent` schneidet Ereignisse unter der Mindestlautstärke als stumm ab); Einschalten entfernt den Override |
+| `SOUND_REMOVE_ALL_DISABLED`, `SOUND_REMOVE_TYPE` | Die laufenden Stimmen aller stummgeschalteten Ereignisse bzw. des einen Ereignisses werden gestoppt (verfolgt über `Tracked.Event` und die Ambient-Einträge) |
+| `ENABLE_OBJECT_SOUND`, `DISABLE_OBJECT_SOUND` | Der Ambient-Loop eines benannten Objekts bleibt aus (`Drawable::enableAmbientSoundFromScript`); ein laufender Loop endet mit dem nächsten Ambient-Durchlauf |
+| `SOUND_AMBIENT_PAUSE`, `SOUND_AMBIENT_RESUME` | Kein Ambient-Loop, solange pausiert |
+| `EVA_SET_ENABLED_DISABLED` | `EvaAnnouncer.Enabled` (`Eva::setEvaEnabled`): beim Umschalten werden die vorgemerkten Ereignisse gelöscht; solange aus, läuft `Update` gar nicht (keine Prüfungen, kein Verfall) |
+
+Ein Ereignisname, den der Audiokatalog nicht kennt, wird nicht gespeichert, sondern unter „audio unknown event names“ gezählt. Ende des Spiels (`GameAudio.Detach`, auch beim Betreten der Shell)
+ruft `ResetScriptState` (`AudioManager::reset`): Skriptlautstärken zurück auf 1, keine Overrides, Eva an. Musik ist von `SOUND_DISABLE_TYPE` bewusst ausgenommen (Titel laufen über die
+Playlist, nicht über `Start`). Der Audiobericht hat dafür eine Zeile `audio script control: …` (Lautstärken, Overrides, stummgeschaltete Anfragen, entfernte Stimmen).
+
+**Belegt** durch `AudioDirectorTests.ScriptControlsTheSound` (am **gerenderten** Ausgang gemessen: 50 % Skriptlautstärke halbiert den Ausschlag des `Ui`-/`Voice`-Busses, 0 % schweigt, ein
+Override von 0,5 halbiert das Ereignis, eine laufende Schleife wird nach dem Override leiser, `SOUND_REMOVE_TYPE` entfernt die Stimme aus dem Mixer, Eva schweigt und verliert die
+Vormerkung, Zustand wird zurückgesetzt), `Audio.Tests` (`SetVoiceVolume`) und `MissionEffectsTests` (Skriptausgaben → `IMissionAudioControl`). Im Client: `MD_USA01` meldet nach 900 Bildern
+„11 event overrides“ und `dropped:script-muted=1`. **Nicht belegt:** wie die Kinotöne dadurch klingen (kein Gehör), und ob die stummgeschalteten Ereignisnamen alle Stimmen treffen, die das
+Original trifft (die Namensgleichheit folgt dem Katalog; Ereignisse mit Zufallsvarianten tragen einen Namen).
+
 ## Bus-Zuordnung
 
 Der Mixer kennt fünf Busse (`AudioBus`: `Music`, `Sfx`, `Voice`, `Ambient`, `Ui`); die vier Regler des Optionsbildschirms
@@ -146,11 +174,11 @@ Der Mixer kennt fünf Busse (`AudioBus`: `Music`, `Sfx`, `Voice`, `Ambient`, `Ui
 
 | Bus | Formel | Begründung |
 |---|---|---|
-| `Music` | `Music × (pausiert ? 0.4 : 1)` | Duck beim Pausieren, kein Stopp (Menü bleibt hörbar) |
-| `Sfx` | `Effects × Zoom` | 3D-Effekte folgen dem Kamerazoom wie `AudioManager::update`/`set3DVolumeAdjustment` |
-| `Ambient` | `Ambient × Zoom` | dieselbe Zoomkurve, eigener Regler |
-| `Voice` | `Voice` | Sprache/EVA/Einheiten-Ansagen, kein Zoom (Referenz: `DefaultSpeechVolume` ist nicht 3D) |
-| `Ui` | `Effects × Effective2DSoundVolume/DefaultSoundVolume` | erhält das Retail-Verhältnis aus `Relative2DVolume` zwischen 2D- und 3D-Effekten, ohne den Zoom |
+| `Music` | `Music × (pausiert ? 0.4 : 1) × Skript(Musik)` | Duck beim Pausieren, kein Stopp (Menü bleibt hörbar) |
+| `Sfx` | `Effects × Zoom × Skript(3D-Ton)` | 3D-Effekte folgen dem Kamerazoom wie `AudioManager::update`/`set3DVolumeAdjustment` |
+| `Ambient` | `Ambient × Zoom × Skript(3D-Ton)` | dieselbe Zoomkurve, eigener Regler |
+| `Voice` | `Voice × Skript(Sprache)` | Sprache/EVA/Einheiten-Ansagen, kein Zoom (Referenz: `DefaultSpeechVolume` ist nicht 3D) |
+| `Ui` | `Effects × Effective2DSoundVolume/DefaultSoundVolume × Skript(2D-Ton)` | erhält das Retail-Verhältnis aus `Relative2DVolume` zwischen 2D- und 3D-Effekten, ohne den Zoom |
 
 `Master` geht unverändert an `SoftwareMixer.SetMasterVolume`. Änderungen werden nur gesendet, wenn sie um mehr als
 0,002 vom zuletzt gesendeten Wert abweichen (Rauschunterdrückung für die Befehlswarteschlange).

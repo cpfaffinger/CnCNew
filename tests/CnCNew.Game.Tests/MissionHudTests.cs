@@ -124,6 +124,7 @@ internal static class MissionHudTests
         {
             var run = MissionRun.Load(MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyTicks });
             var live = LiveMission.Create(data, run, viewport);
+            live.Director.AudioControl = new FakeAudio(); // the volumes, mutes and Eva switch of the opening need a sound to act on
             var controller = new MissionController(live, GameSettings.Default);
             var start = live.Camera.Pivot;
             long time = 10_000;
@@ -168,11 +169,14 @@ internal static class MissionHudTests
             controller.Update(1.0 / 30);
             TestHarness.Assert(controller.Hud.Input.Selection.Contains(dozer.Id), "after the cinematic a click selects the dozer");
 
+            _ = director.PostEffects; // a renderer that draws the screen filters asks for them every frame
             var counts = director.Counts().ToDictionary(count => count.Action);
             foreach (var action in (ReadOnlySpan<string>)["DISABLE_INPUT", "ENABLE_INPUT", "CAMERA_LETTERBOX_BEGIN", "CAMERA_LETTERBOX_END", "SETUP_CAMERA", "MOVE_CAMERA_TO", "RESET_CAMERA"])
                 TestHarness.Assert(counts.TryGetValue(action, out var count) && count.Emitted > 0 && count.Displayed == count.Emitted, $"{action} is emitted and displayed ({(counts.TryGetValue(action, out var value) ? $"{value.Emitted}/{value.Displayed}" : "never emitted")})");
             TestHarness.Assert(counts["SPEECH_PLAY"].Emitted > 0 && counts["SPEECH_PLAY"].Displayed == counts["SPEECH_PLAY"].Emitted, "speech without audio is shown as its placeholder subtitle");
-            TestHarness.Assert(counts.Values.Any(count => count.NotDisplayed > 0 && count.How == CnCNew.Game.Shell.MissionPresentationDirector.HowDisplayed("SET_FPS_LIMIT")), "outputs without a display are counted as not displayed, not dropped");
+            // Every output type of this map has a consumer since the second Phase 16 session (volumes, mutes, Eva, motion blur); what nothing shows is still counted, not dropped (MissionEffectsTests, MissionPresentationTests).
+            TestHarness.Assert(counts.Values.All(count => count.Displayed + count.HandledElsewhere + count.NotDisplayed == count.Emitted && count.NotDisplayed == 0), "every output of the opening is accounted for as displayed: " + string.Join(", ", counts.Values.Where(count => count.NotDisplayed > 0).Select(count => count.Action)));
+            TestHarness.Assert(counts["CAMERA_MOTION_BLUR_JUMP"].Forwarded == 1 && counts["MUSIC_SET_VOLUME"].Emitted > 0, "the motion blur and the music volume of the opening reach their consumers");
         });
         harness.Run("The mission ends through the HUD controller exactly once", () =>
         {

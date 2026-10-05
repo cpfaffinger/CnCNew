@@ -82,6 +82,7 @@ internal static class CaptureFlashTests
         t.Run("every flash tints the building in the capturer's colour, decays to none and restarts; nothing else is tinted", () => Capture(true));
         t.Run("without selection flash settings no tint is projected", () => Capture(false));
         t.Run("a flash during the decay starts at the peak again; a dead capturer starts nothing", Restart);
+        t.Run("a script's NAMED_FLASH plays a colour flash every 15th logic frame, seconds * 2 times, unsaturated", ScriptedFlash);
         return t.Failures;
     }
 
@@ -158,6 +159,32 @@ internal static class CaptureFlashTests
         Assert(flashTicks[1] - flashTicks[0] > SelectionFlashTracker.LastVisibleAge && tints[flashTicks[1] - 1] == Vector3.Zero, "between the first two flashes the tint is gone");
         Assert(tints.Where(pair => pair.Key > flashTicks[^1] + SelectionFlashTracker.LastVisibleAge).All(pair => pair.Value == Vector3.Zero), "no tint after the last flash has decayed");
         Assert(world.FindEntity(station)!.Owner == new PlayerId(1), "the building changed hands");
+    }
+
+    /// <summary><c>ScriptActions::doNamedFlash</c> + <c>Drawable::update</c>: the flash count is <c>seconds * 30 / 15</c>, a flash starts on every logic frame divisible by 15 while any are left, with the colour as it is.</summary>
+    private static void ScriptedFlash()
+    {
+        var tracker = new SelectionFlashTracker();
+        var white = Vector3.One;
+        tracker.StartScripted(7, white, 2);
+        Assert(tracker.ScriptedPending == 1 && tracker.TintAt(7, 0) == Vector3.Zero, "nothing happens until the clock reaches a flash frame");
+        var starts = new List<long>();
+        for (long tick = 1; tick <= 100; tick++)
+        {
+            var before = tracker.TintAt(7, tick - 1);
+            tracker.Advance(tick);
+            var tint = tracker.TintAt(7, tick);
+            if (tint == white && before != white) starts.Add(tick);
+            if (tick == 46) Assert(tracker.ScriptedPending == 1, "one flash of two seconds is still to come");
+            if (tick == 61) Assert(tracker.ScriptedPending == 0, "all four flashes of two seconds are used up");
+        }
+        Assert(starts.SequenceEqual([15L, 30L, 45L, 60L]), $"two seconds are four flashes on frames 15, 30, 45 and 60 ({string.Join(", ", starts)})");
+        Assert(tracker.TintAt(7, 60) == white && tracker.TintAt(7, 61) == white && tracker.TintAt(7, 62) == white * 0.75f && tracker.TintAt(7, 64) == white * 0.25f && tracker.TintAt(7, 65) == Vector3.Zero, "each flash holds the colour two ticks and decays in quarters");
+        tracker.StartScripted(8, Vector3.One, 0);
+        Assert(tracker.ScriptedPending == 0, "no seconds, no flash");
+        tracker.StartScripted(9, Vector3.One, 5);
+        tracker.Prune(70, id => id != 9);
+        Assert(tracker.ScriptedPending == 0, "a flash of an object that is gone is forgotten");
     }
 
     private static void Restart()

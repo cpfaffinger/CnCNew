@@ -60,6 +60,7 @@ public sealed class SelectionModel
     public void Replace(IEnumerable<EntityId> ids)
     {
         var next = new SortedSet<uint>(ids.Select(id => id.Value));
+        if (Picker.ScriptUnselectableCount > 0) next.RemoveWhere(Picker.IsScriptUnselectable);
         if (next.SetEquals(_selected)) return;
         _selected.Clear();
         _selected.UnionWith(next);
@@ -70,6 +71,7 @@ public sealed class SelectionModel
     {
         var before = new SortedSet<uint>(_selected);
         edit(_selected);
+        if (Picker.ScriptUnselectableCount > 0) _selected.RemoveWhere(Picker.IsScriptUnselectable);
         if (!before.SetEquals(_selected)) SelectionChanged?.Invoke(Selected);
     }
 
