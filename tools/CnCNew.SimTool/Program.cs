@@ -45,6 +45,9 @@ const string Usage = """
                                                            AI skirmish; samples every 15 ticks: units standing inside a structure footprint, units with a move order that do not move (stuck), longest stalls
       stress [--ticks N] [--population N] [--out replay.bin]
                                                            record + two fresh runs + snapshot continuation, leak and budget checks
+      perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--replay] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer]
+      perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer]
+                                                           time per tick and tick phase, module updates, allocations, replay catch-up speed, snapshot cost (docs/PERFORMANCE.md)
     """;
 
 if (args.Length == 0)
@@ -68,6 +71,8 @@ try
         "skirmish-sweep" when args.Length >= 2 => SkirmishSweep(args[1], args),
         "unit-audit" when args.Length >= 2 => UnitAudit(args[1], args),
         "mission-run" when args.Length >= 2 => MissionRun(args[1], args),
+        "perf" when args.Length >= 2 => CnCNew.SimTool.PerfCommand.Skirmish(args, CompileShipped),
+        "perf-mission" when args.Length >= 2 => CnCNew.SimTool.PerfCommand.Mission(args, CompileShipped),
         _ => Fail(Usage),
     };
 }
