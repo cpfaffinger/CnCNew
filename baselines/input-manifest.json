@@ -1,0 +1,1278 @@
+{
+  "catalogs": {
+    "commands": {
+      "items": 1,
+      "sha256": "FF85601A2A97B75F515A062F40F4F4F124DCC28E59DD2D302E77761155C7F48C",
+      "values": 6336
+    },
+    "crates": {
+      "items": 9,
+      "sha256": "5AA9729870A9DEA523282EEF117191EBC650E6E29BA204D0691670081E5719DE",
+      "values": 166
+    },
+    "creationLists": {
+      "items": 294,
+      "sha256": "F3B4248B3486C3011A0C9C18E8208AAB8B87E4BF92269084C3367E102EE345C3",
+      "values": 28528
+    },
+    "factions": {
+      "items": 15,
+      "sha256": "8F3945DFAFD6126282E736849B86303251B8577AEEBF5591A7F2C2C0617294C5",
+      "values": 242
+    },
+    "sciences": {
+      "items": 96,
+      "sha256": "EA5F674B0EFFFC750EFF564E08FF8FCAD129BA1F46F32869F824AC414DD6171F",
+      "values": 1031
+    },
+    "specialPowers": {
+      "items": 80,
+      "sha256": "EA87EDF870C13BD5857F34206C736655907B569CBAECE50AC39C1AE1A0427037",
+      "values": 965
+    },
+    "templates": {
+      "items": 2115,
+      "sha256": "C3399DFE5D23BD9BE5462E2EF4CCB232A5EE11967B66A7CBB9F1326D69FAF40A",
+      "values": 501747
+    },
+    "upgrades": {
+      "items": 85,
+      "sha256": "AFA2F39B2A0CDD60022103E60D6BCDF3BF298D7CF0FDB9DE1066C496C2259E68",
+      "values": 854
+    },
+    "weapons": {
+      "items": 363,
+      "sha256": "AAF4D18D2668C4EF99DFD9FC5F6BA6768558B8BFEB9960409873485A7A7392E5",
+      "values": 41819
+    },
+    "whole": {
+      "items": 2115,
+      "sha256": "11949C985D63EAD0A0BDFB6E81B425E4E78E81437F9C815ADFADE547E89CDCC8",
+      "values": 588087
+    }
+  },
+  "definitions": {
+    "bytes": 144626133,
+    "definitions": 12550,
+    "sha256": "68879F19FA8DA1381D4F0513DB034D879323BFEFB990797F112E694B728E63BF"
+  },
+  "files": {
+    "Data/INI/Campaign.ini": {
+      "bytes": 16986,
+      "contentSha256": "0C743FA698DF74BD9BCA7405BCD17D1641BD4ED2768BAEAFC1925FB0E5D5F4D7"
+    },
+    "Data/INI/ChallengeMode.ini": {
+      "bytes": 13263,
+      "contentSha256": "144ED044E210824F6AE4A5F68B775B3D2F4F9B66677290260B5F832939C97192"
+    }
+  },
+  "kind": "input-manifest",
+  "maps": {
+    "Maps/AllBuildingsAllSidesUnitTest_Save/AllBuildingsAllSidesUnitTest_Save.map": {
+      "bytes": 16701,
+      "cellsX": 331,
+      "cellsY": 333,
+      "contentSha256": "F4DFA19A8A60FEBAEDDFE097C662B6074C5E5C9A3FCD74CC3B932DE8CF8C25B9",
+      "startPositions": 0,
+      "terrainFingerprint": "72B070F06FE1AD7D069CA027C29510C0F5F319FB7D8652FA8C9F919D3DCF3F43"
+    },
+    "Maps/Alpine Assault/Alpine Assault.map": {
+      "bytes": 275491,
+      "cellsX": 239,
+      "cellsY": 259,
+      "contentSha256": "CF3624B11F7C68C65837605B9799E96B48D8BAA75817E2E7842DF951632584AD",
+      "startPositions": 2,
+      "terrainFingerprint": "2F2793ED2FFE1E406D709C0CE63EC4C6F0AC6D5F50E72AC4F0EF89310E87C095"
+    },
+    "Maps/BUG_SavedGameandEnabledFolders/BUG_SavedGameandEnabledFolders.map": {
+      "bytes": 2403,
+      "cellsX": 100,
+      "cellsY": 100,
+      "contentSha256": "401DE587DCEECCAD13721E58DFA33B4116346DDD9B3378CF1B3E724B65B6F8DD",
+      "startPositions": 0,
+      "terrainFingerprint": "A3138D129A9D1E6677F7E308A89E7D2DEF076B7AE27B4C88BBE16D2B77E22AF2"
+    },
+    "Maps/BarrenBadlands/BarrenBadlands.map": {
+      "bytes": 197488,
+      "cellsX": 250,
+      "cellsY": 250,
+      "contentSha256": "8865743F8B70A89077706B257D1020B905F775D36B1A28FC281743CC5B8EBAC3",
+      "startPositions": 2,
+      "terrainFingerprint": "EA592899976182F0C925064C2EE193A2DFC1D48B128487DCF02843FDC74F1FE9"
+    },
+    "Maps/Bear Town Beatdown/Bear Town Beatdown.map": {
+      "bytes": 273513,
+      "cellsX": 350,
+      "cellsY": 300,
+      "contentSha256": "940CC0000ACFA562A1813C6D64F3014BE1DA437BA0ABA3BCA30EF45C9BBFCC09",
+      "startPositions": 4,
+      "terrainFingerprint": "AC92C1676A7A02E28E9501CA75E8B937164C52EEEBBBBC02FC59529C68C02DC6"
+    },
+    "Maps/Bitter Winter/Bitter Winter.map": {
+      "bytes": 225694,
+      "cellsX": 240,
+      "cellsY": 320,
+      "contentSha256": "7B6A0452A707AD109619BE1323C2273603C9C1652374254D6B0A805E3824453D",
+      "startPositions": 2,
+      "terrainFingerprint": "4C42D6D18A4977B4219D8084995279C368A6ECF9224CF99E57D3AA3C5F497FEE"
+    },
+    "Maps/Bombardment Beach/Bombardment Beach.map": {
+      "bytes": 204193,
+      "cellsX": 275,
+      "cellsY": 275,
+      "contentSha256": "B3D725D2DB8D305DDDCF6AD3C59E9BE205AA0CF5E88EB223DEB421410550CFD9",
+      "startPositions": 2,
+      "terrainFingerprint": "26CEC4AE549567033683A1182B186B7655F780BEE8A5337F4E142827D8F2A768"
+    },
+    "Maps/Cairo Commandos/Cairo Commandos.map": {
+      "bytes": 258781,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "207A50F54D31E55E010BC7CE565A844F95C9B4EF1C8C536CE66DE6200A2B07A5",
+      "startPositions": 3,
+      "terrainFingerprint": "78FF46D176990AA236A6D8C911154D39F819E286EF13EB7695139216A01D6F5B"
+    },
+    "Maps/Dark Mountain/Dark Mountain.map": {
+      "bytes": 154660,
+      "cellsX": 376,
+      "cellsY": 370,
+      "contentSha256": "8446FEA4875A5C41F8E4B1E6AE449C1B00EA057D02CFF344CC980C5D34E82291",
+      "startPositions": 4,
+      "terrainFingerprint": "81A224CC138C8782EA9389749896D69AFA3E01ECBFF1F769F5C601485F4B9EE3"
+    },
+    "Maps/Dark Night/Dark Night.map": {
+      "bytes": 731437,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "1D1354F13C82DD06F47C411A518EA5DCCCA3F43167394BF723C5619EB771BC25",
+      "startPositions": 4,
+      "terrainFingerprint": "EF256FD14E448B525B88682EE3888ACB46C48EB2C29545CEC6EE3EEBC98DACD6"
+    },
+    "Maps/Death Valley/Death Valley.map": {
+      "bytes": 342435,
+      "cellsX": 400,
+      "cellsY": 550,
+      "contentSha256": "605E1D60AEE289DB503AE095E5D1C8B9E5167F54688CF2199482297707370AD1",
+      "startPositions": 8,
+      "terrainFingerprint": "6725A70DE030E0FA30C2B1FA0411763354A7B6E1F2849AEE257AF1CA0CFAEF90"
+    },
+    "Maps/Defcon6/Defcon6.map": {
+      "bytes": 228789,
+      "cellsX": 375,
+      "cellsY": 325,
+      "contentSha256": "7C13207E87CA248DC4815F1351906880C772E6FD93290CA71E0087157F051526",
+      "startPositions": 6,
+      "terrainFingerprint": "DAA7AA5939C36809EBC82B79E54D99A625064BE93D7F10134DF34F043033D23D"
+    },
+    "Maps/Desert Fury/Desert Fury.map": {
+      "bytes": 203883,
+      "cellsX": 251,
+      "cellsY": 251,
+      "contentSha256": "624814AE4C7DAE445B6A664D26F366FFC6EF68414B4A77F794B75279E49599B9",
+      "startPositions": 2,
+      "terrainFingerprint": "CB5315A02404C03324D4F50C81A2A868FDDA00BD8C18BAD165D1053F8574A530"
+    },
+    "Maps/Destruction Station/Destruction Station.map": {
+      "bytes": 208786,
+      "cellsX": 420,
+      "cellsY": 420,
+      "contentSha256": "9645C5CB9220FCC786218BDF0C7251D1F860B9E31D722EA809E08FCAEBDDD66D",
+      "startPositions": 8,
+      "terrainFingerprint": "E40092BA62E755BF0F0DF0E97DDDEC31980C48AB5BA718631E92120CA6F9417A"
+    },
+    "Maps/DogsOfWar/DogsOfWar.map": {
+      "bytes": 94414,
+      "cellsX": 325,
+      "cellsY": 325,
+      "contentSha256": "59658593F15D48D2AE149261B334C007FE2FCDC4AAE8EFF8749CE70FF92133F9",
+      "startPositions": 4,
+      "terrainFingerprint": "6452E72B4D3E1F0820E4630A032ED6563BD4BAF3F5DF34B08615803EE6D57743"
+    },
+    "Maps/Dust Devil/Dust Devil.map": {
+      "bytes": 287694,
+      "cellsX": 250,
+      "cellsY": 250,
+      "contentSha256": "CBD84F84B52020E1540DA8BABED134FDBBFF538A22C1C1D21B6FF30F015DFED4",
+      "startPositions": 2,
+      "terrainFingerprint": "A8D5219386B79BEEB5A9357A4482020A37A07F299A74DA43486D0BC5B92B8C6F"
+    },
+    "Maps/Eastern Everglades/Eastern Everglades.map": {
+      "bytes": 252499,
+      "cellsX": 320,
+      "cellsY": 320,
+      "contentSha256": "8EF7EBFF3C065923DAA0AAB853326C36002EE60EA4AEA6E4C9112922AF93CA26",
+      "startPositions": 4,
+      "terrainFingerprint": "029F013867B3F92A02B3A9F73AF78F853312B59A1A370776A00FA78AD5D19493"
+    },
+    "Maps/El Scorcho/El Scorcho.map": {
+      "bytes": 315809,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "E8384056F97BB7D6C526658EFEB8C8F51E78F212C90B524531C145B378EE941A",
+      "startPositions": 4,
+      "terrainFingerprint": "FFB15AD3F0103CEA7FE03BA386B904F87178DAFE7DEFDEED273C7E1A8DB731AC"
+    },
+    "Maps/Fallen Empire/Fallen Empire.map": {
+      "bytes": 294197,
+      "cellsX": 280,
+      "cellsY": 250,
+      "contentSha256": "69FBC70A3BB2A822F66CEEBF118A65129122AE5F53D5E2BDEA2BE0C902F96A04",
+      "startPositions": 4,
+      "terrainFingerprint": "F984E725F31DA778B7FFB1DCC22CC43D030069E346C1588A93472995A91F8394"
+    },
+    "Maps/Final Crusade/Final Crusade.map": {
+      "bytes": 190347,
+      "cellsX": 200,
+      "cellsY": 218,
+      "contentSha256": "1A89746C5ABD3AFD2D18EAB1F82B6E161006D56303334FE647D2F6DCE083DA59",
+      "startPositions": 2,
+      "terrainFingerprint": "A0DD1385E80CF8EAB878E661E0AFD4FFF682D6E5A3787381ED7710EA10B786B5"
+    },
+    "Maps/Flash Effect/Flash Effect.map": {
+      "bytes": 168122,
+      "cellsX": 340,
+      "cellsY": 340,
+      "contentSha256": "D8DE2F526ADA9FB16E274C8C4BDD3B0CE1DD334DE178835432F8BB3039013D5C",
+      "startPositions": 3,
+      "terrainFingerprint": "36A04B3F7C3B53CE0EEC6D1CC416E80C87E67F67E6DB310895E34BAAAD360BC9"
+    },
+    "Maps/Flash Fire/Flash Fire.map": {
+      "bytes": 219406,
+      "cellsX": 275,
+      "cellsY": 275,
+      "contentSha256": "48C7456BC8C6615671F0007E02C2CC7F0CDB869F80EB5B8BC4229FA649C6EDB7",
+      "startPositions": 2,
+      "terrainFingerprint": "1FB2FE902DC41FD2954D751B7CEECFB7D2614F670915D77202698DEC1FD26FFB"
+    },
+    "Maps/FloodedPlains/FloodedPlains.map": {
+      "bytes": 206472,
+      "cellsX": 300,
+      "cellsY": 300,
+      "contentSha256": "28D039AF3289A3D4B4EEACE9D05F825C3C68EDE4B87DCED77F72430EB737FF5D",
+      "startPositions": 4,
+      "terrainFingerprint": "F557478A99DAF84246E35079830E62C8373ADDB53BC3BD71A7B50FC91E2A72B7"
+    },
+    "Maps/ForgottenForestZH/ForgottenForestZH.map": {
+      "bytes": 172735,
+      "cellsX": 275,
+      "cellsY": 225,
+      "contentSha256": "005227930A7286F33ABFEF2D12D18FD9508AEA42C86A5DE8BBCAB66A3FC5B687",
+      "startPositions": 2,
+      "terrainFingerprint": "747303198302E71098C08F4EBFF7A6D22F5960DD43AD388FBD3485A8D0EE52AE"
+    },
+    "Maps/Fortress Avalanche/Fortress Avalanche.map": {
+      "bytes": 218664,
+      "cellsX": 418,
+      "cellsY": 413,
+      "contentSha256": "37F83709EC2893DF649920CEDF70FFE5830F9143FF7439BAB8F85FFFF2858332",
+      "startPositions": 8,
+      "terrainFingerprint": "33328E30DC192529572A4FF54ED65044BF4A635929CA9373A3F848C8DDEA1505"
+    },
+    "Maps/Free Fire Zone/Free Fire Zone.map": {
+      "bytes": 201851,
+      "cellsX": 300,
+      "cellsY": 300,
+      "contentSha256": "7C08052A2A5D430666320EEF4E82335AEBB583ED46A15B084B71C0676A7D06A4",
+      "startPositions": 6,
+      "terrainFingerprint": "6769EBE7BD8C74C18314ADB92E912ED48F0F5CA7D45F6EE82D3648F97D375853"
+    },
+    "Maps/GC_AirGeneral/GC_AirGeneral.map": {
+      "bytes": 551486,
+      "cellsX": 220,
+      "cellsY": 285,
+      "contentSha256": "9F3543997FB51566419A29C034C38B79706551250EDEAAE79A6CA46E0EC537FC",
+      "startPositions": 1,
+      "terrainFingerprint": "034771C6F81B21D5B289C4849E889DBB4AC7E0EB73FFBEAF0E2DEDFDFD0519A8"
+    },
+    "Maps/GC_ChemGeneral/GC_ChemGeneral.map": {
+      "bytes": 272543,
+      "cellsX": 240,
+      "cellsY": 300,
+      "contentSha256": "2D6621AB000CC17C53BD165E126F67FA5EC04FF62834CDA92C130A447CD3A38D",
+      "startPositions": 1,
+      "terrainFingerprint": "1A854FBB80024F0DF3B26C8C29BD7F41C4885B049C7D80A08B680E7AC790D33F"
+    },
+    "Maps/GC_ChinaBoss/GC_ChinaBoss.map": {
+      "bytes": 399879,
+      "cellsX": 276,
+      "cellsY": 401,
+      "contentSha256": "E3760B7CFF1F4CAF33F8254C9D62B93724C33B666E6545E871E3D8CFBCF75E2D",
+      "startPositions": 1,
+      "terrainFingerprint": "D8CF8B56EAC8373110AE3CFD6B5B2D9828D7541370F2C1AF8EA6AD6846908E07"
+    },
+    "Maps/GC_DemolitionGeneral/GC_DemolitionGeneral.map": {
+      "bytes": 259082,
+      "cellsX": 262,
+      "cellsY": 311,
+      "contentSha256": "08031090F8AC5466767AF3F69558265F36C3AFCFEE7FE234CB344214A515F6AC",
+      "startPositions": 0,
+      "terrainFingerprint": "2EC86062EDFC337ABE9DE4C9AF1A3690F7569F2907C82AA73D17C981E92A7928"
+    },
+    "Maps/GC_LaserGeneral/GC_LaserGeneral.map": {
+      "bytes": 273953,
+      "cellsX": 280,
+      "cellsY": 340,
+      "contentSha256": "CEEA6573D4326ED994FEE859F6BDD03E4E4460FE709EE85DFDF33EB0A8B93B3B",
+      "startPositions": 1,
+      "terrainFingerprint": "D210FF0FFF3FC6A46F3FBC62C7DD7416932E6EC35B0AA059EF507841BEF70260"
+    },
+    "Maps/GC_NukeGeneral/GC_NukeGeneral.map": {
+      "bytes": 278680,
+      "cellsX": 250,
+      "cellsY": 350,
+      "contentSha256": "883B47EC6382B691FE6D91CB6E554E0E5803C2D8C75DCA503261FB5E7C8EDD2F",
+      "startPositions": 1,
+      "terrainFingerprint": "5521CE9FD05661AF61C66CB8E8FDE576066B73238C1C7D11D38A5F8E5405B917"
+    },
+    "Maps/GC_Stealth/GC_Stealth.map": {
+      "bytes": 239876,
+      "cellsX": 300,
+      "cellsY": 220,
+      "contentSha256": "D2AEAC6E744060E0DBE079071FD3D95549C2AEED3399EAD8E74DEE7F1380A057",
+      "startPositions": 1,
+      "terrainFingerprint": "62B432B8C9AB159C00D1EC2D39C2AF93F5865767D9F865BDAD349ABC9CAFE210"
+    },
+    "Maps/GC_SuperWeaponsGeneral/GC_SuperWeaponsGeneral.map": {
+      "bytes": 217990,
+      "cellsX": 250,
+      "cellsY": 300,
+      "contentSha256": "571C756470C32692443FE5CB8A8B3721EFDF619EFC4CB60803972AA9EC94A40D",
+      "startPositions": 1,
+      "terrainFingerprint": "950F384AF1EF7BBCEC9826E99D653AF2C8F67D7A3C6D218754D7B8CBDA0C96A8"
+    },
+    "Maps/GC_TankGeneral/GC_TankGeneral.map": {
+      "bytes": 448562,
+      "cellsX": 400,
+      "cellsY": 300,
+      "contentSha256": "A70AC3B0ED16442B6783784BB4DC0CA4FCD05A194CA208BA4463CA2C174F836C",
+      "startPositions": 1,
+      "terrainFingerprint": "6586AE14A23AB722D4FE71E4A930012E2354720948AFC33885271C5BF59F7030"
+    },
+    "Maps/Golden Oasis/Golden Oasis.map": {
+      "bytes": 581608,
+      "cellsX": 430,
+      "cellsY": 430,
+      "contentSha256": "C2B55E759CA66172870C8C22EB356D30B375AFC02CBDF74CC1D27B216B54C0BF",
+      "startPositions": 4,
+      "terrainFingerprint": "F89C14199A8CEB2BA81091D6C73B8C997C0BD42D72300597273E285F58E7C7B3"
+    },
+    "Maps/Green Pastures/Green Pastures.map": {
+      "bytes": 126587,
+      "cellsX": 249,
+      "cellsY": 325,
+      "contentSha256": "E01829ABA90C5D5116B8845CC1911FCF79E6D06CC49A13416CFE52DCC44D127A",
+      "startPositions": 6,
+      "terrainFingerprint": "FCCA14240B643F4FF2FA57992C9BE96FCD81D19F1E76FFAD687EEA53DCB67E36"
+    },
+    "Maps/Heartland Shield/Heartland Shield.map": {
+      "bytes": 252344,
+      "cellsX": 251,
+      "cellsY": 339,
+      "contentSha256": "FD3E893AF239D553D7D5DF0026B1F724B2F79CFBFE594DAF7D35559B596A68AD",
+      "startPositions": 2,
+      "terrainFingerprint": "C3C4ABAA36457284D8EA4198B9EA43C1A2FA23D9B3B461E6F2481BAFF541A54D"
+    },
+    "Maps/Homeland Alliance/Homeland Alliance.map": {
+      "bytes": 288090,
+      "cellsX": 340,
+      "cellsY": 340,
+      "contentSha256": "620A261916AB00E6A18B3D883735AF032716F88B016A6E1A3358B597EFAD9AC8",
+      "startPositions": 4,
+      "terrainFingerprint": "61E2FDD9904CE22FA42A77405CF87F876AD61646F2E61F63C0C2DED12EB559B7"
+    },
+    "Maps/Hostile Dawn/Hostile Dawn.map": {
+      "bytes": 251105,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "DE79D1709BDADBF420166D21540EFC5D5494847DBE53BCFEAE8F5F92717B62DB",
+      "startPositions": 6,
+      "terrainFingerprint": "39847F6590C9ECDEC8D1048D35934C7D8092D4C7572F0524CA63BBC6C456D9FB"
+    },
+    "Maps/Hovercraft/Hovercraft.map": {
+      "bytes": 17341,
+      "cellsX": 296,
+      "cellsY": 287,
+      "contentSha256": "C45FE17EBD79B7A6E3E810D64409F6AAD21323A73B42B3952ACEB527B4034773",
+      "startPositions": 0,
+      "terrainFingerprint": "C9FF62DCDD5673C14E3622C364B32B1665F437DFB111B25E79B003622987E396"
+    },
+    "Maps/Iron Dragon/Iron Dragon.map": {
+      "bytes": 306186,
+      "cellsX": 531,
+      "cellsY": 282,
+      "contentSha256": "0029BF25DB5B32F1A456EECC5B42A11BE4B177682E57F10C6FDC57F8DCA2420C",
+      "startPositions": 8,
+      "terrainFingerprint": "493A68CDA6C838268BD51278D815B8167D9AF3C4D95CBEFB3D23896BE9553514"
+    },
+    "Maps/Killing Fields/Killing Fields.map": {
+      "bytes": 171691,
+      "cellsX": 180,
+      "cellsY": 320,
+      "contentSha256": "1F73AD08CDBCCFA557E69C2D0FB4D124FED643CB1C1B5F1788E4B8841A87375E",
+      "startPositions": 2,
+      "terrainFingerprint": "8E92380036149517FC59A46DA2AB8D4AA7C28C3EE1C569ADE8076DC7B575A380"
+    },
+    "Maps/Leipzig Lowlands/Leipzig Lowlands.map": {
+      "bytes": 229636,
+      "cellsX": 350,
+      "cellsY": 250,
+      "contentSha256": "12D55CFBCA4BA0ABAD3C838A4FC8B95FE6F49B1B57AC89CF19534197F3CA2A73",
+      "startPositions": 2,
+      "terrainFingerprint": "31882D27894B1E0BBCBF3F1C94583D97FB24B98032C9309A2C428EAA77C38C55"
+    },
+    "Maps/Lights Out/Lights Out.map": {
+      "bytes": 157634,
+      "cellsX": 350,
+      "cellsY": 230,
+      "contentSha256": "CF4338C03965EFC3D02C2C0D35C29C698C08F60AB94F71DB85FC87368D2AC8C6",
+      "startPositions": 4,
+      "terrainFingerprint": "2E711F64E169F0F951D7F6DC96F0CC76C0D711DC4C9EEFB726E245BA07108638"
+    },
+    "Maps/Lone Eagle/Lone Eagle.map": {
+      "bytes": 203209,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "1AA0B8880FBC7D224B928745E248A94135F8C15EE11338CDB25C9B14B8FA51F1",
+      "startPositions": 4,
+      "terrainFingerprint": "F6554073403A65D48A5260F7E0621D938502BF6D77A5285A38E35EDA71170910"
+    },
+    "Maps/MD_CHI01/MD_CHI01.map": {
+      "bytes": 540786,
+      "cellsX": 308,
+      "cellsY": 468,
+      "contentSha256": "15F58ED674711D5E66EFDCD2B9ECC6DAB0DD5220C0831A5B0E10BC2F93A65B9C",
+      "startPositions": 0,
+      "terrainFingerprint": "B0F7563A5709837ED60B12C9F93FCA180C431F4098AB52B837118A2430DC8505"
+    },
+    "Maps/MD_CHI02/MD_CHI02.map": {
+      "bytes": 389268,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "A47C7F7B362BFB9E29BA28F9A17E8F1D4D0FB04BB518E413C7535C2C67F6E0EC",
+      "startPositions": 0,
+      "terrainFingerprint": "E864FAB891EEE4FD5C164E5B71CA00D488D0BB22FE64C2C91C23FE0F0983C843"
+    },
+    "Maps/MD_CHI03/MD_CHI03.map": {
+      "bytes": 330093,
+      "cellsX": 320,
+      "cellsY": 320,
+      "contentSha256": "1C1FF094E49545635AAC6B5C37E5E8100707AEC01150B0D8092C30DB48A81580",
+      "startPositions": 0,
+      "terrainFingerprint": "09B456FD4EBA7DDACB833CBC63C152A3A5BE5A717C0A6D4FF2284B7F8FD17D35"
+    },
+    "Maps/MD_CHI04/MD_CHI04.map": {
+      "bytes": 439545,
+      "cellsX": 527,
+      "cellsY": 526,
+      "contentSha256": "626A004F567599171EA074A35C32920DE59AEADDF4131FB4AD2E0824383E15E0",
+      "startPositions": 0,
+      "terrainFingerprint": "D8AE7FBECA3A37B76E485BD8B952E22C931C5E99E414E9A8A8DF79E769DA5EA8"
+    },
+    "Maps/MD_CHI05/MD_CHI05.map": {
+      "bytes": 462068,
+      "cellsX": 400,
+      "cellsY": 547,
+      "contentSha256": "68425DAD33D13C5F6B0E88973A2630F04AC56C831EEA05FFBAE6B560CAA2E439",
+      "startPositions": 0,
+      "terrainFingerprint": "47B2B24228919760EAF61A86F4550EEDB1959C742B7FAF2A33F301FF0DB3A923"
+    },
+    "Maps/MD_CHI05_END/MD_CHI05_END.map": {
+      "bytes": 417727,
+      "cellsX": 400,
+      "cellsY": 549,
+      "contentSha256": "54DEE32B346578058A60A2FB20AC4A1EEAA0A76339761A4B386B92D5CD52986A",
+      "startPositions": 0,
+      "terrainFingerprint": "E092F6DB8176915585769E1F72ACAE9125495872BDCF9681226BC0A02C12E4F6"
+    },
+    "Maps/MD_CHI05_Intro/MD_CHI05_Intro.map": {
+      "bytes": 372334,
+      "cellsX": 400,
+      "cellsY": 400,
+      "contentSha256": "B0B2CC82E7E027AA03DCD595452D99BB94347C34A1753CF37A5B86629B91189E",
+      "startPositions": 0,
+      "terrainFingerprint": "0BC880A341305F45FD3ABD7BA41431F1A4B9E7782407972B88BC6764EE47DA45"
+    },
+    "Maps/MD_GLA01/MD_GLA01.map": {
+      "bytes": 308971,
+      "cellsX": 472,
+      "cellsY": 434,
+      "contentSha256": "79E383B1BCE701FBEEF536872B9B2275AA11AFA200E1E8FF652EE33A91567DC0",
+      "startPositions": 0,
+      "terrainFingerprint": "16D9FF57E1F8B59190BCB5930EAD2B7CAAAA30521338EAC312649C2E7A915AC1"
+    },
+    "Maps/MD_GLA02/MD_GLA02.map": {
+      "bytes": 347146,
+      "cellsX": 298,
+      "cellsY": 348,
+      "contentSha256": "75B3672203A1FFA593FDA77E35914EFDFAB26BA000BC515B7125F0D393D1D7B2",
+      "startPositions": 0,
+      "terrainFingerprint": "9E201D7BDD088B1699F1B8AEA49FA1B8E28BB224F1CEC24622704543F2810132"
+    },
+    "Maps/MD_GLA02_CINE/MD_GLA02_CINE.map": {
+      "bytes": 278999,
+      "cellsX": 298,
+      "cellsY": 348,
+      "contentSha256": "7251B7C67E139C510D5045E801C88005D87CF915E280E96A4584ACCBC3B3CBCE",
+      "startPositions": 0,
+      "terrainFingerprint": "D1BF4D26714A9830FAF603EB2708B885C47060F6FF5AA109C33DAD4A8AF58DB2"
+    },
+    "Maps/MD_GLA03/MD_GLA03.map": {
+      "bytes": 295065,
+      "cellsX": 380,
+      "cellsY": 380,
+      "contentSha256": "925B5C66F041A608EACC2756E5227520B72116D2BB13EC8204806103C0CF9724",
+      "startPositions": 0,
+      "terrainFingerprint": "83FBB6F3748E941459269DCBCEBFD1DDB735CD27291AAE2F124D2E42B92412BB"
+    },
+    "Maps/MD_GLA03_CINE/MD_GLA03_CINE.map": {
+      "bytes": 251951,
+      "cellsX": 380,
+      "cellsY": 380,
+      "contentSha256": "0D4EF664020ECBFAF9B65E33104F36B3579E80A822516BC1A9F509576DA27295",
+      "startPositions": 0,
+      "terrainFingerprint": "9F7F0AA4786628F30A9631074DB72E184538AFEE480C08C28147C056494D10B8"
+    },
+    "Maps/MD_GLA03_END/MD_GLA03_END.map": {
+      "bytes": 254894,
+      "cellsX": 380,
+      "cellsY": 380,
+      "contentSha256": "ACB4FF63A14CA3B1990FE606D9C4A796BFC7CF98406BBAEF67819EF1AD81DA74",
+      "startPositions": 0,
+      "terrainFingerprint": "1258430170BC6A08A9A0E8CDD2F398D097507BE5C2C1D6C765CD23E72B20F785"
+    },
+    "Maps/MD_GLA04/MD_GLA04.map": {
+      "bytes": 355559,
+      "cellsX": 300,
+      "cellsY": 420,
+      "contentSha256": "C0613FCD97E65A3E62EEDEF29CD1B8BCB42B5E123A092E711071CABFEA2C21DC",
+      "startPositions": 0,
+      "terrainFingerprint": "56669755E015B8BB56C72B805CA345F8A1F8D16E9A5AED7F6D64442ED12A4275"
+    },
+    "Maps/MD_GLA04_INTRO/MD_GLA04_INTRO.map": {
+      "bytes": 338563,
+      "cellsX": 300,
+      "cellsY": 420,
+      "contentSha256": "6AD8C28EE07B3571852BDB6363D150E8DD56E0DB3F63C1CC44E75E05F6CBDF89",
+      "startPositions": 0,
+      "terrainFingerprint": "92584CB4757C47521FF729ECB5E19DF5C5E4707EA2C16B57E071DA23F6683937"
+    },
+    "Maps/MD_GLA04_Sound/MD_GLA04_Sound.map": {
+      "bytes": 333385,
+      "cellsX": 300,
+      "cellsY": 420,
+      "contentSha256": "9200460998BC8323C4D5A027207B6F87728E42E146391214DE35931AFD1B0B1E",
+      "startPositions": 0,
+      "terrainFingerprint": "1F00C9AE0831A73DB874975D62170CC77E8BB32562DB7A997ECDE4558D6320DD"
+    },
+    "Maps/MD_GLA05/MD_GLA05.map": {
+      "bytes": 910681,
+      "cellsX": 589,
+      "cellsY": 589,
+      "contentSha256": "A993D7EB9909C93560D1D8255C6C81A122E1D6D723690DC47AF6588BB156744E",
+      "startPositions": 0,
+      "terrainFingerprint": "8265FD4E188F2D61072034076E66E4F7F40911FE6D7E62727850663E035E3892"
+    },
+    "Maps/MD_GLA05_END/MD_GLA05_END.map": {
+      "bytes": 861828,
+      "cellsX": 589,
+      "cellsY": 589,
+      "contentSha256": "5362BB8195672BC741206A9D3B7695B4A8B9A021D7783828523251999CB93F09",
+      "startPositions": 0,
+      "terrainFingerprint": "D4AA253201C0483EB23AAC786D81D4EDD1B557175273FE6F81C67EA50A9219DA"
+    },
+    "Maps/MD_GLA05_INTRO/MD_GLA05_INTRO.map": {
+      "bytes": 473389,
+      "cellsX": 470,
+      "cellsY": 470,
+      "contentSha256": "808C012D6D8EC37ED7CDB8A056B82C33212C83DABD11FA2DD3366A51A7E457CC",
+      "startPositions": 1,
+      "terrainFingerprint": "BE4B721100B10EB0F620A66A744CEFBDDFAA6C803E6D2FC94F4E6153A5562C4E"
+    },
+    "Maps/MD_ShellMap/MD_ShellMap.map": {
+      "bytes": 82311,
+      "cellsX": 175,
+      "cellsY": 175,
+      "contentSha256": "F7B5FF6E426C0C7F1D8A16BF8C721496BE783380EC82842EA7AC93E6F3BF46C1",
+      "startPositions": 0,
+      "terrainFingerprint": "5ABE604D90E78B3F0CBD5343BC335BF8329AC2BB60344945AFFF57442EB2B614"
+    },
+    "Maps/MD_USA01/MD_USA01.map": {
+      "bytes": 393862,
+      "cellsX": 537,
+      "cellsY": 387,
+      "contentSha256": "77D91874D3CA977939710E5AA436C93BA26100B71AB6DD5365AB03114DA7F64D",
+      "startPositions": 0,
+      "terrainFingerprint": "56D33C4C6E478038753B380D4CFD055460A04C9DA3648E0B4DE5D1F5C16F12C8"
+    },
+    "Maps/MD_USA01_CINE/MD_USA01_CINE.map": {
+      "bytes": 384832,
+      "cellsX": 537,
+      "cellsY": 387,
+      "contentSha256": "4DA1B2445396EF6425001474B676B27231494C9D61E39540035C62FD755FD03B",
+      "startPositions": 0,
+      "terrainFingerprint": "220423DDF82275A08123A501CBCCEC1A4A36AA6ADA05C2A15F1DE67EBC12107E"
+    },
+    "Maps/MD_USA02/MD_USA02.map": {
+      "bytes": 288363,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "34E972308D727A9C18295876F870C2223239AD1DBD3749E3605F0CDBFAB21DB4",
+      "startPositions": 0,
+      "terrainFingerprint": "C1B4ED7EC7A5C35ED1C60583E03E3BEFAD2A7866BD3C0AD5A4826A9BE20E369D"
+    },
+    "Maps/MD_USA02_INTRO/MD_USA02_INTRO.map": {
+      "bytes": 273557,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "CF9C654DE388E56D4A166E695A6455F28A95352251839B2FA6022B3E3FC7022E",
+      "startPositions": 0,
+      "terrainFingerprint": "21A8E79EF6516669E3567EEAD09D7E2A6D67B073B0017A9902B8A7084AE12A18"
+    },
+    "Maps/MD_USA02_INTRO_NS/MD_USA02_INTRO_NS.map": {
+      "bytes": 274729,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "FD180887CFB6133D97F34F91D7B9124FB9978FE481A9FD96D484BBF6E923DE56",
+      "startPositions": 0,
+      "terrainFingerprint": "79D578203018203176F404B2A9BFD806BA4CA10A7C523E62044616B286FA2EE5"
+    },
+    "Maps/MD_USA03/MD_USA03.map": {
+      "bytes": 361207,
+      "cellsX": 318,
+      "cellsY": 467,
+      "contentSha256": "6EB26E9844BC53555008492D030BE3A15F24FF4A770261C022A4B197930597BE",
+      "startPositions": 0,
+      "terrainFingerprint": "3159D6558FF573C03809A8774CA1CC55B189A05C46C9631C26A1EBEC9D7E90F3"
+    },
+    "Maps/MD_USA03_CINE/MD_USA03_CINE.map": {
+      "bytes": 238991,
+      "cellsX": 317,
+      "cellsY": 468,
+      "contentSha256": "B01C5FD62D0C91B1E14F1227E9D1B3BC58A8AF7C5022267AEE0CF37E4AADE09B",
+      "startPositions": 0,
+      "terrainFingerprint": "E737C2ACDF1E5BA9C7A34A5B924A9AAC2A67745AECB815C80007A84F642177F2"
+    },
+    "Maps/MD_USA03_END/MD_USA03_END.map": {
+      "bytes": 298553,
+      "cellsX": 250,
+      "cellsY": 400,
+      "contentSha256": "19A5115519FF6C152D06D229FA7C9540BE78E4B15D0A476053010A5E9BAAB6EA",
+      "startPositions": 0,
+      "terrainFingerprint": "52BE8F06993A9B58619DA119D2B43687BB028CC973C0E9634D8DDAC730A77B1C"
+    },
+    "Maps/MD_USA03_END1/MD_USA03_END1.map": {
+      "bytes": 302543,
+      "cellsX": 250,
+      "cellsY": 400,
+      "contentSha256": "88D0763C75D9C2D833A985219977C7B5AAEBD6CC3B188FA38638AC4FA17EBF5B",
+      "startPositions": 0,
+      "terrainFingerprint": "71E17C0092DD128D4F0FB346AD643EFBEFD8C491C04A9C7FD5359D0674774EF0"
+    },
+    "Maps/MD_USA03_Intro/MD_USA03_Intro.map": {
+      "bytes": 275657,
+      "cellsX": 250,
+      "cellsY": 400,
+      "contentSha256": "53ECCBFC3339DE34F40A9664B3EEE4721C2EB6231893896226ADBD71DE176181",
+      "startPositions": 0,
+      "terrainFingerprint": "C16D23BAFCC3C4F71C9C64812647A51EC142A10CEC67A312B55AE007883676CE"
+    },
+    "Maps/MD_USA03_MID_CINE/MD_USA03_MID_CINE.map": {
+      "bytes": 224116,
+      "cellsX": 250,
+      "cellsY": 400,
+      "contentSha256": "0ABB74FDEE50E814658E3458AF376CAF393DA26B67780ECC4062CBA972570DC6",
+      "startPositions": 0,
+      "terrainFingerprint": "62D915284C33FB1B98EB5C336C3FC35D4019A33655464101F3BF37376710FA79"
+    },
+    "Maps/MD_USA04/MD_USA04.map": {
+      "bytes": 328486,
+      "cellsX": 438,
+      "cellsY": 404,
+      "contentSha256": "8C6C7D838AB406DDFA858BB18893DD3CC9307FDBAF8856BED430D727452C365B",
+      "startPositions": 0,
+      "terrainFingerprint": "31FCB84558A3D8713F8F8D5038168E0B5E11310B8F196F5EDB1EF2B2D020041C"
+    },
+    "Maps/MD_USA04_CINE/MD_USA04_CINE.map": {
+      "bytes": 255853,
+      "cellsX": 438,
+      "cellsY": 436,
+      "contentSha256": "C0133D3D3924C188A96D274FC0BD67A972CFE0027E851ADC7C69EA16B5B5969C",
+      "startPositions": 0,
+      "terrainFingerprint": "B91912328FF3D16324E7B2385BB49BBA824485CAFE15803F7C854BA8C46C34FA"
+    },
+    "Maps/MD_USA04_Intro/MD_USA04_Intro.map": {
+      "bytes": 277724,
+      "cellsX": 231,
+      "cellsY": 331,
+      "contentSha256": "FF90DDE8CC2EF51480D97487CF67E64AD9F11DC39E098A3D56101D67DEA00D97",
+      "startPositions": 0,
+      "terrainFingerprint": "1F94044FB913AADB7A34E021370342BD186577B871E0BAD20383776B76E125E2"
+    },
+    "Maps/MD_USA05/MD_USA05.map": {
+      "bytes": 358567,
+      "cellsX": 527,
+      "cellsY": 521,
+      "contentSha256": "D46F27682D6E2CCF327C98EF7CCF54257DCF3C57EE38AF188C903AFDFFEF073D",
+      "startPositions": 1,
+      "terrainFingerprint": "B3FE20CB4BE453476E508677F6F4B98420B497CDC30278895AD0B66430FEFB93"
+    },
+    "Maps/MD_USA06_INTRO/MD_USA06_INTRO.map": {
+      "bytes": 234084,
+      "cellsX": 504,
+      "cellsY": 395,
+      "contentSha256": "7FE979571DA706A5FE4A6AA21A472D3ACD23A217848C65722D6A7A8F03CEE1DC",
+      "startPositions": 1,
+      "terrainFingerprint": "2B6A6B7C71F4B51AC4FC5818E41C1705FD252D6714973550715C3C71B3962C28"
+    },
+    "Maps/Manic Aggression/Manic Aggression.map": {
+      "bytes": 220259,
+      "cellsX": 300,
+      "cellsY": 300,
+      "contentSha256": "552AF14B71FB5D6CC8D186D1C11C9645E07B158F1471A1202F0C5FD3D561645B",
+      "startPositions": 4,
+      "terrainFingerprint": "73B5AEDD8417148F5BDE69F067029CAE29C6AE50105D5EF4751F84D88F1680D7"
+    },
+    "Maps/Mountain Guns/Mountain Guns.map": {
+      "bytes": 284389,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "A96394BF7F5E5BCE30850350F6A5A426B578D1DAB6BABD6DE13FF6AE0AFDA6D2",
+      "startPositions": 5,
+      "terrainFingerprint": "C5D60E146DA14F6963CDD8DFACF1C4063A93740A71D3260239596A87D9CAD5F8"
+    },
+    "Maps/MountainFox/MountainFox.map": {
+      "bytes": 318524,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "22A689824361C6D8C7D4CA214D27700124AAA9FA059BB79BC295ECCD3197EBD5",
+      "startPositions": 4,
+      "terrainFingerprint": "6D540005AFC607C8813D46085F9A3C587F0A12E6CB94AEE515FE708080113902"
+    },
+    "Maps/NorthAmerica/NorthAmerica.map": {
+      "bytes": 217128,
+      "cellsX": 375,
+      "cellsY": 375,
+      "contentSha256": "4CF5733794A533AA2A2094136AB75FEE6938CDAE3A5816A51BE69831CDBDF31A",
+      "startPositions": 2,
+      "terrainFingerprint": "3D45AE14C9C9DE0AF5498DF64A0C0C5FEC79E12B069B33320C3EEE7E4B1F5C34"
+    },
+    "Maps/Overland/Overland.map": {
+      "bytes": 231534,
+      "cellsX": 340,
+      "cellsY": 340,
+      "contentSha256": "DB4BE1756F987CB8A9348EB5B90F6587AB906A74A4CCDAD0B4E2C262BA28C128",
+      "startPositions": 4,
+      "terrainFingerprint": "9653BB5CFC2407EE1856CC26672D9B864F36EFE53E49B6A34D049B4CEB4C184F"
+    },
+    "Maps/Red Rock/Red Rock.map": {
+      "bytes": 415991,
+      "cellsX": 400,
+      "cellsY": 360,
+      "contentSha256": "064E2A34553B80360F48CE75A2875E935590FDCA57B38BB8A11D828C169E76D1",
+      "startPositions": 6,
+      "terrainFingerprint": "8FA758512DA57224763FC5E001C8F3D920DB1DEFA9679AD1B430FD5ADADAC572"
+    },
+    "Maps/Rocky Rampage/Rocky Rampage.map": {
+      "bytes": 277792,
+      "cellsX": 325,
+      "cellsY": 325,
+      "contentSha256": "607257AEA85C323BD9B10DE25B95882B1036BBC7E053762EA5E1BB7807F2CDAD",
+      "startPositions": 4,
+      "terrainFingerprint": "872C46812D2835B4B4ECD218AF48CA608BDA9F2257F47F8737D57EA2F2648690"
+    },
+    "Maps/Rogue Agent/Rogue Agent.map": {
+      "bytes": 215867,
+      "cellsX": 375,
+      "cellsY": 351,
+      "contentSha256": "DFDA7FE77784D3C72C002C7CAA166803CF9D46C805284F8208A07015D17107A7",
+      "startPositions": 4,
+      "terrainFingerprint": "612FB5803A6B197E65901889EED46D923FBCD60A5B59D357C87256A83C088052"
+    },
+    "Maps/Sand Serpent/Sand Serpent.map": {
+      "bytes": 145506,
+      "cellsX": 264,
+      "cellsY": 264,
+      "contentSha256": "264DD01F0585949349EBD02EDE0624567585AB84436911C594423D6B4FB1D2E0",
+      "startPositions": 2,
+      "terrainFingerprint": "52508E32C3F30BE0150FDCE4F93160B0AE71EA85DC4FB212AB8C0FA1D5BB8BD0"
+    },
+    "Maps/Seaside Mutiny/Seaside Mutiny.map": {
+      "bytes": 208291,
+      "cellsX": 275,
+      "cellsY": 275,
+      "contentSha256": "58B78910B417A3F53E009E2460D1E270C2278BF76DAC8574F8368967966A883D",
+      "startPositions": 2,
+      "terrainFingerprint": "E9A1C4E3E5358C567D63D0D8B6BE4AC272E1FB4B03FAFDEC44C0E9E11CE76746"
+    },
+    "Maps/ShellMapMD/ShellMapMD.map": {
+      "bytes": 86345,
+      "cellsX": 175,
+      "cellsY": 175,
+      "contentSha256": "D0206AA6A56AE5008689A5B1998204596FE813922EEA52B9C4E5FC9B433E6DCE",
+      "startPositions": 0,
+      "terrainFingerprint": "526A77DBBFFF627BB3D597657A7A5B4987D772886B7F6FA440BEB39AB74150DE"
+    },
+    "Maps/Silent River/Silent River.map": {
+      "bytes": 302358,
+      "cellsX": 317,
+      "cellsY": 310,
+      "contentSha256": "4314C28DA35786F4B22339EC1B0FB584DCBCD73E7074773EDD2FCEA905A445FC",
+      "startPositions": 2,
+      "terrainFingerprint": "A16A993A98A06E92A049AB465212314F807E697F22BF35A3B76CB3F53374443D"
+    },
+    "Maps/TheFrontline/TheFrontline.map": {
+      "bytes": 244044,
+      "cellsX": 282,
+      "cellsY": 320,
+      "contentSha256": "9F1D266BA3BAB355F9D7B41D90CCB275268FD2DB6C4A75F3765BB90CDC8B5D15",
+      "startPositions": 2,
+      "terrainFingerprint": "9AB06E9E27C432E67D5FF8639521466A8203C599BC6315617F81770C7243BF1F"
+    },
+    "Maps/Tournament City/Tournament City.map": {
+      "bytes": 386149,
+      "cellsX": 475,
+      "cellsY": 475,
+      "contentSha256": "4FC6792A690C0F581BD6873601E6AC571357360721BBDA089423760788C9CE1B",
+      "startPositions": 6,
+      "terrainFingerprint": "3CC60F0A25C70B43F758C01AF41405B7E6EB904BE3703077159B2E014D9F1F95"
+    },
+    "Maps/Tournament Continent/Tournament Continent.map": {
+      "bytes": 639753,
+      "cellsX": 375,
+      "cellsY": 375,
+      "contentSha256": "8CC53D2620EB973F6318779B96667F39A7E547B736C0EE33338927E467D2CF33",
+      "startPositions": 4,
+      "terrainFingerprint": "6FF216DC2D5A0D1CE740F0DFA1B35670389934E49E6F362159EE2942DD3CFA3C"
+    },
+    "Maps/Tournament Desert/Tournament Desert.map": {
+      "bytes": 144534,
+      "cellsX": 204,
+      "cellsY": 270,
+      "contentSha256": "DB429B884BC593971FEB9D545ADA1F1D0AEA114F2262B052FE46D81F9F034D01",
+      "startPositions": 2,
+      "terrainFingerprint": "D17489FE53DC61177003F890669DEEC292087E23CDE7399D428D28A13B6E5F94"
+    },
+    "Maps/Tournament Island/Tournament Island.map": {
+      "bytes": 130668,
+      "cellsX": 351,
+      "cellsY": 354,
+      "contentSha256": "2CF556A21869FCA4FD781C42242EE4CBA6C724D31768361D49D7EC2DC215B755",
+      "startPositions": 4,
+      "terrainFingerprint": "BD541250D044261D9ECEB5BD66E21E1EAC8FCE85AAE077EFA51CC7FC33BB27AA"
+    },
+    "Maps/Tournament Lake/Tournament Lake.map": {
+      "bytes": 167918,
+      "cellsX": 312,
+      "cellsY": 313,
+      "contentSha256": "E20C8E21D05BA9C47B8000D54BD67C9D98A972559EE405A704E567300D4F10AC",
+      "startPositions": 4,
+      "terrainFingerprint": "1DE2E2CE27219D8E488D3EEB58B88541404F9045CB18E9EA6E1B445F20D92E77"
+    },
+    "Maps/Tournament Plains/Tournament Plains.map": {
+      "bytes": 158876,
+      "cellsX": 350,
+      "cellsY": 250,
+      "contentSha256": "D44152FA37C1BD56886BF8D3272C00C6DD7E389CB8ED4BCD322E01405A3AB78C",
+      "startPositions": 2,
+      "terrainFingerprint": "4383A65928D6F402A74B0C2ED09B7AE87256AA37ACBF636CE7573A2208169215"
+    },
+    "Maps/Tournament Tundra/Tournament Tundra.map": {
+      "bytes": 114428,
+      "cellsX": 268,
+      "cellsY": 269,
+      "contentSha256": "1012B6A637F727C8B672716EA6BD067218264241545A8462740D6885A6559FC0",
+      "startPositions": 4,
+      "terrainFingerprint": "528E3AA9B6576C63319AB30EAB37C72B257F20C0AB6977FA5A632E04F6EE65B3"
+    },
+    "Maps/Tournament Urban/Tournament Urban.map": {
+      "bytes": 196270,
+      "cellsX": 315,
+      "cellsY": 315,
+      "contentSha256": "3E39CE614335D5A658C133DB13B0D602AECB727EC08D2A4493BE2F26666B2EE3",
+      "startPositions": 4,
+      "terrainFingerprint": "83D89D40AD8BD36063CA8B20CECFECE66A81B24A3F425A85C13BDF72FF35C967"
+    },
+    "Maps/TournamentA/TournamentA.map": {
+      "bytes": 230497,
+      "cellsX": 445,
+      "cellsY": 275,
+      "contentSha256": "95891777694514C1839A4905BA6412E9E8244D3835CF3A9BE109805FC8DEE13F",
+      "startPositions": 4,
+      "terrainFingerprint": "772A7F802EFFE44BBCAB5595AAE9679992504C4B7DB3D95A775E4ACA0F45D27E"
+    },
+    "Maps/TournamentB/TournamentB.map": {
+      "bytes": 165576,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "D34F22C7AB4DE60EAD7650F293E3F51BB3E789775F09B2FDFFA8900E125AA32D",
+      "startPositions": 4,
+      "terrainFingerprint": "484292F06CF0977558A6BB5D5A18BCD3534D74B0416D118A4F14D3C137F08558"
+    },
+    "Maps/Twilight Flame/Twilight Flame.map": {
+      "bytes": 400412,
+      "cellsX": 486,
+      "cellsY": 469,
+      "contentSha256": "3B8B47E1AF6E5D8D479F282EF6B6E542B5C2DBBD700A91FCF55AA7DA209B1100",
+      "startPositions": 8,
+      "terrainFingerprint": "C21E485C8F8CA76B8CA6C09A0ACD275056E7A06EA257174E175BB3BE06FAAC01"
+    },
+    "Maps/USA05_EndsConflict/USA05_EndsConflict.map": {
+      "bytes": 116462,
+      "cellsX": 332,
+      "cellsY": 329,
+      "contentSha256": "E9C5F923221015611D7ED55E3AA371B602783DC5E65BE68E27BE43771C493C01",
+      "startPositions": 0,
+      "terrainFingerprint": "23501DE7C0B6B1E44E67E84CCE9C5A8C69AA33214E49397E12DABD02A324141D"
+    },
+    "Maps/USA05_EndsConflict_INTRO/USA05_EndsConflict_INTRO.map": {
+      "bytes": 157916,
+      "cellsX": 499,
+      "cellsY": 329,
+      "contentSha256": "6DF658BFB6AAEF73EC18234B63B94304D92A7045F0F9519B9F1C8E4A79651912",
+      "startPositions": 0,
+      "terrainFingerprint": "3F1F7F25AF119207FD9556DFA6072E8C09B1606AA14C72AE1AEB7FDA37045DA0"
+    },
+    "Maps/USA05_EndsConflict_INTRO_N/USA05_EndsConflict_INTRO_N.map": {
+      "bytes": 157980,
+      "cellsX": 499,
+      "cellsY": 329,
+      "contentSha256": "508C2BCFB5E90C3B1A4B52A3E08E231A8EF8087405161C5D284DFDB859BCFEEB",
+      "startPositions": 0,
+      "terrainFingerprint": "3F1F7F25AF119207FD9556DFA6072E8C09B1606AA14C72AE1AEB7FDA37045DA0"
+    },
+    "Maps/USA07-TaskForces/USA07-TaskForces.map": {
+      "bytes": 314126,
+      "cellsX": 250,
+      "cellsY": 249,
+      "contentSha256": "E1114604227EB39A0FF5D7A16016FB1257E8DF0123D5B06A5D51355DE9304649",
+      "startPositions": 0,
+      "terrainFingerprint": "221C9DE6128214796A3F2E8060A95F0923B12B32DBA8E6F1A546789A4C9CD8F1"
+    },
+    "Maps/Victory Valley/Victory Valley.map": {
+      "bytes": 243585,
+      "cellsX": 351,
+      "cellsY": 350,
+      "contentSha256": "222A930ED88F32DE63E666BE17DCA517E3231ADDA3E68882370CD032A34FFF7C",
+      "startPositions": 4,
+      "terrainFingerprint": "E833DB10F2D7C9BA54F238C2350CBDD169447107BBF9714E506161E5871AE7BF"
+    },
+    "Maps/Wasteland Warlords/Wasteland Warlords.map": {
+      "bytes": 295451,
+      "cellsX": 250,
+      "cellsY": 200,
+      "contentSha256": "9D3EDBB7621BAAB21570C7F474273C7BE1BC0D81B853CF4DB92E60B6873CE126",
+      "startPositions": 2,
+      "terrainFingerprint": "1B41E2A0972117CA56605083E0D8BB70261C874312E4E1A663B951E743473612"
+    },
+    "Maps/Whiteout/Whiteout.map": {
+      "bytes": 217005,
+      "cellsX": 420,
+      "cellsY": 417,
+      "contentSha256": "50173C66408EBA35E04C1D257B52E2517DB35136B85EFA3DDD69FC106B2B0DBC",
+      "startPositions": 8,
+      "terrainFingerprint": "94F721335D34365DEE33987797FF570E6E37867AE9D6F697456C4E71C0E16D49"
+    },
+    "Maps/Winding River/Winding River.map": {
+      "bytes": 221203,
+      "cellsX": 320,
+      "cellsY": 320,
+      "contentSha256": "F2D3ACA9C0DAC85235D45308F4493AC5029E37AF8583AE01089ABEF2B9156C11",
+      "startPositions": 2,
+      "terrainFingerprint": "F6AABEE85ECCF7C32B220ED6F1B4768D9F9948906F043A93F916A7E9EDA8E33A"
+    },
+    "Maps/Winter Wolf/Winter Wolf.map": {
+      "bytes": 198200,
+      "cellsX": 220,
+      "cellsY": 220,
+      "contentSha256": "28D5FAF88F098377A812981013A8654F326962332BFF09752B7B316EEF029894",
+      "startPositions": 2,
+      "terrainFingerprint": "74C7AFDB34105C77B25D07CF3A73FD513C6E0C6188E11126433707AC7FF0A7F6"
+    },
+    "Maps/_Art Review New Units/_Art Review New Units.map": {
+      "bytes": 12367,
+      "cellsX": 300,
+      "cellsY": 300,
+      "contentSha256": "7E27B69F0768D5E5598C7E3DE47868CD2AC7A3EA506B9E81CF9669A728A19C7F",
+      "startPositions": 0,
+      "terrainFingerprint": "D12589F1976381F22D4838138D05709542307B4C7E8D3D02989E8452CEC31158"
+    },
+    "maps/Armored Fury/Armored Fury.map": {
+      "bytes": 177469,
+      "cellsX": 356,
+      "cellsY": 356,
+      "contentSha256": "2DD6E3053C0F3DD910E983CABF26304FBA44386C8E2BA13C3E9B4BFA16309D27",
+      "startPositions": 6,
+      "terrainFingerprint": "216EECD8AC3028BB5FA9250E880AB5A9221BF447E5B0B5702A8068D59B48B6E7"
+    },
+    "maps/Bridge Busters/Bridge Busters.map": {
+      "bytes": 223392,
+      "cellsX": 190,
+      "cellsY": 190,
+      "contentSha256": "C037B38237F4920889862D2F8802BF90F2A2E9656E054FF5868E78FCD1B29F6B",
+      "startPositions": 0,
+      "terrainFingerprint": "9EC94352E606CE9C7DBD946F2E85FF9360829282A06C976978F9A387E40E753B"
+    },
+    "maps/CHI01/CHI01.map": {
+      "bytes": 239366,
+      "cellsX": 264,
+      "cellsY": 246,
+      "contentSha256": "673494FBC367BDB6D0867D36554C2896F4505E37E73F762F73D61D92F44FEF92",
+      "startPositions": 0,
+      "terrainFingerprint": "0ECB397A5518F2C989E843E979D501F64EC8D9E67324005CAB1DB69DBF14114C"
+    },
+    "maps/CHI02/CHI02.map": {
+      "bytes": 183995,
+      "cellsX": 290,
+      "cellsY": 270,
+      "contentSha256": "5A5872062555AAAC8D25C5076D9749ACE8816C3F8D1327370D97C2DF32E2E296",
+      "startPositions": 0,
+      "terrainFingerprint": "CC91DFBC8B0FBC0D31B8906F3AFA6541CF89E255FA7AD81DF19F6535E0F81DAC"
+    },
+    "maps/CHI03/CHI03.map": {
+      "bytes": 322722,
+      "cellsX": 245,
+      "cellsY": 290,
+      "contentSha256": "DD2F7DD62D2EDFAAB132058D0F7B5155DFCBA1AD5C1AF903941AE4D5BF9B49BA",
+      "startPositions": 0,
+      "terrainFingerprint": "2EFEF7FD060D2A2A8DCD21E37E0E2EC072B9D19D3951348207F0D895DCB883B4"
+    },
+    "maps/CHI04/CHI04.map": {
+      "bytes": 279738,
+      "cellsX": 170,
+      "cellsY": 250,
+      "contentSha256": "F352289FF367C45D60EBF26150CDE91EBFE6594D2CFC358C95E6C2D700DBC552",
+      "startPositions": 0,
+      "terrainFingerprint": "6716AD8C0BAF95C306E0FFC80C1C2ABDD0005EC884307B118CBB50BD97FB49EE"
+    },
+    "maps/CHI05/CHI05.map": {
+      "bytes": 228105,
+      "cellsX": 275,
+      "cellsY": 303,
+      "contentSha256": "FFE05CA759433AAE11F3B302D0CE81DC3DC462540496B1AA70F6A2076CFBC872",
+      "startPositions": 0,
+      "terrainFingerprint": "E9340D88128B025F913BD59DB1A0C866F065281363D9C8FD6B6823BC89A78ACC"
+    },
+    "maps/CHI06/CHI06.map": {
+      "bytes": 336068,
+      "cellsX": 253,
+      "cellsY": 329,
+      "contentSha256": "5C3C3B9EE813C39ADB25767C26EF84EE89484D7692361D4EC14BDDEA391B6B35",
+      "startPositions": 0,
+      "terrainFingerprint": "1D0C789D1CF6709F54018F99E8567AE6F7271AC48638C990B7F79E5EC587D1D9"
+    },
+    "maps/CHI07/CHI07.map": {
+      "bytes": 350377,
+      "cellsX": 230,
+      "cellsY": 430,
+      "contentSha256": "86754192E987883EF06BDEC61B534C1F29CE44BB39954186A7D3AA7D1C1CFD0E",
+      "startPositions": 0,
+      "terrainFingerprint": "5D1F43E3EC6B38AF91DBA36A4E3D90FC14C9257A55961A8225AF49853B8C6DB8"
+    },
+    "maps/CHI08/CHI08.map": {
+      "bytes": 1419296,
+      "cellsX": 250,
+      "cellsY": 350,
+      "contentSha256": "74AAAA841A60E03BED73DF40FEE29238A383D92EA2DA71A1C761006E9568DF73",
+      "startPositions": 0,
+      "terrainFingerprint": "78053DAE6A36C174754E98D1A1F073E3CBA17823D6E5224F6E93831BD0FD3474"
+    },
+    "maps/CHIfinal/CHIfinal.map": {
+      "bytes": 3751583,
+      "cellsX": 230,
+      "cellsY": 430,
+      "contentSha256": "B7852DD6E844854FF604E499AF98071489C518BEADD5BAF4A1794FD00AFE2C0D",
+      "startPositions": 0,
+      "terrainFingerprint": "C4EDF9237A6CE3B981025EB49F96CD88CEBDEB2A93042045820DF1875070C095"
+    },
+    "maps/Cliff/Cliff.map": {
+      "bytes": 767727,
+      "cellsX": 200,
+      "cellsY": 200,
+      "contentSha256": "B7A86AD79A11D86237C7D37EB3C599F33CE54EB4204F78D65FDFF6FC9FEDADF8",
+      "startPositions": 0,
+      "terrainFingerprint": "636E72EEA7CED57CDA39D7B499F1E434CBAB68058C355CED678F8785293B1DD7"
+    },
+    "maps/GLA01/GLA01.map": {
+      "bytes": 513978,
+      "cellsX": 312,
+      "cellsY": 294,
+      "contentSha256": "EEE892F1E0A2AB2E1EBC300171F5CDA55131B0AE22E80AE15389EFF3CC38E980",
+      "startPositions": 0,
+      "terrainFingerprint": "50E93B8A587F6EA27091E5DF5700E72BBE9248EACE60358C829F4FE1FDC2FABB"
+    },
+    "maps/GLA02/GLA02.map": {
+      "bytes": 350458,
+      "cellsX": 151,
+      "cellsY": 201,
+      "contentSha256": "304053070ADE335B0C52CE97DA966FE840757A718944F30057D23CCAA2312A79",
+      "startPositions": 0,
+      "terrainFingerprint": "EFB34785C1A5BBF6410063B9599F78FC2DB080C4393E4FEB887F9F727C9B6D6F"
+    },
+    "maps/GLA04/GLA04.map": {
+      "bytes": 204048,
+      "cellsX": 199,
+      "cellsY": 201,
+      "contentSha256": "6A36B5FB8EDA524CB149FFF5D9F737992D862E53FD022BAC81D9E6C0A328B428",
+      "startPositions": 0,
+      "terrainFingerprint": "AE1FEB3CF15AC97673F923E765B41701976089D21A9CF4BEBBA64105C55EB0CA"
+    },
+    "maps/GLA05/GLA05.map": {
+      "bytes": 180824,
+      "cellsX": 220,
+      "cellsY": 180,
+      "contentSha256": "0E7FB5419DB758CA79F1A7350D63CBAC0A078DAF5E568A9CFB1C039D24F8EE36",
+      "startPositions": 0,
+      "terrainFingerprint": "9593504977249B8DE9F49A94ABEDCBB106D55DE4E4C460D54A7DDB452147386A"
+    },
+    "maps/GLA06/GLA06.map": {
+      "bytes": 362376,
+      "cellsX": 275,
+      "cellsY": 250,
+      "contentSha256": "2C0B5E0A4B45421D83395A326DC9FC5285F249FE24B58225D74EF5CF66D3B171",
+      "startPositions": 0,
+      "terrainFingerprint": "E7CB19776E104628FE1730AA9C3271F303F2716756F50B097CBAF7608CAC938C"
+    },
+    "maps/GLA07/GLA07.map": {
+      "bytes": 354586,
+      "cellsX": 250,
+      "cellsY": 250,
+      "contentSha256": "3F1A8EC41CC1A69BB9C024A950CE4C081B051CBD05493705663D5FB5D14B44E0",
+      "startPositions": 0,
+      "terrainFingerprint": "DDAD496E696DDD9E65D64BBA71FAE8FCE878317F8F87C9027D2926E04CA721F2"
+    },
+    "maps/GLA08/GLA08.map": {
+      "bytes": 401067,
+      "cellsX": 524,
+      "cellsY": 377,
+      "contentSha256": "94334D5E7D1B9E1178C5D3B92D819678500F94EB9D65F0CA0B41B33BB7FB01A8",
+      "startPositions": 0,
+      "terrainFingerprint": "47803FBE2F7B1D907AC96F42C7F7AFF17D8D3B7231EC438A02BE6EE858B92395"
+    },
+    "maps/Mountain Fox/Mountain Fox.map": {
+      "bytes": 447050,
+      "cellsX": 350,
+      "cellsY": 350,
+      "contentSha256": "0561D514F4477B89701E8A2B53DF00DFD8390E5B62B5751622FA9EEC928BF3EF",
+      "startPositions": 0,
+      "terrainFingerprint": "4FC294058DD67A96185EBB79CD5CD55DC84E117B16915685FB539B4A06876D9E"
+    },
+    "maps/Scorched Earth/Scorched Earth.map": {
+      "bytes": 164847,
+      "cellsX": 190,
+      "cellsY": 190,
+      "contentSha256": "833D0EE5A2FA9A7D9044192473F5ECB45E7B685CA77F7EFB4D79CBC9172D0F22",
+      "startPositions": 2,
+      "terrainFingerprint": "EC6963C08AA6BB214226E8D2D058A287828890197A2B86382AC82582F352239A"
+    },
+    "maps/ShellMap1/ShellMap1.map": {
+      "bytes": 37161,
+      "cellsX": 140,
+      "cellsY": 130,
+      "contentSha256": "ED043554B3F61E40D07C1B6D6256F04253747060DE5A99FB22F8E0E3A77316E8",
+      "startPositions": 0,
+      "terrainFingerprint": "03517B97FDCB770C60CC7D291EF2035E4E8559A79D19F20C094C016835A71657"
+    },
+    "maps/ShellMap1Low/ShellMap1Low.map": {
+      "bytes": 34047,
+      "cellsX": 140,
+      "cellsY": 130,
+      "contentSha256": "14C900DCB822A6202C8C535A0D944A07D4B323C2AF7BCD770CCD57BBDC5B2E51",
+      "startPositions": 0,
+      "terrainFingerprint": "B845BA97BD3F6DCFB4CFDB9FB1668FD37F7329AC28707A7214393A98A84FFEC7"
+    },
+    "maps/SwissMP/SwissMP.map": {
+      "bytes": 297856,
+      "cellsX": 200,
+      "cellsY": 240,
+      "contentSha256": "599039C3A609D7AD540E585A4DD859AB9C47F6DB64573744D2131C92C918BEE5",
+      "startPositions": 0,
+      "terrainFingerprint": "6AFAB482113C45596E386EE3CC87CE35B03593ECC5AEB3181F01C41DA985266A"
+    },
+    "maps/Training01/Training01.map": {
+      "bytes": 786944,
+      "cellsX": 310,
+      "cellsY": 280,
+      "contentSha256": "D0FB2F84AFED7D8EABB67CDB9735E6CD94032B2615B07EAEAB013EB0A908CEF1",
+      "startPositions": 0,
+      "terrainFingerprint": "529E2A45111A7647F5BFF96FE130FA6FFD1A6739B29749F95D068D95CE1925F2"
+    },
+    "maps/USA01/USA01.map": {
+      "bytes": 378770,
+      "cellsX": 374,
+      "cellsY": 299,
+      "contentSha256": "11C6050977757AAAE0F98668A1C9D32E5D71BB5B9CAD18C8413616966C41837E",
+      "startPositions": 0,
+      "terrainFingerprint": "DEB9C02A1C99A3845E05F7C5D7E896B08FE56CC8CE070B1DE3F899F490F7690D"
+    },
+    "maps/USA02/USA02.map": {
+      "bytes": 257389,
+      "cellsX": 274,
+      "cellsY": 210,
+      "contentSha256": "66AD9BE60080F72448A1BFC7572A69E39D67D441C67D1DF80C14454E8BAF198D",
+      "startPositions": 0,
+      "terrainFingerprint": "257F7440517E4F3EE9115FB32F62AA709B8CFFFF335ABDDA6CF989C0AB005471"
+    },
+    "maps/USA03/USA03.map": {
+      "bytes": 251547,
+      "cellsX": 228,
+      "cellsY": 201,
+      "contentSha256": "396C49F95477BCE27A1A8FC2613AA2823AFC3FB2F63FD83C5DBFBF20953332A3",
+      "startPositions": 0,
+      "terrainFingerprint": "08293D6D7FE8DCD168CD1E735F61E1F5DA8F5D11A605CF4F38B6A1572D95F8A4"
+    },
+    "maps/USA04/USA04.map": {
+      "bytes": 249529,
+      "cellsX": 220,
+      "cellsY": 280,
+      "contentSha256": "7B7565B1236734C686F938BE08CEEC6AAD7D225C4009373D2FF77D1142E1CB31",
+      "startPositions": 0,
+      "terrainFingerprint": "1D804F87794BB2942E7DD427B7783252A3443235B3B1FA2329D5FE10D56263BE"
+    },
+    "maps/USA05/USA05.map": {
+      "bytes": 1191316,
+      "cellsX": 300,
+      "cellsY": 220,
+      "contentSha256": "14308AB8118AFCBFD2D154362252464EA4CECA4CD533A1DC6EF6B6FB8866E3E5",
+      "startPositions": 0,
+      "terrainFingerprint": "A06A1D6C5252295C211AF70306FF90E3496A85D73671292FD2C842F82BFE193C"
+    },
+    "maps/USA06/USA06.map": {
+      "bytes": 313863,
+      "cellsX": 250,
+      "cellsY": 305,
+      "contentSha256": "64384B3522BB38A30E497D7E5D2AE0DABAD905C39B865DD0FABA93F185C54337",
+      "startPositions": 0,
+      "terrainFingerprint": "78D1297631CF766AB385C802F81F57CB1B3A16423AAE59215CC47E37C1BF54D5"
+    },
+    "maps/USA07/USA07.map": {
+      "bytes": 318954,
+      "cellsX": 250,
+      "cellsY": 249,
+      "contentSha256": "F65E0B537D84CC0F8062EEA7FE6BF790A5A8DE557EF3468C4E10DBD1FBA7B5B9",
+      "startPositions": 0,
+      "terrainFingerprint": "8D310E39A7F78BBF20FDC8583E441320D1BA92DFDBF7FE2A95A30AA9C4B36236"
+    },
+    "maps/USA08/USA08.map": {
+      "bytes": 363034,
+      "cellsX": 300,
+      "cellsY": 150,
+      "contentSha256": "6E23EA8D3C2D2B1D74D0F9D403640E763FCFC20F8980F8053E8E64606D4E76E2",
+      "startPositions": 0,
+      "terrainFingerprint": "3FE7D2AA3588E170C3816B8FBD47C2E23D13BAA7F664BD0B0C0273E244AA5EF1"
+    },
+    "maps/Woodcrest Circle/Woodcrest Circle.map": {
+      "bytes": 192141,
+      "cellsX": 200,
+      "cellsY": 218,
+      "contentSha256": "F91DFD7FAF85F8EB45574F7238117E0539FE875C5440841473BE6B4114DC777C",
+      "startPositions": 0,
+      "terrainFingerprint": "DE03471182AD85A0A44A593B5E05097ADF7A1196BA249DD56B33E25400D08746"
+    }
+  },
+  "modelGeometry": {
+    "airfields": 9,
+    "sha256": "93D5819BF231304D112CABABBC0A69986E82CF7E353BBC8742EEBE7A88F1DA47"
+  },
+  "schema": 1,
+  "worldFingerprint": "63FE84D91A4EB0C6128002B90F2471D26B8D23E5576AD51ACED3313F7CF9AEBB"
+}
