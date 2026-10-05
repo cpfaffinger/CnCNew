@@ -17,6 +17,7 @@ using CnCNew.Game.Tests;
     (nameof(MissionTextTests), MissionTextTests.Run),
     (nameof(ScenarioTests), ScenarioTests.Run),
     (nameof(ModelGeometryTests), ModelGeometryTests.Run),
+    (nameof(DeterminismTests), DeterminismTests.Run),
 ];
 
 // --suite is accepted as another spelling of --only.

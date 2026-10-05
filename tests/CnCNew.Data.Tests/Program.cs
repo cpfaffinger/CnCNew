@@ -38,6 +38,7 @@ FullCompilationsAreByteIdentical();
 FingerprintStreamingMatchesBuffer();
 ObjectCreationListsAreTypedNuggets();
 WeaponBonusesAreTypedAndStrict();
+SingleBitsMatchTheRuntimeCast();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -880,6 +881,76 @@ static void WeaponBonusesAreTypedAndStrict()
     Throws<FormatException>(() => DefinitionCompiler.Compile(One("Weapon W\n  WeaponBonus = VETERAN SPEED 125%\nEnd\n")), "not a member of WeaponBonusField");
     Throws<FormatException>(() => DefinitionCompiler.Compile(One("Weapon W\n  WeaponBonus = VETERAN DAMAGE 125\nEnd\n")), "percentage");
     Assert(NameTablesPhase5.WeaponBonusCondition.Count == 27, "WeaponBonus condition table size.");
+}
+
+// Phase 18, D2: the integer conversion of single-precision bits is the runtime's (decimal)float, value and scale, for every bit pattern tried.
+static void SingleBitsMatchTheRuntimeCast()
+{
+    static bool Same(decimal a, decimal b)
+    {
+        Span<int> left = stackalloc int[4];
+        Span<int> right = stackalloc int[4];
+        decimal.GetBits(a, left);
+        decimal.GetBits(b, right);
+        return left.SequenceEqual(right);
+    }
+
+    long compared = 0, overflow = 0;
+    void Compare(int bits)
+    {
+        var single = BitConverter.Int32BitsToSingle(bits);
+        if (!float.IsFinite(single))
+        {
+            Assert(!CnCNew.Data.World.SingleBits.IsFinite(bits), $"Bits {bits:X8} are not finite.");
+            Throws<ArgumentException>(() => CnCNew.Data.World.SingleBits.ToDecimal(bits), "not a finite number");
+            return;
+        }
+        Assert(CnCNew.Data.World.SingleBits.IsFinite(bits), $"Bits {bits:X8} are finite.");
+        decimal expected;
+        try
+        {
+            expected = (decimal)single;
+        }
+        catch (OverflowException)
+        {
+            overflow++;
+            Throws<OverflowException>(() => CnCNew.Data.World.SingleBits.ToDecimal(bits), "does not fit a decimal");
+            return;
+        }
+        var actual = CnCNew.Data.World.SingleBits.ToDecimal(bits);
+        compared++;
+        if (!Same(expected, actual))
+            throw new InvalidOperationException($"Single bits {bits:X8} ({single:R}): the runtime cast gives {expected} (scale {expected.Scale}), the integer routine {actual} (scale {actual.Scale}).");
+    }
+
+    // Hand-picked: zeros, subnormals, the limits of the decimal range, exact halves of the seventh digit, powers of two and ten, map-like coordinates.
+    foreach (var value in new[] { 0f, -0f, float.Epsilon, -float.Epsilon, 1f, -1f, 0.1f, 0.5f, 1.5f, 2.5f, 10f, 100f, 1e6f, 1e7f, 9999999f, 9999999.5f, 16777216f, 16777217f, 1e-7f, 1e-10f, 1e-28f,
+                 5e-29f, 4.9e-29f, 1e-30f, 7.9e28f, 7.92e28f, 7.93e28f, 1e29f, float.MaxValue, float.MinValue, 1234567.5f, 123456.75f, 0.0625f, 3.1415927f, -1.5707964f, 2560f, 1265.625f,
+                 0.3333333f, 0.6666667f, 999999.94f, 999999.97f, 99999.99f, 9999999.9f, 1e22f, 1e23f, 3.4e-5f, float.PositiveInfinity, float.NegativeInfinity, float.NaN })
+        Compare(BitConverter.SingleToInt32Bits(value));
+
+    // Every exponent with a spread of mantissas, both signs: 256 * 2 * 4096 patterns.
+    for (var exponent = 0; exponent < 256; exponent++)
+        for (var step = 0; step < 4096; step++)
+        {
+            var mantissa = (int)((uint)step * 2_654_435_761u >> 9) & 0x7FFFFF;
+            Compare((exponent << 23) | mantissa);
+            Compare(unchecked((int)0x80000000) | (exponent << 23) | mantissa);
+        }
+
+    // A fixed pseudo-random walk over the whole 32-bit space (xorshift32), and one concentrated on the magnitudes of map coordinates (2^-8 .. 2^16).
+    var state = 0x9E3779B9u;
+    for (var index = 0; index < 4_000_000; index++)
+    {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        Compare(unchecked((int)state));
+        var exponent = 119 + (int)(state % 24);
+        Compare((int)((state & 0x807FFFFFu) | ((uint)exponent << 23)));
+    }
+    Console.WriteLine($"  single bits -> decimal: {compared} bit patterns identical to the runtime cast (value and scale), {overflow} overflow alike.");
+    Assert(compared > 9_000_000 && overflow > 0, "The comparison covered the range.");
 }
 
 static void Assert(bool condition, string message)
