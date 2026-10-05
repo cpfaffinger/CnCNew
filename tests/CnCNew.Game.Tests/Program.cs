@@ -7,6 +7,7 @@ using CnCNew.Game.Tests;
     (nameof(LiveMatchTests), LiveMatchTests.Run),
     (nameof(AudioDirectorTests), AudioDirectorTests.Run),
     (nameof(ShellTests), ShellTests.Run),
+    (nameof(ShellTransitionTests), ShellTransitionTests.Run),
     (nameof(HudTests), HudTests.Run),
     (nameof(CampaignTests), CampaignTests.Run),
     (nameof(CampaignShellTests), CampaignShellTests.Run),

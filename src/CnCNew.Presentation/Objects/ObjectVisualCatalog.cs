@@ -21,7 +21,8 @@ public sealed record ObjectVisual(
     string? ButtonImage,
     ImmutableArray<DrawSpec> Draws,
     ImmutableArray<ConditionUpgradeSpec> ConditionUpgrades,
-    SuspensionMotion? Suspension = null)
+    SuspensionMotion? Suspension = null,
+    float PlacementViewAngle = 0f)
 {
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
     public bool IsStructure => IsKindOf("STRUCTURE");
@@ -96,8 +97,12 @@ public sealed class ObjectVisualCatalog
         var radius = isBox ? Math.Sqrt((double)(major * major + minor * minor)) : (double)major;
         return new ObjectVisual(definition.OriginalName, kindOf, (float)(Number(definition.Fields, "Scale") ?? 1m), shadow, (float)radius,
             Text(definition.Fields, "SelectPortrait"), Text(definition.Fields, "ButtonImage"), draws, upgrades.ToImmutable(),
-            locomotors is null ? null : NormalSuspension(definition, locomotors));
+            locomotors is null ? null : NormalSuspension(definition, locomotors), PlacementViewAngleOf(definition));
     }
+
+    /// <summary><c>PlacementViewAngle</c> in radians (<c>ThingTemplate::getPlacementViewAngle</c>): the heading a structure has while it follows the cursor and when it is placed without a drag.</summary>
+    private static float PlacementViewAngleOf(ObjectDefinition definition)
+        => Field(definition.Fields, "PlacementViewAngle")?.Value.Value is Angle angle ? (float)((double)angle.Degrees * Math.PI / 180.0) : 0f;
 
     /// <summary>The chassis dynamics of the <c>SET_NORMAL</c> locomotor (the first listed name that exists), or null when it has none.</summary>
     private static SuspensionMotion? NormalSuspension(ObjectDefinition definition, IReadOnlyDictionary<string, SuspensionMotion?> locomotors)

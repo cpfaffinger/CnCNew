@@ -91,7 +91,8 @@ if (contentDirectory is not null)
 
 using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),
     audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30"), GetArgument(args, "--cursor-at"), GetArgument(args, "--waypoints"),
-    inputScriptPath is null ? null : CnCNew.Client.Stride.Testing.InputScript.Load(inputScriptPath), int.Parse(GetArgument(args, "--mission-journal") ?? "0")))
+    inputScriptPath is null ? null : CnCNew.Client.Stride.Testing.InputScript.Load(inputScriptPath), int.Parse(GetArgument(args, "--mission-journal") ?? "0"),
+    !args.Contains("--no-transitions", StringComparer.OrdinalIgnoreCase)))
 {
     game.Run();
     if (game.UnresolvedInputSteps > 0) Environment.ExitCode = 3;
@@ -151,7 +152,8 @@ internal sealed class CnCNewGame(
     string? cursorAt = null,
     string? waypoints = null,
     CnCNew.Client.Stride.Testing.InputScript? inputScript = null,
-    int missionJournalLines = 0) : Game
+    int missionJournalLines = 0,
+    bool animateShell = true) : Game
 {
     public int UnresolvedInputSteps { get; private set; }
 
@@ -210,7 +212,7 @@ internal sealed class CnCNewGame(
         {
             var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"));
             var back = GraphicsDevice.Presenter.BackBuffer;
-            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions);
+            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell);
             Window.Title = "CnCNew";
             ApplyStaging();
             return;

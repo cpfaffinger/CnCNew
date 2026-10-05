@@ -22,7 +22,7 @@ public sealed partial class UiWindowTree
         Hilite,
     }
 
-    private sealed class DrawBuilder(UiWindowTree tree)
+    private sealed partial class DrawBuilder(UiWindowTree tree)
     {
         private const int MaximumTiles = 256;
         private readonly ImmutableArray<UiDrawCommand>.Builder _commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
@@ -89,7 +89,8 @@ public sealed partial class UiWindowTree
         {
             if ((window.Status & WndStatus.Image) != 0)
             {
-                if (set[index].Image is { } image) Image(image, Offset(window, rect));
+                var named = set.Kind == WndDrawDataKind.Enabled && index == 0 ? window.EnabledImage0 : set[index].Image;
+                if (named is { } image) Image(image, Offset(window, rect));
             }
             else Box(rect, set[index]);
         }
@@ -462,7 +463,7 @@ public sealed partial class UiWindowTree
 
         private void Image(string image, UiRect rect)
         {
-            if (!rect.IsEmpty) _commands.Add(new UiImageDraw(image, rect, WndColor.White, false, false));
+            if (!rect.IsEmpty) _commands.Add(new UiImageDraw(image, rect, WndColor.White with { A = _tintAlpha }, false, false));
         }
     }
 }

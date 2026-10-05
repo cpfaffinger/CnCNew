@@ -1,0 +1,5 @@
+# Capture aid for the refused building preview (docs/GAME-HUD.md section 18): as placement-preview.txt, but the pointer rests on the base's own structure, where the footprint is blocked.
+5   look own:DOZER
+10  click left own:DOZER
+30  click left command:DozerConstruct
+50  move own:STRUCTURE

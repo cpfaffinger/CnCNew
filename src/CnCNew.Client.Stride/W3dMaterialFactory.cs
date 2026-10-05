@@ -21,6 +21,13 @@ internal sealed class W3dMaterialFactory(
     /// <summary>A colour factor on the surface of every material created while it is not one (a flashing object, <c>Layers.Objects.FlashTint</c>); multiplies with <see cref="Dim"/>. Set by the caller around <see cref="Create"/>.</summary>
     public System.Numerics.Vector3 Tint { get; set; } = System.Numerics.Vector3.One;
 
+    /// <summary>
+    /// Opacity of every material created while it is below one (<c>Drawable::setDrawableOpacity</c>, the building preview of a placement): an opaque pass becomes an alpha blended pass with
+    /// this alpha (a cut-out pass keeps its holes, its alpha is scaled), a pass that already blends has its alpha (or, when it adds or modulates, its colour) scaled. Depth writing stays
+    /// as the shader has it, so the preview does not show its own far side through its near side. Set by the caller around <see cref="Create"/>.
+    /// </summary>
+    public float Opacity { get; set; } = 1f;
+
     public Material Create(W3dMesh mesh, W3dRenderBatch batch)
     {
         if (batch.Passes.Count == 0)
@@ -87,6 +94,18 @@ internal sealed class W3dMaterialFactory(
             surface = SubstituteAlpha(new ComputeBinaryColor(surface, new ComputeColor(new Color4(factor.X, factor.Y, factor.Z, 1f)), BinaryOperator.Multiply), surface);
         }
 
+        var opaque = shader is null || (shader.SourceBlend == W3dSourceBlend.One && shader.DestinationBlend == W3dDestinationBlend.Zero);
+        var translucent = Opacity < 1f;
+        if (translucent)
+        {
+            var scale = new ComputeColor(new Color4(Opacity, Opacity, Opacity, Opacity));
+            var cutout = shader?.AlphaTestEnabled == true;
+            var alphaBlended = shader?.SourceBlend == W3dSourceBlend.SourceAlpha;
+            surface = opaque && !cutout ? SubstituteAlpha(surface, scale) // the alpha of an opaque pass is whatever the texture holds; it is the opacity now
+                : cutout || alphaBlended ? SubstituteAlpha(surface, new ComputeBinaryColor(surface, scale, BinaryOperator.Multiply)) // alpha only: holes stay holes
+                : new ComputeBinaryColor(surface, scale, BinaryOperator.Multiply); // adds or modulates: the colour carries the amount
+        }
+
         var attributes = new MaterialAttributes
         {
             Diffuse = new MaterialDiffuseMapFeature(surface),
@@ -102,12 +121,12 @@ internal sealed class W3dMaterialFactory(
         var pass = material.Passes[0];
         if (shader is null)
         {
+            if (translucent) BlendByAlpha(pass);
             return material;
         }
 
         pass.DepthFunction = MapDepthCompare(shader.DepthCompare);
         pass.CullMode = mesh.IsTwoSided ? CullMode.None : CullMode.Back;
-        var opaque = shader.SourceBlend == W3dSourceBlend.One && shader.DestinationBlend == W3dDestinationBlend.Zero;
         pass.HasTransparency = !opaque;
         if (!opaque)
         {
@@ -116,9 +135,17 @@ internal sealed class W3dMaterialFactory(
                 MapDestinationBlend(shader.DestinationBlend));
             pass.AlphaToCoverage = false;
         }
+        else if (translucent) BlendByAlpha(pass);
 
         depthWrites[pass] = shader.DepthWriteEnabled;
         return material;
+    }
+
+    private static void BlendByAlpha(MaterialPass pass)
+    {
+        pass.HasTransparency = true;
+        pass.BlendState = new BlendStateDescription(Blend.SourceAlpha, Blend.InverseSourceAlpha);
+        pass.AlphaToCoverage = false;
     }
 
     private IComputeColor TextureColor(W3dMesh mesh, uint textureId, int coordinateIndex)

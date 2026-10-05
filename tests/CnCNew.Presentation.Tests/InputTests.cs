@@ -37,6 +37,7 @@ static class InputTests
         run.Test("Input: contextual orders produce the exact commands", ContextOrders);
         run.Test("Input: standing orders attack, attack-move, guard, waypoints, stop and scatter", StandingOrderBehaviour);
         run.Test("Input: placement validity, ghost rotation and the construct command", PlacementRules);
+        run.Test("Input: a placement starts at the template's PlacementViewAngle and a click without a drag keeps it", PlacementViewAngle);
         run.Test("Input: command bar slots, availability reasons, queue and multi-select", CommandBarStates);
         run.Test("Input: camera intent from keys, edges, drag, wheel and metas", CameraIntents);
         run.Test("Input: acceptance sequence through the event pipeline is replayable", AcceptanceSequence);
@@ -1117,6 +1118,27 @@ static class InputTests
         arena.System(sequence => new GiveMoneyCommand(PlayerId.System, sequence, world.Tick, Me, Fixed.FromInt(10)));
         arena.Step();
         Assert(SimulationQueries.CheckPlacement(world, Me, idleDozer, "Plant", Fixed.FromInt(40), Fixed.FromInt(140), Fixed.Zero) == PlacementIssue.InsufficientFunds, "70 left of a 100 cost");
+    }
+
+    private static void PlacementViewAngle()
+    {
+        var arena = new Arena(300);
+        arena.Spawn("Dozer", Me, 40, 40);
+        arena.Step(2);
+        var world = arena.World;
+        var dozer = arena.Find("Dozer", Me, 40, 40);
+        var view = new TopDownView();
+        var angle = -MathF.PI / 4;
+        var controller = new CommandModeController(Me, arena.Sink, new SelectionModel(Me), new CommandSettings(PlacementViewAngle: template => template == "Plant" ? angle : 0f));
+        Assert(CommandButtonCatalog.Build(Fixture.Graph).TryGetButton("Command_ConstructPlant", out var construct), "construct button");
+        controller.Selection.Replace([dozer.Id]);
+        controller.Activate(world, construct, controller.Selection.OwnSelected(world));
+        controller.Hover(world, view, Screen(40, 80));
+        Assert(controller.Ghost is { Template: "Plant", Angle: var start } && start == angle, "the ghost starts turned by the template's view angle");
+        controller.PlacementPress(world, view, Screen(40, 80));
+        var before = arena.Sink.Issued.Count;
+        Assert(controller.PlacementRelease(world, view, Screen(40, 80)), "release places");
+        Assert(arena.Sink.Issued.Skip(before).Single() is ConstructCommand command && command.Angle == SimulationQueries.ToFixed(angle), "a click without a drag places the building with that angle");
     }
 
     // ============================================================================================ command bar

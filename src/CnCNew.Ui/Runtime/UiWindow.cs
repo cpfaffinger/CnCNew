@@ -88,6 +88,19 @@ public sealed class UiWindow
         if (!enabled) Tree.OnWindowHidden(this);
     }
 
+    private string? _enabledImage0;
+    private bool _enabledImage0Replaced;
+
+    /// <summary>The image of the first enabled draw entry: the file's own, or the one <see cref="SetEnabledImage0"/> replaced it with.</summary>
+    public string? EnabledImage0 => _enabledImage0Replaced ? _enabledImage0 : Definition.GetDrawData(WndDrawDataKind.Enabled)[0].Image;
+
+    /// <summary><c>winSetEnabledImage(0, image)</c>: replaces the first enabled draw entry's image (window transitions use it to hand an image to a grow marker).</summary>
+    public void SetEnabledImage0(string? image)
+    {
+        _enabledImage0 = image;
+        _enabledImage0Replaced = true;
+    }
+
     public void SetText(string text) => Text = UiTextValue.Plain(text);
 
     public void SetTextLabel(string label) => Text = UiTextValue.Label(label);

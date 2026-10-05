@@ -65,7 +65,7 @@ internal sealed class LiveMatchHost : IDisposable
         else step(seconds);
         _camera.ViewMatrix = Match.Camera.View.ToStride();
         _camera.ProjectionMatrix = Match.Camera.Projection.ToStride();
-        var frame = new WorldFrame(Match, Match.Frame, commandList, (float)seconds, _total);
+        var frame = new WorldFrame(Match, Match.ObjectFrame, commandList, (float)seconds, _total);
         foreach (var layer in _layers) layer.Update(frame);
     }
 

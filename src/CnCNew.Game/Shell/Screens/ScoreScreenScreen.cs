@@ -41,6 +41,8 @@ public sealed class ScoreScreenScreen : ShellScreen
             W($"StaticTextObserver{row}").SetHidden(true);
             W($"GameWindowWinner{row}").SetHidden(!entry.IsWinner);
         }
+        // ScoreScreenInit (skirmish): the rows appear one after the other and the numbers count up. Started last, because COUNTUP reads the numbers set above.
+        Transitions?.SetGroup("ScoreScreenShow");
     }
 
     private static readonly string[] RowFieldPrefixes =

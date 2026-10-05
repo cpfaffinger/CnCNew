@@ -76,10 +76,11 @@ internal sealed class ClientRuntime : IDisposable
     public void StageWaypoints((float X, float Y)[] offsets) => _stagedWaypoints = offsets;
 
     /// <summary>The shell (main menu and everything behind it); it starts matches and missions itself.</summary>
-    public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio)
+    public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio, bool animateTransitions = true)
     {
+        // animateTransitions: the menu animates like the original (Data/INI/WindowTransitions.ini, docs/GAME-SHELL.md section 11); --no-transitions switches to hard cuts.
         var runtime = new ClientRuntime(game, data, GameSettings.Default,
-            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure), audio);
+            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions), audio);
         runtime._audio.Game.EnterShell();
         return runtime;
     }

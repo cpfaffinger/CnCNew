@@ -89,8 +89,11 @@ internal sealed class ModelAsset
     private readonly Dictionary<uint, Model> _teamModels = [];
     private readonly Dictionary<(int MaterialIndex, uint TeamHex), Material> _teamMaterials = [];
     private readonly Dictionary<(int MaterialIndex, uint TeamHex), Material> _dimmedMaterials = [];
-    private readonly Dictionary<(int MaterialIndex, uint TeamHex, bool Dimmed, uint Flash), Material> _flashMaterials = [];
-    private readonly Dictionary<(int SkinPart, int Batch, uint Flash), Material> _flashSkinMaterials = [];
+    private readonly Dictionary<(int MaterialIndex, uint TeamHex, bool Dimmed, uint Flash, int Opacity), Material> _flashMaterials = [];
+    private readonly Dictionary<(int SkinPart, int Batch, uint Flash, int Opacity), Material> _flashSkinMaterials = [];
+
+    /// <summary>The opacity step of a solid drawable; steps are percent, so the few translucent drawables (the building preview) share a handful of cached material variants.</summary>
+    public const int SolidOpacity = 100;
 
     /// <summary>The brightness of an object in the fog (a fog level of one half squared for the linear pipeline, as the terrain layer does).</summary>
     public const float FogBrightness = 0.25f;
@@ -151,11 +154,11 @@ internal sealed class ModelAsset
     /// The material to use for slot <paramref name="materialIndex"/> for a team, if it samples a ZHC texture or the object is in the fog (<paramref name="dimmed"/>: the same
     /// material darkened by <see cref="FogBrightness"/>, built lazily and cached); else null (use the shared one).
     /// </summary>
-    public Material? GetTeamMaterial(int materialIndex, ColorValue team, bool dimmed = false, uint flash = FlashTint.None)
+    public Material? GetTeamMaterial(int materialIndex, ColorValue team, bool dimmed = false, uint flash = FlashTint.None, int opacity = SolidOpacity)
     {
         var info = FindByMaterialIndex(materialIndex);
         if (info is null) return null;
-        if (flash != FlashTint.None) return GetFlashMaterial(materialIndex, info, team, dimmed, flash);
+        if (flash != FlashTint.None || opacity != SolidOpacity) return GetFlashMaterial(materialIndex, info, team, dimmed, flash, opacity);
         if (dimmed) return GetDimmedMaterial(materialIndex, info, team);
         if (!info.UsesHouseColorTexture) return null;
         var key = (materialIndex, Hex(team));
@@ -176,13 +179,14 @@ internal sealed class ModelAsset
     }
 
     /// <summary>The material of slot <paramref name="materialIndex"/> with the flash factor <paramref name="flash"/> (<see cref="FlashTint"/>) on its surface, built lazily and cached: a flash has four levels per colour.</summary>
-    private Material GetFlashMaterial(int materialIndex, MeshInfo info, ColorValue team, bool dimmed, uint flash)
+    private Material GetFlashMaterial(int materialIndex, MeshInfo info, ColorValue team, bool dimmed, uint flash, int opacity)
     {
-        var key = (materialIndex, info.UsesHouseColorTexture ? Hex(team) : 0u, dimmed, flash);
+        var key = (materialIndex, info.UsesHouseColorTexture ? Hex(team) : 0u, dimmed, flash, opacity);
         if (_flashMaterials.TryGetValue(key, out var cached)) return cached;
         if (info.UsesHouseColorTexture) _services.Textures.HouseColor = team;
         if (dimmed) _services.Materials.Dim = FogBrightness;
         _services.Materials.Tint = FlashTint.Factor(flash);
+        _services.Materials.Opacity = opacity / (float)SolidOpacity;
         Material built;
         try
         {
@@ -190,6 +194,7 @@ internal sealed class ModelAsset
         }
         finally
         {
+            _services.Materials.Opacity = 1f;
             _services.Materials.Tint = Vector3.One;
             _services.Materials.Dim = 1f;
             _services.Textures.HouseColor = null;
@@ -200,12 +205,13 @@ internal sealed class ModelAsset
     }
 
     /// <summary>The material of one batch of a skinned part with the flash factor on its surface; null without a flash (the instance then draws the part's shared material).</summary>
-    public Material? GetSkinMaterial(int skinPart, int batch, uint flash)
+    public Material? GetSkinMaterial(int skinPart, int batch, uint flash, int opacity = SolidOpacity)
     {
-        if (flash == FlashTint.None) return null;
-        var key = (skinPart, batch, flash);
+        if (flash == FlashTint.None && opacity == SolidOpacity) return null;
+        var key = (skinPart, batch, flash, opacity);
         if (_flashSkinMaterials.TryGetValue(key, out var cached)) return cached;
         _services.Materials.Tint = FlashTint.Factor(flash);
+        _services.Materials.Opacity = opacity / (float)SolidOpacity;
         Material built;
         try
         {
@@ -213,6 +219,7 @@ internal sealed class ModelAsset
         }
         finally
         {
+            _services.Materials.Opacity = 1f;
             _services.Materials.Tint = Vector3.One;
         }
 

@@ -224,7 +224,7 @@ Check-Box, Custom-Draw; dreiteiliger Button mit Kacheln).
 ## 7. Grenzen
 
 - `ShellMenuScheme` (`Data/INI/ShellMenuScheme.ini`, im `CompiledDefinitionGraph` als Kompatibilitätsdefinition) wird hier
-  nicht gelesen; Menüübergänge (`WindowTransitions.ini`, `LAYOUTINIT`-Animationen) sind Aufgabe der Shell.
+  nicht gelesen; Menüübergänge (`WindowTransitions.ini`, `LAYOUTINIT`-Animationen) sind Aufgabe der Shell (`docs/GAME-SHELL.md` §12; der Handler liegt in `CnCNew.Ui/Transitions`).
 - Modale Fenster (`winSetModal`), Mauscapture durch Callbacks, Ziehen von `DRAGGABLE`-Fenstern, IME, Videopuffer,
   `USE_OVERLAY_STATES`/`FLASHING`/`NOT_READY`-Overlays, Hotkey-Text und Uhr-Overlays der Control Bar sind nicht umgesetzt.
 - Der alte Rahmen `WIN_STATUS_BORDER` (`winDrawBorder`) wird nicht gezeichnet, nur gezählt (`BorderStatusWindows`; Realdaten: 37 gezeichnete Fenster je Auflösung, versteckte nicht mitgezählt).

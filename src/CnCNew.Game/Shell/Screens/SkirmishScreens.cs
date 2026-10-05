@@ -64,7 +64,11 @@ public sealed class SkirmishSetupScreen : ShellScreen
 
         RefreshMapDisplay();
         ApplySlotVisibility();
+        // SkirmishGameOptionsMenuUpdate: the screen fades in (FULLFADE of SubParent) and fades out again when it is closed.
+        Transitions?.SetGroup("SkirmishGameOptionsMenuFade");
     }
+
+    protected override string? ExitTransitionGroup => "SkirmishGameOptionsMenuFade";
 
     private void ApplySlotVisibility()
     {

@@ -192,6 +192,9 @@ keinem Gadget aus erreichbar, weil die ausgelieferte `OptionsMenu.wnd` keins daf
 * Boot: `GameShell.CreateLoading` zeichnet sofort etwas (der Ladebildschirm ist ab dem ersten Frame sichtbar), erreicht
   nach dem Hintergrund-Ladevorgang zuverlässig `ShellPhase.Menus`.
 
+* **Fensterübergänge** (`ShellTransitionTests.cs`, zehn Tests gegen die echten Layouts, Einzelheiten §12): Einstieg, Eingabe bei versteckten Fenstern, Untermenüs, Fraktionslogos, Screen-Rundgang
+  mit Flash-out/Fade-in/erneutem Einstieg, alle Kampagnenknöpfe, Ergebnisbildschirm mit hochzählenden Zahlen, byteidentische Wiederholung, Lauf ohne Animation.
+
 `dotnet build CnCNew.slnx`: unverändert **21 Warnungen** (die dokumentierte Stride-Asset-Compiler-Basislinie), **0**
 davon neu.
 
@@ -211,6 +214,9 @@ davon neu.
   `UiRenderer.TextMeasure` durch) – vorher saßen alle zentrierten Texte sichtbar neben der Mitte.
 * Anzeigemodus/Sprache/Seitenverhältnis/Barrierefreiheits-Textskalierung sind in `GameSettings` vorhanden, aber von
   keinem Gadget der ausgelieferten `OptionsMenu.wnd` aus erreichbar.
+* **Fensterübergänge (§12):** nur im Stride-Client eingeschaltet (`GameShell.Create(…, animateTransitions: true)`, `--no-transitions` schaltet sie ab); `Create` ohne den Parameter,
+  alle Tests und die goldenen Hashes laufen ohne Animation. Nicht gespielt werden die Gruppen von Mehrspieler-Bildschirmen, des Schwierigkeitsmenüs (hier ein eigener Screen), des Spielmenüs
+  im Spiel (`Quit*`, gehört zum HUD), `GenExpFade`, `ControlBarArrow` und der Bildschirmfade beim Spielstart (`FadeWholeScreen` nach dem Laden) – siehe §12 „Nicht umgesetzt“.
 * **Phase 12:** die Shell-Ausgaben (`StartMatchOutput`, `StartMissionOutput`, `ExitRequestedOutput`, Anzeige-/Einstellungsänderungen) und die Rückmeldungen
   (`MatchFinished`/`MissionFinished`) sind im Stride-Client angeschlossen (`ClientRuntime`, `docs/GAME-HUD.md` §15). `GameShell` liest beim Start `Data/INI/ChallengeMode.ini` und setzt über
   `CampaignCatalog.WithPersonas` die Persona-Fraktion jeder Challenge-Kampagne (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
@@ -230,9 +236,9 @@ Ein Mensch hat `scripts/demo-shell.ps1` gespielt und fünf Auffälligkeiten geme
 Dazu behoben, nicht gemeldet: Die Hülle setzte ihre Texte mit `ShellTextMeasure` (synthetische Breiten), gezeichnet
 wurde mit der echten Schrift; zentrierte Beschriftungen saßen deshalb rechts der Mitte (§10).
 
-**Nicht gemacht:** die Übergangsanimationen des Originals (`GameWindowTransitions`, `WindowTransitions.ini`,
-`TheTransitionHandler->setGroup(...)`: Einblenden der Schaltflächen, Aufklappen der Gruppen), das Aufblitzen des
-Logos und die animierte Gefechtsszene hinter dem Hauptmenü. Gruppenwechsel sind harte Schnitte.
+**Nicht gemacht:** die animierte Gefechtsszene hinter dem Hauptmenü (zurückgestellt). Die Übergangsanimationen des Originals
+(`GameWindowTransitions`, `WindowTransitions.ini`, `TheTransitionHandler->setGroup(...)`: Einblenden der Schaltflächen, Aufklappen der Gruppen,
+Aufblitzen des Logos) sind seit Phase 16 umgesetzt, siehe §12; ohne `animateTransitions` bleiben Gruppenwechsel harte Schnitte.
 
 **Goldene Hashes:** 42 der 54 Werte in `baselines/screens.txt` haben sich geändert – alle Screens, die das Hauptmenü
 enthalten oder über ihm liegen (versteckte Fraktions-Schaltflächen), dazu die Regler der Skirmish-Einrichtung und die
@@ -243,3 +249,126 @@ Richtigkeit.
 **Sichtmittel:** `tools/CnCNew.UiRenderTool` zeichnet seitdem auch die Hülle selbst (`shell-*.png`, über
 `GameShell.Create` und echte Eingabeereignisse): Hauptmenü, überfahrene und gedrückte Schaltfläche, Optionen mit
 Reglern (überfahren, gezogen), Beenden-Dialog – siehe `docs/CLIENT-UI-RENDERING.md` §5.
+
+## 12. Fensterübergänge (`WindowTransitions.ini`, Phase 16)
+
+Das Original animiert die Hülle über `GameWindowTransitionsHandler` (`GameWindowTransitions.cpp/.h`, `GameWindowTransitionsStyles.cpp`): Schaltflächen blitzen nacheinander auf, Untermenüs klappen
+auf und zu, das Logo blendet ein, Bildschirmwechsel gehen durch eine schwarze Blende, die Zahlen des Ergebnisbildschirms zählen hoch. Die Daten stehen in `Data/INI/WindowTransitions.ini`
+(56 Gruppen, 381 Fenstereinträge); die Screens bestellen Gruppen mit `TheTransitionHandler->setGroup(name)`, `reverse(name)`, `remove(name)` und warten auf `isFinished()`.
+
+### Datenweg
+
+`WindowTransition` ist im Definitionsgraph weiter ein gezählter Kompatibilitätsblock (56, `baselines/compatibility.json` unverändert, `IniTool compat-check`: 751 Einträge, Definitionssnapshot unverändert).
+Gelesen wird die Datei vom strengen Leser `WindowTransitionTable.Parse` (`src/CnCNew.Ui/Transitions/`), wie Credits und Kampagnen (§4/`ShellCredits`): es ist ein reines Anzeigeskript der Hülle, ohne
+Verbraucher in Simulation oder Präsentationsgraph; eine Typisierung in `CnCNew.Data` hätte nur die Snapshot-Hashes verschoben. Der Leser kennt keinen Standardwert: unbekannter Schlüssel, unbekannter
+Stil, fehlender Stil, fehlender `WinName` (außer bei den zwei ganzbildschirmigen Stilen), doppelte Gruppe, negative Verzögerung und nicht beendeter Block sind `WindowTransitionFormatException` mit Datei und
+Zeile (das Original setzt hier still den ersten Stil bzw. den leeren Namen). Realdaten: 56 Gruppen, 381 Einträge, alle Stile bekannt, **alle Fensternamen lösen in den ausgelieferten Layouts auf** (0 offen).
+
+### Aufbau (Stride-frei, `CnCNew.Ui`)
+
+| Typ | Aufgabe | Original |
+|---|---|---|
+| `WindowTransitionTable` / `TransitionGroupSpec` | Gruppen, Fenstereinträge (`WinName`, `Style`, `FrameDelay`), `FireOnce` | `parseWindowTransitions`, `parseWindow` |
+| `TransitionEffect` + 15 Klassen | ein Effekt eines Fensters: `Init`, `Update(frame)`, `Reverse`, `Skip`, `Draw`, `IsFinished`, `FrameLength` | `Transition` und Stile |
+| `TransitionWindow`, `TransitionGroup` | Verzögerung je Fenster; Gruppenzähler, der vorwärts oder (nach `Reverse`) rückwärts läuft; `Reverse` setzt ihn auf die längste `Verzögerung + Länge` | `TransitionWindow`, `TransitionGroup` |
+| `WindowTransitionHandler` | `SetGroup`, `Reverse`, `Remove`, `IsFinished`, `Step`, `Advance(Sekunden)`, `AppendDraw`; aktuelle, wartende, gezeichnete und zuletzt gezeichnete Gruppe | `GameWindowTransitionsHandler` |
+| `UiTransitionHost`, `ITransitionWindow` | bindet die Effekte an einen `UiWindowTree`: Fenster per dekoriertem Namen, Verstecken, Bild/Text lesen und setzen, Töne | `TheWindowManager->winGetWindowFromId` und `GameWindow`-Aufrufe |
+
+* **Zeit:** ein Übergangs-Frame je Clientframe des Originals; die Hülle läuft dort mit 30 FPS (`GameData.ini`: `UseFPSLimit = Yes`, `FramesPerSecondLimit = 30`). `Advance(Sekunden)` macht daraus ganze Frames zu
+  1/30 s (Rest wird übertragen), nichts liest Wandzeit – eine Folge ist eine reine Funktion der gesteppten Frames. `ShellScreen.Update` deckelt einen Aufruf auf 0,1 s (3 Frames), damit ein Ladehänger die
+  Folge nicht in einem Schritt abspielt.
+* **Zeichnen:** ein Effekt versteckt sein Fenster und zeichnet an dessen Stelle einen Ersatz (`UiBorderRect`/`UiFillRect`/`UiImageDraw`/`UiTextDraw` mit Alpha), den `GameShell.BuildDrawList` hinter die Zeichenliste des
+  jeweiligen Screens hängt (im Original zeichnet `winRepaint` die Übergänge zuletzt). Der Ersatz des Schaltflächen-Aufblitzens ist `PushButtonImageDrawThree` (`UiWindowTree.BuildPushButtonImages`: linkes, mittleres
+  und rechtes Bild mit Alpha, ohne Text). Jeder Screen hat seinen eigenen Handler (jeder Screen hat seinen eigenen Fensterbaum); der Handler des Originals ist global.
+* **Eingabe:** wie im Original gibt es keine Sperre im Handler. Ein Fenster, das der Effekt versteckt hält (Schaltflächen bis Effektframe 11, Gruppen bis zum Ende ihres Aufblitzens), nimmt keine Eingabe
+  (versteckte Fenster werden nicht getroffen); darüber hinaus verweigern die Screens Navigation, solange eine Gruppe läuft (`dontAllowTransitions` im Hauptmenü: Untermenüwechsel, Kampagnen-/Skirmish-/Lade-/Credits-/
+  Optionsknöpfe und Escape; „Beenden“ ist ausgenommen); ein Screen, der gerade ausblendet (`IsClosing`), bekommt keine Eingabe mehr. `GameShell.IsAnimating` sagt dem Host (und den Tests), wann alles still steht.
+
+### Die 15 Stile (Häufigkeit in der Datei; Frames = Länge des Effekts)
+
+| Stil | n | Frames | Verhalten (Quelle: `GameWindowTransitionsStyles.cpp`) |
+|---|---|---|---|
+| `FLASH` | 117 | 8 | Fenster Frames 1–3 versteckt, weißer Rahmen und Füllung mit Alpha 100/33, 150/66, 200/99, danach ab Frame 4 sichtbar mit abklingendem Weiß (75/50/25/10); Ton `GUIBoarderFadeIn` |
+| `BUTTONFLASH` | 77 | 17 | 1–3 weißes Aufblitzen wachsend (Ton `GUIButtonsFadeIn`), 4–7 Schaltflächenbild unter abklingendem Weiß, 8–10 nur das Bild, 11–16 Fenster sichtbar unter abklingendem Verlauf `Gradient`; rückwärts dieselben Tabellen gespiegelt |
+| `WINFADE` | 7 | 10 | das erste Bild des Fensters mit Alpha 25 · Frame (1–9) |
+| `WINSCALEUP` | 47 | 6 | das Bild wächst aus der Mitte in sechs Schritten (Frames 1–5 gezeichnet); Ton `GUILogoMouseOver` |
+| `SCORESCALEUP` | 7 | 6 | wie `WINSCALEUP`; Ton `GUIScoreScreenPictures` |
+| `MAINMENUSCALEUP` | 8 | 5 | das Disabled-Bild fliegt und wächst in fünf Schritten in `WinGrowMarker`; Ton `GUILogoSelect` |
+| `MAINMENUMEDIUMSCALEUP` | 10 | 3 | das Logo `WinFactionX` wächst um seine Mitte auf die Größe von `WinFactionXMedium`; Ton `GUILogoMouseOver` |
+| `MAINMENUSMALLSCALEDOWN` | 0 | 6 | wie oben auf `…Small`; von der ausgelieferten Datei **nicht benutzt** (umgesetzt und getestet) |
+| `TYPETEXT` | 4 | min(Textlänge, 30) | ein Zeichen je Frame, Ton `GUITypeText`; rückwärts löscht es |
+| `SCREENFADE` | 1 | 30 | schwarze Fläche über den ganzen Bildschirm, Alpha `1/29 · 255 · Frame`; rückwärts blendet es auf |
+| `COUNTUP` | 56 | min(Wert/Schritt, 30) | Zahl zählt in 1er, 100er oder 1000er Schritten von 0 hoch; Ton `GUIScoreScreenTick` |
+| `FULLFADE` | 12 | 10 | Schwarz mit blauem Rahmen über der Fensterfläche, Alpha 51·Frame bis Frame 5 (volles Schwarz, das Fenster erscheint), danach wieder herunter |
+| `TEXTONFRAME` | 16 | 1 | das Fenster erscheint nach seiner Verzögerung (+1); ein bereits verstecktes Fenster bleibt versteckt |
+| `CONTROLBARARROW` | 1 | 22 | Pfeilbild gleitet in 16 Frames auf `ControlBar.wnd:ButtonGeneral`, blendet in 6 aus |
+| `REVERSESOUND` | 18 | 2 | kein Bild, spielt `GUITransitionFade` auf Frame 1 |
+
+Die Frame-, Alpha- und Schrittwerte stammen aus dem Quelltext (neu geschrieben, kein Code kopiert); jeder Effekt ist mit Abtastwerten getestet (`tests/CnCNew.Ui.Tests/TransitionTests.cs`).
+
+### Welche Screens welche Gruppen spielen (23 von 56, im Test `GroupsAreKnown` gezählt)
+
+| Screen | Gruppen | Auslöser (nach `MainMenu.cpp`, `SkirmishGameOptionsMenu.cpp`, `ChallengeMenu.cpp`, `PopupSaveLoad.cpp`, `ScoreScreen.cpp`) |
+|---|---|---|
+| Hauptmenü, erster Start | `FadeWholeScreen` (rückwärts: aus Schwarz einblenden), danach `MainMenuDefaultMenuLogoFade` | `MainMenuInit` mit `FirstTimeRunningTheGame` |
+| Hauptmenü, jede Rückkehr | `MainMenuDefaultMenuLogoFade` | `MainMenuInit` nach dem Schließen eines Screens, der das Menü ausgeblendet hat (`OnRevealed`) |
+| Untermenü Einzelspieler | `MainMenuDefaultMenu` entfernen, `MainMenuDefaultMenuBack` rückwärts, `MainMenuSinglePlayerMenu`; zurück: `…SinglePlayerMenu` entfernen, `MainMenuSinglePlayerMenuBack` rückwärts, `MainMenuDefaultMenu` | Knöpfe Einzelspieler / Zurück, Escape |
+| Untermenü Laden/Wiedergabe | `MainMenuLoadReplayMenu` / `MainMenuLoadReplayMenuBack` | Knöpfe Laden/Wiedergabe / Zurück |
+| Fraktionslogos | `MainMenuFactionUS`, `…GLA`, `…China`, `…Training` (für „Challenge“), `…Skirmish` | Überfahren des Knopfes (setzen), Verlassen (rückwärts); während einer Übergangs-Gruppe wird die Anfrage gemerkt (`showLogo`/`showSide`) |
+| Hauptmenü → Skirmish / USA / GLA / China / Challenge | `MainMenuSinglePlayerMenuBackSkirmish` / `…BackUS` / `…BackGLA` / `…BackChina` / `…BackTraining` rückwärts (Logo entfernt), der Screen öffnet, wenn alles fertig ist (`Shell::push` wartet auf das Ende der Abschaltanimation) | Knöpfe der Einzelspieler-Spalte |
+| Hauptmenü → Credits | `MainMenuDefaultMenu` rückwärts | Knopf Credits |
+| Hauptmenü → Spiel laden | `MainMenuLoadReplayMenuBackTransition` rückwärts | Knopf Laden |
+| Skirmish-Einrichtung | `SkirmishGameOptionsMenuFade` (Einstieg und rückwärts beim Schließen) | `SkirmishGameOptionsMenuUpdate` / `…Shutdown` |
+| Challenge-Auswahl | `ChallengeMenuFade` (ebenso) | `ChallengeMenu.cpp` |
+| Spiel laden | `SaveLoadMenuFade` (ebenso) | `PopupSaveLoad.cpp` |
+| Ergebnisbildschirm (Skirmish) | `ScoreScreenShow` (Zeilen erscheinen nacheinander, Zahlen zählen hoch, Bilder wachsen) | `ScoreScreenInit` |
+
+Optionen, Credits, Beenden-Dialog, Kartenwahl, Briefing und Missionsergebnis haben im Original keine Gruppe (die Optionen nutzten nur den älteren `AnimateWindowManager`, den die ausgelieferten Menüs
+praktisch nicht mehr aufrufen) und bleiben harte Schnitte.
+
+### Abweichungen vom Original (bewusst, alle benannt)
+
+1. **Erster Start:** das Original wartet mit dem Hauptmenü, bis die Maus um mehr als 20 Pixel bewegt oder eine Taste gedrückt wird (`notShown`), und spielt dann `MainMenuFade` (Lineal) und das Menü. Hier beginnt es
+   nach der Blende von selbst; das Lineal (`MainMenuRuler`) ist sofort da.
+2. **Frame 0:** die Übergangsgruppe, die gerade begonnen wurde, wird schon im ersten Frame gezeichnet (`PrimeDraw`); das Original zeichnet erst nach dem ersten `update` (ein Frame nacktes Bild, z. B. vor der Blende aus Schwarz).
+3. **Effekte ohne Fenster** (Name nicht im Screen) enden sofort und der Name wird gezählt (`MissingWindows`); das Original dereferenziert den Nullzeiger bzw. lässt den Zustand offen. `MAINMENUSCALEUP` ohne `WinGrowMarker` ebenso.
+4. **`TYPETEXT`** beendet sich bei `Frame == Länge`; das Original nur bei Frame 30, so dass ein Text unter 30 Zeichen die Gruppe nie beendet. Bei 30 und mehr Zeichen identisch.
+5. **`COUNTUP`/`TEXTONFRAME` auf verstecktem Fenster** (Zeile eines nicht belegten Spielerplatzes): das Fenster bleibt versteckt. Das Original macht es auf seinem Startframe sichtbar (`COUNTUP`), was nur gut aussieht, solange der
+   Text leer ist; hier steht der Vorlagentext („Units Built“) in den leeren Zeilen, deshalb die Abweichung.
+6. **Nicht endende rückwärts laufende Gruppe:** läuft der Zähler unter 0, ohne dass alle Fenster fertig melden, wird die Gruppe beendet (`Overrun`, Test: tritt bei den ausgelieferten Daten nie auf).
+7. **Bild `Gradient`:** das Verlaufsbild von `BUTTONFLASH` (Frames 11–16) gibt es im Retail-Bestand nicht (`findImageByName` liefert im Original NULL, `drawImage(NULL)` zeichnet nichts). Hier ebenso nichts, der Name steht in
+   `MissingImages`. Die Knöpfe blitzen also bis Frame 10 und erscheinen dann ohne Verlauf.
+8. **Rückkehr:** `OnRevealed` spielt den Einstieg erneut, wenn das Menü für einen anderen Screen ausgeblendet hat; wird ein Dialog (Beenden) geschlossen, passiert das nicht.
+9. **Zustand der Ruhe:** das Einzelspieler-Untermenü zeigt in der Ruhe die fünf kleinen Fraktionslogos am unteren Rand (`WINSCALEUP` lässt sie sichtbar). Die harte Variante zeigte sie bisher nicht; sie tut es jetzt, damit
+   Ruhezustand mit und ohne Animation gleich sind (siehe Hashes).
+10. **Hauptmenü-Init:** `initialHide()` versteckt alle fünfzehn Logofenster (fünf Fraktionen × drei Größen); ohne das blieb nach einer Kampagnenwahl das mittlere Logo stehen (im Test aufgefallen).
+
+### Goldene Hashes
+
+`baselines/screens.txt`: **24 von 54** Werten geändert (4 Screens × 6 Auflösungen): `MainMenu-SinglePlayer`, `SkirmishSetup`, `SkirmishMapSelect`, `SkirmishSetup-MapChosen`; alle vier enthalten das offene
+Einzelspieler-Untermenü (sichtbar oder darunter), Ursache ausschließlich die fünf Logos (Punkt 9). Unverändert: `MainMenu`, `MatchLoading`, `ScoreScreen`, `Credits`, `Options`, `QuitConfirm` (30 Werte) und der
+HUD-Hash. Die Übergänge selbst ändern keinen Hash, weil die Hülle ohne `animateTransitions` keine Gruppe anlegt (`NoTransitionsNoAnimation`); die Ruhezustände der Animation sind in den Tests bytegleich mit denen ohne.
+
+### Messwerte (30 Frames/s, `.local/phase2-import-a`, neu messen)
+
+* Hauptmenü: erster Start 57 Frames (1,90 s): Blende 29 Frames, Rand ab Frame 34, Logo 40, erster Knopf 46, letzter Knopf 51. Längster Vorwärtslauf im Realdatentest (alle Zahlen als `1234` angenommen): 60 Frames (2,00 s, `ScoreScreenShow`).
+* Alle 56 Gruppen laufen vorwärts und rückwärts ohne `Overrun` bis zum Ende (Realdatentest).
+* 18 synthetische Tests plus Realdatentest in `TransitionTests` (Ui: Leser, Effekte, Handler, Uhr, echter Fensterbaum), 10 Tests in `ShellTransitionTests` (Game). Zwei Läufe derselben Folge: gleicher Hash (`1730265A0B3D8B31` für
+  20 Frames Einstieg + Einzelspieler-Wechsel + Hover).
+* `tools/CnCNew.UiRenderTool` schreibt die Folgen als PNG (`docs/CLIENT-UI-RENDERING.md` §7): 49 neue Bilder, alle 113 PNGs in zwei Läufen byteidentisch; angesehen: Einstieg (Schwarz, Lineal, Logo und Knöpfe im
+  Aufblitzen), Einzelspieler-Wechsel mit wachsenden Logos, Hover-Logo, Skirmish-Ausblenden/Einblenden, Ergebnisbildschirm.
+
+### Nicht umgesetzt (benannt)
+
+* Die Gruppen von Mehrspieler- und GameSpy-Bildschirmen (elf `FULLFADE`-Gruppen, `Multi`-Untermenü), des Schwierigkeitsmenüs (`MainMenuDifficulty*`, `…FromDiff`: hier ist die Auswahl ein eigener Screen), die Spielmenü-Gruppen im
+  Spiel (`QuitNoSave`, `QuitFull` und ihre `Back`-Gruppen; das Spielmenü gehört dem HUD), `GenExpFade` und `ControlBarArrow` (die Effekte sind umgesetzt und getestet, aber das HUD ruft sie nicht auf).
+* Der Bildschirmfade beim Spielstart (`FadeWholeScreen` nach dem Laden zu Schwarz, beim Spielbeginn zurück): der Stride-Client hat keine Ebene dafür über Welt und HUD; der Ladebildschirm schaltet hart.
+* Die Maus-Warteschleife des ersten Starts (Abweichung 1), die Bibs/Hinweise anderer Screens und die Gefechtsszene hinter dem Menü.
+
+### Nicht belegt (ein Mensch muss hinsehen)
+
+* **Dass die Folgen im Fenster so aussehen und sich so anfühlen wie im Original.** Geprüft sind Abtastwerte, Reihenfolgen, Zustände und einzelne PNGs eines Offscreen-Renderers; Tempo (30 Frames/s gegen die
+  tatsächliche Bildrate des Fensters), Tonzeitpunkte (`GUIButtonsFadeIn` je Knopf) und Gesamteindruck sind **nicht** gesehen oder gehört.
+* Ob der erste Start ohne Maus-Warten stört, ob die fehlende Verlaufsstufe (Punkt 7) auffällt, ob die 0,1-s-Deckelung bei langsamen Frames spürbar ist.
+* Die Wirkung bei anderen Auflösungen als 1280×720 (die Ersatzflächen nutzen die skalierten Fensterrechtecke; die PNG-Folgen gibt es nur dort).
+* Ein Befund am Rand: `LoadGameScreen` erreicht Escape nur mit Tastaturfokus (`SaveLoadMenuInput` hängt am Kindfenster, der Wurzel fehlt der `INPUTCALLBACK`) – auch ohne Animation; nicht behoben.
