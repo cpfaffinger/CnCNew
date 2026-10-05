@@ -149,7 +149,8 @@ Umsetzung wie oben (`ScheduleScan`, `IdleScanStep`, `ScanStep`):
 * Die Daten: 38 `Turret`-Blöcke setzen ein Abtastintervall (50 Objekte einschließlich der Reskins der Generäle haben einen abtastenden Turm): die Sentry-Drohne (alle 250 ms, bis 360°),
   Patriot-Batterie und Gattling-Kanone (250 ms, 360°), die Feuerbasis (550–950 ms, 360°), Strategiezentrum (Hauptturm; 500–1000 ms, 60°; sein `AltTurret` ist `InitiallyDisabled`), die Technicals (5–10 s, 30–60°), das ECM-Fahrzeug (Intervall 0, genau 180°,
   `RecenterTime` 0: es dreht sich ununterbrochen hin und zurück, wie in der Referenz).
-* Kein Selbstzielen: `TurretAI::friend_checkForIdleMoodTarget` (ein Turm wählt von sich aus ein Opfer, `AutoAcquireEnemiesWhenIdle`) ist nicht nachgebildet; Zielwahl bleibt Sache der Befehlsgeber.
+* Selbstzielen: `TurretAI::friend_checkForIdleMoodTarget` (ein ruhender Turm wählt von sich aus ein Opfer, `AutoAcquireEnemiesWhenIdle`) ist seit Phase 17 Teil des Zielerwerbs der Simulation
+  (`docs/SIMULATION-CORE.md` §33): ein ruhender Turm bekommt sein Opfer von der Einheit, auch wenn deren Körper fährt; ein Opfer unterbricht das Abtasten wie jeder Angriff.
 
 ### 3.6 Snapshot, Hash, Determinismus
 
@@ -192,9 +193,11 @@ der Sentry-Drohne; das gezeichnete Bild kann dem Simulationsstand um einen Tick 
   `OrderMove` und beendet ihn). Eine Einheitenfähigkeit beendet Angriff und Bewegung: `SpecialAbilityUpdate::initiateIntentToDoSpecialPower` ruft `aiIdle` („Clear any old AI before starting this special
   ability“), umgesetzt beim `UseSpecialPowerCommand` für jedes Objekt mit einem `SpecialAbilityUpdate` der Kraft (die gestufte Übernahme tat es schon selbst; Test `TurretAttackEndsWhenTheUnitStartsAnAbility`).
   Spezialkräfte ohne `SpecialAbilityUpdate` (Gebäudekräfte, OCL-Kräfte) berühren den AI-Zustand auch in der Referenz nicht.
-* **Kein Selbstzielen im Leerlauf (bewusst zurückgestellt):** `friend_checkForIdleMoodTarget` (ein ruhender Turm wählt von sich aus ein Opfer in Reichweite) und `AutoAcquireEnemiesWhenIdle` sind nicht nachgebildet.
-  Grund: die Zielwahl liegt in dieser Simulation bei den Befehlsgebern (`SkirmishAi.Fire`, `MissionSession`, `StandingOrders` für die Einheiten des Menschen); ein zweiter Zielerwerb in der Simulation würde mit ihnen
-  doppelt schießen lassen, bis sie umgebaut sind, und verschiebt jeden Referenzwert. Er gehört zusammen mit Angriffsmarsch und Stimmung (`AttitudeType`) in ein eigenes, vermessenes Paket (Phase 17, Abschnitt 8a).
+* **Selbstzielen (seit Phase 17 umgesetzt, vorher bewusst zurückgestellt):** `friend_checkForIdleMoodTarget` und `AutoAcquireEnemiesWhenIdle` sind nachgebildet – nicht im Turm, sondern als Angriffszustand der
+  Einheit (`Entity.Acquisition`, `World/SimulationWorld.Acquisition.cs`), der den Türmen ihr Opfer gibt (`AimTurretsForAttack`) und es ihnen am Ende des Angriffs wieder nimmt (`StopTurrets`). Die drei Befehlsgeber
+  (`MissionSession.DriveCombat`, `SkirmishAi.Fire`, `StandingOrders.FireAtNearestEnemy`) wählen keine Opfer mehr; ein Opfer, das ein Befehlsgeber ausdrücklich nennt (`FireWeaponCommand`, `PursueCommand`), sperrt die
+  eigene Zielwahl der Einheit, solange solche Befehle kommen. Regeln, Quellen, Näherungen und Messwerte: `docs/SIMULATION-CORE.md` §33. Weiter nicht nachgebildet: die Verfolgung aus dem Leerlauf (eine ruhende Einheit
+  eines Computerspielers läuft ihrem Opfer nicht nach; nur im Angriffsmarsch) und die Antwort einer passiven Einheit auf ihren letzten Angreifer.
 * **Eigener Zufallsstrom für das Abtasten:** gleiche Verteilung wie die Referenz, andere Werte (3.5). Die Abtastung wartet nicht auf Aktivierung durch Energie, EMP oder Deaktivierung
   (`m_enabled` der Referenz entspricht nur `Gates`).
 * **Körper zielt nicht:** Waffen ohne Turm feuern weiter ohne Drehung des Körpers (`AcceptableAimDelta` bleibt `deferred-field`); fahrende Einheiten drehen den Körper nur durch ihre Bewegung.
@@ -297,7 +300,11 @@ Befunde:
 **Entscheidung:** keine Verhaltenskorrektur an Haltezeit, Sichtregel oder Idle-Scan. „Ein neuer Befehl beendet das Zielen“ ist das Verhalten der Referenz (`AIAttackState::onExit` setzt die Turmziele auf `NULL`,
 sobald ein anderer AI-Zustand den Angriff ersetzt); es zurückzunehmen würde ein KI-Ergebnis reparieren, indem ein belegtes Verhalten gefälscht wird. Der Idle-Scan während eines Angriffs ist schon ausgeschlossen
 (ein Ziel unterbricht ihn). Was der Referenz gegenüber fehlt, ist der Zielerwerb durch die Einheit selbst (Angriffsmarsch, `friend_checkForIdleMoodTarget`): dort verliert eine marschierende Einheit ihr Ziel nicht
-dauerhaft, weil sie sich das nächste selbst sucht. Hier übernimmt das der Befehlsgeber im nächsten Denkschritt; siehe Abschnitt 6.
+dauerhaft, weil sie sich das nächste selbst sucht. Bis Phase 16 übernahm das der Befehlsgeber im nächsten Denkschritt.
+
+**Nachtrag Phase 17 (5. Oktober 2026):** der Zielerwerb durch die Einheit und der Angriffsmarsch sind umgesetzt (`docs/SIMULATION-CORE.md` §33). "Ein neuer Befehl beendet das Zielen" gilt unverändert
+(`EndAttack` löscht jetzt auch den Angriffszustand der Einheit); die Einheit sucht sich danach selbst das nächste Opfer: im Angriffsmarsch zwei Frames nach dem Befehl, sonst sobald sie wieder ruht. Die 16 KI-Läufe sind
+dort neu erhoben; die Spalten dieses Abschnitts beschreiben den Stand davor.
 ## 9. Nachziehen in anderen Dokumenten (nicht Teil dieser Änderung)
 
 `docs/SIMULATION-CORE.md` (Waffenwahl-Näherungen „Turm- und Neigungsbedingungen fehlen“, Abschnitt zur Waffenwahl), `docs/PRESENTATION-OBJECTS.md` (Zeile 47 `TURRET_ROTATE`, Abschnitt zu `TurretYaw`: „null, weil die Simulation

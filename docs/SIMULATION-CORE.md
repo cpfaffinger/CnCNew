@@ -1095,7 +1095,7 @@ Zustand dieser Module wird nur geschrieben, wenn er vom Anfangswert abweicht (ke
 Modultypen, 1.680 von 2.115 Retail-Objekten instanziierbar (79,4 %), 15.903 von 19.553 Modulverwendungen abgedeckt (81,3 %), Kompatibilitätsbasislinie 765 Einträge (neu gemessen, `baselines/compatibility.json`).
 
 **Überschreibungs-Beziehungen** (`SimulationWorld.RelationshipOverride`): ein Haken `Func<Entity, Entity, Relationship?>`, den `RelationshipBetween` vor der Spielerbeziehung befragt; `AreEnemies(Entity, Entity)`,
-die Zielwahl und der Kampf (`SimulationWorld.Combat`) und `MissionSession.DriveCombat` benutzen die Entitätsvariante. Der Haken gehört dem Skript-Motor (`docs/SCRIPT-ENGINE.md` §5, §8 Punkt 19) und ist `null`,
+die Zielwahl und der Kampf (`SimulationWorld.Combat`) und der Zielerwerb der Einheiten (§33; bis Phase 16 `MissionSession.DriveCombat`) benutzen die Entitätsvariante. Der Haken gehört dem Skript-Motor (`docs/SCRIPT-ENGINE.md` §5, §8 Punkt 19) und ist `null`,
 solange keine Überschreibung gesetzt ist – Läufe ohne sie bleiben byteidentisch (Retail-Referenzmatch und Stresstest unverändert).
 
 **`IWorldServices.TransferOwnership`:** die Modulschnittstelle bietet jetzt den Besitzerwechsel an (für `TechBuildingBehavior`; `SimulationWorld.TransferOwnership` aus §22 verschiebt auch die Energieproduktion).
@@ -1358,7 +1358,7 @@ gegnerische Verteidigung (Armored Fury, China gegen GLA: GLA produzierte 236 Ein
 deshalb jetzt die Welle als Menge der gemeinsam losmarschierten Einheiten: Nachzügler sammeln sich am Sammelpunkt und folgen, sobald sie mindestens die halbe Angriffsschwelle sind; die Welle gilt als
 gebrochen, wenn von ihr weniger als ein Drittel der Schwelle (mindestens drei) übrig ist. Verteidigung (`FindThreat`) nimmt weiter alle. Wirkung: 12 statt 10 entschiedene Läufe – drei gewonnen
 (Armored Fury China/GLA und America/China, Death Valley Tank/AirForce), einer verloren (Alpine Assault Tank/AirForce). Bei 16 Läufen ist das kein starker Beleg; übernommen wurde es, weil es dem Vorbild näher ist.
-Die vier verbleibenden Patts (dreimal ChinaTankGeneral gegen AmericaAirForceGeneral, Bitter Winter America/China) sind Gegenstand von Phase 17. Keine Balance-Aussage.
+Die vier verbleibenden Patts (dreimal ChinaTankGeneral gegen AmericaAirForceGeneral, Bitter Winter America/China) sind Gegenstand von Phase 17. Keine Balance-Aussage. Stand nach dem Zielerwerb der Einheiten (Phase 17): §33.6.
 
 Weitere Referenzwerte (4. Oktober 2026, `SimTool` Release, Welt-Fingerabdruck mit Bone-Tabelle `CC9641FC1D68F326…`):
 
@@ -1372,3 +1372,164 @@ Weitere Referenzwerte (4. Oktober 2026, `SimTool` Release, Welt-Fingerabdruck mi
 
 Der Weg des Referenzspiels über diesen Tag: Tick 15.000 (`01C01E3B91EAE18C`) → 14.490 (`1104C4CD97A0D4CA`; Feuerstufen und Vorangriffsverzögerung) → 13.500 (beschädigte Locomotoren). Das Referenzszenario benutzt
 `SkirmishAi` nicht; die Bone-Tabelle der Werkzeuge und die Fähigkeitsregel änderten es nicht.
+
+## 33. Phase 17 (5. Oktober 2026): Zielerwerb der Einheiten und Angriffsmarsch
+
+Bis Phase 16 wählte die Simulation keine Opfer: das taten drei Befehlsgeber (`MissionSession.DriveCombat`, `SkirmishAi.Fire`, `StandingOrders.FireAtNearestEnemy` der Darstellung), jeder mit eigener Regel
+und eigenem Takt, und eine marschierende Einheit verlor ihr Ziel bis zum nächsten Denkschritt ihres Befehlsgebers (`docs/SIM-TURRET-AIM.md` §6, §8a). Jetzt erwirbt jede Einheit ihr Opfer selbst, und es gibt
+einen Angriffsmarsch als Befehl. Code: `World/SimulationWorld.Acquisition.cs`, `World/AcquisitionState.cs`, `Scripting/ScriptEngine.Acquisition.cs`; Tests: `Tests.Acquisition.cs`.
+
+### 33.1 Daten: `AutoAcquireEnemiesWhenIdle` streng typisiert
+
+Der Schlüssel war als `Bool` typisiert; `INI::parseBitString32` mit `TheAutoAcquireEnemiesNames` (`AIUpdate.cpp` `AIUpdateModuleData::buildFieldParse`, `AIUpdate.h`) liest aber eine Bitliste. Von den Werten des
+Retailbestands (Textsuche über `Data/INI`: 271-mal `Yes`, 62-mal `No`, 28-mal `Yes Stealthed`, 17-mal `No NotWhileAttacking`, 11-mal `No ATTACK_BUILDINGS`, 5-mal `Yes Stealthed ATTACK_BUILDINGS`, 2-mal
+`No ATTACK_BUILDINGS Stealthed`, je einmal `YES ATTACK_BUILDINGS` und `Yes Stealthed ATTACK_BUILDINGS Stealthed`) ging bei 65 Zeilen alles nach dem ersten Token als „von der Referenz überlesen“ verloren –
+was falsch war: die Referenz liest sie.
+
+* `NameTablesPhase5.AutoAcquireEnemies` (`YES`, `STEALTHED`, `NO`, `NOTWHILEATTACKING`, `ATTACK_BUILDINGS`; Bits `AAS_Idle` 0x01 … `AAS_Idle_Attack_Buildings` 0x10), Feldtyp `Flags` in `AIUpdateInterface` und
+  allen abgeleiteten AI-Modulen (`ModuleCatalog`, `AiBase`). Ein unbekanntes Token ist ein Fehler, `NONE` und `+`/`-` verhalten sich wie in `parseBitString32`.
+* `AIUpdateData.AutoAcquire` (`[Flags] AutoAcquire`, gleiche Bitwerte) und `AIUpdateData.MoodCheckTicks` (`MoodAttackCheckRate`, Standard `LOGICFRAMES_PER_SECOND * 2` = 60 Ticks wie der Konstruktor von
+  `AIUpdateModuleData`; im Bestand 50-mal 250 ms, 4-mal 500 ms). `NO` ist ein eigenes Bit, das niemand prüft: „No ATTACK_BUILDINGS“ setzt zwei Bits und erwirbt im Leerlauf trotzdem nichts.
+* `baselines/compatibility.json` ist **unverändert** (751 Einträge, `IniTool compat-check` und ein frisch erzeugter `compat-baseline` sind bytegleich mit der Datei): die verlorenen Tokens waren Diagnosen des
+  Graphen, die der Sammelzähler der Basislinie nicht führte. Der Realdatentest prüft jetzt, dass keine `compatibility-ignored-tokens`-Diagnose mehr `AutoAcquireEnemiesWhenIdle` nennt.
+* Folge: Definitionssnapshot und Welt-Fingerabdruck ändern sich (das Feld ist ein `Flags`-Wert statt eines `Bool`).
+
+### 33.2 Regeln
+
+Die Referenz ruft `AIUpdateInterface::getNextMoodTarget` von drei Stellen: `AIIdleState::update` (ruhende Einheit), `TurretAI::friend_checkForIdleMoodTarget` aus `TurretAIIdleState::update` (ruhender Turm, während der
+Körper etwas anderes tut) und `AIAttackMoveToState::update` (Angriffsmarsch). `StepAcquisition` läuft einmal je Tick nach allen Bewegungen und vor `StepTurrets`, über die Objekte mit AI-Modul in Id-Reihenfolge:
+
+| Zustand der Einheit (`AcquireMode`) | Bedingung | Verhalten | Referenz |
+|---|---|---|---|
+| Leerlauf | `AIUpdateInterface.IsIdle`, Bit `YES` | sucht ein Opfer **in Waffenreichweite**; feuert, solange es in Reichweite bleibt; verlässt es die Reichweite, wird es aufgegeben und zwei Frames später neu gesucht | `AIIdleState::update` → `aiAttackObject(enemy, NO_MAX_SHOTS_LIMIT, CMD_FROM_AI)` |
+| Turm | Körper beschäftigt (fährt, baut, dockt), Bit `YES`, Objekt hat einen zielenden Turm (`TurretInfo.Gates`) | wie Leerlauf, aber nur mit Waffen auf einem Turm; die Einheit fährt weiter | `friend_checkForIdleMoodTarget`, `m_targetWasSetByIdleMood` |
+| Angriffsmarsch | `AttackMoveCommand` (kein `YES` nötig) | sucht im Marsch; hält für den Kampf an, feuert, sucht nach dem Tod des Opfers sofort das nächste und marschiert ohne Opfer weiter zum Ziel | `AIAttackMoveToState::update` (`forceRetargetThisFrame`, `friend_endingMove`) |
+| keiner | sonst (kein `YES`, getarnt ohne `STEALTHED`, deaktiviert) | nichts | `getNextMoodTarget` gibt `NULL` |
+
+* **Takt** (`m_nextMoodCheckTime`): beim Eintritt in einen der Zustände wird die Suche auf „jetzt + 2 Frames“ gestellt (`resetNextMoodCheckTime`, `ForceIdleMSEC` = 67 ms in `AIData.ini`), danach alle
+  `MoodAttackCheckRate`; das erste Intervall nach einem Eintritt ist um bis zu eine halbe Rate verschoben (`m_randomlyOffsetMoodCheck`). Der Zufall dafür ist wie beim Abtasten der Türme ein Hash aus
+  (Weltsamen, Entity-Id, Tick) und zieht nichts aus `LogicRandom`.
+* **Wer nicht sucht:** Objekte im Bau, verkaufte, per EMP oder Skript (`DISABLED_HELD`) stillgelegte und enthaltene Objekte; getarnte Einheiten ohne Bit `STEALTHED` („Sorry, stealthed and not allowed to idle fire
+  when stealthed“; gilt wie in der Referenz nicht für den Angriffsmarsch); schlafende und passive Teams eines Computerspielers („Human units don't have a mood“).
+* **Opferwahl** (`AI::findClosestEnemy`): der nächste Feind (Mittelpunktabstand, bei Gleichstand die kleinere Id), der lebt, kein Projektil/`INERT`/Mine ist, nicht in einem Container steckt, für den Spieler der
+  Einheit sichtbar ist (`CanPlayerSee`: Nebel) und nicht getarnt und unentdeckt ist (`PartitionFilterStealthedAndUndetected`), und gegen den eine Waffe wirkt, die die Einheit selbst wählen darf
+  (`PartitionFilterPossibleToAttack`: `AutoChooseSources` mit `CMD_FROM_AI`, `AntiMask`, Schaden durch die Panzerung, gepinnter Slot).
+* **Gebäude:** `PartitionFilterInsignificantBuildings` (`AttackIgnoreInsignificantBuildings = Yes`): ein leeres Gebäude mit Container, das kein Fraktionsgebäude (`FS_*`) ist, nimmt niemand.
+  `PartitionFilterRejectBuildings`: andere feindliche Gebäude sind Opfer für Einheiten eines **Computerspielers** (`m_acquireEnemies`) und für Einheiten mit `ATTACK_BUILDINGS`; alle anderen nehmen nur
+  `FS_BASE_DEFENSE` und besetzte Gebäude. Eine ruhende Einheit des Menschen schießt also nicht von selbst auf eine Kaserne – wie im Original.
+* **Angriffspriorität** (Missionen, `IAcquisitionAdvisor` = `ScriptEngine`): hat die Einheit einen Prioritätssatz, gewinnt die höchste Priorität nach Abzug von einem Punkt je `AttackPriorityDistanceModifier`
+  (100) Entfernung, mindestens 1; bei Gleichstand die höhere Rohpriorität, dann der nähere; Priorität 0 wird nie angegriffen. Ohne Satz gilt „der nächste“ (`getDefaultAttackInfo`).
+* **Reichweite der Suche** (`AI::getAdjustedVisionRangeForObject`): wer nicht verfolgen darf, sucht nur in Waffenreichweite (`AI::WITHIN_ATTACK_RANGE`). Wer verfolgen darf – nur Bodeneinheiten eines
+  Computerspielers **im Angriffsmarsch** –, sucht bis `VisionRange` × `GuardOuterModifierAI` (1,333), bei wachsamen Teams × 1,1 und bei aggressiven × 1,5, läuft dem Opfer nach (`AIAttackApproachTargetState`;
+  das Ziel der Verfolgung wird alle 15 Ticks nachgeführt, die Türme folgen als Verfolgung) und gibt es auf, wenn es weiter als zwei Suchradien weg oder nicht mehr sichtbar ist.
+* **Schuss:** eine Einheit mit Opfer feuert in jedem Tick, in dem sie darf – derselbe Weg wie ein angenommener `FireWeaponCommand` mit `FireOrigin.Ai` (`ChooseWeapon`, `IFireGate`, Turmausrichtung mit
+  Angriffszustand, `PreAttackDelay`, Magazin, `WeaponFired`-Ereignis), aber ohne Befehl. Ein Deploy-Fahrzeug baut dadurch von selbst auf, sobald es ein Opfer hat.
+* **Ende:** Opfer tot, unsichtbar, kein Feind mehr oder außer Reichweite (ohne Verfolgung); jeder neue AI-Befehl (`EndAttack`: Bewegung, Idle, Andocken, Bauen, Fähigkeit) löscht Opfer **und** Angriffsmarsch.
+* **Befohlene Angriffe:** ein angenommener `FireWeaponCommand` (Ursprung Spieler oder KI, nicht Skript-Knopf) oder `PursueCommand` macht dessen Ziel zum Opfer der Einheit (`Ordered`); solange solche Befehle
+  kommen – bis 45 Ticks nach dem Zeitpunkt, an dem die Einheit wieder hätte feuern können –, sucht und feuert die Einheit nicht selbst. So schießt nichts doppelt: `StandingOrders.Attack`, das Referenzszenario
+  und `ObjectiveDriver` fahren ihre Angriffe weiter über Befehle.
+* **Flugzeuge** (`KINDOF_AIRCRAFT`): halten im Angriffsmarsch nicht an und verfolgen nicht, sie feuern im Vorbeiflug; ein gespeicherter Angriffsmarsch eines parkenden Jets bleibt einer (`JetAIUpdate`
+  trägt ihn mit dem aufgeschobenen Befehl).
+
+### 33.3 `AttackMoveCommand`
+
+`AttackMoveCommand(Unit, X, Y)` (Typ 32; `MSG_DO_ATTACKMOVETO` → `aiAttackMoveToPosition`): `AIUpdateInterface.OrderMove(…, attackMove: true)` → `IWorldServices.BeginAttackMove`. Die Welt hält den Zustand
+(`AcquisitionState.AttackMove`, Ziel, `Halted`, `Chasing`); für den Kampf nimmt sie der Einheit das Bewegungsziel (`StopInternalMove`) und gibt es ihr danach wieder (`StartInternalMove` zum Ziel), ohne dass
+das ein neuer Befehl wäre. Abfragen für Befehlsgeber: `SimulationWorld.IsAttackMoving`, `AttackMoveGoalOf`, `AcquiredVictimOf`. Eine angehaltene Einheit auf Angriffsmarsch hat kein Bewegungsziel; Befehlsgeber, die
+„steht still“ als „braucht einen neuen Befehl“ lasen, fragen deshalb `IsAttackMoving` mit (`ScriptEngine.Marching`, `SkirmishAi.CommandArmy`, `StandingOrders`).
+
+**Versionen:** `CommandTypes.Version` 13 → **14**, `ReplayFormat.CurrentVersion` 10 → **11** (alte Replays scheitern an der Befehlstabelle). `WorldSnapshot.Version` bleibt **9**: der neue Zustand je Objekt
+(`acquisition`: Opfer, befohlen, Angriffsmarsch mit Ziel, Modus und nächster Suchzeitpunkt) wird nur geschrieben, wenn das Objekt selbst sucht oder angreift, und nur gelesen, wenn er da ist.
+`MissionSnapshot` bleibt **2** (`combatIntervalTicks` behält Name und Feld; 0 schaltet den Zielerwerb der Mission ab, `SimulationWorld.SelfAcquisition`).
+
+### 33.4 Die Befehlsgeber
+
+| Befehlsgeber | vorher | jetzt |
+|---|---|---|
+| `MissionSession` | `DriveCombat`: jedes bewaffnete Objekt feuerte alle 3 Ticks per Befehl auf den nächsten Feind in Reichweite – auch im Gehen, auch mit `AutoAcquire = No`, auch ohne AI-Modul | entfallen; die Sitzung setzt `World.AcquisitionAdvisor = Engine` und zählt `WeaponFired` |
+| `ScriptEngine` | Jagd-/Angriffsbefehle als `SetMoveTargetCommand`, Schüsse durch `DriveCombat` | Jagd, Team- und Gebietsangriff als `AttackMoveCommand` (`AttackToward`: eine kämpfende oder schon dorthin marschierende Einheit bekommt keinen neuen Befehl); Angriff auf ein benanntes Objekt zusätzlich als Feuerbefehl (`FireAtOrdered`); Bewegungen wachsamer/aggressiver Teams eines Computerspielers werden Angriffsmärsche (`privateMoveToPosition`, `MAA_Action_To_AttackMove`); Stimmung aus `teamAggressiveness` (`Team.cpp`, `TeamTemplateInfo`) und `TEAM_SET_ATTITUDE` |
+| `SkirmishAi` | `Fire()` alle 5 Ticks, `MoveGoalFor` (Annäherung auf 70 % der Reichweite) | `Fire` und `MoveGoalFor` entfallen; `CommandArmy` schickt die Armee per `AttackMoveCommand` zum Gruppenziel |
+| `StandingOrders` (Darstellung) | Angriffsbewegung und Wachen feuerten per Befehl auf den nächsten Feind | Angriffsbewegung = `AttackMoveCommand`; kein Feuerbefehl mehr außer beim Angriff auf ein genanntes Ziel |
+| `ObjectiveDriver` (Nur-Befehle-Modus) | Bewegungsbefehl zum Opfer, Schüsse durch `DriveCombat` | Angriffsmarsch plus Angriffsbefehl auf das Opfer (`Assault`, `DriveAssaults`) |
+
+### 33.5 Näherungen und was fehlt
+
+* **Keine Verfolgung aus dem Leerlauf.** In der Referenz läuft eine ruhende Einheit eines Computerspielers einem Opfer in ihrem Suchradius nach (`aiAttackObject`); hier bleibt sie stehen und nimmt nur, was in
+  Reichweite ist. Verfolgt wird nur im Angriffsmarsch. Grund: die Befehlsgeber stellen ihre Einheiten (Sammelpunkt, Skriptposten); eine Einheit, die ihren Posten verlässt, kollidiert mit deren Buchführung.
+* **`AIData.ini` ist nicht typisiert:** `GuardOuterModifierAI` 1,333, `AlertRangeModifier` 1,1, `AggressiveRangeModifier` 1,5, `AttackPriorityDistanceModifier` 100, `ForceIdleMSEC` 67 und
+  `AttackIgnoreInsignificantBuildings = Yes` stehen als benannte Konstanten mit den Werten der ausgelieferten Datei im Code. `GuardOuterModifierHuman` (2,2) hat keine Wirkung, weil Einheiten des Menschen ohnehin
+  nur in Waffenreichweite suchen.
+* **Passive Teams** erwerben nichts (die Referenz lässt sie auf ihren letzten Angreifer antworten); **schlafende** Teams bewegen sich weiter, wenn ein Skript es befiehlt (`MAA_Action_To_Idle` fehlt).
+  `NAMED_SET_ATTITUDE` (einzelnes Objekt) bleibt aufgezeichnet ohne Wirkung; `m_attackCommonTarget` (Team greift gemeinsames Ziel an) fehlt.
+* **`NOTWHILEATTACKING`** ist gelesen, hat aber keine eigene Wirkung: eine Einheit mit Opfer sucht hier nie ein zweites.
+* **Sichtlinie:** `AttackUsesLineOfSight`/`KINDOF_ATTACK_NEEDS_LINE_OF_SIGHT` (`AI::CAN_SEE`) ist nicht geprüft; Sicht ist die des Spielers (Nebel) – die Referenz verlangt den Nebeltest nur für Einheiten des
+  Menschen, hier gilt er für alle.
+* **Abstände** sind Mittelpunktabstände (die Referenz misst `FROM_BOUNDINGSPHERE_2D`); der leere-Gebäude-Filter fragt „hat einen Container und ist leer“ statt `isGarrisonable`.
+* **Aus Containern wird nicht gefeuert** (Garnison, `isPassengerAllowedToFire`): enthaltene Objekte erwerben nichts. `DriveCombat` ließ sie feuern; das war kein belegtes Verhalten.
+* **Objekte ohne AI-Modul erwerben nichts** (in der Referenz hat jedes angreifende Objekt eines). `DriveCombat` ließ auch sie schießen.
+* **Aufgeschobene Bewegungen:** nur `JetAIUpdate` trägt den Angriffsmarsch durch einen aufgeschobenen Befehl; ein `DeployStyleAIUpdate`-Fahrzeug, das erst einpacken muss, und ein Hacker, der erst abbaut, führen ihn als
+  einfache Bewegung aus. `AIAttackMoveToState` wiederholt eine gescheiterte Wegsuche (`ATTACK_RETRY_COUNT`); hier endet der Angriffsmarsch, wenn die Bewegung endet.
+* **Einheitenfähigkeit:** `OBJECT_STATUS_IS_USING_ABILITY` wird nicht gesetzt; eine Einheit, die eine Fähigkeit ausführt und dabei als untätig gilt, könnte ein Opfer erwerben.
+* **Darstellung und Bedienung** (Angriffsbewegung im Client, selbst schießende ruhende Einheiten des Menschen) hat **kein Mensch gesehen**.
+
+### 33.6 Messwerte (Release, Retaildaten, 5. Oktober 2026)
+
+„Vorher“ ist der Stand `4eea97b`, mit denselben Werkzeugen neu gemessen (er stimmt mit §32 überein); „nachher“ ist dieser Stand.
+
+| Lauf | vorher (`4eea97b`) | nachher |
+|---|---|---|
+| `SimTool reference-match` | Sieger FactionGLA, Tick 13.500, Endhash `0946FB676DEC615C`, Kette `EA6D12F180930D71` | Sieger FactionGLA, Tick **14.490**, Endhash `23B4B25DF62765D8`, Kette `DE5849AF9F8493C4`; Lauf 2 und Snapshot-Fortsetzung (Tick 7.395) identisch |
+| `SimTool stress` (216.000 Ticks) | Endhash `56882F763EABEF67`, Kette `B8E663493F2C73D5` | **unverändert**: Endhash und Kette gleich, also bekommt in der synthetischen Fixture kein Objekt einen Angriffszustand (er stünde im Hash des Objekts) |
+| 16 KI-Läufe (`ai-match … --max-ticks 45000`) | 12 von 16 entschieden | **11 von 16** entschieden; alle 16 in Lauf 2 und nach Snapshot-Fortsetzung tickgenau identisch (Tabelle unten) |
+| `CampaignTool audit --ticks 900 --campaign CHALLENGE_0` | 7/7 deterministisch, 7/7 identisch nach Speichern/Laden, Ausschalt-Enden Sieg 7/7, Niederlage 6/7 | **unverändert** 7/7, 7/7, 7/7, 6/7 (4.984 statt 4.980 Skripte ausgeführt, 0 Treffer auf fehlende Typen) |
+| `CampaignTool drive --campaign CHALLENGE_0` (60.000 Ticks) | Sieg 7/7, Niederlage 7/7 | **unverändert**, jede Zeile (Skript, Tick, Eingriffe) gleich |
+| `CampaignTool drive --campaign GLA` | Sieg 5/5, Niederlage 5/5 | **unverändert** 5/5 und 5/5, gleiche Skripte und Ticks; `MD_GLA03` braucht 258 statt 227 Welteingriffe |
+| `scripts/audit-scenarios.ps1` | drei Szenen grün | **drei Szenen grün** |
+| Tests | – | `Simulation.Tests` Release mit `--long --content-dir`: 348 bestanden (8 neu: 7 synthetisch, 1 Realdaten); `Presentation.Tests` bestanden; `Game.Tests` (Release, `--content-dir`) bestanden |
+
+Das Referenzspiel verschiebt sich (sein Szenario befiehlt weiter jeden Schuss; neu ist, dass Einheiten in den Lücken zwischen seinen Befehlen selbst schießen und dass seine Befehle die eigene Zielwahl der
+Einheit sperren). Der Realdatentest `RealAcquisition` lässt einen Crusader und einen Battlemaster ohne jeden Befehl kämpfen: erster Schuss in Tick 3, 13 Schüsse, einer zerstört, zwei Läufe hashgleich.
+
+**Die 16 KI-Läufe** (Standardseeds; „vorher“ deckt sich mit der Spalte „jetzt“ aus §32):
+
+| Karte | Paarung | vorher | Endhash vorher | **nachher** | Endhash nachher | Kette nachher |
+|---|---|---|---|---|---|---|
+| Alpine Assault | China, GLA | China, Tick 7.545 | `39344016A5EE8F91` | **China, Tick 23.310** | `54DD2C9094141CC8` | `582FA4C6DF853C4B` |
+| Alpine Assault | America, China | America, Tick 16.800 | `745839146322DDE6` | **America, Tick 16.965** | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` |
+| Alpine Assault | GLA, America | America, Tick 10.740 | `DDDFE22494F29A34` | **America, Tick 8.895** | `23A93C58C775A691` | `B29CF881F6B1CC59` |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | Patt | `3CD8D8C4D53675C0` | **Patt** | `2EDDC1B7BF19F28B` | `0C7DD733866C09BA` |
+| Armored Fury | China, GLA | China, Tick 11.460 | `6CAD71B81D3CE47A` | **Patt** | `89B05A25738A9E6D` | `35DFAE191CAD2649` |
+| Armored Fury | America, China | America, Tick 33.255 | `63486D2572E76BCE` | **America, Tick 19.095** | `4A99580AC54F4EBD` | `AD65CED96F474586` |
+| Armored Fury | GLA, America | America, Tick 40.260 | `9801D2537695316C` | **America, Tick 37.365** | `3C7BC00FB4E3E8C1` | `0C664B1DEFEFDF44` |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | Patt | `E5ED792B12D35CC0` | **Patt** | `C8ACAB511BFC8C86` | `15D05EFD38B29EEB` |
+| Bitter Winter | China, GLA | China, Tick 12.930 | `CB890471FCB4B084` | **China, Tick 17.220** | `26CD35AC8AA660F5` | `2B86E2038EDFAAB7` |
+| Bitter Winter | America, China | Patt | `0FDEB99B1DEFAAA6` | **Patt** | `3C403645D06C2E92` | `6F84497D225021F4` |
+| Bitter Winter | GLA, America | America, Tick 14.430 | `A3A6295689F3F0E5` | **America, Tick 8.895** | `AB725263AEF8E3B7` | `CDFCDF66730FF07B` |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | Patt | `0EC68A99E3ED5ACD` | **Patt** | `A4B3ACB444C989B4` | `BA6DCDD5A38758EF` |
+| Death Valley | China, GLA | China, Tick 11.160 | `DA30DBBC2434E499` | **China, Tick 8.565** | `9F0F8D7D28E8654D` | `90CDEBE18E7C6B01` |
+| Death Valley | America, China | China, Tick 9.975 | `8DB4AA743B8F349A` | **America, Tick 9.330** | `E98A532C90F89642` | `AC321A0CFA9C00E1` |
+| Death Valley | GLA, America | America, Tick 13.755 | `2992C9E0876B2C95` | **America, Tick 8.175** | `3F33A4FEDEBA85C1` | `3B00774A84E69278` |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | AmericaAirForceGeneral, Tick 32.280 | `C443660F229E157E` | **ChinaTankGeneral, Tick 32.475** | `828EE15100622D42` | `0C3AF1B086B9428E` |
+
+Entschieden: vorher 12, nachher **11**. Zwei Ausgänge kippen: Armored Fury China/GLA (China bei 11.460 → Patt) und Death Valley Tank/AirForce (AirForce bei 32.280 → ChinaTankGeneral bei 32.475); Death Valley
+America/China wechselt den Sieger (China → America). Von den elf entschiedenen Läufen enden sieben früher als vorher und vier später (deutlich: Alpine Assault China/GLA 7.545 → 23.310 und Bitter Winter China/GLA 12.930 →
+17.220; knapp: Alpine Assault America/China und Death Valley Tank/AirForce). Bei 16 Läufen ist das keine Aussage über Stärke; **keine Balance-Aussage**.
+
+**Was die Spuren der fünf Patts zeigen** (`SimTool ai-match … --trace N --trace-army`; `--trace-army` ist neu und druckt je Spieler die Armee nach Typ mit „marschiert / Angriffsmarsch / kämpft“, dem
+Abstand zum nächsten feindlichen Gebäude und der Selbstauskunft der KI):
+
+| Lauf | Bild bei Tick 45.000 |
+|---|---|
+| Alpine Assault, Tank/AirForce | China: 7 Gebäude, Armee 0 seit Tick 27.000, 150 Credits, Strecke Zentrum–Lager 956 (das nahe Lager ist leer), Produktion steht bei 74. AirForce: 13 Gebäude, 0 Credits, 4 Sammler, produziert 200 Einheiten – ausschließlich Ranger und Missile Defender –, die in Gruppen von 4 bis 12 an Chinas einer Verteidigung sterben; die erste Welle endet nie (Wellen 1) |
+| Armored Fury, China/GLA | China: 9 Gebäude, 0 Credits, Armee 0–2, Strecke 654. GLA: 9 Gebäude, 30 Credits, 295 Einheiten produziert, fast nur Rebellen, die über 180 bis 1.150 Einheiten verteilt anmarschieren und an einer Verteidigung sterben |
+| Armored Fury, Tank/AirForce | beide 12–13 Gebäude, 125–150 Credits, Strecken 654 und 521, Armeen 4 und 6 unter der Angriffsschwelle (16 und 22) |
+| Bitter Winter, America/China | beide seit Tick 30.000 eingefroren: 25 und 250 Credits, Strecken 1.173 und 1.127, Armeen 2 und 0, die Vorräte der Karte bleiben bei 1.068 Kisten stehen |
+| Bitter Winter, Tank/AirForce | AirForce hat 3 Gebäude, keine Armee, keinen Bauarbeiter, keine Kaserne; China 11 Gebäude, aber 125 Credits, Strecke 1.173 und 3 Einheiten unter der Schwelle 12 – es greift nicht mehr an |
+
+Gemeinsam ist allen: am Ende haben beide Seiten kein Geld (das Lager neben dem Versorgungszentrum ist leer, das nächste gefüllte 500 bis 1.200 Einheiten entfernt, für ein weiteres Zentrum reicht das Geld
+nicht), und die Armeen bestehen aus der jeweils billigsten Infanterie, die eine einzelne Basisverteidigung nicht überwindet. Der Zielerwerb zeigt in den Spuren keinen Fehler (Einheiten im Angriffsmarsch
+kämpfen und marschieren weiter; „kämpft“ und „marschiert“ zugleich sind Verfolgungen). Das ist der Befund aus §32 und `SIM-TURRET-AIM.md` §8a, jetzt mit Zahlen je Lauf.
+
+**Ein Korrekturversuch, gemessen und verworfen:** „eine Armee, die 90 Sekunden nicht gewachsen ist, greift auch unter der Schwelle an“ (für Bitter Winter Tank/AirForce naheliegend). Alle 16 Läufe neu:
+dieselben 11 entschieden, die elf mit identischem Endhash, die fünf Patts blieben Patts (nur ihre Hashes änderten sich). Die Änderung ist deshalb nicht im Code. Was die Spuren als Ursache nennen –
+Wirtschaft nach dem Leerlaufen des ersten Lagers und die Zusammensetzung der Armee – ist ein eigener Auftrag an `SkirmishAi` (Geld für ein zweites Zentrum zurückhalten, nicht nur das Billigste bauen).

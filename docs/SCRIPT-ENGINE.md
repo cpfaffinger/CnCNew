@@ -37,7 +37,8 @@ Die VM hängt nur von `CnCNew.Data` ab (`SourceRules` gilt): keine Wandzeit, kei
 
 ## 2. Ein Tick
 
-`MissionSession.Step()` = `ScriptEngine.Update(tick)` → `DriveCombat(tick)` → `SimulationWorld.Step()` → `ScriptEngine.Observe(events)`.
+`MissionSession.Step()` = `ScriptEngine.Update(tick)` → `SimulationWorld.Step()` (darin der Zielerwerb der Einheiten, `docs/SIMULATION-CORE.md` §33) → `ScriptEngine.Observe(events)`.
+Bis Phase 16 stand dazwischen `DriveCombat(tick)`, der Gefechtstreiber der Sitzung; er ist entfallen.
 
 `ScriptEngine.Update` endet seit Phase 11 mit `UpdateFollowers` → `ProcessTeamEvents` (§5b) → `ProcessSequences` (§5a) → `ProcessTeamBuilds`; die Menge „Objekte, die in diesem Tick einen
 Befehl bekamen“ (`_busyThisTick`) wird zu Beginn geleert, weil ein Befehl erst im Weltschritt wirkt, die Sequenzlogik das Objekt des Originals aber sofort als beschäftigt behandeln muss.
@@ -215,10 +216,14 @@ geskriptet).
   denselben Standard zurück und hinterlässt eine Notiz in `MissionSession.Notes`, nie still. `CampaignController.StartCurrentMission` und
   `CampaignTool audit|playthrough --human-side <Name>` reichen die Wahl durch; die eigentliche General-Auswahl bleibt Sache der Shell-Anbindung
   (`docs/HANDOFF-PHASE10.md` Teil 2).
-- **Automatisches Gefecht** (`DriveCombat`): Die Simulation hat keine Zielerfassung im Leerlauf (`AutoAcquireEnemiesWhenIdle` wird nicht
-  modelliert; auch die Skirmish-KI schießt ausdrücklich). Die Sitzung lässt jedes bewaffnete Objekt alle `CombatIntervalTicks` (3, versetzt
-  nach Objekt-ID) per `FireWeaponCommand` auf den Feind in Reichweite schießen, höchste Angriffspriorität zuerst, dann am nächsten.
-  Neutrale schießen nie. Sicht/Reichweite prüft die normale Befehlsvalidierung.
+- **Gefecht** (seit Phase 17, `docs/SIMULATION-CORE.md` §33): die Einheiten wählen ihre Opfer selbst (`AutoAcquireEnemiesWhenIdle`, `MoodAttackCheckRate`); der frühere Gefechtstreiber
+  `DriveCombat` (jedes bewaffnete Objekt schoss alle drei Ticks auf den nächsten Feind in Reichweite, auch im Gehen und ohne Rücksicht auf sein `AutoAcquire`) ist entfallen. Der Skript-Motor ist
+  `IAcquisitionAdvisor` der Welt: er liefert die Angriffspriorität (`AttackPriorityInfo`; Priorität 0 wird nie angegriffen, je 100 Einheiten Entfernung ein Punkt Abzug) und die Stimmung des Teams
+  (`teamAggressiveness` der Karte, überschrieben durch `TEAM_SET_ATTITUDE`): schlafende und passive Teams eines Computerspielers erwerben nichts, wachsame und aggressive machen aus jedem
+  Bewegungsbefehl des Skripts einen Angriffsmarsch (`MAA_Action_To_AttackMove`) und suchen 1,1- bzw. 1,5-mal so weit. Jagd-, Team- und Gebietsangriffe (`UpdateFollowers`) sind Angriffsmärsche
+  (`AttackMoveCommand`) zum Ziel; der Angriff auf ein benanntes Objekt schickt zusätzlich den Schuss als Befehl, sobald eine Waffe reicht (`FireAtOrdered`), weil das benannte Opfer nicht das
+  sein muss, das die Einheit selbst wählen würde. `MissionOptions.CombatIntervalTicks` ist kein Intervall mehr: 0 schaltet den Zielerwerb der Mission ab (Tests), jeder andere Wert lässt ihn an
+  (Name und Snapshot-Feld bleiben, `MissionSnapshot` 2). `MissionCombatStats.Shots` zählt jetzt alle `WeaponFired`-Ereignisse.
 
 ## 7a. Mission im Client: was `--mission` tut und was von den `ScriptOutput`s zu sehen ist (Phase 16, Punkt 5)
 
@@ -748,7 +753,7 @@ Team-Warteschlangen und die `getTeamNamed`-Regel verschieben die Karten also nic
 berichtet** (`ObjectiveDriveResult.Declined`, Zeile `declined world write` in `Unmet`); der Ergebnisbericht trennt jetzt Befehle (`Commands`: Bewegungsbefehle, Produktionsbefehle, die Befehle des Agenten) und
 Weltschreibungen (`WorldWrites`) – auch im Normalmodus (`drive` zeigt „N interventions: C commands, W world writes“).
 
-Was ein Spieler tut, übernehmen: (1) „zerstöre X“-Blätter schicken die bewaffneten, beweglichen Einheiten des Betrachters mit Bewegungsbefehlen zum nächsten Opfer (die Gefechtsschleife der Sitzung, `DriveCombat`,
+Was ein Spieler tut, übernehmen: (1) „zerstöre X“-Blätter schicken die bewaffneten, beweglichen Einheiten des Betrachters mit einem Angriffsmarsch zum nächsten Opfer und geben es ihnen als Angriffsbefehl (seit Phase 17: `Assault`/`DriveAssaults`; vorher Bewegungsbefehle und die Gefechtsschleife der Sitzung, `DriveCombat`,
 schießt, sobald Ziele in Reichweite sind); (2) „Anzahl von Typ X“-Blätter stellen Produktion bei einem eigenen Produzenten an (`QueueProductionCommand` nach `CanQueueProductionTemplate`), Einheiten außerhalb des Bereichs
 gehen zu Fuß dorthin (kein Teleport); (3) **Wirtschaft und Heer spielt der Skirmish-Agent**: `SkirmishAi` (`CnCNew.Simulation/Skirmish`, „spielt nur über typisierte Befehle“) steuert den Betrachter durch den
 Befehlszähler der Sitzung (`command with { Sequence, Tick }`, damit Skripte, Fahrer und Agent einen Zähler teilen); er baut Basis und Wirtschaft, produziert, sammelt ein Heer und greift in Wellen an, mit den Positionen

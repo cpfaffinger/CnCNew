@@ -198,8 +198,13 @@ wiederholt die Einzelschritte in `Tick`, wie die Skirmish-KI; jeder wiederholte 
 * **Angriff** (`groupAttackObject`): in Reichweite → `FireWeaponCommand` sobald nachgeladen (mit denselben Vorbedingungen wie die Simulation,
   also ohne Ablehnungen); außer Reichweite → `SetMoveTargetCommand` zum Ziel, neu erst wenn das Ziel sich mehr als 10 m bewegt hat oder die
   Einheit steht; in Reichweite angekommen → Halt an Ort. Endet, wenn das Ziel stirbt oder unsichtbar wird.
-* **Angriffsbewegung**: bewegen und auf den nächsten sichtbaren Feind in Waffenreichweite feuern (gleich weit: kleinere Id); endet bei Ankunft.
-* **Wachen** (alle drei Guard-Arten gleich, ohne Verfolgung): zur Position, dort auf Feinde in Reichweite feuern.
+* **Angriffsbewegung** (Meta `ENGINE_ATTACK_MOVE` bzw. der Knopf `ATTACK_MOVE` der Befehlsleiste, dann Klick): ein `AttackMoveCommand` je Einheit (seit Phase 17, Befehlstabelle 14). Marschieren,
+  für einen Kampf anhalten und weitermarschieren macht die Simulation (`docs/SIMULATION-CORE.md` §33); der Eintrag in `StandingOrders` sagt nur noch, dass die Einheit auf einer Angriffsbewegung
+  ist, und endet mit ihr (`SimulationWorld.IsAttackMoving`). Die Eingabeschicht schickt dafür keinen Feuerbefehl mehr.
+* **Wachen** (alle drei Guard-Arten gleich, ohne Verfolgung): zur Position; dort wählt die Einheit ihre Opfer selbst (Zielerwerb der Simulation im Leerlauf, sofern ihr `AutoAcquireEnemiesWhenIdle`
+  es erlaubt). Auch hier kein Feuerbefehl der Eingabeschicht mehr.
+* **Zielwahl allgemein**: ruhende Einheiten des Menschen schießen seit Phase 17 von selbst auf Feinde in Reichweite (vorher nie, außer mit Angriffs-, Angriffsbewegungs- oder Wachbefehl); nur der
+  Angriff auf ein vom Spieler genanntes Ziel wird weiter von hier gefahren. Nicht von einem Menschen gesehen.
 * **Wegpunkte** (`MSG_ADD_WAYPOINT`): der erste Alt-Klick ordnet die Bewegung sofort an und beginnt den Befehl (`Destination`), jeder weitere hängt eine
   Station an (`Waypoints`); bei Ankunft (kein Bewegungsziel mehr) wird die nächste Station als `SetMoveTargetCommand` angeordnet, nach der letzten endet der
   Befehl. Die Simulation kennt keinen Wegpunktpfad; die Warteschlange ist reine Eingabeschicht, jeder Schritt steht im Replay. Anzeige: §12.
