@@ -49,6 +49,12 @@ public sealed class GameData
     /// <summary>Virtual paths of every map file, ordinal order.</summary>
     public ImmutableArray<string> Maps { get; }
 
+    /// <summary>
+    /// Identifies a map across machines: the SHA-256 of the map file from the content manifest. The terrain fingerprint covers what the simulation's terrain
+    /// reads; the file hash covers everything else in the file as well (sides, teams, scripts, trigger areas).
+    /// </summary>
+    public string MapFileHash(string mapPath) => Content.FileHash(mapPath);
+
     /// <summary>Compiles the retail base data (map overlays excluded) and builds every catalog; the slow part of starting the game.</summary>
     public static GameData Load(string contentDirectory, Action<string>? progress = null, bool modelGeometry = true)
     {

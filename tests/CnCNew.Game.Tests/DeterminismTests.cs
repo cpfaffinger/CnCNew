@@ -233,6 +233,22 @@ internal static class DeterminismTests
             }
         });
 
+        harness.Run("D5: every shipped map is identified by the hash of its file; the terrain fingerprint of the reference missions", () =>
+        {
+            var hashes = data.Maps.Select(data.MapFileHash).ToArray();
+            TestHarness.Assert(hashes.All(hash => hash.Length == 64 && hash.All(digit => digit is (>= '0' and <= '9') or (>= 'A' and <= 'F'))), "a map file hash is 64 upper-case hex digits");
+            foreach (var path in new[] { AlpineAssault, "Maps/MD_USA05/MD_USA05.map", "Maps/MD_GLA05/MD_GLA05.map" })
+            {
+                using var stream = data.Content.OpenRead(path);
+                var actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+                TestHarness.Assert(actual == data.MapFileHash(path), $"{path}: the manifest hash is the hash of the file");
+                var (_, terrain) = LoadMap(data, path);
+                Console.WriteLine($"       {path}: file {actual[..16]}, terrain fingerprint {terrain.Fingerprint[..16]}");
+            }
+            Console.WriteLine($"       {hashes.Length} maps, {hashes.Distinct(StringComparer.Ordinal).Count()} distinct file hashes");
+            TestHarness.Assert(hashes.Length >= 150, $"the shipped maps are listed ({hashes.Length})");
+        });
+
         harness.Run("D2 and D7: every real of every shipped map converts like the runtime cast; waypoints that tie in name and position", () =>
         {
             long reals = 0, differing = 0, waypoints = 0, tiedGroups = 0, tiedWaypoints = 0, undefinedGroups = 0;

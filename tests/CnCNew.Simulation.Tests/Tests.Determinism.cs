@@ -196,4 +196,36 @@ static partial class Tests
             plain.World.VerifyIncrementalHash();
         }
     }
+
+    /// <summary>
+    /// D5: the terrain fingerprint is what a replay, a snapshot and (later) a joining machine compare to know they stand on the same map. It covered heights,
+    /// cells, water and the names and positions of the waypoints, but neither the waypoints' ids and links (the paths units and scripts follow) nor the objects
+    /// placed on the map (start bases, supply warehouses, scripted units). Two maps that differ in those must not share a fingerprint.
+    /// </summary>
+    public static void TerrainFingerprintCoversWaypointLinksAndMapObjects()
+    {
+        MapObject Waypoint(string name, decimal x, int id) => new("*Waypoints/Waypoint", x, 50m, 0m, 0m, 0,
+            new MapProperties([new MapProperty("waypointID", MapPropertyType.Int, id, 0m, string.Empty), new MapProperty("waypointName", MapPropertyType.Ascii, 0, 0m, name)]));
+        MapObject Placed(string template, decimal x, decimal angle, string owner) => new(template, x, 80m, 0m, angle, 0, new MapProperties([new MapProperty("originalOwner", MapPropertyType.Ascii, 0, 0m, owner)]));
+        var basis = SyntheticMaps.Build(40, 30, 1) with
+        {
+            Objects = [Waypoint("A", 10m, 1), Waypoint("B", 20m, 2), Waypoint("C", 30m, 3), Placed("SupplyDock", 100m, 0m, "teamA")],
+            WaypointLinks = [new MapWaypointLink(1, 2)],
+        };
+        string Print(MapData map) => TerrainMap.Build(map, "fingerprint").Fingerprint;
+        var reference = Print(basis);
+        Check.That(Print(basis with { Objects = [..basis.Objects] }) == reference, "The same map has the same fingerprint.");
+        var variants = new (string What, MapData Map)[]
+        {
+            ("a waypoint link that leads elsewhere", basis with { WaypointLinks = [new MapWaypointLink(1, 3)] }),
+            ("waypoint ids exchanged", basis with { Objects = [Waypoint("A", 10m, 2), Waypoint("B", 20m, 1), Waypoint("C", 30m, 3), basis.Objects[3]] }),
+            ("a map object moved", basis with { Objects = [..basis.Objects.Take(3), Placed("SupplyDock", 110m, 0m, "teamA")] }),
+            ("a map object turned", basis with { Objects = [..basis.Objects.Take(3), Placed("SupplyDock", 100m, 1.5m, "teamA")] }),
+            ("a map object of another type", basis with { Objects = [..basis.Objects.Take(3), Placed("SupplyPile", 100m, 0m, "teamA")] }),
+            ("a map object of another owner", basis with { Objects = [..basis.Objects.Take(3), Placed("SupplyDock", 100m, 0m, "teamB")] }),
+            ("a map object more", basis with { Objects = [..basis.Objects, Placed("SupplyDock", 200m, 0m, "teamA")] }),
+        };
+        var unnoticed = variants.Where(variant => Print(variant.Map) == reference).Select(variant => variant.What).ToArray();
+        Check.That(unnoticed.Length == 0, "The terrain fingerprint does not notice: " + string.Join("; ", unnoticed) + ".");
+    }
 }

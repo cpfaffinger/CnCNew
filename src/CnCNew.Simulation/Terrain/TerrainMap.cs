@@ -60,7 +60,7 @@ public sealed class TerrainMap
         for (var cy = 0; cy < cellsY; cy++)
             for (var cx = 0; cx < cellsX; cx++) cells[cy * cellsX + cx] = Classify(map.BlendTiles, cx, cy);
         _cells = [..cells];
-        Fingerprint = ComputeFingerprint();
+        Fingerprint = ComputeFingerprint(map);
     }
 
     public string Name { get; }
@@ -289,11 +289,18 @@ public sealed class TerrainMap
         return inside;
     }
 
-    private string ComputeFingerprint()
+    /// <summary>
+    /// What a replay, a snapshot and a second machine compare to know they stand on the same terrain: heights, cells, water, the waypoints with their ids and
+    /// links (the paths units and scripts follow), and every object placed on the map (start bases, supply sources, scripted units, props) with its properties,
+    /// in file order. Not covered: sides, teams, scripts and trigger areas - a whole map is identified by the hash of its file (content manifest).
+    /// </summary>
+    private string ComputeFingerprint(MapData map)
     {
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
         {
+            // Version of this layout: 2 adds waypoint ids and links and the map objects.
+            writer.Write("terrain-fingerprint-2");
             writer.Write(_vertexWidth);
             writer.Write(_vertexHeight);
             writer.Write(_border);
@@ -320,6 +327,27 @@ public sealed class TerrainMap
                 writer.Write(waypoint.X.Raw);
                 writer.Write(waypoint.Y.Raw);
                 writer.Write(waypoint.Z.Raw);
+                writer.Write(waypoint.Id);
+                writer.Write(waypoint.NextId);
+            }
+            writer.Write(map.Objects.Length);
+            foreach (var placed in map.Objects)
+            {
+                writer.Write(placed.Name);
+                writer.Write(Fixed.FromDecimal(placed.X).Raw);
+                writer.Write(Fixed.FromDecimal(placed.Y).Raw);
+                writer.Write(Fixed.FromDecimal(placed.Z).Raw);
+                writer.Write(Fixed.FromDecimal(placed.Angle).Raw);
+                writer.Write(placed.Flags);
+                writer.Write(placed.Properties.Items.Length);
+                foreach (var property in placed.Properties.Items)
+                {
+                    writer.Write(property.Key);
+                    writer.Write((int)property.Type);
+                    writer.Write(property.Integer);
+                    writer.Write(property.Real);
+                    writer.Write(property.Text);
+                }
             }
         }
         return Convert.ToHexString(SHA256.HashData(stream.ToArray()));

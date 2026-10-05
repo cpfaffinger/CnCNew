@@ -366,6 +366,7 @@ run.Test("Determinism D7: the waypoint order is total", Tests.WaypointOrderIsTot
 run.Test("Determinism D3: a running world and a restored one enumerate their entities in id order", Tests.EntityEnumerationIsOrderedById);
 run.Test("Determinism D8: the incremental hash equals the full hash in every tick of the stress scenario", Tests.IncrementalHashHoldsInEveryTick);
 run.Test("Determinism D8: a scripted warehouse value reaches the tick hash; writing a save does not change it", Tests.ScriptedWarehouseValueReachesTheHash);
+run.Test("Determinism D5: the terrain fingerprint covers waypoint ids, links and the objects on the map", Tests.TerrainFingerprintCoversWaypointLinksAndMapObjects);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

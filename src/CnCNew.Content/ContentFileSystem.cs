@@ -86,6 +86,12 @@ public sealed class ContentFileSystem
             : throw new FileNotFoundException($"Content file '{virtualPath}' was not found.", virtualPath);
     }
 
+    /// <summary>
+    /// The SHA-256 of a content file as the manifest records it, 64 upper-case hex digits: the identity of a file (a map, for instance) that two machines can
+    /// compare without reading it. <see cref="VerifyIntegrityAsync"/> checks that the files on disk still have these hashes.
+    /// </summary>
+    public string FileHash(string virtualPath) => GetEntry(virtualPath).Sha256.ToUpperInvariant();
+
     public Stream OpenRead(string virtualPath)
     {
         var entry = GetEntry(virtualPath);
