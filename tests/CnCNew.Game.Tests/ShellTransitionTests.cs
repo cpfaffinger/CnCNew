@@ -127,6 +127,7 @@ internal static class ShellTransitionTests
         while (shell.IsAnimating && frames < 400)
         {
             shell.Update(Frame);
+            shell.BuildDrawList(); // effects note a missing image when they draw
             frames++;
             sounds.AddRange(shell.DrainOutputs().OfType<PlayUiSoundOutput>().Select(output => output.EventName));
             foreach (var name in names)
@@ -137,6 +138,8 @@ internal static class ShellTransitionTests
         TestHarness.Assert(firstVisible["MainMenu.wnd:ButtonSinglePlayer"] < firstVisible["MainMenu.wnd:ButtonExit"],
             "the buttons come in one after the other: single player before exit");
         TestHarness.Assert(shell.CurrentScreen.Transitions!.MissingWindows.Count == 0, $"no window of the groups is missing: {string.Join(",", shell.CurrentScreen.Transitions.MissingWindows)}");
+        TestHarness.Assert(string.Join(",", shell.CurrentScreen.Transitions.MissingImages) == "Gradient",
+            $"the only image the flash groups ask for and the retail data lacks is the button gradient (the original draws nothing for it, too): [{string.Join(",", shell.CurrentScreen.Transitions.MissingImages)}]");
         TestHarness.Assert(sounds.Contains("GUIBoarderFadeIn") && sounds.Contains("GUIButtonsFadeIn"), $"the entry plays its sounds ({string.Join(",", sounds.Distinct())})");
         TestHarness.Assert(Dump(shell) == restingMain, "after the entry the menu draws exactly what the transition-free menu draws");
         Console.WriteLine($"  main menu entry: {frames} frames ({frames / 30.0:F2} s); first visible frames: " + string.Join(", ", firstVisible.OrderBy(pair => pair.Value).Select(pair => $"{pair.Key[(pair.Key.IndexOf(':') + 1)..]} {pair.Value}")));

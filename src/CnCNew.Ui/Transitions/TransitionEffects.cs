@@ -242,7 +242,12 @@ public sealed class ButtonFlashEffect(ITransitionHost host) : TransitionEffect(h
             output.Add(new UiBorderRect(rect, White(border)));
             output.Add(new UiFillRect(rect, White(fill)));
         }
-        void Gradient(int alpha) => output.Add(new UiImageDraw("Gradient", rect, White(alpha), false, false));
+        void Gradient(int alpha)
+        {
+            // The retail data has no mapped image named "Gradient" (findImageByName returns NULL and drawImage(NULL) draws nothing); same here, but noted.
+            if (!Host.HasImage("Gradient")) Host.NoteMissingImage("Gradient");
+            else output.Add(new UiImageDraw("Gradient", rect, White(alpha), false, false));
+        }
         void Button() => Win?.AppendButtonImages(255, output);
 
         switch (DrawState)

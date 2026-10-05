@@ -151,6 +151,9 @@ public sealed class WindowTransitionHandler
     /// <summary>Decorated names of windows a started group asked for that the screen does not have.</summary>
     public IReadOnlyCollection<string> MissingWindows => _missing;
 
+    /// <summary>Mapped images an effect asked for that do not exist (the effect drew nothing for them).</summary>
+    public IReadOnlyCollection<string> MissingImages => _host.MissingImages;
+
     public string? CurrentGroup => _current?.Name;
 
     public string? PendingGroup => _pending?.Name;

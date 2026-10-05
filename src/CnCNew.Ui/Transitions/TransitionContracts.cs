@@ -59,4 +59,13 @@ public interface ITransitionHost
     string? ControlBarArrowImage { get; }
 
     bool TryGetImageSize(string image, out int width, out int height);
+
+    /// <summary>Whether a mapped image of this name exists (<c>findImageByName</c> is not null).</summary>
+    bool HasImage(string image);
+
+    /// <summary>An effect wanted a mapped image that does not exist and drew nothing for it (the original's <c>drawImage(NULL)</c>); recorded so it can be reported, never silent.</summary>
+    void NoteMissingImage(string image);
+
+    /// <summary>The names recorded by <see cref="NoteMissingImage"/>, ordinal order.</summary>
+    IReadOnlyCollection<string> MissingImages { get; }
 }

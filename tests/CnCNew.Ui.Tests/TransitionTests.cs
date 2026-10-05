@@ -24,6 +24,7 @@ public static class TransitionTests
         Test(TableRejectsWhatItDoesNotKnow);
         Test(FlashHidesThenFadesInAFixedTable);
         Test(ButtonFlashFollowsItsFrameTable);
+        Test(ButtonFlashWithoutItsGradientImageDrawsNothingForIt);
         Test(ButtonFlashReversedMirrorsTheTable);
         Test(FadeAndScaleUpUseTheirIncrements);
         Test(ScreenFadeAndFullFadeRampAlpha);
@@ -106,6 +107,12 @@ public static class TransitionTests
             (width, height) = (32, 24);
             return true;
         }
+
+        public HashSet<string> LackingImages { get; } = [];
+        private readonly SortedSet<string> _missingImages = new(StringComparer.Ordinal);
+        public bool HasImage(string image) => !LackingImages.Contains(image);
+        public void NoteMissingImage(string image) => _missingImages.Add(image);
+        public IReadOnlyCollection<string> MissingImages => _missingImages;
     }
 
     private static WindowTransitionTable Table(string text) => WindowTransitionTable.Parse(text, "test.ini");
@@ -257,6 +264,18 @@ public static class TransitionTests
         Equal(false, hidden[15], "shown from effect frame 11");
         Equal(true, handler.IsFinished, "finished at effect frame 17 = group frame 22");
         Equal(new[] { "GUIButtonsFadeIn" }, host.Sounds.ToArray(), "one sound");
+    }
+
+    private static void ButtonFlashWithoutItsGradientImageDrawsNothingForIt()
+    {
+        var host = new FakeHost();
+        host.Add("A");
+        host.LackingImages.Add("Gradient");
+        var handler = new WindowTransitionHandler(Table(Group("G", "BUTTONFLASH")), host);
+        handler.SetGroup("G");
+        for (var frame = 1; frame <= 11; frame++) handler.Step();
+        Equal("image button:A 100,100 120x60 a255", Draws(handler), "effect frame 11 has no gradient image to draw, only the button");
+        Equal("Gradient", string.Join(",", handler.MissingImages), "the missing image is recorded");
     }
 
     private static void ButtonFlashReversedMirrorsTheTable()

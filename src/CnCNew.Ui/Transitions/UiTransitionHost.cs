@@ -27,6 +27,14 @@ public sealed class UiTransitionHost(UiWindowTree tree, Action<string> playSound
 
     public void PlaySound(string eventName) => playSound(eventName);
 
+    private readonly SortedSet<string> _missingImages = new(StringComparer.Ordinal);
+
+    public bool HasImage(string image) => tree.Services.Images is { } images && images.TryGetSize(image, out _, out _);
+
+    public void NoteMissingImage(string image) => _missingImages.Add(image);
+
+    public IReadOnlyCollection<string> MissingImages => _missingImages;
+
     public bool TryGetImageSize(string image, out int width, out int height)
     {
         width = height = 0;
