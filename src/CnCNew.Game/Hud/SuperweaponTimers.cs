@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using CnCNew.Game.Data;
 using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
@@ -22,20 +23,13 @@ public readonly record struct SuperweaponLine(PlayerId Player, EntityId Object, 
 /// science the owner lacks is left out; the list stops with "..." above the control bar (<c>0.82</c> of the view height). A mission script can hide the whole list
 /// (<c>DISABLE_SPECIAL_POWER_DISPLAY</c>, <see cref="DisplayEnabled"/>) or single objects (<c>NAMED_HIDE_SPECIAL_POWER_DISPLAY</c>, <see cref="HiddenByScript"/>).
 /// <para>
-/// The position, flash time and font are the values of the retail <c>InGameUI.ini</c> (<c>SuperweaponCountdownPosition</c> X:0.90 Y:0.01, <c>FlashDuration</c> 500 ms, <c>NormalFont</c>/<c>ReadyFont</c> Arial 10,
-/// bold only when ready, <c>FlashColor</c> white); a test compares them with the file. They are constants here because the data layer does not type <c>InGameUI.ini</c>.
+/// The position (<c>SuperweaponCountdownPosition</c>), the flash time and color and the fonts (<c>Language.ini</c>, ready or normal) come from the typed <see cref="InGameUiStyle"/>, not from constants;
+/// a ready power uses the ready font and flashes between the owner's color and the flash color every flash period (<c>m_superweaponUsedFlashColor</c> starts true, so the flash color shows in
+/// the odd periods).
 /// </para>
 /// </summary>
 public sealed class SuperweaponTimers
 {
-    public const float PositionX = 0.90f;
-    public const float PositionY = 0.01f;
-
-    /// <summary><c>SuperweaponCountdownFlashDuration</c> 500 ms in logic frames.</summary>
-    public const int FlashFrames = 15;
-
-    public const int FontSize = 10;
-
     /// <summary>The list stops at this share of the view height (<c>bottomMargin = view height * 0.82</c>).</summary>
     public const float BottomMargin = 0.82f;
 
@@ -99,28 +93,33 @@ public sealed class SuperweaponTimers
     /// The draw commands for <paramref name="lines"/> on a <paramref name="width"/> x <paramref name="height"/> view whose control bar starts at <paramref name="controlBarTop"/>: the name right-aligned to
     /// the list's x, the time left-aligned from it (<c>SuperweaponInfo::drawName/drawTime</c>), one line per font height, in the owner's colour, white while a ready power flashes.
     /// </summary>
-    public static ImmutableArray<UiDrawCommand> Draw(ImmutableArray<SuperweaponLine> lines, Func<PlayerId, WndColor> colorOf, long tick, int width, int height, int controlBarTop, IUiTextMeasure measure)
+    public static ImmutableArray<UiDrawCommand> Draw(ImmutableArray<SuperweaponLine> lines, Func<PlayerId, WndColor> colorOf, long tick, int width, int height, int controlBarTop, IUiTextMeasure measure,
+        InGameUiStyle style, UiScaleOptions options)
     {
+        ArgumentNullException.ThrowIfNull(style);
         if (lines.IsDefaultOrEmpty) return [];
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
+        var settings = style.Settings;
+        var viewport = new UiViewport(width, height);
+        var normalFont = style.Font(InGameUiFontRole.SuperweaponNormal, viewport, options);
+        var readyFont = style.Font(InGameUiFontRole.SuperweaponReady, viewport, options);
         var shadow = new WndColor(0, 0, 0, 255);
         var clip = new UiRect(0, 0, width, height);
-        var x = (int)(PositionX * width);
-        var y = (int)(PositionY * height);
+        var x = (int)(settings.SuperweaponPosition.X * width);
+        var y = (int)(settings.SuperweaponPosition.Y * height);
         var bottom = (int)(Math.Min(height, controlBarTop > 0 ? controlBarTop : height) * BottomMargin);
-        // Ready powers flash on a clock of the logic frames: white for FlashFrames, the owner's colour for the next FlashFrames.
-        var flashWhite = tick / FlashFrames % 2 == 0;
+        var flashFrames = (int)settings.SuperweaponFlashFrames;
+        var flash = flashFrames > 0 && tick / flashFrames % 2 == 1;
         foreach (var line in lines)
         {
-            var font = new UiFont("Arial", FontSize, line.Ready);
+            var font = line.Ready ? readyFont : normalFont;
             var step = measure.LineHeight(font);
             if (y >= bottom)
             {
-                var dots = new UiFont("Arial", FontSize, false);
-                commands.Add(new UiTextDraw("...", null, dots, WndColor.White, shadow, x - measure.MeasureWidth("...", dots), y, UiTextAlignment.Left, clip));
+                commands.Add(new UiTextDraw("...", null, normalFont, settings.SuperweaponFlashColor, shadow, x, y, UiTextAlignment.Left, clip));
                 break;
             }
-            var color = line.Ready && flashWhite ? WndColor.White : colorOf(line.Player);
+            var color = line.Ready && flash ? settings.SuperweaponFlashColor : colorOf(line.Player);
             commands.Add(new UiTextDraw(line.Name, null, font, color, shadow, x - measure.MeasureWidth(line.Name, font), y, UiTextAlignment.Left, clip));
             commands.Add(new UiTextDraw(line.Time, null, font, color, shadow, x, y, UiTextAlignment.Left, clip));
             y += step;

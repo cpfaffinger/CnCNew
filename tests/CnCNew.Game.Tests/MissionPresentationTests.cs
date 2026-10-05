@@ -135,7 +135,7 @@ internal static class MissionPresentationTests
         var text = Script("Text", If("CONDITION_TRUE"), [Do("DISPLAY_TEXT", Named(MapScriptParameterType.ObjectType, "GUI:Test"))]);
         var session = Start([radar, text], null);
         var resolved = new Dictionary<string, string> { ["GUI:Test"] = "Resolved Caption Text" };
-        var director = new MissionPresentationDirector(session, label => resolved.GetValueOrDefault(label, label));
+        var director = new MissionPresentationDirector(session, label => resolved.GetValueOrDefault(label, label)) { TextStyle = TextFixtures.Style, TextScaleOptions = TextFixtures.Options, TextMeasure = new ShellTextMeasure() };
 
         director.BeforeStep();
         session.Step();
@@ -144,7 +144,7 @@ internal static class MissionPresentationTests
         TestHarness.Assert(director.RadarBlips.Length == 1, $"one radar blip captured (got {director.RadarBlips.Length})");
         var blip = director.RadarBlips[0];
         TestHarness.Assert(Math.Abs(blip.X - 123f) < 0.01f && Math.Abs(blip.Y - 456f) < 0.01f && blip.EventType == 3, $"the blip carries the script's real position and event type (got {blip.X},{blip.Y},{blip.EventType})");
-        TestHarness.Assert(director.CaptionText == "Resolved Caption Text", $"DISPLAY_TEXT shows the resolved text, not the raw label (got '{director.CaptionText}')");
+        TestHarness.Assert(director.Messages is { Lines: [{ Text: "Resolved Caption Text" }] }, $"DISPLAY_TEXT adds the resolved text, not the raw label, to the message lines (got '{string.Join(" | ", director.Messages?.Lines.Select(line => line.Text) ?? [])}')");
     }
 
     // ---------------------------------------------------------------------------------------------------- item 7: UI feedback into the VM
@@ -181,7 +181,7 @@ internal static class MissionPresentationTests
             Do("CAMERA_LETTERBOX_BEGIN"),
             Do("DISABLE_INPUT"),
             Do("ROTATE_CAMERA", Real(0.5m), Real(4), Real(0), Real(0)),
-            Do("DISPLAY_CINEMATIC_TEXT", Named(MapScriptParameterType.ObjectType, "GUI:Cine"), Named(MapScriptParameterType.ObjectType, "Arial"), Int(4)),
+            Do("DISPLAY_CINEMATIC_TEXT", Named(MapScriptParameterType.ObjectType, "GUI:Cine"), Named(MapScriptParameterType.ObjectType, "Arial - Size:12 [Bold]"), Int(4)),
             Do("SET_COUNTER", Named(MapScriptParameterType.Counter, "kills"), Int(7)),
             Do("DISPLAY_COUNTER", Named(MapScriptParameterType.Counter, "kills"), Named(MapScriptParameterType.ObjectType, "GUI:Kills")),
             Do("SOUND_PLAY_NAMED", Named(MapScriptParameterType.ObjectType, "SomeSound"), Named(MapScriptParameterType.Unit, "Nobody")),
@@ -189,7 +189,7 @@ internal static class MissionPresentationTests
         ]);
         var (map, fixture, terrain) = Mission([intro], [waypoint]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        var director = new MissionPresentationDirector(session);
+        var director = new MissionPresentationDirector(session) { TextStyle = TextFixtures.Style, TextScaleOptions = TextFixtures.Options, TextMeasure = new ShellTextMeasure() };
         var disabled = 0;
         director.InputDisabled += () => disabled++;
 
@@ -242,7 +242,7 @@ internal static class MissionPresentationTests
         var speech = Script("Speech", If("CONDITION_TRUE"), [Do("SPEECH_PLAY", Named(MapScriptParameterType.ObjectType, "VoiceEvent01"))]);
         var (map, fixture, terrain) = Mission([intro, text, speech], [waypoint]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        var director = new MissionPresentationDirector(session, label => label == "GUI:Overlay" ? "Resolved Overlay" : label);
+        var director = new MissionPresentationDirector(session, label => label == "GUI:Overlay" ? "Resolved Overlay" : label) { TextStyle = TextFixtures.Style, TextScaleOptions = TextFixtures.Options, TextMeasure = new ShellTextMeasure() };
 
         director.BeforeStep();
         session.Step();

@@ -17,14 +17,16 @@ public sealed class HudAssets
     public const string ControlBarPath = "Window/ControlBar.wnd";
     public const string QuitMenuPath = "Window/Menus/QuitMenu.wnd";
     public const string PopupSaveLoadPath = "Window/Menus/PopupSaveLoad.wnd";
+    public const string InGamePopupPath = "Window/InGamePopupMessage.wnd";
     public const string SchemePath = "Data/INI/ControlBarScheme.ini";
 
-    private HudAssets(WndLayout controlBar, WndLayout quitMenu, WndLayout popupSaveLoad, WndHeaderTemplateTable headerTemplates, ControlBarSchemeTable schemes,
+    private HudAssets(WndLayout controlBar, WndLayout quitMenu, WndLayout popupSaveLoad, WndLayout inGamePopup, WndHeaderTemplateTable headerTemplates, ControlBarSchemeTable schemes,
         LocalizedText text, MappedImageTable images)
     {
         ControlBar = controlBar;
         QuitMenu = quitMenu;
         PopupSaveLoad = popupSaveLoad;
+        InGamePopup = inGamePopup;
         HeaderTemplates = headerTemplates;
         Schemes = schemes;
         Text = text;
@@ -36,6 +38,8 @@ public sealed class HudAssets
     /// <summary>The in-mission save/load popup (<see cref="CnCNew.Game.Hud.MissionPauseMenu"/>); not used by skirmish, which
     /// cannot be saved (see <c>docs/CAMPAIGN-AND-SAVEGAMES.md</c>).</summary>
     public WndLayout PopupSaveLoad { get; }
+    /// <summary>The message window of <c>INGAME_POPUP_MESSAGE</c> (<c>InGamePopupMessage.wnd</c>, <see cref="MissionPopupWindow"/>).</summary>
+    public WndLayout InGamePopup { get; }
     public WndHeaderTemplateTable HeaderTemplates { get; }
     public ControlBarSchemeTable Schemes { get; }
     public LocalizedText Text { get; }
@@ -55,6 +59,7 @@ public sealed class HudAssets
         var controlBar = ReadLayout(ControlBarPath, "ControlBar.wnd");
         var quitMenu = ReadLayout(QuitMenuPath, "QuitMenu.wnd");
         var popupSaveLoad = ReadLayout(PopupSaveLoadPath, "PopupSaveLoad.wnd");
+        var inGamePopup = ReadLayout(InGamePopupPath, "InGamePopupMessage.wnd");
 
         var headerTemplatePath = $"Data/{language}/HeaderTemplate.ini";
         WndHeaderTemplateTable headerTemplates;
@@ -76,7 +81,7 @@ public sealed class HudAssets
         else schemes = ControlBarSchemeTable.Parse(string.Empty);
 
         var text = data.LoadText(language);
-        return new HudAssets(controlBar, quitMenu, popupSaveLoad, headerTemplates, schemes, text, data.Images);
+        return new HudAssets(controlBar, quitMenu, popupSaveLoad, inGamePopup, headerTemplates, schemes, text, data.Images);
     }
 
     public UiTreeServices BuildTreeServices(IUiTextMeasure measure) => new(measure)

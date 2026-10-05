@@ -67,14 +67,16 @@ public static class MissionOutputCatalog
         Shown("zoom blur into the old view, cut to the waypoint at the apex, zoom blur out of the new one (ScreenMotionBlurFilter, 24 logic frames); a post pass of the Stride client", "CAMERA_MOTION_BLUR_JUMP");
 
         // ---- input, text, ton, film, radar (unchanged from the first Phase 16 session)
-        Shown("the player's world input is dropped, with a notice on screen", "DISABLE_INPUT", "ENABLE_INPUT");
+        Shown("the player's world input is dropped (nothing is shown for it, as in the original)", "DISABLE_INPUT", "ENABLE_INPUT");
         Shown("audio event played; its name on screen as a placeholder subtitle", "SPEECH_PLAY");
         Shown("audio event played (not positioned)", "SOUND_PLAY_NAMED", "PLAY_SOUND_EFFECT", "PLAY_SOUND_EFFECT_AT");
         Shown("music track started", "MUSIC_SET_TRACK");
         Shown("text placeholder with the movie name (no video decoder)", "MOVIE_PLAY_FULLSCREEN", "MOVIE_PLAY_RADAR");
-        Shown("caption text at the top", "DISPLAY_TEXT", "INGAME_POPUP_MESSAGE", "SHOW_MILITARY_CAPTION");
-        Shown("text in the lower bar", "DISPLAY_CINEMATIC_TEXT");
-        Shown("named counter/timer line at the top right", "DISPLAY_COUNTDOWN_TIMER", "DISPLAY_COUNTER", "HIDE_COUNTDOWN_TIMER", "HIDE_COUNTER", "ENABLE_COUNTDOWN_TIMER_DISPLAY", "DISABLE_COUNTDOWN_TIMER_DISPLAY");
+        Shown("a line of the message list at the top left (InGameUI::message: MessageFont, MessagePosition, fades after about nine seconds)", "DISPLAY_TEXT");
+        Shown("a message window with an OK button (InGamePopupMessage.wnd; pauses the game when the script says so)", "INGAME_POPUP_MESSAGE");
+        Shown("the label typed out character by character at the bottom left, title line then body (InGameUI::militarySubtitle: MilitaryCaption fonts and position, blinking block cursor, fade)", "SHOW_MILITARY_CAPTION");
+        Shown("centered text at 0.9 of the screen height in the font the script names (W3DDisplay::draw, DISPLAY_CINEMATIC_TEXT)", "DISPLAY_CINEMATIC_TEXT");
+        Shown("a named counter/timer line at NamedTimerCountdownPosition, stacked upward (InGameUI::postDraw: NamedTimerCountdown fonts and colors)", "DISPLAY_COUNTDOWN_TIMER", "DISPLAY_COUNTER", "HIDE_COUNTDOWN_TIMER", "HIDE_COUNTER", "ENABLE_COUNTDOWN_TIMER_DISPLAY", "DISABLE_COUNTDOWN_TIMER_DISPLAY");
         Shown("blinking dot on the minimap", "RADAR_CREATE_EVENT", "OBJECT_CREATE_RADAR_EVENT", "TEAM_CREATE_RADAR_EVENT");
         Shown("outcome banner", "VICTORY", "DEFEAT");
 

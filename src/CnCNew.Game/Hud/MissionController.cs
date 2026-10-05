@@ -28,9 +28,18 @@ public sealed class MissionController : IMissionHudControl
         Hud.MatchEnded += OnEnded;
         mission.Director.InputDisabled += OnInputDisabled;
         mission.Director.TextMeasure = textMeasure ?? new MonospaceTextMeasure();
+        mission.Director.TextStyle = Hud.TextStyle;
+        mission.Director.TextScaleOptions = Hud.ScaleOptions;
         Hud.Superweapons.HiddenByScript = id => _hiddenSuperweapons.Contains(id.Value);
         mission.Director.Hud = this;
+        _textMeasure = textMeasure ?? new MonospaceTextMeasure();
     }
+
+    private readonly IUiTextMeasure _textMeasure;
+    private MissionPopupWindow? _popup;
+    private PopupMessage? _shownPopup;
+    private bool _pausedBeforePopup;
+    private long _popupClockMs;
 
     private readonly HashSet<uint> _hiddenSuperweapons = [];
 
@@ -95,7 +104,44 @@ public sealed class MissionController : IMissionHudControl
     {
         ArgumentNullException.ThrowIfNull(inputEvent);
         _lastInputTime = inputEvent.TimeMs;
+        // A message popup (INGAME_POPUP_MESSAGE) is a window of its own: it takes its events first, and while it pauses the game it takes all of them.
+        if (_popup is { IsOpen: true } popup && popup.Process(inputEvent)) return;
         Hud.Process(inputEvent);
+    }
+
+    /// <summary>The message popup on screen, if a script opened one (<see cref="MissionPresentationDirector.Popup"/>).</summary>
+    public MissionPopupWindow? Popup => _popup;
+
+    /// <summary>
+    /// <c>InGameUI::popupMessage</c>/<c>clearPopupMessageData</c> on the host side: opens the window for a new <see cref="MissionPresentationDirector.Popup"/> (pausing the game when the script asked for it) and
+    /// removes it when the script side dropped it.
+    /// </summary>
+    private void SyncPopup()
+    {
+        var wanted = Director.Popup;
+        if (ReferenceEquals(wanted, _shownPopup)) return;
+        if (_shownPopup is not null) ClosePopupState();
+        if (wanted is null) return;
+        var viewport = new UiViewport(Math.Max(1, (int)Mission.Camera.ViewportSize.X), Math.Max(1, (int)Mission.Camera.ViewportSize.Y));
+        if (_popup is null)
+        {
+            _popup = new MissionPopupWindow(Hud.Assets, _textMeasure, Hud.ScaleOptions, viewport);
+            _popup.Closed += () => { ClosePopupState(); Director.DismissPopup(); };
+        }
+        _popup.Show(wanted, viewport);
+        _shownPopup = wanted;
+        if (wanted.Pause)
+        {
+            _pausedBeforePopup = Mission.Paused;
+            Mission.Paused = true;
+        }
+    }
+
+    private void ClosePopupState()
+    {
+        _popup?.Hide();
+        if (_shownPopup is { Pause: true }) Mission.Paused = _pausedBeforePopup;
+        _shownPopup = null;
     }
 
     /// <summary>One rendered frame: advances the mission (<see cref="LiveGame.Advance"/>, which steps the simulation at 30 Hz), then the HUD's own clocks (ticker, quit menu).</summary>
@@ -104,6 +150,9 @@ public sealed class MissionController : IMissionHudControl
         Mission.Advance(deltaSeconds);
         // After the ticks of this frame: a script that disabled the input in them already cleared selection and modes (OnInputDisabled) while the HUD still took events.
         Hud.WorldInputEnabled = !Director.InputLocked;
+        SyncPopup();
+        _popupClockMs += (long)Math.Round(deltaSeconds * 1000);
+        _popup?.Advance(_popupClockMs);
         Hud.Update(deltaSeconds);
     }
 
@@ -116,7 +165,9 @@ public sealed class MissionController : IMissionHudControl
         var hud = Hud.BuildDrawList(width, height);
         var overlay = Director.BuildOverlayCommands(width, height);
         // CAMERA_LETTERBOX_BEGIN hides the control bar (ScriptActions::doLetterBoxMode: HideControlBar); the in-game menu, when open, stays.
-        return hud with { Commands = Director.Letterbox && !Hud.IsMenuOpen ? overlay : hud.Commands.AddRange(overlay) };
+        var commands = Director.Letterbox && !Hud.IsMenuOpen ? overlay : hud.Commands.AddRange(overlay);
+        if (_popup is { IsOpen: true } popup) commands = commands.AddRange(popup.BuildCommands(width, height));
+        return hud with { Commands = commands };
     }
 
     private void OnEnded(MatchResult _)

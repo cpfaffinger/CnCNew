@@ -14,6 +14,7 @@ using CnCNew.Game.Tests;
     (nameof(MissionPresentationTests), MissionPresentationTests.Run),
     (nameof(MissionHudTests), MissionHudTests.Run),
     (nameof(MissionEffectsTests), MissionEffectsTests.Run),
+    (nameof(MissionTextTests), MissionTextTests.Run),
     (nameof(ScenarioTests), ScenarioTests.Run),
     (nameof(ModelGeometryTests), ModelGeometryTests.Run),
 ];
