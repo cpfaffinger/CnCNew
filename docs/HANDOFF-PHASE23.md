@@ -1,0 +1,66 @@
+N+1-Handoff (Phase 23): Zeitschritt-Invarianz, neu entworfene Abnahmetests und Umstellung auf 60 Hz
+
+Du arbeitest autonom am lokalen Projekt `C:\Users\cp\RiderProjects\CnCNew`. Lies zuerst `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, **`docs/TICKRATE-AUDIT.md`** (§4 und §5 sowie die in Phase 20 geführte Liste „für Phase 23“), `docs/SIMULATION-CORE.md`, `docs/GAME-RULES.md`, `docs/SCRIPT-ENGINE.md`, `docs/SIM-TURRET-AIM.md`, `docs/SIM-JET-FLIGHT.md`, `docs/CAMPAIGN-AND-SAVEGAMES.md` und die Abschlussberichte der Phasen 20 bis 22.
+Voraussetzung: die Phasen 20, 21 und 22 sind abgeschlossen und gemergt. Die Simulation läuft bei 30, 60 und 120 Hz durch, die Präsentation ist von der Rate entkoppelt, die Auflösung ist Q39.24, das Referenzmanifest bei 30 Hz besteht.
+
+## Ziel
+
+60 Hz wird die Produktrate für Gefecht **und** Kampagne. Vorher wird belegt, dass das Spiel bei 60 Hz *dasselbe Spiel* ist wie bei 30 Hz – nicht über Hashes (die können nicht übereinstimmen), sondern über gemessene Spielgrößen. Dafür werden die Abnahmetests neu entworfen. Danach wird jeder Referenzwert bei 60 Hz neu erhoben.
+
+## Ehrlicher Status (Ausgangslage)
+
+- Nach Phase 20 sind alle Zeit- und Ratenwerte umgerechnet, und Zeiten aus den Daten liegen auf dem 30-Hz-Raster des Originals. **Nicht** behandelt ist alles, was je Tick integriert wird und sich mit der Schrittweite ändert (`docs/TICKRATE-AUDIT.md` §5 und die Liste aus Phase 20): Bodenbewegung mit Drehbegrenzung, Schwellwinkel und Ankunftsradius „ein Tick Weg“; Flügelflug und Jets (Untergrenzen je Tick, Geschwindigkeit als Beschleunigung benutzt); Geschosse (Beschleunigung, Neuausrichtung, Schwerkraft, Detonation einen Schritt nach dem letzten Punkt); Umstürzen (Euler mit Abprall, multiplikativer Zerfall); multiplikative Dämpfung je Bild (Hubschrauber-Absturz, Neutronenrakete, Zugformation, Zug, Schranke); abweichende Integrationsreihenfolge (Battle Bus); Turmschwenk gegen einen festen Winkel; Zufallsziehungen je Prüfung.
+- Es gibt **keinen Test**, der zwei Raten vergleicht. Alle bestehenden Abnahmen (Referenzmatch, Stresstest, KI-Tabelle, Kampagnenaudit, Zielfahrer, Erreichbarkeit, Nur-Befehle-Agent) sind Hashes oder Zählungen bei 30 Hz mit Tickbudgets, die 30 Hz meinen (`drive` 60.000 Ticks, `audit --ticks 900`, `ai-match --max-ticks 45000`).
+- Die Skirmish-KI denkt nach Phase 20 in Spielzeit, ihre Ergebnisse bei 60 Hz sind unbewertet.
+
+## Entscheidungen, die feststehen (`docs/MULTIPLAYER-PLAN.md` §2)
+
+- Unterstützte Raten: 30, 60, 120. Produktrate nach dieser Phase: 60. Die Rate bleibt ein Parameter der Sitzung; 30 und 120 bleiben lauffähig und werden von der Raten-Äquivalenz-Suite dauerhaft mitgeprüft (das ist der Schutz gegen neue Kopplung).
+- **Golden-Hashes gibt es nach dieser Phase nur noch für 60 Hz.** Zwei Raten mit je vollständigem Referenzbestand werden nicht gepflegt.
+- Ein gespeicherter Stand trägt seine Rate und läuft mit ihr weiter (Phase 20).
+- **Ausweg „Originalraster“:** Logik, die das Original einmal je Bild ausführt und die sich nicht sinnvoll auf eine andere Schrittweite umrechnen lässt, darf auf jedem (Rate/30)-ten Tick laufen. Jede solche Stelle wird gezählt, begründet und in `docs/SIMULATION-CORE.md` geführt; für Bewegung, Befehlsannahme und Zielerfassung ist der Ausweg nicht zulässig (dort liegt der Nutzen der höheren Rate).
+
+## Auftrag (in dieser Reihenfolge)
+
+1. **Ausgangszustand reproduzieren.** Build, Tests, Manifest bei 30 Hz, Leistungsprofil, Determinismus-Zeilen des eigenen Rechners.
+2. **Raten-Äquivalenz-Suite entwerfen und bauen** (`tests/CnCNew.Simulation.Tests`, Suite `RateEquivalence`, mit Realdaten über `--content-dir`; dazu `SimTool rate-compare` für Einzelfälle). Jeder Fall stellt eine kleine Szene, läuft sie bei 30, 60 und 120 Hz und vergleicht **Spielgrößen in Sekunden und Welteinheiten** gegen eine je Größe erklärte Toleranz. Die Toleranzen stehen als Tabelle in `docs/SIMULATION-CORE.md`; Vorschlag: Zeiten aus Daten exakt gleich (sie liegen auf demselben Raster), Ereigniszeitpunkte aus Bewegung ± 1 Originalbild, Strecken und Endlagen ± 0,5 %, Raten über 60 s (Schaden, Einkommen) ± 1 %.
+   - **Fortbewegung, über alle Locomotoren der Retail-Daten automatisch:** Zeit und Strecke bis zur Höchstgeschwindigkeit, Bremsweg, Zeit für 90°/180°, Fahrt über eine feste Strecke mit Kurven, Ankunftsgenauigkeit, beschädigter Zustand.
+   - **Flug:** Start, Reiseflug, Kurve, Landung der Jets; Hubschrauber; Abwurf; Fallschirm.
+   - **Waffen, über alle Waffenvorlagen automatisch:** Abstand zwischen Schüssen, Magazin und Nachladen, `PreAttackDelay`, Feuerstufen, Schaden je 60 s auf ein Standardziel, Reichweite.
+   - **Geschosse:** Flugzeit und Aufschlagpunkt je Geschossmodul (gelenkt, ballistisch, Bogen), Streuung im Mittel.
+   - **Türme:** Schwenkzeit, Feuerfreigabe, Rückkehr in die Ruhelage, Leerlauf-Schwenk.
+   - **Schaden und Heilung über Zeit:** Gift, Feuer, Strahlung, Reparatur, Selbstheilung, Basisregeneration.
+   - **Wirtschaft und Bau:** Bauzeit, Produktionszeit, Upgradezeit, Verkauf, ein Sammler-Umlauf, Einkommen je 5 Minuten, Schwarzmarkt/Hacker/Ölturm-Takte.
+   - **Spezialkräfte und Zeitmodule:** Abklingzeiten, Lebensdauern, langsamer Tod, Umstürzen (Dauer und Endlage), Minen, Tarnung und Enttarnung, Sicht und Aufdeckung.
+   - **Skripte:** Zeitgeber in Sekunden *und* in Bildern, Zähler, Auswertungsverzögerung, Sequenzwartezeiten, `EndGameDelay`.
+   - **KI:** Entscheidungen je Spielminute, Zeitpunkt der ersten Kaserne, des ersten Angriffs.
+   Die Suite soll bei ihrem ersten Lauf **viele Fehlschläge zeigen** – das ist ihr Zweck. Die Liste der Fehlschläge ist der Arbeitsvorrat für Schritt 3.
+3. **Ursachen abtragen, bis die Suite besteht.** Je Ursache: Befund, Korrektur, Suite-Lauf, ein Commit. Regeln:
+   - **Bei 30 Hz bleibt das Manifest unverändert**, solange die Korrektur nur die Skalierung betrifft. Wo die Korrektur das Verhalten auch bei 30 Hz ändert (z. B. eine andere Integrationsreihenfolge), ist das eine eigene, benannte Änderung mit neu geschriebenem Manifest – nur wenn es keinen skalierenden Weg gibt.
+   - Additive Größen je Bild: mit 30/Rate skalieren. Multiplikative Faktoren je Bild *f*: `f^(30/Rate)`, bei 60 Hz die Quadratwurzel, bei 120 Hz die vierte Wurzel (über `Fixed.Sqrt`, beim Katalogbau, mit Test auf die erreichte Genauigkeit).
+   - Schwellen, die „ein Tick Weg“ oder „ein Tick Winkel“ meinen (Ankunftsradius, Turmschwenk-Umkehr, Ruheschwelle): als ein Originalbild Weg bzw. Winkel ausdrücken.
+   - Ereignisse, die „einen Schritt später“ eintreten (Detonation, Feuerzustand): ein Originalbild später.
+   - Zufallsziehungen je Prüfung: der Prüfrhythmus liegt nach Phase 20 in Spielzeit; belegen, dass die Zahl der Ziehungen je Spielzeit gleich ist.
+   - Der Ausweg „Originalraster“ nur wie oben festgelegt.
+4. **Verteilungsvergleich für das, was chaotisch ist.** Ein ganzes Match ist nicht fallweise vergleichbar. Deshalb: jede Paarung der KI-Tabelle mit 20 Startwerten bei 30 und bei 60 Hz; verglichen werden Siegquote je Fraktion, Anteil entschiedener Matches und mittlere Matchdauer in Spielminuten. Die zulässige Abweichung wird vorher festgelegt und begründet (Stichprobenstreuung bei 20 Läufen ausrechnen, nicht schätzen). Dasselbe für die Kampagne mit dem Zielfahrer: Sieg/Niederlage je Karte und Zeitpunkt des Endskripts in Spielsekunden.
+5. **Leistungstor bei 60 Hz.** Das Profil aus Phase 19 bei 60 Hz wiederholen: Tickzeit (Mittel, 99 %, Maximum), Aufholtempo als Vielfaches der Echtzeit, Speicherbereinigung, Kosten der Spielschicht je Tick im Client, Bildrate des Clients in einem 8-Spieler-Match. Sollwerte aus `docs/HANDOFF-PHASE19.md`; das **gemessene Aufholtempo bei 60 Hz** ist eine Kenngröße, auf die sich die Phasen 26 und 27 stützen. Wird ein Sollwert verfehlt, erst die Kostenstelle abtragen (Regeln der Phase 19), dann umstellen.
+6. **Umstellung.** Standardrate 60 in Sitzungen, Client, Werkzeugen und Tests. Alle Tickbudgets, die Spielzeit meinen, aus Spielzeit berechnen (Zielfahrer 60.000 Ticks bei 30 Hz ≙ 2.000 s; `audit --ticks 900` ≙ 30 s; `ai-match --max-ticks 45000` ≙ 25 min; Stresstest 216.000 Ticks ≙ 2 h) – die Werkzeuge nehmen künftig `--seconds`/`--minutes`, `--ticks` bleibt als Rohangabe.
+7. **Alles neu erheben bei 60 Hz und das Manifest neu schreiben:** Referenzmatch, Stresstest, KI-Tabelle (alle Karten und Paarungen, `docs/SIMULATION-CORE.md` §19 vollständig neu), `skirmish-sweep` über alle 64 Karten, die 8-Spieler-Läufe, Kampagne (`drive` Sieg/Niederlage je Karte, `audit` deterministisch und gleich nach Speichern/Laden, `reachability`, Nur-Befehle-Agent), die Szenen-Audits (`audit-scenarios.ps1`), die Determinismus-Matrix. Jede Zahl aus einem Lauf, je Kampagne einzeln, Hintergrundläufe mit begrenztem Timeout.
+8. **Formate.** Alle tickbezogenen Optionen in gespeicherten Ständen prüfen (`MissionSnapshot`: `maxTicks`, `presentationLatencyTicks`, `combatIntervalTicks`): als Zeit speichern oder beim Laden mit der gespeicherten Rate deuten; Versionen erhöhen, wo sich Bytes ändern.
+9. **Sichtprüfung vorbereiten.** Die Liste aus Phase 21 (Effekte, Mündungsfeuer, Federung, Missionsintro) um das ergänzen, was diese Phase verändert hat (Fahrverhalten, Geschossbahnen, Turmbewegung), als Checkliste in `docs/DEMO-FINDINGS.md`; mit den Demo-Skripten bei 60 Hz startbar machen. Abhaken kann nur ein Mensch.
+10. **Doku vollständig nachziehen.** Jede Angabe „30 Hz“, jede Tickzahl und jeder Referenzwert in `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, `docs/SIMULATION-CORE.md`, `docs/GAME-RULES.md`, `docs/SCRIPT-ENGINE.md`, `docs/CAMPAIGN-AND-SAVEGAMES.md`, den `SIM-*.md`, `CLAUDE.md`: aktualisieren oder als historisch (30 Hz) kennzeichnen. `docs/TICKRATE-AUDIT.md` abschließen: jede Stelle des Inventars hat einen Verbleib.
+
+## Engstellen und Showstopper dieser Phase
+
+- **Die Bewegung ist der schwerste Teil.** Wegverfolgung, Ausweichen um stehende Einheiten (Neuplanung, Vorausschau), Kollision und Formationen reagieren auf den Schritt. Kleine Unterschiede je Tick führen zu anderen Wegen. Die Suite prüft deshalb Einzelgrößen eng und ganze Fahrten weit; der Verteilungsvergleich fängt den Rest.
+- **Chaos ist kein Fehler, ein systematischer Versatz schon.** Wenn eine Fraktion bei 60 Hz verlässlich besser abschneidet, ist irgendwo eine Rate oder Dauer falsch skaliert. Dann mit `SimTool ai-match --trace` und `rate-compare` die erste auseinanderlaufende Größe suchen.
+- **Laufzeit der Neuerhebung.** Bei 60 Hz verdoppelt sich die Tickzahl jedes Laufs. Ohne die Leistungsarbeit aus Phase 19 dauert Schritt 7 viele Stunden.
+- **Kampagnenskripte** sind auf 30 Bilder je Sekunde geschrieben (Bildzähler, enge zeitliche Abfolgen). Jede Karte, deren Ausgang oder Endzeitpunkt sich verschiebt, wird einzeln untersucht.
+
+## Nicht verhandelbare Regeln
+
+`CLAUDE.md` und `docs/MULTIPLAYER-PLAN.md` §6. Für diese Phase: eine Ursache je Commit; jede Toleranz ist vor dem Lauf festgelegt und begründet, nie nachträglich an das Ergebnis angepasst; „besteht“ heißt bei 30, 60 **und** 120 Hz.
+
+## Abnahme
+
+Die Raten-Äquivalenz-Suite besteht bei allen drei Raten mit den dokumentierten Toleranzen; der Verteilungsvergleich liegt innerhalb der vorab festgelegten Grenzen oder jede Abweichung hat eine benannte Ursache; das Leistungstor bei 60 Hz ist bestanden; 60 Hz ist Standard; das Manifest und alle Referenzwerte sind bei 60 Hz neu erhoben; die Doku nennt keine veraltete Rate mehr. Der Abschlussbericht enthält die Tabelle der abgetragenen Ursachen, die Stellen des Auswegs „Originalraster“, alte und neue Referenzwerte mit Commit-Hashes – und ausdrücklich, dass kein Mensch das Spiel bei 60 Hz gesehen hat, solange das nicht geschehen ist. Am Ende die „Ausgangslage“ in `docs/HANDOFF-PHASE24.md` aktualisieren.
