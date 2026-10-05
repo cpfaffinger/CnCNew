@@ -13,9 +13,9 @@ public enum StandingOrderKind
 {
     /// <summary><c>groupAttackObject</c> / <c>groupForceAttackObject</c>: chase and fire until the target is gone.</summary>
     Attack,
-    /// <summary><c>groupAttackMoveToPosition</c>: walk to the point, firing at enemies in weapon range on the way.</summary>
+    /// <summary><c>groupAttackMoveToPosition</c>: the simulation's attack-move (<see cref="AttackMoveCommand"/>); the entry only says that the unit is on one, until it arrives.</summary>
     AttackMove,
-    /// <summary><c>groupGuardPosition</c> without pursuit: walk to the point and fire at enemies in weapon range there.</summary>
+    /// <summary><c>groupGuardPosition</c> without pursuit: walk to the point; standing there the unit picks its victims itself (the simulation's idle target acquisition).</summary>
     Guard,
     /// <summary><c>MSG_ADD_WAYPOINT</c>: the next point is ordered when the previous one is reached.</summary>
     Waypoints,
@@ -25,8 +25,9 @@ public sealed record StandingOrder(StandingOrderKind Kind, EntityId Target, Vect
 
 /// <summary>
 /// The simulation's commands are single steps (move to a point, fire one shot, dock); the original's AI states (attack an object, attack-move,
-/// guard, waypoint paths) span many ticks. This book keeps those multi-tick orders on the client and re-issues the single-step commands each
-/// tick, exactly as <see cref="Simulation.Skirmish.SkirmishAi"/> does for the computer players. Every re-issued command still goes through the sink,
+/// waypoint paths) span many ticks. This book keeps those multi-tick orders on the client and re-issues the single-step commands each
+/// tick. Choosing victims is not its business: an idle unit, a unit on an attack-move and the turret of a marching unit acquire their targets in the
+/// simulation (docs/SIMULATION-CORE.md §33); only the attack on a victim the player named is driven from here. Every re-issued command still goes through the sink,
 /// so the replay contains it. Orders are processed in ascending unit id.
 /// </summary>
 public sealed class StandingOrders
@@ -91,11 +92,10 @@ public sealed class StandingOrders
                     UpdateAttack(world, player, unit, order, issue);
                     break;
                 case StandingOrderKind.AttackMove:
-                    FireAtNearestEnemy(world, player, unit, issue);
-                    if (settled && !unit.HasMoveTarget) Clear(unit.Id);
+                    // The simulation marches, fights and marches on; the entry ends with the attack-move.
+                    if (settled && !world.IsAttackMoving(unit)) Clear(unit.Id);
                     break;
                 case StandingOrderKind.Guard:
-                    FireAtNearestEnemy(world, player, unit, issue);
                     break;
                 case StandingOrderKind.Waypoints:
                     if (!settled || unit.HasMoveTarget) break;
@@ -185,27 +185,5 @@ public sealed class StandingOrders
         var (x, y) = (SimulationQueries.ToFixed(point.X), SimulationQueries.ToFixed(point.Y));
         issue((sequence, tick) => new SetMoveTargetCommand(player, sequence, tick, unit.Id, x, y));
         return true;
-    }
-
-    /// <summary>The nearest visible enemy in weapon range (ties: lower id), fired at when the weapon is ready.</summary>
-    private static void FireAtNearestEnemy(SimulationWorld world, PlayerId player, Entity unit, Func<Func<ulong, long, SimCommand>, SubmitResult> issue)
-    {
-        if (!world.IsAnyWeaponReady(unit)) return;
-        Entity? best = null;
-        var bestDistance = Fixed.MaxValue;
-        foreach (var candidate in world.Entities)
-        {
-            if (!world.AreEnemies(player, candidate.Owner) || !SimulationQueries.IsAlive(candidate) || candidate.Body is null) continue;
-            if (!SimulationQueries.CanFireAt(world, unit, candidate, FireOrigin.Ai)) continue;
-            var dx = candidate.X - unit.X;
-            var dy = candidate.Y - unit.Y;
-            var distance = dx * dx + dy * dy;
-            if (distance < bestDistance || (distance == bestDistance && candidate.Id.Value < best!.Id.Value))
-            {
-                best = candidate;
-                bestDistance = distance;
-            }
-        }
-        if (best is not null) issue((sequence, tick) => new FireWeaponCommand(player, sequence, tick, unit.Id, best.Id, WeaponSlot.Best, FireOrigin.Ai));
     }
 }

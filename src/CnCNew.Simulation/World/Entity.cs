@@ -101,6 +101,9 @@ public sealed class Entity
     public TurretReading? TurretOf(int index)
         => Turrets is { } turrets && index >= 0 && index < turrets.Length && turrets[index] is { } state ? new TurretReading(state.Angle, state.Pitch, state.Rotating) : null;
 
+    /// <summary>The unit's own attack state (its victim, an attack-move); null while it attacks nothing and marches nowhere, so such an object keeps its serialized form.</summary>
+    internal AcquisitionState? Acquisition { get; set; }
+
     public long LastDamageTick { get; internal set; } = -1;
 
     /// <summary><c>Object::isCaptured</c> (<c>setCaptured</c>, never cleared): the object was taken over by entering it (an unmanned vehicle); counted by the skirmish condition on captured units. Written only when set.</summary>
@@ -228,6 +231,7 @@ public sealed class Entity
         writer.Int("lastFireTick", LastFireTick);
         DescribeTurrets(writer);
         Firing?.Describe(writer);
+        Acquisition?.Describe(writer);
         if (Captured) writer.Bool("captured", true);
         if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);

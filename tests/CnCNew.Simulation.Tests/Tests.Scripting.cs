@@ -199,6 +199,7 @@ static partial class Tests
             Weapon = PRIMARY SkirmishGun
           End
           Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
           End
           Behavior = FireWeaponPower Gun01
             SpecialPowerTemplate = GunPower
@@ -255,6 +256,7 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
           Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
           End
           Behavior = CommandButtonHuntUpdate Hunt01
             ScanRate = 500

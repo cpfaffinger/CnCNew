@@ -44,14 +44,17 @@ internal sealed partial class ObjectiveDriver
     /// <summary>Whether the viewer can still grow an army (an own structure that produces): only then is it worth waiting for the agent to mass one.</summary>
     private bool CanReinforce() => LiveOf(_local).Any(entity => entity.Template.IsKindOf("STRUCTURE") && entity.Template.Modules.Any(module => module.Name == "ProductionUpdate"));
 
+    /// <summary>The viewer's attack orders: unit id to victim id. Like the client's standing orders the driver carries an attack on a named victim tick by tick (<see cref="DriveAssaults"/>).</summary>
+    private readonly SortedDictionary<uint, uint> _assaults = [];
+
     private readonly List<(Fixed X, Fixed Y)> _objectivePoints = [];
     private bool _objectivesFresh;
     private long _objectivesAt = long.MinValue;
 
     /// <summary>
     /// Orders the army at <paramref name="victims"/>: where the agent leads the army the victims become its objective (one army, one goal, instead of two command givers pulling at
-    /// the same units), every other armed unit of the viewer walks toward its nearest victim. Enemies in weapon range are left to the session's combat loop; a victim the viewer is
-    /// not at war with (a neutral target object) gets an explicit fire order, as a player's forced attack would. False when no order could be given.
+    /// the same units). Every armed unit of the viewer gets its nearest victim as its attack order (<see cref="DriveAssaults"/> fires at it once in reach - a player's units do not
+    /// pick buildings or neutral objects by themselves); units the agent does not lead also get an attack-move toward it. False when no order could be given.
     /// </summary>
     private bool Assault(IReadOnlyList<Entity> victims)
     {
@@ -69,7 +72,6 @@ internal sealed partial class ObjectiveDriver
         var any = _agent is not null;
         foreach (var unit in Army().ToArray())
         {
-            if (_agent is not null && _agent.LeadsUnit(unit)) continue;
             var range = _world.MaxWeaponRange(unit);
             Entity? nearest = null;
             var best = Fixed.MaxValue;
@@ -81,12 +83,9 @@ internal sealed partial class ObjectiveDriver
                 if (distance < best) { best = distance; nearest = victim; }
             }
             if (nearest is null) continue;
-            if (best > range * range) { any |= Send(unit, (nearest.X, nearest.Y)); continue; }
-            if (_world.AreEnemies(unit, nearest) || !_world.IsAnyWeaponReady(unit)) continue;
-            var (source, target) = (unit.Id, nearest.Id);
-            if (!_session.Issue(_local, (sequence, tick) => new FireWeaponCommand(_local, sequence, tick, source, target)).Accepted) continue;
-            Commands++;
-            any = true;
+            _assaults[unit.Id.Value] = nearest.Id.Value;
+            if (best <= range * range || (_agent is not null && _agent.LeadsUnit(unit))) continue;
+            any |= SendAttackMove(unit, (nearest.X, nearest.Y));
         }
         return any;
     }
@@ -217,7 +216,40 @@ internal sealed partial class ObjectiveDriver
     }
 
     /// <summary>The agent's turn for the current tick (call once per tick, before the session steps); nothing without an agent.</summary>
-    public void Act() => _agent?.Update();
+    public void Act()
+    {
+        _agent?.Update();
+        DriveAssaults();
+    }
+
+    private bool SendAttackMove(Entity entity, (Fixed X, Fixed Y) spot)
+    {
+        if (entity.Owner.IsSystem || entity.Template.Locomotor is null || !MayOrder(entity)) return false;
+        var owner = entity.Owner;
+        var id = entity.Id;
+        if (!_session.Issue(owner, (sequence, tick) => new AttackMoveCommand(owner, sequence, tick, id, spot.X, spot.Y)).Accepted) return false;
+        Commands++;
+        return true;
+    }
+
+    /// <summary>The fire half of the attack orders (<c>aiAttackObject</c> by the player): a unit whose weapon reaches its victim and is ready fires at it, whatever the unit would pick by itself.</summary>
+    private void DriveAssaults()
+    {
+        if (_assaults.Count == 0) return;
+        foreach (var (unitId, victimId) in _assaults.ToArray())
+        {
+            var unit = _world.FindEntity(new EntityId(unitId));
+            var victim = _world.FindEntity(new EntityId(victimId));
+            if (unit is null || victim is null || unit.DestroyRequested || unit.EffectivelyDead || victim.DestroyRequested || victim.EffectivelyDead || victim.Body is null)
+            {
+                _assaults.Remove(unitId);
+                continue;
+            }
+            if (!_world.ChooseWeapon(unit, victim, CnCNew.Simulation.Templates.FireOrigin.Player).CanFire) continue;
+            var owner = unit.Owner;
+            if (_session.Issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, unit.Id, victim.Id)).Accepted) Commands++;
+        }
+    }
 }
 
 internal sealed partial class ObjectiveDriver
@@ -228,6 +260,6 @@ internal sealed partial class ObjectiveDriver
         if (_agent is null) return string.Empty;
         var stats = _agent.Stats;
         var army = Army().Count();
-        return $"agent: {stats.Commands} commands ({stats.Rejected} rejected), {stats.Constructions} constructions, {stats.Productions} productions, {stats.Waves} attack waves, {stats.Shots} shots, attacking {stats.AttackTicks} ticks; money {_world.MoneyOf(_local)}, army now {army}; {_agent.DescribeState()}";
+        return $"agent: {stats.Commands} commands ({stats.Rejected} rejected), {stats.Constructions} constructions, {stats.Productions} productions, {stats.Waves} attack waves, attacking {stats.AttackTicks} ticks; money {_world.MoneyOf(_local)}, army now {army}; {_agent.DescribeState()}";
     }
 }

@@ -28,7 +28,6 @@ public sealed class SkirmishAiStats
     public int Resumes { get; internal set; }
     public int CancelledSites { get; internal set; }
     public int Productions { get; internal set; }
-    public int Shots { get; internal set; }
     public int MoveOrders { get; internal set; }
     public int PowerUses { get; internal set; }
     public int SciencePurchases { get; internal set; }
@@ -201,7 +200,6 @@ public sealed class SkirmishAi
         if (_tick == 0 || (_tick + _phase) % FireInterval != 0) return;
         if (_world.IsPlayerDefeated(_player)) return;
         Observe();
-        Fire();
         if ((_tick + _phase) % ThinkInterval != 0) return;
         Think();
     }
@@ -937,32 +935,6 @@ public sealed class SkirmishAi
         return null;
     }
 
-    private void Fire()
-    {
-        if (_enemyTargets.Count == 0) return;
-        foreach (var entity in _structures.Concat(_units))
-        {
-            if (!_world.IsAnyWeaponReady(entity)) continue;
-            if (entity.Template.IsKindOf("STRUCTURE") && (RoleOf(entity.Template) & Role.Defense) == 0) continue;
-            var range = _world.MaxWeaponRange(entity);
-            if (range <= Fixed.Zero) continue;
-            var limit = range * range;
-            Entity? best = null;
-            var bestDistance = Fixed.MaxValue;
-            foreach (var target in _enemyTargets)
-            {
-                var distance = DistanceSquared(entity.X, entity.Y, target.X, target.Y);
-                if (distance > limit || distance >= bestDistance) continue;
-                // The AI picks the weapon (CMD_FROM_AI); skip targets none of the unit's weapons can fire at right now.
-                if (!_world.ChooseWeapon(entity, target, FireOrigin.Ai).CanFire) continue;
-                best = target;
-                bestDistance = distance;
-            }
-            if (best is null) continue;
-            if (Send(sequence => new FireWeaponCommand(_player, sequence, _tick, entity.Id, best.Id, WeaponSlot.Best, FireOrigin.Ai)).Accepted) Stats.Shots++;
-        }
-    }
-
     private void CommandArmy()
     {
         var army = _units.Where(value => (RoleOf(value.Template) & Role.Army) != 0 && AiOf(value) is not null).ToList();
@@ -1005,15 +977,17 @@ public sealed class SkirmishAi
             if (_boarding.TryGetValue(unit.Id.Value, out var boardingUntil) && boardingUntil > _tick) continue;
             // Defence takes everybody; an attack only the wave, the others wait at the rally point.
             var destination = threat is null && _attacking && !_wave.Contains(unit.Id.Value) ? _rally ?? armyGoal : armyGoal;
-            var (x, y) = MoveGoalFor(unit, destination);
+            // An attack-move: the unit engages what it meets on the way by itself (the world's target acquisition) and marches on afterwards.
+            var (x, y) = destination;
+            var marching = unit.HasMoveTarget || _world.IsAttackMoving(unit);
             if (DistanceSquared(unit.X, unit.Y, x, y) < Fixed.FromInt(1600)) continue;
             if (_orders.TryGetValue(unit.Id.Value, out var order))
             {
                 var same = DistanceSquared(order.X, order.Y, x, y) < Fixed.FromInt(900);
-                if (same && (unit.HasMoveTarget || _tick - order.Tick < OrderRefreshTicks)) continue;
-                if (!same && unit.HasMoveTarget && _tick - order.Tick < 60) continue;
+                if (same && (marching || _tick - order.Tick < OrderRefreshTicks)) continue;
+                if (!same && marching && _tick - order.Tick < 60) continue;
             }
-            if (Send(sequence => new SetMoveTargetCommand(_player, sequence, _tick, unit.Id, x, y)).Accepted) Stats.MoveOrders++;
+            if (Send(sequence => new AttackMoveCommand(_player, sequence, _tick, unit.Id, x, y)).Accepted) Stats.MoveOrders++;
             _orders[unit.Id.Value] = new Goal(x, y, _tick);
         }
     }
@@ -1101,25 +1075,6 @@ public sealed class SkirmishAi
             _orders.Remove(pick.Id.Value);
             Stats.TransportLoads++;
         }
-    }
-
-    /// <summary>The unit walks to the nearest enemy it sees within engagement distance, otherwise to the group goal.</summary>
-    private (Fixed X, Fixed Y) MoveGoalFor(Entity unit, (Fixed X, Fixed Y) destination)
-    {
-        Entity? nearest = null;
-        var best = EngageRadius * EngageRadius;
-        foreach (var target in _enemyTargets)
-        {
-            var distance = DistanceSquared(unit.X, unit.Y, target.X, target.Y);
-            if (distance < best) { best = distance; nearest = target; }
-        }
-        if (nearest is null) return destination;
-        var range = _world.MaxWeaponRange(unit);
-        var distanceToTarget = Fixed.Sqrt(best);
-        var stand = range * Fixed.FromDecimal(0.7m);
-        if (distanceToTarget <= stand || distanceToTarget <= Fixed.Zero) return (unit.X, unit.Y);
-        var ratio = (distanceToTarget - stand) / distanceToTarget;
-        return (unit.X + (nearest.X - unit.X) * ratio, unit.Y + (nearest.Y - unit.Y) * ratio);
     }
 
     /// <summary>The visible enemy closest to the base among those near any of the AI's structures: the army drops its plans and defends.</summary>

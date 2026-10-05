@@ -46,6 +46,9 @@ public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingl
     /// <summary><c>teamIsAIRecruitable</c>: the team's units may be taken by <c>RECRUIT_TEAM</c> without <c>TEAM_AVAILABLE_FOR_RECRUITMENT</c>.</summary>
     public bool AiRecruitable { get; init; }
 
+    /// <summary><c>teamAggressiveness</c> (<c>TeamTemplateInfo::m_initialTeamAttitude</c>): the mood the team's units start with, an <c>AttitudeType</c> value (-2 sleep .. 2 aggressive); 0 (normal) when the key is absent.</summary>
+    public int Aggressiveness { get; init; }
+
     /// <summary><c>teamReinforcementOrigin</c>: the waypoint a reinforcement starts from; empty: it starts at its destination.</summary>
     public string ReinforcementOrigin { get; init; } = string.Empty;
 
@@ -274,6 +277,7 @@ public sealed class ScriptProgram
                 PrioritySuccessIncrease = team.TryGetInt("teamProductionPrioritySuccessIncrease", out var increase) ? increase : 0,
                 PriorityFailureDecrease = team.TryGetInt("teamProductionPriorityFailureDecrease", out var decrease) ? decrease : 0,
                 AiRecruitable = team.GetBool("teamIsAIRecruitable"),
+                Aggressiveness = team.TryGetInt("teamAggressiveness", out var aggressiveness) ? aggressiveness : 0,
             });
         }
 

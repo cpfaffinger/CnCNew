@@ -338,7 +338,7 @@ public sealed partial class ScriptEngine
                 if (_world.TransferOwnership(target.Id, member.Owner)) { _unmanned.Remove(targetId); target.Captured = true; }
                 foreach (var key in _captureOrders.Where(pair => pair.Value == targetId).Select(pair => pair.Key).ToArray()) _captureOrders.Remove(key);
             }
-            else if (!member.HasMoveTarget && tick % 30 == 0) MoveTo(member, target.X, target.Y);
+            else if (!Marching(member) && tick % 30 == 0) MoveTo(member, target.X, target.Y);
         }
     }
 
@@ -954,7 +954,7 @@ public sealed partial class ScriptEngine
             goalY = waypoint.Y + follower.OffsetY;
         }
         follower.Index = current;
-        if (follower.GoalIndex != current || !entity.HasMoveTarget)
+        if (follower.GoalIndex != current || !Marching(entity))
         {
             follower.GoalIndex = current;
             MoveTo(entity, goalX, goalY);

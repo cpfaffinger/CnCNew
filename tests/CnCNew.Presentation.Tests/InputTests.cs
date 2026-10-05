@@ -340,6 +340,7 @@ static class InputTests
           Behavior = DestroyDie Destroy01
           End
           Behavior = AIUpdateInterface AI01
+            MoodAttackCheckRate = 100
           End
           WeaponSet
             Conditions = None
@@ -1028,15 +1029,18 @@ static class InputTests
         Assert(controller.Mode == CommandModeKind.AttackMove && controller.Hover(world, view, Screen(60, 100)).Cursor == CursorKind.AttackMove, "attack-move mode shows its cursor");
         Assert(controller.CompleteTarget(world, view, Screen(60, 100)) && controller.Orders.TryGet(tank.Id, out var attackMove) && attackMove.Kind == StandingOrderKind.AttackMove
                && controller.Mode == CommandModeKind.None, "the click completes the attack move");
+        Assert(arena.Sink.Issued[^1] is AttackMoveCommand marchOrder && marchOrder.Unit == tank.Id, "the attack move is the simulation's AttackMoveCommand");
         var fired = false;
+        var orderedShots = 0;
         for (var tick = 0; tick < 120 && !fired; tick++)
         {
             var before = arena.Sink.Issued.Count;
             controller.Update(world);
-            fired = arena.Sink.Issued.Skip(before).OfType<FireWeaponCommand>().Any(fire => fire.Source == tank.Id && fire.Target == other.Id);
+            orderedShots += arena.Sink.Issued.Skip(before).OfType<FireWeaponCommand>().Count();
             arena.Step();
+            fired = world.AcquiredVictimOf(tank) == other.Id;
         }
-        Assert(fired, "an attack-moving unit fires at an enemy that comes into range");
+        Assert(fired && orderedShots == 0, "an attack-moving unit engages an enemy that comes into range by itself: the simulation picks the victim, the client orders no shot");
 
         selection.Replace([ranger.Id, tank.Id]);
         controller.OnMeta(world, MetaAction.BeginWaypoints);

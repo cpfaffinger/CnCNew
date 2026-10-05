@@ -675,6 +675,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!CanMove(target)) return CommandRejection.CannotMove;
                 break;
             }
+            case AttackMoveCommand attackMove:
+            {
+                if (!_entities.TryGetValue(attackMove.Unit.Value, out var marcher) || marcher.DestroyRequested) return CommandRejection.UnknownEntity;
+                if (marcher.Owner != command.Player) return CommandRejection.NotPermitted;
+                if (!CanMove(marcher)) return CommandRejection.CannotMove;
+                break;
+            }
             case PursueCommand pursue:
             {
                 if (!_entities.TryGetValue(pursue.Unit.Value, out var pursuer) || pursuer.DestroyRequested) return CommandRejection.UnknownEntity;
@@ -1001,6 +1008,16 @@ public sealed partial class SimulationWorld : IWorldServices
                 AiOf(actor)!.OrderDock(this, dockEntity, true);
                 break;
             }
+            case AttackMoveCommand attackMove:
+            {
+                var marcher = FindEntity(attackMove.Unit);
+                if (marcher is null || marcher.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
+                if (marcher.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                if (!CanMove(marcher)) { RecordRejection(command, CommandRejection.CannotMove); break; }
+                ReleaseWeaponLock(marcher, WeaponLockKind.Temporary);
+                AiOf(marcher)!.OrderMove(this, attackMove.X, attackMove.Y, true, attackMove: true);
+                break;
+            }
             case PursueCommand pursue:
             {
                 var unit = FindEntity(pursue.Unit);
@@ -1013,6 +1030,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 // The order replaces the unit's attack like any new AI command; the pursuit then starts the attack afresh against the victim.
                 AiOf(unit)!.OrderMove(this, pursue.X, pursue.Y, true);
                 BeginPursuit(unit, victim);
+                NoteOrderedAttack(unit, victim);
                 break;
             }
             case FireWeaponCommand fire:
@@ -1026,6 +1044,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 var choice = ChooseWeapon(source, fireTarget, fire.Origin, fire.Slot);
                 if (choice.Rejection != 0) { RecordRejection(command, choice.Rejection); break; }
                 if (!GateAllowsFire(source, fireTarget)) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }
+                // An attack order of the unit's command giver: the unit does not pick victims by itself while such orders keep coming. A script's one-off button is no attack.
+                if (fire.Origin != FireOrigin.Script) NoteOrderedAttack(source, fireTarget);
                 // The turret of the slot turns to the victim first and the weapon waits until it points there (TurretAI). The order stays accepted — the attack goes on and the next
                 // order of the stream fires — so this is neither a rejection (no "cannot do" cue) nor a shot. A script's one-off command button fires its single shot regardless.
                 if (!AimTurretsAt(source, choice.Slot, fireTarget, fire.Origin != FireOrigin.Script ? TurretAimOrder.Attack : TurretAimOrder.Shot) && fire.Origin != FireOrigin.Script) { _turretWaits++; break; }
@@ -1426,6 +1446,7 @@ public sealed partial class SimulationWorld : IWorldServices
             _entitySum = unchecked(_entitySum - entity.CachedHash);
             UnregisterStructureHooks(entity);
             _activeTurrets.Remove(entity.Id.Value);
+            _acquirers.Remove(entity.Id.Value);
             _coolingTrackers.Remove(entity.Id.Value);
             _entities.Remove(entity.Id.Value);
             UntrackCollidable(entity);
@@ -1615,6 +1636,7 @@ public sealed partial class SimulationWorld : IWorldServices
         RegisterStructureHooks(entity);
         RegisterTurrets(entity);
         RegisterFiringTracker(entity);
+        RegisterAcquirer(entity);
         foreach (var module in entity.ModuleArray)
             if (module is IWorldAttached attached) attached.Attach(this);
         foreach (var node in entity.Updates)
@@ -1644,6 +1666,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ExecuteCommands(tick);
         FireTimers(tick);
         RunUpdates(tick);
+        StepAcquisition(tick);
         StepTurrets(tick);
         StepFiringTrackers(tick);
         DeliverEvents();

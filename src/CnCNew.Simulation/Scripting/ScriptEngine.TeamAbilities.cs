@@ -339,7 +339,7 @@ public sealed partial class ScriptEngine
             if (_tick < _buttonHuntNext.GetValueOrDefault(id)) continue;
             var data = hunter.ModuleArray.OfType<CommandButtonHuntUpdate>().First().Data;
             _buttonHuntNext[id] = _tick + Math.Max(data.ScanTicks, SimulationTiming.LogicFramesPerSecond);
-            if (hunter.HasMoveTarget || _busyThisTick.Contains(id)) continue;
+            if (Marching(hunter) || _busyThisTick.Contains(id)) continue;
             var range = data.ScanRange <= Fixed.Zero ? Fixed.FromInt(9999) : data.ScanRange;
             var limit = range * range;
             var candidates = _world.Entities

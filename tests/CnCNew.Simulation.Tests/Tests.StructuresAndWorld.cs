@@ -819,6 +819,8 @@ static partial class Tests
     public static void StructuresDeployStyleUnitsDeployToShootAndPackToMove()
     {
         var sw = new StructuresWorld();
+        // The deployer's AI acquires by itself (AutoAcquireEnemiesWhenIdle = Yes) and would deploy as soon as it sees the target; this test drives the gate with commands.
+        sw.World.SelfAcquisition = false;
         var deployer = sw.Spawn("SwDeployer", 1, 100, 100);
         var target = sw.Spawn("SwTarget", 2, 140, 100);
         sw.Run(4);

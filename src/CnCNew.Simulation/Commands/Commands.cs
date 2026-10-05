@@ -13,7 +13,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 13;
+    public const int Version = 14;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -77,7 +77,11 @@ public static class CommandTypes
     /// <summary><c>AIAttackApproachTargetState</c>: moves toward a point to attack an object; the unit's turrets track the victim until the attack ends (docs/SIM-TURRET-AIM.md).</summary>
     public const ushort Pursue = 31;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= Pursue;
+    // --------------------------------------------------------------------------------------------------- attack-move (v14)
+    /// <summary><c>aiAttackMoveToPosition</c> (<c>AI_ATTACK_MOVE_TO</c>): moves to a point, engages what the unit meets on the way and marches on afterwards (docs/SIMULATION-CORE.md §33).</summary>
+    public const ushort AttackMove = 32;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= AttackMove;
 }
 
 /// <summary>
@@ -152,6 +156,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.SetWeaponLock => new SetWeaponLockCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("source"))), checked((int)reader.Int("slot")),
                 (WeaponLockKind)checked((byte)reader.Int("lock"))),
             CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), new EntityId(checked((uint)reader.UInt("victim"))), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), reader.Fixed("x"), reader.Fixed("y")),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -246,7 +251,24 @@ public sealed record PursueCommand(PlayerId Player, ulong Sequence, long Tick, E
 }
 
 /// <summary>
-/// Direct-target weapon fire (no auto-acquire, no line of sight, no projectile travel time or splash — see <see cref="Templates.WeaponInfo"/>). One shot from
+/// <c>MSG_DO_ATTACKMOVETO</c> / <c>aiAttackMoveToPosition</c>: the unit marches to (X, Y); whenever it finds a victim on the way (<c>AIAttackMoveToState::update</c> asks
+/// <c>getNextMoodTarget</c> at the unit's <c>MoodAttackCheckRate</c>) it stops, fights — a computer player's unit walks up to a victim beyond its weapons, a human player's unit only
+/// takes what is in range — and resumes the march when the victim is gone. Any other order ends it. Aircraft fire in passing without stopping.
+/// </summary>
+public sealed record AttackMoveCommand(PlayerId Player, ulong Sequence, long Tick, EntityId Unit, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.AttackMove;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.UInt("unit", Unit.Value);
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+    }
+}
+
+/// <summary>
+/// Direct-target weapon fire ordered by a command giver (the units' own target acquisition fires without a command, docs/SIMULATION-CORE.md §33). One shot from
 /// one weapon slot: with <see cref="Slot"/> = <see cref="WeaponSlot.Best"/> the world chooses among the slots like <c>WeaponSet::chooseBestWeaponForTarget</c>
 /// (<see cref="Origin"/> decides which slots the unit may pick by itself, <c>AutoChooseSources</c>); an explicit slot is a <c>FIRE_WEAPON</c> command button's
 /// <c>WeaponSlot</c> and also pins the slot (<c>setWeaponLock(LOCKED_TEMPORARILY)</c>) until its clip empties or the unit is ordered to move.

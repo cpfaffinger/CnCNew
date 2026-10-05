@@ -67,6 +67,12 @@ public interface IWorldServices
     /// </summary>
     void EndAttack(Entity entity);
 
+    /// <summary>
+    /// <c>AI_ATTACK_MOVE_TO</c> begins for the entity, which is being ordered to move to (<paramref name="x"/>, <paramref name="y"/>): it engages what it meets on the way and resumes the
+    /// march afterwards. Called by the AI module from inside its move order, after <see cref="EndAttack"/>.
+    /// </summary>
+    void BeginAttackMove(Entity entity, Fixed x, Fixed y);
+
     // ------------------------------------------------------------------------------------ phase 5: economy, upgrades
 
     UpgradeCatalog Upgrades { get; }

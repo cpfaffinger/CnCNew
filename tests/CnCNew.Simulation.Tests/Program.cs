@@ -353,6 +353,13 @@ run.Test("Pre-attack delay: the weapon winds up per shot, per attack or per clip
 run.Test("Damaged locomotor: a really damaged object moves with SpeedDamaged", Tests.DamagedLocomotorSlowsAReallyDamagedObject);
 run.Test("Turret idle scan: random angle and interval, hold, return, determinism, snapshot", Tests.TurretIdleScanGlancesAroundDeterministically);
 run.Test("Turret idle scan: an attack interrupts it and it resumes afterwards", Tests.TurretIdleScanYieldsToAnAttackAndResumes);
+run.Test("Acquisition: AutoAcquireEnemiesWhenIdle is typed as flags, unknown tokens are errors", Tests.AcquisitionFlagsAreTypedAndStrict);
+run.Test("Acquisition: an idle unit picks the closest enemy in range, does not chase, and the host can switch it off", Tests.AcquisitionIdleUnitPicksTheClosestEnemyInRange);
+run.Test("Acquisition: one victim after another, the next one two frames after a kill", Tests.AcquisitionKillsOneVictimAfterAnother);
+run.Test("Acquisition: structures, stealth, moods and attack priorities", Tests.AcquisitionStructuresStealthAndMoods);
+run.Test("Acquisition: an ordered attack is left alone, a move ends an attack, a marching turret takes targets of opportunity", Tests.AcquisitionLeavesAnOrderedAttackAlone);
+run.Test("Attack-move: the unit stops for a fight and marches on; a computer player's unit walks to its victim", Tests.AttackMoveStopsFightsAndMarchesOn);
+run.Test("Attack-move: snapshot mid-fight, determinism and the replay of AttackMoveCommand", Tests.AttackMoveSnapshotDeterminismAndReplay);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
@@ -367,6 +374,7 @@ if (contentDirectory is not null) run.Test("Real data: weapon sets, multi-weapon
 if (contentDirectory is not null) run.Test("Real data: Ranger, Red Guard, Rebel and Black Lotus capture a barracks in the stages of their data", () => Tests.RealStagedCapture(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: turrets of the Crusader, the Battlemaster, the sweeping guns and the linked battleships", () => Tests.RealTurrets(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turret on a Battlemaster it chases; retail turrets scan while idle", () => Tests.RealTurretAttackAndScan(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: retail AutoAcquire flags; a Crusader and a Battlemaster fight without orders", () => Tests.RealAcquisition(contentDirectory));
 return run.Finish();
 
 /// <param name="only">With <c>--only TEXT</c>, just the tests whose name contains TEXT run (a development aid; the full run takes no argument).</param>
