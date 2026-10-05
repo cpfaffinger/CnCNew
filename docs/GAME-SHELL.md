@@ -243,3 +243,24 @@ Richtigkeit.
 **Sichtmittel:** `tools/CnCNew.UiRenderTool` zeichnet seitdem auch die Hülle selbst (`shell-*.png`, über
 `GameShell.Create` und echte Eingabeereignisse): Hauptmenü, überfahrene und gedrückte Schaltfläche, Optionen mit
 Reglern (überfahren, gezogen), Beenden-Dialog – siehe `docs/CLIENT-UI-RENDERING.md` §5.
+
+### Phase 16: Textvergleich mit dem Original (Zusammenfassung, Tabelle in `docs/TEXT-AUDIT.md`)
+
+Der Mensch fand die Texte „komisch“ gegenüber dem Original. Systematisch untersucht (Daten + Referenzcode, kein Originalbild vorhanden); behoben und im Schalenbereich wirksam:
+
+| Befund | Ursache | Behebung | Test |
+|---|---|---|---|
+| „Generals“-Schrift (Titel, Hauptmenüknöpfe, 294 Fenstertexte) bis 85 px zu breit, Zeilenhöhen 1 px daneben | FreeType-Näherung (91-%-Stauchung, ungehintete Vorschübe) statt der GDI-Schrift des Originals (`lfWidth = 0,40·Höhe`, GDI wählt die Breite: ca. 87 %) | `GdiFontProvider` (`docs/CLIENT-UI-RENDERING.md` §2) | `UiRenderTool` Selbstprüfung + `--font-audit` (Sichtmittel) |
+| „Alternate Mouse Setu“ abgeschnitten | Texte von Knöpfen, Kontrollkästchen und Radioknöpfen waren auf das Fenster geschnitten; im Original setzt nur statischer Text einen Zuschnitt | `UiDrawBuilder.Text` mit Zuschnitt je Gadgettyp | `WndTests` (Golden), `SentenceLayoutTests` |
+| Zeilenumbruch und Zentrierung anders | greedy `<=`-Umbruch ohne Einzug und Überlappung statt `Build_Sentence_*` | `UiSentenceLayout` | `SentenceLayoutTests` (9 Fälle, von Hand nachgerechnet) |
+| Skirmish-Einrichtung: `FactionAmerica`, `Color 1`, `None` | feste Namen statt `PlayerTemplate.DisplayName` (`INI:FactionAmerica` = „USA“), `MultiplayerColor.TooltipName` (`Color:Gold`), `Team:n` | `ShellSkirmishText` (Fallbacks gezählt in `ShellTextSource.RawNameHits`) | `ShellTests` „Skirmish setup and options show localized words …“ |
+| Optionen: Eingabefelder zeigen das Wort „Entry“ | TEXT der Layoutdatei, `OptionsMenuInit` überschreibt es | beide Netzwerkfelder starten leer | dasselbe |
+| Credits in Arial 24 fett / 16 fett / 12 | feste Werte statt `CreditsTitleFont`/`CreditsMinorTitleFont`/`CreditsNormalFont` aus `Language.ini` mit `adjustFontSize` | `LanguageFonts`, `CreditsFonts` | `ShellTests` „Credits lines use the Language.ini credits fonts …“ |
+| Tooltips fehlten ganz | nie umgesetzt | `TooltipPainter` im Shell- und HUD-Zeichenpfad | `ShellTests` „A window with TOOLTIPTEXT shows the pointer tooltip …“ |
+
+**Nicht behoben (Befund für den Übergangsagenten und das Briefing):** (a) *Bildschirmstapel*: `GameShell.BuildDrawList` zeichnet **jeden** Bildschirm des Stapels. `Shell::push` fährt im Original
+zuerst den oberen Bildschirm herunter (`runShutdown`, danach versteckt), sodass Optionen, Skirmish-Einrichtung und Kampagnenbildschirme das Hauptmenü ersetzen; hier scheinen dessen Knopftexte
+(„CHALLENGE“, „BACK“ …) durch die neuen Fenster, am deutlichsten in der Skirmish-Einrichtung. Dazu bräuchte der Hintergrund (Rahmen, Logo, im Original die 3D-Schattenkarte) eine eigene Ebene.
+(b) *`SinglePlayerMenu.wnd`* (Zwischenseite Neu/Laden/Zurück nach „USA“) gibt es im Original nicht (USA führt direkt in den Schwierigkeitsdialog); ihre Texte stehen in Times New Roman, wie
+die Layoutdatei es vorgibt. (c) *Skirmish-Einrichtung*: „Computer“ und „(no map selected)“/„No map selected“ sind feste englische Wörter (kein Label; das Original kennt Easy/Medium/Hard
+Army und eine Kartenleiste), die Farb-Einträge tragen keine Farbfläche. (d) Briefing und Ladeschirm haben im Original Filmhintergründe und Fortschrittstexte, hier ein Standbild.

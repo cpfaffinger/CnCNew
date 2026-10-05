@@ -12,7 +12,7 @@ namespace CnCNew.UiRenderTool;
 /// <summary>
 /// The rest of the screens a player meets between the main menu and a match, driven through the shell with real input
 /// like <see cref="ShellScenes"/>: single-player menu, skirmish setup and map picker, the match loading screen, the score
-/// screen after a short match, credits, the USA campaign screens up to the mission briefing, and the load game screen.
+/// screen after a short match, credits and the USA campaign screens up to the mission briefing.
 /// These are the screens whose text the human compared against the original (docs/TEXT-AUDIT.md).
 /// </summary>
 internal static class ShellFlowScenes
@@ -84,10 +84,6 @@ internal static class ShellFlowScenes
             Shot(shell, "briefing-usa");
             shell.Update(0.5);
             Shot(shell, "briefing-usa-later");
-
-            shell = NewShell();
-            Click(shell, "MainMenu.wnd:ButtonLoadGame");
-            Shot(shell, "load-game");
         }
     }
 }

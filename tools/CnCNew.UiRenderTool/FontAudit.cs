@@ -17,6 +17,54 @@ namespace CnCNew.UiRenderTool;
 /// </summary>
 internal static class FontAudit
 {
+    /// <summary>
+    /// Invariants of the GDI face that must hold on every Windows installation (the exact pixel metrics depend on the installed Arial, these do not):
+    /// the face GDI selects is the requested one, glyph coverage is quantized to the 16 steps of the original's 4-bit alpha, the cell height is
+    /// ascent + descent, the overlap follows <c>(height / 8)</c> within [0, 4], blank and letter advances are positive, the Generals font is clearly
+    /// narrower than plain Arial and a bold face is wider than the regular one. Returns the failures.
+    /// </summary>
+    public static IReadOnlyList<string> SelfCheck()
+    {
+        var problems = new List<string>();
+        void Check(bool condition, string message)
+        {
+            if (!condition) problems.Add(message);
+        }
+
+        using var gdi = new GdiFontProvider();
+        foreach (var (size, bold) in new[] { (13, false), (16, false), (16, true), (24, false), (36, false) })
+        {
+            var spec = new UiFontSpec("Arial", size, bold, 100);
+            using var chain = (UiFontChain)gdi.Open(spec);
+            var face = chain.Primary;
+            Check(face is GdiFontFace { FaceName: "Arial" }, $"{spec}: GDI selected '{(face as GdiFontFace)?.FaceName}' instead of Arial.");
+            Check(face.Metrics.LineHeight == face.Metrics.Ascent + face.Metrics.Descent, $"{spec}: cell height {face.Metrics.LineHeight} is not ascent {face.Metrics.Ascent} + descent {face.Metrics.Descent}.");
+            Check(face.Metrics.Overlap == Math.Clamp(size / 8, 0, 4), $"{spec}: overlap {face.Metrics.Overlap}.");
+            Check(face.Advance(' ') > 0 && face.Advance('i') > 0 && face.Advance('M') > face.Advance('i'), $"{spec}: implausible advances.");
+            foreach (var character in "AEgjMQW%@")
+            {
+                var glyph = face.Rasterize(character);
+                Check(!glyph.IsEmpty && glyph.Coverage.All(value => value % 17 == 0), $"{spec}: glyph '{character}' coverage is not a multiple of 17 (4-bit alpha) or empty.");
+                Check(glyph.BearingY <= face.Metrics.Ascent && glyph.Width > 0 && glyph.Height <= face.Metrics.LineHeight, $"{spec}: glyph '{character}' does not fit the cell.");
+            }
+            Check(face.Advance('W') >= face.Advance('V'), $"{spec}: 'W' is narrower than 'V' although the original adds one pixel to it.");
+        }
+        var plain = gdi.Open(new UiFontSpec("Arial", 24, false, 100));
+        var generals = gdi.Open(new UiFontSpec("Arial", 24, false, UiFontPolicy.GeneralsWidthPercent));
+        const string sample = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var plainWidth = sample.Sum(character => plain.Advance(character));
+        var generalsWidth = sample.Sum(character => generals.Advance(character));
+        Check(generalsWidth < plainWidth * 0.92 && generalsWidth > plainWidth * 0.75, $"Generals is {generalsWidth} px wide for the capitals, Arial {plainWidth} px.");
+        var regular = gdi.Open(new UiFontSpec("Arial", 16, false, 100));
+        var heavy = gdi.Open(new UiFontSpec("Arial", 16, true, 100));
+        Check("Command and Conquer".Sum(character => heavy.Advance(character)) > "Command and Conquer".Sum(character => regular.Advance(character)), "Arial Bold is not wider than Arial.");
+        plain.Dispose();
+        generals.Dispose();
+        regular.Dispose();
+        heavy.Dispose();
+        return problems;
+    }
+
     public static void Run(GameData data, LocalizedText text, WndHeaderTemplateTable templates, string outputDirectory)
     {
         var report = new StringBuilder();

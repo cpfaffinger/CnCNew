@@ -97,6 +97,13 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
     private void RunCaptures()
     {
         var renderer = _renderer!;
+        if (backend == UiFontBackend.Gdi)
+        {
+            var problems = FontAudit.SelfCheck();
+            foreach (var problem in problems) Console.Error.WriteLine($"GDI self check: {problem}");
+            if (problems.Count > 0) throw new InvalidDataException($"The GDI font self check failed ({problems.Count} problem(s)).");
+            Console.WriteLine("GDI self check passed.");
+        }
         var services = new UiTreeServices(renderer.TextMeasure) { Images = renderer.Images, Text = _text, HeaderTemplates = _templates };
         var content = _data!.Content;
 
