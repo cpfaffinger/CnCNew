@@ -33,6 +33,9 @@ internal sealed class ObjectLayerStats
 
     /// <summary>Model parts drawn with a flash tint this frame (a building that is being captured) / since the start (cumulative: a flash lasts five ticks).</summary>
     public int FlashTinted;
+
+    /// <summary>Parts drawn translucent this frame (the building preview of a placement; one per draw module of it).</summary>
+    public int Translucent;
     public long FlashTintedTotal;
 
     /// <summary>Triangles submitted this frame (sum of visible mesh draw counts / 3).</summary>
@@ -78,7 +81,7 @@ internal sealed class ObjectLayerStats
     }
 
     public override string ToString() =>
-        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} wheels={WheelsDriven} flashes={MuzzleFlashesShown}/{MuzzleFlashesShown + MuzzleFlashesHidden} tinted={FlashTinted} tintedTotal={FlashTintedTotal} triangles={Triangles} " +
+        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} wheels={WheelsDriven} flashes={MuzzleFlashesShown}/{MuzzleFlashesShown + MuzzleFlashesHidden} tinted={FlashTinted} tintedTotal={FlashTintedTotal} translucent={Translucent} triangles={Triangles} " +
         $"models={ModelsLoaded} missingModels={ModelsMissing} missingTextures={TexturesMissing} missingAnimations={MissingAnimations} placeholders={Placeholders} gpuProblems={GpuResourceProblems} " +
         $"frameMs={FrameMilliseconds:F3} avgMs={AverageFrameMilliseconds:F3} allocB={FrameAllocatedBytes}";
 }

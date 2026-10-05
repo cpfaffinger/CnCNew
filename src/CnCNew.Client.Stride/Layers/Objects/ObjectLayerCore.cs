@@ -78,6 +78,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         stats.MuzzleFlashesHidden = 0;
         stats.MuzzleFlashesShown = 0;
         stats.FlashTinted = 0;
+        stats.Translucent = 0;
         stats.Triangles = 0;
         stats.Placeholders = 0;
 
@@ -279,9 +280,11 @@ internal sealed class ObjectLayerCore : IWorldLayer
             Stats.FlashTintedTotal++;
         }
 
+        var opacity = OpacityStep(drawable);
+        if (opacity != ModelAsset.SolidOpacity) Stats.Translucent++;
         for (var m = 0; m < rigidModel.Materials.Count; m++)
         {
-            rigidComponent.Materials[m] = asset.GetTeamMaterial(m, team, drawable.Fogged || ForceFog, flash)!;
+            rigidComponent.Materials[m] = asset.GetTeamMaterial(m, team, drawable.Fogged || ForceFog, flash, opacity)!;
         }
 
         var skeleton = rigidComponent.Skeleton;
@@ -313,9 +316,13 @@ internal sealed class ObjectLayerCore : IWorldLayer
             }
         }
 
-        UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, flash, frame);
+        UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, flash, opacity, frame);
         Stats.Drawn++;
     }
+
+    /// <summary>The opacity of a drawable in whole percent (<see cref="DrawableInstance.Opacity"/>), so the translucent variants of a model's materials can be cached.</summary>
+    private static int OpacityStep(DrawableInstance drawable)
+        => drawable.Opacity >= 1f ? ModelAsset.SolidOpacity : Math.Clamp((int)MathF.Round(drawable.Opacity * ModelAsset.SolidOpacity), 1, ModelAsset.SolidOpacity - 1);
 
     /// <summary>Debug switch for screenshot checks: <c>CNCNEW_OBJECT_FOG=1</c> draws every object as if it stood in the fog (like <c>CNCNEW_TERRAIN_REVEAL</c> for the terrain).</summary>
     private static readonly bool ForceFog = System.Environment.GetEnvironmentVariable("CNCNEW_OBJECT_FOG") == "1";
@@ -462,7 +469,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
     }
 
     private void UpdateSkins(
-        DrawPartState part, ModelAsset asset, W3dPose pose, ModelStateSpec state, DrawableInstance drawable, Matrix4x4 instanceMatrix, uint flash, in WorldFrame frame)
+        DrawPartState part, ModelAsset asset, W3dPose pose, ModelStateSpec state, DrawableInstance drawable, Matrix4x4 instanceMatrix, uint flash, int opacity, in WorldFrame frame)
     {
         if (part.Skins.Count != asset.SkinParts.Length)
         {
@@ -475,14 +482,15 @@ internal sealed class ObjectLayerCore : IWorldLayer
             var visible = pose.IsBoneVisible(skin.Part.BoneIndex) && ComputeVisible(skin.Part.FullName, skin.Part.DefaultVisible, state.SubObjects);
             skin.Entity.Component.Enabled = visible;
             if (!visible) continue;
-            if (skin.Flash != flash)
+            if (skin.Flash != flash || skin.Opacity != opacity)
             {
                 for (var b = 0; b < skin.Part.Batches.Count; b++)
                 {
-                    skin.Entity.Component.Materials[skin.Part.Batches[b].MaterialIndex] = asset.GetSkinMaterial(i, b, flash)!;
+                    skin.Entity.Component.Materials[skin.Part.Batches[b].MaterialIndex] = asset.GetSkinMaterial(i, b, flash, opacity)!;
                 }
 
                 skin.Flash = flash;
+                skin.Opacity = opacity;
             }
 
             W3dModel.SkinVertices(skin.Part.Mesh, pose.BoneWorldTransforms, skin.Positions, skin.Normals);

@@ -18,6 +18,9 @@ internal sealed class SkinRuntime
 
     /// <summary>The flash factor (<see cref="FlashTint"/>) the entity's material overrides were last set for.</summary>
     public uint Flash { get; set; } = FlashTint.None;
+
+    /// <summary>The opacity step (<see cref="ModelAsset.SolidOpacity"/> = solid) the entity's material overrides were last set for.</summary>
+    public int Opacity { get; set; } = ModelAsset.SolidOpacity;
 }
 
 /// <summary>

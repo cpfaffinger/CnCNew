@@ -1,0 +1,7 @@
+# Capture aid for the building preview (docs/GAME-HUD.md section 18): select the dozer, press a construct button of the control bar and hold the pointer on a
+# legal spot next to the dozer; the capture frame of the run (--frames) then shows the translucent building at the cursor. placement-refused.txt holds the pointer
+# on the base's own structure instead (refused spot: the preview turns red).
+5   look own:DOZER
+10  click left own:DOZER
+30  click left command:DozerConstruct
+50  move placement from own:DOZER
