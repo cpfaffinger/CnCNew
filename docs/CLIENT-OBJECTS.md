@@ -303,3 +303,16 @@ Ursachenanalyse oben (Puffer, Windung, Licht), keine Zahl.
 - Stride-Interna verifiziert per Dekompilierung (`ilspycmd`, `Stride.Rendering.dll` 4.3.0.2507):
   `SkeletonUpdater.UpdateNode` (Verhalten von `OverrideWorldMatrix`), `ModelComponent.Update`
   (Wurzelknoten-Sonderfall), `IndexingDictionary<T>` (`Clear`, `null` entfernt einen Eintrag).
+
+## Durchscheinende Objekte (Phase 16, Vorschaumodell beim Platzieren)
+
+`DrawableInstance.Opacity` (Standard 1) ist `Drawable::setDrawableOpacity`: unter 1 zeichnet der Objekt-Layer jede Oberfläche des Drawables durchscheinend. Heute setzt nur `PlacementPreview` einen Wert
+(0,45, `docs/GAME-HUD.md` §18); Entitäten und Kulissen bleiben bei 1.
+
+* **Material:** `W3dMaterialFactory.Opacity` (gesetzt rund um `Create`, wie `Dim` und `Tint`). Ein undurchsichtiger Durchgang wird ein alphagemischter (`SourceAlpha`/`InverseSourceAlpha`) mit dem Alpha der Deckkraft (das Alpha
+  einer undurchsichtigen Textur ist beliebig); ein Durchgang mit Alphatest behält seine Löcher (Alpha mal Deckkraft); ein Durchgang, der schon mit `SourceAlpha` mischt, skaliert sein Alpha; additive und modulierende
+  Durchgänge skalieren die Farbe. Die Tiefenschreibung bleibt die des Shaders, damit man durch die Vorderseite nicht die Rückseite sieht.
+* **Cache:** `ModelAsset` hält die Varianten je (Materialplatz, Teamfarbe, gedimmt, Blitz, Deckkraft in ganzen Prozent) und für Hautteile je (Teil, Stapel, Blitz, Deckkraft); ein Vorschaumodell kostet also nach dem
+  ersten Frame keine Materialbauten mehr. `SolidOpacity = 100` ist der Zustand ohne Variante.
+* **Zähler:** `translucent=` in der Zeile `object layer:` (durchscheinend gezeichnete Teile des Frames).
+* Das Ganze gilt nicht für Schatten (der Layer zeichnet für die Vorschau keinen) und nicht für Teile, die der Hide-Mechanismus über die Nullmatrix versteckt (die bleiben unsichtbar).

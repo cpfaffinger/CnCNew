@@ -436,3 +436,28 @@ Mit der Wiedergabe „Dozer wählen → Bauknopf → Zeiger über den Boden → 
   (`display: back buffer …, window client area …`). Das ließ sich headless nicht nachstellen und ist **nicht** als Ursache belegt.
 - **Nicht belegt:** ob der Tester genau in diesen 25 Sekunden gebaut hat. Die Eröffnungssequenz ist der einzige Weg, auf dem die Wiedergabe im echten Client scheiterte; ein Mensch muss im
   laufenden Client bestätigen, dass der Bau jetzt geht (Fenster, echte Maus, echte Frametimes sind headless nicht prüfbar).
+
+## 18. Phase 16: Vorschaumodell beim Platzieren
+
+Bisher zeigte die Platzierung eines Gebäudes nur die schraffierte Grundfläche (`PlacementGhostOverlay`, `HudOverlayRenderer`). Das Original zeigt außerdem das Gebäude selbst durchscheinend am Zeiger
+(`InGameUI::placeBuildAvailable` legt ein `Drawable` der Vorlage an, `handleBuildPlacements` setzt Ort und Winkel jeden Frame, `setDrawableOpacity(0.45)`, bei verweigertem Ort `colorTint(rot)`).
+
+**Datenweg** (jede Stufe getestet):
+1. `CommandModeController.Ghost` (Präsentation) – Ort, Winkel, gültig oder `PlacementIssue`; der Winkel beginnt beim `PlacementViewAngle` der Vorlage (`docs/PRESENTATION-INPUT.md` §7).
+2. `MatchController.Update` (nach `LiveGame.Advance`, vor den Welt-Layern) setzt `LiveGame.PlacementGhost` = Geist im Platzierungsmodus (nicht bei offenem Spielmenü), sonst `null`.
+3. `LiveGame.ObjectFrame` = `Frame` plus `PlacementPreview.Create(…)` des Geistes (`DrawableInstance` mit `Opacity` 0,45, `FlashTint` rot bei verweigertem Ort, `SceneryIndex = PlacementPreviewIndex`). `Frame` selbst bleibt
+   frei davon: Minimap-Punkte, Heilsymbole und Auswahl lesen es und sehen die Vorschau nie.
+4. `LiveMatchHost` gibt dem Objekt-Layer `ObjectFrame`; der Layer zeichnet `Opacity < 1` mit durchscheinenden Materialvarianten (`docs/CLIENT-OBJECTS.md`, „Durchscheinende Objekte“).
+
+**Tests:** `PlacementPreviewTests` (Präsentation, 5 Tests: Winkel im Katalog, gültiger/verweigerter Geist, nichts zu zeigen, Zustandsauswahl), `InputTests` „a placement starts at the template's PlacementViewAngle …“,
+`HudTests` „Placement preview …“ (echte Daten, Dozer, Bauknopf, Hover: `ObjectFrame` hat genau ein Objekt mehr als `Frame`, `Opacity` 0,45, rot auf der eigenen Basisstruktur, nach dem Klick weg).
+
+**Sichtprobe** (Client, `--smoke-test --match "Maps/Alpine Assault/Alpine Assault.map" --size 1280x720 --frames 100 --capture …`, Skripte `scripts/input/placement-preview.txt` und `placement-refused.txt`, PNGs
+außerhalb des Repos angesehen): Dozer auswählen, Kraftwerk-Knopf, Zeiger neben den Dozer: in der grünen Grundfläche steht das Kraftwerk als blasses, durchscheinendes Modell; auf der eigenen Basisstruktur
+(`BlockedFootprint`) ist es rötlich getönt, die Grundfläche rot. Objekt-Layer-Zeile: `translucent=1` (ein durchscheinender Teil), `tinted=1` bei verweigertem Ort.
+
+**Nicht umgesetzt:** Linienbau (Mauern: `m_placeIcon[1..]`, `buildTiledLocations` – es gibt ein Modell, keine Kette), das Fraktions-Bib-Decal unter einem verweigerten Ort (`addFactionBibDrawable`), die Spielerfarbe
+der Anzeige bei Nacht (`setIndicatorColor` mit Nachtfarbe), ein Schatten des Vorschaumodells. Die schraffierte Grundfläche bleibt als Hilfe (das Original zeichnet keine).
+
+**Nicht belegt:** wie das Vorschaumodell im laufenden Fenster aussieht (Lesbarkeit bei 0,45 gegen helles Gelände, Rottönung bei dunklen Texturen, Schatten- und Sortierreihenfolge mit den anderen
+durchscheinenden Objekten) – gesehen sind zwei Standbilder des Headless-Laufs; die Rottönung ist ein Faktor auf die Oberflächenfarbe (`FlashTint.Gain`), nicht die Licht-Addition des Originals.

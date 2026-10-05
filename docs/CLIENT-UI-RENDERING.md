@@ -177,3 +177,26 @@ Clip-Wechsel), `MissingImages`/`MissingTextures`/`MissingLabels`/`MissingGlyphs`
 (Magenta-Füllung für Bilder, Magenta-Text mit Unterstrich für Label, Notdef-Box für Glyphen), bleibt ungezählt – siehe
 `docs/IMPLEMENTATION-PLAN.md`/CLAUDE.md, „nie still auf Standardwerte zurückfallen“, auf die Präsentationsschicht
 übertragen.
+
+## 7. Fensterübergänge im Renderer (Phase 16)
+
+Die Übergangsanimationen der Hülle (`docs/GAME-SHELL.md` §12) brauchen vom Renderer **nichts Neues**: die Ersatzbilder der Effekte sind gewöhnliche `UiDrawCommand`s – `UiBorderRect` und `UiFillRect` mit Alpha (weißes
+Aufblitzen, schwarze Blende), `UiImageDraw` mit Alpha-Tönung (Logo-Einblendung, wachsende Bilder, die drei Teile einer Schaltfläche) und `UiTextDraw` (getippter Text) – und werden nach der Zeichenliste des jeweiligen
+Screens angehängt. `UiRenderer.DrawRect`/`DrawBorder`/`DrawImage` blenden mit dem Alpha der Farbe; die Reihenfolge der Befehle ist die Zeichenreihenfolge. Zwei kleine Erweiterungen der Fensterschicht dahinter:
+`UiWindowTree.BuildPushButtonImages(fenster, alpha)` (linkes/mittleres/rechtes Bild einer Schaltfläche mit Alpha, ohne Text; `PushButtonImageDrawThree`) und `UiWindow.SetEnabledImage0` (`winSetEnabledImage`).
+
+**Sichtprüfung:** `tools/CnCNew.UiRenderTool` schreibt zusätzlich zu den Bildern aus §5 die Folgen der animierten Hülle (`TransitionScenes.cs`, 1280×720, 30 Frames/s, `transition-NAME-fNN-1280x720.png`, N = Frames ab
+Beginn der Folge):
+
+| Folge | Bilder (Frames) | zeigt |
+|---|---|---|
+| `entry` | 0, 12, 24, 30, 34, 37, 40, 43, 46, 50, 54, 58, `settled` | schwarz, Einblendung des Lineals, Rahmen und Logo, Knöpfe blitzen einer nach dem anderen auf, Ruhezustand |
+| `single` | 1, 4, 8, 12, 16, 20, 24, 28, 34, `settled` | Wurzelknöpfe blitzen aus, Rahmen und fünf Knöpfe blitzen ein, die Fraktionslogos wachsen |
+| `hover-usa`, `hover-usa-away` | 1, 2, 3, 6 / 1, 2, 6 | das USA-Logo wächst auf die mittlere Größe und zurück |
+| `skirmish-out`, `skirmish-in` | 2, 6, 10 / 1, 3, 4, 5, 6, 8, 10 | Einzelspieler-Spalte blitzt aus; die Einrichtung blendet über Schwarz ein (Inhalt erscheint bei Frame 5) |
+| `score` | 0, 1, 8, 12, 20, 30, 40, 55, 70 | Zeilen erscheinen nacheinander, Zahlen zählen hoch (echtes 900-Tick-Gefecht) |
+
+Lauf vom 5. Oktober 2026: 113 PNGs (64 aus §5 + 49 Folgenbilder), `commands=19265 sprites=42613 drawCalls=3532 batches=1320 missingImages=12 missingTextures=0 missingLabels=12 missingGlyphs=0 substitutedGlyphs=12
+customDraws=52 unbalancedClips=4` (die zwölf fehlenden Bilder sind dieselben wie in §5: kein `Gradient` mehr – der Effekt zeichnet das im Retail-Bestand fehlende Verlaufsbild gar nicht erst, `docs/GAME-SHELL.md`
+§12 Punkt 7); zwei Läufe ergeben für alle 113 Dateien identische SHA-256-Summen. Angesehen wurden Einstieg (f00/f24/f37/f46/settled), Einzelspieler (f08/f20/settled), Hover (f06), Skirmish (out f06, in f04/f05)
+und Ergebnisbildschirm (f30). **Das ersetzt keine Sichtprüfung im laufenden Fenster:** Tempo, Ton und Eindruck sind nicht beurteilt.

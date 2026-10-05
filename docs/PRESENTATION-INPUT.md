@@ -221,6 +221,16 @@ Richtung Anker → Cursor (`InGameUI.cpp`), Loslassen platziert: gültig → `Co
 `InvalidOrder` mit Grund, Anker gelöst, Modus bleibt (`PlaceEventTranslator.cpp`). Cursor `Build`/`InvalidBuild` (Engine-Cursor ohne
 `MouseCursor`-Block: beim Platzieren ist wie im Original kein Cursor zu sehen, §11).
 
+**Anfangswinkel (Phase 16):** der Geist beginnt – wie das Platzierungs-Symbol des Originals (`InGameUI::placeBuildAvailable`: `build->getPlacementViewAngle()`) – mit dem `PlacementViewAngle` der Vorlage
+(Retail: 242 Vorlagen mit einem Wert ungleich 0 in den Objekt-INIs – -45 Grad 139-mal, -135 Grad 85-mal, außerdem -44, 45, 135 und 180; `ObjectVisual.PlacementViewAngle`, Bogenmaß), und ein Klick ohne Ziehen platziert mit diesem Winkel (`ConstructCommand.Angle`). Vorher war es
+immer 0. Der Wert kommt über `CommandSettings.PlacementViewAngle` (eine Funktion Vorlagenname → Winkel; der HUD-Controller füllt sie aus dem Sichtkatalog), ohne die Funktion bleibt es 0.
+
+**Vorschaumodell:** der Geist (`PlacementGhost`: Vorlage, Ort, Winkel, gültig oder Grund) ist die Eingabe von `PlacementPreview.Create` (`CnCNew.Presentation/Objects`), das daraus ein `DrawableInstance` baut:
+das Modell des Normalzustands der Vorlage, durchscheinend mit 0,45 (`placementOpacity` in `InGameUI.cpp`), bei verweigertem Ort mit dem roten Blitzton (1, 0, 0) (`illegalBuildColor`; `Drawable::colorTint` ist ein
+festgestellter `colorFlash`, hier `DrawableInstance.FlashTint`). Kein Modell, kein Boden unter dem Zeiger oder unbekannte Vorlage: kein Vorschaumodell. Der Objekt-Layer des Clients zeichnet es
+(`docs/CLIENT-OBJECTS.md`, `docs/GAME-HUD.md` §18). Cursor: das Original zeigt beim Platzieren **keinen** Zeiger (`Mouse::CROSS` hat in `Mouse.ini` keinen Block; mit `m_winCursors` setzt `Win32Mouse::setCursor` dann
+`SetCursor(NULL)`, der DX8-Pfad lässt den Zeiger versteckt) – unverändert (§11).
+
 `SimulationQueries.CheckPlacement` ist ein Trockenlauf von `SimulationWorld.CheckConstruct` in gleicher Reihenfolge: Bauer verfügbar →
 Template bekannt → instanziierbar → baubar (`STRUCTURE`, `Buildable`, Seite) → Voraussetzungen (`Ignore_Prerequisites`) → Geld →
 `NavigationGrid.IsFootprintLegal` (Karte, Klippe, Wasser, fremde Grundfläche; **derselbe Codepfad wie die Simulation**) →
