@@ -360,6 +360,9 @@ run.Test("Acquisition: structures, stealth, moods and attack priorities", Tests.
 run.Test("Acquisition: an ordered attack is left alone, a move ends an attack, a marching turret takes targets of opportunity", Tests.AcquisitionLeavesAnOrderedAttackAlone);
 run.Test("Attack-move: the unit stops for a fight and marches on; a computer player's unit walks to its victim", Tests.AttackMoveStopsFightsAndMarchesOn);
 run.Test("Attack-move: snapshot mid-fight, determinism and the replay of AttackMoveCommand", Tests.AttackMoveSnapshotDeterminismAndReplay);
+run.Test("Baseline manifests: canonical file form, round trip and strict reading", Tests.ManifestCanonicalRoundTrip);
+run.Test("Baseline manifests: a check reports the first differing field with both values", Tests.ManifestCheckReportsTheFirstDifference);
+run.Test("Baseline manifests: the content hash of an object graph ignores storage order", Tests.CanonicalObjectHashIgnoresStorageOrder);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

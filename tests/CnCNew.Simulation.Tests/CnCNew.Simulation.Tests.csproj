@@ -3,6 +3,11 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The pure parts of the baseline manifests live in the tool; they are compiled into the tests as source (no reference to an executable, no new dependency). -->
+    <Compile Include="../../tools/CnCNew.SimTool/ManifestDocument.cs" Link="Linked/ManifestDocument.cs" />
+    <Compile Include="../../tools/CnCNew.SimTool/CanonicalObjectHasher.cs" Link="Linked/CanonicalObjectHasher.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
     <ProjectReference Include="../../src/CnCNew.Data/CnCNew.Data.csproj" />
     <ProjectReference Include="../../src/CnCNew.Simulation/CnCNew.Simulation.csproj" />
