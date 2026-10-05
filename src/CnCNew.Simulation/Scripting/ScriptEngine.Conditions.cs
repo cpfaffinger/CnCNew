@@ -82,7 +82,7 @@ public sealed partial class ScriptEngine
             {
                 // evaluatePlayerLostObjectType: the count of the type dropped below the count seen at the previous evaluation.
                 if (!Has(type, p, 2) || ResolvePlayer(Str(p, 0)) is not { } watcher) return false;
-                var key = $"count:{watcher.Id.Value}:{Str(p, 1)}";
+                var key = InvariantText.Format($"count:{watcher.Id.Value}:{Str(p, 1)}");
                 var now = CountOfTypes(watcher.Id, Str(p, 1), null);
                 var before = _counters.TryGetValue(key, out var seen) ? seen.Value : now;
                 CounterFor(key).Value = now;

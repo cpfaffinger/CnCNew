@@ -438,7 +438,7 @@ public sealed partial class ScriptEngine
                 for (var index = 0; index < unit.Script.OrConditions[branch].AndConditions.Length; index++)
                 {
                     var condition = unit.Script.OrConditions[branch].AndConditions[index];
-                    result.Add(($"{branch}.{index} {condition.TypeName}", EvaluateCondition(condition)));
+                    result.Add((InvariantText.Format($"{branch}.{index} {condition.TypeName}"), EvaluateCondition(condition)));
                 }
         }
         finally
@@ -550,6 +550,9 @@ public sealed partial class ScriptEngine
     }
 
     private void Diagnose(string message) => _diagnostics[message] = _diagnostics.GetValueOrDefault(message) + 1;
+
+    /// <summary>Diagnoses are part of the hashed state: numbers inside them are written with the invariant culture (<see cref="InvariantText"/>).</summary>
+    private void Diagnose(InvariantText message) => Diagnose(message.ToStringAndClear());
 
     private void Output(string action, params string[] arguments) => _outputs.Add(new ScriptOutput(_tick, action, [..arguments]));
 
