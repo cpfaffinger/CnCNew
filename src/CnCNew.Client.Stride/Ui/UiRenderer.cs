@@ -31,6 +31,7 @@ internal sealed class UiRenderer : IDisposable
     private readonly AtlasPageTextures _pageTextures;
     private readonly UiGlyphAtlas _atlas;
     private readonly UiGlyphCache _glyphs;
+    private readonly UiGlyphCache? _glyphsLightOnDark;
     private readonly UiImageTextures _images;
     private readonly MappedImageTable _imageTable;
     private readonly SpriteBatch _batch;
@@ -60,6 +61,8 @@ internal sealed class UiRenderer : IDisposable
         _pageTextures = new AtlasPageTextures(device);
         _atlas = new UiGlyphAtlas(AtlasPageSize, _pageTextures);
         _glyphs = new UiGlyphCache(_atlas);
+        // The original blends text in gamma space; a linear-light device needs another alpha for light text (UiAlphaCurves).
+        _glyphsLightOnDark = device.ColorSpace == ColorSpace.Linear ? new UiGlyphCache(_atlas, UiAlphaCurves.LightOnDark) : null;
         _images = new UiImageTextures(device, content, images, language);
         _batch = new SpriteBatch(device);
         Images = new MappedImageLookup(images);
@@ -278,10 +281,11 @@ internal sealed class UiRenderer : IDisposable
     private void DrawGlyphs(UiFontSpec spec, IUiFontFace face, List<UiGlyphPlacement> placements, int x, int baseline, WndColor color, UiRect clip, UiRect bounds)
     {
         var tint = ToColor(color);
+        var cache = _glyphsLightOnDark is not null && UiAlphaCurves.IsLight(color) ? _glyphsLightOnDark : null;
         SelectScissor(bounds.IsInside(clip) ? _bounds : clip);
         foreach (var placement in placements)
         {
-            var glyph = _glyphs.Get(spec, face, placement.Codepoint);
+            var glyph = (cache ?? _glyphs).Get(spec, face, placement.Codepoint);
             if (glyph.IsMissing) _frame.MissingGlyph(placement.Codepoint);
             if (glyph.IsSubstituted) _frame.SubstitutedGlyphs++;
             if (glyph.Region is not { } region) continue;

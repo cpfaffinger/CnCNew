@@ -5,9 +5,10 @@ public sealed record CachedGlyph(AtlasRegion? Region, int BearingX, int BearingY
 
 /// <summary>
 /// Rasterizes each (face, code point) once and keeps it in the atlas as white RGBA with the coverage in alpha, so that the
-/// vertex color tints it and alpha blending applies the coverage.
+/// vertex color tints it and alpha blending applies the coverage. <paramref name="alphaMap"/> (256 entries) maps the coverage to the stored
+/// alpha (<see cref="UiAlphaCurves"/>); null keeps the coverage.
 /// </summary>
-public sealed class UiGlyphCache(UiGlyphAtlas atlas)
+public sealed class UiGlyphCache(UiGlyphAtlas atlas, byte[]? alphaMap = null)
 {
     private readonly Dictionary<(UiFontSpec, int), CachedGlyph> _glyphs = [];
 
@@ -30,7 +31,7 @@ public sealed class UiGlyphCache(UiGlyphAtlas atlas)
                 rgba[i * 4] = 255;
                 rgba[i * 4 + 1] = 255;
                 rgba[i * 4 + 2] = 255;
-                rgba[i * 4 + 3] = bitmap.Coverage[i];
+                rgba[i * 4 + 3] = alphaMap is null ? bitmap.Coverage[i] : alphaMap[bitmap.Coverage[i]];
             }
             region = atlas.Add(bitmap.Width, bitmap.Height, rgba);
         }
