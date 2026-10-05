@@ -63,7 +63,7 @@ public static class MissionOutputCatalog
         Shown("the camera is confined to the map border with that index (TerrainLogic::setActiveBoundary); the minimap keeps border 0", "MAP_SWITCH_BORDER");
         Shown("black bars, control bar hidden", "CAMERA_LETTERBOX_BEGIN", "CAMERA_LETTERBOX_END");
         Shown("full-screen white/black fade", "CAMERA_FADE_ADD", "CAMERA_FADE_SUBTRACT", "CAMERA_FADE_MULTIPLY");
-        Shown("the world turns grey-scale (luminance 0.3/0.59/0.11) over the given frames; a post pass of the Stride client", "CAMERA_BW_MODE_BEGIN", "CAMERA_BW_MODE_END");
+        Shown("the world turns grey-scale (red-channel mono, an approximation of the luminance 0.3/0.59/0.11) over the given frames; a post pass of the Stride client", "CAMERA_BW_MODE_BEGIN", "CAMERA_BW_MODE_END");
         Shown("zoom blur into the old view, cut to the waypoint at the apex, zoom blur out of the new one (ScreenMotionBlurFilter, 24 logic frames); a post pass of the Stride client", "CAMERA_MOTION_BLUR_JUMP");
 
         // ---- input, text, ton, film, radar (unchanged from the first Phase 16 session)
@@ -98,6 +98,8 @@ public static class MissionOutputCatalog
         Shown("the healing icons over repaired objects are left out while off (GameLogic::setDrawIconUI; the player's own selection marks stay)", "OPTIONS_SET_DRAWICON_UI_MODE");
         Shown("only the Selectable flag has a consumer (the player can no longer select the object); the other flags are listed under problems", "UNIT_AFFECT_OBJECT_PANEL_FLAGS", "TEAM_AFFECT_OBJECT_PANEL_FLAGS");
         Shown("the drawable flashes its house colour every half second for the given seconds (Drawable::colorFlash)", "NAMED_FLASH", "TEAM_FLASH");
+        Shown("the whole superweapon timer list (top right, \"Name: m:ss\" per public-timer power) is hidden or shown again (InGameUI::setSuperweaponDisplayEnabledByScript)", "DISABLE_SPECIAL_POWER_DISPLAY", "ENABLE_SPECIAL_POWER_DISPLAY");
+        Shown("the timer of that object's superweapon is hidden or shown again in the list (InGameUI::hideObjectSuperweaponDisplayByScript)", "NAMED_HIDE_SPECIAL_POWER_DISPLAY", "NAMED_SHOW_SPECIAL_POWER_DISPLAY");
         Shown("the drawable flashes white every half second for the given seconds (Drawable::colorFlash)", "NAMED_FLASH_WHITE", "TEAM_FLASH_WHITE");
         Shown("the object is drawn in that house colour (Object::setCustomIndicatorColor), also on the minimap", "NAMED_CUSTOM_COLOR");
 
@@ -105,7 +107,6 @@ public static class MissionOutputCatalog
         Elsewhere("MissionSession.Step runs the scripts but not the world while time is frozen (GameLogic::update returns after ScriptEngine::UPDATE); the director's clock keeps running", "FREEZE_TIME", "UNFREEZE_TIME");
 
         // ---- not displayed, with the reason
-        Not("the HUD has no superweapon timer list (InGameUI::drawSuperweaponTimers); the director keeps the flags", "DISABLE_SPECIAL_POWER_DISPLAY", "ENABLE_SPECIAL_POWER_DISPLAY", "NAMED_HIDE_SPECIAL_POWER_DISPLAY", "NAMED_SHOW_SPECIAL_POWER_DISPLAY");
         Not("the control bar model keeps the availability (Hidden/Disabled sciences are hidden/restricted PurchaseScience buttons), but the client has no Generals Powers panel to show it", "PLAYER_SCIENCE_AVAILABILITY");
         Not("the client has no radar-facility rule: the minimap is always live, so there is nothing to force on or off", "RADAR_FORCE_ENABLE", "RADAR_REVERT_TO_NORMAL", "RADAR_ENABLE", "RADAR_DISABLE", "REFRESH_RADAR");
         Not("the mission result screen shows one row without statistics; the scoring flags are kept by the director", "ENABLE_SCORING", "DISABLE_SCORING", "PLAYER_EXCLUDE_FROM_SCORE_SCREEN");

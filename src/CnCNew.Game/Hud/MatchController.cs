@@ -50,6 +50,10 @@ public sealed class MatchController
     private readonly ControlBarSchemeInfo? _scheme;
     private readonly List<(string Text, long ExpiresAtMs)> _ticker = [];
     private readonly OrderHintBook _hints = new();
+    private readonly IUiTextMeasure _textMeasure;
+    private ImmutableArray<SuperweaponLine> _superweaponLines = [];
+    private long _superweaponTick = -1;
+    private bool _superweaponEnabled = true;
     private const long TickerLifetimeMs = 8000;
     private const int TickerCapacity = 6;
 
@@ -67,6 +71,7 @@ public sealed class MatchController
         Stats = new MatchStatsTracker();
 
         _assets = HudAssets.Load(match.Data, language);
+        _textMeasure = textMeasure ?? new MonospaceTextMeasure();
         var services = _assets.BuildTreeServices(textMeasure ?? new MonospaceTextMeasure());
         _scaleOptions = new UiScaleOptions
         {
@@ -128,6 +133,9 @@ public sealed class MatchController
     /// over repaired objects are left out. The selection markers of the player's own selection stay (the original draws those through the selection, not through the icon pass).
     /// </summary>
     public bool IconUiEnabled { get; set; } = true;
+
+    /// <summary>The superweapon countdowns at the top right (<c>InGameUI::draw</c>): every public-timer power of every player. A mission's scripts hide the list or single objects through it.</summary>
+    public SuperweaponTimers Superweapons { get; } = new();
 
     /// <summary>Meta actions the controller does not handle itself (pause, screenshot, chat, diplomacy, control bar toggle, time scale, ...).
     /// <see cref="MetaAction.Options"/> is handled internally (opens/closes the in-game menu) and never appears here.</summary>
@@ -622,7 +630,8 @@ public sealed class MatchController
         var viewportRect = new UiRect(0, 0, width, _controlBarRoot.Rect.Y);
         // The scheme art is the control bar's own background (W3DCommandBarBackgroundDraw in the original): it lies under the window tree, whose windows draw their own chrome on top.
         // The world-space feedback (selection rings, health bars, orders, rally points, placement ghost, healing icons) lies between the 3D scene and the control bar chrome.
-        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BuildSchemeBackground()).AddRange(ResolveHardCodedImages(baseList.Commands)).AddRange(extra).Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
+        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BuildSchemeBackground()).AddRange(ResolveHardCodedImages(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
+            .Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
         return baseList with { Commands = commands };
     }
 
@@ -674,6 +683,20 @@ public sealed class MatchController
             _tree.FindByName($"ControlBar.wnd:ButtonQueue{(index + 1):00}")!.SetHidden(index >= view.Queue.Length);
 
         _tree.FindByName("ControlBar.wnd:WinUnitSelected")!.SetHidden(view.Context != CommandBarContext.Command);
+    }
+
+    /// <summary>The superweapon countdowns over the world view (see <see cref="SuperweaponTimers"/>); each owner's house colour, the names from the string table.</summary>
+    private ImmutableArray<UiDrawCommand> BuildSuperweaponCommands(int width, int height)
+    {
+        // The list only changes with the logic tick (or a script's switch, which the next tick shows); a frame in between reuses it.
+        if (_superweaponTick != Match.Tick || _superweaponEnabled != Superweapons.DisplayEnabled)
+        {
+            _superweaponLines = Superweapons.Collect(Match.World, label => _assets.Text.TryGet(label, out var resolved) ? resolved : null);
+            _superweaponTick = Match.Tick;
+            _superweaponEnabled = Superweapons.DisplayEnabled;
+        }
+        var lines = _superweaponLines;
+        return SuperweaponTimers.Draw(lines, player => { var house = Match.Colors.Of(player); return new WndColor(house.Red, house.Green, house.Blue, 255); }, Match.Tick, width, height, _controlBarRoot.Rect.Y, _textMeasure);
     }
 
     private ImmutableArray<UiDrawCommand> BuildDynamicCommands()

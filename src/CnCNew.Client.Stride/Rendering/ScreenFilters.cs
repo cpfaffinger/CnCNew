@@ -9,8 +9,8 @@ namespace CnCNew.Client.Stride.Rendering;
 /// The original renders the scene into a texture and draws it back through a pixel shader (<c>ScreenBWFilter</c>, <c>ScreenMotionBlurFilter</c> in <c>W3DShaderManager.cpp</c>). This project has no custom
 /// shaders, so both are built from what a sprite batch offers: the back buffer is copied once and drawn back several times.
 /// <list type="bullet">
-/// <item><description>Grey-scale: <c>(1 - t) * C</c> drawn opaque, then <c>t * 0.30 * R</c>, <c>t * 0.59 * G</c> and <c>t * 0.11 * B</c> added with the red, green and blue channel swizzled into all three
-/// channels - the luminance weights of the original's pixel shader constant, blended by the fade <c>t</c>.</description></item>
+/// <item><description>Grey-scale: the picture blended with its red channel drawn as mono, by the fade <c>t</c>: <c>(1 - t) * C + t * (R, R, R)</c>. The sprite batch's only swizzle is RRRR, so this is an approximation of the
+/// original's luminance weights 0.30 / 0.59 / 0.11 (reds come out lighter, blues darker).</description></item>
 /// <item><description>Motion blur: the copy zoomed into the centre by <c>sqrt(1 - count / 60 * 0.9)</c>, then up to 30 more layers, each zoomed a further 1 percent and blended at alpha 0x15 (or 2 percent and
 /// additive alpha 9 + (count - 30) / 5, plus 60 at the peak, for the saturating variant) - the same layer sums the original draws.</description></item>
 /// </list>

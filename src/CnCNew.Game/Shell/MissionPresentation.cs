@@ -1107,13 +1107,23 @@ public sealed class MissionPresentationDirector
                 _scoreScreenExcluded.Add(Argument(output, 0));
                 return;
             case "ENABLE_SPECIAL_POWER_DISPLAY" or "DISABLE_SPECIAL_POWER_DISPLAY":
+                // InGameUI::setSuperweaponDisplayEnabledByScript: the whole superweapon timer list.
                 SpecialPowerDisplayEnabled = action == "ENABLE_SPECIAL_POWER_DISPLAY";
+                if (Hud is not { } powerHud) { Problem(action, "no HUD connected"); return; }
+                powerHud.SetSpecialPowerDisplay(SpecialPowerDisplayEnabled);
+                Handled(action, Channel.Hud);
                 return;
             case "NAMED_HIDE_SPECIAL_POWER_DISPLAY" or "NAMED_SHOW_SPECIAL_POWER_DISPLAY":
-                if (!TryNamedId(Argument(output, 0), out var powerObject)) return;
-                if (action == "NAMED_HIDE_SPECIAL_POWER_DISPLAY") _hiddenPowerDisplays.Add(powerObject.Value);
-                else _hiddenPowerDisplays.Remove(powerObject.Value);
+            {
+                // InGameUI::hideObjectSuperweaponDisplayByScript / showObjectSuperweaponDisplayByScript: the timer of one object.
+                if (!TryNamedId(Argument(output, 0), out var powerObject)) { Problem(action, "unknown named object"); return; }
+                var visible = action == "NAMED_SHOW_SPECIAL_POWER_DISPLAY";
+                if (visible) _hiddenPowerDisplays.Remove(powerObject.Value);
+                else _hiddenPowerDisplays.Add(powerObject.Value);
+                if (Hud is not { } objectHud) { Problem(action, "no HUD connected"); return; }
+                if (objectHud.SetObjectSpecialPowerDisplay(powerObject, visible)) Handled(action, Channel.Hud);
                 return;
+            }
             case "DRAW_SKYBOX_BEGIN" or "DRAW_SKYBOX_END":
                 SkyboxRequested = action == "DRAW_SKYBOX_BEGIN";
                 return;

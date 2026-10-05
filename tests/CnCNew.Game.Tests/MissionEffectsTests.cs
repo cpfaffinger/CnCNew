@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Numerics;
 using CnCNew.Data.World;
 using CnCNew.Game.Campaign;
@@ -12,7 +13,10 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Ui.Layout;
+using CnCNew.Ui.Runtime;
 using CnCNew.Ui.Settings;
+using CnCNew.Ui.Wnd;
 using static CnCNew.Game.Tests.MissionPresentationTests;
 
 namespace CnCNew.Game.Tests;
@@ -47,6 +51,8 @@ file sealed class FakeHud : IMissionHudControl
     public bool SetScienceAvailability(string science, string availability) { Calls.Add($"science {science} {availability}"); return true; }
     public void SetIconUiEnabled(bool enabled) => Calls.Add($"icons {enabled}");
     public bool SetObjectSelectable(EntityId entity, bool selectable) { Calls.Add($"selectable {selectable}"); return true; }
+    public void SetSpecialPowerDisplay(bool enabled) => Calls.Add($"power display {enabled}");
+    public bool SetObjectSpecialPowerDisplay(EntityId entity, bool visible) { Calls.Add($"object power display {visible}"); return true; }
 }
 
 /// <summary>
@@ -65,6 +71,7 @@ internal static class MissionEffectsTests
         harness.Run("SCREEN_SHAKE shakes the real camera deterministically with the GameData intensity of its type", ScreenShakeShakesTheCamera);
         harness.Run("MAP_SWITCH_BORDER confines the camera to the border; a border the map lacks is reported", BorderSwitchConfinesTheCamera);
         harness.Run("The grey-scale and the motion blur follow the original's frame counts; the cut happens at the blur's apex", ScreenFiltersFollowTheOriginalFrameCounts);
+        harness.Run("The superweapon list: a ready power is bold and flashes white every 15 frames, and the list ends in an ellipsis above the control bar", SuperweaponDrawRules);
 
         var index = Array.IndexOf(args, "--content-dir");
         if (index < 0 || index + 1 >= args.Length)
@@ -77,6 +84,7 @@ internal static class MissionEffectsTests
         harness.Run("A removed command-bar button is gone from the bar of a selected object, and comes back when the script adds it", () => RealCommandBar(data));
         harness.Run("Sciences a script hides or disables are hidden or restricted PurchaseScience buttons; an unselectable object leaves the selection", () => RealScienceAndSelection(data));
         harness.Run("A script's custom house colour and colour flash show in the object layer's frame", () => RealColorsAndFlashes(data));
+        harness.Run("The superweapon list shows every public-timer power with its owner's colour, and the scripts' switches hide it", () => RealSuperweaponList(data));
         return harness.Failures;
     }
 
@@ -192,8 +200,8 @@ internal static class MissionEffectsTests
         StepOnce(again, host);
 
         TestHarness.Assert(objects.Calls.SequenceEqual(["flash 1,1,1 5s", "flash house 3s", "color FF00FFFF"]), $"flash white, flash in the house colour and the custom colour (an ARGB integer) reach the object layer ({string.Join(" | ", objects.Calls)})");
-        TestHarness.Assert(hud.Calls.SequenceEqual(["remove Command_A TypeA", "add Command_B TypeA 3", "science SCIENCE_X Hidden", "icons False", "selectable False"]),
-            $"the HUD got the removals, the science of the local player only, the icon switch and the Selectable flag ({string.Join(" | ", hud.Calls)})");
+        TestHarness.Assert(hud.Calls.SequenceEqual(["remove Command_A TypeA", "add Command_B TypeA 3", "science SCIENCE_X Hidden", "icons False", "selectable False", "power display False"]),
+            $"the HUD got the removals, the science of the local player only, the icon switch, the Selectable flag and the superweapon list switch ({string.Join(" | ", hud.Calls)})");
         counts = host.Counts().ToDictionary(count => count.Action);
         TestHarness.Assert(counts["NAMED_FLASH_WHITE"] is { Displayed: 1 } && counts["NAMED_CUSTOM_COLOR"] is { Displayed: 1 }, "flashes and colours are displayed once the object layer acted");
         TestHarness.Assert(counts["COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE"] is { Displayed: 1 } && counts["COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT"] is { Displayed: 1 } && counts["OPTIONS_SET_DRAWICON_UI_MODE"] is { Displayed: 1 }, "the control bar and the icon switch are displayed once the HUD acted");
@@ -491,5 +499,64 @@ internal static class MissionEffectsTests
         var flashes = tints.Zip(tints.Skip(1), (a, b) => (a, b)).Count(pair => pair.b > pair.a * 1.5f && pair.b > 0.1f);
         TestHarness.Assert(tints.Max() > 0.5f && flashes == 2 && tints[^1] < 0.01f, $"one second of flashing is two flashes of the colour envelope, and the tint is gone afterwards (flashes {flashes}, max {tints.Max():F2})");
         TestHarness.Assert(!effects.Flash(new EntityId(uint.MaxValue), null, 1) && !effects.SetHouseColor(new EntityId(uint.MaxValue), 1u), "an object that does not exist is not flashed");
+    }
+
+    private static void SuperweaponDrawRules()
+    {
+        var measure = new ShellTextMeasure();
+        var owner = new PlayerId(1);
+        var own = new WndColor(10, 200, 10, 255);
+        SuperweaponLine Line(uint id, bool ready) => new(owner, new EntityId(id), "Power", "Nuke: ", ready ? "0:00" : "1:05", ready ? 0 : 65, ready);
+        ImmutableArray<UiDrawCommand> Draw(ImmutableArray<SuperweaponLine> lines, long tick, int controlBarTop = 600) => SuperweaponTimers.Draw(lines, _ => own, tick, 1000, 800, controlBarTop, measure);
+
+        var ready = Draw([Line(1, true)], 0);
+        var waiting = Draw([Line(1, false)], 0);
+        TestHarness.Assert(((UiTextDraw)ready[0]).Font.Bold && !((UiTextDraw)waiting[0]).Font.Bold, "only a ready power is bold");
+        TestHarness.Assert(((UiTextDraw)ready[0]).Color == WndColor.White && ((UiTextDraw)waiting[0]).Color == own, "a ready power starts white, a waiting one has its owner's colour");
+        TestHarness.Assert(((UiTextDraw)Draw([Line(1, true)], 14)[0]).Color == WndColor.White && ((UiTextDraw)Draw([Line(1, true)], 15)[0]).Color == own && ((UiTextDraw)Draw([Line(1, true)], 30)[0]).Color == WndColor.White,
+            "the flash changes every 15 logic frames");
+        TestHarness.Assert(SuperweaponTimers.Draw([], _ => own, 0, 1000, 800, 600, measure).IsEmpty, "no lines, no commands");
+
+        var many = Enumerable.Range(1, 40).Select(id => Line((uint)id, false)).ToImmutableArray();
+        var commands = Draw(many, 0);
+        var last = (UiTextDraw)commands[^1];
+        var limit = (int)(600 * SuperweaponTimers.BottomMargin);
+        TestHarness.Assert(last.Text == "..." && commands.Length < 80 && commands.Cast<UiTextDraw>().Take(commands.Length - 1).All(draw => draw.Y < limit), $"the list stops above the control bar with an ellipsis ({commands.Length} commands)");
+    }
+
+    private static void RealSuperweaponList(GameData data)
+    {
+        var (live, controller, _) = LoadMission(data, "Maps/GC_NukeGeneral/GC_NukeGeneral.map");
+        var text = data.LoadText("English");
+        string? Label(string label) => text.TryGet(label, out var resolved) ? resolved : null;
+        for (var frame = 0; frame < 60; frame++) controller.Update(1.0 / 30);
+
+        // GC_NukeGeneral hides the five nuclear missile launchers of the enemy general at the start (NAMED_HIDE_SPECIAL_POWER_DISPLAY).
+        var superweapons = controller.Hud.Superweapons;
+        var hidden = live.Director.SpecialPowerDisplayHidden.ToArray();
+        TestHarness.Assert(hidden.Length == 5, $"the script hid the display of five objects ({hidden.Length})");
+        TestHarness.Assert(superweapons.Collect(live.World, Label).IsEmpty, "the hidden launchers show no line");
+
+        superweapons.HiddenByScript = null;
+        var lines = superweapons.Collect(live.World, Label);
+        TestHarness.Assert(lines.Length == 5 && lines.All(line => line.Power == "SuperweaponNeutronMissile" && line.Player.Value == 2 && hidden.Contains(line.Object.Value)),
+            $"unhidden, the five launchers of player 2 show one line each: {string.Join(", ", lines.Select(line => $"{line.Object.Value}:{line.Power}"))}");
+        TestHarness.Assert(lines.All(line => line.Name.EndsWith(": ", StringComparison.Ordinal) && !line.Name.StartsWith("GUI:", StringComparison.Ordinal)), $"the name comes from the string table ({lines[0].Name})");
+        TestHarness.Assert(superweapons.MissingLabels.IsEmpty, "every label was found");
+        TestHarness.Assert(lines.All(line => line.Time == $"{line.SecondsLeft / 60}:{line.SecondsLeft % 60:00}" && line.SecondsLeft >= 0), $"the time reads m:ss ({lines[0].Time})");
+        TestHarness.Assert(lines.Select(line => line.Object.Value).SequenceEqual(lines.Select(line => line.Object.Value).OrderBy(id => id)), "the lines are in creation order");
+
+        var measure = new ShellTextMeasure();
+        WndColor Colour(PlayerId player) => new((byte)(player.Value * 10), 20, 30, 255);
+        var commands = SuperweaponTimers.Draw(lines, Colour, live.World.Tick, 1280, 720, 560, measure);
+        TestHarness.Assert(commands.Length == 10 && commands.Cast<UiTextDraw>().All(draw => draw.Color == Colour(new PlayerId(2)) || draw.Color == WndColor.White), "two texts per line, in the owner's colour");
+        var nameDraw = (UiTextDraw)commands[0];
+        var timeDraw = (UiTextDraw)commands[1];
+        TestHarness.Assert(nameDraw.X + measure.MeasureWidth(nameDraw.Text, nameDraw.Font) == (int)(0.90f * 1280) && timeDraw.X == (int)(0.90f * 1280) && timeDraw.Y == nameDraw.Y,
+            "the name ends where the time starts, at 90 % of the width");
+        TestHarness.Assert(commands.SequenceEqual(SuperweaponTimers.Draw(lines, Colour, live.World.Tick, 1280, 720, 560, measure)), "drawing is deterministic");
+
+        superweapons.DisplayEnabled = false;
+        TestHarness.Assert(superweapons.Collect(live.World, Label).IsEmpty, "DISABLE_SPECIAL_POWER_DISPLAY empties the list");
     }
 }

@@ -72,4 +72,10 @@ public interface IMissionHudControl
 
     /// <summary><c>UNIT_AFFECT_OBJECT_PANEL_FLAGS</c> "Selectable" (<c>Object::setSelectable</c>): the object can or cannot be selected by the player.</summary>
     bool SetObjectSelectable(EntityId entity, bool selectable);
+
+    /// <summary><c>DISABLE_SPECIAL_POWER_DISPLAY</c>/<c>ENABLE_SPECIAL_POWER_DISPLAY</c> (<c>InGameUI::setSuperweaponDisplayEnabledByScript</c>): the whole superweapon timer list.</summary>
+    void SetSpecialPowerDisplay(bool enabled);
+
+    /// <summary><c>NAMED_HIDE_SPECIAL_POWER_DISPLAY</c>/<c>NAMED_SHOW_SPECIAL_POWER_DISPLAY</c>: the timer of one object's superweapon. False when the object is gone.</summary>
+    bool SetObjectSpecialPowerDisplay(EntityId entity, bool visible);
 }

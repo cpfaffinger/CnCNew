@@ -28,7 +28,20 @@ public sealed class MissionController : IMissionHudControl
         Hud.MatchEnded += OnEnded;
         mission.Director.InputDisabled += OnInputDisabled;
         mission.Director.TextMeasure = textMeasure ?? new MonospaceTextMeasure();
+        Hud.Superweapons.HiddenByScript = id => _hiddenSuperweapons.Contains(id.Value);
         mission.Director.Hud = this;
+    }
+
+    private readonly HashSet<uint> _hiddenSuperweapons = [];
+
+    public void SetSpecialPowerDisplay(bool enabled) => Hud.Superweapons.DisplayEnabled = enabled;
+
+    public bool SetObjectSpecialPowerDisplay(EntityId entity, bool visible)
+    {
+        if (Mission.World.FindEntity(entity) is null) return false;
+        if (visible) _hiddenSuperweapons.Remove(entity.Value);
+        else _hiddenSuperweapons.Add(entity.Value);
+        return true;
     }
 
     // ---- IMissionHudControl: what the mission's scripts may change about the control bar and the selection (docs/SCRIPT-ENGINE.md §7a)
