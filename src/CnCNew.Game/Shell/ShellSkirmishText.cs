@@ -27,8 +27,13 @@ public sealed class ShellSkirmishText
     /// <summary><c>GUI:Closed</c>, the second entry of every opponent slot (<c>SkirmishGameOptionsMenuInit</c>).</summary>
     public string Closed => Resolve("GUI:Closed", "Closed");
 
-    /// <summary><c>GUI:EasyAI</c>, <c>GUI:MediumAI</c>, <c>GUI:HardAI</c> ("Easy Army" ...): the three computer opponents of a slot, in the original's order.</summary>
-    public ImmutableArray<string> Armies => [Resolve("GUI:EasyAI", "Easy Army"), Resolve("GUI:MediumAI", "Medium Army"), Resolve("GUI:HardAI", "Hard Army")];
+    /// <summary>
+    /// <c>GUI:MediumAI</c> ("Medium Army"): the one computer opponent a slot offers. The original lists <c>GUI:EasyAI</c>, <c>GUI:MediumAI</c> and <c>GUI:HardAI</c>
+    /// (<c>SLOT_EASY_AI/SLOT_MED_AI/SLOT_BRUTAL_AI</c>), but what tells them apart in a skirmish is the difficulty flags of the skirmish AI scripts, which this build does not run;
+    /// the data-backed difficulty bonuses (<c>Player::friend_applyDifficultyBonusesForObject</c>) apply to campaign games only. The medium entry is kept because the
+    /// simulation's one computer player corresponds to <c>DIFFICULTY_NORMAL</c> (<c>docs/SIMULATION-CORE.md</c> §35).
+    /// </summary>
+    public string ComputerArmy => Resolve("GUI:MediumAI", "Medium Army");
 
     /// <summary><c>GUI:Player</c>: the name the original puts into the player name field when the preferences hold none.</summary>
     public string Player => Resolve("GUI:Player", "Player");
