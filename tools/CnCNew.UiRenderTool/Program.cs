@@ -160,6 +160,7 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
         TransitionScenes.Capture(_data, renderer.TextMeasure, outputDirectory, (list, width, height, name) => Capture(renderer, list, width, height, name, manifest));
         ShellFlowScenes.Capture(_data, renderer.TextMeasure, outputDirectory, (list, width, height, name) => Capture(renderer, list, width, height, name, manifest));
         MissionTextScenes.Capture(_data, renderer.TextMeasure, (list, width, height, name) => Capture(renderer, list, width, height, name, manifest));
+        HudFeedbackScenes.Capture(_data, renderer.TextMeasure, (list, width, height, name) => Capture(renderer, list, width, height, name, manifest));
 
         File.WriteAllLines(Path.Combine(outputDirectory, "manifest.txt"), manifest);
         var totals = renderer.Stats;

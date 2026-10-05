@@ -310,9 +310,15 @@ erscheint als sich selbst und steht unter „problems“ (`label … has no text
 
 Alle Zeiten laufen auf der Präsentationsuhr (`MissionPresentationDirector.Clock`, Welt-Tick plus eingefrorene Schritte), also weiter bei angehaltener Zeit; im Original verringert `update` dafür `lifetime`/`blockBeginFrame`/`incrementOnFrame`
 je Bild. Der Zustand ist reine Funktion der Bilder seit dem Beginn (`UiMessageLog`, `MilitaryCaptionState` in `Shell/MissionText.cs`, ein `Update(frame)` je Schritt), die Zeichenlisten baut `MissionTextOverlay`; beide sind
-ohne Renderer und Welt testbar. **Grenzen:** das Original aktualisiert je gezeichnetem Bild, hier je Logikschritt (beim Verblassen sichtbar, nicht bei der Schreibmaschine); der Tippklick `MilitarySubtitlesTyping` wird nicht gespielt
-(`TypedCharacters` zählt für einen Host); die Letterbox-Balken sind ein Achtel der Höhe statt `(Höhe − 9/16 · Breite)/2` (bei 16:9 gar keine) und liegen unter den Texten, nicht darüber; die Befehlsrückmeldungen des HUD
-(`MatchController`-Ticker) sind keine Meldungszeilen; das Ergebnisbanner ist erfunden. **Nicht belegt:** das Aussehen im Vergleich zum Original und im Bewegtbild (`docs/TEXT-AUDIT.md` §7 Punkt 8–12), das Meldungsfenster im echten Spiel
+ohne Renderer und Welt testbar. **Grenzen:** das Original aktualisiert je gezeichnetem Bild, hier je Logikschritt (beim Verblassen sichtbar, nicht bei der Schreibmaschine);
+das Ergebnisbanner ist erfunden. **Seit dem 5. Oktober 2026 (dritte Sitzung) dem Original nachgezogen:** (1) der **Tippklick**: jedes getippte Zeichen (kein Zeilenumbruch) fragt
+`MilitarySubtitlesTyping` beim Ton des Hosts an (`InGameUI::update`: `static AudioEventRTS click("MilitarySubtitlesTyping")`); der Bericht nennt `mission caption typing: N characters typed,
+M clicks started (…)`, ohne Ton `M = 0` mit Grund. (2) die **Letterbox** nach `W3DDisplay::renderLetterBox`: zwei schwarze Rechtecke der Höhe `(Höhe − 9/16 · Breite) / 2` oben und unten
+(800x600: 75 Pixel, 1024x768: 96, 1280x1024: 152; bei 16:9 und breiter **keine**, die Rechtecke lägen außerhalb des Bildes), ihr Alpha ist die Blendstufe (`LETTER_BOX_FADE_TIME` 1000 ms,
+hier 30 Logikschritte der Präsentationsuhr), beim Ende blendet nur der **obere** Balken aus (der Aufruf für den unteren ist im Original auskommentiert, er verschwindet sofort);
+Reihenfolge wie `W3DDisplay::draw`: Meldungen, Beschriftung und Zeitgeber (`InGameUI::postDraw`), darüber die Balken, darüber der Filmtext (`MissionPresentationDirector.LetterboxBars`,
+`LetterboxFadeLevel`). Die Befehlsleiste verschwindet weiterhin sofort (`ScriptActions::doLetterBoxMode`: `HideControlBar`). (3) die **Meldungsliste** ist eine: die Zeilen des HUD
+(`HudMessageFeed`, `docs/GAME-HUD.md` §8) und `DISPLAY_TEXT` teilen sich `UiMessageLog` (`UseMessages`). **Nicht belegt:** das Aussehen im Vergleich zum Original und im Bewegtbild (`docs/TEXT-AUDIT.md` §7 Punkt 8–12), das Meldungsfenster im echten Spiel
 (keine Kampagnenkarte öffnet es in den ersten 4000 Bildern; `Training01` öffnet es erst später, bei einer Spielerhandlung), Filmtext (von keiner Karte benutzt).
 **Zähler.** Jeder Ausgabetyp hat im Katalog (`MissionOutputCatalog`) genau einen von drei Zuständen: *dargestellt* (ein Verbraucher im Client wirkt dort, wo der Spieler es sieht, hört oder dadurch
 eingeschränkt ist), *nicht dargestellt* (mit Grund, siehe unten) oder *anderswo erledigt* (die Simulation macht es selbst; nur `FREEZE_TIME`/`UNFREEZE_TIME`). Der Director zählt je Ausgabetyp `emitted`

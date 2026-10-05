@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Numerics;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
@@ -101,6 +102,25 @@ public static class SimulationQueries
             if (!satisfied) return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// The lines of a template's <c>Prerequisites</c> block the player does not meet, in file order, by the same test as <see cref="PrerequisitesSatisfied"/> but without the
+    /// <c>Ignore_Prerequisites</c> exemption (<c>ProductionPrerequisite::getRequiresList</c> does not look at it): what a description lists under "Requires".
+    /// </summary>
+    public static ImmutableArray<PrerequisiteLine> MissingPrerequisites(SimulationWorld world, PlayerId player, ObjectTemplate template)
+    {
+        var missing = ImmutableArray.CreateBuilder<PrerequisiteLine>();
+        var sciences = world.PlayerSciences(player);
+        foreach (var line in template.Prerequisites)
+        {
+            var satisfied = line.IsScience
+                ? line.Alternatives.All(name => world.Sciences.TryGet(name, out var science) && sciences.Has(science.Index))
+                : world.Entities.Any(entity => entity.Owner == player && !entity.HasStatus(ObjectStatusBits.UnderConstruction)
+                                               && line.Alternatives.Contains(entity.Template.Name, StringComparer.OrdinalIgnoreCase));
+            if (!satisfied) missing.Add(line);
+        }
+        return missing.ToImmutable();
     }
 
     /// <summary>

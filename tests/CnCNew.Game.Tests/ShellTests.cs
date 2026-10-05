@@ -89,7 +89,7 @@ internal static class ShellTests
         TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen, "OK returns to setup");
         Capture(shell, "SkirmishSetup-MapChosen", baselines, updating);
         var mapDisplay = shell.CurrentScreen.Tree.FindByName("SkirmishGameOptionsMenu.wnd:TextEntryMapDisplay")!.Text!.Value;
-        TestHarness.Assert(mapDisplay != "(no map selected)", "a map was chosen");
+        TestHarness.Assert(mapDisplay.Length > 0, "a map was chosen");
 
         Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
         TestHarness.Assert(shell.Phase == ShellPhase.MatchLoading, "Start moves to match loading");
@@ -397,7 +397,15 @@ internal static class ShellTests
         var colors = Entries("ComboBoxColor0");
         TestHarness.Assert(colors.Length == 8 && colors.SequenceEqual(["Gold", "Red", "Blue", "Green", "Orange", "Cyan", "Purple", "Pink"]), $"the colors are the multiplayer color names in file order: {string.Join(", ", colors)}");
         TestHarness.Assert(Entries("ComboBoxTeam0").SequenceEqual(["None", "1", "2", "3", "4"]), "the teams are Team:0..Team:4");
-        TestHarness.Assert(Entries("ComboBoxPlayer1")[0] == "Open", "the open slot is GUI:Open");
+        // SkirmishGameOptionsMenuInit: GUI:Open, GUI:Closed, GUI:EasyAI, GUI:MediumAI, GUI:HardAI; the second slot starts as the easy army, the name field holds GUI:Player.
+        TestHarness.Assert(Entries("ComboBoxPlayer1").SequenceEqual(["Open", "Closed", "Easy Army", "Medium Army", "Hard Army"]) && Entries("ComboBoxPlayer7").Length == 5, $"an opponent slot offers the original's five entries: {string.Join(", ", Entries("ComboBoxPlayer1"))}");
+        TestHarness.Assert(tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer1")!.ComboBox!.SelectedIndex == 2 && tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer2")!.ComboBox!.SelectedIndex == 0, "the second slot starts as the easy army, the others open");
+        TestHarness.Assert(tree.FindByName("SkirmishGameOptionsMenu.wnd:TextEntryPlayerName")!.TextEntry!.Text == "Player", "the player name is GUI:Player");
+        // getPreferredMap / getDefaultMap: without a remembered map the first multiplayer map of the catalog (lower-case path order) is chosen; the setup never says "no map".
+        var expectedMap = shell.MapCatalog.Values.Where(entry => entry.IsMultiplayer).Select(entry => entry.VirtualPath).OrderBy(path => path.Replace('/', '\\').ToLowerInvariant(), StringComparer.Ordinal).First();
+        var shownMap = tree.FindByName("SkirmishGameOptionsMenu.wnd:TextEntryMapDisplay")!.Text!.Value;
+        TestHarness.Assert(shownMap == shell.MapNames.DisplayName(expectedMap, shell.MapCatalog, shell.TextSource) && shownMap.Length > 0 && !shownMap.Contains("no map", StringComparison.OrdinalIgnoreCase), $"the default map is preselected and named: '{shownMap}' ({expectedMap})");
+        TestHarness.Assert(!shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Computer", StringComparison.Ordinal) || text.Text.Contains("o map selected", StringComparison.Ordinal)), "neither 'Computer' nor '(no map selected)' is on the screen");
         TestHarness.Assert(shell.TextSource!.RawNameHits.Count == 0, $"no label fell back to a raw name: {string.Join(", ", shell.TextSource.RawNameHits.Keys)}");
 
         shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));

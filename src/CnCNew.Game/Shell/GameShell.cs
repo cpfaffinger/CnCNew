@@ -429,6 +429,14 @@ public sealed class GameShell
 
     internal void PlaySound(string eventName) => _outputs.Add(new PlayUiSoundOutput(eventName));
 
+    /// <summary>
+    /// Computer opponents started from the skirmish setup whose chosen army (<c>GUI:EasyAI</c>, <c>GUI:MediumAI</c>, <c>GUI:HardAI</c>) made no difference: the skirmish AI of this
+    /// build has no difficulty. Counted so the gap shows in a report instead of hiding behind three equal entries.
+    /// </summary>
+    public int SkirmishDifficultyIgnored { get; private set; }
+
+    internal void CountSkirmishDifficultyIgnored(int opponents) => SkirmishDifficultyIgnored += opponents;
+
     internal void OpenOptions() => Push(new OptionsScreen(this));
     internal void OpenSkirmishSetup() => Push(new SkirmishSetupScreen(this));
     internal void OpenSkirmishMapSelect(SkirmishSetupScreen owner) => Push(new SkirmishMapSelectScreen(this, owner));

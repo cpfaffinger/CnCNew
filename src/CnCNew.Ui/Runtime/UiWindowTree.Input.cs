@@ -9,6 +9,7 @@ public sealed partial class UiWindowTree
     private UiWindow? _grab;
     private UiWindow? _openCombo;
     private long _hoverSince;
+    private bool _pointerInside;
     private int _hoverX, _hoverY;
     private UiWindow? _lastClickWindow;
     private int _lastClickRow = -1;
@@ -64,6 +65,7 @@ public sealed partial class UiWindowTree
     public bool MouseMove(int x, int y)
     {
         var target = InputTarget(x, y);
+        _pointerInside = true;
         if (_grab is not null)
         {
             if (_grab.Slider is { Dragging: true }) SetSliderFromPointer(_grab, x, y);
@@ -211,6 +213,7 @@ public sealed partial class UiWindowTree
     {
         if (_grab?.Slider is { } slider) slider.Dragging = false;
         _grab = null;
+        _pointerInside = false;
         if (_hover is null) return;
         Leave(_hover);
         _hover = null;

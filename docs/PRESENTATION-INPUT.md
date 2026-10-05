@@ -231,6 +231,8 @@ festgestellter `colorFlash`, hier `DrawableInstance.FlashTint`). Kein Modell, ke
 (`docs/CLIENT-OBJECTS.md`, `docs/GAME-HUD.md` §18). Cursor: das Original zeigt beim Platzieren **keinen** Zeiger (`Mouse::CROSS` hat in `Mouse.ini` keinen Block; mit `m_winCursors` setzt `Win32Mouse::setCursor` dann
 `SetCursor(NULL)`, der DX8-Pfad lässt den Zeiger versteckt) – unverändert (§11).
 
+`SimulationQueries.MissingPrerequisites` liefert die unerfüllten `Prerequisites`-Zeilen einer Vorlage (derselbe Test wie `PrerequisitesSatisfied`, je Zeile, ohne die
+`Ignore_Prerequisites`-Ausnahme) für die „Requires“-Zeile der Knopfbeschreibung (`docs/GAME-HUD.md` §5a).
 `SimulationQueries.CheckPlacement` ist ein Trockenlauf von `SimulationWorld.CheckConstruct` in gleicher Reihenfolge: Bauer verfügbar →
 Template bekannt → instanziierbar → baubar (`STRUCTURE`, `Buildable`, Seite) → Voraussetzungen (`Ignore_Prerequisites`) → Geld →
 `NavigationGrid.IsFootprintLegal` (Karte, Klippe, Wasser, fremde Grundfläche; **derselbe Codepfad wie die Simulation**) →

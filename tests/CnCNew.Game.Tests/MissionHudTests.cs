@@ -142,8 +142,12 @@ internal static class MissionHudTests
             TestHarness.Assert(director.InputLocked && director.Letterbox, $"the intro disables the input and opens the letterbox (locked {director.InputLocked}, letterbox {director.Letterbox}, tick {live.Tick})");
             TestHarness.Assert(Vector2.Distance(live.Camera.Pivot, start) > 100f, $"the scripted camera left the player's base (from {start} to {live.Camera.Pivot})");
             var cinematic = controller.BuildDrawList(1280, 720);
-            TestHarness.Assert(!cinematic.Commands.Any(command => command is CnCNew.Ui.Runtime.UiCustomDraw) && cinematic.Commands.OfType<CnCNew.Ui.Runtime.UiFillRect>().Count() >= 2,
-                $"during the letterbox the control bar is hidden and the bars are drawn ({cinematic.Commands.Length} commands)");
+            TestHarness.Assert(!cinematic.Commands.Any(command => command is CnCNew.Ui.Runtime.UiCustomDraw) && director.LetterboxFadeLevel == 1f,
+                $"during the letterbox the control bar is hidden ({cinematic.Commands.Length} commands, fade level {director.LetterboxFadeLevel})");
+            // W3DDisplay::renderLetterBox: the bars are what a 16:9 picture leaves free, so none at 1280x720 and 96 pixels at 1024x768.
+            TestHarness.Assert(CnCNew.Game.Shell.MissionPresentationDirector.LetterboxBars(1280, 720, director.Letterbox, director.LetterboxFadeLevel).IsEmpty
+                && director.BuildOverlayCommands(1024, 768).OfType<CnCNew.Ui.Runtime.UiFillRect>().Count(fill => fill.Rect.Width == 1024 && fill.Rect.Height == 96 && fill.Color.A == 255) == 2,
+                "no bars on the 16:9 screen, two 96-pixel bars on a 4:3 one");
 
             // A click in the middle of the screen during the cinematic: before the fix it reached the world while the camera was being moved by the script.
             var dozer = live.World.Entities.First(entity => entity.Owner == live.Human && entity.Template.IsKindOf("DOZER"));

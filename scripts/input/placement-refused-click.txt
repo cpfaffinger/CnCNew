@@ -1,0 +1,7 @@
+# Capture aid for the game's own message lines (docs/GAME-HUD.md section 8, "Meldungsliste"): as placement-refused.txt, then the click on the refused spot.
+# The capture frame of the run (--frames 100 or later, before the line has faded at about frame 345) shows "You can't build here" at the top left.
+5   look own:DOZER
+10  click left own:DOZER
+30  click left command:DozerConstruct
+50  move own:STRUCTURE
+70  click left own:STRUCTURE

@@ -132,10 +132,13 @@ Wiederverwendung eines der inerten Platzhalter).
 
 `SkirmishSetupScreen` erzeugt einen `MatchSetup` aus: Karte (`SkirmishMapSelectScreen`, nur `isMultiplayer`-Karten),
 menschliche Fraktion (`ComboBoxPlayerTemplate0`, inklusive „Random“, deterministisch über einen pro Slot festen Seed
-aufgelöst – nicht den Match-Seed), bis zu 7 Computergegner (`ComboBoxPlayer1..7` = Offen/Computer, begrenzt durch die
+aufgelöst – nicht den Match-Seed), bis zu 7 Computergegner (`ComboBoxPlayer1..7` = `GUI:Open`, `GUI:Closed`, `GUI:EasyAI`, `GUI:MediumAI`, `GUI:HardAI` wie in `SkirmishGameOptionsMenuInit`; begrenzt durch die
 Startpositionsanzahl der gewählten Karte aus `MapCache.ini`), Startkapital (`ComboBoxStartingCash` →
-`SkirmishMatchOptions.StartMoney`). Start tut ohne Karte oder ohne mindestens einen Computergegner einfach nichts
-(keine Inline-Fehlermeldung – bewusste Vereinfachung).
+`SkirmishMatchOptions.StartMoney`). Die Karte ist wie im Original vorbelegt: die zuletzt gespielte (`SkirmishMemory.LastMap`, `SkirmishPreferences::getPreferredMap`),
+sonst die erste Mehrspielerkarte des Katalogs in der Reihenfolge der kleingeschriebenen Pfade (`getDefaultMap(TRUE)`, der `MapCache` ist danach sortiert); den Text
+„(no map selected)“ gibt es nicht mehr, ohne jede Mehrspielerkarte bleibt das Namensfeld leer und die Vorschau zeigt nur ihren Rahmen. Der zweite Slot beginnt als „Easy Army“
+(das Original nimmt je nach Zahl der Siege eine stärkere; Siege werden hier nicht gezählt), das Namensfeld trägt `GUI:Player`. Start tut ohne mindestens einen Computergegner
+einfach nichts (keine Inline-Fehlermeldung – bewusste Vereinfachung).
 
 Nicht verdrahtet, weil `LiveMatch`/`SkirmishMatchOptions` es nicht unterstützen (Anfragen für eine künftige Phase):
 
@@ -144,8 +147,10 @@ Nicht verdrahtet, weil `LiveMatch`/`SkirmishMatchOptions` es nicht unterstützen
   Karten-Screens sind rein dekorativ (Klicks laufen ins Leere).
 * **Teams**: `ComboBoxTeam0..7` ist sichtbar und bedienbar, aber `SkirmishSlot.Team`/`MatchSetup` haben kein Feld dafür.
 * **Spielerfarbe**: `ComboBoxColor0..7` zeigt nur generische „Color N“-Einträge (keine echte Farbpalette angebunden).
-* **KI-Schwierigkeitsgrad**: die Skirmish-KI in diesem Stand kennt keine Schwierigkeitsachse; die Einrichtung bietet
-  daher keine an (auch `GeneralSettings.DefaultAiDifficulty` wird von der KI nicht gelesen).
+* **KI-Schwierigkeitsgrad**: die Skirmish-KI in diesem Stand kennt keine Schwierigkeitsachse. Die Einrichtung zeigt die drei Armeen des Originals
+  (`GUI:EasyAI`/`MediumAI`/`HardAI`; `GameLogic::startNewGame` macht daraus `skirmishDifficulty`), alle drei starten aber **dieselbe** KI; jeder so gestartete Gegner wird in
+  `GameShell.SkirmishDifficultyIgnored` gezählt (auch `GeneralSettings.DefaultAiDifficulty` wird von der KI nicht gelesen). Ein Mensch, der „Easy Army“ wählt, bekommt also nicht,
+  was dasteht – das ist eine offene Lücke der Simulation, kein Textproblem mehr.
 * **Spielgeschwindigkeit/Superwaffen-Limit**: `SliderGameSpeed`/`CheckboxLimitSuperweapons` sind sichtbar, aber ohne
   Wirkung.
 
@@ -400,8 +405,8 @@ Der Mensch fand die Texte „komisch“ gegenüber dem Original. Systematisch un
 zuerst den oberen Bildschirm herunter (`runShutdown`, danach versteckt), sodass Optionen, Skirmish-Einrichtung und Kampagnenbildschirme das Hauptmenü ersetzen; hier scheinen dessen Knopftexte
 („CHALLENGE“, „BACK“ …) durch die neuen Fenster, am deutlichsten in der Skirmish-Einrichtung. Dazu bräuchte der Hintergrund (Rahmen, Logo, im Original die 3D-Schattenkarte) eine eigene Ebene.
 (b) *`SinglePlayerMenu.wnd`* (Zwischenseite Neu/Laden/Zurück nach „USA“) gibt es im Original nicht (USA führt direkt in den Schwierigkeitsdialog); ihre Texte standen in Times New Roman, wie
-die Layoutdatei es vorgibt. Noch offen: (c) *Skirmish-Einrichtung*: „Computer“ und „(no map selected)“/„No map selected“ sind feste englische Wörter (kein Label; das Original kennt Easy/Medium/Hard
-Army und eine Kartenleiste), die Farb-Einträge tragen keine Farbfläche. (d) Briefing und Ladeschirm haben im Original Filmhintergründe und Fortschrittstexte, hier ein Standbild.
+die Layoutdatei es vorgibt. (c) *Skirmish-Einrichtung* – **behoben** (5. Oktober 2026): „Computer“ und „(no map selected)“/„No map selected“ sind durch die Labels und die Kartenvorbelegung des Originals ersetzt
+(Abschnitt „Skirmish-Einrichtung“ oben). Noch offen: die Farb-Einträge tragen keine Farbfläche. (d) Briefing und Ladeschirm haben im Original Filmhintergründe und Fortschrittstexte, hier ein Standbild.
 
 ## 13. Bildschirmstapel, Schwierigkeitsfrage, Ladeliste (Phase 16, Menüs)
 

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Numerics;
 using CnCNew.Game.Data;
 using CnCNew.Game.Live;
+using CnCNew.Game.Shell;
 using CnCNew.Presentation.Camera;
 using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Events;
@@ -44,20 +45,18 @@ public sealed class MatchController
 {
     private readonly HudAssets _assets;
     private readonly TooltipPainter _tooltips;
+    private readonly CommandButtonDescription _descriptions;
     private readonly UiWindowTree _tree;
     private readonly UiWindow _controlBarRoot;
     private readonly UiWindow _quitMenuRoot;
     private readonly UiWindow _leftHud;
     private readonly UiScaleOptions _scaleOptions;
     private readonly ControlBarSchemeInfo? _scheme;
-    private readonly List<(string Text, long ExpiresAtMs)> _ticker = [];
     private readonly OrderHintBook _hints = new();
     private readonly IUiTextMeasure _textMeasure;
     private ImmutableArray<SuperweaponLine> _superweaponLines = [];
     private long _superweaponTick = -1;
     private bool _superweaponEnabled = true;
-    private const long TickerLifetimeMs = 8000;
-    private const int TickerCapacity = 6;
 
     private bool _uiOwnsMouse;
     private bool _minimapPanning;
@@ -74,8 +73,10 @@ public sealed class MatchController
 
         _assets = HudAssets.Load(match.Data, language);
         _tooltips = new TooltipPainter(match.Data.Graph);
+        _descriptions = new CommandButtonDescription(match.Data.Graph, _assets.Text);
         _textMeasure = textMeasure ?? new MonospaceTextMeasure();
         TextStyle = InGameUiStyle.FromGraph(match.Data.Graph);
+        Messages = new HudMessageFeed(new UiMessageLog(TextStyle.Settings), _assets.Text, match.Data.Graph) { Clock = () => Match.Tick };
         var services = _assets.BuildTreeServices(textMeasure ?? new MonospaceTextMeasure());
         _scaleOptions = new UiScaleOptions
         {
@@ -112,6 +113,10 @@ public sealed class MatchController
 
         match.BeforeTick = world => Input.Tick(world);
         match.TickStepped += OnTickStepped;
+        match.CommandIssued += (command, result) =>
+        {
+            if (result.Accepted && command is CnCNew.Simulation.Commands.PurchaseUpgradeCommand purchase) Messages.ExpectUpgrade(purchase.Upgrade);
+        };
 
         CommandBar = Input.CommandBar!.Build(match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(match.World, match.Human);
@@ -145,6 +150,18 @@ public sealed class MatchController
 
     /// <summary>What the in-game text is drawn from: the positions and colors of <c>InGameUI.ini</c> and the fonts of <c>Language.ini</c> (the superweapon list here, the mission texts through <see cref="MissionController"/>).</summary>
     public InGameUiStyle TextStyle { get; }
+
+    /// <summary>
+    /// The message list at the top left (<c>InGameUI::message</c>): what the game tells the player about refused orders, finished buildings and upgrades, attacks and defeated
+    /// players (<see cref="HudMessageFeed"/>). The lines fade as the original's do (<see cref="UiMessageLog"/>).
+    /// </summary>
+    public HudMessageFeed Messages { get; }
+
+    /// <summary>
+    /// <see langword="true"/> (a skirmish): this HUD fades the message lines once per logic step and draws them. A mission sets it to <see langword="false"/>: its presentation director
+    /// owns the list then (it shares it with <c>DISPLAY_TEXT</c>, updates it on its own clock and draws it with the other mission texts, also while the control bar is hidden).
+    /// </summary>
+    public bool OwnsMessageList { get; set; } = true;
 
     /// <summary>The text scaling this HUD was built with (the display settings' UI scale and the accessibility text scale).</summary>
     public UiScaleOptions ScaleOptions => _scaleOptions;
@@ -331,7 +348,7 @@ public sealed class MatchController
             case "ControlBar.wnd:ButtonGeneral":
             case "ControlBar.wnd:ButtonPlaceBeacon":
             case "ControlBar.wnd:PopupCommunicator":
-                AddTicker($"{name.Split(':')[^1]} is not implemented.");
+                Messages.ClientNote($"not supported in this build: {name.Split(':')[^1]}");
                 break;
         }
     }
@@ -366,7 +383,7 @@ public sealed class MatchController
         if (!PointerOverWindow) Input.RefreshHint(Match.World, Match.Camera);
         CommandBar = Input.CommandBar!.Build(Match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(Match.World, Match.Human);
-        DrainFeedbackToTicker();
+        DrainFeedback();
         Overlay = ComputeOverlay();
         // The building follows the cursor in the world, too: the object layer draws it translucent (InGameUI::handleBuildPlacements).
         Match.PlacementGhost = !IsMenuOpen && Input.Commands.Mode == CommandModeKind.Placement ? Input.Commands.Ghost : null;
@@ -413,64 +430,28 @@ public sealed class MatchController
         };
     }
 
-    // ------------------------------------------------------------------------------------------------------------ ticker and stats
+    // ------------------------------------------------------------------------------------------------------------ messages and stats
 
-    private void DrainFeedbackToTicker()
+    private void DrainFeedback()
     {
         foreach (var feedback in Input.Commands.DrainFeedback())
         {
             CommandFeedbackObserved?.Invoke(feedback);
             _hints.Observe(feedback, _clockMs);
-            var text = feedback.Kind switch
-            {
-                FeedbackKind.Rejected => $"Rejected: {feedback.Detail}",
-                FeedbackKind.Unsupported => $"Not supported: {feedback.Detail}",
-                FeedbackKind.InvalidOrder => "Cannot do that.",
-                _ => null,
-            };
-            if (text is not null) AddTicker(text);
+            Messages.Observe(feedback);
         }
     }
 
     private void OnTickStepped(TickResult result)
     {
         Stats.Observe(result, Match.World);
-        foreach (var ev in result.Events) ObserveTickerEvent(ev);
+        foreach (var ev in result.Events) Messages.Observe(ev, Match.World, Match.Human);
+        if (OwnsMessageList) Messages.Log.Update(Match.Tick);
         if (Match.IsOver && !_matchEndedFired)
         {
             _matchEndedFired = true;
             MatchEnded?.Invoke(Stats.Snapshot(Match.Players, Match.Winner, Match.World.Tick));
         }
-    }
-
-    /// <summary>The EVA-style ticker text, derived only from <see cref="SimEvent"/>s the simulation already raises (documented in
-    /// docs/GAME-HUD.md): construction and production completion, player defeat, special power use, upgrades and rejected commands.</summary>
-    private void ObserveTickerEvent(SimEvent ev)
-    {
-        var world = Match.World;
-        string? text = ev.Kind switch
-        {
-            SimEventKind.ConstructionCompleted => world.FindEntity(ev.Entity) is { } site ? $"{site.Template.Name} construction complete" : null,
-            SimEventKind.ProductionCompleted when (uint)ev.Value < (uint)world.Templates.Templates.Length => $"{world.Templates[(int)ev.Value].Name} ready",
-            SimEventKind.PlayerDefeated => $"Player {ev.Player.Value} has been defeated",
-            SimEventKind.SpecialPowerUsed => $"{ev.Text} activated",
-            SimEventKind.UpgradeCompleted => "Upgrade complete",
-            SimEventKind.CommandRejected => "Command rejected",
-            _ => null,
-        };
-        if (text is not null) AddTicker(text);
-    }
-
-    private void AddTicker(string text)
-    {
-        _ticker.Add((text, _clockMs + TickerLifetimeMs));
-        while (_ticker.Count > TickerCapacity) _ticker.RemoveAt(0);
-    }
-
-    private ImmutableArray<string> TickerSnapshot()
-    {
-        _ticker.RemoveAll(entry => entry.ExpiresAtMs <= _clockMs);
-        return [.._ticker.Select(entry => entry.Text)];
     }
 
     // ------------------------------------------------------------------------------------------------------------ overlay
@@ -562,7 +543,7 @@ public sealed class MatchController
         }
 
         var hint = DescribeHint(Input.Hint);
-        return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, TickerSnapshot(), heals.ToImmutable(),
+        return new HudOverlay(box, selected.ToImmutable(), rally.ToImmutable(), orderLines.ToImmutable(), placement, hint, [..Messages.Log.Lines.Select(line => line.Text)], heals.ToImmutable(),
             waypointPaths.ToImmutable(), hints.ToImmutable());
 
         Vector3 OnGround(Vector2 point) => new(point.X, point.Y, Match.Heights.HeightAt(point.X, point.Y));
@@ -646,32 +627,28 @@ public sealed class MatchController
         // The world-space feedback (selection rings, health bars, orders, rally points, placement ghost, healing icons) lies between the 3D scene and the control bar chrome.
         var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BuildSchemeBackground()).AddRange(ResolveHardCodedImages(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
             .Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
+        // InGameUI::postDraw: the message lines lie over the windows.
+        if (OwnsMessageList && !Messages.Log.IsEmpty) commands = commands.AddRange(MissionTextOverlay.Messages(Messages.Log, TextStyle, _scaleOptions, _textMeasure, width, height));
         // Mouse::drawTooltip lies over everything, the window tree's own tooltips (TOOLTIPTEXT) and the command button descriptions alike.
         if (_tree.Tooltip is { } tooltip) commands = commands.AddRange(_tooltips.Build(tooltip, _tree.Viewport, _scaleOptions, _tree.Services.TextMeasure));
         return baseList with { Commands = commands };
     }
 
     /// <summary>
-    /// The description of a command button (<c>ControlBar::populateBuildTooltipLayout</c>): the translated name, the cost (<c>TOOLTIP:Cost</c>) when it
-    /// costs money, the description label, and "Insufficient funds" when the money does not suffice. The original shows these three in
-    /// <c>ControlBarPopupDescription.wnd</c>, a popup with its own draw function; here they are the lines of the pointer tooltip. Requirement and
-    /// science texts are not built. The hot key mark (<c>&amp;</c>) is dropped from the name.
+    /// The description popup of the control bar (<c>ControlBar::populateBuildTooltipLayout</c>): for a command button its name, cost, description, why it cannot be bought and what
+    /// it requires (<see cref="CommandButtonDescription"/>); for the money and the power window their two texts. The original shows them in <c>ControlBarPopupDescription.wnd</c>, a
+    /// popup with its own draw function above the control bar; here they are the lines of the pointer tooltip.
     /// </summary>
     private string? CommandButtonTooltip(UiWindow window)
     {
         const string prefix = "ControlBar.wnd:ButtonCommand";
+        if (window.Name == "ControlBar.wnd:MoneyDisplay") return _descriptions.Money().ToTooltip();
+        if (window.Name == "ControlBar.wnd:PowerWindow") return _descriptions.Power(Hud.EnergyProduction, Hud.EnergyConsumption).ToTooltip();
         if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return null;
         if (slot is < 1 or > CommandBarModel.GridSlots || CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) return null;
-        var lines = new List<string>();
-        if (button.Button.TextLabel.Length > 0) lines.Add(_assets.Text.Get(button.Button.TextLabel).Replace("&", string.Empty, StringComparison.Ordinal));
-        if (button.Cost.Raw > 0) lines.Add(_assets.Text.Format("TOOLTIP:Cost", (int)button.Cost.ToDecimal()));
-        if (button.Button.DescriptLabel.Length > 0)
-        {
-            var description = _assets.Text.Get(button.Button.DescriptLabel);
-            if (button.Cost.Raw > 0 && Hud.Money.Raw < button.Cost.Raw) description += "\n\n" + _assets.Text.Get("TOOLTIP:TooltipNotEnoughMoneyToBuild");
-            lines.Add(description);
-        }
-        return lines.Count == 0 ? null : string.Join("\n", lines);
+        var selected = Input.Selection.Selected.Select(Match.World.FindEntity).FirstOrDefault(entity => entity is not null);
+        var tooltip = _descriptions.Build(button, Match.World, Match.Human, selected).ToTooltip();
+        return tooltip.Length == 0 ? null : tooltip;
     }
 
     /// <summary>
@@ -712,6 +689,9 @@ public sealed class MatchController
             if (_scheme is { } moneyScheme)
                 moneyWindow.SetScreenRect(_controlBarRoot.Transform.Map(new WndScreenRect(moneyScheme.Money.Left, moneyScheme.Money.Top, moneyScheme.Money.Right, moneyScheme.Money.Bottom, 1920, 1080)));
         }
+        // ControlBarScheme::init puts the power window at the scheme's power bar, too: the bar is drawn there, and its description pops up there.
+        if (_scheme is { } powerScheme && _tree.FindByName("ControlBar.wnd:PowerWindow") is { } powerWindow)
+            powerWindow.SetScreenRect(_controlBarRoot.Transform.Map(new WndScreenRect(powerScheme.PowerBar.Left, powerScheme.PowerBar.Top, powerScheme.PowerBar.Right, powerScheme.PowerBar.Bottom, 1920, 1080)));
         _tree.FindByName("ControlBar.wnd:CommandWindow")!.SetHidden(view.Context is not (CommandBarContext.Command or CommandBarContext.MultiSelect));
         _tree.FindByName("ControlBar.wnd:UnderConstructionWindow")!.SetHidden(view.Context != CommandBarContext.UnderConstruction);
         var underConstructionDesc = _tree.FindByName("ControlBar.wnd:UnderConstructionDesc");

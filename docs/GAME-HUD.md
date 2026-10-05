@@ -13,7 +13,7 @@ Pro gerendertem Frame:
 
 1. `controller.Process(inputEvent)` für jedes anstehende Geräteereignis (Maus, Tastatur, Fokusverlust).
 2. `liveMatch.Advance(deltaSeconds)` (Paket-C-Vertrag, unverändert außer den unten beschriebenen additiven Erweiterungen).
-3. `controller.Update(deltaSeconds)` – wendet die Kameraabsicht an, baut `CommandBar`/`Hud` neu, aktualisiert den Ticker und das
+3. `controller.Update(deltaSeconds)` – wendet die Kameraabsicht an, baut `CommandBar`/`Hud` neu, aktualisiert die Meldungsliste und das
    `Overlay`.
 4. `controller.BuildDrawList(width, height)` – aktualisiert die Sichtbarkeit der dynamischen Fenster und liefert die fertige
    `UiDrawList` inklusive der dynamischen Cameo-/Kostüm-/Abklingzeit-Overlays.
@@ -32,7 +32,7 @@ Pro gerendertem Frame:
   `MatchController` hängt hier `Input.Tick(world)` ein (Selektion bereinigen, stehende Befehle nachführen), wie es der Vertrag von
   `GameInputController.Tick` verlangt.
 * `event Action<TickResult>? TickStepped` – nach jedem Tick mit dem Ergebnis (Zustandshash, Ereignisse). `MatchController` speist
-  hierüber `MatchStatsTracker` und den Ticker.
+  hierüber `MatchStatsTracker` und die Meldungsliste.
 
 Keines der drei Felder wird von `LiveMatch` selbst aufgerufen, wenn niemand zuhört; das Verhalten ohne `MatchController` ist
 unverändert (siehe `LiveMatchTests.cs`, weiterhin grün).
@@ -101,7 +101,7 @@ wandert (`PassSelectedButtonsToParentSystem`) bis zu `ControlBarParent.SYSTEMCAL
 | `ButtonCancelConstruction` | `CommandModeController.CancelConstruction(producer)`. |
 | `ButtonIdleWorker` | `GameInputController.DispatchMeta(MetaAction.SelectNextIdleWorker, …)`. |
 | `ButtonOptions` | öffnet das Menü (wie Esc). |
-| `ButtonGeneral`, `ButtonPlaceBeacon`, `PopupCommunicator` | nicht umgesetzt (Generalspunkte-Popup, Leuchtfeuer, Chat – außerhalb des Auftragsumfangs); erzeugen eine Ticker-Meldung „… is not implemented.“, nie einen stillen Fehlschlag. |
+| `ButtonGeneral`, `ButtonPlaceBeacon`, `PopupCommunicator` | nicht umgesetzt (Generalspunkte-Popup, Leuchtfeuer, Chat – außerhalb des Auftragsumfangs); erzeugen eine eingeklammerte Meldungszeile „(not supported in this build: …)“ (`HudMessageFeed.ClientNote`), nie einen stillen Fehlschlag. |
 
 `QuitMenuParent.SYSTEMCALLBACK = "QuitMenuSystem"` wird analog registriert (Abschnitt 4).
 
@@ -146,11 +146,41 @@ bevor sie zurückgegeben wird:
 `Mouse::drawTooltip` in Mouse.cpp): Kasten 20 Pixel rechts vom Zeiger (links bzw. über dem Zeiger am Bildrand), Umbruch bei `TooltipWidth` Prozent der
 Bildbreite, Text von links über `TooltipFillTime` eingeblendet (Hervorhebungsfarbe auf den vorderen 15 Pixeln), Stil aus dem `Mouse`-Block von `Mouse.ini`,
 Schrift `TooltipFontName` aus `Language.ini` (Arial 8) mit Auflösungsanpassung. Er erscheint, wenn der Zeiger `TOOLTIPDELAY` (sonst 800 ms) still
-über dem Fenster stand, und verschwindet bei jeder Bewegung. Die Befehlsknöpfe (`TOOLTIPDELAY = 1`) zeigen Name, Kosten (`TOOLTIP:Cost`),
-Beschreibung und bei zu wenig Geld „Insufficient funds“. **Vereinfacht:** das Original zeigt diese Beschreibung in `ControlBarPopupDescription.wnd`
-(eigene Zeichenfunktion `W3DCommandBarHelpPopupDraw`, Voraussetzungs- und Wissenschaftstexte, unterstrichener Hotkey); hier sind es die Zeilen des
-Zeigertooltips, Voraussetzungen und Wissenschaften fehlen, das `&` des Namens wird entfernt. Objekttooltips (Einheit unter dem Zeiger) und Geld-/Energie-
-Tooltips gibt es nicht.
+über dem Fenster stand, und verschwindet bei jeder Bewegung.
+
+**Beschreibung der Befehlsknöpfe** (`CommandButtonDescription`, nach `ControlBar::populateBuildTooltipLayout` in ControlBarPopupDescription.cpp und
+`ProductionPrerequisite::getRequiresList`): die drei Texte des Originalpopups – Name (`TextLabel`, ohne `&`), Kosten (`TOOLTIP:Cost`, nur wenn > 0), Beschreibung (`DescriptLabel`) – als
+Zeilen des Zeigertooltips (`TOOLTIPDELAY = 1`). An die Beschreibung hängt das Original, und jetzt auch der Client:
+
+| Fall | Text | Regel |
+|---|---|---|
+| Einheit/Gebäude, zu wenig Geld | Leerzeile, `TOOLTIP:TooltipNotEnoughMoneyToBuild` („Insufficient funds“) | `canMakeUnit` = `CANMAKE_NO_MONEY`; nur mit Beschreibungslabel und ausgewähltem Objekt |
+| Einheit/Gebäude oder Upgrade, Warteschlange voll | Leerzeile, `TOOLTIP:TooltipCannotPurchaseBecauseQueueFull` | `CANMAKE_QUEUE_FULL` bzw. `getProductionCount() == MAX_BUILD_QUEUE_BUTTONS` |
+| Voraussetzung fehlt | neue Zeile `CONTROLBAR:Requirements` („Requires: %s“) mit je einem Eintrag je unerfüllter `Prerequisites`-Zeile, durch „, “ getrennt: Anzeigename des Objekts; bei Alternativen die **letzten zwei** mit `CONTROLBAR:OrRequirement` („A or B“ – `getRequiresList` nennt nur diese beiden); bei einer Wissenschaftszeile `CONTROLBAR:GeneralsPromotion` | `getRequiresList` je Voraussetzung; `Ignore_Prerequisites` wird dort nicht beachtet |
+| Upgrade schon vorhanden (Spieler oder ausgewähltes Objekt) | `PurchasedLabel` des Knopfs, sonst `TOOLTIP:AlreadyUpgradedDefault`, **statt** der Beschreibung, ohne Kosten | `hasUpgradeComplete`/`hasUpgrade` |
+| Upgrade, Wissenschaft des Knopfs fehlt | neue Zeile „Requires: General's Promotion“ | `getScienceVec`, `hasScience` |
+| Overcharge-Knopf | neue Zeile `TOOLTIP:TooltipNukeReactorOverChargeIsOn`/`…IsOff` | `OverchargeBehaviorInterface::isOverchargeActive` |
+
+Dazu die zwei Fenster, die das Original im selben Popup beschreibt: `ControlBar.wnd:MoneyDisplay` (`CONTROLBAR:Money`, `CONTROLBAR:MoneyDescription`) und `ControlBar.wnd:PowerWindow`
+(`CONTROLBAR:Power`, `CONTROLBAR:PowerDescription` mit Erzeugung und Verbrauch des Spielers); das Energiefenster liegt jetzt wie das Geldfenster am Rechteck des Schemas
+(`ControlBarScheme::init`), dort wo der Balken gezeichnet wird. Die fehlenden Zeilen einer Vorlage liefert `SimulationQueries.MissingPrerequisites` (derselbe Test wie
+`PrerequisitesSatisfied`, je Zeile).
+
+**Ausgegraute Knöpfe erklären sich:** Die Tooltip-Suche des Originals ignoriert den Enabled-Zustand (`GameWindowManager::winProcessMouseEvent`:
+`winPointInAnyChild( x, y, TRUE, TRUE )`), die Eingabe nicht. `UiWindowTree.Tooltip` fragt deshalb zuerst das tiefste sichtbare Fenster unter dem Zeiger, wenn es (oder ein Fenster
+darüber) deaktiviert ist; vorher bekam ein deaktivierter Knopf nie einen Tooltip – genau die Knöpfe, bei denen „Requires: …“ steht. Eingabe und Hervorhebung bleiben unverändert beim
+aktivierten Fenster (`WndTests.TooltipStateMachine`).
+
+**Nebenbefund Energiefenster:** `ControlBar.wnd:PowerWindow` steht in der Layoutdatei als 100x100-Rechteck oben links (bei 1920x1080) mit `INPUTCALLBACK = GameWinBlockInput`; solange es
+dort blieb, verschluckte die HUD jeden Klick in die linke obere Bildecke (etwa 67x67 Pixel bei 1280x720). Am Schemarechteck liegt es jetzt in der Befehlsleiste. Dadurch ändert sich der
+goldene Wert `hud-drawlist-1280x720.sha256`: das Rechteck des `W3DPowerDraw`-Eintrags der Zeichenliste ist ein anderes (der Client zählt diesen Eintrag nur; den Balken zeichnet weiterhin
+`BuildDynamicCommands`).
+
+**Vereinfacht / nicht gebaut:** Das Original zeigt das alles in `ControlBarPopupDescription.wnd` (eigenes Fenster über der Befehlsleiste, eigene Zeichenfunktion
+`W3DCommandBarHelpPopupDraw`, unterstrichener Hotkey); hier bleibt es der Zeigertooltip. Es fehlen: die Texte der Wissenschaftsknöpfe (`ScienceStore::getNameAndDescription`,
+`TOOLTIP:ScienceCost` – der Client hat kein Generalspunkte-Fenster), der Text bei widersprechendem Upgrade (`ConflictingLabel`; die Simulation kennt kein `affectedByUpgrade`), die Gründe
+„Höchstzahl“ und „Flugfeld voll“ (`TooltipCannotBuild…BecauseMaximumNumber`, `…ParkingFull`), das `GeneralsExp`-Fenster, Objekttooltips (Einheit unter dem Zeiger).
+**Nicht belegt:** ob ein Mensch die Zeilen lesbar findet und ob Lage und Tempo des Tooltips taugen – nichts davon wurde gesehen.
 
 **Nicht umgesetzt** (bewusst außerhalb des Umfangs, siehe Auftrag): Beacon- und Diplomatie-Fenster, das Generalspunkte-Popup, die
 fünf `UnitUpgradeN`-Symbole (die Simulation liefert nur die Namen der abgeschlossenen Upgrades über
@@ -188,19 +218,49 @@ Skripte gegen diese Schicht).
 | `OrderHints` (`OrderHintMarker`) | `OrderHintBook` (§16): die Marken frisch erteilter Befehle mit ihrem Alter 0..1. |
 | `Placement` | `CommandModeController.Ghost` plus eine selbst berechnete Grundfläche (`Footprint`): bei `Geometry == BOX` die um `Angle` gedrehten Eckpunkte aus `GeometryMajorRadius`/`MinorRadius`, sonst ein Quadrat aus `BoundingCircleRadius` (die Simulation liefert für Nicht-Box-Geometrien keine Kantenlängen). |
 | `HintText` | grobe Textform von `GameInputController.Hint.Action` (kein String-Tabellen-Label – nur ein technischer Platzhaltertext für einen Host, der noch keine eigene Übersetzung hat). |
-| `Ticker` | Siehe unten. |
+| `Ticker` | Die Texte der Meldungsliste dieses Bildes (siehe unten); gezeichnet wird die Liste selbst, nicht dieses Feld. |
 
-### Ticker (EVA-Ersatz)
+### Meldungsliste (`InGameUI::message`, Phase 16)
 
-Es gibt keine eigene EVA-Sprachausgabe in diesem Paket; der Ticker ist eine reine Textliste (höchstens sechs Einträge, acht
-Sekunden Lebensdauer, eigene Uhr aus den `deltaSeconds`-Summen von `Update`), gespeist aus genau den Quellen, die die Simulation
-hergibt:
+**Vorher:** `MatchController` führte einen „Ticker“ mit erfundenen englischen Texten („Rejected: …“, „Cannot do that.“, „… ready“, „Command rejected“), acht Sekunden Lebensdauer – und
+**kein Zeichencode las ihn** (`HudOverlay.Ticker` hatte außerhalb von `MatchController` keinen Verbraucher). Der Spieler erfuhr also nie, warum ein Befehl nichts tat.
 
-* `CommandModeController.DrainFeedback()`: `Rejected`, `Unsupported`, `InvalidOrder`.
-* `SimEventKind.ConstructionCompleted`, `ProductionCompleted`, `PlayerDefeated`, `SpecialPowerUsed`, `UpgradeCompleted`,
-  `CommandRejected` aus `LiveMatch.TickStepped`.
+**Jetzt** gibt es wie im Original **eine** Meldungsliste (`InGameUI::m_uiMessages`, hier `UiMessageLog` aus der Missionstext-Arbeit: sechs Zeilen, `MessagePosition`/`MessageFont`/
+`MessageColor1/2` aus `InGameUI.ini`, Verblassen nach der Ganzzahlrechnung des Originals, weg nach 277 Logikbildern). `HudMessageFeed` (`CnCNew.Game/Hud`) schreibt die Zeilen des
+Spiels hinein, `DISPLAY_TEXT` der Missionsskripte die seinen – in dieselbe Liste: in einer Mission gehört sie dem Director (`MissionPresentationDirector.UseMessages`, er verblasst und
+zeichnet sie, auch während die Befehlsleiste versteckt ist), im Skirmish dem HUD (`MatchController.OwnsMessageList`, ein Update je Logikschritt, gezeichnet nach den Fenstern wie
+`InGameUI::postDraw`). Jede Zeile ist ein Label der Stringtabelle, gewählt wo das Original es wählt; ein fehlendes Label erscheint als `??Label??` und wird von `LocalizedText`
+gezählt.
 
-Jede andere `SimEventKind` wird ignoriert; es gibt keinen generischen Sammeltext.
+| Anlass | Label (englischer Text) | Quelle im Original |
+|---|---|---|
+| Produktion/Bau abgelehnt: kein Geld | `GUI:NotEnoughMoneyToBuild` („You don't have enough money to build that“) | `ControlBar::processCommandUI`, `PlaceEventTranslator::translateGameMessage` |
+| Upgrade abgelehnt: kein Geld | `GUI:NotEnoughMoneyToUpgrade` | `UpgradeCenter::canAffordUpgrade` |
+| Warteschlange voll | `GUI:ProductionQueueFull` | `ControlBar::processCommandUI` |
+| Höchstzahl erreicht (`MaxSimultaneousOfType`) | `GUI:UnitMaxedOut` | ebenda |
+| Bauplatz unerkundet | `GUI:CantBuildShroud` | `InGameUI::displayCantBuildMessage` (`LBC_SHROUD`) |
+| Bauplatz sonst abgelehnt | `GUI:CantBuildThere` | ebenda (`LBC_GENERIC_FAILURE`) |
+| Gebäude des Spielers fertig | `DOZER:ConstructionComplete` mit dem Anzeigenamen (`Object.DisplayName`, sonst `INI:MissingDisplayName`) | `DozerAIUpdate` (Abschluss der Bauaufgabe) |
+| vom Spieler bestelltes Upgrade fertig | `UPGRADE:UpgradeComplete` mit `Upgrade.DisplayName` | `ProductionUpdate::update` |
+| eigenes Objekt von einem anderen Spieler beschädigt | `RADAR:UnitUnderAttack`, `RADAR:HarvesterUnderAttack`, `RADAR:StructureUnderAttack` (Gebäude mit `MP_COUNT_FOR_VICTORY`), sonst `RADAR:UnderAttack`; höchstens eine Zeile je 250 Welteinheiten und 10 Sekunden | `Radar::tryUnderAttackEvent`, `Radar::tryEvent` |
+| Spieler besiegt (nur Skirmish) | `GUI:PlayerHasBeenDefeated` mit dem Armeenamen | `VictoryConditions::update` (läuft nur, wenn `RecorderClass::isMultiplayer`) |
+
+**Ohne Zeile, gezählt** (`HudMessageFeed.WithoutLine`, Schlüssel = Art, Wert = Anzahl): jede andere Ablehnung der Simulation (`rejected <Grund> (<Befehl>)`), ein ungültiger Befehl
+ohne Bauplatz (`invalid order` – das Original zeigt dort den Verbots-Zeiger, keinen Text), ein Upgrade ohne `DisplayName`, und Upgrades, die niemand bestellt hat
+(`upgrade granted, not ordered`: das Radar des Kommandozentrums, `GrantUpgradeCreate`, Skripte – das Ereignis der Simulation unterscheidet sie nicht von einem gekauften, deshalb merkt sich
+die Liste die angenommenen `PurchaseUpgradeCommand`s des Spielers; ohne das stand „Upgrade Complete: Radar“ am Anfang jeder Partie). **Eigene Zeile des Clients** (eingeklammert, wie
+die Sprach-/Filmplatzhalter): „(not supported in this build: …)“ für Knöpfe, deren Befehl die Simulation nicht kennt.
+
+**Vereinfacht/nicht umgesetzt:** Die Simulation meldet einen „blockierten Grundriss“, wo das Original Gelände, Neigung, Hindernisse, Versorgungsnähe und Weg unterscheidet
+(`GUI:CantBuildRestrictedTerrain` …) – alle laufen auf `GUI:CantBuildThere`. `GUI:ParkingPlacesFull`, `DOZER:RepairComplete`, `RADAR:Infiltration`, `GUI:OverchargeExhausted`,
+die Kampfplan- und Tarnungs-Meldungen, `GUI:NothingSelected`/`SelectedAcross…` und die Meldungen der Tastenkürzel (`GUI:MessagesOn` …) haben keine Quelle in diesem Stand. Der Name des
+besiegten Spielers ist der Armeename (`PlayerTemplate.DisplayName`), weil die Sitzung keine Spielernamen trägt. In den meisten Fällen verhindert schon der ausgegraute Knopf den Befehl
+(wie im Original: `getCommandAvailability` liefert `COMMAND_RESTRICTED` bei zu wenig Geld); die Ablehnungszeilen erscheinen dann nur bei Tastenkürzeln und Wettläufen.
+**Bildproben (nur selbst angesehen, keine Abnahme):** `tools/CnCNew.UiRenderTool` schreibt `hudfeedback-WxH.png` (echte Befehlsleiste, drei Meldungszeilen, Zeiger auf einem ausgegrauten
+Bauknopf mit „Requires: …“) und `hudletterbox-WxH.png` (dieselben Zeilen unter den Letterbox-Balken); der Client zeigt die Zeile im Rauchtest mit
+`--match "Maps/Alpine Assault/Alpine Assault.map" --frames 110 --input-script scripts/input/placement-refused-click.txt --capture <png>` (Klick auf das eigene Kommandozentrum:
+„You can't build here“ oben links, Vorschau rot).
+**Nicht belegt:** Aussehen, Lesbarkeit und Takt der Liste im Fenster – kein Mensch hat sie gesehen.
 
 ## 9. Kameraeinstellungen
 

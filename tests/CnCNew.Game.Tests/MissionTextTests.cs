@@ -39,6 +39,8 @@ internal static class MissionTextTests
         harness.Run("A new caption replaces the one on screen; a popup keeps its clamped placement until dismissed", ReplacementAndPopup);
         harness.Run("Fonts, sizes and positions follow the screen size and the text scale", ScalingFollowsTheScreen);
         harness.Run("A speech event shows its subtitle label as a caption for 8 seconds unless the text is missing, empty or starts with an asterisk", SpeechSubtitles);
+        harness.Run("Letterbox bars cover what a 16:9 picture leaves free (none at 16:9), fade in over a second, lie over the messages and under the cinematic text; only the top bar fades out", LetterboxFollowsTheOriginal);
+        harness.Run("Every typed character of the military caption asks the audio for the typing click; without audio the clicks are counted as not started", TypingClick);
 
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null)
@@ -49,6 +51,8 @@ internal static class MissionTextTests
             harness.Run("Real data: the MD_CHI02 reinforcement countdown stands at the named timer position", () => RealCountdown(data));
             harness.Run("Real data: the message popup is laid out by InGamePopupMessage.wnd and closed by OK, Enter and Escape", () => RealPopupWindow(data));
             harness.Run("Real data: a pausing popup stops the mission and swallows input until it is closed; one that does not pause lets the world go on", () => RealPopupInTheMission(data));
+            harness.Run("Real data: the MD_USA01 caption starts the retail typing click once per character through the real audio director", () => RealTypingClick(data));
+            harness.Run("Real data: the mission HUD's own messages share the scripts' message list and stay on screen while the control bar is hidden", () => RealSharedMessageList(data));
         }
         return harness.Failures;
     }
@@ -118,6 +122,82 @@ internal static class MissionTextTests
         for (var frame = 1; frame <= 150; frame++) mixed.Update(frame);
         mixed.Add("b", 150);
         TestHarness.Assert(mixed.Lines.Count() == 2 && mixed.Lines[0].Color.A < 255 && mixed.Lines[1].Color == Settings.MessageColor2, "a previous line that has started to fade is not MessageColor1 any more, so the next line takes MessageColor2");
+    }
+
+    /// <summary>
+    /// <c>W3DDisplay::renderLetterBox</c>: <c>drawFillRect(0, 0, w, (h - 9/16 w) / 2)</c> and the same from the bottom, with the alpha of the fade level (1000 ms); while it fades out
+    /// only the top bar is drawn. <c>W3DDisplay::draw</c> renders the bars after the in-game UI and before the cinematic text.
+    /// </summary>
+    private static void LetterboxFollowsTheOriginal()
+    {
+        var black = new WndColor(0, 0, 0, 255);
+        TestHarness.Assert(MissionPresentationDirector.LetterboxBars(800, 600, true, 1f).SequenceEqual([new UiFillRect(new UiRect(0, 0, 800, 75), black), new UiFillRect(new UiRect(0, 525, 800, 75), black)]), "800x600: two bars of (600 - 450) / 2 = 75 pixels");
+        TestHarness.Assert(MissionPresentationDirector.LetterboxBars(1024, 768, true, 1f) is [UiFillRect { Rect: { Y: 0, Height: 96 } }, UiFillRect { Rect: { Y: 672, Height: 96 } }], "1024x768: 96 pixels");
+        TestHarness.Assert(MissionPresentationDirector.LetterboxBars(1280, 1024, true, 1f) is [UiFillRect { Rect.Height: 152 }, UiFillRect { Rect: { Y: 872, Height: 152 } }], "1280x1024: 152 pixels");
+        TestHarness.Assert(MissionPresentationDirector.LetterboxBars(1280, 720, true, 1f).IsEmpty && MissionPresentationDirector.LetterboxBars(1920, 1080, true, 1f).IsEmpty, "a 16:9 screen has no bars");
+        TestHarness.Assert(MissionPresentationDirector.LetterboxBars(2560, 1080, true, 1f).IsEmpty, "a wider screen has none either (the original's rectangles lie outside the screen)");
+        TestHarness.Assert(MissionPresentationDirector.LetterboxBars(800, 600, true, 0.5f) is [UiFillRect { Color.A: 127 }, UiFillRect { Color.A: 127 }], "the fade level is the alpha: (Int)(0.5 * 255) = 127");
+        TestHarness.Assert(MissionPresentationDirector.LetterboxBars(800, 600, false, 0.5f) is [UiFillRect { Rect: { Y: 0, Height: 75 }, Color.A: 127 }], "fading out, only the top bar is drawn");
+        TestHarness.Assert(MissionPresentationDirector.LetterboxBars(800, 600, true, 0f).IsEmpty && MissionPresentationDirector.LetterboxBars(800, 600, false, 0f).IsEmpty, "nothing at level 0");
+
+        var begin = Script("Begin", If("CONDITION_TRUE"),
+        [
+            Do("CAMERA_LETTERBOX_BEGIN"), Do("DISPLAY_TEXT", Label("MAP:Line")),
+            Do("DISPLAY_CINEMATIC_TEXT", Label("MAP:Cine"), Named(MapScriptParameterType.ObjectType, "Arial - Size:12"), Int(30)),
+        ]);
+        var end = new MapScript("End", string.Empty, string.Empty, string.Empty, true, true, true, true, true, false, 0,
+            [new MapOrCondition([If("FLAG", Named(MapScriptParameterType.Flag, "end"), Bool(true))])], [Do("CAMERA_LETTERBOX_END")], []);
+        var (session, director) = Synthetic([begin, end]);
+        Step(director, session);
+        TestHarness.Assert(director.Letterbox && director.LetterboxFadeLevel == 0f, $"the letterbox begins at fade level 0 ({director.LetterboxFadeLevel})");
+        TestHarness.Assert(!director.BuildOverlayCommands(800, 600).OfType<UiFillRect>().Any(), "so nothing is drawn in its first step");
+        for (var step = 0; step < 15; step++) Step(director, session);
+        TestHarness.Assert(director.LetterboxFadeLevel == 0.5f && director.BuildOverlayCommands(800, 600).OfType<UiFillRect>().Count(fill => fill.Color.A == 127 && fill.Rect.Height == 75) == 2, $"half a second later the bars are half there ({director.LetterboxFadeLevel})");
+        for (var step = 0; step < 15; step++) Step(director, session);
+        var commands = director.BuildOverlayCommands(800, 600);
+        var bars = commands.OfType<UiFillRect>().ToArray();
+        TestHarness.Assert(director.LetterboxFadeLevel == 1f && bars.Length == 2 && bars.All(bar => bar.Color == black), "after a second they are black");
+        var message = commands.IndexOf(commands.OfType<UiTextDraw>().Single(text => text.Text == "MAP:Line"));
+        var cinematic = commands.IndexOf(commands.OfType<UiTextDraw>().Single(text => text.Text == "MAP:Cine"));
+        var firstBar = commands.IndexOf(bars[0]);
+        var lastBar = commands.IndexOf(bars[1]);
+        TestHarness.Assert(message < firstBar && lastBar < cinematic, $"the message line is drawn before the bars (they cover it), the cinematic text after them (message {message}, bars {firstBar}/{lastBar}, cinematic {cinematic})");
+        TestHarness.Assert(!director.BuildOverlayCommands(1280, 720).OfType<UiFillRect>().Any(), "the same letterbox draws no bar on a 16:9 screen");
+        for (var step = 0; step < 40; step++) Step(director, session);
+        TestHarness.Assert(director.LetterboxFadeLevel == 1f, "the level stays at 1");
+
+        session.Engine.SignalUiInteraction("end");
+        Step(director, session);
+        for (var step = 0; step < 15; step++) Step(director, session);
+        var closing = director.BuildOverlayCommands(800, 600).OfType<UiFillRect>().ToArray();
+        TestHarness.Assert(!director.Letterbox && closing is [{ Rect: { Y: 0, Height: 75 }, Color.A: 127 }], $"ended: the top bar alone fades out ({closing.Length} bars, level {director.LetterboxFadeLevel})");
+        for (var step = 0; step < 15; step++) Step(director, session);
+        TestHarness.Assert(director.LetterboxFadeLevel == 0f && !director.BuildOverlayCommands(800, 600).OfType<UiFillRect>().Any(), "and is gone a second after the end");
+    }
+
+    /// <summary><c>InGameUI::update</c> plays <c>MilitarySubtitlesTyping</c> for every character it appends to the caption (not for a line break).</summary>
+    private static void TypingClick()
+    {
+        var script = Script("Caption", If("CONDITION_TRUE"), [Do("SHOW_MILITARY_CAPTION", Label("MAP:Caption"), Int(5000))]);
+        var (session, director) = Synthetic([script], label => label == "MAP:Caption" ? "Title\nBody" : label);
+        var played = new List<(long Step, string Action, string Event)>();
+        long now = 0;
+        director.Audio = (action, name) => { played.Add((now, action, name)); return true; };
+        for (now = 1; now <= 22; now++) Step(director, session);
+        TestHarness.Assert(played.Count == 0, "no click during the start delay");
+        Step(director, session);
+        TestHarness.Assert(played is [(23, "SHOW_MILITARY_CAPTION", MissionPresentationDirector.TypingClickEvent)] && MissionPresentationDirector.TypingClickEvent == "MilitarySubtitlesTyping", "the first character clicks at frame 23");
+        for (now = 24; now <= 100; now++) Step(director, session);
+        TestHarness.Assert(played.Count == 9 && director.TypingClicks == 9 && director.TypingClicksStarted == 9, $"nine characters ('Title' and 'Body'), nine clicks, none for the line break ({played.Count}, {director.TypingClicks}, {director.TypingClicksStarted})");
+        TestHarness.Assert(played.Take(5).Select(click => click.Step).SequenceEqual([23, 25, 27, 29, 31]), "one click every second frame while a line types");
+        for (now = 101; now <= 260; now++) Step(director, session);
+        TestHarness.Assert(played.Count == 9, "no click while the caption stands or fades");
+        TestHarness.Assert(director.Report().Any(line => line == "mission caption typing: 9 characters typed, 9 clicks started (MilitarySubtitlesTyping)"), "the report names the numbers");
+
+        var (silentSession, silent) = Synthetic([script], label => label == "MAP:Caption" ? "Title\nBody" : label);
+        for (var step = 1; step <= 100; step++) Step(silent, silentSession);
+        TestHarness.Assert(silent.TypingClicks == 9 && silent.TypingClicksStarted == 0, "without audio the clicks are counted, none started");
+        TestHarness.Assert(silent.Report().Any(line => line == "mission caption typing: 9 characters typed, 0 clicks started (no audio connected)"), "and the report says why");
     }
 
     private static MilitaryCaptionState Begin(string text, long durationMs, long frame)
@@ -470,6 +550,48 @@ internal static class MissionTextTests
         TestHarness.Assert(timer!.Font == normal && timer.X + CnCNew.Ui.Rendering.UiSentenceLayout.Layout(timer.Text, timer.Font, measure, 0, false).Width == 1152 && timer.Y == 479, $"right-aligned at 0.90 of the width, 0.666 of the height, in the normal timer font ({timer.Font}, {timer.X},{timer.Y})");
         TestHarness.Assert(System.Text.RegularExpressions.Regex.IsMatch(timer.Text, @"\d+:\d\d$"), $"a countdown reads m:ss ({timer.Text})");
         TestHarness.Assert(!live.Director.Problems.Keys.Any(key => key.Contains("has no text", StringComparison.Ordinal) || key.Contains("on-screen text", StringComparison.Ordinal)), "no unresolved labels");
+    }
+
+    private static void RealTypingClick(GameData data)
+    {
+        var (live, controller) = LoadMission(data, "Maps/MD_USA01/MD_USA01.map");
+        using var audio = CnCNew.Game.Audio.GameAudio.Create(data, options: new CnCNew.Game.Audio.AudioDirectorOptions { Seed = 1 });
+        live.Director.AudioControl = audio;
+        TestHarness.Assert(data.Audio.Find(MissionPresentationDirector.TypingClickEvent) is not null, "SoundEffects.ini has the MilitarySubtitlesTyping event");
+        for (var frame = 0; frame < 190; frame++) controller.Update(1.0 / 30);
+        var director = live.Director;
+        var expected = "Somewhere in Southern KazakhstanEn route to Baikonur".Length;
+        TestHarness.Assert(director.TypingClicks == expected, $"one click asked per typed character of the two caption lines ({director.TypingClicks} of {expected})");
+        TestHarness.Assert(director.TypingClicksStarted > 0, $"the audio director starts the click ({director.TypingClicksStarted} of {director.TypingClicks} started)");
+        Console.WriteLine($"       typing clicks: {director.TypingClicks} asked, {director.TypingClicksStarted} started by the audio director");
+    }
+
+    /// <summary>
+    /// <c>InGameUI::m_uiMessages</c> is one list: the game's own messages (here a refused placement) and <c>DISPLAY_TEXT</c> lines stand in it together, and <c>InGameUI::postDraw</c>
+    /// draws it whether or not the control bar is hidden.
+    /// </summary>
+    private static void RealSharedMessageList(GameData data)
+    {
+        var (live, controller) = LoadMission(data, "Maps/MD_USA01/MD_USA01.map");
+        var director = live.Director;
+        TestHarness.Assert(ReferenceEquals(director.Messages, controller.Hud.Messages.Log) && !controller.Hud.OwnsMessageList, "the mission HUD hands its message list to the director");
+        for (var frame = 0; frame < 30; frame++) controller.Update(1.0 / 30);
+        TestHarness.Assert(director.Messages!.IsEmpty && controller.Hud.Messages.WithoutLine.ContainsKey("upgrade granted, not ordered"), "the radar the command center comes with is no 'Upgrade Complete' line (nobody ordered it)");
+        // A line of the scripts' DISPLAY_TEXT stands in the same list: the HUD's line is the next, one font height below.
+        director.Messages.Add("a line of the scripts", director.Clock);
+        controller.Hud.Messages.Message("GUI:CantBuildThere");
+        var font = controller.Hud.TextStyle.Font(InGameUiFontRole.Message, new UiViewport(1280, 720), controller.Hud.ScaleOptions);
+        var list = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(text => text.Text == "You can't build here").ToArray();
+        var index = director.Messages.Lines.Length - 1;
+        var expectedY = 22 + index * new MonospaceTextMeasure().LineHeight(font);
+        Console.WriteLine($"       shared message list: {string.Join(" | ", director.Messages.Lines.Select(entry => entry.Text))}");
+        TestHarness.Assert(director.Messages.Lines[^1].Text == "You can't build here" && list is [{ X: 10 } line] && line.Y == expectedY && line.Font == font,
+            $"the line is drawn once, by the director, as line {index} of the list from the message position in the message font ({string.Join(" | ", list.Select(draw => $"{draw.X},{draw.Y} {draw.Font}"))} vs {expectedY} {font})");
+        var before = director.Messages.Lines[^1].Color.A;
+        for (var frame = 0; frame < 150; frame++) controller.Update(1.0 / 30);
+        TestHarness.Assert(director.Messages.Lines.FirstOrDefault(entry => entry.Text == "You can't build here") is { Text: not null, Color.A: var after } && after < before, "the director fades it on its clock");
+        for (var frame = 0; frame < 200; frame++) controller.Update(1.0 / 30);
+        TestHarness.Assert(director.Messages.IsEmpty, "and removes it");
     }
 
     private static ImmutableArray<UiDrawCommand> DrawPopup(MissionPopupWindow popup) => popup.BuildCommands(1280, 720);
