@@ -6,8 +6,9 @@ Zwei Schichten:
 - `src/CnCNew.Ui/Rendering/**` – Stride-freie Logik (Fontauflösung, Textlayout, Glyph-Atlas-Packung, Clip-Stack,
   Bildrotation, Statistik). Referenziert nur `CnCNew.Ui.Layout`/`Runtime`/`Images`, keine Engine, kein Dateisystem außer
   über injizierte Schnittstellen. Unit-getestet in `tests/CnCNew.Ui.Tests/UiRenderingTests.cs`.
-- `src/CnCNew.Client.Stride/Ui/**` – die dünne Stride-Schicht: FreeType-Fontprovider über die Windows-Registry,
-  Texturcache für gemappte Bilder, Glyph-Atlas als GPU-Texturen, und `UiRenderer`, der `SpriteBatch` benutzt.
+- `src/CnCNew.Client.Stride/Ui/**` – die dünne Stride-Schicht: GDI-Fontprovider (`GdiFontProvider`, wie das Original; FreeType
+  bleibt als `UiFontBackend.FreeType` zum Vergleich), Texturcache für gemappte Bilder, Glyph-Atlas als GPU-Texturen, und
+  `UiRenderer`, der `SpriteBatch` benutzt.
 
 Verifiziert mit `tools/CnCNew.UiRenderTool` (siehe Abschnitt 5): echte Menüs aus `.local/phase2-import-a` plus
 synthetische Szenen, gerendert in vier Auflösungen, als PNG in ein Scratchpad-Verzeichnis exportiert und über zwei
@@ -29,9 +30,10 @@ Primitiven:
 - `UiImageDraw`: Auflösung über die injizierte `MappedImageTable`; `ROTATED_90_CLOCKWISE`-Bilder werden einmalig auf der
   CPU aufgerichtet (`UiImagePixels.UprightRotated`, gegen `Image::parseImageStatus`/`W3DDisplay::drawImage` geprüft) und
   als eigene kleine Textur hochgeladen. Spiegelungen über `SpriteEffects`.
-- `UiTextDraw`: Zeilenlayout aus `UiTextRuns.Layout` (ganzzahlige Advances, kein Kerning, wie
+- `UiTextDraw`: eine Zeile aus `UiTextRuns.Layout` (ganzzahlige Advances, kein Kerning, wie
   `Render2DSentenceClass::Get_Text_Extents`), Glyphen aus dem Atlas, Schattenfarbe bei (+1, +1) vor der Hauptfarbe
-  gezeichnet.
+  gezeichnet. Zeilenumbruch, Blockbreite und Zeilenposition kommen **nicht** aus dem Renderer, sondern vom Fensterbaum
+  (`UiSentenceLayout`, nach `Build_Sentence_Not_Centered`/`Build_Sentence_Centered`, `docs/TEXT-AUDIT.md` Abschnitt 2).
 - `UiPushClip`/`UiPopClip`: `UiClipStack`, Schnitt mit dem Ausgangsviewport als Boden; ein überzähliges Pop wird gezählt,
   nicht angewandt.
 - `UiCustomDraw`: der laufende Batch wird geflusht, dann ruft der Renderer `CustomDraw` (Host-Callback für Minimap,
@@ -39,33 +41,38 @@ Primitiven:
 
 ## 2. Schrift
 
-Kein `Stride.Graphics.SpriteFont` (dynamische GDI-Rasterung ist plattform-/DPI-abhängig und nicht deterministisch über
-Läufe), kein `System.Drawing`. Stattdessen FreeType über `Stride.SharpFont` (das Stride selbst mitliefert, `freetype.dll`
-liegt im `Stride.Graphics`-Paket unter `runtimes/win-x64/native` und landet automatisch im Ausgabeverzeichnis).
+Kein `Stride.Graphics.SpriteFont` und kein `System.Drawing`. Das Original rastert jedes Zeichen mit einer **GDI-Schrift**
+(`FontCharsClass::Create_GDI_Font`/`Store_GDI_Char`, render2dsentence.cpp: `CreateFont`, `ExtTextOutW` in eine 24-Bit-DIB, Breite aus
+`GetTextExtentPoint32W`); der Client macht dasselbe über P/Invoke (`GdiFontProvider`, `gdi32`/`user32`) und ist damit auf Windows die
+Vorlage selbst statt einer Annäherung. Die frühere FreeType-Fassung (91-%-Stauchung für „Generals“, ungehintete Vorschübe) ist als
+`UiFontBackend.FreeType` erhalten; `UiRenderTool --font-backend freetype` und `--font-audit` vergleichen beide (Messwerte in
+`docs/TEXT-AUDIT.md`).
 
-- **Fontauflösung** (`UiFontPolicy`): 96 DPI fest, Pixelgröße `(punkte·96+36)/72` (`MulDiv`-Rundung wie
-  `FontCharsClass::Create_GDI_Font`, render2dsentence.cpp). Der Fontname `Generals` ist im Original Arial mit
-  `lfWidth = Höhe·0,40`; da Arials mittlere Zeichenbreite 0,4414 em beträgt, entspricht das 91 % horizontaler Stauchung
-  (`UiFontPolicy.GeneralsWidthPercent`).
-- **Fontdatei-Katalog** (`FontFileCatalog`, `WindowsFontCatalog`): liest
-  `HKLM/HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts`, zerlegt Namen wie `Arial Bold (TrueType)` oder
-  `Microsoft YaHei & Microsoft YaHei UI (TrueType)`. Nur `.ttf`/`.ttc`/`.otf`; Kursivschnitte werden nie gewählt; Fett
-  ohne passenden Fettschnitt fällt auf Regular zurück (gezählt in `UiRenderer.FontSubstitutions`, einmalig auf stderr
-  gemeldet).
-- **Fallback-Kette** (`UiFontChain`): fehlt die angeforderte Familie ganz, oder fehlt einem Zeichen der Glyph, wird die
-  nächste aus `UiFontPolicy.FallbackFamilies` geöffnet (Arial, Segoe UI, Arial Unicode MS, Microsoft YaHei,
-  Malgun Gothic, Yu Gothic, MS Gothic, Segoe UI Symbol) – lazy, nur bei Bedarf. Kein Font irgendwo installiert wirft
-  `FileNotFoundException`, es gibt keinen eingebetteten Ersatz.
-- **Rasterung**: `FT_LOAD_RENDER` in einem Aufruf. Ein zweistufiges `LoadGlyph` + separates `RenderGlyph` – identisch zur
-  FreeType-Standardempfehlung und in einem isolierten Testprogramm erfolgreich – lieferte im Stride-Prozess
-  konsequent `PixelMode.None` (unberechnete Bitmap); die kombinierte Flagge ist zuverlässig in beiden Fällen und wird
-  daher durchgängig verwendet (`FreeTypeFace.Rasterize`). Ergebnis: weiße RGBA-Glyphen mit der Abdeckung in Alpha,
-  gepackt in `UiGlyphAtlas` (Shelf-Packing, deterministisch bei gleicher Aufrufreihenfolge).
-- **Bekannte Grenze**: Die Glyphen sind pixelgenau zur FreeType-Rasterung dieser Windows-Installation, nicht zur
-  originalen GDI-Rasterung von `CreateFont`/`ExtTextOut`. Kantenglättung, Hinting und Zeichenbreiten weichen in
-  Subpixel-Details vom Original ab; sichtbar wird das höchstens bei sehr kleinen Schriftgrößen. Für die tatsächlich
-  installierten Familien (Arial, Segoe UI) ist die Deckung vollständig; ein System ohne diese Familien nutzt den
-  nächsten Fallback und zählt das in `FontSubstitutions`.
+- **Fontauflösung** (`UiFontPolicy`): 96 DPI fest, Pixelhöhe `(punkte·96+36)/72` (`MulDiv`-Rundung wie `Create_GDI_Font`). Der Name
+  `Generals` ist Arial mit `lfWidth = Höhe·0,40` (`(int)(Höhe·0,40f)`); **die Breite wählt GDI selbst** (es skaliert Arial auf die
+  Durchschnittsbreite), gemessen sind das etwa 87 % der natürlichen Breite (Großbuchstaben bei 24 px: 364 statt 417 px), nicht die 91 % der
+  früheren Näherung. `UiFontSpec.WidthPercent == 91` kennzeichnet weiterhin „Generals“, für GDI zählt nur dieses Kennzeichen.
+- **Zellmaße und Vorschub** (`GdiFontFace`): Zeilenhöhe `tmHeight`, Ascent `tmAscent`, Vorschub `GetTextExtentPoint32W` je Zeichen (kein Kerning) minus
+  `tmOverhang` (0 bei „Generals“), `W` ein Pixel breiter (`xOrigin`); `PixelOverlap = Höhe/8` auf [0, 4] begrenzt, das Original addiert sie zur
+  Blockbreite (`Get_Extra_Overlap`, `UiFontFaceMetrics.Overlap`, `IUiTextMeasure.ExtraOverlap`).
+- **Deckung**: die Glyphen liegen im Original als A4R4G4B4-Textur; `pixel_value >> 4` ist das Alpha (16 Stufen), das Rasterergebnis hat also nur
+  die Werte 0, 17, …, 255. `GdiFontFace.Rasterize` bildet das nach (zugeschnitten auf die belegte Fläche, `BearingY = Ascent − oberste Zeile`).
+  Nicht nachgebildet: die ODER-Verknüpfung der `PixelOverlap` Spalten, mit der sich benachbarte Glyphen im Original überlagern (der Atlas mischt
+  über Alpha); sie betrifft nur Zeichen mit Überstand.
+- **Ersetzungen sind sichtbar**: GDI ersetzt eine fehlende Familie stillschweigend. `GdiFontProvider` prüft nach `SelectObject` mit `GetTextFace`, ob
+  die Familie wirklich die angeforderte ist; sonst probiert er `UiFontPolicy.FallbackFamilies`, meldet `angefordert → verwendet` einmal auf stderr
+  und führt es in `UiRenderer.FontSubstitutions`. Nur wenn nichts davon installiert ist, gilt GDIs Ersatz (ebenfalls gemeldet). Auf dem
+  Messrechner fehlt `Arial Unicode MS` (`UnicodeFontName`, kommt mit Office): GDI nimmt Arial, 97 verschiedene Codepunkte der englischen
+  Zeichenketten liegen bis auf drei C1-Steuerzeichen (U+0085/0093/0094, kein Glyph, Breite 0 wie im Original) alle in Arial.
+- **Fallback-Kette** (`UiFontChain`): fehlt einem Zeichen der Glyph der Familie (`GetGlyphIndicesW`), wird die nächste aus
+  `UiFontPolicy.FallbackFamilies` geöffnet (Arial, Segoe UI, Arial Unicode MS, Microsoft YaHei, Malgun Gothic, Yu Gothic, MS Gothic, Segoe UI
+  Symbol) – lazy, nur bei Bedarf; gezählt als `SubstitutedGlyphs`. Das Original nimmt für Zeichen ≥ 256 immer `UnicodeFontName`; die Kette ist
+  eine Obermenge davon.
+- **Rasterschriften**: `Courier` und `FixedSys` (Language.ini) sind Rasterschriften; GDI hat sie, FreeType hatte sie nicht (Ersatz Arial).
+- **Bekannte Grenze**: Die Pixel sind die GDI-Rasterung **dieser** Windows-Installation (Arial-Version, Hinting). Das Original lief mit der
+  Arial-Fassung seiner Zeit (2003); Unterschiede in einzelnen Vorschüben oder Kantenpixeln sind möglich und ohne Original nicht messbar.
+  `UiRenderTool` prüft bei jedem Lauf Invarianten, die auf jeder Installation gelten (`FontAudit.SelfCheck`: Familie wirklich Arial, Deckung nur in
+  17er-Stufen, Zellhöhe = Ascent + Descent, Überlappung, Generals deutlich schmaler als Arial).
 
 ## 3. Farbraum (keine Gammakorrektur)
 
@@ -79,6 +86,12 @@ eigenes `ToLinear()` hier hätte doppelt dekodiert (empirisch geprüft: führte 
 Hardware-seitige Dekodierung ausgelöst und ebenfalls abgedunkelt. Nettoeffekt der gewählten Kombination: sRGB rein,
 sRGB raus – wie die ungefärbte GDI/D3D9-Kompositierung des Originals; nur die Zwischenrechnung läuft linear, was
 weiche Kanten und durchscheinende Überlagerungen um wenige 8-Bit-Stufen von einer naiven Byte-Mischung abweichen lässt.
+**Textkanten (Phase 16):** Der Linearraum-Blend hat einen Nachteil, den das Original nicht hat: es blendet in Bytes. 50 % Deckung weißer Schrift auf Schwarz ergibt im Original Byte 128, hier 188 –
+helle Schrift wirkte fett und verwaschen (gemessen am Randpixel mit 6/15 Deckung: 170 statt 102). `UiAlphaCurves.LightOnDark` speichert deshalb für helle Schrift
+(`IsLight`: Leuchtdichte der Farbbytes ≥ ½) als Alpha `decode(Deckung)`; über Schwarz kommt dann wieder genau der Gammaraum-Wert heraus (die Randpixel sind danach die
+17er-Stufen der 4-Bit-Deckung), über nicht schwarzem Grund ist es eine Näherung. Dunkle Schrift und Schatten behalten die Deckung. Der Renderer hält dafür einen zweiten
+`UiGlyphCache` auf demselben Atlas, nur auf Geräten mit `ColorSpace.Linear`.
+
 Das Aufnahmewerkzeug (Abschnitt 5) muss dieselbe Konvention einhalten und wählt daher `_SRgb` nur für sein
 Offscreen-Render-Target, nie für die UI-eigenen Texturen (`CaptureGame.Capture`, an `GraphicsDevice.ColorSpace`
 gekoppelt).
@@ -89,7 +102,7 @@ gekoppelt).
 internal sealed class UiRenderer : IDisposable
 {
     UiRenderer(RenderServices services);                                              // aus dem Weltlayer-Setup
-    UiRenderer(GraphicsDevice, ContentFileSystem, MappedImageTable, string language);  // direkt, z. B. im Tool
+    UiRenderer(GraphicsDevice, ContentFileSystem, MappedImageTable, string language, UiFontBackend backend = UiFontBackend.Gdi);  // direkt, z. B. im Tool
 
     Action<GraphicsContext, UiCustomDraw>? CustomDraw { get; set; }
     UiTextMetrics TextMeasure { get; }     // für UiTreeServices.TextMeasure
@@ -134,6 +147,15 @@ Offscreen-`Texture`-Render-Target (kein sichtbares Fenster nötig) in vier Aufl�
   verschachtelte Clips samt überzähligem Pop, getönte/deaktivierte/gedrückte/gespiegelte Bilder, sowie eine
   rotierte Textur (`WatermarkGLA`, ein echtes `ROTATED_90_CLOCKWISE`-Bild aus `SCShellUserInterface512.INI`) neben
   einem absichtlich unbekannten Bildnamen.
+
+Phase 16 (Textvergleich, `docs/TEXT-AUDIT.md`) fügt hinzu: `--font-audit` (GDI gegen FreeType auf allen 80 Originallayouts, Glyphdeckung der
+Zeichenketten; schreibt `font-audit.txt` statt Bilder), `--font-backend gdi|freetype` (Standard `gdi`), die Selbstprüfung der GDI-Schrift zu
+Beginn jedes Laufs und die `flow-*`-Szenen (`ShellFlowScenes.cs`): Einzelspielermenü, Zeigertooltip (halb eingeblendet und fertig),
+Skirmish-Einrichtung, Kartenwahl (leer und mit Auswahl), Einrichtung mit Karte, Ladeschirm, Abschlussbildschirm nach einem kurzen Gefecht,
+Credits, Kampagnenbildschirm, Schwierigkeitsdialog, Briefing (Anfang und später). `scripts/capture-text.ps1` fährt alles inklusive der
+Client-Szenen `hud-money` und `hud-tooltip` (Eingabeskript) in 1280x720 und 1920x1080 und schreibt die Pixel-Prüfsummen (96 Bilder, zwei Läufe
+identisch). Lauf vom 5. Oktober 2026: `commands=20997 sprites=44459 drawCalls=3735 batches=1368 missingImages=12 missingTextures=0 missingLabels=12 missingGlyphs=0
+substitutedGlyphs=12 customDraws=56 unbalancedClips=4`, eine Textur mit abweichender Größe (`WarSchoolBar.tga`, Datei 512x512, Tabelle 1.024x1.024; gezählt, Quellrechtecke skaliert).
 
 Seit der ersten Sichtprüfung der Hülle (`docs/GAME-SHELL.md` §11) kommen dazu:
 

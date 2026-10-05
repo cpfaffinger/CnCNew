@@ -30,6 +30,7 @@ public static class TextAndSettingsTests
             ("FormatterHandlesTheGamesPrintfSubset", FormatterHandlesTheGamesPrintfSubset),
             ("LanguageCatalogResolvesWithoutFileSystem", LanguageCatalogResolvesWithoutFileSystem),
             ("LanguageIniIsTypedFromTheGraph", LanguageIniIsTypedFromTheGraph),
+            ("MouseTooltipSettingsAreTypedFromTheGraph", MouseTooltipSettingsAreTypedFromTheGraph),
             ("MappedImagesAreTypedFromTheGraph", MappedImagesAreTypedFromTheGraph),
             ("MappedImageErrorsAreExplicit", MappedImageErrorsAreExplicit),
             ("MappedImageTexturesAreResolvedByDelegate", MappedImageTexturesAreResolvedByDelegate),
@@ -240,6 +241,21 @@ public static class TextAndSettingsTests
         Throws<FormatException>(() => GlobalLanguageSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/English/Language.ini"] = "Language\n  Bogus = 1\nEnd\n" })), "not a key");
         Throws<FormatException>(() => GlobalLanguageSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/English/Language.ini"] = "Language\n  MessageFont = Arial Yes\nEnd\n" })), "must be");
         Throws<InvalidDataException>(() => GlobalLanguageSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/Mouse.ini"] = "Mouse\nEnd\n" })), "no 'Language' block");
+    }
+
+    private static void MouseTooltipSettingsAreTypedFromTheGraph()
+    {
+        const string ini = "Mouse\n  TooltipFontName = Arial\n  TooltipFontSize = 8\n  TooltipFontIsBold = No\n  TooltipAnimateBackground = No ; scroll out\n"
+            + "  TooltipFillTime = 250\n  TooltipDelayTime = 800\n  TooltipTextColor = R:220 G:220 B:220 A:255\n  TooltipHighlightColor = R:255 G:255 B:0 A:255\n"
+            + "  TooltipShadowColor = R:0 G:0 B:0 A:255\n  TooltipBorderColor = R:60 G:60 B:155 A:255\n  TooltipBackgroundColor = R:20 G:20 B:20 A:128\n"
+            + "  TooltipWidth = 20\n  OrthoCamera = Yes\n  DragTolerance = 25\nEnd\n";
+        var settings = MouseTooltipSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/Mouse.ini"] = ini }));
+        Assert(settings.Font == new FontDescription("Arial", 8, false) && !settings.AnimateBackground, "Font and animation flag.");
+        Assert(settings.FillTimeMilliseconds == 250 && settings.DelayMilliseconds == 800 && settings.WidthFraction == 0.2m, "Times and the width percentage become a fraction.");
+        Assert(settings.TextColor.R == 220 && settings.HighlightColor.G == 255 && settings.BorderColor.B == 155 && settings.BackgroundColor.A == 128, "Colors are R:n G:n B:n A:n.");
+        Throws<FormatException>(() => MouseTooltipSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/Mouse.ini"] = ini.Replace("TooltipWidth = 20\n", string.Empty, StringComparison.Ordinal) })), "no TooltipWidth");
+        Throws<FormatException>(() => MouseTooltipSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/Mouse.ini"] = ini.Replace("R:20 G:20 B:20", "R:20 G:20", StringComparison.Ordinal) })), "Malformed color");
+        Throws<InvalidDataException>(() => MouseTooltipSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/English/Language.ini"] = "Language\nEnd\n" })), "no 'Mouse' block");
     }
 
     // ------------------------------------------------------------------------------------------------------ images

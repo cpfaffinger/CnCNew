@@ -14,7 +14,7 @@ namespace CnCNew.Client.Stride.Ui;
 /// Draws <see cref="UiDrawList"/>s (and the same primitives directly, for the HUD) with one Stride <see cref="SpriteBatch"/>:
 /// fills, borders, mapped images and text all become textured quads in draw order with straight-alpha blending, so later
 /// commands lie on top exactly as in the list. Clips are scissor rectangles; a clip change ends the current batch and begins
-/// the next, draws that lie wholly inside their clip keep the running batch. Text comes from <see cref="FreeTypeFontProvider"/>
+/// the next, draws that lie wholly inside their clip keep the running batch. Text comes from <see cref="GdiFontProvider"/>
 /// glyphs in an atlas (<see cref="UiGlyphCache"/>), drawn 1:1 at integer positions. Everything that cannot be drawn as asked
 /// (unknown image, missing texture page, unresolved label, missing glyph) gets a visible placeholder and is counted in
 /// <see cref="Stats"/>; nothing is dropped silently. See <c>docs/CLIENT-UI-RENDERING.md</c>.
@@ -27,10 +27,11 @@ internal sealed class UiRenderer : IDisposable
     private static readonly WndColor PlaceholderLine = new(255, 0, 255, 255);
 
     private readonly GraphicsDevice _device;
-    private readonly FreeTypeFontProvider _fonts;
+    private readonly IUiFontSource _fonts;
     private readonly AtlasPageTextures _pageTextures;
     private readonly UiGlyphAtlas _atlas;
     private readonly UiGlyphCache _glyphs;
+    private readonly UiGlyphCache? _glyphsLightOnDark;
     private readonly UiImageTextures _images;
     private readonly MappedImageTable _imageTable;
     private readonly SpriteBatch _batch;
@@ -51,15 +52,17 @@ internal sealed class UiRenderer : IDisposable
     {
     }
 
-    public UiRenderer(GraphicsDevice device, ContentFileSystem content, MappedImageTable images, string language)
+    public UiRenderer(GraphicsDevice device, ContentFileSystem content, MappedImageTable images, string language, UiFontBackend backend = UiFontBackend.Gdi)
     {
         _device = device;
         _imageTable = images;
-        _fonts = new FreeTypeFontProvider();
+        _fonts = backend == UiFontBackend.Gdi ? new GdiFontProvider() : new FreeTypeFontProvider();
         TextMeasure = new UiTextMetrics(_fonts);
         _pageTextures = new AtlasPageTextures(device);
         _atlas = new UiGlyphAtlas(AtlasPageSize, _pageTextures);
         _glyphs = new UiGlyphCache(_atlas);
+        // The original blends text in gamma space; a linear-light device needs another alpha for light text (UiAlphaCurves).
+        _glyphsLightOnDark = device.ColorSpace == ColorSpace.Linear ? new UiGlyphCache(_atlas, UiAlphaCurves.LightOnDark) : null;
         _images = new UiImageTextures(device, content, images, language);
         _batch = new SpriteBatch(device);
         Images = new MappedImageLookup(images);
@@ -278,10 +281,11 @@ internal sealed class UiRenderer : IDisposable
     private void DrawGlyphs(UiFontSpec spec, IUiFontFace face, List<UiGlyphPlacement> placements, int x, int baseline, WndColor color, UiRect clip, UiRect bounds)
     {
         var tint = ToColor(color);
+        var cache = _glyphsLightOnDark is not null && UiAlphaCurves.IsLight(color) ? _glyphsLightOnDark : null;
         SelectScissor(bounds.IsInside(clip) ? _bounds : clip);
         foreach (var placement in placements)
         {
-            var glyph = _glyphs.Get(spec, face, placement.Codepoint);
+            var glyph = (cache ?? _glyphs).Get(spec, face, placement.Codepoint);
             if (glyph.IsMissing) _frame.MissingGlyph(placement.Codepoint);
             if (glyph.IsSubstituted) _frame.SubstitutedGlyphs++;
             if (glyph.Region is not { } region) continue;

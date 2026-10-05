@@ -22,6 +22,7 @@ public static class UiRenderingTests
         Test(AtlasPacksDeterministicallyWithoutOverlap);
         Test(AtlasRejectsImagesLargerThanAPage);
         Test(GlyphCacheRasterizesOnceAndStoresCoverageAsAlpha);
+        Test(LightTextGetsTheGammaSpaceAlphaCurve);
         Test(ClipStackIntersectsAndCountsUnderflow);
         Test(RotatedImagesAreTurnedUpright);
         Test(TextRunsPlaceGlyphsOnTheBaseline);
@@ -152,6 +153,33 @@ public static class UiRenderingTests
         Throws<ArgumentOutOfRangeException>(() => atlas.Add(10, 64, new byte[10 * 64 * 4]));
         Throws<ArgumentException>(() => atlas.Add(4, 4, new byte[3]));
         atlas.Add(63, 50, new byte[63 * 50 * 4]);
+    }
+
+    private static void LightTextGetsTheGammaSpaceAlphaCurve()
+    {
+        var curve = UiAlphaCurves.LightOnDark;
+        Check(curve.Length == 256 && curve[0] == 0 && curve[255] == 255, "The curve keeps the ends.");
+        for (var i = 1; i < 256; i++) Check(curve[i] >= curve[i - 1], "The curve is monotonic.");
+        // 50 % coverage of white on black is byte 128 in a gamma-space blend; the linear-light device encodes alpha again, so the stored alpha is decode(128 / 255).
+        Check(curve[128] is >= 53 and <= 56, $"decode(0.5) is 0.2140 (alpha {curve[128]}).");
+        // A linear-light blend of that alpha over black encodes back to the coverage (within one step of rounding).
+        for (var i = 59; i < 256; i += 17)
+        {
+            var linear = curve[i] / 255.0;
+            var encoded = linear <= 0.0031308 ? linear * 12.92 : 1.055 * Math.Pow(linear, 1 / 2.4) - 0.055;
+            Check(Math.Abs(encoded * 255.0 - i) <= 2.5, $"coverage {i}: re-encoded {encoded * 255.0:F1}");
+        }
+        Check(UiAlphaCurves.IsLight(new WndColor(255, 255, 255, 255)) && UiAlphaCurves.IsLight(new WndColor(209, 218, 255, 255)) && UiAlphaCurves.IsLight(new WndColor(220, 220, 220, 255)),
+            "White and pale colors are light text.");
+        Check(!UiAlphaCurves.IsLight(new WndColor(0, 0, 0, 255)) && !UiAlphaCurves.IsLight(new WndColor(0, 0, 128, 255)) && !UiAlphaCurves.IsLight(new WndColor(60, 60, 155, 255)),
+            "Black and dark blue are dark text.");
+
+        var sink = new MemorySink();
+        var cache = new UiGlyphCache(new UiGlyphAtlas(256, sink), curve);
+        var glyph = cache.Get(new UiFontSpec("Arial", 16, false, 100), new FakeFace("f", 16, _ => true), 'A');
+        var region = glyph.Region!.Value;
+        var offset = (region.Y * 256 + region.X) * 4;
+        Check(sink.Pages[region.Page][offset + 3] == curve['A' % 251 + 1], "The cache stores the mapped alpha.");
     }
 
     private static void GlyphCacheRasterizesOnceAndStoresCoverageAsAlpha()

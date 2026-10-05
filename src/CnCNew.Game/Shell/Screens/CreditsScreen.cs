@@ -1,3 +1,4 @@
+using CnCNew.Game.Data;
 using CnCNew.Ui.Runtime;
 
 namespace CnCNew.Game.Shell.Screens;
@@ -29,7 +30,18 @@ public sealed class CreditsScreen : ShellScreen
     }
 
     public override UiDrawList BuildDrawList()
-        => ShellCustomDraw.ExpandCredits(Tree.BuildDrawList(), new ShellCreditsContext(Shell.Credits, (int)_scrollPixels, Shell.TextSource), Tree.Services.TextMeasure);
+        => ShellCustomDraw.ExpandCredits(Tree.BuildDrawList(), new ShellCreditsContext(Shell.Credits, (int)_scrollPixels, Shell.TextSource, Fonts()), Tree.Services.TextMeasure);
+
+    /// <summary>Credits.cpp: CreditsTitleFont for TITLE, CreditsMinorTitleFont for MINORTITLE, CreditsNormalFont for NORMAL and COLUMN, each at the adjusted size.</summary>
+    private CreditsFonts Fonts()
+    {
+        _languageFonts ??= LanguageFonts.FromGraph(Shell.Data.Graph);
+        return new CreditsFonts(_languageFonts.Resolve("CreditsTitleFont", Shell.Viewport, Shell.ScaleOptions),
+            _languageFonts.Resolve("CreditsMinorTitleFont", Shell.Viewport, Shell.ScaleOptions),
+            _languageFonts.Resolve("CreditsNormalFont", Shell.Viewport, Shell.ScaleOptions));
+    }
+
+    private LanguageFonts? _languageFonts;
 
     private void OnInput(UiWindowTree tree, UiEvent e)
     {

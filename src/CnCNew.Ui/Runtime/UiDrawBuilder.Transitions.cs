@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CnCNew.Ui.Layout;
+using CnCNew.Ui.Rendering;
 using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Ui.Runtime;
@@ -46,20 +47,18 @@ public sealed partial class UiWindowTree
             var area = centered ? window.Rect : UiRect.FromEdges(Math.Min(window.Rect.Right, window.Rect.X + margin), window.Rect.Y, window.Rect.Right, window.Rect.Bottom);
             var alignment = centered ? UiTextAlignment.Center : UiTextAlignment.Left;
             var measure = tree.Services.TextMeasure;
-            var lines = UiTextLayout.Wrap(text, window.Rect.Width - window.Transform.X.Length(10), window.Font, measure);
-            var lineHeight = measure.LineHeight(window.Font);
-            var y = area.Y + area.Height / 2 - lines.Length * lineHeight / 2;
-            var widths = lines.Select(line => measure.MeasureWidth(line, window.Font)).ToArray();
-            var block = widths.Length == 0 ? 0 : widths.Max();
             var wrapCentered = (window.Status & WndStatus.WrapCentered) != 0;
-            for (var index = 0; index < lines.Length; index++, y += lineHeight)
+            var sentence = UiSentenceLayout.Layout(text, window.Font, measure, window.Rect.Width - window.Transform.X.Length(10), wrapCentered);
+            var lineHeight = measure.LineHeight(window.Font);
+            var y = area.Y + area.Height / 2 - sentence.Height / 2;
+            var left = alignment == UiTextAlignment.Left ? area.X : area.X + area.Width / 2 - sentence.Width / 2;
+            for (var index = 0; index < sentence.Lines.Length; index++, y += lineHeight)
             {
-                if (lines[index].Length == 0) continue;
-                var x = alignment == UiTextAlignment.Left ? area.X
-                    : wrapCentered ? area.X + area.Width / 2 - widths[index] / 2
-                    : area.X + area.Width / 2 - block / 2;
-                _commands.Add(new UiTextDraw(lines[index], null, window.Font, color, shadow, x, y, alignment, window.Rect));
+                var line = sentence.Lines[index];
+                if (line.Text.Length == 0) continue;
+                _commands.Add(new UiTextDraw(line.Text, null, window.Font, color, shadow, left + line.X, y, alignment, window.Rect));
             }
+
             return _commands.ToImmutable();
         }
     }

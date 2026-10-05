@@ -49,6 +49,8 @@ public sealed class UiTextMetrics(IUiFontProvider provider) : IUiTextMeasure, ID
 
     public int LineHeight(UiFont font) => Face(font).Metrics.LineHeight;
 
+    public int ExtraOverlap(UiFont font) => Face(font).Metrics.Overlap;
+
     public void Dispose()
     {
         foreach (var face in _faces.Values) face.Dispose();

@@ -32,6 +32,8 @@ public sealed class SkirmishSetupScreen : ShellScreen
         _factionChoices = [.. Shell.Data.Factions.Where(p => p.Faction.PlayableSide).Select(p => p.Faction.Name)
             .Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal), "Random"];
         _startMoney = MoneyChoices.Contains(Shell.Settings.Skirmish.LastStartMoney) ? Shell.Settings.Skirmish.LastStartMoney : MoneyChoices[1];
+        var names = new ShellSkirmishText(Shell.Data.Graph, Shell.TextSource);
+        var colors = names.ColorNames();
 
         Tree.Register("SkirmishGameOptionsMenuSystem", OnSystem);
         Tree.Register("SkirmishGameOptionsMenuInput", OnInput);
@@ -40,18 +42,17 @@ public sealed class SkirmishSetupScreen : ShellScreen
         for (var slot = 0; slot < Slots; slot++)
         {
             var template = W($"ComboBoxPlayerTemplate{slot}");
-            foreach (var name in _factionChoices) template.AddComboEntry(name);
+            foreach (var name in _factionChoices) template.AddComboEntry(name == "Random" ? names.Random : names.Faction(name));
             template.SetComboSelection(0);
             var color = W($"ComboBoxColor{slot}");
-            for (var index = 0; index < Slots; index++) color.AddComboEntry($"Color {index + 1}");
-            color.SetComboSelection(slot);
+            foreach (var colorName in colors) color.AddComboEntry(colorName);
+            color.SetComboSelection(Math.Min(slot, colors.Length - 1));
             var team = W($"ComboBoxTeam{slot}");
-            team.AddComboEntry("None");
-            for (var index = 1; index <= 4; index++) team.AddComboEntry(index.ToString());
+            for (var index = 0; index <= 4; index++) team.AddComboEntry(names.Team(index));
             team.SetComboSelection(0);
             if (slot == 0) continue;
             var player = W($"ComboBoxPlayer{slot}");
-            player.AddComboEntry("Open");
+            player.AddComboEntry(names.Open);
             player.AddComboEntry("Computer");
             player.SetComboSelection(0);
         }

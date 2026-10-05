@@ -52,6 +52,9 @@ internal static class ShellTests
         harness.Run("Buttons draw hilite and pushed images under the pointer and drop them when it leaves", () => ButtonStates(data));
         harness.Run("Options: sliders draw their boxes and drag, static texts have no hover fill", () => OptionsSlidersAndLabels(data));
         harness.Run("Quit dialog text takes the header template size, not the 1920x1080 layout scale", () => QuitDialogFonts(data));
+        harness.Run("Skirmish setup and options show localized words, not internal names or the layout's placeholders", () => LocalizedSetupText(data));
+        harness.Run("A window with TOOLTIPTEXT shows the pointer tooltip after the delay with the Mouse.ini style", () => PointerTooltip(data));
+        harness.Run("Credits lines use the Language.ini credits fonts at the adjusted size", () => CreditsFonts(data));
 
         if (updating) SaveBaselines(baselines);
         return harness.Failures;
@@ -223,6 +226,71 @@ internal static class ShellTests
         shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(4, 4)));
         TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && tree.AllWindows.All(window => !window.IsHilited && !(window.Type == WndWindowType.PushButton && window.IsSelected)),
             "no main menu window is hilited or pressed with the pointer away");
+    }
+
+    /// <summary>
+    /// The skirmish setup listed the internal template names (<c>FactionAmerica</c>), <c>Color 1</c> and <c>None</c>; the original lists
+    /// <c>PlayerTemplate.DisplayName</c> labels (<c>INI:FactionAmerica</c> = "USA"), <c>MultiplayerColor.TooltipName</c> labels (<c>Color:Gold</c>) and
+    /// <c>Team:n</c>. The options menu showed the word "Entry" (the layout's TEXT of the two network entry fields) where OptionsMenuInit puts values.
+    /// </summary>
+    private static void LocalizedSetupText(GameData data)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-shell-tests-" + Guid.NewGuid().ToString("N"));
+        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonSkirmish");
+        var tree = shell.CurrentScreen.Tree;
+        string[] Entries(string name) => [.. tree.FindByName($"SkirmishGameOptionsMenu.wnd:{name}")!.ComboBox!.Entries];
+        var armies = Entries("ComboBoxPlayerTemplate0");
+        foreach (var expected in new[] { "USA", "China", "GLA", "Random" })
+            TestHarness.Assert(armies.Contains(expected), $"the army list has '{expected}': {string.Join(", ", armies)}");
+        TestHarness.Assert(armies.All(name => !name.StartsWith("Faction", StringComparison.Ordinal)), $"no internal template name in the army list: {string.Join(", ", armies)}");
+        var colors = Entries("ComboBoxColor0");
+        TestHarness.Assert(colors.Length == 8 && colors.SequenceEqual(["Gold", "Red", "Blue", "Green", "Orange", "Cyan", "Purple", "Pink"]), $"the colors are the multiplayer color names in file order: {string.Join(", ", colors)}");
+        TestHarness.Assert(Entries("ComboBoxTeam0").SequenceEqual(["None", "1", "2", "3", "4"]), "the teams are Team:0..Team:4");
+        TestHarness.Assert(Entries("ComboBoxPlayer1")[0] == "Open", "the open slot is GUI:Open");
+        TestHarness.Assert(shell.TextSource!.RawNameHits.Count == 0, $"no label fell back to a raw name: {string.Join(", ", shell.TextSource.RawNameHits.Keys)}");
+
+        shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonOptions");
+        foreach (var name in new[] { "TextEntryHTTPProxy", "TextEntryFirewallPortOverride" })
+            TestHarness.Assert(shell.CurrentScreen.Tree.FindByName($"OptionsMenu.wnd:{name}")!.TextEntry!.Text.Length == 0, $"{name} starts empty, not with the layout's word 'Entry'");
+    }
+
+    /// <summary>
+    /// Credits.cpp draws TITLE lines in <c>CreditsTitleFont</c> (Arial 22), MINORTITLE in <c>CreditsMinorTitleFont</c> (Arial 16 bold) and NORMAL in
+    /// <c>CreditsNormalFont</c> (Arial 14), each through <c>adjustFontSize</c>; the shell used to draw Arial 24 bold / 16 bold / 12.
+    /// </summary>
+    private static void CreditsFonts(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonCredits");
+        for (var i = 0; i < 400; i++) shell.Update(0.05);
+        var fonts = shell.BuildDrawList().Commands.OfType<UiTextDraw>().Select(text => text.Font).Where(font => font.Name == "Arial").Distinct().ToArray();
+        TestHarness.Assert(fonts.Length > 0, "credits lines are on screen after 20 seconds of scrolling");
+        // 1280x720 Uniform: the 800x600 scale is 1.2; sizes are the point sizes of Language.ini times 1.2, floored.
+        var allowed = new[] { new UiFont("Arial", 26, false), new UiFont("Arial", 19, true), new UiFont("Arial", 16, false) };
+        TestHarness.Assert(fonts.All(allowed.Contains), $"only the three credits fonts appear: {string.Join(", ", fonts)}");
+    }
+
+    private static void PointerTooltip(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        var button = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonUSA")!;
+        TestHarness.Assert(button.Definition.TooltipText is { Length: > 0 }, "the USA button carries a TOOLTIPTEXT");
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(button.Rect.CenterX, button.Rect.CenterY)));
+        TestHarness.Assert(!shell.BuildDrawList().Commands.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "no tooltip before the delay");
+        shell.Update(2.0);
+        var commands = shell.BuildDrawList().Commands;
+        var fill = commands.OfType<UiFillRect>().Last(rect => rect.Color == new WndColor(20, 20, 20, 255));
+        TestHarness.Assert(commands.OfType<UiBorderRect>().Any(border => border.Rect == fill.Rect && border.Color == new WndColor(60, 60, 155, 255)), "the box has the Mouse.ini border color");
+        shell.TextSource!.TryResolve(button.Definition.TooltipText!, out var expected);
+        var shown = string.Join(" ", commands.OfType<UiTextDraw>().Where(text => text.Color == new WndColor(220, 220, 220, 255)).Select(text => text.Text.Trim()));
+        TestHarness.Assert(shown == string.Join(" ", expected.Split(' ', StringSplitOptions.RemoveEmptyEntries)), $"the tooltip shows the resolved label text: '{shown}'");
+        TestHarness.Assert(fill.Rect.X > button.Rect.CenterX && fill.Rect.Y >= button.Rect.CenterY - 1, "the box sits right of and below the pointer");
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(2, 2)));
+        TestHarness.Assert(!shell.BuildDrawList().Commands.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "leaving the window hides it");
     }
 
     private static void OptionsSlidersAndLabels(GameData data)

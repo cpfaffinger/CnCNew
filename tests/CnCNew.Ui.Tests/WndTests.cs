@@ -874,9 +874,15 @@ public static class WndTests
         Check(tree.Tooltip is null, "Tooltip must wait for the Mouse.ini delay.");
         tree.AdvanceTo(1800);
         Check(tree.Tooltip == new UiTooltip("T.wnd:Default", "TOOLTIP:Default", "TOOLTIP:Default", 50, 20), $"Unresolved label tooltip: {tree.Tooltip}");
+        tree.MouseMove(60, 20);
+        Check(tree.Tooltip is null, "Moving the pointer hides the tooltip and restarts the delay (the pointer must be still).");
+        tree.AdvanceTo(2599);
+        Check(tree.Tooltip is null, "The restarted delay has not passed.");
+        tree.AdvanceTo(2650);
+        Check(tree.Tooltip is { AgeMs: 50 }, $"The age counts from the end of the delay: {tree.Tooltip}");
         tree.MouseMove(50, 60);
         Check(tree.Tooltip is null, "Changing the window restarts the delay.");
-        tree.AdvanceTo(1900);
+        tree.AdvanceTo(2750);
         Check(tree.Tooltip?.Text == "Quick", "TOOLTIPDELAY 100 and resolved label.");
         tree.MouseMove(50, 100);
         tree.AdvanceTo(5000);
@@ -934,13 +940,14 @@ public static class WndTests
             image Background 0,0 800x600 tint 255,255,255,255
             border 100,100 200x40 93,94,95,255
             fill 101,101 198x38 90,91,92,255
-            text "OK" key=GUI:Ok font=Arial/10 color=255,255,0,255 shadow=0,0,0,255 at 195,114 center clip 100,100 200x40
-            text "Hello wide" key=GUI:Label font=Arial/10 color=255,255,255,255 shadow=0,0,0,255 at 105,208 center clip 100,200 60x40
-            text "world" key=GUI:Label font=Arial/10 color=255,255,255,255 shadow=0,0,0,255 at 118,220 center clip 100,200 60x40
+            text "OK" key=GUI:Ok font=Arial/10 color=255,255,0,255 shadow=0,0,0,255 at 195,114 center clip 0,0 800x600
+            text "Hello" key=GUI:Label font=Arial/10 color=255,255,255,255 shadow=0,0,0,255 at 115,202 center clip 100,200 60x40
+            text "wide" key=GUI:Label font=Arial/10 color=255,255,255,255 shadow=0,0,0,255 at 117,214 center clip 100,200 60x40
+            text "world" key=GUI:Label font=Arial/10 color=255,255,255,255 shadow=0,0,0,255 at 117,226 center clip 100,200 60x40
             border 100,303 24x24 10,11,12,255
             fill 101,304 22x22 7,8,9,255
             fill 106,309 12x12 255,255,255,255
-            text "GUI:Check" key=GUI:Check font=Arial/10 color=255,255,255,255 shadow=0,0,0,255 at 130,309 left clip 100,300 200x30
+            text "GUI:Check" key=GUI:Check font=Arial/10 color=255,255,255,255 shadow=0,0,0,255 at 130,309 left clip 0,0 800x600
             custom W3DMainMenuDraw G.wnd:Custom 400,100 100x40
 
             """;

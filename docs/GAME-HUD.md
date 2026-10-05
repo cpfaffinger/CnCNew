@@ -127,14 +127,30 @@ bevor sie zurückgegeben wird:
 
 * **Cameo:** `UiImageDraw(button.ButtonImage, slotRect, …)`, sofern das benannte Bild in `GameData.Images` existiert (fehlt es,
   wird nichts gezeichnet – kein Platzhalter, kein Absturz; das Original hätte hier ebenfalls kein Bild).
-* **Hotkeybuchstabe** oben links, **Kosten** unten rechts (nur wenn `CommandBarButton.Cost != 0`).
+* **Kein Text auf den Symbolen.** Das Original druckt weder Hotkeybuchstaben noch Kosten auf die Befehlssymbole (`ControlBar::setControlCommand` leert den
+  Knopftext, Name, Kosten und Hotkey stehen in der Beschreibung); der Client hat sie früher aufgedruckt und ist davon abgekommen (Phase 16, `docs/TEXT-AUDIT.md`).
+  Stattdessen gibt es **Tooltips** (Abschnitt 5a).
 * **Abklingzeit/Nachladen:** ein halbtransparentes Rechteck, das von oben in den Knopf hineinwischt (`ButtonAvailability.NotReady`,
   `ReadyFraction`); dieselbe Wischlogik für den ersten Warteschlangeneintrag (`QueueEntry.Progress`).
 * **Warteschlangen-Cameo** je sichtbarem `ButtonQueueNN`.
-* **Geld/Energie:** Text bzw. gefüllter Balken an den aus `ControlBarScheme.ini` gelesenen Rechtecken (`MoneyUL/LR`,
-  `PowerBarUL/LR`), projiziert über `ControlBarParent.Transform` (Abschnitt 4). Der Energiebalken ist proportional zu
+* **Geld/Energie:** das Fenster `ControlBar.wnd:MoneyDisplay` trägt den Text `GUI:ControlBarMoneyDisplay` (`$ %d`) mit dem Geld des lokalen Spielers
+  (`InGameUI::update`) und liegt am Geldrechteck des Schemas (`MoneyUL/LR`, `ControlBarScheme`; `UiWindow.SetScreenRect`); die Layoutdatei hat dort nur den
+  Platzhalter „$$$“ in einem 100x100-Rechteck oben links, den der Client früher so zeigte. Der Energiebalken ist ein gefüllter Balken am Rechteck
+  `PowerBarUL/LR`, projiziert über `ControlBarParent.Transform` (Abschnitt 4). Der Energiebalken ist proportional zu
   `Produktion / Verbrauch` (auf `[0,1]` begrenzt) statt eines festen Balkens, was dem Original nahekommt, ohne dessen exakte
   Balkengrafik zu benötigen.
+
+### 5a. Tooltips (Phase 16)
+
+`MatchController` und `GameShell` hängen den Zeigertooltip des Fensters unter dem Zeiger an die Zeichenliste (`TooltipPainter`, `UiTooltipLayout`;
+`Mouse::drawTooltip` in Mouse.cpp): Kasten 20 Pixel rechts vom Zeiger (links bzw. über dem Zeiger am Bildrand), Umbruch bei `TooltipWidth` Prozent der
+Bildbreite, Text von links über `TooltipFillTime` eingeblendet (Hervorhebungsfarbe auf den vorderen 15 Pixeln), Stil aus dem `Mouse`-Block von `Mouse.ini`,
+Schrift `TooltipFontName` aus `Language.ini` (Arial 8) mit Auflösungsanpassung. Er erscheint, wenn der Zeiger `TOOLTIPDELAY` (sonst 800 ms) still
+über dem Fenster stand, und verschwindet bei jeder Bewegung. Die Befehlsknöpfe (`TOOLTIPDELAY = 1`) zeigen Name, Kosten (`TOOLTIP:Cost`),
+Beschreibung und bei zu wenig Geld „Insufficient funds“. **Vereinfacht:** das Original zeigt diese Beschreibung in `ControlBarPopupDescription.wnd`
+(eigene Zeichenfunktion `W3DCommandBarHelpPopupDraw`, Voraussetzungs- und Wissenschaftstexte, unterstrichener Hotkey); hier sind es die Zeilen des
+Zeigertooltips, Voraussetzungen und Wissenschaften fehlen, das `&` des Namens wird entfernt. Objekttooltips (Einheit unter dem Zeiger) und Geld-/Energie-
+Tooltips gibt es nicht.
 
 **Nicht umgesetzt** (bewusst außerhalb des Umfangs, siehe Auftrag): Beacon- und Diplomatie-Fenster, das Generalspunkte-Popup, die
 fünf `UnitUpgradeN`-Symbole (die Simulation liefert nur die Namen der abgeschlossenen Upgrades über

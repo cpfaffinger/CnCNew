@@ -97,6 +97,13 @@ public sealed class ShellTextSource(LocalizedText text) : IUiTextSource
 
     public IReadOnlyDictionary<string, int> FallbackHits => _fallbackHits;
 
+    private readonly SortedDictionary<string, int> _rawNameHits = new(StringComparer.Ordinal);
+
+    /// <summary>Labels (or internal names) for which a screen had no localized text and showed the raw name instead (<see cref="ShellSkirmishText"/>).</summary>
+    public IReadOnlyDictionary<string, int> RawNameHits => _rawNameHits;
+
+    public void CountRawName(string label) => _rawNameHits[label] = _rawNameHits.GetValueOrDefault(label) + 1;
+
     public bool TryResolve(string label, out string value)
     {
         if (text.TryGet(label, out value)) return true;

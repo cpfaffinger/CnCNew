@@ -13,7 +13,8 @@ public sealed record GlyphBitmap(int Width, int Height, int BearingX, int Bearin
 /// <param name="Ascent">Pixels above the baseline (<c>tmAscent</c>).</param>
 /// <param name="Descent">Pixels below the baseline.</param>
 /// <param name="LineHeight">Cell height (<c>tmHeight</c> = ascent + descent); the line step without extra leading.</param>
-public readonly record struct UiFontFaceMetrics(int Ascent, int Descent, int LineHeight);
+/// <param name="Overlap">The font's <c>PixelOverlap</c> (<c>Get_Extra_Overlap</c>): glyph bitmaps are that many columns wider than their advance, and a text block is that much wider than its last pen position.</param>
+public readonly record struct UiFontFaceMetrics(int Ascent, int Descent, int LineHeight, int Overlap = 0);
 
 /// <summary>One sized face. Implementations rasterize on demand and must be deterministic for a given font file.</summary>
 public interface IUiFontFace : IDisposable

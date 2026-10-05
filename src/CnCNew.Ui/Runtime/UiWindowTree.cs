@@ -107,6 +107,11 @@ public sealed partial class UiWindowTree
     {
         Viewport = viewport;
         Options = options ?? Options;
+        Relayout();
+    }
+
+    internal void Relayout()
+    {
         foreach (var root in _roots) Place(root, null);
     }
 
@@ -292,7 +297,7 @@ public sealed partial class UiWindowTree
         var rect = window.Definition.Rect;
         var (transform, forChildren) = UiScaler.ForWindow(rect, inherited, Viewport, Options.Mode);
         window.Transform = transform;
-        window.Rect = transform.Map(rect);
+        window.Rect = window.ScreenRectOverride ?? transform.Map(rect);
         window.HitRect = Options.MinimumHitTarget > 0 && window.IsInteractive ? window.Rect.ExpandTo(Options.MinimumHitTarget) : window.Rect;
         window.Font = ResolveFont(window);
         foreach (var child in window.Children) Place(child, forChildren);
@@ -327,6 +332,12 @@ public sealed partial class UiWindowTree
             if (_hover is null || _grab is not null || !_hover.IsVisible) return null;
             var delay = _hover.Definition.TooltipDelay >= 0 ? _hover.Definition.TooltipDelay : Services.DefaultTooltipDelayMs;
             if (Now - _hoverSince < delay) return null;
+            var age = Now - _hoverSince - delay;
+            if (TooltipOverride is { } custom)
+            {
+                var text = custom(_hover);
+                if (text is not null) return new UiTooltip(_hover.Name, text, null, _hoverX, _hoverY, age);
+            }
             var callback = _hover.Definition.Callbacks.Tooltip;
             if (callback is not null)
             {
@@ -340,14 +351,20 @@ public sealed partial class UiWindowTree
                     }
                     return null;
                 }
-                return provider(this, _hover) is { } text ? new UiTooltip(_hover.Name, text, null, _hoverX, _hoverY) : null;
+                return provider(this, _hover) is { } text ? new UiTooltip(_hover.Name, text, null, _hoverX, _hoverY, age) : null;
             }
             if (_hover.Definition.TooltipText is not { } label) return null;
             return Services.Text is { } source && source.TryResolve(label, out var resolved)
-                ? new UiTooltip(_hover.Name, resolved, label, _hoverX, _hoverY)
-                : new UiTooltip(_hover.Name, label, label, _hoverX, _hoverY);
+                ? new UiTooltip(_hover.Name, resolved, label, _hoverX, _hoverY, age)
+                : new UiTooltip(_hover.Name, label, label, _hoverX, _hoverY, age);
         }
     }
 
     private UiWindow? _countedTooltipMiss;
+
+    /// <summary>
+    /// Tooltip text a host computes for a window (the control bar builds its command button descriptions in code, not from
+    /// <c>TOOLTIPTEXT</c>); consulted before the window's own callback and text. Null from the function: the window decides.
+    /// </summary>
+    public Func<UiWindow, string?>? TooltipOverride { get; set; }
 }

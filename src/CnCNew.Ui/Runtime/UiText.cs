@@ -13,6 +13,9 @@ public interface IUiTextMeasure
 {
     int MeasureWidth(string text, UiFont font);
     int LineHeight(UiFont font);
+
+    /// <summary>The font's pixel overlap added to the width of a text block (<c>Render2DSentenceClass::Get_Formatted_Text_Extents</c>); 0 when a measure has no such notion.</summary>
+    int ExtraOverlap(UiFont font) => 0;
 }
 
 /// <summary>Mapped image sizes supplied by the renderer (resolved through the mapped image table).</summary>
@@ -32,37 +35,4 @@ public sealed record UiTextValue(string Value, bool IsLabel)
 {
     public static UiTextValue Label(string label) => new(label, true);
     public static UiTextValue Plain(string text) => new(text, false);
-}
-
-public static class UiTextLayout
-{
-    /// <summary>
-    /// Greedy word wrap at blanks; explicit <c>\n</c> starts a new line. A word wider than <paramref name="maxWidth"/> keeps
-    /// its own line (it is not broken inside). <paramref name="maxWidth"/> &lt;= 0 disables wrapping.
-    /// </summary>
-    public static ImmutableArray<string> Wrap(string text, int maxWidth, UiFont font, IUiTextMeasure measure)
-    {
-        var lines = ImmutableArray.CreateBuilder<string>();
-        foreach (var paragraph in text.Replace("\r", string.Empty, StringComparison.Ordinal).Split('\n'))
-        {
-            if (maxWidth <= 0)
-            {
-                lines.Add(paragraph);
-                continue;
-            }
-            var current = string.Empty;
-            foreach (var word in paragraph.Split(' '))
-            {
-                var candidate = current.Length == 0 ? word : current + " " + word;
-                if (current.Length > 0 && measure.MeasureWidth(candidate, font) > maxWidth)
-                {
-                    lines.Add(current);
-                    current = word;
-                }
-                else current = candidate;
-            }
-            lines.Add(current);
-        }
-        return lines.ToImmutable();
-    }
 }

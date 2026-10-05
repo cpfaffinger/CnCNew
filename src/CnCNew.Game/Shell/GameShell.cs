@@ -67,6 +67,7 @@ public sealed class GameShell
     private readonly IUiTextMeasure _textMeasure;
     private readonly bool _animateTransitions;
     private bool _mainMenuShownBefore;
+    private TooltipPainter? _tooltips;
 
     private GameShell(IShellEnvironment environment, string language, UiViewport viewport, IUiTextMeasure? textMeasure, bool animateTransitions)
     {
@@ -186,6 +187,7 @@ public sealed class GameShell
     private void FinishLoading(GameData data)
     {
         Data = data;
+        _tooltips = new TooltipPainter(data.Graph);
         Layouts = ShellLayouts.Load(data.Content, Language, [.. ShellLayoutNames.All]);
         RawText = data.LoadText(Language);
         TextSource = new ShellTextSource(RawText);
@@ -325,6 +327,9 @@ public sealed class GameShell
             border += list.Statistics.BorderStatusWindows;
             foreach (var (name, count) in list.Statistics.CustomDraws) custom[name] = custom.GetValueOrDefault(name) + count;
         }
+        // Mouse::drawTooltip lies over every window.
+        if (_tooltips is not null && _stack.Count > 0 && CurrentScreen.Tree.Tooltip is { } tooltip)
+            commands.AddRange(_tooltips.Build(tooltip, Viewport, ScaleOptions, _textMeasure));
         if (Phase == ShellPhase.MatchLoading) _loadingFrameShown = true;
         return new UiDrawList(commands.ToImmutable(), new UiDrawStatistics(windows, unresolvedLabels, unresolvedSizes, border, custom.ToImmutableSortedDictionary(StringComparer.Ordinal)));
     }
