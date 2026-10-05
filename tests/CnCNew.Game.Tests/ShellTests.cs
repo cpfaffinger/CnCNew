@@ -55,6 +55,9 @@ internal static class ShellTests
         harness.Run("Skirmish setup and options show localized words, not internal names or the layout's placeholders", () => LocalizedSetupText(data));
         harness.Run("A window with TOOLTIPTEXT shows the pointer tooltip after the delay with the Mouse.ini style", () => PointerTooltip(data));
         harness.Run("Credits lines use the Language.ini credits fonts at the adjusted size", () => CreditsFonts(data));
+        harness.Run("Shell::push replaces the screen below, overlays keep it: only what the original shows is drawn", () => ScreenStackDrawing(data));
+        harness.Run("Escape leaves the load game screen without any gadget focus", () => LoadGameEscapeWithoutFocus(data));
+        harness.Run("Challenge menu hides its biography until a general is picked, then shows the persona's text", () => ChallengeMenuBio(data));
 
         if (updating) SaveBaselines(baselines);
         return harness.Failures;
@@ -180,6 +183,152 @@ internal static class ShellTests
         Click(shell, "MainMenu.wnd:ButtonSingleBack");
         labels = LabelsDrawn(shell);
         TestHarness.Assert(labels.SequenceEqual(MainGroupLabels), $"back in the main group: {string.Join(", ", labels)}");
+    }
+
+    // ------------------------------------------------------------------------------------------------- screen stack (Shell::push hides the screen below)
+
+    /// <summary>
+    /// <c>Shell::push</c> runs the shutdown of the top screen, which ends in <c>layout->hide(TRUE)</c> (<c>MainMenuShutdown</c>), before the new layout
+    /// is created: skirmish setup, credits, the challenge menu and the load game screen replace the main menu on screen. The options menu, the skirmish map
+    /// picker and message boxes are layered over the screen below instead. The draw list must hold exactly what the original shows, nothing of a hidden
+    /// screen (the main menu's button texts used to shine through the new windows).
+    /// </summary>
+    private static void ScreenStackDrawing(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var main = shell.CurrentScreen;
+        var mainAlone = main.BuildDrawList().Commands.Length;
+        TestHarness.Assert(mainAlone > 0 && shell.BuildDrawList().Commands.Length == mainAlone, "the main menu alone is drawn on an empty stack");
+
+        void OnlyTopIsDrawn(string what)
+        {
+            var top = shell.CurrentScreen;
+            TestHarness.Assert(shell.Stack.Count > 1 && shell.Stack[0] == main, $"{what}: the main menu is still on the stack below");
+            TestHarness.Assert(shell.BuildDrawList().Dump() == top.BuildDrawList().Dump(), $"{what}: only the topmost screen is drawn, nothing of the main menu shows through");
+            TestHarness.Assert(!LabelsDrawn(shell).Intersect(MainGroupLabels).Any(), $"{what}: none of the main menu's button texts is drawn: {string.Join(", ", LabelsDrawn(shell).Intersect(MainGroupLabels))}");
+        }
+
+        void OverlayKeepsBelow(string what, ShellScreen below)
+        {
+            var top = shell.CurrentScreen;
+            var expected = below.BuildDrawList().Commands.Length + top.BuildDrawList().Commands.Length;
+            TestHarness.Assert(shell.BuildDrawList().Commands.Length == expected, $"{what}: the screen below stays visible behind the overlay ({shell.BuildDrawList().Commands.Length} commands, expected {expected})");
+        }
+
+        // skirmish setup replaces the main menu; the map picker is an overlay of the setup, not of the main menu
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonSkirmish");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen, "skirmish setup is open");
+        OnlyTopIsDrawn("skirmish setup");
+        var setup = shell.CurrentScreen;
+        Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonSelectMap");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishMapSelectScreen, "the map picker is open");
+        OverlayKeepsBelow("map picker", setup);
+        TestHarness.Assert(!LabelsDrawn(shell).Intersect(MainGroupLabels).Any(), "map picker: still nothing of the main menu");
+        // showSkirmishGameOptionsUnderlyingGUIElements(FALSE): the setup's map preview, faction/colour/team combos and start button are hidden while the picker lies over them
+        var setupTree = setup.Tree;
+        foreach (var name in new[] { "MapWindow", "ButtonStart", "ButtonSelectMap", "ComboBoxColor0", "ComboBoxTeam3", "ComboBoxPlayerTemplate1", "StaticTextTeam" })
+            TestHarness.Assert(!setupTree.FindByName($"SkirmishGameOptionsMenu.wnd:{name}")!.IsVisible, $"map picker: {name} of the setup is hidden");
+        TestHarness.Assert(setupTree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer1")!.IsVisible, "map picker: the player column stays");
+        TestHarness.Assert(!setupTree.FindByName("SkirmishGameOptionsMenu.wnd:ButtonBack")!.IsEnabled && !setupTree.FindByName("SkirmishGameOptionsMenu.wnd:ButtonReset")!.IsEnabled, "map picker: Back and Reset of the setup are disabled");
+        Click(shell, "SkirmishMapSelectMenu.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen, "Back closes the map picker");
+        foreach (var name in new[] { "MapWindow", "ButtonStart", "ButtonSelectMap", "ComboBoxColor0", "ComboBoxTeam1", "ComboBoxPlayerTemplate1", "StaticTextTeam" })
+            TestHarness.Assert(setupTree.FindByName($"SkirmishGameOptionsMenu.wnd:{name}")!.IsVisible, $"after the map picker: {name} of the setup is back");
+        TestHarness.Assert(setupTree.FindByName("SkirmishGameOptionsMenu.wnd:ButtonBack")!.IsEnabled && setupTree.FindByName("SkirmishGameOptionsMenu.wnd:ButtonReset")!.IsEnabled, "after the map picker: Back and Reset are enabled again");
+        OnlyTopIsDrawn("skirmish setup after the map picker");
+        Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is MainMenuScreen, "back on the main menu, which starts over on its root group (MainMenuInit runs again)");
+        TestHarness.Assert(shell.Stack.Count == 1 && shell.BuildDrawList().Dump() == shell.CurrentScreen.BuildDrawList().Dump(), "the main menu draws alone again");
+
+        // options and the quit box are layered over the main menu
+        Click(shell, "MainMenu.wnd:ButtonOptions");
+        TestHarness.Assert(shell.CurrentScreen is OptionsScreen, "options are open");
+        OverlayKeepsBelow("options", main);
+        Click(shell, "OptionsMenu.wnd:ButtonBack");
+        Click(shell, "MainMenu.wnd:ButtonExit");
+        TestHarness.Assert(shell.CurrentScreen is MessageBoxScreen, "the quit box is open");
+        OverlayKeepsBelow("quit box", main);
+        Click(shell, "QuitMessageBox.wnd:ButtonNo");
+
+        // credits
+        Click(shell, "MainMenu.wnd:ButtonCredits");
+        TestHarness.Assert(shell.CurrentScreen is CreditsScreen, "credits are open");
+        OnlyTopIsDrawn("credits");
+        Key(shell, KeyCode.Escape);
+
+        // load game (Load, then Load Game)
+        Click(shell, "MainMenu.wnd:ButtonLoadReplay");
+        Click(shell, "MainMenu.wnd:ButtonLoadGame");
+        TestHarness.Assert(shell.CurrentScreen is LoadGameScreen, "load game is open");
+        OnlyTopIsDrawn("load game");
+        Click(shell, "SaveLoad.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is MainMenuScreen, "back on the main menu after load game");
+
+        // challenge menu: the difficulty question is part of the main menu, then the menu replaces it
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonChallenge");
+        Click(shell, "MainMenu.wnd:ButtonMedium");
+        TestHarness.Assert(shell.CurrentScreen is ChallengeSelectScreen, "the challenge menu is open");
+        OnlyTopIsDrawn("challenge menu");
+        Click(shell, "ChallengeMenu.wnd:ButtonBack");
+        TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && shell.Stack.Count == 1, "back on the main menu after the challenge menu");
+    }
+
+    /// <summary>
+    /// <c>ChallengeMenuInit</c> hides the biography panel and the Play button until a general is chosen (<c>setGeneralBio</c>); the panel's four lines were the layout's own
+    /// placeholders (<c>GUI:BioNameEntry</c> … drawn as unresolved labels) before the persona text came from <c>ChallengeMode.ini</c>.
+    /// </summary>
+    private static void ChallengeMenuBio(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonChallenge");
+        Click(shell, "MainMenu.wnd:ButtonHard");
+        TestHarness.Assert(shell.CurrentScreen is ChallengeSelectScreen, "the challenge menu is open");
+        var tree = shell.CurrentScreen.Tree;
+        UiWindow Win(string name) => tree.FindByName($"ChallengeMenu.wnd:{name}")!;
+        TestHarness.Assert(!Win("GeneralsBioParent").IsVisible && !Win("ButtonPlay").IsVisible, "the biography panel and Play are hidden before a pick");
+        TestHarness.Assert(shell.BuildDrawList().Statistics.UnresolvedLabels == 0, "the menu draws no unresolved label before a pick");
+        for (var index = 0; index < 12; index++)
+            TestHarness.Assert(Win($"GeneralPosition{index}").IsVisible == index < 9, $"GeneralPosition{index}: shown exactly for the nine playable generals");
+
+        Click(shell, "ChallengeMenu.wnd:GeneralPosition2");
+        TestHarness.Assert(Win("GeneralsBioParent").IsVisible && Win("ButtonPlay").IsVisible, "the panel and Play appear with a pick");
+        foreach (var line in new[] { "BioNameEntry", "BioDOBEntry", "BioBirthplaceEntry", "BioStrategyEntry" })
+        {
+            var text = Win(line).Text!.Value;
+            TestHarness.Assert(text.Length > 0 && !text.StartsWith("GUI:", StringComparison.Ordinal), $"{line} shows resolved text, got '{text}'");
+        }
+        TestHarness.Assert(shell.BuildDrawList().Statistics.UnresolvedLabels == 0, "the menu draws no unresolved label after a pick");
+        Click(shell, "ChallengeMenu.wnd:ButtonPlay");
+        TestHarness.Assert(shell.Phase == ShellPhase.MissionBriefing, "Play starts the picked general's campaign");
+        for (var i = 0; i < 400 && shell.Phase == ShellPhase.MissionBriefing; i++) shell.Update(0.1);
+        var started = shell.DrainOutputs().OfType<StartMissionOutput>().Single();
+        TestHarness.Assert(started.Controller!.Campaign.Name == "CHALLENGE_2" && started.Controller.Progress.Difficulty == CnCNew.Simulation.Scripting.ScriptDifficulty.Hard, "position 2 plays CHALLENGE_2 with the difficulty asked on the main menu");
+    }
+
+    /// <summary>
+    /// <c>PopupSaveLoad.cpp</c>: <c>SaveLoadMenuInput</c> handles Escape (it presses Back) and hangs on the <c>SaveLoadMenu</c> child, not on the root of the file;
+    /// the layout's init focuses that child. Without it Escape only worked after a gadget had been clicked or tabbed to.
+    /// </summary>
+    private static void LoadGameEscapeWithoutFocus(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonLoadReplay");
+        Click(shell, "MainMenu.wnd:ButtonLoadGame");
+        TestHarness.Assert(shell.CurrentScreen is LoadGameScreen, "load game is open");
+        TestHarness.Assert(shell.CurrentScreen.Tree.Focus is null, "no gadget has the focus (the case that failed)");
+        Key(shell, KeyCode.Escape);
+        TestHarness.Assert(shell.CurrentScreen is MainMenuScreen, "Escape closes the load game screen without any gadget focus");
+
+        // With a gadget focused it works as before.
+        Click(shell, "MainMenu.wnd:ButtonLoadReplay");
+        Click(shell, "MainMenu.wnd:ButtonLoadGame");
+        Key(shell, KeyCode.Tab);
+        TestHarness.Assert(shell.CurrentScreen.Tree.Focus is not null, "Tab focused a gadget");
+        Key(shell, KeyCode.Escape);
+        TestHarness.Assert(shell.CurrentScreen is MainMenuScreen, "Escape still works with a focused gadget");
     }
 
     private static HashSet<string> ImagesOver(UiDrawList list, UiRect rect)

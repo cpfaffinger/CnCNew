@@ -13,6 +13,9 @@ public enum ShellMessageBoxButtons { OkOnly, YesNo, YesNoCancel }
 /// </summary>
 public sealed class MessageBoxScreen : ShellScreen
 {
+    /// <summary>A message box is a modal popup (<c>MessageBoxOk</c>/<c>QuitMessageBoxYesNo</c> create their own layout), not a shell push: the screen below stays visible behind it.</summary>
+    public override bool HidesScreensBelow => false;
+
     private readonly Action _onAccept;
     private readonly Action? _onDecline;
 

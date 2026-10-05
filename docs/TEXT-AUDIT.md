@@ -124,6 +124,10 @@ Status: **behoben** (mit Test oder Messung), **vereinfacht**, **offen**, **bewus
 | Briefing/Ladeschirm | Standbild statt Film und Fortschrittstexten | Filme/Bink fehlen | **offen** (Phase 16, Punkt 5) |
 | Missionstexte | feste Arial-Größen in `MissionPresentation.cs` | nicht über `Language.ini` (`MilitaryCaptionFont` Courier New 12, `MessageFont` …) | **offen**, Parallelauftrag |
 | Cursortext (`drawCursorText`), Beschriftungen über Objekten, Superwaffen-/Zeitgeberanzeige | gibt es nicht | nie umgesetzt | **offen** |
+| Skirmish: Kartenliste | Namen nach zwei Buchstaben abgeschnitten („Al“, „Ar“) | Namen in der ersten von zwei Spalten (5 %/95 %) | **behoben** (zweite Spalte) |
+| Skirmish: Kartenvorschau | Diagonale Kreise über „No map selected“ | `ButtonMapStartPosition0..7` im Layout nicht versteckt, das Original versteckt sie bis `positionStartSpots` | **behoben/vereinfacht** (versteckt; Lage der Startplätze fehlt im Katalog) |
+| Skirmish: Kartenwahl | Spaltenüberschriften, Felder und Start der Einrichtung scheinen durch die Liste | `showSkirmishGameOptionsUnderlyingGUIElements` nicht umgesetzt | **behoben** (`GAME-SHELL.md` §13.1) |
+| Challenge-Menü | `GUI:BioNameEntry` … als Biografie, Knöpfe ohne Bild | Platzhalter des Layouts statt Persona-Texten und Medaillen | **behoben** (§13.4); **offen:** Porträt, Buchstabe-für-Buchstabe-Eingabe |
 
 ## 5. Messwerte (`UiRenderTool --font-audit`, 80 Layouts, 1280x720 und 1920x1080, Uniform)
 
@@ -146,6 +150,8 @@ Die Sollwerte belegen Reproduzierbarkeit, nicht Richtigkeit.
 * `tests/CnCNew.Game.Tests/baselines/screens.txt`: **48 von 54** Werten geändert (alle Bildschirme außer `MatchLoading`): `MainMenu`, `MainMenu-SinglePlayer`, `QuitConfirm`, `Credits`,
   `ScoreScreen`, `SkirmishMapSelect`, `SkirmishSetup`, `SkirmishSetup-MapChosen`, je sechs Auflösungen. Ursachen: Zuschnittrechtecke der Knopf-/Kästchentexte (jetzt ganzer Bildschirm), Umbruch und
   Einzug, Eingabefeld-/Auswahlfeldtexte, lokalisierte Skirmish-Wörter, Credits-Schriften. (Die Hash-Bildung nutzt das synthetische `ShellTextMeasure`, die Werte hängen also nicht von GDI ab.)
+* Danach (Phase 16, Menüs): vier der 54 Werte (`Credits`, `SkirmishSetup`, `SkirmishMapSelect`, `SkirmishSetup-MapChosen`, je sechs Auflösungen, also 24) neu aufgenommen, weil das Hauptmenü unter diesen Bildschirmen nicht mehr gezeichnet wird
+  (`GAME-SHELL.md` §13.5).
 * `tests/CnCNew.Game.Tests/baselines/hud-drawlist-1280x720.sha256`: geändert (`B2C97FCE…` → `CE98E458…`): das Geldfenster trägt den Text „$ 10000“ am Schemarechteck statt „$$$“ im 100x100-Feld, die
   von Hand gezeichnete Zahl entfällt.
 * `UiRenderTool`: die Bilder ändern sich insgesamt (Schrift); es gibt keine Sollwerte, nur die Zweilauf-Gleichheit.
@@ -158,11 +164,11 @@ Die Sollwerte belegen Reproduzierbarkeit, nicht Richtigkeit.
    Wirkung von `UiAlphaCurves`, DPI-Skalierung des Fensters, `UiRenderer`-Zähler im Betrieb).
 3. **Tooltips:** Aussehen, Platzierung, Geschwindigkeit der Einblendung und die vereinfachte Befehlsknopfbeschreibung gegen das Originalpopup.
 4. **Uniform-Modus gegen Originalmaßstab:** bei 1280x720 und größer sind Texte im Verhältnis zu den Fenstern anders als im Original, weil die Hülle gleichmäßig skaliert (Abschnitt 4.1).
-5. **Durchscheinende Menüs:** `GameShell.BuildDrawList` zeichnet alle Bildschirme des Stapels. Im Original fährt `Shell::push` den oberen Bildschirm herunter (versteckt ihn), Optionen,
-   Skirmish-Einrichtung und Kampagnenseiten ersetzen also das Hauptmenü. Hier scheinen dessen Knopftexte („CHALLENGE“, „BACK“, „SKIRMISH“ …) durch die neue Seite, am stärksten in
-   `flow-skirmish-setup-map-*.png`. Das ist die auffälligste Textstörung, die nach dieser Arbeit bleibt; sie gehört zum Parallelauftrag Übergänge (Hintergrundebene nötig, da Rahmen und Logo im
-   Hauptmenü-Layout liegen) und ist hier **nicht** angefasst.
-6. **`SinglePlayerMenu.wnd`** (Neu/Laden/Zurück nach „USA“) ist kein Bildschirm des Originals und steht in Times New Roman.
+5. **Durchscheinende Menüs** – **behoben** (`docs/GAME-SHELL.md` §13): die Hülle zeichnet nur noch den obersten ersetzenden Bildschirm (`Shell::push` versteckt den darunter) und was darüber liegt; Optionen, Kartenwahl
+   und Dialoge sind wie im Original Überlagerungen. Eine Hintergrundebene war nicht nötig (Rahmen und Lineal bringen die ersetzenden Layouts selbst mit). Vorher schienen die Knopftexte des Hauptmenüs („CHALLENGE“,
+   „BACK“, „SKIRMISH“ …) durch die neue Seite, am stärksten in `flow-skirmish-setup-map-*.png`.
+6. **`SinglePlayerMenu.wnd`** (Neu/Laden/Zurück nach „USA“) – **behoben**: ist ein Erbstück des ersten Generals, das Zero Hour nie öffnet; das Original fragt die Schwierigkeit im Hauptmenü (`MapBorder4`), die Hülle
+   ebenso (`GAME-SHELL.md` §13.2). Die Seite mit Times New Roman gibt es nicht mehr.
 7. **Hinweis zum Tooltip der Befehlsknöpfe:** die Texte kommen aus `CommandButton.TextLabel`/`DescriptLabel`; sind Voraussetzungen offen, steht das heute nicht darin.
 
 ## 8. Tests und Werkzeuge
@@ -174,6 +180,8 @@ Die Sollwerte belegen Reproduzierbarkeit, nicht Richtigkeit.
 | Zuschnitt und Position der Knopf-/Kästchentexte, Tooltipzeit und -alter | `tests/CnCNew.Ui.Tests/WndTests.cs` (`DrawListGolden`, `TooltipStateMachine`) |
 | Geldfenster, Befehlsknopf-Tooltip, keine Texte auf den Symbolen | `tests/CnCNew.Game.Tests/HudTests.cs` |
 | Skirmish-Wörter, leere Eingabefelder, Zeigertooltip der Hülle, Credits-Schriften | `tests/CnCNew.Game.Tests/ShellTests.cs` |
+| Bildschirmstapel (nichts vom Hauptmenü unter ersetzenden Screens), Kartenwahl, Challenge-Menü, Escape in der Ladeliste | `tests/CnCNew.Game.Tests/ShellTests.cs` (`ScreenStackDrawing`, `ChallengeMenuBio`, `LoadGameEscapeWithoutFocus`) |
+| `KeyboardHome`, Bild-/Größenersatz eines Fensters | `tests/CnCNew.Ui.Tests/WndTests.cs` |
 | GDI-Schrift (Familie wirklich Arial, 17er-Deckungsstufen, Zellmaße, Generals schmaler) | `tools/CnCNew.UiRenderTool` (`FontAudit.SelfCheck` bei jedem Lauf) |
 | Schriftvergleich, Glyphdeckung, Platzhalter-/Hotkey-Zählung | `tools/CnCNew.UiRenderTool -- --font-audit` |
 | Alphakurve für helle Schrift, Glyphcache mit Kurve | `tests/CnCNew.Ui.Tests/UiRenderingTests.cs` (`LightTextGetsTheGammaSpaceAlphaCurve`) |

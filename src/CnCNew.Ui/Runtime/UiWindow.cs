@@ -105,17 +105,35 @@ public sealed class UiWindow
         if (!enabled) Tree.OnWindowHidden(this);
     }
 
-    private string? _enabledImage0;
-    private bool _enabledImage0Replaced;
+    private Dictionary<(WndDrawDataKind Kind, int Index), string?>? _imageOverrides;
 
     /// <summary>The image of the first enabled draw entry: the file's own, or the one <see cref="SetEnabledImage0"/> replaced it with.</summary>
-    public string? EnabledImage0 => _enabledImage0Replaced ? _enabledImage0 : Definition.GetDrawData(WndDrawDataKind.Enabled)[0].Image;
+    public string? EnabledImage0 => DrawImage(WndDrawDataKind.Enabled, 0);
 
     /// <summary><c>winSetEnabledImage(0, image)</c>: replaces the first enabled draw entry's image (window transitions use it to hand an image to a grow marker).</summary>
-    public void SetEnabledImage0(string? image)
+    public void SetEnabledImage0(string? image) => SetDrawImage(WndDrawDataKind.Enabled, 0, image);
+
+    /// <summary>The image of one draw entry: the file's own, or the one <see cref="SetDrawImage"/> replaced it with.</summary>
+    public string? DrawImage(WndDrawDataKind kind, int index)
+        => _imageOverrides is not null && _imageOverrides.TryGetValue((kind, index), out var image) ? image : Definition.GetDrawData(kind)[index].Image;
+
+    /// <summary>Same as <see cref="DrawImage(WndDrawDataKind, int)"/> for an entry of <paramref name="set"/> (a set of this window's definition).</summary>
+    public string? DrawImage(WndDrawDataSet set, int index) => DrawImage(set.Kind, index);
+
+    /// <summary><c>winSetEnabledImage</c>, <c>winSetHiliteImage</c> and <c>winSetDisabledImage</c>: replaces the image of one draw entry (the challenge menu hands each general's medallion to its button this way).</summary>
+    public void SetDrawImage(WndDrawDataKind kind, int index, string? image) => (_imageOverrides ??= [])[(kind, index)] = image;
+
+    private WndScreenRect? _designRect;
+
+    /// <summary>The layout rectangle in creation-resolution units: the file's own, or the one <see cref="SetDesignSize"/> resized.</summary>
+    public WndScreenRect DesignRect => _designRect ?? Definition.Rect;
+
+    /// <summary><c>winSetSize</c> in the units of the layout (pixels of the creation resolution), keeping the upper-left corner; the window follows the viewport like any other.</summary>
+    public void SetDesignSize(int width, int height)
     {
-        _enabledImage0 = image;
-        _enabledImage0Replaced = true;
+        var rect = Definition.Rect;
+        _designRect = rect with { Right = rect.Left + width, Bottom = rect.Top + height };
+        Tree.Relayout();
     }
 
     public void SetText(string text) => Text = UiTextValue.Plain(text);

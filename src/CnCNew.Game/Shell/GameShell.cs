@@ -311,8 +311,9 @@ public sealed class GameShell
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
         int windows = 0, unresolvedLabels = 0, unresolvedSizes = 0, border = 0;
         var custom = new SortedDictionary<string, int>(StringComparer.Ordinal);
-        foreach (var screen in _stack)
+        for (var index = FirstDrawnScreen(); index < _stack.Count; index++)
         {
+            var screen = _stack[index];
             var list = screen.BuildDrawList();
             commands.AddRange(list.Commands);
             if (screen.Transitions is { } transitions)
@@ -332,6 +333,19 @@ public sealed class GameShell
             commands.AddRange(_tooltips.Build(tooltip, Viewport, ScaleOptions, _textMeasure));
         if (Phase == ShellPhase.MatchLoading) _loadingFrameShown = true;
         return new UiDrawList(commands.ToImmutable(), new UiDrawStatistics(windows, unresolvedLabels, unresolvedSizes, border, custom.ToImmutableSortedDictionary(StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// The lowest screen of the stack that is on screen: the topmost one that hides what lies below it (<see cref="ShellScreen.HidesScreensBelow"/>) and
+    /// everything layered over it. A screen under that one is shut down and hidden in the original (<c>Shell::push</c>, <c>MainMenuShutdown</c> ends in
+    /// <c>layout-&gt;hide(TRUE)</c>), so its windows draw nothing and the windows of the screen above lie on whatever the shell shows behind the menus (the
+    /// shell map of the original, which this build does not have: black).
+    /// </summary>
+    internal int FirstDrawnScreen()
+    {
+        var index = _stack.Count - 1;
+        while (index > 0 && !_stack[index].HidesScreensBelow) index--;
+        return Math.Max(index, 0);
     }
 
     public ImmutableArray<ShellOutput> DrainOutputs()
@@ -365,9 +379,7 @@ public sealed class GameShell
 
     // ------------------------------------------------------------------------------------------------- campaign and savegame navigation (called by screens)
 
-    internal void OpenCampaignFaction(CampaignDefinition campaign) => Push(new CampaignFactionScreen(this, campaign));
-    internal void OpenChallengeSelect() => Push(new ChallengeSelectScreen(this));
-    internal void OpenDifficultySelect(Action<ScriptDifficulty> onAccept) => Push(new DifficultySelectScreen(this, onAccept));
+    internal void OpenChallengeSelect(ScriptDifficulty difficulty) => Push(new ChallengeSelectScreen(this, difficulty));
     internal void OpenLoadGame() => Push(new LoadGameScreen(this));
 
     /// <summary>Starts (or restarts) the current mission of <paramref name="controller"/> and shows its briefing

@@ -25,11 +25,23 @@ public abstract class ShellScreen
 
     protected GameShell Shell { get; }
     public string LayoutName { get; }
+
+    /// <summary>
+    /// Whether the screens below this one are shut down and hidden while it is open (<c>Shell::push</c>: the top screen runs its shutdown, which ends
+    /// in <c>layout-&gt;hide(TRUE)</c>, before the new layout is created) or stay on screen behind it. Screens that the original opens by
+    /// <c>Shell::push</c> or <c>Shell::pop</c> (skirmish setup, credits, challenge menu, load game, score screen) replace what lies below, so the
+    /// shell draws only the topmost such screen and what stands above it. The options menu (<c>getOptionsLayout</c> + <c>hide(FALSE)</c>), the skirmish map
+    /// picker (<c>winCreateLayout</c> + <c>hide(FALSE)</c>) and the message boxes are layered over the screen below it, which keeps running; they return <see langword="false"/>.
+    /// </summary>
+    public virtual bool HidesScreensBelow => true;
     public UiWindowTree Tree { get; }
 
     /// <summary>Looks up a window of this screen's own layout by its undecorated name; throws if the shipped WND file does not have it (never a silent null).</summary>
     protected UiWindow W(string name) => Tree.FindByName($"{LayoutName}.wnd:{name}")
         ?? throw new InvalidOperationException($"Window '{name}' does not exist in {LayoutName}.wnd.");
+
+    /// <summary>Hides a window of this screen's layout (throws if the shipped file does not have it).</summary>
+    internal void HideWindow(string name) => W(name).SetHidden(true);
 
     protected UiWindow? TryW(string name) => Tree.FindByName($"{LayoutName}.wnd:{name}");
 

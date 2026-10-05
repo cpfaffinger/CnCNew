@@ -46,6 +46,8 @@ public static class WndTests
         Test(HiliteFollowsThePointerOnly);
         Test(StaticTextHasNoHiliteState);
         Test(HorizontalSliderDrawsBoxesAndThumb);
+        Test(KeyboardHomeReceivesKeysWithoutFocus);
+        Test(DrawImagesAndDesignSizeCanBeReplaced);
 
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null) Test(() => RealData(contentDirectory));
@@ -1131,6 +1133,72 @@ public static class WndTests
             Check(tree.BuildDrawList().Dump() == before, $"Hovering at {x},{y} must not change the picture:\n{tree.BuildDrawList().Dump()}");
         }
         Check(!Find(tree, "T.wnd:Label").IsHilited && !Find(tree, "T.wnd:Bar").IsHilited && received.Count == 0, $"No hilite, no messages: {string.Join(", ", received)}");
+    }
+
+    /// <summary>
+    /// <c>SaveLoad.wnd</c> keeps its <c>INPUTCALLBACK</c> on a child of the root and the layout's init focuses that child: keys must reach it with no gadget focused,
+    /// as long as it is visible; a hidden home or none at all leaves keys to start at the topmost root as before.
+    /// </summary>
+    private static void KeyboardHomeReceivesKeysWithoutFocus()
+    {
+        var text = WndFile(Window(new Spec("USER", "K.wnd:Root", 0, 0, 800, 600)
+        {
+            Children = [new Spec("USER", "K.wnd:Menu", 100, 100, 700, 500) { Input = "MenuInput", Children = [new Spec("PUSHBUTTON", "K.wnd:Back", 200, 400, 300, 440)] }],
+        }));
+        var tree = Tree(text);
+        var keys = new List<UiKey>();
+        tree.Register("MenuInput", (_, e) =>
+        {
+            if (e.Kind == UiEventKind.Key) keys.Add((UiKey)e.Value);
+        });
+        Check(!tree.KeyDown(UiKey.Escape) && keys.Count == 0, "Without focus and without a home the root has no input callback: nobody gets the key.");
+        tree.Dispatch();
+        Check(keys.Count == 0, "Still nothing delivered.");
+
+        tree.KeyboardHome = Find(tree, "K.wnd:Menu");
+        Check(tree.KeyDown(UiKey.Escape), "With the child as keyboard home the key is received.");
+        tree.Dispatch();
+        Check(keys.SequenceEqual([UiKey.Escape]), "The child's input callback got Escape without any gadget focus.");
+
+        Find(tree, "K.wnd:Menu").SetHidden(true);
+        Check(!tree.KeyDown(UiKey.Escape), "A hidden home receives nothing.");
+        tree.Dispatch();
+        Check(keys.Count == 1, "No second delivery while the home is hidden.");
+        Find(tree, "K.wnd:Menu").SetHidden(false);
+        tree.KeyDown(UiKey.Escape);
+        tree.Dispatch();
+        Check(keys.Count == 2, "The home works again once it is visible (hiding it did not drop it).");
+    }
+
+    /// <summary>
+    /// <c>winSetEnabledImage</c>/<c>winSetHiliteImage</c>/<c>winSetDisabledImage</c> and <c>winSetSize</c>: a replaced image is what the button draws in that state,
+    /// the file's own stays for the others, and a new design size keeps the corner and follows the viewport.
+    /// </summary>
+    private static void DrawImagesAndDesignSizeCanBeReplaced()
+    {
+        var images = new FakeImages(new() { ["E"] = (10, 30), ["D"] = (10, 30), ["H"] = (10, 30), ["P"] = (10, 30), ["X"] = (10, 30), ["Y"] = (10, 30), ["Z"] = (10, 30) });
+        var services = new UiTreeServices(new MonoMeasure()) { Images = images };
+        var tree = Tree(StateLayout("ENABLED"), services: services);
+        var one = Find(tree, "S.wnd:One");
+        Check(one.DrawImage(WndDrawDataKind.Enabled, 0) == "E" && one.EnabledImage0 == "E", "The file's own image until replaced.");
+        one.SetDrawImage(WndDrawDataKind.Enabled, 0, "X");
+        Check(ImagesOf(tree).Contains("X") && !ImagesOf(tree).Contains("E"), $"The replaced enabled image is drawn: {string.Join(",", ImagesOf(tree))}");
+        one.SetDrawImage(WndDrawDataKind.Hilite, 0, "Y");
+        one.SetDrawImage(WndDrawDataKind.Hilite, 1, "Z");
+        tree.MouseMove(150, 215);
+        Check(ImagesOf(tree).Contains("Y") && !ImagesOf(tree).Contains("H"), $"The replaced hilite image is drawn under the pointer: {string.Join(",", ImagesOf(tree))}");
+        tree.MouseDown(150, 215, UiMouseButton.Left);
+        Check(ImagesOf(tree).Contains("Z") && !ImagesOf(tree).Contains("P"), $"The replaced hilite image 1 is drawn while pressed: {string.Join(",", ImagesOf(tree))}");
+        tree.MouseUp(150, 215, UiMouseButton.Left);
+        tree.MouseMove(700, 500);
+        Check(one.EnabledImage0 == "X", "SetEnabledImage0 and SetDrawImage(Enabled, 0) are the same entry.");
+
+        var rect = one.Rect;
+        one.SetDesignSize(40, 40);
+        Check(one.Rect.X == rect.X && one.Rect.Y == rect.Y && one.Rect.Width == 40 && one.Rect.Height == 40, $"Design size keeps the corner: {rect} -> {one.Rect}");
+        tree.SetViewport(new UiViewport(1600, 1200), UiScaleOptions.Original);
+        Check(one.Rect.Width == 80 && one.Rect.Height == 80, $"and scales with the viewport: {one.Rect}");
+        Check(Find(tree, "S.wnd:Three").Rect.Width == 200, "Other windows keep their design rectangle.");
     }
 
     /// <summary>

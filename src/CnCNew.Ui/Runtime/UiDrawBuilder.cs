@@ -93,7 +93,7 @@ public sealed partial class UiWindowTree
         {
             if ((window.Status & WndStatus.Image) != 0)
             {
-                var named = set.Kind == WndDrawDataKind.Enabled && index == 0 ? window.EnabledImage0 : set[index].Image;
+                var named = window.DrawImage(set, index);
                 if (named is { } image) Image(image, Offset(window, rect));
             }
             else Box(rect, set[index]);
@@ -116,9 +116,9 @@ public sealed partial class UiWindowTree
                     // W3DGadgetPushButtonImageDrawOne: enabled + selected uses the hilite-selected image.
                     var image = state switch
                     {
-                        DrawState.Disabled => set[selected ? 1 : 0].Image,
-                        DrawState.Hilite => set[selected ? 1 : 0].Image,
-                        _ => selected ? Set(window, WndDrawDataKind.Enabled, DrawState.Hilite)[1].Image : set[0].Image,
+                        DrawState.Disabled => window.DrawImage(set, selected ? 1 : 0),
+                        DrawState.Hilite => window.DrawImage(set, selected ? 1 : 0),
+                        _ => selected ? window.DrawImage(Set(window, WndDrawDataKind.Enabled, DrawState.Hilite), 1) : window.DrawImage(set, 0),
                     };
                     if (image is not null) Image(image, Offset(window, window.Rect));
                 }

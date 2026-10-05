@@ -398,7 +398,7 @@ public sealed partial class UiWindowTree
 
     /// <summary>
     /// A key press. The focused gadget handles it first; Tab/Shift+Tab move the focus; other keys travel from the focus
-    /// (or, without focus, from the topmost visible top-level window) up to the nearest <c>INPUTCALLBACK</c> as a
+    /// (or, without focus, from <see cref="KeyboardHome"/> if set and visible, else from the topmost visible top-level window) up to the nearest <c>INPUTCALLBACK</c> as a
     /// <see cref="UiEventKind.Key"/> event. Returns true when the UI consumed the key.
     /// </summary>
     public bool KeyDown(UiKey key, UiModifiers modifiers = UiModifiers.None)
@@ -412,7 +412,7 @@ public sealed partial class UiWindowTree
             CloseCombo();
             return true;
         }
-        var source = Focus ?? RootsBottomToTop().LastOrDefault(root => root.IsVisible);
+        var source = Focus ?? (KeyboardHome is { IsVisible: true } home ? home : null) ?? RootsBottomToTop().LastOrDefault(root => root.IsVisible);
         if (source is null) return false;
         var received = KeyWouldBeReceived(source);
         Emit(UiEventKind.Key, source, (int)key);
