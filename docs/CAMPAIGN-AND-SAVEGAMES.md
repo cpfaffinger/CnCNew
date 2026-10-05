@@ -116,11 +116,10 @@ und Endproben: `docs/SCRIPT-ENGINE.md` §9). Die Größe eines Missionszustands 
 `src/CnCNew.Game/Shell/Screens/CampaignScreens.cs`, `src/CnCNew.Game/Shell/MissionPresentation.cs` und die Erweiterungen in
 `GameShell.cs`/`MainMenuScreen.cs` verdrahten diesen Abschnitt vollständig:
 
-- **Kampagnenauswahl**: `MainMenu.wnd`s `ButtonUSA`/`ButtonGLA`/`ButtonChina` (jetzt aktiv) öffnen `CampaignFactionScreen`
-  (`SinglePlayerMenu.wnd`, New/Load Game); `ButtonChallenge` öffnet `ChallengeSelectScreen` (`ChallengeMenu.wnd`, listet
-  `IsChallengeCampaign`-Kampagnen über die `GeneralPosition0..11`-Knöpfe, feste Schwierigkeit Hard). New Game fragt die
-  Schwierigkeit über `DifficultySelectScreen` (`DifficultySelect.wnd`) ab, dann `GameShell.BeginCampaign` →
-  `CampaignProgress.Begin` + `CampaignController.StartCurrentMission`.
+- **Kampagnenauswahl** (seit Phase 16 wie im Original, `docs/GAME-SHELL.md` §13): `MainMenu.wnd`s `ButtonUSA`/`ButtonGLA`/`ButtonChina` öffnen die Schwierigkeitsfrage **im Hauptmenü** (`MapBorder4`:
+  Easy/Medium/Hard/Back), die Wahl ruft `GameShell.BeginCampaign` → `CampaignProgress.Begin` + `CampaignController.StartCurrentMission`; `ButtonChallenge` fragt dasselbe und öffnet dann
+  `ChallengeSelectScreen` (`ChallengeMenu.wnd`: die neun spielbaren `GeneralPersona`s von `ChallengeMode.ini` auf den `GeneralPosition0..11`-Knöpfen, Biografie und Play nach der Wahl, die gewählte Schwierigkeit gilt).
+  Laden ist der Knopf Load des Hauptmenüs (`LoadGameScreen`). `SinglePlayerMenu.wnd` und `DifficultySelect.wnd` benutzt Zero Hour nie und die Shell auch nicht mehr.
 - **Briefing**: `MissionBriefingScreen` nutzt das reale `SinglePlayerLoadScreen.wnd` wieder (dessen `ObjectivesWin`-Gruppe mit
   `StaticTextLine0..4` schon für genau `ObjectiveLabels` gedacht ist; `StaticTextCameoText0..3` trägt `LocationLabel` plus
   `UnitNames0..2`). `ShellPhase.MissionBriefing` hält den Bildschirm für `max(VoiceLengthSeconds, 2)` simulierte Sekunden
