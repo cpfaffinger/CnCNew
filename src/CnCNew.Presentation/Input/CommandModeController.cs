@@ -337,6 +337,13 @@ public sealed class CommandModeController
         return Issue((sequence, tick) => new SetMoveTargetCommand(Player, sequence, tick, unit.Id, x, y)).Accepted;
     }
 
+    /// <summary><c>MSG_DO_ATTACKMOVETO</c>: the simulation's attack-move (the unit engages what it meets and marches on by itself).</summary>
+    private bool AttackMove(Entity unit, Vector3 ground)
+    {
+        var (x, y) = (SimulationQueries.ToFixed(ground.X), SimulationQueries.ToFixed(ground.Y));
+        return Issue((sequence, tick) => new AttackMoveCommand(Player, sequence, tick, unit.Id, x, y)).Accepted;
+    }
+
     /// <summary><c>MSG_DO_STOP</c> (<c>groupIdle</c>): drops the standing orders and halts every mobile unit where it stands.</summary>
     public void Stop(SimulationWorld world, IEnumerable<Entity> units)
     {
@@ -559,7 +566,7 @@ public sealed class CommandModeController
                 foreach (var unit in sources)
                 {
                     Orders.Clear(unit.Id);
-                    if (!Move(world, unit, point)) continue;
+                    if (!(kind == StandingOrderKind.AttackMove ? AttackMove(unit, point) : Move(world, unit, point))) continue;
                     Orders.Set(unit.Id, new StandingOrder(kind, EntityId.Invalid, new Vector2(point.X, point.Y), [], world.Tick));
                     any = true;
                 }
