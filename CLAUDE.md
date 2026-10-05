@@ -38,17 +38,19 @@ Import → Runtime-Content → Datenmodelle → Simulation → Präsentation. Sc
   brauchen Katalogschema, Bindung, Tests und einen Eintrag in `SIMULATION-CORE.md`.
 - Determinismus: kanonische Sortierung, keine absoluten Pfade, Zeitstempel oder
   Dictionary-/HashSet-Reihenfolgen in Artefakten. Zwei unabhängige Läufe müssen byteidentisch sein.
-- `TreatWarningsAsErrors=true`. Bekannt und erklärt sind ausschließlich die `EXEC`-Konsolenzeilen von Strides eigenem
-  `Stride.Core.Assets.CompilerApp`, die seit Phase 7/8 durch die Projektverweise von `CnCNew.Client.Stride` ausgelöst werden
-  (`[YamlAssemblyRegistry] Assembly … has not been processed by assembly processor with --serialization flags`, je eine pro
-  referenziertem Projekt ohne Stride-Assets, plus einmal `[AssetCompiler] Could not find game settings asset …`) – informative
-  Werkzeugausgaben, kein `Fehler`, sie tauchen nur bei einem sauberen Build auf (inkrementell cacht der Asset-Compiler-Schritt sie weg)
-  und wachsen 1:1 mit jedem neu referenzierten Projekt. Referenzzahl bei sauberem `dotnet build CnCNew.slnx` (`bin`/`obj` von
-  `CnCNew.Client.Stride` gelöscht, sonst inkrementell und die Zahl irreführend niedrig): **11 Warnungen** (10 `YamlAssemblyRegistry` +
-  1 `AssetCompiler`; gemessen 4. Oktober 2026). `NU1901`/`NU1903` sind **keine** erklärten Warnungen mehr: sie waren echte Advisories der
-  transitiven Stride-Werkzeugpakete und sind seit Phase 15 durch `build/StrideToolingPins.props` behoben (nicht wieder unterdrücken);
-  `scripts/audit-vulnerable.ps1` prüft die Solution und `CnCNew.UiRenderTool` auf bekannte Anfälligkeiten und gehört zum Phasenabschluss.
-  Jede andere neue Warnung ist ein Fehler, bis sie erklärt ist.
+- `TreatWarningsAsErrors=true`. Der saubere Build hat **0 Warnungen** (`dotnet build CnCNew.slnx` mit gelöschtem `bin`/`obj` von
+  `CnCNew.Client.Stride` und `dotnet build tools/CnCNew.UiRenderTool`; gemessen 5. Oktober 2026). Jede Warnung ist ein Fehler, bis sie
+  behoben ist. Die früheren 11 `EXEC`-Zeilen von Strides `Stride.Core.Assets.CompilerApp` (`[YamlAssemblyRegistry] Assembly [CnCNew.…]
+  has not been processed by assembly processor …` je referenziertem Projekt, `[AssetCompiler] Could not find game settings asset …`)
+  treffen auf dieses Repo nicht zu (keine Stride-Assets in den CnCNew-Assemblies, kein Stride-GameSettings-Asset) und werden von
+  `build/StrideAssetCompile.targets` (über `Directory.Build.targets`) gezielt als gewöhnliche Werkzeugausgabe eingestuft: genau diese zwei
+  Muster, jede andere Warn-/Fehlerzeile des Asset-Compilers bleibt Warnung/Fehler. Gegenprobe:
+  `dotnet build src/CnCNew.Client.Stride "-p:CnCNewStrideKnownAssetCompilerNotes="` zeigt sie wieder. Die Datei kopiert das Target
+  `StrideCompileAsset` aus Stride 4.3.0.2507 und ist bei einem Stride-Update gegen das Paket zu prüfen; die Ausnahmeliste nicht erweitern,
+  ohne die Ursache zu belegen. `NU1901`/`NU1903` waren echte Advisories der transitiven Stride-Werkzeugpakete und sind seit Phase 15 durch
+  `build/StrideToolingPins.props` behoben (nicht wieder unterdrücken); `scripts/audit-vulnerable.ps1` prüft die Solution und
+  `CnCNew.UiRenderTool` auf bekannte Anfälligkeiten und gehört zum Phasenabschluss. Ältere Zahlen (21 bzw. 11 Warnungen) weiter unten und in
+  den Phasenberichten sind historisch.
 - Kein Vertrauen auf Zahlen aus Docs oder früheren Berichten: Bestandszahlen immer neu messen.
 - Fremder Code (EA-Quellen, GeneralsGameCode, GeneralsGamePatch unter `references/`) darf gelesen,
   aber nicht unbesehen kopiert werden. Algorithmen werden verstanden, neu geschrieben und im

@@ -96,7 +96,7 @@ dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --conte
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir .local/content --model-path Art/W3D/AVSoloDrn.W3D --capture .local/visual-verification/animated-stage1.png
 ```
 
-Der Stride-Assetcompiler 4.3.0.2507 bringt derzeit einige von NuGet als verwundbar gemeldete transitive **Buildwerkzeuge** mit. `NU1901` und `NU1903` bleiben beim Client-Build sichtbar, werden dort aber nicht als Fehler behandelt. Sie sind kein stillschweigend ignorierter Befund und müssen bei einem Stride-Update oder einer isolierten Content-Pipeline entfernt werden.
+Der saubere Build hat 0 Warnungen. Die transitiven Buildwerkzeuge des Stride-Assetcompilers 4.3.0.2507 sind über `build/StrideToolingPins.props` auf Patch-Versionen angehoben (`scripts/audit-vulnerable.ps1`); seine zwei hier nicht zutreffenden Hinweise (`YamlAssemblyRegistry`, fehlendes `GameSettings`-Asset) stuft `build/StrideAssetCompile.targets` gezielt als gewöhnliche Werkzeugausgabe ein, jede andere Warnung bleibt eine Warnung.
 
 ## Rechtliche Trennung
 
