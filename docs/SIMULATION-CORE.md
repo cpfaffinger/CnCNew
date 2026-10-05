@@ -1564,3 +1564,61 @@ Die 16 KI-gegen-KI-Läufe sind davon unberührt: die Endhashes des gemergten Sta
 Der Stresstest zeigt keinen Schwund (die 150 µs je Tick aus Phase 14 waren Last, nicht Code; unter Last maß derselbe Stand heute 166 µs). Die Missionsläufe ändern ihre Hashes, weil der Zielerwerb jetzt in der
 Simulation liegt; `MD_GLA05` ist 9 % langsamer, `MD_USA05` 9 % schneller. **Nicht gemacht:** ein Profil der heißesten Module. Die Missionsläufe sind der Ort dafür (die Zahl oben ist die Gesamtlaufzeit des Werkzeugs
 mit Laden und Wiederholungsläufen, kein Wert je Tick).
+
+## 35. Phase 17 (5. Oktober 2026): Schwierigkeit eines Computerspielers im Skirmish – Befund, keine Simulationsänderung
+
+Auftrag war, der Simulation eine in den Daten belegte Schwierigkeitsachse für Computerspieler zu geben und die drei Armeen der Skirmish-Einrichtung
+(„Easy/Medium/Hard Army“) daran zu binden. Die Prüfung der Referenz ergibt: **keine der in den Daten belegten Wirkungen gilt für einen Computerspieler im Skirmish.**
+Es wurde deshalb nichts an der Simulation geändert (kein Feld, kein Snapshot-Eintrag, keine Version); stattdessen bietet die Einrichtung nur noch eine Armee
+(`docs/GAME-SHELL.md` §6). Erfunden wurde nichts.
+
+### 35.1 Was die Daten enthalten
+
+| Datei | Inhalt | gemessen |
+| --- | --- | --- |
+| `Data/INI/GameData.ini` | `WeaponBonus = SOLO_AI_EASY RATE_OF_FIRE 80%`, `SOLO_AI_NORMAL … 100%`, `SOLO_AI_HARD … 120%` | drei Zeilen; für `SOLO_HUMAN_*` gibt es keine `WeaponBonus`-Zeile |
+| `Data/INI/GameData.ini` | `HumanSoloPlayerHealthBonus_Easy = 150%`, `_Normal = 100%`, `_Hard = 80%` | `AISoloPlayerHealthBonus_*` kommt nicht vor (Vorgabe 1,0, `GlobalData::GlobalData`) |
+| `Data/INI/Default/AIData.ini` | `SideInfo` mit `ResourceGatherersEasy/Normal/Hard` | 12 Seiten; je Seite sind alle drei Werte gleich (2, bei den GLA-Seiten 5) |
+
+Die `WeaponBonus`-Zeilen sind in `CnCNew.Data` bereits streng typisiert (`GameDataSchema`, `FieldType.WeaponBonusEntry`); die Bedingungsnamen `SOLO_*` stehen in der
+Namenstabelle. An `baselines/compatibility.json` ändert sich nichts.
+
+### 35.2 Wo die Referenz sie anwendet
+
+| Wirkung | Fundstelle (Datei, Funktion) | gilt im Skirmish? |
+| --- | --- | --- |
+| Waffenbonus `SOLO_AI_*` / `SOLO_HUMAN_*` auf jedes Objekt des Spielers | `Common/RTS/Player.cpp`, `Player::friend_applyDifficultyBonusesForObject` (aufgerufen aus `Object::setReceivingDifficultyBonus`, `Object.cpp`; `Object::initObject` setzt es, solange `ScriptEngine::getObjectsShouldReceiveDifficultyBonus` gilt) | **nein** – der ganze Rumpf steht unter `if (TheGameLogic->isInSinglePlayerGame())` |
+| Lebenspunktefaktor `m_soloPlayerHealthBonusForDifficulty[Spielertyp][Schwierigkeit]` | dieselbe Funktion | **nein**, dieselbe Bedingung; für Computerspieler ohnehin 1,0 |
+| Spielmodus | `GameLogic/System/GameLogic.cpp`, `GameLogic::isInSinglePlayerGame`: nur `GAME_SINGLE_PLAYER` (oder dessen Wiedergabe). Das Skirmish-Menü startet `GAME_SKIRMISH` (`SkirmishGameOptionsMenu.cpp`, `reallyDoStart`: `MSG_NEW_GAME` mit `GAME_SKIRMISH`) | – |
+| Slot → Schwierigkeit | `GameLogic::startNewGame`: `SLOT_EASY_AI`/`SLOT_MED_AI`/`SLOT_BRUTAL_AI` → `skirmishDifficulty` = `DIFFICULTY_EASY`/`NORMAL`/`HARD`; `Player::initFromDict` gibt es an `AIPlayer::setAIDifficulty`; `Player::getPlayerDifficulty` liefert es | ja – die Achse selbst existiert je Computerspieler |
+| Zahl der Sammler | `GameLogic/AI/AIPlayer.cpp`, `AIPlayer::checkForSupplyCenter` (`AISideInfo::m_easy/m_normal/m_hard`) | ja, aber wirkungslos: die ausgelieferten Werte sind je Seite gleich |
+| Skripte mit Leicht/Normal/Schwer-Flaggen | `ScriptEngine::executeScript` (`Script::isEasy/isNormal/isHard` gegen `Player::getPlayerDifficulty`), `TeamPrototype::evaluateProductionCondition` (`Common/RTS/Team.cpp`) | ja – das ist der eigentliche Unterschied der drei Armeen (`SkirmishScripts.scb`) |
+| Gemeinsames Teamziel | `Team::setTeamTargetObject` (`Team.cpp`): ein Computerspieler der Stufe leicht setzt kein gemeinsames Angriffsziel | ja, aber nur für Skript-Teams |
+| Opferwahl beim Angriff auf einen Trupp | `AIAttackSquadState::chooseVictim` (`GameLogic/AI/AIStates.cpp`): leicht zufällig, normal das nächste, schwer alle dasselbe | ja, aber nur über `aiAttackTeam` (Skriptaktion bzw. `AIGroup`) |
+
+Es gibt keine weitere Stelle, die `getPlayerDifficulty`, `getAIDifficulty` oder `m_difficulty` liest (gesucht in `GameEngine/Source/Common` und `GameEngine/Source/GameLogic`).
+
+### 35.3 Folgerung
+
+- Die beiden Zahlenwirkungen der Daten (Feuerrate 80 %/120 %, Lebenspunkte) sind **Kampagnenregeln** („Solo“), keine Skirmish-Regeln. Sie auf Skirmish-Gegner anzuwenden wäre erfundenes Tuning.
+- Die im Skirmish wirksame Schwierigkeit des Originals steckt in den KI-Skripten und in zwei Team-Verhalten, die an Skript-Teams hängen. Dieses Projekt führt `SkirmishScripts.scb`
+  nicht aus (`SkirmishAi` ersetzt sie, §19/§32) und `SkirmishAi` arbeitet ohne Skript-Teams; eine Nachbildung wäre Imitation, kein Beleg. **Das bleibt der Unterschied zum Original.**
+- Der eine Computerspieler dieser Simulation entspricht damit `DIFFICULTY_NORMAL`: kein Bonus, kein Malus. Die Einrichtung bietet deshalb `GUI:Open`, `GUI:Closed` und `GUI:MediumAI`
+  („Medium Army“) – ein Eintrag des Originals in seiner Bedeutung, statt dreier, die dasselbe starten. `GameShell.SkirmishDifficultyIgnored` ist entfallen.
+- **Nebenbefund, nicht bearbeitet:** dieselbe Funktion gilt in Kampagnenmissionen, und dort wendet diese Simulation sie **nicht** an – `MissionOptions.Difficulty` steuert nur die
+  Skriptflaggen (`ScriptEngine`), weder der Waffenbonus `SOLO_AI_EASY/HARD` noch `HumanSoloPlayerHealthBonus_Easy/Hard` wirken; auch die Skriptaktion, die den Bonus je Karte
+  ab- und anschaltet (`OBJECT_ALLOW_BONUSES`, `ScriptActions::doEnableOrDisableObjectDifficultyBonuses`), ist nur aufgezeichnet und hat keinen Verbraucher. Auf „normal“ ist das ohne Wirkung (100 %), auf „leicht“/„schwer“ weicht
+  eine Mission vom Original ab. Das lag außerhalb dieses Auftrags (Skirmish) und ist eine Entscheidung vor dem Einfrieren der Simulation.
+
+### 35.4 Messung (Release, 5. Oktober 2026)
+
+Kein Quelltext von `CnCNew.Simulation`, `CnCNew.Data` oder `tools/CnCNew.SimTool` wurde geändert; die Läufe bestätigen den Stand und sind zugleich „vorher“ und „nachher“.
+Eine Wirkungstabelle Leicht/Schwer gibt es nicht, weil es keine Wirkung gibt; `SimTool ai-match` hat keine Option `--difficulty` bekommen.
+
+| Lauf | Ergebnis | Endhash | Kette | Lauf 2 / Fortsetzung aus Snapshot |
+| --- | --- | --- | --- | --- |
+| `SimTool reference-match` | FactionGLA bei Tick 14.490 | `23B4B25DF62765D8` | `DE5849AF9F8493C4` | identisch / identisch |
+| `SimTool stress` (216.000 Ticks) | – | `56882F763EABEF67` | `B8E663493F2C73D5` | identisch |
+| `ai-match` Alpine Assault, `FactionChina,FactionGLA`, 45.000 Ticks | FactionChina bei 23.310 | `54DD2C9094141CC8` | `582FA4C6DF853C4B` | identisch / identisch |
+| `ai-match` Alpine Assault, `FactionAmerica,FactionChina` | FactionAmerica bei 16.965 | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` | identisch / identisch |
+| `ai-match` Alpine Assault, `FactionGLA,FactionAmerica` | FactionAmerica bei 8.895 | `23A93C58C775A691` | `B29CF881F6B1CC59` | identisch / identisch |

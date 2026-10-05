@@ -10,9 +10,9 @@ namespace CnCNew.Game.Shell.Screens;
 /// map's start position count), and starting cash feed a <see cref="MatchSetup"/>. Everything else the layout shows
 /// (game speed, superweapon limit, battle-honor list, per-slot color/team) has no counterpart in <c>LiveMatch</c> or
 /// <see cref="Simulation.Skirmish.SkirmishMatchOptions"/> yet: the gadgets are populated and stay interactive so the
-/// screen looks authentic, but their values are not read at Start time. The opponent slots offer the original's entries
-/// (<c>GUI:Open</c>, <c>GUI:Closed</c> and the three armies <c>GUI:EasyAI</c>, <c>GUI:MediumAI</c>, <c>GUI:HardAI</c>), but the skirmish AI of
-/// this build has no difficulty axis: every army starts the same AI, counted in <see cref="GameShell.SkirmishDifficultyIgnored"/>. All of this
+/// screen looks authentic, but their values are not read at Start time. The opponent slots offer <c>GUI:Open</c>, <c>GUI:Closed</c> and one
+/// computer army (<c>GUI:MediumAI</c>) instead of the original's three: the skirmish AI of this build has one strength, and nothing the shipped data
+/// ties to difficulty applies to a skirmish computer player (<see cref="ShellSkirmishText.ComputerArmy"/>). All of this
 /// is listed as a request to <c>LiveMatch</c>/the AI in <c>docs/GAME-SHELL.md</c>. A map is always preselected as in the original; Start does
 /// nothing (no inline validation message, just no output) until at least one computer opponent is chosen.
 /// </summary>
@@ -26,8 +26,8 @@ public sealed class SkirmishSetupScreen : ShellScreen
     private readonly int[] _factionIndex = new int[Slots];
     private int _startPositionCount = Slots;
 
-    /// <summary>The entries of an opponent slot as <c>SkirmishGameOptionsMenuInit</c> fills them: <c>GUI:Open</c>, <c>GUI:Closed</c>, then the three armies.</summary>
-    private const int FirstArmyEntry = 2;
+    /// <summary>The entries of an opponent slot: <c>GUI:Open</c>, <c>GUI:Closed</c> as <c>SkirmishGameOptionsMenuInit</c> fills them, then the computer army.</summary>
+    private const int ComputerArmyEntry = 2;
     private string? _selectedMapPath;
     private int _startMoney;
 
@@ -43,7 +43,7 @@ public sealed class SkirmishSetupScreen : ShellScreen
         Tree.Register("SkirmishGameOptionsMenuInput", OnInput);
 
         W("TextEntryPlayerName").SetEntryText(names.Player);
-        var armies = names.Armies;
+        var computerArmy = names.ComputerArmy;
         for (var slot = 0; slot < Slots; slot++)
         {
             var template = W($"ComboBoxPlayerTemplate{slot}");
@@ -59,12 +59,12 @@ public sealed class SkirmishSetupScreen : ShellScreen
             var player = W($"ComboBoxPlayer{slot}");
             player.AddComboEntry(names.Open);
             player.AddComboEntry(names.Closed);
-            foreach (var army in armies) player.AddComboEntry(army);
+            player.AddComboEntry(computerArmy);
             player.SetComboSelection(0);
         }
-        // SkirmishGameOptionsMenuInit: the second slot starts as the easy army (until the battle honors count more than five wins; this build keeps none).
+        // SkirmishGameOptionsMenuInit: the second slot starts as a computer army (the original picks easy, medium or hard by the battle honors; this build has one).
         _computer[1] = true;
-        W("ComboBoxPlayer1").SetComboSelection(FirstArmyEntry);
+        W("ComboBoxPlayer1").SetComboSelection(ComputerArmyEntry);
 
         var money = W("ComboBoxStartingCash");
         foreach (var value in MoneyChoices) money.AddComboEntry(Shell.FormatMoney(value));
@@ -165,8 +165,6 @@ public sealed class SkirmishSetupScreen : ShellScreen
         if (opponents.Count == 0) return;
         var options = SkirmishMatchOptions.Standard with { StartMoney = _startMoney };
         var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options);
-        // The three armies are the original's difficulties (GameLogic::startNewGame: skirmishDifficulty); the skirmish AI of this build has one strength, so the choice is counted, not obeyed.
-        Shell.CountSkirmishDifficultyIgnored(opponents.Count);
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });
         Shell.BeginMatchLoading(setup);
@@ -197,7 +195,7 @@ public sealed class SkirmishSetupScreen : ShellScreen
             if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayerTemplate{slot}") { _factionIndex[slot] = e.Value; return; }
             if (slot > 0 && e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayer{slot}")
             {
-                _computer[slot] = e.Value >= FirstArmyEntry;
+                _computer[slot] = e.Value == ComputerArmyEntry;
                 W($"ComboBoxPlayerTemplate{slot}").SetEnabled(_computer[slot]);
                 return;
             }

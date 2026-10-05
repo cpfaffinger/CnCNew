@@ -397,9 +397,12 @@ internal static class ShellTests
         var colors = Entries("ComboBoxColor0");
         TestHarness.Assert(colors.Length == 8 && colors.SequenceEqual(["Gold", "Red", "Blue", "Green", "Orange", "Cyan", "Purple", "Pink"]), $"the colors are the multiplayer color names in file order: {string.Join(", ", colors)}");
         TestHarness.Assert(Entries("ComboBoxTeam0").SequenceEqual(["None", "1", "2", "3", "4"]), "the teams are Team:0..Team:4");
-        // SkirmishGameOptionsMenuInit: GUI:Open, GUI:Closed, GUI:EasyAI, GUI:MediumAI, GUI:HardAI; the second slot starts as the easy army, the name field holds GUI:Player.
-        TestHarness.Assert(Entries("ComboBoxPlayer1").SequenceEqual(["Open", "Closed", "Easy Army", "Medium Army", "Hard Army"]) && Entries("ComboBoxPlayer7").Length == 5, $"an opponent slot offers the original's five entries: {string.Join(", ", Entries("ComboBoxPlayer1"))}");
-        TestHarness.Assert(tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer1")!.ComboBox!.SelectedIndex == 2 && tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer2")!.ComboBox!.SelectedIndex == 0, "the second slot starts as the easy army, the others open");
+        // SkirmishGameOptionsMenuInit lists GUI:Open, GUI:Closed, GUI:EasyAI, GUI:MediumAI, GUI:HardAI. This build has one computer player strength and no difficulty effect that
+        // applies in a skirmish, so a slot offers one army (GUI:MediumAI) and never a choice it cannot honour; the second slot starts as that army, the name field holds GUI:Player.
+        for (var slot = 1; slot <= 7; slot++)
+            TestHarness.Assert(Entries($"ComboBoxPlayer{slot}").SequenceEqual(["Open", "Closed", "Medium Army"]), $"opponent slot {slot} offers open, closed and one computer army: {string.Join(", ", Entries($"ComboBoxPlayer{slot}"))}");
+        TestHarness.Assert(tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer1")!.ComboBox!.SelectedIndex == 2 && tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer2")!.ComboBox!.SelectedIndex == 0, "the second slot starts as the computer army, the others open");
+        TestHarness.Assert(!shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Easy Army", StringComparison.Ordinal) || text.Text.Contains("Hard Army", StringComparison.Ordinal)), "no difficulty the simulation does not have is on the screen");
         TestHarness.Assert(tree.FindByName("SkirmishGameOptionsMenu.wnd:TextEntryPlayerName")!.TextEntry!.Text == "Player", "the player name is GUI:Player");
         // getPreferredMap / getDefaultMap: without a remembered map the first multiplayer map of the catalog (lower-case path order) is chosen; the setup never says "no map".
         var expectedMap = shell.MapCatalog.Values.Where(entry => entry.IsMultiplayer).Select(entry => entry.VirtualPath).OrderBy(path => path.Replace('/', '\\').ToLowerInvariant(), StringComparer.Ordinal).First();
@@ -407,6 +410,24 @@ internal static class ShellTests
         TestHarness.Assert(shownMap == shell.MapNames.DisplayName(expectedMap, shell.MapCatalog, shell.TextSource) && shownMap.Length > 0 && !shownMap.Contains("no map", StringComparison.OrdinalIgnoreCase), $"the default map is preselected and named: '{shownMap}' ({expectedMap})");
         TestHarness.Assert(!shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Computer", StringComparison.Ordinal) || text.Text.Contains("o map selected", StringComparison.Ordinal)), "neither 'Computer' nor '(no map selected)' is on the screen");
         TestHarness.Assert(shell.TextSource!.RawNameHits.Count == 0, $"no label fell back to a raw name: {string.Join(", ", shell.TextSource.RawNameHits.Keys)}");
+
+        // Every entry of a slot does what it says: open and closed are no opponent (Start then does nothing), the army is exactly one computer player.
+        var slotOne = tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer1")!;
+        foreach (var empty in new[] { 0, 1 })
+        {
+            tree.Post(UiEventKind.ComboSelected, slotOne, value: empty);
+            tree.Dispatch();
+            Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
+            TestHarness.Assert(shell.Phase != ShellPhase.MatchLoading && shell.CurrentScreen is SkirmishSetupScreen, $"slot entry '{Entries("ComboBoxPlayer1")[empty]}' is no opponent: Start does nothing");
+        }
+        tree.Post(UiEventKind.ComboSelected, slotOne, value: 2);
+        tree.Dispatch();
+        Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
+        TestHarness.Assert(shell.Phase == ShellPhase.MatchLoading, "the computer army entry is an opponent: Start loads the match");
+        shell.BuildDrawList(); // the match is handed off after one drawn frame of the load screen
+        shell.Update(1.0 / 30);
+        var started =shell.DrainOutputs().OfType<StartMatchOutput>().Single();
+        TestHarness.Assert(started.Setup.Opponents.Length == 1, $"one computer army entry starts one computer player, got {started.Setup.Opponents.Length}");
 
         shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
         Click(shell, "MainMenu.wnd:ButtonOptions");
