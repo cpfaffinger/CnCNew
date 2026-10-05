@@ -627,7 +627,7 @@ static partial class Tests
             new SetWeaponLockCommand(player1, 4, 6, new EntityId(4), 0, WeaponLockKind.None),
         ];
         Check.That(ReplayFormat.Read(ReplayFormat.Write(new ReplayFile(round, samples, []))).Commands.SequenceEqual(samples), "Every combination round-trips.");
-        Check.That(ReplayFormat.CurrentVersion == 10 && CommandTypes.Version == 13 && WorldSnapshot.Version == 9, "Weapon slots: replay format 10, command table 13, snapshot 9 (turret state).");
+        Check.That(ReplayFormat.CurrentVersion == 11 && CommandTypes.Version == 14 && WorldSnapshot.Version == 9, "Weapon slots: replay format 11, command table 14, snapshot 9 (turret state).");
         var bad = ReplayFormat.Write(new ReplayFile(round, [new FireWeaponCommand(player1, 1, 3, new EntityId(4), new EntityId(5), 7, FireOrigin.Ai)], []));
         Check.Throws<ReplayFormatException>(() => ReplayFormat.Read(bad), "slot");
     }

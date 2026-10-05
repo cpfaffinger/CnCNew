@@ -73,6 +73,7 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
           Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
           End
         End
         Object {{side}}Plant
@@ -236,7 +237,7 @@ static partial class Tests
         var bytes = ReplayFormat.Write(withCheckpoints);
         var read = ReplayFormat.Read(bytes);
         Check.That(ReplayFormat.Write(read).AsSpan().SequenceEqual(bytes), "The recorded match survives the replay file byte for byte.");
-        Check.That(read.Commands.Any(value => value is ConstructCommand) && read.Commands.Any(value => value is QueueProductionCommand) && read.Commands.Any(value => value is SetMoveTargetCommand),
+        Check.That(read.Commands.Any(value => value is ConstructCommand) && read.Commands.Any(value => value is QueueProductionCommand) && read.Commands.Any(value => value is AttackMoveCommand),
             "The replay carries construction, production and movement commands.");
 
         var first = ReplayRunner.Run(read, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 500 }, terrain);

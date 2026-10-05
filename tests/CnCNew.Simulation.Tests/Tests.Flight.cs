@@ -102,6 +102,9 @@ static partial class Tests
             Conditions = None
             Weapon = PRIMARY FlightMissileGun
           End
+          Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
+          End
         End
         Object AlphaTrooper
           Side = Alpha
