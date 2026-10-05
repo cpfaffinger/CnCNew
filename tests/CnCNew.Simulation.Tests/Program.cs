@@ -363,6 +363,8 @@ run.Test("Attack-move: the unit stops for a fight and marches on; a computer pla
 run.Test("Attack-move: snapshot mid-fight, determinism and the replay of AttackMoveCommand", Tests.AttackMoveSnapshotDeterminismAndReplay);
 run.Test("Determinism D4: script state, diagnoses and forwarded arguments do not depend on the culture", Tests.ScriptStateIsCultureIndependent);
 run.Test("Determinism D7: the waypoint order is total", Tests.WaypointOrderIsTotal);
+run.Test("Determinism D8: the incremental hash equals the full hash in every tick of the stress scenario", Tests.IncrementalHashHoldsInEveryTick);
+run.Test("Determinism D8: a scripted warehouse value reaches the tick hash; writing a save does not change it", Tests.ScriptedWarehouseValueReachesTheHash);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

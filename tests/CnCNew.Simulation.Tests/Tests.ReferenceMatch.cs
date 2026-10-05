@@ -194,7 +194,8 @@ static partial class Tests
         Check.That(replay.Header.Players.SequenceEqual(recorded.Header.Players) && replay.Commands.Length == recorded.Commands.Length, "The replay file round-trips players, factions and commands.");
         Check.That(ReplayFormat.Write(replay).AsSpan().SequenceEqual(bytes), "Writing a read replay reproduces the file byte for byte.");
 
-        var first = ReplayRunner.Run(replay, catalog, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 1_000 });
+        // D8: verified in every tick.
+        var first = ReplayRunner.Run(replay, catalog, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 1 });
         Check.That(first.VerifiedCheckpoints == replay.Checkpoints.Length && first.RejectedCommands == 0, $"Every checkpoint verifies and no recorded command is rejected ({first.RejectedCommands} rejected).");
         var second = ReplayRunner.Run(replay, catalog, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
         Check.That(first.TickHashes.AsSpan().SequenceEqual(second.TickHashes) && first.FinalHash == second.FinalHash, "Two fresh runs are hash identical on every tick.");

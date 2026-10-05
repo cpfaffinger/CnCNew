@@ -111,4 +111,51 @@ static partial class Tests
         for (var index = 1; index < forward.Waypoints.Length; index++)
             Check.That(TerrainMap.CompareWaypoints(forward.Waypoints[index - 1], forward.Waypoints[index]) < 0, "The order is strict: no two waypoints tie.");
     }
+
+    /// <summary>
+    /// D8: the tick hash is maintained incrementally; a state change without <c>MarkDirty</c> leaves a stale entity hash that no one notices until the object
+    /// is marked for another reason. The tools verify against a full recomputation only every few thousand ticks. Here the stress scenario is verified in
+    /// every tick, and the verified run must hash like the unverified one (verification refreshes the caches, so it must not be what makes a run correct).
+    /// </summary>
+    public static void IncrementalHashHoldsInEveryTick()
+    {
+        var fixture = new SyntheticFixture();
+        var replay = new StressScenario(new StressOptions(6_000, 600, 0xC0FFEE01, 0x5EED0001, 1_500, 1_000)).Record(fixture);
+        var plain = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
+        var verified = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 1 });
+        Check.That(plain.TicksExecuted >= 6_000 && plain.TickHashes.AsSpan().SequenceEqual(verified.TickHashes), "Verifying the incremental hash in every tick does not change a tick hash of the stress scenario.");
+    }
+
+    /// <summary>
+    /// D8, found on <c>MD_GLA05</c> (the mission restored at tick 150 left the continuous run at tick 900): <c>WAREHOUSE_SET_VALUE</c> changed the stock of a
+    /// supply dock and set the entity's dirty flag by hand instead of calling <c>MarkDirty</c>. The flag without the entry in the world's dirty list is worse
+    /// than no flag: every later <c>MarkDirty</c> returns early, the entity's cached hash stays stale for good, and the tick hash only becomes right when
+    /// something recomputes it in full - writing a snapshot does. A mission hashed differently depending on whether a save had been written.
+    /// </summary>
+    public static void ScriptedWarehouseValueReachesTheHash()
+    {
+        MissionSession Start() => StartMission([
+            Scr.Script("Value", [Scr.And(Scr.If("FLAG", Scr.Flag("go"), Scr.Bool(true)))], [Scr.Do("WAREHOUSE_SET_VALUE", Scr.Unit("Store"), Scr.Int(250))], oneShot: true),
+        ], objects: [Placed("ScriptWarehouse", 300m, 300m, "", "Store"), Placed("AlphaSoldier", 100m, 200m, "teamA", "S1")]);
+        var plain = Start();
+        var saved = Start();
+        // The script fires on a quiet tick, long after the warehouse was created (a fresh entity is in the dirty list anyway).
+        foreach (var session in new[] { plain, saved })
+        {
+            Run(session, 20);
+            session.Engine.SignalUiInteraction("go");
+            Run(session, 3);
+        }
+        Check.That(plain.World.WarehouseBoxes(NamedIn(plain, "Store")!.Id) == 3, "Fixture: the script changed the warehouse's stock.");
+        // Writing a save must be an observation: the mission that was saved hashes like the one that was not.
+        var bytes = MissionSnapshot.Write(saved);
+        Check.That(saved.StateHash() == plain.StateHash(), "A mission hashes differently after a save was written: a cached entity hash was stale.");
+        var restored = MissionSnapshot.Restore(bytes, saved.World.Templates, saved.World.Configuration.DefinitionFingerprint, saved.World.Terrain!, saved.Map);
+        for (var tick = 0; tick < 30; tick++)
+        {
+            var expected = plain.Step().StateHash;
+            Check.That(saved.Step().StateHash == expected && restored.Step().StateHash == expected, $"Saved, restored and undisturbed mission agree in tick {plain.World.Tick - 1}.");
+            plain.World.VerifyIncrementalHash();
+        }
+    }
 }

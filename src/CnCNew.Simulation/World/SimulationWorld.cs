@@ -1744,9 +1744,15 @@ public sealed partial class SimulationWorld : IWorldServices
     public void VerifyIncrementalHash()
     {
         var incremental = ComputeIncrementalHash();
+        // Name the entities whose cached hash is stale before the full recomputation refreshes the caches: they changed without MarkDirty.
+        List<string>? stale = null;
+        foreach (var entity in _entities.Values)
+            if (HashEntity(entity) != entity.CachedHash) (stale ??= []).Add(Scripting.InvariantText.Format($"{entity.Id.Value} {entity.Template.Name}"));
         var full = ComputeFullHash();
-        if (full != incremental)
-            throw new InvalidOperationException($"Incremental state hash {incremental:X16} differs from the full hash {full:X16}.");
+        if (full == incremental) return;
+        var cause = stale is null ? "no entity is stale: timers, commands or global state"
+            : "changed without MarkDirty: " + string.Join(", ", stale.Take(12)) + (stale.Count > 12 ? Scripting.InvariantText.Format($" and {stale.Count - 12} more") : string.Empty);
+        throw new InvalidOperationException(Scripting.InvariantText.Format($"Incremental state hash {incremental:X16} differs from the full hash {full:X16} at tick {_tick} ({cause})."));
     }
 
     private ulong FinishHash()

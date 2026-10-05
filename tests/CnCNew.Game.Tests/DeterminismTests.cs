@@ -43,6 +43,63 @@ internal static class DeterminismTests
         var full = args.Contains("--determinism-full");
         var data = GameData.Load(directory);
 
+        harness.Run("D8: the incremental hash equals the full hash in every tick (reference match, AI match, two missions; bounded)", () =>
+        {
+            void Verify(string name, ReplayFile replay, TerrainMap? terrain, long ticks)
+            {
+                long? stop = full ? null : ticks;
+                var plain = ReplayRunner.Run(replay, data.Templates, data.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, StopTick = stop }, terrain);
+                var verified = ReplayRunner.Run(replay, data.Templates, data.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, StopTick = stop, VerifyIncrementalEvery = 1 }, terrain);
+                Console.WriteLine($"       {name}: {verified.TicksExecuted} ticks verified, final hash {verified.FinalHash:X16}");
+                TestHarness.Assert(plain.TickHashes.AsSpan().SequenceEqual(verified.TickHashes), $"{name}: verifying in every tick changes a tick hash");
+            }
+
+            Verify("reference match", new ReferenceMatchScenario(ReferenceMatchOptions.Standard).Record(data.Templates, data.Fingerprint), null, 6_000);
+            var (alpine, alpineTerrain) = LoadMap(data, AlpineAssault);
+            var chosen = new[] { "FactionChina", "FactionGLA" }.Select(name => data.Factions.First(value => value.Faction.Name.Equals(name, StringComparison.OrdinalIgnoreCase))).ToImmutableArray();
+            Verify("AI match Alpine Assault FactionChina,FactionGLA",
+                new SkirmishMatchScenario(SkirmishMatchOptions.Standard with { MaxTicks = 45_000 }).Record(data.Templates, data.Fingerprint, alpineTerrain, alpine.Objects, chosen), alpineTerrain, 9_000);
+            // MD_GLA05 is the mission that showed the finding: WAREHOUSE_SET_VALUE at tick 855 changed five supply docks without MarkDirty.
+            // --determinism-full verifies every campaign and challenge map for 1,500 ticks instead.
+            var missions = full
+                ? data.Maps.Where(path => path.Split('/') is [_, var folder, _] && (folder.StartsWith("MD_", StringComparison.OrdinalIgnoreCase) || folder.StartsWith("GC_", StringComparison.OrdinalIgnoreCase))).Select(path => (Path: path, Ticks: 1_500L)).ToArray()
+                : [("Maps/MD_USA05/MD_USA05.map", 600L), ("Maps/GC_ChemGeneral/GC_ChemGeneral.map", 1_500L), ("Maps/MD_GLA05/MD_GLA05.map", 1_200L)];
+            var failures = new List<string>();
+            foreach (var (path, ticks) in missions)
+            {
+                var (map, terrain) = LoadMap(data, path);
+                var options = MissionOptions.Standard with { MaxTicks = 0 };
+                MissionSession plain, verified;
+                try
+                {
+                    plain = MissionSession.Start(options, data.Templates, data.Fingerprint, terrain, map);
+                    verified = MissionSession.Start(options, data.Templates, data.Fingerprint, terrain, map);
+                }
+                catch (Exception exception) when (full)
+                {
+                    Console.WriteLine($"       mission {path}: not started ({exception.Message})");
+                    continue;
+                }
+                try
+                {
+                    while (plain.World.Tick < ticks && !plain.IsOver)
+                    {
+                        var expected = plain.Step().StateHash;
+                        var actual = verified.Step().StateHash;
+                        verified.World.VerifyIncrementalHash();
+                        TestHarness.Assert(expected == actual, $"verifying in every tick changes the hash of tick {plain.World.Tick - 1}");
+                    }
+                    Console.WriteLine($"       mission {path}: {verified.World.Tick} ticks verified, {verified.World.Metrics.Entities} entities, final hash {verified.StateHash():X16}");
+                }
+                catch (InvalidOperationException exception)
+                {
+                    Console.WriteLine($"       mission {path}: {exception.Message}");
+                    failures.Add($"{path}: {exception.Message}");
+                }
+            }
+            TestHarness.Assert(failures.Count == 0, $"{failures.Count} mission(s) with a stale incremental hash: {string.Join(" || ", failures)}");
+        });
+
         harness.Run("D4: definitions, bone table, map and a mission are the same under de-DE, tr-TR, ar-SA, sv-SE and a made-up culture", () =>
         {
             (string Definitions, string World, string Terrain, string Program, ulong Chain, ulong Final) Play()
