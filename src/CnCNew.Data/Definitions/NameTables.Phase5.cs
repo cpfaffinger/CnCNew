@@ -9,6 +9,13 @@ public static class NameTablesPhase5
     public static NameTable LocomotorSurface { get; } = new("LocomotorSurface", "LocomotorSet.h TheLocomotorSurfaceTypeNames",
         "GROUND", "WATER", "CLIFF", "AIR", "RUBBLE");
 
+    /// <summary>
+    /// AIUpdate.h TheAutoAcquireEnemiesNames (5 entries; bits <c>AAS_Idle</c>, <c>AAS_Idle_Stealthed</c>, <c>AAS_Idle_No</c>, <c>AAS_Idle_Not_While_Attacking</c>,
+    /// <c>AAS_Idle_Attack_Buildings</c>). <c>NO</c> is a bit of its own that nothing tests: "No ATTACK_BUILDINGS" sets two bits and still does not acquire while idle.
+    /// </summary>
+    public static NameTable AutoAcquireEnemies { get; } = new("AutoAcquireEnemies", "AIUpdate.h TheAutoAcquireEnemiesNames",
+        "YES", "STEALTHED", "NO", "NOTWHILEATTACKING", "ATTACK_BUILDINGS");
+
     /// <summary>StealthUpdate.h TheStealthLevelNames (9 entries).</summary>
     public static NameTable StealthForbiddenCondition { get; } = new("StealthForbiddenCondition", "StealthUpdate.h TheStealthLevelNames",
         "ATTACKING", "MOVING", "USING_ABILITY", "FIRING_PRIMARY", "FIRING_SECONDARY", "FIRING_TERTIARY", "NO_BLACK_MARKET", "TAKING_DAMAGE", "RIDERS_ATTACKING");

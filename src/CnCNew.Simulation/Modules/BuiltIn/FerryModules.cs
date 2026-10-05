@@ -195,11 +195,11 @@ public sealed class RailedTransportAIUpdate(RailedTransportAiData data) : AIUpda
     }
 
     /// <summary>The player cannot order the ferry about; the AI and scripts can.</summary>
-    public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
+    public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer, bool attackMove = false)
     {
         if (fromPlayer) return;
         _followWaypoint = -1;
-        base.OrderMove(world, x, y, fromPlayer);
+        base.OrderMove(world, x, y, fromPlayer, attackMove);
     }
 
     public override void OrderEnter(IWorldServices world, Entity container, bool fromPlayer)

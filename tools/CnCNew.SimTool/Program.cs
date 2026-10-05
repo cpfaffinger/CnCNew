@@ -35,7 +35,7 @@ const string Usage = """
       hash <replay.bin>                                    run a replay and print final hash and hash-chain digest
       reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--out replay.bin] [--diagnose]
                                                            headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
-      ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin] [--trace N]
+      ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin] [--trace N [--trace-army]]
                                                            skirmish AIs on a real map: record, two fresh runs, snapshot continuation
       skirmish-sweep <content-dir> [--max-ticks N]        starts a short two-AI skirmish on every map with >= 2 start positions;
                                                            reports which start and end (by victory or the tick budget) without crashing
@@ -407,6 +407,25 @@ static int AiMatch(string directory, string[] args)
             line.Append($" | {player.Faction?.Replace("Faction", string.Empty)}: ${(long)world.MoneyOf(player.Id).Floor(),6} bld {structures,2} army {army,3} harv {harvesters,2} doz {builders} trip {trip,4} waves {stats?.Waves ?? 0} prod {stats?.Productions ?? 0}");
         }
         Console.WriteLine(line.ToString());
+        if (!args.Contains("--trace-army")) return;
+        // --trace-army: per player the army by type and what it is doing (marching, on an attack-move, fighting a victim, idle), how far it is from the nearest enemy structure, and the AI's own view.
+        for (var index = 0; index < session.Players.Length; index++)
+        {
+            var player = session.Players[index];
+            var enemyStructures = world.Entities.Where(entity => world.AreEnemies(player.Id, entity.Owner) && !entity.EffectivelyDead && entity.Template.IsKindOf("STRUCTURE")).ToList();
+            var army = world.Entities.Where(entity => entity.Owner == player.Id && !entity.EffectivelyDead && !entity.Template.IsKindOf("STRUCTURE") && !entity.Template.IsKindOf("HARVESTER") && !entity.Template.IsKindOf("DOZER"));
+            foreach (var group in army.GroupBy(entity => entity.Template.Name).OrderBy(group => group.Key, StringComparer.Ordinal))
+            {
+                long Nearest(CnCNew.Simulation.World.Entity unit) => enemyStructures.Count == 0 ? -1 : enemyStructures.Min(structure =>
+                {
+                    var dx = (structure.X - unit.X).ToDecimal();
+                    var dy = (structure.Y - unit.Y).ToDecimal();
+                    return (long)Math.Sqrt((double)(dx * dx + dy * dy));
+                });
+                Console.WriteLine($"      {player.Faction?.Replace("Faction", string.Empty)} {group.Key} x{group.Count()}: moving {group.Count(unit => unit.HasMoveTarget)}, attack-move {group.Count(world.IsAttackMoving)}, fighting {group.Count(unit => world.AcquiredVictimOf(unit).IsValid)}, contained {group.Count(unit => unit.ContainedBy.IsValid)}, weapon range {(long)group.Max(unit => world.MaxWeaponRange(unit)).Floor()}, nearest enemy structure {group.Min(Nearest)}..{group.Max(Nearest)}");
+            }
+            if (session.Ais[index] is { } ai) Console.WriteLine($"      {player.Faction?.Replace("Faction", string.Empty)} AI: {ai.DescribeState()}");
+        }
     });
     Console.WriteLine($"Recorded {recorded.Commands.Length} commands over {recorded.Header.EndTick} ticks in {watch.Elapsed.TotalSeconds:F1} s; {scenario.WarehousesSpawned} map warehouses spawned.");
     foreach (var note in scenario.Notes) Console.WriteLine($"  note: {note}");
@@ -414,7 +433,7 @@ static int AiMatch(string directory, string[] args)
     {
         var stats = scenario.Ais[index].Stats;
         var final = scenario.Finals[index];
-        Console.WriteLine($"  {final.Faction}: {(final.Defeated ? "defeated" : "alive")}, {final.Objects} objects, {final.Money} money; commands {stats.Commands} (rejected {stats.Rejected}), built {stats.Constructions} (resumed {stats.Resumes}, cancelled {stats.CancelledSites}), produced {stats.Productions}, shots {stats.Shots}, waves {stats.Waves}, powers {stats.PowerUses}, sciences {stats.SciencePurchases}, repairs {stats.Repairs}, docks {stats.DockOrders}, tunnel entries {stats.TunnelEntries}, transport loads {stats.TransportLoads}, evacuations {stats.Evacuations}, idle thinks {stats.IdleThinks}");
+        Console.WriteLine($"  {final.Faction}: {(final.Defeated ? "defeated" : "alive")}, {final.Objects} objects, {final.Money} money; commands {stats.Commands} (rejected {stats.Rejected}), built {stats.Constructions} (resumed {stats.Resumes}, cancelled {stats.CancelledSites}), produced {stats.Productions}, waves {stats.Waves}, powers {stats.PowerUses}, sciences {stats.SciencePurchases}, repairs {stats.Repairs}, docks {stats.DockOrders}, tunnel entries {stats.TunnelEntries}, transport loads {stats.TransportLoads}, evacuations {stats.Evacuations}, idle thinks {stats.IdleThinks}");
         if (stats.RejectionsByReason.Count > 0) Console.WriteLine($"    rejections: {string.Join(", ", stats.RejectionsByReason.Select(pair => $"{pair.Key}={pair.Value}"))}");
     }
     Console.WriteLine(scenario.Winner is null

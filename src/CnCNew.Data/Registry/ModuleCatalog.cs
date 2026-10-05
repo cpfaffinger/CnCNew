@@ -236,7 +236,7 @@ public static class ModuleCatalog
         // errors) and read by the simulation's turret model (docs/SIM-TURRET-AIM.md) — hence AllowsNestedSections.
         Add("AIUpdateInterface",
         [
-            new("AutoAcquireEnemiesWhenIdle", FieldType.Bool, Source: "AIUpdate.cpp"),
+            new("AutoAcquireEnemiesWhenIdle", FieldType.Flags, Table: NameTablesPhase5.AutoAcquireEnemies, Source: "AIUpdate.cpp INI::parseBitString32"),
             new("MoodAttackCheckRate", FieldType.DurationMs, Source: "AIUpdate.cpp"),
             new("ForbidPlayerCommands", FieldType.Bool, Source: "AIUpdate.cpp"),
             new("TurretsLinked", FieldType.Bool, Source: "AIUpdate.cpp"),
@@ -246,7 +246,7 @@ public static class ModuleCatalog
         // carry the AIUpdateInterface base fields (AIUpdate.cpp) plus their own table.
         ImmutableArray<FieldSchema> AiBase(string source) =>
         [
-            new("AutoAcquireEnemiesWhenIdle", FieldType.Bool, Source: source),
+            new("AutoAcquireEnemiesWhenIdle", FieldType.Flags, Table: NameTablesPhase5.AutoAcquireEnemies, Source: source + " (AIUpdate.cpp INI::parseBitString32)"),
             new("MoodAttackCheckRate", FieldType.DurationMs, Source: source),
             new("ForbidPlayerCommands", FieldType.Bool, Source: source),
             new("TurretsLinked", FieldType.Bool, Source: source),

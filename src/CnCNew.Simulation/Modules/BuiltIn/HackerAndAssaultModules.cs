@@ -102,7 +102,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
 
     private long CashDelay() => Entity.ContainedBy.IsValid ? data.CashDelayFastTicks : data.CashDelayTicks;
 
-    public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
+    public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer, bool attackMove = false)
     {
         if (_state is HackState.Hacking or HackState.Packing)
         {
@@ -122,7 +122,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
         }
         _hasPending = false;
         _state = HackState.None;
-        base.OrderMove(world, x, y, fromPlayer);
+        base.OrderMove(world, x, y, fromPlayer, attackMove);
     }
 
     public override long Update(IWorldServices world)

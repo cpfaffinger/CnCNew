@@ -35,7 +35,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 10;
+    public const int CurrentVersion = 11;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -321,6 +321,11 @@ public static class ReplayFormat
                 writer.Write(pursue.X.Raw);
                 writer.Write(pursue.Y.Raw);
                 break;
+            case AttackMoveCommand attackMove:
+                writer.Write(attackMove.Unit.Value);
+                writer.Write(attackMove.X.Raw);
+                writer.Write(attackMove.Y.Raw);
+                break;
             default:
                 throw new ReplayFormatException($"Command type {command.GetType().Name} has no replay encoding.");
         }
@@ -368,6 +373,7 @@ public static class ReplayFormat
             CommandTypes.Overcharge => new OverchargeCommand(player, sequence, tick, new EntityId(reader.ReadUInt32())),
             CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
     }

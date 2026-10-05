@@ -709,9 +709,9 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     }
 
     /// <summary>Once the plane heads off the map it ignores every order (<c>m_acceptingCommands</c>).</summary>
-    public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
+    public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer, bool attackMove = false)
     {
-        if (_accepting) base.OrderMove(world, x, y, fromPlayer);
+        if (_accepting) base.OrderMove(world, x, y, fromPlayer, attackMove);
     }
 
     /// <summary><c>deliverPayloadViaModuleData</c>: fly to (<paramref name="x"/>, <paramref name="y"/>), drop everything inside, leave. The run is built from the module's own keys.</summary>

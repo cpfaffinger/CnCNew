@@ -146,7 +146,10 @@ public sealed partial class SimulationWorld
     /// <c>AIAttackApproachTargetState::onEnter</c> ("If we have a turret, start aiming"): the unit is on its way to attack <paramref name="victim"/>, so the turrets that carry the weapon it
     /// would use start tracking now, long before a shot is possible. The weapon is the best one that can hurt the victim, whatever its range or reload (<see cref="AttackSlotIgnoringRange"/>).
     /// </summary>
-    private void BeginPursuit(Entity unit, Entity victim)
+    private void BeginPursuit(Entity unit, Entity victim) => AimTurretsForAttack(unit, victim, TurretAimOrder.Pursuit);
+
+    /// <summary>The turrets that carry the weapon the unit would use against <paramref name="victim"/> start tracking it as the victim of an attack (<paramref name="order"/>: a pursuit never gives up for distance).</summary>
+    private void AimTurretsForAttack(Entity unit, Entity victim, TurretAimOrder order)
     {
         if (unit.Turrets is not { } states || unit.Template.Turrets is not { } set) return;
         UpdateWeaponSet(unit);
@@ -156,7 +159,7 @@ public sealed partial class SimulationWorld
         {
             if (states[index] is not { } state || set[index] is not { Gates: true } info) continue;
             if (!set.Linked && !info.Controls(slot)) continue;
-            RequestAim(unit, info, state, victim, slot, TurretAimOrder.Pursuit);
+            RequestAim(unit, info, state, victim, slot, order);
         }
     }
 
@@ -166,7 +169,14 @@ public sealed partial class SimulationWorld
     /// </summary>
     public void EndAttack(Entity entity)
     {
+        ClearAcquisition(entity);
         EndPreAttack(entity);
+        StopTurrets(entity);
+    }
+
+    /// <summary>Every turret of the object drops its victim and starts its recentre hold.</summary>
+    private void StopTurrets(Entity entity)
+    {
         if (entity.Turrets is not { } states || entity.Template.Turrets is not { } set) return;
         var changed = false;
         for (var index = 0; index < states.Length; index++)

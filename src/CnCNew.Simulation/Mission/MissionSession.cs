@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Data.World;
 using CnCNew.Simulation.Commands;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Scripting;
@@ -14,7 +15,11 @@ namespace CnCNew.Simulation.Mission;
 /// <param name="WorldSeed">Seed of the logic random stream (script timers draw from it).</param>
 /// <param name="MaxTicks">Hard stop for headless runs; 0 means no limit (a live mission ends with its script outcome).</param>
 /// <param name="MissionAttempts">How many times the player has started this mission (the campaign progress knows; <c>MISSION_ATTEMPTS</c> conditions compare against it).</param>
-/// <param name="CombatIntervalTicks">How often units look for a target in range (the stand-in for the reference's idle target acquisition).</param>
+/// <param name="CombatIntervalTicks">
+/// 0 switches the units' own target acquisition off for this mission (<see cref="SimulationWorld.SelfAcquisition"/>; scripted tests that want nothing to shoot by itself); any other value
+/// leaves it on. The number is no longer an interval: since the simulation acquires targets itself, each unit's <c>MoodAttackCheckRate</c> decides how often it looks. The name and the
+/// snapshot field are kept so that <see cref="MissionSnapshot"/> stays at its version.
+/// </param>
 /// <param name="HumanSideName">
 /// Which map side the host wants as the human viewer (<c>&lt;Local Player&gt;</c>, the multiplayer victory/defeat conditions), by side name —
 /// deliberately not required to be marked <c>playerIsHuman</c> on the map, since the Generals' Challenge maps model the chosen general as an
@@ -32,13 +37,13 @@ public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty,
     public static MissionOptions Standard { get; } = new(0xC0FFEE09, ScriptDifficulty.Normal);
 }
 
-/// <summary>Counters of the units' automatic combat driver.</summary>
+/// <summary>Combat counters of the mission: weapons fired (every <c>WeaponFired</c> event of the world, whoever chose the victim) and fire orders the world rejected.</summary>
 public sealed record MissionCombatStats(long Shots, long Rejected);
 
 /// <summary>
-/// One running campaign (or scripted) mission: the world built from a map's own data, the script engine that runs the map's scripts, and the
-/// combat driver that stands in for idle target acquisition (<c>AIUpdateInterface</c> in the reference; this simulation has none, the skirmish AI fires
-/// explicitly and so does this driver). <see cref="Step"/> advances one logic tick: scripts, combat, world. The whole state is
+/// One running campaign (or scripted) mission: the world built from a map's own data and the script engine that runs the map's scripts. The units pick their victims
+/// themselves (the world's target acquisition, docs/SIMULATION-CORE.md §33); the script engine tells the world the attack priorities and moods the scripts set.
+/// <see cref="Step"/> advances one logic tick: scripts, then the world. The whole state is
 /// <see cref="MissionSnapshot"/>-saveable: a restored session continues hash-identically to the original.
 /// <para>
 /// What is built from the map: one player per named side (relations from <c>playerAllies</c>/<c>playerEnemies</c>, everything unlisted neutral, as in the
@@ -69,6 +74,8 @@ public sealed class MissionSession
             Notes = [..Notes, $"requested human side '{options.HumanSideName}' is not a human side of this map; falling back to '{fallbackName}'"];
         }
         Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, localPlayer, options.PresentationLatencyTicks, options.MissionAttempts), Issue);
+        world.AcquisitionAdvisor = Engine;
+        world.SelfAcquisition = options.CombatIntervalTicks != 0;
     }
 
     public MissionOptions Options { get; }
@@ -238,70 +245,29 @@ public sealed class MissionSession
 
     // ------------------------------------------------------------------------------------------------------ stepping
 
-    /// <summary>Advances one logic tick: scripts (may order units and change the world), the automatic combat, then the world step.</summary>
+    /// <summary>Advances one logic tick: scripts (may order units and change the world), then the world step (in which the units fight).</summary>
     public TickResult Step()
     {
         var tick = World.Tick;
         Engine.Update(tick);
         // GameLogic::update: a game frozen by FREEZE_TIME ran the scripts and returns - no combat, no world step, the frame counter stays (a presentation clock keeps the cameras going).
         if (Engine.TimeFrozen) return new TickResult(tick, World.StateHash, []);
-        if (Options.CombatIntervalTicks > 0) DriveCombat(tick);
         var result = World.Step();
+        foreach (var item in result.Events)
+            if (item.Kind == SimEventKind.WeaponFired) _shots++;
         Engine.Observe(result.Events);
         return result;
     }
 
-    /// <summary>Submits a command of <paramref name="player"/> at the current tick; the per-player sequence is assigned here, so every source of commands (scripts, the human, the combat driver) shares one counter.</summary>
+    /// <summary>Submits a command of <paramref name="player"/> at the current tick; the per-player sequence is assigned here, so every source of commands (scripts, the human) shares one counter.</summary>
     public SubmitResult Issue(PlayerId player, Func<ulong, long, SimCommand> make)
     {
         var sequence = _sequences.GetValueOrDefault(player.Value) + 1;
         _sequences[player.Value] = sequence;
-        return World.Submit(make(sequence, World.Tick));
-    }
-
-    /// <summary>
-    /// Every armed object fires at the nearest enemy in weapon range (the idle <c>AutoAcquireEnemiesWhenIdle</c> behaviour, which the simulation's AI modules
-    /// do not model). Only players that are enemies of each other shoot; neutral objects never do. Runs every <see cref="MissionOptions.CombatIntervalTicks"/>
-    /// ticks, staggered by object id.
-    /// </summary>
-    private void DriveCombat(long tick)
-    {
-        var interval = Options.CombatIntervalTicks;
-        List<Entity>? targets = null;
-        foreach (var entity in World.Entities.OrderBy(value => value.Id.Value).ToArray())
-        {
-            if ((tick + entity.Id.Value) % interval != 0) continue;
-            if (entity.Owner.IsSystem || !ScriptEngine.CountsAsObject(entity) || !World.IsAnyWeaponReady(entity)) continue;
-            var range = World.MaxWeaponRange(entity);
-            if (range <= Fixed.Zero) continue;
-            targets ??= [..World.Entities.Where(value => !value.Owner.IsSystem && value.Body is not null && ScriptEngine.CountsAsObject(value)).OrderBy(value => value.Id.Value)];
-            var limit = range * range;
-            Entity? best = null;
-            var bestPriority = int.MinValue;
-            var bestDistance = Fixed.MaxValue;
-            foreach (var target in targets)
-            {
-                if (!World.AreEnemies(entity, target)) continue;
-                var dx = entity.X - target.X;
-                var dy = entity.Y - target.Y;
-                var distance = dx * dx + dy * dy;
-                if (distance > limit) continue;
-                // Highest attack priority first (scripts may give an object a priority set), nearest among equals.
-                var priority = Engine.AttackPriority(entity, target);
-                if (priority < bestPriority || (priority == bestPriority && distance >= bestDistance)) continue;
-                // An idle unit picks its own weapon (CMD_FROM_AI); a target none of its weapons can hit and fire this tick is not worth an order.
-                if (!World.ChooseWeapon(entity, target, FireOrigin.Ai).CanFire) continue;
-                best = target;
-                bestPriority = priority;
-                bestDistance = distance;
-            }
-            if (best is null) continue;
-            var owner = entity.Owner;
-            var source = entity.Id;
-            var victim = best.Id;
-            if (Issue(owner, (sequence, at) => new FireWeaponCommand(owner, sequence, at, source, victim, WeaponSlot.Best, FireOrigin.Ai)).Accepted) _shots++;
-            else _rejectedShots++;
-        }
+        var command = make(sequence, World.Tick);
+        var result = World.Submit(command);
+        if (!result.Accepted && command is FireWeaponCommand) _rejectedShots++;
+        return result;
     }
 
     // ---------------------------------------------------------------------------------------------------------- state

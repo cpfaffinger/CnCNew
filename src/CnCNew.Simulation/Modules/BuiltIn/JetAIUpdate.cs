@@ -88,6 +88,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private Fixed _homeX;
     private Fixed _homeY;
     private PendingKind _pending;
+    private bool _pendingAttackMove;
     private Fixed _pendingX;
     private Fixed _pendingY;
     private bool _pendingFromPlayer;
@@ -294,16 +295,16 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     // ------------------------------------------------------------------------------------------------------------------ orders
 
     /// <summary><c>aiDoCommand</c> for a move: stored while a take-off or landing runs or the aircraft is parked (which starts the take-off), carried out at once while it flies.</summary>
-    public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
+    public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer, bool attackMove = false)
     {
         if (TakeoffOrLandingInProgress)
         {
-            Store(PendingKind.Move, x, y, fromPlayer, EntityId.Invalid);
+            Store(PendingKind.Move, x, y, fromPlayer, EntityId.Invalid, attackMove);
             return;
         }
         if (!_allowAir)
         {
-            Store(PendingKind.Move, x, y, fromPlayer, EntityId.Invalid);
+            Store(PendingKind.Move, x, y, fromPlayer, EntityId.Invalid, attackMove);
             BeginTakeoff();
             return;
         }
@@ -311,7 +312,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _returnTick = 0;
         _phase = JetPhase.None;
         _useReturnLocomotor = false;
-        base.OrderMove(world, x, y, fromPlayer);
+        base.OrderMove(world, x, y, fromPlayer, attackMove);
     }
 
     /// <summary><c>privateEnter</c>: entering an airfield means landing there; anything else cannot be entered by an aircraft.</summary>
@@ -341,9 +342,10 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         BeginLanding(world, airfield);
     }
 
-    private void Store(PendingKind kind, Fixed x, Fixed y, bool fromPlayer, EntityId target)
+    private void Store(PendingKind kind, Fixed x, Fixed y, bool fromPlayer, EntityId target, bool attackMove = false)
     {
         _pending = kind;
+        _pendingAttackMove = attackMove;
         _pendingX = x;
         _pendingY = y;
         _pendingFromPlayer = fromPlayer;
@@ -492,10 +494,11 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         }
         var kind = _pending;
         var target = _pendingTarget;
-        var (x, y, fromPlayer) = (_pendingX, _pendingY, _pendingFromPlayer);
+        var (x, y, fromPlayer, attackMove) = (_pendingX, _pendingY, _pendingFromPlayer, _pendingAttackMove);
         _pending = PendingKind.None;
+        _pendingAttackMove = false;
         _returnTick = 0;
-        if (kind == PendingKind.Move) base.OrderMove(world, x, y, fromPlayer);
+        if (kind == PendingKind.Move) base.OrderMove(world, x, y, fromPlayer, attackMove);
         else if (kind == PendingKind.Land && world.FindEntity(target) is { } airfield) BeginLanding(world, airfield);
     }
 
@@ -937,6 +940,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             writer.Fixed("pendingY", _pendingY);
             writer.Bool("pendingFromPlayer", _pendingFromPlayer);
             writer.UInt("pendingTarget", _pendingTarget.Value);
+            // Written only for a stored attack-move, so every other pending order keeps its serialized form.
+            if (_pendingAttackMove) writer.Bool("pendingAttackMove", true);
         }
         writer.Int("pathIndex", _pathIndex);
         writer.BeginArray("jetPath");
@@ -1004,6 +1009,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             _pendingY = reader.Fixed("pendingY");
             _pendingFromPlayer = reader.Bool("pendingFromPlayer");
             _pendingTarget = new EntityId(checked((uint)reader.UInt("pendingTarget")));
+            _pendingAttackMove = reader.Has("pendingAttackMove") && reader.Bool("pendingAttackMove");
         }
         else
         {

@@ -32,7 +32,13 @@ internal sealed partial class ObjectiveDriver
         => LiveOf(_local).Where(entity => SimulationWorld.ActiveWeaponSet(entity) is { WeaponCount: > 0 } && entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE")
                                           && !entity.ContainedBy.IsValid && ScriptEngine.CountsAsObject(entity));
 
-    /// <summary>Orders the army toward the nearest of <paramref name="victims"/> (units already in weapon range are left to the combat loop). False when no order could be given.</summary>
+    /// <summary>The viewer's attack orders: unit id to victim id. Like the client's standing orders the driver carries an attack on a named victim tick by tick (<see cref="DriveAssaults"/>).</summary>
+    private readonly SortedDictionary<uint, uint> _assaults = [];
+
+    /// <summary>
+    /// Orders the army at the nearest of <paramref name="victims"/>: each unit gets that victim as its attack order and, when it is out of reach, an attack-move toward it (on the way the unit
+    /// engages what it meets by itself). False when no order could be given.
+    /// </summary>
     private bool Assault(IReadOnlyList<Entity> victims)
     {
         if (victims.Count == 0) return false;
@@ -51,8 +57,10 @@ internal sealed partial class ObjectiveDriver
                 var distance = dx * dx + dy * dy;
                 if (distance < best) { best = distance; nearest = victim; }
             }
-            if (nearest is null || best <= range * range) continue;
-            any |= Send(unit, (nearest.X, nearest.Y));
+            if (nearest is null) continue;
+            _assaults[unit.Id.Value] = nearest.Id.Value;
+            if (best <= range * range) continue;
+            any |= SendAttackMove(unit, (nearest.X, nearest.Y));
         }
         return any;
     }
@@ -114,7 +122,40 @@ internal sealed partial class ObjectiveDriver
     }
 
     /// <summary>The agent's turn for the current tick (call once per tick, before the session steps); nothing without an agent.</summary>
-    public void Act() => _agent?.Update();
+    public void Act()
+    {
+        _agent?.Update();
+        DriveAssaults();
+    }
+
+    private bool SendAttackMove(Entity entity, (Fixed X, Fixed Y) spot)
+    {
+        if (entity.Owner.IsSystem || entity.Template.Locomotor is null) return false;
+        var owner = entity.Owner;
+        var id = entity.Id;
+        if (!_session.Issue(owner, (sequence, tick) => new AttackMoveCommand(owner, sequence, tick, id, spot.X, spot.Y)).Accepted) return false;
+        Commands++;
+        return true;
+    }
+
+    /// <summary>The fire half of the attack orders (<c>aiAttackObject</c> by the player): a unit whose weapon reaches its victim and is ready fires at it, whatever the unit would pick by itself.</summary>
+    private void DriveAssaults()
+    {
+        if (_assaults.Count == 0) return;
+        foreach (var (unitId, victimId) in _assaults.ToArray())
+        {
+            var unit = _world.FindEntity(new EntityId(unitId));
+            var victim = _world.FindEntity(new EntityId(victimId));
+            if (unit is null || victim is null || unit.DestroyRequested || unit.EffectivelyDead || victim.DestroyRequested || victim.EffectivelyDead || victim.Body is null)
+            {
+                _assaults.Remove(unitId);
+                continue;
+            }
+            if (!_world.ChooseWeapon(unit, victim, CnCNew.Simulation.Templates.FireOrigin.Player).CanFire) continue;
+            var owner = unit.Owner;
+            if (_session.Issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, unit.Id, victim.Id)).Accepted) Commands++;
+        }
+    }
 }
 
 internal sealed partial class ObjectiveDriver
@@ -125,6 +166,6 @@ internal sealed partial class ObjectiveDriver
         if (_agent is null) return string.Empty;
         var stats = _agent.Stats;
         var army = Army().Count();
-        return $"agent: {stats.Commands} commands ({stats.Rejected} rejected), {stats.Constructions} constructions, {stats.Productions} productions, {stats.Waves} attack waves, {stats.Shots} shots, attacking {stats.AttackTicks} ticks; money {_world.MoneyOf(_local)}, army now {army}; {_agent.DescribeState()}";
+        return $"agent: {stats.Commands} commands ({stats.Rejected} rejected), {stats.Constructions} constructions, {stats.Productions} productions, {stats.Waves} attack waves, attacking {stats.AttackTicks} ticks; money {_world.MoneyOf(_local)}, army now {army}; {_agent.DescribeState()}";
     }
 }

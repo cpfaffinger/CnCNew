@@ -519,16 +519,52 @@ public sealed class ObjectCreationUpgrade(ObjectCreationUpgradeData data) : Upgr
 /// <summary>
 /// <c>AIUpdate.cpp</c> field set. Phase 5 scope is straight-line movement only: the fields that drive it live on
 /// <see cref="Templates.LocomotorInfo"/>/<see cref="World.Entity"/> (set by <c>SetMoveTargetCommand</c>), not here.
-/// <c>AutoAcquireEnemiesWhenIdle</c> is kept because it documents a real behaviour phase 5 does not implement (no automatic
-/// target acquisition: <c>FireWeaponCommand</c> is always a direct, explicit order); the rest of the schema
-/// (<c>MoodAttackCheckRate</c>, idle scan timing/angles, <c>ForbidPlayerCommands</c>, <c>MembersGetHealedAtLifeRatio</c>,
-/// <c>VoiceRapidFire</c>) is typed but not consumed — AI moods and squad healing are phase-6 scope.
+/// <c>AutoAcquireEnemiesWhenIdle</c> (the <c>AAS_*</c> bits) and <c>MoodAttackCheckRate</c> drive the unit's own target acquisition
+/// (<see cref="World.SimulationWorld"/>, docs/SIMULATION-CORE.md §33); <c>ForbidPlayerCommands</c> is typed but not consumed.
 /// </summary>
-public sealed record AIUpdateData(bool AutoAcquireEnemiesWhenIdle, Fixed RepairRatePerSecond = default) : ModuleData
+public sealed record AIUpdateData(AutoAcquire AutoAcquire, Fixed RepairRatePerSecond = default, long MoodCheckTicks = AIUpdateData.DefaultMoodCheckTicks) : ModuleData
 {
+    /// <summary><c>AIUpdateModuleData::AIUpdateModuleData</c>: <c>m_moodAttackCheckRate = LOGICFRAMES_PER_SECOND * 2</c>.</summary>
+    public const long DefaultMoodCheckTicks = 2 * SimulationTiming.LogicFramesPerSecond;
+
     public static AIUpdateData Parse(ModuleConfiguration configuration) => new(
-        ModuleConfigReader.Bool(configuration, "AutoAcquireEnemiesWhenIdle", false),
-        ModuleConfigReader.Real(configuration, "RepairHealthPercentPerSecond", Fixed.Zero));
+        ParseAutoAcquire(configuration),
+        ModuleConfigReader.Real(configuration, "RepairHealthPercentPerSecond", Fixed.Zero),
+        Math.Max(1, ModuleConfigReader.Ticks(configuration, "MoodAttackCheckRate", DefaultMoodCheckTicks)));
+
+    private static AutoAcquire ParseAutoAcquire(ModuleConfiguration configuration)
+    {
+        if (ModuleConfigReader.Flags(configuration, "AutoAcquireEnemiesWhenIdle") is not { } flags) return AutoAcquire.None;
+        var result = AutoAcquire.None;
+        foreach (var name in flags.Names)
+            result |= name switch
+            {
+                "YES" => AutoAcquire.Idle,
+                "STEALTHED" => AutoAcquire.Stealthed,
+                "NO" => AutoAcquire.No,
+                "NOTWHILEATTACKING" => AutoAcquire.NotWhileAttacking,
+                "ATTACK_BUILDINGS" => AutoAcquire.AttackBuildings,
+                _ => throw new InvalidDataException($"Module '{configuration.Name}': unknown AutoAcquireEnemiesWhenIdle flag '{name}'."),
+            };
+        return result;
+    }
+}
+
+/// <summary><c>AutoAcquireStates</c> (AIUpdate.h): the bits of <c>AutoAcquireEnemiesWhenIdle</c>, same values as the reference.</summary>
+[Flags]
+public enum AutoAcquire : byte
+{
+    None = 0,
+    /// <summary><c>AAS_Idle</c>: the idle unit (and its idle turret) looks for a victim by itself.</summary>
+    Idle = 0x01,
+    /// <summary><c>AAS_Idle_Stealthed</c>: it also does so while stealthed (giving its position away).</summary>
+    Stealthed = 0x02,
+    /// <summary><c>AAS_Idle_No</c>: the token <c>No</c>; a bit nothing tests.</summary>
+    No = 0x04,
+    /// <summary><c>AAS_Idle_Not_While_Attacking</c>: no target of opportunity while the unit attacks.</summary>
+    NotWhileAttacking = 0x08,
+    /// <summary><c>AAS_Idle_Attack_Buildings</c>: structures are victims too.</summary>
+    AttackBuildings = 0x10,
 }
 
 /// <summary>
@@ -618,10 +654,21 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
-    /// <summary><c>aiMoveToPosition</c>: replaces the current state with a move.</summary>
-    public virtual void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer)
+    /// <summary>The <c>AutoAcquireEnemiesWhenIdle</c> bits of the module data.</summary>
+    public AutoAcquire AutoAcquire => data.AutoAcquire;
+
+    /// <summary><c>MoodAttackCheckRate</c> in ticks: how often the unit looks for a victim by itself.</summary>
+    public long MoodCheckTicks => data.MoodCheckTicks;
+
+    /// <summary>
+    /// <c>aiMoveToPosition</c>: replaces the current state with a move. With <paramref name="attackMove"/> it is <c>aiAttackMoveToPosition</c> (<c>AI_ATTACK_MOVE_TO</c>): the world
+    /// lets the unit engage what it meets on the way and resume the march afterwards (docs/SIMULATION-CORE.md §33). An AI that has to finish something first (a parked jet takes off)
+    /// carries the flag along with the stored order.
+    /// </summary>
+    public virtual void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer, bool attackMove = false)
     {
         world.EndAttack(Entity);
+        if (attackMove) world.BeginAttackMove(Entity, x, y);
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;

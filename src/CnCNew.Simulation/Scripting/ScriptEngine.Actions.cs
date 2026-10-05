@@ -529,14 +529,22 @@ public sealed partial class ScriptEngine
 
     // ------------------------------------------------------------------------------------------------ orders
 
-    private void MoveTo(Entity entity, Fixed x, Fixed y, bool busy = true)
+    /// <summary>
+    /// A move order; with <paramref name="attack"/> an attack-move. <c>AIUpdateInterface::privateMoveToPosition</c> also turns the plain move of a computer player's alert or aggressive
+    /// team into an attack-move (<c>MAA_Action_To_AttackMove</c>).
+    /// </summary>
+    private void MoveTo(Entity entity, Fixed x, Fixed y, bool busy = true, bool attack = false)
     {
         _buttonHunts.Remove(entity.Id.Value);
         if (entity.Owner.IsSystem) { Diagnose("order for a neutral object"); return; }
         if (entity.Template.Locomotor is null) return;
         var owner = entity.Owner;
         var id = entity.Id;
-        if (!_issue(owner, (sequence, tick) => new SetMoveTargetCommand(owner, sequence, tick, id, x, y)).Accepted) Diagnose("order rejected");
+        if (!attack && _world.IsComputerPlayer(owner) && AttitudeOf(entity) >= Attitude.Alert) attack = true;
+        var accepted = attack
+            ? _issue(owner, (sequence, tick) => new AttackMoveCommand(owner, sequence, tick, id, x, y)).Accepted
+            : _issue(owner, (sequence, tick) => new SetMoveTargetCommand(owner, sequence, tick, id, x, y)).Accepted;
+        if (!accepted) Diagnose("order rejected");
         else if (busy) _busyThisTick.Add(id.Value);
     }
 
@@ -595,16 +603,18 @@ public sealed partial class ScriptEngine
                     }
                     waypoint = path.Waypoints[follower.Index];
                 }
-                if (!entity.HasMoveTarget) MoveTo(entity, waypoint.X, waypoint.Y);
+                if (!Marching(entity)) MoveTo(entity, waypoint.X, waypoint.Y);
                 continue;
             }
+            // aiAttackObject: the named victim is the unit's order, whatever the unit would pick by itself; the shot goes out as soon as a weapon reaches it.
+            if (mode.StartsWith(NamedMode, StringComparison.Ordinal) && NamedEntity(mode[NamedMode.Length..]) is { EffectivelyDead: false } ordered && FireAtOrdered(entity, ordered)) continue;
             if (_tick % RetargetInterval != follower.Entity % RetargetInterval) continue;
             if (mode.StartsWith(PositionMode, StringComparison.Ordinal))
             {
                 if (WaypointOrDiagnose(mode[PositionMode.Length..]) is { } spot)
                 {
                     if (DistanceSquared(entity, spot.X, spot.Y) <= ArrivalDistanceSquared) _followers.Remove(follower.Entity);
-                    else if (!entity.HasMoveTarget) MoveTo(entity, spot.X, spot.Y);
+                    else if (!Marching(entity)) MoveTo(entity, spot.X, spot.Y);
                 }
                 else _followers.Remove(follower.Entity);
                 continue;
@@ -619,8 +629,37 @@ public sealed partial class ScriptEngine
                 if (mode != HuntMode) _followers.Remove(follower.Entity);
                 continue;
             }
-            if (DistanceSquared(entity, goal.X, goal.Y) > ArrivalDistanceSquared) MoveTo(entity, goal.X, goal.Y);
+            if (DistanceSquared(entity, goal.X, goal.Y) > ArrivalDistanceSquared) AttackToward(entity, goal.X, goal.Y);
         }
+    }
+
+    /// <summary>The object marches: it has a move target, or it is on an attack-move and stopped on the way for a fight (it will march on by itself).</summary>
+    private bool Marching(Entity entity) => entity.HasMoveTarget || _world.IsAttackMoving(entity);
+
+    /// <summary>
+    /// The move of a hunt or attack order (<c>AIHuntState</c>, <c>aiAttackTeam</c>, <c>aiAttackArea</c>): an attack-move toward the goal, so the unit engages what it meets by itself. A unit
+    /// that is fighting, or already marching to about that goal, is left alone (a new order would end its attack).
+    /// </summary>
+    private void AttackToward(Entity entity, Fixed x, Fixed y)
+    {
+        if (_world.AcquiredVictimOf(entity).IsValid) return;
+        if (entity.HasMoveTarget && _world.AttackMoveGoalOf(entity) is { } goal)
+        {
+            var dx = goal.X - x;
+            var dy = goal.Y - y;
+            if (dx * dx + dy * dy <= ArrivalDistanceSquared) return;
+        }
+        MoveTo(entity, x, y, attack: true);
+    }
+
+    /// <summary>One shot at the victim of an attack order when a weapon of the unit reaches it and is ready; true when the order went out.</summary>
+    private bool FireAtOrdered(Entity entity, Entity victim)
+    {
+        if (entity.Owner.IsSystem || !_world.ChooseWeapon(entity, victim, FireOrigin.Ai).CanFire) return false;
+        var owner = entity.Owner;
+        var source = entity.Id;
+        var target = victim.Id;
+        return _issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target, WeaponSlot.Best, FireOrigin.Ai)).Accepted;
     }
 
     private static Fixed DistanceSquared(Entity entity, Fixed x, Fixed y)
