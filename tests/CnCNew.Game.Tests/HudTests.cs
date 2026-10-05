@@ -35,6 +35,7 @@ internal static class HudTests
         harness.Run("Box selection selects the start units", () => BoxSelectionSelects(data));
         harness.Run("Control groups store and recall a selection", () => ControlGroupsWork(data));
         harness.Run("Control bar scheme art and the logo image", () => SchemeArt(data));
+        harness.Run("The money display shows the localized money at the scheme's rectangle, not the layout placeholder", () => MoneyDisplay(data));
         harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));
 
@@ -466,6 +467,29 @@ internal static class HudTests
         var backgroundParts = commands.TakeWhile(command => command is UiImageDraw).Count();
         TestHarness.Assert(backgroundParts >= 1, $"the human side scheme contributes background parts ({backgroundParts})");
         TestHarness.Assert(!commands.OfType<UiImageDraw>().Any(draw => draw.Image == "HardCodedWithControlBarSchemeIni"), "the hard-coded portrait image is replaced by the scheme's own right-hand image");
+    }
+
+    /// <summary>
+    /// <c>InGameUI::update</c> sets the text of <c>ControlBar.wnd:MoneyDisplay</c> to <c>GUI:ControlBarMoneyDisplay</c> with the money, and
+    /// <c>ControlBarScheme</c> moves the window to the scheme's money rectangle. The layout file holds the placeholder text "$$$" and a 100x100
+    /// rectangle at the top left, which the client used to show as it was.
+    /// </summary>
+    private static void MoneyDisplay(GameData data)
+    {
+        foreach (var (width, height) in new[] { (1280, 720), (1920, 1080) })
+        {
+            var (match, controller) = NewMatch(data, new Vector2(width, height));
+            Advance(match, controller, 1);
+            var commands = controller.BuildDrawList(width, height).Commands;
+            var expected = "$ " + ((int)controller.Hud.Money.ToDecimal()).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var texts = commands.OfType<UiTextDraw>().Where(text => text.Text.StartsWith('$')).ToArray();
+            TestHarness.Assert(texts.Length == 1 && texts[0].Text == expected, $"{width}x{height}: exactly one money text '{expected}', got [{string.Join("|", texts.Select(text => text.Text))}]");
+            TestHarness.Assert(!commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("$$$")), $"{width}x{height}: the layout placeholder '$$$' is not drawn");
+            var window = controller.WindowRect("ControlBar.wnd:MoneyDisplay");
+            var bar = controller.WindowRect("ControlBar.wnd:ControlBarParent");
+            TestHarness.Assert(window is { } money && bar is { } parent && money.Y >= parent.Y && money.Right <= parent.Right + 1 && money.Width > 20, $"{width}x{height}: the money window lies inside the control bar ({window} in {bar})");
+            TestHarness.Assert(texts[0].Clip == window, $"{width}x{height}: the money text is clipped to its window");
+        }
     }
 
     private static void GoldenDrawListHash(GameData data)

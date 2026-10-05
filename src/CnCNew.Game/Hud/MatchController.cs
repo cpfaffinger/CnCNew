@@ -650,6 +650,14 @@ public sealed class MatchController
     private void RefreshDynamicWindows()
     {
         var view = CommandBar;
+        // InGameUI::update: the money window shows "GUI:ControlBarMoneyDisplay" with the local player's money; ControlBarScheme::updateControlBarScheme
+        // puts it at the scheme's money rectangle. The layout file keeps a placeholder text and a 100x100 rectangle at the top left.
+        if (_tree.FindByName("ControlBar.wnd:MoneyDisplay") is { } moneyWindow)
+        {
+            moneyWindow.SetText(_assets.Text.Format("GUI:ControlBarMoneyDisplay", (int)Hud.Money.ToDecimal()));
+            if (_scheme is { } moneyScheme)
+                moneyWindow.SetScreenRect(_controlBarRoot.Transform.Map(new WndScreenRect(moneyScheme.Money.Left, moneyScheme.Money.Top, moneyScheme.Money.Right, moneyScheme.Money.Bottom, 1920, 1080)));
+        }
         _tree.FindByName("ControlBar.wnd:CommandWindow")!.SetHidden(view.Context is not (CommandBarContext.Command or CommandBarContext.MultiSelect));
         _tree.FindByName("ControlBar.wnd:UnderConstructionWindow")!.SetHidden(view.Context != CommandBarContext.UnderConstruction);
         var underConstructionDesc = _tree.FindByName("ControlBar.wnd:UnderConstructionDesc");
@@ -715,10 +723,6 @@ public sealed class MatchController
 
         if (_scheme is { } scheme)
         {
-            var moneyRect = _controlBarRoot.Transform.Map(new WndScreenRect(scheme.Money.Left, scheme.Money.Top, scheme.Money.Right, scheme.Money.Bottom, 1920, 1080));
-            var moneyText = ((long)Hud.Money.ToDecimal()).ToString(CultureInfo.InvariantCulture);
-            commands.Add(new UiTextDraw(moneyText, null, smallFont, white, black, moneyRect.X, moneyRect.Y, UiTextAlignment.Left, moneyRect));
-
             var powerRect = _controlBarRoot.Transform.Map(new WndScreenRect(scheme.PowerBar.Left, scheme.PowerBar.Top, scheme.PowerBar.Right, scheme.PowerBar.Bottom, 1920, 1080));
             var powerColor = Hud.Underpowered ? new WndColor(220, 40, 40, 255) : new WndColor(40, 200, 60, 255);
             var ratio = Hud.EnergyConsumption <= 0 ? 1f : Math.Clamp(Hud.EnergyProduction / (float)Hud.EnergyConsumption, 0f, 1f);

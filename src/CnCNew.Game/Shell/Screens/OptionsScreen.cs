@@ -30,6 +30,10 @@ public sealed class OptionsScreen : ShellScreen
         Tree.Register("OptionsMenuSystem", OnSystem);
         Tree.Register("OptionsMenuInput", OnInput);
         W("LabelVersion").SetText("CnCNew 0.1.0");
+        // The layout's TEXT of an entry field is the word "Entry"; OptionsMenuInit overwrites it with the stored values. There are none here
+        // (network play is out of scope), so the fields start empty instead of showing the placeholder.
+        W("TextEntryHTTPProxy").SetEntryText(string.Empty);
+        W("TextEntryFirewallPortOverride").SetEntryText(string.Empty);
         BuildResolutionList();
         RefreshWidgets();
     }

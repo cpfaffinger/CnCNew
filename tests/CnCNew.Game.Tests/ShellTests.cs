@@ -52,6 +52,7 @@ internal static class ShellTests
         harness.Run("Buttons draw hilite and pushed images under the pointer and drop them when it leaves", () => ButtonStates(data));
         harness.Run("Options: sliders draw their boxes and drag, static texts have no hover fill", () => OptionsSlidersAndLabels(data));
         harness.Run("Quit dialog text takes the header template size, not the 1920x1080 layout scale", () => QuitDialogFonts(data));
+        harness.Run("Skirmish setup and options show localized words, not internal names or the layout's placeholders", () => LocalizedSetupText(data));
 
         if (updating) SaveBaselines(baselines);
         return harness.Failures;
@@ -223,6 +224,35 @@ internal static class ShellTests
         shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(4, 4)));
         TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && tree.AllWindows.All(window => !window.IsHilited && !(window.Type == WndWindowType.PushButton && window.IsSelected)),
             "no main menu window is hilited or pressed with the pointer away");
+    }
+
+    /// <summary>
+    /// The skirmish setup listed the internal template names (<c>FactionAmerica</c>), <c>Color 1</c> and <c>None</c>; the original lists
+    /// <c>PlayerTemplate.DisplayName</c> labels (<c>INI:FactionAmerica</c> = "USA"), <c>MultiplayerColor.TooltipName</c> labels (<c>Color:Gold</c>) and
+    /// <c>Team:n</c>. The options menu showed the word "Entry" (the layout's TEXT of the two network entry fields) where OptionsMenuInit puts values.
+    /// </summary>
+    private static void LocalizedSetupText(GameData data)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-shell-tests-" + Guid.NewGuid().ToString("N"));
+        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonSkirmish");
+        var tree = shell.CurrentScreen.Tree;
+        string[] Entries(string name) => [.. tree.FindByName($"SkirmishGameOptionsMenu.wnd:{name}")!.ComboBox!.Entries];
+        var armies = Entries("ComboBoxPlayerTemplate0");
+        foreach (var expected in new[] { "USA", "China", "GLA", "Random" })
+            TestHarness.Assert(armies.Contains(expected), $"the army list has '{expected}': {string.Join(", ", armies)}");
+        TestHarness.Assert(armies.All(name => !name.StartsWith("Faction", StringComparison.Ordinal)), $"no internal template name in the army list: {string.Join(", ", armies)}");
+        var colors = Entries("ComboBoxColor0");
+        TestHarness.Assert(colors.Length == 8 && colors.SequenceEqual(["Gold", "Red", "Blue", "Green", "Orange", "Cyan", "Purple", "Pink"]), $"the colors are the multiplayer color names in file order: {string.Join(", ", colors)}");
+        TestHarness.Assert(Entries("ComboBoxTeam0").SequenceEqual(["None", "1", "2", "3", "4"]), "the teams are Team:0..Team:4");
+        TestHarness.Assert(Entries("ComboBoxPlayer1")[0] == "Open", "the open slot is GUI:Open");
+        TestHarness.Assert(shell.TextSource!.RawNameHits.Count == 0, $"no label fell back to a raw name: {string.Join(", ", shell.TextSource.RawNameHits.Keys)}");
+
+        shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonOptions");
+        foreach (var name in new[] { "TextEntryHTTPProxy", "TextEntryFirewallPortOverride" })
+            TestHarness.Assert(shell.CurrentScreen.Tree.FindByName($"OptionsMenu.wnd:{name}")!.TextEntry!.Text.Length == 0, $"{name} starts empty, not with the layout's word 'Entry'");
     }
 
     private static void OptionsSlidersAndLabels(GameData data)
