@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Numerics;
 using CnCNew.Content;
 using CnCNew.Data.Compilation;
 using CnCNew.Data.Registry;
@@ -10,28 +11,35 @@ using CnCNew.Game.Data;
 using CnCNew.Presentation.Objects;
 using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.W3D;
 
 namespace CnCNew.Game.Tests;
 
 /// <summary>
 /// Phase 18, determinism across machines on real data (docs/DETERMINISM-FINDINGS.md): what the read-only search suspected is confirmed or refuted here against the
 /// retail content. The synthetic counterparts are in <c>tests/CnCNew.Simulation.Tests/Tests.Determinism.cs</c>.
-/// <c>--determinism-full</c> lets every world restored from a checkpoint run to the end of its match instead of <see cref="TailTicks"/> ticks.
+/// <c>--determinism-full</c> lets every world restored from a checkpoint run to the end of its match instead of <see cref="TailTicks"/> ticks and verifies the
+/// incremental hash on every campaign and challenge map; <c>--determinism-only D8</c> runs the tests of one finding.
 /// </summary>
 internal static class DeterminismTests
 {
     private const long TailTicks = 2_000;
     private const string AlpineAssault = "Maps/Alpine Assault/Alpine Assault.map";
 
+    /// <summary>SHA-256 of the airfield bone table (<c>ModelGeometry.Fingerprint</c>) of the retail content. It is part of the world fingerprint; a different value on another machine means the inputs differ before a single tick ran.</summary>
+    private const string BoneTableGolden = "93D5819BF231304D112CABABBC0A69986E82CF7E353BBC8742EEBE7A88F1DA47";
+
     public static int Run(string[] args)
     {
-        var harness = new TestHarness(nameof(DeterminismTests));
+        // --determinism-only D8 runs just the tests of one finding.
+        var harness = new TestHarness(nameof(DeterminismTests)) { OnlyPrefix = Array.IndexOf(args, "--determinism-only") is var only and >= 0 && only + 1 < args.Length ? args[only + 1] : null };
         var index = Array.IndexOf(args, "--content-dir");
         if (index < 0 || index + 1 >= args.Length)
         {
@@ -42,6 +50,29 @@ internal static class DeterminismTests
         var directory = args[index + 1];
         var full = args.Contains("--determinism-full");
         var data = GameData.Load(directory);
+
+        harness.Run("D3: a world restored at every checkpoint runs like the continuous one (reference match, two AI matches)", () =>
+        {
+            var reference = new ReferenceMatchScenario(ReferenceMatchOptions.Standard).Record(data.Templates, data.Fingerprint);
+            Report("reference match", RestoreAtEveryCheckpoint(reference, data.Templates, data.Fingerprint, null, 1_000, full ? 0 : TailTicks));
+            foreach (var factions in new[] { "FactionChina,FactionGLA", "FactionAmerica,FactionChina" })
+            {
+                var (map, terrain) = LoadMap(data, AlpineAssault);
+                var chosen = factions.Split(',').Select(name => data.Factions.First(value => value.Faction.Name.Equals(name, StringComparison.OrdinalIgnoreCase))).ToImmutableArray();
+                var replay = new SkirmishMatchScenario(SkirmishMatchOptions.Standard with { MaxTicks = 45_000 }).Record(data.Templates, data.Fingerprint, terrain, map.Objects, chosen);
+                Report($"AI match Alpine Assault {factions}", RestoreAtEveryCheckpoint(replay, data.Templates, data.Fingerprint, terrain, 1_000, full ? 0 : TailTicks));
+            }
+        });
+
+        harness.Run("D3: a mission restored every 150 ticks runs like the continuous one (MD_USA05, MD_GLA05)", () =>
+        {
+            foreach (var name in new[] { "MD_USA05", "MD_GLA05" })
+            {
+                var (map, terrain) = LoadMap(data, $"Maps/{name}/{name}.map");
+                // MD_GLA05 restored at tick 150 left the continuous run at tick 900 before the entity table was ordered: the tail has to reach that far.
+                Report($"mission {name}", RestoreMissionAtEveryCheckpoint(data, map, terrain, full ? 3_000 : 1_500, 150, full ? 0 : 900));
+            }
+        });
 
         harness.Run("D8: the incremental hash equals the full hash in every tick (reference match, AI match, two missions; bounded)", () =>
         {

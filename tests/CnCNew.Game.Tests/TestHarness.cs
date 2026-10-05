@@ -4,8 +4,12 @@ internal sealed class TestHarness(string suite)
 {
     public int Failures { get; private set; }
 
+    /// <summary>When set, only the tests whose name starts with this text run (a development aid for the long suites).</summary>
+    public string? OnlyPrefix { get; init; }
+
     public void Run(string name, Action test)
     {
+        if (OnlyPrefix is not null && !name.StartsWith(OnlyPrefix, StringComparison.OrdinalIgnoreCase)) return;
         try
         {
             test();

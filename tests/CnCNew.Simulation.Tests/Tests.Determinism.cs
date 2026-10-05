@@ -113,6 +113,44 @@ static partial class Tests
     }
 
     /// <summary>
+    /// D3: the entity table was a dictionary. After objects died and others were created, a running world enumerated it in the order of the table's free slots,
+    /// a world restored from a snapshot in id order. Every loop over the entities with a side effect that depends on the order (first match wins, effects in
+    /// sequence) could then decide differently in the two worlds. The enumeration must be the same, and it must be the id order.
+    /// </summary>
+    public static void EntityEnumerationIsOrderedById()
+    {
+        var fixture = new SyntheticFixture();
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        for (var index = 0; index < 8; index++) feeder.Spawn(1, "Barrel");
+        for (var tick = 0; tick < 3; tick++) world.Step();
+        Check.That(world.Metrics.Entities == 8, "Fixture: eight barrels.");
+        feeder.Destroy(2);
+        feeder.Destroy(5);
+        feeder.Destroy(6);
+        for (var tick = 0; tick < 3; tick++) world.Step();
+        for (var index = 0; index < 4; index++) feeder.Spawn(1, "Barrel");
+        for (var tick = 0; tick < 3; tick++) world.Step();
+        Check.That(world.Metrics.Entities == 9, $"Fixture: three barrels died, four were created ({world.Metrics.Entities}).");
+        var live = world.Entities.Select(entity => entity.Id.Value).ToArray();
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint).Entities.Select(entity => entity.Id.Value).ToArray();
+        Check.That(live.SequenceEqual(restored), $"A running world enumerates its entities as {string.Join(",", live)}, the same world restored from a snapshot as {string.Join(",", restored)}.");
+        Check.That(live.SequenceEqual(live.Order()), $"The enumeration is the id order ({string.Join(",", live)}).");
+
+        // Removal while enumerating stays legal (the dictionary allowed it): the removed entity is skipped, the rest is visited once, in order.
+        var seen = new List<uint>();
+        foreach (var entity in world.Entities)
+        {
+            seen.Add(entity.Id.Value);
+            if (entity.Id.Value == 3) { feeder.Destroy(4); feeder.Destroy(1); }
+        }
+        Check.That(seen.SequenceEqual(live), "Requesting a destroy inside the loop does not disturb it.");
+        for (var tick = 0; tick < 3; tick++) world.Step();
+        Check.That(world.Entities.Select(entity => entity.Id.Value).SequenceEqual(live.Where(id => id is not (1 or 4))) && world.Entities.Count == 7 && world.FindEntity(new CnCNew.Simulation.Ids.EntityId(4)) is null,
+            "Destroyed entities leave the enumeration and the lookup.");
+    }
+
+    /// <summary>
     /// D8: the tick hash is maintained incrementally; a state change without <c>MarkDirty</c> leaves a stale entity hash that no one notices until the object
     /// is marked for another reason. The tools verify against a full recomputation only every few thousand ticks. Here the stress scenario is verified in
     /// every tick, and the verified run must hash like the unverified one (verification refreshes the caches, so it must not be what makes a run correct).

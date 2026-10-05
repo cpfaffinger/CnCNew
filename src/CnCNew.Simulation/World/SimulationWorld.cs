@@ -51,7 +51,8 @@ public sealed partial class SimulationWorld : IWorldServices
     private const int MaxEventsPerTick = 20_000_000;
 
     private readonly TemplateCatalog _templates;
-    private readonly Dictionary<uint, Entity> _entities = [];
+    // Looked up by id, enumerated in ascending id order: the same in a running world and in one restored from a snapshot (EntityTable, finding D3).
+    private readonly EntityTable _entities = new();
     private readonly List<Entity> _dirty = [];
     private readonly IndexedHeap<UpdateNode> _updates;
     private readonly IndexedHeap<SimTimer> _timers;
@@ -1455,6 +1456,8 @@ public sealed partial class SimulationWorld : IWorldServices
             _destroyedTotal++;
         }
         _destroyQueue.Clear();
+        // A fixed point of the tick at which no loop over the entities is in flight.
+        _entities.Compact();
     }
 
     private void ProcessSpawns()
