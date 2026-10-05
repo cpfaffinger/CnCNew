@@ -114,11 +114,11 @@ Status: **behoben** (mit Test oder Messung), **vereinfacht**, **offen**, **bewus
 |---|---|---|---|
 | Geldanzeige | „$$$“ oben links in der Ecke plus eine Zahl in Arial 10 am Schemarechteck | `MoneyDisplay` blieb mit Platzhalter und 100x100-Rechteck stehen; die Zahl wurde zusätzlich von Hand gezeichnet | **behoben** (`$ 10000` im Fenster am Schemarechteck, `HudTests.MoneyDisplay`) |
 | Befehlssymbole | Hotkeybuchstabe oben links, Kostenzahl unten rechts | Zusatz des Clients, das Original druckt nichts auf die Symbole | **behoben** (entfernt; Beschreibung als Tooltip) |
-| Tooltips | fehlten vollständig (`UiWindowTree.Tooltip` wurde von keinem Code gezeichnet) | nie umgesetzt | **behoben/vereinfacht**: `UiTooltipLayout`, `TooltipPainter`; Befehlsknopfbeschreibung statt `ControlBarPopupDescription.wnd` (ohne Voraussetzungen/Wissenschaften); Objekt- und Geldtooltips fehlen |
+| Tooltips | fehlten vollständig (`UiWindowTree.Tooltip` wurde von keinem Code gezeichnet) | nie umgesetzt | **behoben/vereinfacht**: `UiTooltipLayout`, `TooltipPainter`; die Befehlsknopfbeschreibung folgt `populateBuildTooltipLayout` (Name, Kosten, Beschreibung, „Insufficient funds“, „Requires: …“, gekauftes Upgrade; `docs/GAME-HUD.md` §5a), aber als Zeigertooltip statt `ControlBarPopupDescription.wnd`; Geld- und Energiefenster beschreiben sich; Objekttooltips und Wissenschaftstexte fehlen |
 | Tooltip-Zeitverhalten | blieb sichtbar, solange der Zeiger im Fenster war | Original: der Zeiger muss `Delay` still stehen (`createStreamMessages`) | **behoben** (`WndTests.TooltipStateMachine`) |
 | Optionen: Eingabefelder | zeigten „Entry“ | TEXT der Layoutdatei, `OptionsMenuInit` setzt Werte | **behoben** (leer) |
 | Skirmish: Armeen, Farben, Teams | `FactionAmerica`, `Color 1`, `None` | feste Namen | **behoben** (USA/China/GLA/Random, Gold/Red/Blue/Green/Orange/Cyan/Purple/Pink, Team:0..4; `ShellTests`) |
-| Skirmish: „Computer“, „(no map selected)“ | feste englische Wörter | kein CSF-Label | **offen**; das Original hat Easy/Medium/Hard Army (`GUI:EasyAI` …), die Simulation kennt keine Schwierigkeit |
+| Skirmish: „Computer“, „(no map selected)“ | feste englische Wörter | kein CSF-Label | **behoben**: die Slots bieten wie `SkirmishGameOptionsMenuInit` `GUI:Open`, `GUI:Closed`, `GUI:EasyAI`, `GUI:MediumAI`, `GUI:HardAI`; Namensfeld `GUI:Player`; die Karte ist wie im Original vorbelegt (`getPreferredMap`/`getDefaultMap`), einen Zustand „keine Karte“ gibt es nur ohne jede Mehrspielerkarte (dann leer). **Offen:** die drei Armeen starten dieselbe KI (die Simulation kennt keine Schwierigkeit; gezählt in `GameShell.SkirmishDifficultyIgnored`) |
 | Skirmish: Farbeinträge ohne Farbfläche | Text statt farbiger Fläche | Auswahlfelder kennen keine Eintragsfarben | **offen** |
 | Credits | Schriften Arial 24 fett/16 fett/12 | feste Werte | **behoben** (Language.ini + `adjustFontSize`, `ShellTests`); **offen:** `COLUMN`-Paare, Scrollrate (Original 2 px je Frame, hier 40 px/s) |
 | Abschlussbildschirm | Spielernamen sind die Armeenamen („FactionAmerica“) | Namen kommen aus der Sitzung | **offen** (außerhalb dieses Auftrags: Spielername aus der Einrichtung) |
@@ -148,6 +148,9 @@ ohne Wert laufen auf die Konstruktorstandardwerte von `InGameUI.cpp` und stehen 
 | `INGAME_POPUP_MESSAGE` | wie eine Titelzeile, nach 5 s verschwunden | nie als Fenster umgesetzt | **behoben/vereinfacht**: `InGamePopupMessage.wnd` mit OK-Knopf (`MissionPopupWindow`), Enter/Escape beim Loslassen, pausiert und ist modal, wenn das Skript es verlangt; Textfarbe die des Layouts (254) statt `PopupMessageColor` (255) |
 | Sprach-/Filmplatzhalter | Arial 14; kein Untertitel | feste Schrift; `doSpeechPlay` blieb unbeachtet | **behoben/bewusst**: Untertitel `DIALOGEVENT:<Name>Subtitle` als Missionsbeschriftung (8 s) wenn vorhanden, nicht leer und ohne führendes `*` (englisch 1 von 2.455); der Platzhalter („(speech: Name)“, „(movie placeholder: Name)“) bleibt, gekennzeichnet, in der `MessageFont` der Daten |
 | Hinweis „(cinematic: the mission script has disabled input)“ | erfundener Text | Debughilfe | **entfernt** (das Original zeigt nichts) |
+| Meldungen des Spiels (Befehl abgelehnt, Bau fertig, Angriff …) | ein „Ticker“ mit erfundenen englischen Texten, von keinem Code gezeichnet | nie an die Meldungsliste angeschlossen | **behoben**: `HudMessageFeed` schreibt die Labels des Originals in dieselbe Liste wie `DISPLAY_TEXT` (`docs/GAME-HUD.md` §8 „Meldungsliste“); was im Original keine Zeile hat, wird gezählt |
+| Letterbox-Balken | ein Achtel der Bildhöhe, unter den Texten | erfunden | **behoben**: `(Höhe − 9/16 · Breite) / 2` oben und unten (800x600: 75, 1024x768: 96, 16:9 und breiter: keine), über den Meldungen und unter dem Filmtext, in einer Sekunde eingeblendet, beim Ende blendet nur der obere aus (`W3DDisplay::renderLetterBox`, `W3DDisplay::draw`) |
+| Tippklick der Missionsbeschriftung | fehlte | nicht verdrahtet | **behoben**: je getipptem Zeichen `MilitarySubtitlesTyping` an den Ton des Clients (`InGameUI::update`); gezählt im Missionsbericht |
 | Ergebnisbanner („MISSION ACCOMPLISHED“) | feste Arial 28 fett | kein Original-Gegenstück (Ergebnisbildschirm/Film) | **bewusst** als erfundener Platzhalter, feste Schrift, in `MissionOutputCatalog`/Doku so benannt |
 ## 5. Messwerte (`UiRenderTool --font-audit`, 80 Layouts, 1280x720 und 1920x1080, Uniform)
 
@@ -189,16 +192,19 @@ Die Sollwerte belegen Reproduzierbarkeit, nicht Richtigkeit.
    „BACK“, „SKIRMISH“ …) durch die neue Seite, am stärksten in `flow-skirmish-setup-map-*.png`.
 6. **`SinglePlayerMenu.wnd`** (Neu/Laden/Zurück nach „USA“) – **behoben**: ist ein Erbstück des ersten Generals, das Zero Hour nie öffnet; das Original fragt die Schwierigkeit im Hauptmenü (`MapBorder4`), die Hülle
    ebenso (`GAME-SHELL.md` §13.2). Die Seite mit Times New Roman gibt es nicht mehr.
-7. **Hinweis zum Tooltip der Befehlsknöpfe:** die Texte kommen aus `CommandButton.TextLabel`/`DescriptLabel`; sind Voraussetzungen offen, steht das heute nicht darin.
+7. **Tooltip der Befehlsknöpfe:** Voraussetzungen, Geldmangel und gekaufte Upgrades stehen jetzt darin (`docs/GAME-HUD.md` §5a); anzusehen bleibt, ob die Zeilen im Zeigertooltip lesbar sind – das Original hat dafür ein eigenes Fenster.
 8. **Missionstexte (Abschnitt 4.6):** Alle Zeiten, Reihenfolgen und Zahlen stimmen mit `InGameUI.cpp`/`W3DDisplay.cpp` überein und sind in Tests festgehalten, aber nie mit einem Original verglichen. Ein Mensch muss ansehen: wie die
    Schreibmaschine im Bewegtbild wirkt (Takt, Cursor, Ausblenden), ob Courier New in dieser Größe wie im Original aussieht, die Lage von Meldungen, Zeitgebern und Superwaffenliste auf den Bildschirmen, das Meldungsfenster
    (Knopfbilder, Textumbruch) und den Wegfall des Hinweises bei gesperrter Eingabe.
 9. **Aktualisierung je Logikschritt statt je Bild:** Das Original verblasst Meldungen und Missionsbeschriftung in `InGameUI::update` einmal je gezeichnetem Bild (also schneller ab 60 Bildern je Sekunde); hier einmal je
    Logikschritt (30 je Sekunde). Bei der Schreibmaschine macht das keinen Unterschied (sie vergleicht mit dem Logikbild), beim Verblassen schon.
-10. **Letterbox:** Die Balken der Hülle sind ein Achtel der Höhe, die des Originals `(Höhe − 9/16 · Breite)/2` (bei 16:9 keine); das Original zeichnet sie über die UI-Texte, hier liegen die Texte darüber, weil sonst die Meldungen
-    (y = 22) unter dem oberen Balken verschwänden.
-11. **Tippklick:** Das Original spielt je getipptem Zeichen `MilitarySubtitlesTyping`; der Client tut es nicht (`MilitaryCaptionState.TypedCharacters` zählt die Zeichen für einen Host).
-12. **Nicht angeschlossen:** die Meldungsliste wird nur von `DISPLAY_TEXT` gespeist; die Befehlsrückmeldungen des HUD (Ticker, `MatchController`) laufen weiter über eine eigene Liste, die kein Zeichencode zeichnet.
+10. **Letterbox** – **behoben** nach `W3DDisplay::renderLetterBox`: Balken `(Höhe − 9/16 · Breite) / 2`, bei 16:9 und breiter keine; sie liegen über den Meldungen (y = 22 verschwindet bei 4:3
+    also unter dem oberen Balken, wie im Original) und unter dem Filmtext. Abweichung: die Blende zählt Logikschritte (30 = 1000 ms) statt Wanduhr, und der Mauszeiger des Clients liegt
+    über den Balken (im Original darunter). Anzusehen: ein 4:3-Fenster während eines Intros.
+11. **Tippklick** – **behoben**: je getipptem Zeichen `MilitarySubtitlesTyping` (`SoundEffects.ini`: `utext1a`, Lautstärke 15, `Type = ui player`); auf `MD_USA01` 52 Klicks angefragt und
+    52 gestartet. **Gehört hat es niemand**, auch nicht, ob 15 Klicks je Sekunde über der Musik angenehm sind.
+12. **Befehlsrückmeldungen** – **behoben**: sie stehen in derselben Meldungsliste wie `DISPLAY_TEXT` (`docs/GAME-HUD.md` §8). Anzusehen: ob die Zeilen oben links auffallen, wenn ein
+    Bauplatz abgelehnt wird.
 
 ## 8. Tests und Werkzeuge
 
@@ -213,6 +219,11 @@ Die Sollwerte belegen Reproduzierbarkeit, nicht Richtigkeit.
 | `KeyboardHome`, Bild-/Größenersatz eines Fensters | `tests/CnCNew.Ui.Tests/WndTests.cs` |
 | `InGameUI.ini` typisiert (synthetisch und Retaildatei, Language-Platz gegen INI in Größe/Fett) | `tests/CnCNew.Ui.Tests/TextAndSettingsTests.cs` (`InGameUiSettingsAreTypedFromTheGraph`, `RealInGameUi`) |
 | Meldungsliste, Schreibmaschine Bild für Bild, Ausblenden, Zeitgeber, Filmtext, Meldungsfenster, Skalierung | `tests/CnCNew.Game.Tests/MissionTextTests.cs` (synthetisch; mit `--content-dir`: `MD_USA01`, `MD_CHI02`, Meldungsfenster in `GC_ChemGeneral`) |
+| Meldungen des Spiels: Labels, Lage, Farben, Verblassen, Zählung; abgelehnter Bauplatz über den echten Klickweg | `tests/CnCNew.Game.Tests/HudTests.cs` (`MessageList`, `MessageListFromARefusedPlacement`), `MissionTextTests.cs` (`RealSharedMessageList`) |
+| Letterbox (Maße, Blende, Reihenfolge), Tippklick (synthetisch und `MD_USA01` mit echtem Audio-Director) | `tests/CnCNew.Game.Tests/MissionTextTests.cs` (`LetterboxFollowsTheOriginal`, `TypingClick`, `RealTypingClick`) |
+| Knopfbeschreibung mit Voraussetzungen, Geldmangel, gekauftem Upgrade; Geld- und Energiefenster | `tests/CnCNew.Game.Tests/HudTests.cs` (`CommandButtonRequirements`, `MoneyAndPowerTooltips`) |
+| Tooltip eines deaktivierten Fensters | `tests/CnCNew.Ui.Tests/WndTests.cs` (`TooltipStateMachine`) |
+| Bild der Befehlsleiste mit Meldungszeilen und „Requires“-Tooltip, Letterbox über den Meldungen (drei Größen) | `tools/CnCNew.UiRenderTool` (`HudFeedbackScenes`: `hudfeedback-*.png`, `hudletterbox-*.png`) |
 | Missionstextbild (alle Texte eines Bildschirms, drei Größen) | `tools/CnCNew.UiRenderTool` (`MissionTextScenes`) |
 | GDI-Schrift (Familie wirklich Arial, 17er-Deckungsstufen, Zellmaße, Generals schmaler) | `tools/CnCNew.UiRenderTool` (`FontAudit.SelfCheck` bei jedem Lauf) |
 | Schriftvergleich, Glyphdeckung, Platzhalter-/Hotkey-Zählung | `tools/CnCNew.UiRenderTool -- --font-audit` |
