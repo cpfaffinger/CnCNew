@@ -1683,3 +1683,152 @@ Der Nur-Befehle-Agent der Missionen (`docs/SCRIPT-ENGINE.md` §9) mit der Fassun
 endet bei Tick 20.733 statt 18.492). Die Änderung trägt also weder im Skirmish noch in den Missionen und ist **nicht im Code**. Was die Messung lehrt: der Preis taugt nicht als Maß, und Sparen hält die Armee
 länger unter der Angriffsschwelle. Ein tragfähiger Ansatz braucht einen Kampfwert je Ziel (Schaden gegen Rüstung, wie `WeaponSet`/`ArmorSet` ihn hergeben) und Teams statt Einzelkäufen
 (`AIPlayer::selectTeamToBuild`); das ist eine eigene, vermessene Arbeit hinter dem Programm aus `docs/MULTIPLAYER-PLAN.md`.
+
+## 37. Phase 18 (6. Oktober 2026): Referenzmanifest, Eingangsmanifest und Prüfmodus des inkrementellen Hashs
+
+Keine Änderung an der Simulation. Neu sind zwei Dateien unter `baselines/` und die Werkzeugbefehle, die sie schreiben und prüfen (`tools/CnCNew.SimTool`: `ReferenceManifest.cs`, `InputManifest.cs`,
+`IncrementalHashCheck.cs`, `ManifestDocument.cs`, `CanonicalObjectHasher.cs`). Ab hier ist **das Manifest maßgeblich**; Hashwerte in dieser und anderen Dokumentationen sind Abschriften
+(`docs/MULTIPLAYER-PLAN.md` §6 Regel 2). Jede Änderung an den beiden Dateien ist Review-Gegenstand wie `baselines/compatibility.json`.
+
+```powershell
+dotnet build -c Release tools/CnCNew.SimTool
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/phase2-import-a baselines/reference-manifest.json --set quick
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/phase2-import-a baselines/reference-manifest.json [--set full] [--only <id>[,<id>]] [--jobs N]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/phase2-import-a baselines/reference-manifest.json --set quick --verify-incremental
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest write .local/phase2-import-a baselines/reference-manifest.json [--set full]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest list .local/phase2-import-a
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest show .local/phase2-import-a --only <id> [--explain-incremental]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest check .local/phase2-import-a baselines/input-manifest.json
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest write .local/phase2-import-a baselines/input-manifest.json
+```
+
+### 37.1 Dateiform
+
+Beide Dateien sind eine strenge Teilmenge von JSON (`ManifestDocument`): nur Texte, ganze Zahlen, Wahrheitswerte und Objekte; keine Arrays, keine Brüche, kein `null`. Die Schreibweise ist eindeutig: UTF-8 ohne
+BOM, LF, zwei Leerzeichen je Ebene, Schlüssel auf jeder Ebene ordinal sortiert (Läufe stehen als Schlüssel in `runs`, also nach Id sortiert), Zahlen in invarianter Schreibweise, ein eigenes Escaping (nur `"`,
+`\` und Steuerzeichen unter U+0020; nicht das der Laufzeit, vgl. Befund D9). Die Dateien enthalten keine absoluten Pfade, Zeitstempel, Rechnernamen oder Laufzeiten; Karten stehen als logische Inhaltspfade.
+Der Leser lehnt alles außerhalb des Modells ab (auch doppelte Schlüssel und ein BOM). Zeiten stehen nur auf der Konsole (Fortschritt auf `stderr`, das Ergebnis je Lauf in Id-Reihenfolge auf `stdout`).
+
+### 37.2 Läufe des Referenzmanifests
+
+50 Läufe, davon 9 in der Stufe `quick`. `full` heißt „alle“; jede Zeile der Datei trägt ihre Stufe (`set`). `--only` wählt Läufe nach Id, unabhängig von der Stufe; unbekannte Ids sind ein Fehler
+(Exitcode 2). Seeds sind die Standardwerte der jeweiligen `…Options.Standard`, Tickrate 30.
+
+| Lauf (Id) | Art | Stufe | Parameter |
+|---|---|---|---|
+| `reference-match` | Retail-Referenzmatch (`ReferenceMatchScenario`) | quick | 13 Fraktionen, höchstens 216.000 Ticks |
+| `stress` | synthetischer Stresstest (`StressScenario`) | quick | 216.000 Ticks, Zielbestand 10.500 |
+| `<Karte>_<A>-<B>` (16) | KI gegen KI (`SkirmishMatchScenario`, wie `ai-match`) | 4 quick, 12 full | Alpine Assault, Armored Fury, Bitter Winter, Death Valley × China/GLA, America/China, GLA/America, ChinaTankGeneral/AmericaAirForceGeneral; `--max-ticks 45000` |
+| `ai8_TwilightFlame`, `ai8_FortressAvalanche`, `ai8_IronDragon` | acht KIs | full | die ersten acht spielbaren Fraktionen in Katalogreihenfolge (was `ai-match --players 8` nimmt, im Manifest ausgeschrieben), 9.000 Ticks |
+| `ai8_TwilightFlame_short` | acht KIs, gekürzt | quick | 3.000 Ticks |
+| `skirmish-sweep` | alle Karten mit mindestens zwei Startpositionen, zwei KIs, 3.000 Ticks | full | 150 Karten, 64 gespielt |
+| `mission_<Karte>[_<Fraktion>]` (27) | Mission über 3.000 Ticks (`MissionScenario`, wie `mission-run`) | 2 quick, 25 full | je Kampagne die erste und die letzte Mission |
+
+- **Quick-Auswahl der KI-Läufe:** `AlpineAssault_GLA-America`, `BitterWinter_GLA-America`, `DeathValley_America-China`, `DeathValley_China-GLA` – die kürzesten entschiedenen, drei Karten, jede Grundfraktion
+  mindestens zweimal. Quick-Missionen: `mission_MD_USA05`, `mission_MD_GLA05`.
+- **Acht Spieler:** Twilight Flame (486 × 469 Zellen, die größte Karte mit acht Startpositionen), Fortress Avalanche (418 × 413) und Iron Dragon (531 × 282, anderes Seitenverhältnis). Death Valley hat ebenfalls
+  acht Startpositionen, ist aber schon unter den Zwei-Spieler-Karten. 9.000 Ticks (fünf Spielminuten) sind eine Grenze der Laufzeit, kein Spielende: alle drei enden ohne Sieger. Ein solcher Lauf kostet hier
+  220 bis 305 s (Aufzeichnung und drei Wiedergaben), bei 45.000 Ticks wären es je Lauf deutlich über 20 Minuten.
+- **Missionen:** je Kampagne die erste und die letzte Mission ihrer Reihenfolge, bei nur einer Mission diese. Kampagnen, die dieselbe Karte mit derselben menschlichen Fraktion spielen, teilen sich den Lauf
+  (`MD_USA_1_DEMO` und `USA` → `mission_MD_USA01`; der Parameter `campaigns` nennt alle). Challenge-Kampagnen laufen mit ihrer Persona (`HumanFaction`, `ChallengeSides.HumanSideFor`), deshalb neun verschiedene
+  Läufe auf `GC_ChinaBoss`. Das ergibt 27 Läufe aus 17 Kampagnen. Die Karte von `MD_CAMPEA_DEMO` fehlt im Bestand; das steht als `unavailable` im Manifest und wird mitgeprüft.
+- **Sweep:** ein Eintrag mit Zählern (64 gestartet und beendet, 0 mit Sieger, 0 fehlgeschlagen, 75 Karten ohne und 11 mit nur einer Startposition), Endtick/Endhash/Kette je Karte und einem SHA-256 über
+  diese Zeilen (`combinedSha256`). Der Sweep spielt live und wird nicht wiedergegeben.
+
+Die in `docs/HANDOFF-PHASE18.md` und §36.2 genannten Werte (Referenzmatch, Stresstest, 16 KI-Läufe, `MD_USA05`, `MD_GLA05`) stehen unverändert im Manifest.
+
+### 37.3 Was je Lauf steht
+
+`kind`, `set`, `parameters` (Karte, Fraktionen, Seeds, Tickgrenzen, Tickrate) und `results`. Für aufgezeichnete Läufe (Referenzmatch, Stresstest, KI): `endTick`, `outcome` (`winner`/`stalemate`/`none`),
+`winner`, `victoryTick`, `finalHash`, `chainHash` (Kette über alle Tick-Hashes von Lauf 1), Zahl der Befehle und SHA-256 des Befehlsstroms (die Replay-Datei ohne Prüfpunkte – unterscheidet „die KI hat anders
+entschieden“ von „die Welt hat anders gerechnet“), `identicalInRun2` (zweite frische Wiedergabe, Tick für Tick), `snapshotTick`/`snapshotBytes`/`snapshotSha256` und `identicalAfterSnapshotContinuation`
+(Snapshot bei halber Länge, Wiederherstellung, Rest; verglichen mit Lauf 1). Für Missionen zusätzlich Skript- und Objektzähler, `saveTick`, `hashAtSave` (vor dem Speichern), `hashAfterRestore` (aus der
+wiederhergestellten Sitzung) und zwei Wahrheitswerte:
+
+- `identicalAfterSaveRestore`: gespeicherte und wiederhergestellte Sitzung laufen gleich weiter – das prüfen `mission-run` und das Kampagnen-Audit;
+- `identicalToUninterruptedRunAfterSaveRestore`: beide gleichen außerdem Lauf 1, der nie gespeichert wurde, und der Hash am Speicherpunkt ist vor und nach dem Laden derselbe.
+
+`write` schreibt, was gemessen wurde – auch einen falschen Wahrheitswert, mit Warnung. `check` rechnet alles neu und meldet je Lauf `OK` oder das **erste abweichende Feld** mit erwartetem und tatsächlichem
+Wert, dazu abweichende Kopfwerte (`simulation`: Tickrate, `CommandTypes.Version`, Replay-, Snapshot-Versionen) und Läufe, die nur die Datei oder nur das Werkzeug kennt; Exitcode 1 bei jeder Abweichung.
+
+### 37.4 Befund D8 bestätigt: fünf Missionen tragen einen veralteten inkrementellen Hash
+
+In fünf der 27 Missionsläufe ist `identicalToUninterruptedRunAfterSaveRestore` **falsch** (so im Manifest festgehalten): `mission_MD_USA01`, `mission_MD_USA02`, `mission_MD_GLA03`, `mission_MD_GLA05`,
+`mission_GC_LaserGeneral_ChinaNukeGeneral`. `identicalAfterSaveRestore` ist überall wahr. Ursache: ein Objekt ändert seinen Zustand, ohne dass die Welt es als geändert kennt; sein alter Hash bleibt in der
+Summe, bis etwas alle Hashes neu rechnet – das tut `WorldSnapshot.Write` (`ComputeFullHash`). Die Sitzung hasht deshalb nach dem Speichern anders als ein Lauf, der nie gespeichert hat; die bisherigen Prüfungen
+verglichen nur die beiden Fortsetzungen miteinander und sahen es nicht. Für Lockstep heißt das: zwei Rechner mit demselben Zustand melden verschiedene Hashes, sobald einer von ihnen einen Snapshot schreibt.
+Die dokumentierten Missionshashes dieser fünf Karten (auch `MD_GLA05` `317B464E8BA98377`) sind Hashes mit veralteten Anteilen.
+
+`--verify-incremental` ruft in Lauf 1 nach jedem Tick `SimulationWorld.VerifyIncrementalHash` auf (Stresstest: alle 1.000 Ticks; die Prüfung frischt die Zwischenstände auf, ein betroffener Lauf weicht danach
+auch im Hash ab). `--explain-incremental` nennt zusätzlich Objekt und Felder: es beschreibt jedes Objekt mit `Entity.Describe` und vergleicht dessen Hash mit dem von der Welt gemerkten (`Entity.CachedHash`,
+per Reflection gelesen – der einzige Zugriff auf Internes, kein Eingriff in die Simulation). Ergebnis (Stufe `quick` mit Erklärung, dazu die vier übrigen betroffenen Missionen einzeln):
+
+| Lauf | Ticks mit Abweichung | Objekt, Modul, Feld |
+|---|---|---|
+| Referenzmatch, 4 KI-Läufe, `ai8_TwilightFlame_short`, `MD_USA05` (je Tick), Stresstest (216 Stichproben) | 0 | – |
+| `mission_MD_GLA05` | 1 (nach Tick 854) | fünf `SupplyDock`: `SupplyWarehouseDockUpdate.boxes` (z. B. 400 → 740). Stelle: `SupplyWarehouseDockUpdate.SetCashValue` (`Modules/BuiltIn/DockModules.cs`) setzt `Entity.Dirty = true`, statt die Welt zu benachrichtigen – das Objekt steht nicht in der Dirty-Liste, und spätere `MarkDirty`-Aufrufe kehren wegen des gesetzten Flags sofort zurück. Aufrufer: Skriptaktion `WAREHOUSE_SET_VALUE` (`ScriptEngine.ExtendedActions.cs`) |
+| `mission_MD_USA01` | 4 (ab Tick 58) | `AmericaVehicleChinook`: `TransportContain.contained[]`, `usedSlots` beim Einsteigen |
+| `mission_MD_USA02` | 27 (ab Tick 1.338) | `CivilianBunker01`: `GarrisonContain.contained[]` (`id`, `since`) beim Besetzen; `AmericaCommandCenter`: `OCLSpecialPower.availableOnFrame` (0 → 2.485, Tick 2.455) |
+| `mission_MD_GLA03` | 29 (ab Tick 65) | `CivilianBunker01`, `GreekShop`, `GreekHouse2/3`, `AmericaFireBase`: `GarrisonContain.contained[]` |
+| `mission_GC_LaserGeneral_ChinaNukeGeneral` | 24 (ab Tick 37) | `GuardTower`: `GarrisonContain.contained[]`; `Lazr_AmericaParticleCannonUplink`: `ParticleUplinkCannonUpdate.pendingPath[]`, `pendingPathTick` (Tick 360) |
+
+Gemeinsam ist den Fällen nach Augenschein, dass ein Skript den Zustand setzt (Besetzen, Einsteigen, Lagerwert, Spezialkraft, Strahlpfad); in keinem KI-Lauf der Stufe `quick` und nicht im Referenzmatch trat
+eine Abweichung auf. Nur die Stelle in `SetCashValue` ist im Quelltext nachgelesen; die Aufrufwege der anderen vier Felder sind nicht untersucht. **Nicht behoben** (Auftrag dieser Arbeit: melden, nicht
+ändern). Die Korrektur ändert die Hashes der fünf Missionen und gehört in einen eigenen Commit mit neuem Manifest; danach müssen die fünf Wahrheitswerte wahr sein. Nicht mit Erklärung gelaufen: die 12 KI-Läufe,
+die drei langen Acht-Spieler-Läufe, der Sweep und die übrigen 21 Missionen der Stufe `full` (deren Fortsetzung nach dem Laden gleicht dem ununterbrochenen Lauf, was einen veralteten Hash am Speicherpunkt bei
+Tick 1.500 ausschließt, nicht danach).
+
+### 37.5 Eingangsmanifest
+
+`baselines/input-manifest.json` beantwortet bei einer Abweichung zwischen zwei Rechnern zuerst die Frage, ob schon die Eingänge verschieden sind.
+
+| Abschnitt | Inhalt | Quelle |
+|---|---|---|
+| `definitions` | SHA-256, Länge und Zahl der Definitionen der Retail-Basisdaten (Karten-Overlays ausgeschlossen) | `DefinitionSnapshotWriter.ComputeFingerprint` |
+| `modelGeometry` | Hash der Knochentabelle (Flugplatz-Layouts aus den Modellen), Zahl der Flugplätze | `ModelGeometry.Fingerprint`, gebaut wie im Client (`ModelGeometryLoader`) |
+| `worldFingerprint` | was Welt, Replay und Speicherstand prüfen: Definitionen + Knochentabelle | `ModelGeometry.Combine` |
+| `catalogs` | je Katalog (`templates`, `weapons`, `upgrades`, `specialPowers`, `sciences`, `commands`, `factions`, `crates`, `creationLists`) und für den ganzen `TemplateCatalog` (`whole`, samt der Globalwerte aus `GameData.ini`) ein Inhalts-Hash, die Zahl der Einträge und der beschriebenen Werte | `CanonicalObjectHasher` |
+| `files` | Größe und SHA-256 von `Campaign.ini` und `ChallengeMode.ini` | Content-Manifest |
+| `maps` | je Karte (150): Größe und SHA-256 der Datei laut Content-Manifest, Gelände-Fingerabdruck, Zellen, Zahl der Startpositionen | `ContentFileSystem.GetEntry`, `TerrainMap.Fingerprint` |
+
+Die Kataloge haben keine eigene serialisierte Form. `CanonicalObjectHasher` beschreibt deshalb den Objektgraphen selbst: Zahlen, Wahrheitswerte und Enums als Wert, `decimal` invariant, Brüche als Bitmuster,
+Texte mit Länge; ein Struct ist seine Felder; ein Objekt ist der SHA-256 aus Typname und allen Instanzfeldern (auch privaten, auch der Basisklassen, ordinal nach Typ und Name sortiert – nicht in der
+Reihenfolge der Reflection); Arrays und Listen behalten ihre Reihenfolge, Dictionaries werden nach der Beschreibung des Schlüssels, Mengen nach der des Elements sortiert. Speicheradressen, Hashcodes der
+Laufzeit und Einfügereihenfolgen gehen nicht ein. Gemessen: 588.087 beschriebene Werte für den ganzen Katalog, drei unabhängige Prozesse liefern dieselbe Datei.
+
+**Abgedeckt** ist damit alles, was `TemplateCatalog.Build` aus den Definitionen und der Knochentabelle macht (Vorlagen samt geparster Moduldaten und allem, was sie referenzieren, Waffen, Upgrades,
+Wissenschaften, Spezialkräfte, Befehlssätze, Fraktionen, Kisten, Erzeugungslisten, Globalwerte).
+
+**Nicht abgedeckt:**
+- Code. Delegates werden nur gezählt (366: je Modulbindung Parser und Fabrik); welches Programm die Daten auswertet, steht in keinem der beiden Manifeste (Befund D5: es gibt keine Kennung des Codestands).
+- Der Vergleicher eines Dictionaries (ordinal oder ohne Groß-/Kleinschreibung) und statischer Zustand.
+- Die dekodierten Kartenobjekte, Skripte und Wegpunkt-Ids sowie ihre Wandlung nach `Fixed` (Befunde D2/D5): der Gelände-Fingerabdruck enthält sie nicht. Sie sind nur mittelbar erfasst – über den Dateihash
+  und über die Missions- und KI-Läufe des Referenzmanifests.
+- Die Dateihashes werden dem Content-Manifest entnommen, nicht neu berechnet (die Laufzeit prüft beim Öffnen nur die Länge; den Inhalt prüft `AssetTool verify`).
+- Die synthetische Fixture des Stresstests (sie ist Quelltext).
+- Die Overlay-Definitionen der Karten (`map.ini`): die Läufe benutzen wie der Client die Retail-Basisdaten.
+
+### 37.6 Ausführung und Laufzeiten
+
+Die Läufe sind unabhängig und werden von `--jobs N` Arbeitsthreads abgearbeitet (Standard: halbe Zahl der logischen Prozessoren), die schwersten zuerst. Jeder Arbeiter baut seine eigenen Kataloge (nichts aus
+der Simulation wird zwischen Threads geteilt; das Kompilieren läuft nacheinander); alle Arbeiter müssen denselben Welt-Fingerabdruck erreichen, sonst bricht der Lauf ab. Die Ausgabe hängt nicht von der
+Reihenfolge ab, in der Läufe fertig werden.
+
+Gemessen am 6. Oktober 2026 auf einem Rechner mit 16 logischen Prozessoren, Release, `--jobs 6`, **nicht ruhig** (andere Prozesse liefen mit): `write --set quick` 283 s; `write --set full` 1.663 s (27,7 min;
+davon etwa 13 Minuten zusammen mit einem zweiten eigenen Lauf); `check --set full` zweimal bestanden, 1.599 s (`--jobs 5`) und 1.438 s (24,0 min); `check --set quick` bestanden, 262 s;
+`input-manifest write` und `check` je 13 s. `check --set quick --verify-incremental`: 268 s, 60.896 Ticks geprüft, eine Abweichung (`mission_MD_GLA05`, §37.4) und deshalb Exitcode 1 –
+solange D8 offen ist, ist das der erwartete Ausgang dieses Modus. Längster Einzellauf ist `mission_MD_USA01`
+(632 s für 3.000 Ticks in dreieinhalb Durchgängen).
+
+### 37.7 Tests
+
+`tests/CnCNew.Simulation.Tests/Tests.ReferenceManifest.cs` (drei Tests): kanonische Schreibweise und Rundreise, strenges Lesen, „erstes abweichendes Feld“ an einem synthetischen Manifest, Unabhängigkeit des
+Inhalts-Hashs von Einfügereihenfolgen. `ManifestDocument.cs` und `CanonicalObjectHasher.cs` hängen nur von der BCL ab und werden als verknüpfte Quelldateien in das Testprojekt kompiliert (kein Verweis auf ein
+ausführbares Projekt, keine neue Abhängigkeit). Die Läufe selbst prüft `check`; ein Test über den realen Bestand wäre derselbe halbstündige Lauf.
+
+### 37.8 Grenzen
+
+- Ein Rechner, ein Betriebssystem, eine .NET-Version: das Manifest ist die Messlatte für die Determinismus-Matrix (Auftrag 3 der Phase 18), nicht ihr Ergebnis.
+- Missionen laufen 3.000 Ticks, Acht-Spieler-Läufe 9.000: spätes Spielgeschehen dieser Läufe ist nicht erfasst. Die 16 KI-Läufe decken bis zu 45.000 Ticks ab.
+- Der Sweep und die Missionen sind keine Replays; ihr Befehlsstrom steht nicht im Manifest.
+- `write --set quick` schreibt eine Datei nur mit den Quick-Läufen; die eingecheckte Datei wird mit `--set full` geschrieben.
