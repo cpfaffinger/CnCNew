@@ -94,6 +94,9 @@ public static class AudioOutcomes
     public const string Paused = "dropped:paused";
     public const string RateLimited = "dropped:rate-limited";
     public const string MissingVoiceKey = "dropped:no-voice-key";
+
+    /// <summary>A mission script muted the event (<c>SOUND_DISABLE_TYPE</c>, or <c>AUDIO_OVERRIDE_VOLUME_TYPE</c> with a volume below the minimum): <c>AudioManager::addAudioEvent</c> culls it as muted.</summary>
+    public const string ScriptMuted = "dropped:script-muted";
 }
 
 /// <summary>Who asked for a sound; the director counts every request, start, end and drop per source (<see cref="AudioDirectorStats.Sources"/>).</summary>
@@ -156,12 +159,14 @@ public sealed record AudioDirectorStats(
 /// issue identical mixer commands. Every cue, music track, movie and Eva event that cannot be played is counted in <see cref="Stats"/>.
 /// See <c>docs/GAME-AUDIO.md</c> for the rules and the reference sources.
 /// </summary>
-public sealed class AudioDirector : IDisposable
+public sealed partial class AudioDirector : IDisposable
 {
     private const float BusChangeThreshold = 0.002f;
     private const float PositionChangeThreshold = 0.5f;
 
-    private sealed record Tracked(VoiceHandle Handle, long IssuedFrames, AudioSource Source);
+    /// <param name="Event">The catalog event of the voice, so a script's per-event volume or removal (<c>docs/SCRIPT-ENGINE.md</c> §7a) finds it again.</param>
+    /// <param name="Shift">The random volume shift the voice was started with; the live volume of a voice is the event's override times this.</param>
+    private sealed record Tracked(VoiceHandle Handle, long IssuedFrames, AudioSource Source, string Event, float Shift);
 
     private sealed class AmbientEntry(VoiceHandle handle, long issuedFrames, Vector3 position, double nextAllowed)
     {
@@ -169,6 +174,8 @@ public sealed class AudioDirector : IDisposable
         public long IssuedFrames { get; } = issuedFrames;
         public Vector3 Position { get; set; } = position;
         public double NextAllowed { get; } = nextAllowed;
+        public string Event { get; init; } = string.Empty;
+        public float Shift { get; init; } = 1f;
     }
 
     private readonly AudioCatalog _catalog;
@@ -466,8 +473,12 @@ public sealed class AudioDirector : IDisposable
 
     /// <summary>Starts the event for <paramref name="source"/> and books the result: a started voice is tracked until the mixer drops it, anything else is a counted drop.</summary>
     private VoiceHandle Play(AudioSource source, AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming, bool track = true)
+        => Play(source, info, position, bus, streaming, track, out _);
+
+    private VoiceHandle Play(AudioSource source, AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming, bool track, out float shift)
     {
-        var (handle, outcome) = Start(info, position, bus, streaming);
+        var (handle, outcome, started) = Start(info, position, bus, streaming);
+        shift = started;
         if (!handle.IsValid)
         {
             Drop(source, outcome);
@@ -476,7 +487,7 @@ public sealed class AudioDirector : IDisposable
         Count(outcome);
         _started[(int)source]++;
         _startedEvents[info.Name] = _startedEvents.GetValueOrDefault(info.Name) + 1;
-        if (track) _tracked.Add(new Tracked(handle, _mixer.Statistics.RenderedFrames, source));
+        if (track) _tracked.Add(new Tracked(handle, _mixer.Statistics.RenderedFrames, source, info.Name, started));
         return handle;
     }
 
@@ -517,16 +528,23 @@ public sealed class AudioDirector : IDisposable
     }
 
     /// <summary>Picks the variation, decodes the sounds and hands the request to the mixer; the outcome name says why nothing started.</summary>
-    private (VoiceHandle Handle, string Outcome) Start(AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming)
+    private (VoiceHandle Handle, string Outcome, float Shift) Start(AudioEventInfo info, Vector3? position, AudioBus? bus, bool? streaming)
     {
+        // A script's volume override for this event (AudioManager::addAudioEvent: the event takes the overridden volume; below the minimum it is culled as muted).
+        float? volumeOverride = _eventVolumes.TryGetValue(info.Name, out var scripted) ? scripted : null;
+        if (volumeOverride is { } wanted && (wanted <= 0f || wanted < _catalog.Settings.MinSampleVolume))
+        {
+            _scriptMuted++;
+            return (VoiceHandle.None, AudioOutcomes.ScriptMuted, 1f);
+        }
         if (!_states.TryGetValue(info.Name, out var state)) _states[info.Name] = state = new SoundSelectionState();
         var plan = SoundSelector.Pick(info, _rng, state, _options.TimeOfDay);
-        if (plan is null) return (VoiceHandle.None, AudioOutcomes.NoSounds);
-        var request = PlayRequest.ForEvent(plan, state, _catalog.Settings, _cache.GetOrLoad, position);
-        if (request.Source is EventVoiceSource { Buffers.IsEmpty: true }) return (VoiceHandle.None, AudioOutcomes.DecodeFailed);
+        if (plan is null) return (VoiceHandle.None, AudioOutcomes.NoSounds, 1f);
+        var request = PlayRequest.ForEvent(plan, state, _catalog.Settings, _cache.GetOrLoad, position, volumeOverride);
+        if (request.Source is EventVoiceSource { Buffers.IsEmpty: true }) return (VoiceHandle.None, AudioOutcomes.DecodeFailed, 1f);
         if (bus is { } target) request = request with { Bus = target };
         if (streaming is { } stream) request = request with { Streaming = stream };
-        return (_mixer.Play(request), AudioOutcomes.Played);
+        return (_mixer.Play(request), AudioOutcomes.Played, plan.VolumeShift);
     }
 
     /// <summary>
@@ -673,8 +691,12 @@ public sealed class AudioDirector : IDisposable
         foreach (var drawable in drawables)
         {
             if (drawable.IsGhost) continue;
+            // SOUND_AMBIENT_PAUSE keeps every ambient loop silent; DISABLE_OBJECT_SOUND silences the loops of single named objects (Drawable::enableAmbientSoundFromScript).
+            if (_ambientPaused || (drawable.Entity.IsValid && _objectSoundOff.Contains(drawable.Entity.Value))) continue;
             var info = AmbientOf(drawable.TemplateName);
             if (info is null) continue;
+            // A script-disabled event is not started at all (and a running loop of it is stopped below: it no longer ranks among the wanted ones).
+            if (_eventVolumes.TryGetValue(info.Name, out var scriptVolume) && (scriptVolume <= 0f || scriptVolume < _catalog.Settings.MinSampleVolume)) continue;
             var global = (info.SoundTypes & SoundTypeFlags.Global) != 0;
             var max = global ? _catalog.Settings.GlobalMaxRange : info.MaxRange;
             var distance = Vector3.Distance(drawable.Position, _listenerPosition);
@@ -712,7 +734,7 @@ public sealed class AudioDirector : IDisposable
                 _ambient.Remove(key);
             }
             _requested[(int)AudioSource.Ambient]++;
-            var handle = Play(AudioSource.Ambient, info, drawable.Position, AudioBus.Ambient, null, track: false);
+            var handle = Play(AudioSource.Ambient, info, drawable.Position, AudioBus.Ambient, null, false, out var ambientShift);
             if (!handle.IsValid)
             {
                 // Keep the failure from being retried every 0.25 s.
@@ -721,7 +743,7 @@ public sealed class AudioDirector : IDisposable
             }
             _ambientStarted++;
             var next = info.IsPermanent ? double.PositiveInfinity : _now + _catalog.Settings.TimeBetweenDrawableSoundsMs / 1000.0;
-            _ambient[key] = new AmbientEntry(handle, _mixer.Statistics.RenderedFrames, drawable.Position, next);
+            _ambient[key] = new AmbientEntry(handle, _mixer.Statistics.RenderedFrames, drawable.Position, next) { Event = info.Name, Shift = ambientShift };
         }
     }
 
@@ -860,12 +882,13 @@ public sealed class AudioDirector : IDisposable
     /// </summary>
     private void SyncBuses()
     {
+        // The mission scripts' own volumes (AudioManager::setVolume without AudioAffect_SystemSetting) multiply the player's: music, speech, 2D sound (UI) and 3D sound (world and ambient).
         var volumes = new BusVolumes(
-            Music: _settings.Music * (_paused ? _options.PausedMusicVolume : 1f),
-            Sfx: _settings.Effects * _zoomVolume,
-            Voice: _settings.Voice,
-            Ambient: _settings.Ambient * _zoomVolume,
-            Ui: _settings.Effects * _uiRatio);
+            Music: _settings.Music * (_paused ? _options.PausedMusicVolume : 1f) * _scriptVolumes[(int)ScriptVolumeKind.Music],
+            Sfx: _settings.Effects * _zoomVolume * _scriptVolumes[(int)ScriptVolumeKind.Sound3D],
+            Voice: _settings.Voice * _scriptVolumes[(int)ScriptVolumeKind.Speech],
+            Ambient: _settings.Ambient * _zoomVolume * _scriptVolumes[(int)ScriptVolumeKind.Sound3D],
+            Ui: _settings.Effects * _uiRatio * _scriptVolumes[(int)ScriptVolumeKind.Sound]);
         var master = _muted ? 0f : _settings.Master;
         if (float.IsNaN(_sentMaster) || Math.Abs(_sentMaster - master) > BusChangeThreshold)
         {

@@ -168,6 +168,22 @@ public sealed class EvaAnnouncer(EvaCatalog catalog, SeededRng rng)
     private readonly HashSet<string> _flags = new(StringComparer.OrdinalIgnoreCase);
     private readonly SortedDictionary<string, int> _unknown = new(StringComparer.OrdinalIgnoreCase);
 
+    private bool _enabled = true;
+
+    /// <summary>
+    /// <c>Eva::setEvaEnabled</c> (<c>EVA_SET_ENABLED_DISABLED</c>): setting it, either way, first clears the flagged events; while it is <see langword="false"/> <see cref="Update"/> does
+    /// nothing at all (queued checks are neither expired nor played), exactly as <c>Eva::update</c> returns at its first line.
+    /// </summary>
+    public bool Enabled
+    {
+        get => _enabled;
+        set
+        {
+            _flags.Clear();
+            _enabled = value;
+        }
+    }
+
     public long Requested { get; private set; }
     public long Played { get; private set; }
     public long Expired { get; private set; }
@@ -199,6 +215,7 @@ public sealed class EvaAnnouncer(EvaCatalog catalog, SeededRng rng)
     /// <returns>The dialog event to play, or null.</returns>
     public string? Update(long frame, bool lowPower, bool speaking, string side)
     {
+        if (!_enabled) return null;
         if (frame < 2)
         {
             _flags.Clear();
