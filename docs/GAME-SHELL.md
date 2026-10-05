@@ -132,12 +132,12 @@ Wiederverwendung eines der inerten Platzhalter).
 
 `SkirmishSetupScreen` erzeugt einen `MatchSetup` aus: Karte (`SkirmishMapSelectScreen`, nur `isMultiplayer`-Karten),
 menschliche Fraktion (`ComboBoxPlayerTemplate0`, inklusive „Random“, deterministisch über einen pro Slot festen Seed
-aufgelöst – nicht den Match-Seed), bis zu 7 Computergegner (`ComboBoxPlayer1..7` = `GUI:Open`, `GUI:Closed`, `GUI:EasyAI`, `GUI:MediumAI`, `GUI:HardAI` wie in `SkirmishGameOptionsMenuInit`; begrenzt durch die
+aufgelöst – nicht den Match-Seed), bis zu 7 Computergegner (`ComboBoxPlayer1..7` = `GUI:Open`, `GUI:Closed`, `GUI:MediumAI`; `SkirmishGameOptionsMenuInit` bietet zusätzlich `GUI:EasyAI` und `GUI:HardAI`, siehe unten; begrenzt durch die
 Startpositionsanzahl der gewählten Karte aus `MapCache.ini`), Startkapital (`ComboBoxStartingCash` →
 `SkirmishMatchOptions.StartMoney`). Die Karte ist wie im Original vorbelegt: die zuletzt gespielte (`SkirmishMemory.LastMap`, `SkirmishPreferences::getPreferredMap`),
 sonst die erste Mehrspielerkarte des Katalogs in der Reihenfolge der kleingeschriebenen Pfade (`getDefaultMap(TRUE)`, der `MapCache` ist danach sortiert); den Text
-„(no map selected)“ gibt es nicht mehr, ohne jede Mehrspielerkarte bleibt das Namensfeld leer und die Vorschau zeigt nur ihren Rahmen. Der zweite Slot beginnt als „Easy Army“
-(das Original nimmt je nach Zahl der Siege eine stärkere; Siege werden hier nicht gezählt), das Namensfeld trägt `GUI:Player`. Start tut ohne mindestens einen Computergegner
+„(no map selected)“ gibt es nicht mehr, ohne jede Mehrspielerkarte bleibt das Namensfeld leer und die Vorschau zeigt nur ihren Rahmen. Der zweite Slot beginnt als „Medium Army“
+(das Original nimmt je nach Zahl der Siege die leichte, mittlere oder schwere Armee; hier gibt es nur eine), das Namensfeld trägt `GUI:Player`. Start tut ohne mindestens einen Computergegner
 einfach nichts (keine Inline-Fehlermeldung – bewusste Vereinfachung).
 
 Nicht verdrahtet, weil `LiveMatch`/`SkirmishMatchOptions` es nicht unterstützen (Anfragen für eine künftige Phase):
@@ -147,10 +147,13 @@ Nicht verdrahtet, weil `LiveMatch`/`SkirmishMatchOptions` es nicht unterstützen
   Karten-Screens sind rein dekorativ (Klicks laufen ins Leere).
 * **Teams**: `ComboBoxTeam0..7` ist sichtbar und bedienbar, aber `SkirmishSlot.Team`/`MatchSetup` haben kein Feld dafür.
 * **Spielerfarbe**: `ComboBoxColor0..7` zeigt nur generische „Color N“-Einträge (keine echte Farbpalette angebunden).
-* **KI-Schwierigkeitsgrad**: die Skirmish-KI in diesem Stand kennt keine Schwierigkeitsachse. Die Einrichtung zeigt die drei Armeen des Originals
-  (`GUI:EasyAI`/`MediumAI`/`HardAI`; `GameLogic::startNewGame` macht daraus `skirmishDifficulty`), alle drei starten aber **dieselbe** KI; jeder so gestartete Gegner wird in
-  `GameShell.SkirmishDifficultyIgnored` gezählt (auch `GeneralSettings.DefaultAiDifficulty` wird von der KI nicht gelesen). Ein Mensch, der „Easy Army“ wählt, bekommt also nicht,
-  was dasteht – das ist eine offene Lücke der Simulation, kein Textproblem mehr.
+* **KI-Schwierigkeitsgrad**: das Original bietet je Slot drei Armeen (`GUI:EasyAI`/`MediumAI`/`HardAI` = `SLOT_EASY_AI`/`SLOT_MED_AI`/`SLOT_BRUTAL_AI`;
+  `GameLogic::startNewGame` macht daraus `skirmishDifficulty`). Diese Einrichtung bietet **eine** („Medium Army“, `GUI:MediumAI`, `ShellSkirmishText.ComputerArmy`), weil
+  keine der in den Daten belegten Schwierigkeitswirkungen für einen Computerspieler im Skirmish gilt und der Rest in den hier nicht ausgeführten KI-Skripten steckt
+  (Belege und Abgrenzung: `docs/SIMULATION-CORE.md` §35). Drei Einträge, die dieselbe KI starten, gibt es damit nicht mehr; der Zähler `GameShell.SkirmishDifficultyIgnored`
+  ist entfallen, weil kein Eintrag mehr etwas verspricht, das nicht eingehalten wird. Der mittlere Eintrag bleibt, weil der eine Computerspieler der Simulation
+  `DIFFICULTY_NORMAL` entspricht (kein Bonus, kein Malus). `GeneralSettings.DefaultAiDifficulty` wird weiterhin von nichts gelesen. Die Änderung der Einrichtung ist
+  nicht von einem Menschen gesehen.
 * **Spielgeschwindigkeit/Superwaffen-Limit**: `SliderGameSpeed`/`CheckboxLimitSuperweapons` sind sichtbar, aber ohne
   Wirkung.
 
