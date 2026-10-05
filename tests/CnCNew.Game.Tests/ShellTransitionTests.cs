@@ -22,6 +22,18 @@ internal static class ShellTransitionTests
     private const double Frame = 1.0 / WindowFrames;
     private const int WindowFrames = 30;
     private static long _clockMs;
+    private static readonly SortedSet<string> UsedGroups = new(StringComparer.Ordinal);
+    private static readonly SortedSet<string> MissingWindows = new(StringComparer.Ordinal);
+
+    private static void Note(GameShell shell)
+    {
+        foreach (var screen in shell.Stack)
+        {
+            if (screen.Transitions is not { } transitions) continue;
+            foreach (var name in transitions.RequestedGroups) UsedGroups.Add(name);
+            foreach (var name in transitions.MissingWindows) MissingWindows.Add(name);
+        }
+    }
 
     public static int Run(string[] args)
     {
@@ -38,9 +50,11 @@ internal static class ShellTransitionTests
         harness.Run("Submenus switch through their groups and end in the transition-free state", () => Submenus(data));
         harness.Run("A hovered faction button shows its logo and takes it away again", () => FactionLogos(data));
         harness.Run("Opening and closing a screen flashes the menu out, fades the screen in and replays the entry on return", () => ScreenRoundTrip(data));
+        harness.Run("Every campaign button flashes the menu out and opens its screen; closing it replays the entry", () => CampaignButtons(data));
         harness.Run("The skirmish score screen counts its numbers up and ends on the real values", () => ScoreScreenCountsUp(data));
         harness.Run("Two runs of the same frames draw byte-identical sequences", () => Deterministic(data));
         harness.Run("Without transitions nothing animates and no group is ever created", () => NoTransitionsNoAnimation(data));
+        harness.Run("Every group the shell asks for exists and every window of it is in the screen", () => GroupsAreKnown(data));
         return harness.Failures;
     }
 
@@ -54,7 +68,7 @@ internal static class ShellTransitionTests
     {
         for (var frame = 0; frame < limit; frame++)
         {
-            if (!shell.IsAnimating) return frame;
+            if (!shell.IsAnimating) { Note(shell); return frame; }
             shell.Update(Frame);
         }
         throw new InvalidOperationException($"The shell was still animating after {limit} frames ({shell.CurrentScreen.GetType().Name}: {shell.CurrentScreen.Transitions?.CurrentGroup}).");
@@ -66,6 +80,16 @@ internal static class ShellTransitionTests
     }
 
     private static string Dump(GameShell shell) => shell.BuildDrawList().Dump();
+
+    /// <summary>The first lines that differ between two draw list dumps, for the message of a failed comparison.</summary>
+    private static string Diff(string expected, string actual)
+    {
+        var a = expected.Split((char)10);
+        var b = actual.Split((char)10);
+        var onlyExpected = a.Except(b).Take(3);
+        var onlyActual = b.Except(a).Take(3);
+        return $" (only expected: [{string.Join(" | ", onlyExpected)}]; only actual: [{string.Join(" | ", onlyActual)}])";
+    }
 
     private static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16];
 
@@ -217,6 +241,10 @@ internal static class ShellTransitionTests
         Settle(loadShell);
         TestHarness.Assert(Dump(loadShell) == restingLoad, "settled load/replay submenu equals the transition-free one");
         TestHarness.Assert(loadShell.CurrentScreen.Transitions!.MissingWindows.Count == 0, "no missing windows");
+        Click(loadShell, "MainMenu.wnd:ButtonLoadReplayBack");
+        Settle(loadShell);
+        TestHarness.Assert(Dump(loadShell) == restingMain, "Back from the load/replay submenu returns to the root");
+        Note(loadShell);
     }
 
     private static void FactionLogos(GameData data)
@@ -318,6 +346,35 @@ internal static class ShellTransitionTests
         TestHarness.Assert(shell.CurrentScreen is MessageBoxScreen, "the quit dialog opens immediately");
     }
 
+    private static void CampaignButtons(GameData data)
+    {
+        var shell = NewShell(data, animate: true);
+        Settle(shell);
+        var restingMain = Dump(NewShell(data, animate: false));
+        foreach (var (button, screenName) in new[] { ("ButtonUSA", "CampaignFactionScreen"), ("ButtonGLA", "CampaignFactionScreen"), ("ButtonChina", "CampaignFactionScreen"), ("ButtonChallenge", "ChallengeSelectScreen") })
+        {
+            Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+            Settle(shell);
+            Click(shell, $"MainMenu.wnd:{button}");
+            TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && shell.IsAnimating, $"{button}: the menu flashes out first");
+            var steps = 0;
+            while (shell.CurrentScreen is MainMenuScreen && steps++ < 300) shell.Update(Frame);
+            TestHarness.Assert(shell.CurrentScreen.GetType().Name == screenName, $"{button} opens {screenName}, not {shell.CurrentScreen.GetType().Name}");
+            Settle(shell);
+            Click(shell, shell.CurrentScreen is ChallengeSelectScreen ? "ChallengeMenu.wnd:ButtonBack" : "SinglePlayerMenu.wnd:ButtonBack");
+            Settle(shell);
+            TestHarness.Assert(shell.CurrentScreen is MainMenuScreen, $"{button}: back on the main menu");
+            Settle(shell);
+            TestHarness.Assert(Dump(shell) == restingMain, $"{button}: after the round trip the menu rests on the root again" + Diff(restingMain, Dump(shell)));
+        }
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Settle(shell);
+        Click(shell, "MainMenu.wnd:ButtonSingleBack");
+        Settle(shell);
+        TestHarness.Assert(Dump(shell) == restingMain, "the Back button returns to the root");
+        Note(shell);
+    }
+
     private static void ScoreScreenCountsUp(GameData data)
     {
         var setup = new MatchSetup("Maps/Alpine Assault/Alpine Assault.map", "FactionAmerica", ["FactionChina"], CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard with { MaxTicks = 600 });
@@ -353,6 +410,7 @@ internal static class ShellTransitionTests
         TestHarness.Assert(sounds > 0, "the counters and pictures play their sounds");
         TestHarness.Assert(shell.CurrentScreen.BuildDrawList().Dump() == resting, "the settled score screen equals the transition-free one (final numbers, no fabricated values)");
         TestHarness.Assert(shell.CurrentScreen.Transitions.MissingWindows.Count == 0, $"no missing windows: {string.Join(",", shell.CurrentScreen.Transitions.MissingWindows)}");
+        Note(shell);
     }
 
     private static string Sequence(GameData data)
@@ -388,5 +446,15 @@ internal static class ShellTransitionTests
         TestHarness.Assert(Dump(shell) == before, "time passing changes nothing on the plain menu");
         Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
         TestHarness.Assert(!Window(shell, "MainMenu.wnd:MapBorder").IsHidden && Window(shell, "MainMenu.wnd:MapBorder2").IsHidden, "submenus switch at once");
+    }
+
+    private static void GroupsAreKnown(GameData data)
+    {
+        // The earlier tests walked every screen that has transitions; Settle noted their groups. The table is the shipped one, so an unknown name would have thrown.
+        var table = NewShell(data, animate: true).TransitionTable ?? throw new InvalidOperationException("animated shell without table");
+        TestHarness.Assert(UsedGroups.Count > 0, "groups were noted");
+        TestHarness.Assert(UsedGroups.All(name => table.Find(name) is not null), "every requested group is in WindowTransitions.ini");
+        TestHarness.Assert(MissingWindows.Count == 0, $"no window of a requested group is missing from its screen: {string.Join(",", MissingWindows)}");
+        Console.WriteLine($"  groups the shell plays: {UsedGroups.Count} of {table.Groups.Length}: {string.Join(", ", UsedGroups)}");
     }
 }

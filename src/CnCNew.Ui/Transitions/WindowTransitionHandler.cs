@@ -169,6 +169,9 @@ public sealed class WindowTransitionHandler
     /// <summary>Nothing runs, nothing is pending: the screen is in its resting state.</summary>
     public bool IsIdle => _current is null && _pending is null;
 
+    /// <summary>The names of the groups that were asked for so far (by <see cref="SetGroup"/>, <see cref="Reverse"/> or <see cref="Remove"/>), in the spelling of the table; for reports and tests.</summary>
+    public IReadOnlyCollection<string> RequestedGroups => _groups.Values.Select(group => group.Name).Order(StringComparer.Ordinal).ToArray();
+
     private TransitionGroup Find(string name)
     {
         if (_groups.TryGetValue(name, out var existing)) return existing;

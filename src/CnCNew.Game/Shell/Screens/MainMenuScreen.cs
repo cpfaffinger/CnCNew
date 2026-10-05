@@ -98,7 +98,12 @@ public sealed class MainMenuScreen : ShellScreen
         W("MapBorder1").SetHidden(true);
         W("MapBorder3").SetHidden(true);
         W("MapBorder4").SetHidden(true);
+        // initialHide(): every faction logo window in all three sizes starts hidden (the logos of the single-player submenu are shown by its transition group).
+        foreach (var logo in FactionLogos)
+            foreach (var size in LogoSizes) W(logo + size).SetHidden(true);
     }
+
+    private static readonly string[] LogoSizes = ["", "Small", "Medium"];
 
     /// <summary>The init of <c>MainMenu.cpp</c>: the first menu of the run fades in from black, then the logo and the buttons flash in.</summary>
     private void StartEntry(bool first)
