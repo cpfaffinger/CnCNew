@@ -17,7 +17,7 @@ namespace CnCNew.Simulation.Skirmish;
 /// <param name="Side">Side of the player's faction; only objects of this side are built or produced.</param>
 /// <param name="FamilyPrefix">Name prefix of the faction's own object variants (<c>AirF_America</c>); such variants are preferred over the shared ones of the side.</param>
 /// <param name="HintPositions">Start positions of the other players; public map knowledge the AI may attack before it has seen anything.</param>
-public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions, int AttackThreshold = 0, int MaxAttackThreshold = 0);
+public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions, int AttackThreshold = 0, int MaxAttackThreshold = 0, bool EconomyFirst = false);
 
 /// <summary>Counters an AI keeps about itself; the match report and the tests read them.</summary>
 public sealed class SkirmishAiStats
@@ -165,6 +165,24 @@ public sealed class SkirmishAi
     public SkirmishAiStats Stats { get; } = new();
     public bool Attacking => _attacking;
 
+    /// <summary>
+    /// Places the army is to attack before anything it would pick itself (a mission's objectives, as the briefing and the objective markers tell a player); empty for the AI's own
+    /// choice. A skirmish match never sets it.
+    /// </summary>
+    public ImmutableArray<(Fixed X, Fixed Y)> Objectives { get; set; } = [];
+
+    /// <summary>
+    /// The army attacks with whatever it has and does not fall back to mass again: for a side that cannot produce (a mission that hands the player a fixed force) waiting for the
+    /// attack threshold would wait forever. A skirmish match never sets it.
+    /// </summary>
+    public bool CommitEverything { get; set; }
+
+    /// <summary>Money the AI leaves untouched (a purchase the mission's objective needs, e.g. the capture upgrade); zero in a skirmish match.</summary>
+    public Fixed ObjectiveReserve { get; set; }
+
+    /// <summary>Whether this AI gives <paramref name="unit"/> its marching orders (it counts it as army).</summary>
+    public bool LeadsUnit(Entity unit) => unit.Owner == _player && (RoleOf(unit.Template) & Role.Army) != 0 && AiOf(unit) is not null;
+
     /// <summary>Where the army gathers while it is not attacking (diagnostics).</summary>
     public (Fixed X, Fixed Y)? RallyPoint => _rally;
     public int KnownEnemyStructures => _enemies.Values.Count(value => value.IsStructure);
@@ -190,7 +208,7 @@ public sealed class SkirmishAi
 
     private void Think()
     {
-        _budget = _world.MoneyOf(_player);
+        _budget = Fixed.Max(Fixed.Zero, _world.MoneyOf(_player) - ObjectiveReserve);
         _inFlight.RemoveAll(value => value.Until <= _tick);
         foreach (var expired in _boarding.Where(pair => pair.Value <= _tick).Select(pair => pair.Key).ToList()) _boarding.Remove(expired);
         var before = Stats.Commands;
@@ -255,16 +273,17 @@ public sealed class SkirmishAi
                 else if (!entity.ContainedBy.IsValid && !entity.HasStatus(ObjectStatusBits.UnderConstruction)) _units.Add(entity);
                 continue;
             }
-            if (entity.Owner.IsSystem)
+            // A warehouse of the system player or of any side that is not an enemy (mission maps give their supply docks to a civilian side) is one to gather from,
+            // like FindSupplySource already assumes; it stays remembered as a fixed place.
+            if (entity.Owner.IsSystem || !_world.AreEnemies(_player, entity.Owner))
             {
                 if ((RoleOf(entity.Template) & Role.Warehouse) != 0)
                 {
                     seen.Add(entity.Id.Value);
-                    _warehouses[entity.Id.Value] = new Remembered(entity.Id, entity.Template, entity.Owner, entity.X, entity.Y, _tick, false);
+                    _warehouses[entity.Id.Value] = new Remembered(entity.Id, entity.Template, entity.Owner, entity.X, entity.Y, _tick, !entity.Owner.IsSystem);
                 }
                 continue;
             }
-            if (!_world.AreEnemies(_player, entity.Owner)) continue;
             seen.Add(entity.Id.Value);
             _enemies[entity.Id.Value] = new Remembered(entity.Id, entity.Template, entity.Owner, entity.X, entity.Y, _tick, entity.Template.IsKindOf("STRUCTURE"));
             if (entity.Body is not null) _enemyTargets.Add(entity);
@@ -495,6 +514,8 @@ public sealed class SkirmishAi
         {
             var builder = PickBuilder(used);
             if (builder is null) break;
+            // EconomyFirst (a mission's player agent): until the first supply center stands nothing else is started - a base without income cannot pay for the rest.
+            var essential = _options.EconomyFirst && role == Role.SupplyCenter && CountAlive(Role.SupplyCenter, true) == 0;
             ObjectTemplate? next = null;
             foreach (var candidate in StructureCandidates(role))
             {
@@ -503,18 +524,25 @@ public sealed class SkirmishAi
                 if (state == PlanState.Waiting) next = null;
                 break;
             }
-            if (next is null) continue;
+            if (next is null) { if (essential) break; continue; }
             if (next.BuildCost > _budget)
             {
                 reserved = next.BuildCost;
                 break;
             }
-            if (Backoff(unchecked(0x40000000u + (uint)next.Index), RetryTicks)) continue;
-            var spot = (RoleOf(next) & Role.SupplyCenter) != 0 ? FindSupplyPlacement(next, builder, used) : FindPlacement(next, builder);
-            if (spot is null) continue;
+            if (Backoff(unchecked(0x40000000u + (uint)next.Index), essential ? 60 : RetryTicks)) { if (essential) break; continue; }
+            var bySupplies = (RoleOf(next) & Role.SupplyCenter) != 0;
+            var spot = bySupplies ? FindSupplyPlacement(next, builder, used) : FindPlacement(next, builder);
+            if (bySupplies)
+            {
+                // No legal spot beside the source for a while (cliffs, the map edge, an occupied yard): the center goes up at the base like every other structure rather than never.
+                _supplyPlacementFailures = spot is null ? _supplyPlacementFailures + 1 : 0;
+                if (spot is null && _supplyPlacementFailures > SupplyPlacementPatience) spot = FindPlacement(next, builder);
+            }
+            if (spot is null) { if (essential) break; continue; }
             var (x, y) = spot.Value;
             var result = Send(sequence => new ConstructCommand(_player, sequence, _tick, builder.Id, next.Name, x, y, Fixed.Zero));
-            if (!result.Accepted) continue;
+            if (!result.Accepted) { if (essential) break; continue; }
             used.Add(builder.Id.Value);
             _budget -= next.BuildCost;
             Stats.Constructions++;
@@ -523,6 +551,10 @@ public sealed class SkirmishAi
     }
 
     private Fixed _reserve;
+    private int _supplyPlacementFailures;
+
+    /// <summary>Attempts (one per retry interval) a supply center may fail to find a spot beside its source before it is placed at the base instead.</summary>
+    private const int SupplyPlacementPatience = 3;
 
     /// <summary>An available builder: not on a construction task, and idle unless it is a worker that also gathers (then the gathering yields).</summary>
     private Entity? PickBuilder(HashSet<uint> used, Entity? near = null)
@@ -948,7 +980,7 @@ public sealed class SkirmishAi
         if (threat is not null) goal = threat;
         else
         {
-            if (!_attacking && army.Count >= _threshold)
+            if (!_attacking && (army.Count >= _threshold || CommitEverything))
             {
                 _attacking = true;
                 Stats.Waves++;
@@ -958,7 +990,7 @@ public sealed class SkirmishAi
             {
                 foreach (var unit in army) _wave.Add(unit.Id.Value);
             }
-            else if (_attacking && _wave.Count < Math.Max(3, _threshold / 3))
+            else if (_attacking && !CommitEverything && _wave.Count < Math.Max(3, _threshold / 3))
             {
                 _attacking = false;
                 _wave.Clear();
@@ -1119,6 +1151,16 @@ public sealed class SkirmishAi
 
         Remembered? target = null;
         var best = Fixed.MaxValue;
+        if (!Objectives.IsDefaultOrEmpty)
+        {
+            var nearest = Objectives[0];
+            foreach (var objective in Objectives)
+            {
+                var distance = DistanceSquared(objective.X, objective.Y, cx, cy);
+                if (distance < best) { best = distance; nearest = objective; }
+            }
+            return nearest;
+        }
         foreach (var entry in _enemies.Values)
         {
             if (!entry.IsStructure) continue;

@@ -307,6 +307,7 @@ internal sealed partial class ObjectiveDriver
         var tick = _world.Tick;
         var before = Interventions;
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        _objectivesFresh = false;
         foreach (var plan in chosen)
             foreach (var leaf in plan.Leaves)
             {
@@ -322,6 +323,7 @@ internal sealed partial class ObjectiveDriver
                 if (leaf.Kind == LeafKind.World) WorldWrites++;
                 _log.Add($"{tick}: {leaf.Label}");
             }
+        PublishObjectives();
         var signature = Signature();
         if (_victory && !_commandsOnly)
             foreach (var leaf in _defense ??= BuildDefense())
@@ -509,7 +511,7 @@ internal sealed partial class ObjectiveDriver
                 var setters = Lookup(wantsTrue ? _flagsTrue : _flagsFalse, Text(0)).ToList();
                 if (setters.Count == 0)
                     // A flag nobody sets is one the UI sets (a button the player presses): the engine accepts the interaction as the flag.
-                    return wantsTrue ? Plan.Of(new Leaf("ui:" + Text(0), $"press the UI control behind flag '{Text(0)}'", 3, 60, _ => { _engine.SignalUiInteraction(Text(0)); return true; })) : new Plan();
+                    return wantsTrue ? Plan.Of(new Leaf("ui:" + Text(0), $"press the UI control behind flag '{Text(0)}'", 3, 60, _ => { _engine.SignalUiInteraction(Text(0)); return true; }) { Kind = LeafKind.Signal }) : new Plan();
                 return BestOf(setters, depth) ?? Plan.Blocked($"flag '{Text(0)}' is never set");
             }
             default:
@@ -530,22 +532,12 @@ internal sealed partial class ObjectiveDriver
             switch (kind)
             {
                 case "unitDestroyed":
-                    plan.Merge(Plan.Of(new Leaf("teamdie:" + string.Join("|", teams), $"destroy a member of team '{teams[0]}'{(teams.Length > 1 ? $" or {teams.Length - 1} other(s)" : "")}", 400, 24, _ =>
-                    {
-                        var member = teams.SelectMany(LiveTeamMembers).FirstOrDefault();
-                        if (member is null) return false;
-                        _world.Kill(member.Id);
-                        return true;
-                    })));
+                    plan.Merge(Plan.Of(Destroy("teamdie:" + string.Join("|", teams), $"destroy a member of team '{teams[0]}'{(teams.Length > 1 ? $" or {teams.Length - 1} other(s)" : "")}", 400, 24,
+                        () => teams.SelectMany(LiveTeamMembers).FirstOrDefault() is { } member ? [member] : [])));
                     break;
                 case "destroyed":
-                    plan.Merge(Plan.Of(new Leaf("killteams:" + string.Join("|", teams), $"destroy team '{teams[0]}'{(teams.Length > 1 ? $" and {teams.Length - 1} other(s)" : "")}", 40, 30, _ =>
-                    {
-                        var members = teams.SelectMany(LiveTeamMembers).ToArray();
-                        if (members.Length == 0) return false;
-                        foreach (var member in members) _world.Kill(member.Id);
-                        return true;
-                    })));
+                    plan.Merge(Plan.Of(Destroy("killteams:" + string.Join("|", teams), $"destroy team '{teams[0]}'{(teams.Length > 1 ? $" and {teams.Length - 1} other(s)" : "")}", 40, 30,
+                        () => [..teams.SelectMany(LiveTeamMembers)])));
                     break;
             }
         }

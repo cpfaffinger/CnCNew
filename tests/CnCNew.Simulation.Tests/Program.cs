@@ -167,6 +167,9 @@ run.Test("Scripts: the objective driver ends a mission through its own victory a
 run.Test("Scripts: the goal-directed driver plans backwards from the ending and avoids the opposite ending", Tests.ScriptObjectiveDriverPlansBackwards);
 run.Test("Scripts: the commands-only driver uses orders, not world writes", Tests.ScriptCommandsOnlyDriverUsesOrdersNotWrites);
 run.Test("Scripts: the commands-only driver declines what only a write can do", Tests.ScriptCommandsOnlyDriverDeclinesWhatOnlyAWriteCanDo);
+run.Test("Scripts: the commands-only driver attacks an enemy surplus instead of removing it", Tests.ScriptCommandsOnlyDriverAttacksAnEnemySurplus);
+run.Test("Scripts: the commands-only driver captures instead of handing over", Tests.ScriptCommandsOnlyDriverCapturesInsteadOfHandingOver);
+run.Test("Scripts: the commands-only driver orders only its own units; a UI flag is a signal", Tests.ScriptCommandsOnlyDriverOrdersOnlyItsOwnUnits);
 run.Test("Scripts: team facing a named object, selling everything and the recorded settings", Tests.ScriptPhase13SettingActions);
 run.Test("Scripts: topple directions, buildability, skill set, local defeat", Tests.ScriptPhase13TablesAndOutcome);
 run.Test("Scripts: approach paths, nearest-object moves and unmanned capture", Tests.ScriptPhase13MovementActions);

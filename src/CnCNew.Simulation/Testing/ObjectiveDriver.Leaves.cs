@@ -98,7 +98,7 @@ internal sealed partial class ObjectiveDriver
 
     private bool Send(Entity entity, (Fixed X, Fixed Y) spot)
     {
-        if (entity.Owner.IsSystem || entity.Template.Locomotor is null) return false;
+        if (entity.Owner.IsSystem || entity.Template.Locomotor is null || !MayOrder(entity)) return false;
         var owner = entity.Owner;
         var id = entity.Id;
         if (!_session.Issue(owner, (sequence, tick) => new SetMoveTargetCommand(owner, sequence, tick, id, spot.X, spot.Y)).Accepted) return false;
@@ -180,6 +180,8 @@ internal sealed partial class ObjectiveDriver
             {
                 var name = Text(0);
                 var owner = Text(1);
+                if (_commandsOnly && PlayerOf(owner) == _local)
+                    return Plan.Of(new Leaf($"own:{name}:{owner}", $"capture '{name}' for '{owner}'", 100000, 90, _ => Named(name) is { } entity && Capture(entity)) { Kind = LeafKind.Order });
                 return Plan.Of(new Leaf($"own:{name}:{owner}", $"hand '{name}' to '{owner}'", 3, 30, _ =>
                 {
                     if (Named(name) is not { } entity || PlayerOf(owner) is not { } player) return false;
@@ -191,6 +193,9 @@ internal sealed partial class ObjectiveDriver
                 var name = Text(0);
                 var comparison = Int(1);
                 var percent = Int(2);
+                // A player lowers the health of a hostile object by shooting at it; raising it, or touching anybody else's, is not an order.
+                if (_commandsOnly && comparison is 0 or 1 && Named(name) is { } hostile && _world.AreEnemies(_local, hostile.Owner))
+                    return Plan.Of(Destroy($"health:{name}:{comparison}:{percent}", $"destroy named '{name}' down to {percent} %", 4, 30, () => Named(name) is { } entity ? [entity] : []));
                 return Plan.Of(new Leaf($"health:{name}:{comparison}:{percent}", $"set health of '{name}' ({comparison} {percent} %)", 4, 30, _ =>
                 {
                     if (Named(name) is not { Body: { } body } || body.MaxHealth <= Fixed.Zero) return false;
@@ -208,7 +213,7 @@ internal sealed partial class ObjectiveDriver
             {
                 var name = Text(0);
                 var area = Text(1);
-                var leaf = new Leaf($"go:{name}:{area}", $"send named '{name}' to area '{area}'", 4, 90, attempt =>
+                var leaf = new Leaf($"go:{name}:{area}", $"send named '{name}' to area '{area}'", _commandsOnly ? 100000 : 4, _commandsOnly ? 150 : 90, attempt =>
                 {
                     if (Named(name) is not { } entity || AreaSpot(area) is not { } spot) return false;
                     return GoTo(entity, spot, attempt);
@@ -233,7 +238,7 @@ internal sealed partial class ObjectiveDriver
                 var team = Text(0);
                 var area = Text(1);
                 var entering = type.StartsWith("TEAM_ENTERED", StringComparison.Ordinal);
-                var leaf = new Leaf($"goteam:{team}:{area}", $"send team '{team}' to area '{area}'", 4, 90, attempt =>
+                var leaf = new Leaf($"goteam:{team}:{area}", $"send team '{team}' to area '{area}'", _commandsOnly ? 100000 : 4, _commandsOnly ? 150 : 90, attempt =>
                 {
                     if (AreaSpot(area) is not { } spot) return false;
                     var moved = false;
@@ -289,13 +294,11 @@ internal sealed partial class ObjectiveDriver
                 var name = Text(0);
                 var limit = Int(1);
                 var faction = type.Contains("FACTION", StringComparison.Ordinal);
-                return Plan.Of(new Leaf($"buildings:{name}:{limit}", $"reduce '{name}' to {limit} buildings", 20, 30, _ =>
+                return Plan.Of(Destroy($"buildings:{name}:{limit}", $"destroy buildings of '{name}' down to {limit}", 20, 30, () =>
                 {
-                    if (PlayerOf(name) is not { } player) return false;
+                    if (PlayerOf(name) is not { } player) return [];
                     var buildings = LiveOf(player).Where(entity => ScriptEngine.CountsAsObject(entity) && entity.Template.IsKindOf("STRUCTURE") && (!faction || entity.Template.IsKindOf("MP_COUNT_FOR_VICTORY"))).ToArray();
-                    if (buildings.Length <= limit) return false;
-                    foreach (var building in buildings.Skip(Math.Max(limit, 0))) _world.Kill(building.Id);
-                    return true;
+                    return buildings.Length <= limit ? [] : [..buildings.Skip(Math.Max(limit, 0))];
                 }));
             }
             case "PLAYER_HAS_OBJECT_COMPARISON":
@@ -314,19 +317,20 @@ internal sealed partial class ObjectiveDriver
             {
                 var name = Text(0);
                 var objectType = Text(1);
-                return Edge(new Leaf($"lose:{name}:{objectType}", $"destroy one '{objectType}' of '{name}'", 6, 30, _ =>
-                {
-                    if (PlayerOf(name) is not { } player) return false;
-                    var victim = LiveOf(player).FirstOrDefault(entity => Matches(objectType, entity));
-                    if (victim is null) return false;
-                    _world.Kill(victim.Id);
-                    return true;
-                }, edge: true));
+                return Edge(Destroy($"lose:{name}:{objectType}", $"destroy one '{objectType}' of '{name}'", 6, 30,
+                    () => PlayerOf(name) is { } player && LiveOf(player).FirstOrDefault(entity => Matches(objectType, entity)) is { } victim ? [victim] : []));
             }
             case "PLAYER_ACQUIRED_SCIENCE":
             {
                 var name = Text(0);
                 var science = Text(1);
+                if (_commandsOnly && PlayerOf(name) == _local)
+                    return Plan.Of(new Leaf($"science:{name}:{science}", $"purchase the science '{science}'", 100000, 300, _ =>
+                    {
+                        if (!_session.Issue(_local, (sequence, tick) => new PurchaseScienceCommand(_local, sequence, tick, science)).Accepted) return false;
+                        Commands++;
+                        return true;
+                    }) { Kind = LeafKind.Order });
                 return Plan.Of(new Leaf($"science:{name}:{science}", $"grant '{name}' the science '{science}'", 2, 30, _ => PlayerOf(name) is { } player && _world.GrantScience(player, science)));
             }
             case "SKIRMISH_PLAYER_HAS_UNITS_IN_AREA":
@@ -334,64 +338,51 @@ internal sealed partial class ObjectiveDriver
                 var name = Text(0);
                 var area = Text(1);
                 // Only once the script that asks is live: an area full of hostile units (now including aircraft) kills the unit long before an inactive script would look at it.
-                return Plan.Of(new Leaf($"present:{name}:{area}", $"bring a unit of '{name}' into area '{area}'", 4, 90, attempt =>
+                return Plan.Of(new Leaf($"present:{name}:{area}", $"bring a unit of '{name}' into area '{area}'", _commandsOnly ? 100000 : 4, _commandsOnly ? 150 : 90, attempt =>
                 {
                     if (PlayerOf(name) is not { } player || AreaSpot(area) is not { } spot) return false;
                     var unit = LiveOf(player).FirstOrDefault(entity => entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE") && ScriptEngine.CountsAsObject(entity));
                     return unit is not null && GoTo(unit, spot, attempt);
-                }) { Deferred = !ready });
+                }) { Deferred = !ready, Kind = _commandsOnly ? LeafKind.Order : LeafKind.World });
             }
             case "SKIRMISH_PLAYER_IS_OUTSIDE_AREA":
             {
                 var name = Text(0);
                 var area = Text(1);
-                return Plan.Of(new Leaf($"vacate:{name}:{area}", $"clear '{name}' out of area '{area}'", 10, 60, _ =>
-                {
-                    if (PlayerOf(name) is not { } player || _program.FindArea(area) is not { } zone) return false;
-                    var inside = LiveOf(player).Where(entity => zone.Contains(entity.X, entity.Y)).Select(entity => entity.Id).ToArray();
-                    if (inside.Length == 0) return false;
-                    foreach (var id in inside) _world.Kill(id);
-                    return true;
-                }));
+                return Plan.Of(Destroy($"vacate:{name}:{area}", $"destroy what '{name}' has in area '{area}'", 10, 60,
+                    () => PlayerOf(name) is { } player && _program.FindArea(area) is { } zone ? [..LiveOf(player).Where(entity => zone.Contains(entity.X, entity.Y))] : []));
             }
             case "SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER":
             {
                 var victimName = Text(0);
                 var attackerName = Text(1);
-                return Plan.Of(new Leaf($"attack:{victimName}:{attackerName}", $"let '{attackerName}' hurt '{victimName}'", 3, 30, _ => Hurt(PlayerOf(attackerName), LiveOfPlayer(victimName))));
+                return Plan.Of(HurtLeaf($"attack:{victimName}:{attackerName}", $"let '{attackerName}' hurt '{victimName}'", attackerName, () => LiveOfPlayer(victimName)));
             }
             case "SKIRMISH_PLAYER_HAS_DISCOVERED_PLAYER":
             {
                 var seeing = Text(1);
-                return Plan.Of(new Leaf("reveal:" + seeing, $"reveal the map to '{seeing}'", 2, 60, _ =>
-                {
-                    if (PlayerOf(seeing) is not { } player) return false;
-                    _world.RevealMapPermanently(player, true);
-                    return true;
-                }));
+                var shown = Text(0);
+                return Plan.Of(RevealLeaf(seeing, () => LiveOfPlayer(shown).FirstOrDefault(entity => entity.Template.IsKindOf("STRUCTURE")) ?? LiveOfPlayer(shown).FirstOrDefault()));
             }
             case "NAMED_DISCOVERED":
             case "TEAM_DISCOVERED":
             {
                 var seeing = Text(1);
-                return Plan.Of(new Leaf("reveal:" + seeing, $"reveal the map to '{seeing}'", 2, 60, _ =>
-                {
-                    if (PlayerOf(seeing) is not { } player) return false;
-                    _world.RevealMapPermanently(player, true);
-                    return true;
-                }));
+                var subject = Text(0);
+                var isTeam = type == "TEAM_DISCOVERED";
+                return Plan.Of(RevealLeaf(seeing, () => isTeam ? LiveTeamMembers(subject).FirstOrDefault() : Named(subject)));
             }
             case "NAMED_ATTACKED_BY_PLAYER":
             {
                 var name = Text(0);
                 var attackerName = Text(1);
-                return Plan.Of(new Leaf($"hurt:{name}:{attackerName}", $"let '{attackerName}' hurt '{name}'", 3, 30, _ => Hurt(PlayerOf(attackerName), Named(name) is { } named ? [named] : [])));
+                return Plan.Of(HurtLeaf($"hurt:{name}:{attackerName}", $"let '{attackerName}' hurt '{name}'", attackerName, () => Named(name) is { } named ? [named] : []));
             }
             case "TEAM_ATTACKED_BY_PLAYER":
             {
                 var team = Text(0);
                 var attackerName = Text(1);
-                return Plan.Of(new Leaf($"hurtteam:{team}:{attackerName}", $"let '{attackerName}' hurt team '{team}'", 3, 30, _ => Hurt(PlayerOf(attackerName), LiveTeamMembers(team).Take(1))));
+                return Plan.Of(HurtLeaf($"hurtteam:{team}:{attackerName}", $"let '{attackerName}' hurt team '{team}'", attackerName, () => LiveTeamMembers(team).Take(1)));
             }
             case "NAMED_ATTACKED_BY_OBJECTTYPE":
             case "TEAM_ATTACKED_BY_OBJECTTYPE":
@@ -423,6 +414,12 @@ internal sealed partial class ObjectiveDriver
                     return true;
                 }
                 var own = _world.Entities.Where(entity => entity.Owner == owner && Carries(entity)).OrderBy(entity => entity.Id.Value).ToArray();
+                // Commands-only: a recharge is waited out, and a carrier is taken the way a player takes one (a capture order).
+                if (_commandsOnly && own.Length > 0) return new Plan();
+                if (_commandsOnly && owner == _local)
+                    return Plan.Of(new Leaf($"carrier:{playerName}:{powerName}", $"capture a carrier of '{powerName}'", 100000, 90, _ =>
+                        _world.Entities.Where(entity => entity.Owner != owner && !entity.Owner.IsSystem && Carries(entity) && entity.Template.IsKindOf("STRUCTURE")).OrderBy(entity => entity.Id.Value).FirstOrDefault() is { } carrier
+                        && Capture(carrier)) { Kind = LeafKind.Order });
                 if (own.Length > 0)
                     return own.Any(entity => SpecialPowerRouting.FindModule(entity, power.Index)!.IsReady(_world)) ? new Plan()
                         : Plan.Of(new Leaf($"recharge:{playerName}:{powerName}", $"finish recharging '{powerName}' of '{playerName}'", 2, 60, _ => Recharge(own[0])));
@@ -439,6 +436,27 @@ internal sealed partial class ObjectiveDriver
     }
 
     private IEnumerable<Entity> LiveOfPlayer(string name) => PlayerOf(name) is { } player ? LiveOf(player) : [];
+
+    /// <summary>"<paramref name="attackerName"/> has attacked these": a point of credited damage, or — commands-only, when the attacker is the viewer — a real attack on them.</summary>
+    private Leaf HurtLeaf(string key, string label, string attackerName, Func<IEnumerable<Entity>> victims)
+    {
+        if (_commandsOnly && PlayerOf(attackerName) == _local)
+            return new Leaf(key, label.Replace("let ", "have ", StringComparison.Ordinal), 100000, 90, _ => Assault([..victims().Where(entity => entity.Owner != _local)])) { Kind = LeafKind.Order };
+        return new Leaf(key, label, 3, 30, _ => Hurt(PlayerOf(attackerName), victims()));
+    }
+
+    /// <summary>"<paramref name="seeing"/> has discovered it": the map is revealed, or — commands-only, when the viewer is the one to see — a unit is sent to look.</summary>
+    private Leaf RevealLeaf(string seeing, Func<Entity?> subject)
+    {
+        if (_commandsOnly && PlayerOf(seeing) == _local)
+            return new Leaf("reveal:" + seeing, "send a unit to look at what is to be discovered", 100000, 150, _ => subject() is { } entity && Scout((entity.X, entity.Y))) { Kind = LeafKind.Order };
+        return new Leaf("reveal:" + seeing, $"reveal the map to '{seeing}'", 2, 60, _ =>
+        {
+            if (PlayerOf(seeing) is not { } player) return false;
+            _world.RevealMapPermanently(player, true);
+            return true;
+        });
+    }
 
     /// <summary>One point of damage to the first victim, credited to an object of <paramref name="attacker"/> (the attacker history the engine reads comes from the damage events).</summary>
     private bool Hurt(PlayerId? attacker, IEnumerable<Entity> victims)
@@ -458,7 +476,7 @@ internal sealed partial class ObjectiveDriver
     private Plan CountLeaf(string playerName, int comparison, int n, string typeParameter, string? area, string? kind)
     {
         var key = $"count:{playerName}:{typeParameter}{kind}:{area}:{comparison}:{n}";
-        return Plan.Of(new Leaf(key, $"make '{playerName}' have {comparison} {n} of '{typeParameter}{kind}'{(area is null ? "" : $" in '{area}'")}", 12, 30, attempt =>
+        return Plan.Of(new Leaf(key, $"make '{playerName}' have {comparison} {n} of '{typeParameter}{kind}'{(area is null ? "" : $" in '{area}'")}", _commandsOnly ? 100000 : 12, _commandsOnly ? 90 : 30, attempt =>
         {
             if (PlayerOf(playerName) is not { } player) return false;
             var zone = area is null ? null : _program.FindArea(area);
@@ -470,7 +488,13 @@ internal sealed partial class ObjectiveDriver
             if (target < 0) return false;
             if (current > target)
             {
-                if (_commandsOnly) { _declined.Add($"destroy the surplus of '{typeParameter}{kind}' of '{playerName}'"); return false; }
+                if (_commandsOnly)
+                {
+                    // Too many of an enemy's objects: a player attacks them; too many of anybody else's is nothing an order changes.
+                    if (_world.AreEnemies(_local, player)) return Assault([..LiveOf(player).Where(Counts)]);
+                    _declined.Add($"destroy the surplus of '{typeParameter}{kind}' of '{playerName}'");
+                    return false;
+                }
                 foreach (var surplus in LiveOf(player).Where(Counts).Skip((int)target).ToArray()) _world.Kill(surplus.Id);
                 return true;
             }
