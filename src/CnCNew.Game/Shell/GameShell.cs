@@ -12,6 +12,7 @@ using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
 using CnCNew.Ui.Settings;
 using CnCNew.Ui.Text;
+using CnCNew.Ui.Transitions;
 using LayoutScaleMode = CnCNew.Ui.Layout.UiScaleMode;
 
 namespace CnCNew.Game.Shell;
@@ -64,10 +65,13 @@ public sealed class GameShell
     private double _briefingDuration;
 
     private readonly IUiTextMeasure _textMeasure;
+    private readonly bool _animateTransitions;
+    private bool _mainMenuShownBefore;
 
-    private GameShell(IShellEnvironment environment, string language, UiViewport viewport, IUiTextMeasure? textMeasure)
+    private GameShell(IShellEnvironment environment, string language, UiViewport viewport, IUiTextMeasure? textMeasure, bool animateTransitions)
     {
         _textMeasure = textMeasure ?? new ShellTextMeasure();
+        _animateTransitions = animateTransitions;
         Environment = environment;
         Language = language;
         Viewport = viewport;
@@ -94,6 +98,24 @@ public sealed class GameShell
     public IReadOnlyList<ShellScreen> Stack => _stack;
     public ShellScreen CurrentScreen => _stack[^1];
 
+    /// <summary>
+    /// <c>Data/INI/WindowTransitions.ini</c>, read strictly; <see langword="null"/> when the shell was created without animations. Screens create
+    /// their <see cref="ShellScreen.Transitions"/> from it, so a null table means every group change is a hard cut (the state the golden hashes and
+    /// the click-through tests were recorded in).
+    /// </summary>
+    public WindowTransitionTable? TransitionTable { get; private set; }
+
+    /// <summary>Some screen of the stack still plays a window transition (or is about to open the screen it flashed out for).</summary>
+    public bool IsAnimating => _stack.Any(screen => screen.IsAnimating);
+
+    /// <summary>True the first time a main menu is built in this shell's life (the original fades the very first one in from black, <c>FirstTimeRunningTheGame</c>).</summary>
+    internal bool TakeFirstMainMenu()
+    {
+        var first = !_mainMenuShownBefore;
+        _mainMenuShownBefore = true;
+        return first;
+    }
+
     /// <summary><c>Data/INI/Campaign.ini</c> (not part of the compiled definition graph, see <c>docs/CAMPAIGN-AND-SAVEGAMES.md</c> §1);
     /// <see langword="null"/> only while still booting.</summary>
     public CampaignCatalog? Campaigns { get; private set; }
@@ -119,18 +141,18 @@ public sealed class GameShell
     /// from these widths, so the synthetic <see cref="ShellTextMeasure"/> (the default, for headless tests) puts every
     /// label off centre under a real rasterizer.
     /// </summary>
-    public static GameShell Create(GameData data, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null)
+    public static GameShell Create(GameData data, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false)
     {
-        var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure);
+        var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure, animateTransitions);
         if (viewport is null) shell.Viewport = FitViewport(environment, shell.Settings);
         shell.FinishLoading(data);
         return shell;
     }
 
     /// <summary>Starts in <see cref="ShellPhase.Boot"/>: <see cref="GameData.Load"/> runs on a worker thread while the boot load screen shows its stage.</summary>
-    public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null)
+    public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false)
     {
-        var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure);
+        var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure, animateTransitions);
         if (viewport is null) shell.Viewport = FitViewport(environment, shell.Settings);
         var bootContent = ContentFileSystem.Open(contentDirectory);
         shell._bootContent = bootContent;
@@ -152,6 +174,15 @@ public sealed class GameShell
         return new UiViewport(fit.Result.Width, fit.Result.Height);
     }
 
+    private static WindowTransitionTable LoadTransitionTable(ContentFileSystem content)
+    {
+        const string path = "Data/INI/WindowTransitions.ini";
+        // Animations were asked for: a missing or malformed file is an error, not a quiet switch to hard cuts.
+        using var stream = content.OpenRead(path);
+        using var reader = new StreamReader(stream);
+        return WindowTransitionTable.Parse(reader.ReadToEnd(), path);
+    }
+
     private void FinishLoading(GameData data)
     {
         Data = data;
@@ -166,6 +197,7 @@ public sealed class GameShell
         };
         MapCatalog = ShellMapCatalog.Load(data.Content, data.Maps);
         Credits = ShellCredits.Load(data.Content);
+        if (_animateTransitions) TransitionTable = LoadTransitionTable(data.Content);
         const string campaignPath = "Data/INI/Campaign.ini";
         if (data.Content.Exists(campaignPath))
         {
@@ -195,7 +227,7 @@ public sealed class GameShell
 
     public void HandleInput(InputEvent evt)
     {
-        if (_stack.Count == 0) return;
+        if (_stack.Count == 0 || CurrentScreen.IsClosing) return;
         var tree = CurrentScreen.Tree;
         switch (evt)
         {
@@ -266,7 +298,8 @@ public sealed class GameShell
                 _outputs.Add(new StartMissionOutput(run, controller));
             }
         }
-        foreach (var screen in _stack) screen.Update(dtSeconds);
+        foreach (var screen in _stack.ToArray()) screen.Update(dtSeconds);
+        if (_stack.Count > 0 && CurrentScreen.ExitFinished) Pop();
         if (_stack.Count > 0) CurrentScreen.Tree.AdvanceTo((long)_clockMs);
     }
 
@@ -280,6 +313,12 @@ public sealed class GameShell
         {
             var list = screen.BuildDrawList();
             commands.AddRange(list.Commands);
+            if (screen.Transitions is { } transitions)
+            {
+                var overlay = new List<UiDrawCommand>();
+                transitions.AppendDraw(overlay);
+                commands.AddRange(overlay);
+            }
             windows += list.Statistics.WindowsDrawn;
             unresolvedLabels += list.Statistics.UnresolvedLabels;
             unresolvedSizes += list.Statistics.UnresolvedImageSizes;
@@ -381,7 +420,11 @@ public sealed class GameShell
     internal void OpenQuitConfirm() => Push(new MessageBoxScreen(this, ShellLayoutNames.QuitMessageBox, "GUI:QuitPopupTitle", "GUI:QuitPopupMessage",
         ShellMessageBoxButtons.YesNo, onAccept: () => _outputs.Add(new ExitRequestedOutput()), onDecline: CloseTop));
 
-    internal void CloseTop() => Pop();
+    internal void CloseTop()
+    {
+        if (_stack.Count > 0 && CurrentScreen.BeginExit()) return;
+        Pop();
+    }
 
     internal void ReturnToMainMenuFromResults()
     {
@@ -415,17 +458,18 @@ public sealed class GameShell
         _stack.Add(screen);
     }
 
-    private void Pop()
+    private void Pop(bool reveal = true)
     {
         if (_stack.Count == 0) return;
         var top = _stack[^1];
         _stack.RemoveAt(_stack.Count - 1);
         top.OnClosed();
+        if (reveal && _stack.Count > 0) CurrentScreen.OnRevealed();
     }
 
     private void Replace(ShellScreen screen)
     {
-        while (_stack.Count > 0) Pop();
+        while (_stack.Count > 0) Pop(reveal: false);
         Push(screen);
     }
 }

@@ -177,6 +177,16 @@ public sealed class WindowTransitionHandler
 
     private TransitionGroup? FindOrNone(string name) => string.IsNullOrEmpty(name) ? null : Find(name);
 
+    /// <summary>
+    /// The original takes the group it draws from <see cref="Step"/>, so the frame between starting a group and its first step shows the windows the
+    /// group just hid with none of its stand-ins (a one-frame flash of the bare screen, e.g. before a fade from black). The group that just became
+    /// current is drawn at once instead.
+    /// </summary>
+    private void PrimeDraw()
+    {
+        _draw = _current;
+    }
+
     /// <summary>Starts a group; a running one is reversed first and the new one waits as pending (<c>setGroup</c>). <paramref name="immediate"/> skips the running group to its end instead.</summary>
     public void SetGroup(string groupName, bool immediate = false)
     {
@@ -186,6 +196,7 @@ public sealed class WindowTransitionHandler
             _current.Skip();
             _current = FindOrNone(groupName);
             _current?.Init();
+            PrimeDraw();
             return;
         }
         if (_current is not null)
@@ -197,6 +208,7 @@ public sealed class WindowTransitionHandler
         }
         _current = FindOrNone(groupName);
         _current?.Init();
+        PrimeDraw();
     }
 
     /// <summary>Plays a group backwards (<c>reverse</c>); see the class remarks for a group that is not the running one.</summary>
@@ -220,6 +232,7 @@ public sealed class WindowTransitionHandler
         _current.Skip();
         _current.Reverse();
         _pending = null;
+        PrimeDraw();
     }
 
     /// <summary>Drops a group from the running or pending slot, bringing it to its end state first (<c>remove</c>).</summary>

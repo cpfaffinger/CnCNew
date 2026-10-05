@@ -22,7 +22,11 @@ public sealed class CreditsScreen : ShellScreen
         Tree.Register("CreditsMenuInput", OnInput);
     }
 
-    public override void Update(double dtSeconds) => _scrollPixels += (float)(dtSeconds * PixelsPerSecond);
+    public override void Update(double dtSeconds)
+    {
+        base.Update(dtSeconds);
+        _scrollPixels += (float)(dtSeconds * PixelsPerSecond);
+    }
 
     public override UiDrawList BuildDrawList()
         => ShellCustomDraw.ExpandCredits(Tree.BuildDrawList(), new ShellCreditsContext(Shell.Credits, (int)_scrollPixels, Shell.TextSource), Tree.Services.TextMeasure);

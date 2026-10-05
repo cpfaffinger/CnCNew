@@ -1,4 +1,5 @@
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Transitions;
 
 namespace CnCNew.Game.Shell;
 
@@ -15,7 +16,12 @@ public abstract class ShellScreen
         LayoutName = layoutName;
         Tree = new UiWindowTree(shell.Viewport, shell.ScaleOptions, shell.TreeServices);
         Tree.AddLayout(shell.Layouts.Get(layoutName));
+        if (shell.TransitionTable is { } table) Transitions = new WindowTransitionHandler(table, new UiTransitionHost(Tree, shell.PlaySound));
     }
+
+    /// <summary>The longest stretch of time one <see cref="Update"/> may turn into transition frames. The original steps one frame per client frame;
+    /// a stall (loading, a dragged window) must not play a whole sequence in a single call.</summary>
+    public const double MaxTransitionStepSeconds = 0.1;
 
     protected GameShell Shell { get; }
     public string LayoutName { get; }
@@ -30,7 +36,38 @@ public abstract class ShellScreen
     /// <summary>Resolves a label through the shell's text source, falling back to the label key itself (never thrown away silently: unresolved labels are also counted when drawn).</summary>
     protected string Text(string label) => Shell.TextSource is { } source && source.TryResolve(label, out var text) ? text : label;
 
-    public virtual void Update(double dtSeconds) { }
+    /// <summary>
+    /// The window transitions of this screen (<c>TheTransitionHandler</c> of the original, one per screen here because every screen has its own
+    /// window tree); <see langword="null"/> when the shell runs without animations (headless tests and golden hashes, <c>docs/GAME-SHELL.md</c> §11).
+    /// </summary>
+    public WindowTransitionHandler? Transitions { get; }
+
+    /// <summary>The transition group played backwards when the screen is closed with <see cref="GameShell.CloseTop"/>; the screen is popped once it has finished (the original waits for <c>isAnimFinished</c> before <c>shutdownComplete</c>).</summary>
+    protected virtual string? ExitTransitionGroup => null;
+
+    /// <summary>Set while the exit transition runs; the shell passes no input to a closing screen.</summary>
+    public bool IsClosing { get; private set; }
+
+    /// <summary>Starts the exit transition if the screen has one and the shell animates; returns whether the pop has to wait.</summary>
+    internal bool BeginExit()
+    {
+        if (Transitions is null || ExitTransitionGroup is not { } group) return false;
+        if (IsClosing) return true;
+        IsClosing = true;
+        Transitions.Reverse(group);
+        return true;
+    }
+
+    /// <summary>A transition runs or one is waiting to run; the host keeps drawing frames (and a test keeps stepping) until it is false.</summary>
+    public virtual bool IsAnimating => Transitions is { IsSettled: false };
+
+    /// <summary>The screen has nothing left to wait for: its exit transition (if any) is over.</summary>
+    internal bool ExitFinished => IsClosing && (Transitions?.IsSettled ?? true);
+
+    public virtual void Update(double dtSeconds) => Transitions?.Advance(Math.Min(dtSeconds, MaxTransitionStepSeconds));
+
+    /// <summary>The screen on top of this one was closed and this one is the top again (the original re-runs the layout's init, e.g. <c>MainMenuInit</c>).</summary>
+    public virtual void OnRevealed() { }
 
     public virtual UiDrawList BuildDrawList() => Tree.BuildDrawList();
 

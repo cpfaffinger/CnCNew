@@ -71,7 +71,11 @@ public sealed class ChallengeSelectScreen : ShellScreen
         Tree.Register("ChallengeMenuInput", OnInput);
         for (var index = 0; index < Slots; index++) TryW($"GeneralPosition{index}")?.SetEnabled(index < _challenges.Length);
         RefreshBio();
+        // ChallengeMenuInit: the menu fades in (FULLFADE of GadgetParent); ChallengeMenuShutdown reverses it.
+        Transitions?.SetGroup("ChallengeMenuFade");
     }
+
+    protected override string? ExitTransitionGroup => "ChallengeMenuFade";
 
     private void RefreshBio()
     {
@@ -175,7 +179,11 @@ public sealed class LoadGameScreen : ShellScreen
         W("ButtonSave").SetEnabled(false);
         HideConfirmPanels();
         Refresh();
+        // PopupSaveLoad.cpp: SaveLoadMenuFade (FULLFADE of SaveLoadMenu) on entry, reversed on shutdown.
+        Transitions?.SetGroup("SaveLoadMenuFade");
     }
+
+    protected override string? ExitTransitionGroup => "SaveLoadMenuFade";
 
     private void HideConfirmPanels()
     {
