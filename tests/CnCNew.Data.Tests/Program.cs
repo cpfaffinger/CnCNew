@@ -39,6 +39,7 @@ FingerprintStreamingMatchesBuffer();
 ObjectCreationListsAreTypedNuggets();
 WeaponBonusesAreTypedAndStrict();
 SingleBitsMatchTheRuntimeCast();
+FingerprintEncodingIsPinned();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -881,6 +882,26 @@ static void WeaponBonusesAreTypedAndStrict()
     Throws<FormatException>(() => DefinitionCompiler.Compile(One("Weapon W\n  WeaponBonus = VETERAN SPEED 125%\nEnd\n")), "not a member of WeaponBonusField");
     Throws<FormatException>(() => DefinitionCompiler.Compile(One("Weapon W\n  WeaponBonus = VETERAN DAMAGE 125\nEnd\n")), "percentage");
     Assert(NameTablesPhase5.WeaponBonusCondition.Count == 27, "WeaponBonus condition table size.");
+}
+
+// Phase 18, D9: the definition fingerprint is the SHA-256 of a JSON text. Its line ends used to be the platform's (CRLF on Windows, LF elsewhere) and its string
+// escaping is the runtime's default JSON encoder. The line end and the indentation are pinned now; the escaping is guarded by this golden value: a runtime that
+// escapes differently fails here instead of silently rejecting every other machine.
+static void FingerprintEncodingIsPinned()
+{
+    // Every class of character the default encoder treats specially: HTML-sensitive ASCII, quote, backslash, non-ASCII (Latin-1 source), and plain text.
+    var graph = DefinitionCompiler.Compile(One("Weapon Gun\n  PrimaryDamage = 10\nEnd\nObject T\u00E4nk\n  CommandSet = Cmds\n  DisplayName = OBJECT:<'+&`\"q\\x>\u00F6\u00DF\nEnd\n"));
+    var bytes = DefinitionSnapshotWriter.WriteCanonical(graph);
+    var text = System.Text.Encoding.UTF8.GetString(bytes);
+    var (sha, length) = DefinitionSnapshotWriter.ComputeFingerprint(graph);
+    Assert(length == bytes.Length && sha == Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)), "The streamed fingerprint is the hash of the canonical bytes.");
+    var lineFeeds = text.Count(value => value == '\n');
+    Assert(lineFeeds > 20 && lineFeeds == System.Text.RegularExpressions.Regex.Matches(text, "\r\n").Count, "The canonical snapshot ends its lines with CR LF on every platform.");
+    Assert(text.Contains("\n  \"definitions\": [\r\n    {", StringComparison.Ordinal), "The canonical snapshot is indented with two spaces.");
+    foreach (var escape in new[] { "\\u003C", "\\u0027", "\\u002B", "\\u0026", "\\u0060", "\\u0022", "\\\\x", "\\u003E", "\\u00F6\\u00DF", "T\\u00E4nk" })
+        Assert(text.Contains(escape, StringComparison.Ordinal), $"The canonical snapshot escapes as expected: {escape} is missing.");
+    Console.WriteLine($"  fingerprint encoding: {bytes.Length} bytes, SHA-256 {sha}");
+    Assert(sha == "024D8B2194B55BC497B1BD2DF50DFF4B5EE3A70BDC5256485D8E6FA28AD8BA43" && bytes.Length == 1884, $"The canonical encoding changed: SHA-256 {sha} of {bytes.Length} bytes.");
 }
 
 // Phase 18, D2: the integer conversion of single-precision bits is the runtime's (decimal)float, value and scale, for every bit pattern tried.
