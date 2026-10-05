@@ -11,8 +11,8 @@ namespace CnCNew.UiRenderTool;
 
 /// <summary>
 /// The rest of the screens a player meets between the main menu and a match, driven through the shell with real input
-/// like <see cref="ShellScenes"/>: single-player menu, skirmish setup and map picker, the match loading screen, the score
-/// screen after a short match, credits and the USA campaign screens up to the mission briefing.
+/// like <see cref="ShellScenes"/>: single-player menu, skirmish setup and map picker (and back), the match loading screen, the score
+/// screen after a short match, credits, load game, the challenge menu and the USA campaign's difficulty question up to the mission briefing.
 /// These are the screens whose text the human compared against the original (docs/TEXT-AUDIT.md).
 /// </summary>
 internal static class ShellFlowScenes
@@ -73,14 +73,35 @@ internal static class ShellFlowScenes
             Click(shell, "MainMenu.wnd:ButtonCredits");
             Shot(shell, "credits");
 
+            // Shell::push hides the screen below: setup -> map picker (an overlay of the setup) -> back -> back must never show the main menu's windows behind them.
+            shell = NewShell();
+            Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+            Click(shell, "MainMenu.wnd:ButtonSkirmish");
+            Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonSelectMap");
+            Click(shell, "SkirmishMapSelectMenu.wnd:ButtonBack");
+            Shot(shell, "skirmish-after-map-back");
+            Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonBack");
+            Shot(shell, "main-after-skirmish");
+
+            Click(shell, "MainMenu.wnd:ButtonLoadReplay");
+            Shot(shell, "load-replay-menu");
+            Click(shell, "MainMenu.wnd:ButtonLoadGame");
+            Shot(shell, "load-game");
+            Click(shell, "SaveLoad.wnd:ButtonBack");
+
+            Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+            Click(shell, "MainMenu.wnd:ButtonChallenge");
+            Shot(shell, "challenge-difficulty");
+            Click(shell, "MainMenu.wnd:ButtonMedium");
+            Shot(shell, "challenge-menu");
+            Click(shell, "ChallengeMenu.wnd:GeneralPosition2");
+            Shot(shell, "challenge-menu-picked");
+
             shell = NewShell();
             Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
             Click(shell, "MainMenu.wnd:ButtonUSA");
-            Shot(shell, "campaign-usa");
-            Click(shell, "SinglePlayerMenu.wnd:ButtonNew");
-            Shot(shell, "difficulty");
-            Click(shell, "DifficultySelect.wnd:RadioButtonHard");
-            Click(shell, "DifficultySelect.wnd:ButtonOk");
+            Shot(shell, "campaign-difficulty");
+            Click(shell, "MainMenu.wnd:ButtonHard");
             Shot(shell, "briefing-usa");
             shell.Update(0.5);
             Shot(shell, "briefing-usa-later");
