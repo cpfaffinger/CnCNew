@@ -39,6 +39,13 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void RefreshVision()
     {
+        RevealVision();
+        _visionHash = _vision!.Hash();
+    }
+
+    /// <summary>The reveal part of <see cref="RefreshVision"/> without the hash over the cells (the two are separate tick phases for a measuring tool).</summary>
+    private void RevealVision()
+    {
         var vision = _vision!;
         vision.BeginRefresh();
         var allySlots = new int[_playerList.Length][];
@@ -67,7 +74,6 @@ public sealed partial class SimulationWorld
                 for (var index = 0; index < spied.Count; index++)
                     if (spied.Values[index] > 0 && SlotOf(new PlayerId(spied.Keys[index])) is var spy and >= 0 && !viewers.Contains(spy)) vision.Reveal(spy, entity.X, entity.Y, range);
         }
-        _visionHash = vision.Hash();
     }
 
     private int SlotOf(PlayerId player) => _playerSlots is not null && _playerSlots.TryGetValue(player.Value, out var slot) ? slot : -1;

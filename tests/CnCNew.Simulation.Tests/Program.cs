@@ -46,6 +46,8 @@ run.Test("Stress scenario returns to baseline (short run)", Tests.ShortStress);
 run.Test("Definition insertion order does not change the simulation", Tests.DefinitionOrderIndependence);
 run.Test("Idle ticks do not allocate", Tests.IdleAllocation);
 run.Test("Determinism rules hold in the simulation sources", Tests.SourceRules);
+run.Test("Tick phase observer: every world phase once per tick in order, same hashes, not in the snapshot", Tests.TickPhaseObserverWorld);
+run.Test("Tick phase observer: skirmish and mission sessions report their parts, same hashes and commands", Tests.TickPhaseObserverSessions);
 run.Test("Phase 5: fear-sound RNG consumption (block 0.3)", Tests.Phase5FearSoundRng);
 run.Test("Phase 5: economy and upgrade purchase", Tests.Phase5Economy);
 run.Test("Phase 5: weapon fire, armor, clip and reload", Tests.Phase5Combat);
