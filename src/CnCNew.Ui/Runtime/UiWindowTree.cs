@@ -62,6 +62,14 @@ public sealed partial class UiWindowTree
     /// <summary>All windows in creation order (file order, parents before children).</summary>
     public IReadOnlyList<UiWindow> AllWindows => _all;
     public UiWindow? Focus { get; private set; }
+
+    /// <summary>
+    /// The non-gadget window that receives keys while no gadget has the focus: what a layout's init function gets by calling <c>winSetFocus</c> on one of its
+    /// USER windows (the window whose <c>INPUTCALLBACK</c> handles Escape: <c>SaveLoadMenu</c> of <c>SaveLoad.wnd</c> is such a child; the root of that
+    /// file has no input callback). Unlike a gadget focus it survives the window being hidden for a while by a transition, and it is only used when visible;
+    /// without it (or when it is hidden) keys start at the topmost visible root as before.
+    /// </summary>
+    public UiWindow? KeyboardHome { get; set; }
     public long Now { get; private set; }
     public IReadOnlyList<UiEvent> PendingEvents => _pending.Select(entry => entry.Event).ToArray();
     public IReadOnlyDictionary<string, int> UnregisteredCallbacks => _unregistered;
@@ -294,7 +302,7 @@ public sealed partial class UiWindowTree
 
     private void Place(UiWindow window, UiTransform? inherited)
     {
-        var rect = window.Definition.Rect;
+        var rect = window.DesignRect;
         var (transform, forChildren) = UiScaler.ForWindow(rect, inherited, Viewport, Options.Mode);
         window.Transform = transform;
         window.Rect = window.ScreenRectOverride ?? transform.Map(rect);
