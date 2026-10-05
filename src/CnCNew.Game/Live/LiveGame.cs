@@ -142,6 +142,12 @@ public abstract class LiveGame
     /// <summary>Raised after every step with its result (events for statistics, ticker and sound).</summary>
     public event Action<TickResult>? TickStepped;
 
+    /// <summary>A mission script's colour flash of one drawable (<c>FrameProjector.FlashScripted</c>): presentation only, the simulation is not touched.</summary>
+    public bool FlashDrawable(EntityId entity, Vector3? color, int seconds) => _projector.FlashScripted(entity, color, seconds, World);
+
+    /// <summary>A mission script's house colour for one drawable (<c>FrameProjector.SetHouseColor</c>): presentation only.</summary>
+    public bool SetDrawableHouseColor(EntityId entity, uint argb) => _projector.SetHouseColor(entity, argb, World);
+
     /// <summary>Sound cues of the effects executed since the last call.</summary>
     public ImmutableArray<SoundCue> DrainSoundCues()
     {

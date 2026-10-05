@@ -30,6 +30,7 @@ const string Usage = """
       coverage                                  every script action and condition type the VM does not execute (missing), by name
       usage <content-dir> --action A[,B] [--condition]
                                                 every use of the named script action (or, with --condition, condition) types in the campaign maps: map, script, parameters
+      outputs <content-dir> [--maps]            static census of the presentation outputs (forwarded script actions) the campaign maps can emit, per type: uses, maps, and whether the client has a consumer
       teams <content-dir> --map TEXT [--filter TEXT]
       drive <content-dir> [--campaign NAME] [--map TEXT] [--ticks N] [--explain] [--watch TEMPLATE-TEXT] [--commands-only] [--outcome victory|defeat]
                                                 objective driver: satisfies the world-state conditions of the scripts (kill named objects/teams, send units into areas, ...) one by one and
@@ -69,6 +70,7 @@ try
         "reachability" => ReachabilityReport(content, campaigns, args),
         "script" => ScriptDump(content, campaigns, args),
         "usage" => ActionUsage(content, campaigns, args),
+        "outputs" => OutputCensus(content, campaigns, args),
         "coverage" => Coverage(),
         "drive" => Drive(content, campaigns, args),
         "template" => TemplateInfo(content, args),
@@ -572,6 +574,44 @@ static int ActionUsage(ContentFileSystem content, CampaignCatalog campaigns, str
         }
     }
     return 0;
+}
+
+// Static census of the presentation outputs (ScriptSupport.Forwarded actions) the campaign maps can emit: per type the number of uses and the maps, with what the client does with it.
+static int OutputCensus(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
+{
+    var (context, _, _) = Compile(content);
+    var uses = new SortedDictionary<string, int>(StringComparer.Ordinal);
+    var maps = new SortedDictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var mapCount = 0;
+    foreach (var mission in campaigns.Campaigns.SelectMany(campaign => campaign.Sequence))
+    {
+        if (!seen.Add(mission.MapPath)) continue;
+        MapData map;
+        try { map = context.LoadMap(mission.MapPath); }
+        catch (FileNotFoundException) { continue; }
+        mapCount++;
+        var name = Path.GetFileNameWithoutExtension(mission.MapPath);
+        foreach (var unit in ScriptProgram.Build(map).Units)
+            foreach (var action in unit.Script.Actions.Concat(unit.Script.FalseActions).Where(item => ScriptCoverage.ForwardedActions.Contains(item.TypeName)))
+            {
+                uses[action.TypeName] = uses.GetValueOrDefault(action.TypeName) + 1;
+                if (!maps.TryGetValue(action.TypeName, out var set)) maps[action.TypeName] = set = new SortedSet<string>(StringComparer.Ordinal);
+                set.Add(name);
+            }
+    }
+    var states = new Dictionary<CnCNew.Game.Shell.MissionOutputState, int>();
+    foreach (var (type, count) in uses)
+    {
+        var info = CnCNew.Game.Shell.MissionOutputCatalog.Describe(type);
+        states[info.State] = states.GetValueOrDefault(info.State) + 1;
+        var label = info.State switch { CnCNew.Game.Shell.MissionOutputState.Displayed => "displayed", CnCNew.Game.Shell.MissionOutputState.HandledElsewhere => "elsewhere", _ => "NOT DISPLAYED" };
+        Console.WriteLine($"{type,-44} uses {count,4} maps {maps[type].Count,2}  [{label}] {info.Description}");
+        if (args.Contains("--maps")) Console.WriteLine($"    {string.Join(", ", maps[type])}");
+    }
+    var untabled = ScriptCoverage.ForwardedActions.Where(type => !CnCNew.Game.Shell.MissionOutputCatalog.All.Any(info => info.Action == type)).ToArray();
+    Console.WriteLine($"{mapCount} campaign maps; {uses.Count} forwarded output types used ({uses.Values.Sum()} uses): displayed {states.GetValueOrDefault(CnCNew.Game.Shell.MissionOutputState.Displayed)}, handled elsewhere {states.GetValueOrDefault(CnCNew.Game.Shell.MissionOutputState.HandledElsewhere)}, not displayed {states.GetValueOrDefault(CnCNew.Game.Shell.MissionOutputState.NotDisplayed)}; forwarded types in the engine table {ScriptCoverage.ForwardedActions.Count}, never used by a campaign map {ScriptCoverage.ForwardedActions.Count(type => !uses.ContainsKey(type))}, missing from the output catalog {untabled.Length}{(untabled.Length > 0 ? " (" + string.Join(", ", untabled) + ")" : string.Empty)}.");
+    return untabled.Length == 0 ? 0 : 1;
 }
 
 static int Coverage()

@@ -21,7 +21,7 @@ namespace CnCNew.Game.Live;
 /// A mission is not a replay: scripts change the world directly, so the truth is <see cref="MissionSnapshot"/> (<c>docs/CAMPAIGN-AND-SAVEGAMES.md</c>).
 /// </para>
 /// </summary>
-public sealed class LiveMission : LiveGame
+public sealed class LiveMission : LiveGame, IMissionObjectEffects
 {
     private readonly string _humanFaction;
     private readonly ImmutableArray<PlayerConfiguration> _players;
@@ -32,9 +32,17 @@ public sealed class LiveMission : LiveGame
         Run = run;
         _humanFaction = humanFaction;
         _players = players;
-        Director = new MissionPresentationDirector(run.Session, resolveText);
+        Director = new MissionPresentationDirector(run.Session, resolveText)
+        {
+            ObjectEffects = this,
+            ShakeIntensities = CnCNew.Presentation.Camera.CameraShakeIntensities.FromDefinitions(data.Graph),
+        };
         Bridge = new MissionUiBridge(run.Session);
     }
+
+    // IMissionObjectEffects: flashes and house colours are drawn by the object layer from the frame projector.
+    bool IMissionObjectEffects.Flash(EntityId entity, Vector3? color, int seconds) => FlashDrawable(entity, color, seconds);
+    bool IMissionObjectEffects.SetHouseColor(EntityId entity, uint argb) => SetDrawableHouseColor(entity, argb);
 
     /// <summary>
     /// The <c>PresentationLatencyTicks</c> a client with a <see cref="MissionPresentationDirector"/> starts a mission with (60 seconds): the director ends camera moves,

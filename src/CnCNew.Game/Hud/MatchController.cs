@@ -123,6 +123,12 @@ public sealed class MatchController
     /// </summary>
     public bool WorldInputEnabled { get; set; } = true;
 
+    /// <summary>
+    /// <c>GameLogic::setDrawIconUI</c> (a mission script's <c>OPTIONS_SET_DRAWICON_UI_MODE</c>): while <see langword="false"/> the drawables show no icons (<c>Drawable::drawIconUI</c> draws nothing), so the healing icons
+    /// over repaired objects are left out. The selection markers of the player's own selection stay (the original draws those through the selection, not through the icon pass).
+    /// </summary>
+    public bool IconUiEnabled { get; set; } = true;
+
     /// <summary>Meta actions the controller does not handle itself (pause, screenshot, chat, diplomacy, control bar toggle, time scale, ...).
     /// <see cref="MetaAction.Options"/> is handled internally (opens/closes the in-game menu) and never appears here.</summary>
     public event Action<MetaAction>? UiRequest;
@@ -525,7 +531,7 @@ public sealed class MatchController
 
         // Healed objects in view show the wrench / cross over their health bar, selected or not (Drawable::drawHealing runs for every drawable).
         var heals = ImmutableArray.CreateBuilder<HealIconMarker>();
-        foreach (var drawable in Match.Frame.Drawables)
+        foreach (var drawable in IconUiEnabled ? Match.Frame.Drawables : ImmutableArray<CnCNew.Presentation.Objects.DrawableInstance>.Empty)
         {
             if (!drawable.ShowsHealing || !drawable.Entity.IsValid || world.FindEntity(drawable.Entity) is not { } healed) continue;
             if (!Input.Selection.Picker.TryProject(view, healed, out var projected)) continue;
