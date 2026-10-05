@@ -1622,3 +1622,64 @@ Eine Wirkungstabelle Leicht/Schwer gibt es nicht, weil es keine Wirkung gibt; `S
 | `ai-match` Alpine Assault, `FactionChina,FactionGLA`, 45.000 Ticks | FactionChina bei 23.310 | `54DD2C9094141CC8` | `582FA4C6DF853C4B` | identisch / identisch |
 | `ai-match` Alpine Assault, `FactionAmerica,FactionChina` | FactionAmerica bei 16.965 | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` | identisch / identisch |
 | `ai-match` Alpine Assault, `FactionGLA,FactionAmerica` | FactionAmerica bei 8.895 | `23A93C58C775A691` | `B29CF881F6B1CC59` | identisch / identisch |
+
+## 36. Abschluss Phase 17 (6. Oktober 2026): zweites Versorgungszentrum der KI; Heeresauswahl nach Wert gemessen und verworfen
+
+### 36.1 Befund und Regel
+
+Die fünf Patts aus §33.6 enden alle gleich: das Lager neben dem Versorgungszentrum ist leer, das nächste gefüllte liegt 500 bis 1.200 Einheiten entfernt, und ein weiteres Zentrum plante `SkirmishAi` nur mit
+einer Armee von zehn Einheiten (`PlanGoals`) – die es ohne Einkommen nie mehr gab. In der Referenz entscheiden die Skirmish-Skripte, wann ein weiteres Zentrum gebaut wird (`AI_PLAYER_BUILD_SUPPLY_CENTER` →
+`AIPlayer::buildBySupplies`, Bedingung `SUPPLY_SOURCE_SAFE` → `AIPlayer::isSupplySourceSafe`); diese Skripte führt das Projekt nicht aus. Die Regel hier nimmt deshalb die Bausteine der Referenz und eine eigene
+Auslösebedingung:
+
+| Baustein | Referenz (`GameLogic/AI/AIPlayer.cpp`) | hier (`Skirmish/SkirmishAi.cs`) |
+| --- | --- | --- |
+| Was ein Zentrum noch sammeln kann | `AIPlayer::queueSupplyTruck`: „Make sure we have supplies near it“ – Lager im Umkreis `SUPPLY_CENTER_CLOSE_DIST` (20 Zellen) plus Radius, nicht feindlich, mit Kisten; ein Zentrum ohne solche Quelle bekommt keine Sammler mehr | `SupplyStockInReach`: Summe der Kistenwerte dieser Lager über alle eigenen Zentren |
+| Wohin das nächste Zentrum | `AIPlayer::findSupplyCenter` (schon seit Phase 16: `FindSupplySource`) | unverändert |
+| Ob die Quelle sicher ist | `AIPlayer::isSupplySourceSafe` → `isLocationSafe`: kein Feind im Umkreis `SupplyCenterSafeRadius` (AIData.ini: 300) plus Radius; Sammler, Dozer und unbedeutende Gebäude zählen nicht | `SupplySourceSafe`: sichtbare feindliche Einheiten und bewaffnete Gebäude sowie erinnerte bewaffnete Gebäude (nur was der Spieler sieht oder gesehen hat; die Referenz liest die Partition) |
+| **Auslöser** | Skript (nicht ausgeführt) | **eigen:** sobald der Vorrat in Reichweite unter 3.000 Credits fällt (`LowSupplyStock`), höchstens vier Zentren; das Ziel steht dann vor allen anderen Bauzielen, und solange das Geld nicht reicht, hält die Heeresproduktion den Preis zurück (die vorhandene Rücklage von `BuildStructures`) |
+| Untätige Sammler | – | `OrderCarriers` schickt sie zum nächsten Lager, das noch etwas enthält (vorher: zum nächsten, auch wenn es leer war) |
+
+Die Schwelle 3.000 ist eine eigene Wahl (das Zentrum muss aus dem Resteinkommen noch bezahlbar sein), kein Wert der Daten. Einen Unit-Test hat die Regel nicht: die synthetische Fixture kennt kein
+Versorgungszentrum mit Andockmodul; belegt ist sie durch die 16 Läufe unten.
+
+### 36.2 Die 16 KI-Läufe (Release, `ai-match … --max-ticks 45000`, Standardseeds; vorher = Stand `1a1732c`, nachher = `6eb7ae4`)
+
+| Karte | Paarung | vorher | **nachher** | Endhash nachher | Kette nachher |
+|---|---|---|---|---|---|
+| Alpine Assault | China, GLA | China, Tick 23.310 | China, Tick 23.370 | `0BD4FE5EEB2C37E7` | `BF9939E5A3B45736` |
+| Alpine Assault | America, China | America, Tick 16.965 | unverändert | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` |
+| Alpine Assault | GLA, America | America, Tick 8.895 | unverändert | `23A93C58C775A691` | `B29CF881F6B1CC59` |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | Patt | Patt | `D99B60905846A6B1` | `80EDA8449C86CEE6` |
+| Armored Fury | China, GLA | Patt | Patt | `7196F712342A3BDA` | `FF370FDA722BFA3B` |
+| Armored Fury | America, China | America, Tick 19.095 | America, Tick 19.095 (anderer Hash) | `0E0E07558397DB62` | `E41C4EF3D1DFBEF4` |
+| Armored Fury | GLA, America | America, Tick 37.365 | America, Tick 29.865 | `58B066C7284C21B2` | `64E8453DEE5297E4` |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | Patt | Patt | `7AC8B5574DE21417` | `68F33BE69B8EDF6D` |
+| Bitter Winter | China, GLA | China, Tick 17.220 | unverändert | `26CD35AC8AA660F5` | `2B86E2038EDFAAB7` |
+| Bitter Winter | America, China | Patt | **America, Tick 33.750** | `38380B920A732955` | `5FED11D99834B1B6` |
+| Bitter Winter | GLA, America | America, Tick 8.895 | unverändert | `AB725263AEF8E3B7` | `CDFCDF66730FF07B` |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | Patt | Patt | `9D040D6ACB8E269D` | `24F626B9E8F8CCA2` |
+| Death Valley | China, GLA | China, Tick 8.565 | unverändert | `9F0F8D7D28E8654D` | `90CDEBE18E7C6B01` |
+| Death Valley | America, China | America, Tick 9.330 | unverändert | `E98A532C90F89642` | `AC321A0CFA9C00E1` |
+| Death Valley | GLA, America | America, Tick 8.175 | unverändert | `3F33A4FEDEBA85C1` | `3B00774A84E69278` |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | ChinaTankGeneral, Tick 32.475 | ChinaTankGeneral, Tick 31.770 | `FDAD90E9E139AFE9` | `6E2EE5C9DA09EFD1` |
+
+Entschieden: vorher 11, nachher **12**; kein Sieger wechselt; sieben Läufe sind hashgleich (die Regel greift dort nie), alle 16 sind in Lauf 2 und nach der Snapshot-Fortsetzung identisch. Die vier verbliebenen Patts
+(dreimal ChinaTankGeneral gegen AmericaAirForceGeneral, Armored Fury China/GLA) enden weiter mit Armeen aus der billigsten Infanterie vor einer Basisverteidigung. **Keine Balance-Aussage.** Unverändert, weil
+das Referenzszenario und der Stresstest `SkirmishAi` nicht benutzen: Referenzmatch Sieger FactionGLA bei Tick 14.490, `23B4B25DF62765D8`, Kette `DE5849AF9F8493C4`; Stresstest `56882F763EABEF67` / `B8E663493F2C73D5`.
+
+### 36.3 Heeresauswahl nach Wert und Reichweite: zwei Messrunden, zurückgenommen
+
+Versucht wurde, `ProduceArmy` nicht mehr zufällig aus dem gerade Bezahlbaren wählen zu lassen, sondern je Produzent die wertvollste Einheit (Preis, verdoppelt, wenn die Waffe weiter reicht als jede gesehene
+feindliche Basisverteidigung), Fabriken vor Kasernen, Sparen statt Kleinkauf. Abbruchkriterium der Sitzung: höchstens zwei Messrunden.
+
+| Stand | 16 KI-Läufe entschieden | Was die Spur zeigt |
+| --- | --- | --- |
+| nur Versorgungsregel (§36.2) | **12** | – |
+| Runde 1: Wert = Preis × Reichweitenbonus | 10 | Preis ist kein Kampfwert: America baut 18 `AmericaTankAvenger` (Flugabwehr, 2.000 Credits), die vor der Basis stehen und nicht auf sie schießen können; China baut `ChinaVehicleTroopCrawler` |
+| Runde 2: nur Einheiten, deren Waffe Bodenziele trifft (`AntiGround`), keine Transporter | 11 | ein Patt endet (Armored Fury Tank/AirForce: ChinaTankGeneral bei 18.765), zwei Siege werden Patts (Armored Fury und Bitter Winter America/China) |
+
+Der Nur-Befehle-Agent der Missionen (`docs/SCRIPT-ENGINE.md` §9) mit der Fassung aus Runde 2: bei 15.000 Ticks unverändert 1 von 24, bei 60.000 Ticks **2 statt 3** Karten (`MD_CHI02` geht verloren, `MD_CHI01`
+endet bei Tick 20.733 statt 18.492). Die Änderung trägt also weder im Skirmish noch in den Missionen und ist **nicht im Code**. Was die Messung lehrt: der Preis taugt nicht als Maß, und Sparen hält die Armee
+länger unter der Angriffsschwelle. Ein tragfähiger Ansatz braucht einen Kampfwert je Ziel (Schaden gegen Rüstung, wie `WeaponSet`/`ArmorSet` ihn hergeben) und Teams statt Einzelkäufen
+(`AIPlayer::selectTeamToBuild`); das ist eine eigene, vermessene Arbeit hinter dem Programm aus `docs/MULTIPLAYER-PLAN.md`.
