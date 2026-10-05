@@ -173,8 +173,23 @@ public sealed class MissionPresentationDirector
     /// <summary><c>DISPLAY_TEXT</c>: the message lines at the top left (<c>InGameUI::message</c>); <see langword="null"/> until the first one.</summary>
     public UiMessageLog? Messages => _messages;
 
+    /// <summary>
+    /// Makes <paramref name="log"/> the message list: the original has one (<c>InGameUI::m_uiMessages</c>) for the scripts' <c>DISPLAY_TEXT</c> and the game's own messages
+    /// (<see cref="CnCNew.Game.Hud.HudMessageFeed"/>), so a mission HUD hands its list over and this director fades and draws it.
+    /// </summary>
+    public void UseMessages(UiMessageLog log) => _messages = log ?? throw new ArgumentNullException(nameof(log));
+
     /// <summary><c>SHOW_MILITARY_CAPTION</c>: the caption being typed, shown or faded out, or <see langword="null"/>.</summary>
     public MilitaryCaptionState? MilitaryCaption => _militaryCaption;
+
+    /// <summary>The audio event the original plays for every character the military caption types (<c>InGameUI::update</c>).</summary>
+    public const string TypingClickEvent = "MilitarySubtitlesTyping";
+
+    /// <summary>Characters the military captions typed so far: one click each was asked of the host's audio.</summary>
+    public long TypingClicks { get; private set; }
+
+    /// <summary>How many of <see cref="TypingClicks"/> started a voice (0 without connected audio; the audio layer may also refuse one, e.g. when the event is unknown or muted).</summary>
+    public long TypingClicksStarted { get; private set; }
 
     /// <summary><c>DISPLAY_CINEMATIC_TEXT</c>: the text near the bottom of the screen, or <see langword="null"/>.</summary>
     public CinematicTextState? Cinematic => _cinematic;
@@ -194,6 +209,49 @@ public sealed class MissionPresentationDirector
 
     /// <summary><c>CAMERA_LETTERBOX_BEGIN</c>..<c>END</c>: the original hides the control bar and shows black bars (<c>ScriptActions::doLetterBoxMode</c>).</summary>
     public bool Letterbox { get; private set; }
+
+    private long? _letterboxSwitchedAt;
+
+    /// <summary><c>LETTER_BOX_FADE_TIME</c> (1000 ms) in presentation steps; the original counts wall-clock milliseconds.</summary>
+    public const int LetterboxFadeFrames = 30;
+
+    /// <summary>
+    /// <c>m_letterBoxFadeLevel</c> (<c>W3DDisplay::renderLetterBox</c>): rises from 0 to 1 over a second after the letterbox began, falls back to 0 over a second after it ended.
+    /// </summary>
+    public float LetterboxFadeLevel
+    {
+        get
+        {
+            if (_letterboxSwitchedAt is not { } since) return 0f;
+            var progress = Math.Clamp((Clock - since) / (float)LetterboxFadeFrames, 0f, 1f);
+            return Letterbox ? progress : 1f - progress;
+        }
+    }
+
+    private void SetLetterbox(bool enabled)
+    {
+        // W3DDisplay::enableLetterBox: only a change restarts the fade.
+        if (Letterbox == enabled) return;
+        Letterbox = enabled;
+        _letterboxSwitchedAt = Clock;
+    }
+
+    /// <summary>
+    /// <c>W3DDisplay::renderLetterBox</c>: the bars cover what a 16:9 picture leaves of the screen, <c>(height - 9/16 * width) / 2</c> pixels at the top and at the bottom - 75 at 800x600,
+    /// none on a 16:9 screen or a wider one (the rectangles then lie outside the screen). They are black with the alpha of <paramref name="fadeLevel"/>. While the letterbox fades out
+    /// the original draws the top bar only (the bottom one's call is commented out), so the bottom bar goes at once.
+    /// </summary>
+    public static ImmutableArray<UiDrawCommand> LetterboxBars(int width, int height, bool enabled, float fadeLevel)
+    {
+        var bar = (int)((height - 9f / 16f * width) * 0.5f);
+        var alpha = (byte)(int)(Math.Clamp(fadeLevel, 0f, 1f) * 255f);
+        if (bar <= 0 || alpha == 0) return [];
+        var color = new WndColor(0, 0, 0, alpha);
+        var top = new UiFillRect(new UiRect(0, 0, width, bar), color);
+        if (!enabled) return [top];
+        var bottomY = (int)(height - (height - 9f / 16f * width) * 0.5f);
+        return [top, new UiFillRect(new UiRect(0, bottomY, width, height - bottomY), color)];
+    }
 
     /// <summary><c>DISABLE_INPUT</c>..<c>ENABLE_INPUT</c> (<c>ScriptActions::doDisableInput</c>): the host drops the player's world input while this is set. Reading it tells the director a host honours it.</summary>
     public bool InputLocked
@@ -441,24 +499,20 @@ public sealed class MissionPresentationDirector
     /// The mission's own screen content as <see cref="UiDrawCommand"/>s - the same renderer-neutral vocabulary
     /// <see cref="CnCNew.Game.Hud.MatchController.BuildDrawList"/> uses, so a host's existing <c>UiRenderer</c> draws it: the fade, the letterbox bars, then the texts the way
     /// <c>InGameUI</c> and <c>W3DDisplay</c> draw them (<see cref="MissionTextOverlay"/>: message lines, the typed military caption, named timers and counters, cinematic text; fonts from
-    /// <c>Language.ini</c>, positions and colors from <c>InGameUI.ini</c>, see <see cref="TextStyle"/>), the speech/movie placeholder and the outcome banner. The original draws the letterbox
-    /// bars over the UI texts; its bars are the part of a 16:9 picture the screen does not use (none on a 16:9 screen), ours are an eighth of the height, so the texts are drawn over them
-    /// instead of under. Radar blips are read from <see cref="RadarBlipsForDisplay"/>: turning a world position into a minimap pixel needs the host's own minimap transform.
+    /// <c>Language.ini</c>, positions and colors from <c>InGameUI.ini</c>, see <see cref="TextStyle"/>), the speech/movie placeholder and the outcome banner. The order is the original's
+    /// (<c>W3DDisplay::draw</c>): the in-game texts (<c>InGameUI::postDraw</c>), then the letterbox bars over them (<see cref="LetterboxBars"/>), then the cinematic text over the black.
+    /// Radar blips are read from <see cref="RadarBlipsForDisplay"/>: turning a world position into a minimap pixel needs the host's own minimap transform.
     /// </summary>
     public ImmutableArray<UiDrawCommand> BuildOverlayCommands(int viewportWidth, int viewportHeight)
     {
         _consumers[(int)Channel.Overlay] = true;
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
         var black = new WndColor(0, 0, 0, 255);
-        var bar = Letterbox ? viewportHeight / 8 : 0;
         if (FadeAlpha() is { } fade && fade.Alpha > 0)
             commands.Add(new UiFillRect(new UiRect(0, 0, viewportWidth, viewportHeight), fade.White ? new WndColor(255, 255, 255, fade.Alpha) : new WndColor(0, 0, 0, fade.Alpha)));
-        if (Letterbox)
-        {
-            commands.Add(new UiFillRect(new UiRect(0, 0, viewportWidth, bar), black));
-            commands.Add(new UiFillRect(new UiRect(0, viewportHeight - bar, viewportWidth, bar), black));
-        }
-        AppendTexts(commands, viewportWidth, viewportHeight);
+        AppendTexts(commands, viewportWidth, viewportHeight, overLetterbox: false);
+        commands.AddRange(LetterboxBars(viewportWidth, viewportHeight, Letterbox, LetterboxFadeLevel));
+        AppendTexts(commands, viewportWidth, viewportHeight, overLetterbox: true);
         if (OutcomeBanner is { } banner && TextMeasure is { } bannerMeasure)
         {
             // Not a text of the original (it goes to a score screen and a movie): an honest placeholder, in a fixed font because no data names one.
@@ -475,13 +529,14 @@ public sealed class MissionPresentationDirector
     /// </summary>
     public IUiTextMeasure? TextMeasure { get; set; }
 
-    private void AppendTexts(ImmutableArray<UiDrawCommand>.Builder commands, int width, int height)
+    /// <summary>The texts under the letterbox bars (messages, military caption, timers: <c>InGameUI::postDraw</c>) or the ones over them (cinematic text, the speech/movie placeholder).</summary>
+    private void AppendTexts(ImmutableArray<UiDrawCommand>.Builder commands, int width, int height, bool overLetterbox)
     {
         var timers = _countersVisible && _counters.Count > 0;
         if (_messages is not { IsEmpty: false } && _militaryCaption is null && _cinematic is null && SubtitleEvent is null && MoviePlaceholder is null && !timers) return;
         if (TextStyle is not { } style || TextMeasure is not { } measure)
         {
-            if (!_textProblemReported)
+            if (!_textProblemReported && !overLetterbox)
             {
                 _textProblemReported = true;
                 Problem("on-screen text", TextStyle is null ? "no InGameUI style connected (positions, colors and fonts come from InGameUI.ini and Language.ini)" : "no text measure connected");
@@ -489,10 +544,14 @@ public sealed class MissionPresentationDirector
             return;
         }
         var options = TextScaleOptions;
-        if (_messages is { IsEmpty: false } messages) commands.AddRange(MissionTextOverlay.Messages(messages, style, options, measure, width, height));
-        if (_militaryCaption is { } caption) commands.AddRange(MissionTextOverlay.MilitaryCaption(caption, style, options, measure, width, height));
-        if (timers)
-            commands.AddRange(MissionTextOverlay.NamedTimers(_counters.Select(pair => (pair.Value.Label, pair.Value.IsTimer, _session.Engine.CounterValue(pair.Key))), Clock, style, options, measure, width, height));
+        if (!overLetterbox)
+        {
+            if (_messages is { IsEmpty: false } messages) commands.AddRange(MissionTextOverlay.Messages(messages, style, options, measure, width, height));
+            if (_militaryCaption is { } caption) commands.AddRange(MissionTextOverlay.MilitaryCaption(caption, style, options, measure, width, height));
+            if (timers)
+                commands.AddRange(MissionTextOverlay.NamedTimers(_counters.Select(pair => (pair.Value.Label, pair.Value.IsTimer, _session.Engine.CounterValue(pair.Key))), Clock, style, options, measure, width, height));
+            return;
+        }
         if (_cinematic is { } cinematic) commands.AddRange(MissionTextOverlay.Cinematic(cinematic, style, options, measure, width, height));
         var placeholderName = MoviePlaceholder ?? SubtitleEvent;
         if (placeholderName is { Length: > 0 })
@@ -580,7 +639,14 @@ public sealed class MissionPresentationDirector
         _messages?.Update(clock);
         if (_militaryCaption is { } caption)
         {
+            var typed = caption.TypedCharacters;
             caption.Update(clock);
+            // InGameUI::update: every appended character plays the click (static AudioEventRTS click("MilitarySubtitlesTyping")); a line break does not.
+            if (caption.TypedCharacters > typed)
+            {
+                TypingClicks++;
+                if (TryPlay("SHOW_MILITARY_CAPTION", TypingClickEvent) == true) TypingClicksStarted++;
+            }
             if (caption.Finished) _militaryCaption = null;
         }
         if (_cinematic is { } cinematic && clock >= cinematic.ExpiresAtFrame) _cinematic = null;
@@ -746,11 +812,11 @@ public sealed class MissionPresentationDirector
                 _cameraCompletesAtTick = tick;
                 return;
             case "CAMERA_LETTERBOX_BEGIN":
-                Letterbox = true;
+                SetLetterbox(true);
                 Handled(action, Channel.Overlay);
                 return;
             case "CAMERA_LETTERBOX_END":
-                Letterbox = false;
+                SetLetterbox(false);
                 Handled(action, Channel.Overlay);
                 return;
             case "CAMERA_FADE_ADD" or "CAMERA_FADE_SUBTRACT" or "CAMERA_FADE_MULTIPLY":
@@ -1232,6 +1298,7 @@ public sealed class MissionPresentationDirector
             lines.Add(string.Create(culture, $"mission output {count.Action}: emitted {count.Emitted}, forwarded {count.Forwarded}, displayed {count.Displayed}, handled elsewhere {count.HandledElsewhere}, not displayed {count.NotDisplayed} ({count.How})"));
         lines.Add($"mission output problems: {(_problems.Count == 0 ? "none" : string.Join("; ", _problems.Select(pair => string.Create(culture, $"{pair.Key} x{pair.Value}"))))}");
         lines.Add(string.Create(culture, $"mission presentation: input locked for {InputLockedTicks} ticks, locked at exit {_inputLocked}, letterbox at exit {Letterbox}, camera move pending at exit {_cameraPending}, outcome banner {OutcomeBanner ?? "none"}"));
+        lines.Add(string.Create(culture, $"mission caption typing: {TypingClicks} characters typed, {TypingClicksStarted} clicks started ({(HasAudio ? TypingClickEvent : "no audio connected")})"));
         return lines.ToImmutable();
     }
 

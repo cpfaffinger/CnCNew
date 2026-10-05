@@ -153,6 +153,36 @@ public sealed partial class UiWindowTree
         return null;
     }
 
+    /// <summary>
+    /// The deepest visible window at a point when it, or a window above it, is disabled (<c>GameWindow::winPointInAnyChild</c> with <c>ignoreEnableCheck</c>); <see langword="null"/> when
+    /// the point is over enabled windows only (the mouse region then decides) or over none. Only tooltips ask for it: a disabled window takes no input.
+    /// </summary>
+    private UiWindow? DisabledWindowAt(int x, int y)
+    {
+        if (_openCombo is not null && UiGadgetGeometry.ComboDropDown(_openCombo).Contains(x, y)) return null;
+        foreach (var root in RootsBottomToTop().Reverse())
+        {
+            if (root.IsHidden || !root.HitRect.Contains(x, y)) continue;
+            var window = root;
+            var disabled = !window.IsEnabled;
+            for (var descended = true; descended;)
+            {
+                descended = false;
+                for (var index = window.Children.Count - 1; index >= 0; index--)
+                {
+                    var child = window.Children[index];
+                    if (child.IsHidden || !child.HitRect.Contains(x, y)) continue;
+                    window = child;
+                    disabled |= !child.IsEnabled;
+                    descended = true;
+                    break;
+                }
+            }
+            return disabled ? window : null;
+        }
+        return null;
+    }
+
     private static UiWindow? HitWindow(UiWindow window, int x, int y)
     {
         if (window.IsHidden || !window.IsEnabled || !window.HitRect.Contains(x, y)) return null;
@@ -337,34 +367,36 @@ public sealed partial class UiWindowTree
     {
         get
         {
-            if (_hover is null || _grab is not null || !_hover.IsVisible) return null;
-            var delay = _hover.Definition.TooltipDelay >= 0 ? _hover.Definition.TooltipDelay : Services.DefaultTooltipDelayMs;
+            // The tooltip window is found without the enabled check (winProcessMouseEvent: winPointInAnyChild( x, y, TRUE, TRUE )): a disabled button explains itself, too.
+            var hover = _grab is null && _pointerInside ? DisabledWindowAt(_hoverX, _hoverY) ?? _hover : _hover;
+            if (hover is null || _grab is not null || !hover.IsVisible) return null;
+            var delay = hover.Definition.TooltipDelay >= 0 ? hover.Definition.TooltipDelay : Services.DefaultTooltipDelayMs;
             if (Now - _hoverSince < delay) return null;
             var age = Now - _hoverSince - delay;
             if (TooltipOverride is { } custom)
             {
-                var text = custom(_hover);
-                if (text is not null) return new UiTooltip(_hover.Name, text, null, _hoverX, _hoverY, age);
+                var text = custom(hover);
+                if (text is not null) return new UiTooltip(hover.Name, text, null, _hoverX, _hoverY, age);
             }
-            var callback = _hover.Definition.Callbacks.Tooltip;
+            var callback = hover.Definition.Callbacks.Tooltip;
             if (callback is not null)
             {
                 if (callback == UiBuiltinCallbacks.DefaultTooltip) return null;
                 if (!_tooltipProviders.TryGetValue(callback, out var provider))
                 {
-                    if (_countedTooltipMiss != _hover)
+                    if (_countedTooltipMiss != hover)
                     {
                         _unregistered[callback] = _unregistered.GetValueOrDefault(callback) + 1;
-                        _countedTooltipMiss = _hover;
+                        _countedTooltipMiss = hover;
                     }
                     return null;
                 }
-                return provider(this, _hover) is { } text ? new UiTooltip(_hover.Name, text, null, _hoverX, _hoverY, age) : null;
+                return provider(this, hover) is { } text ? new UiTooltip(hover.Name, text, null, _hoverX, _hoverY, age) : null;
             }
-            if (_hover.Definition.TooltipText is not { } label) return null;
+            if (hover.Definition.TooltipText is not { } label) return null;
             return Services.Text is { } source && source.TryResolve(label, out var resolved)
-                ? new UiTooltip(_hover.Name, resolved, label, _hoverX, _hoverY, age)
-                : new UiTooltip(_hover.Name, label, label, _hoverX, _hoverY, age);
+                ? new UiTooltip(hover.Name, resolved, label, _hoverX, _hoverY, age)
+                : new UiTooltip(hover.Name, label, label, _hoverX, _hoverY, age);
         }
     }
 

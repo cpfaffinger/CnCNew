@@ -32,6 +32,11 @@ public sealed class MissionController : IMissionHudControl
         mission.Director.TextScaleOptions = Hud.ScaleOptions;
         Hud.Superweapons.HiddenByScript = id => _hiddenSuperweapons.Contains(id.Value);
         mission.Director.Hud = this;
+        // One message list (InGameUI::m_uiMessages): the scripts' DISPLAY_TEXT and the game's own messages share it, the director fades and draws it.
+        mission.Director.UseMessages(Hud.Messages.Log);
+        Hud.OwnsMessageList = false;
+        Hud.Messages.Clock = () => mission.Director.Clock;
+        Hud.Messages.AnnounceDefeats = false;
         _textMeasure = textMeasure ?? new MonospaceTextMeasure();
     }
 
