@@ -435,13 +435,70 @@ public sealed class SkirmishAi
         return null;
     }
 
+    private const int MaxSupplyCenters = 4;
+
+    /// <summary>Credits left beside the own supply centers below which the next center is planned: enough income still to come to pay for it.</summary>
+    private const long LowSupplyStock = 3000;
+
+    /// <summary><c>SupplyCenterSafeRadius</c> (AIData.ini, shipped value; the file is not typed yet).</summary>
+    private static readonly Fixed SupplyCenterSafeRadius = Fixed.FromInt(300);
+
+    /// <summary>
+    /// What the own supply centers can still gather: the credits stored in the warehouses within <see cref="SupplyCenterCloseDistance"/> of one of them that are not an enemy's
+    /// (<c>AIPlayer::queueSupplyTruck</c> looks at a center the same way: "make sure we have supplies near it", and stops making gatherers for a center whose source is empty).
+    /// </summary>
+    private long SupplyStockInReach()
+    {
+        long total = 0;
+        foreach (var entity in _world.Entities)
+        {
+            if ((RoleOf(entity.Template) & Role.Warehouse) == 0 || entity.EffectivelyDead || entity.DestroyRequested) continue;
+            if (!entity.Owner.IsSystem && _world.AreEnemies(_player, entity.Owner)) continue;
+            var boxes = Views.EntityPresentationView.WarehouseSupplyBoxes(entity);
+            if (boxes <= 0) continue;
+            var reach = SupplyCenterCloseDistance + entity.Template.BoundingCircleRadius;
+            foreach (var own in _structures.Concat(_sites))
+            {
+                if ((RoleOf(own.Template) & Role.SupplyCenter) == 0) continue;
+                var limit = reach + own.Template.BoundingCircleRadius;
+                if (DistanceSquared(own.X, own.Y, entity.X, entity.Y) > limit * limit) continue;
+                total += (long)boxes * _catalog.ValuePerSupplyBox;
+                break;
+            }
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::isSupplySourceSafe</c>/<c>isLocationSafe</c>: no enemy within <see cref="SupplyCenterSafeRadius"/> of the source, harvesters and dozers not counted. Only what this
+    /// player sees or remembers: visible enemy units and armed structures, and remembered enemy structures.
+    /// </summary>
+    private bool SupplySourceSafe(Entity source)
+    {
+        var radius = SupplyCenterSafeRadius + source.Template.BoundingCircleRadius;
+        var limit = radius * radius;
+        foreach (var enemy in _enemyTargets)
+        {
+            if ((RoleOf(enemy.Template) & (Role.Builder | Role.Carrier)) != 0) continue;
+            if (enemy.Template.IsKindOf("STRUCTURE") && enemy.Template.DefaultWeapon < 0) continue;
+            if (DistanceSquared(enemy.X, enemy.Y, source.X, source.Y) <= limit) return false;
+        }
+        foreach (var entry in _enemies.Values)
+            if (entry.IsStructure && entry.Template.DefaultWeapon >= 0 && DistanceSquared(entry.X, entry.Y, source.X, source.Y) <= limit) return false;
+        return true;
+    }
+
     private Role[] PlanGoals()
     {
         var goals = new List<Role>();
         var army = _units.Count(value => (RoleOf(value.Template) & Role.Army) != 0);
         var producers = CountAlive(Role.Producer, true);
         if (CountAlive(Role.CommandCenter, true) == 0 && CountAlive(Role.Builder, false) > 0) goals.Add(Role.CommandCenter);
-        if (CountAlive(Role.SupplyCenter, true) < 1) goals.Add(Role.SupplyCenter);
+        var supplyCenters = CountAlive(Role.SupplyCenter, true);
+        if (supplyCenters < 1) goals.Add(Role.SupplyCenter);
+        // The stock beside the existing centers is running out: the next center goes to another stocked, safe source before anything else is built, and while it cannot be paid
+        // the army production keeps its price back (the reserve of BuildStructures) - once the income has stopped there is nothing left to pay it with.
+        else if (supplyCenters < MaxSupplyCenters && SupplyStockInReach() < LowSupplyStock && FindSupplySource() is { } nextSource && SupplySourceSafe(nextSource)) goals.Add(Role.SupplyCenter);
         if (CountAlive(Role.Power, true) < 1) goals.Add(Role.Power);
         if (CountAlive(Role.Barracks, true) < 1) goals.Add(Role.Barracks);
         if (CountAlive(Role.Factory, true) < 1) goals.Add(Role.Factory);
@@ -1247,8 +1304,10 @@ public sealed class SkirmishAi
             if (_tick - since < 90 || Backoff(unchecked(0x60000000u + unit.Id.Value))) continue;
             Remembered? nearest = null;
             var best = Fixed.MaxValue;
+            // The nearest warehouse that still holds something (an empty one has nothing to give; the idle carrier stood beside it forever).
             foreach (var warehouse in _warehouses.Values)
             {
+                if (_world.FindEntity(warehouse.Id) is not { } store || Views.EntityPresentationView.WarehouseSupplyBoxes(store) <= 0) continue;
                 var distance = DistanceSquared(warehouse.X, warehouse.Y, unit.X, unit.Y);
                 if (distance < best) { best = distance; nearest = warehouse; }
             }
