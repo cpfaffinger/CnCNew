@@ -874,9 +874,15 @@ public static class WndTests
         Check(tree.Tooltip is null, "Tooltip must wait for the Mouse.ini delay.");
         tree.AdvanceTo(1800);
         Check(tree.Tooltip == new UiTooltip("T.wnd:Default", "TOOLTIP:Default", "TOOLTIP:Default", 50, 20), $"Unresolved label tooltip: {tree.Tooltip}");
+        tree.MouseMove(60, 20);
+        Check(tree.Tooltip is null, "Moving the pointer hides the tooltip and restarts the delay (the pointer must be still).");
+        tree.AdvanceTo(2599);
+        Check(tree.Tooltip is null, "The restarted delay has not passed.");
+        tree.AdvanceTo(2650);
+        Check(tree.Tooltip is { AgeMs: 50 }, $"The age counts from the end of the delay: {tree.Tooltip}");
         tree.MouseMove(50, 60);
         Check(tree.Tooltip is null, "Changing the window restarts the delay.");
-        tree.AdvanceTo(1900);
+        tree.AdvanceTo(2750);
         Check(tree.Tooltip?.Text == "Quick", "TOOLTIPDELAY 100 and resolved label.");
         tree.MouseMove(50, 100);
         tree.AdvanceTo(5000);

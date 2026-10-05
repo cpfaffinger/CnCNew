@@ -97,8 +97,11 @@ public enum UiModifiers
     Alt = 4,
 }
 
-/// <summary>The visible tooltip: text (resolved or the raw label) and the pointer position where it appeared.</summary>
-public sealed record UiTooltip(string WindowName, string Text, string? LabelKey, int X, int Y);
+/// <summary>
+/// The visible tooltip: text (resolved or the raw label), the pointer position and <see cref="AgeMs"/>, the time since it
+/// appeared (the fill animation of <c>Mouse::drawTooltip</c> runs on it).
+/// </summary>
+public sealed record UiTooltip(string WindowName, string Text, string? LabelKey, int X, int Y, long AgeMs = 0);
 
 /// <summary>Callback names the runtime implements itself (the rest must be registered by the shell).</summary>
 public static class UiBuiltinCallbacks

@@ -1,5 +1,8 @@
+using CnCNew.Ui.Layout;
 using CnCNew.Ui.Rendering;
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Text;
+using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Ui.Tests;
 
@@ -33,6 +36,8 @@ public static class SentenceLayoutTests
         Test(CenteredWithoutWrapOrBreakIsTheSingleLineCase);
         Test(CenteredHeightComesFromTheNotCenteredBuilder);
         Test(TinyWrapWidthTerminates);
+        Test(TooltipSitsRightOfThePointerAndFlipsAtTheEdges);
+        Test(TooltipTextIsRevealedOverTheFillTime);
         Console.WriteLine(_failures == 0 ? "Sentence layout tests passed." : $"Sentence layout tests: {_failures} failure(s).");
         return _failures;
     }
@@ -116,6 +121,46 @@ public static class SentenceLayoutTests
         // and word reaches 46) into two lines. The original draws two lines inside a block that is one line tall.
         var sentence = UiSentenceLayout.Layout("aaaa bbbb", Font, new FixedMeasure(), 46, true);
         Check(sentence.Height == 12 && sentence.Lines.Length == 2, Dump(sentence));
+    }
+
+    private static readonly MouseTooltipSettings TooltipStyle = new(new FontDescription("Arial", 8, false), false, 250, 800,
+        new WndColor(220, 220, 220, 255), new WndColor(255, 255, 0, 255), new WndColor(0, 0, 0, 255), new WndColor(60, 60, 155, 255), new WndColor(20, 20, 20, 255), 0.2m);
+
+    private static void TooltipSitsRightOfThePointerAndFlipsAtTheEdges()
+    {
+        var font = new UiFont("Arial", 10, false);
+        var viewport = new UiViewport(1000, 600);
+        // 20 % of 1000 = 200 px wrap width; "Hello world" is 55 px wide, one line of 12 px.
+        var commands = UiTooltipLayout.Build(new UiTooltip("W", "Hello world", null, 100, 100, 1000), TooltipStyle, font, viewport, new FixedMeasure());
+        var box = (UiFillRect)commands[0];
+        Check(box.Rect == new UiRect(120, 100, 57, 14) && box.Color == new WndColor(20, 20, 20, 255), $"Box 20 px right of the pointer, text width + 2: {commands[0]}");
+        Check(commands[1] is UiBorderRect outline && outline.Rect == box.Rect && outline.Color == TooltipStyle.BorderColor, "The outline has the box rectangle.");
+        Check(commands[2] is UiTextDraw { Text: "Hello world", X: 122, Y: 101 } text && text.Color == new WndColor(220, 220, 220, 255) && text.ShadowColor == new WndColor(0, 0, 0, 255), $"Text 2 px in and 1 px down: {commands[2]}");
+        Check(commands.Length == 3, $"A finished reveal has no highlight band left: {commands.Length} commands");
+
+        var right = UiTooltipLayout.Build(new UiTooltip("W", "Hello world", null, 980, 100, 1000), TooltipStyle, font, viewport, new FixedMeasure());
+        Check(right[0] is UiFillRect { Rect.X: 925 }, $"Near the right edge the box moves left of the pointer (pointer - width): {right[0]}");
+        var bottom = UiTooltipLayout.Build(new UiTooltip("W", "Hello world", null, 100, 595, 1000), TooltipStyle, font, viewport, new FixedMeasure());
+        Check(bottom[0] is UiFillRect { Rect.Y: 583 }, $"Near the bottom edge the box moves above the pointer: {bottom[0]}");
+        // The wrap width is 20 % of the screen: 100 px of a 500 px screen wraps "Hello world" (55 px) never, but 50 px does.
+        var narrow = UiTooltipLayout.Build(new UiTooltip("W", "Hello world", null, 10, 10, 1000), TooltipStyle with { WidthFraction = 0.1m }, font, new UiViewport(500, 300), new FixedMeasure());
+        Check(narrow.OfType<UiTextDraw>().Select(draw => draw.Text).SequenceEqual(["Hello", " world"]), "Text wraps at TooltipWidth percent of the screen width.");
+    }
+
+    private static void TooltipTextIsRevealedOverTheFillTime()
+    {
+        var font = new UiFont("Arial", 10, false);
+        var viewport = new UiViewport(1000, 600);
+        var tooltip = new UiTooltip("W", "Hello world", null, 100, 100);
+        // 250 ms fill time, 55 px of text: after 125 ms the clip is 27 px wide and the highlight band covers its last 15 pixels.
+        var half = UiTooltipLayout.Build(tooltip with { AgeMs = 125 }, TooltipStyle, font, viewport, new FixedMeasure());
+        var draws = half.OfType<UiTextDraw>().ToArray();
+        Check(draws.Length == 2 && draws[0].Clip == new UiRect(122, 101, 27, 12) && draws[0].Color == TooltipStyle.TextColor, $"Normal color text clipped to the revealed part: {string.Join(" | ", draws.Select(d => d.ToString()))}");
+        Check(draws[1].Clip == new UiRect(134, 101, 15, 12) && draws[1].Color == TooltipStyle.HighlightColor, "Highlight color on the leading 15 pixels.");
+        var start = UiTooltipLayout.Build(tooltip with { AgeMs = 0 }, TooltipStyle, font, viewport, new FixedMeasure());
+        Check(start.OfType<UiTextDraw>().First().Clip.IsEmpty || start.OfType<UiTextDraw>().First().Clip.Width == 0, "Nothing of the text is shown at the first moment.");
+        var animated = UiTooltipLayout.Build(tooltip with { AgeMs = 125 }, TooltipStyle with { AnimateBackground = true }, font, viewport, new FixedMeasure());
+        Check(animated[0] is UiFillRect { Rect.Width: 29 }, $"With TooltipAnimateBackground the box grows with the reveal: {animated[0]}");
     }
 
     private static void TinyWrapWidthTerminates()

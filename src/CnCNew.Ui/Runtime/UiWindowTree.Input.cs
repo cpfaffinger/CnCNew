@@ -76,6 +76,8 @@ public sealed partial class UiWindowTree
             _hoverSince = Now;
             if (target is not null) Enter(target);
         }
+        // Mouse::createStreamMessages shows a tooltip once the pointer has been still for the delay: moving hides it again.
+        if (x != _hoverX || y != _hoverY) _hoverSince = Now;
         _hoverX = x;
         _hoverY = y;
         return target is not null;
