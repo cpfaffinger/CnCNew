@@ -22,7 +22,7 @@ Drei Gruppen von Ursachen, in der Reihenfolge ihrer sichtbaren Wirkung:
 3. **Texte, die es so nicht geben dürfte:** der Platzhalter „$$$“ oben links, aufgedruckte Hotkeys und Kosten auf den Befehlssymbolen, das Wort „Entry“ in Eingabefeldern, interne
    Namen (`FactionAmerica`, `Color 1`) in der Skirmish-Einrichtung, feste Schriftgrößen in den Credits, **keine Tooltips**. Behoben (Tooltips vereinfacht).
 
-Nicht behoben und nicht in meinem Bereich: durchscheinende Texte darunterliegender Menüs (Abschnitt 7), die Missionstexte (feste Schriften in `MissionPresentation.cs`, Parallelauftrag).
+Danach behoben: durchscheinende Texte darunterliegender Menüs (Abschnitt 7) und die Missionstexte (Abschnitt 4.6: Schriften aus `Language.ini`, Positionen und Farben aus `InGameUI.ini`, Schreibmaschinentext der Missionsbeschriftung, Zeitgeber, Superwaffenliste, Meldungsfenster).
 
 ## 2. Wie das Original Text zeichnet (Quellen)
 
@@ -50,7 +50,8 @@ bit-gleich (alle 96 Prüfsummen identisch).
   dazu `font-audit.txt`.
 * `client/` (Stride-Client `--smoke-test --capture`, 4 Bilder): `hud-money` (Gefecht mit Auswahl, Geldfenster) und `hud-tooltip` (Eingabeskript: Planierraupe wählen, auf den ersten
   Baubefehl zeigen) in beiden Größen.
-* Nicht im Satz, weil im Parallelauftrag: Missionstexte (Untertitel, Zähler, Banner), Übergangsanimationen.
+* Missionstexte: `ui/missiontext-WxH.png` (Werkzeugszene `MissionTextScenes`, 800x600, 1280x720, 1920x1080: Meldungszeilen, Missionsbeschriftung halb getippt, Zeitgeber und Zähler, Superwaffenliste, Filmtext, Meldungsfenster); die Bilder des Werkzeugs haben einen Alphakanal, in dem durchscheinende Flächen halbdurchsichtig bleiben (ein Betrachter über hellem Grund zeigt sie zu hell; vor dem Ansehen den Alphakanal verwerfen). Im Client: `--smoke-test --mission … --filmstrip` (`docs/GAME-HUD.md` §17.3).
+* Nicht im Satz: Übergangsanimationen.
 
 ## 4. Tabelle: Element × Abweichung × Ursache
 
@@ -122,13 +123,32 @@ Status: **behoben** (mit Test oder Messung), **vereinfacht**, **offen**, **bewus
 | Credits | Schriften Arial 24 fett/16 fett/12 | feste Werte | **behoben** (Language.ini + `adjustFontSize`, `ShellTests`); **offen:** `COLUMN`-Paare, Scrollrate (Original 2 px je Frame, hier 40 px/s) |
 | Abschlussbildschirm | Spielernamen sind die Armeenamen („FactionAmerica“) | Namen kommen aus der Sitzung | **offen** (außerhalb dieses Auftrags: Spielername aus der Einrichtung) |
 | Briefing/Ladeschirm | Standbild statt Film und Fortschrittstexten | Filme/Bink fehlen | **offen** (Phase 16, Punkt 5) |
-| Missionstexte | feste Arial-Größen in `MissionPresentation.cs` | nicht über `Language.ini` (`MilitaryCaptionFont` Courier New 12, `MessageFont` …) | **offen**, Parallelauftrag |
-| Cursortext (`drawCursorText`), Beschriftungen über Objekten, Superwaffen-/Zeitgeberanzeige | gibt es nicht | nie umgesetzt | **offen** |
+| Missionstexte | feste Arial-Größen, zentrierte Zeilen, erfundene Platzierung in `MissionPresentation.cs` | nicht über `Language.ini`/`InGameUI.ini` | **behoben**, Abschnitt 4.6 |
+| Cursortext (`drawCursorText`), Beschriftungen über Objekten | gibt es nicht | nie umgesetzt | **offen** |
+| Superwaffen-/Zeitgeberanzeige | feste Werte im Code (Position, Arial 10, Blinkphase) | `InGameUI.ini` war nicht typisiert | **behoben**, Abschnitt 4.6 |
 | Skirmish: Kartenliste | Namen nach zwei Buchstaben abgeschnitten („Al“, „Ar“) | Namen in der ersten von zwei Spalten (5 %/95 %) | **behoben** (zweite Spalte) |
 | Skirmish: Kartenvorschau | Diagonale Kreise über „No map selected“ | `ButtonMapStartPosition0..7` im Layout nicht versteckt, das Original versteckt sie bis `positionStartSpots` | **behoben/vereinfacht** (versteckt; Lage der Startplätze fehlt im Katalog) |
 | Skirmish: Kartenwahl | Spaltenüberschriften, Felder und Start der Einrichtung scheinen durch die Liste | `showSkirmishGameOptionsUnderlyingGUIElements` nicht umgesetzt | **behoben** (`GAME-SHELL.md` §13.1) |
 | Challenge-Menü | `GUI:BioNameEntry` … als Biografie, Knöpfe ohne Bild | Platzhalter des Layouts statt Persona-Texten und Medaillen | **behoben** (§13.4); **offen:** Porträt, Buchstabe-für-Buchstabe-Eingabe |
 
+### 4.6 Missionstexte (`InGameUI`)
+
+Das Original zeichnet die Texte der Missionsskripte aus den Daten von `InGameUI.ini` (Positionen, Farben, Zeiten) und `Language.ini` (Schriften; `InGameUI::init` ersetzt jede Schrift des Blocks durch den gleichnamigen
+Language-Platz). Der Client benutzte feste Arial-Größen, zentrierte Zeilen und eigene Texte; jetzt liest `InGameUiSettings` (`CnCNew.Ui/Text`, streng typisiert, Retail: 29 Radiusdekal-Unterblöcke gezählt, Schlüssel
+ohne Wert laufen auf die Konstruktorstandardwerte von `InGameUI.cpp` und stehen in `DefaultedKeys`) die Datei und `InGameUiStyle` (`CnCNew.Game/Data`) löst Schriften wie alle anderen Texte (`LanguageFonts.Resolve`,
+`adjustFontSize`) auf. Einzelheiten und Quellen: `docs/SCRIPT-ENGINE.md` §7a „Bildschirmtexte nach `InGameUI`“.
+
+| Element | Abweichung (vorher) | Ursache | Status |
+|---|---|---|---|
+| `DISPLAY_TEXT` | eine zentrierte Titelzeile, 5 s | kein Weg zur Meldungsliste | **behoben**: Zeilenliste oben links (`MessagePosition` 10, 22 in Pixeln, `MessageFont` Arial 10 fett angepasst, `MessageColor1/2` abwechselnd, bis zu 6 Zeilen), Verblassen nach der ganzzahligen Rechnung des Originals (`MessageDelayMS / 30 / 1000` = 0; etwa 9,2 s) |
+| `SHOW_MILITARY_CAPTION` | Titel und Text zu einer Zeile zusammengeklebt („KazakhstanEn route“), zentriert, Arial 18 | Zeilenumbruch des Labels ohne Wirkung, feste Schrift | **behoben**: Schreibmaschine (22 Bilder Startverzögerung `MilitaryCaptionDelayMS`, danach ein Zeichen je zweitem Bild, Zeilenwechsel mit erneuter Verzögerung, höchstens 4 Zeilen), erste Zeile Titelschrift (Courier New fett), weitere Zeilen Textschrift, Blockcursor im Takt von 10 Bildern, Position (10, 340) von 800x600 auf den Bildschirm skaliert, nach der Dauer Ausblenden (`floor(Bilder · 0,1)` je Schritt) |
+| `DISPLAY_CINEMATIC_TEXT` | feste Arial 16 fett im unteren Balken | – | **behoben**: Schrift des Skripts (`Name - Size:N [Bold]`) angepasst, zentriert, Umbruch Breite − 20, Oberkante bei 0,9 der Höhe, weiß ohne Schatten, `30 · Sekunden` Bilder; von keiner Kampagnenkarte benutzt, nur synthetisch geprüft |
+| `DISPLAY_COUNTER` / `DISPLAY_COUNTDOWN_TIMER` | Arial 14 fett, Liste von oben unter dem Balken | feste Werte | **behoben**: ab `NamedTimerCountdownPosition` (0,90 / 0,666 der Bildfläche) nach oben gestapelt, rechtsbündig in der rechten Hälfte, Schrift/Farbe `NamedTimerCountdown*`, bei 0:00 Bereitschaftsschrift und Blinken (500 ms = 15 Bilder) in der Blinkfarbe |
+| Superwaffenliste | Konstanten im Code (`PositionX` …), Arial 10 aus dem Code, Blinkphase gegenläufig, „...“ rechtsbündig | `InGameUI.ini` nicht typisiert | **behoben**: Werte und Schriften aus `InGameUiStyle`, Blinkfarbe in ungeraden Perioden (`m_superweaponUsedFlashColor` beginnt wahr), „...“ linksbündig ab x |
+| `INGAME_POPUP_MESSAGE` | wie eine Titelzeile, nach 5 s verschwunden | nie als Fenster umgesetzt | **behoben/vereinfacht**: `InGamePopupMessage.wnd` mit OK-Knopf (`MissionPopupWindow`), Enter/Escape beim Loslassen, pausiert und ist modal, wenn das Skript es verlangt; Textfarbe die des Layouts (254) statt `PopupMessageColor` (255) |
+| Sprach-/Filmplatzhalter | Arial 14; kein Untertitel | feste Schrift; `doSpeechPlay` blieb unbeachtet | **behoben/bewusst**: Untertitel `DIALOGEVENT:<Name>Subtitle` als Missionsbeschriftung (8 s) wenn vorhanden, nicht leer und ohne führendes `*` (englisch 1 von 2.455); der Platzhalter („(speech: Name)“, „(movie placeholder: Name)“) bleibt, gekennzeichnet, in der `MessageFont` der Daten |
+| Hinweis „(cinematic: the mission script has disabled input)“ | erfundener Text | Debughilfe | **entfernt** (das Original zeigt nichts) |
+| Ergebnisbanner („MISSION ACCOMPLISHED“) | feste Arial 28 fett | kein Original-Gegenstück (Ergebnisbildschirm/Film) | **bewusst** als erfundener Platzhalter, feste Schrift, in `MissionOutputCatalog`/Doku so benannt |
 ## 5. Messwerte (`UiRenderTool --font-audit`, 80 Layouts, 1280x720 und 1920x1080, Uniform)
 
 * 36 verschiedene aufgelöste Schriften (Familie, Pixelhöhe, fett, Stauchung); 1.190 Fenstertextzeilen aus 792 Fenstern mit Text.
@@ -170,6 +190,15 @@ Die Sollwerte belegen Reproduzierbarkeit, nicht Richtigkeit.
 6. **`SinglePlayerMenu.wnd`** (Neu/Laden/Zurück nach „USA“) – **behoben**: ist ein Erbstück des ersten Generals, das Zero Hour nie öffnet; das Original fragt die Schwierigkeit im Hauptmenü (`MapBorder4`), die Hülle
    ebenso (`GAME-SHELL.md` §13.2). Die Seite mit Times New Roman gibt es nicht mehr.
 7. **Hinweis zum Tooltip der Befehlsknöpfe:** die Texte kommen aus `CommandButton.TextLabel`/`DescriptLabel`; sind Voraussetzungen offen, steht das heute nicht darin.
+8. **Missionstexte (Abschnitt 4.6):** Alle Zeiten, Reihenfolgen und Zahlen stimmen mit `InGameUI.cpp`/`W3DDisplay.cpp` überein und sind in Tests festgehalten, aber nie mit einem Original verglichen. Ein Mensch muss ansehen: wie die
+   Schreibmaschine im Bewegtbild wirkt (Takt, Cursor, Ausblenden), ob Courier New in dieser Größe wie im Original aussieht, die Lage von Meldungen, Zeitgebern und Superwaffenliste auf den Bildschirmen, das Meldungsfenster
+   (Knopfbilder, Textumbruch) und den Wegfall des Hinweises bei gesperrter Eingabe.
+9. **Aktualisierung je Logikschritt statt je Bild:** Das Original verblasst Meldungen und Missionsbeschriftung in `InGameUI::update` einmal je gezeichnetem Bild (also schneller ab 60 Bildern je Sekunde); hier einmal je
+   Logikschritt (30 je Sekunde). Bei der Schreibmaschine macht das keinen Unterschied (sie vergleicht mit dem Logikbild), beim Verblassen schon.
+10. **Letterbox:** Die Balken der Hülle sind ein Achtel der Höhe, die des Originals `(Höhe − 9/16 · Breite)/2` (bei 16:9 keine); das Original zeichnet sie über die UI-Texte, hier liegen die Texte darüber, weil sonst die Meldungen
+    (y = 22) unter dem oberen Balken verschwänden.
+11. **Tippklick:** Das Original spielt je getipptem Zeichen `MilitarySubtitlesTyping`; der Client tut es nicht (`MilitaryCaptionState.TypedCharacters` zählt die Zeichen für einen Host).
+12. **Nicht angeschlossen:** die Meldungsliste wird nur von `DISPLAY_TEXT` gespeist; die Befehlsrückmeldungen des HUD (Ticker, `MatchController`) laufen weiter über eine eigene Liste, die kein Zeichencode zeichnet.
 
 ## 8. Tests und Werkzeuge
 
@@ -182,6 +211,9 @@ Die Sollwerte belegen Reproduzierbarkeit, nicht Richtigkeit.
 | Skirmish-Wörter, leere Eingabefelder, Zeigertooltip der Hülle, Credits-Schriften | `tests/CnCNew.Game.Tests/ShellTests.cs` |
 | Bildschirmstapel (nichts vom Hauptmenü unter ersetzenden Screens), Kartenwahl, Challenge-Menü, Escape in der Ladeliste | `tests/CnCNew.Game.Tests/ShellTests.cs` (`ScreenStackDrawing`, `ChallengeMenuBio`, `LoadGameEscapeWithoutFocus`) |
 | `KeyboardHome`, Bild-/Größenersatz eines Fensters | `tests/CnCNew.Ui.Tests/WndTests.cs` |
+| `InGameUI.ini` typisiert (synthetisch und Retaildatei, Language-Platz gegen INI in Größe/Fett) | `tests/CnCNew.Ui.Tests/TextAndSettingsTests.cs` (`InGameUiSettingsAreTypedFromTheGraph`, `RealInGameUi`) |
+| Meldungsliste, Schreibmaschine Bild für Bild, Ausblenden, Zeitgeber, Filmtext, Meldungsfenster, Skalierung | `tests/CnCNew.Game.Tests/MissionTextTests.cs` (synthetisch; mit `--content-dir`: `MD_USA01`, `MD_CHI02`, Meldungsfenster in `GC_ChemGeneral`) |
+| Missionstextbild (alle Texte eines Bildschirms, drei Größen) | `tools/CnCNew.UiRenderTool` (`MissionTextScenes`) |
 | GDI-Schrift (Familie wirklich Arial, 17er-Deckungsstufen, Zellmaße, Generals schmaler) | `tools/CnCNew.UiRenderTool` (`FontAudit.SelfCheck` bei jedem Lauf) |
 | Schriftvergleich, Glyphdeckung, Platzhalter-/Hotkey-Zählung | `tools/CnCNew.UiRenderTool -- --font-audit` |
 | Alphakurve für helle Schrift, Glyphcache mit Kurve | `tests/CnCNew.Ui.Tests/UiRenderingTests.cs` (`LightTextGetsTheGammaSpaceAlphaCurve`) |

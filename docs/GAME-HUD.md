@@ -294,7 +294,7 @@ Schichten wanderte unverändert in die Basisklasse, `LiveMatch` blieb für seine
   über `MissionCommandSink` (`Presentation/Input/CommandSink.cs`) in `MissionSession.Issue`, also durch denselben Sequenzzähler je Spieler wie die der Skripte.
   `Winner` ist der Betrachter bei einem Missionssieg, sonst `null` (die Gegner sind geskriptet, kein konkurrierender Mensch).
 - **`MissionController`** (`Hud/MissionController.cs`) setzt ein `MatchController` über die `LiveMission`, hängt `SelectionModel.SelectionChanged` an `MissionUiBridge.OnSelectionChanged`
-  (die Auswahl erreicht `NAMED_SELECTED`), liefert `BuildDrawList` mit dem Bildschirmtext des Directors (Caption/Untertitel/Filmplatzhalter, seit Phase 16 auch Letterbox, Blenden, Zähler, Ergebnisbanner; während der Letterbox ohne Befehlsleiste) über dem HUD, sperrt die Welteingabe, solange das Skript sie gesperrt hat (`MatchController.WorldInputEnabled`), und meldet das Missionsende
+  (die Auswahl erreicht `NAMED_SELECTED`), liefert `BuildDrawList` mit dem Bildschirmtext des Directors (Meldungszeilen, getippte Missionsbeschriftung, Zeitgeber und Zähler, Filmtext, Sprach-/Filmplatzhalter, seit Phase 16 auch Letterbox, Blenden, Ergebnisbanner; während der Letterbox ohne Befehlsleiste) über dem HUD, danach das Meldungsfenster (`MissionPopupWindow`, `INGAME_POPUP_MESSAGE`: eigener Fensterbaum aus `InGamePopupMessage.wnd`; ein Fenster mit Pausenmarke pausiert die Mission und schluckt alle Ereignisse, OK/Enter/Escape schließen es und heben die Pause auf), sperrt die Welteingabe, solange das Skript sie gesperrt hat (`MatchController.WorldInputEnabled`), und meldet das Missionsende
   einmal (`MissionEnded`); danach ruft der Host `GameShell.MissionFinished(run, controller)`.
 - **Was Skripte an Befehlsleiste und HUD ändern** (Phase 16, zweite Sitzung; `MissionController` setzt `IMissionHudControl`, Wortlaut je Ausgabetyp in `docs/SCRIPT-ENGINE.md` §7a):
   `COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE`/`COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT` verändern den **Befehlssatz** des Objekttyps, nicht ein einzelnes Objekt: `ControlBarScriptState`
@@ -307,16 +307,16 @@ Schichten wanderte unverändert in die Basisklasse, `LiveMatch` blieb für seine
   Auswahl lassen das Objekt weg, eine bestehende Auswahl verliert es (`SelectionModel.Replace/Change`). Zustände gehen beim Speichern/Laden einer Mission nicht mit. Tests:
   `MissionEffectsTests` (Attrappen; echte `MD_USA01`: Knopf verschwindet aus der Leiste eines gewählten Objekts und kommt zurück, Wissenschaft, Auswahl).
 - **Superwaffen-Liste** (`Hud/SuperweaponTimers.cs`, `MatchController.Superweapons`, gilt für Gefechte und Missionen): oben rechts, bei x = 0,90, y = 0,01 der Bildfläche (`SuperweaponCountdownPosition` der
-  Retail-`InGameUI.ini`), je Macht mit `PublicTimer` und je Objekt eine Zeile „Name: m:ss“ – der Name rechtsbündig bis x, die Zeit linksbündig ab x (`SuperweaponInfo::drawName/drawTime`), in der Hausfarbe
+  Retail-`InGameUI.ini`, jetzt aus `InGameUiSettings`), je Macht mit `PublicTimer` und je Objekt eine Zeile „Name: m:ss“ – der Name rechtsbündig bis x, die Zeit linksbündig ab x (`SuperweaponInfo::drawName/drawTime`), in der Hausfarbe
   des Besitzers, **auch die gegnerischen** (ein feindlicher Atomschlag läuft auf dem eigenen Bildschirm herunter). Regeln nach `InGameUI::draw`: Spieler nach Index, Mächte nach Name, Objekte in
   Anlegereihenfolge; eine Baustelle zeigt nichts; eine Macht mit gemeinsamem Zeitgeber (`SharedSyncedTimer`) steht je Spieler einmal; fehlt dem Besitzer die geforderte Wissenschaft, fehlt die Zeile;
-  die Zeit ist `(Bereitschaftsbild − Tick) / 30` ganzzahlig (`CommandBarModel.ReadyFrameOf`), eine bereite Macht ist **fett** und wechselt alle 15 Logikbilder (500 ms) zwischen Hausfarbe und Weiß; die Liste
-  hört über der Befehlsleiste (0,82 der Sichthöhe) mit „...“ auf. Der Name ist der Eintrag `GUI:<Machtname>` der Zeichenkettentabelle; fehlt er, steht der Schlüssel selbst da und
+  die Zeit ist `(Bereitschaftsbild − Tick) / 30` ganzzahlig (`CommandBarModel.ReadyFrameOf`), eine bereite Macht hat die Bereitschaftsschrift (`SuperweaponCountdownReadyFont`, Retail: fett) und wechselt alle 15 Logikbilder (`SuperweaponCountdownFlashDuration` 500 ms) zwischen Hausfarbe und `SuperweaponCountdownFlashColor`, die Blinkfarbe in den ungeraden Perioden (der Zustand `m_superweaponUsedFlashColor` beginnt wahr; vorher lag die Phase umgekehrt); die Liste
+  hört über der Befehlsleiste (0,82 der Sichthöhe) mit „...“ auf (linksbündig ab x in der Normalschrift, wie `drawTime` im Original; vorher rechtsbündig). Der Name ist der Eintrag `GUI:<Machtname>` der Zeichenkettentabelle; fehlt er, steht der Schlüssel selbst da und
   `SuperweaponTimers.MissingLabels` zählt ihn. Missionsskripte blenden die ganze Liste (`DisplayEnabled`) oder einzelne Objekte aus (`HiddenByScript`, über `IMissionHudControl`). Die Werte (Position,
-  500 ms, Arial 10, fett nur bereit) stehen als Konstanten im Code, weil die Datenschicht `InGameUI.ini` nicht typisiert; `MissionEffectsTests` vergleicht sie mit der Datei. **Nicht übernommen:**
+  Blinkdauer und -farbe aus `InGameUI.ini`, die Schriften aus `Language.ini` über `InGameUiStyle`, `docs/TEXT-AUDIT.md` §4.6) sind keine Konstanten mehr; `InGameUiSettings` ist streng typisiert und von `TextAndSettingsTests` an der Retaildatei geprüft. **Nicht übernommen:**
   die EVA-Ansage „Superwaffe bereit“, die `drawSuperweaponTimers` im Original mit auslöst (Eva meldet das hier über die Simulationsereignisse), der Wechsel der Schrift beim Bereitwerden mit eigenem
-  Textobjekt, die Wiederaufnahme des Zustands aus einem Spielstand. Die benannten Missionszeitgeber (`DISPLAY_COUNTDOWN_TIMER`) stehen weiter an der alten Stelle im Director, nicht bei
-  `NamedTimerCountdownPosition` (X:0,90 Y:0,666) der Retail-Datei.
+  Textobjekt, die Wiederaufnahme des Zustands aus einem Spielstand. Die benannten Missionszeitgeber (`DISPLAY_COUNTDOWN_TIMER`) stehen seit der Missionstext-Sitzung bei
+  `NamedTimerCountdownPosition` (X:0,90 Y:0,666) der Retail-Datei (`MissionTextOverlay.NamedTimers`, `docs/SCRIPT-ENGINE.md` §7a).
 - **Stride:** `LiveMatchHost` und alle Weltschichten nehmen ein `LiveGame`; `CnCNew.Client.Stride --mission <Karte> [--human-side <Name>]` startet eine Kampagnenkarte (Rauchtest:
   `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/phase2-import-a`). Seit Phase 12 zeichnet die Stride-Hülle auch die HUD-Zeichenliste
   (`MissionController.BuildDrawList`) und verarbeitet die Shell-Ausgaben (`StartMissionOutput`), §15.
@@ -474,6 +474,14 @@ Mit der Wiedergabe „Dozer wählen → Bauknopf → Zeiger über den Boden → 
 - **Nicht belegt:** ob der Tester genau in diesen 25 Sekunden gebaut hat. Die Eröffnungssequenz ist der einzige Weg, auf dem die Wiedergabe im echten Client scheiterte; ein Mensch muss im
   laufenden Client bestätigen, dass der Bau jetzt geht (Fenster, echte Maus, echte Frametimes sind headless nicht prüfbar).
 
+### 17.3 Bildprobe der Missionstexte
+
+Die Missionstexte (`docs/TEXT-AUDIT.md` §4.6, `docs/SCRIPT-ENGINE.md` §7a „Bildschirmtexte nach `InGameUI`“) wurden so angesehen: (1) im Client mit
+`--smoke-test --mission "Maps/MD_USA01/MD_USA01.map" --content-dir … --size 1280x720 --mute --frames 1500 --filmstrip <Ordner> --every 20` (die Schreibmaschine Bild für Bild: Frame 60 zeigt 19 Zeichen der Titelzeile, Frame 100 die fertige Titelzeile
+mit Cursor auf der leeren zweiten Zeile, Frame 160 beide Zeilen) und `MD_CHI02` mit `--frames 2700 --every 90` (der Zeitgeber „Reinforcements Arrive In“ rechts bei 0,90/0,666 neben einer sich tippenden Beschriftung);
+(2) in `tools/CnCNew.UiRenderTool` als Szene `missiontext-WxH.png` (800x600, 1280x720, 1920x1080), die alle Texte eines Bildschirms einschließlich Superwaffenliste und Meldungsfenster auf einem Untergrund zeigt – die
+Superwaffenliste und die Meldungszeilen kommen in den Kampagnenkarten nicht (oder erst spät) vor und sind sonst nur über Tests zu sehen. **Stolperstein:** die PNGs des Werkzeugs behalten den Alphakanal der Zielfläche, durchscheinende Flächen (Meldungsfenster,
+Schatten) erscheinen in manchen Betrachtern zu hell; der Alphakanal ist vor dem Ansehen zu verwerfen. Bewegtbild (Takt der Schreibmaschine, Ausblenden) und das echte Clientfenster sind damit **nicht** belegt.
 ## 18. Phase 16: Vorschaumodell beim Platzieren
 
 Bisher zeigte die Platzierung eines Gebäudes nur die schraffierte Grundfläche (`PlacementGhostOverlay`, `HudOverlayRenderer`). Das Original zeigt außerdem das Gebäude selbst durchscheinend am Zeiger
