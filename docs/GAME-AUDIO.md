@@ -1,4 +1,4 @@
-# Audio (AudioDirector, Eva-Ansage, Musik, Stride-Ausgabe)
+# Audio (AudioDirector, Eva-Ansage, Musik, Geräteausgabe)
 
 Stand: 4. Oktober 2026 (Paket S5 vom 30. September 2026; Verdrahtung im Client: Phase 16, Punkt 1)
 
@@ -10,7 +10,7 @@ Stand: 4. Oktober 2026 (Paket S5 vom 30. September 2026; Verdrahtung im Client: 
 `CnCNew.Game.Audio` macht das Spiel hörbar: Es übersetzt `SoundCue`s (aus `CnCNew.Presentation.Fx`), Auswahl-/Befehls-
 Ereignisse der Präsentation und den Logiktakt der laufenden Partie (`CnCNew.Game.Live.LiveMatch`) in Befehle für den
 gerätefreien `SoftwareMixer` (`CnCNew.Audio`). `CnCNew.Client.Stride/Audio/AudioOutput.cs` liest den Mixer aus und
-schreibt ihn über Strides natives Audiolayer (`Stride.Audio`) auf das OS-Ausgabegerät. Zwischen beiden Enden liegt
+schreibt ihn über `waveOut` (`winmm.dll`) auf das Windows-Ausgabegerät. Zwischen beiden Enden liegt
 keine weitere Kopplung: `CnCNew.Game.Audio` kennt kein Stride, `AudioOutput` kennt keine Spielregeln.
 
 ## Einstiegspunkte für die Integration
@@ -28,7 +28,7 @@ keine weitere Kopplung: `CnCNew.Game.Audio` kennt kein Stride, `AudioOutput` ken
 | `director.Muted` | Mastervolumen 0, ohne die Regler anzufassen; Anfragen und Zähler laufen weiter |
 | `GameAudio.Create(data, settings?)` | Ein Objekt je Client: `EnterShell()`, `Attach(live, hud)`/`Detach()`, `Update(dt)`, `PlayUi(name)`, `PlayHook(miscAudioKey)`, `ApplySettings`, `Muted`, `Report()` |
 | `OfflineAudioRenderer(mixer, wavPath?)` | Rendert den Mixer ohne Gerät (`Pump(dt)`), optional in eine WAV-Datei; `Finish()` liefert die SHA-256 der Samples |
-| `AudioOutput(mixer)` (`CnCNew.Client.Stride`) | `Start()` öffnet das Gerät und startet den Streaming-Thread, `Dispose()` räumt auf |
+| `AudioOutput(mixer)` (`CnCNew.Client.Stride`) | `Start()` öffnet das Gerät und startet den Pump-Thread, `Dispose()` räumt auf |
 | `ClientAudio` (`CnCNew.Client.Stride`) | Wählt den Abnehmer des Mixers (Gerät, Mitschnitt, verwerfen) und druckt den Audiobericht |
 
 Über dem Director liegt `GameAudio` (`CnCNew.Game/Audio/GameAudio.cs`, kein Stride): ein Objekt je Clientprozess, das den Director
@@ -49,7 +49,7 @@ der UI-/Eingabeschicht explizit gemeldet werden (`OnUnitSelected`, `OnUnitOrdere
 
 | Aufruf | Abnehmer | Gerät geöffnet |
 |---|---|---|
-| normal (Fenster) | `AudioOutput` (Strides Audiolayer, eigener Streaming-Thread) | ja |
+| normal (Fenster) | `AudioOutput` (`waveOut`, eigener Pump-Thread) | ja |
 | normal, Gerät lässt sich nicht öffnen | eine Konsolenzeile `warning: no audio device available, the game runs silently (…)`, danach `OfflineAudioRenderer` ohne Datei (rendert und verwirft) | nein |
 | `--smoke-test` | `OfflineAudioRenderer` ohne Datei | nein |
 | `--audio-capture <verzeichnis>` (mit oder ohne `--smoke-test`) | `OfflineAudioRenderer`, schreibt `<verzeichnis>/audio.wav` (16 Bit, Stereo, Mixerrate) | nein |
@@ -133,8 +133,8 @@ im nächsten Block; Offline-Rendering ohne Gerät wirft nicht und schreibt bei f
   `dropped:no-voice-key`), die Terroristen-im-Auto-Stimmen aus MiscAudio.
 - Die Shell-Konstante `GUISliderMoved` gibt es im Retailbestand nicht (dort `GUISliderBeep`); sie wird derzeit von keinem Bildschirm gesendet und würde als unbekanntes Event gezählt.
 - Der Optionsdialog im laufenden Spiel (`MenuAction.Options`) ist im Client nicht verdrahtet, also auch keine Regler dort.
-- Der Fehlerpfad von `AudioOutput` (Gerät lässt sich nicht öffnen) hat keinen automatischen Test – dafür bräuchte es einen Rechner ohne Audiogerät; getestet ist der
-  gerätefreie Ersatzweg.
+- `AudioOutput` hat keinen automatischen Test (weder der Erfolgs- noch der Fehlerpfad; beides braucht ein Audiogerät bzw. dessen Fehlen); belegt ist nur, dass der Client mit Fenster startet und
+  45&nbsp;s ohne Absturz und ohne Warnung läuft. Gehört wurde nichts.
 - Referenzstelle des Klick-Klangs: `MiscAudio.h` beschreibt `m_guiClickSound` als „snd to play when user presses button in GUI“; die Aufrufstelle im Original wurde nicht
   gesucht, die Regel „Befehlsleisten-/Menüknopf → `GUIClickSound`“ ist eine eigene.
 
@@ -308,36 +308,23 @@ rechtmäßig zu dekodieren); jeder Aufruf wird gezählt (`Stats.SkippedMovies`, 
 kein Platzhalterton, kein Fake. Das ist eine bekannte, dauerhafte Grenze dieses Projekts, kein Implementierungsfehler
 dieses Pakets.
 
-## Stride-Ausgabe (`CnCNew.Client.Stride/Audio/AudioOutput.cs`)
+## Geräteausgabe (`CnCNew.Client.Stride/Audio/AudioOutput.cs`)
 
-Der Mixer rendert bereits fertiges interleaved-stereo Float-PCM; die Ausgabeschicht trägt deshalb keinen Zustand pro
-Stimme. `MixerSoundSource` (eine `Stride.Audio.DynamicSoundSource`) füllt bei jedem Aufruf von Strides eigenem
-Streaming-Worker-Thread (`DynamicSoundSource`'s statischer Hintergrundtask) genau einen Block
-(`SoftwareMixer.Render`) von 882 Frames (20&nbsp;ms bei 44100&nbsp;Hz); vier Puffer (`BufferCount`) ergeben rund
-80&nbsp;ms Ausgabelatenz. Das Float→Short-Clamping passiert hier, nicht im Mixer (der bleibt geräteunabhängig).
+Der Mixer rendert bereits fertiges interleaved-stereo Float-PCM; die Ausgabeschicht trägt deshalb keinen Zustand pro Stimme. `AudioOutput` öffnet über die klassische
+Windows-API `waveOut` (`winmm.dll`, P/Invoke, kein NuGet-Paket) das Standardgerät mit 16-Bit-Stereo-PCM in der Abtastrate des Mixers und hält `BufferCount` = 4 Puffer zu je
+882 Frames (20&nbsp;ms bei 44100&nbsp;Hz, rund 80&nbsp;ms Latenz) in der Warteschlange. Ein eigener Thread (`AudioOutput.Pump`, leicht erhöhte Priorität, alle 4&nbsp;ms) sucht Puffer,
+die das Gerät beendet hat (`WHDR_DONE`), füllt sie mit je einem `SoftwareMixer.Render`-Block und reiht sie wieder ein. Das Float→Short-Clamping passiert hier, nicht im Mixer (der bleibt
+geräteunabhängig).
 
-**Auflösung der Konstruktionsreihenfolge:** Strides öffentliche API verlangt für `SoundInstance` bereits eine fertige
-`DynamicSoundSource`, während `DynamicSoundSource`s eigener Konstruktor selbst eine `SoundInstance` erwartet – ein
-Zirkel. Da `DynamicSoundSource` die Instanz in seinem Konstruktor nur als Feld ablegt und sie erst bei der
-Wiedergabe dereferenziert, konstruiert `AudioOutput.Start()` `MixerSoundSource` zunächst mit `null!`, baut daraus die
-echte `SoundInstance` (die nur `MaxNumberOfBuffers` braucht, eine von `MixerSoundSource` überschriebene Eigenschaft
-ohne Bezug zur Instanz) und übergibt sie über `MixerSoundSource.BindInstance` zurück, bevor `Play()` aufgerufen wird.
+**Warum nicht Strides Audiolayer (Änderung vom 5. Oktober 2026):** Die erste Fassung benutzte `Stride.Audio` (`AudioEngine`, `DynamicSoundSource`, `SoundInstance`). Auf dem Entwicklungsrechner
+löste `AudioLayer.SourceCreate` beim Bau der `SoundInstance` eine native Zugriffsverletzung aus (`0xC0000005`, bei jeder Konstruktorvariante; Engine und Listener ließen sich bauen, drei Wiedergabegeräte und der
+Audiodienst waren vorhanden). Ein nativer Absturz ist nicht abfangbar: Jede Demo mit Fenster beendete sich nach der Zeile „Starte Demo“ ohne Meldung, nur die Rauchtests (gerätefrei) liefen. Ursache im
+Stride-Treiber nicht weiter untersucht; die Ausgabe nutzt Stride-Audio nicht mehr. Strides eigenes `AudioSystem` (Teil jeder `Game`-Instanz) wird davon nicht berührt.
 
-Ein eigener, niedrigpriorer Thread (`AudioOutput.Pump`) ruft `AudioEngine.Update()` der eigenen Engine alle 10&nbsp;ms auf; Strides
-Dokumentation verlangt dafür "denselben Thread wie die Hauptschleife". Daran hat die Verdrahtung in Phase 16 nichts geändert
-(nicht auf die Hauptschleife umgezogen, weil das Ergebnis ohne Hörprobe nicht beurteilbar wäre). Das native Nachfüllen der Ringpuffer
-selbst übernimmt Strides eigener `DynamicSoundSource`-Hintergrundtask, unabhängig von diesem Thread.
-
-**Kein Gerät verfügbar:** `AudioEngine`-Konstruktion (native Bibliothek, Gerätezugriff) kann fehlschlagen (fehlende
-`libstrideaudio`, keine Hardware). `Start()` fängt das an dieser einen Gerätegrenze ab (`catch (Exception) when
-(exception is not OutOfMemoryException)`, siehe `docs`-Konvention für Gerätegrenzen in `CnCNew.Audio.Mp3PcmStream`),
-zählt es in `DeviceFailures`, merkt sich den Grund in `FailureReason` und lässt den Client stumm weiterlaufen; `IsAvailable` bleibt `false`, kein Zustand wird
-vorgetäuscht. Der Fehlerzweig fasst `Stride.Audio` selbst nicht mehr an (früher protokollierte er über `AudioEngine.Logger` – bei fehlender nativer Bibliothek
-hätte genau dieser Zugriff erneut geworfen); die eine Konsolenwarnung druckt `ClientAudio`. **Unterläufe** (`Underruns`, in `MixerSoundSource`): Da OpenAL/AudioLayer aus Managed-Code keinen
-direkten Unterlaufzähler liefert, misst `MixerSoundSource` die tatsächliche Zeit zwischen Füllaufrufen gegen die
-erwartete Zeit aus den bereits gelieferten Frames; ein Rückstand von mehr als einer Pufferdauer zählt als ein
-Unterlauf und synchronisiert die Messung neu. Das ist eine Näherung (kein Beleg, dass das native Gerät wirklich
-stotterte), aber ein Signal, nicht Stille.
+**Kein Gerät verfügbar:** `waveOutOpen` liefert einen Fehlercode (keine Hardware, Gerät exklusiv belegt), oder ein späterer Aufruf schlägt fehl. `Start()` fängt das an dieser einen Gerätegrenze ab
+(`catch (Exception) when (exception is not OutOfMemoryException)`), zählt es in `DeviceFailures`, merkt sich den Grund in `FailureReason`, gibt alles Angelegte frei und lässt den Client stumm weiterlaufen;
+`IsAvailable` bleibt `false`, kein Zustand wird vorgetäuscht; die eine Konsolenwarnung druckt `ClientAudio`. **Unterläufe** (`Underruns`): zählt jeden Pumpendurchlauf, in dem alle Puffer schon fertig
+waren, das Gerät also zwischenzeitlich Stille spielte. Das ist ein Signal für Aussetzer, kein Beleg, dass man sie hört.
 
 ## Realdatentest (`tests/CnCNew.Game.Tests/AudioDirectorTests.cs`)
 

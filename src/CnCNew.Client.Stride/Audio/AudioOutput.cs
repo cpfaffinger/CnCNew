@@ -1,22 +1,21 @@
-using System.Diagnostics;
+using System.Runtime.InteropServices;
 using CnCNew.Audio.Mixing;
-using Stride.Audio;
-using StrideAudioListener = Stride.Audio.AudioListener;
 
 namespace CnCNew.Client.Stride.Audio;
 
 /// <summary>
-/// Feeds <see cref="SoftwareMixer.Render"/> to the OS sound device through Stride's native audio layer
-/// (<c>Stride.Audio</c>: <see cref="AudioEngine"/>, <see cref="DynamicSoundSource"/>, <see cref="SoundInstance"/>). The
-/// mixer already produces finished interleaved stereo float, so this class carries no per-voice or spatialization state:
-/// it is one continuous stream, refilled from a single block of the mixer every time Stride's own streaming worker
-/// thread (<see cref="DynamicSoundSource"/>'s static background task) asks for data. An own low-latency thread polls
-/// <see cref="AudioEngine.Update"/> of this class's own engine (see <c>docs/GAME-AUDIO.md</c>).
+/// Feeds <see cref="SoftwareMixer.Render"/> to the Windows sound device through the classic waveOut API (<c>winmm.dll</c>, no extra package). The mixer already produces
+/// finished interleaved stereo float, so this class carries no per-voice or spatialization state: it is one continuous 16-bit stream of <see cref="BufferCount"/> buffers
+/// of <see cref="BufferFrames"/> frames that a pump thread refills as the device finishes them (see <c>docs/GAME-AUDIO.md</c>).
 /// <para>
-/// When no audio device is available — missing native library, no hardware, or any other failure at the device
-/// boundary — <see cref="Start"/> catches it once, counts it in <see cref="DeviceFailures"/>, keeps the reason in
-/// <see cref="FailureReason"/> and every other member becomes a no-op: the client keeps running silently instead of
-/// crashing (<see cref="ClientAudio"/> prints the one warning and renders the mixer without a device from then on).
+/// Why not Stride's own audio layer: on the development machine <c>AudioLayer.SourceCreate</c> of Stride 4.3 raises a native access violation when a
+/// <c>SoundInstance</c> is built for a <c>DynamicSoundSource</c> (every constructor variant, engine and listener fine). A native crash cannot be caught, so the client
+/// died at start-up as soon as a window was opened. Nothing of <c>Stride.Audio</c> is used any more.
+/// </para>
+/// <para>
+/// When no audio device is available — no hardware, the device is in use exclusively, or any other failure at the device boundary — <see cref="Start"/> catches it once,
+/// counts it in <see cref="DeviceFailures"/>, keeps the reason in <see cref="FailureReason"/> and every other member becomes a no-op: the client keeps running silently
+/// (<see cref="ClientAudio"/> prints the one warning).
 /// </para>
 /// </summary>
 internal sealed class AudioOutput : IDisposable
@@ -24,16 +23,23 @@ internal sealed class AudioOutput : IDisposable
     /// <summary>20 ms at 44100 Hz; four of them (<see cref="BufferCount"/>) give about 80 ms of output latency.</summary>
     public const int BufferFrames = 882;
     public const int BufferCount = 4;
-    private const int PumpIntervalMilliseconds = 10;
+    private const int PumpIntervalMilliseconds = 4;
+
+    private const int WaveMapper = -1;
+    private const uint CallbackNull = 0;
+    private const ushort WaveFormatPcm = 1;
+    private const uint HeaderDone = 0x1;
 
     private readonly SoftwareMixer _mixer;
-    private AudioEngine? _engine;
-    private StrideAudioListener? _listener;
-    private MixerSoundSource? _source;
-    private SoundInstance? _instance;
+    private readonly float[] _floatScratch = new float[BufferFrames * 2];
+    private readonly short[] _shortScratch = new short[BufferFrames * 2];
+    private readonly IntPtr[] _headers = new IntPtr[BufferCount];
+    private readonly IntPtr[] _data = new IntPtr[BufferCount];
+    private IntPtr _device;
     private Thread? _pumpThread;
     private volatile bool _running;
     private long _deviceFailures;
+    private long _underruns;
     private bool _disposed;
 
     public AudioOutput(SoftwareMixer mixer) => _mixer = mixer ?? throw new ArgumentNullException(nameof(mixer));
@@ -41,74 +47,124 @@ internal sealed class AudioOutput : IDisposable
     public SoftwareMixer Mixer => _mixer;
 
     /// <summary>True once a device was opened and the stream is playing.</summary>
-    public bool IsAvailable => _instance is not null;
+    public bool IsAvailable => _running;
 
-    /// <summary>Failed device opens (missing native library, no hardware, ...); 0 means the device came up on the first try.</summary>
+    /// <summary>Failed device opens (no hardware, in use, ...); 0 means the device came up on the first try.</summary>
     public long DeviceFailures => Interlocked.Read(ref _deviceFailures);
 
     /// <summary>Why the device did not open, or <see langword="null"/>.</summary>
     public string? FailureReason { get; private set; }
 
-    /// <summary>
-    /// Detected gaps in the refill cadence (see <see cref="MixerSoundSource.Underruns"/>): the streaming thread could
-    /// not keep the native ring buffer fed, so the device likely played a stale or silent buffer. 0 before <see cref="Start"/>
-    /// or while unavailable.
-    /// </summary>
-    public long Underruns => _source?.Underruns ?? 0;
+    /// <summary>Detected starvations of the stream (every queued buffer had already finished when the pump looked); 0 before <see cref="Start"/> or while unavailable.</summary>
+    public long Underruns => Interlocked.Read(ref _underruns);
 
     /// <summary>Opens the default audio device and starts streaming; safe to call once, a no-op if already started or already failed.</summary>
     public void Start()
     {
-        if (_disposed || _running) return;
+        if (_disposed || _running || _device != IntPtr.Zero) return;
         try
         {
-            _engine = new AudioEngine((uint)_mixer.SampleRate);
-            _listener = new StrideAudioListener(_engine);
-            _source = new MixerSoundSource(_mixer, BufferFrames, BufferCount);
-            _instance = new SoundInstance(_engine, _listener, _source, _mixer.SampleRate, mono: false, spatialized: false);
-            _source.BindInstance(_instance);
-            _instance.Volume = 1f;
-            _instance.Play();
+            if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("The waveOut output exists on Windows only.");
+            var format = new WaveFormat
+            {
+                FormatTag = WaveFormatPcm,
+                Channels = 2,
+                SamplesPerSecond = (uint)_mixer.SampleRate,
+                BitsPerSample = 16,
+                BlockAlign = 4,
+                AverageBytesPerSecond = (uint)_mixer.SampleRate * 4,
+                ExtraSize = 0,
+            };
+            var result = WaveOutOpen(out _device, WaveMapper, ref format, IntPtr.Zero, IntPtr.Zero, CallbackNull);
+            if (result != 0) throw new InvalidOperationException($"waveOutOpen failed with MMSYSERR {result}.");
+            var headerSize = Marshal.SizeOf<WaveHeader>();
+            for (var index = 0; index < BufferCount; index++)
+            {
+                _data[index] = Marshal.AllocHGlobal(BufferFrames * 4);
+                _headers[index] = Marshal.AllocHGlobal(headerSize);
+                Marshal.StructureToPtr(new WaveHeader { Data = _data[index], BufferLength = BufferFrames * 4 }, _headers[index], false);
+                result = WaveOutPrepareHeader(_device, _headers[index], headerSize);
+                if (result != 0) throw new InvalidOperationException($"waveOutPrepareHeader failed with MMSYSERR {result}.");
+                Fill(index);
+            }
+
             _running = true;
-            _pumpThread = new Thread(Pump) { IsBackground = true, Name = "CnCNew Audio Pump" };
+            _pumpThread = new Thread(Pump) { IsBackground = true, Name = "CnCNew Audio Pump", Priority = ThreadPriority.AboveNormal };
             _pumpThread.Start();
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            // Nothing of Stride.Audio is touched here beyond releasing what was built: when the native library is missing, the type itself failed to load.
             FailureReason = $"{exception.GetType().Name}: {exception.Message}";
             Interlocked.Increment(ref _deviceFailures);
-            _instance = null;
-            _source = null;
             _running = false;
-            try
-            {
-                _listener?.Dispose();
-                _engine?.Dispose();
-            }
-            catch (Exception cleanup) when (cleanup is not OutOfMemoryException)
-            {
-                FailureReason += $" (cleanup: {cleanup.Message})";
-            }
-            _listener = null;
-            _engine = null;
+            Release();
         }
     }
 
-    /// <summary>Polls <see cref="AudioEngine.Update"/> at audio-buffer cadence; Stride's own worker thread fills the native ring buffer.</summary>
+    /// <summary>Renders one mixer block into buffer <paramref name="index"/> and queues it on the device.</summary>
+    private void Fill(int index)
+    {
+        var frames = _mixer.Render(_floatScratch);
+        var samples = Math.Min(frames * 2, _shortScratch.Length);
+        for (var sample = 0; sample < samples; sample++)
+            _shortScratch[sample] = (short)Math.Clamp(MathF.Round(_floatScratch[sample] * short.MaxValue), short.MinValue, short.MaxValue);
+        Array.Clear(_shortScratch, samples, _shortScratch.Length - samples);
+        Marshal.Copy(_shortScratch, 0, _data[index], _shortScratch.Length);
+        var result = WaveOutWrite(_device, _headers[index], Marshal.SizeOf<WaveHeader>());
+        if (result != 0) throw new InvalidOperationException($"waveOutWrite failed with MMSYSERR {result}.");
+    }
+
+    /// <summary>Refills every buffer the device has finished, oldest first.</summary>
     private void Pump()
     {
+        var next = 0;
+        var flagsOffset = (int)Marshal.OffsetOf<WaveHeader>(nameof(WaveHeader.Flags));
         while (_running && !_disposed)
         {
             try
             {
-                _engine?.Update();
+                var queued = 0;
+                for (var step = 0; step < BufferCount; step++)
+                {
+                    var index = (next + step) % BufferCount;
+                    var flags = (uint)Marshal.ReadInt32(_headers[index], flagsOffset);
+                    if ((flags & HeaderDone) == 0) { queued++; continue; }
+                    Fill(index);
+                    next = (index + 1) % BufferCount;
+                }
+
+                // Every buffer was finished when we looked: the device played silence in between.
+                if (queued == 0) Interlocked.Increment(ref _underruns);
             }
             catch (Exception exception) when (exception is not OutOfMemoryException)
             {
-                AudioEngine.Logger.Warning($"Audio engine update failed ({exception.Message}).");
+                FailureReason = $"{exception.GetType().Name}: {exception.Message}";
+                Interlocked.Increment(ref _deviceFailures);
+                _running = false;
+                return;
             }
+
             Thread.Sleep(PumpIntervalMilliseconds);
+        }
+    }
+
+    private void Release()
+    {
+        var headerSize = Marshal.SizeOf<WaveHeader>();
+        if (_device != IntPtr.Zero)
+        {
+            WaveOutReset(_device);
+            for (var index = 0; index < BufferCount; index++)
+                if (_headers[index] != IntPtr.Zero) WaveOutUnprepareHeader(_device, _headers[index], headerSize);
+            WaveOutClose(_device);
+        }
+
+        for (var index = 0; index < BufferCount; index++)
+        {
+            if (_headers[index] != IntPtr.Zero) Marshal.FreeHGlobal(_headers[index]);
+            if (_data[index] != IntPtr.Zero) Marshal.FreeHGlobal(_data[index]);
+            _headers[index] = IntPtr.Zero;
+            _data[index] = IntPtr.Zero;
         }
     }
 
@@ -118,72 +174,50 @@ internal sealed class AudioOutput : IDisposable
         _disposed = true;
         _running = false;
         _pumpThread?.Join(TimeSpan.FromSeconds(1));
-        _instance?.Stop();
-        _instance?.Dispose();
-        _listener?.Dispose();
-        _engine?.Dispose();
+        Release();
+        _device = IntPtr.Zero;
     }
-}
 
-/// <summary>
-/// The <see cref="DynamicSoundSource"/> that never runs out of data: every buffer is one <see cref="SoftwareMixer.Render"/>
-/// block. <see cref="BindInstance"/> closes the construction cycle that the public Stride API requires (a
-/// <see cref="SoundInstance"/> needs an already-built <see cref="DynamicSoundSource"/>, and the base constructor of this
-/// class only needs the instance to store as a field, never to dereference it) — <see cref="AudioOutput.Start"/>
-/// constructs this with a null instance, builds the real <see cref="SoundInstance"/> from it, then hands it back here.
-/// </summary>
-internal sealed class MixerSoundSource : DynamicSoundSource
-{
-    private readonly SoftwareMixer _mixer;
-    private readonly float[] _floatScratch;
-    private readonly short[] _shortScratch;
-    private readonly double _bufferSeconds;
-    private readonly int _numberOfBuffers;
-    private readonly Stopwatch _clock = new();
-    private long _framesFilled;
-    private long _underruns;
-
-    public MixerSoundSource(SoftwareMixer mixer, int bufferFrames, int numberOfBuffers)
-        : base(null!, numberOfBuffers, bufferFrames * 2 * sizeof(short))
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WaveFormat
     {
-        _mixer = mixer;
-        _floatScratch = new float[bufferFrames * 2];
-        _shortScratch = new short[bufferFrames * 2];
-        _bufferSeconds = (double)bufferFrames / mixer.SampleRate;
-        _numberOfBuffers = numberOfBuffers;
-        NewSources.Add(this);
+        public ushort FormatTag;
+        public ushort Channels;
+        public uint SamplesPerSecond;
+        public uint AverageBytesPerSecond;
+        public ushort BlockAlign;
+        public ushort BitsPerSample;
+        public ushort ExtraSize;
     }
 
-    /// <summary>Detected refill gaps: a call landed more than one buffer duration late, so the device likely starved in between.</summary>
-    public long Underruns => Interlocked.Read(ref _underruns);
-
-    public override int MaxNumberOfBuffers => _numberOfBuffers;
-
-    /// <summary>Attaches the <see cref="SoundInstance"/> built from this source (see the class summary); called exactly once, before <see cref="SoundInstance.Play"/>.</summary>
-    public void BindInstance(SoundInstance instance) => soundInstance = instance ?? throw new ArgumentNullException(nameof(instance));
-
-    public override void SetLooped(bool looped)
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WaveHeader
     {
-        // The mixer's own music sequencing decides looping (CnCNew.Game.Audio.AudioDirector); the output stream never loops as a whole.
+        public IntPtr Data;
+        public uint BufferLength;
+        public uint BytesRecorded;
+        public IntPtr User;
+        public uint Flags;
+        public uint Loops;
+        public IntPtr Next;
+        public IntPtr Reserved;
     }
 
-    protected override void ExtractAndFillData()
-    {
-        if (!_clock.IsRunning) _clock.Start();
-        var expected = _framesFilled / (double)_mixer.SampleRate;
-        var actual = _clock.Elapsed.TotalSeconds;
-        if (_framesFilled > 0 && actual - expected > _bufferSeconds)
-        {
-            Interlocked.Increment(ref _underruns);
-            _clock.Restart();
-            _framesFilled = 0;
-        }
+    [DllImport("winmm.dll", EntryPoint = "waveOutOpen")]
+    private static extern int WaveOutOpen(out IntPtr device, int deviceId, ref WaveFormat format, IntPtr callback, IntPtr instance, uint flags);
 
-        var frames = _mixer.Render(_floatScratch);
-        var samples = frames * 2;
-        for (var index = 0; index < samples; index++)
-            _shortScratch[index] = (short)Math.Clamp(MathF.Round(_floatScratch[index] * short.MaxValue), short.MinValue, short.MaxValue);
-        _framesFilled += frames;
-        FillBuffer(_shortScratch, samples * sizeof(short), AudioLayer.BufferType.None);
-    }
+    [DllImport("winmm.dll", EntryPoint = "waveOutPrepareHeader")]
+    private static extern int WaveOutPrepareHeader(IntPtr device, IntPtr header, int size);
+
+    [DllImport("winmm.dll", EntryPoint = "waveOutUnprepareHeader")]
+    private static extern int WaveOutUnprepareHeader(IntPtr device, IntPtr header, int size);
+
+    [DllImport("winmm.dll", EntryPoint = "waveOutWrite")]
+    private static extern int WaveOutWrite(IntPtr device, IntPtr header, int size);
+
+    [DllImport("winmm.dll", EntryPoint = "waveOutReset")]
+    private static extern int WaveOutReset(IntPtr device);
+
+    [DllImport("winmm.dll", EntryPoint = "waveOutClose")]
+    private static extern int WaveOutClose(IntPtr device);
 }
