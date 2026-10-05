@@ -116,6 +116,42 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
 
     public CommandButtonCatalog Catalog { get; } = catalog;
 
+    /// <summary>What a mission script changed about the control bar (removed or added buttons, sciences hidden or disabled); nothing for a skirmish.</summary>
+    public ControlBarScriptState Script { get; } = new();
+
+    /// <summary><c>CommandSet::getCommandButton</c>: the script's override of the slot (<c>GameLogic::findControlBarOverride</c>, which may be "no button") before the set's own button.</summary>
+    private CommandButtonInfo? ButtonOf(CommandSetInfo set, int index)
+        => Script.TryGetOverride(set.Name, index, out var overridden) ? overridden : set.Slots[index];
+
+    /// <summary>
+    /// <c>ScriptActions::doRemoveCommandBarButton</c>: finds the slot of the command set of <paramref name="objectType"/> (its own <c>CommandSet</c> field) that holds
+    /// <paramref name="buttonName"/> as the set shows it now and removes it for every object that uses that set. True when the object type and the button are known (a button that is gone
+    /// already stays gone); false when either is not, so the caller can report it.
+    /// </summary>
+    public bool RemoveButton(string buttonName, string objectType)
+    {
+        if (!Catalog.TryGetObjectSet(objectType, out var setName) || !Catalog.TryGetSet(setName, out var set) || !Catalog.TryGetButton(buttonName, out _)) return false;
+        for (var index = 0; index < CommandSetInfo.MaxSlots; index++)
+            if (ButtonOf(set, index) is { } present && present.Name.Equals(buttonName, StringComparison.OrdinalIgnoreCase))
+            {
+                Script.Override(set.Name, index, null);
+                break;
+            }
+        return true;
+    }
+
+    /// <summary>
+    /// <c>ScriptActions::doAddCommandBarButton</c>: the button takes <paramref name="slot"/> (1-based, as the designers write it) of the object type's command set. False for an unknown object type,
+    /// button or a slot outside the set.
+    /// </summary>
+    public bool AddButton(string buttonName, string objectType, int slot)
+    {
+        if (!Catalog.TryGetObjectSet(objectType, out var setName) || !Catalog.TryGetSet(setName, out var set) || !Catalog.TryGetButton(buttonName, out var button)) return false;
+        if (--slot < 0 || slot >= CommandSetInfo.MaxSlots) return false;
+        Script.Override(set.Name, slot, button);
+        return true;
+    }
+
     /// <summary>The object's own set, replaced by the set of its last executed <c>CommandSetUpgrade</c> (<c>CommandSetUpgrade::upgradeImplementation</c>: the alternate set when <c>TriggerAlt</c> is owned by the player or the object).</summary>
     public string? ActiveCommandSet(SimulationWorld world, Entity entity)
     {
@@ -156,7 +192,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         var hotkeys = new HashSet<char>();
         for (var index = 0; index < GridSlots; index++)
         {
-            if (set.Slots[index] is not { } button) continue;
+            if (ButtonOf(set, index) is not { } button) continue;
             var state = Evaluate(world, player, entity, button);
             if (state.Availability == ButtonAvailability.Hidden) continue;
             slots[index] = Make(index + 1, button, state, [entity.Id], hotkeys);
@@ -174,11 +210,11 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         }
         var common = new CommandButtonInfo?[GridSlots];
         for (var index = 0; index < GridSlots; index++)
-            if (sets[0].Slots[index] is { } first && first.Has(CommandOptions.OkForMultiSelect)) common[index] = first;
+            if (ButtonOf(sets[0], index) is { } first && first.Has(CommandOptions.OkForMultiSelect)) common[index] = first;
         for (var unit = 1; unit < sets.Count; unit++)
             for (var index = 0; index < GridSlots; index++)
             {
-                var other = sets[unit].Slots[index];
+                var other = ButtonOf(sets[unit], index);
                 if (common[index] is { } current && !ReferenceEquals(current, other) && current.Kind != GuiCommandKind.AttackMove) common[index] = null;
                 else if (common[index] is null && other is { Kind: GuiCommandKind.AttackMove } attack && attack.Has(CommandOptions.OkForMultiSelect)) common[index] = attack;
             }
@@ -187,7 +223,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         for (var index = 0; index < GridSlots; index++)
         {
             if (common[index] is not { } button) continue;
-            var owners = units.Where((_, unit) => ReferenceEquals(sets[unit].Slots[index], button)).ToList();
+            var owners = units.Where((_, unit) => ReferenceEquals(ButtonOf(sets[unit], index), button)).ToList();
             var states = owners.Select(unit => Evaluate(world, player, unit, button)).ToList();
             if (states.All(state => state.Availability == ButtonAvailability.Hidden)) continue;
             // updateContextMultiSelect: enabled when at least one unit can do it; otherwise the first unit's verdict.
@@ -278,6 +314,13 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             }
             case GuiCommandKind.PurchaseScience:
             {
+                // ControlBar::populateGeneralsExpPoints: a science a script hid is not shown at all, one it disabled is shown but cannot be bought (Player::isScienceHidden / isScienceDisabled).
+                if (button.Sciences.Length > 0)
+                {
+                    var scripted = Script.AvailabilityOf(button.Sciences[0]);
+                    if (scripted == ScienceAvailability.Hidden) return State(ButtonAvailability.Hidden, ButtonReason.NotPurchasable);
+                    if (scripted == ScienceAvailability.Disabled) return State(ButtonAvailability.Restricted, ButtonReason.NotPurchasable);
+                }
                 var owned = world.PlayerSciences(player);
                 Simulation.Templates.ScienceInfo? next = null;
                 foreach (var name in button.Sciences)
@@ -358,7 +401,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             var cost = queue[index].Values.TryGetValue("cost", out var value) && value is Fixed fixedCost ? fixedCost : template.BuildCost;
             var total = Math.Max(template.BuildTicks, 1);
             var progress = index == 0 ? Math.Clamp((total - queue[index].Int("remaining")) / (float)total, 0f, 1f) : 0f;
-            var image = set.Slots.FirstOrDefault(button => button is { Kind: GuiCommandKind.UnitBuild } && button.Object.Equals(template.Name, StringComparison.OrdinalIgnoreCase))?.ButtonImage ?? string.Empty;
+            var image = Enumerable.Range(0, set.Slots.Length).Select(slot => ButtonOf(set, slot))
+                .FirstOrDefault(button => button is { Kind: GuiCommandKind.UnitBuild } && button.Object.Equals(template.Name, StringComparison.OrdinalIgnoreCase))?.ButtonImage ?? string.Empty;
             entries.Add(new QueueEntry(index, template.Name, image, cost, progress));
         }
         return entries.ToImmutable();

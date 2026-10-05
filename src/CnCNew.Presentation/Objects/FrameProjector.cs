@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using CnCNew.Data.Definitions;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
@@ -104,6 +105,38 @@ public sealed class FrameProjector
     /// <summary><c>AIGroup::groupCheer</c> (the <c>ALL_CHEER</c> meta action): the objects show SPECIAL_CHEERING for <see cref="UnitConditionTracker.CheerTicks"/> ticks.</summary>
     public void Cheer(IEnumerable<EntityId> entities) => _units.Cheer(entities, Tick);
 
+    private readonly Dictionary<uint, ColorValue> _houseColors = [];
+
+    /// <summary>
+    /// A mission script's colour flash (<c>doNamedFlash</c>): the drawable flashes <paramref name="color"/> (0..1 red, green, blue; <see langword="null"/> is the house colour of its owner) every half
+    /// second for <paramref name="seconds"/> seconds. Presentation only. False when the entity is unknown or the flash settings are missing.
+    /// </summary>
+    public bool FlashScripted(EntityId entity, Vector3? color, int seconds, SimulationWorld world)
+    {
+        if (_options.SelectionFlash is null || world.FindEntity(entity) is not { } found) return false;
+        var peak = color ?? HouseColorOf(found.Owner);
+        _flashes.StartScripted(entity.Value, peak, seconds);
+        return true;
+    }
+
+    private Vector3 HouseColorOf(PlayerId owner)
+    {
+        var house = _options.Colors?.Of(owner) ?? TeamColors.Neutral;
+        return new Vector3(house.Red / 255f, house.Green / 255f, house.Blue / 255f);
+    }
+
+    /// <summary><c>Object::setCustomIndicatorColor</c> (<c>NAMED_CUSTOM_COLOR</c>): the house colour of one object, taken from the colour's alpha-red-green-blue integer; 0 gives the owner's colour back (<c>clearCustomIndicatorColor</c>).</summary>
+    public bool SetHouseColor(EntityId entity, uint argb, SimulationWorld world)
+    {
+        if (world.FindEntity(entity) is null) return false;
+        if (argb == 0) _houseColors.Remove(entity.Value);
+        else _houseColors[entity.Value] = new ColorValue((byte)(argb >> 16), (byte)(argb >> 8), (byte)argb, 255);
+        return true;
+    }
+
+    /// <summary>The scripted house colour of an entity, if a script gave it one.</summary>
+    public ColorValue? HouseColorOverride(EntityId entity) => _houseColors.TryGetValue(entity.Value, out var color) ? color : null;
+
     public void Advance(SimulationWorld world)
     {
         ArgumentNullException.ThrowIfNull(world);
@@ -111,6 +144,7 @@ public sealed class FrameProjector
         _current.Clear();
         MissingVisuals = 0;
         Tick = world.Tick - 1;
+        _flashes.Advance(Tick);
 
         var entities = _options.Viewer is { } viewer ? world.EntitiesVisibleTo(viewer) : [..world.Entities.OrderBy(entity => entity.Id.Value)];
         var ordered = ImmutableArray.CreateBuilder<Capture>(entities.Count);
@@ -132,6 +166,7 @@ public sealed class FrameProjector
             _units.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _structures.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _flashes.Prune(Tick, id => world.FindEntity(new EntityId(id)) is not null);
+            foreach (var id in _houseColors.Keys.Where(id => world.FindEntity(new EntityId(id)) is null).ToArray()) _houseColors.Remove(id);
         }
         if (_options.Viewer is { } fogViewer)
         {
@@ -277,7 +312,7 @@ public sealed class FrameProjector
     }
 
     private DrawableInstance ToDrawable(Capture capture, Vector3 position, float yaw, bool ghost, Capture? previous = null, float alpha = 1f) => new(
-        new EntityId(capture.Id), -1, capture.Visual, position, yaw, capture.Owner, _options.Colors?.Of(capture.Owner) ?? TeamColors.Neutral,
+        new EntityId(capture.Id), -1, capture.Visual, position, yaw, capture.Owner, _houseColors.TryGetValue(capture.Id, out var scripted) ? scripted : _options.Colors?.Of(capture.Owner) ?? TeamColors.Neutral,
         capture.Health01, capture.Construction01, capture.Conditions, capture.Selections,
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
         Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel, capture.FiredSlots,
