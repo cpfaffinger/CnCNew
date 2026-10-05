@@ -9,6 +9,7 @@ using CnCNew.Data.Definitions;
 using CnCNew.Ui.Images;
 using CnCNew.Ui.Settings;
 using CnCNew.Ui.Text;
+using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Ui.Tests;
 
@@ -31,6 +32,7 @@ public static class TextAndSettingsTests
             ("LanguageCatalogResolvesWithoutFileSystem", LanguageCatalogResolvesWithoutFileSystem),
             ("LanguageIniIsTypedFromTheGraph", LanguageIniIsTypedFromTheGraph),
             ("MouseTooltipSettingsAreTypedFromTheGraph", MouseTooltipSettingsAreTypedFromTheGraph),
+            ("InGameUiSettingsAreTypedFromTheGraph", InGameUiSettingsAreTypedFromTheGraph),
             ("MappedImagesAreTypedFromTheGraph", MappedImagesAreTypedFromTheGraph),
             ("MappedImageErrorsAreExplicit", MappedImageErrorsAreExplicit),
             ("MappedImageTexturesAreResolvedByDelegate", MappedImageTexturesAreResolvedByDelegate),
@@ -256,6 +258,32 @@ public static class TextAndSettingsTests
         Throws<FormatException>(() => MouseTooltipSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/Mouse.ini"] = ini.Replace("TooltipWidth = 20\n", string.Empty, StringComparison.Ordinal) })), "no TooltipWidth");
         Throws<FormatException>(() => MouseTooltipSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/Mouse.ini"] = ini.Replace("R:20 G:20 B:20", "R:20 G:20", StringComparison.Ordinal) })), "Malformed color");
         Throws<InvalidDataException>(() => MouseTooltipSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/English/Language.ini"] = "Language\nEnd\n" })), "no 'Mouse' block");
+    }
+
+    private static void InGameUiSettingsAreTypedFromTheGraph()
+    {
+        const string ini = "InGameUI\n  MessageColor1 = R:255 G:250 B:245\n  MessagePosition = X:10 Y:22\n  MessageFont = Arial\n  MessagePointSize = 10\n  MessageBold = Yes\n  MessageDelayMS = 75000\n"
+            + "  MilitaryCaptionColor = R:255 G:255 B:255 A:128\n  MilitaryCaptionPosition = X:10 Y:340\n  MilitaryCaptionTitleFont = Courier New\n  MilitaryCaptionTitlePointSize = 12\n  MilitaryCaptionTitleBold = Yes\n"
+            + "  SuperweaponCountdownPosition = X:0.90 Y:0.01\n  SuperweaponCountdownFlashDuration = 500 ; in milliseconds\n  NamedTimerCountdownPosition = X:0.90 Y:0.666\n"
+            + "  FloatingTextTimeOut = 333\n  FloatingTextMoveUpSpeed = 30\n  FloatingTextVanishRate = 3\n  DrawRMBScrollAnchor = No\n"
+            + "  SpyDroneRadiusCursor\n    Texture = SccSpyDrone_USA\n    Style = SHADOW_ALPHA_DECAL\n  End\nEnd\n";
+        var settings = InGameUiSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/InGameUI.ini"] = ini }));
+        Assert(settings.MessagePosition == new InGameUiPixelPoint(10, 22) && settings.MessageColor1 == new WndColor(255, 250, 245, 255), "Pixel pair and a color without alpha (alpha 255).");
+        Assert(settings.MessageFont == new InGameUiFont("Arial", 10, true) && settings.MessageDelayMilliseconds == 75000, "Font keys and the delay.");
+        Assert(settings.MilitaryCaptionColor == new WndColor(255, 255, 255, 128) && settings.MilitaryCaptionPosition == new InGameUiPixelPoint(10, 340), "RGBA color and position.");
+        Assert(settings.MilitaryCaptionTitleFont.Name == "Courier", "parseAsciiString takes the first token of an unquoted name (Language.ini replaces the font anyway).");
+        Assert(settings.SuperweaponPosition == new InGameUiFractionPoint(0.90m, 0.01m) && settings.NamedTimerPosition == new InGameUiFractionPoint(0.90m, 0.666m), "Fractional positions.");
+        Assert(settings.SuperweaponFlashFrames == 15m, "500 ms are 15 logic frames.");
+        Assert(settings.FloatingTextTimeOutFrames == 10 && settings.FloatingTextMoveUpPerFrame == 1m && settings.FloatingTextVanishPerFrame == 0.1m, "Durations round up, velocities become per frame.");
+        Assert(settings.RadiusCursorSections.SequenceEqual(["SpyDroneRadiusCursor"]), "The radius cursor sub-block is listed.");
+        Assert(settings.MessageColor2 == new WndColor(180, 180, 180, 255) && settings.DefaultedKeys.Contains("MessageColor2") && !settings.DefaultedKeys.Contains("MessageColor1"), "A key the file lacks keeps the constructor default and is listed.");
+        Assert(settings.NamedTimerNormalColor == new WndColor(255, 255, 0, 255) && settings.DrawableCaptionFont == new InGameUiFont("Arial", 10, false), "More constructor defaults.");
+        Throws<FormatException>(() => InGameUiSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/InGameUI.ini"] = "InGameUI\n  Bogus = 1\nEnd\n" })), "not a key");
+        Throws<FormatException>(() => InGameUiSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/InGameUI.ini"] = "InGameUI\n  MessageColor1 = R:1 G:2\nEnd\n" })), "Malformed color");
+        Throws<FormatException>(() => InGameUiSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/InGameUI.ini"] = "InGameUI\n  MessagePosition = X:1.5 Y:2\nEnd\n" })), "pair of integers");
+        Throws<FormatException>(() => InGameUiSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/InGameUI.ini"] = "InGameUI\n  MessageBold = Maybe\nEnd\n" })), "Yes or No");
+        Throws<FormatException>(() => InGameUiSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/InGameUI.ini"] = "InGameUI\n  Surprise\n    Texture = X\n  End\nEnd\n" })), "not a sub-block");
+        Throws<InvalidDataException>(() => InGameUiSettings.FromGraph(Compile(new Dictionary<string, string> { ["Data/INI/Mouse.ini"] = "Mouse\nEnd\n" })), "no 'InGameUI' block");
     }
 
     // ------------------------------------------------------------------------------------------------------ images
@@ -608,6 +636,7 @@ public static class TextAndSettingsTests
         var languageSettings = GlobalLanguageSettings.FromGraph(graph);
         Console.WriteLine($"  Language.ini: unicode font '{languageSettings.UnicodeFontName}', {languageSettings.Fonts.Count} font slots set, "
             + $"defaulted: {string.Join(", ", languageSettings.DefaultedKeys)}; DefaultWindowFont {languageSettings.Font("DefaultWindowFont")}");
+        RealInGameUi(graph, languageSettings);
         var images = MappedImageTable.FromGraph(graph);
         var report = MappedImageTextures.Resolve(images, "English", content.Exists);
         var rotated = images.Images.Count(image => image.IsRotated);
@@ -629,6 +658,36 @@ public static class TextAndSettingsTests
             $"Missing texture baseline drifted: {string.Join(", ", report.Missing.Select(texture => texture.TextureFile))}.");
     }
 
+    /// <summary>The retail <c>InGameUI.ini</c> typed: the values the mission texts follow, and the fonts <c>Language.ini</c> replaces.</summary>
+    private static void RealInGameUi(CompiledDefinitionGraph graph, GlobalLanguageSettings language)
+    {
+        var settings = InGameUiSettings.FromGraph(graph);
+        Console.WriteLine($"  InGameUI.ini: message {settings.MessagePosition} delay {settings.MessageDelayMilliseconds} ms, military caption {settings.MilitaryCaptionPosition}, superweapons {settings.SuperweaponPosition}, "
+            + $"named timers {settings.NamedTimerPosition}, {settings.RadiusCursorSections.Length} radius cursor blocks, defaulted: {string.Join(", ", settings.DefaultedKeys)}");
+        Assert(settings.MessagePosition == new InGameUiPixelPoint(10, 22) && settings.MessageColor1 == new WndColor(255, 255, 255, 255) && settings.MessageColor2 == new WndColor(180, 180, 255, 255)
+            && settings.MessageDelayMilliseconds == 75000, "The retail message values.");
+        Assert(settings.MilitaryCaptionPosition == new InGameUiPixelPoint(10, 340) && settings.MilitaryCaptionColor == new WndColor(255, 255, 255, 255) && settings.MilitaryCaptionRandomizeTyping, "The retail military caption values.");
+        Assert(settings.SuperweaponPosition == new InGameUiFractionPoint(0.90m, 0.01m) && settings.SuperweaponFlashFrames == 15m && settings.SuperweaponFlashColor == new WndColor(255, 255, 255, 255), "The retail superweapon values.");
+        Assert(settings.NamedTimerPosition == new InGameUiFractionPoint(0.90m, 0.666m) && settings.NamedTimerFlashFrames == 15m && settings.NamedTimerNormalColor == new WndColor(255, 255, 255, 255), "The retail named timer values.");
+        Assert(settings.RadiusCursorSections.Length == 29, $"The retail file has 29 radius cursor blocks ({settings.RadiusCursorSections.Length}).");
+        Assert(settings.DefaultedKeys.SequenceEqual(["DrawableCaptionBold", "DrawableCaptionColor", "DrawableCaptionFont", "DrawableCaptionPointSize", "MilitaryCaptionSpeed"]), $"Only the drawable caption keys and the commented-out caption speed are left to the defaults ({string.Join(", ", settings.DefaultedKeys)}).");
+
+        // InGameUI::init replaces each font of the block by the Language.ini slot: size and weight are the same in the retail data; the name differs only where the INI writes the
+        // unquoted "Courier New" (parseAsciiString keeps "Courier") and Language.ini has it quoted.
+        (string Slot, InGameUiFont Ini)[] fonts =
+        [
+            ("MessageFont", settings.MessageFont), ("MilitaryCaptionTitleFont", settings.MilitaryCaptionTitleFont), ("MilitaryCaptionFont", settings.MilitaryCaptionFont),
+            ("SuperweaponCountdownNormalFont", settings.SuperweaponNormalFont), ("SuperweaponCountdownReadyFont", settings.SuperweaponReadyFont),
+            ("NamedTimerCountdownNormalFont", settings.NamedTimerNormalFont), ("NamedTimerCountdownReadyFont", settings.NamedTimerReadyFont),
+        ];
+        foreach (var (slot, ini) in fonts)
+        {
+            var replaced = language.Font(InGameUiSettings.LanguageSlots[slot]);
+            Assert(replaced.Size == ini.PointSize && replaced.Bold == ini.Bold, $"{slot}: Language.ini {replaced} and InGameUI.ini {ini} agree in size and weight.");
+            Assert(replaced.Name == ini.Name || (replaced.Name == "Courier New" && ini.Name == "Courier"), $"{slot}: the font name '{replaced.Name}' agrees with the INI's '{ini.Name}'.");
+        }
+        Assert(language.MilitaryCaptionSpeed == 1 && language.MilitaryCaptionDelayMilliseconds == 750, "The typing speed and the start delay come from Language.ini.");
+    }
     /// <summary>
     /// WND text entries of the menu screens that do not resolve in the retail <c>generals.csf</c>. Placeholders without a
     /// label prefix are overwritten by the menu code at run time (score values, player names, version); the prefixed ones
