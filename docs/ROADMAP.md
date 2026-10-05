@@ -70,15 +70,34 @@
 - danach Missionsskripte, Briefings, Zwischensequenzen und Kampagnenfortschritt.
 - Savegames erst nach Stabilisierung des Simulations-Datenmodells.
 
-## 5. Patch-Integration und Qualität
+## 5. Tickrate, Festkomma und Mehrspieler (Phasen 18–29)
+
+**Status: geplant am 5. Oktober 2026, nichts davon gebaut.** Scope-Änderung des Projektinhabers: Gefechte mit bis zu acht Spielern über Dedicated Server, Simulation mit 60 Hz, Tickrate als Parameter statt Konstante, ein Matchpfad für lokales Gefecht und Netzwerkspiel (mit KI-Slots). Rahmen, Entscheidungen und das Register der Engstellen stehen in `docs/MULTIPLAYER-PLAN.md`; je Phase gibt es einen Auftrag `docs/HANDOFF-PHASE<N>.md`. Diese Phasen liegen vor dem früheren Folgeschritt (jetzt Abschnitt 6), weil Tickrate, Festkomma und Formate jeden Referenzwert und jeden Speicherstand ändern.
+
+- **Phase 18 – Messbasis:** Referenzmanifest statt Hashes in der Doku, Determinismus über Rechnergrenzen (bisher nur auf einem Rechner belegt), Leistungsprofil echter Matches, geprüftes Inventar der Tickraten-Kopplung (`docs/TICKRATE-AUDIT.md`); endet mit der Freigabe des Programms.
+- **Phase 19 – Leistung:** Tickkosten echter Matches senken, ohne ein Ergebnis zu ändern (erste, nicht ruhige Probe: rund 7–9 ms je Tick mit acht KI-Spielern).
+- **Phase 20 und 21 – Tickrate als Parameter:** erst die Simulation (bytegleich bei 30 Hz), dann Präsentation, Spielschicht, UI, Ton, Werkzeuge und Tests (bildgleich bei 30 Hz).
+- **Phase 22 – Festkomma Q39.24** statt Q47.16 (erste geplante Änderung aller Referenzwerte, bei 30 Hz).
+- **Phase 23 – 60 Hz:** Zeitschritt-Invarianz, neu entworfene Abnahmetests (Raten-Äquivalenz bei 30/60/120 Hz), Umstellung des Standards, Neuerhebung aller Referenzwerte.
+- **Phase 24 – Sitzungskern:** KI im gehashten und gespeicherten Zustand, Skirmish-Speicherstand, Match-Beschreibung, zweistufiger Befehlsweg, Tickquelle.
+- **Phase 25 – Protokoll und Relay im Prozess:** das lokale Gefecht läuft über den Netzpfad; Mehr-Client-Probe mit KI-Slots.
+- **Phase 26 – Dedicated Server und UDP:** Zeitabgleich, adaptive Puffer, acht Clients, gemessene Latenz.
+- **Phase 27 – Robustheit:** Desync-Diagnose, Wiedereinstieg, Zuschauer, Server-Replay.
+- **Phase 28 – Serverbetrieb und Sicherheit:** Grenzen, Fuzzing, Verschlüsselung, Paket für Windows und Linux, Kapazität.
+- **Phase 29 – Mehrspieler im Client:** Shell, Raum, Anzeigen im Spiel, Latenzwahrnehmung, Abnahme mit Menschen.
+
+## 6. Patch-Integration und Qualität (Phase 30)
+
+**Verschoben am 5. Oktober 2026:** dieser Abschnitt war der Schritt nach Phase 17 und liegt jetzt hinter dem Programm aus Abschnitt 5 (`docs/HANDOFF-PHASE30.md`).
 
 - GeneralsGameCode-Fixes nach Subsystem katalogisieren und mit Regressionstests übernehmen.
 - GeneralsGamePatch als eigene Overlay-Schicht importieren; kontroverse Balanceänderungen konfigurierbar halten.
 - Crash-, Speicher-, Pfadfindungs-, KI-, Grafik- und UI-Fehler priorisieren.
 - Profiler, strukturierte Logs, deterministische Testläufe und Diagnose-Dumps.
+- Paket und Betriebsdokumentation für Client und Dedicated Server.
 
 ## Nicht im ersten Scope
 
-- Netzwerkcode, Matchmaking, NAT, GameSpy-Kompatibilität und Anti-Cheat.
+- vernetzte Kampagne, Konten, Rangliste, Spielersuche, zentrale Serverliste, NAT-Durchdringung, GameSpy-/WOL-Kompatibilität und Anti-Cheat (Kartenaufdeckung ist im Lockstep-Modell nicht verhinderbar, `docs/MULTIPLAYER-PLAN.md` §2.8). Netzwerkcode für Gefechte über Dedicated Server ist seit dem 5. Oktober 2026 im Scope (Abschnitt 5).
 - binäre Kompatibilität zu alten Mods oder Savegames, solange der Kern noch im Aufbau ist.
 

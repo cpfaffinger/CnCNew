@@ -1,6 +1,6 @@
 # CnCNew
 
-Lokale C#/.NET-Neuimplementierung der für *Generals: Zero Hour* benötigten SAGE-Laufzeit. Der aktuelle Scope umfasst Singleplayer, Skirmish und Kampagne; Multiplayer folgt später.
+Lokale C#/.NET-Neuimplementierung der für *Generals: Zero Hour* benötigten SAGE-Laufzeit. Der Scope umfasst Singleplayer (Skirmish und Kampagne) und – seit dem 5. Oktober 2026 geplant, noch nicht gebaut – Mehrspieler-Gefechte mit bis zu acht Spielern über Dedicated Server bei 60-Hz-Simulation (`docs/MULTIPLAYER-PLAN.md`).
 
 Dieses Arbeitsverzeichnis bleibt lokal. Originale Spieldateien, entpackte Assets und heruntergeladene Referenz-Repositories liegen in ignorierten Verzeichnissen und sind nicht Bestandteil des neuen Quellcodes.
 

@@ -5,9 +5,20 @@ Stand: 30. September 2026 (Phase 6 abgeschlossen)
 ## Ziel und Abgrenzung
 
 Dieser Plan führt den aktuellen Prototyp bis zu einer lokal spielbaren Neuimplementierung von
-*Generals: Zero Hour* für Singleplayer-Skirmish und Kampagne. Netzwerkcode, Matchmaking,
-Anti-Cheat sowie binäre Kompatibilität zu alten Mods und Savegames bleiben außerhalb dieses
-ersten Abschlusses.
+*Generals: Zero Hour* für Singleplayer-Skirmish und Kampagne und – seit der Scope-Änderung vom
+5. Oktober 2026 – für Mehrspieler-Gefechte über Dedicated Server. Vernetzte Kampagne, Matchmaking,
+NAT-Durchdringung, GameSpy-Kompatibilität, Anti-Cheat sowie binäre Kompatibilität zu alten Mods und
+Savegames bleiben außerhalb dieses ersten Abschlusses.
+
+**Scope-Änderung vom 5. Oktober 2026** (begründet und versioniert nach „Reihenfolge und
+Änderungsregel“): Der Projektinhaber nimmt Mehrspieler-Gefechte mit bis zu acht Spielern über
+Dedicated Server in den Scope, hebt die Simulation auf 60 Hz und verlangt, dass die Tickrate ein
+Parameter statt einer Konstante ist; das Mehrspieler-Modul trägt auch das lokale Gefecht gegen die KI.
+Begründung: Ziel ist ein modernes Spiel mit direkter Befehlsannahme und Netzwerkspiel, das nicht vom
+langsamsten Mitspieler abhängt. Folge für diesen Plan: ein neuer Schritt 10 (unten) liegt vor dem
+bisherigen Schritt 10, der zu Schritt 11 wird – Tickrate, Festkomma-Auflösung und Formate ändern jeden
+Referenzwert und jeden Speicherstand und müssen vor einem auslieferbaren Abschluss feststehen. Rahmen
+und Entscheidungen: `docs/MULTIPLAYER-PLAN.md`.
 
 Jeder Schritt bildet eine geschlossene Domäne. Ein Schritt gilt erst als abgeschlossen, wenn
 seine öffentlichen Datenverträge feststehen, die reale Installation vollständig auditiert wird,
@@ -648,7 +659,45 @@ sauber 24/24 und 24/24. Referenzwerte: Retail-Referenzmatch Sieger FactionGLA be
 - Missionen sind keine Replays (Skriptaktionen sind keine aufgezeichneten Befehle); Wahrheit ist der Snapshot.
 - Referenzwerte nach Phase 14: Retail-Referenzmatch Sieger FactionGLA bei Tick 13.890, Endhash `76F22CB0CA79BEEF` (Phase 13: Tick 15.000, `532F19F360C59550`; Phase 10–12: Tick 19.200, `28BE35C1174E369F`); Stresstest `56882F763EABEF67`.
 
-## 10. Patch-Integration, Qualität und auslieferbarer Abschluss
+## 10. Tickrate, Festkomma und Mehrspieler über Dedicated Server
+
+**Status: geplant am 5. Oktober 2026, nichts davon gebaut.** Aufträge: `docs/HANDOFF-PHASE18.md` bis
+`docs/HANDOFF-PHASE29.md`; gemeinsamer Rahmen: `docs/MULTIPLAYER-PLAN.md`.
+
+**Ergebnis:** Die Simulation läuft mit 60 Hz bei parametrisierter Tickrate und Q39.24-Festkomma,
+ist über Rechnergrenzen deterministisch belegt, und Gefechte mit bis zu acht Spielern (Menschen und
+KI gemischt) laufen als Lockstep über einen Relay-Server, der weder simuliert noch Spieldaten lädt.
+Das lokale Gefecht benutzt denselben Pfad mit eingebettetem Server.
+
+Umfang (je Punkt eine Phase):
+
+- 18: Referenzmanifest als Messlatte, Determinismus über Rechnergrenzen, Leistungsprofil echter
+  Matches, geprüftes Inventar der Tickraten-Kopplung (`docs/TICKRATE-AUDIT.md`); Freigabe;
+- 19: Tickkosten echter Matches senken, ergebnisgleich;
+- 20, 21: Tickrate als Parameter in Simulation, Präsentation, Spielschicht, UI, Ton, Werkzeugen und
+  Tests, ergebnis- und bildgleich bei 30 Hz;
+- 22: Festkomma Q47.16 → Q39.24 als einzelne, vermessene Änderung;
+- 23: Zeitschritt-Invarianz, Raten-Äquivalenz-Suite (30/60/120 Hz) als neu entworfene Abnahme,
+  60 Hz als Standard, Neuerhebung aller Referenzwerte;
+- 24: KI im gehashten und gespeicherten Sitzungszustand, Skirmish-Speicherstand, Match-Beschreibung,
+  zweistufiger Befehlsweg, Tickquelle;
+- 25: Protokoll, Raum und Relay im Prozess; lokales Gefecht über den Netzpfad; KI-Slots;
+- 26: Dedicated Server, UDP-Transport, Zeitabgleich, adaptive Puffer, acht Clients;
+- 27: Desync-Diagnose, Wiedereinstieg, Zuschauer, Server-Replay;
+- 28: Serverbetrieb und Sicherheit;
+- 29: Mehrspieler im Client, Latenzwahrnehmung, Abnahme mit Menschen.
+
+Abgeschlossen, wenn die Raten-Äquivalenz-Suite bei 30, 60 und 120 Hz besteht, alle Referenzwerte bei
+60 Hz im Referenzmanifest stehen, das Manifest auf mindestens zwei verschiedenen Rechnern identisch
+besteht, acht Clients über einen Dedicated Server unter gestörtem Netz hashgleich bleiben, ein
+getrennter Client hashgleich wieder einsteigt und Menschen ein lokales Gefecht, ein LAN-Match und ein
+Internet-Match mit KI-Slots abgenommen haben.
+
+Bekannte Grenzen (Stand der Planung): Kartenaufdeckung durch manipulierte Clients ist im
+Lockstep-Modell nicht verhinderbar; die Kampagne bleibt lokal (ihre Skripte nehmen Rückmeldungen der
+Präsentation entgegen); der Server verteilt keine Karten und keine Daten.
+
+## 11. Patch-Integration, Qualität und auslieferbarer Abschluss
 
 **Ergebnis:** Aus den Domänen entsteht ein reproduzierbar baubares, diagnostizierbares und lokal
 auslieferbares Produkt mit klar auswählbarem Original- und Bugfix-Verhalten.
@@ -663,12 +712,14 @@ Umfang:
   dokumentieren;
 - Clean-Room-Build, frischen Assetimport, vollständige Testmatrix, Langzeitläufe und Packaging
   automatisieren;
-- Installations-, Migrations- und Troubleshooting-Dokumentation fertigstellen.
+- Installations-, Migrations- und Troubleshooting-Dokumentation fertigstellen;
+- Paket und Betriebsdokumentation für den Dedicated Server (Windows, Linux) sowie die Versions- und
+  Kompatibilitätsregel für Speicherstände, Replays und das Netzprotokoll ab der ersten Veröffentlichung.
 
 Abgeschlossen, wenn ein frischer Rechner aus dokumentierten Voraussetzungen Quellcode und lokale
 Originalinstallation reproduzierbar in ein startbares Paket überführen kann, die gesamte
 Regressionstestmatrix grün ist, keine ungeklärten hochprioren Defekte offen sind und der in diesem
-Dokument definierte Singleplayer-Scope end-to-end abgenommen wurde.
+Dokument definierte Scope (Einzelspieler und Mehrspieler-Gefechte über Dedicated Server) end-to-end abgenommen wurde.
 
 ## Reihenfolge und Änderungsregel
 
@@ -680,3 +731,5 @@ jedoch separat begründet und versioniert. Die Schritte 1 bis 8 sind abgeschloss
 Phase 16 „Tech-Demo-Reife II – Bedienung“ (begonnen, nicht abgeschlossen; 4. Oktober 2026, **teilweise; nichts davon von einem Menschen abgenommen**; `docs/DEMO-FINDINGS.md` Nr. 16–19, `docs/HANDOFF-PHASE16.md`): **Ton** ist im Client verdrahtet und vermessen (`ClientAudio`/`GameAudio`: Waffen, FX, Bauen, EVA, Stimmen, UI, Musik; Zähler je Quelle, `--audio-capture`, `--mute`; `docs/GAME-AUDIO.md`), aber nie gehört worden. **Mauszeiger** aus den Original-Cursordateien (`CursorReader`, Software-Cursor, Wechsel nach Kontext/Modus/Modifikator), **Wegpunktpfade** und Zielmarken sind gebaut (`docs/PRESENTATION-INPUT.md` §11/§12, `docs/GAME-HUD.md` §16). **Rückmeldung eines Menschen** abgearbeitet: Blinken und Tickton der Gebäudeübernahme (`SimEventKind.CaptureFlash`), fünf Shell-Mängel (Knopfzustände, Schieberegler, Hover auf Texten, versteckte Speicherknöpfe, Vorlagenschriftgröße – die Übergangsanimationen fehlen weiter), Kamerascrollen (war rund 3000-fach zu langsam); „Dozer baut in der Mission nicht“ ist reproduziert und behoben (das Skript-Intro von `GC_ChemGeneral` zog die Kamera unter dem Zeiger weg; Eingabesperre, Letterbox und Kameraschwenk des Skripts werden jetzt befolgt; `scripts/check-dozer-build.ps1` spielt die Klicks im echten Client nach). **Mission im Client:** der Director zeigt Skriptkamera, Letterbox, Blenden, Eingabesperre, Untertitel, Zähler, Banner und Skripttöne und zählt jede Skriptausgabe (`docs/SCRIPT-ENGINE.md` §7a; `GC_ChemGeneral` 17 von 29 dargestellt, `MD_USA01` 72 von 223). **Simulation** (`docs/SIM-FIRING-TRACKER.md`, `docs/SIM-TURRET-AIM.md` §8a, `docs/SIMULATION-CORE.md` §32): Feuerstufen `CONTINUOUS_FIRE_*` als Waffenbonus (Gattlings schießen jetzt schneller), `PreAttackDelay` (29 Waffen, `PREATTACK_A/B/C`), beschädigte Locomotoren, `StructureToppleUpdate` erreicht seinen Endzustand, Fähigkeit beendet Angriff, `SimTool`/`CampaignTool` mit Bone-Tabelle; die KI-Verschiebung ist aufgeschlüsselt (128 Läufe: der Ausschlag bei China/GLA ist die Regel „ein neuer Befehl beendet das Zielen“, `PursueCommand` spielt in `ai-match` keine Rolle, keine Verhaltenskorrektur); die Skirmish-KI stellt ihr Versorgungszentrum ans Lager (`AIPlayer::buildBySupplies`) und greift in Gruppen an: **12 von 16** KI-Läufen entschieden (vorher 5 bis 7). **Referenzwerte (4. Oktober 2026, gemessen):** Retail-Referenzmatch Sieger FactionGLA bei **Tick 13.500**, Endhash `0946FB676DEC615C`, Kette `EA6D12F180930D71`; Stresstest unverändert `56882F763EABEF67` / `B8E663493F2C73D5`; `ai-match` Alpine Assault China/GLA China bei 7.545 (`39344016A5EE8F91`), AirForce/China Patt (`E222322067493EB4`), America/GLA GLA bei 8.865 (`542BE1D4891FEB71`); `WorldSnapshot` 9, Replay 10, `CommandTypes.Version` 13, `MissionSnapshot` 2 unverändert; Modulkatalog 183 von 205, 2.115 von 2.115 instanziierbar, Kompatibilitätsbasislinie 751, sauberer Solution-Build 11 Warnungen. **Kampagne neu gemessen:** Zielfahrer Sieg 24/24 und Niederlage 24/24, Audit 24/24 deterministisch und identisch nach Speichern/Laden, Ausschalt-Endproben Sieg 13/24, Niederlage 15/24; Nur-Befehle-Agent weiter **1 von 24** (auch mit 60.000 Ticks auf vier Karten kein Sieg). **Nicht erledigt:** Textvergleich mit dem Original (Capture-Satz und Befundtabelle), die nicht dargestellten Skriptausgaben (Bildeffekte, Kamerapfade, Sprach-Untertitel), das Durchklicken Shell → Kampagne → Mission → Speichern/Laden → Abschluss mit einem Menschen, Skripttöne der Missionen, Leerlauf-Zielerwerb der Türme, Landeanflug-Bogen der Jets, Black-Lotus-Datenstrom, gezeichnete Fallschirmjäger; **Phase 17 (Spielbarkeit) ist nicht begonnen** außer der Neuerhebung der Zahlen und den KI-Korrekturen. Nachtrag 5. Oktober 2026: Texte (GDI-Schriftpfad, Satzumbruch, Tooltips; `docs/TEXT-AUDIT.md`), Shell-Übergänge und Screen-Stapel (`docs/GAME-SHELL.md` §12/§13), Platzier-Vorschau und für alle 92 Skriptausgabetypen ein Zustand (69 dargestellt; `docs/SCRIPT-ENGINE.md` §7a) sind gebaut und von allen Tests getragen, Referenzwerte unverändert (Referenzmatch Tick 13.500, `0946FB676DEC615C`); **weiterhin von keinem Menschen gesehen oder gehört.**
 
 Der nächste Einstieg ist `docs/HANDOFF-PHASE16.md` (Rest: Sichtabnahme, Texte, Mission im Client, Durchklicken), danach `docs/HANDOFF-PHASE17.md` (Spielbarkeit der Missionen durch einen Menschen, Nur-Befehle-Agent, Leistung, Näherungen der neuen Module). Die Befunde der ersten Tech-Demo stehen in `docs/DEMO-FINDINGS.md`; die Aussage „Phase 7 abgeschlossen“ gilt nur für die Bibliotheken und Rauchtests, nicht für die Darstellungstreue.
+
+**Planänderung vom 5. Oktober 2026:** Nach `docs/HANDOFF-PHASE17.md` folgt Schritt 10 (Tickrate, Festkomma, Mehrspieler; `docs/MULTIPLAYER-PLAN.md`, `docs/HANDOFF-PHASE18.md` bis `docs/HANDOFF-PHASE29.md`), danach Schritt 11 (`docs/HANDOFF-PHASE30.md`). Die Aufträge 18 bis 30 existieren bereits; jede Phase schreibt am Ende die „Ausgangslage“ des nächsten Auftrags fort, statt ihn neu zu schreiben.
