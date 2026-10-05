@@ -23,6 +23,15 @@ public sealed class ShellSkirmishText
 
     public string Random => Resolve("GUI:Random", "Random");
     public string Open => Resolve("GUI:Open", "Open");
+
+    /// <summary><c>GUI:Closed</c>, the second entry of every opponent slot (<c>SkirmishGameOptionsMenuInit</c>).</summary>
+    public string Closed => Resolve("GUI:Closed", "Closed");
+
+    /// <summary><c>GUI:EasyAI</c>, <c>GUI:MediumAI</c>, <c>GUI:HardAI</c> ("Easy Army" ...): the three computer opponents of a slot, in the original's order.</summary>
+    public ImmutableArray<string> Armies => [Resolve("GUI:EasyAI", "Easy Army"), Resolve("GUI:MediumAI", "Medium Army"), Resolve("GUI:HardAI", "Hard Army")];
+
+    /// <summary><c>GUI:Player</c>: the name the original puts into the player name field when the preferences hold none.</summary>
+    public string Player => Resolve("GUI:Player", "Player");
     public string Team(int index) => Resolve($"Team:{index}", index == 0 ? "None" : index.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     /// <summary>The army name of a player template (<c>FactionAmerica</c> to <c>USA</c>).</summary>

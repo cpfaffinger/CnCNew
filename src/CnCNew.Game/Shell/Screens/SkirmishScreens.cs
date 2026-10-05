@@ -10,10 +10,11 @@ namespace CnCNew.Game.Shell.Screens;
 /// map's start position count), and starting cash feed a <see cref="MatchSetup"/>. Everything else the layout shows
 /// (game speed, superweapon limit, battle-honor list, per-slot color/team) has no counterpart in <c>LiveMatch</c> or
 /// <see cref="Simulation.Skirmish.SkirmishMatchOptions"/> yet: the gadgets are populated and stay interactive so the
-/// screen looks authentic, but their values are not read at Start time. AI difficulty is not exposed at all (the
-/// skirmish AI in this build has no difficulty axis). All of this is listed as a request to <c>LiveMatch</c>/the AI in
-/// <c>docs/GAME-SHELL.md</c>. Start does nothing (no inline validation message, just no output) until a map and at
-/// least one computer opponent are chosen.
+/// screen looks authentic, but their values are not read at Start time. The opponent slots offer the original's entries
+/// (<c>GUI:Open</c>, <c>GUI:Closed</c> and the three armies <c>GUI:EasyAI</c>, <c>GUI:MediumAI</c>, <c>GUI:HardAI</c>), but the skirmish AI of
+/// this build has no difficulty axis: every army starts the same AI, counted in <see cref="GameShell.SkirmishDifficultyIgnored"/>. All of this
+/// is listed as a request to <c>LiveMatch</c>/the AI in <c>docs/GAME-SHELL.md</c>. A map is always preselected as in the original; Start does
+/// nothing (no inline validation message, just no output) until at least one computer opponent is chosen.
 /// </summary>
 public sealed class SkirmishSetupScreen : ShellScreen
 {
@@ -24,6 +25,9 @@ public sealed class SkirmishSetupScreen : ShellScreen
     private readonly bool[] _computer = new bool[Slots];
     private readonly int[] _factionIndex = new int[Slots];
     private int _startPositionCount = Slots;
+
+    /// <summary>The entries of an opponent slot as <c>SkirmishGameOptionsMenuInit</c> fills them: <c>GUI:Open</c>, <c>GUI:Closed</c>, then the three armies.</summary>
+    private const int FirstArmyEntry = 2;
     private string? _selectedMapPath;
     private int _startMoney;
 
@@ -38,7 +42,8 @@ public sealed class SkirmishSetupScreen : ShellScreen
         Tree.Register("SkirmishGameOptionsMenuSystem", OnSystem);
         Tree.Register("SkirmishGameOptionsMenuInput", OnInput);
 
-        W("TextEntryPlayerName").SetEntryText("Player");
+        W("TextEntryPlayerName").SetEntryText(names.Player);
+        var armies = names.Armies;
         for (var slot = 0; slot < Slots; slot++)
         {
             var template = W($"ComboBoxPlayerTemplate{slot}");
@@ -53,16 +58,21 @@ public sealed class SkirmishSetupScreen : ShellScreen
             if (slot == 0) continue;
             var player = W($"ComboBoxPlayer{slot}");
             player.AddComboEntry(names.Open);
-            player.AddComboEntry("Computer");
+            player.AddComboEntry(names.Closed);
+            foreach (var army in armies) player.AddComboEntry(army);
             player.SetComboSelection(0);
         }
+        // SkirmishGameOptionsMenuInit: the second slot starts as the easy army (until the battle honors count more than five wins; this build keeps none).
         _computer[1] = true;
-        W("ComboBoxPlayer1").SetComboSelection(1);
+        W("ComboBoxPlayer1").SetComboSelection(FirstArmyEntry);
 
         var money = W("ComboBoxStartingCash");
         foreach (var value in MoneyChoices) money.AddComboEntry(Shell.FormatMoney(value));
         money.SetComboSelection(MoneyChoices.IndexOf(_startMoney));
 
+        // SkirmishGameOptionsMenuInit: the map of the preferences (SkirmishPreferences::getPreferredMap), or the first multiplayer map of the cache (getDefaultMap) - the
+        // setup never stands without a map unless there is none at all.
+        if (PreferredMap() is { } map) SetSelectedMap(map);
         RefreshMapDisplay();
         ApplySlotVisibility();
         HideStartPositionMarkers();
@@ -115,8 +125,20 @@ public sealed class SkirmishSetupScreen : ShellScreen
         }
     }
 
+    /// <summary>
+    /// <c>SkirmishPreferences::getPreferredMap</c>: the last map when it still is a multiplayer map of the catalog, otherwise <c>getDefaultMap(TRUE)</c> - the first multiplayer map
+    /// of the map cache, which is ordered by the lower-case path. <see langword="null"/> only when the catalog has no multiplayer map.
+    /// </summary>
+    private string? PreferredMap()
+    {
+        if (Shell.Settings.Skirmish.LastMap is { } last && Shell.MapCatalog.TryGetValue(last, out var remembered) && remembered.IsMultiplayer) return remembered.VirtualPath;
+        return Shell.MapCatalog.Values.Where(entry => entry.IsMultiplayer).Select(entry => entry.VirtualPath)
+            .OrderBy(path => path.Replace('/', '\\').ToLowerInvariant(), StringComparer.Ordinal).FirstOrDefault();
+    }
+
+    /// <summary>The map name window: the display name of the chosen map (<c>GadgetStaticTextSetText(textEntryMapDisplay, m_displayName)</c>); without any map the original leaves it as it is, here it is empty.</summary>
     private void RefreshMapDisplay()
-        => W("TextEntryMapDisplay").SetText(_selectedMapPath is null ? "(no map selected)" : Shell.MapNames.DisplayName(_selectedMapPath, Shell.MapCatalog, Shell.TextSource));
+        => W("TextEntryMapDisplay").SetText(_selectedMapPath is null ? string.Empty : Shell.MapNames.DisplayName(_selectedMapPath, Shell.MapCatalog, Shell.TextSource));
 
     public void SetSelectedMap(string mapPath)
     {
@@ -143,6 +165,8 @@ public sealed class SkirmishSetupScreen : ShellScreen
         if (opponents.Count == 0) return;
         var options = SkirmishMatchOptions.Standard with { StartMoney = _startMoney };
         var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options);
+        // The three armies are the original's difficulties (GameLogic::startNewGame: skirmishDifficulty); the skirmish AI of this build has one strength, so the choice is counted, not obeyed.
+        Shell.CountSkirmishDifficultyIgnored(opponents.Count);
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });
         Shell.BeginMatchLoading(setup);
@@ -173,7 +197,7 @@ public sealed class SkirmishSetupScreen : ShellScreen
             if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayerTemplate{slot}") { _factionIndex[slot] = e.Value; return; }
             if (slot > 0 && e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayer{slot}")
             {
-                _computer[slot] = e.Value == 1;
+                _computer[slot] = e.Value >= FirstArmyEntry;
                 W($"ComboBoxPlayerTemplate{slot}").SetEnabled(_computer[slot]);
                 return;
             }

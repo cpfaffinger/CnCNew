@@ -44,7 +44,8 @@ public static class ShellCustomDraw
         builder.Add(new UiFillRect(rect, PreviewBackground));
         builder.Add(new UiBorderRect(rect, PreviewBorder));
         var font = new UiFont("Arial", Math.Max(8, rect.Height / 12), false);
-        var text = context.MapDisplayName ?? "No map selected";
+        // Without a map the original's preview window shows nothing (W3DDrawMapPreview has no image to draw).
+        if (context.MapDisplayName is not { Length: > 0 } text) return builder.ToImmutable();
         var width = measure.MeasureWidth(text, font);
         var x = rect.X + Math.Max(0, (rect.Width - width) / 2);
         var y = rect.Y + rect.Height / 2 - measure.LineHeight(font) / 2;
