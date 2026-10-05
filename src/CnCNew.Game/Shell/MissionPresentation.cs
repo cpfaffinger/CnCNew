@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Numerics;
+using CnCNew.Game.Data;
 using CnCNew.Presentation.Camera;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
@@ -8,6 +9,7 @@ using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Time;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Text;
 using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Game.Shell;
@@ -28,6 +30,12 @@ public readonly record struct MissionOutputCount(string Action, long Emitted, lo
 
     public long NotDisplayed => Emitted - Displayed - HandledElsewhere;
 }
+
+/// <summary>
+/// An <c>INGAME_POPUP_MESSAGE</c> (<c>InGameUI::popupMessage</c>): the resolved text, the window's position as a percentage of the screen (clamped to 0..100), its width in pixels (at least 50) and
+/// whether it pauses the game until it is closed.
+/// </summary>
+public sealed record PopupMessage(string Text, int XPercent, int YPercent, int Width, bool Pause);
 
 /// <summary>The screen post effects the scripts switch on, for the host's renderer (<see cref="MissionPresentationDirector.PostEffects"/>).</summary>
 /// <param name="BlackWhite">0..1: how far the world is turned grey-scale (<c>ScreenBWFilter::m_curFadeValue</c>).</param>
@@ -63,7 +71,6 @@ public readonly record struct MissionPostEffects(float BlackWhite, int MotionBlu
 /// </summary>
 public sealed class MissionPresentationDirector
 {
-    private const long DefaultTextTicks = 5 * SimulationTiming.LogicFramesPerSecond;
     private const long DefaultPlaceholderTicks = 3 * SimulationTiming.LogicFramesPerSecond;
     private const long RadarBlipLifetimeTicks = 8 * SimulationTiming.LogicFramesPerSecond;
     private const string CameraKey = "<camera>";
@@ -83,8 +90,10 @@ public sealed class MissionPresentationDirector
     private readonly bool[] _consumers = new bool[8];
     private readonly PlayerId _human;
 
-    private long _captionExpiresAtTick;
-    private long _cinematicExpiresAtTick;
+    private UiMessageLog? _messages;
+    private MilitaryCaptionState? _militaryCaption;
+    private CinematicTextState? _cinematic;
+    private bool _textProblemReported;
     private long _movieExpiresAtTick;
     private long _subtitleExpiresAtTick;
     private long _cameraCompletesAtTick;
@@ -152,8 +161,33 @@ public sealed class MissionPresentationDirector
     /// <summary>The <c>GameData</c> intensities of the camera shake types (<c>SCREEN_SHAKE</c>); without them a shake is a reported problem.</summary>
     public CameraShakeIntensities? ShakeIntensities { get; set; }
 
-    public string? CaptionText { get; private set; }
-    public string? CinematicText { get; private set; }
+    /// <summary>
+    /// What the mission's own texts are drawn from (positions, colors and durations of <c>InGameUI.ini</c>, fonts of <c>Language.ini</c>). Without it the texts are still kept as state but never
+    /// drawn, and each text output is a reported problem - a size or a font is never invented (<c>docs/TEXT-AUDIT.md</c>).
+    /// </summary>
+    public InGameUiStyle? TextStyle { get; set; }
+
+    /// <summary>How the host scales text for the screen (the same options as its HUD), for <see cref="BuildOverlayCommands"/>.</summary>
+    public UiScaleOptions TextScaleOptions { get; set; } = new();
+
+    /// <summary><c>DISPLAY_TEXT</c>: the message lines at the top left (<c>InGameUI::message</c>); <see langword="null"/> until the first one.</summary>
+    public UiMessageLog? Messages => _messages;
+
+    /// <summary><c>SHOW_MILITARY_CAPTION</c>: the caption being typed, shown or faded out, or <see langword="null"/>.</summary>
+    public MilitaryCaptionState? MilitaryCaption => _militaryCaption;
+
+    /// <summary><c>DISPLAY_CINEMATIC_TEXT</c>: the text near the bottom of the screen, or <see langword="null"/>.</summary>
+    public CinematicTextState? Cinematic => _cinematic;
+
+    /// <summary><c>INGAME_POPUP_MESSAGE</c>: the message window on screen (<c>InGameUI::m_popupMessageData</c>) until its OK button is pressed (<see cref="DismissPopup"/>), or <see langword="null"/>.</summary>
+    public PopupMessage? Popup { get; private set; }
+
+    /// <summary>Opens a message popup (<c>InGameUI::popupMessage</c>); a popup that is already open is replaced. The script outputs call this, a host or a test may too.</summary>
+    public void ShowPopup(PopupMessage message) => Popup = message ?? throw new ArgumentNullException(nameof(message));
+
+    /// <summary>The OK button (or Enter/Escape) of the popup: <c>InGameUI::clearPopupMessageData</c>. The host unpauses the game when the popup had paused it.</summary>
+    public void DismissPopup() => Popup = null;
+
     public string? SubtitleEvent { get; private set; }
     public string? MoviePlaceholder { get; private set; }
     public bool CameraMoveActive => _cameraPending;
@@ -405,15 +439,16 @@ public sealed class MissionPresentationDirector
 
     /// <summary>
     /// The mission's own screen content as <see cref="UiDrawCommand"/>s - the same renderer-neutral vocabulary
-    /// <see cref="CnCNew.Game.Hud.MatchController.BuildDrawList"/> uses, so a host's existing <c>UiRenderer</c> draws it: the fade, the letterbox bars, caption and
-    /// cinematic text, the speech/movie placeholder, counters and countdown timers, the input-lock notice and the outcome banner. Radar blips are read from
-    /// <see cref="RadarBlipsForDisplay"/>: turning a world position into a minimap pixel needs the host's own minimap transform.
+    /// <see cref="CnCNew.Game.Hud.MatchController.BuildDrawList"/> uses, so a host's existing <c>UiRenderer</c> draws it: the fade, the letterbox bars, then the texts the way
+    /// <c>InGameUI</c> and <c>W3DDisplay</c> draw them (<see cref="MissionTextOverlay"/>: message lines, the typed military caption, named timers and counters, cinematic text; fonts from
+    /// <c>Language.ini</c>, positions and colors from <c>InGameUI.ini</c>, see <see cref="TextStyle"/>), the speech/movie placeholder and the outcome banner. The original draws the letterbox
+    /// bars over the UI texts; its bars are the part of a 16:9 picture the screen does not use (none on a 16:9 screen), ours are an eighth of the height, so the texts are drawn over them
+    /// instead of under. Radar blips are read from <see cref="RadarBlipsForDisplay"/>: turning a world position into a minimap pixel needs the host's own minimap transform.
     /// </summary>
     public ImmutableArray<UiDrawCommand> BuildOverlayCommands(int viewportWidth, int viewportHeight)
     {
         _consumers[(int)Channel.Overlay] = true;
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
-        var white = new WndColor(255, 255, 255, 255);
         var black = new WndColor(0, 0, 0, 255);
         var bar = Letterbox ? viewportHeight / 8 : 0;
         if (FadeAlpha() is { } fade && fade.Alpha > 0)
@@ -423,79 +458,50 @@ public sealed class MissionPresentationDirector
             commands.Add(new UiFillRect(new UiRect(0, 0, viewportWidth, bar), black));
             commands.Add(new UiFillRect(new UiRect(0, viewportHeight - bar, viewportWidth, bar), black));
         }
-        if (CaptionText is { Length: > 0 } caption)
+        AppendTexts(commands, viewportWidth, viewportHeight);
+        if (OutcomeBanner is { } banner && TextMeasure is { } bannerMeasure)
         {
-            Centered(commands, caption, new UiFont("Arial", 18, true), bar + 24, viewportWidth, white);
-        }
-        if (CinematicText is { Length: > 0 } cinematic)
-        {
-            Centered(commands, cinematic, new UiFont("Arial", 16, true), viewportHeight - Math.Max(bar, 96) + 8, viewportWidth, white);
-        }
-        var placeholderName = MoviePlaceholder ?? SubtitleEvent;
-        if (placeholderName is { Length: > 0 })
-        {
-            // No Bink decoder and no decoded dialogue/subtitle text in this build (docs/CAMPAIGN-AND-SAVEGAMES.md): the
-            // raw event/movie name is shown, clearly marked as a placeholder rather than invented dialogue.
-            var text = MoviePlaceholder is not null ? $"(movie placeholder: {placeholderName})" : $"(speech: {placeholderName})";
-            // Inside the lower letterbox bar; without the letterbox above the control bar instead of on top of it.
-            Centered(commands, text, new UiFont("Arial", 14, false), Letterbox ? Math.Max(0, viewportHeight - 48) : viewportHeight * 3 / 4, viewportWidth, white);
-        }
-        if (_countersVisible)
-        {
-            var y = bar + 64;
-            foreach (var (name, display) in _counters)
-            {
-                var value = _session.Engine.CounterValue(name);
-                // InGameUI::addNamedTimer shows a countdown as minutes:seconds of its remaining logic frames, a counter as its plain value.
-                var shown = display.IsTimer ? string.Create(CultureInfo.InvariantCulture, $"{Math.Max(0, value) / SimulationTiming.LogicFramesPerSecond / 60}:{Math.Max(0, value) / SimulationTiming.LogicFramesPerSecond % 60:00}") : value.ToString(CultureInfo.InvariantCulture);
-                var rect = new UiRect(viewportWidth - 420, y, 404, 24);
-                commands.Add(new UiTextDraw($"{display.Label} {shown}", null, new UiFont("Arial", 14, true), white, black, rect.X, y, UiTextAlignment.Left, rect));
-                y += 26;
-            }
-        }
-        if (_inputLocked && OutcomeBanner is null)
-        {
-            Centered(commands, "(cinematic: the mission script has disabled input)", new UiFont("Arial", 12, false), Math.Max(4, bar - 28), viewportWidth, new WndColor(200, 200, 200, 255));
-        }
-        if (OutcomeBanner is { } banner)
-        {
+            // Not a text of the original (it goes to a score screen and a movie): an honest placeholder, in a fixed font because no data names one.
             var rect = new UiRect(0, viewportHeight / 3, viewportWidth, 48);
             commands.Add(new UiFillRect(new UiRect(0, rect.Y - 12, viewportWidth, 72), new WndColor(0, 0, 0, 150)));
-            Centered(commands, banner, new UiFont("Arial", 28, true), rect.Y, viewportWidth, white);
+            commands.AddRange(MissionTextOverlay.CenteredText(banner, new UiFont("Arial", 28, true), bannerMeasure, viewportWidth, viewportHeight, rect.Y, new WndColor(255, 255, 255, 255), black));
         }
         return commands.ToImmutable();
     }
 
     /// <summary>
-    /// The host's text measure (the renderer's glyph metrics): a draw command carries the final left edge of its text, so centring needs the real width. Without one the
-    /// width is estimated from the font size.
+    /// The host's text measure (the renderer's glyph metrics): a draw command carries the final left edge of its text, so laying out and centring need the real widths. Without one no text is
+    /// drawn and the first text output is reported as a problem.
     /// </summary>
     public IUiTextMeasure? TextMeasure { get; set; }
 
-    /// <summary>Adds <paramref name="text"/> centred at <paramref name="y"/>, wrapped at word boundaries when it is wider than the screen (a mission objective is a long sentence).</summary>
-    private void Centered(ImmutableArray<UiDrawCommand>.Builder commands, string text, UiFont font, int y, int viewportWidth, WndColor color)
+    private void AppendTexts(ImmutableArray<UiDrawCommand>.Builder commands, int width, int height)
     {
-        int Width(string value) => TextMeasure?.MeasureWidth(value, font) ?? (int)(value.Length * font.Size * 0.6f);
-        var lineHeight = TextMeasure?.LineHeight(font) ?? font.Size + 6;
-        var available = Math.Max(64, viewportWidth - 64);
-        var lines = new List<string>();
-        var line = string.Empty;
-        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        var timers = _countersVisible && _counters.Count > 0;
+        if (_messages is not { IsEmpty: false } && _militaryCaption is null && _cinematic is null && SubtitleEvent is null && MoviePlaceholder is null && !timers) return;
+        if (TextStyle is not { } style || TextMeasure is not { } measure)
         {
-            var candidate = line.Length == 0 ? word : line + " " + word;
-            if (line.Length > 0 && Width(candidate) > available)
+            if (!_textProblemReported)
             {
-                lines.Add(line);
-                line = word;
+                _textProblemReported = true;
+                Problem("on-screen text", TextStyle is null ? "no InGameUI style connected (positions, colors and fonts come from InGameUI.ini and Language.ini)" : "no text measure connected");
             }
-            else line = candidate;
+            return;
         }
-        if (line.Length > 0) lines.Add(line);
-        foreach (var value in lines)
+        var options = TextScaleOptions;
+        if (_messages is { IsEmpty: false } messages) commands.AddRange(MissionTextOverlay.Messages(messages, style, options, measure, width, height));
+        if (_militaryCaption is { } caption) commands.AddRange(MissionTextOverlay.MilitaryCaption(caption, style, options, measure, width, height));
+        if (timers)
+            commands.AddRange(MissionTextOverlay.NamedTimers(_counters.Select(pair => (pair.Value.Label, pair.Value.IsTimer, _session.Engine.CounterValue(pair.Key))), Clock, style, options, measure, width, height));
+        if (_cinematic is { } cinematic) commands.AddRange(MissionTextOverlay.Cinematic(cinematic, style, options, measure, width, height));
+        var placeholderName = MoviePlaceholder ?? SubtitleEvent;
+        if (placeholderName is { Length: > 0 })
         {
-            var clip = new UiRect(0, y, viewportWidth, lineHeight + 4);
-            commands.Add(new UiTextDraw(value, null, font, color, new WndColor(0, 0, 0, 255), Math.Max(0, (viewportWidth - Width(value)) / 2), y, UiTextAlignment.Left, clip));
-            y += lineHeight;
+            // No Bink decoder and no decoded dialogue/subtitle text in this build (docs/CAMPAIGN-AND-SAVEGAMES.md): the raw event/movie name is shown, clearly marked as a placeholder
+            // rather than invented dialogue, in the message font of the data. Inside the lower letterbox bar; without the letterbox above the control bar instead of on top of it.
+            var text = MoviePlaceholder is not null ? $"(movie placeholder: {placeholderName})" : $"(speech: {placeholderName})";
+            var font = style.Font(InGameUiFontRole.Message, new UiViewport(width, height), options);
+            commands.AddRange(MissionTextOverlay.CenteredText(text, font, measure, width, height, Letterbox ? Math.Max(0, height - 48) : height * 3 / 4, new WndColor(255, 255, 255, 255), new WndColor(0, 0, 0, 255)));
         }
     }
 
@@ -527,8 +533,6 @@ public sealed class MissionPresentationDirector
         _tickBeforeStep = _session.World.Tick;
         _lastObservedTick = _tickBeforeStep + _frozenSteps;
         var tick = _lastObservedTick;
-        if (CaptionText is not null && tick >= _captionExpiresAtTick) CaptionText = null;
-        if (CinematicText is not null && tick >= _cinematicExpiresAtTick) CinematicText = null;
         if (MoviePlaceholder is not null && tick >= _movieExpiresAtTick) MoviePlaceholder = null;
         if (SubtitleEvent is not null && tick >= _subtitleExpiresAtTick) SubtitleEvent = null;
         for (var index = _completions.Count - 1; index >= 0; index--)
@@ -562,8 +566,24 @@ public sealed class MissionPresentationDirector
         // A step that left the world tick where it was is a frozen one (FREEZE_TIME): the presentation clock goes on without it.
         var worldStepped = _session.World.Tick != _tickBeforeStep;
         if (!worldStepped) _frozenSteps++;
+        AdvanceText(Clock);
         AdvanceFilters(worldStepped);
         _radar.RemoveAll(blip => Clock - blip.CreatedAtTick > RadarBlipLifetimeTicks);
+    }
+
+    /// <summary>
+    /// <c>InGameUI::update</c> for the texts: the message lines fade and go, the military caption types, blinks and fades, the cinematic text runs out. One update per presentation step, on the
+    /// presentation clock (so a text goes on while a script freezes the world, as the original's does).
+    /// </summary>
+    private void AdvanceText(long clock)
+    {
+        _messages?.Update(clock);
+        if (_militaryCaption is { } caption)
+        {
+            caption.Update(clock);
+            if (caption.Finished) _militaryCaption = null;
+        }
+        if (_cinematic is { } cinematic && clock >= cinematic.ExpiresAtFrame) _cinematic = null;
     }
 
     /// <summary>
@@ -765,9 +785,12 @@ public sealed class MissionPresentationDirector
                 else Problem(action, !HasAudio ? "no audio connected" : $"'{name}' did not start");
                 if (action is "SPEECH_PLAY" or "SOUND_PLAY_NAMED")
                 {
-                    // No subtitle text exists for a speech event: its name is shown, marked as a placeholder, whether or not the sound plays.
                     if (action == "SPEECH_PLAY")
                     {
+                        // doSpeechPlay: the subtitle label DIALOGEVENT:<name>Subtitle is typed out as a military caption for 8 seconds when the string table has it and it is neither empty nor
+                        // starts with '*' (the retail English table marks 2454 of its 2455 subtitles with '*', so the original shows none of them).
+                        TryShowSpeechSubtitle(name, tick);
+                        // Apart from that no text exists for a speech event: its name is shown, marked as a placeholder, whether or not the sound plays.
                         SubtitleEvent = name;
                         _subtitleExpiresAtTick = tick + DefaultPlaceholderTicks;
                         if (!played) Handled(action, Channel.Overlay);
@@ -789,34 +812,55 @@ public sealed class MissionPresentationDirector
                 _completions.Add((output.Arguments[0], tick + DefaultPlaceholderTicks));
                 Handled(action, Channel.Overlay);
                 return;
-            case "DISPLAY_TEXT" or "INGAME_POPUP_MESSAGE":
+            case "DISPLAY_TEXT":
+            {
+                // doDisplayText -> InGameUI::message: one more line of the message list at the top left (the label's text), which fades on its own.
                 if (output.Arguments.Length == 0) { Problem(action, "text label missing"); return; }
-                CaptionText = _resolveText(output.Arguments[0]);
-                _captionExpiresAtTick = tick + DefaultTextTicks;
+                if (TextStyle is not { } style) { Problem(action, "no InGameUI style connected"); return; }
+                (_messages ??= new UiMessageLog(style.Settings)).Add(ResolveLabel(action, output.Arguments[0]), tick);
                 Handled(action, Channel.Overlay);
                 return;
+            }
+            case "INGAME_POPUP_MESSAGE":
+            {
+                // doInGamePopupMessage(message, x, y, width, pause) -> InGameUI::popupMessage: a window of InGamePopupMessage.wnd at x/y percent of the screen, closed by its OK button.
+                if (output.Arguments.Length < 5 || !int.TryParse(output.Arguments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var popupX)
+                    || !int.TryParse(output.Arguments[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var popupY) || !int.TryParse(output.Arguments[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var popupWidth)
+                    || !int.TryParse(output.Arguments[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out var popupPause))
+                {
+                    Problem(action, "popup arguments missing");
+                    return;
+                }
+                ShowPopup(new PopupMessage(ResolveLabel(action, output.Arguments[0]), Math.Clamp(popupX, 0, 100), Math.Clamp(popupY, 0, 100), Math.Max(50, popupWidth), popupPause != 0));
+                Handled(action, Channel.Overlay);
+                return;
+            }
             case "DISPLAY_CINEMATIC_TEXT":
             {
-                // doDisplayCinematicText(displayText, fontType, timeInSeconds): the text of the lower letterbox bar.
-                if (output.Arguments.Length == 0) { Problem(action, "text label missing"); return; }
-                CinematicText = _resolveText(output.Arguments[0]);
-                _cinematicExpiresAtTick = tick + (Number(output, 2, out var seconds) && seconds > 0 ? DurationTicks(seconds) : DefaultTextTicks);
+                // doDisplayCinematicText(displayText, fontType, timeInSeconds): W3DDisplay::draw shows it for 30 * seconds frames, centered near the bottom, in the font of the script.
+                if (output.Arguments.Length < 3) { Problem(action, "arguments missing"); return; }
+                if (!MissionTextOverlay.TryParseCinematicFont(output.Arguments[1], out var font, out var fontProblem)) { Problem(action, fontProblem); return; }
+                if (!Number(output, 2, out var seconds)) { Problem(action, "duration missing"); return; }
+                _cinematic = new CinematicTextState(ResolveLabel(action, output.Arguments[0]), font, tick + (long)seconds * SimulationTiming.LogicFramesPerSecond);
                 Handled(action, Channel.Overlay);
                 return;
             }
             case "SHOW_MILITARY_CAPTION":
-                if (output.Arguments.Length > 1 && long.TryParse(output.Arguments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var durationMs))
-                {
-                    CaptionText = _resolveText(output.Arguments[0]);
-                    _captionExpiresAtTick = tick + MillisecondsToTicks(durationMs);
-                    Handled(action, Channel.Overlay);
-                }
-                else Problem(action, "caption arguments missing");
+            {
+                // doMilitaryCaption(label, durationMs) -> InGameUI::militarySubtitle: replaces the caption on screen, then types the new one.
+                if (output.Arguments.Length < 2 || !long.TryParse(output.Arguments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var durationMs)) { Problem(action, "caption arguments missing"); return; }
+                if (TextStyle is not { } style) { Problem(action, "no InGameUI style connected"); return; }
+                _militaryCaption = null;
+                var language = style.Language.Settings;
+                _militaryCaption = MilitaryCaptionState.Begin(ResolveLabel(action, output.Arguments[0]), durationMs, tick, style.Settings, language.MilitaryCaptionSpeed, language.MilitaryCaptionDelayMilliseconds, out var problem);
+                if (_militaryCaption is null) Problem(action, problem ?? "no caption");
+                else Handled(action, Channel.Overlay);
                 return;
+            }
             case "DISPLAY_COUNTDOWN_TIMER" or "DISPLAY_COUNTER":
                 // doDisplayCountdownTimer(timerName, timerText) / doDisplayCounter(counterName, counterText): a named line of the timer display.
                 if (output.Arguments.Length < 2) { Problem(action, "arguments missing"); return; }
-                _counters[output.Arguments[0]] = (_resolveText(output.Arguments[1]), action == "DISPLAY_COUNTDOWN_TIMER");
+                _counters[output.Arguments[0]] = (ResolveLabel(action, output.Arguments[1]), action == "DISPLAY_COUNTDOWN_TIMER");
                 Handled(action, Channel.Overlay);
                 return;
             case "HIDE_COUNTDOWN_TIMER" or "HIDE_COUNTER":
@@ -863,6 +907,19 @@ public sealed class MissionPresentationDirector
                 ApplyScene(output, tick);
                 return;
         }
+    }
+
+    private const long SpeechSubtitleMilliseconds = 8000;
+
+    private void TryShowSpeechSubtitle(string speechName, long tick)
+    {
+        if (TextStyle is not { } style) return;
+        var label = $"DIALOGEVENT:{speechName}Subtitle";
+        var subtitle = _resolveText(label);
+        // A host that cannot resolve a label hands it back unchanged: that is "not found" here, and the usual case (the retail table has labels for most speech events).
+        if (string.Equals(subtitle, label, StringComparison.Ordinal) || subtitle.Length == 0 || subtitle[0] == '*') return;
+        var language = style.Language.Settings;
+        _militaryCaption = MilitaryCaptionState.Begin(subtitle, SpeechSubtitleMilliseconds, tick, style.Settings, language.MilitaryCaptionSpeed, language.MilitaryCaptionDelayMilliseconds, out _);
     }
 
     private bool HasAudio => AudioControl is not null || Audio is not null;
@@ -1179,7 +1236,14 @@ public sealed class MissionPresentationDirector
     }
 
     private static long DurationTicks(double seconds) => Math.Max(0, (long)Math.Round(seconds * SimulationTiming.LogicFramesPerSecond));
-    private static long MillisecondsToTicks(long milliseconds) => Math.Max(0, (long)Math.Round(milliseconds / 1000.0 * SimulationTiming.LogicFramesPerSecond));
+
+    /// <summary>The text of a CSF label; a label the host cannot resolve comes back unchanged and is counted as a problem, so the screen shows the label and the report says why.</summary>
+    private string ResolveLabel(string action, string label)
+    {
+        var text = _resolveText(label);
+        if (string.Equals(text, label, StringComparison.Ordinal)) Problem(action, $"label '{label}' has no text (shown as the label)");
+        return text;
+    }
 
     private static bool TryParseCoord(string text, out float x, out float y)
     {

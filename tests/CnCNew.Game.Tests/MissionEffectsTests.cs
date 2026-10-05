@@ -507,15 +507,16 @@ internal static class MissionEffectsTests
         var owner = new PlayerId(1);
         var own = new WndColor(10, 200, 10, 255);
         SuperweaponLine Line(uint id, bool ready) => new(owner, new EntityId(id), "Power", "Nuke: ", ready ? "0:00" : "1:05", ready ? 0 : 65, ready);
-        ImmutableArray<UiDrawCommand> Draw(ImmutableArray<SuperweaponLine> lines, long tick, int controlBarTop = 600) => SuperweaponTimers.Draw(lines, _ => own, tick, 1000, 800, controlBarTop, measure);
+        ImmutableArray<UiDrawCommand> Draw(ImmutableArray<SuperweaponLine> lines, long tick, int controlBarTop = 600) => SuperweaponTimers.Draw(lines, _ => own, tick, 1000, 800, controlBarTop, measure, TextFixtures.Style, TextFixtures.Options);
 
         var ready = Draw([Line(1, true)], 0);
         var waiting = Draw([Line(1, false)], 0);
         TestHarness.Assert(((UiTextDraw)ready[0]).Font.Bold && !((UiTextDraw)waiting[0]).Font.Bold, "only a ready power is bold");
-        TestHarness.Assert(((UiTextDraw)ready[0]).Color == WndColor.White && ((UiTextDraw)waiting[0]).Color == own, "a ready power starts white, a waiting one has its owner's colour");
-        TestHarness.Assert(((UiTextDraw)Draw([Line(1, true)], 14)[0]).Color == WndColor.White && ((UiTextDraw)Draw([Line(1, true)], 15)[0]).Color == own && ((UiTextDraw)Draw([Line(1, true)], 30)[0]).Color == WndColor.White,
-            "the flash changes every 15 logic frames");
-        TestHarness.Assert(SuperweaponTimers.Draw([], _ => own, 0, 1000, 800, 600, measure).IsEmpty, "no lines, no commands");
+        TestHarness.Assert(((UiTextDraw)ready[0]).Color == own && ((UiTextDraw)waiting[0]).Color == own, "a ready power starts in its owner's colour (m_superweaponUsedFlashColor starts true), a waiting one never flashes");
+        TestHarness.Assert(((UiTextDraw)Draw([Line(1, true)], 14)[0]).Color == own && ((UiTextDraw)Draw([Line(1, true)], 15)[0]).Color == WndColor.White && ((UiTextDraw)Draw([Line(1, true)], 30)[0]).Color == own,
+            "the flash changes every 15 logic frames (SuperweaponCountdownFlashDuration 500 ms)");
+        TestHarness.Assert(((UiTextDraw)Draw([Line(1, false)], 15)[0]).Color == own, "a waiting power does not flash");
+        TestHarness.Assert(SuperweaponTimers.Draw([], _ => own, 0, 1000, 800, 600, measure, TextFixtures.Style, TextFixtures.Options).IsEmpty, "no lines, no commands");
 
         var many = Enumerable.Range(1, 40).Select(id => Line((uint)id, false)).ToImmutableArray();
         var commands = Draw(many, 0);
@@ -548,13 +549,13 @@ internal static class MissionEffectsTests
 
         var measure = new ShellTextMeasure();
         WndColor Colour(PlayerId player) => new((byte)(player.Value * 10), 20, 30, 255);
-        var commands = SuperweaponTimers.Draw(lines, Colour, live.World.Tick, 1280, 720, 560, measure);
+        var commands = SuperweaponTimers.Draw(lines, Colour, live.World.Tick, 1280, 720, 560, measure, controller.Hud.TextStyle, controller.Hud.ScaleOptions);
         TestHarness.Assert(commands.Length == 10 && commands.Cast<UiTextDraw>().All(draw => draw.Color == Colour(new PlayerId(2)) || draw.Color == WndColor.White), "two texts per line, in the owner's colour");
         var nameDraw = (UiTextDraw)commands[0];
         var timeDraw = (UiTextDraw)commands[1];
         TestHarness.Assert(nameDraw.X + measure.MeasureWidth(nameDraw.Text, nameDraw.Font) == (int)(0.90f * 1280) && timeDraw.X == (int)(0.90f * 1280) && timeDraw.Y == nameDraw.Y,
             "the name ends where the time starts, at 90 % of the width");
-        TestHarness.Assert(commands.SequenceEqual(SuperweaponTimers.Draw(lines, Colour, live.World.Tick, 1280, 720, 560, measure)), "drawing is deterministic");
+        TestHarness.Assert(commands.SequenceEqual(SuperweaponTimers.Draw(lines, Colour, live.World.Tick, 1280, 720, 560, measure, controller.Hud.TextStyle, controller.Hud.ScaleOptions)), "drawing is deterministic");
 
         superweapons.DisplayEnabled = false;
         TestHarness.Assert(superweapons.Collect(live.World, Label).IsEmpty, "DISABLE_SPECIAL_POWER_DISPLAY empties the list");

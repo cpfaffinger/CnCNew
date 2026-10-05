@@ -16,9 +16,12 @@ public sealed class LanguageFonts(GlobalLanguageSettings language)
 
     public GlobalLanguageSettings Settings => language;
 
-    public UiFont Resolve(string slot, UiViewport viewport, UiScaleOptions options)
+    public UiFont Resolve(string slot, UiViewport viewport, UiScaleOptions options) => Resolve(language.Font(slot), viewport, options);
+
+    /// <summary>A font that is not a <c>Language.ini</c> slot (a script's cinematic text font, the fonts of <c>InGameUI.ini</c>) at the adjusted size of <paramref name="viewport"/>.</summary>
+    public UiFont Resolve(FontDescription font, UiViewport viewport, UiScaleOptions options)
     {
-        var font = language.Font(slot);
+        ArgumentNullException.ThrowIfNull(font);
         return new UiFont(font.Name, UiScaler.ScaleFontSize(font.Size, true, viewport, options, UiScaler.DefaultDisplayWidth, UiScaler.DefaultDisplayHeight), font.Bold);
     }
 }

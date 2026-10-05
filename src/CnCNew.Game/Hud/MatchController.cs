@@ -75,6 +75,7 @@ public sealed class MatchController
         _assets = HudAssets.Load(match.Data, language);
         _tooltips = new TooltipPainter(match.Data.Graph);
         _textMeasure = textMeasure ?? new MonospaceTextMeasure();
+        TextStyle = InGameUiStyle.FromGraph(match.Data.Graph);
         var services = _assets.BuildTreeServices(textMeasure ?? new MonospaceTextMeasure());
         _scaleOptions = new UiScaleOptions
         {
@@ -118,6 +119,7 @@ public sealed class MatchController
     }
 
     public LiveGame Match { get; }
+    public HudAssets Assets => _assets;
     public GameInputController Input { get; }
     public MatchStatsTracker Stats { get; }
 
@@ -140,6 +142,12 @@ public sealed class MatchController
 
     /// <summary>The superweapon countdowns at the top right (<c>InGameUI::draw</c>): every public-timer power of every player. A mission's scripts hide the list or single objects through it.</summary>
     public SuperweaponTimers Superweapons { get; } = new();
+
+    /// <summary>What the in-game text is drawn from: the positions and colors of <c>InGameUI.ini</c> and the fonts of <c>Language.ini</c> (the superweapon list here, the mission texts through <see cref="MissionController"/>).</summary>
+    public InGameUiStyle TextStyle { get; }
+
+    /// <summary>The text scaling this HUD was built with (the display settings' UI scale and the accessibility text scale).</summary>
+    public UiScaleOptions ScaleOptions => _scaleOptions;
 
     /// <summary>Meta actions the controller does not handle itself (pause, screenshot, chat, diplomacy, control bar toggle, time scale, ...).
     /// <see cref="MetaAction.Options"/> is handled internally (opens/closes the in-game menu) and never appears here.</summary>
@@ -735,7 +743,7 @@ public sealed class MatchController
             _superweaponEnabled = Superweapons.DisplayEnabled;
         }
         var lines = _superweaponLines;
-        return SuperweaponTimers.Draw(lines, player => { var house = Match.Colors.Of(player); return new WndColor(house.Red, house.Green, house.Blue, 255); }, Match.Tick, width, height, _controlBarRoot.Rect.Y, _textMeasure);
+        return SuperweaponTimers.Draw(lines, player => { var house = Match.Colors.Of(player); return new WndColor(house.Red, house.Green, house.Blue, 255); }, Match.Tick, width, height, _controlBarRoot.Rect.Y, _textMeasure, TextStyle, _scaleOptions);
     }
 
     private ImmutableArray<UiDrawCommand> BuildDynamicCommands()
