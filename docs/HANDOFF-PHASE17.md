@@ -67,3 +67,47 @@ Zahlen mit Commit-Hashes, die Tabelle der Nur-Befehle-Läufe je Karte (vorher/na
 ## Hinweis zur Planänderung vom 5. Oktober 2026
 
 Der Projektinhaber hat Mehrspieler über Dedicated Server, 60 Hz und eine parametrisierte Tickrate in den Scope genommen (`docs/MULTIPLAYER-PLAN.md`, Phasen 18–29). Für diesen Auftrag folgt daraus: (1) Das Programm vergleicht ab Phase 18 „vorher/nachher“ über Hashes; jede Regelkorrektur dieser Phase sollte deshalb *vor* dem Start von Phase 18 gemergt sein. (2) Punkt 3 (Leistung) wird in Phase 18/19 mit einem Profil echter Matches fortgeführt; hier genügt die ruhige Vorher/Nachher-Messung. (3) Der frühere Folgeschritt (Patch-Integration, Qualität, Paket) ist jetzt Phase 30.
+
+## Rest der Phase 17 (geschrieben am 5. Oktober 2026 am Ende der ersten Sitzung)
+
+Phase 17 ist **begonnen, nicht abgeschlossen**. Dieser Abschnitt ersetzt die Zahlen weiter oben, wo sie abweichen. Das Programm Tickrate/Festkomma/Mehrspieler (docs/HANDOFF-PHASE18.md ff.) verlangt, dass währenddessen niemand das Verhalten der Simulation ändert: die Punkte 2 bis 5 unten ändern es und gehören deshalb **vor** Phase 18 oder hinter das Programm (docs/HANDOFF-PHASE30.md Punkt 2) – das entscheidet der Projektinhaber.
+
+### Stand (5. Oktober 2026, alles am gemergten Stand gemessen)
+
+- **Build und Tests:** sauberer `dotnet build CnCNew.slnx` (bin/obj von `CnCNew.Client.Stride` gelöscht) **0 Warnungen** (seit `c231e5c` stuft `build/StrideAssetCompile.targets` die zwei Stride-Hinweismuster als Werkzeugausgabe ein; vorher 11); alle Testprogramme grün, `Game.Tests` nur im Release-Build (429 s ruhig, 31 min unter Last); `compat-check` 751; 183/205 Module, 2.115/2.115 Objekte.
+- **Versionen und Referenzwerte:** `CommandTypes.Version` **14**, Replay **11** (neu `AttackMoveCommand`), `WorldSnapshot` 9, `MissionSnapshot` 2. Retail-Referenzmatch Sieger FactionGLA bei **Tick 14.490**, Endhash `23B4B25DF62765D8`, Kette `DE5849AF9F8493C4`; Stresstest `56882F763EABEF67` / `B8E663493F2C73D5`; 16 KI-Läufe **11 entschieden** (Tabelle mit Hashes: `SIMULATION-CORE.md` §33.6), alle deterministisch.
+- **Kampagne:** `drive` (60.000 Ticks) Sieg 24/24, Niederlage 24/24; `audit --ticks 900` 24/24 deterministisch und identisch nach Speichern/Laden, 0 Treffer auf fehlende Typen, Ausschalt-Endproben 13/24 und 15/24; `reachability` sauber 24/24 und 24/24.
+- **Nur-Befehle-Agent** (`drive --commands-only --outcome victory`, 0 Weltschreibungen): 15.000 Ticks **1 von 24** (`MD_GLA04`), 60.000 Ticks (18 Karten) **3 Karten** (`MD_GLA04`, `MD_CHI01` @18.492, `MD_CHI02` @29.605). Nicht mit 60.000 Ticks gemessen: `Training01`, `MD_USA01`–`03`, `MD_GLA02`; `MD_USA04` nach 3.300 s abgebrochen.
+- **Was Phase 17 getan hat:** Zielerwerb der Einheiten und Angriffsmarsch in der Simulation (`DriveCombat`, `SkirmishAi.Fire` entfallen); jede erste unerfüllte Bedingung der Siegketten ist ein Befehl (Angriff, Eroberung mit Upgrade-Kauf, Späher, Wissenschaft, UI-Signal), ein Nur-Befehle-Lauf kommandiert nur eigene Einheiten; Agent mit Lagern nicht feindlicher Seiten, Versorgungszentrum zuerst, Angriffszielen aus den Missionszielen; HUD-Meldungsliste, Letterbox nach Original, Tippton, Skirmish-Einträge, Tooltip mit Anforderungen.
+- **Von keinem Menschen gesehen, gehört oder gespielt:** alles aus Phase 15, 16 und 17 – Welt-Darstellung, Ton (Ausgabe über `waveOut`), Mauszeiger, Wegpunkte, Texte, Shell-Übergänge, Mission im Client, Meldungsliste, Letterbox, Tooltips, selbst feuernde Einheiten, Angriffsmarsch. Die Demos (`scripts/demo-*.ps1`) warten auf Rückmeldung; liefert der Mensch Befunde, gehen sie vor (Eintrag in `docs/DEMO-FINDINGS.md` mit Nummer, Ursache, Status; Ursache an Daten/Referenzcode belegen).
+
+### Offene Arbeit (in dieser Reihenfolge)
+
+1. **Befunde des Menschen zuerst**, falls er welche liefert. Sonst weiter mit 2.
+2. **Der Agent gewinnt Gefechte (Kern).** Die Tabelle in `SCRIPT-ENGINE.md` §9 „Phase 17“ sagt je Karte, woran es scheitert; die drei Ursachen in dieser Reihenfolge angehen, jede mit Messung auf allen Karten (15.000 und 60.000 Ticks, je Karte einzeln, `--timeline N` zeigt Geld/Heer/Gebäude je Seite):
+   - *Heereszusammensetzung:* `SkirmishAi.ProduceArmy` wählt zufällig aus dem gerade Bezahlbaren – überwiegend Infanterie, die an Gatling-Kanonen und Bunkern stirbt (`GC_TankGeneral`: nach 48.000 Ticks 1 Einheit, 25 Credits). Wert statt Zufall, Reichweite gegen die gesehene Basisverteidigung (Artillerie, Luft), Sparen statt Kleinkauf; Referenz: `AIPlayer`/`AISkirmishPlayer` Teamauswahl, `AIData.ini`.
+   - *Nachschub:* kein zweites Versorgungszentrum, wenn das erste Lager leer ist – dieselbe Ursache wie die fünf Patts der KI-Läufe (§33.6). Das hebt beide Zahlen.
+   - *Missionsabläufe:* Eskorte (`MD_GLA01`), Abwehrwellen (`MD_CHI04`), Transport über Wasser (`MD_USA04`), Einheiten, die das Skript erst später übergibt (`MD_USA03`, `Training01`), Eroberung ohne Eroberungseinheit (`MD_GLA02`).
+   Jede Änderung an `SkirmishAi` verschiebt die 16 KI-Läufe: danach alle 16 neu messen (`SimTool ai-match … --trace N --trace-army`), die Tabelle in §33.6 fortschreiben.
+3. **KI-Schwierigkeit:** „Easy/Medium/Hard Army“ im Skirmish-Setup starten dieselbe KI (`GameShell.SkirmishDifficultyIgnored` zählt es). Entweder eine belegte Schwierigkeitsachse (`AIData.ini`, `AISkirmishPlayer`) oder die Einträge ehrlich zusammenlegen.
+4. **Leistung:** Profil der Missionsläufe (`SimTool mission-run` auf `MD_GLA05`: 147,9 s für 3.000 Ticks Werkzeuglaufzeit, 9 % mehr als vor dem Zielerwerb; `MD_USA05` 66,7 s); heißeste Module benennen, ohne Hash-Änderung beschleunigen. Der Stresstest zeigt keinen Schwund (61 µs je Tick, ruhig).
+5. **Näherungen**, nach Nutzen: Verfolgung aus dem Leerlauf für Computerspieler, `AIData.ini` typisieren, Feuern aus Containern, `ATTACK_NEEDS_LINE_OF_SIGHT` (alle in `SIMULATION-CORE.md` §33.5); `PowerSabotage`-Verbraucher; Bauplatz-Ablehnungsgründe (die Simulation meldet einen, das Original fünf); Befehlsknopf-Popup `ControlBarPopupDescription.wnd` statt Zeiger-Tooltip.
+6. **Durchklicken mit einem Menschen** (Shell → Kampagne → Mission → Speichern/Laden → Abschluss; Skirmish-Setup → Match → Ergebnis): Bericht je Bildschirm „ging / ging nicht / ging mit Mängeln“.
+
+### Werkzeuge und Fallstricke aus Phase 17
+
+- `CampaignTool drive … --commands-only --outcome victory --explain --timeline N` (Zeitleiste je Seite), `--watch TEXT` (Objekte), `--watch-flag`. Je Karte einzeln mit `--map "/NAME.map"` (der Schrägstrich trennt `MD_USA01` von `MD_USA01_CINE`).
+- Ein Komma in einem `-File`-Argument von `pwsh` wird kein Array: Listen als eine Zeichenkette übergeben und im Skript teilen.
+- `git commit -F -` mit Here-String funktioniert in PowerShell nicht: Nachricht in eine Datei im Scratchpad schreiben, `git commit -F <datei>`.
+- Python-Editskripte brauchen neben `newline=''` auch `encoding='utf-8'` (Standard hier ist cp1252).
+- `tests/CnCNew.Simulation.Tests/Tests.World.cs` und `tests/CnCNew.Game.Tests/baselines/screens.txt` sind CRLF.
+- Werkzeuge für lange Läufe aus einer Kopie starten (`Copy-Item tools/…/bin/Release/net10.0 <scratchpad>/…`), sonst sperrt der Lauf den nächsten Build; ein Test aus einem `-o`-Verzeichnis findet die Repo-Wurzel nicht (`SourceRules` schlägt dann fehl – im Baum laufen lassen).
+- In dieser Sitzung kamen während der Arbeit zwei Commits einer anderen Sitzung auf `main` (`c231e5c`, `9b67a1f`): vor jedem Commit `git log -3` ansehen, Fremdes bewahren.
+
+### Nicht verhandelbare Regeln (unverändert, siehe `CLAUDE.md`)
+
+Schichten, keine stillen Fallbacks, Determinismus (`SourceRules`), `TreatWarningsAsErrors` mit **0** Warnungen, Kompatibilitätsbasislinie nur mit Begründung ändern, fremden Code nur lesen und zitieren, Bestandszahlen neu messen, nur lokal, kein Remote, nichts pushen, mehrere fachlich geschlossene Commits, Zeilenenden pro Datei erhalten (CRLF: `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, die zwei Testdateien oben; nur mit `pwsh`), Hintergrundläufe mit Timeout, pro `dotnet build` ein Projekt. Darstellungs-, Ton- und Bedienungsänderungen gelten erst als bestanden, wenn ein Mensch sie abgenommen hat.
+
+### Abschlussbericht
+
+Zahlen mit Commit-Hashes, die Tabelle der Nur-Befehle-Läufe je Karte (vorher/nachher, 15.000 und 60.000 Ticks), die 16 KI-Läufe, Profil und Leistungsmessung (ruhig), Ergebnisse des Durchklickens, aktualisierte Doku; `docs/HANDOFF-PHASE18.md` (Ausgangslage) wird fortgeschrieben, nicht neu geschrieben. Der Bericht nennt ausdrücklich, was *nicht* belegt ist.
