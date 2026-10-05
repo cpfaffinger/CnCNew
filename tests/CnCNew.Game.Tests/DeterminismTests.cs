@@ -40,6 +40,68 @@ internal static class DeterminismTests
     {
         // --determinism-only D8 runs just the tests of one finding.
         var harness = new TestHarness(nameof(DeterminismTests)) { OnlyPrefix = Array.IndexOf(args, "--determinism-only") is var only and >= 0 && only + 1 < args.Length ? args[only + 1] : null };
+        harness.Run("D1: a synthetic skeleton's rest poses are computed exactly, rounded half-to-even, and agree with the single-precision path", () =>
+        {
+            static W3dPivot Pivot(string name, int parent, Vector3 translation, Quaternion rotation) => new(name, parent, translation, Vector3.Zero, rotation);
+            var quarter = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2);
+            var twelfth = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 6);
+            var skeleton = W3dSkeleton.FromHierarchy(new W3dHierarchy(0x00040001, "SYNTH", Vector3.Zero,
+            [
+                Pivot("ROOTTRANSFORM", -1, new Vector3(999f, 999f, 999f), quarter),      // bone 0 is the identity whatever the file says
+                Pivot("Base", 0, new Vector3(10f, 20f, 0f), quarter),
+                Pivot("Child", 1, new Vector3(5f, 0f, 2f), Quaternion.Identity),
+                Pivot("Turned", 0, Vector3.Zero, twelfth),
+                Pivot("Arm", 3, new Vector3(16f, 0f, 0f), Quaternion.Identity),
+                Pivot("Ties", 0, new Vector3(1.03125f, 1.09375f, -1.03125f), Quaternion.Identity),
+                Pivot("Back", 0, Vector3.Zero, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI)),
+                Pivot("Tilted", 2, new Vector3(0.3f, -7.77f, 1.234f), Quaternion.Normalize(new Quaternion(0.1f, -0.2f, 0.3f, 0.9f))),
+            ], []));
+            BonePose Pose(string name) => ModelGeometryLoader.RestPose(skeleton, skeleton.FindBone(name));
+            static Fixed Sixteenths(int count) => Fixed.FromDecimal(count / 16m);
+            static Fixed Heading(int count) => Fixed.FromDecimal(count / 1024m);
+
+            TestHarness.Assert(Pose("ROOTTRANSFORM") == new BonePose(Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero), $"bone 0 is the identity: {Pose("ROOTTRANSFORM")}");
+            // π/2 = 1608.495... steps of 1/1024 rad: the boundary at 1608.5 is 4.6e-6 rad away, the reason the arc tangent is computed far finer than the table.
+            TestHarness.Assert(Pose("Base") == new BonePose(Sixteenths(160), Sixteenths(320), Fixed.Zero, Heading(1608)), $"Base: {Pose("Base")}");
+            // (5, 0, 2) turned a quarter about z and moved by (10, 20, 0).
+            TestHarness.Assert(Pose("Child") == new BonePose(Sixteenths(160), Sixteenths(400), Sixteenths(32), Heading(1608)), $"Child: {Pose("Child")}");
+            // 16 along x turned by 30 degrees: (13.856, 8, 0) -> 222/16 and 128/16; the heading 0.5236 rad -> 536/1024.
+            TestHarness.Assert(Pose("Arm") == new BonePose(Sixteenths(222), Sixteenths(128), Fixed.Zero, Heading(536)), $"Arm: {Pose("Arm")}");
+            // Exact halves of a sixteenth go to the even neighbour: 16.5 -> 16, 17.5 -> 18, -16.5 -> -16.
+            TestHarness.Assert(Pose("Ties") == new BonePose(Sixteenths(16), Sixteenths(18), Sixteenths(-16), Fixed.Zero), $"Ties: {Pose("Ties")}");
+            // Half a turn: +π or -π by the sign of a sine that is zero up to rounding; both round to ±3217/1024.
+            TestHarness.Assert(Pose("Back").Heading.Abs() == Heading(3217), $"Back: {Pose("Back")}");
+
+            // Every bone against the single-precision matrices the table used to be read from (the two paths may only differ on a rounding boundary; none of these is one).
+            for (var bone = 0; bone < skeleton.BoneCount; bone++)
+            {
+                var matrix = skeleton.RestWorldTransforms[bone];
+                var exact = ModelGeometryLoader.RestPose(skeleton, bone);
+                static Fixed Old(float value, decimal step) => Fixed.FromDecimal(decimal.Round((decimal)value * step) / step);
+                var single = new BonePose(Old(matrix.M41, 16m), Old(matrix.M42, 16m), Old(matrix.M43, 16m), Old(MathF.Atan2(matrix.M12, matrix.M11), 1024m));
+                if (skeleton.BoneNames[bone] == "Back") continue;
+                TestHarness.Assert(exact == single, $"{skeleton.BoneNames[bone]}: exact {exact}, single precision {single}");
+            }
+
+            // The whole-number arc tangent against the double-precision one over a spread of vectors in all quadrants.
+            var state = 0x2545F491u;
+            var compared = 0;
+            for (var sample = 0; sample < 20_000; sample++)
+            {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                var y = ((int)(state & 0xFFFF) - 0x8000) / 256f;
+                var x = ((int)((state >> 16) & 0xFFFF) - 0x8000) / 256f;
+                var angle = Math.Atan2(y, x) * 1024.0;
+                if (Math.Abs(angle - Math.Floor(angle) - 0.5) < 1e-6) continue;
+                var steps = ModelGeometryLoader.HeadingSteps(BitConverter.SingleToInt32Bits(y), BitConverter.SingleToInt32Bits(x));
+                TestHarness.Assert(steps == (long)Math.Round(angle, MidpointRounding.ToEven), $"atan2({y}, {x}): {steps} steps, double precision {angle}");
+                compared++;
+            }
+            TestHarness.Assert(compared > 19_000, $"the arc tangent was compared ({compared})");
+        });
+
         var index = Array.IndexOf(args, "--content-dir");
         if (index < 0 || index + 1 >= args.Length)
         {
@@ -50,6 +112,13 @@ internal static class DeterminismTests
         var directory = args[index + 1];
         var full = args.Contains("--determinism-full");
         var data = GameData.Load(directory);
+
+        harness.Run("D1: the bone table of the retail airfields has its golden hash", () =>
+        {
+            var geometry = data.Templates.Geometry;
+            Console.WriteLine($"       bone table: {geometry.Airfields.Count} airfields, SHA-256 {geometry.Fingerprint}");
+            TestHarness.Assert(geometry.Fingerprint == BoneTableGolden, $"the bone table changed: {geometry.Fingerprint} instead of {BoneTableGolden}");
+        });
 
         harness.Run("D3: a world restored at every checkpoint runs like the continuous one (reference match, two AI matches)", () =>
         {

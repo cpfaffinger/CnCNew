@@ -15,13 +15,18 @@ namespace CnCNew.Game.Data;
 /// Reads the airfield bones the simulation needs (<see cref="ModelGeometry"/>) from the base-pose skeletons of the airfields' draw models. The simulation may not open model files, so this is where
 /// <c>ParkingPlaceBehavior::buildInfo</c>'s <c>getSingleLogicalBonePosition</c> calls are answered: for every object with a <c>ParkingPlaceBehavior</c> the default condition state's model is loaded
 /// and the bones <c>Runway{c}Parking{r}</c>, <c>Runway{c}Park{r}Han</c>, <c>Runway{c}Prep{r}</c>, <c>RunwayStart{c}</c>, <c>RunwayEnd{c}</c> (and <c>HeliPark01</c> when present) are read from the rest pose with an
-/// identity root (the "pristine" bones of <c>W3DModelDraw</c>). A missing model or bone is an error, never a default. Coordinates are rounded to 1/16 unit and headings to 1/1024 radian, so a
-/// last-bit difference of the single-precision matrix products cannot change the table (and with it the world fingerprint) from one machine to the next.
+/// identity root (the "pristine" bones of <c>W3DModelDraw</c>). A missing model or bone is an error, never a default. Coordinates are rounded to 1/16 unit and headings to 1/1024 radian.
+/// <para>
+/// The table is part of the world fingerprint, so it has to be the same on every machine. It is therefore not read from the skeleton's single-precision matrices
+/// (products that depend on the vector instructions and on fused multiply-add of the processor, and an arc tangent of the C runtime) but computed from the
+/// pivots' numbers as the file states them, without rounding (<see cref="ExactTransform"/>), with a whole-number arc tangent (<see cref="ExactBoneMath"/>).
+/// </para>
 /// </summary>
 public static class ModelGeometryLoader
 {
-    private const decimal PositionStep = 16m;
-    private const decimal HeadingStep = 1024m;
+    /// <summary>Coordinates are multiples of 2^-4 = 1/16 unit, headings of 2^-10 = 1/1024 radian.</summary>
+    private const int PositionBits = 4;
+    private const int HeadingBits = 10;
 
     public static ModelGeometry Load(CompiledDefinitionGraph graph, ObjectVisualCatalog visuals, ContentFileSystem content)
     {
@@ -74,9 +79,14 @@ public static class ModelGeometryLoader
         {
             var index = skeleton.FindBone(name);
             if (index < 0) throw new InvalidDataException($"{template}: model '{modelName}' has no bone '{name}'.");
-            var matrix = skeleton.RestWorldTransforms[index];
-            return new BonePose(Position(matrix.M41), Position(matrix.M42), Position(matrix.M43),
-                Fixed.FromDecimal(decimal.Round((decimal)MathF.Atan2(matrix.M12, matrix.M11) * HeadingStep) / HeadingStep));
+            try
+            {
+                return RestPose(skeleton, index);
+            }
+            catch (InvalidDataException exception)
+            {
+                throw new InvalidDataException($"{template}: model '{modelName}', bone '{name}': {exception.Message}");
+            }
         }
 
         var parking = ImmutableArray.CreateBuilder<BonePose>(rows * cols);
@@ -102,5 +112,34 @@ public static class ModelGeometryLoader
         return new AirfieldLayout(rows, cols, parking.MoveToImmutable(), hangar.MoveToImmutable(), prep.MoveToImmutable(), start.MoveToImmutable(), end.MoveToImmutable(), pad);
     }
 
-    private static Fixed Position(float value) => Fixed.FromDecimal(decimal.Round((decimal)value * PositionStep) / PositionStep);
+    /// <summary>
+    /// A bone's rest pose in model space with an identity root: position and heading (the angle of the bone's x axis in the ground plane,
+    /// <c>atan2(M12, M11)</c>), rounded to the table's resolution. Computed exactly from the pivots (<c>world = local * parentWorld</c>, bone 0 is the identity).
+    /// </summary>
+    public static BonePose RestPose(W3dSkeleton skeleton, int bone)
+    {
+        ArgumentNullException.ThrowIfNull(skeleton);
+        if (bone < 0 || bone >= skeleton.BoneCount) throw new ArgumentOutOfRangeException(nameof(bone));
+        var world = ExactTransform.Identity;
+        for (var index = bone; index > 0;)
+        {
+            var pivot = skeleton.RestPivots[index];
+            world = world.Then(ExactTransform.FromPivot(
+                Exact(pivot.Rotation.X), Exact(pivot.Rotation.Y), Exact(pivot.Rotation.Z), Exact(pivot.Rotation.W),
+                Exact(pivot.Translation.X), Exact(pivot.Translation.Y), Exact(pivot.Translation.Z)));
+            var parent = skeleton.Parents[index];
+            if (parent < 0 || parent >= index) throw new InvalidDataException($"bone {index} has the parent {parent}; a parent must precede its children.");
+            index = parent;
+        }
+
+        return new BonePose(Step(world.X.RoundToStep(PositionBits), PositionBits), Step(world.Y.RoundToStep(PositionBits), PositionBits), Step(world.Z.RoundToStep(PositionBits), PositionBits),
+            Step(ExactBoneMath.Atan2ToStep(world.M12, world.M11, HeadingBits), HeadingBits));
+
+        // The one place a single of the model file enters the exact domain: only its bits are read.
+        static Dyadic Exact(float component) => Dyadic.FromSingleBits(BitConverter.SingleToInt32Bits(component));
+        static Fixed Step(long count, int bits) => Fixed.FromDecimal(count / new decimal(1L << bits));
+    }
+
+    /// <summary>The angle of the vector (x, y), both given as single-precision bits, in steps of 1/1024 radian: the arc tangent of the table, exposed for its test.</summary>
+    public static long HeadingSteps(int yBits, int xBits) => ExactBoneMath.Atan2ToStep(Dyadic.FromSingleBits(yBits), Dyadic.FromSingleBits(xBits), HeadingBits);
 }

@@ -117,9 +117,8 @@ static partial class Tests
         // -- floating point that never becomes a simulation input
         new("Formats/LegacyAssetReaders.cs", RuleFloatConversion, "var value = BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(offset)));", "ValidateWak: import-time validation of a walk-mesh file, the number is only tested for finiteness"),
         new("Formats/LegacyAssetReaders.cs", RuleFloatConversion, "if (!float.IsFinite(value)) throw new InvalidDataException($\"WAK contains", "ValidateWak: import-time validation, see above"),
-        // -- D1, open until the bone table is computed exactly: the airfield bones are single-precision matrix products and an arc tangent of the C runtime
-        new("Game/Data/ModelGeometryLoader.cs", RuleFloatConversion, "MathF.Atan2(matrix.M12, matrix.M11)", "finding D1 (docs/DETERMINISM-FINDINGS.md): not fixed yet"),
-        new("Game/Data/ModelGeometryLoader.cs", RuleFloatConversion, "private static Fixed Position(float value)", "finding D1 (docs/DETERMINISM-FINDINGS.md): not fixed yet"),
+        // -- the bone table (D1): the one place a single of a model file enters the exact domain; only its bits are read, no arithmetic is done on it
+        new("Game/Data/ModelGeometryLoader.cs", RuleFloatConversion, "static Dyadic Exact(float component) => Dyadic.FromSingleBits(BitConverter.SingleToInt32Bits(component));", "the parameter type of the bits-only entry point"),
     ];
 
     /// <summary>Scans the files and returns one line per hit that no exception covers, and one per exception that covered nothing.</summary>
@@ -186,7 +185,8 @@ static partial class Tests
         var files = Directory.EnumerateFiles(Path.Combine(root, "src", "CnCNew.Data"), "*.cs", SearchOption.AllDirectories)
             .Append(Path.Combine(root, "src", "CnCNew.Formats", "SageMapDecoder.cs"))
             .Append(Path.Combine(root, "src", "CnCNew.Formats", "LegacyAssetReaders.cs"))
-            .Append(Path.Combine(root, "src", "CnCNew.Game", "Data", "ModelGeometryLoader.cs"));
+            .Append(Path.Combine(root, "src", "CnCNew.Game", "Data", "ModelGeometryLoader.cs"))
+            .Append(Path.Combine(root, "src", "CnCNew.Game", "Data", "ExactBoneMath.cs"));
         var violations = ScanSources(root, files, FeederRules, FeederExceptions);
         Check.That(violations.Count == 0, $"Forbidden constructs in the code that feeds the simulation ({violations.Count}):\n  " + string.Join("\n  ", violations));
 

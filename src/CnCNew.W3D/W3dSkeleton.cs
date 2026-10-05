@@ -14,12 +14,14 @@ public sealed class W3dSkeleton
 
     private readonly FrozenDictionary<string, int> _boneIndices;
 
-    private W3dSkeleton(string name, ImmutableArray<string> boneNames, ImmutableArray<int> parents, ImmutableArray<Matrix4x4> restTransforms)
+    private W3dSkeleton(string name, ImmutableArray<string> boneNames, ImmutableArray<int> parents, ImmutableArray<Matrix4x4> restTransforms,
+        ImmutableArray<(Vector3 Translation, Quaternion Rotation)> restPivots)
     {
         Name = name;
         BoneNames = boneNames;
         Parents = parents;
         RestTransforms = restTransforms;
+        RestPivots = restPivots;
         var indices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < boneNames.Length; index++)
         {
@@ -47,6 +49,12 @@ public sealed class W3dSkeleton
     /// <summary>Base pose relative to the parent: <c>R(pivot rotation) * T(pivot translation)</c>. Bone 0's is ignored.</summary>
     public ImmutableArray<Matrix4x4> RestTransforms { get; }
 
+    /// <summary>
+    /// The base pose as the file states it: translation and rotation of every pivot relative to its parent, the numbers untouched. Whoever needs a result that
+    /// is the same on every machine (the airfield bones of the simulation) computes from these, not from the single-precision matrices.
+    /// </summary>
+    public ImmutableArray<(Vector3 Translation, Quaternion Rotation)> RestPivots { get; }
+
     /// <summary>Base pose in model space with an identity root ("pristine" bones of W3DModelDraw).</summary>
     public ImmutableArray<Matrix4x4> RestWorldTransforms { get; }
 
@@ -58,20 +66,22 @@ public sealed class W3dSkeleton
         var names = ImmutableArray.CreateBuilder<string>(hierarchy.Pivots.Length);
         var parents = ImmutableArray.CreateBuilder<int>(hierarchy.Pivots.Length);
         var rest = ImmutableArray.CreateBuilder<Matrix4x4>(hierarchy.Pivots.Length);
+        var pivots = ImmutableArray.CreateBuilder<(Vector3, Quaternion)>(hierarchy.Pivots.Length);
         foreach (var pivot in hierarchy.Pivots)
         {
             names.Add(pivot.Name);
             parents.Add(pivot.ParentIndex);
+            pivots.Add((pivot.Translation, pivot.Rotation));
             // HTreeClass::read_pivots: BaseTransform = Translate(t) * Build_Matrix3D(q) in column-vector form.
             rest.Add(Matrix4x4.CreateFromQuaternion(pivot.Rotation) * Matrix4x4.CreateTranslation(pivot.Translation));
         }
 
-        return new W3dSkeleton(hierarchy.Name, names.MoveToImmutable(), parents.MoveToImmutable(), rest.MoveToImmutable());
+        return new W3dSkeleton(hierarchy.Name, names.MoveToImmutable(), parents.MoveToImmutable(), rest.MoveToImmutable(), pivots.MoveToImmutable());
     }
 
     /// <summary>The single-pivot tree the original builds for render objects without a hierarchy (HTreeClass::Init_Default).</summary>
     public static W3dSkeleton CreateDefault(string name)
-        => new(name, [DefaultRootName], [-1], [Matrix4x4.Identity]);
+        => new(name, [DefaultRootName], [-1], [Matrix4x4.Identity], [(Vector3.Zero, Quaternion.Identity)]);
 
     /// <summary>Case-insensitive exact lookup; -1 if the bone does not exist.</summary>
     public int FindBone(string name)
