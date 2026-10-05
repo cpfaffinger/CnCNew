@@ -129,6 +129,21 @@ static partial class Tests
         fades.Render(block);
         Check.Near(block[0], 0.9, 1e-5, "Fade-out ramps down …");
         Check.That(block[2 * 10] == 0f && fades.ActiveVoiceCount == 0 && fades.Statistics.Stopped == 1, "… and releases the voice.");
+
+        // A script's per-event volume reaches a voice that is already playing (AudioManager::adjustVolumeOfPlayingAudio).
+        using var live = new SoftwareMixer(new MixerOptions(SampleRate: 1000));
+        var loud = live.Play(PlayRequest.ForBuffer(Dc(0.4f, 1000, 10000), AudioBus.Ui));
+        var other = live.Play(PlayRequest.ForBuffer(Dc(0.4f, 1000, 10000), AudioBus.Ui));
+        var samples = new float[2 * 200];
+        live.Render(samples);
+        Check.Near(samples[^2], 0.8, 1e-6, "Two voices add up.");
+        live.SetVoiceVolume(loud, 0.25f);
+        live.Render(samples);
+        Check.Near(samples[^2], 0.5, 1e-5, "A new volume for one voice changes only that voice.");
+        live.SetVoiceVolume(other, 0f);
+        live.SetVoiceVolume(new VoiceHandle(999_999), 0.5f);
+        live.Render(samples);
+        Check.Near(samples[^2], 0.1, 1e-5, "A voice at volume zero is silent; a handle that does not exist is ignored.");
     }
 
     public static void MusicCrossfade()
