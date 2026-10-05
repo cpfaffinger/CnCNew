@@ -361,6 +361,7 @@ run.Test("Acquisition: an ordered attack is left alone, a move ends an attack, a
 run.Test("Attack-move: the unit stops for a fight and marches on; a computer player's unit walks to its victim", Tests.AttackMoveStopsFightsAndMarchesOn);
 run.Test("Attack-move: snapshot mid-fight, determinism and the replay of AttackMoveCommand", Tests.AttackMoveSnapshotDeterminismAndReplay);
 run.Test("Determinism D4: script state, diagnoses and forwarded arguments do not depend on the culture", Tests.ScriptStateIsCultureIndependent);
+run.Test("Determinism D7: the waypoint order is total", Tests.WaypointOrderIsTotal);
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));

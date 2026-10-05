@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using CnCNew.Data.World;
 using CnCNew.Simulation.Mission;
+using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
@@ -89,5 +90,25 @@ static partial class Tests
                 differing.Add($"{CultureLabel(culture)}: hash {(result.Hash == reference.Hash ? "equal" : "differs")}, outputs {(result.Outputs == reference.Outputs ? "equal" : result.Outputs)}, diagnostics {(result.Diagnostics == reference.Diagnostics ? "equal" : result.Diagnostics)}");
         }
         Check.That(differing.Count == 0, "The script state depends on the culture of the machine:\n         " + string.Join("\n         ", differing));
+    }
+
+    /// <summary>
+    /// D7: waypoints were sorted by name, x and y only. Waypoints that share those (the World Builder lets a designer stack two of the same name) then came out in
+    /// an order that depended on their order in the file and on the runtime's unstable sort. The same set of waypoints must give the same terrain.
+    /// </summary>
+    public static void WaypointOrderIsTotal()
+    {
+        // 48 stacked waypoints of one name (more than the insertion-sort threshold of Array.Sort) that differ only in height, plus a few distinct ones.
+        var stacked = Enumerable.Range(0, 48).Select(index => ("Stack", 100m, 200m, (decimal)(index * 7 % 48))).ToArray();
+        (string, decimal, decimal, decimal)[] others = [("Alpha", 10m, 10m, 0m), ("Zulu", 300m, 50m, 0m), ("Stack", 100m, 210m, 0m)];
+        var forward = TerrainMap.Build(SyntheticMaps.Build(60, 40, 1, waypoints: [..others, ..stacked]), "stack");
+        var backward = TerrainMap.Build(SyntheticMaps.Build(60, 40, 1, waypoints: [..stacked.Reverse(), ..others.Reverse()]), "stack");
+        Check.That(forward.Waypoints.Length == 51 && backward.Waypoints.Length == 51, "Every waypoint is kept.");
+        // The synthetic builder numbers the waypoints in file order; the comparison below leaves the id out because it differs between the two files by construction.
+        var same = forward.Waypoints.Select(point => (point.Name, point.X, point.Y, point.Z)).SequenceEqual(backward.Waypoints.Select(point => (point.Name, point.X, point.Y, point.Z)));
+        Check.That(same, "The same waypoints in another file order give another waypoint order: "
+            + string.Join(" ", forward.Waypoints.Skip(1).Take(6).Select(point => point.Z.ToDecimal())) + " ... against " + string.Join(" ", backward.Waypoints.Skip(1).Take(6).Select(point => point.Z.ToDecimal())) + " ...");
+        for (var index = 1; index < forward.Waypoints.Length; index++)
+            Check.That(TerrainMap.CompareWaypoints(forward.Waypoints[index - 1], forward.Waypoints[index]) < 0, "The order is strict: no two waypoints tie.");
     }
 }

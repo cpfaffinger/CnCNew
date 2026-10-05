@@ -141,12 +141,27 @@ public sealed class TerrainMap
             var id = obj.Properties.TryGetInt("waypointID", out var waypointId) ? waypointId : -1;
             waypoints.Add(new TerrainWaypoint(waypointName, Fixed.FromDecimal(obj.X), Fixed.FromDecimal(obj.Y), Fixed.FromDecimal(obj.Z), id, id >= 0 && links.TryGetValue(id, out var next) ? next : -1));
         }
-        waypoints.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name) is var order and not 0 ? order : a.X.Raw.CompareTo(b.X.Raw) is var xo and not 0 ? xo : a.Y.Raw.CompareTo(b.Y.Raw));
+        waypoints.Sort(CompareWaypoints);
 
         return new TerrainMap(name, map, cellsX, cellsY, water.ToImmutable(), waypoints.ToImmutable());
     }
 
     /// <summary><c>classifyMapCell</c>: CLIFF when the height cell is a cliff, WATER when any of its four corners lies below the water level at that corner.</summary>
+    /// <summary>
+    /// The canonical waypoint order. It compares every field, so two waypoints that tie are equal in everything and their order cannot matter: the sort is not
+    /// stable, and a comparison that left a field out would make the order of such waypoints a property of the file order and of the runtime's sort routine.
+    /// </summary>
+    public static int CompareWaypoints(TerrainWaypoint a, TerrainWaypoint b)
+    {
+        var order = string.CompareOrdinal(a.Name, b.Name);
+        if (order == 0) order = a.X.Raw.CompareTo(b.X.Raw);
+        if (order == 0) order = a.Y.Raw.CompareTo(b.Y.Raw);
+        if (order == 0) order = a.Z.Raw.CompareTo(b.Z.Raw);
+        if (order == 0) order = a.Id.CompareTo(b.Id);
+        if (order == 0) order = a.NextId.CompareTo(b.NextId);
+        return order;
+    }
+
     private CellFlags Classify(MapBlendTiles blend, int cx, int cy)
     {
         var flags = CellFlags.None;
