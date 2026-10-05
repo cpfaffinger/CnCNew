@@ -33,7 +33,7 @@ internal static class CampaignShellTests
 
         var contentDir = ContentDir(args);
         if (contentDir is null) Console.WriteLine("SKIP CampaignShellTests real-campaign flow (pass --content-dir <dir>)");
-        else harness.Run("Main menu -> USA -> New Game -> difficulty reaches a real mission with its real briefing text", () => RealCampaignFlow(contentDir));
+        else harness.Run("Main menu -> USA -> difficulty reaches a real mission with its real briefing text", () => RealCampaignFlow(contentDir));
         return harness.Failures;
     }
 
@@ -58,12 +58,14 @@ internal static class CampaignShellTests
         ShellTestInput.Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
         TestHarness.Assert(!shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonUSA")!.IsHidden, "USA is reachable from the single-player submenu");
         ShellTestInput.Click(shell, "MainMenu.wnd:ButtonUSA");
-        TestHarness.Assert(shell.CurrentScreen is CampaignFactionScreen, "USA opens its campaign faction screen (New/Load/Back)");
-
-        ShellTestInput.Click(shell, "SinglePlayerMenu.wnd:ButtonNew");
-        TestHarness.Assert(shell.CurrentScreen is DifficultySelectScreen, "New Game asks the difficulty before starting");
-        ShellTestInput.Click(shell, "DifficultySelect.wnd:RadioButtonHard");
-        ShellTestInput.Click(shell, "DifficultySelect.wnd:ButtonOk");
+        // MainMenu.cpp: USA does not open a screen, the difficulty question is part of MainMenu.wnd (MapBorder4). SinglePlayerMenu.wnd/DifficultySelect.wnd are not used by Zero Hour.
+        TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && shell.Stack.Count == 1, "USA asks the difficulty on the main menu itself, no screen is pushed");
+        var tree = shell.CurrentScreen.Tree;
+        TestHarness.Assert(!tree.FindByName("MainMenu.wnd:MapBorder4")!.IsHidden && tree.FindByName("MainMenu.wnd:ButtonEasy")!.IsVisible && !tree.FindByName("MainMenu.wnd:StaticTextSelectDifficulty")!.IsHidden,
+            "the difficulty frame with Easy/Medium/Hard and its caption is shown");
+        TestHarness.Assert(tree.FindByName("MainMenu.wnd:MapBorder")!.IsHidden && !tree.FindByName("MainMenu.wnd:ButtonUSA")!.IsVisible, "the single-player column is gone behind it");
+        TestHarness.Assert(!tree.FindByName("MainMenu.wnd:WinGrowMarker")!.IsHidden, "the large USA logo stands beside the question (the grow marker shows it)");
+        ShellTestInput.Click(shell, "MainMenu.wnd:ButtonHard");
 
         TestHarness.Assert(shell.Phase == ShellPhase.MissionBriefing, "accepting a difficulty starts the first mission and shows its briefing");
         TestHarness.Assert(shell.CurrentScreen is MissionBriefingScreen, "the briefing screen is on top");

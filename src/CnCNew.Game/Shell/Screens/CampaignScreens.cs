@@ -3,152 +3,96 @@ using CnCNew.Game.Campaign;
 using CnCNew.Game.Save;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Game.Shell.Screens;
 
 /// <summary>
-/// <c>SinglePlayerMenu.wnd</c>: New Game/Load Game/Back for one faction's campaign (reached from <c>MainMenu.wnd</c>'s
-/// USA/GLA/China buttons, see <see cref="Screens.MainMenuScreen"/>). New Game asks the difficulty
-/// (<see cref="DifficultySelectScreen"/>) and then starts <see cref="CampaignDefinition.FirstMission"/>; Load Game opens
-/// the shared <see cref="LoadGameScreen"/> (not filtered by faction: the retail file does not either).
-/// </summary>
-public sealed class CampaignFactionScreen : ShellScreen
-{
-    private readonly CampaignDefinition _campaign;
-
-    public CampaignFactionScreen(GameShell shell, CampaignDefinition campaign) : base(shell, ShellLayoutNames.SinglePlayerMenu)
-    {
-        _campaign = campaign;
-        Tree.Register("SinglePlayerMenuSystem", OnSystem);
-        Tree.Register("SinglePlayerMenuInput", OnInput);
-    }
-
-    private void OnSystem(UiWindowTree tree, UiEvent e)
-    {
-        if (e.Kind != UiEventKind.ButtonSelected) return;
-        switch (e.Source)
-        {
-            case "SinglePlayerMenu.wnd:ButtonNew":
-                Shell.PlaySound(ShellUiSounds.ButtonClick);
-                Shell.OpenDifficultySelect(difficulty => Shell.BeginCampaign(_campaign, difficulty));
-                break;
-            case "SinglePlayerMenu.wnd:ButtonLoad":
-                Shell.PlaySound(ShellUiSounds.ButtonClick);
-                Shell.OpenLoadGame();
-                break;
-            case "SinglePlayerMenu.wnd:ButtonBack":
-                Shell.PlaySound(ShellUiSounds.ButtonClick);
-                Shell.CloseTop();
-                break;
-        }
-    }
-
-    private void OnInput(UiWindowTree tree, UiEvent e)
-    {
-        if (e.Kind == UiEventKind.Key && e.Value == (int)UiKey.Escape) Shell.CloseTop();
-    }
-}
-
-/// <summary>
-/// <c>ChallengeMenu.wnd</c>: picks one of the <c>IsChallengeCampaign</c> campaigns of <c>Campaign.ini</c> (the nine
-/// Generals' Challenge opponents) across its twelve <c>GeneralPosition</c> slots (the retail file has room for more
-/// generals than Zero Hour ships; the unused slots stay disabled). Challenge mode fixes the difficulty to Hard (the
-/// retail shell does not ask either: the bios already encode the intended difficulty curve), so there is no
-/// <see cref="DifficultySelectScreen"/> step here. The bio panel shows the campaign's name label and its first
-/// mission's <c>GeneralName</c>; the full biography text fields (strategy/birthplace/DOB) have no source data in this
-/// build and are left at their shipped placeholder text.
+/// <c>ChallengeMenu.wnd</c> (<c>ChallengeMenu.cpp</c>): the nine Generals' Challenge opponents of <c>ChallengeMode.ini</c> on twelve <c>GeneralPositionN</c> buttons
+/// (<see cref="CampaignCatalog.Personas"/>; a persona that does not start enabled or has no campaign keeps its button hidden, as <c>setEnabledButtons</c> does).
+/// The difficulty was chosen on the main menu before this screen opened (<c>setupGameStart</c> with <c>launchChallengeMenu</c>:
+/// <c>TheChallengeGenerals->setCurrentDifficulty</c>) and is what the campaign starts with. Like <c>ChallengeMenuInit</c> the biography panel and the Play button
+/// stay hidden until a general is picked (<c>setGeneralBio</c>); then the four lines (<c>BioNameEntry</c>, <c>BioDOBEntry</c>, <c>BioBirthplaceEntry</c>,
+/// <c>BioStrategyEntry</c>, repurposed by the original for name, rank, branch and strategy) show the persona's labels at once; the original types them out one
+/// letter per frame (<c>updateBio</c>). The buttons show the medallions of the general's player template (<c>MedallionRegular</c>/<c>Hilite</c>/<c>Select</c>); the
+/// biography portrait (<c>BioPortrait</c>) and the voice/preview sounds are not implemented.
 /// </summary>
 public sealed class ChallengeSelectScreen : ShellScreen
 {
     private const int Slots = 12;
-    private readonly ImmutableArray<CampaignDefinition> _challenges;
+    private readonly ImmutableArray<CampaignDefinition?> _slots;
+    private readonly ImmutableArray<ChallengePersona?> _personas;
+    private readonly ScriptDifficulty _difficulty;
     private int _selected = -1;
 
-    public ChallengeSelectScreen(GameShell shell) : base(shell, ShellLayoutNames.ChallengeMenu)
+    public ChallengeSelectScreen(GameShell shell, ScriptDifficulty difficulty) : base(shell, ShellLayoutNames.ChallengeMenu)
     {
-        _challenges = [.. (shell.Campaigns?.Campaigns ?? []).Where(campaign => campaign.IsChallenge).OrderBy(campaign => campaign.Name, StringComparer.Ordinal)];
+        _difficulty = difficulty;
+        var personas = ImmutableArray.CreateBuilder<ChallengePersona?>(Slots);
+        var slots = ImmutableArray.CreateBuilder<CampaignDefinition?>(Slots);
+        for (var index = 0; index < Slots; index++)
+        {
+            var persona = shell.Campaigns?.Personas.FirstOrDefault(candidate => candidate.Index == index);
+            var campaign = persona is { StartsEnabled: true } ? shell.Campaigns!.Find(persona.Campaign) : null;
+            personas.Add(persona);
+            slots.Add(campaign);
+        }
+        _personas = personas.ToImmutable();
+        _slots = slots.ToImmutable();
         Tree.Register("ChallengeMenuSystem", OnSystem);
         Tree.Register("ChallengeMenuInput", OnInput);
-        for (var index = 0; index < Slots; index++) TryW($"GeneralPosition{index}")?.SetEnabled(index < _challenges.Length);
-        RefreshBio();
+        var names = new ShellSkirmishText(Shell.Data.Graph, Shell.TextSource);
+        for (var index = 0; index < Slots; index++)
+        {
+            var button = TryW($"GeneralPosition{index}");
+            button?.SetEnabled(_slots[index] is not null);
+            button?.SetHidden(_slots[index] is null);
+            if (button is null || _slots[index] is null || names.Medallions(_personas[index]!.PlayerTemplate) is not { } medallion) continue;
+            // setEnabledButtons: the general's medallions replace the placeholder images, and "image size keeps changing, so it'll drive the window size directly".
+            button.SetDrawImage(WndDrawDataKind.Enabled, 0, medallion.Regular);
+            button.SetDrawImage(WndDrawDataKind.Hilite, 0, medallion.Hilite);
+            button.SetDrawImage(WndDrawDataKind.Hilite, 1, medallion.Select);
+            button.SetDrawImage(WndDrawDataKind.Disabled, 1, medallion.Select);
+            if (Tree.Services.Images is { } images && images.TryGetSize(medallion.Regular, out var width, out _)) button.SetDesignSize(width, width);
+        }
+        W("GeneralsBioParent").SetHidden(true);
+        W("ButtonPlay").SetHidden(true);
         // ChallengeMenuInit: the menu fades in (FULLFADE of GadgetParent); ChallengeMenuShutdown reverses it.
         Transitions?.SetGroup("ChallengeMenuFade");
     }
 
     protected override string? ExitTransitionGroup => "ChallengeMenuFade";
 
-    private void RefreshBio()
+    private void Select(int index)
     {
-        var hasSelection = _selected >= 0 && _selected < _challenges.Length;
-        W("ButtonPlay").SetEnabled(hasSelection);
-        if (!hasSelection) return;
-        var campaign = _challenges[_selected];
-        TryW("BioNameEntry")?.SetText(Text(campaign.NameLabel));
-        var general = campaign.Missions.Length > 0 ? campaign.Missions[0].GeneralName : string.Empty;
-        if (general.Length > 0) TryW("BioBirthplaceEntry")?.SetText(general);
+        _selected = index;
+        var persona = _personas[index]!;
+        W("GeneralsBioParent").SetHidden(false);
+        W("ButtonPlay").SetHidden(false);
+        W("BioNameEntry").SetText(Text(persona.BioName));
+        W("BioDOBEntry").SetText(Text(persona.BioRank));
+        W("BioBirthplaceEntry").SetText(Text(persona.BioBranch));
+        W("BioStrategyEntry").SetText(Text(persona.BioStrategy));
     }
 
     private void OnSystem(UiWindowTree tree, UiEvent e)
     {
         if (e.Kind != UiEventKind.ButtonSelected) return;
-        for (var index = 0; index < _challenges.Length; index++)
+        for (var index = 0; index < Slots; index++)
         {
-            if (e.Source != $"ChallengeMenu.wnd:GeneralPosition{index}") continue;
+            if (e.Source != $"ChallengeMenu.wnd:GeneralPosition{index}" || _slots[index] is null) continue;
             Shell.PlaySound(ShellUiSounds.ButtonClick);
-            _selected = index;
-            RefreshBio();
+            Select(index);
             return;
         }
         switch (e.Source)
         {
             case "ChallengeMenu.wnd:ButtonPlay":
-                if (_selected < 0 || _selected >= _challenges.Length) return;
+                if (_selected < 0 || _slots[_selected] is not { } campaign) return;
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
-                Shell.BeginCampaign(_challenges[_selected], ScriptDifficulty.Hard);
+                Shell.BeginCampaign(campaign, _difficulty);
                 break;
             case "ChallengeMenu.wnd:ButtonBack":
-                Shell.PlaySound(ShellUiSounds.ButtonClick);
-                Shell.CloseTop();
-                break;
-        }
-    }
-
-    private void OnInput(UiWindowTree tree, UiEvent e)
-    {
-        if (e.Kind == UiEventKind.Key && e.Value == (int)UiKey.Escape) Shell.CloseTop();
-    }
-}
-
-/// <summary><c>DifficultySelect.wnd</c>: Easy/Medium/Hard, defaulting to Medium like the retail dialog. Reports the
-/// choice to <paramref name="onAccept"/> and closes; Cancel just closes.</summary>
-public sealed class DifficultySelectScreen : ShellScreen
-{
-    private readonly Action<ScriptDifficulty> _onAccept;
-    private ScriptDifficulty _difficulty = ScriptDifficulty.Normal;
-
-    public DifficultySelectScreen(GameShell shell, Action<ScriptDifficulty> onAccept) : base(shell, ShellLayoutNames.DifficultySelect)
-    {
-        _onAccept = onAccept;
-        Tree.Register("DifficultySelectSystem", OnSystem);
-        Tree.Register("DifficultySelectInput", OnInput);
-        W("RadioButtonMedium").SetChecked(true);
-    }
-
-    private void OnSystem(UiWindowTree tree, UiEvent e)
-    {
-        if (e.Kind != UiEventKind.ButtonSelected) return;
-        switch (e.Source)
-        {
-            case "DifficultySelect.wnd:RadioButtonEasy": _difficulty = ScriptDifficulty.Easy; break;
-            case "DifficultySelect.wnd:RadioButtonMedium": _difficulty = ScriptDifficulty.Normal; break;
-            case "DifficultySelect.wnd:RadioButtonHard": _difficulty = ScriptDifficulty.Hard; break;
-            case "DifficultySelect.wnd:ButtonOk":
-                Shell.PlaySound(ShellUiSounds.ButtonClick);
-                var chosen = _difficulty;
-                Shell.CloseTop();
-                _onAccept(chosen);
-                break;
-            case "DifficultySelect.wnd:ButtonCancel":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 Shell.CloseTop();
                 break;
@@ -176,6 +120,9 @@ public sealed class LoadGameScreen : ShellScreen
     {
         Tree.Register("SaveLoadMenuSystem", OnSystem);
         Tree.Register("SaveLoadMenuInput", OnInput);
+        // SaveLoadMenuFullScreenInit: winSetFocus(SaveLoadMenu). That child carries the INPUTCALLBACK (the root of the file has none), so Escape only
+        // reaches it from there; without a gadget focus the keys would otherwise start at the root and find nobody.
+        Tree.KeyboardHome = W("SaveLoadMenu");
         W("ButtonSave").SetEnabled(false);
         HideConfirmPanels();
         Refresh();
@@ -327,6 +274,9 @@ public sealed class MissionBannerScreen : ShellScreen
 /// </summary>
 public sealed class MissionResultScreen : ShellScreen
 {
+    /// <summary>Shown over the victory/defeat banner (<see cref="MissionBannerScreen"/>), which is its backdrop here.</summary>
+    public override bool HidesScreensBelow => false;
+
     public MissionResultScreen(GameShell shell, MissionRun run, CampaignController? controller, MissionConclusion? conclusion) : base(shell, ShellLayoutNames.ScoreScreen)
     {
         Tree.Register("ScoreScreenSystem", OnSystem);

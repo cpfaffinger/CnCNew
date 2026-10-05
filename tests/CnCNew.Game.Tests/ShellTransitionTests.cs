@@ -348,31 +348,87 @@ internal static class ShellTransitionTests
 
     private static void CampaignButtons(GameData data)
     {
-        var shell = NewShell(data, animate: true);
-        Settle(shell);
-        var restingMain = Dump(NewShell(data, animate: false));
-        foreach (var (button, screenName) in new[] { ("ButtonUSA", "CampaignFactionScreen"), ("ButtonGLA", "CampaignFactionScreen"), ("ButtonChina", "CampaignFactionScreen"), ("ButtonChallenge", "ChallengeSelectScreen") })
+        // The difficulty question of USA/GLA/China/Challenge is part of MainMenu.wnd (MapBorder4, ButtonEasy/Medium/Hard/DiffBack, MainMenu.cpp), not a screen of its own.
+        var plain = NewShell(data, animate: false);
+        var restingMain = Dump(plain);
+        Click(plain, "MainMenu.wnd:ButtonSinglePlayer");
+        var restingSingle = Dump(plain);
+        foreach (var button in new[] { "ButtonUSA", "ButtonGLA", "ButtonChina", "ButtonChallenge" })
         {
+            Click(plain, $"MainMenu.wnd:{button}");
+            var restingDifficulty = Dump(plain);
+            TestHarness.Assert(plain.CurrentScreen is MainMenuScreen && plain.Stack.Count == 1, $"{button}: without animation the difficulty question is shown at once, on the main menu");
+            TestHarness.Assert(restingDifficulty != restingSingle, $"{button}: the difficulty question looks different from the single-player column");
+            Click(plain, "MainMenu.wnd:ButtonDiffBack");
+            // The Challenge branch's groups fade the title logo out and never bring it back (see MainMenuScreen.OpenDifficulty), so only the other three restore the column exactly.
+            var backFromDifficulty = Dump(plain);
+            TestHarness.Assert((backFromDifficulty == restingSingle) == (button != "ButtonChallenge"), $"{button}: Back restores the single-player column (transition-free), the Challenge branch without the logo");
+
+            var shell = NewShell(data, animate: true);
+            Settle(shell);
             Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
             Settle(shell);
             Click(shell, $"MainMenu.wnd:{button}");
-            TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && shell.IsAnimating, $"{button}: the menu flashes out first");
+            TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && shell.IsAnimating, $"{button}: the column gives way with a transition");
+            Settle(shell);
+            TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && shell.Stack.Count == 1, $"{button}: the difficulty question belongs to the main menu");
+            TestHarness.Assert(Dump(shell) == restingDifficulty, $"{button}: the settled difficulty question equals the transition-free one" + Diff(restingDifficulty, Dump(shell)));
+            TestHarness.Assert(shell.CurrentScreen.Transitions!.MissingWindows.Count == 0, $"{button}: no missing windows");
+            Click(shell, "MainMenu.wnd:ButtonDiffBack");
+            Settle(shell);
+            TestHarness.Assert(Dump(shell) == backFromDifficulty, $"{button}: Back, settled, equals the transition-free single-player column" + Diff(backFromDifficulty, Dump(shell)));
+
+            // Escape from the question goes back as well.
+            Click(shell, $"MainMenu.wnd:{button}");
+            Settle(shell);
+            shell.HandleInput(new KeyEvent(++_clockMs, KeyCode.Escape, IsDown: true));
+            Settle(shell);
+            TestHarness.Assert(Dump(shell) == backFromDifficulty, $"{button}: Escape from the difficulty question returns to the single-player column");
+
+            Click(shell, $"MainMenu.wnd:{button}");
+            Settle(shell);
+            var menu = shell.CurrentScreen.Transitions!;
+            Click(shell, "MainMenu.wnd:ButtonEasy");
+            TestHarness.Assert(shell.CurrentScreen is MainMenuScreen && shell.IsAnimating, $"{button}: choosing a difficulty plays the exit groups first");
+            var fades = menu.CurrentGroup == "FadeWholeScreen" || menu.PendingGroup == "FadeWholeScreen";
             var steps = 0;
             while (shell.CurrentScreen is MainMenuScreen && steps++ < 300) shell.Update(Frame);
-            TestHarness.Assert(shell.CurrentScreen.GetType().Name == screenName, $"{button} opens {screenName}, not {shell.CurrentScreen.GetType().Name}");
-            Settle(shell);
-            Click(shell, shell.CurrentScreen is ChallengeSelectScreen ? "ChallengeMenu.wnd:ButtonBack" : "SinglePlayerMenu.wnd:ButtonBack");
-            Settle(shell);
-            TestHarness.Assert(shell.CurrentScreen is MainMenuScreen, $"{button}: back on the main menu");
-            Settle(shell);
-            TestHarness.Assert(Dump(shell) == restingMain, $"{button}: after the round trip the menu rests on the root again" + Diff(restingMain, Dump(shell)));
+            if (button == "ButtonChallenge")
+            {
+                TestHarness.Assert(shell.CurrentScreen is ChallengeSelectScreen, "Challenge opens the challenge menu after the question");
+                TestHarness.Assert(menu.RequestedGroups.Contains("MainMenuDifficultyMenuBack") && !fades, "Challenge reverses the difficulty groups, no fade to black");
+                Settle(shell);
+                Click(shell, "ChallengeMenu.wnd:GeneralPosition0");
+                Click(shell, "ChallengeMenu.wnd:ButtonPlay");
+            }
+            else
+            {
+                TestHarness.Assert(fades, $"{button}: the screen fades to black before the mission starts");
+            }
+            TestHarness.Assert(shell.Phase == ShellPhase.MissionBriefing && shell.CurrentScreen is MissionBriefingScreen, $"{button}: the mission briefing follows");
+            for (var i = 0; i < 400 && shell.Phase == ShellPhase.MissionBriefing; i++) shell.Update(0.1);
+            var started = shell.DrainOutputs().OfType<StartMissionOutput>().SingleOrDefault();
+            TestHarness.Assert(started?.Controller is { } controller && controller.Progress.Difficulty == CnCNew.Simulation.Scripting.ScriptDifficulty.Easy, $"{button}: the chosen difficulty reached the mission");
         }
-        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
-        Settle(shell);
-        Click(shell, "MainMenu.wnd:ButtonSingleBack");
-        Settle(shell);
-        TestHarness.Assert(Dump(shell) == restingMain, "the Back button returns to the root");
-        Note(shell);
+
+        // Challenge and back: the menu rests on the root again.
+        var round = NewShell(data, animate: true);
+        Settle(round);
+        Click(round, "MainMenu.wnd:ButtonSinglePlayer");
+        Settle(round);
+        Click(round, "MainMenu.wnd:ButtonChallenge");
+        Settle(round);
+        Click(round, "MainMenu.wnd:ButtonMedium");
+        var more = 0;
+        while (round.CurrentScreen is MainMenuScreen && more++ < 300) round.Update(Frame);
+        TestHarness.Assert(round.CurrentScreen is ChallengeSelectScreen, "the challenge menu opened");
+        Settle(round);
+        Click(round, "ChallengeMenu.wnd:ButtonBack");
+        Settle(round);
+        TestHarness.Assert(round.CurrentScreen is MainMenuScreen, "back on the main menu");
+        Settle(round);
+        TestHarness.Assert(Dump(round) == restingMain, "after the challenge round trip the menu rests on the root again" + Diff(restingMain, Dump(round)));
+        Note(round);
     }
 
     private static void ScoreScreenCountsUp(GameData data)

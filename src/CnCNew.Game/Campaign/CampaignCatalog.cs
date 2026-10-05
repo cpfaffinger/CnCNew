@@ -33,6 +33,13 @@ public sealed record CampaignDefinition(
 }
 
 /// <summary>
+/// One <c>GeneralPersonaN</c> block of <c>ChallengeMode.ini</c> (<c>ChallengeGenerals.cpp</c>): the general behind the <c>GeneralPositionN</c> button of <c>ChallengeMenu.wnd</c>.
+/// The four <c>Bio*</c> values are CSF labels that fill the biography panel of the menu (<c>setGeneralBio</c>: name, rank, branch, strategy). <see cref="Campaign"/> is
+/// the literal <c>unimplemented</c> for the personas the shipped game has no campaign for.
+/// </summary>
+public sealed record ChallengePersona(int Index, string PlayerTemplate, string Campaign, bool StartsEnabled, string BioName, string BioRank, string BioBranch, string BioStrategy);
+
+/// <summary>
 /// The campaigns of <c>Data/INI/Campaign.ini</c>. The file is not part of the compiled definition graph (the load plan lists it as
 /// not loaded): its format is a fixed, flat subset of the INI syntax (<c>Key Value</c> lines, <c>Campaign</c>/<c>Mission</c> blocks closed by
 /// <c>END</c>), so it is read here, by the layer that owns campaign flow. Unknown keys are not skipped silently: they are collected in
@@ -40,11 +47,15 @@ public sealed record CampaignDefinition(
 /// </summary>
 public sealed class CampaignCatalog
 {
-    private CampaignCatalog(ImmutableArray<CampaignDefinition> campaigns, ImmutableArray<string> unknownKeys)
+    private CampaignCatalog(ImmutableArray<CampaignDefinition> campaigns, ImmutableArray<string> unknownKeys, ImmutableArray<ChallengePersona> personas = default)
     {
         Campaigns = campaigns;
         UnknownKeys = unknownKeys;
+        Personas = personas.IsDefault ? [] : personas;
     }
+
+    /// <summary>The generals of <c>ChallengeMode.ini</c> by position (empty until <see cref="WithPersonas"/> read the file).</summary>
+    public ImmutableArray<ChallengePersona> Personas { get; }
 
     public ImmutableArray<CampaignDefinition> Campaigns { get; }
 
@@ -63,8 +74,10 @@ public sealed class CampaignCatalog
     /// </summary>
     public CampaignCatalog WithPersonas(string challengeModeText)
     {
-        var personas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        string template = string.Empty;
+        var list = ImmutableArray.CreateBuilder<ChallengePersona>();
+        int index = -1;
+        string template = string.Empty, campaign = string.Empty, name = string.Empty, rank = string.Empty, branch = string.Empty, strategy = string.Empty;
+        var enabled = false;
         foreach (var raw in challengeModeText.Split('\n'))
         {
             var line = raw;
@@ -72,14 +85,31 @@ public sealed class CampaignCatalog
             if (comment >= 0) line = line[..comment];
             line = line.Trim();
             var (key, value) = Split(line);
-            if (key.Equals("PlayerTemplate", StringComparison.OrdinalIgnoreCase)) template = value;
-            else if (key.Equals("Campaign", StringComparison.OrdinalIgnoreCase) && template.Length > 0)
+            if (key.StartsWith("GeneralPersona", StringComparison.OrdinalIgnoreCase) && int.TryParse(key["GeneralPersona".Length..], NumberStyles.None, CultureInfo.InvariantCulture, out var number))
             {
-                personas.TryAdd(value, template);
-                template = string.Empty;
+                index = number;
+                template = campaign = name = rank = branch = strategy = string.Empty;
+                enabled = false;
+            }
+            else if (key.Equals("PlayerTemplate", StringComparison.OrdinalIgnoreCase)) template = value;
+            else if (key.Equals("Campaign", StringComparison.OrdinalIgnoreCase)) campaign = value;
+            else if (key.Equals("StartsEnabled", StringComparison.OrdinalIgnoreCase)) enabled = Bool(value);
+            else if (key.Equals("BioNameString", StringComparison.OrdinalIgnoreCase)) name = value;
+            else if (key.Equals("BioRankString", StringComparison.OrdinalIgnoreCase)) rank = value;
+            else if (key.Equals("BioBranchString", StringComparison.OrdinalIgnoreCase)) branch = value;
+            else if (key.Equals("BioStrategyString", StringComparison.OrdinalIgnoreCase)) strategy = value;
+            else if (key.Equals("END", StringComparison.OrdinalIgnoreCase) && index >= 0 && campaign.Length > 0)
+            {
+                list.Add(new ChallengePersona(index, template, campaign, enabled, name, rank, branch, strategy));
+                index = -1;
+                campaign = string.Empty;
             }
         }
-        return new CampaignCatalog([..Campaigns.Select(campaign => campaign.IsChallenge && campaign.PlayerFaction.Length == 0 && personas.TryGetValue(campaign.Name, out var faction) ? campaign with { PlayerFaction = faction } : campaign)], UnknownKeys);
+        var personas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var persona in list)
+            if (persona.PlayerTemplate.Length > 0) personas.TryAdd(persona.Campaign, persona.PlayerTemplate);
+        return new CampaignCatalog([..Campaigns.Select(campaign => campaign.IsChallenge && campaign.PlayerFaction.Length == 0 && personas.TryGetValue(campaign.Name, out var faction) ? campaign with { PlayerFaction = faction } : campaign)],
+            UnknownKeys, [..list.OrderBy(persona => persona.Index)]);
     }
 
     public static CampaignCatalog Parse(Stream stream)

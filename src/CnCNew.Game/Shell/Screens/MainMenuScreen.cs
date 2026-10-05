@@ -1,4 +1,8 @@
+using CnCNew.Game.Campaign;
+using CnCNew.Simulation.Scripting;
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Transitions;
+using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Game.Shell.Screens;
 
@@ -9,10 +13,14 @@ namespace CnCNew.Game.Shell.Screens;
 /// routed messages, just lifecycle names in the WND file), so this constructor performs the equivalent of
 /// <c>W3DMainMenuInit</c> directly: hide every submenu group except the entry one.
 /// <para>
-/// USA/GLA/China/Challenge and Load Game are wired to the campaign/savegame flow (<c>docs/CAMPAIGN-AND-SAVEGAMES.md</c>
-/// §7). The three faction "recent save" shortcuts on the root have no equivalent in this build (there is no concept of
-/// "most recent save per faction") and stay hidden like after <c>MainMenuInit</c>; <c>ButtonMultiplayer</c> stays out of scope (see
-/// <c>docs/GAME-SHELL.md</c>) and stays disabled too.
+/// USA/GLA/China open the difficulty submenu of this very layout (<c>MapBorder4</c>: <c>ButtonEasy/Medium/Hard/DiffBack</c>, groups
+/// <c>MainMenuDifficultyMenu*</c>), as in <c>MainMenu.cpp</c>; choosing a difficulty starts the campaign (<c>FadeWholeScreen</c>, then the mission
+/// briefing). Challenge asks the same question and then pushes <c>ChallengeMenu.wnd</c> (<c>setupGameStart</c> with <c>launchChallengeMenu</c>). There is no
+/// intermediate New/Load page: <c>SinglePlayerMenu.wnd</c> is a leftover of the original Generals that nothing in Zero Hour opens
+/// (<c>SinglePlayerMenu.cpp</c> exists, no <c>Shell::push</c> names it); loading a game is the Load button of the main menu (<c>MapBorder3</c>).
+/// The three faction "recent save" shortcuts on the root have no equivalent in this build (there is no concept of
+/// "most recent save per faction"; Zero Hour's <c>MainMenu.cpp</c> never shows them either) and stay hidden like after <c>MainMenuInit</c>;
+/// <c>ButtonMultiplayer</c> stays out of scope (see <c>docs/GAME-SHELL.md</c>) and stays disabled too.
 /// </para>
 /// <para>
 /// With window transitions (<see cref="ShellScreen.Transitions"/>, the shell created with <c>animateTransitions</c>) the menu animates like
@@ -26,7 +34,25 @@ namespace CnCNew.Game.Shell.Screens;
 /// </summary>
 public sealed class MainMenuScreen : ShellScreen
 {
-    private enum Submenu { Main, SinglePlayer, LoadReplay }
+    private enum Submenu { Main, SinglePlayer, LoadReplay, Difficulty }
+
+    /// <summary>
+    /// One of the four buttons of the single-player submenu that lead to the difficulty question (<c>MainMenu.cpp</c>, <c>buttonUSAID</c>/<c>buttonGLAID</c>/
+    /// <c>buttonChinaID</c>/<c>buttonChallengeID</c>) with the transition groups its branches play (<c>WindowTransitions.ini</c>). <see cref="Campaign"/> is the
+    /// <c>Campaign.ini</c> name started by it; null for the Challenge button, which opens the challenge menu instead (<c>TheCampaignManager->setCampaign</c> is not called).
+    /// </summary>
+    private sealed record Faction(string Button, string? Campaign, string Logo, string HoverGroup, string BackFromSinglePlayer, string Difficulty, string DifficultyBack, string FromDifficulty);
+
+    private static readonly Faction[] Factions =
+    [
+        new("ButtonUSA", "USA", "WinFactionUS", "MainMenuFactionUS", "MainMenuSinglePlayerMenuBackUS", "MainMenuDifficultyMenuUS", "MainMenuDifficultyMenuUSBack", "MainMenuSinglePlayerUSAMenuFromDiff"),
+        new("ButtonGLA", "GLA", "WinFactionGLA", "MainMenuFactionGLA", "MainMenuSinglePlayerMenuBackGLA", "MainMenuDifficultyMenuGLA", "MainMenuDifficultyMenuGLABack", "MainMenuSinglePlayerGLAMenuFromDiff"),
+        new("ButtonChina", "China", "WinFactionChina", "MainMenuFactionChina", "MainMenuSinglePlayerMenuBackChina", "MainMenuDifficultyMenuChina", "MainMenuDifficultyMenuChinaBack", "MainMenuSinglePlayerChinaMenuFromDiff"),
+        new("ButtonChallenge", null, "WinFactionTraining", "MainMenuFactionTraining", "MainMenuSinglePlayerMenuBackTraining", "MainMenuDifficultyMenuTraining", "MainMenuDifficultyMenuTrainingBack", "MainMenuSinglePlayerTrainingMenuFromDiff"),
+    ];
+
+    /// <summary>The faction whose difficulty question is open (<c>showSide</c> of <c>MainMenu.cpp</c>).</summary>
+    private Faction? _faction;
 
     private Submenu _submenu = Submenu.Main;
 
@@ -93,6 +119,11 @@ public sealed class MainMenuScreen : ShellScreen
         _dontAllow = false;
         _campaignSelected = false;
         _pendingLogo = null;
+        _faction = null;
+        _campaign = null;
+        W("StaticTextSelectDifficulty").SetHidden(true);
+        W("WinGrowMarker").SetHidden(true);
+        W("Logo").SetHidden(false);
         W("MapBorder2").SetHidden(false);
         W("MapBorder").SetHidden(true);
         W("MapBorder1").SetHidden(true);
@@ -177,38 +208,111 @@ public sealed class MainMenuScreen : ShellScreen
     }
 
     /// <summary>
-    /// Opens another screen: with transitions the menu first flashes out (<paramref name="removeGroup"/> dropped, <paramref name="reverseGroup"/>
-    /// reversed) and <paramref name="open"/> runs when the groups are done; without them it runs at once.
+    /// Opens another screen: with transitions the menu first plays <paramref name="play"/> (the flash-out groups) and <paramref name="open"/> runs when the groups
+    /// are done; without them it runs at once. <c>Shell::push</c> only starts the shutdown of the top screen, <c>MainMenuUpdate</c> finishes it
+    /// (<c>isAnimFinished</c> and <c>TheTransitionHandler->isFinished</c>) and the new layout is created then.
     /// </summary>
-    private void LeaveFor(Action open, string? removeGroup, string reverseGroup)
+    private void LeaveFor(Action open, Action<WindowTransitionHandler> play)
     {
+        // The screen below is shut down for good: when it is closed the menu starts over (MainMenuInit runs again, here OnRevealed), with or without animation.
+        _leaving = true;
         if (Transitions is not { } transitions)
         {
             open();
             return;
         }
         _campaignSelected = true;
-        _leaving = true;
         _open = open;
-        if (removeGroup is not null) transitions.Remove(removeGroup);
-        transitions.Reverse(reverseGroup);
+        play(transitions);
     }
 
-    private void OpenCampaign(string name, string backGroup)
+    private void LeaveFor(Action open, string? removeGroup, string reverseGroup)
+        => LeaveFor(open, transitions =>
+        {
+            if (removeGroup is not null) transitions.Remove(removeGroup);
+            transitions.Reverse(reverseGroup);
+        });
+
+    private CampaignDefinition? _campaign;
+
+    /// <summary>The USA/GLA/China/Challenge button: the single-player column gives way to the difficulty question (<c>MainMenu.cpp</c>, <c>GBM_SELECTED</c> of <c>buttonUSAID</c> and the like).</summary>
+    private void OpenDifficulty(Faction faction)
     {
-        if (Shell.Campaigns?.Find(name) is not { } campaign) return;
+        CampaignDefinition? campaign = null;
+        if (faction.Campaign is not null && (campaign = Shell.Campaigns?.Find(faction.Campaign)) is null) return;
         Shell.PlaySound(ShellUiSounds.ButtonClick);
-        LeaveFor(() => Shell.OpenCampaignFaction(campaign), FactionGroupOf(backGroup), backGroup);
+        _campaign = campaign;
+        _faction = faction;
+        _submenu = Submenu.Difficulty;
+        _campaignSelected = true;
+        _pendingLogo = null;
+        if (Transitions is not { } transitions)
+        {
+            // Resting state of the groups below: the single-player frame and its five logos gone, the difficulty frame with its text shown, and the faction's
+            // logo grown into WinGrowMarker (MAINMENUSCALEUP ends by handing the disabled image of WinFaction<X>Medium to the marker and showing it).
+            W("MapBorder").SetHidden(true);
+            W("MapBorder4").SetHidden(false);
+            W("StaticTextSelectDifficulty").SetHidden(false);
+            foreach (var logo in FactionLogos) W(logo).SetHidden(true);
+            W("WinGrowMarker").SetEnabledImage0(W(faction.Logo + "Medium").Definition.GetDrawData(WndDrawDataKind.Disabled)[0].Image);
+            W("WinGrowMarker").SetHidden(false);
+            // MainMenuSinglePlayerMenuBackTraining fades the title logo out (WINFADE, hidden at the end of its reversed run) and no later group of the Challenge
+            // branch brings it back (MainMenuSinglePlayerTrainingMenuFromDiff does not name it): it returns with the entry group when the menu is rebuilt.
+            if (campaign is null) W("Logo").SetHidden(true);
+            return;
+        }
+        transitions.SetGroup(faction.HoverGroup);
+        if (campaign is not null) transitions.Remove(faction.HoverGroup, skipPending: true);
+        W(faction.Logo).SetHidden(true);
+        transitions.Reverse(faction.BackFromSinglePlayer);
+        transitions.SetGroup(faction.Difficulty);
     }
 
-    private static string FactionGroupOf(string backGroup) => backGroup switch
+    /// <summary>Easy/Medium/Hard (<c>checkCDBeforeCampaign</c> without the CD check, <c>prepareCampaignGame</c>, <c>setupGameStart</c>): a campaign fades out and starts; Challenge keeps the choice for its menu.</summary>
+    private void ChooseDifficulty(ScriptDifficulty difficulty)
     {
-        "MainMenuSinglePlayerMenuBackUS" => "MainMenuFactionUS",
-        "MainMenuSinglePlayerMenuBackGLA" => "MainMenuFactionGLA",
-        "MainMenuSinglePlayerMenuBackChina" => "MainMenuFactionChina",
-        "MainMenuSinglePlayerMenuBackTraining" => "MainMenuFactionTraining",
-        _ => "MainMenuFactionSkirmish",
-    };
+        if (_faction is not { } faction) return;
+        Shell.PlaySound(ShellUiSounds.ButtonClick);
+        if (faction.Campaign is null)
+        {
+            LeaveFor(() => Shell.OpenChallengeSelect(difficulty), transitions =>
+            {
+                _dontAllow = true;
+                transitions.Reverse("MainMenuDifficultyMenuBack");
+                transitions.Reverse(faction.Difficulty);
+            });
+            return;
+        }
+        var campaign = _campaign ?? throw new InvalidOperationException("The difficulty question of a campaign button is open without its campaign.");
+        LeaveFor(() => Shell.BeginCampaign(campaign, difficulty), transitions =>
+        {
+            _dontAllow = true;
+            transitions.Reverse("MainMenuDifficultyMenuBack");
+            transitions.SetGroup("FadeWholeScreen");
+        });
+    }
+
+    /// <summary><c>buttonDiffBackID</c> and <c>diffReverseSide</c>: back to the single-player column, with the faction's logo returning to its place.</summary>
+    private void CloseDifficulty()
+    {
+        if (_faction is not { } faction) return;
+        _campaign = null;
+        _faction = null;
+        _campaignSelected = false;
+        _submenu = Submenu.SinglePlayer;
+        if (Transitions is not { } transitions)
+        {
+            W("MapBorder4").SetHidden(true);
+            W("StaticTextSelectDifficulty").SetHidden(true);
+            W("WinGrowMarker").SetHidden(true);
+            W("MapBorder").SetHidden(false);
+            foreach (var logo in FactionLogos) W(logo).SetHidden(false);
+            return;
+        }
+        _dontAllow = true;
+        transitions.Reverse(faction.DifficultyBack);
+        transitions.SetGroup(faction.FromDifficulty);
+    }
 
     private void OnSystem(UiWindowTree tree, UiEvent e)
     {
@@ -230,14 +334,13 @@ public sealed class MainMenuScreen : ShellScreen
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 LeaveFor(Shell.OpenSkirmishSetup, "MainMenuFactionSkirmish", "MainMenuSinglePlayerMenuBackSkirmish");
                 break;
-            case "MainMenu.wnd:ButtonUSA": if (!_campaignSelected) OpenCampaign("USA", "MainMenuSinglePlayerMenuBackUS"); break;
-            case "MainMenu.wnd:ButtonGLA": if (!_campaignSelected) OpenCampaign("GLA", "MainMenuSinglePlayerMenuBackGLA"); break;
-            case "MainMenu.wnd:ButtonChina": if (!_campaignSelected) OpenCampaign("China", "MainMenuSinglePlayerMenuBackChina"); break;
-            case "MainMenu.wnd:ButtonChallenge":
-                if (_campaignSelected) break;
-                Shell.PlaySound(ShellUiSounds.ButtonClick);
-                LeaveFor(Shell.OpenChallengeSelect, "MainMenuFactionTraining", "MainMenuSinglePlayerMenuBackTraining");
+            case "MainMenu.wnd:ButtonUSA" or "MainMenu.wnd:ButtonGLA" or "MainMenu.wnd:ButtonChina" or "MainMenu.wnd:ButtonChallenge":
+                if (!_campaignSelected) OpenDifficulty(Factions.Single(faction => "MainMenu.wnd:" + faction.Button == e.Source));
                 break;
+            case "MainMenu.wnd:ButtonEasy": ChooseDifficulty(ScriptDifficulty.Easy); break;
+            case "MainMenu.wnd:ButtonMedium": ChooseDifficulty(ScriptDifficulty.Normal); break;
+            case "MainMenu.wnd:ButtonHard": ChooseDifficulty(ScriptDifficulty.Hard); break;
+            case "MainMenu.wnd:ButtonDiffBack": Shell.PlaySound(ShellUiSounds.ButtonClick); CloseDifficulty(); break;
             case "MainMenu.wnd:ButtonLoadReplay": Shell.PlaySound(ShellUiSounds.ButtonClick); SwitchTo(Submenu.LoadReplay); break;
             case "MainMenu.wnd:ButtonLoadReplayBack": Shell.PlaySound(ShellUiSounds.ButtonClick); SwitchTo(Submenu.Main); break;
             case "MainMenu.wnd:ButtonLoadGame":
@@ -278,7 +381,11 @@ public sealed class MainMenuScreen : ShellScreen
     {
         if (e.Kind != UiEventKind.Key || e.Value != (int)UiKey.Escape) return;
         if (_leaving) return;
-        if (SinglePlayerSubmenuOpen || LoadReplaySubmenuOpen)
+        if (_submenu == Submenu.Difficulty)
+        {
+            if (!_dontAllow) CloseDifficulty();
+        }
+        else if (SinglePlayerSubmenuOpen || LoadReplaySubmenuOpen)
         {
             if (!_dontAllow && !_campaignSelected) SwitchTo(Submenu.Main);
         }

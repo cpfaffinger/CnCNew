@@ -339,6 +339,9 @@ internal static class CampaignTests
         var withPersonas = catalog.WithPersonas(personaReader.ReadToEnd());
         TestHarness.Assert(withPersonas.Find("CHALLENGE_0")!.PlayerFaction == "FactionAmericaAirForceGeneral" && withPersonas.Find("CHALLENGE_1")!.PlayerFaction == "FactionGLAToxinGeneral" && withPersonas.Find("CHALLENGE_2")!.PlayerFaction == "FactionChinaNukeGeneral", "each challenge campaign gets the faction of its general persona (ChallengeMode.ini), CHALLENGE_0 keeps its own");
         TestHarness.Assert(withPersonas.Campaigns.Where(campaign => !campaign.IsChallenge).All(campaign => campaign.PlayerFaction.Length == 0), "story campaigns have no persona");
+        TestHarness.Assert(withPersonas.Personas.Length == 12 && withPersonas.Personas.Select(persona => persona.Index).SequenceEqual(Enumerable.Range(0, 12)), "twelve personas by position");
+        TestHarness.Assert(withPersonas.Personas.Count(persona => persona.StartsEnabled && persona.Campaign != "unimplemented") == 9 && withPersonas.Personas[0].Campaign == "CHALLENGE_0", "nine playable personas, position 0 plays CHALLENGE_0");
+        TestHarness.Assert(withPersonas.Personas.All(persona => persona.BioName.Length > 0 && persona.BioRank.Length > 0 && persona.BioBranch.Length > 0 && persona.BioStrategy.Length > 0), "every persona names its four biography labels");
         TestHarness.Assert(catalog.UnknownKeys.IsEmpty, "no unknown keys: " + string.Join(", ", catalog.UnknownKeys));
         var problems = catalog.Validate(content.Exists);
         // The EA demo map is not part of the retail install; everything else must be consistent.

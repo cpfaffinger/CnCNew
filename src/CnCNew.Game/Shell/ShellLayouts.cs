@@ -58,15 +58,8 @@ public static class ShellLayoutNames
     public const string MessageBox = "MessageBox";
     public const string QuitMessageBox = "QuitMessageBox";
 
-    /// <summary><c>Window/Menus/SinglePlayerMenu.wnd</c>: New/Load Game for one faction's campaign (reached from
-    /// <c>MainMenu.wnd</c>'s USA/GLA/China buttons).</summary>
-    public const string SinglePlayerMenu = "SinglePlayerMenu";
-
     /// <summary><c>Window/Menus/ChallengeMenu.wnd</c>: pick a Generals' Challenge opponent/campaign.</summary>
     public const string ChallengeMenu = "ChallengeMenu";
-
-    /// <summary><c>Window/Menus/DifficultySelect.wnd</c>: Easy/Medium/Hard before a new campaign.</summary>
-    public const string DifficultySelect = "DifficultySelect";
 
     /// <summary><c>Window/Menus/SaveLoad.wnd</c>: the main-menu load-game list (<see cref="CnCNew.Game.Save.SaveGameStore"/>).</summary>
     public const string SaveLoad = "SaveLoad";
@@ -81,6 +74,6 @@ public static class ShellLayoutNames
     [
         MainMenu, OptionsMenu, SkirmishGameOptionsMenu, SkirmishMapSelectMenu, ScoreScreen, CreditsMenu,
         ShellGameLoadScreen, SinglePlayerLoadScreen, MessageBox, QuitMessageBox,
-        SinglePlayerMenu, ChallengeMenu, DifficultySelect, SaveLoad, Victorious, Defeat,
+        ChallengeMenu, SaveLoad, Victorious, Defeat,
     ];
 }

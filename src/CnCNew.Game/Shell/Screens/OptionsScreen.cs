@@ -21,6 +21,9 @@ public sealed class OptionsScreen : ShellScreen
     private static readonly ImmutableArray<(int Width, int Height)> ResolutionChoices =
         [.. Resolutions.Standard.Select(r => (r.Width, r.Height)).OrderBy(r => r.Width).ThenBy(r => r.Height)];
 
+    /// <summary>The original layers the options menu over the main menu (<c>getOptionsLayout</c>, <c>runInit</c>, <c>hide(FALSE)</c>): no shell push, the main menu is not shut down.</summary>
+    public override bool HidesScreensBelow => false;
+
     private GameSettings _working;
     private ImmutableArray<(int Width, int Height)> _resolutionEntries;
 

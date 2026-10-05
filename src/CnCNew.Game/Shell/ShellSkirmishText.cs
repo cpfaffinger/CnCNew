@@ -33,6 +33,17 @@ public sealed class ShellSkirmishText
         return label is { Length: > 0 } ? Resolve(label, templateName) : Count(templateName, templateName);
     }
 
+    /// <summary>
+    /// The three medallion images of a player template (<c>MedallionRegular</c>, <c>MedallionHilite</c>, <c>MedallionSelect</c> of <c>PlayerTemplate.ini</c>, the originals' <c>getMedallionNormal</c>,
+    /// <c>getMedallionHilite</c>, <c>getMedallionSelected</c>); <see langword="null"/> when the template or one of the three keys is missing (the caller counts and shows nothing).
+    /// </summary>
+    public (string Regular, string Hilite, string Select)? Medallions(string templateName)
+    {
+        var definition = _definitions.FirstOrDefault(value => value.Id.Kind == DefinitionKind.Faction && value.Id.Name.Equals(templateName, StringComparison.OrdinalIgnoreCase));
+        string? Field(string name) => definition?.Fields.FirstOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Trim('"');
+        return Field("MedallionRegular") is { Length: > 0 } regular && Field("MedallionHilite") is { Length: > 0 } hilite && Field("MedallionSelect") is { Length: > 0 } select ? (regular, hilite, select) : null;
+    }
+
     /// <summary>The names of the multiplayer colors in file order (<c>MultiplayerColor</c> blocks of <c>multiplayer.ini</c>).</summary>
     public ImmutableArray<string> ColorNames()
     {

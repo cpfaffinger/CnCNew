@@ -65,21 +65,52 @@ public sealed class SkirmishSetupScreen : ShellScreen
 
         RefreshMapDisplay();
         ApplySlotVisibility();
+        HideStartPositionMarkers();
         // SkirmishGameOptionsMenuUpdate: the screen fades in (FULLFADE of SubParent) and fades out again when it is closed.
         Transitions?.SetGroup("SkirmishGameOptionsMenuFade");
     }
 
     protected override string? ExitTransitionGroup => "SkirmishGameOptionsMenuFade";
 
+    private bool _mapPickerOpen;
+
+    /// <summary>
+    /// The eight numbered start-position bubbles of the map preview (<c>ButtonMapStartPosition0..7</c>, children of <c>MapWindow</c>) are not hidden in the layout file: the original hides
+    /// them at init and <c>positionStartSpots</c> shows and places the ones the map has. This build's map catalog knows how many start positions a map has but not where they are, so
+    /// the bubbles stay hidden instead of standing in a diagonal row on top of the preview's text.
+    /// </summary>
+    internal static void HideStartPositionMarkers(ShellScreen screen)
+    {
+        for (var slot = 0; slot < Slots; slot++) screen.HideWindow($"ButtonMapStartPosition{slot}");
+    }
+
+    private void HideStartPositionMarkers() => HideStartPositionMarkers(this);
+
+    /// <summary>The windows of the setup that <c>showSkirmishGameOptionsUnderlyingGUIElements</c> (<c>SkirmishMapSelectMenu.cpp</c>) hides while the map picker lies over it
+    /// (the picker's own layout has no opaque background, so what it does not hide would show through its list): the map preview with its caption and name, the three
+    /// column captions, the faction/colour/team combo boxes and the start button. The player name column and the lower panels stay, as in the original.</summary>
+    private static readonly ImmutableArray<string> HiddenWhileMapPicker =
+        ["MapWindow", "StaticTextTeam", "StaticTextFaction", "StaticTextColor", "TextEntryMapDisplay", "ButtonSelectMap", "ButtonStart", "StaticTextMapPreview"];
+
+    /// <summary><c>showSkirmishGameOptionsUnderlyingGUIElements(!open)</c>; Reset and Back are disabled while the picker is open (<c>winEnable(show)</c>).</summary>
+    internal void SetMapPickerOpen(bool open)
+    {
+        _mapPickerOpen = open;
+        foreach (var name in HiddenWhileMapPicker) W(name).SetHidden(open);
+        ApplySlotVisibility();
+        W("ButtonReset").SetEnabled(!open);
+        W("ButtonBack").SetEnabled(!open);
+    }
+
     private void ApplySlotVisibility()
     {
-        for (var slot = 1; slot < Slots; slot++)
+        for (var slot = 0; slot < Slots; slot++)
         {
-            var visible = slot < _startPositionCount;
-            W($"ComboBoxPlayer{slot}").SetHidden(!visible);
-            W($"ComboBoxPlayerTemplate{slot}").SetHidden(!visible);
-            W($"ComboBoxColor{slot}").SetHidden(!visible);
-            W($"ComboBoxTeam{slot}").SetHidden(!visible);
+            var visible = slot < _startPositionCount || slot == 0;
+            if (slot > 0) W($"ComboBoxPlayer{slot}").SetHidden(!visible);
+            W($"ComboBoxPlayerTemplate{slot}").SetHidden(!visible || _mapPickerOpen);
+            W($"ComboBoxColor{slot}").SetHidden(!visible || _mapPickerOpen);
+            W($"ComboBoxTeam{slot}").SetHidden(!visible || _mapPickerOpen);
             if (!visible) _computer[slot] = false;
         }
     }
@@ -168,6 +199,9 @@ public sealed class SkirmishSetupScreen : ShellScreen
 /// </summary>
 public sealed class SkirmishMapSelectScreen : ShellScreen
 {
+    /// <summary>The original creates the map picker as a layout of its own on top of the skirmish setup (<c>SkirmishGameOptionsMenu.cpp</c>: <c>winCreateLayout</c>, <c>hide(FALSE)</c>), not by <c>Shell::push</c>; the setup stays visible behind it.</summary>
+    public override bool HidesScreensBelow => false;
+
     private readonly SkirmishSetupScreen _owner;
     private ImmutableArray<string> _mapPaths = [];
     private int _selectedIndex = -1;
@@ -179,7 +213,12 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
         Tree.Register("SkirmishMapSelectMenuInput", OnInput);
         W("RadioButtonSystemMaps").SetChecked(true);
         PopulateSystemMaps();
+        SkirmishSetupScreen.HideStartPositionMarkers(this);
+        _owner.SetMapPickerOpen(true);
     }
+
+    /// <summary>OK and Back both give the setup its hidden elements back (<c>showSkirmishGameOptionsUnderlyingGUIElements(TRUE)</c>).</summary>
+    public override void OnClosed() => _owner.SetMapPickerOpen(false);
 
     private void PopulateSystemMaps()
     {
@@ -187,7 +226,9 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
             .OrderBy(path => Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource), StringComparer.Ordinal)];
         var list = W("ListboxMap");
         list.ClearList();
-        foreach (var path in _mapPaths) list.AddListRow(new UiListRow(Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource)));
+        // Two columns of 5 % and 95 % (COLUMNSWIDTH of the file): populateMapListbox puts the difficulty-success image in the first and the name in the second. There is no
+        // success record in this build, so the first column stays empty; the name used to land in it and was cut off after two letters.
+        foreach (var path in _mapPaths) list.AddListRow(new UiListRow(string.Empty, Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource)));
         _selectedIndex = -1;
     }
 
