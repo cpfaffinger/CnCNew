@@ -39,6 +39,13 @@ internal static class ShellFlowScenes
             var shell = NewShell();
             Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
             Shot(shell, "single-player");
+            var usa = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonUSA")!.Rect;
+            shell.HandleInput(new MouseMoveEvent(++time, new Vector2(usa.X + usa.Width / 2, usa.Y + usa.Height / 2)));
+            shell.Update(0.9);
+            Shot(shell, "tooltip-revealing");
+            shell.Update(0.5);
+            Shot(shell, "tooltip");
+            shell.HandleInput(new MouseMoveEvent(++time, new Vector2(0, 0)));
             Click(shell, "MainMenu.wnd:ButtonSkirmish");
             Shot(shell, "skirmish-setup");
             Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonSelectMap");

@@ -1,4 +1,5 @@
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Wnd;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
@@ -36,6 +37,7 @@ internal static class HudTests
         harness.Run("Control groups store and recall a selection", () => ControlGroupsWork(data));
         harness.Run("Control bar scheme art and the logo image", () => SchemeArt(data));
         harness.Run("The money display shows the localized money at the scheme's rectangle, not the layout placeholder", () => MoneyDisplay(data));
+        harness.Run("A command button shows its description as a pointer tooltip after the delay, and the icons carry no hot key or cost text", () => CommandButtonTooltip(data));
         harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));
 
@@ -490,6 +492,42 @@ internal static class HudTests
             TestHarness.Assert(window is { } money && bar is { } parent && money.Y >= parent.Y && money.Right <= parent.Right + 1 && money.Width > 20, $"{width}x{height}: the money window lies inside the control bar ({window} in {bar})");
             TestHarness.Assert(texts[0].Clip == window, $"{width}x{height}: the money text is clipped to its window");
         }
+    }
+
+    /// <summary>
+    /// The original draws no text on the command icons (hot keys and costs are in the description popup); the client used to print a hot key
+    /// letter and the cost on every icon and had no tooltips at all. The description is now the name, the cost and the description label of the
+    /// button in the pointer tooltip (<c>Mouse::drawTooltip</c>), shown after <c>TOOLTIPDELAY</c> and hidden again when the pointer moves.
+    /// </summary>
+    private static void CommandButtonTooltip(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Advance(match, controller, 1);
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        Refresh(controller);
+        var slot = FindConstructSlot(match, controller.CommandBar);
+        var button = controller.CommandBar[slot]!;
+        var rect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{slot:00}")!.Value;
+
+        var idle = controller.BuildDrawList(1280, 720).Commands;
+        TestHarness.Assert(!idle.OfType<UiTextDraw>().Any(text => text.Clip == rect && text.Text.Length <= 6), "no hot key letter or cost number is printed on the command icon");
+
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX, rect.CenterY)));
+        TestHarness.Assert(!controller.BuildDrawList(1280, 720).Commands.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "the tooltip is not there at the first moment of the hover");
+        Advance(match, controller, 30);
+        var shown = controller.BuildDrawList(1280, 720).Commands;
+        var texts = shown.OfType<UiTextDraw>().Where(text => text.Color == new WndColor(220, 220, 220, 255)).ToArray();
+        TestHarness.Assert(texts.Length > 0 && shown.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "after the delay a tooltip box with text lies over the HUD");
+        var name = data.LoadText("English").Get(button.Button.TextLabel).Replace("&", string.Empty, StringComparison.Ordinal);
+        var joined = string.Join(" ", texts.Select(text => text.Text.Trim()));
+        TestHarness.Assert(joined.StartsWith(name.Split(' ')[0], StringComparison.Ordinal), $"the first line is the button name '{name}': {joined}");
+        if (button.Cost.Raw > 0) TestHarness.Assert(joined.Contains("Cost: " + (int)button.Cost.ToDecimal(), StringComparison.Ordinal), $"the cost line follows: {joined}");
+
+        controller.Process(new MouseMoveEvent(time += 16, new Vector2(rect.CenterX + 1, rect.CenterY)));
+        TestHarness.Assert(!controller.BuildDrawList(1280, 720).Commands.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "moving the pointer hides the tooltip until it has been still for the delay again (1 ms here)");
     }
 
     private static void GoldenDrawListHash(GameData data)

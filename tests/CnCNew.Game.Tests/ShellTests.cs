@@ -53,6 +53,7 @@ internal static class ShellTests
         harness.Run("Options: sliders draw their boxes and drag, static texts have no hover fill", () => OptionsSlidersAndLabels(data));
         harness.Run("Quit dialog text takes the header template size, not the 1920x1080 layout scale", () => QuitDialogFonts(data));
         harness.Run("Skirmish setup and options show localized words, not internal names or the layout's placeholders", () => LocalizedSetupText(data));
+        harness.Run("A window with TOOLTIPTEXT shows the pointer tooltip after the delay with the Mouse.ini style", () => PointerTooltip(data));
 
         if (updating) SaveBaselines(baselines);
         return harness.Failures;
@@ -253,6 +254,26 @@ internal static class ShellTests
         Click(shell, "MainMenu.wnd:ButtonOptions");
         foreach (var name in new[] { "TextEntryHTTPProxy", "TextEntryFirewallPortOverride" })
             TestHarness.Assert(shell.CurrentScreen.Tree.FindByName($"OptionsMenu.wnd:{name}")!.TextEntry!.Text.Length == 0, $"{name} starts empty, not with the layout's word 'Entry'");
+    }
+
+    private static void PointerTooltip(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        var button = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonUSA")!;
+        TestHarness.Assert(button.Definition.TooltipText is { Length: > 0 }, "the USA button carries a TOOLTIPTEXT");
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(button.Rect.CenterX, button.Rect.CenterY)));
+        TestHarness.Assert(!shell.BuildDrawList().Commands.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "no tooltip before the delay");
+        shell.Update(2.0);
+        var commands = shell.BuildDrawList().Commands;
+        var fill = commands.OfType<UiFillRect>().Last(rect => rect.Color == new WndColor(20, 20, 20, 255));
+        TestHarness.Assert(commands.OfType<UiBorderRect>().Any(border => border.Rect == fill.Rect && border.Color == new WndColor(60, 60, 155, 255)), "the box has the Mouse.ini border color");
+        shell.TextSource!.TryResolve(button.Definition.TooltipText!, out var expected);
+        var shown = string.Join(" ", commands.OfType<UiTextDraw>().Where(text => text.Color == new WndColor(220, 220, 220, 255)).Select(text => text.Text.Trim()));
+        TestHarness.Assert(shown == string.Join(" ", expected.Split(' ', StringSplitOptions.RemoveEmptyEntries)), $"the tooltip shows the resolved label text: '{shown}'");
+        TestHarness.Assert(fill.Rect.X > button.Rect.CenterX && fill.Rect.Y >= button.Rect.CenterY - 1, "the box sits right of and below the pointer");
+        shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(2, 2)));
+        TestHarness.Assert(!shell.BuildDrawList().Commands.Any(command => command is UiFillRect { Color: { R: 20, G: 20, B: 20 } }), "leaving the window hides it");
     }
 
     private static void OptionsSlidersAndLabels(GameData data)

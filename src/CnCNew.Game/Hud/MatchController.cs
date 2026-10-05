@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Numerics;
+using CnCNew.Game.Data;
 using CnCNew.Game.Live;
 using CnCNew.Presentation.Camera;
 using CnCNew.Presentation.Input;
@@ -42,6 +43,7 @@ public enum MenuAction
 public sealed class MatchController
 {
     private readonly HudAssets _assets;
+    private readonly TooltipPainter _tooltips;
     private readonly UiWindowTree _tree;
     private readonly UiWindow _controlBarRoot;
     private readonly UiWindow _quitMenuRoot;
@@ -67,6 +69,7 @@ public sealed class MatchController
         Stats = new MatchStatsTracker();
 
         _assets = HudAssets.Load(match.Data, language);
+        _tooltips = new TooltipPainter(match.Data.Graph);
         var services = _assets.BuildTreeServices(textMeasure ?? new MonospaceTextMeasure());
         _scaleOptions = new UiScaleOptions
         {
@@ -75,6 +78,7 @@ public sealed class MatchController
         };
         var viewport = new UiViewport(Math.Max(1, (int)match.Camera.ViewportSize.X), Math.Max(1, (int)match.Camera.ViewportSize.Y));
         _tree = new UiWindowTree(viewport, _scaleOptions, services);
+        _tree.TooltipOverride = CommandButtonTooltip;
 
         var controlBarRoots = _tree.AddLayout(_assets.ControlBar);
         _controlBarRoot = controlBarRoots.Single(window => window.Name == "ControlBar.wnd:ControlBarParent");
@@ -617,7 +621,32 @@ public sealed class MatchController
         // The scheme art is the control bar's own background (W3DCommandBarBackgroundDraw in the original): it lies under the window tree, whose windows draw their own chrome on top.
         // The world-space feedback (selection rings, health bars, orders, rally points, placement ghost, healing icons) lies between the 3D scene and the control bar chrome.
         var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BuildSchemeBackground()).AddRange(ResolveHardCodedImages(baseList.Commands)).AddRange(extra).Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
+        // Mouse::drawTooltip lies over everything, the window tree's own tooltips (TOOLTIPTEXT) and the command button descriptions alike.
+        if (_tree.Tooltip is { } tooltip) commands = commands.AddRange(_tooltips.Build(tooltip, _tree.Viewport, _scaleOptions, _tree.Services.TextMeasure));
         return baseList with { Commands = commands };
+    }
+
+    /// <summary>
+    /// The description of a command button (<c>ControlBar::populateBuildTooltipLayout</c>): the translated name, the cost (<c>TOOLTIP:Cost</c>) when it
+    /// costs money, the description label, and "Insufficient funds" when the money does not suffice. The original shows these three in
+    /// <c>ControlBarPopupDescription.wnd</c>, a popup with its own draw function; here they are the lines of the pointer tooltip. Requirement and
+    /// science texts are not built. The hot key mark (<c>&amp;</c>) is dropped from the name.
+    /// </summary>
+    private string? CommandButtonTooltip(UiWindow window)
+    {
+        const string prefix = "ControlBar.wnd:ButtonCommand";
+        if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return null;
+        if (slot is < 1 or > CommandBarModel.GridSlots || CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) return null;
+        var lines = new List<string>();
+        if (button.Button.TextLabel.Length > 0) lines.Add(_assets.Text.Get(button.Button.TextLabel).Replace("&", string.Empty, StringComparison.Ordinal));
+        if (button.Cost.Raw > 0) lines.Add(_assets.Text.Format("TOOLTIP:Cost", (int)button.Cost.ToDecimal()));
+        if (button.Button.DescriptLabel.Length > 0)
+        {
+            var description = _assets.Text.Get(button.Button.DescriptLabel);
+            if (button.Cost.Raw > 0 && Hud.Money.Raw < button.Cost.Raw) description += "\n\n" + _assets.Text.Get("TOOLTIP:TooltipNotEnoughMoneyToBuild");
+            lines.Add(description);
+        }
+        return lines.Count == 0 ? null : string.Join("\n", lines);
     }
 
     /// <summary>
@@ -681,10 +710,6 @@ public sealed class MatchController
     private ImmutableArray<UiDrawCommand> BuildDynamicCommands()
     {
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
-        var smallFont = new UiFont("Arial", 10, false);
-        var white = new WndColor(255, 255, 255, 255);
-        var black = new WndColor(0, 0, 0, 255);
-        var yellow = new WndColor(255, 255, 0, 255);
         var cooldown = new WndColor(0, 0, 0, 160);
 
         for (var slot = 1; slot <= CommandBarModel.GridSlots; slot++)
@@ -694,13 +719,6 @@ public sealed class MatchController
             var rect = _tree.FindByName($"ControlBar.wnd:ButtonCommand{slot:00}")!.Rect;
             if (button.Button.ButtonImage.Length > 0 && _assets.Images.TryGet(button.Button.ButtonImage, out _))
                 commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, WndColor.White, false, false));
-            if (button.Hotkey is { } hotkey)
-                commands.Add(new UiTextDraw(char.ToUpperInvariant(hotkey).ToString(), null, smallFont, white, black, rect.X + 2, rect.Y + 2, UiTextAlignment.Left, rect));
-            if (button.Cost.Raw != 0)
-            {
-                var text = ((int)button.Cost.ToDecimal()).ToString(CultureInfo.InvariantCulture);
-                commands.Add(new UiTextDraw(text, null, smallFont, yellow, black, rect.Right - 4 - text.Length * 6, rect.Bottom - 14, UiTextAlignment.Left, rect));
-            }
             if (button.Availability == ButtonAvailability.NotReady && button.ReadyFraction is { } fraction)
             {
                 var wipe = (int)(rect.Height * (1 - fraction));
