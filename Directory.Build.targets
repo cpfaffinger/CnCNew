@@ -1,0 +1,4 @@
+<Project>
+  <!-- Imported after the NuGet package targets, which is what lets build/StrideAssetCompile.targets replace the package's StrideCompileAsset target. -->
+  <Import Project="build/StrideAssetCompile.targets" Condition="'$(StrideCompileAssetBuildPath)' != ''" />
+</Project>

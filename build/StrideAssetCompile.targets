@@ -1,0 +1,36 @@
+<Project>
+  <!--
+    Replaces the StrideCompileAsset target of Stride.Core.Assets.CompilerApp 4.3.0.2507 (build/Stride.Core.Assets.CompilerApp.targets) with an identical
+    one whose Exec classifies the compiler's console output itself. The package target lets MSBuild turn every "warning …" line into a build warning,
+    including two that cannot apply to this repository:
+
+    - "[YamlAssemblyRegistry] Assembly [CnCNew.…] has not been processed by assembly processor with [...] serialization flags": the compiler loads every
+      referenced project. The CnCNew assemblies deliberately carry no Stride types or [DataContract] assets (layer rules), so there is nothing to alias.
+    - "[AssetCompiler] Could not find game settings asset at location [GameSettings]": the client has no Stride GameSettings asset by design; it configures
+      the game in code and only needs the compiled default shaders.
+
+    Exactly these two stay ordinary (low importance) output. Any other warning line is still a warning, any error line an error, and a non-zero exit code
+    still fails the build. Re-check against the package target when the Stride version changes.
+  -->
+  <PropertyGroup>
+    <CnCNewStrideKnownAssetCompilerNotes>(?!.*\[YamlAssemblyRegistry\] Assembly \[CnCNew\.[^\]]+\] has not been processed by assembly processor with --serialization flags)(?!.*\[AssetCompiler\] Could not find game settings asset at location \[GameSettings\])</CnCNewStrideKnownAssetCompilerNotes>
+  </PropertyGroup>
+
+  <Target Name="StrideCompileAsset" Condition="'$(StrideIsExecutable)' == 'true' And '$(StrideCompilerSkipBuild)' != 'true'" DependsOnTargets="_StrideCollectUpToDateCheckInputDesignTime;_StrideCollectUpToDateCheckOutputDesignTime;_StridePrepareAssetCompiler" Inputs="@(StrideAssetInput)" Outputs="@(StrideAssetOutput)">
+    <PropertyGroup>
+      <StrideCompileAssetCommandProxy>dotnet &quot;$(StrideCompileAssetCommand)&quot;</StrideCompileAssetCommandProxy>
+      <StrideCompileAssetCommandProxy>$(StrideCompileAssetCommandProxy) $(StrideCompileAssetOptions) --disable-auto-compile --project-configuration &quot;$(Configuration)&quot; --platform=$(StridePlatform) --project-configuration=$(Configuration) --compile-property:StrideGraphicsApi=$(StrideGraphicsApi) --output-path=&quot;$(StrideCompileAssetOutputPath)&quot; --build-path=&quot;$(StrideCompileAssetBuildPath)&quot; --package-file=&quot;$(MSBuildProjectFullPath)&quot; --msbuild-uptodatecheck-filebase=&quot;$(StrideCompileAssetUpToDateCheckFileBase)&quot;</StrideCompileAssetCommandProxy>
+      <StrideCompileAssetCommandProxy Condition="'$(StrideBuildEngineLogVerbose)' != ''">$(StrideCompileAssetCommandProxy) --verbose</StrideCompileAssetCommandProxy>
+      <StrideCompileAssetCommandProxy Condition="'$(StrideBuildEngineLogDebug)' != ''">$(StrideCompileAssetCommandProxy) --debug</StrideCompileAssetCommandProxy>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(TargetDir)" />
+
+    <Exec WorkingDirectory="$(TargetDir)"
+          Command="$(StrideCompileAssetCommandProxy)"
+          IgnoreStandardErrorWarningFormat="true"
+          CustomErrorRegularExpression="^\s*(error|fatal)\b"
+          CustomWarningRegularExpression="^\s*warning\b$(CnCNewStrideKnownAssetCompilerNotes)"
+          StandardOutputImportance="Low" />
+  </Target>
+</Project>
