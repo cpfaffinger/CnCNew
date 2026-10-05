@@ -21,8 +21,10 @@ public sealed class TooltipPainter
     {
         ArgumentNullException.ThrowIfNull(graph);
         _style = MouseTooltipSettings.FromGraph(graph);
-        var language = GlobalLanguageSettings.FromGraph(graph).Font("TooltipFontName");
-        _font = language.Name.Length > 0 ? language : _style.Font;
+        var language = GlobalLanguageSettings.FromGraph(graph);
+        // Mouse::mouseNotifyResolutionChange takes the Language.ini slot whenever its name is not empty, and the slot's default name never is
+        // (FontDesc::FontDesc): the font of the Mouse block is dead data in the retail game.
+        _font = language.Font("TooltipFontName");
     }
 
     public MouseTooltipSettings Style => _style;

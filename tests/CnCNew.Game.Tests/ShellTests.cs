@@ -54,6 +54,7 @@ internal static class ShellTests
         harness.Run("Quit dialog text takes the header template size, not the 1920x1080 layout scale", () => QuitDialogFonts(data));
         harness.Run("Skirmish setup and options show localized words, not internal names or the layout's placeholders", () => LocalizedSetupText(data));
         harness.Run("A window with TOOLTIPTEXT shows the pointer tooltip after the delay with the Mouse.ini style", () => PointerTooltip(data));
+        harness.Run("Credits lines use the Language.ini credits fonts at the adjusted size", () => CreditsFonts(data));
 
         if (updating) SaveBaselines(baselines);
         return harness.Failures;
@@ -254,6 +255,22 @@ internal static class ShellTests
         Click(shell, "MainMenu.wnd:ButtonOptions");
         foreach (var name in new[] { "TextEntryHTTPProxy", "TextEntryFirewallPortOverride" })
             TestHarness.Assert(shell.CurrentScreen.Tree.FindByName($"OptionsMenu.wnd:{name}")!.TextEntry!.Text.Length == 0, $"{name} starts empty, not with the layout's word 'Entry'");
+    }
+
+    /// <summary>
+    /// Credits.cpp draws TITLE lines in <c>CreditsTitleFont</c> (Arial 22), MINORTITLE in <c>CreditsMinorTitleFont</c> (Arial 16 bold) and NORMAL in
+    /// <c>CreditsNormalFont</c> (Arial 14), each through <c>adjustFontSize</c>; the shell used to draw Arial 24 bold / 16 bold / 12.
+    /// </summary>
+    private static void CreditsFonts(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonCredits");
+        for (var i = 0; i < 400; i++) shell.Update(0.05);
+        var fonts = shell.BuildDrawList().Commands.OfType<UiTextDraw>().Select(text => text.Font).Where(font => font.Name == "Arial").Distinct().ToArray();
+        TestHarness.Assert(fonts.Length > 0, "credits lines are on screen after 20 seconds of scrolling");
+        // 1280x720 Uniform: the 800x600 scale is 1.2; sizes are the point sizes of Language.ini times 1.2, floored.
+        var allowed = new[] { new UiFont("Arial", 26, false), new UiFont("Arial", 19, true), new UiFont("Arial", 16, false) };
+        TestHarness.Assert(fonts.All(allowed.Contains), $"only the three credits fonts appear: {string.Join(", ", fonts)}");
     }
 
     private static void PointerTooltip(GameData data)

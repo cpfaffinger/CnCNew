@@ -9,7 +9,10 @@ namespace CnCNew.Game.Shell;
 public sealed record ShellMapPreviewContext(string? MapDisplayName);
 
 /// <summary>What the credits custom draw needs: the parsed lines, a vertical scroll offset in pixels, and the text source for label lines.</summary>
-public sealed record ShellCreditsContext(ImmutableArray<CreditsLine> Lines, int ScrollOffsetPixels, IUiTextSource? TextSource);
+/// <summary>The three credits fonts of <c>Language.ini</c> (<c>CreditsTitleFont</c>, <c>CreditsMinorTitleFont</c>, <c>CreditsNormalFont</c>, resolution adjusted).</summary>
+public sealed record CreditsFonts(UiFont Title, UiFont MinorTitle, UiFont Normal);
+
+public sealed record ShellCreditsContext(ImmutableArray<CreditsLine> Lines, int ScrollOffsetPixels, IUiTextSource? TextSource, CreditsFonts? Fonts = null);
 
 /// <summary>
 /// Expands the <see cref="UiCustomDraw"/> commands the shell's screens actually produce with real data
@@ -57,11 +60,12 @@ public static class ShellCustomDraw
         var y = rect.Y + rect.Height - context.ScrollOffsetPixels;
         foreach (var line in context.Lines)
         {
+            var fonts = context.Fonts;
             var font = line.Style switch
             {
-                CreditsStyle.Title => new UiFont("Arial", 24, true),
-                CreditsStyle.MinorTitle => new UiFont("Arial", 16, true),
-                _ => new UiFont("Arial", 12, false),
+                CreditsStyle.Title => fonts?.Title ?? new UiFont("Arial", 24, true),
+                CreditsStyle.MinorTitle => fonts?.MinorTitle ?? new UiFont("Arial", 16, true),
+                _ => fonts?.Normal ?? new UiFont("Arial", 12, false),
             };
             var height = measure.LineHeight(font);
             if (y + height >= rect.Y && y <= rect.Bottom)
