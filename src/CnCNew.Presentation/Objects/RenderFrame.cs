@@ -37,13 +37,22 @@ public sealed record DrawableInstance(
     bool ShowsHealing = false,
     bool Fogged = false,
     ChassisPose Chassis = default,
-    Vector3 FlashTint = default)
+    Vector3 FlashTint = default,
+    float Opacity = 1f)
 {
     // FlashTint: what Drawable::getSelectionColor returns while the selection flash envelope plays (SelectionFlashTracker): a signed colour added to the lights of this drawable; zero: none.
 
     public bool HasFlashTint => FlashTint != Vector3.Zero;
 
     // Chassis: the body tilt/lift and the wheel steering and spring offsets of a treaded or wheeled vehicle (SuspensionTracker); level for everything else.
+
+    // Opacity: 1 draws the drawable solid; below 1 the object layer draws every surface of it translucent (Drawable::setDrawableOpacity). Only the placement preview uses it
+    // (PlacementPreview.Opacity); entities and scenery stay at 1.
+
+    /// <summary>The <see cref="SceneryIndex"/> of the building preview that follows the cursor while a structure is placed (an entity-less, scenery-less drawable needs a key of its own).</summary>
+    public const int PlacementPreviewIndex = -2;
+
+    public bool IsPlacementPreview => SceneryIndex == PlacementPreviewIndex;
 
     // Fogged: explored but not currently visible to the viewer (remembered structure, scenery out of sight). The original draws such objects through the shroud texture, darkened like the ground.
 

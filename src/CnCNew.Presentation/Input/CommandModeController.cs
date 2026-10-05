@@ -13,8 +13,10 @@ namespace CnCNew.Presentation.Input;
 /// <summary>
 /// <paramref name="PlacementDragPixels"/>: <c>PLACEMENT_DRAG_THRESHOLD_DIST</c> before a held placement click starts rotating the ghost.
 /// <paramref name="MoveHintFrames"/>: lifetime of the move marker (<c>W3DInGameUI::drawMoveHints</c>).
+/// <paramref name="PlacementViewAngle"/>: the heading in radians a structure template has before the player drags a direction (<c>ThingTemplate::getPlacementViewAngle</c>,
+/// the <c>PlacementViewAngle</c> of the INI; <c>InGameUI::placeBuildAvailable</c> starts the placement icon with it and a click without a drag places the building with it); null: 0 for every template.
 /// </summary>
-public sealed record CommandSettings(float PlacementDragPixels = 5f, int MoveHintFrames = 40, int MarkerFrames = 40);
+public sealed record CommandSettings(float PlacementDragPixels = 5f, int MoveHintFrames = 40, int MarkerFrames = 40, Func<string, float>? PlacementViewAngle = null);
 
 /// <summary>
 /// Turns the selection, the object and ground under the cursor and the modifier states into typed simulation commands and a cursor
@@ -393,7 +395,7 @@ public sealed class CommandModeController
                 _button = button;
                 _builder = builder.Id;
                 _sources = [builder.Id];
-                _placementAngle = 0f;
+                _placementAngle = Settings.PlacementViewAngle?.Invoke(button.Object) ?? 0f;
                 return ActivationResult.EnteredMode;
             }
             case GuiCommandKind.DozerConstructCancel:

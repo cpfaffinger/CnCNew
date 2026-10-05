@@ -97,7 +97,7 @@ public sealed class MatchController
         var hotkeys = HotkeyMap.FromGraph(match.Data.Graph).WithEngineDefaults();
         Input = new GameInputController(match.Human, match.Commands, hotkeys, buttons,
             label => _assets.Text.TryGet(label, out var resolved) ? resolved : null,
-            new GameInputSettings(Camera: MapCameraSettings(settings)));
+            new GameInputSettings(Camera: MapCameraSettings(settings), Commands: new CommandSettings(PlacementViewAngle: template => match.Data.Visuals.TryGet(template, out var visual) ? visual.PlacementViewAngle : 0f)));
         Input.UiRequest += OnInputUiRequest;
 
         match.BeforeTick = world => Input.Tick(world);
@@ -342,6 +342,8 @@ public sealed class MatchController
         Hud = Input.CommandBar.Hud(Match.World, Match.Human);
         DrainFeedbackToTicker();
         Overlay = ComputeOverlay();
+        // The building follows the cursor in the world, too: the object layer draws it translucent (InGameUI::handleBuildPlacements).
+        Match.PlacementGhost = !IsMenuOpen && Input.Commands.Mode == CommandModeKind.Placement ? Input.Commands.Ghost : null;
         _clockMs += (long)Math.Round(deltaSeconds * 1000);
         _tree.AdvanceTo(_clockMs);
     }

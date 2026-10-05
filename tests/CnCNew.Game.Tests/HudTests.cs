@@ -39,8 +39,78 @@ internal static class HudTests
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));
 
         harness.Run("Cursor and markers: Alt waypoints draw a path with a marker per station, an order leaves a fading hint, the cursor follows context and windows", () => CursorAndMarkers(data));
+        harness.Run("Placement preview: the chosen building follows the cursor in the object frame, translucent, red where refused, gone after the click", () => PlacementPreviewInObjectFrame(data));
 
         return harness.Failures;
+    }
+
+    /// <summary>
+    /// The placement of a structure shows its model at the cursor (<c>InGameUI::handleBuildPlacements</c>): while the placement mode is on, <see cref="LiveGame.ObjectFrame"/> carries one more
+    /// drawable than <see cref="LiveGame.Frame"/> (which stays free of it), translucent at the ghost's place and angle, tinted red where the simulation refuses the spot; the mode ends, the preview goes.
+    /// </summary>
+    private static void PlacementPreviewInObjectFrame(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Advance(match, controller, 1);
+        TestHarness.Assert(match.PlacementGhost is null && match.ObjectFrame.Drawables.Length == match.Frame.Drawables.Length, "no placement, no preview");
+
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        Refresh(controller);
+        var slot = FindConstructSlot(match, controller.CommandBar);
+        var rect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{slot:00}") ?? throw new InvalidOperationException("button window missing");
+        Click(controller, ref time, MouseButton.Left, new Vector2(rect.CenterX, rect.CenterY));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.Placement, "the construct button enters placement mode");
+        var template = controller.Input.Commands.PendingButton!.Object;
+        var viewAngle = match.Data.Visuals.TryGet(template, out var visual) ? visual.PlacementViewAngle : 0f;
+
+        var dozerGround = SimulationQueries.GroundOf(dozer);
+        PlacementGhost? valid = null;
+        foreach (var offset in (ReadOnlySpan<Vector2>)[new(300, 0), new(-300, 0), new(0, 300), new(0, -300), new(220, 220), new(-220, -220)])
+        {
+            var candidate = dozerGround + offset;
+            controller.Process(new MouseMoveEvent(time += 16, Screen(match, new Vector3(candidate.X, candidate.Y, 0f))));
+            if (controller.Input.Commands.Ghost is { IsValid: true } found) { valid = found; break; }
+        }
+        TestHarness.Assert(valid is not null, $"a buildable spot for '{template}' exists near the dozer");
+        TestHarness.Assert(Math.Abs(valid!.Angle - viewAngle) < 1e-5f, $"the placement starts at the template's PlacementViewAngle ({valid.Angle} vs {viewAngle})");
+        Advance(match, controller, 1);
+        TestHarness.Assert(match.PlacementGhost is { } ghost && ghost.Template == template && ghost.IsValid, "the HUD hands the ghost to the game every frame");
+        var solid = match.Frame.Drawables;
+        var withPreview = match.ObjectFrame.Drawables;
+        TestHarness.Assert(withPreview.Length == solid.Length + 1 && !solid.Any(drawable => drawable.IsPlacementPreview), "the preview is in the object frame only");
+        var preview = withPreview[^1];
+        TestHarness.Assert(preview.IsPlacementPreview && preview.TemplateName.Equals(template, StringComparison.OrdinalIgnoreCase), "the last drawable is the preview of the chosen template");
+        TestHarness.Assert(preview.Opacity == CnCNew.Presentation.Objects.PlacementPreview.Opacity && !preview.HasFlashTint, "translucent and untinted on a legal spot");
+        TestHarness.Assert(preview.PrimaryModel is not null, "it has a model to draw");
+        TestHarness.Assert(Math.Abs(preview.Position.X - valid.Position.X) < 0.5f && Math.Abs(preview.Position.Y - valid.Position.Y) < 0.5f, "at the ghost's place");
+        TestHarness.Assert(solid.All(drawable => drawable.Opacity == 1f), "everything else stays solid");
+
+        // Where the simulation refuses the spot (here: on top of the base's own structure) the preview turns red.
+        PlacementGhost? refused = null;
+        foreach (var structure in match.World.Entities.Where(entity => entity.Owner == match.Human && entity.Template.IsKindOf("STRUCTURE")).Take(4))
+        {
+            var ground = SimulationQueries.GroundOf(structure);
+            controller.Process(new MouseMoveEvent(time += 16, Screen(match, new Vector3(ground.X, ground.Y, 0f))));
+            if (controller.Input.Commands.Ghost is { IsValid: false, Reason: not PlacementIssue.NoGround } bad) { refused = bad; break; }
+        }
+        if (refused is not null)
+        {
+            Advance(match, controller, 1);
+            var red = match.ObjectFrame.Drawables[^1];
+            TestHarness.Assert(red.IsPlacementPreview && red.FlashTint == CnCNew.Presentation.Objects.PlacementPreview.IllegalTint, "a refused spot tints the preview red");
+        }
+        else Console.WriteLine("       (no refused spot was found on screen; only the legal preview was exercised)");
+
+        // The click places the structure: the mode ends and the preview is gone with the next frame.
+        controller.Process(new MouseMoveEvent(time += 16, Screen(match, valid.Position)));
+        Click(controller, ref time, MouseButton.Left, Screen(match, valid.Position));
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.None, "the click places the structure");
+        TestHarness.Assert(match.PlacementGhost is null && match.ObjectFrame.Drawables.All(drawable => !drawable.IsPlacementPreview), "no preview after the placement");
     }
 
     /// <summary>docs/DEMO-FINDINGS.md #8: neither the cursor nor the waypoints a player set were visible.</summary>

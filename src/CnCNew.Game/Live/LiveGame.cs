@@ -97,6 +97,21 @@ public abstract class LiveGame
     public double Speed { get; set; } = 1;
 
     public RenderFrame Frame { get; private set; }
+
+    /// <summary>
+    /// Where the human is about to place a structure (the HUD sets it every frame while the placement mode is on, null otherwise): <see cref="ObjectFrame"/> then carries
+    /// the translucent building at that spot. It never enters <see cref="Frame"/>, so nothing that reads the frame for objects (minimap dots, heal icons, picking) sees it.
+    /// </summary>
+    public PlacementGhost? PlacementGhost { get; set; }
+
+    /// <summary>
+    /// The frame the object layer draws: <see cref="Frame"/> plus the placement preview (<see cref="CnCNew.Presentation.Objects.PlacementPreview"/>) of
+    /// <see cref="PlacementGhost"/>, if there is one and its template has a model.
+    /// </summary>
+    public RenderFrame ObjectFrame
+        => PlacementGhost is { } ghost && PlacementPreview.Create(Data.Visuals, ghost, Human, Colors) is { } preview
+            ? Frame with { Drawables = Frame.Drawables.Add(preview) }
+            : Frame;
     public long Tick => World.Tick;
 
     /// <summary>Faction name of the viewer's player (selects the control bar scheme and the Eva voice).</summary>

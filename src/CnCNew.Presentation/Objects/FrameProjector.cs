@@ -286,7 +286,7 @@ public sealed class FrameProjector
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
-    private static ImmutableArray<DrawModuleSelection> Select(ObjectVisual visual, ModelConditionSet conditions)
+    internal static ImmutableArray<DrawModuleSelection> Select(ObjectVisual visual, ModelConditionSet conditions)
         => [..visual.Draws.Select(draw => BestStateSelector.FindBest(draw, conditions) is var index and >= 0
             ? new DrawModuleSelection(index, draw.States[index].Model)
             : new DrawModuleSelection(-1, null))];

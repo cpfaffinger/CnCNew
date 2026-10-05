@@ -20,6 +20,7 @@ Func<string[], int>[] suites =
     CaptureConditionTests.Run,
     CaptureFlashTests.Run,
     JetOrderTests.Run,
+    PlacementPreviewTests.Run,
 ];
 
 var failures = 0;
