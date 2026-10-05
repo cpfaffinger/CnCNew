@@ -65,6 +65,7 @@ try
         "stress" => Stress(Options(args), Arg(args, "--out")),
         "reference-match" when args.Length >= 2 => ReferenceMatch(args[1], args),
         "ai-match" when args.Length >= 2 => AiMatch(args[1], args),
+        "reference-manifest" or "input-manifest" => CnCNew.SimTool.ManifestCommands.Run(args),
         "skirmish-sweep" when args.Length >= 2 => SkirmishSweep(args[1], args),
         "unit-audit" when args.Length >= 2 => UnitAudit(args[1], args),
         "mission-run" when args.Length >= 2 => MissionRun(args[1], args),
