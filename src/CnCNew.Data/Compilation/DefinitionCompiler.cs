@@ -307,7 +307,7 @@ public static class DefinitionCompiler
         else
         {
             repeat = RepeatableKeys.Lookup(state.DeclarationType, key);
-            value = state.Kind == DefinitionKind.CommandSet && int.TryParse(key, out _)
+            value = state.Kind == DefinitionKind.CommandSet && int.TryParse(key, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _)
                 ? new DefinitionValue(DefinitionValueKind.Reference, new DefinitionReference(DefinitionKind.CommandButton, property.Value.Trim()), property.Value)
                 : DefinitionValueParser.Parse(key, property.Value, property.Location);
             // A domain that has a (partial) typed schema but doesn't know this particular key: visible, not silent.

@@ -50,7 +50,7 @@ public static class MissionSnapshot
             writer.Text("humanSideName", session.Options.HumanSideName);
             if (session.Options.HumanFaction.Length > 0) writer.Text("humanFaction", session.Options.HumanFaction);
             writer.EndObject();
-            writer.Text("stateHash", session.StateHash().ToString("X16"));
+            writer.Text("stateHash", session.StateHash().ToString("X16", System.Globalization.CultureInfo.InvariantCulture));
             writer.BeginObject("session");
             session.DescribeSession(writer);
             writer.EndObject();
@@ -99,7 +99,7 @@ public static class MissionSnapshot
             session.LoadSession(root.Object("session"));
             session.Engine.Load(root.Object("script"));
             var recorded = root.Text("stateHash");
-            var actual = session.StateHash().ToString("X16");
+            var actual = session.StateHash().ToString("X16", System.Globalization.CultureInfo.InvariantCulture);
             if (!string.Equals(recorded, actual, StringComparison.Ordinal))
                 throw new SnapshotFormatException($"Mission state integrity check failed: recorded hash {recorded}, restored state hashes to {actual}.");
             return session;

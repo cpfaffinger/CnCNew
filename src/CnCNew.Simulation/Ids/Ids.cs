@@ -1,3 +1,4 @@
+using System.Globalization;
 using CnCNew.Simulation.State;
 
 namespace CnCNew.Simulation.Ids;
@@ -10,7 +11,7 @@ public readonly record struct EntityId(uint Value)
 {
     public static EntityId Invalid => default;
     public bool IsValid => Value != 0;
-    public override string ToString() => Value.ToString();
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
 }
 
 /// <summary>Player 0 is the system authority (scripts, tools, tests); real players start at 1.</summary>
@@ -18,7 +19,7 @@ public readonly record struct PlayerId(int Value)
 {
     public static PlayerId System => new(0);
     public bool IsSystem => Value == 0;
-    public override string ToString() => Value.ToString();
+    public override string ToString() => Value.ToString(CultureInfo.InvariantCulture);
 }
 
 /// <summary>Monotone id of an accepted command.</summary>
