@@ -81,6 +81,8 @@ Weitere Befunde und Behebungen vom 5. Oktober 2026 (Phase 16, ohne Menschen gefu
 | 29 | Ein ausgegrauter Befehlsknopf sagt nicht, was fehlt | der Tooltip trug nur Name, Kosten, Beschreibung | behoben, nicht von einem Menschen gesehen: „Requires: …“ mit Anzeigenamen, „Insufficient funds“, gekauftes Upgrade, Geld- und Energiefenster nach `ControlBar::populateBuildTooltipLayout` (`docs/GAME-HUD.md` §5a); weiter als Zeigertooltip statt eigenem Popupfenster; deaktivierte Fenster bekommen jetzt überhaupt einen Tooltip (`winPointInAnyChild` ohne Enabled-Prüfung) |
 | 30 | Klicks in die linke obere Bildecke taten nichts (bei der Arbeit an Nr. 29 gefunden, nicht vom Tester gemeldet) | `ControlBar.wnd:PowerWindow` blieb als unsichtbares 100x100-Fenster mit `GameWinBlockInput` an der Layoutposition oben links stehen | behoben, nicht von einem Menschen geprüft: das Fenster liegt wie im Original am Energiebalken des Schemas (`ControlBarScheme::init`) |
 
+In der ersten Phase-17-Sitzung (5. Oktober 2026) hat kein Mensch neue Befunde geliefert; Nr. 25 bis 30 stammen aus der Arbeit an den Resten von Phase 16 und sind – wie alles seit Phase 15 – nicht von einem Menschen abgenommen. Neu und ebenfalls ungesehen: Einheiten des Spielers feuern im Leerlauf selbst auf Feinde in Reichweite, der Angriffsmarsch ist ein eigener Befehl (`docs/SIMULATION-CORE.md` §33).
+
 ## Was daraus folgt
 
 - Der Stand nach Phase 14 war **kein** „spielbares Produkt“: Simulation und Skripte sind belegt, die Darstellung ist es nicht. Das Phase-14-Handoff hatte den Client nicht im Umfang; dass dort 21 Warnungen als „erklärt“ standen, galt für die Warnzahl, nicht für die Sicherheit.

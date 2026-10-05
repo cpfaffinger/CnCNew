@@ -1533,3 +1533,34 @@ kämpfen und marschieren weiter; „kämpft“ und „marschiert“ zugleich sin
 **Ein Korrekturversuch, gemessen und verworfen:** „eine Armee, die 90 Sekunden nicht gewachsen ist, greift auch unter der Schwelle an“ (für Bitter Winter Tank/AirForce naheliegend). Alle 16 Läufe neu:
 dieselben 11 entschieden, die elf mit identischem Endhash, die fünf Patts blieben Patts (nur ihre Hashes änderten sich). Die Änderung ist deshalb nicht im Code. Was die Spuren als Ursache nennen –
 Wirtschaft nach dem Leerlaufen des ersten Lagers und die Zusammensetzung der Armee – ist ein eigener Auftrag an `SkirmishAi` (Geld für ein zweites Zentrum zurückhalten, nicht nur das Billigste bauen).
+
+## 34. Phase 17 (5. Oktober 2026): `SkirmishAi` als Agent einer Mission, Leistung ruhig gemessen
+
+### 34.1 Was sich an `SkirmishAi` geändert hat
+
+Der Nur-Befehle-Modus des Zielfahrers (`docs/SCRIPT-ENGINE.md` §9) lässt `SkirmishAi` für den Betrachter einer Mission spielen. Zwei Fehler fielen nur dort auf und sind in der KI selbst behoben; drei
+Schalter setzt nur der Missionsagent (ein Skirmish-Match setzt keinen davon).
+
+| Änderung | Wo | Begründung |
+| --- | --- | --- |
+| Lager einer **nicht feindlichen Seite** zählen als Lager (`Observe`) | `SkirmishAi.Observe` | Missionskarten geben die `SupplyDock`s einem Zivilspieler statt dem Systemspieler; `FindSupplySource` nahm sie schon an, das Gedächtnis `_warehouses` nicht – „warehouses known 0“, kein Sammler wurde geschickt |
+| Versorgungszentrum an der Basis nach drei vergeblichen Platzsuchen neben der Quelle (`SupplyPlacementPatience`) | `BuildStructures` | `AIPlayer::buildBySupplies` kennt den Fall „kein legaler Platz“ nicht; hier blieb das Zentrum sonst für immer ungebaut (`GC_ChemGeneral`: Lager am Kartenrand) |
+| `Objectives` (Angriffsziele vor der eigenen Wahl) | `AttackTarget` | die Opfer der Missionsziele, wie Briefing und Zielmarken sie einem Spieler nennen |
+| `CommitEverything` (Angriff ohne Schwelle, kein Rückzug zum Sammeln) | `CommandArmy` | eine Seite ohne Produktionsgebäude wartete sonst für immer unter der Angriffsschwelle |
+| `ObjectiveReserve` (Geld, das die KI nicht anrührt) | `Think` | der Kauf, den ein Missionsziel braucht (Eroberungs-Upgrade) |
+| Option `EconomyFirst` (nichts anderes bauen, bis das erste Versorgungszentrum steht) | `BuildStructures` | ohne Einkommen ging das Startgeld der Challenge-Karten in Kraftwerke und Kasernen |
+
+Die 16 KI-gegen-KI-Läufe sind davon unberührt: die Endhashes des gemergten Stands sind die aus §33.6 (dort ohne diese Änderungen gemessen).
+
+### 34.2 Leistung (ruhige Maschine, keine parallelen Läufe, Release, 5. Oktober 2026)
+
+| Lauf | vorher (`4eea97b`) | nachher (`2a66661`) |
+| --- | --- | --- |
+| `SimTool stress`, Lauf 1 (216.000 Ticks), zweimal gemessen | 13,1 s / 13,3 s (60,5 / 61,6 µs je Tick) | 13,3 s / 13,3 s (61,5 / 61,6 µs je Tick) |
+| Endhash / Kette | `56882F763EABEF67` / `B8E663493F2C73D5` | unverändert |
+| `SimTool mission-run` `MD_USA05`, 3.000 Ticks (Gesamtlaufzeit des Werkzeugs) | 73,4 s | 66,7 s |
+| `SimTool mission-run` `MD_GLA05`, 3.000 Ticks | 135,6 s | 147,9 s |
+
+Der Stresstest zeigt keinen Schwund (die 150 µs je Tick aus Phase 14 waren Last, nicht Code; unter Last maß derselbe Stand heute 166 µs). Die Missionsläufe ändern ihre Hashes, weil der Zielerwerb jetzt in der
+Simulation liegt; `MD_GLA05` ist 9 % langsamer, `MD_USA05` 9 % schneller. **Nicht gemacht:** ein Profil der heißesten Module. Die Missionsläufe sind der Ort dafür (die Zahl oben ist die Gesamtlaufzeit des Werkzeugs
+mit Laden und Wiederholungsläufen, kein Wert je Tick).

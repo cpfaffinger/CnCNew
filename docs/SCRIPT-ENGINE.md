@@ -817,3 +817,78 @@ erfüllt keine Missionsziele – das bleibt der Kern von Phase 17.
 
 Neu gemessen am selben Tag (Stand `096290b`, vor den KI-Korrekturen; der Fahrer und das Audit benutzen `SkirmishAi` nicht): `drive` (60.000 Ticks) **Sieg 24/24, Niederlage 24/24**; `audit --ticks 900` 24/24
 deterministisch, 24/24 identisch nach Speichern/Laden, 0 Treffer auf fehlende Typen, Ausschalt-Endproben **Sieg 13/24, Niederlage 15/24** (je Karte einzeln gelaufen, 24 Karten einschließlich `Training01`).
+### Phase 17: die erste unerfüllte Bedingung je Karte als Befehl (5. Oktober 2026, gemessen)
+
+Ausgangsfrage des Handoffs: nicht mehr Zeit, sondern je Karte die erste unerfüllte Bedingung der Siegkette (`drive --commands-only --outcome victory --explain`) als Befehl ausdrücken. Die Vorher-Messung
+(Stand `4eea97b`, 15.000 Ticks, je Karte einzeln, 8 Läufe parallel): **1 von 24** (`MD_GLA04`, das Skript endet selbst), `MD_USA01` nach 1.800 s abgebrochen. Auf 9 der 24 Karten stand als erste offene
+Bedingung eine **abgelehnte Weltschreibung**, auf den übrigen ein Angriffsblatt, das der Agent nicht gewann.
+
+**Was der Nur-Befehle-Modus jetzt statt einer Weltschreibung tut (`ObjectiveDriver.Commands.cs`, `ObjectiveDriver.Leaves.cs`):**
+
+| Bedingung der Kette | vorher (Nur-Befehle) | jetzt |
+| --- | --- | --- |
+| Anzahl eines Typs/einer Art eines **Feindes** zu hoch (`PLAYER_HAS_OBJECT_COMPARISON`, `…_IN_TRIGGER_AREA`), `PLAYER_HAS_N_OR_FEWER_(FACTION_)BUILDINGS`, `PLAYER_LOST_OBJECT_TYPE`, `SKIRMISH_PLAYER_IS_OUTSIDE_AREA`, Teamereignisse „zerstört“/„Mitglied zerstört“ | abgelehnt („destroy the surplus …“) | **Angriff**: die Opfer werden Ziel des Heeres; jede bewaffnete Einheit bekommt ihr nächstes Opfer als Angriffsbefehl (`FireWeaponCommand`, sobald in Reichweite – Einheiten eines Menschen wählen Gebäude und neutrale Objekte nicht selbst) und, wenn der Agent sie nicht führt, einen `AttackMoveCommand` dorthin |
+| `NAMED_OWNED_BY_PLAYER` für den Betrachter | abgelehnt („hand … to …“) | **`CaptureCommand`** einer Einheit, die die Eroberungsfähigkeit trägt (`SpecialAbilityUpdate` mit `SPECIAL_*_CAPTURE_BUILDING`); ist die Fähigkeit pausiert, wird das auslösende Upgrade gekauft (`UnpauseSpecialPowerUpgrade.TriggeredBy`, `PurchaseUpgradeCommand`; der Agent hält den Preis zurück, `SkirmishAi.ObjectiveReserve`), fehlt eine solche Einheit, wird die billigste produziert; ein noch nicht gesehenes Gebäude bekommt einen Späher |
+| `SKIRMISH_SPECIAL_POWER_READY` ohne eigenen Träger | abgelehnt („capture a carrier …“) | Eroberung des Trägers wie oben; ein eigener, noch ladender Träger wird abgewartet (kein Sofort-Aufladen) |
+| `SKIRMISH_PLAYER_HAS_UNITS_IN_AREA` | abgelehnt („bring a unit …“) | Marschbefehl einer eigenen Einheit in den Bereich |
+| `NAMED_DISCOVERED`, `TEAM_DISCOVERED`, `SKIRMISH_PLAYER_HAS_DISCOVERED_PLAYER` (Betrachter sieht) | abgelehnt (Karte aufdecken) | die nächste eigene Einheit geht hin |
+| `PLAYER_ACQUIRED_SCIENCE` (Betrachter) | abgelehnt | `PurchaseScienceCommand` |
+| `NAMED_/TEAM_ATTACKED_BY_PLAYER`, `SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER` (Betrachter greift an) | abgelehnt (Schadenspunkt) | echter Angriff |
+| `UNIT_HEALTH` eines feindlichen Objekts nach unten | abgelehnt | Angriff |
+| Flag, das kein Skript setzt (UI-Knopf) | abgelehnt | **UI-Signal** (`LeafKind.Signal`): der Spieler drückt den Knopf; keine Weltschreibung |
+
+Zwei Verschärfungen gehören dazu, damit „Befehl“ ehrlich bleibt: ein Nur-Befehle-Lauf kommandiert **nur Einheiten des Betrachters** (ein Marschbefehl an die Einheit einer anderen Seite wird abgelehnt und als
+`order '…' of another side` berichtet – vorher wurde er still erteilt), und er greift nie die eigene Seite an. Die reduzierte Sofort-Eroberung der Simulation (jede Einheit, die neben einem Gebäude steht) benutzt
+der Fahrer auf Realdaten nicht; nur in der synthetischen Fixture, die keine Einheit mit Fähigkeit kennt. Weiter abgelehnt und benannt: Geld (`PLAYER_HAS_CREDITS`), fremder Besitz, Gesundheit nach oben, Erzeugen
+ohne Produzenten.
+
+**Agent (`SkirmishAi` als Wirtschafts- und Heeresführer des Betrachters):** die Opfer der Angriffsblätter sind sein Angriffsziel (`Objectives`; ein Heer, ein Ziel, statt zweier Befehlsgeber an denselben
+Einheiten); eine Seite ohne Produktionsgebäude greift mit allem an, was sie hat, sobald ein Ziel benannt ist (`CommitEverything` – sonst wartete ein festes Missionsheer unter der Angriffsschwelle für immer);
+bis das erste Versorgungszentrum steht, wird nichts anderes begonnen (`EconomyFirst`). Zwei Fehler der KI, die nur auf Missionskarten auffielen, sind behoben: Lager einer nicht feindlichen Seite zählen als
+Lager (Missionskarten geben die `SupplyDock`s einem Zivilspieler, der Agent kannte „0 Lager“ und schickte keinen Sammler), und ein Versorgungszentrum, das neben seiner Quelle dreimal keinen Platz findet,
+wird an der Basis gebaut (auf `GC_ChemGeneral` wurde nie eines gebaut, das Startgeld ging in Kraftwerke und Kasernen). Beides ändert die 16 KI-gegen-KI-Läufe nicht (Hashes identisch, `SIMULATION-CORE.md` §33).
+
+**Je Karte: erste unerfüllte Bedingung vorher, was jetzt versucht wird, Ergebnis (gemergter Stand `2a66661` mit Zielerwerb der Einheiten in der Simulation; 0 Weltschreibungen auf allen Karten):**
+
+| Karte | erste unerfüllte Bedingung vorher | jetzt | 15.000 Ticks | 60.000 Ticks |
+| --- | --- | --- | --- | --- |
+| Training01 | Angriff auf `SCUD Storm Target` (kein Heer, kein Agent: die Seite besitzt anfangs nichts) | unverändert, 0 Befehle | nicht erreicht | nicht gemessen |
+| GC_ChemGeneral | alle Baugebäude von `SkirmishGLA` zerstören; Agent ohne Versorgungszentrum | Angriffsziel des Agenten, Wirtschaft steht, Heer verliert | nicht erreicht | nicht erreicht |
+| GC_NukeGeneral | alle Baugebäude von `AIOpponent` | wie oben | nicht erreicht | nicht erreicht |
+| GC_SuperWeaponsGeneral | alle Baugebäude von `AIOpponent` | wie oben | nicht erreicht | nicht erreicht |
+| GC_TankGeneral | alle Baugebäude von `AIOpponent` | wie oben (Infanterie gegen Gatling-Kanonen, Lager am Start erschöpft) | nicht erreicht | nicht erreicht |
+| GC_Stealth | alles von `AIOpponent`, `AIOpponent2` | wie oben | nicht erreicht | nicht erreicht |
+| GC_LaserGeneral | alles von `PlyrAmericaLaserGeneral` | wie oben | nicht erreicht | nicht erreicht |
+| GC_ChinaBoss | **abgelehnt:** Überschuss von `Boss_Airfield/_Barracks/_WarFactory/_CommandCenter/_VehicleDozer` | Angriff auf diese Gebäude | nicht erreicht | nicht erreicht |
+| GC_AirGeneral | alles von `AirGen_Grainger` | Angriffsziel des Agenten | nicht erreicht | nicht erreicht |
+| MD_USA01 | (Vorher-Lauf abgebrochen) | Angriff: `GLA_Forces_LF` darf kein Gebäude in `Launch_Facility_Area` behalten | nicht erreicht | nicht gemessen |
+| MD_USA02 | **abgelehnt:** Überschuss `GLA_Buildings` von `GLA_attackers` | Angriff; `Truck01` gehört einer anderen Seite (Befehl abgelehnt) | nicht erreicht | nicht gemessen |
+| MD_USA03 | `Burton` in `End Game Mountain Area`, drei Lagergebäude | Burton gehört (noch) nicht dem Betrachter: Befehl abgelehnt | nicht erreicht | nicht gemessen |
+| MD_USA04 | Angriff auf sechs benannte GLA-Gebäude | Angriff, Heer kommt nicht an | nicht erreicht | Lauf nach 3.300 s abgebrochen |
+| MD_USA05 | **abgelehnt:** vier Toxin-Gebäude übergeben | Eroberung (Upgrade kaufen, Ranger schicken) | nicht erreicht | nicht erreicht |
+| MD_GLA01 | 4 `ShiekLimo` von `PlyrGLA` in `AirfieldArea` | Marschbefehle (eine Limousine lebt noch) | nicht erreicht | nicht erreicht |
+| MD_GLA02 | **abgelehnt:** `Primary enemy CC` übergeben | Eroberung; keine Einheit mit Fähigkeit und kein Produzent (abgelehnt, benannt) | nicht erreicht | nicht gemessen |
+| MD_GLA03 | **abgelehnt:** Einheit in `MAINLAND`, Träger der Partikelkanone erobern | Marsch, Späher, Eroberung | nicht erreicht | nicht erreicht |
+| MD_GLA04 | – (Skript endet selbst) | – | **ja** @1022 | – |
+| MD_GLA05 | alles von `AIOpponent` | Angriffsziel des Agenten | nicht erreicht | nicht erreicht |
+| MD_CHI01 | alles von `GLA_Enemy` | Angriffsziel des Agenten | nicht erreicht | **ja** – `END_Final_` @18.492 |
+| MD_CHI02 | **abgelehnt:** Überschuss `Factory List` von `BG1`–`BG4` | Angriff | nicht erreicht | **ja** – `END_Final_` @29.605 |
+| MD_CHI03 | Angriff auf `STATUE-00…` | Angriff | nicht erreicht | nicht erreicht |
+| MD_CHI04 | **abgelehnt:** Mitglied von `Wave 6a Team 5` zerstören | Angriff, sobald die Welle existiert (Abwehrmission: es gibt noch nichts anzugreifen) | nicht erreicht | nicht erreicht |
+| MD_CHI05 | **abgelehnt:** Überschuss der GLA-Gebäudetypen von `ENEMY_GLA` | Angriff | nicht erreicht | nicht erreicht |
+
+**Ergebnis:** bei 15.000 Ticks unverändert **1 von 24**; mit 60.000 Ticks (18 Karten gemessen) **3 Karten** (`MD_GLA04`, `MD_CHI01`, `MD_CHI02`) – die ersten zwei Siege, die der Agent nur mit Befehlen
+erkämpft (vorher gewann er mit 60.000 Ticks keine der vier nachgemessenen Karten, darunter `MD_CHI01`). Auf dem Stand vor dem Merge des Zielerwerbs (nur die Fahrer-Änderungen, `e2ea1a9`) dieselben drei
+Karten (`MD_CHI01` @18.747, `MD_CHI02` @23.238). Laufzeiten: der Zielerwerb in der Simulation ersetzt die Gefechtsschleife der Sitzung; `MD_USA01` braucht für 15.000 Ticks 972 s statt über 1.800 s,
+`Training01` 170 s statt 672 s (jeweils unter paralleler Last gemessen, keine Leistungsaussage).
+
+**Woran es jetzt scheitert (gemessen, nicht behoben):** kein Lauf endet mehr an einer abgelehnten Schreibung, die ein Spieler als Befehl geben könnte (verbleibende Ablehnungen: Einheiten anderer Seiten auf
+`MD_USA02`/`MD_USA03`, fehlende Eroberungseinheit auf `MD_GLA02`). Es scheitert am Gefecht und an der Wirtschaft: (a) die Challenge-Gegner sind vorgebaute Festungen mit sechsstelligem Guthaben; der Agent
+produziert zufällig aus dem, was er gerade bezahlen kann – überwiegend Infanterie –, und verliert sie Welle um Welle an der Basisverteidigung (`GC_TankGeneral`: nach 48.000 Ticks 1 Einheit, 25 Credits, das
+Lager am Start ist leer); (b) er erschließt kein zweites Lager, wenn das erste leer ist (dieselbe Ursache wie die fünf Patts der KI-Läufe, `SIMULATION-CORE.md` §33.6); (c) Missionsabläufe (Eskorte auf
+`MD_GLA01`, Abwehrwellen auf `MD_CHI04`, Inselkarten mit Transport auf `MD_USA04`, Einheiten, die das Skript erst später übergibt, auf `MD_USA03`/`Training01`) kennt weder Agent noch Blatt. Der nächste Schritt
+ist deshalb Heereszusammensetzung und Nachschub des Agenten (Reichweite gegen Basisverteidigung, Wert statt Zufall, zweites Versorgungszentrum), danach je Karte der Ablauf.
+
+Tests: `ScriptCommandsOnlyDriverAttacksAnEnemySurplus`, `…CapturesInsteadOfHandingOver`, `…OrdersOnlyItsOwnUnits` (dazu das UI-Signal) neben den beiden bestehenden. Der Normalmodus des Fahrers ist
+unverändert: **Sieg 24/24, Niederlage 24/24** (60.000 Ticks, gemergter Stand), Audit 24/24 deterministisch und identisch nach Speichern/Laden, 0 Treffer auf fehlende Typen, Ausschalt-Endproben 13/24 und
+15/24, Erreichbarkeit sauber 24/24 und 24/24.
