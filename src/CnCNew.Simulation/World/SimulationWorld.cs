@@ -1298,6 +1298,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private void RunUpdates(long tick)
     {
         var processed = 0;
+        var observer = PhaseObserver;
         while (_updates.Count > 0)
         {
             var node = _updates.Peek();
@@ -1308,7 +1309,9 @@ public sealed partial class SimulationWorld : IWorldServices
             if (++processed > MaxUpdatesPerTick) throw new InvalidOperationException("Update storm: too many module updates in one tick.");
             MarkDirty(entity);
             _currentUpdate = node;
+            observer?.UpdateStarted(node.Module);
             var sleep = node.Update.Update(this);
+            observer?.UpdateEnded(node.Module);
             _currentUpdate = null;
             if (sleep < SimulationTiming.SleepNone) sleep = SimulationTiming.SleepNone;
             var wake = Math.Min(tick + sleep, SimulationTiming.SleepForever);
@@ -1661,6 +1664,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <summary>Executes one tick and returns its state hash. The returned buffers are reused by the next call.</summary>
     public TickResult Step()
     {
+        if (PhaseObserver is { } observer) return StepObserved(observer);
         var tick = _tick;
         _tickEvents.Clear();
         ExecuteCommands(tick);
@@ -1678,6 +1682,69 @@ public sealed partial class SimulationWorld : IWorldServices
         if (_vision is not null && tick % VisionIntervalTicks == 0) RefreshVision();
         _tick = tick + 1;
         return new TickResult(tick, ComputeIncrementalHash(), _tickEvents);
+    }
+
+    /// <summary>
+    /// A tool's measuring hook (<see cref="ITickPhaseObserver"/>); <see langword="null"/> unless a tool installs one. Not part of the state: neither hashed nor saved.
+    /// </summary>
+    public ITickPhaseObserver? PhaseObserver { get; set; }
+
+    /// <summary>Entities touched since the state hash was last computed: what the next hash has to describe again.</summary>
+    public int DirtyEntityCount => _dirty.Count;
+
+    /// <summary>The same step as <see cref="Step"/>, statement for statement, with the observer told about every phase boundary (every phase exactly once per tick, also an empty one).</summary>
+    private TickResult StepObserved(ITickPhaseObserver observer)
+    {
+        var tick = _tick;
+        _tickEvents.Clear();
+        observer.PhaseStarted(TickPhase.Commands);
+        ExecuteCommands(tick);
+        observer.PhaseEnded(TickPhase.Commands);
+        observer.PhaseStarted(TickPhase.Timers);
+        FireTimers(tick);
+        observer.PhaseEnded(TickPhase.Timers);
+        observer.PhaseStarted(TickPhase.Updates);
+        RunUpdates(tick);
+        observer.PhaseEnded(TickPhase.Updates);
+        observer.PhaseStarted(TickPhase.Acquisition);
+        StepAcquisition(tick);
+        observer.PhaseEnded(TickPhase.Acquisition);
+        observer.PhaseStarted(TickPhase.Turrets);
+        StepTurrets(tick);
+        observer.PhaseEnded(TickPhase.Turrets);
+        observer.PhaseStarted(TickPhase.FiringTrackers);
+        StepFiringTrackers(tick);
+        observer.PhaseEnded(TickPhase.FiringTrackers);
+        observer.PhaseStarted(TickPhase.Events);
+        DeliverEvents();
+        observer.PhaseEnded(TickPhase.Events);
+        observer.PhaseStarted(TickPhase.Sales);
+        ProcessSales(tick);
+        observer.PhaseEnded(TickPhase.Sales);
+        observer.PhaseStarted(TickPhase.Destroys);
+        ProcessDestroys();
+        observer.PhaseEnded(TickPhase.Destroys);
+        observer.PhaseStarted(TickPhase.DelayedDamage);
+        ProcessDelayedDamage(tick);
+        observer.PhaseEnded(TickPhase.DelayedDamage);
+        observer.PhaseStarted(TickPhase.Spawns);
+        ProcessSpawns();
+        observer.PhaseEnded(TickPhase.Spawns);
+        observer.PhaseStarted(TickPhase.SpawnEvents);
+        DeliverEvents();
+        observer.PhaseEnded(TickPhase.SpawnEvents);
+        var refresh = _vision is not null && tick % VisionIntervalTicks == 0;
+        observer.PhaseStarted(TickPhase.Vision);
+        if (refresh) RevealVision();
+        observer.PhaseEnded(TickPhase.Vision);
+        observer.PhaseStarted(TickPhase.VisionHash);
+        if (refresh) _visionHash = _vision!.Hash();
+        observer.PhaseEnded(TickPhase.VisionHash);
+        observer.PhaseStarted(TickPhase.Hash);
+        _tick = tick + 1;
+        var hash = ComputeIncrementalHash();
+        observer.PhaseEnded(TickPhase.Hash);
+        return new TickResult(tick, hash, _tickEvents);
     }
 
     // -------------------------------------------------------------------------------------------------- hash

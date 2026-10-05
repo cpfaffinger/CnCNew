@@ -106,18 +106,24 @@ public sealed class SkirmishMatchSession
     public TickResult Step()
     {
         var tick = World.Tick;
+        // A measuring tool's hook (not state): the session reports its own two parts around the world's phases.
+        var observer = World.PhaseObserver;
+        observer?.PhaseStarted(TickPhase.SkirmishAi);
         if (VictoryTick < 0)
         {
             GrantSciencePoints(tick);
             foreach (var ai in Ais) ai?.Update();
         }
+        observer?.PhaseEnded(TickPhase.SkirmishAi);
         var result = World.Step();
+        observer?.PhaseStarted(TickPhase.SkirmishVictory);
         if (VictoryTick < 0 && tick > 0 && tick % VictoryCheckInterval == 0 && World.TryGetWinner() is { } winner)
         {
             Winner = winner;
             VictoryTick = tick;
             _endTick = Math.Min(_options.MaxTicks, tick + 1 + _options.GraceTicks);
         }
+        observer?.PhaseEnded(TickPhase.SkirmishVictory);
         return result;
     }
 

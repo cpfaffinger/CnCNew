@@ -249,13 +249,19 @@ public sealed class MissionSession
     public TickResult Step()
     {
         var tick = World.Tick;
+        // A measuring tool's hook (not state): the session reports its own two parts around the world's phases.
+        var observer = World.PhaseObserver;
+        observer?.PhaseStarted(TickPhase.MissionScripts);
         Engine.Update(tick);
+        observer?.PhaseEnded(TickPhase.MissionScripts);
         // GameLogic::update: a game frozen by FREEZE_TIME ran the scripts and returns - no combat, no world step, the frame counter stays (a presentation clock keeps the cameras going).
         if (Engine.TimeFrozen) return new TickResult(tick, World.StateHash, []);
         var result = World.Step();
+        observer?.PhaseStarted(TickPhase.MissionEvents);
         foreach (var item in result.Events)
             if (item.Kind == SimEventKind.WeaponFired) _shots++;
         Engine.Observe(result.Events);
+        observer?.PhaseEnded(TickPhase.MissionEvents);
         return result;
     }
 
