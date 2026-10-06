@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using CnCNew.Data;
 using CnCNew.Data.Definitions;
 using CnCNew.Ui.Wnd;
 
@@ -62,9 +63,6 @@ public sealed record InGameUiSettings(
     ImmutableArray<string> DefaultedKeys)
 {
     public static readonly DefinitionId DefinitionId = new(DefinitionKind.Compatibility, "ingameui/ingameui");
-
-    /// <summary>The logic frames per second the duration and velocity keys convert with (<c>LOGICFRAMES_PER_SECOND</c>).</summary>
-    public const int LogicFramesPerSecond = 30;
 
     /// <summary>Which <c>Language.ini</c> font slot replaces which font of this block (<c>InGameUI::init</c>).</summary>
     public static ImmutableSortedDictionary<string, string> LanguageSlots { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -212,17 +210,18 @@ public sealed record InGameUiSettings(
         InGameUiFont Font(string key, string pointSizeKey, string boldKey, InGameUiFont fallback)
             => new(FontName(key, fallback.Name), Integer(pointSizeKey, fallback.PointSize), Boolean(boldKey, fallback.Bold));
 
-        // INI::parseDurationReal: milliseconds become (fractional) logic frames.
+        // INI::parseDurationReal: milliseconds become (fractional) original frames (LOGICFRAMES_PER_SECOND of the original, 1/30 s): the unit of every frame value of this block.
+        // Hosts compare them with a clock in original frames, never with simulation ticks.
         decimal Frames(string key, decimal fallbackFrames)
-            => values.ContainsKey(key) ? Real(key, 0m) * LogicFramesPerSecond / 1000m : fallbackFrames;
+            => values.ContainsKey(key) ? Real(key, 0m) * OriginalFrame.PerSecond / 1000m : fallbackFrames;
 
         // INI::parseDurationUnsignedInt: milliseconds become whole logic frames, rounded up.
         int WholeFrames(string key, int fallbackFrames)
-            => values.ContainsKey(key) ? (int)Math.Ceiling(Real(key, 0m) * LogicFramesPerSecond / 1000m) : fallbackFrames;
+            => values.ContainsKey(key) ? (int)Math.Ceiling(Real(key, 0m) * OriginalFrame.PerSecond / 1000m) : fallbackFrames;
 
         // INI::parseVelocityReal: units per second become units per logic frame.
         decimal PerFrame(string key, decimal fallback)
-            => values.ContainsKey(key) ? Real(key, 0m) / LogicFramesPerSecond : fallback;
+            => values.ContainsKey(key) ? Real(key, 0m) / OriginalFrame.PerSecond : fallback;
 
         // The defaults are the constructor of InGameUI (InGameUI.cpp); the retail file sets every key but the drawable caption ones.
         return new InGameUiSettings(
@@ -250,7 +249,7 @@ public sealed record InGameUiSettings(
             Color("NamedTimerCountdownNormalColor", new WndColor(255, 255, 0, 255)),
             Font("NamedTimerCountdownReadyFont", "NamedTimerCountdownReadyPointSize", "NamedTimerCountdownReadyBold", new InGameUiFont("Arial", 10, false)),
             Color("NamedTimerCountdownReadyColor", new WndColor(255, 0, 255, 255)),
-            WholeFrames("FloatingTextTimeOut", LogicFramesPerSecond / 3),
+            WholeFrames("FloatingTextTimeOut", OriginalFrame.PerSecond / 3),
             PerFrame("FloatingTextMoveUpSpeed", 1m),
             PerFrame("FloatingTextVanishRate", 0.1m),
             Color("PopupMessageColor", new WndColor(255, 255, 255, 255)),

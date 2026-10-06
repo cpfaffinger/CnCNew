@@ -79,7 +79,7 @@ public sealed class FogOfWarGrid
 
     public static FogOfWarGrid ForVision(VisionMap vision, FogSettings settings) => new(vision.CellsX, vision.CellsY, settings);
 
-    /// <summary>Takes the player's current vision (the simulation refreshes it every <c>VisionIntervalTicks</c>). The levels keep fading.</summary>
+    /// <summary>Takes the player's current vision (the simulation refreshes it every <c>SimulationWorld.VisionInterval</c> ticks). The levels keep fading.</summary>
     public void Update(VisionMap vision, int playerSlot)
     {
         ArgumentNullException.ThrowIfNull(vision);

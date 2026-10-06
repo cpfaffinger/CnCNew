@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Numerics;
 using CnCNew.Client.Stride.Rendering;
 using CnCNew.Data.Definitions;
+using CnCNew.Data;
 using CnCNew.Game.Live;
 using CnCNew.Presentation.Objects;
 using CnCNew.Presentation.Terrain;
@@ -398,7 +399,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         if (part.CabBone > 0)
         {
             // The original damps once per drawn frame at 30 frames per second; here the same fraction per elapsed 1/30 s.
-            var blend = 1f - MathF.Pow(1f - Math.Clamp(part.RotationDamping, 0f, 1f), (float)(deltaSeconds * 30.0));
+            var blend = 1f - MathF.Pow(1f - Math.Clamp(part.RotationDamping, 0f, 1f), (float)(deltaSeconds * OriginalFrame.PerSecond));
             var cabStep = (chassis.WheelAngle * part.CabFactor - part.CabAngle) * blend;
             var trailerStep = part.TrailerBone > 0 ? (-chassis.WheelAngle * part.TrailerFactor - part.TrailerAngle) * blend : 0f;
             if (MathF.Abs(cabStep) > 1e-5f || MathF.Abs(trailerStep) > 1e-5f || float.IsNaN(part.WheelApplied[6]))

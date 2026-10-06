@@ -1227,7 +1227,7 @@ static class InputTests
         var state = new InputState();
         var viewport = new Vector2(800, 600);
         state.Apply(new MouseMoveEvent(0, new Vector2(400, 300)));
-        Assert(camera.Update(state, hotkeys, viewport, 1f / 30).IsIdle, "a centred cursor and no keys: idle");
+        Assert(camera.Update(state, hotkeys, viewport, CnCNew.Tests.TestTime.FrameSecondsF).IsIdle, "a centred cursor and no keys: idle");
         state.Apply(new KeyEvent(1, KeyCode.Up, true));
         var up = camera.Update(state, hotkeys, viewport, 1f);
         Assert(up.Scroll == new Vector2(0, 2.0f * 2.0f), "the up arrow scrolls forward: vertical factor 2.0 x keyboard factor 2.0 per second");
@@ -1251,14 +1251,14 @@ static class InputTests
         state.Apply(new MouseMoveEvent(12, new Vector2(400, 300)));
         camera.OnWheel(2);
         camera.OnMeta(MetaAction.BeginCameraRotateLeft);
-        var spin = camera.Update(state, hotkeys, viewport, 1f / 30);
+        var spin = camera.Update(state, hotkeys, viewport, CnCNew.Tests.TestTime.FrameSecondsF);
         Assert(spin.ZoomDelta == -20f && Math.Abs(spin.RotateDelta - 0.1f) < 1e-6f, "two wheel detents zoom in 20; rotate-left turns 0.1 rad per frame");
         camera.OnMeta(MetaAction.EndCameraRotateLeft);
         camera.OnGesture(new PointerGesture(GestureKind.Click, MouseButton.Middle, new Vector2(10, 10), new Vector2(13, 13), KeyModifiers.None, 0));
         camera.RequestCenter(new Vector2(40, 40));
-        var reset = camera.Update(state, hotkeys, viewport, 1f / 30);
+        var reset = camera.Update(state, hotkeys, viewport, CnCNew.Tests.TestTime.FrameSecondsF);
         Assert(reset.Reset && reset.CenterOn == new Vector2(40, 40) && reset.RotateDelta == 0, "a middle click resets, a centre request is passed on");
-        Assert(camera.Update(state, hotkeys, viewport, 1f / 30).IsIdle, "one-shot requests are consumed");
+        Assert(camera.Update(state, hotkeys, viewport, CnCNew.Tests.TestTime.FrameSecondsF).IsIdle, "one-shot requests are consumed");
         camera.OnGesture(new PointerGesture(GestureKind.DragStarted, MouseButton.Middle, new Vector2(100, 100), new Vector2(130, 100), KeyModifiers.None, 0));
         camera.OnGesture(new PointerGesture(GestureKind.DragMoved, MouseButton.Middle, new Vector2(100, 100), new Vector2(150, 100), KeyModifiers.None, 0));
         Assert(Math.Abs(camera.Update(state, hotkeys, viewport, 0).RotateDelta - 0.5f) < 1e-5f, "a 50 px middle drag rotates 0.5 rad");

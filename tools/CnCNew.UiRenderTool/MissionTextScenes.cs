@@ -52,7 +52,7 @@ internal static class MissionTextScenes
 
             // DISPLAY_COUNTDOWN_TIMER and DISPLAY_COUNTER.
             commands.AddRange(MissionTextOverlay.NamedTimers(
-                [(Label("SCRIPT:CHI02xReinforcementTimer"), true, 30 * (11 * 60 + 55)), (Label("SCRIPT:MD_CHI03InternationalOpinion"), false, 42), (Label("SCRIPT:CHI02xReinforcementTimer"), true, 0)],
+                [(Label("SCRIPT:CHI02xReinforcementTimer"), true, CnCNew.Data.OriginalFrame.PerSecond * (11 * 60 + 55)), (Label("SCRIPT:MD_CHI03InternationalOpinion"), false, 42), (Label("SCRIPT:CHI02xReinforcementTimer"), true, 0)],
                 15 * 5, style, options, measure, width, height));
 
             // The superweapon list: a waiting power, a ready one, another waiting one.

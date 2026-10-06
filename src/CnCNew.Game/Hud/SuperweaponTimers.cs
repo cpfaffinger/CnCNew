@@ -74,7 +74,7 @@ public sealed class SuperweaponTimers
                     if (HiddenByScript?.Invoke(entity.Id) == true) continue;
                     var readyFrame = CommandBarModel.ReadyFrameOf(world, entity.Owner, module, power);
                     // "Integer math. We can't have float imprecision display 4:01 on a disabled superweapon" (InGameUI.cpp): a power that is ready, or disabled with its time over, shows 0:00.
-                    var seconds = readyFrame < world.Tick ? 0 : (int)((readyFrame - world.Tick) / SimulationRate.OriginalFramesPerSecond);
+                    var seconds = readyFrame < world.Tick ? 0 : (int)world.Time.ToWholeSeconds(readyFrame - world.Tick);
                     var label = "GUI:" + name;
                     var text = labelText(label);
                     if (text is null)
@@ -93,7 +93,8 @@ public sealed class SuperweaponTimers
     /// The draw commands for <paramref name="lines"/> on a <paramref name="width"/> x <paramref name="height"/> view whose control bar starts at <paramref name="controlBarTop"/>: the name right-aligned to
     /// the list's x, the time left-aligned from it (<c>SuperweaponInfo::drawName/drawTime</c>), one line per font height, in the owner's colour, white while a ready power flashes.
     /// </summary>
-    public static ImmutableArray<UiDrawCommand> Draw(ImmutableArray<SuperweaponLine> lines, Func<PlayerId, WndColor> colorOf, long tick, int width, int height, int controlBarTop, IUiTextMeasure measure,
+    /// <param name="frame">The game clock in original frames (<c>GameClock.OriginalFrames</c>): the flash period of <c>InGameUI.ini</c> is in that unit.</param>
+    public static ImmutableArray<UiDrawCommand> Draw(ImmutableArray<SuperweaponLine> lines, Func<PlayerId, WndColor> colorOf, long frame, int width, int height, int controlBarTop, IUiTextMeasure measure,
         InGameUiStyle style, UiScaleOptions options)
     {
         ArgumentNullException.ThrowIfNull(style);
@@ -109,7 +110,7 @@ public sealed class SuperweaponTimers
         var y = (int)(settings.SuperweaponPosition.Y * height);
         var bottom = (int)(Math.Min(height, controlBarTop > 0 ? controlBarTop : height) * BottomMargin);
         var flashFrames = (int)settings.SuperweaponFlashFrames;
-        var flash = flashFrames > 0 && tick / flashFrames % 2 == 1;
+        var flash = flashFrames > 0 && frame / flashFrames % 2 == 1;
         foreach (var line in lines)
         {
             var font = line.Ready ? readyFont : normalFont;

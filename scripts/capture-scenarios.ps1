@@ -3,7 +3,8 @@
   Rendert die gestellten Demos (capture-building, tank-duel, jet-strafe) ohne Fenster als Bildfolge und legt eine HTML-Uebersicht an.
 
 .DESCRIPTION
-  Fuer jede Szene laeuft der Stride-Client im Rauchtestmodus (feste 30 Ticks pro Sekunde, also Bild = Tick) und schreibt alle -Every Bilder ein PNG
+  Fuer jede Szene laeuft der Stride-Client im Rauchtestmodus (ein Bild = ein Originalbild von 1/30 s Spielzeit, bei jeder Simulationsrate; bei 30 Hz ist das ein Tick)
+  und schreibt alle -Every Bilder ein PNG
   (`--filmstrip`). Zusammen mit der Szenenbeschreibung und dem Pruefsatz aus docs/DEMO-SCENARIOS.md steht in index.html, worauf man in der Folge achten soll.
   Die Bilder gehoeren nicht ins Repo (Originalassets). Zum Selbstansehen im Fenster: scripts\demo-capture-building.ps1, demo-tank-duel.ps1, demo-jet-strafe.ps1.
 
@@ -18,8 +19,10 @@ param(
     [string]$ContentDir,
     [string]$OutDir,
     [string]$Size = '1280x720',
-    # Abstand der Bilder in Ticks; 0 = Standard je Szene.
+    # Abstand der Bilder in Originalbildern (1/30 s); 0 = Standard je Szene.
     [int]$Every = 0,
+    # Simulationsrate (30, 60 oder 120 Hz); 0 = Standard der Spielschicht. Bildzahlen und Abstaende bleiben Spielzeit.
+    [int]$TickRate = 0,
     [switch]$NoBuild
 )
 
@@ -32,7 +35,7 @@ if (-not $OutDir) { $OutDir = Join-Path ([IO.Path]::GetTempPath()) 'cncnew-scena
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path -LiteralPath $OutDir).Path
 
-# Szene: (Ticks, Standardabstand, worauf zu achten ist)
+# Szene: (Originalbilder, Standardabstand, worauf zu achten ist)
 $plan = [ordered]@{
     'capture-building' = @(1500, 100, 'Der Ranger geht zur Kaserne, packt aus (UNPACKING), hisst die Flagge (RAISING_FLAG, die Kaserne blinkt in seiner Farbe), die Kaserne wechselt die Seite, der Ranger packt wieder ein.')
     'tank-duel'        = @(300, 10, 'Beide Tuerme drehen sich zum Gegner, bevor der erste Schuss faellt; Muendungsfeuer erst nach Ausrichtung; die Rohre zeigen bei jedem Schuss auf das Ziel.')
@@ -54,8 +57,9 @@ foreach ($name in $names) {
     $step = if ($Every -gt 0) { $Every } else { $default }
     $dir = Join-Path $OutDir $name
     if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
-    Write-Host "== $name ($ticks Ticks, alle $step)" -ForegroundColor Cyan
-    dotnet run --project $project -c Release --no-build -- --smoke-test --content-dir $ContentDir --size $Size --scenario $name --frames $ticks --filmstrip $dir --every $step | Out-Null
+    Write-Host "== $name ($ticks Originalbilder, alle $step)" -ForegroundColor Cyan
+    $rateArgs = if ($TickRate -gt 0) { @('--tick-rate', "$TickRate") } else { @() }
+    dotnet run --project $project -c Release --no-build -- --smoke-test --content-dir $ContentDir --size $Size --scenario $name --frames $ticks --filmstrip $dir --every $step @rateArgs | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Szene '$name' fehlgeschlagen (Exitcode $LASTEXITCODE)." }
     [void]$html.AppendLine("<h2>$name</h2><p>$note</p>")
     foreach ($png in Get-ChildItem -LiteralPath $dir -Filter 'frame-*.png' | Sort-Object Name) {

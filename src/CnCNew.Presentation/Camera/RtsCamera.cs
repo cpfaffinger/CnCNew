@@ -1,4 +1,5 @@
 using System.Numerics;
+using CnCNew.Data;
 using CnCNew.Presentation.Terrain;
 
 namespace CnCNew.Presentation.Camera;
@@ -19,7 +20,8 @@ namespace CnCNew.Presentation.Camera;
 /// </summary>
 public sealed class RtsCamera : IViewProjection
 {
-    private const float FrameRate = 30f;
+    // Camera values of the original are amounts per original frame; the camera itself runs on wall time. Never the simulation's tick rate.
+    private const float FrameRate = OriginalFrame.PerSecond;
     private readonly RtsCameraSettings _settings;
     private readonly TerrainHeightSampler _terrain;
     private Vector2 _pivot;

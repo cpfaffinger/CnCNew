@@ -1,4 +1,5 @@
 using CnCNew.Data.Definitions;
+using CnCNew.Data;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
@@ -23,11 +24,14 @@ namespace CnCNew.Presentation.Objects;
 /// </summary>
 public sealed class UnitConditionTracker
 {
-    /// <summary><c>AIGroup::groupCheer</c>: <c>LOGICFRAMES_PER_SECOND * 3</c>.</summary>
-    public const int CheerTicks = 3 * 30;
+    /// <summary><c>AIGroup::groupCheer</c>: <c>LOGICFRAMES_PER_SECOND * 3</c>, in original frames.</summary>
+    public const int CheerFrames = 3 * OriginalFrame.PerSecond;
 
-    /// <summary><c>TensileFormationUpdate::update</c>: FREEFALL only while <c>m_life &lt; 100</c> and the rock moved more than 0.2 vertically.</summary>
-    private const int TensileFreefallLife = 100;
+    /// <summary>
+    /// <c>TensileFormationUpdate::update</c>: FREEFALL only while <c>m_life &lt; 100</c> (original frames; the simulation counts the life in ticks of its rate) and the rock
+    /// moved more than 0.2 vertically within one original frame.
+    /// </summary>
+    private const int TensileFreefallLifeFrames = 100;
 
     // The sim turns by exactly the locomotor's turn rate per tick when the goal is further away; the angle is renormalised, so allow a few raw units of rounding.
     private static readonly Fixed TurnTolerance = Fixed.FromRaw(8);
@@ -80,10 +84,13 @@ public sealed class UnitConditionTracker
         }
     }
 
-    /// <summary><c>AIGroup::groupCheer</c> (the <c>ALL_CHEER</c> test key): the objects show SPECIAL_CHEERING for <see cref="CheerTicks"/> ticks after <paramref name="tick"/>; a new cheer restarts the time.</summary>
-    public void Cheer(IEnumerable<EntityId> entities, long tick)
+    /// <summary>
+    /// <c>AIGroup::groupCheer</c> (the <c>ALL_CHEER</c> test key): the objects show SPECIAL_CHEERING for <paramref name="durationTicks"/> ticks (<see cref="CheerFrames"/> in the
+    /// ticks of the world) after <paramref name="tick"/>; a new cheer restarts the time.
+    /// </summary>
+    public void Cheer(IEnumerable<EntityId> entities, long tick, long durationTicks)
     {
-        foreach (var id in entities) StateOf(id.Value).CheerUntil = tick + CheerTicks;
+        foreach (var id in entities) StateOf(id.Value).CheerUntil = tick + durationTicks;
     }
 
     /// <summary>The bits the tracker adds to <paramref name="entity"/> for the tick <paramref name="tick"/> that was just simulated; <paramref name="turrets"/> must already have been updated for it.</summary>
@@ -123,7 +130,9 @@ public sealed class UnitConditionTracker
 
         if (state.Tensile is { } tensile)
         {
-            if (tensile.Enabled && tensile.Life is > 0 and < TensileFreefallLife && state.HasZ && (entity.Z - state.LastZ).Abs() > TensileDrop) set = set.With(UnitFlags.Freefall);
+            // The drop of one tick, scaled to the drop of one original frame (a factor of one at 30 Hz).
+            if (tensile.Enabled && tensile.Life > 0 && tensile.Life < world.Time.OriginalFrames(TensileFreefallLifeFrames) && state.HasZ
+                && (entity.Z - state.LastZ).Abs() * Fixed.FromInt(world.Time.TicksPerOriginalFrame) > TensileDrop) set = set.With(UnitFlags.Freefall);
             state.LastZ = entity.Z;
             state.HasZ = true;
         }

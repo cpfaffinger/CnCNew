@@ -20,7 +20,8 @@ static class FxAuditCommand
         var report = FxAudit.Run(graph, catalog, content.Exists);
         foreach (var line in report.Lines) Console.WriteLine(line);
 
-        var sweep = FxAudit.ExecuteAll(catalog);
+        // The sweep steps original frames and has no world; the rate only labels the ticks no event of it carries.
+        var sweep = FxAudit.ExecuteAll(catalog, CnCNew.Simulation.Time.SimulationRate.Original.Time);
         Console.WriteLine($"Execution sweep: {sweep.FxListsExecuted} FXLists in both forms, {sweep.ParticleSystemsSpawned} particle systems spawned, "
             + $"{sweep.Frames} frames, peak {sweep.PeakParticles} particles, {sweep.SoundCues} sound cues, checksum {sweep.Checksum:X16}.");
         var stats = sweep.Particles;

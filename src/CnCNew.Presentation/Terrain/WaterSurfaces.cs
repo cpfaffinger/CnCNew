@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using CnCNew.Data.Definitions;
 using CnCNew.Data.World;
+using CnCNew.Data;
 
 namespace CnCNew.Presentation.Terrain;
 
@@ -22,8 +23,8 @@ public sealed record WaterAppearance(
     float UScrollPerMs,
     float VScrollPerMs)
 {
-    /// <summary><c>WaterRenderObjClass::update</c>: <c>m_riverVOrigin += 0.002</c> per 30 Hz logic frame.</summary>
-    public const float RiverVScrollPerSecond = 0.002f * 30f;
+    /// <summary><c>WaterRenderObjClass::update</c>: <c>m_riverVOrigin += 0.002</c> per original frame; scrolled on wall time.</summary>
+    public const float RiverVScrollPerSecond = 0.002f * OriginalFrame.PerSecond;
 
     /// <summary><c>drawTrapezoidWater</c>: <c>waterFactor = 150</c> world units per texture repeat.</summary>
     public const float StandingWaterUnitsPerRepeat = 150f;

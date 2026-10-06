@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Numerics;
+using CnCNew.Data;
 using CnCNew.Game.Data;
+using CnCNew.Presentation;
 using CnCNew.Presentation.Camera;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
@@ -71,8 +73,9 @@ public readonly record struct MissionPostEffects(float BlackWhite, int MotionBlu
 /// </summary>
 public sealed class MissionPresentationDirector
 {
-    private const long DefaultPlaceholderTicks = 3 * SimulationRate.OriginalFramesPerSecond;
-    private const long RadarBlipLifetimeTicks = 8 * SimulationRate.OriginalFramesPerSecond;
+    // Durations of the director itself, in original frames (3 s and 8 s); they become ticks of the session's world where they are used.
+    private const long DefaultPlaceholderFrames = 3 * OriginalFrame.PerSecond;
+    private const long RadarBlipLifetimeFrames = 8 * OriginalFrame.PerSecond;
     private const string CameraKey = "<camera>";
     private const int JournalCapacity = 4000;
 
@@ -128,7 +131,19 @@ public sealed class MissionPresentationDirector
     /// The presentation clock: the world tick plus the steps in which the scripts froze time (<c>FREEZE_TIME</c>; <c>MissionSession.Step</c> runs the scripts but not the world then). Camera moves, fades,
     /// captions, the blur and the grey-scale ramp run on it, so they go on while the world stands still, exactly as the original's views do; without a freeze it equals the world tick.
     /// </summary>
+    /// <remarks>
+    /// The unit is the tick of the session's world. Everything the scripts and the data give in original frames (fade and grey-scale frames, caption times, <c>InGameUI</c>
+    /// durations) is converted with <see cref="Time"/> where it meets this clock, and what the original advances once per frame (texts, filters) advances on
+    /// <see cref="FrameClock"/>: at 60 Hz it lasts the same game time as at 30 Hz.
+    /// </remarks>
     public long Clock => _session.World.Tick + _frozenSteps;
+
+    /// <summary>The presentation clock in original frames (1/30 s): the unit of the texts (<see cref="UiMessageLog"/>, <see cref="MilitaryCaptionState"/>, named timers). Equal to <see cref="Clock"/> at 30 Hz.</summary>
+    public long FrameClock => FrameOf(Clock);
+
+    private SimulationTime Time => _session.World.Time;
+
+    private long FrameOf(long clock) => GameClock.OriginalFrameOf(clock, Time.TicksPerOriginalFrame);
 
     /// <summary>The mission scripts' sound control (volumes, muted events, Eva, ambient loops); without it the output counts as not played.</summary>
     public IMissionAudioControl? AudioControl { get; set; }
@@ -212,8 +227,11 @@ public sealed class MissionPresentationDirector
 
     private long? _letterboxSwitchedAt;
 
-    /// <summary><c>LETTER_BOX_FADE_TIME</c> (1000 ms) in presentation steps; the original counts wall-clock milliseconds.</summary>
-    public const int LetterboxFadeFrames = 30;
+    /// <summary>
+    /// <c>LETTER_BOX_FADE_TIME</c> (1000 ms) in original frames of the presentation clock; the original counts wall-clock milliseconds. The fade stays on the presentation
+    /// clock (it stands with a paused game and is reproducible); in seconds it is the same at every tick rate.
+    /// </summary>
+    public const int LetterboxFadeFrames = OriginalFrame.PerSecond;
 
     /// <summary>
     /// <c>m_letterBoxFadeLevel</c> (<c>W3DDisplay::renderLetterBox</c>): rises from 0 to 1 over a second after the letterbox began, falls back to 0 over a second after it ended.
@@ -223,7 +241,7 @@ public sealed class MissionPresentationDirector
         get
         {
             if (_letterboxSwitchedAt is not { } since) return 0f;
-            var progress = Math.Clamp((Clock - since) / (float)LetterboxFadeFrames, 0f, 1f);
+            var progress = Math.Clamp((Clock - since) / (float)Time.OriginalFrames(LetterboxFadeFrames), 0f, 1f);
             return Letterbox ? progress : 1f - progress;
         }
     }
@@ -549,7 +567,7 @@ public sealed class MissionPresentationDirector
             if (_messages is { IsEmpty: false } messages) commands.AddRange(MissionTextOverlay.Messages(messages, style, options, measure, width, height));
             if (_militaryCaption is { } caption) commands.AddRange(MissionTextOverlay.MilitaryCaption(caption, style, options, measure, width, height));
             if (timers)
-                commands.AddRange(MissionTextOverlay.NamedTimers(_counters.Select(pair => (pair.Value.Label, pair.Value.IsTimer, _session.Engine.CounterValue(pair.Key))), Clock, style, options, measure, width, height));
+                commands.AddRange(MissionTextOverlay.NamedTimers(_counters.Select(pair => (pair.Value.Label, pair.Value.IsTimer, CounterForDisplay(pair.Key, pair.Value.IsTimer))), FrameClock, style, options, measure, width, height));
             return;
         }
         if (_cinematic is { } cinematic) commands.AddRange(MissionTextOverlay.Cinematic(cinematic, style, options, measure, width, height));
@@ -562,6 +580,13 @@ public sealed class MissionPresentationDirector
             var font = style.Font(InGameUiFontRole.Message, new UiViewport(width, height), options);
             commands.AddRange(MissionTextOverlay.CenteredText(text, font, measure, width, height, Letterbox ? Math.Max(0, height - 48) : height * 3 / 4, new WndColor(255, 255, 255, 255), new WndColor(0, 0, 0, 255)));
         }
+    }
+
+    // A timer of the script VM counts ticks of the world; the display counts original frames (InGameUI::postDraw divides by LOGICFRAMES_PER_SECOND). A counter is a plain number.
+    private long CounterForDisplay(string name, bool isTimer)
+    {
+        var value = _session.Engine.CounterValue(name);
+        return isTimer ? GameClock.OriginalFrameOf(value, Time.TicksPerOriginalFrame) : value;
     }
 
     private (bool White, byte Alpha)? FadeAlpha()
@@ -625,14 +650,18 @@ public sealed class MissionPresentationDirector
         // A step that left the world tick where it was is a frozen one (FREEZE_TIME): the presentation clock goes on without it.
         var worldStepped = _session.World.Tick != _tickBeforeStep;
         if (!worldStepped) _frozenSteps++;
-        AdvanceText(Clock);
-        AdvanceFilters(worldStepped);
-        _radar.RemoveAll(blip => Clock - blip.CreatedAtTick > RadarBlipLifetimeTicks);
+        // Texts and filters are the original's per-frame updates: they advance when the presentation clock begins an original frame (every step at 30 Hz).
+        if (GameClock.BeginsOriginalFrame(Clock, Time.TicksPerOriginalFrame))
+        {
+            AdvanceText(FrameClock);
+            AdvanceFilters(worldStepped);
+        }
+        _radar.RemoveAll(blip => Clock - blip.CreatedAtTick > Time.OriginalFrames(RadarBlipLifetimeFrames));
     }
 
     /// <summary>
-    /// <c>InGameUI::update</c> for the texts: the message lines fade and go, the military caption types, blinks and fades, the cinematic text runs out. One update per presentation step, on the
-    /// presentation clock (so a text goes on while a script freezes the world, as the original's does).
+    /// <c>InGameUI::update</c> for the texts: the message lines fade and go, the military caption types, blinks and fades, the cinematic text runs out. One update per original frame of the
+    /// presentation clock (so a text goes on while a script freezes the world, as the original's does); <paramref name="clock"/> is <see cref="FrameClock"/>.
     /// </summary>
     private void AdvanceText(long clock)
     {
@@ -653,8 +682,8 @@ public sealed class MissionPresentationDirector
     }
 
     /// <summary>
-    /// The two screen filters advance once per logic step. The grey-scale ramps over its frames (<c>ScreenBWFilter::set</c> counts <c>m_curFadeFrame</c> per drawn frame; a logic step stands in for one);
-    /// the motion blur adds 5 to its count for 12 steps, cuts to the target at 60 and takes 5 off for 11 more (<c>ScreenMotionBlurFilter::postRender</c>, only on a frame the game logic has changed).
+    /// The two screen filters advance once per original frame. The grey-scale ramps over its frames (<c>ScreenBWFilter::set</c> counts <c>m_curFadeFrame</c> per drawn frame; an original frame stands in for one);
+    /// the motion blur adds 5 to its count for 12 frames, cuts to the target at 60 and takes 5 off for 11 more (<c>ScreenMotionBlurFilter::postRender</c>, only on a frame the game logic has changed).
     /// </summary>
     private void AdvanceFilters(bool worldStepped)
     {
@@ -770,7 +799,7 @@ public sealed class MissionPresentationDirector
             {
                 // cameraModFinalZoom/Pitch change where the move in progress ends; here they reach their value together with that move.
                 if (!Number(output, 0, out var factor)) { Problem(action, "value argument missing"); return; }
-                var seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)SimulationRate.OriginalFramesPerSecond);
+                var seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)Time.TicksPerSecond);
                 if (action == "CAMERA_MOD_SET_FINAL_ZOOM") _zoomRequest = (factor, seconds);
                 else _pitchRequest = (factor, seconds);
                 Handled(action, Channel.Camera);
@@ -788,7 +817,7 @@ public sealed class MissionPresentationDirector
                     _cameraPending = true;
                     _cameraCompletesAtTick = tick + DurationTicks(seconds);
                 }
-                else seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)SimulationRate.OriginalFramesPerSecond);
+                else seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)Time.TicksPerSecond);
                 _lookRequest = (new Vector2(lookAt.X, lookAt.Y), seconds);
                 Handled(action, Channel.Camera);
                 return;
@@ -821,7 +850,7 @@ public sealed class MissionPresentationDirector
                 return;
             case "CAMERA_FADE_ADD" or "CAMERA_FADE_SUBTRACT" or "CAMERA_FADE_MULTIPLY":
             {
-                // doCameraFade*(minFade, maxFade, framesIncrease, framesHold, framesDecrease). Add brightens towards white, subtract darkens towards black; multiply
+                // doCameraFade*(minFade, maxFade, framesIncrease, framesHold, framesDecrease): the frame counts are original frames whatever the tick rate. Add brightens towards white, subtract darkens towards black; multiply
                 // darkens as its factor falls below 1, so it is shown as black with the inverted factor.
                 if (!Number(output, 0, out var min) || !Number(output, 1, out var max) || !Number(output, 2, out var increase) || !Number(output, 3, out var hold) || !Number(output, 4, out var decrease))
                 {
@@ -829,7 +858,7 @@ public sealed class MissionPresentationDirector
                     return;
                 }
                 if (action == "CAMERA_FADE_MULTIPLY") (min, max) = (1 - min, 1 - max);
-                _fade = (action == "CAMERA_FADE_ADD", min, max, tick, (long)increase, (long)hold, (long)decrease);
+                _fade = (action == "CAMERA_FADE_ADD", min, max, tick, Time.OriginalFrames((long)increase), Time.OriginalFrames((long)hold), Time.OriginalFrames((long)decrease));
                 Handled(action, Channel.Overlay);
                 return;
             }
@@ -858,10 +887,10 @@ public sealed class MissionPresentationDirector
                         TryShowSpeechSubtitle(name, tick);
                         // Apart from that no text exists for a speech event: its name is shown, marked as a placeholder, whether or not the sound plays.
                         SubtitleEvent = name;
-                        _subtitleExpiresAtTick = tick + DefaultPlaceholderTicks;
+                        _subtitleExpiresAtTick = tick + Time.OriginalFrames(DefaultPlaceholderFrames);
                         if (!played) Handled(action, Channel.Overlay);
                     }
-                    _completions.Add((name, tick + DefaultPlaceholderTicks));
+                    _completions.Add((name, tick + Time.OriginalFrames(DefaultPlaceholderFrames)));
                 }
                 return;
             }
@@ -874,8 +903,8 @@ public sealed class MissionPresentationDirector
             case "MOVIE_PLAY_FULLSCREEN" or "MOVIE_PLAY_RADAR":
                 if (output.Arguments.Length == 0) { Problem(action, "movie name missing"); return; }
                 MoviePlaceholder = output.Arguments[0];
-                _movieExpiresAtTick = tick + DefaultPlaceholderTicks;
-                _completions.Add((output.Arguments[0], tick + DefaultPlaceholderTicks));
+                _movieExpiresAtTick = tick + Time.OriginalFrames(DefaultPlaceholderFrames);
+                _completions.Add((output.Arguments[0], tick + Time.OriginalFrames(DefaultPlaceholderFrames)));
                 Handled(action, Channel.Overlay);
                 return;
             case "DISPLAY_TEXT":
@@ -883,7 +912,7 @@ public sealed class MissionPresentationDirector
                 // doDisplayText -> InGameUI::message: one more line of the message list at the top left (the label's text), which fades on its own.
                 if (output.Arguments.Length == 0) { Problem(action, "text label missing"); return; }
                 if (TextStyle is not { } style) { Problem(action, "no InGameUI style connected"); return; }
-                (_messages ??= new UiMessageLog(style.Settings)).Add(ResolveLabel(action, output.Arguments[0]), tick);
+                (_messages ??= new UiMessageLog(style.Settings)).Add(ResolveLabel(action, output.Arguments[0]), FrameOf(tick));
                 Handled(action, Channel.Overlay);
                 return;
             }
@@ -907,7 +936,7 @@ public sealed class MissionPresentationDirector
                 if (output.Arguments.Length < 3) { Problem(action, "arguments missing"); return; }
                 if (!MissionTextOverlay.TryParseCinematicFont(output.Arguments[1], out var font, out var fontProblem)) { Problem(action, fontProblem); return; }
                 if (!Number(output, 2, out var seconds)) { Problem(action, "duration missing"); return; }
-                _cinematic = new CinematicTextState(ResolveLabel(action, output.Arguments[0]), font, tick + (long)seconds * SimulationRate.OriginalFramesPerSecond);
+                _cinematic = new CinematicTextState(ResolveLabel(action, output.Arguments[0]), font, FrameOf(tick) + (long)seconds * OriginalFrame.PerSecond);
                 Handled(action, Channel.Overlay);
                 return;
             }
@@ -918,7 +947,7 @@ public sealed class MissionPresentationDirector
                 if (TextStyle is not { } style) { Problem(action, "no InGameUI style connected"); return; }
                 _militaryCaption = null;
                 var language = style.Language.Settings;
-                _militaryCaption = MilitaryCaptionState.Begin(ResolveLabel(action, output.Arguments[0]), durationMs, tick, style.Settings, language.MilitaryCaptionSpeed, language.MilitaryCaptionDelayMilliseconds, out var problem);
+                _militaryCaption = MilitaryCaptionState.Begin(ResolveLabel(action, output.Arguments[0]), durationMs, FrameOf(tick), style.Settings, language.MilitaryCaptionSpeed, language.MilitaryCaptionDelayMilliseconds, out var problem);
                 if (_militaryCaption is null) Problem(action, problem ?? "no caption");
                 else Handled(action, Channel.Overlay);
                 return;
@@ -985,7 +1014,7 @@ public sealed class MissionPresentationDirector
         // A host that cannot resolve a label hands it back unchanged: that is "not found" here, and the usual case (the retail table has labels for most speech events).
         if (string.Equals(subtitle, label, StringComparison.Ordinal) || subtitle.Length == 0 || subtitle[0] == '*') return;
         var language = style.Language.Settings;
-        _militaryCaption = MilitaryCaptionState.Begin(subtitle, SpeechSubtitleMilliseconds, tick, style.Settings, language.MilitaryCaptionSpeed, language.MilitaryCaptionDelayMilliseconds, out _);
+        _militaryCaption = MilitaryCaptionState.Begin(subtitle, SpeechSubtitleMilliseconds, FrameOf(tick), style.Settings, language.MilitaryCaptionSpeed, language.MilitaryCaptionDelayMilliseconds, out _);
     }
 
     private bool HasAudio => AudioControl is not null || Audio is not null;
@@ -1302,7 +1331,8 @@ public sealed class MissionPresentationDirector
         return lines.ToImmutable();
     }
 
-    private static long DurationTicks(double seconds) => Math.Max(0, (long)Math.Round(seconds * SimulationRate.OriginalFramesPerSecond));
+    // Script seconds to ticks of the session's world, rounded to whole original frames first (the deadline falls on the same game time at every rate).
+    private long DurationTicks(double seconds) => Time.OriginalFrames(Math.Max(0, (long)Math.Round(seconds * OriginalFrame.PerSecond)));
 
     /// <summary>The text of a CSF label; a label the host cannot resolve comes back unchanged and is counted as a problem, so the screen shows the label and the report says why.</summary>
     private string ResolveLabel(string action, string label)

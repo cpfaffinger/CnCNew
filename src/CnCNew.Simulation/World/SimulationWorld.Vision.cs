@@ -14,12 +14,6 @@ public sealed partial class SimulationWorld
     /// </summary>
     public const int VisionIntervalFrames = 3;
 
-    /// <summary>
-    /// <see cref="VisionIntervalFrames"/> under its former name, for the callers outside the simulation that still step at the original's rate (game layer, tools, tests: phase 21).
-    /// It is the interval in ticks only at 30 Hz; the world itself uses <see cref="VisionInterval"/>.
-    /// </summary>
-    public const int VisionIntervalTicks = VisionIntervalFrames;
-
     /// <summary>The shroud is recomputed on every tick that is a multiple of this (<see cref="VisionIntervalFrames"/> in ticks of this world).</summary>
     public long VisionInterval { get; }
 

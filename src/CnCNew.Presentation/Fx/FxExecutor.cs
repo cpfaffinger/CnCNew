@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Presentation.Fx;
 
@@ -19,8 +20,13 @@ public sealed record FxInvocation(Vector3 Primary)
 /// <summary>
 /// Executes FXLists and the FX-bearing simulation events into renderer-neutral data: particle systems in a <see cref="ParticleWorld"/>,
 /// tracers, ray requests, light pulses, view-shake requests, scorch decals and <see cref="SoundCue"/>s. Nothing calls back into a
-/// renderer: callers run <see cref="ExecuteEvents"/> after each simulation tick, <see cref="Update"/> once per logic frame, and read
-/// <see cref="Capture"/>/<see cref="DrainSoundCues"/>. Every skipped or approximated case is counted in <see cref="Counters"/>.
+/// renderer: callers run <see cref="ExecuteEvents"/> after each simulation tick, <see cref="Update"/> once per original frame (1/30 s of game time: after every
+/// tick at 30 Hz, after every second tick at 60 Hz), and read <see cref="Capture"/>/<see cref="DrainSoundCues"/>. Every skipped or approximated case is counted in
+/// <see cref="Counters"/>.
+/// <para>
+/// Two units of time meet here and are kept apart: FX data and <see cref="Frame"/> are original frames; the ticks on the events are ticks of the simulation's rate.
+/// The one place they are compared, the throttle of damage effects, runs on the simulation's tick with its data duration converted through the time service.
+/// </para>
 /// </summary>
 public sealed class FxExecutor
 {
@@ -29,6 +35,7 @@ public sealed class FxExecutor
     private const int MaxLights = 64;
     private readonly FxCatalog _catalog;
     private readonly FxRandom _random;
+    private readonly SimulationTime _time;
     private readonly SoundCueDeriver _deriver;
     private readonly List<TracerState> _tracers = [];
     private readonly List<LightState> _lights = [];
@@ -41,13 +48,15 @@ public sealed class FxExecutor
     private readonly Dictionary<uint, string> _tickWeaponsBySource = [];
     private long _currentTick;
 
-    public FxExecutor(FxCatalog catalog, ulong seed, ParticleBudget? budget = null)
+    /// <param name="time">The time service of the world whose events are executed: event ticks are in its rate.</param>
+    public FxExecutor(FxCatalog catalog, SimulationTime time, ulong seed, ParticleBudget? budget = null)
     {
         _catalog = catalog;
+        _time = time ?? throw new ArgumentNullException(nameof(time));
         _random = new FxRandom(seed);
         Particles = new ParticleWorld(budget ?? catalog.Settings.Budget, _random, catalog.FindParticleSystem);
         Decals = new DecalBuffer();
-        _deriver = new SoundCueDeriver(catalog);
+        _deriver = new SoundCueDeriver(catalog, time);
     }
 
     public FxCatalog Catalog => _catalog;
@@ -146,7 +155,7 @@ public sealed class FxExecutor
         }
         var sourceLevel = Math.Clamp(view.GetPose(simEvent.Other)?.Veterancy ?? 0, 0, 3);
         var (major, minor, amount, throttle) = table.Resolve(damageType, sourceLevel);
-        _damageThrottle[simEvent.Entity.Value] = (damageType, simEvent.Tick + throttle);
+        _damageThrottle[simEvent.Entity.Value] = (damageType, simEvent.Tick + _time.OriginalFrames(throttle));
         var damage = simEvent.Value / 65536f;
         var fx = damage >= amount ? major : minor;
         if (fx is not null) ExecuteFxListAtEntity(fx, simEvent.Entity, simEvent.Other, view);
@@ -333,7 +342,7 @@ public sealed class FxExecutor
 
     // ------------------------------------------------------------------------------------------- frames
 
-    /// <summary>Advances particles, tracers, lights and decal lifetimes by one logic frame.</summary>
+    /// <summary>Advances particles, tracers, lights and decal lifetimes by one original frame.</summary>
     public void Update(IFxWorldView view)
     {
         Particles.Step(view.GetPose, view.GroundHeight);

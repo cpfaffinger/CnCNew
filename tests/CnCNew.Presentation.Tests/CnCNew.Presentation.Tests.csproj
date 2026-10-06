@@ -5,6 +5,8 @@
   <ItemGroup>
     <!-- The synthetic .cur/.ani builders of the decoder tests, shared so that the cursor set is tested against real file bytes. -->
     <Compile Include="../CnCNew.Images.Tests/CursorFixtures.cs" Link="CursorFixtures.cs" />
+    <!-- Time helpers of the tests (one original frame of wall time, one tick of a world): no test writes a rate of its own. -->
+    <Compile Include="../Shared/TestTime.cs" Link="Shared/TestTime.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Presentation/CnCNew.Presentation.csproj" />

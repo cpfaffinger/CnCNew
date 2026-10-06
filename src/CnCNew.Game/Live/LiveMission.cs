@@ -46,10 +46,11 @@ public sealed class LiveMission : LiveGame, IMissionObjectEffects
     bool IMissionObjectEffects.SetHouseColor(EntityId entity, uint argb) => SetDrawableHouseColor(entity, argb);
 
     /// <summary>
-    /// The <c>PresentationLatencyTicks</c> a client with a <see cref="MissionPresentationDirector"/> starts a mission with (60 seconds): the director ends camera moves,
-    /// speech and movies at their own time, the latency only bounds how long the scripts wait for something nobody completed.
+    /// The <c>MissionOptions.PresentationLatencyTicks</c> a client with a <see cref="MissionPresentationDirector"/> starts a mission with: 60 seconds, in original frames
+    /// (the option's unit; the script VM converts it to ticks of its world). The director ends camera moves, speech and movies at their own time, the latency only bounds how
+    /// long the scripts wait for something nobody completed.
     /// </summary>
-    public const int ClientPresentationLatencyTicks = 60 * CnCNew.Simulation.Time.SimulationRate.OriginalFramesPerSecond;
+    public const int ClientPresentationLatencyFrames = 60 * CnCNew.Data.OriginalFrame.PerSecond;
 
     public MissionRun Run { get; }
     public MissionSession Session => Run.Session;

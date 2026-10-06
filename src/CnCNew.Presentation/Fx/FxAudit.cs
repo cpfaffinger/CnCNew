@@ -89,11 +89,12 @@ public static class FxAudit
 
     /// <summary>
     /// Executes every FXList in both forms (object at the origin, position with a secondary 100 units away) and spawns every particle
-    /// system template once, stepping one frame after each, then lets everything run out for <paramref name="settleFrames"/> frames.
+    /// system template once, stepping one original frame after each, then lets everything run out for <paramref name="settleFrames"/> original frames.
+    /// The sweep has no world and no ticks: <paramref name="time"/> only tells the executor which rate event ticks would have.
     /// </summary>
-    public static FxExecutionSweep ExecuteAll(FxCatalog catalog, ulong seed = 1, int settleFrames = 300)
+    public static FxExecutionSweep ExecuteAll(FxCatalog catalog, CnCNew.Simulation.Time.SimulationTime time, ulong seed = 1, int settleFrames = 300)
     {
-        var executor = new FxExecutor(catalog, seed);
+        var executor = new FxExecutor(catalog, time, seed);
         var view = new SweepView();
         var peak = 0;
         var cues = 0;

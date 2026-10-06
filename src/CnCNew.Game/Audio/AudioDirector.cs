@@ -6,6 +6,7 @@ using CnCNew.Audio.Mixing;
 using CnCNew.Audio.Selection;
 using CnCNew.Game.Data;
 using CnCNew.Game.Live;
+using CnCNew.Presentation;
 using CnCNew.Presentation.Fx;
 using CnCNew.Presentation.Objects;
 using CnCNew.Simulation.Ids;
@@ -47,7 +48,8 @@ public interface IAudioGameView
     /// <summary>The local player's template side as <c>Eva.ini</c> spells it (<c>America</c>, <c>ChinaTankGeneral</c>, ...).</summary>
     string HumanSide { get; }
 
-    long Tick { get; }
+    /// <summary>The presentation clock of the game (<see cref="LiveGame.Clock"/>): the announcer counts its original frames, the flood protection converts cue ticks with its rate.</summary>
+    GameClock Clock { get; }
 
     /// <summary>The local player's energy balance is negative (<c>Energy::hasSufficientPower</c> is false).</summary>
     bool LowPower { get; }
@@ -67,7 +69,7 @@ public sealed class LiveAudioView(LiveGame live) : IAudioGameView
     public string HumanSide => _side ??= live.Data.Factions
         .FirstOrDefault(value => value.Faction.Name.Equals(live.HumanFaction, StringComparison.OrdinalIgnoreCase))?.Side ?? "";
 
-    public long Tick => live.Tick;
+    public GameClock Clock => live.Clock;
     public bool LowPower => live.World.EnergyProductionOf(live.Human) < 0;
     public Relationship RelationshipOf(PlayerId from, PlayerId to) => live.World.RelationshipOf(from, to);
     public bool IsShrouded(Vector3 position) => live.FxView.IsShrouded(position);
@@ -215,7 +217,7 @@ public sealed partial class AudioDirector : IDisposable
     private bool _muted;
     private double _now;
     private double _lastAmbient = double.NegativeInfinity;
-    private long _lastEvaTick = -1;
+    private long _lastEvaFrame = -1;
     private long _cuesReceived, _uiPlayed, _unitVoicesPlayed, _ambientStarted;
 
     private enum MusicMode { None, Menu, Match }
@@ -410,9 +412,9 @@ public sealed partial class AudioDirector : IDisposable
             Drop(AudioSource.Simulation, AudioOutcomes.Paused, cues.Length);
             return;
         }
-        var before = _limiter.DroppedByRate + _limiter.DroppedByTickCap + _limiter.DroppedByDistance;
-        var accepted = _limiter.Filter(cues, _listenerPosition);
-        Drop(AudioSource.Simulation, AudioOutcomes.RateLimited, _limiter.DroppedByRate + _limiter.DroppedByTickCap + _limiter.DroppedByDistance - before);
+        var before = _limiter.DroppedByRate + _limiter.DroppedByFrameCap + _limiter.DroppedByDistance;
+        var accepted = _limiter.Filter(cues, view.Clock.TicksPerOriginalFrame, _listenerPosition);
+        Drop(AudioSource.Simulation, AudioOutcomes.RateLimited, _limiter.DroppedByRate + _limiter.DroppedByFrameCap + _limiter.DroppedByDistance - before);
         foreach (var cue in accepted) Dispatch(cue, view);
     }
 
@@ -647,11 +649,13 @@ public sealed partial class AudioDirector : IDisposable
 
     private void UpdateEva(IAudioGameView view)
     {
-        // Once per match tick: the announcer counts logic frames, and a render frame may step several ticks (the catch-up of LiveMatch).
-        if (view.Tick == _lastEvaTick) return;
-        _lastEvaTick = view.Tick;
+        // Once per original frame of game time: the announcer counts logic frames of the original (its waits in Eva.ini are 1/30 s units), and a render frame may step
+        // several ticks (the catch-up of LiveGame) or, at a higher tick rate, less than one original frame.
+        var frame = view.Clock.OriginalFrames;
+        if (frame == _lastEvaFrame) return;
+        _lastEvaFrame = frame;
         var speaking = IsLive(_evaVoice, _evaIssued);
-        var dialog = _eva.Update(view.Tick, view.LowPower, speaking, view.HumanSide);
+        var dialog = _eva.Update(frame, view.LowPower, speaking, view.HumanSide);
         if (dialog is null) return;
         var info = _catalog.Find(dialog);
         if (info is null)

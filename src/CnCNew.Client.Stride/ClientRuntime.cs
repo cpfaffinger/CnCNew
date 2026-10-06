@@ -138,8 +138,8 @@ internal sealed class ClientRuntime : IDisposable
         var engine = session.Engine;
         var lines = new List<string>
         {
-            $"mission: map {mission.Run.MapPath}, human side '{session.Program.Players.FirstOrDefault(player => player.Id == mission.Human)?.Name}' (player {mission.Human.Value}, faction {mission.HumanFaction}), presentation latency {session.Options.PresentationLatencyTicks} ticks",
-            $"mission: {_frame} frames, world tick {mission.Tick}, session steps {_running.MissionSteps} (script VM updates), outcome {mission.Outcome}, over {mission.IsOver}, missing action hits {engine.MissingActionHits.Values.Sum()}, missing condition hits {engine.MissingConditionHits.Values.Sum()}",
+            $"mission: map {mission.Run.MapPath}, human side '{session.Program.Players.FirstOrDefault(player => player.Id == mission.Human)?.Name}' (player {mission.Human.Value}, faction {mission.HumanFaction}), presentation latency {session.Options.PresentationLatencyTicks} original frames ({session.Options.PresentationLatencyTicks / CnCNew.Data.OriginalFrame.PerSecond} s)",
+            $"mission: {_frame} frames, world tick {mission.Tick} at {mission.World.Time.Rate}, session steps {_running.MissionSteps} (script VM updates), outcome {mission.Outcome}, over {mission.IsOver}, missing action hits {engine.MissingActionHits.Values.Sum()}, missing condition hits {engine.MissingConditionHits.Values.Sum()}",
         };
         lines.AddRange(mission.Director.Report());
         lines.Add($"mission screen filters: {_filters.FramesFiltered} frames drawn through the grey-scale or the motion blur; camera shake offset at exit {mission.Camera.ShakeOffset.Length():F2}, border {mission.Camera.ActiveBoundary}");

@@ -76,7 +76,7 @@ public sealed class MatchController
         _descriptions = new CommandButtonDescription(match.Data.Graph, _assets.Text);
         _textMeasure = textMeasure ?? new MonospaceTextMeasure();
         TextStyle = InGameUiStyle.FromGraph(match.Data.Graph);
-        Messages = new HudMessageFeed(new UiMessageLog(TextStyle.Settings), _assets.Text, match.Data.Graph) { Clock = () => Match.Tick };
+        Messages = new HudMessageFeed(new UiMessageLog(TextStyle.Settings), _assets.Text, match.Data.Graph) { Clock = () => Match.Clock.OriginalFrames };
         var services = _assets.BuildTreeServices(textMeasure ?? new MonospaceTextMeasure());
         _scaleOptions = new UiScaleOptions
         {
@@ -446,7 +446,8 @@ public sealed class MatchController
     {
         Stats.Observe(result, Match.World);
         foreach (var ev in result.Events) Messages.Observe(ev, Match.World, Match.Human);
-        if (OwnsMessageList) Messages.Log.Update(Match.Tick);
+        // InGameUI::update runs once per original frame: the lines fade on the game clock's 1/30 s grid, not per simulation tick.
+        if (OwnsMessageList && Match.Clock.IsOriginalFrameBoundary) Messages.Log.Update(Match.Clock.OriginalFrames);
         if (Match.IsOver && !_matchEndedFired)
         {
             _matchEndedFired = true;
@@ -723,7 +724,7 @@ public sealed class MatchController
             _superweaponEnabled = Superweapons.DisplayEnabled;
         }
         var lines = _superweaponLines;
-        return SuperweaponTimers.Draw(lines, player => { var house = Match.Colors.Of(player); return new WndColor(house.Red, house.Green, house.Blue, 255); }, Match.Tick, width, height, _controlBarRoot.Rect.Y, _textMeasure, TextStyle, _scaleOptions);
+        return SuperweaponTimers.Draw(lines, player => { var house = Match.Colors.Of(player); return new WndColor(house.Red, house.Green, house.Blue, 255); }, Match.Clock.OriginalFrames, width, height, _controlBarRoot.Rect.Y, _textMeasure, TextStyle, _scaleOptions);
     }
 
     private ImmutableArray<UiDrawCommand> BuildDynamicCommands()

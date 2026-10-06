@@ -231,7 +231,7 @@ internal static class HudTests
         var wrench = controller.BuildDrawList(1280, 720).Commands.OfType<UiImageDraw>().FirstOrDefault(image => image.Image.StartsWith("SCPWrench", StringComparison.Ordinal));
         TestHarness.Assert(wrench is not null, "the wrench frame is drawn");
         Console.WriteLine($"  overlay: {kinds.GetValueOrDefault("UiLineDraw")} line commands for one selected dozer, healing icon {wrench?.Image}");
-        Advance(match, controller, 4 * 30);
+        Advance(match, controller, 4 * CnCNew.Tests.TestTime.FramesPerSecond);
         TestHarness.Assert(!controller.Overlay.HealIcons.Any(value => value.Entity == dozer.Id), "the dozer's icon is gone three seconds after its last healing");
 
         // The animation is a pure function of the clock: ten frames up and down, sixteen in a loop.
@@ -282,7 +282,7 @@ internal static class HudTests
         return screen;
     }
 
-    private static void Advance(LiveMatch match, MatchController controller, int frames, double dt = 1.0 / 30)
+    private static void Advance(LiveMatch match, MatchController controller, int frames, double dt = CnCNew.Tests.TestTime.FrameSeconds)
     {
         for (var i = 0; i < frames; i++)
         {

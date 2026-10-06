@@ -22,24 +22,25 @@ public enum ScenarioOrderKind
     /// <summary>A standing attack order (chase and fire until the target is gone), the order a player gives with a right click.</summary>
     Attack,
     MoveTo,
-    /// <summary>Capture the target structure: the command is retried every tick until the simulation accepts it (a unit with the staged capture ability walks there itself; any other needs the actor in reach).</summary>
+    /// <summary>Capture the target structure: the command is retried every original frame until the simulation accepts it (a unit with the staged capture ability walks there itself; any other needs the actor in reach).</summary>
     Capture,
     /// <summary>Queue <see cref="ScenarioOrder.Template"/> at the actor (a producer); the unit that comes out is bound to the tag in <see cref="ScenarioOrder.Target"/>.</summary>
     Produce,
 }
 
 /// <summary>
-/// An order given to <see cref="Actor"/> from <see cref="Tick"/> on (<see cref="Target"/> is another unit's tag; Move uses <see cref="X"/>/<see cref="Y"/>). An order whose actor is not there yet
-/// (a unit still being produced) waits until it is.
+/// An order given to <see cref="Actor"/> from the original frame <see cref="Frame"/> on (1/30 s of game time each; <see cref="Target"/> is another unit's tag; Move uses
+/// <see cref="X"/>/<see cref="Y"/>). An order whose actor is not there yet (a unit still being produced) waits until it is.
 /// </summary>
-public sealed record ScenarioOrder(long Tick, string Actor, ScenarioOrderKind Kind, string? Target = null, float X = 0f, float Y = 0f, string? Template = null);
+public sealed record ScenarioOrder(long Frame, string Actor, ScenarioOrderKind Kind, string? Target = null, float X = 0f, float Y = 0f, string? Template = null);
 
 /// <summary>
 /// A staged demonstration for auditing one behaviour on a real map: who stands where, what they are told and when, where the camera looks. The same definition runs in the
 /// Stride client (<c>--scenario NAME</c>) and headless (<c>PresentationTool scenario-audit</c>), which prints the facts the demo is meant to show.
+/// <see cref="Frames"/> is how long the demo runs, in original frames (game time: the same number of seconds at every tick rate).
 /// </summary>
 public sealed record DemoScenario(
-    string Name, string Title, string Description, long Ticks, ImmutableArray<ScenarioUnit> Units, ImmutableArray<ScenarioOrder> Orders,
+    string Name, string Title, string Description, long Frames, ImmutableArray<ScenarioUnit> Units, ImmutableArray<ScenarioOrder> Orders,
     float LookX, float LookY, float CameraAngleDegrees = 0f, float CameraPitchDegrees = 35f, float CameraHeight = 220f)
 {
     /// <summary>Money the human player starts with (production scenarios).</summary>
@@ -88,7 +89,10 @@ public sealed class LiveScenario : LiveGame
     public IReadOnlyDictionary<string, EntityId> Tags => _tags;
 
     public override string HumanFaction => Scenario.HumanFaction;
-    public override bool IsOver => World.Tick >= Scenario.Ticks;
+    public override bool IsOver => World.Tick >= LengthTicks;
+
+    /// <summary>The length of the scenario in ticks of its world (<see cref="DemoScenario.Frames"/> converted).</summary>
+    public long LengthTicks => World.Time.OriginalFrames(Scenario.Frames);
     public override PlayerId? Winner => null;
     public override ImmutableArray<PlayerConfiguration> Players => _players;
     protected override ICommandSink CreateCommandSink() => _commands;
@@ -103,10 +107,12 @@ public sealed class LiveScenario : LiveGame
 
     protected override TickResult StepSimulation()
     {
-        for (var index = 0; index < Scenario.Orders.Length; index++)
+        // Orders are given, and retried, once per original frame: the commands of a demo follow game time, not the tick rate.
+        var frameBegins = World.Time.IsOriginalFrameBoundary(World.Tick);
+        for (var index = 0; frameBegins && index < Scenario.Orders.Length; index++)
         {
             var order = Scenario.Orders[index];
-            if (order.Tick > World.Tick || _done.Contains(index)) continue;
+            if (World.Time.OriginalFrames(order.Frame) > World.Tick || _done.Contains(index)) continue;
             if (!_tags.TryGetValue(order.Actor, out var actor) || World.FindEntity(actor) is not { } entity) continue; // not produced yet (or gone)
             if (Apply(index, order, actor, entity)) _done.Add(index);
         }
@@ -117,7 +123,7 @@ public sealed class LiveScenario : LiveGame
         return result;
     }
 
-    /// <summary>Returns true when the order is finished (a capture the simulation still refuses, or an attack on a unit still being produced, is tried again next tick).</summary>
+    /// <summary>Returns true when the order is finished (a capture the simulation still refuses, or an attack on a unit still being produced, is tried again in the next original frame).</summary>
     private bool Apply(int index, ScenarioOrder order, EntityId actor, Entity entity)
     {
         var player = entity.Owner;

@@ -40,7 +40,7 @@ internal static class LiveMatchTests
             Console.WriteLine($"  after one second: {live.Frame.Drawables.Length} drawables");
             TestHarness.Assert(live.Frame.Drawables.Length > 0, "drawables after the first second");
             var advance = Stopwatch.StartNew();
-            for (var frame = 0; frame < 30 * 20; frame++) live.Advance(1.0 / 30);
+            for (var frame = 0; frame < CnCNew.Tests.TestTime.FramesPerSecond * 20; frame++) live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
             Console.WriteLine($"  600 frames: {advance.Elapsed.TotalMilliseconds / 600:F2} ms/frame, tick {live.Tick}, {live.Frame.Drawables.Length} drawables, {live.Fx.Particles.ParticleCount} particles");
             TestHarness.Assert(live.Tick >= 590, "simulation advanced at 30 Hz");
             live.Paused = true;

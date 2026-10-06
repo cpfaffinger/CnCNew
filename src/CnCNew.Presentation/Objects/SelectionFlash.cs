@@ -1,5 +1,6 @@
 using System.Numerics;
 using CnCNew.Data.Definitions;
+using CnCNew.Data;
 using CnCNew.Presentation.Terrain;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -28,12 +29,13 @@ public sealed record SelectionFlashSettings(float SaturationFactor)
 public sealed class SelectionFlashTracker
 {
     /// <summary><c>flashAsSelected</c> plays the envelope with 0 attack frames and 4 decay frames (<c>TintEnvelope::play(color, 0, 4)</c>).</summary>
-    public const int DecayTicks = 4;
+    public const int DecayFrames = 4;
 
-    /// <summary>The last tick after a flash on which <see cref="Envelope"/> is above zero.</summary>
-    public const int LastVisibleAge = DecayTicks;
+    /// <summary>The last original frame after a flash on which <see cref="Envelope"/> is above zero.</summary>
+    public const int LastVisibleAge = DecayFrames;
 
-    private readonly Dictionary<uint, (long Tick, Vector3 Peak)> _flashes = [];
+    // Keyed by entity; the time is the original frame the flash started in (GameClock.OriginalFrameOf of the event's tick), never a tick.
+    private readonly Dictionary<uint, (long Frame, Vector3 Peak)> _flashes = [];
 
     /// <summary>
     /// <c>Drawable::saturateRGB</c>: <c>color * factor - factor / 2</c> per channel of the 0..1 colour. With the retail factor 0.5 white becomes (0.25, 0.25, 0.25) and pure red
@@ -46,15 +48,15 @@ public sealed class SelectionFlashTracker
     }
 
     /// <summary>
-    /// The share of the peak colour <paramref name="age"/> ticks after the flash. <c>TintEnvelope::update</c> runs once per frame of the 30 Hz clock: the first update of the
+    /// The share of the peak colour <paramref name="age"/> original frames after the flash. <c>TintEnvelope::update</c> runs once per frame of the 30 Hz clock: the first update of the
     /// attack state adds the whole way to the peak (zero attack frames count as one), the second finds the peak reached and switches to decay without changing the colour, the
-    /// following ones subtract a quarter of the peak each until nothing is left and the envelope rests. So the peak shows for two ticks, then 3/4, 1/2 and 1/4.
+    /// following ones subtract a quarter of the peak each until nothing is left and the envelope rests. So the peak shows for two frames, then 3/4, 1/2 and 1/4.
     /// </summary>
     public static float Envelope(long age) => age switch
     {
         < 0 => 0f,
         <= 1 => 1f,
-        <= LastVisibleAge => (DecayTicks + 1 - age) / (float)DecayTicks,
+        <= LastVisibleAge => (DecayFrames + 1 - age) / (float)DecayFrames,
         _ => 0f,
     };
 
@@ -67,7 +69,7 @@ public sealed class SelectionFlashTracker
         if (simEvent.Kind != SimEventKind.CaptureFlash) return;
         if (world.FindEntity(simEvent.Other) is not { } capturer) return;
         var color = colors?.Of(capturer.Owner) ?? TeamColors.Neutral;
-        _flashes[simEvent.Entity.Value] = (simEvent.Tick, Saturate(color, settings.SaturationFactor));
+        _flashes[simEvent.Entity.Value] = (GameClock.OriginalFrameOf(simEvent.Tick, world.Time.TicksPerOriginalFrame), Saturate(color, settings.SaturationFactor));
     }
 
     /// <summary><c>DRAWABLE_FRAMES_PER_FLASH</c> (<c>Drawable.h</c>): half a second; a drawable told to flash for n seconds plays its colour flash every 15th logic frame, <c>2 n</c> times.</summary>
@@ -82,21 +84,21 @@ public sealed class SelectionFlashTracker
     /// </summary>
     public void StartScripted(uint entity, Vector3 peak, int seconds)
     {
-        var count = seconds * SimulationRate.OriginalFramesPerSecond / ScriptFlashInterval;
+        var count = seconds * OriginalFrame.PerSecond / ScriptFlashInterval;
         if (count > 0) _scripted[entity] = (peak, count);
     }
 
     /// <summary>
     /// <c>Drawable::update</c>: on every logic frame that is a multiple of <see cref="ScriptFlashInterval"/> an entity with flashes left plays one (restarting the envelope, as
-    /// <c>TintEnvelope::play</c> does). Call once per simulated tick with the tick just simulated.
+    /// <c>TintEnvelope::play</c> does). Call once per original frame with the frame that just began (at 30 Hz once per simulated tick with that tick).
     /// </summary>
-    public void Advance(long tick)
+    public void Advance(long frame)
     {
-        if (_scripted.Count == 0 || tick % ScriptFlashInterval != 0) return;
+        if (_scripted.Count == 0 || frame % ScriptFlashInterval != 0) return;
         foreach (var entity in _scripted.Keys.ToArray())
         {
             var (peak, remaining) = _scripted[entity];
-            _flashes[entity] = (tick, peak);
+            _flashes[entity] = (frame, peak);
             if (remaining <= 1) _scripted.Remove(entity);
             else _scripted[entity] = (peak, remaining - 1);
         }
@@ -105,14 +107,14 @@ public sealed class SelectionFlashTracker
     /// <summary>Entities that still have scripted flashes to play (for tests).</summary>
     public int ScriptedPending => _scripted.Count;
 
-    /// <summary>The tint of the entity at <paramref name="tick"/>; zero when it does not flash.</summary>
-    public Vector3 TintAt(uint entity, long tick)
-        => _flashes.TryGetValue(entity, out var flash) ? flash.Peak * Envelope(tick - flash.Tick) : Vector3.Zero;
+    /// <summary>The tint of the entity in the original frame <paramref name="frame"/>; zero when it does not flash.</summary>
+    public Vector3 TintAt(uint entity, long frame)
+        => _flashes.TryGetValue(entity, out var flash) ? flash.Peak * Envelope(frame - flash.Frame) : Vector3.Zero;
 
     /// <summary>Forgets finished flashes and those of entities that are gone.</summary>
-    public void Prune(long tick, Func<uint, bool> alive)
+    public void Prune(long frame, Func<uint, bool> alive)
     {
-        foreach (var id in _flashes.Where(pair => tick - pair.Value.Tick > LastVisibleAge || !alive(pair.Key)).Select(pair => pair.Key).ToArray()) _flashes.Remove(id);
+        foreach (var id in _flashes.Where(pair => frame - pair.Value.Frame > LastVisibleAge || !alive(pair.Key)).Select(pair => pair.Key).ToArray()) _flashes.Remove(id);
         foreach (var id in _scripted.Keys.Where(id => !alive(id)).ToArray()) _scripted.Remove(id);
     }
 }

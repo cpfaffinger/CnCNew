@@ -29,6 +29,11 @@ if (scenario is not null) matchMap = scenario.Map;
 var missionMap = GetArgument(args, "--mission");
 // --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §17); fixed time steps only.
 var inputScriptPath = GetArgument(args, "--input-script");
+// --tick-rate N: the simulation rate of the session (30, 60 or 120 Hz; the default is the game layer's, 30 Hz until the product rate changes). Everything shown and heard
+// lasts the same game time at every rate; an unsupported rate is refused by the simulation's own message.
+var tickRate = GetArgument(args, "--tick-rate") is { } rateText
+    ? CnCNew.Simulation.Time.SimulationRate.FromTicksPerSecond(int.Parse(rateText, System.Globalization.CultureInfo.InvariantCulture))
+    : GameData.DefaultSessionRate;
 // --audio-capture DIR renders the mixer into DIR/audio.wav instead of a device; a smoke test never opens a device (it renders and discards unless a capture is asked for).
 var audioOptions = new CnCNew.Client.Stride.Audio.ClientAudioOptions(smokeTest, GetArgument(args, "--audio-capture"), args.Contains("--mute", StringComparer.OrdinalIgnoreCase));
 var shellMode = args.Contains("--shell", StringComparer.OrdinalIgnoreCase) || (contentDirectory is not null && modelPath is null && matchMap is null && missionMap is null);
@@ -92,7 +97,7 @@ if (contentDirectory is not null)
 using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),
     audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30"), GetArgument(args, "--cursor-at"), GetArgument(args, "--waypoints"),
     inputScriptPath is null ? null : CnCNew.Client.Stride.Testing.InputScript.Load(inputScriptPath), int.Parse(GetArgument(args, "--mission-journal") ?? "0"),
-    !args.Contains("--no-transitions", StringComparer.OrdinalIgnoreCase)))
+    !args.Contains("--no-transitions", StringComparer.OrdinalIgnoreCase), tickRate))
 {
     game.Run();
     if (game.UnresolvedInputSteps > 0) Environment.ExitCode = 3;
@@ -118,7 +123,7 @@ static string? GetArgument(string[] arguments, string name)
 }
 
 /// <param name="Map">Virtual map path or a unique part of it (for example "Alpine Assault").</param>
-/// <param name="Frames">Smoke test only: rendered frames at a fixed 30 fps before the capture.</param>
+/// <param name="Frames">Smoke test only: rendered frames before the capture; each is one original frame (1/30 s) of game time at every tick rate.</param>
 /// <param name="AutoPlay">The human slot is played by the computer (--autoplay).</param>
 /// <param name="Look">Camera target "x,y" in world units (--look); Angle/Pitch in degrees, Height in world units above ground.</param>
 internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<string> Opponents, int Seed, int Frames, string Size,
@@ -153,8 +158,15 @@ internal sealed class CnCNewGame(
     string? waypoints = null,
     CnCNew.Client.Stride.Testing.InputScript? inputScript = null,
     int missionJournalLines = 0,
-    bool animateShell = true) : Game
+    bool animateShell = true,
+    CnCNew.Simulation.Time.SimulationRate? tickRate = null) : Game
 {
+    /// <summary>
+    /// The fixed step of a smoke test: every rendered frame advances the game by one original frame (1/30 s), whatever the tick rate - one tick at 30 Hz, two at 60 Hz.
+    /// So <c>--frames</c>, <c>--every</c> and the frame numbers of an input script mean the same game time at every rate, and a capture at frame N shows the same moment.
+    /// </summary>
+    private const double SmokeStepSeconds = 1.0 / CnCNew.Data.OriginalFrame.PerSecond;
+
     public int UnresolvedInputSteps { get; private set; }
 
     private ClientRuntime? _runtime;
@@ -210,7 +222,7 @@ internal sealed class CnCNewGame(
 
         if (shellMode)
         {
-            var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"));
+            var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate);
             var back = GraphicsDevice.Presenter.BackBuffer;
             _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell);
             Window.Title = "CnCNew";
@@ -278,7 +290,8 @@ internal sealed class CnCNewGame(
 
     private void LoadLiveMatch(LiveOptions options)
     {
-        var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"));
+        var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate);
+        Console.WriteLine($"session: simulation rate {data.Rate}");
         var mapPath = data.Maps.FirstOrDefault(path => path.Equals(options.Map, StringComparison.OrdinalIgnoreCase))
             ?? data.Maps.SingleOrDefault(path => path.Contains(options.Map, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"Map '{options.Map}' was not found or is ambiguous.");
@@ -286,7 +299,7 @@ internal sealed class CnCNewGame(
         {
             var viewport = GraphicsDevice.Presenter.BackBuffer;
             // The director reports when a scripted camera move, speech or movie really ended (CompletePresentation); the latency is only the bound after which the VM stops waiting.
-            var run = MissionRun.Load(MissionContext.From(data), mapPath, MissionOptions.Standard with { HumanSideName = options.HumanSide, PresentationLatencyTicks = LiveMission.ClientPresentationLatencyTicks });
+            var run = MissionRun.Load(MissionContext.From(data), mapPath, MissionOptions.Standard with { HumanSideName = options.HumanSide, PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
             var text = data.LoadText("English");
             var mission = LiveMission.Create(data, run, new System.Numerics.Vector2(viewport.Width, viewport.Height), label => text.TryGet(label, out var resolved) ? resolved : label);
             ApplyCamera(mission.Camera, options);
@@ -354,7 +367,7 @@ internal sealed class CnCNewGame(
         if (_runtime is not null)
         {
             var back = GraphicsDevice.Presenter.BackBuffer;
-            _runtime.Update(gameTime, Input, back.Width, back.Height, smokeTest ? 1.0 / 30 : null);
+            _runtime.Update(gameTime, Input, back.Width, back.Height, smokeTest ? SmokeStepSeconds : null);
             if (_runtime.Game is { } game) Window.Title = $"CnCNew — {game.HumanFaction}";
             if (_runtime.PendingResolution is { } resolution)
             {

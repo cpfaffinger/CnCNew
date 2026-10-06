@@ -530,13 +530,13 @@ internal static class PerfCommand
         long hashTicks = 0, revealTicks = 0;
         for (var index = 0; index < recorder.Count; index++)
         {
-            if (recorder.Ticks[index] % SimulationWorld.VisionIntervalTicks != 0) continue;
+            if (recorder.Ticks[index] % world.VisionInterval != 0) continue;
             refreshes++;
             hashTicks += hashing[index];
             revealTicks += reveal[index];
         }
         if (refreshes == 0) return;
-        Console.WriteLine($"      in the run: {refreshes} refreshes in {recorder.Count} ticks (every {SimulationWorld.VisionIntervalTicks} ticks); per refresh the hash phase took {Us((double)hashTicks / refreshes):F1} us and the reveal phase "
+        Console.WriteLine($"      in the run: {refreshes} refreshes in {recorder.Count} ticks (every {world.VisionInterval} ticks); per refresh the hash phase took {Us((double)hashTicks / refreshes):F1} us and the reveal phase "
                           + $"(forget what was visible, then one circle per looking object and viewer) {Us((double)revealTicks / refreshes):F1} us; "
                           + $"share of all tick time: hash {100 * Us(hashTicks) / total:F1} %, reveal {100 * Us(revealTicks) / total:F1} %.");
     }
@@ -883,7 +883,7 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
     {
         _current[(int)phase] += Stopwatch.GetTimestamp() - _phaseStart;
         _phaseBytes[(int)phase] += GC.GetAllocatedBytesForCurrentThread() - _phaseStartBytes;
-        if (VisionProbe && phase == TickPhase.VisionHash && world.Vision is { } vision && world.Tick % SimulationWorld.VisionIntervalTicks == 0) ProbeVisionRefresh(vision);
+        if (VisionProbe && phase == TickPhase.VisionHash && world.Vision is { } vision && world.Tick % world.VisionInterval == 0) ProbeVisionRefresh(vision);
         if (phase != TickPhase.Hash) return;
         HashAllocated += GC.GetAllocatedBytesForCurrentThread() - _hashAllocationStart;
         // Read here, before the probes at the end of the run ask for the hash again.

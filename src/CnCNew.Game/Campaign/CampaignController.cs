@@ -26,7 +26,8 @@ public sealed class CampaignController(MissionContext context, CampaignDefinitio
     /// Generals' Challenge maps model the chosen general as the map's only human side but leave naming it to the host); empty keeps
     /// <see cref="Mission.MissionSession.LocalPlayerOf"/>'s own fallback; for a Generals' Challenge campaign it is chosen by <see cref="ChallengeSides"/> instead
     /// of left empty. <paramref name="presentationLatencyTicks"/> is for a host that has no <c>MissionPresentationDirector</c> to complete speech/movie/camera
-    /// outputs itself: they then count as playing for that many ticks (0: finished at once, the headless default).
+    /// outputs itself: they then count as playing for that many original frames (1/30 s each, the unit of <c>MissionOptions.PresentationLatencyTicks</c>; 0: finished at once,
+    /// the headless default). <paramref name="maxTicks"/> is a run budget in ticks of the session's rate.
     /// </summary>
     public MissionRun StartCurrentMission(long maxTicks = 0, string humanSideName = "", int presentationLatencyTicks = 0)
     {
