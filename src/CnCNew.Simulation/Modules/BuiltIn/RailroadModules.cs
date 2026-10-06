@@ -57,7 +57,8 @@ public sealed record RailroadData(bool IsLocomotive, ImmutableArray<string> Carr
 /// </summary>
 public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModule, IProducerReceiver
 {
-    private const int FramesUnpulledLongEnoughToUnhitch = 2;
+    /// <summary><c>FRAMES_UNPULLED_LONG_ENOUGH_TO_UNHITCH (2)</c> (RailroadGuideAIUpdate.cpp): updates without a pull from the carriage ahead. Order, not time (the pull arrives within the same step or not at all), so it is not scaled with the rate.</summary>
+    private const long FramesUnpulledLongEnoughToUnhitch = 2 * TickOrder.Next;
     private static readonly Fixed PushStart = Fixed.FromDecimal(0.02m);
     private static readonly int UnderConstructionBit = ObjectStatusBits.UnderConstruction;
     private static readonly int CrushDamage = NameTables.DamageType.TryIndexOf("CRUSH", out var crush) ? crush : throw new InvalidOperationException("CRUSH is not a damage type.");

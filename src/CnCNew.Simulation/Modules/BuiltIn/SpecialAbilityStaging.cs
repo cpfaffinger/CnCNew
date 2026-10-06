@@ -312,7 +312,8 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     {
         if (data.PackUnpackVariation <= Fixed.Zero) return ticks;
         var factor = world.LogicRandom.Range(Fixed.One - data.PackUnpackVariation, Fixed.One + data.PackUnpackVariation);
-        return Math.Max(1, (Fixed.FromInt(ticks) * factor).Floor());
+        // The variation is applied to logic frames of the original (floored, at least one frame) and the result scaled: the same duration at every rate.
+        return world.Time.OriginalFrames(Math.Max(1, (Fixed.FromInt(world.Time.ToOriginalFrames(ticks)) * factor).Floor()));
     }
 
     private void StartUnpacking(IWorldServices world)

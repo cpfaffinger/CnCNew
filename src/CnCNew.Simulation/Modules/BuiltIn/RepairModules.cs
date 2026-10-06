@@ -31,7 +31,7 @@ public sealed record RepairDockData(int NumberApproachPositions, Fixed FramesFor
     {
         var field = ModuleConfigReader.Find(configuration, "TimeForFullHeal");
         var frames = field is null
-            ? Fixed.One
+            ? Fixed.FromInt(configuration.Time.TicksPerOriginalFrame) // m_framesForFullHeal = 1.0f (RepairDockUpdate.cpp): one logic frame of the original
             : field.Value.Value is GameTime time ? configuration.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : throw new InvalidDataException("RepairDockUpdate TimeForFullHeal is not a duration.");
         if (frames <= Fixed.Zero) throw new InvalidDataException("RepairDockUpdate TimeForFullHeal must be positive.");
         return new RepairDockData(ParseApproachPositions(configuration), frames);
@@ -119,7 +119,8 @@ internal sealed class AutoFindHealingUpdate(AutoFindHealingData data) : SimModul
             _nextScanTicks--;
             return SimulationTiming.SleepNone;
         }
-        _nextScanTicks = data.ScanTicks;
+        // m_nextScanFrames-- / m_nextScanFrames = data->m_scanFrames (AutoFindHealingUpdate.cpp): a period of ScanRate + 1 frames of the original.
+        _nextScanTicks = TickGrid.CountdownActingAfterZero(world.Time, data.ScanTicks);
 
         var ai = Entity.Modules.OfType<AIUpdateInterface>().FirstOrDefault();
         if (ai is null || Entity.Body is not { } body) return SimulationTiming.SleepNone;
