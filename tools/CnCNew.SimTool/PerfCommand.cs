@@ -6,6 +6,8 @@ using System.Text;
 using CnCNew.Content;
 using CnCNew.Data.Definitions;
 using CnCNew.Formats;
+using CnCNew.SimTool.Manifests;
+using CnCNew.SimTool.Perf;
 using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
@@ -31,13 +33,13 @@ internal delegate (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, strin
 internal static class PerfCommand
 {
     private const string Usage = """
-        perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--replay] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer]
-        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer]
+        perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--replay] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
+        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
         """;
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-    private sealed record Common(string Directory, string MapPath, long Ticks, string? Csv, int Top, int Sample, bool Modules, bool Observe)
+    private sealed record Common(string Directory, string MapPath, long Ticks, string? Csv, int Top, int Sample, bool Modules, bool Observe, string? Json, string Label)
     {
         public static Common Parse(string[] args) => new(
             args[1],
@@ -47,7 +49,12 @@ internal static class PerfCommand
             int.Parse(Arg(args, "--top") ?? "15", Invariant),
             Math.Max(1, int.Parse(Arg(args, "--sample") ?? "300", Invariant)),
             !args.Contains("--no-modules"),
-            !args.Contains("--no-observer"));
+            !args.Contains("--no-observer"),
+            Arg(args, "--json"),
+            Arg(args, "--label") ?? string.Empty);
+
+        /// <summary>The parameters every run has; two summaries with different parameters are different measurements.</summary>
+        public ManifestObject Parameters() => new ManifestObject().Add("map", MapPath).Add("ticks", Ticks).Add("observer", Observe).Add("modules", Observe && Modules);
     }
 
     private static string? Arg(string[] args, string name)
@@ -64,7 +71,8 @@ internal static class PerfCommand
         var common = Common.Parse(args);
         var options = SkirmishMatchOptions.Standard with { MaxTicks = common.Ticks };
         if (Arg(args, "--seed") is { } seed) options = options with { AiSeed = uint.Parse(seed, Invariant), WorldSeed = uint.Parse(seed, Invariant) ^ 0xC0FFEE06 };
-        PrintHardware();
+        var hardware = HardwareLine();
+        Console.WriteLine("Hardware: " + hardware);
         var setup = Stopwatch.StartNew();
         var (_, catalog, fingerprint) = compile(common.Directory);
         var content = ContentFileSystem.Open(common.Directory);
@@ -106,7 +114,12 @@ internal static class PerfCommand
         Console.WriteLine(session.Winner is null
             ? $"Match: {recorder.Count} ticks in {wall.Elapsed.TotalSeconds:F1} s wall time, no winner (tick budget)."
             : $"Match: {recorder.Count} ticks in {wall.Elapsed.TotalSeconds:F1} s wall time, winner player {session.Winner.Value.Value} at tick {session.VictoryTick}.");
-        Report(recorder, common, summary, gcBefore, gcAfter, [TickPhase.SkirmishAi, TickPhase.SkirmishVictory], [TickPhase.MissionScripts, TickPhase.MissionEvents]);
+        var json = PerfSummary.Create("perf", common.Label, hardware, common.Parameters()
+            .Add("factions", string.Join(",", chosen.Select(value => value.Faction.Name))).Add("aiSeed", options.AiSeed).Add("worldSeed", options.WorldSeed));
+        Report(recorder, common, summary, json, gcBefore, gcAfter, [TickPhase.SkirmishAi, TickPhase.SkirmishVictory], [TickPhase.MissionScripts, TickPhase.MissionEvents]);
+        var results = new ManifestObject().Add("ticks", recorder.Count).Add("finalHash", finalHash.ToString("X16")).Add("chainHash", chain.ToString("X16"))
+            .Add("winner", session.Winner is { } winner ? winner.Value : 0L).Add("victoryTick", session.Winner is null ? -1L : session.VictoryTick);
+        json.Add("results", results);
         Console.WriteLine($"Final hash {finalHash:X16}, chain {chain:X16} (must equal the same run without the observer; `ai-match --max-ticks {common.Ticks}` prints the same pair).");
         summary["hash"] = finalHash.ToString("X16");
         summary["chain"] = chain.ToString("X16");
@@ -135,16 +148,19 @@ internal static class PerfCommand
             summary["replay_us"] = (watch.Elapsed.TotalSeconds / run.TicksExecuted * 1e6).ToString("F1", Invariant);
             summary["catchup30"] = (replayTicksPerSecond.Value / 30).ToString("F1", Invariant);
             summary["catchup60"] = (replayTicksPerSecond.Value / 60).ToString("F1", Invariant);
+            json.Add("replay", new ManifestObject().Add("perTickNs", PerfSummary.Nanoseconds(watch.Elapsed.TotalSeconds / run.TicksExecuted * 1e6)).Add("ticksPerSecond", (long)Math.Round(replayTicksPerSecond.Value))
+                .Add("bytesPerTickMean", (GC.GetAllocatedBytesForCurrentThread() - replayAllocated) / Math.Max(1, run.TicksExecuted))
+                .Add("gen0", replayGcAfter.Gen0 - replayGc.Gen0).Add("gen1", replayGcAfter.Gen1 - replayGc.Gen1).Add("gen2", replayGcAfter.Gen2 - replayGc.Gen2).Add("hashEqualsLive", same));
         }
 
         Console.WriteLine();
-        CheckIncrementalHash(world, summary);
+        results.Add("incrementalEqualsFull", CheckIncrementalHash(world, summary));
         var fullHash = world.StateHash;
         var snapshot = Measure(() => WorldSnapshot.Write(world), out var writeMs);
         var restored = Measure(() => WorldSnapshot.Restore(snapshot, catalog, fingerprint, terrain), out var restoreMs);
         var restoredSame = restored.StateHash == fullHash;
         failed |= !restoredSame;
-        PrintSnapshot("WorldSnapshot", snapshot.Length, world.Entities.Count, writeMs, restoreMs, restoredSame, summary);
+        PrintSnapshot("WorldSnapshot", snapshot.Length, world.Entities.Count, writeMs, restoreMs, restoredSame, summary, json);
 
         Extrapolate(recorder, replayTicksPerSecond, summary);
         Console.WriteLine();
@@ -153,6 +169,7 @@ internal static class PerfCommand
         ProbeDescribe(world, recorder);
         Console.WriteLine("  (c) MissionSession.StateHash: not part of a skirmish; use perf-mission.");
         PrintSummary(summary);
+        WriteJson(common, json);
         return failed ? 1 : 0;
     }
 
@@ -164,7 +181,8 @@ internal static class PerfCommand
         var common = Common.Parse(args);
         var options = MissionOptions.Standard with { Difficulty = Enum.Parse<ScriptDifficulty>(Arg(args, "--difficulty") ?? "Normal", true), MaxTicks = 0 };
         if (Arg(args, "--seed") is { } seed) options = options with { WorldSeed = uint.Parse(seed, Invariant) };
-        PrintHardware();
+        var hardware = HardwareLine();
+        Console.WriteLine("Hardware: " + hardware);
         var setup = Stopwatch.StartNew();
         var (_, catalog, fingerprint) = compile(common.Directory);
         var content = ContentFileSystem.Open(common.Directory);
@@ -209,18 +227,21 @@ internal static class PerfCommand
             ["kind"] = "mission", ["map"] = common.MapPath, ["cells"] = $"{terrain.CellsX}x{terrain.CellsY}", ["players"] = world.Configuration.Players.Length.ToString(Invariant),
         };
         Console.WriteLine($"Mission: {recorder.Count} steps to tick {world.Tick} in {wall.Elapsed.TotalSeconds:F1} s wall time; outcome {session.Outcome}; scripts executed {session.Engine.ExecutedScripts}, actions {session.Engine.ExecutedActions}.");
-        Report(recorder, common, summary, gcBefore, gcAfter, [TickPhase.MissionScripts, TickPhase.MissionEvents], [TickPhase.SkirmishAi, TickPhase.SkirmishVictory]);
+        var json = PerfSummary.Create("perf-mission", common.Label, hardware, common.Parameters().Add("difficulty", options.Difficulty.ToString()).Add("worldSeed", options.WorldSeed));
+        Report(recorder, common, summary, json, gcBefore, gcAfter, [TickPhase.MissionScripts, TickPhase.MissionEvents], [TickPhase.SkirmishAi, TickPhase.SkirmishVictory]);
+        var results = new ManifestObject().Add("ticks", recorder.Count).Add("finalHash", finalHash.ToString("X16")).Add("chainHash", chain.ToString("X16")).Add("outcome", session.Outcome.ToString());
+        json.Add("results", results);
         Console.WriteLine($"Final hash {finalHash:X16}, chain {chain:X16} (must equal the same run without the observer; `mission-run --ticks {common.Ticks}` prints the same pair).");
         summary["hash"] = finalHash.ToString("X16");
         summary["chain"] = chain.ToString("X16");
 
         Console.WriteLine();
-        CheckIncrementalHash(world, summary);
+        results.Add("incrementalEqualsFull", CheckIncrementalHash(world, summary));
         var fullHash = session.StateHash();
         var snapshot = Measure(() => MissionSnapshot.Write(session), out var writeMs);
         var restored = Measure(() => MissionSnapshot.Restore(snapshot, catalog, fingerprint, terrain, map), out var restoreMs);
         var restoredSame = restored.StateHash() == fullHash;
-        PrintSnapshot("MissionSnapshot", snapshot.Length, world.Entities.Count, writeMs, restoreMs, restoredSame, summary);
+        PrintSnapshot("MissionSnapshot", snapshot.Length, world.Entities.Count, writeMs, restoreMs, restoredSame, summary, json);
 
         Extrapolate(recorder, null, summary);
         Console.WriteLine();
@@ -229,14 +250,23 @@ internal static class PerfCommand
         ProbeDescribe(world, recorder);
         ProbeScriptHash(session, recorder);
         PrintSummary(summary);
+        WriteJson(common, json);
         return restoredSame ? 0 : 1;
     }
 
     // --------------------------------------------------------------------------------------------------- report
 
-    private static void PrintHardware()
-        => Console.WriteLine($"Hardware: {Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER")}; {Environment.ProcessorCount} logical processors; {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024)} MiB memory; "
-                             + $"{RuntimeInformation.OSDescription}; {RuntimeInformation.FrameworkDescription}; Server GC {System.Runtime.GCSettings.IsServerGC}; clock resolution {1e9 / Stopwatch.Frequency:F0} ns.");
+    private static string HardwareLine()
+        => $"{Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER")}; {Environment.ProcessorCount} logical processors; {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024)} MiB memory; "
+           + $"{RuntimeInformation.OSDescription}; {RuntimeInformation.FrameworkDescription}; Server GC {System.Runtime.GCSettings.IsServerGC}; clock resolution {(1e9 / Stopwatch.Frequency).ToString("F0", Invariant)} ns.";
+
+    private static void WriteJson(Common common, ManifestObject json)
+    {
+        if (common.Json is not { } file) return;
+        var path = Path.GetFullPath(file);
+        PerfSummary.Write(path, json);
+        Console.WriteLine($"JSON: summary written to {Path.GetFileName(path)} (compare two of them with `SimTool perf-compare <old.json> <new.json>`).");
+    }
 
     private static (int Gen0, int Gen1, int Gen2) GcCounts() => (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
 
@@ -271,11 +301,13 @@ internal static class PerfCommand
             return new Distribution(Us((double)sum / sorted.Length), Us(Rank(0.50)), Us(Rank(0.95)), Us(Rank(0.99)), Us(sorted[^1]), Us(sum));
         }
 
+        public ManifestObject ToNode() => PerfSummary.Distribution(Mean, Median, P95, P99, Max);
+
         public string Row(string name, double totalSum)
             => $"  {name,-18} {Mean,10:F1} {Median,10:F1} {P95,10:F1} {P99,10:F1} {Max,11:F1} {(totalSum <= 0 ? 0 : 100 * Sum / totalSum),6:F1} %";
     }
 
-    private static void Report(TickRecorder recorder, Common common, SortedDictionary<string, string> summary, (int Gen0, int Gen1, int Gen2) gcBefore, (int Gen0, int Gen1, int Gen2) gcAfter,
+    private static void Report(TickRecorder recorder, Common common, SortedDictionary<string, string> summary, ManifestObject json, (int Gen0, int Gen1, int Gen2) gcBefore, (int Gen0, int Gen1, int Gen2) gcAfter,
         TickPhase[] sessionPhases, TickPhase[] foreignPhases)
     {
         var total = Distribution.Of(recorder.Total);
@@ -289,6 +321,10 @@ internal static class PerfCommand
         summary["p95_us"] = total.P95.ToString("F1", Invariant);
         summary["p99_us"] = total.P99.ToString("F1", Invariant);
         summary["max_us"] = total.Max.ToString("F1", Invariant);
+        json.Add("tick", total.ToNode());
+        var phasesJson = new ManifestObject();
+        var modulesJson = new ManifestObject();
+        json.Add("phases", phasesJson).Add("modules", modulesJson);
         var warm = Math.Min(300, recorder.Count / 2);
         if (recorder.Count > warm && warm > 0)
             Console.WriteLine($"  mean without the first {warm} ticks (JIT warm-up): {Us(recorder.Total.Skip(warm).Average(value => (double)value)):F1} us.");
@@ -304,10 +340,13 @@ internal static class PerfCommand
                 if (!sessionPhases.Contains(phase)) worldSum += distribution.Sum;
                 Console.WriteLine(distribution.Row((sessionPhases.Contains(phase) ? "+ " : "  ") + phase, total.Sum));
                 summary[$"phase_{phase}_us"] = distribution.Mean.ToString("F1", Invariant);
+                phasesJson.Add(phase.ToString(), distribution.ToNode());
             }
             Console.WriteLine($"  {"  (unattributed)",-18} {(total.Sum - phaseSum) / recorder.Count,10:F1} {"",10} {"",10} {"",10} {"",11} {100 * (total.Sum - phaseSum) / total.Sum,6:F1} %");
             Console.WriteLine($"  world step alone (the phases without '+'): mean {worldSum / recorder.Count:F1} us; '+' marks the session's own parts; unattributed = between the phases, including the observer's own clock reads.");
             summary["world_mean_us"] = (worldSum / recorder.Count).ToString("F1", Invariant);
+            phasesJson.Add("(unattributed)", new ManifestObject().Add("meanNs", PerfSummary.Nanoseconds((total.Sum - phaseSum) / recorder.Count)));
+            phasesJson.Add("(world)", new ManifestObject().Add("meanNs", PerfSummary.Nanoseconds(worldSum / recorder.Count)));
             if (sessionPhases.Contains(TickPhase.SkirmishAi)) summary["ai_mean_us"] = Distribution.Of(recorder.Phase(TickPhase.SkirmishAi)).Mean.ToString("F1", Invariant);
             if (sessionPhases.Contains(TickPhase.MissionScripts)) summary["scripts_mean_us"] = Distribution.Of(recorder.Phase(TickPhase.MissionScripts)).Mean.ToString("F1", Invariant);
 
@@ -331,6 +370,8 @@ internal static class PerfCommand
                 Console.WriteLine($"Update phase by module type, top {Math.Min(common.Top, modules.Count)} of {modules.Count} by total time (timed at the scheduler's dispatch; {modules.Sum(value => value.Calls)} calls = {(double)modules.Sum(value => value.Calls) / recorder.Count:F0} per tick, {100 * moduleSum / Math.Max(1, updates):F1} % of the phase inside module updates):");
                 Console.WriteLine($"  {"module",-36} {"calls",12} {"total ms",11} {"mean us",9} {"max us",10} {"of phase",9}");
                 foreach (var module in modules.Take(common.Top))
+                    modulesJson.Add(module.Name, new ManifestObject().Add("calls", module.Calls).Add("totalNs", PerfSummary.Nanoseconds(Us(module.Ticks))).Add("meanNs", PerfSummary.Nanoseconds(Us(module.Ticks) / module.Calls)).Add("maxNs", PerfSummary.Nanoseconds(Us(module.Max))));
+                foreach (var module in modules.Take(common.Top))
                     Console.WriteLine($"  {module.Name,-36} {module.Calls,12} {Us(module.Ticks) / 1000,11:F1} {Us(module.Ticks) / module.Calls,9:F2} {Us(module.Max),10:F1} {100 * Us(module.Ticks) / Math.Max(1, updates),7:F1} %");
             }
             else Console.WriteLine("Update phase by module type: switched off (--no-modules).");
@@ -350,6 +391,9 @@ internal static class PerfCommand
         summary["objects_min"] = recorder.Objects.Min().ToString(Invariant);
         summary["objects_max"] = recorder.Objects.Max().ToString(Invariant);
         summary["objects_end"] = recorder.Objects[^1].ToString(Invariant);
+        json.Add("allocation", new ManifestObject().Add("bytesPerTickMean", allocated / Math.Max(1, recorder.Count)).Add("bytesPerTickMedian", sortedAllocations[sortedAllocations.Length / 2]).Add("bytesPerTickMax", sortedAllocations[^1])
+            .Add("gen0", gcAfter.Gen0 - gcBefore.Gen0).Add("gen1", gcAfter.Gen1 - gcBefore.Gen1).Add("gen2", gcAfter.Gen2 - gcBefore.Gen2));
+        json.Add("objects", new ManifestObject().Add("min", recorder.Objects.Min()).Add("max", recorder.Objects.Max()).Add("end", recorder.Objects[^1]));
 
         if (common.Csv is { } csv)
         {
@@ -363,7 +407,7 @@ internal static class PerfCommand
     /// The incrementally maintained hash against a full recomputation (which also refreshes the caches). A difference is a state change that did not mark its
     /// entity dirty (docs/HANDOFF-PHASE18.md, finding D8): the run's hash is then not the hash of its state, and a snapshot restores to the full one.
     /// </summary>
-    private static void CheckIncrementalHash(SimulationWorld world, SortedDictionary<string, string> summary)
+    private static bool CheckIncrementalHash(SimulationWorld world, SortedDictionary<string, string> summary)
     {
         var incremental = world.StateHash;
         var full = world.ComputeFullHash();
@@ -371,10 +415,12 @@ internal static class PerfCommand
         Console.WriteLine(incremental == full
             ? $"World hash at the end: incremental {incremental:X16} equals a full recomputation."
             : $"WARNING: the world's incremental hash {incremental:X16} differs from a full recomputation {full:X16}: some state change did not mark its entity dirty (finding D8). The snapshot below is compared with the full hash.");
+        return incremental == full;
     }
 
-    private static void PrintSnapshot(string kind, int bytes, int objects, double writeMs, double restoreMs, bool same, SortedDictionary<string, string> summary)
+    private static void PrintSnapshot(string kind, int bytes, int objects, double writeMs, double restoreMs, bool same, SortedDictionary<string, string> summary, ManifestObject json)
     {
+        json.Add("snapshot", new ManifestObject().Add("bytes", bytes).Add("bytesPerObject", bytes / Math.Max(1, objects)).Add("writeNs", PerfSummary.Nanoseconds(writeMs * 1000)).Add("restoreNs", PerfSummary.Nanoseconds(restoreMs * 1000)).Add("restoredHashEqual", same));
         Console.WriteLine($"{kind} at the end: {bytes} bytes for {objects} objects ({bytes / Math.Max(1, objects)} bytes/object); write {writeMs:F1} ms, restore {restoreMs:F1} ms (best of three each); restored hash equal: {same}.");
         summary["snapshot_bytes"] = bytes.ToString(Invariant);
         summary["snapshot_bytes_per_object"] = (bytes / Math.Max(1, objects)).ToString(Invariant);

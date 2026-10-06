@@ -8,7 +8,8 @@
     - Gefechte mit `SimTool perf ... --replay`: kleine Karte mit 2 Spielern, mittlere Karte mit 2 und 4 Spielern, grosse Karte mit 2, 4 und 8 Spielern,
       je -Ticks Ticks (Standard 54.000 = 30 Spielminuten bei 30 Hz);
     - zwei grosse Missionen mit `SimTool perf-mission` (MD_USA05, MD_GLA05), je 3.000 und 9.000 Ticks.
-  Je Lauf entstehen <name>.txt (volle Ausgabe) und <name>.csv (eine Zeile je 300 Ticks); am Ende summary.md (Tabelle aus den `summary:`-Zeilen).
+  Je Lauf entstehen <name>.txt (volle Ausgabe), <name>.csv (eine Zeile je 300 Ticks) und <name>.json (maschinenlesbare Zusammenfassung fuer
+  `SimTool perf-compare` bzw. scripts/perf-compare.ps1); am Ende summary.md (Tabelle aus den `summary:`-Zeilen).
   Die Ausgaben liegen ausserhalb des Repos unter -OutDir (Standard: %TEMP%\cncnew-perf).
 
   Nur mit pwsh (PowerShell 7) ausfuehren. Fuer eine ruhige Messung darf auf dem Rechner sonst nichts laufen (siehe docs/PERFORMANCE.md);
@@ -18,6 +19,7 @@
   .\scripts\perf-profile.ps1
   .\scripts\perf-profile.ps1 -Ticks 6000 -Only 'large-*'
   .\scripts\perf-profile.ps1 -Only 'mission-*' -MissionTicks 3000
+  .\scripts\perf-profile.ps1 -Label 'b432fb7 vor der Aenderung' -OutDir $env:TEMP\perf-alt
 #>
 [CmdletBinding()]
 param(
@@ -31,6 +33,8 @@ param(
     [string]$OutDir,
     # Obergrenze je Lauf; ein Lauf, der sie ueberschreitet, wird beendet und als TIMEOUT gefuehrt.
     [int]$TimeoutMinutes = 60,
+    # Freitext, der in jede <name>.json geschrieben wird (ueblich: der Commit). Ohne Angabe der Kurz-Hash von HEAD; das Werkzeug selbst fragt git nicht.
+    [string]$Label,
     [switch]$NoBuild
 )
 
@@ -80,6 +84,7 @@ if (-not $NoBuild) {
     Copy-Item -LiteralPath $built.FullName -Destination $binDir -Recurse
 }
 $exe = Join-Path $binDir 'CnCNew.SimTool.exe'
+if (-not $Label) { $Label = (git -C $repo rev-parse --short HEAD) }
 if (-not (Test-Path -LiteralPath $exe)) { throw "SimTool nicht gefunden: $exe (ohne -NoBuild starten)." }
 
 function Get-CpuLoad {
@@ -92,7 +97,10 @@ foreach ($run in $runs) {
     $log = Join-Path $OutDir "$($run.Name).txt"
     $errorLog = Join-Path $OutDir "$($run.Name).err.txt"
     $csv = Join-Path $OutDir "$($run.Name).csv"
-    $arguments = @($run.Command, "`"$ContentDir`"", '--map', "`"$($run.Map)`"", '--ticks', $run.Ticks, '--csv', "`"$csv`"")
+    $json = Join-Path $OutDir "$($run.Name).json"
+    # Eine alte Zusammenfassung darf nicht als Ergebnis dieses Laufs liegen bleiben, wenn er scheitert.
+    if (Test-Path -LiteralPath $json) { Remove-Item -LiteralPath $json -Force }
+    $arguments = @($run.Command, "`"$ContentDir`"", '--map', "`"$($run.Map)`"", '--ticks', $run.Ticks, '--csv', "`"$csv`"", '--json', "`"$json`"", '--label', "`"$($Label -replace '"', "'")`"")
     if ($run.Command -eq 'perf') { $arguments += @('--players', $run.Players, '--replay') }
     $load = Get-CpuLoad
     Write-Host "== $($run.Name): $($run.Command) $($run.Map), $($run.Ticks) Ticks (CPU-Auslastung vorher $load %)" -ForegroundColor Cyan
