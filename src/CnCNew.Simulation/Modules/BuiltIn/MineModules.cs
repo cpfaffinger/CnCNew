@@ -57,6 +57,9 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
     private long _scanCountdown;
     private bool _detonated;
 
+    // The objects in range of one scan; kept between scans so that a scan does not allocate. Not state.
+    private readonly List<Entity> _inRange = [];
+
     public override string ModuleName => "DemoTrapUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public DemoTrapMode Mode => _mode;
@@ -95,17 +98,24 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
 
         var shallDetonate = false;
         var limit = data.TriggerRange * data.TriggerRange;
-        var inRange = new List<Entity>();
+        // An object more than one unit beyond the range on one axis is outside the circle whatever the other axis says: its squared distance is at least
+        // (range + 1)^2 = range^2 + 2 range + 1, and the rounding of the two products (half a raw unit each) cannot bring that down to the limit. Those
+        // objects - nearly all of the world - are passed over before the 128-bit products; the test of the circle itself is unchanged.
+        var reach = data.TriggerRange + Fixed.One;
+        var boxed = data.TriggerRange >= Fixed.Zero;
+        var inRange = _inRange;
+        inRange.Clear();
         foreach (var other in world.Entities)
         {
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
+            if (boxed && (dx > reach || dy > reach || -dx > reach || -dy > reach)) continue;
             if (!other.DestroyRequested && dx * dx + dy * dy <= limit) inRange.Add(other);
         }
         inRange.Sort(static (a, b) => a.Id.Value.CompareTo(b.Id.Value));
         foreach (var other in inRange)
         {
-            if (data.IgnoreKinds.Any(other.Template.IsKindOf) || other.EffectivelyDead) continue;
+            if (IsIgnoredKind(other.Template) || other.EffectivelyDead) continue;
             // "order matters: we want to know if I consider it to be an enemy, not vice versa"
             if (world.RelationshipOf(Entity.Owner, other.Owner) != Relationship.Enemies)
             {
@@ -118,6 +128,13 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
         }
         if (shallDetonate) Detonate(world);
         return SimulationTiming.SleepNone;
+    }
+
+    private bool IsIgnoredKind(Templates.ObjectTemplate template)
+    {
+        foreach (var kind in data.IgnoreKinds)
+            if (template.IsKindOf(kind)) return true;
+        return false;
     }
 
     private void Detonate(IWorldServices world)
