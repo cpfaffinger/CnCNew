@@ -50,6 +50,14 @@ const string Usage = """
                                                            time per tick and tick phase, module updates, allocations, replay catch-up speed, snapshot cost (docs/PERFORMANCE.md)
     """;
 
+// Determinism matrix (docs/DETERMINISM.md): every command can run under another culture to show that nothing culture-dependent reaches a result.
+if (Environment.GetEnvironmentVariable("CNCNEW_TEST_CULTURE") is { Length: > 0 } testCulture)
+{
+    var culture = CultureInfo.GetCultureInfo(testCulture);
+    CultureInfo.DefaultThreadCurrentCulture = CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = culture;
+    Console.Error.WriteLine($"culture: {culture.Name} (CNCNEW_TEST_CULTURE)");
+}
+
 if (args.Length == 0)
 {
     Console.Error.WriteLine(Usage);
