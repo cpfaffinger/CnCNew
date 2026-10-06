@@ -49,6 +49,13 @@ run.Test("Tick rate: a world refuses a catalog of another rate", Tests.TickRateW
 run.Test("Tick rate: snapshots at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateSnapshotsCarryTheirRate);
 run.Test("Tick rate: replays at 60 and 120 Hz run; 50 Hz, a catalog and a world of another rate are rejected", Tests.TickRateReplaysCarryTheirRate);
 run.Test("Tick rate: mission states at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateMissionSnapshotsCarryTheirRate);
+// Tick rate, stage 2, modules N–Z (Tests.TickRate.ModulesNZ.cs).
+run.Test("Tick rate N–Z: a detector's stagger is drawn in frames of the original", Tests.TickRateNzDetectorStaggerIsDrawnInOriginalFrames);
+run.Test("Tick rate N–Z: poison without an interval hurts once per frame of the original", Tests.TickRateNzPoisonWithoutIntervalHurtsOncePerOriginalFrame);
+run.Test("Tick rate N–Z: auto heal without a delay pulses once per frame of the original", Tests.TickRateNzAutoHealWithoutDelayPulsesOncePerOriginalFrame);
+run.Test("Tick rate N–Z: the enemy-near scan keeps its frame boundary", Tests.TickRateNzEnemyNearScanKeepsItsFrameBoundary);
+run.Test("Tick rate N–Z: the slow-death variance is drawn in frames of the original", Tests.TickRateNzSlowDeathVarianceIsDrawnInOriginalFrames);
+run.Test("Tick rate N–Z: catalog defaults are frames of the original", Tests.TickRateNzCatalogDefaultsAreOriginalFrames);
 run.Test("Replay equality, divergence detection and continuation", Tests.ReplayRuns);
 run.Test("Stress scenario returns to baseline (short run)", Tests.ShortStress);
 run.Test("Definition insertion order does not change the simulation", Tests.DefinitionOrderIndependence);
