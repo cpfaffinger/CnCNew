@@ -57,6 +57,8 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
 {
     /// <summary><c>BOOBY_TRAP_SCAN_RANGE</c>-style constant of the reference: area mode ends when the unit is back within this distance of its point.</summary>
     private static readonly Fixed AreaDoneDistance = Fixed.FromInt(25);
+    /// <summary><c>CleanupHazardUpdate.cpp</c>, <c>fireWhenReady</c>: <c>GameLogicRandomValue( 0, 3 )</c> – the longest wait before the rescan, in logic frames of the original.</summary>
+    private const int RescanWaitMaxFrames = 3;
 
     private long _nextWake = -1;
     private EntityId _bestTarget;
@@ -101,7 +103,8 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
             FireWhenReady(world, ai);
             return SimulationTiming.SleepNone;
         }
-        _nextScan = data.ScanTicks;
+        // CleanupHazardUpdate.cpp, update: m_nextScanFrames-- / m_nextScanFrames = data->m_scanFrames – a scan every ScanRate + 1 frames of the original.
+        _nextScan = world.Time.CountdownReload(data.ScanTicks);
         if (ScanClosestTarget(world)) FireWhenReady(world, ai);
         else if (_moveRange != Fixed.Zero && ai is not null && ai.IsIdle)
         {
@@ -126,12 +129,15 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
             if (distance < weapon.AttackRange) _inRange = true;
             else if (_inRange)
             {
-                _nextScan = world.LogicRandom.Range(0, 3);
+                // CleanupHazardUpdate.cpp, fireWhenReady: m_nextScanFrames = GameLogicRandomValue( 0, 3 ) – drawn in frames of the original; a wait of
+                // n > 0 frames ends n + 1 frames later (the countdown acts in the update after it reached zero).
+                var waitFrames = world.LogicRandom.Range(0, RescanWaitMaxFrames);
+                _nextScan = waitFrames == 0 ? 0 : world.Time.CountdownReload(world.Time.OriginalFrames(waitFrames));
                 _bestTarget = EntityId.Invalid;
                 if (_nextScan == 0)
                 {
                     ScanClosestTarget(world);
-                    _nextScan = data.ScanTicks;
+                    _nextScan = world.Time.CountdownReload(data.ScanTicks);
                     target = null; // might be out of range
                 }
             }
@@ -339,7 +345,7 @@ public sealed class SpyVisionUpdate(SpyVisionData data) : SimModule, IUpdateModu
                     return SimulationTiming.SleepForever;
                 }
                 // Reset the interval timer by sleeping, so it has to wait before going on again.
-                return Math.Max(data.SelfPoweredIntervalTicks, SimulationTiming.SleepNone);
+                return world.Time.AtLeastOneFrame(data.SelfPoweredIntervalTicks);
             }
         }
         if (_active && _deactivateTick <= world.Tick)
@@ -356,7 +362,7 @@ public sealed class SpyVisionUpdate(SpyVisionData data) : SimModule, IUpdateModu
         {
             // UPDATE_SLEEP(duration/interval); a permanent spy (no duration) has nothing left to do.
             if (_active) return data.SelfPoweredDurationTicks == 0 ? SimulationTiming.SleepForever : data.SelfPoweredDurationTicks;
-            return Math.Max(data.SelfPoweredIntervalTicks, SimulationTiming.SleepNone);
+            return world.Time.AtLeastOneFrame(data.SelfPoweredIntervalTicks);
         }
         return SimulationTiming.SleepForever;
     }
@@ -495,14 +501,15 @@ public sealed class AssistedTargetingUpdate(AssistedTargetingData data) : SimMod
         var victim = world.FindEntity(_victim);
         if (victim is null || victim.DestroyRequested || victim.EffectivelyDead || SimulationWorld.WeaponIndexIn(Entity, data.Slot) < 0) return Stop();
         var ready = Entity.ReadyTickOf(data.Slot);
-        if (world.Tick < ready) return Math.Min(ready - world.Tick, ReloadWait);
+        var reloadWait = world.Time.OriginalFrames(ReloadWaitFrames);
+        if (world.Tick < ready) return Math.Min(ready - world.Tick, reloadWait);
         if (!world.TryFireWeaponSlot(Entity, data.Slot, victim)) return Stop();
         _shotsLeft--;
-        return _shotsLeft <= 0 ? Stop() : Math.Max(Math.Min(Entity.ReadyTickOf(data.Slot) - world.Tick, ReloadWait), SimulationTiming.SleepNone);
+        return _shotsLeft <= 0 ? Stop() : Math.Max(Math.Min(Entity.ReadyTickOf(data.Slot) - world.Tick, reloadWait), SimulationTiming.SleepNone);
     }
 
-    /// <summary>An upper bound for one sleep while the slot reloads: a weapon that reloads at an airfield never becomes ready by itself.</summary>
-    private const long ReloadWait = 1000;
+    /// <summary>Own value: an upper bound for one sleep while the slot reloads (a weapon that reloads at an airfield never becomes ready by itself), in logic frames of the original.</summary>
+    private const long ReloadWaitFrames = 1000;
 
     private long Stop()
     {

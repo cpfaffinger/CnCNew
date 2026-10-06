@@ -245,7 +245,10 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
     public enum Motion : byte { Still, Rise, BuildAcross, TearDownAcross, Sink }
 
     private static readonly Fixed MinSpeedShare = Fixed.FromDecimal(0.08m);
-    private static readonly Fixed AbsoluteMinSpeed = Fixed.FromDecimal(0.001m);
+    /// <summary><c>BridgeScaffoldBehavior.cpp</c>, <c>update</c>: <c>if( speed &lt; 0.001f ) speed = 0.001f</c> – a distance per logic frame of the original.</summary>
+    private static readonly Fixed AbsoluteMinSpeedPerFrame = Fixed.FromDecimal(0.001m);
+    /// <summary><c>BridgeScaffoldBehavior.cpp</c>, constructor: <c>m_lateralSpeed = 1.0f</c>, <c>m_verticalSpeed = 1.0f</c> – a distance per logic frame of the original.</summary>
+    private static readonly Fixed DefaultSpeedPerFrame = Fixed.One;
 
     private long _nextWake = SimulationTiming.SleepForever;
     private Motion _motion;
@@ -253,12 +256,16 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
     private (Fixed X, Fixed Y, Fixed Z) _riseTo;
     private (Fixed X, Fixed Y, Fixed Z) _build;
     private (Fixed X, Fixed Y, Fixed Z) _target;
-    private Fixed _lateralSpeed = Fixed.One;
-    private Fixed _verticalSpeed = Fixed.One;
+    // Distances per tick (state). Until the object is spawned they hold the default per frame of the original; OnSpawn scales it to the rate of the world.
+    private Fixed _lateralSpeed = DefaultSpeedPerFrame;
+    private Fixed _verticalSpeed = DefaultSpeedPerFrame;
 
     public override string ModuleName => "BridgeScaffoldBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public Motion CurrentMotion => _motion;
+
+    public override void OnSpawn(IWorldServices world)
+        => (_lateralSpeed, _verticalSpeed) = (world.Time.PerOriginalFrameToPerTick(DefaultSpeedPerFrame), world.Time.PerOriginalFrameToPerTick(DefaultSpeedPerFrame));
 
     public void SetPositions((Fixed X, Fixed Y, Fixed Z) create, (Fixed X, Fixed Y, Fixed Z) riseTo, (Fixed X, Fixed Y, Fixed Z) build) => (_create, _riseTo, _build) = (create, riseTo, build);
 
@@ -311,7 +318,8 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
         var minSpeed = top * MinSpeedShare;
         if (speed < minSpeed) speed = minSpeed;
         if (speed > top) speed = top;
-        if (speed < AbsoluteMinSpeed) speed = AbsoluteMinSpeed;
+        var absoluteMinSpeed = world.Time.PerOriginalFrameToPerTick(AbsoluteMinSpeedPerFrame); // untouched at 30 Hz
+        if (speed < absoluteMinSpeed) speed = absoluteMinSpeed;
 
         var (newX, newY, newZ) = (Entity.X + unitX * speed, Entity.Y + unitY * speed, Entity.Z + unitZ * speed);
         // Would the step pass the target? Then the target is reached.
