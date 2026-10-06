@@ -512,6 +512,30 @@ Wegpunktverbindungen, die Ease-Zeiten des Skripts; `CAMERA_MOD_FREEZE_TIME`, `CA
 Lautstärken) sind Hostzustand und gehen beim Speichern/Laden einer Mission **nicht** mit (`MissionSnapshot` kennt nur die Simulation und die Skript-VM): nach dem Laden gilt die Befehlsleiste wieder
 unverändert, bis das Skript den Zustand erneut setzt.
 
+### Zeit und Tickrate der Missionspräsentation (Phase 21)
+
+Der Director benutzt den Tick weiter als Uhr, nimmt aber nicht mehr an, dass er 1/30 s dauert. `MissionPresentationDirector.Clock` ist der Tick der Welt plus die eingefrorenen Schritte (`FREEZE_TIME`), in Ticks der Rate der Sitzung; `FrameClock` ist dieselbe Uhr in **Originalbildern** (1/30 s). Bei 30 Hz sind beide gleich, und alles ist unverändert (Prüfsummen: `docs/TICKRATE-MIGRATION.md` §14.2).
+
+| Ausgabe | Einheit des Skripts bzw. der Daten | Umrechnung |
+|---|---|---|
+| `CAMERA_FADE_*` (Anstieg, Halten, Abfall) | Originalbilder (`ScriptEngine::setFade`) | `Time.OriginalFrames(…)` beim Annehmen; der Verlauf läuft auf `Clock` |
+| `CAMERA_BW_MODE_BEGIN/END` | Originalbilder | die Rampe zählt ein Bild je Originalbild der Präsentationsuhr |
+| Zoom-Unschärfe (`CAMERA_MOTION_BLUR_*`) | +5/−5 je Bild des Originals | ein Schritt je Originalbild |
+| Kamerabewegungen (Sekunden) | Sekunden | `DurationTicks`: auf ganze Originalbilder gerundet, dann in Ticks; die Restzeit für Zoom/Neigung/Blick teilt durch `Time.TicksPerSecond` |
+| `SHOW_MILITARY_CAPTION`, Sprachuntertitel | Millisekunden, `MilitaryCaptionDelayMS`, `MilitaryCaptionSpeed` (Bilder) | `MilitaryCaptionState` rechnet in Originalbildern und wird einmal je Originalbild aktualisiert (`AdvanceText(FrameClock)`); der Tippton folgt dem |
+| `DISPLAY_TEXT` (Meldungszeilen) | Alter in Bildern, ein Update je Bild | Stempel `FrameOf(tick)`, ein Update je Originalbild |
+| `DISPLAY_CINEMATIC_TEXT` | Sekunden | Ablauf in Originalbildern (`(long)seconds * OriginalFrame.PerSecond`) |
+| Platzhalter für Sprache, Ton, Film (3 s), Radarereignis (8 s) | eigene Dauern | Konstanten in Originalbildern, in Ticks der Welt verglichen |
+| Letterbox-Blende (`LETTER_BOX_FADE_TIME` 1000 ms) | Wandzeit im Original | `LetterboxFadeFrames = OriginalFrame.PerSecond` Originalbilder der **Präsentationsuhr** (siehe unten) |
+| benannte Zähler | Timerwert der VM in Ticks | `CounterForDisplay` rechnet in Originalbilder |
+| `PresentationLatencyTicks` | Originalbilder (Einheit der Option) | `LiveMission.ClientPresentationLatencyFrames = 60 * OriginalFrame.PerSecond`; die VM skaliert |
+
+**Abweichung vom Auftrag (bewusst):** der Auftrag der Phase 21 nennt die Letterbox-Blende „als Wandzeit wie im Original“. Sie bleibt auf der Präsentationsuhr: so steht sie mit einem pausierten Spiel, bleibt in Tests und Aufnahmen reproduzierbar und bei 30 Hz bildgleich; in Sekunden dauert sie bei jeder Rate gleich lang (gemessen 1,0333 / 1,0167 / 1,0083 s bei 30 / 60 / 120 Hz bis zur vollen Deckung). Wer sie an die Wandzeit hängen will, ändert `LetterboxFadeLevel` – und damit die Aufnahmen der Missionsintros.
+
+**Zeitmaß-Test** (`tests/CnCNew.Game.Tests/TimeScaleTests.cs`, synthetische Mission je bei 30, 60 und 120 Hz, Toleranz ein Originalbild): Kamerafahrt von 5 s (bis der Director sie beendet und bis `CAMERA_MOVEMENT_FINISHED` die Skripte erreicht), Militäruntertitel (erstes Zeichen 0,7667 s, alle neun Zeichen 2,0667 s, verschwunden nach 7,5333 s – bei allen drei Raten gleich), Meldungszeile (9,2333 s), Kinotext (4,0000 s), Sprachplatzhalter (3 s), Skriptblende (schwarz nach 1,0000 s, vorbei nach 3,0000 s), Letterbox, Graustufen-Rampe (1,0000 s), Radarereignis (8 s).
+
+**Nicht belegt:** ob ein Missionsintro bei 60 Hz richtig aussieht und klingt. Der Test misst Dauern; gesehen und gehört hat es kein Mensch. `InputLockedTicks` und die Zeile „input locked for N ticks“ des Berichts zählen weiter Ticks der Rate.
+
 ## 8. Abweichungen und Näherungen (vollständig)
 
 1. **Bauanlage** (`ThingTemplate::isBuildFacility`): im Original aus den Voraussetzungen anderer Vorlagen berechnet; hier: Struktur mit

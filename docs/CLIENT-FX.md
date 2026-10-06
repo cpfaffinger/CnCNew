@@ -160,6 +160,15 @@ katalog, Karte oder Budget neu messen.
 - Alles andere unter `Layers/Fx/**` (`FxGeometry`, `FxMaterials`, `FxRunPool`, `FxBuilder`, `FxStats`, `FxDemo`) ist
   `internal` und nur für diese Schicht gedacht.
 
+
+## Zeit und Tickrate (Phase 21)
+
+Die FX-Schicht des Clients zeichnet, was `FxExecutor.Capture` liefert, und führt selbst keine Uhr. Seit Phase 21 stuft `LiveGame` die Effektuhr einmal je **Originalbild** (1/30 s Spielzeit) statt einmal je Simulationstick (`docs/PRESENTATION-FX.md`, „Zeit und Tickrate“): bei 30 Hz ist das dasselbe, bei 60 Hz ändert sich das Partikelbild weiterhin 30-mal je Sekunde. `FxDemo` (`CNCNEW_FX_DEMO=ring`) zählt `match.Fx.Frame` und setzt seinen Ring damit bei jeder Rate alle 45 Originalbilder (1,5 s).
+
+Der Client hat die Option `--tick-rate N` (30, 60 oder 120 Hz; Standard ist `GameData.DefaultSessionRate`, 30 Hz bis Phase 23). Im Rauchtest ist ein gezeichnetes Bild ein Originalbild Spielzeit bei jeder Rate (ein Tick bei 30 Hz, zwei bei 60 Hz); `--frames`, `--every` und die Bildnummern eines Eingabeskripts meinen deshalb bei jeder Rate dieselbe Spielzeit, und eine Aufnahme bei Bild N zeigt denselben Zeitpunkt. Der FX-Bench (`CNCNEW_FX_DEMO=bench`) ist davon unberührt.
+
+Nicht belegt: das Aussehen der Effekte bei 60 Hz (kein Mensch hat es gesehen).
+
 ## Quellenverweise
 
 - `pointgr.cpp` (`PointGroupClass::Render`): Quadaufbau, UV-Reihenfolge, Kantenlänge = `Size`, Shader-Presets
