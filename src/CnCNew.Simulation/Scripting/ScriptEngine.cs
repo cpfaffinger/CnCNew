@@ -184,6 +184,9 @@ public sealed partial class ScriptEngine
     }
 
     public ScriptProgram Program => _program;
+
+    /// <summary>A tool's measuring hook (<see cref="IScriptObserver"/>); <see langword="null"/> unless a tool installs one. Not part of the state: neither hashed nor saved.</summary>
+    public IScriptObserver? Observer { get; set; }
     public MissionOutcome Outcome { get; private set; }
 
     /// <summary>The tick the outcome was decided (<c>VICTORY</c>/<c>DEFEAT</c> executed), or -1.</summary>
@@ -319,13 +322,17 @@ public sealed partial class ScriptEngine
             if (_endTimer < 1) IsEnded = true;
         }
         if (_endTimer >= 0) return;
+        var observer = Observer;
+        observer?.SectionStarted(ScriptSection.Housekeeping);
         if (_pendingPresentation.Count > 0)
             foreach (var name in _pendingPresentation.Where(pair => pair.Value <= tick).Select(pair => pair.Key).ToArray()) _pendingPresentation.Remove(name);
 
         PruneTeams();
         foreach (var counter in _counters.Values)
             if (counter.IsTimer && counter.Value >= 0) counter.Value--;
+        observer?.SectionEnded(ScriptSection.Housekeeping);
 
+        observer?.SectionStarted(ScriptSection.Scripts);
         for (var list = 0; list < _program.ListCount; list++)
         {
             _currentList = list;
@@ -342,14 +349,45 @@ public sealed partial class ScriptEngine
             }
         }
         _uiInteractions.Clear();
-        UpdateFollowers();
-        UpdateButtonHunts();
-        ProcessTeamEvents();
-        ProcessSequences();
-        ProcessTeamBuilds();
-        UpdateTeamQueues();
-        UpdatePhase13(tick);
+        observer?.SectionEnded(ScriptSection.Scripts);
+        if (observer is null)
+        {
+            UpdateFollowers();
+            UpdateButtonHunts();
+            ProcessTeamEvents();
+            ProcessSequences();
+            ProcessTeamBuilds();
+            UpdateTeamQueues();
+            UpdatePhase13(tick);
+        }
+        else UpdateTailObserved(observer, tick);
         _pruneBelow = _world.Ids.NextEntity;
+    }
+
+    /// <summary>The same calls in the same order as the tail of <see cref="Update"/>, each reported to the observer.</summary>
+    private void UpdateTailObserved(IScriptObserver observer, long tick)
+    {
+        observer.SectionStarted(ScriptSection.Followers);
+        UpdateFollowers();
+        observer.SectionEnded(ScriptSection.Followers);
+        observer.SectionStarted(ScriptSection.ButtonHunts);
+        UpdateButtonHunts();
+        observer.SectionEnded(ScriptSection.ButtonHunts);
+        observer.SectionStarted(ScriptSection.TeamEvents);
+        ProcessTeamEvents();
+        observer.SectionEnded(ScriptSection.TeamEvents);
+        observer.SectionStarted(ScriptSection.Sequences);
+        ProcessSequences();
+        observer.SectionEnded(ScriptSection.Sequences);
+        observer.SectionStarted(ScriptSection.TeamBuilds);
+        ProcessTeamBuilds();
+        observer.SectionEnded(ScriptSection.TeamBuilds);
+        observer.SectionStarted(ScriptSection.TeamQueues);
+        UpdateTeamQueues();
+        observer.SectionEnded(ScriptSection.TeamQueues);
+        observer.SectionStarted(ScriptSection.WorldOrders);
+        UpdatePhase13(tick);
+        observer.SectionEnded(ScriptSection.WorldOrders);
     }
 
     private void ExecuteScript(ScriptUnit unit)

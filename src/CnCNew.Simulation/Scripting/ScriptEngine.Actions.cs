@@ -23,6 +23,18 @@ public sealed partial class ScriptEngine
     /// <summary><c>ScriptEngine::executeActions</c> / <c>ScriptActions::executeAction</c> for one action; see <see cref="ScriptCoverage"/> for what each type does.</summary>
     private void ExecuteAction(MapScriptAction action)
     {
+        if (Observer is not { } observer)
+        {
+            ExecuteActionCore(action);
+            return;
+        }
+        observer.ActionStarted(action);
+        try { ExecuteActionCore(action); }
+        finally { observer.ActionEnded(action); }
+    }
+
+    private void ExecuteActionCore(MapScriptAction action)
+    {
         var p = action.Parameters;
         var type = action.TypeName;
         if (ScriptCoverage.ForwardedActions.Contains(type))

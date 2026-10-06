@@ -25,6 +25,14 @@ public sealed partial class ScriptEngine
     /// <summary><c>ScriptEngine::evaluateCondition</c> and <c>ScriptConditions::evaluateCondition</c>: the engine-level types first, then the world-bound ones.</summary>
     private bool EvaluateCondition(MapCondition condition)
     {
+        if (Observer is not { } observer) return EvaluateConditionCore(condition);
+        observer.ConditionStarted(condition);
+        try { return EvaluateConditionCore(condition); }
+        finally { observer.ConditionEnded(condition); }
+    }
+
+    private bool EvaluateConditionCore(MapCondition condition)
+    {
         var p = condition.Parameters;
         var type = condition.TypeName;
         switch (type)
