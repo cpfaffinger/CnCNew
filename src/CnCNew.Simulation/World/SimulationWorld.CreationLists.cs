@@ -134,7 +134,9 @@ public sealed partial class SimulationWorld
                 startX -= FixedTrig.Cos(orient) * slop;
                 startY -= FixedTrig.Sin(orient) * slop;
             }
-            long delay = spec.DelayDeliveryMaxTicks > 0 ? LogicRandom.Range(0, checked((int)spec.DelayDeliveryMaxTicks)) : 0;
+            // DelayDeliveryMax is a duration in logic frames of the original (INI::parseDurationUnsignedInt): the delay is drawn in frames and only then scaled to ticks, so it
+            // stays on the original's grid at every tick rate.
+            long delay = spec.DelayDeliveryMaxTicks > 0 ? Time.OriginalFrames(LogicRandom.Range(0, checked((int)Time.ToOriginalFrames(spec.DelayDeliveryMaxTicks)))) : 0;
             var order = new Modules.BuiltIn.DeliveryOrder(moveX, moveY, targetX, targetY, run, delay);
 
             var transport = source.Id;
@@ -341,8 +343,8 @@ public sealed partial class SimulationWorld
     /// <summary><c>Thing::isSignificantlyAboveTerrain</c>: higher than three frames of free fall above the terrain height (flat 0 without terrain).</summary>
     public bool IsSignificantlyAboveTerrain(Entity entity) => IsSignificantlyAbove(entity.Z, GroundHeightAt(entity.X, entity.Y));
 
-    // A height, not a rate: 3 x 3 logic frames of the original times the gravity per frame of the original squared (gravity per second² / 30²). The same
-    // at every tick rate, so it is written with the original's frame rate and never with the rate of the world.
-    private bool IsSignificantlyAbove(Fixed z, Fixed ground)
-        => z - ground > Fixed.FromDecimal(-9m * _templates.Gravity / (SimulationRate.OriginalFramesPerSecond * SimulationRate.OriginalFramesPerSecond));
+    /// <summary>The height of three logic frames of the original in free fall (<c>-(3*3) * m_gravity</c>); the same at every tick rate. Resolved once when the world is created.</summary>
+    private readonly Fixed _significantHeight;
+
+    private bool IsSignificantlyAbove(Fixed z, Fixed ground) => z - ground > _significantHeight;
 }

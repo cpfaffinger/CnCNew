@@ -3,6 +3,7 @@ using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -17,17 +18,29 @@ public sealed partial class SimulationWorld
     /// <summary><c>REL_THRESH</c> of <c>TurretAIAimTurretState::update</c>: "about 2 degrees" (0.035 rad) — how closely the turret has to point at the victim before the weapon may fire.</summary>
     private static readonly Fixed TurretAlignThreshold = Fixed.FromDecimal(0.035m);
 
-    /// <summary>A one-off aim (a module's or script's shot, not part of an attack order) keeps its aim at least this long after the latest request (and past the weapon's reload).</summary>
-    private const long TurretAimGraceTicks = 15;
+    /// <summary>
+    /// A one-off aim (a module's or script's shot, not part of an attack order) keeps its aim at least this long after the latest request (and past the weapon's reload): logic frames
+    /// of the original, 0.5 s. An own value of this simulation.
+    /// </summary>
+    private const long TurretAimGraceFrames = 15;
 
-    /// <summary>The longest reload that extends the hold (a weapon that reloads at an airfield reports an endless wait).</summary>
-    private const long TurretReloadHoldCapTicks = 450;
+    /// <summary>The longest reload that extends the hold (a weapon that reloads at an airfield reports an endless wait): 15 s in logic frames of the original. An own value of this simulation.</summary>
+    private const long TurretReloadHoldCapFrames = 15L * SimulationRate.OriginalFramesPerSecond;
 
-    /// <summary><c>ENABLE_SWEEP_FRAME_COUNT</c>: the sweep of <c>TurretFireAngleSweep</c> stays on this many ticks after a shot.</summary>
-    private const long TurretSweepEnableTicks = 3;
+    /// <summary><c>ENABLE_SWEEP_FRAME_COUNT</c> (TurretAI.cpp, <c>m_enableSweepUntil = now + ENABLE_SWEEP_FRAME_COUNT</c>): the sweep of <c>TurretFireAngleSweep</c> stays on this many logic frames of the original after a shot.</summary>
+    private const long TurretSweepEnableFrames = 3;
 
-    /// <summary>How long an attacker that stands still keeps its turrets on a victim out of reach of every weapon before it gives up (the reference's attack state ends when it may not chase).</summary>
-    private const long TurretLoseInterestTicks = 45;
+    /// <summary>
+    /// How long an attacker that stands still keeps its turrets on a victim out of reach of every weapon before it gives up (the reference's attack state ends when it may not chase):
+    /// logic frames of the original, 1.5 s. An own value of this simulation.
+    /// </summary>
+    private const long TurretLoseInterestFrames = 45;
+
+    // The four above in ticks of this world, resolved once when the world is created.
+    private readonly long _turretAimGraceTicks;
+    private readonly long _turretReloadHoldCapTicks;
+    private readonly long _turretSweepEnableTicks;
+    private readonly long _turretLoseInterestTicks;
 
     /// <summary><c>friend_turnTowardsAngle(…, 0.5f, 0.0f)</c> of the recenter and idle-scan states.</summary>
     private static readonly Fixed TurretRecenterRateFactor = Fixed.FromDecimal(0.5m);
@@ -125,7 +138,7 @@ public sealed partial class SimulationWorld
         }
 
         if (state.Persistent && state.Target == victim.Id) return;
-        var holdUntil = Math.Max(state.HoldUntil, _tick + Math.Max(info.RecenterTicks, TurretAimGraceTicks));
+        var holdUntil = Math.Max(state.HoldUntil, _tick + Math.Max(info.RecenterTicks, _turretAimGraceTicks));
         if (!state.Persistent && state.Target == victim.Id && state.Slot == slot && state.HoldUntil == holdUntil) return;
         state.Target = victim.Id;
         state.Slot = slot;
@@ -191,6 +204,12 @@ public sealed partial class SimulationWorld
         MarkDirty(entity);
     }
 
+    /// <summary>
+    /// The smallest value of <see cref="TurretState.HoldUntil"/> and <see cref="TurretState.NextScan"/> that means "set": 0 stands for "none" in both, so a deadline computed in
+    /// tick 0 is lifted to 1. A sentinel of the state encoding, not a duration — never scaled with the tick rate.
+    /// </summary>
+    private const long TurretDeadlineSet = 1;
+
     /// <summary>The target is dropped; the angle is held for the recentre time, then the turret turns back.</summary>
     private static void StopAiming(TurretInfo info, TurretState state, long tick)
     {
@@ -198,7 +217,7 @@ public sealed partial class SimulationWorld
         state.Persistent = false;
         state.Pursuing = false;
         state.LoseInterestAt = 0;
-        state.HoldUntil = Math.Max(1, tick + info.RecenterTicks);
+        state.HoldUntil = Math.Max(TurretDeadlineSet, tick + info.RecenterTicks);
     }
 
     /// <summary>The object has a turret that takes part in aiming (<see cref="TurretInfo.Gates"/>): an attack order is visible in its turrets.</summary>
@@ -251,7 +270,7 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// Whether a persistent aim goes on this tick. The victim has to stay attackable for its attacker's player (<c>TurretAIAimTurretState::update</c> fails the aim when
     /// <c>getAbleToAttackSpecificObject(ATTACK_CONTINUED_TARGET, …)</c> does: a victim in the fog, stealthed or garrisoned) and, unless the unit pursues the victim, an attack on a victim
-    /// that no weapon reaches is given up after <see cref="TurretLoseInterestTicks"/> (the reference's attack state fails there: <c>AIAttackApproachTargetState::onEnter</c> returns failure
+    /// that no weapon reaches is given up after <see cref="TurretLoseInterestFrames"/> (the reference's attack state fails there: <c>AIAttackApproachTargetState::onEnter</c> returns failure
     /// for a unit that may not chase, which is every unit the AI sent after a target it acquired itself).
     /// </summary>
     private bool KeepsAttackIntent(Entity attacker, Entity victim, TurretState state, long tick)
@@ -262,7 +281,7 @@ public sealed partial class SimulationWorld
         var dx = victim.X - attacker.X;
         var dy = victim.Y - attacker.Y;
         if (dx * dx + dy * dy <= range * range) { state.LoseInterestAt = 0; return true; }
-        if (state.LoseInterestAt == 0) state.LoseInterestAt = tick + TurretLoseInterestTicks;
+        if (state.LoseInterestAt == 0) state.LoseInterestAt = tick + _turretLoseInterestTicks;
         return tick < state.LoseInterestAt;
     }
 
@@ -279,11 +298,11 @@ public sealed partial class SimulationWorld
             if (!set.Linked && !info.Controls(slot)) continue;
             if (!state.Persistent)
             {
-                var ready = Math.Min(source.ReadyTickOf(slot), _tick + TurretReloadHoldCapTicks);
-                state.HoldUntil = Math.Max(state.HoldUntil, Math.Max(_tick, ready) + Math.Max(info.RecenterTicks, TurretAimGraceTicks));
+                var ready = Math.Min(source.ReadyTickOf(slot), _tick + _turretReloadHoldCapTicks);
+                state.HoldUntil = Math.Max(state.HoldUntil, Math.Max(_tick, ready) + Math.Max(info.RecenterTicks, _turretAimGraceTicks));
             }
 
-            if (info.SweepOf(slot) > Fixed.Zero) state.SweepUntil = _tick + TurretSweepEnableTicks;
+            if (info.SweepOf(slot) > Fixed.Zero) state.SweepUntil = _tick + _turretSweepEnableTicks;
             MarkDirty(source);
         }
     }
@@ -488,12 +507,16 @@ public sealed partial class SimulationWorld
         if (!angleReached || !pitchReached) return;
         state.Scanning = false;
         state.ScanAngle = Fixed.Zero;
-        state.HoldUntil = Math.Max(1, tick + info.RecenterTicks);
+        state.HoldUntil = Math.Max(TurretDeadlineSet, tick + info.RecenterTicks);
     }
 
-    /// <summary><c>TurretAIIdleState::resetIdleScan</c>: the next scan starts a random interval from now.</summary>
+    /// <summary>
+    /// <c>TurretAIIdleState::resetIdleScan</c>: the next scan starts a random interval from now. The interval is drawn in logic frames of the original
+    /// (<c>GameLogicRandomValue(getMinIdleScanInterval(), getMaxIdleScanInterval())</c> draws frames) and only then scaled to ticks, so it stays on the original's grid at every tick rate.
+    /// </summary>
     private void ScheduleScan(Entity entity, TurretInfo info, TurretState state, long tick)
-        => state.NextScan = Math.Max(1, tick + DrawScan(entity, info, state, info.MinScanIntervalTicks, info.MaxScanIntervalTicks));
+        => state.NextScan = Math.Max(TurretDeadlineSet,
+            tick + Time.OriginalFrames(DrawScan(entity, info, state, Time.ToOriginalFrames(info.MinScanIntervalTicks), Time.ToOriginalFrames(info.MaxScanIntervalTicks))));
 
     // The reference draws the scan decisions from the shared logic stream (GameLogicRandomValue), so every idle turret in the world shifts every other user of it. This simulation instead hashes
     // (world seed, entity, turret, draw counter): the same inputs always give the same values, replays and snapshot continuations agree, and idle turrets do not disturb LogicRandom.

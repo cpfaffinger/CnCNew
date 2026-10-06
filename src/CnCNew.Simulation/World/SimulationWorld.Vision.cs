@@ -8,8 +8,20 @@ namespace CnCNew.Simulation.World;
 
 public sealed partial class SimulationWorld
 {
-    /// <summary>The shroud is recomputed every this many ticks (the reference refreshes on a partition cell timer; three ticks keep the delay below 100 ms).</summary>
-    public const int VisionIntervalTicks = 3;
+    /// <summary>
+    /// The shroud is recomputed every this many logic frames of the original (the reference refreshes on a partition cell timer; three frames keep the delay at 100 ms). An own rhythm
+    /// of this simulation; the world steps it as <see cref="VisionInterval"/> ticks, on the ticks that are a multiple of it (phase 0).
+    /// </summary>
+    public const int VisionIntervalFrames = 3;
+
+    /// <summary>
+    /// <see cref="VisionIntervalFrames"/> under its former name, for the callers outside the simulation that still step at the original's rate (game layer, tools, tests: phase 21).
+    /// It is the interval in ticks only at 30 Hz; the world itself uses <see cref="VisionInterval"/>.
+    /// </summary>
+    public const int VisionIntervalTicks = VisionIntervalFrames;
+
+    /// <summary>The shroud is recomputed on every tick that is a multiple of this (<see cref="VisionIntervalFrames"/> in ticks of this world).</summary>
+    public long VisionInterval { get; }
 
     private static readonly int StealthedStatus = ObjectStatusBits.Index("STEALTHED");
     private static readonly int DetectedStatus = ObjectStatusBits.Index("DETECTED");

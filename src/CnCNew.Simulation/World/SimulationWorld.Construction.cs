@@ -14,8 +14,18 @@ namespace CnCNew.Simulation.World;
 /// </summary>
 public sealed partial class SimulationWorld
 {
-    /// <summary><c>BuildAssistant::update</c>: <c>FRAMES_TO_ALLOW_SCAFFOLD</c> + <c>TOTAL_FRAMES_TO_SELL_OBJECT</c> - 1 frames from the sell order until the refund.</summary>
-    private const long SaleDurationTicks = 179;
+    /// <summary>
+    /// <c>BuildAssistant.cpp</c>: <c>FRAMES_TO_ALLOW_SCAFFOLD</c> (<c>LOGICFRAMES_PER_SECOND * 1.5f</c>, 45 frames in which the scaffold stands) plus the 135 frames in which
+    /// <c>BuildAssistant::update</c> takes <c>100 / TOTAL_FRAMES_TO_SELL_OBJECT</c> (<c>LOGICFRAMES_PER_SECOND * 3.0f</c> = 90) percent per frame off the construction percent until
+    /// it reaches -50 %: 180 logic frames of the original from the sell order to the refund. The refund falls in the step before that time is over (<see cref="BeginSale"/>).
+    /// </summary>
+    private const long SaleDurationFrames = 45 + 135;
+
+    /// <summary><see cref="SaleDurationFrames"/> in ticks of this world, less the one step by which the refund comes early; resolved once when the world is created.</summary>
+    private readonly long _saleDurationTicks;
+
+    /// <summary>A structure whose <c>BuildTime</c> is zero still takes one logic frame of the original to build, in ticks of this world.</summary>
+    private readonly long _minimumBuildTicks;
 
     private readonly SortedSet<(long Tick, uint Id)> _sales = [];
 
@@ -227,7 +237,7 @@ public sealed partial class SimulationWorld
     public bool AdvanceConstruction(Entity site)
     {
         if (!site.HasStatus(ObjectStatusBits.UnderConstruction)) return true;
-        var total = Math.Max(site.Template.BuildTicks, 1);
+        var total = Math.Max(site.Template.BuildTicks, _minimumBuildTicks);
         site.ConstructionWork++;
         var work = Math.Min(site.ConstructionWork, total);
         if (site.Body is IConstructionBody body)
@@ -272,7 +282,7 @@ public sealed partial class SimulationWorld
     private void BeginSale(Entity target)
     {
         target.Status |= 1UL << ObjectStatusBits.Sold;
-        target.SellCompleteTick = _tick + SaleDurationTicks;
+        target.SellCompleteTick = _tick + _saleDurationTicks;
         _sales.Add((target.SellCompleteTick, target.Id.Value));
         if (FindProductionModule(target) is { } production)
         {

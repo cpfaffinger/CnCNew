@@ -14,7 +14,8 @@ namespace CnCNew.Simulation.Templates;
 /// <para>
 /// Flight time (phase 8, <c>WeaponTemplate::fireWeaponTemplate</c>): <see cref="WeaponSpeed"/>/<see cref="MinWeaponSpeed"/> are per tick
 /// (<c>INI::parseVelocityReal</c>, default 999999 = "effectively instant"); a weapon with a <see cref="ProjectileObject"/> launches that
-/// object, one without lands after <c>ceil(distance / WeaponSpeed)</c> ticks (at once below one tick). <see cref="ScatterRadius"/> and
+/// object, one without lands after <c>ceil(distance / WeaponSpeed)</c> logic frames of the original, counted against the way of one such frame (at once below one
+/// frame of flight; <c>SimulationWorld.FlightTicks</c>). <see cref="ScatterRadius"/> and
 /// <see cref="ScatterRadiusVsInfantry"/> (<c>m_infantryInaccuracyDist</c>) randomise a projectile's aim point, the detonation effect and
 /// creation list are <see cref="DetonationFx"/>/<see cref="DetonationOcl"/> (the veterancy-specific variants are not modeled). These are
 /// documented simplifications, not silent gaps: <c>GAME-RULES.md</c> names them.
@@ -76,12 +77,16 @@ public sealed record WeaponInfo(
     /// <summary><c>PreAttackType</c> (<c>m_prefireType</c>): whether the delay applies to every shot, to the first shot at a victim or to the first shot of a clip.</summary>
     public WeaponPrefire PreAttackType { get; init; } = WeaponPrefire.PerShot;
 
-    /// <summary><c>WeaponTemplate::getPreAttackDelay(bonus)</c>: the delay times the <c>PRE_ATTACK</c> bonus multiplier (truncated, as the reference's integer return does).</summary>
-    public long PreAttackDelayWith(WeaponBonusTable global, uint conditions)
+    /// <summary>
+    /// <c>WeaponTemplate::getPreAttackDelay(bonus)</c>: the delay times the <c>PRE_ATTACK</c> bonus multiplier (truncated, as the reference's integer return does). The reference
+    /// truncates logic frames, so the product is truncated in logic frames of the original and only then scaled to ticks of <paramref name="time"/>: the wind-up is the same game
+    /// time at every tick rate.
+    /// </summary>
+    public long PreAttackDelayWith(SimulationTime time, WeaponBonusTable global, uint conditions)
     {
         if (PreAttackDelayTicks == 0) return 0;
         var multiplier = Multiplier(global, conditions, WeaponBonusTable.PreAttack);
-        return multiplier <= Fixed.Zero ? 0 : (Fixed.FromInt(PreAttackDelayTicks) * multiplier).Floor();
+        return multiplier <= Fixed.Zero ? 0 : time.OriginalFrames((Fixed.FromInt(time.ToOriginalFrames(PreAttackDelayTicks)) * multiplier).Floor());
     }
 
     /// <summary>
@@ -103,13 +108,35 @@ public sealed record WeaponInfo(
 
     public Fixed RangeWith(WeaponBonusTable global, uint conditions) => AttackRange * Multiplier(global, conditions, WeaponBonusTable.Range);
 
+    /// <summary>The shortest time between two shots of one weapon, in logic frames of the original: the reference fires a weapon at most once per logic frame.</summary>
+    public const long MinimumShotDelayFrames = 1;
+
+    /// <summary><c>WeaponTemplate::getDelayBetweenShots(bonus)</c> in ticks of <paramref name="time"/>, rounded on the original's grid (<see cref="ScaledByRateOfFire(SimulationTime, WeaponBonusTable, uint, long)"/>).</summary>
+    public long DelayBetweenShotsWith(SimulationTime time, WeaponBonusTable global, uint conditions) => ScaledByRateOfFire(time, global, conditions, DelayBetweenShotsTicks);
+
+    /// <summary><c>WeaponTemplate::getClipReloadTime(bonus)</c> in ticks of <paramref name="time"/>, rounded on the original's grid.</summary>
+    public long ClipReloadWith(SimulationTime time, WeaponBonusTable global, uint conditions) => ClipReloadTicks == 0 ? 0 : ScaledByRateOfFire(time, global, conditions, ClipReloadTicks);
+
+    // Weapon.cpp getDelayBetweenShots/getClipReloadTime: REAL_TO_INT_FLOOR(time / rate-of-fire multiplier), in logic frames. A multiplier of zero or less (only
+    // reachable by a data-side WeaponBonus of -100% or worse) stops the weapon instead of dividing by zero; a shot never comes faster than one logic frame of the
+    // original. The division is floored in logic frames of the original and only then scaled to ticks, so a rate-of-fire bonus gives the same game time between
+    // shots at every tick rate (floor(2t / m) is not 2 * floor(t / m)); at 30 Hz frames are ticks and this is the former expression.
+    private long ScaledByRateOfFire(SimulationTime time, WeaponBonusTable global, uint conditions, long ticks)
+    {
+        var multiplier = Multiplier(global, conditions, WeaponBonusTable.RateOfFire);
+        if (multiplier <= Fixed.Zero) return SimulationTiming.SleepForever;
+        return time.OriginalFrames(Math.Max(MinimumShotDelayFrames, (Fixed.FromInt(time.ToOriginalFrames(ticks)) / multiplier).Floor()));
+    }
+
+    /// <summary>
+    /// The same without the time service: floored in ticks, at least one tick. Equal to the overload with a time service at 30 Hz only. Kept for the two callers in
+    /// <c>Modules/BuiltIn</c> (<c>CombatModules.cs</c>, <c>JetAIUpdate.cs</c>) until they pass <c>world.Time</c>; new code uses the overloads above.
+    /// </summary>
     public long DelayBetweenShotsWith(WeaponBonusTable global, uint conditions) => ScaledByRateOfFire(global, conditions, DelayBetweenShotsTicks);
 
+    /// <summary>See <see cref="DelayBetweenShotsWith(WeaponBonusTable, uint)"/>.</summary>
     public long ClipReloadWith(WeaponBonusTable global, uint conditions) => ClipReloadTicks == 0 ? 0 : ScaledByRateOfFire(global, conditions, ClipReloadTicks);
 
-    // Weapon.cpp getDelayBetweenShots/getClipReloadTime: floor(time / rate-of-fire multiplier). A multiplier of zero or less (only
-    // reachable by a data-side WeaponBonus of -100% or worse) stops the weapon instead of dividing by zero; a shot never comes
-    // faster than one tick.
     private long ScaledByRateOfFire(WeaponBonusTable global, uint conditions, long ticks)
     {
         var multiplier = Multiplier(global, conditions, WeaponBonusTable.RateOfFire);
@@ -206,8 +233,11 @@ public sealed class WeaponCatalog
             var range = Field("AttackRange")?.Value.Value is Distance attackRange ? Fixed.FromDecimal(attackRange.Value) : Fixed.Zero;
             var clipSize = Field("ClipSize")?.Value.Value is long clip ? checked((int)clip) : 0;
             var reload = Field("ClipReloadTime")?.Value.Value is GameTime reloadTime ? timing.DurationMillisecondsToTicks(reloadTime.Milliseconds) : 0;
+            // A weapon without DelayBetweenShots, or with 0 ms, fires once per logic frame of the original (the lower bound is this simulation's own; the reference's
+            // WeaponTemplate::getDelayBetweenShots would return 0 and fire again in the next logic frame).
+            var minimumDelay = timing.OriginalFrames(WeaponInfo.MinimumShotDelayFrames);
             var delay = Field("DelayBetweenShots")?.Value.Value is ShotDelayValue shotDelay
-                ? timing.DurationMillisecondsToTicks(shotDelay.Min.Milliseconds) : SimulationTiming.SleepNone;
+                ? timing.DurationMillisecondsToTicks(shotDelay.Min.Milliseconds) : minimumDelay;
             var primaryRadius = Field("PrimaryDamageRadius")?.Value.Value is Distance primaryRadiusValue ? Fixed.FromDecimal(primaryRadiusValue.Value) : Fixed.Zero;
             var secondaryRadius = Field("SecondaryDamageRadius")?.Value.Value is Distance secondaryRadiusValue ? Fixed.FromDecimal(secondaryRadiusValue.Value) : Fixed.Zero;
             var secondaryDamage = Field("SecondaryDamage")?.Value.Value is decimal secondary ? Fixed.FromDecimal(secondary) : Fixed.Zero;
@@ -260,7 +290,7 @@ public sealed class WeaponCatalog
                     ? parsed : throw new InvalidDataException($"{definition.OriginalName}: '{key}' has the unexpected value '{field.Value.OriginalText}'.")
                 : null;
             var projectile = Name("ProjectileObject");
-            weapons.Add(new WeaponInfo(index++, definition.OriginalName, damage, damageType, deathType, range, clipSize, reload, Math.Max(SimulationTiming.SleepNone, delay), WeaponBonusTable.From(definition),
+            weapons.Add(new WeaponInfo(index++, definition.OriginalName, damage, damageType, deathType, range, clipSize, reload, Math.Max(minimumDelay, delay), WeaponBonusTable.From(definition),
                 primaryRadius, secondaryDamage, secondaryRadius, affects)
             {
                 WeaponSpeed = Speed("WeaponSpeed"),

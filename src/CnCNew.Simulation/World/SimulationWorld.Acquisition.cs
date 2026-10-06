@@ -5,6 +5,7 @@ using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -31,14 +32,25 @@ public sealed partial class SimulationWorld
     /// <summary><c>AttackPriorityDistanceModifier</c> (AIData.ini 100): the distance that lowers a victim's attack priority by one.</summary>
     private static readonly Fixed AttackPriorityDistanceStep = Fixed.FromInt(100);
 
-    /// <summary>An attack named by fire or pursue orders is over when no such order arrived for this long after the unit could fire again (a command giver only orders a shot the weapon can take).</summary>
-    private const long OrderedAttackGraceTicks = 45;
+    /// <summary>
+    /// An attack named by fire or pursue orders is over when no such order arrived for this long (logic frames of the original, 1.5 s) after the unit could fire again (a command
+    /// giver only orders a shot the weapon can take). An own value of this simulation.
+    /// </summary>
+    private const long OrderedAttackGraceFrames = 45;
 
-    /// <summary><c>ForceIdleMSEC</c> (AIData.ini 67 ms, "2 frames"): how long a unit has been in a state that looks for victims before its first look.</summary>
-    private const long ForceIdleTicks = 2;
+    /// <summary>
+    /// <c>ForceIdleMSEC</c> (AIData.ini 67 ms, "2 frames"; <c>AI.cpp</c> field table → <c>m_forceIdleFramesCount</c>, used by <c>AIUpdateInterface::resetNextMoodCheckTime</c>):
+    /// how long a unit has been in a state that looks for victims before its first look, in logic frames of the original.
+    /// </summary>
+    private const long ForceIdleFrames = 2;
 
-    /// <summary>A chase is pointed at the victim's current position this often.</summary>
-    private const long ChaseRefreshTicks = 15;
+    /// <summary>A chase is pointed at the victim's current position this often (logic frames of the original, 0.5 s). An own rhythm of this simulation.</summary>
+    private const long ChaseRefreshFrames = 15;
+
+    // The three above in ticks of this world, resolved once when the world is created.
+    private readonly long _orderedAttackGraceTicks;
+    private readonly long _forceIdleTicks;
+    private readonly long _chaseRefreshTicks;
 
     /// <summary>A chased victim that is further away than this many acquisition radii has escaped.</summary>
     private const int ChaseLeashFactor = 2;
@@ -150,7 +162,7 @@ public sealed partial class SimulationWorld
             if (state.Ordered)
             {
                 // The command giver fires; the world only notices when its attack is over.
-                if (attackable && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) <= OrderedAttackGraceTicks) return;
+                if (attackable && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) <= _orderedAttackGraceTicks) return;
                 state.ClearVictim();
             }
             else
@@ -160,7 +172,7 @@ public sealed partial class SimulationWorld
                 // AIAttackMoveToState::update (forceRetargetThisFrame): on an attack-move the next victim is looked for at once. An idle unit or turret enters its idle state again,
                 // whose look is due two frames later.
                 if (state.AttackMove) force = true;
-                else if (state.Mode != 0) (state.NextCheck, state.Offset) = (tick + ForceIdleTicks, true);
+                else if (state.Mode != 0) (state.NextCheck, state.Offset) = (tick + _forceIdleTicks, true);
             }
         }
 
@@ -176,7 +188,7 @@ public sealed partial class SimulationWorld
             {
                 // resetNextMoodCheckTime: a state that looks for victims was entered.
                 state.Mode = (byte)mode;
-                state.NextCheck = tick + ForceIdleTicks;
+                state.NextCheck = tick + _forceIdleTicks;
                 state.Offset = true;
             }
 
@@ -205,7 +217,7 @@ public sealed partial class SimulationWorld
         {
             // The fight is over: AIAttackMoveToState repaths and marches on.
             state.Halted = false;
-            if (ai.StartInternalMove(state.GoalX, state.GoalY)) WakeAt(entity, ai, tick + 1);
+            if (ai.StartInternalMove(state.GoalX, state.GoalY)) WakeAt(entity, ai, tick + TickOrder.Next);
             else state.AttackMove = false;
         }
         else if (!entity.HasMoveTarget) state.AttackMove = false;
@@ -232,18 +244,23 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// <c>GameLogicRandomValue(-halfRate, halfRate)</c> of <c>getNextMoodTarget</c>. The reference draws from the shared logic stream; like the turrets' idle scan this hashes (world seed,
     /// entity, tick) instead, so the same inputs give the same value, replays and snapshot continuations agree and no other user of the logic stream is shifted.
+    /// <para>
+    /// The value is drawn in logic frames of the original (half the check rate in frames, as the reference draws it) and only then scaled to ticks, so the shift stays on the
+    /// original's grid at every tick rate. The tick number that seeds the hash is the world's own: the draws of two rates are not the same sequence.
+    /// </para>
     /// </summary>
     private long MoodCheckOffset(Entity entity, long tick, long rate)
     {
-        var half = rate >> 1;
+        var half = Time.ToOriginalFrames(rate) >> 1;
         if (half <= 0) return 0;
         unchecked
         {
+            // tick + 1 keeps the hash input away from zero in the first tick: an offset of the hash, neither a time nor an order.
             var z = (((ulong)Streams.Seed << 32) | entity.Id.Value) + 0x9E3779B97F4A7C15UL * (ulong)(tick + 1);
             z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
             z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
             z ^= z >> 31;
-            return (long)(z % (ulong)(2 * half + 1)) - half;
+            return Time.OriginalFrames((long)(z % (ulong)(2 * half + 1)) - half);
         }
     }
 
@@ -286,10 +303,10 @@ public sealed partial class SimulationWorld
         var dx = victim.X - entity.X;
         var dy = victim.Y - entity.Y;
         if (dx * dx + dy * dy > leash * leash) return false;
-        if (!state.Chasing || tick - state.ChaseTick >= ChaseRefreshTicks || !entity.HasMoveTarget)
+        if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
         {
             if (!ai.StartInternalMove(victim.X, victim.Y)) return false;
-            WakeAt(entity, ai, tick + 1);
+            WakeAt(entity, ai, tick + TickOrder.Next);
             state.Chasing = true;
             state.ChaseTick = tick;
             state.Halted = true;
@@ -336,7 +353,7 @@ public sealed partial class SimulationWorld
         var earliest = long.MaxValue;
         for (var slot = 0; slot < WeaponSlot.Count; slot++)
             if (set.HasWeapon(slot)) earliest = Math.Min(earliest, EffectiveReadyTick(entity, slot, set));
-        return Math.Clamp(earliest, tick - OrderedAttackGraceTicks - 1, tick + TurretReloadHoldCapTicks);
+        return Math.Clamp(earliest, tick - _orderedAttackGraceTicks - TickOrder.Next, tick + _turretReloadHoldCapTicks);
     }
 
     // ------------------------------------------------------------------------------------------------------ choosing the victim

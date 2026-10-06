@@ -10,7 +10,7 @@ namespace CnCNew.Simulation.World;
 /// <summary>
 /// Flight time of shots (<c>WeaponTemplate::fireWeaponTemplate</c>, <c>WeaponStore::setDelayedDamage</c>/<c>update</c>,
 /// <c>WeaponStore::handleProjectileDetonation</c>). A weapon without a projectile object lands its damage <c>ceil(distance / WeaponSpeed)</c>
-/// ticks after it fired (at once when that is below one tick); a weapon with one launches the object, whose projectile module flies it and
+/// logic frames of the original after it fired (at once when that is below one frame; <see cref="FlightTicks"/>); a weapon with one launches the object, whose projectile module flies it and
 /// detonates it (<see cref="IProjectileModule"/>). See docs/GAME-RULES.md §6i for the fixed-point rules and the documented deviations.
 /// </summary>
 public sealed partial class SimulationWorld
@@ -118,19 +118,24 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// <c>delayInFrames = |victimPos - sourcePos| / WeaponSpeed</c>: 0 (hit now) below one tick, otherwise <c>REAL_TO_INT_CEIL</c> of it,
+    /// <c>delayInFrames = |victimPos - sourcePos| / WeaponSpeed</c>: 0 (hit now) below one logic frame, otherwise <c>REAL_TO_INT_CEIL</c> of it,
     /// computed exactly on the raw fixed-point values (the distance itself is the floored fixed-point square root). A speed of 0 or less —
     /// three shipped weapons without damage, where the reference divides by zero — hits at once.
+    /// <para>
+    /// The reference counts in its logic frames, so the count is taken in logic frames of the original — against the way of one frame, which is the speed per tick times the ticks
+    /// per frame — and only then scaled to ticks: "at once" stays "closer than one frame of flight" and the delay stays on the original's grid at every tick rate.
+    /// </para>
     /// </summary>
-    internal static long FlightTicks(Entity source, Fixed x, Fixed y, Fixed z, Fixed speed)
+    internal long FlightTicks(Entity source, Fixed x, Fixed y, Fixed z, Fixed speed)
     {
         if (speed <= Fixed.Zero) return 0;
         var dx = x - source.X;
         var dy = y - source.Y;
         var dz = z - source.Z;
         var distance = Fixed.Sqrt(dx * dx + dy * dy + dz * dz);
-        if (distance < speed) return 0;
-        return (distance.Raw + speed.Raw - 1) / speed.Raw;
+        var perFrame = checked(speed.Raw * Time.TicksPerOriginalFrame);
+        if (distance.Raw < perFrame) return 0;
+        return Time.OriginalFrames((distance.Raw + perFrame - 1) / perFrame);
     }
 
     /// <summary><c>WeaponStore::update</c>: every delayed hit due by now lands, in insertion order (the reference runs it at the end of the frame).</summary>

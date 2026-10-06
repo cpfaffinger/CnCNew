@@ -168,6 +168,20 @@ public sealed partial class SimulationWorld : IWorldServices
             throw new ArgumentException($"The catalog was built for {templates.Rate}, the world is configured for {configuration.Rate}.", nameof(templates));
         Configuration = configuration;
         Time = configuration.Rate.Time;
+        // The world's own durations and rhythms are written in logic frames of the original; they become ticks of this world's rate here, once, so no step converts.
+        _orderedAttackGraceTicks = Time.OriginalFrames(OrderedAttackGraceFrames);
+        _forceIdleTicks = Time.OriginalFrames(ForceIdleFrames);
+        _chaseRefreshTicks = Time.OriginalFrames(ChaseRefreshFrames);
+        _turretAimGraceTicks = Time.OriginalFrames(TurretAimGraceFrames);
+        _turretReloadHoldCapTicks = Time.OriginalFrames(TurretReloadHoldCapFrames);
+        _turretSweepEnableTicks = Time.OriginalFrames(TurretSweepEnableFrames);
+        _turretLoseInterestTicks = Time.OriginalFrames(TurretLoseInterestFrames);
+        VisionInterval = Time.OriginalFrames(VisionIntervalFrames);
+        _saleDurationTicks = Time.OriginalFrames(SaleDurationFrames) - TickOrder.Next;
+        _minimumBuildTicks = Time.OriginalFrames(1);
+        // Thing::isSignificantlyAboveTerrain: a height, not a rate - 3 x 3 logic frames of the original times the gravity per frame of the original squared (gravity per second² / 30²).
+        // The same at every tick rate, so it is written with the original's frame rate and never with the rate of the world.
+        _significantHeight = Fixed.FromDecimal(-9m * templates.Gravity / (SimulationRate.OriginalFramesPerSecond * SimulationRate.OriginalFramesPerSecond));
         Terrain = terrain;
         Navigation = terrain is null ? null : new NavigationGrid(terrain);
         _templates = templates;
@@ -1728,8 +1742,8 @@ public sealed partial class SimulationWorld : IWorldServices
         ProcessDelayedDamage(tick);
         ProcessSpawns();
         DeliverEvents();
-        if (_vision is not null && tick % VisionIntervalTicks == 0) RefreshVision();
-        _tick = tick + 1;
+        if (_vision is not null && tick % VisionInterval == 0) RefreshVision();
+        _tick = tick + TickOrder.Next;
         return new TickResult(tick, ComputeIncrementalHash(), _tickEvents);
     }
 
@@ -1782,7 +1796,7 @@ public sealed partial class SimulationWorld : IWorldServices
         observer.PhaseStarted(TickPhase.SpawnEvents);
         DeliverEvents();
         observer.PhaseEnded(TickPhase.SpawnEvents);
-        var refresh = _vision is not null && tick % VisionIntervalTicks == 0;
+        var refresh = _vision is not null && tick % VisionInterval == 0;
         observer.PhaseStarted(TickPhase.Vision);
         if (refresh) RevealVision();
         observer.PhaseEnded(TickPhase.Vision);
@@ -1790,7 +1804,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (refresh) HashVision();
         observer.PhaseEnded(TickPhase.VisionHash);
         observer.PhaseStarted(TickPhase.Hash);
-        _tick = tick + 1;
+        _tick = tick + TickOrder.Next;
         var hash = ComputeIncrementalHash();
         observer.PhaseEnded(TickPhase.Hash);
         return new TickResult(tick, hash, _tickEvents);
