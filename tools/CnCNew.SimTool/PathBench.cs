@@ -62,7 +62,7 @@ internal static class PathBench
         var queries = new List<(Fixed StartX, Fixed StartY, Fixed GoalX, Fixed GoalY)>();
         while (queries.Count < searches)
         {
-            Fixed Coordinate(int cells) => Fixed.FromRaw((long)(Next() % (ulong)((long)cells * TerrainMap.CellSize << 16)));
+            Fixed Coordinate(int cells) => Fixed.FromRaw((long)(Next() % (ulong)((long)cells * TerrainMap.CellSize * Fixed.ScaleRaw)));
             var query = (Coordinate(terrain.CellsX), Coordinate(terrain.CellsY), Coordinate(terrain.CellsX), Coordinate(terrain.CellsY));
             // A start a ground unit can stand on; the goal is whatever the draw gives (some cannot be reached: those searches run to the budget, as in a match).
             if (grid.IsPassable(TerrainMap.CellOf(query.Item1), TerrainMap.CellOf(query.Item2), LocomotorSurfaces.Ground)) queries.Add(query);

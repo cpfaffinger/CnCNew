@@ -367,7 +367,7 @@ public sealed class FrameProjector
         return set;
     }
 
-    private static float ToFloat(Fixed value) => (float)(value.Raw / (double)Fixed.ScaleRaw);
+    private static float ToFloat(Fixed value) => FixedConvert.ToSingle(value);
 
     private sealed record Capture(
         uint Id, ObjectVisual Visual, PlayerId Owner, Vector3 Position, float Yaw, Fixed FixedX, Fixed FixedY, float Health01,

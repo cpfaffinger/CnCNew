@@ -32,7 +32,7 @@ public sealed class LiveMatch : LiveGame
 
     private LiveMatch(GameData data, MatchSetup setup, SkirmishMatchSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
         : base(data, session.World, map, setup.MapPath, terrain, session.Players, new PlayerId(1), fxSeed, viewport,
-            new Vector2(terrain.StartPositions[0].X.Raw / 65536f, terrain.StartPositions[0].Y.Raw / 65536f))
+            new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(terrain.StartPositions[0].X), CnCNew.Presentation.FixedConvert.ToSingle(terrain.StartPositions[0].Y)))
     {
         Setup = setup;
         Session = session;

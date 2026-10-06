@@ -30,7 +30,7 @@ public sealed class UnitConditionTracker
     private const int TensileFreefallLife = 100;
 
     // The sim turns by exactly the locomotor's turn rate per tick when the goal is further away; the angle is renormalised, so allow a few raw units of rounding.
-    private static readonly Fixed TurnTolerance = Fixed.FromRaw(8);
+    private static readonly Fixed TurnTolerance = Fixed.FromFraction(1, 8192);
     private static readonly Fixed TensileDrop = Fixed.FromDecimal(0.2m);
     private static readonly Fixed Half = Fixed.FromDecimal(0.5m);
     private static readonly int SplattedDeath = NameTables.DeathType.TryIndexOf("SPLATTED", out var splatted) ? splatted : throw new InvalidOperationException("SPLATTED is not a death type.");

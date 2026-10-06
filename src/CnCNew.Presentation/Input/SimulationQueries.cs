@@ -147,7 +147,7 @@ public static class SimulationQueries
     /// World float to simulation fixed point: rounded to the nearest raw step, so a position that is exact in binary (every pixel of an
     /// orthographic test view) converts exactly.
     /// </summary>
-    public static Fixed ToFixed(float value) => Fixed.FromRaw((long)Math.Round((double)value * Fixed.ScaleRaw));
+    public static Fixed ToFixed(float value) => FixedConvert.FromSingle(value);
 
     public static Vector2 GroundOf(Entity entity) => new((float)entity.X.ToDecimal(), (float)entity.Y.ToDecimal());
 

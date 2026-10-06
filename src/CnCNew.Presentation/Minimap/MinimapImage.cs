@@ -219,5 +219,5 @@ public sealed class MinimapImage
         return Vector3.Clamp(color + (target - color) * t, Vector3.Zero, Vector3.One);
     }
 
-    private static Fixed ToFixed(float value) => Fixed.FromRaw((long)MathF.Round(value * Fixed.ScaleRaw));
+    private static Fixed ToFixed(float value) => FixedConvert.FromSingle(value);
 }

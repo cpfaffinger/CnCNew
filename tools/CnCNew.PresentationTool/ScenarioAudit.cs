@@ -513,7 +513,7 @@ internal static class ScenarioAudit
         if (landingDistance > Tolerance) failures.Add($"{tag} touches down {landingDistance:F0} units from the airfield's runway");
     }
 
-    private static float ToFloat(CnCNew.Simulation.Numerics.Fixed value) => (float)(value.Raw / 65536.0);
+    private static float ToFloat(CnCNew.Simulation.Numerics.Fixed value) => CnCNew.Presentation.FixedConvert.ToSingle(value);
 
     private static float Wrap(float radians)
     {

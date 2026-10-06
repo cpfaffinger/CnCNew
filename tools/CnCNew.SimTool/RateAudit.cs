@@ -50,7 +50,7 @@ internal static class RateAudit
 
         Console.WriteLine($"Rate audit of the catalog at {rate} against 30 Hz ({catalogs[rate].Templates.Length} templates, retail base data).");
         Console.WriteLine();
-        Console.WriteLine("By conversion (exact decimal value against its fixed-point result, Q47.16), while the catalog is built:");
+        Console.WriteLine($"By conversion (exact decimal value against its fixed-point result, Q{63 - Fixed.FractionBits}.{Fixed.FractionBits}), while the catalog is built:");
         Console.WriteLine($"  {"function",-42} {"rate",7} {"calls",8} {"non-zero",9} {"-> zero",8} {"> 1 %",8} {"> 10 %",8}  worst relative error (exact value)");
         foreach (var built in probes.Keys.OrderBy(value => value.TicksPerSecond))
             foreach (var (function, entry) in probes[built].Quantisation.OrderBy(pair => pair.Key, StringComparer.Ordinal))

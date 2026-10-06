@@ -107,8 +107,8 @@ public sealed class LiveMission : LiveGame, IMissionObjectEffects
         foreach (var entity in run.Session.World.Entities)
         {
             if (entity.Owner != human || entity.EffectivelyDead) continue;
-            x += entity.X.Raw / 65536.0;
-            y += entity.Y.Raw / 65536.0;
+            x += CnCNew.Presentation.FixedConvert.ToDouble(entity.X);
+            y += CnCNew.Presentation.FixedConvert.ToDouble(entity.Y);
             count++;
         }
         if (count > 0) return new Vector2((float)(x / count), (float)(y / count));

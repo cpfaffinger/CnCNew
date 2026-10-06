@@ -221,7 +221,7 @@ static int UnitAudit(string directory, string[] args)
     return 0;
 }
 
-static double D(Fixed value) => value.Raw / (double)Fixed.ScaleRaw;
+static double D(Fixed value) => CnCNew.Presentation.FixedConvert.ToDouble(value);
 
 static int Fail(string message)
 {

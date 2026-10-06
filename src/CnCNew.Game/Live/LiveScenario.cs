@@ -124,7 +124,7 @@ public sealed class LiveScenario : LiveGame
         switch (order.Kind)
         {
             case ScenarioOrderKind.Attack when order.Target is not null && _tags.TryGetValue(order.Target, out var target) && World.FindEntity(target) is { } victim:
-                Book(player).Set(actor, new StandingOrder(StandingOrderKind.Attack, target, new Vector2(victim.X.Raw / 65536f, victim.Y.Raw / 65536f), [], World.Tick));
+                Book(player).Set(actor, new StandingOrder(StandingOrderKind.Attack, target, new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(victim.X), CnCNew.Presentation.FixedConvert.ToSingle(victim.Y)), [], World.Tick));
                 return true;
             case ScenarioOrderKind.Attack:
                 return false; // the target is still to be produced
@@ -175,7 +175,7 @@ public sealed class LiveScenario : LiveGame
         MapData map;
         using (var stream = data.Content.OpenRead(scenario.Map)) map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, scenario.Map);
-        var anchor = new Vector2(terrain.StartPositions[0].X.Raw / 65536f, terrain.StartPositions[0].Y.Raw / 65536f);
+        var anchor = new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(terrain.StartPositions[0].X), CnCNew.Presentation.FixedConvert.ToSingle(terrain.StartPositions[0].Y));
         var players = ImmutableArray.Create(
             new PlayerConfiguration(new PlayerId(1), scenario.HumanFaction, scenario.HumanFaction),
             new PlayerConfiguration(new PlayerId(2), scenario.OpponentFaction, scenario.OpponentFaction, 0, true));

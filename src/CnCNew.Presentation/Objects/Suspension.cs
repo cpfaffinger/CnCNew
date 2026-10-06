@@ -253,5 +253,5 @@ public sealed class SuspensionTracker
         return angle;
     }
 
-    private static float ToFloat(Fixed value) => (float)(value.Raw / (double)Fixed.ScaleRaw);
+    private static float ToFloat(Fixed value) => FixedConvert.ToSingle(value);
 }
