@@ -71,9 +71,52 @@ internal static class ResultQuantities
         values.Add("winner", winner).Add("victoryTick", victoryTick);
     }
 
+    /// <summary><c>--commands &lt;dir&gt;</c>: where the command streams of the recorded runs are written, one text file per run; null: nowhere.</summary>
+    public static string? CommandsDirectory { get; set; }
+
+    [ThreadStatic] private static string? _run;
+
+    /// <summary>Names the run the calling worker computes next (the file name of its command stream).</summary>
+    public static void Begin(string run) => _run = run;
+
+    /// <summary>
+    /// The command stream as text, one command per line in replay order: tick, player, type and every field. Positions and amounts are rounded to whole
+    /// units, so that the streams of two numeric resolutions can be compared line by line: the first line that differs is the first decision of the driver
+    /// (an AI, the scenario) that came out differently, not a difference in the last digit. The AI match records its commands through the same replay.
+    /// </summary>
+    private static void WriteCommands(ReplayFile recorded)
+    {
+        if (CommandsDirectory is null || _run is null) return;
+        var text = new System.Text.StringBuilder();
+        foreach (var command in recorded.Commands)
+        {
+            text.Append(CultureInfo.InvariantCulture, $"{command.Tick} p{command.Player.Value} {command.GetType().Name}");
+            foreach (var property in command.GetType().GetProperties().OrderBy(property => property.MetadataToken))
+            {
+                if (property.Name is "Tick" or "Player" or "Sequence" or "EqualityContract") continue;
+                var value = property.GetValue(command);
+                var shown = value switch
+                {
+                    Simulation.Numerics.Fixed number => number.Round().ToString(CultureInfo.InvariantCulture),
+                    Simulation.Ids.EntityId id => id.Value.ToString(CultureInfo.InvariantCulture),
+                    Simulation.Ids.PlayerId id => id.Value.ToString(CultureInfo.InvariantCulture),
+                    IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+                    null => "-",
+                    _ => value.ToString() ?? string.Empty,
+                };
+                // A rounded amount is marked with '~': a comparison may allow it a unit of difference.
+                text.Append(' ').Append(property.Name).Append(value is Simulation.Numerics.Fixed ? '~' : '=').Append(shown);
+            }
+            text.Append('\n');
+        }
+        Directory.CreateDirectory(CommandsDirectory);
+        File.WriteAllText(Path.Combine(CommandsDirectory, _run + ".commands.txt"), text.ToString());
+    }
+
     /// <summary>One fresh run of a recorded replay with the tally attached.</summary>
     private static ManifestObject Replayed(ReplayFile recorded, TemplateCatalog catalog, TerrainMap? terrain)
     {
+        WriteCommands(recorded);
         var replay = ReplayFormat.Read(ReplayFormat.Write(recorded));
         var world = ReplayRunner.CreateWorld(replay.Header, catalog, terrain);
         var tally = new Tally();

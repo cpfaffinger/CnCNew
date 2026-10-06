@@ -113,7 +113,7 @@ internal static class ReferenceManifest
 
     private const string UsageText = """
         Usage: CnCNew.SimTool reference-manifest write <content-dir> <file> [--set quick|full] [--jobs N]
-               CnCNew.SimTool reference-manifest results <content-dir> --out <file> [--set quick|full] [--only <run-id>[,<run-id>]] [--jobs N]
+               CnCNew.SimTool reference-manifest results <content-dir> --out <file> [--commands <dir>] [--set quick|full] [--only <run-id>[,<run-id>]] [--jobs N]
                CnCNew.SimTool reference-manifest check <content-dir> <file> [--set quick|full] [--only <run-id>[,<run-id>]] [--verify-incremental|--explain-incremental] [--jobs N]
                CnCNew.SimTool reference-manifest list  <content-dir>
                CnCNew.SimTool reference-manifest show  <content-dir> [--set quick|full] [--only <run-id>[,<run-id>]] [--verify-incremental|--explain-incremental] [--jobs N]
@@ -121,7 +121,8 @@ internal static class ReferenceManifest
           check   computes them again; one line per run with OK or the first differing field, exit code 1 on any difference
           show    computes runs and prints their entries; reads and writes no file
           results runs every run once and writes what is not a hash: outcome, end tick, objects and money per player, commands by type,
-                  events by kind; it reads no manifest and changes none
+                  events by kind; it reads no manifest and changes none. --commands also writes the command stream of every recorded
+                  run as text (amounts in whole units): two resolutions or rates are compared by the first line that differs
           --set   quick: a few minutes; full (default): every run. --only picks runs by id, whatever their set.
           --verify-incremental   in run 1 of every checked run, compare the incremental state hash with a full recomputation
                                  after every tick (the synthetic stress run: every 1,000 ticks)
@@ -162,6 +163,7 @@ internal static class ReferenceManifest
 
         var watch = Stopwatch.StartNew();
         Console.Error.WriteLine($"{selected.Count} runs ({selected.Sum(spec => spec.Jobs.Length)} jobs), {jobs} side by side{(verify != VerifyMode.None ? ", incremental hash verified" : string.Empty)}.");
+        if (results && ManifestCommands.Option(args, "--commands") is { } commands) ResultQuantities.CommandsDirectory = Path.GetFullPath(commands);
         var outcomes = Execute(args[2], selected, jobs, verify, results);
         Console.Error.WriteLine($"Computed in {watch.Elapsed.TotalSeconds:F1} s.");
         if (results)
@@ -438,6 +440,7 @@ internal static class ReferenceManifest
                         context = SimContext.Load(directory);
                         fingerprints[worker] = context.Fingerprint;
                     }
+                    if (details) ResultQuantities.Begin(spec.Id);
                     var result = details ? new JobResult(job.Details(context)) : job.Work(context, verify);
                     lock (gate) results[spec.Id][slot] = result;
                 }
