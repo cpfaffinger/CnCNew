@@ -177,6 +177,8 @@ public sealed class GenerateMinefieldBehavior(GenerateMinefieldData data) : SimM
             _generated = false;
             PlaceMines(world);
         }
+        // Waiting for the upgrade: this branch wrote nothing at all, only the wake tick moves.
+        else world.OnlyOwnStateChanged(this);
         return SimulationTiming.SleepNone;
     }
 

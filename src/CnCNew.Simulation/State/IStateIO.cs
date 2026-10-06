@@ -75,8 +75,15 @@ public static class StateHash
     /// fold. The only difference is the schedule: one <c>Mix</c> depends on the previous one of its own stream, which leaves a processor waiting for most of a fold's time; four
     /// streams advance side by side here, so four such chains overlap. A stream that ends hands its lane to the next one.
     /// </summary>
-    public static void FoldStreams(ReadOnlySpan<ulong> words, ReadOnlySpan<int> ends, Span<ulong> hashes)
+    public static void FoldStreams(ReadOnlySpan<ulong> words, ReadOnlySpan<int> ends, Span<ulong> hashes) => FoldStreams(words, ends, default, hashes);
+
+    /// <summary>
+    /// The same with a start value per stream: stream <c>i</c> is <c>Fold(seeds[i], its words)</c>. A stream that continues an earlier fold passes the state that fold had reached.
+    /// An empty <paramref name="seeds"/> starts every stream from <see cref="Seed"/>.
+    /// </summary>
+    public static void FoldStreams(ReadOnlySpan<ulong> words, ReadOnlySpan<int> ends, ReadOnlySpan<ulong> seeds, Span<ulong> hashes)
     {
+        if (!seeds.IsEmpty && seeds.Length != ends.Length) throw new ArgumentException("One seed per stream.", nameof(seeds));
         var next = 0;
         int index0 = -1, index1 = -1, index2 = -1, index3 = -1;
         int position0 = 0, position1 = 0, position2 = 0, position3 = 0;
@@ -89,25 +96,25 @@ public static class StateHash
             {
                 if (index0 >= 0) hashes[index0] = hash0;
                 if (next == ends.Length) { index0 = -1; break; }
-                index0 = next; position0 = next == 0 ? 0 : ends[next - 1]; end0 = ends[next]; hash0 = Seed; next++;
+                index0 = next; position0 = next == 0 ? 0 : ends[next - 1]; end0 = ends[next]; hash0 = seeds.IsEmpty ? Seed : seeds[next]; next++;
             }
             while (index1 < 0 || position1 == end1)
             {
                 if (index1 >= 0) hashes[index1] = hash1;
                 if (next == ends.Length) { index1 = -1; break; }
-                index1 = next; position1 = next == 0 ? 0 : ends[next - 1]; end1 = ends[next]; hash1 = Seed; next++;
+                index1 = next; position1 = next == 0 ? 0 : ends[next - 1]; end1 = ends[next]; hash1 = seeds.IsEmpty ? Seed : seeds[next]; next++;
             }
             while (index2 < 0 || position2 == end2)
             {
                 if (index2 >= 0) hashes[index2] = hash2;
                 if (next == ends.Length) { index2 = -1; break; }
-                index2 = next; position2 = next == 0 ? 0 : ends[next - 1]; end2 = ends[next]; hash2 = Seed; next++;
+                index2 = next; position2 = next == 0 ? 0 : ends[next - 1]; end2 = ends[next]; hash2 = seeds.IsEmpty ? Seed : seeds[next]; next++;
             }
             while (index3 < 0 || position3 == end3)
             {
                 if (index3 >= 0) hashes[index3] = hash3;
                 if (next == ends.Length) { index3 = -1; break; }
-                index3 = next; position3 = next == 0 ? 0 : ends[next - 1]; end3 = ends[next]; hash3 = Seed; next++;
+                index3 = next; position3 = next == 0 ? 0 : ends[next - 1]; end3 = ends[next]; hash3 = seeds.IsEmpty ? Seed : seeds[next]; next++;
             }
             // Fewer than four streams are left at the very end. An idle lane then reads along with a busy one and its result is dropped (its index stays negative), so the
             // loop below keeps one shape.
@@ -160,6 +167,21 @@ public sealed class WordStateWriter : IStateWriter
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan((uint)count, (uint)_count);
         _count = count;
+    }
+
+    /// <summary>
+    /// While set, <see cref="Mark"/> notes the current word count into this array. The world uses it to learn where the state of each module lies inside an entity description
+    /// it wants to keep; nobody else sets it, and a description behaves the same with or without it.
+    /// </summary>
+    internal int[]? Marks { get; set; }
+    internal int MarkCount { get; set; }
+
+    /// <summary><see cref="World.Entity.Describe"/> calls this before and after the state of every module.</summary>
+    internal void Mark()
+    {
+        if (Marks is not { } marks) return;
+        if (MarkCount < marks.Length) marks[MarkCount] = _count;
+        MarkCount++;
     }
 
     /// <summary>Appends words that an earlier description wrote into a writer of this kind.</summary>

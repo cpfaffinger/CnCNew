@@ -132,19 +132,31 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         var until = world.Tick + Math.Max(ticks, SimulationTiming.SleepNone);
         if (until > _detectedUntilTick) _detectedUntilTick = until;
         Entity.Status |= 1UL << DetectedBit;
+        // Called from the detector's update, not this entity's: the change needs its own mark (this module's update vouches only for what it wrote itself).
+        world.MarkDirty(Entity);
     }
 
     public long Update(IWorldServices world)
     {
+        var status = Entity.Status;
+        UpdateStealth(world);
+        // This update runs every tick for every object that has the module, and for most of them it changes nothing. What it can write is the entity's status bits and
+        // this module's own fields (below; ReceiveGrant also marks the entity through the world). With the status as it was, only the module's own state changed.
+        if (Entity.Status == status) world.OnlyOwnStateChanged(this);
+        return SimulationTiming.SleepNone;
+    }
+
+    private void UpdateStealth(IWorldServices world)
+    {
         if (Entity.HasStatus(DetectedBit) && world.Tick >= _detectedUntilTick) Entity.Status &= ~(1UL << DetectedBit);
         // StealthUpdate::update: without CAN_STEALTH (innate, or granted by StealthUpgrade) the module does nothing.
-        if (!Entity.HasStatus(CanStealthBit)) return SimulationTiming.SleepNone;
+        if (!Entity.HasStatus(CanStealthBit)) return;
         // "Deal with temporary stealth": a grant with a duration ends when it runs out or as soon as the player gives the unit an order ("No exploits").
         if (_framesGranted > 0)
         {
             _framesGranted--;
             if (_framesGranted == 0 || CrateModules.AiOf(Entity) is { LastCommandFromPlayer: true }) ReceiveGrant(world, false, 0);
-            if (!Entity.HasStatus(CanStealthBit)) return SimulationTiming.SleepNone;
+            if (!Entity.HasStatus(CanStealthBit)) return;
         }
         if (!Satisfies(world, data.RequiredStatus, data.ForbiddenStatus) || AnyForbiddenCondition(world) || ScriptUnstealthed)
         {
@@ -156,7 +168,6 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
             if (_readyTick == long.MaxValue) _readyTick = world.Tick + Math.Max(data.StealthDelayTicks, SimulationTiming.SleepNone);
             if (world.Tick >= _readyTick) Entity.Status |= 1UL << StealthedBit;
         }
-        return SimulationTiming.SleepNone;
     }
 
     private static bool Satisfies(IWorldServices world, ulong required, ulong forbidden)

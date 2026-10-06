@@ -66,7 +66,8 @@ static partial class Tests
         new(RuleEnvironment, new Regex(@"\b(File|Directory|Process|Environment|AppContext|AppDomain|RuntimeInformation)\.")),
         // The flag alone does not put the entity into the world's dirty list, and it makes every later MarkDirty return early: the cached hash stays stale
         // until something recomputes the full hash (D8, found on MD_GLA05).
-        new(RuleDirtyFlag, new Regex(@"\bDirty\s*=\s*true")),
+        // The same holds for the per-module marks: a bit without the entry in the world's list is never looked at, a bit set by hand is a promise nobody checked.
+        new(RuleDirtyFlag, new Regex(@"\bDirty\s*=\s*true|\bDirtyModules\s*\|=")),
     ];
 
     /// <summary>
@@ -87,6 +88,7 @@ static partial class Tests
         new("Templates/ScienceCatalog.cs", RuleProcessHash, "HashCode.Combine(_low, _high)", "key hash of a bit set; used for equality lookups only"),
         new("Templates/UpgradeCatalog.cs", RuleProcessHash, "HashCode.Combine(_low, _high)", "key hash of a bit set; used for equality lookups only"),
         new("World/SimulationWorld.cs", RuleDirtyFlag, "entity.Dirty = true;", "MarkDirty itself: the flag and the list entry together"),
+        new("World/SimulationWorld.cs", RuleDirtyFlag, "entity.DirtyModules |= 1UL << module.Index;", "MarkModuleDirty itself: the bit and the list entry together, for an update that vouched for its own state"),
         // -- ToString() of things that are not numbers
         new("Mission/MissionSession.cs", RuleNumberText, "localPlayer.ToString()", "PlayerId.ToString is invariant (Ids.cs); the text is a load note, not state"),
         new("Skirmish/SkirmishAi.cs", RuleNumberText, "RoleOf(template).ToString()", "an enum name; diagnostics for tools"),
@@ -200,7 +202,7 @@ static partial class Tests
             "var x = Math.Atan2(a, b);", "var y = Math.Round(z);", "var half = 1.5;", "var big = 1e5;", "var f = 2f;", "Vector128<int> v;", "using System.Numerics;", "using System.Runtime.Intrinsics;",
             "var c = StringComparer.InvariantCulture;", "names.Sort(Comparer<string>.Default);", "var h = name.GetHashCode();", "var k = HashCode.Combine(a, b);", "var p = Environment.ProcessorCount;",
             "Parallel.For(0, 4, Body);", "await Task.Delay(1);", "var s = value.ToString();", "var n = int.Parse(text);", "if (name.StartsWith(prefix)) return;", "var u = name.ToUpper();",
-            "private readonly SortedDictionary<string, int> _table = [];", "var d = (decimal)single;", "var t = MathF.Tan(a);", "var q = Math.Sqrt(2);", "var w = Math.Floor(v);", "Entity.Dirty = true;", "text.AppendLine(line);", "var p = Path.Combine(a, b);", "var n = Environment.NewLine;",
+            "private readonly SortedDictionary<string, int> _table = [];", "var d = (decimal)single;", "var t = MathF.Tan(a);", "var q = Math.Sqrt(2);", "var w = Math.Floor(v);", "Entity.Dirty = true;", "entity.DirtyModules |= 2;", "text.AppendLine(line);", "var p = Path.Combine(a, b);", "var n = Environment.NewLine;",
         ];
         foreach (var line in caught)
             Check.That(SimulationRules.Concat(FeederRules).Any(rule => rule.Pattern.IsMatch(line)), $"No rule catches: {line}");
