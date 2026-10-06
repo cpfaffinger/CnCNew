@@ -51,6 +51,9 @@ internal sealed partial class ObjectiveDriver
     private bool _objectivesFresh;
     private long _objectivesAt = long.MinValue;
 
+    /// <summary>Game time after which objectives no leaf has named again are dropped, in logic frames of the original (5 s).</summary>
+    private const long ObjectiveExpiryFrames = 150;
+
     /// <summary>
     /// Orders the army at <paramref name="victims"/>: where the agent leads the army the victims become its objective (one army, one goal, instead of two command givers pulling at
     /// the same units). Every armed unit of the viewer gets its nearest victim as its attack order (<see cref="DriveAssaults"/> fires at it once in reach - a player's units do not
@@ -94,7 +97,7 @@ internal sealed partial class ObjectiveDriver
     private void PublishObjectives()
     {
         if (_agent is null) return;
-        if (_world.Tick - _objectivesAt > 150) _objectivePoints.Clear();
+        if (_world.Tick - _objectivesAt > _world.Time.OriginalFrames(ObjectiveExpiryFrames)) _objectivePoints.Clear();
         // Only toward a named objective: without one a fixed force that charges at whatever it knows of loses the units the mission needs.
         _agent.CommitEverything = _objectivePoints.Count > 0 && !CanReinforce();
         _agent.Objectives = [.._objectivePoints];

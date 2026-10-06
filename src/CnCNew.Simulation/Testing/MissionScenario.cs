@@ -90,11 +90,17 @@ public static class MissionProbe
     /// Headless proof that an ending exists and is reachable: lets the mission settle, then destroys every object of the players hostile to the viewer
     /// (<paramref name="victory"/>) or every object of the viewer and its allies (defeat) and waits for the script outcome. It does not claim every objective
     /// path works; it checks the scripted endings that follow from elimination, and names the ending scripts whose conditions stayed false otherwise.
+    /// <para>
+    /// Units: <paramref name="settleTicks"/> and <paramref name="waitTicks"/> are game time in logic frames of the original (1/30 s; the scripts' own delays are game time too) and are
+    /// scaled to the catalog's rate here. <see cref="MissionProbeResult.TicksToOutcome"/> is in ticks.
+    /// </para>
     /// </summary>
     public static MissionProbeResult Run(MissionOptions options, TemplateCatalog catalog, string fingerprint, TerrainMap terrain, MapData map, bool victory, long settleTicks = 150, long waitTicks = 600)
     {
         var session = MissionSession.Start(options, catalog, fingerprint, terrain, map);
-        while (session.World.Tick < settleTicks && !session.IsOver) session.Step();
+        var settle = session.World.Time.OriginalFrames(settleTicks);
+        var wait = session.World.Time.OriginalFrames(waitTicks);
+        while (session.World.Tick < settle && !session.IsOver) session.Step();
         var local = MissionSession.LocalPlayerOf(session.Program, options.HumanSideName);
         var world = session.World;
         var toKill = world.Entities.Where(entity => !entity.Owner.IsSystem && (victory ? world.AreEnemies(local, entity.Owner) : entity.Owner == local || world.AreAllies(local, entity.Owner)))
@@ -103,7 +109,7 @@ public static class MissionProbe
         var killTick = world.Tick;
         var wanted = victory ? MissionOutcome.Victory : MissionOutcome.Defeat;
         var actionName = victory ? "VICTORY" : "DEFEAT";
-        while (world.Tick < killTick + waitTicks && session.Engine.Outcome == MissionOutcome.None && !session.IsOver) session.Step();
+        while (world.Tick < killTick + wait && session.Engine.Outcome == MissionOutcome.None && !session.IsOver) session.Step();
         var ending = session.Program.Units.Where(unit => unit.Script.Actions.Concat(unit.Script.FalseActions).Any(action => action.TypeName == actionName || (victory && action.TypeName == "QUICKVICTORY"))).ToArray();
         var unmet = ImmutableArray.CreateBuilder<string>();
         if (session.Engine.Outcome != wanted)

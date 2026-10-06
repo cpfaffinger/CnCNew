@@ -32,21 +32,28 @@ public sealed record ObjectiveDriveResult(bool ReachedByScript, MissionOutcome O
 /// </summary>
 public static class MissionObjectiveDriver
 {
+    /// <summary>
+    /// Units: <paramref name="maxTicks"/> is the run budget in ticks of the catalog's rate; <paramref name="spacing"/> (distance of two planning rounds) and
+    /// <paramref name="settleTicks"/> (game time before the first round) are logic frames of the original (1/30 s) and scaled here, like every cooldown of the driver's leaves -
+    /// the driver plans at the same moments of game time at every rate. At 30 Hz a frame is a tick.
+    /// </summary>
     public static ObjectiveDriveResult Run(MissionOptions options, TemplateCatalog catalog, string fingerprint, TerrainMap terrain, MapData map, bool victory, long maxTicks = 4500, int spacing = 15, long settleTicks = 60, Action<MissionSession>? observe = null, bool commandsOnly = false, int agentThreshold = 0)
     {
         var session = MissionSession.Start(options, catalog, fingerprint, terrain, map);
         var driver = new ObjectiveDriver(session, victory, commandsOnly, agentThreshold);
         var world = session.World;
         var engine = session.Engine;
+        var settle = world.Time.OriginalFrames(settleTicks);
+        var roundSpacing = world.Time.OriginalFrames(spacing);
 
-        while (world.Tick < settleTicks && !session.IsOver) { driver.Act(); session.Step(); observe?.Invoke(session); }
+        while (world.Tick < settle && !session.IsOver) { driver.Act(); session.Step(); observe?.Invoke(session); }
         long nextAt = world.Tick;
         while (world.Tick < maxTicks && !session.IsOver && engine.Outcome == MissionOutcome.None)
         {
             if (world.Tick >= nextAt)
             {
                 driver.Round();
-                nextAt = world.Tick + spacing;
+                nextAt = world.Tick + roundSpacing;
             }
             driver.Act();
             session.Step();
