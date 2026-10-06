@@ -90,8 +90,9 @@ public sealed partial class SimulationWorld
         return limit.Raw >= 0 && difference > limit.Raw + ScanSlack;
     }
 
+    /// <summary>A unit that stands in the way: one of <see cref="_mobiles"/> (so it has a locomotor) that is alive, not carried, not the mover or its goal, and neither moving nor ordered to.</summary>
     private static bool StandsStill(Entity other, Entity mover, EntityId goal)
-        => !(other.HasMoveTarget || other.Template.Locomotor is null || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || other.Speed != Fixed.Zero);
+        => !(other.HasMoveTarget || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || other.Speed != Fixed.Zero);
 
     private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadCore(Entity mover, Fixed dx, Fixed dy)
     {
@@ -112,8 +113,10 @@ public sealed partial class SimulationWorld
         }
 
         var blocked = false;
-        foreach (var other in _entities)
+        var mobiles = _mobiles;
+        for (var index = 0; index < mobiles.Count; index++)
         {
+            var other = mobiles[index];
             if (!StandsStill(other, mover, goal)) continue;
             var limit = moverRadius + other.Template.BoundingCircleRadius + StandingBlockerMargin;
             if (limit.Raw >= 0 && (other.X.Raw < minX.Raw - limit.Raw - ScanSlack || other.X.Raw > maxX.Raw + limit.Raw + ScanSlack || other.Y.Raw < minY.Raw - limit.Raw - ScanSlack || other.Y.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
@@ -132,8 +135,9 @@ public sealed partial class SimulationWorld
         circles.Clear();
         var around = Fixed.FromInt(150);
         var aroundSquared = around * around;
-        foreach (var other in _entities)
+        for (var index = 0; index < mobiles.Count; index++)
         {
+            var other = mobiles[index];
             if (!StandsStill(other, mover, goal) || FurtherThan(other.X, mover.X, around) || FurtherThan(other.Y, mover.Y, around)) continue;
             var ddx = other.X - mover.X;
             var ddy = other.Y - mover.Y;
@@ -150,9 +154,11 @@ public sealed partial class SimulationWorld
         var x = mover.X + dx;
         var y = mover.Y + dy;
         var moverRadius = mover.Template.BoundingCircleRadius;
-        foreach (var other in _entities)
+        var mobiles = _mobiles;
+        for (var index = 0; index < mobiles.Count; index++)
         {
-            if (other.Template.Locomotor is null || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
+            var other = mobiles[index];
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
             var limit = moverRadius + other.Template.BoundingCircleRadius;
             if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
             var ddx = other.X - x;
@@ -179,13 +185,18 @@ public sealed partial class SimulationWorld
     {
         if (mover.EffectivelyDead) return;
         if (mover.Template.CrusherLevel > 0)
-            foreach (var other in _entities)
+        {
+            // Only an object with a ToppleUpdate or a SquishCollide module can be toppled or squished; for every other object the two calls below did nothing.
+            var targets = _crushTargets;
+            for (var index = 0; index < targets.Count; index++)
             {
+                var other = targets[index];
                 if (other.Id == mover.Id || other.EffectivelyDead) continue;
                 if (!FootprintsOverlap(mover, other)) continue;
                 TryTopple(mover, other);
                 TrySquish(mover, other, stepX, stepY);
             }
+        }
         DeliverCollisions(mover);
     }
 
@@ -194,18 +205,45 @@ public sealed partial class SimulationWorld
     /// <summary>Every registered entity that has at least one <see cref="ICollideModule"/> (crates, hijackers, saboteurs, ...), in registration order.</summary>
     private readonly List<Entity> _collidables = [];
 
+    /// <summary>
+    /// Every registered entity with a locomotor, in ascending id order: the only objects the avoidance and standing-blocker scans of a movement step look at. An entity's template
+    /// never changes, so membership is decided once, when the entity is registered.
+    /// </summary>
+    private readonly List<Entity> _mobiles = [];
+
+    /// <summary>Every registered entity that has a <see cref="ToppleUpdate"/> or a <see cref="SquishCollide"/> module, in ascending id order: what a crusher can topple or squish.</summary>
+    private readonly List<Entity> _crushTargets = [];
+
+    // Kept in ascending id order, so a live world and one restored from a snapshot (which registers in id order) visit the entities of a list in the same order: the order of the entity table.
+    private static void InsertById(List<Entity> list, Entity entity)
+    {
+        var index = list.Count;
+        while (index > 0 && list[index - 1].Id.Value > entity.Id.Value) index--;
+        list.Insert(index, entity);
+    }
+
+    private static bool IsCrushTarget(Entity entity)
+    {
+        foreach (var module in entity.ModuleArray)
+            if (module is ToppleUpdate or SquishCollide) return true;
+        return false;
+    }
+
+    /// <summary>Called when an entity enters the entity table (the name is older than the other two lists).</summary>
     private void TrackCollidable(Entity entity)
     {
         entity.CollideModules = [..entity.ModuleArray.OfType<ICollideModule>()];
+        if (entity.Template.Locomotor is not null) InsertById(_mobiles, entity);
+        if (IsCrushTarget(entity)) InsertById(_crushTargets, entity);
         if (entity.CollideModules.Length == 0) return;
-        // Kept in ascending id order, so a live world and one restored from a snapshot (which registers in id order) visit overlapping holders in the same order.
-        var index = _collidables.Count;
-        while (index > 0 && _collidables[index - 1].Id.Value > entity.Id.Value) index--;
-        _collidables.Insert(index, entity);
+        InsertById(_collidables, entity);
     }
 
+    /// <summary>Called when an entity leaves the entity table.</summary>
     private void UntrackCollidable(Entity entity)
     {
+        if (entity.Template.Locomotor is not null) _mobiles.Remove(entity);
+        if (IsCrushTarget(entity)) _crushTargets.Remove(entity);
         if (entity.CollideModules.Length > 0) _collidables.Remove(entity);
     }
 
@@ -255,9 +293,13 @@ public sealed partial class SimulationWorld
     private void TryTopple(Entity mover, Entity other)
     {
         if (mover.Template.CrusherLevel <= 1) return;
-        var topple = other.Modules.OfType<ToppleUpdate>().FirstOrDefault(module => module.IsAbleToBeToppled);
-        if (topple is null) return;
-        topple.ApplyTopplingForce(this, other.X - mover.X, other.Y - mover.Y, mover.Speed);
+        // The first ToppleUpdate that can still be toppled.
+        foreach (var module in other.ModuleArray)
+        {
+            if (module is not ToppleUpdate { IsAbleToBeToppled: true } topple) continue;
+            topple.ApplyTopplingForce(this, other.X - mover.X, other.Y - mover.Y, mover.Speed);
+            return;
+        }
     }
 
     /// <summary>
@@ -270,7 +312,10 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void TrySquish(Entity mover, Entity other, Fixed stepX, Fixed stepY)
     {
-        if (other.Modules.OfType<SquishCollide>().FirstOrDefault() is null) return;
+        var squishable = false;
+        foreach (var module in other.ModuleArray)
+            if (module is SquishCollide) { squishable = true; break; }
+        if (!squishable) return;
         if (RelationshipOf(other.Owner, mover.Owner) == Relationship.Allies) return;
         var limit = mover.Template.BoundingCircleRadius + SquishVictimRadius;
         var dx = other.X - mover.X;

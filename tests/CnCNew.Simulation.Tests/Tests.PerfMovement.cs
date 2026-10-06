@@ -228,6 +228,13 @@ static partial class Tests
                 if (entity.Template.Locomotor is not null && entity.Id.Value % 2 == 0) feeder.SetMoveTarget(entity.Owner.Value, entity.Id.Value, 5 + random.Below(190), 5 + random.Below(190));
             for (var round = 0; round < 12; round++)
             {
+                // Objects come and go between the rounds: the scans look at the world's list of mobile objects, which has to follow.
+                if (round % 3 == 1)
+                {
+                    var present = world.Entities.ToArray();
+                    for (var gone = 0; gone < 3; gone++) feeder.Destroy(present[random.Below(present.Length)].Id.Value);
+                    for (var added = 0; added < 4; added++) feeder.Spawn(1, added % 2 == 0 ? "Walker" : "Post", owner: 1 + added % 2, x: 5 + random.Below(190), y: 5 + random.Below(190));
+                }
                 for (var step = 0; step < 4; step++) world.Step();
                 var entities = world.Entities.ToArray();
                 foreach (var mover in entities)
