@@ -302,8 +302,10 @@ public sealed class FrameProjector
         var alt = _turrets.Update(entity, 1);
         var chassis = _suspension.Update(entity, visual, world, _options.SnapDistance) ?? ChassisPose.Level;
         conditions = conditions.Union(_units.Update(entity, world, world.Tick - 1, _turrets));
+        // The selected states are a function of the visual and the condition bits alone; most objects keep both from one tick to the next.
+        var selections = previous is not null && ReferenceEquals(previous.Visual, visual) && previous.Conditions == conditions ? previous.Selections : Select(visual, conditions);
         return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
-            ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, Select(visual, conditions),
+            ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, selections,
             entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis);
     }
 
@@ -346,9 +348,16 @@ public sealed class FrameProjector
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
     internal static ImmutableArray<DrawModuleSelection> Select(ObjectVisual visual, ModelConditionSet conditions)
-        => [..visual.Draws.Select(draw => BestStateSelector.FindBest(draw, conditions) is var index and >= 0
-            ? new DrawModuleSelection(index, draw.States[index].Model)
-            : new DrawModuleSelection(-1, null))];
+    {
+        var draws = visual.Draws;
+        var selections = ImmutableArray.CreateBuilder<DrawModuleSelection>(draws.Length);
+        foreach (var draw in draws)
+        {
+            var index = BestStateSelector.FindBest(draw, conditions);
+            selections.Add(index >= 0 ? new DrawModuleSelection(index, draw.States[index].Model) : new DrawModuleSelection(-1, null));
+        }
+        return selections.MoveToImmutable();
+    }
 
     private static ModelConditionSet BaseConditions(FrameProjectorOptions options)
     {
