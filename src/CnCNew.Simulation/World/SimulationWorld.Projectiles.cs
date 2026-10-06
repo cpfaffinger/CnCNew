@@ -10,7 +10,7 @@ namespace CnCNew.Simulation.World;
 /// <summary>
 /// Flight time of shots (<c>WeaponTemplate::fireWeaponTemplate</c>, <c>WeaponStore::setDelayedDamage</c>/<c>update</c>,
 /// <c>WeaponStore::handleProjectileDetonation</c>). A weapon without a projectile object lands its damage <c>ceil(distance / WeaponSpeed)</c>
-/// ticks after it fired (at once when that is below one tick); a weapon with one launches the object, whose projectile module flies it and
+/// logic frames of the original after it fired (at once when that is below one frame; <see cref="FlightTicks"/>); a weapon with one launches the object, whose projectile module flies it and
 /// detonates it (<see cref="IProjectileModule"/>). See docs/GAME-RULES.md §6i for the fixed-point rules and the documented deviations.
 /// </summary>
 public sealed partial class SimulationWorld
@@ -118,7 +118,7 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// <c>delayInFrames = |victimPos - sourcePos| / WeaponSpeed</c>: 0 (hit now) below one tick, otherwise <c>REAL_TO_INT_CEIL</c> of it,
+    /// <c>delayInFrames = |victimPos - sourcePos| / WeaponSpeed</c>: 0 (hit now) below one logic frame, otherwise <c>REAL_TO_INT_CEIL</c> of it,
     /// computed exactly on the raw fixed-point values (the distance itself is the floored fixed-point square root). A speed of 0 or less —
     /// three shipped weapons without damage, where the reference divides by zero — hits at once.
     /// <para>

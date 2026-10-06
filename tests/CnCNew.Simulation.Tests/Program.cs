@@ -49,6 +49,13 @@ run.Test("Tick rate: a world refuses a catalog of another rate", Tests.TickRateW
 run.Test("Tick rate: snapshots at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateSnapshotsCarryTheirRate);
 run.Test("Tick rate: replays at 60 and 120 Hz run; 50 Hz, a catalog and a world of another rate are rejected", Tests.TickRateReplaysCarryTheirRate);
 run.Test("Tick rate: mission states at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateMissionSnapshotsCarryTheirRate);
+run.Test("Tick rate, world: a sale takes 180 logic frames less one step at 30, 60 and 120 Hz", Tests.TickRateWorldSaleTakesTheSameGameTime);
+run.Test("Tick rate, world: the shroud is refreshed every three logic frames, phase 0", Tests.TickRateWorldVisionKeepsItsRhythm);
+run.Test("Tick rate, world: weapon delays under a bonus are rounded in logic frames", Tests.TickRateWorldWeaponDelaysAreRoundedOnTheOriginalGrid);
+run.Test("Tick rate, world: a weapon that spins up keeps its shot times", Tests.TickRateWorldSpinUpKeepsItsShotTimes);
+run.Test("Tick rate, world: the flight time of a shot without a projectile is counted in logic frames", Tests.TickRateWorldFlightTimeIsCountedInFrames);
+run.Test("Tick rate, world: turret deadlines and the idle scan stay on the grid", Tests.TickRateWorldTurretDeadlinesAndScanStayOnTheGrid);
+run.Test("Tick rate, world: an idle unit's first look falls two logic frames after it became idle", Tests.TickRateWorldAcquisitionLooksOnTheGrid);
 run.Test("Replay equality, divergence detection and continuation", Tests.ReplayRuns);
 run.Test("Stress scenario returns to baseline (short run)", Tests.ShortStress);
 run.Test("Definition insertion order does not change the simulation", Tests.DefinitionOrderIndependence);
