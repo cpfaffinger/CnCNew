@@ -78,8 +78,12 @@ public sealed class NavigationGrid
     private int[] _queue = new int[256];
     private int[] _pathCells = new int[256];
     private PathPoint[] _points = new PathPoint[32];
-    private long[] _heap = new long[256];
-    private int _heapCount;
+    // The open list: one heap of cell indices per total cost (see Push).
+    private const int RingSize = 128;
+    private readonly int[][] _buckets = new int[RingSize][];
+    private readonly int[] _bucketCounts = new int[RingSize];
+    private int _currentTotal;
+    private int _queued;
     // The flood from the goal of a search that only wants a path that arrives (FindPathToGoal).
     private const int ReverseStride = 1024;
     private int[]? _reverseStamp;
@@ -460,7 +464,9 @@ public sealed class NavigationGrid
             _currentStamp = 1;
         }
         var stamp = _currentStamp;
-        _heapCount = 0;
+        Array.Clear(_bucketCounts);
+        _queued = 0;
+        _currentTotal = Heuristic(startCellX, startCellY, goalCellX, goalCellY);
         CollectEscapeCells(startCellX, startCellY, EscapeRadius, surfaces);
         CollectEscapeCells(goalCellX, goalCellY, GoalEscapeRadius, surfaces);
         PrepareOpenTable(surfaces);
@@ -489,7 +495,7 @@ public sealed class NavigationGrid
         var reached = false;
         var expansions = 0;
         // A cell taken from the heap a second time (it was pushed again with a lower cost before it was expanded) counts toward the budget like an expansion; it always did.
-        for (; _heapCount > 0 && expansions < ExpansionBudget; expansions++)
+        for (; _queued > 0 && expansions < ExpansionBudget; expansions++)
         {
             if (reverse && (expansions & (ReverseStride - 1)) == ReverseStride - 1)
             {
@@ -501,7 +507,7 @@ public sealed class NavigationGrid
                 }
                 if (verdict > 0) reverse = false;
             }
-            var current = (int)(Pop() & 0xFFFFFFFFL);
+            var current = Pop();
             ref var cell = ref search[current];
             if (cell.ClosedStamp == stamp) continue;
             cell.ClosedStamp = stamp;
@@ -595,6 +601,7 @@ public sealed class NavigationGrid
     }
 
     /// <summary>One step of the search from <paramref name="current"/> to its open neighbour <paramref name="next"/>: records the cheaper way and queues the neighbour.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     private void Relax(SearchCell[] search, byte[] state, int stamp, int current, int next, int currentCost, int stepCost, int nx, int ny, int goalCellX, int goalCellY)
     {
         ref var cell = ref search[next];
@@ -610,6 +617,7 @@ public sealed class NavigationGrid
     private (int X, int Y) ClampedCell(Fixed x, Fixed y)
         => (Math.Clamp(TerrainMap.CellOf(x), 0, Terrain.CellsX - 1), Math.Clamp(TerrainMap.CellOf(y), 0, Terrain.CellsY - 1));
 
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     private static int Heuristic(int x, int y, int goalX, int goalY)
     {
         var dx = Math.Abs(x - goalX);
@@ -647,29 +655,46 @@ public sealed class NavigationGrid
         return true;
     }
 
-    // Min-heap of (cost << 32 | cell index): the index in the low word makes equal costs pop in ascending cell order.
-    private void Push(int cost, int index)
+    // The open list hands out the queued cell with the lowest total cost (cost so far plus the octile distance to the goal) and, among equal totals, the lowest cell index: the order
+    // of a min-heap over (total << 32 | cell index), which is what this was. That order depends on the queued values alone, not on how they are stored, so they are stored by total:
+    // the totals of the queued cells never lie below the total of the cell being expanded (the octile distance never drops by more than the cost of the step) and never more than 70
+    // above it (the dearest step, a diagonal onto an escape cell, costs 56, and the distance grows by at most 14). A ring of 128 heaps of cell indices, indexed by the total modulo
+    // 128, therefore holds one total per heap; the search works through them in ascending order. A total outside that window would be a broken search and stops it.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private void Push(int total, int index)
     {
-        if (_heapCount == _heap.Length) Array.Resize(ref _heap, _heap.Length * 2);
         _probePushes++;
-        var heap = _heap;
-        var key = ((long)cost << 32) | (uint)index;
-        var child = _heapCount++;
+        if ((uint)(total - _currentTotal) >= RingSize) throw new InvalidOperationException("Path search: a total cost outside the window of the open list.");
+        var slot = total & (RingSize - 1);
+        var heap = _buckets[slot] ??= new int[64];
+        var child = _bucketCounts[slot];
+        if (child == heap.Length)
+        {
+            Array.Resize(ref heap, heap.Length * 2);
+            _buckets[slot] = heap;
+        }
+        _bucketCounts[slot] = child + 1;
+        _queued++;
         while (child > 0)
         {
             var parent = (child - 1) >> 1;
-            if (heap[parent] <= key) break;
+            if (heap[parent] <= index) break;
             heap[child] = heap[parent];
             child = parent;
         }
-        heap[child] = key;
+        heap[child] = index;
     }
 
-    private long Pop()
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private int Pop()
     {
-        var heap = _heap;
+        var counts = _bucketCounts;
+        while (counts[_currentTotal & (RingSize - 1)] == 0) _currentTotal++;
+        var slot = _currentTotal & (RingSize - 1);
+        var heap = _buckets[slot];
         var top = heap[0];
-        var count = --_heapCount;
+        var count = --counts[slot];
+        _queued--;
         var last = heap[count];
         if (count > 0)
         {
