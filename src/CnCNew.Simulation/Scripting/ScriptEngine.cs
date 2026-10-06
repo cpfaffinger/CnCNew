@@ -711,9 +711,6 @@ public sealed partial class ScriptEngine
         => !entity.EffectivelyDead && !entity.DestroyRequested
            && !entity.Template.IsKindOf("PROJECTILE") && !entity.Template.IsKindOf("INERT") && !entity.Template.IsKindOf("MINE");
 
-    private IEnumerable<Entity> PlayerEntities(PlayerId player)
-        => _world.Entities.Where(entity => entity.Owner == player && CountsAsObject(entity)).OrderBy(entity => entity.Id.Value);
-
     // ------------------------------------------------------------------------------------------------ state
 
     private static readonly ImmutableArray<string> Empty = [];

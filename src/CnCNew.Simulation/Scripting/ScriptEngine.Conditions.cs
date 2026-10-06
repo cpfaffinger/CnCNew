@@ -58,9 +58,9 @@ public sealed partial class ScriptEngine
 
             // ---- players
             case "PLAYER_ALL_DESTROYED":
-                return !Has(type, p, 1) || ResolvePlayer(Str(p, 0)) is not { } allGone || !PlayerEntities(allGone.Id).Any();
+                return !Has(type, p, 1) || ResolvePlayer(Str(p, 0)) is not { } allGone || !PlayerHasAnyObject(allGone.Id);
             case "PLAYER_ALL_BUILDFACILITIES_DESTROYED":
-                return !Has(type, p, 1) || ResolvePlayer(Str(p, 0)) is not { } noFacility || !PlayerEntities(noFacility.Id).Any(IsBuildFacility);
+                return !Has(type, p, 1) || ResolvePlayer(Str(p, 0)) is not { } noFacility || !PlayerHasBuildFacility(noFacility.Id);
             case "PLAYER_HAS_CREDITS":
             {
                 // evaluatePlayerHasCredits compares the parameter against the balance, parameter on the left.
@@ -192,8 +192,7 @@ public sealed partial class ScriptEngine
             {
                 // evaluatePlayerHasUnitKindInArea: live, non-inert objects of the player with the kind inside the area.
                 if (!Has(type, p, 5) || ResolvePlayer(Str(p, 0)) is not { } kindOwner || AreaOrDiagnose(Str(p, 4)) is not { } kindArea) return false;
-                var count = PlayerEntities(kindOwner.Id).Count(entity => !entity.Template.IsKindOf("INERT") && entity.Template.IsKindOf(Str(p, 3)) && kindArea.Contains(entity.X, entity.Y));
-                return Compare(Int(p, 1), count, Int(p, 2));
+                return Compare(Int(p, 1), CountOfKindInArea(kindOwner.Id, Str(p, 3), kindArea), Int(p, 2));
             }
             case "BUILT_BY_PLAYER":
             {
@@ -264,15 +263,8 @@ public sealed partial class ScriptEngine
 
     private bool IsUnit(Entity entity) => !entity.Template.IsKindOf("STRUCTURE") && CountsAsObject(entity);
 
-    /// <summary>
-    /// <c>ThingTemplate::isBuildFacility</c> is derived from other templates' prerequisites in the reference; the simulation has no such back-reference, so a
-    /// structure that can produce (has a production module) stands in for it. Documented in <c>MAP-SCRIPTS.md</c> §8.
-    /// </summary>
-    private static bool IsBuildFacility(Entity entity)
-        => entity.Template.IsKindOf("STRUCTURE") && entity.Template.Modules.Any(module => module.Name is "ProductionUpdate" or "DozerAIUpdate");
-
-    private int CountBuildings(PlayerId player, bool victoryRelevantOnly)
-        => PlayerEntities(player).Count(entity => entity.Template.IsKindOf("STRUCTURE") && (!victoryRelevantOnly || entity.Template.IsKindOf("MP_COUNT_FOR_VICTORY")));
+    // ThingTemplate::isBuildFacility is derived from other templates' prerequisites in the reference; the simulation has no such back-reference, so a
+    // structure that can produce (has a production module) stands in for it (TemplateFacts.BuildFacility). Documented in MAP-SCRIPTS.md §8.
 
     private ScriptArea? AreaOrDiagnose(string name)
     {
@@ -302,9 +294,6 @@ public sealed partial class ScriptEngine
         => _objectLists.TryGetValue(typeParameter, out var list)
             ? list.Contains(entity.Template.Name)
             : string.Equals(entity.Template.Name, typeParameter, StringComparison.Ordinal);
-
-    private int CountOfTypes(PlayerId player, string typeParameter, ScriptArea? area)
-        => PlayerEntities(player).Count(entity => TypeMatches(typeParameter, entity) && (area is null || area.Contains(entity.X, entity.Y)));
 
     private static bool SurfacesMatch(Entity entity, int mask)
     {

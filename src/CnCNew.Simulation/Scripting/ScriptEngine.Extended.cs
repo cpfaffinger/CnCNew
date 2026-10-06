@@ -52,11 +52,7 @@ public sealed partial class ScriptEngine
             {
                 // evaluateSkirmishValueInArea: the summed build cost of the player's live, non-inert objects inside the area, compared against the parameter.
                 if (!Has(type, p, 4) || ResolvePlayer(Str(p, 0)) is not { } valueOwner || AreaOrDiagnose(Str(p, 3)) is not { } valueArea) return true;
-                long total = 0;
-                foreach (var entity in _world.Entities)
-                    if (entity.Owner == valueOwner.Id && !entity.EffectivelyDead && !entity.DestroyRequested && !entity.Template.IsKindOf("INERT") && valueArea.Contains(entity.X, entity.Y))
-                        total += entity.Template.BuildCost.Floor();
-                result = Compare(Int(p, 1), total, Int(p, 2));
+                result = Compare(Int(p, 1), PlayerValueInArea(valueOwner.Id, valueArea), Int(p, 2));
                 return true;
             }
             case "SKIRMISH_SPECIAL_POWER_READY":
@@ -129,14 +125,6 @@ public sealed partial class ScriptEngine
         }
     }
 
-    private bool PlayerHasObjectsInArea(PlayerId player, ScriptArea area)
-    {
-        foreach (var entity in _world.Entities)
-            if (entity.Owner == player && !entity.EffectivelyDead && !entity.DestroyRequested && !entity.Template.IsKindOf("INERT") && !entity.Template.IsKindOf("PROJECTILE") && area.Contains(entity.X, entity.Y))
-                return true;
-        return false;
-    }
-
     /// <summary>
     /// <c>evaluateSkirmishSpecialPowerIsReady</c>: does any of the player's finished, usable objects carry the power ready? Without a disabled-status model
     /// the "disabled" test of the reference is dropped (<c>docs/SCRIPT-ENGINE.md</c> §8); an unknown power name never becomes true (and is counted once per call).
@@ -148,9 +136,9 @@ public sealed partial class ScriptEngine
             Diagnose($"unknown special power '{powerName}'");
             return false;
         }
-        foreach (var entity in PlayerEntities(player))
+        foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
         {
-            if (entity.HasStatus(UnderConstructionBit)) continue;
+            if (!Counts(entity) || entity.HasStatus(UnderConstructionBit)) continue;
             if (SpecialPowerRouting.FindModule(entity, info.Index) is not { } module) continue;
             if (info.RequiredScience >= 0 && !_world.PlayerSciences(player).Has(info.RequiredScience)) continue;
             if (module.IsReady(_world)) return true;
