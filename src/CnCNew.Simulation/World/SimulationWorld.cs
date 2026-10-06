@@ -70,6 +70,17 @@ public sealed partial class SimulationWorld : IWorldServices
     private const int LegacyRejectionEntries = (int)CommandRejection.CannotToggleOvercharge + 1;
     private readonly HashStateWriter _hasher = new();
     private readonly HashStateWriter _globalHasher = new();
+    // The incremental hash writes the words of the touched entities down and folds several entities side by side (StateHash.FoldStreams); a batch stays small enough
+    // for the processor's near caches.
+    private const int HashBatchEntities = 64;
+    private const int HashBatchWords = 16_384;
+    private readonly WordStateWriter _entityWords = new();
+    private readonly Entity[] _hashBatch = new Entity[HashBatchEntities];
+    private readonly int[] _hashBatchEnds = new int[HashBatchEntities];
+    private readonly ulong[] _hashBatchValues = new ulong[HashBatchEntities];
+    private long _hashedEntities;
+    private long _hashedWords;
+    private long _hashedUnchanged;
     private long _tick;
     private int _moduleCount;
     private int _pendingCommandCount;
@@ -1775,17 +1786,51 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private ulong ComputeIncrementalHash()
     {
+        var count = 0;
+        var words = _entityWords;
         foreach (var entity in _dirty)
         {
             entity.Dirty = false;
             if (!entity.Registered) continue;
-            var hash = HashEntity(entity);
-            _entitySum = unchecked(_entitySum - entity.CachedHash + hash);
-            entity.CachedHash = hash;
+            entity.Describe(words);
+            _hashBatch[count] = entity;
+            _hashBatchEnds[count++] = words.Count;
+            if (count == HashBatchEntities || words.Count >= HashBatchWords) count = FoldHashBatch(count);
         }
+        if (count > 0) FoldHashBatch(count);
         _dirty.Clear();
         return FinishHash();
     }
+
+    /// <summary>
+    /// Hashes the entities written down in <see cref="_entityWords"/> and moves their contribution to the entity sum. Each hash is <see cref="HashEntity"/>'s value: the same
+    /// words in the same order through the same fold, only scheduled side by side. Applied in list order, one entity after the other, as the loop did before.
+    /// </summary>
+    private int FoldHashBatch(int count)
+    {
+        var words = _entityWords;
+        var hashes = _hashBatchValues.AsSpan(0, count);
+        State.StateHash.FoldStreams(words.Words, _hashBatchEnds.AsSpan(0, count), hashes);
+        for (var index = 0; index < hashes.Length; index++)
+        {
+            var entity = _hashBatch[index];
+            var hash = hashes[index];
+            if (hash == entity.CachedHash) _hashedUnchanged++;
+            _entitySum = unchecked(_entitySum - entity.CachedHash + hash);
+            entity.CachedHash = hash;
+            _hashBatch[index] = null!;
+        }
+        _hashedEntities += count;
+        _hashedWords += words.Count;
+        words.Reset();
+        return 0;
+    }
+
+    /// <summary>
+    /// What the incremental hash has done since the world was created, for a measuring tool: entities described again, words folded for them, and how many of those entities
+    /// came out with the hash they already had (touched without a change the hash sees). Not part of the state: neither hashed nor saved.
+    /// </summary>
+    public HashWork HashWorkDone => new(_hashedEntities, _hashedWords, _hashedUnchanged);
 
     /// <summary>Recomputes every hash from scratch (verification, snapshot integrity). Also refreshes the incremental caches.</summary>
     public ulong ComputeFullHash()

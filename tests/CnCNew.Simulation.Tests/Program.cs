@@ -45,6 +45,8 @@ run.Test("Replay equality, divergence detection and continuation", Tests.ReplayR
 run.Test("Stress scenario returns to baseline (short run)", Tests.ShortStress);
 run.Test("Definition insertion order does not change the simulation", Tests.DefinitionOrderIndependence);
 run.Test("Idle ticks do not allocate", Tests.IdleAllocation);
+run.Test("State hash: written words and side-by-side streams equal the sequential hash", Tests.HashWordsAndStreamsEqualTheSequentialHash);
+run.Test("State hash: word descriptions of every fixture template, clean idle entities, every update moves the description", Tests.HashWorkOnTheSyntheticFixture);
 run.Test("Determinism rules hold in the simulation sources", Tests.SourceRules);
 run.Test("Tick phase observer: every world phase once per tick in order, same hashes, not in the snapshot", Tests.TickPhaseObserverWorld);
 run.Test("Tick phase observer: skirmish and mission sessions report their parts, same hashes and commands", Tests.TickPhaseObserverSessions);
@@ -376,6 +378,7 @@ run.Test("Determinism D5: the terrain fingerprint covers waypoint ids, links and
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (args.Contains("--long")) run.Test("Long run: 216,000 ticks, fresh runs and snapshot continuation", Tests.LongRun);
 if (contentDirectory is not null) run.Test("Real data: instantiate compiled shipped objects", () => Tests.RealData(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: word descriptions of every shipped object equal the sequential hash, every update moves the description", () => Tests.HashWorkOnRealData(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook supply and tunnels", () => Tests.RealFlightAndTransports(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: winged jets fly a square, never below their minimum speed, circle, and the B-52 and helicopters keep their movement", () => Tests.RealWingedFlight(contentDirectory));
