@@ -91,6 +91,12 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>A unit that stands in the way: one of <see cref="_mobiles"/> (so it has a locomotor) that is alive, not carried, not the mover or its goal, and neither moving nor ordered to.</summary>
+    // The widest bounding circle among the mobile objects this world has seen (as a magnitude, it only grows). With it a scan can drop an object by its position alone, before it
+    // reads anything else of it: an object further away on one axis than the mover's radius plus this radius plus the slack fails the exact test with its own, smaller radius too.
+    private long _widestMobile;
+
+    private static long Magnitude(Fixed value) => value.Raw < 0 ? -value.Raw : value.Raw;
+
     private static bool StandsStill(Entity other, Entity mover, EntityId goal)
         => !(other.HasMoveTarget || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || other.Speed != Fixed.Zero);
 
@@ -114,9 +120,12 @@ public sealed partial class SimulationWorld
 
         var blocked = false;
         var mobiles = _mobiles;
+        var reach = Magnitude(moverRadius) + _widestMobile + Magnitude(StandingBlockerMargin) + ScanSlack;
+        long nearX = minX.Raw - reach, farX = maxX.Raw + reach, nearY = minY.Raw - reach, farY = maxY.Raw + reach;
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
+            if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
             if (!StandsStill(other, mover, goal)) continue;
             var limit = moverRadius + other.Template.BoundingCircleRadius + StandingBlockerMargin;
             if (limit.Raw >= 0 && (other.X.Raw < minX.Raw - limit.Raw - ScanSlack || other.X.Raw > maxX.Raw + limit.Raw + ScanSlack || other.Y.Raw < minY.Raw - limit.Raw - ScanSlack || other.Y.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
@@ -155,9 +164,12 @@ public sealed partial class SimulationWorld
         var y = mover.Y + dy;
         var moverRadius = mover.Template.BoundingCircleRadius;
         var mobiles = _mobiles;
+        var reach = Magnitude(moverRadius) + _widestMobile + ScanSlack;
+        long nearX = x.Raw - reach, farX = x.Raw + reach, nearY = y.Raw - reach, farY = y.Raw + reach;
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
+            if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
             if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
             var limit = moverRadius + other.Template.BoundingCircleRadius;
             if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
@@ -233,7 +245,11 @@ public sealed partial class SimulationWorld
     private void TrackCollidable(Entity entity)
     {
         entity.CollideModules = [..entity.ModuleArray.OfType<ICollideModule>()];
-        if (entity.Template.Locomotor is not null) InsertById(_mobiles, entity);
+        if (entity.Template.Locomotor is not null)
+        {
+            InsertById(_mobiles, entity);
+            _widestMobile = Math.Max(_widestMobile, Magnitude(entity.Template.BoundingCircleRadius));
+        }
         if (IsCrushTarget(entity)) InsertById(_crushTargets, entity);
         if (entity.CollideModules.Length == 0) return;
         InsertById(_collidables, entity);
