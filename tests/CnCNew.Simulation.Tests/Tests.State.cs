@@ -357,6 +357,10 @@ static partial class Tests
         // The rules and their explicit exceptions are in Tests.SourceRules.cs (D6).
         var violations = ScanSources(root, Directory.EnumerateFiles(source, "*.cs", SearchOption.AllDirectories), SimulationRules, SimulationExceptions);
         Check.That(violations.Count == 0, $"Forbidden constructs in the simulation ({violations.Count}):\n  " + string.Join("\n  ", violations));
+        // Phase 20: the tick convention (docs/TICKRATE-MIGRATION.md §1). The lexical rules ran above; a constant in frames must also reach the time service.
+        var unconverted = FramesConstantsReachTheTimeService(source);
+        Check.That(unconverted.Count == 0, $"Constants in logic frames of the original ({unconverted.Count}):\n  " + string.Join("\n  ", unconverted));
+        TickLiteralRulesCatchAndAllow();
 
         // A restored update module without its saved wake tick would be re-armed one tick late (World.Register) and the run would drift from the live one.
         var missingWake = new List<string>();

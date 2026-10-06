@@ -337,7 +337,7 @@ public sealed class HordeUpdate(HordeData data) : SimModule, IUpdateModule
     {
         _lastRefresh = world.Tick;
         // The stagger is drawn in logic frames of the original (GameLogicRandomValue(1, delay)) and then scaled, so the drawn value stays on the 30 Hz grid.
-        _nextWake = world.Tick + world.Time.OriginalFrames(world.LogicRandom.Range(1, (int)Math.Max(1, world.Time.ToOriginalFrames(data.UpdateRateTicks))));
+        _nextWake = world.Tick + world.Time.DrawFrames(world.LogicRandom, world.Time.TicksPerOriginalFrame, world.Time.AtLeastOneFrame(data.UpdateRateTicks));
     }
 
     public long Update(IWorldServices world)

@@ -8,7 +8,12 @@ using System.Text.RegularExpressions;
 /// </summary>
 static partial class Tests
 {
-    private sealed record SourceRule(string Name, Regex Pattern);
+    /// <param name="Violates">Decides for a line the pattern matched whether it breaks the rule (a rule with allowances); null: every match does.</param>
+    /// <param name="Scope">Part of the repository-relative path a file must contain for the rule to apply; null: every scanned file.</param>
+    private sealed record SourceRule(string Name, Regex Pattern, Func<string, bool>? Violates = null, string? Scope = null)
+    {
+        public bool Hits(string line) => Pattern.IsMatch(line) && (Violates is null || Violates(line));
+    }
 
     /// <param name="File">End of the repository-relative path, forward slashes.</param>
     /// <param name="LinePart">Text the offending source line contains.</param>
@@ -28,6 +33,12 @@ static partial class Tests
     private const string RuleDirtyFlag = "dirty flag set without MarkDirty";
     private const string RulePlatformText = "platform line end or path separator";
     private const string RuleFixedTickRate = "hard-coded tick rate";
+    private const string RuleRateLiteral = "number used as a tick rate";
+    private const string RuleTickNamedNumber = "tick-named value written as a number";
+    private const string RuleTickArithmetic = "bare number in tick arithmetic";
+    private const string RuleBareSleep = "bare number returned as a sleep";
+    private const string RuleOneTickMinimum = "duration floored at one tick";
+    private const string RuleLiteralDraw = "logic random drawn over a literal range";
 
     private static readonly SourceRule[] CommonRules =
     [
@@ -59,6 +70,78 @@ static partial class Tests
         // A real literal that is not a decimal (1.5, 1e5, 2f, 2d): `var x = 1.5` is a double without the word.
         @"|(?<![\w.])\d[\d_]*\.\d[\d_]*(?:[eE][+-]?\d+)?(?![\w.])|(?<![\w.])\d[\d_]*(?:[eE][+-]?\d+|[fFdD])(?![\w.])";
 
+    // ------------------------------------------------------------------------------------------------------------------------------------------------
+    // Phase 20, the convention of docs/TICKRATE-MIGRATION.md §1 as rules: no bare tick number in the simulation. A duration is a constant in logic frames
+    // of the original (a const whose name ends in Frames, converted with the time service where it is used), or whole seconds (…Seconds), or comes from
+    // the catalog. A literal that means order is written with TickOrder.Next. The patterns are the strong ones of docs/TICKRATE-AUDIT.md §8 (P02, P03,
+    // P06/N08, P07/N05, P08/N07, P09, P13) narrowed by what the convention allows; P04/N16 (every 30, 60, 300 …) are too loud for a rule and stay a
+    // reading aid. Lexical tripwires, like every rule here: a number passed as a positional argument (new Leaf(…, 3, 30, …)) is invisible to them.
+
+    private static readonly Regex TickNamedNumber = new(
+        @"(?<name>\b_?\w*(?:[Tt]ick|[Ff]rame|[Ii]nterval|[Dd]elay|[Pp]eriod|[Cc]ooldown)\w*)\s*(?:\{[^}]*\}\s*)?(?<![=!<>+\-*/%&|^])(?:=(?![=>])|:(?!:))\s*\(?(?<value>-?\d[\w.]*(?:\s*[*+/-]\s*[\w.]+)*)");
+
+    /// <summary>
+    /// A constant, field, local, property or parameter with Tick, Frame, Interval, Delay, Period or Cooldown in its name that is given a number. Allowed by
+    /// rule: 0 and -1 (unset, never); an expression of <c>TickOrder.Next</c> (order, not time); a <c>const</c> whose name ends in <c>Frames</c> (logic frames
+    /// of the original – that it reaches the time service is checked separately); <c>MaxTicks</c>/<c>maxTicks</c> (a run budget is a number of steps).
+    /// </summary>
+    private static bool TickNamedNumberViolates(string line)
+    {
+        foreach (Match match in TickNamedNumber.Matches(line))
+        {
+            var name = match.Groups["name"].Value;
+            var value = match.Groups["value"].Value.Replace("_", string.Empty, StringComparison.Ordinal).TrimEnd('L');
+            if (value is "0" or "-1") continue;
+            if (value.Contains("TickOrder.Next", StringComparison.Ordinal)) continue;
+            if (name.EndsWith("Frames", StringComparison.Ordinal) && Regex.IsMatch(line, @"\bconst\b")) continue;
+            if (name is "MaxTicks" or "maxTicks") continue;
+            return true;
+        }
+        return false;
+    }
+
+    private static readonly Regex TickArithmetic = new(
+        @"\b\w*[Tt]ick\w*\s*[-+%]\s*(?<value>\d\w*(?:\s*\*\s*[\w.]+)?)|\bnow\s*[-+%]\s*(?<value>\d\w*(?:\s*\*\s*[\w.]+)?)" +
+        @"|\b\w*[Tt]ick\w*\s*-\s*[\w.]+\s*(?:>=|<=|>|<|==)\s*(?<value>[1-9]\w*(?:\s*\*\s*[\w.]+)?)|(?:\b_life|\b_age|\bframe\w*)\s*%\s*(?<value>\d+)");
+
+    /// <summary>A tick plus, minus or modulo a number, or a tick difference compared with one. Allowed by rule: a multiple of <c>TickOrder.Next</c>.</summary>
+    private static bool TickArithmeticViolates(string line)
+    {
+        foreach (Match match in TickArithmetic.Matches(line))
+            if (!match.Groups["value"].Value.Contains("TickOrder.Next", StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    private static readonly SourceRule[] TickLiteralRules =
+    [
+        // A rate written as a number: a field named like a rate that is given one, and 30 or 900 (30²) as a factor, divisor or modulus.
+        new(RuleRateLiteral, new Regex(@"\b\w*(PerSecond|FramesPerSec|TicksPerSec|FrameRate|TickRate|Fps|Hz)\w*\s*=\s*\d|1(\.0)?[dfm]?\s*/\s*30(\.0)?[dfm]?\b|30m?\s*/\s*1000|/\s*33\b|1000\s*/\s*30" +
+                                     @"|(?<![\w.])(30|900)[mL]?\s*[*/%]|[*/%]\s*(30|900)[mL]?(?![\w.])|[*/%]\s*Fixed\.FromInt\((30|900)\)|Fixed\.FromInt\((30|900)\)\s*[*/%]|FromTicksPerSecond\(\d")),
+        new(RuleTickNamedNumber, TickNamedNumber, TickNamedNumberViolates),
+        new(RuleTickArithmetic, TickArithmetic, TickArithmeticViolates),
+        // IUpdateModule.Update returns its sleep in ticks: a number there is a bare duration (0 is not a sleep, the scheduler raises it to SleepNone).
+        new(RuleBareSleep, new Regex(@"\breturn\s+(world\.Tick\s*\+\s*)?[1-9][\d_]*L?\s*;"), Scope: "/Modules/"),
+        new(RuleBareSleep, new Regex(@"\breturn\s+(world\.Tick\s*\+\s*)?[1-9][\d_]*L?\s*;"), Scope: "/Scripting/"),
+        // "At least one tick" is a lower bound that halves with the rate. A duration uses AtLeastOneFrame; what stays is named below with its reason.
+        new(RuleOneTickMinimum, new Regex(@"Math\.Max\([^;]*\bSleepNone\b|Math\.Max\(\s*[^;,]*Ticks\w*\s*,\s*1L?\s*\)|Math\.Max\(\s*1L?\s*,\s*[^;]*Ticks\b")),
+        // GameLogicRandomValue(0, 3) in the reference draws frames; such a draw goes through DrawFrames or is drawn in frames and scaled. A literal range
+        // that is left draws something else and says so below.
+        new(RuleLiteralDraw, new Regex(@"LogicRandom\.Range\((0|1),\s*\d+\)")),
+    ];
+
+    /// <summary>
+    /// Constants in logic frames of the original that the lexical check for "is converted" does not see reaching the time service, each with the way it
+    /// does. Checked by <see cref="FramesConstantsReachTheTimeService"/>; an entry that is not needed fails the test.
+    /// </summary>
+    private static readonly (string File, string Constant, string Reason)[] FramesConstantExceptions =
+    [
+        ("Modules/BuiltIn/CleanupAndSpyModules.cs", "RescanWaitMaxFrames", "upper bound of a draw in frames (GameLogicRandomValue(0, 3)); the drawn value is scaled with OriginalFrames on the next line"),
+        ("Modules/BuiltIn/ProjectileModules.cs", "RescanMaxFrames", "upper bound of a draw in frames; the drawn value is scaled with OriginalFrames"),
+        ("Skirmish/SkirmishAi.cs", "SupplyLookRetryFrames", "passed to Backoff(key, frames), which scales"),
+        ("Skirmish/SkirmishAi.cs", "TunnelEvacuationRetryFrames", "passed to Backoff(key, frames), which scales"),
+        ("Skirmish/SkirmishAi.cs", "WarehouseScoutRetryFrames", "passed to Backoff(key, frames), which scales"),
+    ];
+
     /// <summary>The simulation: no floating point at all, no access to anything outside itself.</summary>
     private static readonly SourceRule[] SimulationRules =
     [
@@ -69,9 +152,9 @@ static partial class Tests
         // until something recomputes the full hash (D8, found on MD_GLA05).
         new(RuleDirtyFlag, new Regex(@"\bDirty\s*=\s*true")),
         // Phase 20: the tick rate is a value of the world. The former constant must not come back, and nothing converts with the static class any more:
-        // every conversion that depends on the rate goes through the time service (world.Time, configuration.Time). Stage 2 of the phase extends this rule
-        // to bare tick literals (docs/TICKRATE-MIGRATION.md).
+        // every conversion that depends on the rate goes through the time service (world.Time, configuration.Time).
         new(RuleFixedTickRate, new Regex(@"\bLogicFramesPerSecond\b|\bSimulationTiming\.(DurationMillisecondsTo\w+|SecondsToTicks|PerSecond\w+|DegreesPerSecond\w+)\(")),
+        ..TickLiteralRules,
     ];
 
     /// <summary>
@@ -83,6 +166,45 @@ static partial class Tests
     [
         ..CommonRules,
         new(RuleFloatConversion, new Regex(FloatingPointPattern + @"|\(decimal\)\s*[A-Za-z_(]|BitConverter\.(Int32BitsToSingle|Int64BitsToDouble|UInt32BitsToSingle|UInt64BitsToDouble|ToSingle|ToDouble)|\.Read(Single|Double)\(|BinaryPrimitives\.Read(Single|Double)")),
+    ];
+
+    /// <summary>Phase 20: every number the tick rules accept although no allowance of the convention covers it, with the reason it is not a bare tick count.</summary>
+    private static readonly SourceException[] TickLiteralExceptions =
+    [
+        // -- numbers that look like a rate
+        new("Time/SimulationRate.cs", RuleRateLiteral, "public const int OriginalFramesPerSecond = 30;", "the one named 30 of the simulation: the logic frame rate of the original"),
+        new("Time/SimulationTiming.cs", RuleRateLiteral, "public const long MillisecondsPerSecond = 1000;", "milliseconds in a second, not a rate"),
+        new("Modules/BuiltIn/DockMachine.cs", RuleRateLiteral, "private const long ClearanceTimeoutFrames = 30L * SimulationRate.OriginalFramesPerSecond;", "30 seconds times the frames in a second: a constant in frames"),
+        new("Numerics/FixedTrig.cs", RuleRateLiteral, "inner = Fixed.One - x2 * inner / Fixed.FromInt(30);", "a term of the sine series, no time"),
+        // -- tick-named values that are numbers
+        new("Time/SimulationRate.cs", RuleTickNamedNumber, "public const int OriginalFramesPerSecond = 30;", "the definition of the original's frame rate"),
+        new("Mission/MissionSession.cs", RuleTickNamedNumber, "int CombatIntervalTicks = 3,", "a switch since phase 15 (0: scripted fire off), never a duration; the name is the key of the mission state"),
+        new("Modules/BuiltIn/Phase5Modules.cs", RuleTickNamedNumber, "private long _blockerReplanTick = -1000;", "'never planned', far before any tick; also the default the snapshot omits"),
+        new("Templates/TurretInfo.cs", RuleTickNamedNumber, "public const long NeverScanTicks = 9999999;", "the reference's sentinel for 'never' (TurretAIData::TurretAIData), compared and never scaled"),
+        new("Testing/MissionObjectiveDriver.cs", RuleTickNamedNumber, "long maxTicks = 4500, int spacing = 15, long settleTicks = 60,", "spacing and settleTicks are logic frames of the original under a historic name, scaled in Run; maxTicks is the budget"),
+        new("Testing/MissionScenario.cs", RuleTickNamedNumber, "long settleTicks = 150, long waitTicks = 600)", "logic frames of the original under a historic name, scaled in MissionProbe.Run"),
+        new("World/SimulationWorld.cs", RuleTickNamedNumber, "private const int MaxUpdatesPerTick = 50_000_000;", "a storm limit per step, no time"),
+        new("World/SimulationWorld.cs", RuleTickNamedNumber, "private const int MaxEventsPerTick = 20_000_000;", "a storm limit per step, no time"),
+        // -- tick arithmetic with a number
+        new("World/SimulationWorld.Acquisition.cs", RuleTickArithmetic, "0x9E3779B97F4A7C15UL * (ulong)(tick + 1);", "offset of a hash input (no zero in the first tick), neither time nor order"),
+        // -- lower bounds of one tick that are not durations
+        new("Modules/BuiltIn/CleanupAndSpyModules.cs", RuleOneTickMinimum, "world.Tick + Math.Max(durationTicks, SimulationTiming.SleepNone)", "a wake-up must lie in the future; the duration is a sum of catalog durations on the grid and zero is handled before"),
+        new("Modules/BuiltIn/CleanupAndSpyModules.cs", RuleOneTickMinimum, "Math.Max(Math.Min(Entity.ReadyTickOf(data.Slot) - world.Tick, reloadWait), SimulationTiming.SleepNone)", "a difference of absolute ticks: sleep until then, at least to the next step"),
+        new("Modules/BuiltIn/DockModules.cs", RuleOneTickMinimum, "_nextWake = Math.Max(_depositOnTick, world.Tick + SimulationTiming.SleepNone);", "an absolute tick, at least the next step"),
+        new("Modules/BuiltIn/LastBlockerModules.cs", RuleOneTickMinimum, "world.Tick + Math.Max(data.SuppressTicks, SimulationTiming.SleepNone)", "a wake-up must lie in the future; with SuppressTicks 0 this is one tick, not one frame (list for phase 23)"),
+        new("Modules/BuiltIn/MatchModules.cs", RuleOneTickMinimum, "world.Tick + Math.Max(world.BaseRegenDelayTicks, SimulationTiming.SleepNone)", "a wake-up must lie in the future; with a delay of 0 this is one tick, not one frame (list for phase 23)"),
+        new("Modules/BuiltIn/MineModules.cs", RuleOneTickMinimum, "return Math.Max(_nextDeathCheck - now, SimulationTiming.SleepNone);", "a difference of absolute ticks"),
+        new("Modules/BuiltIn/Phase5BlockerModules.cs", RuleOneTickMinimum, "return Math.Max(soonest - now, SimulationTiming.SleepNone);", "a difference of absolute ticks"),
+        new("Modules/BuiltIn/Phase5BlockerModules.cs", RuleOneTickMinimum, "return Math.Max(data.UpdateRateTicks, SimulationTiming.SleepNone);", "deliberately one tick: a detection holds UpdateRateTicks + TickOrder.Next, a floor of one frame would open a gap of a tick at DetectionRate 0"),
+        new("Modules/BuiltIn/Phase5Modules.cs", RuleOneTickMinimum, "var until = world.Tick + Math.Max(ticks, SimulationTiming.SleepNone);", "MarkDetected: the caller builds the value from a rate plus TickOrder.Next; the floor guards a caller passing 0"),
+        new("Modules/BuiltIn/WorldEffectModules.cs", RuleOneTickMinimum, "return Math.Max(soonest - now, SimulationTiming.SleepNone);", "a difference of absolute ticks"),
+        new("Modules/BuiltIn/SpecialAbilityStaging.cs", RuleOneTickMinimum, "var denominator = Math.Max(1, data.PreparationTicks);", "guards a division by zero, no duration"),
+        new("Testing/StressScenario.cs", RuleOneTickMinimum, "var remaining = (int)Math.Max(1, _options.Ticks - tick - world.Time.OriginalFrames(DrainReserveFrames));", "a number of steps used as a modulus, at least 1"),
+        // -- draws over a literal range that are not durations
+        new("Modules/BuiltIn/Bodies.cs", RuleLiteralDraw, "world.LogicRandom.Range(0, 99) < 25", "a percentage"),
+        new("Modules/BuiltIn/SlaveModules.cs", RuleLiteralDraw, "Fixed.FromInt(world.LogicRandom.Range(0, 6))", "a direction in whole radians"),
+        new("Modules/BuiltIn/SlaveModules.cs", RuleLiteralDraw, "_ = world.LogicRandom.Range(0, 10);", "the reference's draw for the locomotor choice, kept for the stream"),
+        new("Modules/BuiltIn/WorldEffectModules.cs", RuleLiteralDraw, "_ = world.LogicRandom.Range(1, 100);", "the reference's draw for the splash sound, kept for the stream"),
     ];
 
     private static readonly SourceException[] SimulationExceptions =
@@ -108,6 +230,7 @@ static partial class Tests
         new("World/SimulationWorld.CreationLists.cs", RuleNumberText, "nugget.Kind.ToString(), CreationSkipReasons.NoObjectNamed", "an enum name"),
         new("Templates/WeaponCatalog.cs", RuleNumberText, "decimal.TryParse(field.Value.OriginalText.Split([' ', '\\t'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault(), System.Globalization.NumberStyles.Float,",
             "the invariant culture is the next argument, on the following line"),
+        ..TickLiteralExceptions,
     ];
 
     private static readonly SourceException[] FeederExceptions =
@@ -142,6 +265,7 @@ static partial class Tests
             var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
             var lineNumber = 0;
             var insideRawString = false;
+            var applicable = rules.Where(rule => rule.Scope is null || ("/" + relative).Contains(rule.Scope, StringComparison.Ordinal)).ToArray();
             foreach (var raw in File.ReadLines(file))
             {
                 lineNumber++;
@@ -165,9 +289,9 @@ static partial class Tests
                 line = Regex.Replace(line, "\"(\\\\.|[^\"\\\\])*\"", "\"\"");
                 var comment = line.IndexOf("//", StringComparison.Ordinal);
                 if (comment >= 0) line = line[..comment];
-                foreach (var rule in rules)
+                foreach (var rule in applicable)
                 {
-                    if (!rule.Pattern.IsMatch(line)) continue;
+                    if (!rule.Hits(line)) continue;
                     var exception = Array.FindIndex(exceptions, value => value.Rule == rule.Name && relative.EndsWith(value.File, StringComparison.Ordinal) && raw.Contains(value.LinePart, StringComparison.Ordinal));
                     if (exception >= 0) used[exception] = true;
                     else violations.Add($"{relative}({lineNumber}): {rule.Name}: {raw.Trim()}");
@@ -208,7 +332,7 @@ static partial class Tests
             "private readonly SortedDictionary<string, int> _table = [];", "var d = (decimal)single;", "var t = MathF.Tan(a);", "var q = Math.Sqrt(2);", "var w = Math.Floor(v);", "Entity.Dirty = true;", "text.AppendLine(line);", "var p = Path.Combine(a, b);", "var n = Environment.NewLine;",
         ];
         foreach (var line in caught)
-            Check.That(SimulationRules.Concat(FeederRules).Any(rule => rule.Pattern.IsMatch(line)), $"No rule catches: {line}");
+            Check.That(SimulationRules.Concat(FeederRules).Any(rule => rule.Hits(line)), $"No rule catches: {line}");
         string[] allowed =
         [
             "var x = 1.5m;", "var y = Fixed.FromDecimal(0.25m);", "var z = Math.Max(a, b);", "var n = int.Parse(text, CultureInfo.InvariantCulture);", "if (name.StartsWith(prefix, StringComparison.Ordinal)) return;",
@@ -217,8 +341,102 @@ static partial class Tests
         ];
         foreach (var line in allowed)
         {
-            var wrong = SimulationRules.Concat(FeederRules).FirstOrDefault(rule => rule.Pattern.IsMatch(line));
+            var wrong = SimulationRules.Concat(FeederRules).FirstOrDefault(rule => rule.Hits(line));
             Check.That(wrong is null, $"A rule wrongly catches: {line} ({wrong?.Name})");
+        }
+    }
+
+    /// <summary>Strips what the rules do not read from a source line: string contents and the trailing comment.</summary>
+    private static string CodeOf(string raw)
+    {
+        var line = Regex.Replace(raw, "\"(\\\\.|[^\"\\\\])*\"", "\"\"");
+        var comment = line.IndexOf("//", StringComparison.Ordinal);
+        return comment >= 0 ? line[..comment] : line;
+    }
+
+    /// <summary>
+    /// The other half of the convention: a constant in logic frames of the original must reach the time service. Lexically that is a line in which the
+    /// constant stands inside <c>OriginalFrames(…)</c>, is the fallback of <c>ModuleConfigReader.Ticks(…)</c>, or defines another constant in frames; in the
+    /// type of the constant (its file and the other files of a partial class), or anywhere in the simulation for a public one. Returns the constants for which no such line exists and that
+    /// <see cref="FramesConstantExceptions"/> does not name, and the exceptions that were not needed.
+    /// </summary>
+    private static List<string> FramesConstantsReachTheTimeService(string source)
+    {
+        var files = Directory.EnumerateFiles(source, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal) && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .Select(file => (Relative: Path.GetRelativePath(source, file).Replace('\\', '/'), Lines: File.ReadLines(file).Select(CodeOf).ToArray())).ToArray();
+        var used = new bool[FramesConstantExceptions.Length];
+        var problems = new List<string>();
+        var declared = 0;
+        foreach (var (relative, lines) in files)
+        {
+            foreach (var line in lines)
+            {
+                var declaration = Regex.Match(line, @"\b(?<access>public|internal|private|protected)?\s*const\s+(?:int|long)\s+(?<name>\w+Frames)\s*=");
+                if (!declaration.Success) continue;
+                declared++;
+                var name = declaration.Groups["name"].Value;
+                var converted = new Regex($@"OriginalFrames\([^;]*\b{name}\b|\.Ticks\([^;]*,\s*{name}\)|\bconst\s+(?:int|long)\s+\w+Frames\s*=[^;]*\b{name}\b");
+                // A private constant is converted in its own type: the file, or the other files of a partial class (SimulationWorld.*.cs, ScriptEngine.*.cs).
+                var scope = declaration.Groups["access"].Value == "public" ? files : files.Where(file => PartialKey(file.Relative) == PartialKey(relative));
+                var reaches = scope.Any(file => file.Lines.Any(candidate => converted.IsMatch(candidate)));
+                var exception = Array.FindIndex(FramesConstantExceptions, value => value.File == relative && value.Constant == name);
+                if (exception >= 0)
+                {
+                    if (reaches) problems.Add($"exception without a need: {relative} {name} is seen reaching the time service");
+                    else used[exception] = true;
+                }
+                else if (!reaches) problems.Add($"{relative}: the constant {name} is in logic frames of the original but no line converts it with the time service");
+            }
+        }
+        for (var index = 0; index < used.Length; index++)
+            if (!used[index] && !problems.Any(problem => problem.Contains(FramesConstantExceptions[index].Constant, StringComparison.Ordinal)))
+                problems.Add($"exception without a constant: {FramesConstantExceptions[index].File} {FramesConstantExceptions[index].Constant}");
+        Check.That(declared >= 60, $"The scan found the constants in frames ({declared}).");
+        return problems;
+    }
+
+    private static string PartialKey(string relative)
+    {
+        var slash = relative.LastIndexOf('/');
+        var dot = relative.IndexOf('.', slash + 1);
+        return relative[..dot];
+    }
+
+    /// <summary>The tick rules themselves: what they catch and what the convention lets through.</summary>
+    private static void TickLiteralRulesCatchAndAllow()
+    {
+        (string Line, string Rule)[] caught =
+        [
+            ("private const long ThinkInterval = 15;", RuleTickNamedNumber), ("private const long RetryTicks = 300;", RuleTickNamedNumber), ("private long _nextTick = 5;", RuleTickNamedNumber),
+            ("var scanDelay = cond ? data.ScanDelayTicks : 30;", RuleTickNamedNumber), ("public sealed record Options(long GraceTicks = 300);", RuleTickNamedNumber), ("var framesToWait = 15;", RuleTickNamedNumber),
+            ("private int HealRateFrames = 3;", RuleTickNamedNumber), ("_cooldownPeriod = 2 * 30;", RuleTickNamedNumber),
+            ("if (world.Tick - _last >= 30) Replan();", RuleTickArithmetic), ("world.WakeAt(Entity, this, tick + 1);", RuleTickArithmetic), ("if (tick % 15 == 0) Think();", RuleTickArithmetic),
+            ("_transferTick = now + 2;", RuleTickArithmetic), ("if (_life % 30 == 29) Propagate();", RuleTickArithmetic), ("var remaining = head.RemainingTicks - 1;", RuleTickArithmetic),
+            ("var perTick = amount / 30;", RuleRateLiteral), ("var speed = perSecond / Fixed.FromInt(30);", RuleRateLiteral), ("private const int FramesPerSecond = 30;", RuleRateLiteral),
+            ("var gravity = value / 900m;", RuleRateLiteral), ("var rate = SimulationRate.FromTicksPerSecond(60);", RuleRateLiteral), ("var ms = ticks * 1000 / 30;", RuleRateLiteral),
+            ("_readyTick = world.Tick + Math.Max(data.DelayTicks, SimulationTiming.SleepNone);", RuleOneTickMinimum), ("Add(index, cost, Math.Max(totalTicks, 1));", RuleOneTickMinimum),
+            ("_nextScan = world.LogicRandom.Range(0, 3);", RuleLiteralDraw),
+        ];
+        foreach (var (line, rule) in caught)
+            Check.That(TickLiteralRules.Any(value => value.Name == rule && value.Hits(line)), $"The rule '{rule}' does not catch: {line}");
+        Check.That(TickLiteralRules.Where(value => value.Name == RuleBareSleep).All(value => value.Hits("        return 15;") && value.Hits("return world.Tick + 30;") && !value.Hits("return 0;") && !value.Hits("return SimulationTiming.SleepNone;")),
+            "A bare number as a sleep is caught, 0 and the named sleeps are not.");
+        string[] allowed =
+        [
+            "private const long ThinkIntervalFrames = 15;", "private const long RecentFireFrames = 2 * SimulationRate.OriginalFramesPerSecond;",
+            "private long _detectedUntilTick = -1;", "_returnTick = 0;", "public sealed record Options(long MaxTicks = 0, int PresentationLatencyTicks = 0);", "long maxTicks = 4500,",
+            "private const long FramesUnpulledLongEnoughToUnhitch = 2 * TickOrder.Next;", "_transferTick = now + 2 * TickOrder.Next;", "world.WakeAt(Entity, this, tick + TickOrder.Next);",
+            "if (world.Tick - arrival.Tick > 2 * TickOrder.Next) Drop();", "if (tick % _thinkInterval != 0) return;", "if (world.Tick - _last >= world.Time.OriginalFrames(ReplanFrames)) Replan();",
+            "_nextWake = world.Tick + world.Time.AtLeastOneFrame(data.DelayTicks);", "return world.Time.OriginalFrames(HealRateFrames);", "var amount = world.Time.PerSecondToPerTick(body.MaxHealth * ratio);",
+            "if (state.OrderedTick == 0) return;", "var wait = world.LogicRandom.Range(0, RescanMaxFrames);", "var ring = radius + Fixed.FromInt(30);", "if (DistanceSquared(a, b) < Fixed.FromInt(900)) return;",
+            "z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;", "private const long SparkEverySteps = 2;", "private const long SupplyScanSeconds = 10;",
+        ];
+        foreach (var line in allowed)
+        {
+            var wrong = TickLiteralRules.FirstOrDefault(rule => rule.Hits(line));
+            Check.That(wrong is null, $"A tick rule wrongly catches: {line} ({wrong?.Name})");
         }
     }
 }

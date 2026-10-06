@@ -1420,7 +1420,8 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
-    public void Enqueue(int templateIndex, Fixed cost, long totalTicks) => _queue.Add(new ProductionEntry(templateIndex, cost, Math.Max(totalTicks, 1)));
+    /// <param name="time">The time service of the world: a build time of zero still takes one logic frame of the original, not one tick.</param>
+    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks) => _queue.Add(new ProductionEntry(templateIndex, cost, time.AtLeastOneFrame(totalTicks)));
 
     public bool HasSlot(int slot) => slot >= 0 && slot < _queue.Count;
 
@@ -1490,7 +1491,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         if (world.Tick < _disabledUntil || Entity.ScriptDisableMask != 0) return SimulationTiming.SleepNone;
         var head = _queue[0];
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
-        var remaining = head.RemainingTicks - 1;
+        var remaining = head.RemainingTicks - TickOrder.Next;
         if (remaining <= 0 && exit is not null && !exit.IsFreeToExitFor(world.Templates[head.TemplateIndex]))
         {
             // The door is closed (QueueProductionExitUpdate delay): the finished unit waits at the head of the queue.
