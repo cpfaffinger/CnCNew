@@ -62,10 +62,21 @@ internal static class RateAudit
         }
         var walk = new Walk(rate.TicksPerOriginalFrame);
         walk.Compare(catalogs[SimulationRate.Hz30], catalogs[rate], "catalog", string.Empty);
-        // The range: a value that is squared (a radius, a range) must stay below the square root of the largest fixed-point value.
+        // The range: the square of a value above the square root of the largest fixed-point value does not fit. Ranges and radii are compared through
+        // SquaredReach, which does not form it; this list says which fields hold such values at all (docs/FIXED-POINT-Q39-24.md §5).
         Console.WriteLine();
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Range of the catalog at {rate} (largest fixed-point value {Fixed.MaxValue.ToDecimal():F0}, its square root {Walk.SquareLimit.ToDecimal():F0}): the largest magnitude is {walk.LargestText}."));
-        Print($"magnitude above the square root of the largest value (a square of it overflows)", walk.Large);
+        Print($"magnitude above the square root of the largest value (its plain square overflows; compared through SquaredReach)", walk.Large);
+        if (args.Contains("--ranges"))
+        {
+            // Every fixed-point field of the catalog with its largest magnitude: the input of the table "which field is squared where" (docs/FIXED-POINT-Q39-24.md §5).
+            var floor = Fixed.FromInt(OptionalLong(args, "--ranges-above") ?? 0);
+            var listed = walk.All.Where(pair => pair.Value.Worst >= floor.ToDecimal()).OrderByDescending(pair => pair.Value.Worst).ThenBy(pair => pair.Key, StringComparer.Ordinal).ToArray();
+            Console.WriteLine();
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Largest magnitude of every fixed-point field of the catalog ({listed.Length} of {walk.All.Count} fields, at least {floor.ToDecimal():F0}):"));
+            foreach (var (field, bucket) in listed)
+                Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"    {field,-60} x{bucket.Count,-6} max {bucket.Worst,14:G12}{(bucket.Worst > Walk.SquareLimit.ToDecimal() ? "  ABOVE THE SQUARE LIMIT" : string.Empty)}  ({bucket.WorstText})"));
+        }
         if (rate == SimulationRate.Hz30) return 0;
 
         Console.WriteLine();
@@ -77,6 +88,12 @@ internal static class RateAudit
         Print($"whole numbers that differ but are not {rate.TicksPerOriginalFrame} x the 30 Hz value (a duration off the grid, or not a duration)", walk.OffGrid);
         Console.WriteLine($"  changed fixed-point values by the factor they follow: {string.Join(", ", walk.ByFactor.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key} x{pair.Value}"))}.");
         return 0;
+    }
+
+    private static long? OptionalLong(string[] args, string name)
+    {
+        var index = Array.IndexOf(args, name);
+        return index >= 0 && index + 1 < args.Length ? long.Parse(args[index + 1], CultureInfo.InvariantCulture) : null;
     }
 
     private static void Print(string title, SortedDictionary<string, Bucket> buckets)
@@ -112,6 +129,7 @@ internal static class RateAudit
         public SortedDictionary<string, Bucket> OffGrid { get; } = new(StringComparer.Ordinal);
         public SortedDictionary<string, long> ByFactor { get; } = new(StringComparer.Ordinal);
         public SortedDictionary<string, Bucket> Large { get; } = new(StringComparer.Ordinal);
+        public SortedDictionary<string, Bucket> All { get; } = new(StringComparer.Ordinal);
         public static readonly Fixed SquareLimit = Fixed.Sqrt(Fixed.MaxValue);
         public string LargestText { get; private set; } = "none";
         private Fixed _largest;
@@ -164,6 +182,7 @@ internal static class RateAudit
             var magnitude = value == Fixed.MinValue ? Fixed.MaxValue : value.Abs();
             var text = string.Create(CultureInfo.InvariantCulture, $"{owner}: {value.ToDecimal():G12}");
             if (magnitude > _largest) (_largest, LargestText) = (magnitude, $"{text} ({path})");
+            Of(All, path).Add(magnitude.ToDecimal(), text);
             if (magnitude > SquareLimit) Of(Large, path).Add(magnitude.ToDecimal(), text);
         }
 

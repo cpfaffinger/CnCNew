@@ -50,8 +50,13 @@ const string Usage = """
       perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
                                                            time per tick and tick phase, module updates, allocations, replay catch-up speed, snapshot cost (docs/PERFORMANCE.md)
       catalog-cost <content-dir> [--rounds N]              time of TemplateCatalog.Build for 30, 60 and 120 Hz (the catalog is built per tick rate)
-      rate-audit <content-dir> --tick-rate N               what the catalog loses at the rate: conversions and catalog values that round to zero or are
-                                                           more than 1 % / 10 % off, by function and by type and field, with the worst examples
+      rate-audit <content-dir> [--tick-rate N] [--ranges [--ranges-above UNITS]]
+                                                           what the catalog loses at the rate: conversions and catalog values that round to zero or are
+                                                           more than 1 % / 10 % off, by function and by type and field, with the worst examples;
+                                                           --ranges lists the largest magnitude of every fixed-point field (which may be squared: docs/FIXED-POINT-Q39-24.md)
+      range-audit <content-dir> [--frames N] [--distance UNITS]
+                                                           every retail object with a weapon is ordered to fire at a tank and at a soldier; lists every run that
+                                                           threw and the weapons whose data lie beyond the square limit of the fixed-point numbers
       perf-compare <old.json> <new.json> [--threshold-percent N] [--min-us N] [--all] [--allow-different-hash] [--out FILE]
                                                            two --json summaries metric by metric; marks changes beyond the threshold (default 10 %); a report, never a failing test (docs/PERF-GAME-LAYER.md)
     Every command that creates a world takes --tick-rate N (30, 60 or 120; default 30): the catalog is built for that rate and the world runs at it.
@@ -106,6 +111,7 @@ try
         "path-bench" when args.Length >= 2 => CnCNew.SimTool.PathBench.Run(args),
         "catalog-cost" when args.Length >= 2 => CnCNew.SimTool.CatalogCost.Run(args),
         "rate-audit" when args.Length >= 2 => CnCNew.SimTool.RateAudit.Run(args),
+        "range-audit" when args.Length >= 2 => CnCNew.SimTool.RangeAudit.Run(args, CompileShipped),
         _ => Fail(Usage),
     };
 }
