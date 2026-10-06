@@ -326,7 +326,8 @@ public sealed class SupplyWarehouseCripplingBehavior(WarehouseCripplingData data
         _nextHealing = world.Tick + data.DelayTicks;
         world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, data.Amount, DamageTypes.Healing, DeathTypes.None, false));
         if (Entity.Body is { } body && body.Health >= body.MaxHealth) return SimulationTiming.SleepForever;
-        return Math.Max(_nextHealing - world.Tick, SimulationTiming.SleepNone);
+        // A SelfHealDelay of 0 heals once per frame of the original, not once per tick.
+        return world.Time.AtLeastOneFrame(_nextHealing - world.Tick);
     }
 
     public override void Describe(IStateWriter writer)

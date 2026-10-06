@@ -94,7 +94,8 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
             return SimulationTiming.SleepNone;
         }
         if (_mode == DemoTrapMode.Manual) return SimulationTiming.SleepNone;
-        _scanCountdown = data.ScanTicks;
+        // DemoTrapUpdate.cpp, DemoTrapUpdate::update: m_nextScanFrames-- / m_nextScanFrames = m_scanFrames – a scan every ScanRate + 1 frames of the original.
+        _scanCountdown = world.Time.CountdownReload(data.ScanTicks);
 
         var shallDetonate = false;
         var limit = data.TriggerRange * data.TriggerRange;
