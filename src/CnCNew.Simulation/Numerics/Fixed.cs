@@ -75,7 +75,11 @@ public readonly struct Fixed : IEquatable<Fixed>, IComparable<Fixed>
         if (value._raw == 0) return Zero;
         // result_raw = floor(sqrt(raw * ScaleRaw)), see ToDecimal()/FromDecimal() round trip reasoning above.
         var target = (Int128)value._raw * ScaleRaw;
-        var x = (Int128)value._raw > ScaleRaw ? (Int128)value._raw : ScaleRaw; // initial guess >= true root
+        // Initial guess >= true root: target < 2^bits, so 2^ceil(bits / 2) is above the root, and never more than twice as far as it has to be. Newton's
+        // iteration over the integers falls from any start at or above the root to floor(sqrt(target)) and stops there, so the start decides only how many
+        // 128-bit divisions it takes (a handful instead of one per bit the old start, max(raw, scale), was too large by).
+        var bits = 128 - (int)Int128.LeadingZeroCount(target);
+        var x = Int128.One << ((bits + 1) / 2);
         while (true)
         {
             var next = (x + target / x) / 2;
