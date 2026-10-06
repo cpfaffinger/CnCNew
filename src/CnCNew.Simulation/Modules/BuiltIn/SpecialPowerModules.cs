@@ -134,6 +134,9 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
             _pausedCount--;
             if (_pausedCount == 0) _availableOnFrame += world.Tick - _pausedOnFrame;
         }
+        // Pause count, pause frame and ready frame are hashed state: without this the cached hash of the carrier stays stale until something else touches it
+        // (NAMED_STOP/START_SPECIAL_POWER_COUNTDOWN, UnpauseSpecialPowerUpgrade; finding D8).
+        world.MarkDirty(Entity);
     }
 
     public void Trigger(IWorldServices world) => StartRecharge(world);
