@@ -89,6 +89,7 @@ public sealed partial class SimulationWorld
                 for (var index = 0; index < spied.Count; index++)
                     if (spied.Values[index] > 0 && SlotOf(new PlayerId(spied.Keys[index])) is var spy and >= 0 && !viewers.Contains(spy)) vision.Reveal(spy, entity.X, entity.Y, range);
         }
+        vision.EndRefresh();
     }
 
     private int SlotOf(PlayerId player) => _playerSlots is not null && _playerSlots.TryGetValue(player.Value, out var slot) ? slot : -1;

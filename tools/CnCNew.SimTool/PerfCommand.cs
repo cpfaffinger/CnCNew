@@ -417,7 +417,7 @@ internal static class PerfCommand
         var cells = (long)vision.CellsX * vision.CellsY * vision.PlayerSlots;
         // Read before the probe below adds its own calls.
         var counters = vision.Counters;
-        long counted = counters.Refreshes, cleared = counters.CellsCleared, circles = counters.Circles, revealed = counters.CellsRevealed, tested = counters.CellsTested;
+        long counted = counters.Refreshes, slotsUnchanged = counters.SlotsUnchanged, circlesSkipped = counters.CirclesSkipped, cleared = counters.CellsCleared, circles = counters.Circles, revealed = counters.CellsRevealed, tested = counters.CellsTested;
         long hashCalls = counters.HashCalls, hashUnchanged = counters.HashUnchanged, compared = counters.BytesCompared, hashed = counters.BytesHashed;
         var kept = vision.CurrentHash();
         const int rounds = 20;
@@ -428,7 +428,7 @@ internal static class PerfCommand
         Console.WriteLine($"  (a) vision: {vision.CellsX}x{vision.CellsY} cells x {vision.PlayerSlots} slots (players + system) = {cells} cell bytes. VisionMap.Hash() alone (the full pass, the definition of the value), {rounds} calls on the end state: {perCall:F1} us per call = {perCall * 1000 / cells:F2} ns per cell byte (check {sink:X16}).");
         Console.WriteLine($"      the kept hash (VisionMap.CurrentHash) on the end state {(kept == sink ? "equals the full pass" : $"is {kept:X16}: WARNING, it DIFFERS from the full pass")}; mode: {(vision.ReferenceMode ? "REFERENCE (--vision-reference: the original computation over every cell)" : "incremental")}.");
         if (counted > 0 && hashCalls > 0)
-            Console.WriteLine(string.Create(Invariant, $"      counters (deterministic): {counted} refreshes; per refresh {(double)cleared / counted:F0} cell bytes cleared ({100.0 * cleared / counted / cells:F1} % of the table), {(double)circles / counted:F1} circles, {(double)tested / counted:F0} radius tests, {(double)revealed / counted:F0} cell bytes written; ")
+            Console.WriteLine(string.Create(Invariant, $"      counters (deterministic): {counted} refreshes; per refresh {(double)cleared / counted:F0} cell bytes cleared ({100.0 * cleared / counted / cells:F1} % of the table), {(double)circles / counted:F1} circles ({(double)circlesSkipped / counted:F1} of them not drawn: {100.0 * slotsUnchanged / counted / vision.PlayerSlots:F1} % of the slot refreshes had the circles of the refresh before), {(double)tested / counted:F0} radius tests, {(double)revealed / counted:F0} cell bytes written; ")
                               + string.Create(Invariant, $"{hashCalls} hash calls, {hashUnchanged} of them without a changed byte ({100.0 * hashUnchanged / hashCalls:F1} %); per call {(double)hashed / hashCalls:F0} bytes mixed ({100.0 * hashed / hashCalls / cells:F1} % of the table) and {(double)compared / hashCalls:F0} bytes compared."));
         if (recorder.VisionProbe && recorder.VisionProbeRefreshes > 0)
             Console.WriteLine(string.Create(Invariant, $"      probe (--vision-probe, its time is in 'unattributed'): {recorder.VisionProbeRefreshes} refreshes, {recorder.VisionProbeUnchanged} left every cell byte as it was; changed cell bytes per refresh: mean {(double)recorder.VisionProbeChanged / recorder.VisionProbeRefreshes:F1}, maximum {recorder.VisionProbeChangedMax}; ")
