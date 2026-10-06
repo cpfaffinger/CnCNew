@@ -225,7 +225,7 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) TurretWorld(params (string Template, int Owner, int X, int Y, decimal Heading)[] objects)
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: TurretFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: TurretFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         foreach (var (template, owner, x, y, heading) in objects) feeder.Spawn(owner, template, owner: owner, x: x, y: y, angle: Fixed.FromDecimal(heading));
@@ -233,10 +233,10 @@ static partial class Tests
         return (world, feeder, fixture);
     }
 
-    /// <summary>Orders the shooter to fire every tick, as a standing attack does, until a shot goes out; returns the number of ticks that passed before the shot (-1 when none within <paramref name="limit"/>).</summary>
+    /// <summary>Orders the shooter to fire every tick, as a standing attack does, until a shot goes out; returns the number of ticks that passed before the shot (-1 when none within <paramref name="limit"/> original frames).</summary>
     private static int TicksUntilShot(SimulationWorld world, Feeder feeder, uint shooter, uint victim, int limit = 80, int slot = WeaponSlot.Best, FireOrigin origin = FireOrigin.Player)
     {
-        for (var waited = 0; waited < limit; waited++)
+        for (var waited = 0; waited < world.Frames(limit); waited++)
         {
             feeder.FireWeaponSlot(1, shooter, victim, slot, origin);
             var result = world.Step();
@@ -252,21 +252,21 @@ static partial class Tests
 
     public static void TurretsTemplateModelAndStrictParsing()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: TurretFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: TurretFiles());
         var catalog = fixture.Templates;
         catalog.TryGet("TurretTank", out var tank);
         var set = tank!.Turrets!;
         var main = set[0]!;
         Check.That(set[1] is null && !set.Linked, "A Turret block gives the template its main turret.");
-        Check.That(main.TurnRate == SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(180m) && main.TurnRate.Raw is > 6860 and < 6866, $"TurretTurnRate is degrees per second: 180 are 6 degrees per tick ({main.TurnRate.Raw} raw).");
-        Check.That(main.RecenterTicks == 15 && main.Controls(WeaponSlot.Primary) && !main.Controls(WeaponSlot.Secondary) && main.Gates && !main.AllowsPitch, "RecenterTime is 500 ms (15 ticks); ControlledWeaponSlots names the slot.");
+        Check.That(main.TurnRate == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m) && main.TurnRate.Raw is > 6860 and < 6866, $"TurretTurnRate is degrees per second: 180 are 6 degrees per tick ({main.TurnRate.Raw} raw).");
+        Check.That(main.RecenterTicks == TestRate.Frames(15) && main.Controls(WeaponSlot.Primary) && !main.Controls(WeaponSlot.Secondary) && main.Gates && !main.AllowsPitch, "RecenterTime is 500 ms (15 ticks); ControlledWeaponSlots names the slot.");
         catalog.TryGet("BareTurretTank", out var bare);
         var bareTurret = bare!.Turrets![0]!;
-        Check.That(bareTurret.TurnRate == Fixed.FromDecimal(0.01m) && bareTurret.PitchRate == Fixed.FromDecimal(0.01m) && bareTurret.RecenterTicks == 60 && bareTurret.NaturalAngle == Fixed.Zero,
+        Check.That(bareTurret.TurnRate == TestRate.Time.PerOriginalFrameToPerTick(0.01m) && bareTurret.PitchRate == TestRate.Time.PerOriginalFrameToPerTick(0.01m) && bareTurret.RecenterTicks == TestRate.Frames(60) && bareTurret.NaturalAngle == Fixed.Zero,
             "Absent keys keep the reference defaults: 0.01 rad per frame, two seconds, natural angle 0.");
         catalog.TryGet("DualTurretTank", out var dual);
         Check.That(dual!.Turrets![0]!.Index == 0 && dual.Turrets[1] is { Index: 1, AllowsPitch: true } alt && alt.Controls(WeaponSlot.Secondary) && alt.FirePitch == Degrees(20m)
-                   && alt.TurnRate == SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(360m), "AltTurret is the second turret with its own rates, pitch and slot.");
+                   && alt.TurnRate == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(360m), "AltTurret is the second turret with its own rates, pitch and slot.");
         catalog.TryGet("LinkedTurretShip", out var ship);
         Check.That(ship!.Turrets!.Linked, "TurretsLinked of the AI module is read.");
         catalog.TryGet("SweepTank", out var sweep);
@@ -283,11 +283,11 @@ static partial class Tests
             ["Data/INI/Object/TurretBad.ini"] = $"Object BadTurret\n  KindOf = SELECTABLE VEHICLE\n  Body = ActiveBody Body01\n    MaxHealth = 10.0\n    InitialHealth = 10.0\n  End\n  Behavior = AIUpdateInterface AI01\n    Turret\n{turretBlockBody}    End\n  End\nEnd\n",
         };
 
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: Files("      ControlledWeaponSlots = PRIMARY\n      TurretWobble = 3\n")).Templates, "TurretWobble");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: Files("      TurretTurnRate = 90\n")).Templates, "ControlledWeaponSlots");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: Files("      ControlledWeaponSlots = QUARTERNARY\n")).Templates, "QUARTERNARY");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: Files("      ControlledWeaponSlots = PRIMARY\n      TurretTurnRate = fast\n")).Templates, "TurretTurnRate");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: Files("      ControlledWeaponSlots = PRIMARY\n      TurretFireAngleSweep = PRIMARY wide\n")).Templates, "TurretFireAngleSweep");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: Files("      ControlledWeaponSlots = PRIMARY\n      TurretWobble = 3\n")).Templates, "TurretWobble");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: Files("      TurretTurnRate = 90\n")).Templates, "ControlledWeaponSlots");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: Files("      ControlledWeaponSlots = QUARTERNARY\n")).Templates, "QUARTERNARY");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: Files("      ControlledWeaponSlots = PRIMARY\n      TurretTurnRate = fast\n")).Templates, "TurretTurnRate");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: Files("      ControlledWeaponSlots = PRIMARY\n      TurretFireAngleSweep = PRIMARY wide\n")).Templates, "TurretFireAngleSweep");
     }
 
     public static void TurretsTurnAtTheirRateAndTheShotWaits()
@@ -301,11 +301,11 @@ static partial class Tests
         feeder.FireWeapon(1, tank.Id.Value, target);
         world.Step();
         var first = tank.TurretOf(0)!.Value;
-        Check.That(first.Angle == SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(180m) && first.Rotating, $"The first tick turns the turret by its rate ({first.Angle.Raw} raw), TURRET_ROTATE is on.");
+        Check.That(first.Angle == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m) && first.Rotating, $"The first tick turns the turret by its rate ({first.Angle.Raw} raw), TURRET_ROTATE is on.");
         var shotAfter = 1 + TicksUntilShot(world, feeder, tank.Id.Value, target);
-        Check.That(shotAfter == 15, $"The shot waits until the turret has turned 90 degrees at 6 degrees per tick: {shotAfter} ticks after the order.");
+        Check.That(shotAfter == world.Frames(15), $"The shot waits until the turret has turned 90 degrees at 6 degrees per tick: {shotAfter} ticks after the order.");
         var pointing = tank.TurretOf(0)!.Value;
-        Check.That(Near(pointing.Angle, Degrees(90m), 1m) && !pointing.Rotating && world.TurretWaits == 15, $"It points at the victim when the shot goes out ({pointing.Angle.Raw} raw; {world.TurretWaits} orders waited).");
+        Check.That(Near(pointing.Angle, Degrees(90m), 1m) && !pointing.Rotating && world.TurretWaits == world.Frames(15), $"It points at the victim when the shot goes out ({pointing.Angle.Raw} raw; {world.TurretWaits} orders waited).");
         Check.That(world.RejectionCounts.Sum() == 0, "Waiting for the turret is not a rejection (no 'cannot do' cue): nothing was rejected.");
 
         // A tank whose body already faces the victim does not wait at all: the turret angle is relative to the heading.
@@ -328,7 +328,7 @@ static partial class Tests
         var splitTank = Slotted(split, "SplitTank");
         Check.That(TicksUntilShot(split, splitFeeder, splitTank.Id.Value, IdOf(split, "TurretTarget"), slot: WeaponSlot.Secondary) == 0, "A weapon in a slot no turret controls fires at once.");
         Check.That(Near(splitTank.TurretOf(0)!.Value.Angle, Fixed.Zero), "...and the turret of the other slot is not asked to aim.");
-        Check.That(TicksUntilShot(split, splitFeeder, splitTank.Id.Value, IdOf(split, "TurretTarget"), slot: WeaponSlot.Primary) > 10, "The turret-controlled primary gun of the same tank waits for its turret.");
+        Check.That(TicksUntilShot(split, splitFeeder, splitTank.Id.Value, IdOf(split, "TurretTarget"), slot: WeaponSlot.Primary) > split.Frames(10), "The turret-controlled primary gun of the same tank waits for its turret.");
 
         var (script, scriptFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
         var scripted = Slotted(script, "TurretTank");
@@ -342,20 +342,20 @@ static partial class Tests
         var (world, feeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
         var tank = Slotted(world, "TurretTank");
         var target = IdOf(world, "TurretTarget");
-        Check.That(TicksUntilShot(world, feeder, tank.Id.Value, target) == 15, "The turret turned toward the target and fired.");
+        Check.That(TicksUntilShot(world, feeder, tank.Id.Value, target) == world.Frames(15), "The turret turned toward the target and fired.");
         Check.That(Encoding.UTF8.GetString(WorldSnapshot.Write(world)).Contains("\"turrets\""), "A turret away from rest is part of the snapshot.");
 
         // The fire order started an attack: with the victim alive the turret keeps its aim without further orders (docs/SIM-TURRET-AIM.md §3a).
-        for (var i = 0; i < 100; i++) world.Step();
+        for (var i = 0; i < world.Frames(100); i++) world.Step();
         Check.That(Near(tank.TurretOf(0)!.Value.Angle, Degrees(90m), 1m) && !tank.TurretOf(0)!.Value.Rotating, "After the last order it still points at the living victim: the attack goes on.");
 
         // An isolated shot that is not an attack order (a script's command button) keeps its aim for the reload plus the recentre time, then turns back.
         var (shot, shotFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
         var shooter = Slotted(shot, "TurretTank");
         Check.That(TicksUntilShot(shot, shotFeeder, shooter.Id.Value, IdOf(shot, "TurretTarget"), origin: FireOrigin.Script) == 0, "A script's one-off shot goes out at once.");
-        for (var i = 0; i < 22; i++) shot.Step();
+        for (var i = 0; i < shot.Frames(22); i++) shot.Step();
         Check.That(Near(shooter.TurretOf(0)!.Value.Angle, Degrees(90m), 1m), "A one-off shot holds its aim for a while...");
-        for (var i = 0; i < 200; i++) shot.Step();
+        for (var i = 0; i < shot.Frames(200); i++) shot.Step();
         Check.That(shooter.TurretOf(0)!.Value.Angle == Fixed.Zero && !Encoding.UTF8.GetString(WorldSnapshot.Write(shot)).Contains("\"turrets\""),
             "...then it turns back at half speed and rests: a turret at rest writes nothing, the snapshot is the one of an object without turret state.");
 
@@ -371,9 +371,9 @@ static partial class Tests
 
         var halfway = killer.TurretOf(0)!.Value.Angle;
         killFeeder.Kill(fragile);
-        for (var i = 0; i < 10; i++) killing.Step();
+        for (var i = 0; i < killing.Frames(10); i++) killing.Step();
         Check.That(killer.TurretOf(0)!.Value.Angle == halfway && !killer.TurretOf(0)!.Value.Rotating, "A dead victim stops the turning: the turret holds where it was.");
-        for (var i = 0; i < 120; i++) killing.Step();
+        for (var i = 0; i < killing.Frames(120); i++) killing.Step();
         Check.That(killer.TurretOf(0)!.Value.Angle == Fixed.Zero, "...and recentres after the hold time.");
     }
 
@@ -385,34 +385,34 @@ static partial class Tests
         var target = IdOf(world, "TurretTarget");
         var waited = TicksUntilShot(world, feeder, dual.Id.Value, target, slot: WeaponSlot.Secondary);
         var alt = dual.TurretOf(1)!.Value;
-        Check.That(waited is >= 8 and <= 10, $"The secondary gun waits for the alt turret (90 degrees at 12 per tick) and its pitch (20 degrees at 2 per tick): {waited} ticks.");
+        Check.That(world.InFrames(waited) is >= 8 and <= 10, $"The secondary gun waits for the alt turret (90 degrees at 12 per tick) and its pitch (20 degrees at 2 per tick): {waited} ticks.");
         Check.That(Near(alt.Angle, Degrees(90m), 1m) && Near(alt.Pitch, Degrees(20m), 2.1m) && Near(dual.TurretOf(0)!.Value.Angle, Fixed.Zero), "The alt turret points at the victim at the firing pitch; the main turret stayed centred.");
 
         // A weapon that sweeps (TurretFireAngleSweep) may fire anywhere inside the sweep angle; the same turret without a sweep has to turn the last degrees first.
         var (sweepWorld, sweepFeeder, _) = TurretWorld(("SweepTank", 1, 0, 0, 0m), ("TurretTarget", 2, 94, 34, 0m));
         Check.That(TicksUntilShot(sweepWorld, sweepFeeder, IdOf(sweepWorld, "SweepTank"), IdOf(sweepWorld, "TurretTarget")) == 0, "A victim 20 degrees off, inside the 25 degree sweep, is fired at without turning first.");
         var (plainWorld, plainFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 94, 34, 0m));
-        Check.That(TicksUntilShot(plainWorld, plainFeeder, IdOf(plainWorld, "TurretTank"), IdOf(plainWorld, "TurretTarget")) is >= 3 and <= 4, "Without the sweep the turret turns 20 degrees first.");
+        Check.That(plainWorld.InFrames(TicksUntilShot(plainWorld, plainFeeder, IdOf(plainWorld, "TurretTank"), IdOf(plainWorld, "TurretTarget"))) is >= 3 and <= 4, "Without the sweep the turret turns 20 degrees first.");
 
         // Linked turrets: every turret aims and any slot fires only once all of them point at the victim.
         var (ship, shipFeeder, _) = TurretWorld(("LinkedTurretShip", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
         var linked = Slotted(ship, "LinkedTurretShip");
         var shipWaited = TicksUntilShot(ship, shipFeeder, linked.Id.Value, IdOf(ship, "TurretTarget"), slot: WeaponSlot.Primary);
-        Check.That(shipWaited >= 30 && Near(linked.TurretOf(1)!.Value.Angle, Degrees(90m), 2.1m), $"With TurretsLinked the fast main gun also waits for the slow alt turret (90 degrees at 2 per tick): {shipWaited} ticks.");
+        Check.That(shipWaited >= ship.Frames(30) && Near(linked.TurretOf(1)!.Value.Angle, Degrees(90m), 2.1m), $"With TurretsLinked the fast main gun also waits for the slow alt turret (90 degrees at 2 per tick): {shipWaited} ticks.");
     }
 
     public static void TurretsSnapshotMidTurnAndDeterminism()
     {
         var (first, firstFeeder, fixture) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("DualTurretTank", 1, 40, 0, 0m), ("SweepTank", 1, 80, 0, 0m), ("TurretTarget", 2, 0, 100, 0m), ("TurretTarget", 2, 120, 100, 0m));
         var (second, secondFeeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("DualTurretTank", 1, 40, 0, 0m), ("SweepTank", 1, 80, 0, 0m), ("TurretTarget", 2, 0, 100, 0m), ("TurretTarget", 2, 120, 100, 0m));
-        List<ulong> Run(SimulationWorld world, Feeder feeder, int ticks)
+        List<ulong> Run(SimulationWorld world, Feeder feeder, int frames)
         {
             var hashes = new List<ulong>();
-            for (var i = 0; i < ticks; i++)
+            for (var i = 0; i < world.Frames(frames); i++)
             {
                 feeder.FireWeapon(1, IdOf(world, "TurretTank"), IdOf(world, "TurretTarget"));
                 feeder.FireWeaponSlot(1, IdOf(world, "DualTurretTank"), IdOf(world, "TurretTarget", 1), WeaponSlot.Secondary);
-                if (world.Tick < 60) feeder.FireWeapon(1, IdOf(world, "SweepTank"), IdOf(world, "TurretTarget", 1));
+                if (world.Tick < world.Frames(60)) feeder.FireWeapon(1, IdOf(world, "SweepTank"), IdOf(world, "TurretTarget", 1));
                 hashes.Add(world.Step().StateHash);
             }
 
@@ -445,7 +445,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
 
         var withTurret = catalog.Templates.Where(template => template.Turrets is not null).ToArray();
@@ -456,8 +456,8 @@ static partial class Tests
             "The retail turret blocks are read; three of the four battleships link their two turrets (the cinematic one does not).");
 
         Check.That(catalog.TryGet("AmericaTankCrusader", out var crusader) && crusader.Turrets![0] is { } crusaderTurret && crusader.Turrets[1] is null
-                   && crusaderTurret.TurnRate == SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(180m) && crusaderTurret.Controls(WeaponSlot.Primary) && crusaderTurret.Gates, "The Crusader's turret turns at 180 degrees per second and controls its gun.");
-        Check.That(catalog.TryGet("ChinaTankBattleMaster", out var battleMaster) && battleMaster.Turrets![0] is { Gates: true } battleMasterTurret && battleMasterTurret.TurnRate < SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(180m),
+                   && crusaderTurret.TurnRate == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m) && crusaderTurret.Controls(WeaponSlot.Primary) && crusaderTurret.Gates, "The Crusader's turret turns at 180 degrees per second and controls its gun.");
+        Check.That(catalog.TryGet("ChinaTankBattleMaster", out var battleMaster) && battleMaster.Turrets![0] is { Gates: true } battleMasterTurret && battleMasterTurret.TurnRate < TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m),
             "The Battlemaster's turret is slower than the Crusader's.");
         Check.That(catalog.TryGet("AmericaInfantryRanger", out var ranger) && ranger.Turrets is null, "A Ranger has no turret: it fires without aiming.");
         var sweeping = withTurret.Where(template => template.Turrets!.Turrets.Any(turret => turret is not null && Enumerable.Range(0, WeaponSlot.Count).Any(slot => turret.SweepOf(slot) > Fixed.Zero))).ToArray();
@@ -466,7 +466,7 @@ static partial class Tests
         var tanks = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
         ulong Duel(out long crusaderShot, out long battleMasterShot, out Fixed crusaderError)
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, tanks, "real-turrets", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, tanks, "real-turrets", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             void Spawn(int player, string template, int x, int y, Fixed heading)
             {
@@ -483,7 +483,7 @@ static partial class Tests
             crusaderShot = battleMasterShot = -1;
             var start = world.Tick;
             crusaderError = Fixed.Zero;
-            for (var i = 0; i < 90; i++)
+            for (var i = 0; i < world.Frames(90); i++)
             {
                 foreach (var (shooter, victim) in new[] { (crusaderEntity, battleMasterEntity), (battleMasterEntity, crusaderEntity) })
                 {
@@ -511,7 +511,7 @@ static partial class Tests
         var first = Duel(out var crusaderShot, out var battleMasterShot, out var error);
         Console.WriteLine($"       turrets: tank duel - the Battlemaster fires after {battleMasterShot} ticks (already aimed), the Crusader after {crusaderShot} ticks (45 degrees at 6 per tick), aim error {error.Raw / (double)Fixed.ScaleRaw * 180 / Math.PI:F2} degrees");
         Check.That(battleMasterShot == 0, "The Battlemaster, aimed from the start, fires on its first order.");
-        Check.That(crusaderShot is >= 7 and <= 9 && error < Degrees(2m), $"The Crusader's turret turns 45 degrees at 6 degrees per tick before the shot ({crusaderShot} ticks, error {error.Raw} raw).");
+        Check.That(TestRate.InFrames(crusaderShot) is >= 7 and <= 9 && error < Degrees(2m), $"The Crusader's turret turns 45 degrees at 6 degrees per tick before the shot ({crusaderShot} ticks, error {error.Raw} raw).");
         Check.That(first == Duel(out _, out _, out _), "The retail duel is deterministic.");
     }
 }

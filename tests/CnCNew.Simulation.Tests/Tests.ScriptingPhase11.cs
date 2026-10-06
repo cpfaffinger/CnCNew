@@ -29,7 +29,7 @@ static partial class Tests
             Scr.Script("AttackedB", [Scr.And(Scr.If("SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER", Scr.Side(PlayerB), Scr.Side(PlayerA)))], [Scr.Do("SET_FLAG", Scr.Flag("bHit"), Scr.Bool(true))]),
         ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Mine"), Placed("BetaSoldier", 550m, 380m, "teamB", "Theirs")]);
         var engine = session.Engine;
-        Run(session, 5);
+        Run(session, session.Frames(5));
         Check.That(engine.FlagValue("aInside") && !engine.FlagValue("bInside"), "HAS_UNITS_IN_AREA sees the soldier inside, not the one outside.");
         Check.That(engine.FlagValue("bOutside") && !engine.FlagValue("aOutside"), "IS_OUTSIDE_AREA is the negation when player and area exist.");
         Check.That(!engine.FlagValue("ghost"), "An unknown area makes IS_OUTSIDE_AREA false, as in the reference (area must exist).");
@@ -43,7 +43,7 @@ static partial class Tests
             Scr.Script("Attacked", [Scr.And(Scr.If("SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER", Scr.Side(PlayerA), Scr.Side(PlayerB)))], [Scr.Do("SET_FLAG", Scr.Flag("aHit"), Scr.Bool(true))]),
             Scr.Script("AttackedB", [Scr.And(Scr.If("SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER", Scr.Side(PlayerB), Scr.Side(PlayerA)))], [Scr.Do("SET_FLAG", Scr.Flag("bHit"), Scr.Bool(true))]),
         ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Mine"), Placed("BetaSoldier", 140m, 200m, "teamB", "Theirs")]);
-        Run(attack, 60);
+        Run(attack, attack.Frames(60));
         Check.That(attack.Engine.FlagValue("aHit") && attack.Engine.FlagValue("bHit"), "After a firefight each side has been attacked by the other.");
     }
 
@@ -63,10 +63,10 @@ static partial class Tests
         ], objects: [Placed("AlphaHero", 100m, 100m, "teamA", "Hero"), Placed("AlphaSoldier", 140m, 100m, "teamA", "Mate"), Placed("AlphaHero", 100m, 300m, "teamA", "Other"),
             Placed("AlphaHero", 500m, 20m, "teamA", "Hero2"), Placed("BetaSoldier", 560m, 20m, "teamB", "Near"), Placed("BetaSoldier", 500m, 380m, "teamB", "Far")]);
         var engine = session.Engine;
-        Run(session, 20);
+        Run(session, session.Frames(20));
         Check.That(engine.CounterValue("ready") > 0, "An unused power is ready for SKIRMISH_SPECIAL_POWER_READY.");
         var readyBefore = engine.CounterValue("ready");
-        Run(session, 80);
+        Run(session, session.Frames(80));
         Check.That(engine.CounterValue("triggered") == 1, $"PLAYER_TRIGGERED_SPECIAL_POWER is consumed by the first evaluation that sees it (got {engine.CounterValue("triggered")}).");
         Check.That(!engine.FlagValue("wrong"), "The FROM_NAMED variant only matches the unit that used the power.");
         Check.That(engine.FlagValue("sees"), "TYPE_SIGHTED: the hero has an AlphaSoldier of PlayerA in its vision range.");
@@ -99,15 +99,15 @@ static partial class Tests
         ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Scout")]);
         var world = session.World;
         var viewer = new PlayerId(1);
-        Run(session, 6);
+        Run(session, session.Frames(6));
         Check.That(!world.IsPositionVisibleTo(viewer, far.X, far.Y) && !world.IsPositionExploredBy(viewer, far.X, far.Y), "The far corner starts shrouded.");
         session.Engine.SignalUiInteraction("peek");
-        Run(session, 4);
+        Run(session, session.Frames(4));
         Check.That(world.IsPositionExploredBy(viewer, Fixed.FromInt(400), Fixed.FromInt(200)) && !world.IsPositionVisibleTo(viewer, Fixed.FromInt(400), Fixed.FromInt(200)), "MAP_REVEAL_AT_WAYPOINT is a quick look: the area becomes explored (fogged), not visible.");
         session.Engine.SignalUiInteraction("go");
-        Run(session, 4);
+        Run(session, session.Frames(4));
         Check.That(world.IsPositionVisibleTo(viewer, far.X, far.Y), "MAP_REVEAL_ALL_PERM makes every cell visible.");
-        Run(session, 30);
+        Run(session, session.Frames(30));
         Check.That(world.IsPositionVisibleTo(viewer, far.X, far.Y), "The permanent reveal survives the periodic vision refresh.");
         Check.That(!world.IsPositionVisibleTo(new PlayerId(2), far.X, far.Y), "Only the named player's map is revealed.");
 
@@ -120,10 +120,10 @@ static partial class Tests
         Check.That(copy.World.StateHash == session.World.StateHash, "...and has the same world hash.");
 
         session.Engine.SignalUiInteraction("undo");
-        Run(session, 8);
+        Run(session, session.Frames(8));
         Check.That(!world.IsPositionVisibleTo(viewer, far.X, far.Y) && world.IsPositionExploredBy(viewer, far.X, far.Y), "UNDO_PERM drops the permanent mark: not visible any more, still explored.");
         session.Engine.SignalUiInteraction("shroud");
-        Run(session, 4);
+        Run(session, session.Frames(4));
         Check.That(!world.IsPositionExploredBy(viewer, far.X, far.Y), "MAP_SHROUD_ALL forgets everything the player had explored.");
     }
 
@@ -138,12 +138,12 @@ static partial class Tests
         ], objects: [Placed("AlphaCenter", 100m, 100m, "teamA", "Hq")]);
         var viewer = new PlayerId(1);
         var center = NamedIn(session, "Hq")!;
-        Run(session, 2);
+        Run(session, session.Frames(2));
         Check.That(session.World.CanBuildUnits(viewer) && session.World.CanBuildStructures(viewer), "Construction is allowed by default.");
         var accepted = session.Issue(viewer, (sequence, tick) => new CnCNew.Simulation.Commands.QueueProductionCommand(viewer, sequence, tick, center.Id, "AlphaSoldier"));
         Check.That(accepted.Accepted, "A soldier can be queued while unit construction is enabled.");
         session.Engine.SignalUiInteraction("off");
-        Run(session, 2);
+        Run(session, session.Frames(2));
         Check.That(!session.World.CanBuildUnits(viewer) && !session.World.CanBuildStructures(viewer), "PLAYER_DISABLE_*_CONSTRUCTION switches both off.");
         var refused = session.Issue(viewer, (sequence, tick) => new CnCNew.Simulation.Commands.QueueProductionCommand(viewer, sequence, tick, center.Id, "AlphaSoldier"));
         Run(session, 1);
@@ -153,7 +153,7 @@ static partial class Tests
         var copy = MissionSnapshot.Restore(snapshot, fixture.Templates, fixture.Fingerprint, terrain, StartMissionMap(session));
         Check.That(!copy.World.CanBuildUnits(viewer) && !copy.World.CanBuildStructures(viewer), "The switches are part of the saved world state.");
         session.Engine.SignalUiInteraction("on");
-        Run(session, 2);
+        Run(session, session.Frames(2));
         Check.That(session.World.CanBuildUnits(viewer) && session.World.CanBuildStructures(viewer), "PLAYER_ENABLE_*_CONSTRUCTION switches them on again.");
     }
 
@@ -168,20 +168,20 @@ static partial class Tests
             Scr.Script("IsEmpty", [Scr.And(Scr.If("NAMED_BUILDING_IS_EMPTY", Scr.Unit("Bunk")))], [Scr.Do("SET_FLAG", Scr.Flag("bunkEmpty"), Scr.Bool(true))]),
         ], objects: [Placed("AlphaBunker", 160m, 200m, "teamA", "Bunk"), Placed("AlphaSoldier", 100m, 200m, "Squad", "S1"), Placed("AlphaSoldier", 100m, 220m, "Squad", "S2")]);
         var bunker = NamedIn(session, "Bunk")!;
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(bunker.Container is { ContainCount: 0 } && session.Engine.FlagValue("bunkEmpty"), "The bunker starts empty (NAMED_BUILDING_IS_EMPTY).");
         session.Engine.SignalUiInteraction("garrison");
-        Run(session, 400);
+        Run(session, session.Frames(400));
         Check.That(bunker.Container!.ContainCount == 1 && NamedIn(session, "S1")!.ContainedBy == bunker.Id, $"NAMED_GARRISON_SPECIFIC_BUILDING walked the soldier into the bunker (count {bunker.Container.ContainCount}).");
         Check.That(session.Engine.FlagValue("garrisoned"), "SKIRMISH_PLAYER_HAS_COMPARISON_GARRISONED counts the occupied garrison.");
         session.Engine.SignalUiInteraction("leave");
-        Run(session, 20);
+        Run(session, session.Frames(20));
         Check.That(bunker.Container.ContainCount == 0 && !NamedIn(session, "S1")!.ContainedBy.IsValid, "NAMED_EXIT_BUILDING lets the soldier out again.");
         session.Engine.SignalUiInteraction("team");
-        Run(session, 500);
+        Run(session, session.Frames(500));
         Check.That(bunker.Container.ContainCount == 2, $"TEAM_GARRISON_NEAREST_BUILDING filled the bunker's two slots with the team's infantry (count {bunker.Container.ContainCount}; diagnostics {string.Join("; ", session.Engine.Diagnostics.Select(pair => pair.Key + "=" + pair.Value))}; team {string.Join(",", session.Engine.TeamInstances.Select(team => team.Prototype + ":" + team.Members.Count))}).");
         session.Engine.SignalUiInteraction("empty");
-        Run(session, 20);
+        Run(session, session.Frames(20));
         Check.That(bunker.Container.ContainCount == 0, "EXIT_SPECIFIC_BUILDING evacuates everybody.");
         Check.That(session.Engine.MissingActionHits.Count == 0 && session.World.RejectionCounts.Sum() == 0, "No action counted as missing, no command rejected: " + string.Join(", ", session.Engine.MissingActionHits.Keys) + " / " + string.Join("; ", session.Engine.Diagnostics.Keys));
     }
@@ -194,10 +194,10 @@ static partial class Tests
         ], objects: [Placed("ScriptWarehouse", 300m, 300m, "", "Store"), Placed("AlphaSoldier", 100m, 200m, "teamA", "S1"), Placed("BetaSoldier", 500m, 300m, "teamB", "B1")]);
         var store = NamedIn(session, "Store")!;
         Check.That(session.World.WarehouseBoxes(store.Id) == 5, "The warehouse starts with its 5 boxes.");
-        Run(session, 2);
+        Run(session, session.Frames(2));
         Check.That(session.World.WarehouseBoxes(store.Id) == 3, $"WAREHOUSE_SET_VALUE 250 with 100 per box leaves ceil(2.5) = 3 boxes (got {session.World.WarehouseBoxes(store.Id)}).");
         session.Engine.SignalUiInteraction("merge");
-        Run(session, 2);
+        Run(session, session.Frames(2));
         var soldier = NamedIn(session, "S1")!;
         Check.That(soldier.Owner == new PlayerId(2), "TEAM_MERGE_INTO_TEAM moves the members to the destination team and its owner.");
         Check.That(!session.Engine.TeamInstances.First(team => team.Prototype == "teamA").Members.Any(), "The merged team is empty afterwards (it stays addressable for TEAM_DESTROYED).");
@@ -213,9 +213,9 @@ static partial class Tests
             Scr.Text("teamUnitType1", "AlphaSoldier"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 2, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 3, 0m, string.Empty)]);
         map = map with { Teams = [..map.Teams, Gang()] };
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 20);
+        Run(session, session.Frames(20));
         Check.That(!session.Engine.FlagValue("gangReady"), "The team is not created before its units exist.");
-        Run(session, 600);
+        Run(session, session.Frames(600));
         var gang = session.Engine.TeamInstances.First(team => team.Prototype == "Gang");
         Check.That(gang.Members.Count == 3 && gang.Created && session.Engine.FlagValue("gangReady"),
             $"BUILD_TEAM queued and produced the team's soldiers, which joined and activated it (members {gang.Members.Count}, created {gang.Created}; diagnostics: {string.Join("; ", session.Engine.Diagnostics.Keys)}).");
@@ -231,7 +231,7 @@ static partial class Tests
             Scr.Script("Odd", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY", Scr.Unit("Hero"), Scr.Ability("Cmd_AlphaSellNotPower"))], oneShot: true),
         ], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Shooter"), Placed("BetaSoldier", 130m, 100m, "teamB", "Victim"), Placed("AlphaHero", 100m, 300m, "teamA", "Hero")]);
         var victim = NamedIn(session, "Victim")!;
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(victim.Body!.Health < victim.Body.MaxHealth, "A FIRE_WEAPON button used on a named target fires the carrier's weapon at it.");
         Check.That(session.Engine.Diagnostics.ContainsKey("command button 'Cmd_AlphaSellNotPower' has command SELL, not executed"), "A button of another command kind is diagnosed under its own message.");
         Check.That(session.Engine.Diagnostics.Keys.All(key => !key.Contains("is not a special-power", StringComparison.Ordinal)), "The old catch-all message is gone.");
@@ -255,16 +255,16 @@ static partial class Tests
             Scr.Script("LoneSteps", [], [Scr.Do("SET_FLAG", Scr.Flag("loneStarted"), Scr.Bool(true)), Scr.Do("NAMED_STOP", Scr.Unit("<This Object>")), Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("loneDone"))], active: false),
         ], objects: [Placed("AlphaSoldier", 100m, 200m, "Squad", "S1"), Placed("AlphaSoldier", 100m, 300m, "teamA", "Lone")]);
         var engine = session.Engine;
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(engine.FlagValue("step1"), "The first instruction of the sequential script ran right away.");
         Check.That(!engine.FlagValue("arrived"), "The next instruction waits until the move has finished (the team is not idle).");
         Check.That(engine.FlagValue("loneStarted") && engine.CounterValue("loneDone") == 1, "A unit sequence runs its instructions in one tick while the unit stays idle, with <This Object> naming the unit.");
-        Run(session, 400);
+        Run(session, session.Frames(400));
         Check.That(engine.FlagValue("arrived"), "After the team reached the waypoint the sequence went on.");
         var soldier = NamedIn(session, "S1")!;
         Check.That(soldier.X > Fixed.FromInt(200), $"The soldier walked to the waypoint (x = {soldier.X}).");
         Check.That(engine.CounterValue("laps") >= 1, $"The idle timer ended and the last instruction ran (laps {engine.CounterValue("laps")}).");
-        Run(session, 3000);
+        Run(session, session.Frames(3000));
         Check.That(engine.CounterValue("laps") == 3, $"A looping sequential script with 3 runs stops after exactly 3 laps (got {engine.CounterValue("laps")}).");
         Check.That(engine.MissingActionHits.Count == 0, "No action counted as missing: " + string.Join(", ", engine.MissingActionHits.Keys));
 
@@ -280,9 +280,9 @@ static partial class Tests
             patrol,
             Scr.Script("Stop", [Scr.And(Scr.If("FLAG", Scr.Flag("halt"), Scr.Bool(true)))], [Scr.Do("TEAM_STOP_SEQUENTIAL_SCRIPT", Scr.Team("Squad"))], oneShot: true),
         ], objects: [Placed("AlphaSoldier", 100m, 200m, "Squad", "S1")]);
-        Run(stopper, 5);
+        Run(stopper, stopper.Frames(5));
         stopper.Engine.SignalUiInteraction("halt");
-        Run(stopper, 600);
+        Run(stopper, stopper.Frames(600));
         Check.That(!stopper.Engine.FlagValue("arrived"), "TEAM_STOP_SEQUENTIAL_SCRIPT ends the runner: the instruction after the move never ran.");
     }
 
@@ -301,23 +301,23 @@ static partial class Tests
         var engine = session.Engine;
         var viewer = new PlayerId(1);
         var far = (X: Fixed.FromInt(400), Y: Fixed.FromInt(200));
-        Run(session, 60);
+        Run(session, session.Frames(60));
         Check.That(!engine.FlagValue("ready"), "A countdown set to 4 s keeps the power from being ready after 2 s.");
-        Run(session, 90);
+        Run(session, session.Frames(90));
         Check.That(engine.FlagValue("ready") && engine.FlagValue("fired"), "After the countdown the power is ready and NAMED_FIRE_SPECIAL_POWER_AT_NAMED used it (and the trigger condition saw the unit).");
         Check.That(session.World.RejectionCounts.Sum() == 0, "The use was accepted: " + string.Join("; ", engine.Diagnostics.Keys));
         Check.That(!world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "The far waypoint is out of sight before the reveal.");
         engine.SignalUiInteraction("look");
-        Run(session, 8);
+        Run(session, session.Frames(8));
         Check.That(world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "MAP_REVEAL_PERMANENTLY_AT_WAYPOINT keeps the area in sight.");
         engine.SignalUiInteraction("unlook");
-        Run(session, 8);
+        Run(session, session.Frames(8));
         Check.That(!world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "The named undo takes the reveal back.");
         engine.SignalUiInteraction("record");
-        Run(session, 2);
+        Run(session, session.Frames(2));
         Check.That(engine.RecordedActions == 2 && engine.SkillPointsModifierOf(viewer) == Fixed.FromInt(2), "The experience scale and the bonus switch are recorded, not executed.");
         var recordOnly = StartMission([Scr.Script("Record", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("PLAYER_AFFECT_RECEIVING_EXPERIENCE", Scr.Side(PlayerA), Scr.Real(2m)), Scr.Do("OBJECT_ALLOW_BONUSES", Scr.Bool(false))], oneShot: true)]);
-        Run(recordOnly, 2);
+        Run(recordOnly, recordOnly.Frames(2));
         Check.That(recordOnly.Engine.ExecutedActions == 0 && recordOnly.Engine.RecordedActions == 2 && recordOnly.Engine.MissingActionHits.Count == 0, "Recorded actions are neither counted as executed nor as missing.");
         Check.That(ScriptCoverage.ActionSupport("OBJECT_ALLOW_BONUSES") == ScriptSupport.Recorded, "The support table names them as recorded.");
     }
@@ -336,7 +336,7 @@ static partial class Tests
             Scr.Text("teamUnitType1", "AlphaSoldier"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 1, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 2, 0m, string.Empty)]);
         map = map with { Teams = [..map.Teams, Strike()] };
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 2400);
+        Run(session, session.Frames(2400));
         var strike = session.Engine.TeamInstances.First(team => team.Prototype == "Strike");
         Check.That(strike.Created && strike.Members.Count == 2 && session.Engine.FlagValue("strike"), $"RECRUIT_TEAM took the two (MaxCount) free soldiers (members {strike.Members.Count}, diagnostics {string.Join("; ", session.Engine.Diagnostics.Keys)}).");
         Check.That(!strike.Members.Contains(NamedIn(session, "Squad1")!.Id.Value), "A unit of another team that was not made recruitable stays where it is.");
@@ -359,18 +359,18 @@ static partial class Tests
         map = map with { Teams = [..map.Teams, Wave()] };
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         var engine = session.Engine;
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(engine.CounterValue("created") == 1, $"The team's create script ran once when the team was active (got {engine.CounterValue("created")}).");
-        Run(session, 4);
+        Run(session, session.Frames(4));
         Check.That(engine.CounterValue("sighted") == 1 && engine.CounterValue("clear") == 0, "The enemy-sighted script ran when the Hunter came into the soldiers' vision range.");
         session.World.Kill(NamedIn(session, "W1")!.Id);
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(engine.CounterValue("unitDied") == 1, $"Every member's death runs the unit-destroyed script (got {engine.CounterValue("unitDied")}).");
         Check.That(engine.CounterValue("gone") == 1, "With the default threshold (clamped to units - 1, Team::updateState) the destroyed script runs as soon as the team has lost a unit.");
         session.World.Kill(NamedIn(session, "W2")!.Id);
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(engine.CounterValue("unitDied") == 2 && engine.CounterValue("gone") == 1, $"The second death runs the unit-destroyed script again but not the destroyed script a second time (died {engine.CounterValue("unitDied")}, gone {engine.CounterValue("gone")}).");
-        Run(session, 30);
+        Run(session, session.Frames(30));
         Check.That(engine.CounterValue("gone") == 1 && engine.CounterValue("created") == 1, "Neither script repeats.");
         var (original, restored, _) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 200);
         Check.That(original.Chain == restored.Chain && original.FinalHash == restored.FinalHash, "A mission with team event state continues identically after save/restore.");
@@ -384,12 +384,12 @@ static partial class Tests
             Scr.Script("Win", [Scr.And(Scr.If("NAMED_DESTROYED", Scr.Unit("Target")), Scr.If("FLAG", Scr.Flag("arrived"), Scr.Bool(true)))], [Scr.Do("VICTORY")], oneShot: true),
             Scr.Script("Lose", [Scr.And(Scr.If("NAMED_DESTROYED", Scr.Unit("Hero")))], [Scr.Do("DEFEAT")], oneShot: true),
         ], objects: [Placed("AlphaHero", 100m, 100m, "teamA", "Hero"), Placed("AlphaSoldier", 400m, 300m, "teamA", "Walker"), Placed("BetaSoldier", 520m, 380m, "teamB", "Target")]);
-        var win = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, true, maxTicks: 3000);
+        var win = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, true, maxTicks: TestRate.Frames(3000));
         Check.That(win.ReachedByScript && win.Outcome == MissionOutcome.Victory && win.OutcomeScript == "Win", $"The driver reached the victory through the mission's own 'Win' script (outcome {win.Outcome} by '{win.OutcomeScript}', log: {string.Join("; ", win.Log)}).");
         Check.That(win.Interventions >= 2 && win.Log.Any(line => line.Contains("send named 'Walker'", StringComparison.Ordinal)) && win.Log.Any(line => line.Contains("destroy named 'Target'", StringComparison.Ordinal)), "It sent the walker into the area and destroyed the enemy's target.");
-        var lose = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, false, maxTicks: 3000);
+        var lose = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, false, maxTicks: TestRate.Frames(3000));
         Check.That(lose.ReachedByScript && lose.Outcome == MissionOutcome.Defeat && lose.OutcomeScript == "Lose", $"...and the defeat through 'Lose' (outcome {lose.Outcome} by '{lose.OutcomeScript}').");
-        var again = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, true, maxTicks: 3000);
+        var again = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, true, maxTicks: TestRate.Frames(3000));
         Check.That(again.OutcomeTick == win.OutcomeTick && again.Log.SequenceEqual(win.Log), "A second run of the driver is identical.");
     }
 }

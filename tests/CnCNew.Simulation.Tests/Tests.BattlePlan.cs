@@ -146,9 +146,9 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) BattlePlanWorld()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: BattlePlanFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: BattlePlanFiles());
         var terrain = NavTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         return (world, new Feeder(world), fixture);
     }
 
@@ -228,7 +228,7 @@ static partial class Tests
         var restoredCenter = restored.FindEntity(center.Id)!;
         Check.That(restoredFeeder.UseSpecialPower(1, restoredCenter.Id.Value, "SPECIAL_BattlePlanFixture", SpecialPowerTargetKind.None, option: 1, tick: restored.Tick).Accepted && feeder.UseSpecialPower(1, center.Id.Value, "SPECIAL_BattlePlanFixture", SpecialPowerTargetKind.None, option: 1).Accepted,
             "Both worlds are told to switch to bombardment.");
-        for (var tick = 0; tick < 150; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The plan change continues identically after a restore (tick {tick}).");
+        for (var tick = 0; tick < world.Frames(150); tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The plan change continues identically after a restore (tick {tick}).");
 
         // Bombardment: the weapon bonus raises the damage by 50 %.
         Check.That(plan.ActivePlan == BattlePlanKind.Bombardment, "Bombardment is in force.");
@@ -253,7 +253,7 @@ static partial class Tests
         var center = CsSpawn(world, feeder, "PlanCenter", 1, 100, 100);
         CsSpawn(world, feeder, "PlanSoldier", 1, 20, 100);
         var plan = center.Modules.OfType<BattlePlanUpdate>().Single();
-        var ready = new SyntheticFixture(SimulationRate.Original, files: BattlePlanFiles());
+        var ready = new SyntheticFixture(TestRate.Default, files: BattlePlanFiles());
         ChooseBattlePlan(world, feeder, center, 3);
         CsRun(world, 40, () => plan.Status == BattlePlanUpdate.TransitionStatus.Active);
 
@@ -262,7 +262,7 @@ static partial class Tests
         var restoredFeeder = feeder.ForkTo(restored);
         Check.That(restoredFeeder.UseSpecialPower(1, center.Id.Value, "SPECIAL_BattlePlanFixture", SpecialPowerTargetKind.None, option: 2, tick: restored.Tick).Accepted && feeder.UseSpecialPower(1, center.Id.Value, "SPECIAL_BattlePlanFixture", SpecialPowerTargetKind.None, option: 2).Accepted,
             "Both worlds switch to hold the line.");
-        for (var tick = 0; tick < 130; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The switch continues identically after a restore (tick {tick}).");
+        for (var tick = 0; tick < world.Frames(130); tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The switch continues identically after a restore (tick {tick}).");
         Check.That(restored.FindEntity(center.Id)!.Modules.OfType<BattlePlanUpdate>().Single().ActivePlan == BattlePlanKind.HoldTheLine, "The restored center reached hold the line.");
 
         // An unsupported option does nothing.

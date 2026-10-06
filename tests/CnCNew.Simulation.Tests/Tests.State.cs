@@ -23,10 +23,10 @@ static partial class Tests
     private static readonly StressOptions ShortOptions = new(3_000, 300, 0xC0FFEE01, 0x5EED0001, 400, 250);
 
     /// <summary>Records a short stress scenario and adds checkpoints from a second run.</summary>
-    private static (SyntheticFixture Fixture, ReplayFile Replay, StressScenario Scenario) ShortReplay(StressOptions? options = null)
+    private static (SyntheticFixture Fixture, ReplayFile Replay, StressScenario Scenario) ShortReplay(StressOptions? options = null, SimulationRate? rate = null)
     {
         options ??= ShortOptions;
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(rate ?? TestRate.Default);
         var scenario = new StressScenario(options);
         var recorded = scenario.Record(fixture);
         var withCheckpoints = ReplayRunner.Run(recorded, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordCheckpointInterval = options.CheckpointInterval });
@@ -59,7 +59,7 @@ static partial class Tests
             var ordered = reversed ? commands.OrderByDescending(value => value.Player.Value).ThenBy(value => value.Sequence) : commands.OrderBy(value => value.Player.Value).ThenBy(value => value.Sequence);
             foreach (var command in ordered) world.Submit(command);
             var list = new List<ulong>();
-            for (var tick = 0; tick < 60; tick++) list.Add(world.Step().StateHash);
+            for (var tick = 0; tick < world.Frames(60); tick++) list.Add(world.Step().StateHash);
             return [..list];
         }
         Check.That(Hashes(false).AsSpan().SequenceEqual(Hashes(true)), "Different submission orders of the same tick must give identical hashes.");
@@ -124,14 +124,14 @@ static partial class Tests
         Check.That(pending.Metrics.PendingCommands == 2 && pending.Metrics.PendingEvents == 1, "Fixture: pending commands and events exist.");
         var pendingRestored = WorldSnapshot.Restore(WorldSnapshot.Write(pending), fixture.Templates, fixture.Fingerprint);
         Check.That(pendingRestored.StateHash == pending.StateHash && pendingRestored.Metrics == pending.Metrics, $"Pending commands and events survive the snapshot: {pending.Metrics} / {pendingRestored.Metrics}; {pending.StateHash:X16} / {pendingRestored.StateHash:X16}");
-        for (var tick = 0; tick < 30; tick++)
+        for (var tick = 0; tick < pending.Frames(30); tick++)
             Check.That(pending.Step().StateHash == pendingRestored.Step().StateHash, "Pending commands execute identically after restore.");
         Check.That(pending.Metrics.Timers == 1 && pending.Metrics.SpawnedTotal == 1, "The restored timer and spawn ran in both worlds.");
     }
 
     public static void SnapshotRejection()
     {
-        var (fixture, replay, _) = ShortReplay();
+        var (fixture, replay, _) = ShortReplay(rate: SimulationRate.Original); // the rejections below name 30 Hz as the rate of this catalog
         var world = ReplayRunner.CreateWorld(replay.Header, fixture.Templates);
         ReplayRunner.Run(replay, world, new ReplayRunOptions { StopTick = 600 });
         var bytes = WorldSnapshot.Write(world);
@@ -185,7 +185,7 @@ static partial class Tests
 
     public static void ReplayFormatTests()
     {
-        var (fixture, replay, _) = ShortReplay();
+        var (fixture, replay, _) = ShortReplay(rate: SimulationRate.Original); // the rejections below name 30 Hz as the rate of this catalog
         var bytes = ReplayFormat.Write(replay);
         var read = ReplayFormat.Read(bytes);
         Check.That((read.Header with { Players = default }) == (replay.Header with { Players = default }) && read.Header.Players.SequenceEqual(replay.Header.Players) && read.Commands.SequenceEqual(replay.Commands) && read.Checkpoints.SequenceEqual(replay.Checkpoints), "Replay round trip preserves header, commands and checkpoints.");
@@ -275,7 +275,7 @@ static partial class Tests
     public static void ShortStress()
     {
         var options = new StressOptions(12_000, 1_200, 0xC0FFEE01, 0x5EED0001, 1_500, 1_000);
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var scenario = new StressScenario(options);
         var replay = scenario.Record(fixture);
         var maxEntities = 0;
@@ -304,9 +304,9 @@ static partial class Tests
 
     public static void DefinitionOrderIndependence()
     {
-        var original = new SyntheticFixture(SimulationRate.Original);
+        var original = new SyntheticFixture(TestRate.Default);
         var reversedFiles = SyntheticFixture.Files.Reverse().ToDictionary(pair => pair.Key, pair => pair.Value);
-        var permuted = new SyntheticFixture(SimulationRate.Original, files: reversedFiles);
+        var permuted = new SyntheticFixture(TestRate.Default, files: reversedFiles);
         Check.That(original.Fingerprint == permuted.Fingerprint, "The definition fingerprint must not depend on file enumeration order.");
         Check.That(original.Templates.Templates.Select(value => value.Name).SequenceEqual(permuted.Templates.Templates.Select(value => value.Name)), "Template indices must not depend on file enumeration order.");
         var scenario = new StressScenario(ShortOptions);
@@ -320,7 +320,7 @@ static partial class Tests
     {
         // The full acceptance run of the phase: 216,000 ticks (two hours of game time), two fresh runs, snapshot continuation.
         var options = StressOptions.Standard;
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var scenario = new StressScenario(options);
         var replay = scenario.Record(fixture);
         Check.That(scenario.PeakAlive >= 10_000, $"At least 10,000 simultaneously living entities (peak {scenario.PeakAlive}).");
@@ -337,14 +337,14 @@ static partial class Tests
 
     public static void IdleAllocation()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         for (var index = 0; index < 500; index++) feeder.Spawn(1 + index % 2, "Barrel");
-        for (var tick = 0; tick < 100; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(100); tick++) world.Step();
         Check.That(world.Metrics.Entities == 500, "Fixture: 500 barrels.");
         var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var tick = 0; tick < 300; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(300); tick++) world.Step();
         var perTick = (GC.GetAllocatedBytesForCurrentThread() - before) / 300;
         Console.WriteLine($"       idle tick with 500 entities: {perTick} bytes allocated per tick");
         Check.That(perTick <= 64, $"An idle tick must not allocate (measured {perTick} bytes).");
@@ -391,7 +391,7 @@ static partial class Tests
         var source = new RealSource(content);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(source, ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         SpecialPowerRealData(catalog);
         var report = ModuleCoverage.Compute(catalog);
         Console.WriteLine($"       real data: {report.Objects} objects, {report.Instantiable} instantiable, {report.Blocked} blocked, {report.WithoutSimulationModules} without simulation modules");
@@ -402,7 +402,7 @@ static partial class Tests
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "P1"));
         ulong[] Run()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 77, players, "shipped-objects", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 77, players, "shipped-objects", fingerprint), catalog);
             var sequence = 0UL;
             foreach (var template in catalog.Templates.Where(value => value.IsInstantiable))
                 world.Submit(new SpawnCommand(new PlayerId(1), ++sequence, 0, template.Name, PlayerId.System, Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero));
@@ -413,7 +413,7 @@ static partial class Tests
             var system = 0UL;
             foreach (var entity in world.Entities.OrderBy(value => value.Id.Value).ToArray())
                 world.Submit(new KillCommand(PlayerId.System, ++system, world.Tick, entity.Id));
-            for (var tick = 0; tick < 400; tick++) hashes.Add(world.Step().StateHash);
+            for (var tick = 0; tick < world.Frames(400); tick++) hashes.Add(world.Step().StateHash);
             world.VerifyIncrementalHash();
             return [..hashes];
         }
@@ -429,7 +429,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var participants = ReferenceMatchScenario.Participants(catalog, out _);
         Check.That(participants.Length >= 2, $"At least two retail factions can field a base and an armed unit ({participants.Length}).");

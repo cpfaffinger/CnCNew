@@ -166,11 +166,11 @@ static partial class Tests
     };
 
     private static SimulationWorld NewCreationListWorld(SyntheticFixture fixture, uint seed = 5)
-        => new(new WorldConfiguration(new WorldId(1), SimulationRate.Original, seed, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        => new(new WorldConfiguration(new WorldId(1), TestRate.Default, seed, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
 
     public static void Phase5CreationLists()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: CreationListFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: CreationListFiles());
         var world = NewCreationListWorld(fixture);
         var feeder = new Feeder(world);
         Check.That(world.CreationLists.Lists.Length == 16 && world.CreationLists.TryGet("OCL_Spread", out var spread) && spread.Nuggets[0].SpreadFormation && spread.Nuggets[0].Count == 4,
@@ -242,8 +242,8 @@ static partial class Tests
         Run("OCL_Lifetime");
         var timed = Created("Timed").Single();
         var spawnedAt = world.Tick;
-        while (world.FindEntity(timed.Id) is not null && world.Tick < spawnedAt + 200) world.Step();
-        Check.That(world.FindEntity(timed.Id) is null && world.Tick - spawnedAt is >= 25 and <= 35, "MinLifetime/MaxLifetime override the object's own lifetime range: " + (world.Tick - spawnedAt));
+        while (world.FindEntity(timed.Id) is not null && world.Tick < spawnedAt + world.Frames(200)) world.Step();
+        Check.That(world.FindEntity(timed.Id) is null && world.InFrames(world.Tick - spawnedAt) is >= 25 and <= 35, "MinLifetime/MaxLifetime override the object's own lifetime range: " + (world.Tick - spawnedAt));
 
         // ---- skipped members are reported, never dropped
         events = Run("OCL_Skips");
@@ -284,7 +284,7 @@ static partial class Tests
 
     public static void Phase5CreationListDeterminism()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: CreationListFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: CreationListFiles());
         SimulationWorld Build()
         {
             var world = NewCreationListWorld(fixture, 11);
@@ -304,7 +304,7 @@ static partial class Tests
         // The queued spawn setup (health, veterancy, lifetime, containment) must survive a snapshot.
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(first), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == first.StateHash && restored.Metrics == first.Metrics, "The spawn queue round-trips through the snapshot.");
-        for (var tick = 0; tick < 90; tick++)
+        for (var tick = 0; tick < first.Frames(90); tick++)
             Check.That(first.Step().StateHash == restored.Step().StateHash && second.Step().StateHash == first.StateHash, "Restored and independent worlds stay hash-identical.");
         var healths = first.Entities.Where(value => value.Template.Name is "Bit" or "Plain" && value.Id.Value != 1).Select(value => value.Body!.Health).ToArray();
         Check.That(healths.Length >= 6 && healths.Any(value => value < Fixed.FromInt(100)) && healths.Distinct().Count() > 1, "The random health range produced varied health values.");

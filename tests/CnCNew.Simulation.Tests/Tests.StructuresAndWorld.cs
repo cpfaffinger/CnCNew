@@ -675,9 +675,9 @@ static partial class Tests
     {
         public StructuresWorld(bool lake = false)
         {
-            Fixture = new SyntheticFixture(SimulationRate.Original, files: StructuresFiles());
+            Fixture = new SyntheticFixture(TestRate.Default, files: StructuresFiles());
             Terrain = StructuresTerrain(lake);
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, StructuresPlayers, SyntheticFixture.FixtureId, Fixture.Fingerprint, Terrain.Fingerprint), Fixture.Templates, Terrain);
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, StructuresPlayers, SyntheticFixture.FixtureId, Fixture.Fingerprint, Terrain.Fingerprint), Fixture.Templates, Terrain);
             Feeder = new Feeder(World);
         }
 
@@ -705,9 +705,9 @@ static partial class Tests
             return World.FindEntity(id)!;
         }
 
-        public void Run(int ticks)
+        public void Run(int frames) // original frames (1/30 s of game time)
         {
-            for (var tick = 0; tick < ticks; tick++) World.Step();
+            for (var tick = 0; tick < World.Frames(frames); tick++) World.Step();
         }
 
         public Entity[] Of(string template) => World.Entities.Where(entity => entity.Template.Name == template).OrderBy(entity => entity.Id.Value).ToArray();
@@ -767,7 +767,7 @@ static partial class Tests
         var collapse = Module<StructureCollapseUpdate>(building);
         var events = new List<SimEvent>();
         sw.World.Kill(building.Id);
-        for (var tick = 0; tick < 200 && !collapse.IsCollapsed; tick++) events.AddRange(sw.World.Step().Events);
+        for (var tick = 0; tick < sw.World.Frames(200) && !collapse.IsCollapsed; tick++) events.AddRange(sw.World.Step().Events);
         Check.That(collapse.IsCollapsed, "The destroyed building finished collapsing.");
         Check.That(events.Any(value => value.Kind == SimEventKind.FxRequested && value.Text == "FX_Test"), "The INITIAL effect list was requested.");
         Check.That(events.Any(value => value.Kind == SimEventKind.FxRequested && value.Text == "FX_Other"), "The FINAL effect list was requested.");
@@ -786,7 +786,7 @@ static partial class Tests
         a.Run(12);
         b.Run(12);
         var restored = StructuresWorld.RestoreOf(a);
-        for (var tick = 0; tick < 80; tick++)
+        for (var tick = 0; tick < a.World.Frames(80); tick++)
         {
             a.World.Step();
             b.World.Step();
@@ -889,7 +889,7 @@ static partial class Tests
         var reachedStation = false;
         var leftStation = false;
         var spacingChecked = false;
-        for (var tick = 0; tick < 700 && !spacingChecked; tick++)
+        for (var tick = 0; tick < sw.World.Frames(700) && !spacingChecked; tick++)
         {
             sw.World.Step();
             maxSpeed = Fixed.Max(maxSpeed, rail.Speed);
@@ -907,8 +907,8 @@ static partial class Tests
         Check.That(reachedStation, "The train braked and waited at the station waypoint.");
         Check.That(leftStation, "After the waiting time the train set off again.");
         Check.That(spacingChecked, "The train ran on past the station.");
-        Check.That(maxSpeed <= Fixed.FromInt(3), $"The speed never exceeded SpeedMax ({maxSpeed}).");
-        Check.That(maxSpeed > Fixed.FromInt(2), "The locomotive reached (nearly) its top speed.");
+        Check.That(maxSpeed <= sw.World.PerFrame(Fixed.FromInt(3)), $"The speed never exceeded SpeedMax ({maxSpeed}).");
+        Check.That(maxSpeed > sw.World.PerFrame(Fixed.FromInt(2)), "The locomotive reached (nearly) its top speed.");
 
         // The end of an open track: the whole train leaves it and is destroyed, one carriage after the other.
         sw.Run(400);
@@ -1068,7 +1068,7 @@ static partial class Tests
         var scaffold = scaffoldWorld.Spawn("SwScaffold", 0, 100, 100);
         var module = Module<BridgeScaffoldBehavior>(scaffold);
         module.SetPositions((Fixed.FromInt(100), Fixed.FromInt(100), Fixed.Zero), (Fixed.FromInt(100), Fixed.FromInt(100), Fixed.FromInt(30)), (Fixed.FromInt(160), Fixed.FromInt(100), Fixed.FromInt(30)));
-        module.SetSpeeds(Fixed.FromInt(4), Fixed.FromInt(3));
+        module.SetSpeeds(scaffoldWorld.World.PerFrame(Fixed.FromInt(4)), scaffoldWorld.World.PerFrame(Fixed.FromInt(3)));
         module.SetMotion(scaffoldWorld.World, BridgeScaffoldBehavior.Motion.Rise);
         scaffoldWorld.Run(10);
         Check.That(scaffold.Z > Fixed.Zero && scaffold.Z < Fixed.FromInt(30) && module.CurrentMotion == BridgeScaffoldBehavior.Motion.Rise, "The scaffold is rising.");
@@ -1221,7 +1221,7 @@ static partial class Tests
         Check.That(!onWave.IsMoving, "The wave waits its WaveDelay before moving.");
         sw.Run(80);
         Check.That(onWave.IsMoving && wave.X >= Fixed.FromInt(100), $"Then it moves along its waypoint path ({wave.X}, {wave.Y}).");
-        for (var tick = 0; tick < 200 && !low.EffectivelyDead; tick++) sw.World.Step();
+        for (var tick = 0; tick < sw.World.Frames(200) && !low.EffectivelyDead; tick++) sw.World.Step();
         Check.That(low.EffectivelyDead && low.HasStatus(ObjectStatusBits.Index("WET")), "The wave flooded the object in its way.");
         sw.Run(200);
         Check.That(sw.World.FindEntity(wave.Id) is null || sw.World.FindEntity(wave.Id)!.DestroyRequested, "At the end of its path the wave is destroyed.");
@@ -1258,7 +1258,7 @@ static partial class Tests
         b.Run(150);
         var restored = StructuresWorld.RestoreOf(a);
         Check.That(restored.World.StateHash == a.World.StateHash, "The restored world has the state hash of the saved one.");
-        for (var tick = 0; tick < 250; tick++)
+        for (var tick = 0; tick < a.World.Frames(250); tick++)
         {
             a.World.Step();
             b.World.Step();
@@ -1285,7 +1285,7 @@ static partial class Tests
         var content = CnCNew.Content.ContentFileSystem.Open(directory);
         var options = CnCNew.Data.Compilation.DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = CnCNew.Data.Compilation.MapOverlayMode.Exclude };
         var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new RealSource(content), CnCNew.Data.Registry.ModuleRegistry.Default, options);
-        var catalog = CnCNew.Simulation.Templates.TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = CnCNew.Simulation.Templates.TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var carriers = catalog.Templates.Where(template => template.Modules.Any(module => StructureGroupModules.Contains(module.Name)) || template.MissingModules.Any(module => StructureGroupModules.Contains(module))).ToArray();
         var refused = carriers.Where(template => template.MissingModules.Any(module => StructureGroupModules.Any(name => module.Contains(name, StringComparison.Ordinal)))).ToArray();
@@ -1301,7 +1301,7 @@ static partial class Tests
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
         (ulong[] Hashes, int Collapsed, int Collapsing) Run()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 11, players, "real-structures", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 11, players, "real-structures", fingerprint), catalog);
             var sequence = 0UL;
             var column = 0;
             foreach (var template in spawnable)
@@ -1312,10 +1312,10 @@ static partial class Tests
                 Check.That(world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, template.Name, new PlayerId(column % 2 + 1), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, $"{template.Name} spawns.");
             }
             var hashes = new List<ulong>();
-            for (var tick = 0; tick < 120; tick++) hashes.Add(world.Step().StateHash);
+            for (var tick = 0; tick < world.Frames(120); tick++) hashes.Add(world.Step().StateHash);
             foreach (var entity in world.Entities.OrderBy(value => value.Id.Value).ToArray())
                 world.Submit(new KillCommand(PlayerId.System, ++sequence, world.Tick, entity.Id));
-            for (var tick = 0; tick < 900; tick++) hashes.Add(world.Step().StateHash);
+            for (var tick = 0; tick < world.Frames(900); tick++) hashes.Add(world.Step().StateHash);
             world.VerifyIncrementalHash();
             var collapses = world.Entities.SelectMany(entity => entity.Modules.OfType<StructureCollapseUpdate>()).ToArray();
             return ([..hashes], collapses.Count(value => value.IsCollapsed), collapses.Count(value => value.IsCollapsing));
@@ -1330,12 +1330,12 @@ static partial class Tests
         var terrain = StructuresTerrain();
         TrainRun RunTrain()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(2), SimulationRate.Original, 3, players, "real-train", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(2), TestRate.Default, 3, players, "real-train", fingerprint, terrain.Fingerprint), catalog, terrain);
             Check.That(world.Submit(new SpawnCommand(PlayerId.System, 1, world.Tick, "TrainEngine", PlayerId.System, Fixed.FromInt(60), Fixed.FromInt(100), Fixed.Zero, Fixed.Zero)).Accepted, "The retail locomotive spawns.");
             var hashes = new List<ulong>();
             var seen = 0;
             var braked = false;
-            for (var tick = 0; tick < 450; tick++)
+            for (var tick = 0; tick < world.Frames(450); tick++)
             {
                 hashes.Add(world.Step().StateHash);
                 var cars = world.Entities.Count(entity => entity.Template.Name is "TrainCoal" or "TrainCab");

@@ -592,9 +592,9 @@ static partial class Tests
 
     private static SimulationWorld CratesWorld(out Feeder feeder, bool computerAlpha = false, uint seed = 1)
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles());
         ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha", IsComputer: computerAlpha), new(new PlayerId(2), "Beta")];
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, seed, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, seed, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }
@@ -611,11 +611,11 @@ static partial class Tests
 
     private static bool CsExists(SimulationWorld world, Entity entity) => world.FindEntity(entity.Id) is not null;
 
-    /// <summary>Steps until <paramref name="done"/> holds (at most <paramref name="limit"/> ticks) and returns every event of those ticks.</summary>
+    /// <summary>Steps until <paramref name="done"/> holds (at most <paramref name="limit"/> original frames, 1/30 s of game time each) and returns every event of those steps.</summary>
     private static List<SimEvent> CsRun(SimulationWorld world, int limit, Func<bool>? done = null)
     {
         var events = new List<SimEvent>();
-        for (var tick = 0; tick < limit; tick++)
+        for (var tick = 0; tick < world.Frames(limit); tick++)
         {
             events.AddRange(world.Step().Events);
             if (done is not null && done()) break;
@@ -841,9 +841,9 @@ static partial class Tests
 
         // A snapshot taken mid-ride continues identically.
         var bytes = WorldSnapshot.Write(world);
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles());
         var restored = WorldSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint);
-        for (var tick = 0; tick < 20; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The ride continues identically after a snapshot restore (tick {tick}).");
+        for (var tick = 0; tick < world.Frames(20); tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The ride continues identically after a snapshot restore (tick {tick}).");
 
         // When the truck is destroyed the hijacker reappears where it was.
         var lastX = truck.X;
@@ -910,7 +910,7 @@ static partial class Tests
         var spy4 = Send(200, plant);
         long hit = -1;
         CsRun(world, 100, () => { if (!CsExists(world, spy4)) hit = world.Tick; return hit >= 0; });
-        Check.That(world.PowerSabotagedUntil(beta) >= hit + 59 && world.PowerSabotagedUntil(beta) <= hit + 61, $"A power-plant saboteur sets the victim's power-sabotaged tick 2 s ahead ({world.PowerSabotagedUntil(beta)}, now {hit}).");
+        Check.That(world.PowerSabotagedUntil(beta) >= hit + world.Frames(59) && world.PowerSabotagedUntil(beta) <= hit + world.Frames(61), $"A power-plant saboteur sets the victim's power-sabotaged tick 2 s ahead ({world.PowerSabotagedUntil(beta)}, now {hit}).");
 
         // A military-factory saboteur stops the production queue for SabotageDuration (3 s = 90 ticks).
         var spy5 = Send(400, factory);
@@ -923,7 +923,7 @@ static partial class Tests
         CsRun(world, 80);
         Check.That(!world.Entities.Any(value => value.Template.Name == "SabProduct"), $"Nothing leaves the sabotaged factory while it is disabled (tick {world.Tick - disabledAt} after the sabotage).");
         CsRun(world, 100, () => world.Entities.Any(value => value.Template.Name == "SabProduct"));
-        Check.That(world.Entities.Any(value => value.Template.Name == "SabProduct") && world.Tick - disabledAt >= 110, $"The queue resumes once the duration is over ({world.Tick - disabledAt} ticks after the sabotage).");
+        Check.That(world.Entities.Any(value => value.Template.Name == "SabProduct") && world.Tick - disabledAt >= world.Frames(110), $"The queue resumes once the duration is over ({world.Tick - disabledAt} ticks after the sabotage).");
 
         // A snapshot taken while the factory is disabled keeps it disabled.
         var spy6 = Send(400, factory);
@@ -933,8 +933,8 @@ static partial class Tests
         feeder.QueueProduction(2, factory.Id.Value, "SabProduct");
         CsRun(world, 20);
         var bytes = WorldSnapshot.Write(world);
-        var restored = WorldSnapshot.Restore(bytes, new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Fingerprint);
-        for (var tick = 0; tick < 150; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The disabled factory continues identically after a restore (tick {tick}).");
+        var restored = WorldSnapshot.Restore(bytes, new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Fingerprint);
+        for (var tick = 0; tick < world.Frames(150); tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The disabled factory continues identically after a restore (tick {tick}).");
         // An ally's building is not a target.
         var spy7 = Send(500, friendly);
         CsRun(world, 100);
@@ -1001,8 +1001,8 @@ static partial class Tests
         timed2.Modules.OfType<StickyBombUpdate>().Single().InitStickyBomb(world, runner2, null);
         feeder.SetMoveTarget(1, runner2.Id.Value, 980, 100);
         CsRun(world, 5);
-        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Fingerprint);
-        for (var tick = 0; tick < 60; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"An attached bomb continues identically after a restore (tick {tick}).");
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Fingerprint);
+        for (var tick = 0; tick < world.Frames(60); tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"An attached bomb continues identically after a restore (tick {tick}).");
         Check.That(!CsExists(world, timed2), "The timed bomb's lifetime (1 s) killed it.");
     }
 
@@ -1035,14 +1035,14 @@ static partial class Tests
         Check.That(!plain.HasStatus(stealth), "An object without a StealthUpdate cannot be granted anything.");
 
         // The grant is permanent: it survives a snapshot.
-        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Fingerprint);
-        for (var tick = 0; tick < 100; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The grant continues identically after a restore (tick {tick}).");
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Fingerprint);
+        for (var tick = 0; tick < world.Frames(100); tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The grant continues identically after a restore (tick {tick}).");
         Check.That(close.HasStatus(stealth), "Stealth is still on.");
 
         // A stealth grant with a duration ends when it runs out, and at once when the player gives an order.
         var timedUnit = CsSpawn(world, feeder, "VisibleInfantry", 1, 600);
         var stealthModule = timedUnit.Modules.OfType<StealthUpdate>().Single();
-        stealthModule.ReceiveGrant(world, true, 5);
+        stealthModule.ReceiveGrant(world, true, world.Frames(5));
         Check.That(timedUnit.HasStatus(stealth), "ReceiveGrant switches stealth on.");
         CsRun(world, 3);
         Check.That(timedUnit.HasStatus(stealth), "The grant lasts a few ticks.");
@@ -1060,7 +1060,7 @@ static partial class Tests
         var world = CratesWorld(out var feeder, seed: 11);
         var wanderer = CsSpawn(world, feeder, "FixtureWanderer", 1, 100, 100);
         var positions = new List<(Fixed X, Fixed Y)>();
-        for (var tick = 0; tick < 200; tick++)
+        for (var tick = 0; tick < world.Frames(200); tick++)
         {
             world.Step();
             positions.Add((wanderer.X, wanderer.Y));
@@ -1074,14 +1074,14 @@ static partial class Tests
         // Same seed, same walk; another seed, another walk; and a restore continues the walk.
         var twin = CratesWorld(out var twinFeeder, seed: 11);
         CsSpawn(twin, twinFeeder, "FixtureWanderer", 1, 100, 100);
-        for (var tick = 0; tick < 200; tick++) twin.Step();
+        for (var tick = 0; tick < twin.Frames(200); tick++) twin.Step();
         Check.That(twin.StateHash == world.StateHash, "The walk is deterministic for a seed.");
         var other = CratesWorld(out var otherFeeder, seed: 12);
         var otherWanderer = CsSpawn(other, otherFeeder, "FixtureWanderer", 1, 100, 100);
-        for (var tick = 0; tick < 200; tick++) other.Step();
+        for (var tick = 0; tick < other.Frames(200); tick++) other.Step();
         Check.That(otherWanderer.X != wanderer.X || otherWanderer.Y != wanderer.Y, "Another seed gives another walk.");
-        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Fingerprint);
-        for (var tick = 0; tick < 100; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The walk continues identically after a restore (tick {tick}).");
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Fingerprint);
+        for (var tick = 0; tick < world.Frames(100); tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The walk continues identically after a restore (tick {tick}).");
     }
 
     // ============================================================================================================ ProjectileStreamUpdate
@@ -1122,14 +1122,14 @@ static partial class Tests
         Check.That(module.Count == 5, $"Culling removes the hole and the gone projectiles from the front ({module.Count}).");
         Check.That(CsExists(world, stream), "The stream lives while its owner exists.");
 
-        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: CratesAndSpecialsFiles()).Fingerprint);
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Templates, new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles()).Fingerprint);
         var restoredModule = restored.Entities.Single(value => value.Template.Name == "FixtureStream").Modules.OfType<ProjectileStreamUpdate>().Single();
         Check.That(restoredModule.Count == module.Count && restoredModule.Owner == module.Owner, "The buffer survives a snapshot.");
         world.Kill(owner.Id);
         foreach (var shot in shots.Skip(2)) world.Kill(shot.Id);
         CsRun(world, 6);
         Check.That(!CsExists(world, stream), "With an empty buffer and no owner the stream removes itself.");
-        for (var tick = 0; tick < 6; tick++) restored.Step();
+        for (var tick = 0; tick < restored.Frames(6); tick++) restored.Step();
         Check.That(restored.Entities.Any(value => value.Template.Name == "FixtureStream"), "(The restored copy's owner still lives, so its stream does too.)");
     }
 }

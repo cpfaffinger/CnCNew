@@ -264,7 +264,7 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) SlotWorld(params (string Template, int Owner, int X, int Y)[] objects)
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: WeaponSlotFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         foreach (var (template, owner, x, y) in objects) feeder.Spawn(owner, template, owner: owner, x: x, y: y, z: template == "Heli" ? 100 : 0);
@@ -279,7 +279,7 @@ static partial class Tests
 
     public static void WeaponSlotsTemplateModel()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: WeaponSlotFiles());
         var catalog = fixture.Templates;
         string Name(int weapon) => weapon < 0 ? "-" : catalog.Weapons[weapon].Name;
 
@@ -310,11 +310,11 @@ static partial class Tests
         {
             ["Data/INI/Object/Broken.ini"] = "Object Broken\n  KindOf = SELECTABLE\n  Body = ActiveBody Body01\n  End\n  WeaponSet\n    Conditions = None\n" + weaponSet + "  End\nEnd\n",
         };
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = PRIMARY NoSuchWeapon\n")).Templates, "NoSuchWeapon");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = PRIMARY MainGun\n    Frobnicate = Yes\n")).Templates, "Frobnicate");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = PRIMARY MainGun\n    AutoChooseSources = PRIMARY FROM_NOBODY\n")).Templates, "FROM_NOBODY");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = PRIMARY MainGun\n    PreferredAgainst = PRIMARY NOT_A_KIND\n")).Templates, "NOT_A_KIND");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = QUARTERNARY MainGun\n")).Templates, "weapon slot name");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: With("    Weapon = PRIMARY NoSuchWeapon\n")).Templates, "NoSuchWeapon");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: With("    Weapon = PRIMARY MainGun\n    Frobnicate = Yes\n")).Templates, "Frobnicate");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: With("    Weapon = PRIMARY MainGun\n    AutoChooseSources = PRIMARY FROM_NOBODY\n")).Templates, "FROM_NOBODY");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: With("    Weapon = PRIMARY MainGun\n    PreferredAgainst = PRIMARY NOT_A_KIND\n")).Templates, "NOT_A_KIND");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: With("    Weapon = QUARTERNARY MainGun\n")).Templates, "weapon slot name");
     }
 
     public static void WeaponSlotsBothSlotsFireAtDifferentTargets()
@@ -329,14 +329,14 @@ static partial class Tests
         Check.That(feeder.FireWeapon(1, dual.Id.Value, hulk).Accepted, "The target at 80 is within the main gun's range only.");
         var first = world.Step();
         Check.That(WeaponsFired(first, dual.Id.Value).SequenceEqual(["MainGun"]), "The main gun fires at it.");
-        Check.That(dual.ClipOf(0) == 1 && dual.ReadyTickOf(0) == start + 15 && dual.LastFireTickOf(0) == start && dual.CurrentWeaponSlot == 0, "Primary slot: one round used, ready 15 ticks later.");
+        Check.That(dual.ClipOf(0) == 1 && dual.ReadyTickOf(0) == start + world.Frames(15) && dual.LastFireTickOf(0) == start && dual.CurrentWeaponSlot == 0, "Primary slot: one round used, ready 15 ticks later.");
         Check.That(world.FindEntity(new EntityId(hulk))!.Body!.Health == Fixed.FromInt(100000 - 40), "40 armor-piercing damage against the default armor.");
 
         Check.That(feeder.FireWeapon(1, dual.Id.Value, dummy).Accepted, "One tick later the main gun is reloading, the machine gun is ready: the order is accepted.");
         var second = world.Step();
         Check.That(WeaponsFired(second, dual.Id.Value).SequenceEqual(["MachineGun"]), "The secondary slot fires at the other target.");
-        Check.That(dual.ClipOf(1) == int.MaxValue && dual.ReadyTickOf(1) == start + 1 + 3 && dual.LastFireTickOf(1) == start + 1 && dual.CurrentWeaponSlot == 1, "Secondary slot: its own 3-tick delay and last-fire tick.");
-        Check.That(dual.ClipOf(0) == 1 && dual.ReadyTickOf(0) == start + 15 && dual.LastFireTickOf(0) == start && dual.LastFireTick == start + 1, "The primary slot is untouched; the object's LastFireTick follows any slot.");
+        Check.That(dual.ClipOf(1) == int.MaxValue && dual.ReadyTickOf(1) == start + 1 + world.Frames(3) && dual.LastFireTickOf(1) == start + 1 && dual.CurrentWeaponSlot == 1, "Secondary slot: its own 3-tick delay and last-fire tick.");
+        Check.That(dual.ClipOf(0) == 1 && dual.ReadyTickOf(0) == start + world.Frames(15) && dual.LastFireTickOf(0) == start && dual.LastFireTick == start + 1, "The primary slot is untouched; the object's LastFireTick follows any slot.");
         Check.That(world.FindEntity(new EntityId(dummy))!.Body!.Health == Fixed.FromInt(100000 - 5), "5 small-arms damage.");
 
         // Out of the machine gun's range with the main gun reloading: the object waits instead of firing the wrong weapon.
@@ -408,7 +408,7 @@ static partial class Tests
         Check.That(feeder.FireWeapon(1, hunter.Id.Value, rifleman).Accepted, "The preferred machine gun fires.");
         Check.That(WeaponsFired(world.Step(), hunter.Id.Value).SequenceEqual(["MachineGun"]), "...against the infantry.");
         Check.That(!feeder.FireWeapon(1, hunter.Id.Value, rifleman).Accepted && hunter.ClipOf(0) == 2, "While the machine gun waits out its 3 ticks the ready main gun is not used: the preferred weapon is kept.");
-        world.Step();
+        for (var wait = 1; wait < world.Frames(3) - 1; wait++) world.Step(); // the rest of the three-frame delay, less the step below
         world.Step();
         Check.That(feeder.FireWeapon(1, hunter.Id.Value, rifleman).Accepted, "Once the machine gun is ready it fires again.");
         Check.That(WeaponsFired(world.Step(), hunter.Id.Value).SequenceEqual(["MachineGun"]) && hunter.ClipOf(0) == 2, "Still the machine gun; the main gun never fired.");
@@ -425,19 +425,19 @@ static partial class Tests
         world.Step();
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Secondary).Accepted, "Machine gun, while the gun waits.");
         world.Step();
-        while (world.Tick < start + 15) world.Step();
+        while (world.Tick < start + world.Frames(15)) world.Step();
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted, "Gun, second round.");
         world.Step();
-        Check.That(trio.ClipOf(0) == 0 && trio.ReadyTickOf(0) == start + 15 + 60, $"The emptied gun reloads for ClipReloadTime (60 ticks): ready at {trio.ReadyTickOf(0)}.");
-        Check.That(trio.ClipOf(1) == int.MaxValue && trio.ReadyTickOf(1) == start + 1 + 3 && trio.ClipOf(2) == 4 && trio.ReadyTickOf(2) == 0, "The other slots keep their own clip and timer.");
+        Check.That(trio.ClipOf(0) == 0 && trio.ReadyTickOf(0) == start + world.Frames(15 + 60), $"The emptied gun reloads for ClipReloadTime (60 ticks): ready at {trio.ReadyTickOf(0)}.");
+        Check.That(trio.ClipOf(1) == int.MaxValue && trio.ReadyTickOf(1) == start + 1 + world.Frames(3) && trio.ClipOf(2) == 4 && trio.ReadyTickOf(2) == 0, "The other slots keep their own clip and timer.");
         // The machine gun keeps firing during the gun's reload; the rocket pods have their own clip of 4.
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Secondary).Accepted && !feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted,
             "The machine gun is available while the gun reloads.");
         world.Step();
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Tertiary).Accepted, "The rocket pods fire independently.");
         world.Step();
-        Check.That(trio.ClipOf(2) == 3 && trio.ReadyTickOf(2) == world.Tick - 1 + 6, "Rocket pods: one of 4 used, 200 ms (6 ticks) delay.");
-        while (world.Tick < start + 15 + 60) world.Step();
+        Check.That(trio.ClipOf(2) == 3 && trio.ReadyTickOf(2) == world.Tick - 1 + world.Frames(6), "Rocket pods: one of 4 used, 200 ms (6 ticks) delay.");
+        while (world.Tick < start + world.Frames(15 + 60)) world.Step();
         Check.That(feeder.FireWeaponSlot(1, trio.Id.Value, dummy, WeaponSlot.Primary).Accepted, "After 60 ticks the gun's clip is full again and it fires.");
         world.Step();
         Check.That(trio.ClipOf(0) == 1, "A refilled clip of 2 minus the shot.");
@@ -451,14 +451,14 @@ static partial class Tests
         var start = world.Tick;
         Check.That(feeder.FireWeaponSlot(1, sharing.Id.Value, dummy, WeaponSlot.Secondary).Accepted, "The machine gun fires.");
         world.Step();
-        Check.That(sharing.ReadyTickOf(0) == start + 3 && sharing.ReadyTickOf(1) == start + 3, "ShareWeaponReloadTime: the gun now waits for the machine gun's delay too.");
-        while (world.Tick < start + 3) world.Step();
+        Check.That(sharing.ReadyTickOf(0) == start + world.Frames(3) && sharing.ReadyTickOf(1) == start + world.Frames(3), "ShareWeaponReloadTime: the gun now waits for the machine gun's delay too.");
+        while (world.Tick < start + world.Frames(3)) world.Step();
         Check.That(feeder.FireWeaponSlot(1, sharing.Id.Value, dummy, WeaponSlot.Primary).Accepted, "Both are ready after 3 ticks.");
         world.Step();
-        Check.That(sharing.ReadyTickOf(1) == start + 3 + 15 && sharing.ReadyTickOf(0) == start + 3 + 15, "The gun's 15-tick delay holds the machine gun back as well.");
+        Check.That(sharing.ReadyTickOf(1) == start + world.Frames(3 + 15) && sharing.ReadyTickOf(0) == start + world.Frames(3 + 15), "The gun's 15-tick delay holds the machine gun back as well.");
         Check.That(!feeder.FireWeaponSlot(1, sharing.Id.Value, dummy, WeaponSlot.Secondary).Accepted, "So the machine gun cannot fire in between.");
         // The shared timers are in the snapshot.
-        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles()).Fingerprint);
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(TestRate.Default, files: WeaponSlotFiles()).Templates, new SyntheticFixture(TestRate.Default, files: WeaponSlotFiles()).Fingerprint);
         var copy = restored.FindEntity(sharing.Id)!;
         Check.That(copy.ReadyTickOf(0) == sharing.ReadyTickOf(0) && copy.ReadyTickOf(1) == sharing.ReadyTickOf(1), "The restored object keeps the shared timers.");
     }
@@ -494,7 +494,7 @@ static partial class Tests
         Check.That(feeder.FireWeaponSlot(1, scripted.Id.Value, near, WeaponSlot.Secondary).Accepted, "The big gun fires on an explicit order.");
         world.Step();
         Check.That(scripted.WeaponLock == WeaponLockKind.Temporary && scripted.ClipOf(1) == 1, "Locked after the first round.");
-        for (var i = 0; i < 15; i++) world.Step();
+        for (var i = 0; i < world.Frames(15); i++) world.Step();
         Check.That(feeder.FireWeapon(1, scripted.Id.Value, near).Accepted, "An ordinary order while locked uses the locked slot.");
         Check.That(WeaponsFired(world.Step(), scripted.Id.Value).SequenceEqual(["BigGun"]), "...the big gun, although automatic choice would never pick it for a player.");
         Check.That(scripted.ClipOf(1) == 0 && scripted.WeaponLock == WeaponLockKind.None, "The emptied clip released the temporary lock.");
@@ -542,14 +542,14 @@ static partial class Tests
         var (first, firstFeeder, fixture) = SlotWorld(("Trio", 1, 0, 0), ("Sharing", 1, 0, 30), ("Dummy", 2, 50, 0), ("Rifleman", 2, 50, 30));
         var (second, secondFeeder, _) = SlotWorld(("Trio", 1, 0, 0), ("Sharing", 1, 0, 30), ("Dummy", 2, 50, 0), ("Rifleman", 2, 50, 30));
         // Every tick both objects shoot at whatever the model lets them (rejections are fine); now and then the pods are ordered by slot.
-        List<ulong> Run(SimulationWorld world, Feeder feeder, int ticks)
+        List<ulong> Run(SimulationWorld world, Feeder feeder, int frames)
         {
             var hashes = new List<ulong>();
-            for (var i = 0; i < ticks; i++)
+            for (var i = 0; i < world.Frames(frames); i++)
             {
                 feeder.FireWeapon(1, IdOf(world, "Trio"), IdOf(world, "Dummy"));
                 feeder.FireWeapon(1, IdOf(world, "Sharing"), IdOf(world, "Rifleman"));
-                if (world.Tick % 40 == 10) feeder.FireWeaponSlot(1, IdOf(world, "Trio"), IdOf(world, "Dummy"), WeaponSlot.Tertiary);
+                if (world.Tick % world.Frames(40) == world.Frames(10)) feeder.FireWeaponSlot(1, IdOf(world, "Trio"), IdOf(world, "Dummy"), WeaponSlot.Tertiary);
                 hashes.Add(world.Step().StateHash);
             }
             return hashes;
@@ -588,7 +588,7 @@ static partial class Tests
 
     public static void WeaponSlotsCommandsRoundTripInReplays()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: WeaponSlotFiles());
         var player1 = new PlayerId(1);
         var player2 = new PlayerId(2);
         var commands = new List<SimCommand>
@@ -606,7 +606,7 @@ static partial class Tests
             if (tick == 100) commands.Add(new SetWeaponLockCommand(player1, ++sequence, tick, new EntityId(1), 0, WeaponLockKind.None));
         }
         var ordered = commands.OrderBy(value => value.Tick).ThenBy(value => value.Player.Value).ThenBy(value => value.Sequence).ToImmutableArray();
-        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, 30, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), TwoPlayers, 160, 20);
+        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, TestRate.Default.TicksPerSecond, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), TwoPlayers, 160, 20);
         var probe = ReplayRunner.Run(new ReplayFile(header, ordered, []), fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
         var file = ReplayFormat.Read(ReplayFormat.Write(new ReplayFile(header, ordered, probe.Checkpoints)));
         Check.That(file.Commands.SequenceEqual(ordered), "Fire commands with slot and origin and weapon lock commands survive the replay file.");
@@ -685,10 +685,10 @@ static partial class Tests
         var victim = NamedIn(session, "Victim")!;
         var shooter = NamedIn(session, "Shooter")!;
         var switcher = NamedIn(session, "Switcher")!;
-        Run(session, 3); // vision first: a FIRE_WEAPON order at a target the player cannot see is refused
+        Run(session, session.Frames(3)); // vision first: a FIRE_WEAPON order at a target the player cannot see is refused
         var before = victim.Body!.Health;
         session.Engine.SignalUiInteraction("go");
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(before - victim.Body.Health == Fixed.FromInt(50), $"A FIRE_WEAPON button names the SECONDARY slot: the carrier shoots SlotBig (50), not its primary gun (20): {before - victim.Body.Health} dealt; diagnostics: {string.Join("; ", session.Engine.Diagnostics.Keys)}; rejections: {string.Join(",", session.World.RejectionCounts.Select((count, index) => count > 0 ? $"{(CommandRejection)index}={count}" : ""))}.");
         Check.That(shooter.WeaponLock == WeaponLockKind.Temporary && shooter.CurrentWeaponSlot == 1, "...and the button pinned that slot.");
         Check.That(switcher.WeaponLock == WeaponLockKind.Permanent && switcher.CurrentWeaponSlot == 1, "A SWITCH_WEAPON button locks its slot permanently.");

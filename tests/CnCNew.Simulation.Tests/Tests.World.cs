@@ -137,13 +137,13 @@ static partial class Tests
     private static readonly ImmutableArray<PlayerConfiguration> TwoPlayers = [new(new PlayerId(1), "Alpha"), new(new PlayerId(2), "Beta")];
 
     public static SimulationWorld NewWorld(SyntheticFixture fixture, uint seed = 1)
-        => new(new WorldConfiguration(new WorldId(1), SimulationRate.Original, seed, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        => new(new WorldConfiguration(new WorldId(1), TestRate.Default, seed, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
 
     private static string Describe(SimEvent simEvent) => $"{simEvent.Kind}:{simEvent.Entity}:{simEvent.Text}:{simEvent.Value}";
 
     public static void Lifecycle()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         Check.That(world.Tick == 0 && world.Metrics.Entities == 0, "A new world is empty at tick 0.");
@@ -178,7 +178,7 @@ static partial class Tests
 
     public static void BodyAndDieModules()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         foreach (var template in new[] { "Tank", "Building", "Ghost", "Highlander", "Prop", "Sleeper" }) feeder.Spawn(1, template);
@@ -265,7 +265,7 @@ static partial class Tests
 
     public static void LifetimeAndDeletion()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         const uint seed = 4242;
         var world = NewWorld(fixture, seed);
         var feeder = new Feeder(world);
@@ -279,14 +279,14 @@ static partial class Tests
         var sparkB = Math.Max(1, reference.Range(15, 45));
         var puff = Math.Max(1, reference.Range(9, 27));
         var deaths = new Dictionary<uint, (long Tick, string Kind)>();
-        for (var tick = 1; tick < 60; tick++)
+        for (var tick = 1; tick < world.Frames(60); tick++)
         {
             foreach (var simEvent in world.Step().Events)
                 if (simEvent.Kind is SimEventKind.EntityDied or SimEventKind.EntityDestroyed)
                     deaths.TryAdd(simEvent.Entity.Value, (simEvent.Tick, simEvent.Kind.ToString()));
         }
-        Check.That(deaths[1] == (sparkA, "EntityDied") && deaths[2] == (sparkB, "EntityDied"), $"Sparks are killed at their drawn lifetime ({sparkA}, {sparkB}); got {deaths[1]}, {deaths[2]}.");
-        Check.That(deaths[3] == (puff, "EntityDestroyed"), $"The puff is destroyed (not killed) at its lifetime {puff}; got {deaths[3]}.");
+        Check.That(deaths[1] == (world.Frames(sparkA), "EntityDied") && deaths[2] == (world.Frames(sparkB), "EntityDied"), $"Sparks are killed at their drawn lifetime ({sparkA}, {sparkB}); got {deaths[1]}, {deaths[2]}.");
+        Check.That(deaths[3] == (world.Frames(puff), "EntityDestroyed"), $"The puff is destroyed (not killed) at its lifetime {puff}; got {deaths[3]}.");
         Check.That(world.Metrics.Entities == 0 && world.Metrics.ScheduledUpdates == 0, "Expired entities leave no scheduled updates behind.");
 
         // A lifetime of zero is raised to one tick.
@@ -294,16 +294,16 @@ static partial class Tests
         {
             ["Data/INI/Object/Zero.ini"] = "Object Zero\n  Behavior = DeletionUpdate D\n    MinLifetime = 0\n    MaxLifetime = 0\n  End\nEnd\nObject Forever\n  Behavior = DeletionUpdate D\n    MinLifetime = -1\n    MaxLifetime = -1\n  End\nEnd\n",
         };
-        var custom = new SyntheticFixture(SimulationRate.Original, files: files);
+        var custom = new SyntheticFixture(TestRate.Default, files: files);
         var zeroWorld = NewWorld(custom, 9);
         var zeroFeeder = new Feeder(zeroWorld);
         zeroFeeder.Spawn(1, "Zero");
         zeroFeeder.Spawn(1, "Forever");
-        zeroWorld.Step();
+        for (var i = 0; i < zeroWorld.Frames(1); i++) zeroWorld.Step();
         var removed = zeroWorld.Step().Events.Single(value => value.Kind == SimEventKind.EntityDestroyed);
-        Check.That(removed.Entity.Value == 1 && removed.Tick == 1, "A zero lifetime becomes one tick.");
+        Check.That(removed.Entity.Value == 1 && removed.Tick == zeroWorld.Frames(1), "A zero lifetime becomes one frame.");
         var forever = zeroWorld.FindEntity(new EntityId(2))!;
-        Check.That(forever.Modules.OfType<DeletionUpdate>().Single().DieTick == 128849019, "-1 wraps to 4294967295 ms = 128849019 ticks like the reference (MD_GLA01 SalvageCrate).");
+        Check.That(forever.Modules.OfType<DeletionUpdate>().Single().DieTick == zeroWorld.Frames(128849019), "-1 wraps to 4294967295 ms = 128849019 ticks like the reference (MD_GLA01 SalvageCrate).");
     }
 
     private static (SimulationWorld World, ProbeLog Log, SyntheticFixture Fixture) ProbeWorld()
@@ -369,7 +369,7 @@ static partial class Tests
             End
             """,
         };
-        var fixture = new SyntheticFixture(SimulationRate.Original, bindings, files);
+        var fixture = new SyntheticFixture(TestRate.Default, bindings, files);
         return (NewWorld(fixture), log, fixture);
     }
 
@@ -382,7 +382,7 @@ static partial class Tests
             feeder.Spawn(1, "Wake5");   // id 2
             feeder.Spawn(1, "Wake4");   // id 3
             feeder.Spawn(1, "TwoProbes"); // id 4
-            for (var tick = 0; tick < 8; tick++) world.Step();
+            for (var tick = 0; tick < world.Frames(8); tick++) world.Step();
             var updates = log.Entries.Where(value => value.StartsWith("update", StringComparison.Ordinal)).ToArray();
             // Wake tick 4: entity 3; wake tick 5: entities 1, 2, 4 (twice: module order); then the sleeping ones by (wake, id).
             Check.That(updates.Take(6).SequenceEqual(["update:3:4", "update:1:5", "update:2:5", "update:4:5", "update:4:5", "update:3:7"]), "Update order is (wake tick, entity id, module index): " + string.Join(" ", updates));
@@ -393,7 +393,7 @@ static partial class Tests
             var feeder = new Feeder(world);
             feeder.Spawn(1, "Killer");  // id 1 destroys id 2 in tick 5
             feeder.Spawn(1, "Victim");  // id 2 would update at ticks 5, 6, 7...
-            for (var tick = 0; tick < 8; tick++) world.Step();
+            for (var tick = 0; tick < world.Frames(8); tick++) world.Step();
             var entries = log.Entries;
             Check.That(entries.Contains("update:1:5") && !entries.Contains("update:2:5"), "A destroyed entity receives no further updates in the same tick even though its update was due: " + string.Join(" ", entries));
             Check.That(entries.Contains("event:2:EntityDestroyed:5"), "Its events are still delivered in that tick.");
@@ -424,7 +424,7 @@ static partial class Tests
 
     public static void TimerBehaviour()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Barrel");
@@ -479,7 +479,7 @@ static partial class Tests
 
     public static void CommandValidationAndOrder()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var world = NewWorld(fixture);
         // Execution order is (player id, sequence) regardless of submission order.
         var p1 = new PlayerId(1);

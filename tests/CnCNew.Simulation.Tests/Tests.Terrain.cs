@@ -102,10 +102,10 @@ static partial class Tests
 
     public static void TerrainInWorldSnapshotAndReplay()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var terrain = TerrainMap.Build(SyntheticMaps.Build(4, 4, 1, (x, _) => x * 8), "ramp");
         var other = TerrainMap.Build(SyntheticMaps.Build(4, 4, 1, (x, _) => x * 4), "flatter");
-        var configuration = new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint);
+        var configuration = new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint);
         Check.Throws<ArgumentException>(() => new SimulationWorld(configuration, fixture.Templates), "terrain fingerprint");
         Check.Throws<ArgumentException>(() => new SimulationWorld(configuration, fixture.Templates, other), "terrain fingerprint");
 
@@ -117,7 +117,7 @@ static partial class Tests
         Check.That(barrel.Z == Fixed.FromInt(10), "A spawn at height 0 is placed on the terrain (10 m one cell east of the origin).");
         Check.That(world.IsSignificantlyAboveTerrain(barrel) == false, "An entity on the ground is not above the terrain.");
 
-        var flat = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var flat = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         new Feeder(flat).Spawn(1, "Barrel", x: 10, y: 0);
         flat.Step();
         Check.That(flat.FindEntity(new EntityId(1))!.Z == Fixed.Zero && flat.Terrain is null, "Without terrain the ground stays at height 0.");
@@ -128,7 +128,7 @@ static partial class Tests
         Check.Throws<SnapshotFormatException>(() => WorldSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint), "terrain");
         Check.Throws<SnapshotFormatException>(() => WorldSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, other), "terrain");
 
-        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, 30, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), TwoPlayers, 10, 5, terrain.Fingerprint);
+        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, TestRate.Default.TicksPerSecond, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), TwoPlayers, 10, 5, terrain.Fingerprint);
         var replay = new ReplayFile(header, [], []);
         var read = ReplayFormat.Read(ReplayFormat.Write(replay));
         Check.That(read.Header.TerrainFingerprint == terrain.Fingerprint, "The replay header carries the terrain fingerprint.");

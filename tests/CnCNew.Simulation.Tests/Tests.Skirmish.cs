@@ -193,7 +193,7 @@ static partial class Tests
 
     public static void CommandCatalogBuilds()
     {
-        var catalog = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles()).Templates;
+        var catalog = new SyntheticFixture(TestRate.Default, files: SkirmishFiles()).Templates;
         var commands = catalog.Commands;
         Check.That(commands.BuildsOf("AlphaCenterSet").SequenceEqual(["AlphaDozer", "AlphaSoldier"]),
             $"A producer's set lists each UNIT_BUILD object once, in button order, and skips other commands (got {string.Join(", ", commands.BuildsOf("AlphaCenterSet"))}).");
@@ -208,7 +208,7 @@ static partial class Tests
 
     private static (ReplayFile Replay, SkirmishMatchScenario Scenario, TemplateCatalogHolder Holder) SkirmishRecord(long maxTicks, uint aiSeed = 7)
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: SkirmishFiles());
         var map = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
         var terrain = TerrainMap.Build(map, "skirmish");
         var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
@@ -280,7 +280,7 @@ static partial class Tests
     /// </summary>
     public static void SkirmishLiveSessionMatchesItsOwnReplay()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: SkirmishFiles());
         var map = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
         var terrain = TerrainMap.Build(map, "skirmish");
         var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
@@ -305,13 +305,13 @@ static partial class Tests
     /// </summary>
     public static void SkirmishSessionRefusesToSave()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: SkirmishFiles());
         var map = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
         var terrain = TerrainMap.Build(map, "skirmish");
         var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
         var options = new SkirmishMatchOptions(0xC0FFEE06, 7, 500, 60, 500, 500, 0);
         var session = SkirmishMatchSession.Start(options, fixture.Templates, fixture.Fingerprint, terrain, map.Objects, [.. participants.Select(participant => new SkirmishSlot(participant))]);
-        for (var i = 0; i < 5; i++) session.Step();
+        for (var i = 0; i < session.Frames(5); i++) session.Step();
         Check.Throws<NotSupportedException>(() => session.CreateSave(), "cannot be saved");
     }
 }

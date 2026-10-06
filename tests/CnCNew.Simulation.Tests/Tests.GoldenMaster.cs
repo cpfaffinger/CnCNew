@@ -22,7 +22,7 @@ static partial class Tests
         // Golden armor arithmetic, by hand: 20 * 100% = 20, 20 * 50% = 10, 40 * 50% = 20.
         foreach (var (armored, expectedDamage, expectedShots) in new[] { (false, 20, 5), (true, 10, 10) })
         {
-            var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+            var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
             var world = NewWorld(fixture);
             var feeder = new Feeder(world);
             feeder.Spawn(1, "Fighter", x: 0, y: 0);
@@ -39,7 +39,7 @@ static partial class Tests
             var shotTicks = new List<long>();
             var damages = new List<long>();
             long diedTick = -1;
-            for (var i = 0; i < 400 && diedTick < 0; i++)
+            for (var i = 0; i < world.Frames(400) && diedTick < 0; i++)
             {
                 feeder.FireWeapon(1, 1, 2);
                 var result = world.Step();
@@ -58,8 +58,8 @@ static partial class Tests
             {
                 expectedTicks.Add(ready);
                 clip--;
-                if (clip == 0) { ready += 60; clip = 2; }
-                else ready += 15;
+                if (clip == 0) { ready += world.Frames(60); clip = 2; }
+                else ready += world.Frames(15);
             }
             var label = armored ? "half armor" : "no armor";
             Check.That(shotTicks.SequenceEqual(expectedTicks), $"{label}: shot ticks {string.Join(",", shotTicks)} must equal the model {string.Join(",", expectedTicks)}.");
@@ -75,7 +75,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5GoldenProduction()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Factory", x: 5, y: 5);
@@ -88,11 +88,11 @@ static partial class Tests
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(600), "Two Fighters at BuildCost 200 leave 600 of 1000.");
 
         var completed = new List<long>();
-        for (var i = 0; i < 400; i++)
+        for (var i = 0; i < world.Frames(400); i++)
             foreach (var simEvent in world.Step().Events)
                 if (simEvent.Kind == SimEventKind.ProductionCompleted) completed.Add(simEvent.Tick);
         Check.That(completed.Count == 2, $"Both queued units complete (got {completed.Count}).");
-        Check.That(completed[1] - completed[0] == 2 * 30, $"Consecutive completions are BuildTime * 30 = 60 ticks apart (got {completed[1] - completed[0]}).");
+        Check.That(completed[1] - completed[0] == world.Frames(2 * 30), $"Consecutive completions are BuildTime * 30 = 60 ticks apart (got {completed[1] - completed[0]}).");
         Check.That(world.Entities.Count(value => value.Template.Name == "Fighter") == 2 && world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(600), "Exactly two Fighters exist and no further money moved.");
     }
 }

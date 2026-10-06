@@ -23,6 +23,7 @@ using CnCNew.Simulation.Timers;
 using CnCNew.Simulation.World;
 
 var run = new Runner(args.SkipWhile(value => value != "--only").Skip(1).FirstOrDefault());
+if (!TestRate.IsOriginal) Console.WriteLine($"Default test worlds run at {TestRate.Default.TicksPerSecond} Hz ({TestRate.Option}/{TestRate.Variable}): a probe, the reference is 30 Hz.");
 run.Test("Fixed-point arithmetic, rounding and limits", Tests.FixedPoint);
 run.Test("Tick rate, duration and unit conversions", Tests.Timing);
 run.Test("Reference float conversion vs exact ticks (documented deviation)", Tests.FloatDeviation);

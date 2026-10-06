@@ -188,16 +188,16 @@ static partial class Tests
 
     private static SimulationWorld AirWorld(out SyntheticFixture fixture, out Feeder feeder, bool terrain = false, IReadOnlyDictionary<string, string>? files = null)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: files ?? AirFixtureFiles);
+        fixture = new SyntheticFixture(TestRate.Default, files: files ?? AirFixtureFiles);
         var map = terrain ? CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(300, 300, 1, (_, _) => 0), "air") : null;
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
         feeder = new Feeder(world);
         return world;
     }
 
-    private static void StepUntil(SimulationWorld world, Func<bool> condition, int maxTicks, string failure)
+    private static void StepUntil(SimulationWorld world, Func<bool> condition, int maxFrames, string failure) // budget in original frames (1/30 s)
     {
-        for (var tick = 0; tick < maxTicks; tick++)
+        for (var tick = 0; tick < world.Frames(maxFrames); tick++)
         {
             if (condition()) return;
             world.Step();
@@ -248,14 +248,14 @@ static partial class Tests
         // the parked jet is healed by the airfield
         world.Damage(jet.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(100), DamageTypes.Explosion, DeathTypes.Normal, false));
         var hurt = jet.Body!.Health;
-        for (var i = 0; i < 40; i++) world.Step();
+        for (var i = 0; i < world.Frames(40); i++) world.Step();
         Check.That(jet.Body.Health > hurt, $"The airfield heals the parked jet ({hurt} -> {jet.Body.Health}).");
 
         // take-off on a move order
         var phases = new List<JetAIUpdate.JetPhase>();
         Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 1200, 500).Accepted, "The move order is accepted.");
         var tookOff = false;
-        for (var tick = 0; tick < 900; tick++)
+        for (var tick = 0; tick < world.Frames(900); tick++)
         {
             world.Step();
             if (phases.Count == 0 || phases[^1] != ai.Phase) phases.Add(ai.Phase);
@@ -267,13 +267,13 @@ static partial class Tests
         Check.That(parking.OccupantOf(0) == jet.Id, "A jet keeps its space while airborne.");
         StepUntil(world, () => !jet.HasMoveTarget, 900, "The jet reaches its destination.");
         Check.That((jet.X - Fixed.FromInt(1200)).Abs() < Fixed.FromInt(10) && (jet.Y - Fixed.FromInt(500)).Abs() < Fixed.FromInt(10), $"It arrived at the order's destination ({jet.X}, {jet.Y}).");
-        for (var i = 0; i < 90 && jet.Z < Fixed.FromInt(60); i++) world.Step();
+        for (var i = 0; i < world.Frames(90) && jet.Z < Fixed.FromInt(60); i++) world.Step();
         Check.That(jet.Z == Fixed.FromInt(60), $"It flies at the locomotor's preferred height ({jet.Z}).");
 
         // fire both missiles: the clip is empty and does not reload by time
         var dummy = Get(world, "AirDummy");
         Check.That(feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted, "The first shot is accepted.");
-        for (var i = 0; i < 5; i++) world.Step();
+        for (var i = 0; i < world.Frames(5); i++) world.Step();
         Check.That(feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted, "The second shot is accepted.");
         world.Step();
         Check.That(jet.WeaponClip == 0 && jet.WeaponReadyTick >= CnCNew.Simulation.Time.SimulationTiming.SleepForever, $"A RETURN_TO_BASE weapon never reloads by time (clip {jet.WeaponClip}, ready {jet.WeaponReadyTick}).");
@@ -282,7 +282,7 @@ static partial class Tests
         // it returns, lands, taxis, reloads
         var back = new List<JetAIUpdate.JetPhase>();
         var snapshots = 0;
-        for (var tick = 0; tick < 2500; tick++)
+        for (var tick = 0; tick < world.Frames(2500); tick++)
         {
             world.Step();
             if (back.Count == 0 || back[^1] != ai.Phase)
@@ -292,7 +292,7 @@ static partial class Tests
                 {
                     var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, world.Terrain);
                     Check.That(restored.StateHash == world.StateHash, $"A snapshot in phase {ai.Phase} restores to the same hash.");
-                    for (var follow = 0; follow < 40; follow++)
+                    for (var follow = 0; follow < restored.Frames(40); follow++)
                         Check.That(restored.Step().StateHash == world.Step().StateHash, $"The restored world follows the original through phase {ai.Phase} (step {follow}).");
                 }
             }
@@ -316,7 +316,7 @@ static partial class Tests
         StepUntil(world, () => JetOf(second).Phase == JetAIUpdate.JetPhase.None, 600, "The second jet parked: " + JetOf(second).Phase);
         Check.That(parking.OccupantOf(0) == first.Id && parking.OccupantOf(1) == second.Id, "Each jet holds one of the two spaces.");
         Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, "A third jet can be queued.");
-        for (var i = 0; i < 150; i++) world.Step();
+        for (var i = 0; i < world.Frames(150); i++) world.Step();
         Check.That(world.Entities.Count(value => value.Template.Name == "AirTestJet") == 2, "With both spaces taken the airfield holds the finished third jet back (nothing was created).");
         Check.That(!parking.IsFreeToExit, "The airfield has no free exit.");
 
@@ -327,7 +327,7 @@ static partial class Tests
         feeder.SetMoveTarget(1, second.Id.Value, 1200, 560);
         long firstTakeoff = -1, secondTakeoff = -1, secondWaited = 0;
         var secondAtPrep = false;
-        for (var tick = 0; tick < 1500 && (firstTakeoff < 0 || secondTakeoff < 0 || firstJet.Phase == JetAIUpdate.JetPhase.TakingOff || secondJet.Phase == JetAIUpdate.JetPhase.TakingOff); tick++)
+        for (var tick = 0; tick < world.Frames(1500) && (firstTakeoff < 0 || secondTakeoff < 0 || firstJet.Phase == JetAIUpdate.JetPhase.TakingOff || secondJet.Phase == JetAIUpdate.JetPhase.TakingOff); tick++)
         {
             world.Step();
             if (firstTakeoff < 0 && firstJet.Phase == JetAIUpdate.JetPhase.TakingOff) firstTakeoff = world.Tick;
@@ -367,15 +367,15 @@ static partial class Tests
         feeder.SetMoveTarget(1, first.Id.Value, 900, 500);
         StepUntil(world, () => JetOf(first).AllowAirLoco && !first.HasMoveTarget && first.Z == Fixed.FromInt(60), 1500, "The first jet is flying.");
         world.Kill(airfield.Id);
-        for (var i = 0; i < 5; i++) world.Step();
+        for (var i = 0; i < world.Frames(5); i++) world.Step();
         Check.That(second.EffectivelyDead, "The parked jet died with its airfield.");
         Check.That(!first.EffectivelyDead, "The jet in flight survived the airfield.");
         Check.That(feeder.FireWeapon(1, first.Id.Value, dummy.Id.Value).Accepted, "It fires its first missile.");
-        for (var i = 0; i < 5; i++) world.Step();
+        for (var i = 0; i < world.Frames(5); i++) world.Step();
         Check.That(feeder.FireWeapon(1, first.Id.Value, dummy.Id.Value).Accepted, "It fires its second missile.");
         StepUntil(world, () => JetOf(first).Phase == JetAIUpdate.JetPhase.CirclingDeadAirfield, 600, "Out of ammunition without an airfield the jet circles over where the airfield was: " + JetOf(first).Phase);
         var health = first.Body!.Health;
-        for (var i = 0; i < 30; i++) world.Step();
+        for (var i = 0; i < world.Frames(30); i++) world.Step();
         Check.That(first.Body.Health < health - Fixed.FromInt(30) || first.EffectivelyDead, $"It takes 30 % of its maximum health per second ({health} -> {first.Body.Health}).");
         StepUntil(world, () => first.EffectivelyDead || first.DestroyRequested, 200, "It burns out.");
     }

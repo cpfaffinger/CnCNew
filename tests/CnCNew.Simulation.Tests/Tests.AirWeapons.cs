@@ -465,9 +465,9 @@ static partial class Tests
 
     private static SimulationWorld AirWeaponWorld(out SyntheticFixture fixture, out Feeder feeder, bool terrain = false)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: AirWeaponFixtureFiles);
+        fixture = new SyntheticFixture(TestRate.Default, files: AirWeaponFixtureFiles);
         var map = terrain ? CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(200, 200, 1, (_, _) => 0), "airweapons") : null;
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 13, AirPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 13, AirPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
         feeder = new Feeder(world);
         return world;
     }
@@ -495,7 +495,7 @@ static partial class Tests
         feeder.Spawn(2, "AirTestJet", owner: 2, x: 100, y: 100);
         feeder.Spawn(2, "AirHardenedJet", owner: 2, x: 100, y: 105);
         feeder.Spawn(1, "AirEmpTank", owner: 1, x: 100, y: 300);
-        for (var i = 0; i < 80; i++) world.Step();
+        for (var i = 0; i < world.Frames(80); i++) world.Step();
         var jet = Named(world, "AirTestJet", 2);
         var hardened = Named(world, "AirHardenedJet", 2);
         Check.That(jet.Z == Fixed.FromInt(60) && hardened.Z == Fixed.FromInt(60), "Both aircraft fly at their preferred height.");
@@ -511,13 +511,13 @@ static partial class Tests
         var pulse = Get(world, "AirEmpPulse");
         var emp = pulse.Modules.OfType<EmpUpdate>().Single();
         var start = world.Tick;
-        for (var i = 0; i < 6; i++) world.Step();
+        for (var i = 0; i < world.Frames(6); i++) world.Step();
         Check.That(!emp.HasPulsed && victim.EmpDisabledUntil == 0 && !jet.EffectivelyDead, "Nothing happens before StartFadeTime.");
         StepUntil(world, () => emp.HasPulsed, 20, "The pulse fires.");
         var pulseTick = world.Tick - 1;
         world.Step();
-        Check.That(Math.Abs(pulseTick - (start + 9)) <= 1, $"The pulse fires StartFadeTime (9 ticks) after its creation (created {start}, fired {pulseTick}).");
-        Check.That(victim.EmpDisabledUntil >= pulseTick + 59 && victim.EmpDisabledUntil <= pulseTick + 62, $"An enemy vehicle in range is disabled for 60 ticks ({victim.EmpDisabledUntil} vs {pulseTick}).");
+        Check.That(Math.Abs(pulseTick - (start + world.Frames(9))) <= 1, $"The pulse fires StartFadeTime (9 ticks) after its creation (created {start}, fired {pulseTick}).");
+        Check.That(victim.EmpDisabledUntil >= pulseTick + world.Frames(59) && victim.EmpDisabledUntil <= pulseTick + world.Frames(62), $"An enemy vehicle in range is disabled for 60 ticks ({victim.EmpDisabledUntil} vs {pulseTick}).");
         Check.That(enemyFactory.EmpDisabledUntil > 0, "An enemy faction structure is disabled.");
         Check.That(jet.EffectivelyDead, "An airborne aircraft dies.");
         Check.That(!hardened.EffectivelyDead && hardened.EmpDisabledUntil == 0, "An EMP-hardened aircraft is spared.");
@@ -527,12 +527,12 @@ static partial class Tests
         // the disabled vehicle neither moves nor shoots; it recovers
         Check.That(feeder.SetMoveTarget(2, victim.Id.Value, 120, 300).Accepted, "It can be ordered.");
         var before = (victim.X, victim.Y);
-        for (var i = 0; i < 20; i++) world.Step();
+        for (var i = 0; i < world.Frames(20); i++) world.Step();
         Check.That((victim.X, victim.Y) == before, "A disabled vehicle stands still.");
         Check.That(!feeder.FireWeapon(2, victim.Id.Value, attacker.Id.Value).Accepted, "A disabled vehicle cannot fire.");
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == world.StateHash, "A snapshot during the disable restores to the same hash.");
-        for (var i = 0; i < 100; i++) Check.That(restored.Step().StateHash == world.Step().StateHash, "The restored world follows the original (step " + i + ").");
+        for (var i = 0; i < restored.Frames(100); i++) Check.That(restored.Step().StateHash == world.Step().StateHash, "The restored world follows the original (step " + i + ").");
         Check.That(victim.Y > Fixed.FromInt(110), $"The vehicle drives on once the disable is over ({victim.Y}).");
         Check.That(!world.Entities.Any(value => value.Template.Name == "AirEmpPulse"), "The pulse object is gone after its lifetime.");
         Check.That(feeder.FireWeapon(2, victim.Id.Value, attacker.Id.Value).Accepted, "The recovered vehicle fires again.");
@@ -548,12 +548,12 @@ static partial class Tests
         feeder.Spawn(2, "AirEmpWall", owner: 2, x: 100, y: 70);
         feeder.Spawn(3, "AirEmpInfantry", owner: 3, x: 70, y: 100);
         feeder.Spawn(2, "AirEmpTank", owner: 2, x: 500, y: 100);
-        for (var i = 0; i < 100; i++) world.Step();
+        for (var i = 0; i < world.Frames(100); i++) world.Step();
         Check.That(Enumerable.All(world.Entities, value => value.EmpDisabledUntil == 0), "The first update puts the module to sleep: nothing is disabled while the bomb lives (the delay is not what triggers it).");
         world.Kill(Get(world, "AirLeafletBomb").Id);
         world.Step();
         var tick = world.Tick;
-        Check.That(Named(world, "AirEmpInfantry", 2).EmpDisabledUntil == tick + 44 || Named(world, "AirEmpInfantry", 2).EmpDisabledUntil == tick + 45, $"Enemy infantry is disabled for 45 ticks ({Named(world, "AirEmpInfantry", 2).EmpDisabledUntil} vs {tick}).");
+        Check.That(Named(world, "AirEmpInfantry", 2).EmpDisabledUntil == tick + world.Frames(45) - 1 || Named(world, "AirEmpInfantry", 2).EmpDisabledUntil == tick + world.Frames(45), $"Enemy infantry is disabled for 45 ticks ({Named(world, "AirEmpInfantry", 2).EmpDisabledUntil} vs {tick}).");
         Check.That(Named(world, "AirEmpTank", 2, 0).EmpDisabledUntil > 0 && Named(world, "AirEmpTank", 2, 1).EmpDisabledUntil == 0, "The enemy vehicle in range is disabled, the far one is not.");
         Check.That(Named(world, "AirEmpWall", 2).EmpDisabledUntil == 0 && Named(world, "AirEmpInfantry", 3).EmpDisabledUntil == 0, "A structure and an ally are not.");
     }
@@ -575,7 +575,7 @@ static partial class Tests
         if (upgraded) world.CompleteUpgrade(new PlayerId(1), null, "Upgrade_AirBusters");
         Check.That(feeder.FireWeapon(1, Get(world, "AirBusterLauncher").Id.Value, bunker.Id.Value).Accepted, "The bomb is dropped on the bunker.");
         int fx = 0, shock = 0;
-        for (var i = 0; i < 120; i++)
+        for (var i = 0; i < world.Frames(120); i++)
         {
             var result = world.Step();
             foreach (var value in result.Events)
@@ -623,7 +623,7 @@ static partial class Tests
             Check.That(feeder.EnterContainer(2, trooper.Id.Value, truck.Id.Value).Accepted, "A trooper boards the truck.");
         world.Step();
         Check.That(truck.Container!.ContainCount == 2, "Two troopers ride in the truck.");
-        for (var i = 0; i < 70; i++) world.Step();
+        for (var i = 0; i < world.Frames(70); i++) world.Step();
         var tank = Named(world, "AirEmpTank", 2);
         feeder.SetMoveTarget(2, tank.Id.Value, 300, 300);
         world.Step();
@@ -661,7 +661,7 @@ static partial class Tests
         Entity? missile = null;
         var maxZ = Fixed.Zero;
         long deathTick = -1;
-        for (var tick = 0; tick < 400; tick++)
+        for (var tick = 0; tick < world.Frames(400); tick++)
         {
             var result = world.Step();
             foreach (var value in result.Events)
@@ -669,10 +669,10 @@ static partial class Tests
             missile ??= world.Entities.FirstOrDefault(value => value.Template.Name == "AirNeutronMissile");
             if (missile is null) continue;
             if (missile.Z > maxZ) maxZ = missile.Z;
-            if (tick < 6 && missile.Z > Fixed.Zero && missile.Template.Name == "AirNeutronMissile")
+            if (tick < world.Frames(6) && missile.Z > Fixed.Zero && missile.Template.Name == "AirNeutronMissile")
                 Check.That(missile.X == Fixed.FromInt(200) && missile.Y == Fixed.FromInt(200), $"It leaves the silo straight up (tick {tick}: {missile.X}, {missile.Y}, {missile.Z}).");
             if (deathTick < 0 && missile.EffectivelyDead) deathTick = world.Tick;
-            if (world.Tick > 300 && !world.Entities.Any(value => value.Template.Name == "AirNeutronMissile")) break;
+            if (world.Tick > world.Frames(300) && !world.Entities.Any(value => value.Template.Name == "AirNeutronMissile")) break;
         }
         Check.That(missile is not null && deathTick > 0, "The missile flew and died.");
         Check.That(maxZ >= Fixed.FromInt(280), $"It climbed to the point above the target ({maxZ}).");
@@ -692,10 +692,10 @@ static partial class Tests
         feeder2.Spawn(2, "AirDummy", owner: 2, x: 600, y: 200);
         again.Step();
         feeder2.FireWeapon(1, Get(again, "AirSilo").Id.Value, Get(again, "AirDummy").Id.Value);
-        for (var i = 0; i < 40; i++) again.Step();
+        for (var i = 0; i < again.Frames(40); i++) again.Step();
         var copy = WorldSnapshot.Restore(WorldSnapshot.Write(again), fixture2.Templates, fixture2.Fingerprint);
         Check.That(copy.StateHash == again.StateHash, "The missile in flight restores to the same hash.");
-        for (var i = 0; i < 160; i++) Check.That(copy.Step().StateHash == again.Step().StateHash, "The restored missile flies identically (step " + i + ").");
+        for (var i = 0; i < copy.Frames(160); i++) Check.That(copy.Step().StateHash == again.Step().StateHash, "The restored missile flies identically (step " + i + ").");
         _ = fixture;
     }
 
@@ -721,10 +721,10 @@ static partial class Tests
                     if (value.Kind == SimEventKind.FxRequested && value.Text.StartsWith("Air", StringComparison.Ordinal)) fx.Add((result.Tick, value.Text));
             }
         }
-        Check.That(door.Door == MissileLauncherBuildingUpdate.DoorState.Closed && ready > world.Tick + 100, $"The door starts closed with the power recharging (ready at {ready}).");
-        Run(ready - 40);
+        Check.That(door.Door == MissileLauncherBuildingUpdate.DoorState.Closed && ready > world.Tick + world.Frames(100), $"The door starts closed with the power recharging (ready at {ready}).");
+        Run(ready - world.Frames(40));
         Check.That(door.Door == MissileLauncherBuildingUpdate.DoorState.Closed, "Still closed more than DoorOpenTime (30 ticks) before the power is ready.");
-        Run(ready - 20);
+        Run(ready - world.Frames(20));
         Check.That(door.Door == MissileLauncherBuildingUpdate.DoorState.Opening, "Opening 30 ticks before the power is ready.");
         Run(ready + 2);
         Check.That(door.Door == MissileLauncherBuildingUpdate.DoorState.Open, "Open when the power is ready.");
@@ -734,13 +734,13 @@ static partial class Tests
         Check.That(door.Door == MissileLauncherBuildingUpdate.DoorState.WaitingToClose, "Using the power starts the wait before the door closes.");
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == world.StateHash, "The door state restores to the same hash.");
-        Run(use + 25);
+        Run(use + world.Frames(25));
         Check.That(door.Door == MissileLauncherBuildingUpdate.DoorState.Closing, "Closing after DoorWaitOpenTime (15 ticks).");
-        Run(use + 70);
+        Run(use + world.Frames(70));
         Check.That(door.Door == MissileLauncherBuildingUpdate.DoorState.Closed, "Closed again.");
         var texts = fx.Select(value => value.Text).ToArray();
         Check.That(texts.SequenceEqual(["AirDoorFx", "AirOpenFx", "AirLaunchFx", "AirCrashFx", "AirBustFx"]), "One effect per door state, in order: " + string.Join(",", texts));
-        for (var i = 0; i < 60; i++) Check.That(restored.Step().StateHash == WorldSnapshot.Restore(WorldSnapshot.Write(restored), fixture.Templates, fixture.Fingerprint).StateHash, "A restored door state is stable.");
+        for (var i = 0; i < restored.Frames(60); i++) Check.That(restored.Step().StateHash == WorldSnapshot.Restore(WorldSnapshot.Write(restored), fixture.Templates, fixture.Fingerprint).StateHash, "A restored door state is stable.");
     }
 
     /// <summary>
@@ -757,7 +757,7 @@ static partial class Tests
         var spectre = ship.Modules.OfType<SpectreGunshipUpdate>().Single();
         var dummy = Get(world, "AirDummy");
         Check.That(spectre.Status == SpectreGunshipUpdate.GunshipStatus.Idle, "The gunship waits idle.");
-        for (var i = 0; i < 125; i++) world.Step(); // the power recharges for 4 seconds after the gunship appeared
+        for (var i = 0; i < world.Frames(125); i++) world.Step(); // the power recharges for 4 seconds after the gunship appeared
         var use = feeder.UseSpecialPower(1, ship.Id.Value, "AirGunshipPower", SpecialPowerTargetKind.Location, x: 400, y: 0);
         Check.That(use.Accepted, "The power is used on a location.");
         world.Step();
@@ -770,7 +770,7 @@ static partial class Tests
         var maxDistance = Fixed.Zero;
         var healthBefore = dummy.Body!.Health;
         long attackedAfter = -1;
-        for (var tick = 0; tick < 300 && spectre.Status != SpectreGunshipUpdate.GunshipStatus.Departing; tick++)
+        for (var tick = 0; tick < world.Frames(300) && spectre.Status != SpectreGunshipUpdate.GunshipStatus.Departing; tick++)
         {
             var result = world.Step();
             gattling ??= world.FindEntity(spectre.Gattling);
@@ -780,7 +780,7 @@ static partial class Tests
             if (spectre.Status == SpectreGunshipUpdate.GunshipStatus.Orbiting)
             {
                 if (orbitStart < 0) orbitStart = world.Tick;
-                if (world.Tick - orbitStart > 20)
+                if (world.Tick - orbitStart > world.Frames(20))
                 {
                     var distance = Fixed.Sqrt((ship.X - Fixed.FromInt(400)) * (ship.X - Fixed.FromInt(400)) + ship.Y * ship.Y);
                     if (distance < minDistance) minDistance = distance;
@@ -804,9 +804,9 @@ static partial class Tests
         feeder2.Spawn(1, "AirGunship", owner: 1, x: 0, y: 0);
         second.Step();
         var other = Get(second, "AirGunship");
-        for (var i = 0; i < 125; i++) second.Step();
+        for (var i = 0; i < second.Frames(125); i++) second.Step();
         feeder2.UseSpecialPower(1, other.Id.Value, "AirGunshipPower", SpecialPowerTargetKind.Location, x: 400, y: 0);
-        for (var i = 0; i < 80; i++) second.Step();
+        for (var i = 0; i < second.Frames(80); i++) second.Step();
         var otherGattling = other.Modules.OfType<SpectreGunshipUpdate>().Single().Gattling;
         Check.That(otherGattling.IsValid && second.FindEntity(otherGattling) is not null, "Setup: the second gunship has its gattling.");
         second.Kill(other.Id);
@@ -825,7 +825,7 @@ static partial class Tests
         feeder.Spawn(2, "AirDummy", owner: 2, x: 1000, y: 1005);
         world.Step();
         var carrier = Get(world, "AirGunshipCarrier");
-        for (var i = 0; i < 125; i++) world.Step();
+        for (var i = 0; i < world.Frames(125); i++) world.Step();
         Check.That(world.Terrain is { } terrain && terrain.ExtentX > Fixed.FromInt(1500), "Setup: a map with terrain.");
         Check.That(feeder.UseSpecialPower(1, carrier.Id.Value, "AirGunshipPower", SpecialPowerTargetKind.Location, x: 1000, y: 1000).Accepted, "The carrier's power is used.");
         world.Step();
@@ -842,7 +842,7 @@ static partial class Tests
         StepUntil(world, () => spectre.Status == SpectreGunshipUpdate.GunshipStatus.Orbiting, 600, "It reaches the target area and starts to orbit: " + spectre.Status);
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, world.Terrain);
         Check.That(restored.StateHash == world.StateHash, "The orbiting gunship restores to the same hash.");
-        for (var i = 0; i < 120; i++) Check.That(restored.Step().StateHash == world.Step().StateHash, "The restored gunship follows the original (step " + i + ").");
+        for (var i = 0; i < restored.Frames(120); i++) Check.That(restored.Step().StateHash == world.Step().StateHash, "The restored gunship follows the original (step " + i + ").");
         Check.That(dummy.Body.Health < health, "The gunship hurt the enemy.");
     }
 }

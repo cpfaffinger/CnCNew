@@ -26,7 +26,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         foreach (var name in new[] { "AmericaTankCrusader", "AmericaVehicleChinook", "AmericaSupplyCenter", "GLATunnelNetwork" })
             Check.That(catalog.TryGet(name, out var template) && template.IsInstantiable, $"{name} is instantiable.");
@@ -48,7 +48,7 @@ static partial class Tests
 
         (ulong[] Hashes, Dictionary<string, long> Facts) Run()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-flight", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-flight", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             SubmitResult Send(int player, Func<ulong, SimCommand> make) => world.Submit(make(sequence[player] = sequence.GetValueOrDefault(player) + 1));
             void Spawn(int player, string template, int x, int y)
@@ -85,9 +85,9 @@ static partial class Tests
             Check.That(Send(1, next => new EnterContainerCommand(new PlayerId(1), next, world.Tick, rider.Id, tunnelA.Id)).Accepted, "The GLA unit enters tunnel A.");
             var shellHealth = shellTarget.Body!.Health;
             var missileHealth = missileTarget.Body!.Health;
-            for (var tick = 0; tick < 1800; tick++)
+            for (var tick = 0; tick < world.Frames(1800); tick++)
             {
-                if (tick == 10) Send(1, next => new EvacuateCommand(new PlayerId(1), next, world.Tick, tunnelB.Id, false, Fixed.Zero, Fixed.Zero));
+                if (tick == world.Frames(10)) Send(1, next => new EvacuateCommand(new PlayerId(1), next, world.Tick, tunnelB.Id, false, Fixed.Zero, Fixed.Zero));
                 var result = world.Step();
                 hashes.Add(result.StateHash);
                 foreach (var simEvent in result.Events)

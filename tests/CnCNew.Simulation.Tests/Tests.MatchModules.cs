@@ -150,7 +150,7 @@ static partial class Tests
     /// </summary>
     public static void MatchMinefieldAndPhysics()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: MinefieldFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: MinefieldFiles());
         Check.That(fixture.Templates.TryGet("Truck", out var truck) && truck.IsInstantiable, "PhysicsBehavior and SquishCollide leave a vehicle instantiable: " + (truck is null ? "missing" : string.Join(", ", truck.MissingModules)));
         Check.That(fixture.Templates.TryGet("BadMine", out var badMine) && !badMine.IsInstantiable, "A mine with a module that is not implemented stays non-instantiable.");
 
@@ -241,7 +241,7 @@ static partial class Tests
         var restoredFeeder = liveFeeder.ForkTo(restored);
         liveFeeder.PurchaseUpgrade(1, "Upgrade_EMPMines", target: 2);
         restoredFeeder.PurchaseUpgrade(1, "Upgrade_EMPMines", target: 2);
-        for (var i = 0; i < 6; i++)
+        for (var i = 0; i < live.Frames(6); i++)
             Check.That(live.Step().StateHash == restored.Step().StateHash, "The upgrade swap after a restore is hash-identical to the live run at step " + i + ".");
         Check.That(CountOf(restored, "EmpMine") == 38 && CountOf(restored, "TestMine") == 0, "The restored world swapped its mines.");
     }
@@ -265,18 +265,18 @@ static partial class Tests
             End
             """,
         };
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: files);
+        var fixture = new SyntheticFixture(TestRate.Default, files: files);
         var live = NewWorld(fixture);
         var feeder = new Feeder(live);
         feeder.Spawn(1, "Regenerator");
         live.Step();
         feeder.Damage(1, 300);
-        for (var i = 0; i < 10; i++) live.Step();
+        for (var i = 0; i < live.Frames(10); i++) live.Step();
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(live), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == live.StateHash, "The delayed structure round-trips.");
         var body = restored.FindEntity(new EntityId(1))!.Body!;
         var damaged = body.Health;
-        for (var i = 0; i < 60; i++)
+        for (var i = 0; i < live.Frames(60); i++)
             Check.That(live.Step().StateHash == restored.Step().StateHash, "Regeneration after a restore is hash-identical at step " + i + ".");
         Check.That(body.Health > damaged, "The restored structure healed once the delay elapsed.");
     }

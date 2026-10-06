@@ -116,10 +116,10 @@ static partial class Tests
 
     private static readonly int UsingAbilityStatusBit = ObjectStatusBits.Index("USING_ABILITY");
 
-    private static List<CaptureSample> ObserveCapture(SimulationWorld world, uint actor, uint station, int ticks, Action<long>? each = null)
+    private static List<CaptureSample> ObserveCapture(SimulationWorld world, uint actor, uint station, int frames, Action<long>? each = null)
     {
         var samples = new List<CaptureSample>();
-        for (var index = 0; index < ticks; index++)
+        for (var index = 0; index < world.Frames(frames); index++)
         {
             var result = world.Step();
             each?.Invoke(world.Tick);
@@ -142,7 +142,7 @@ static partial class Tests
 
     private static SimulationWorld StagedWorld(out SyntheticFixture fixture, out Feeder feeder, int stationX = 200, int stationY = 50, string capturer = "StagedCapturer", bool upgrade = true)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: StagedCaptureFiles());
+        fixture = new SyntheticFixture(TestRate.Default, files: StagedCaptureFiles());
         var world = NewWorld(fixture);
         feeder = new Feeder(world);
         feeder.Spawn(1, capturer, owner: 1, x: 100, y: 50);                         // id 1
@@ -151,7 +151,7 @@ static partial class Tests
         world.Step();
         if (upgrade) world.CompleteUpgrade(new PlayerId(1), null, "Upgrade_StagedCapture");
         // The power recharges (1000 ms) from the moment the unit appears.
-        for (var index = 0; index < 40; index++) world.Step();
+        for (var index = 0; index < world.Frames(40); index++) world.Step();
         return world;
     }
 
@@ -163,7 +163,7 @@ static partial class Tests
         Check.That(feeder.Capture(1, 1, 2).Reason == CommandRejection.SpecialPowerNotReady, "The capture power is paused until its upgrade (UnpauseSpecialPowerUpgrade): the command is refused.");
         world.CompleteUpgrade(new PlayerId(1), null, "Upgrade_StagedCapture");
         Check.That(feeder.Capture(1, 1, 2).Reason == CommandRejection.SpecialPowerNotReady, "Releasing the pause adds the paused time to the recharge: the power is not ready the same tick.");
-        for (var index = 0; index < 35; index++) world.Step();
+        for (var index = 0; index < world.Frames(35); index++) world.Step();
         Check.That(feeder.Capture(1, 1, 2).Accepted, "With the upgrade (and the recharge over) the capture is accepted although the Capturer stands 100 units away: it walks there itself.");
         var ability = capturer.Modules.OfType<SpecialAbilityUpdate>().Single();
         var power = capturer.Modules.OfType<SpecialAbility>().Single();
@@ -174,9 +174,9 @@ static partial class Tests
         var prepare = StageRun(samples, AbilityStage.Preparing);
         var pack = StageRun(samples, AbilityStage.Packing);
         Check.That(approach.Start > 0 && approach.Length > 10, $"The Capturer first walks toward the building (approach for {approach.Length} ticks).");
-        Check.That(unpack.Length == StagedUnpack, $"Unpacking lasts UnpackTime = {StagedUnpack} ticks, took {unpack.Length}.");
-        Check.That(prepare.Length == StagedPrepare, $"Raising the flag lasts PreparationTime = {StagedPrepare} ticks, took {prepare.Length}.");
-        Check.That(pack.Length == StagedPack, $"Packing lasts PackTime = {StagedPack} ticks, took {pack.Length}.");
+        Check.That(unpack.Length == world.Frames(StagedUnpack), $"Unpacking lasts UnpackTime = {StagedUnpack} ticks, took {unpack.Length}.");
+        Check.That(prepare.Length == world.Frames(StagedPrepare), $"Raising the flag lasts PreparationTime = {StagedPrepare} ticks, took {prepare.Length}.");
+        Check.That(pack.Length == world.Frames(StagedPack), $"Packing lasts PackTime = {StagedPack} ticks, took {pack.Length}.");
         Check.That(approach.Start < unpack.Start && unpack.Start + unpack.Length == prepare.Start && prepare.Start + prepare.Length == pack.Start, "The stages follow each other without gaps: approach, unpack, prepare, pack.");
         Check.That(samples[^1].Stage == AbilityStage.None && !ability.IsActive, "The ability is over afterwards.");
 
@@ -196,7 +196,7 @@ static partial class Tests
         Check.That(samples.Where(value => value.Stage is AbilityStage.Unpacking or AbilityStage.Preparing or AbilityStage.Packing).Select(value => value.X).Distinct().Count() == 1, "It does not move while unpacking, raising the flag or packing.");
 
         // The infantry capture restarts the recharge on every preparation tick: not ready right after, ready again 1000 ms (30 ticks) later.
-        Check.That(!power.IsReady(world) || world.Tick - pack.Start >= StagedPack + 30, "The power recharges from the end of the preparation on.");
+        Check.That(!power.IsReady(world) || world.Tick - pack.Start >= world.Frames(StagedPack + 30), "The power recharges from the end of the preparation on.");
         Check.That(feeder.Capture(1, 1, 2).Reason == CommandRejection.CannotCapture, "The building is already the Capturer's: nothing left to capture.");
     }
 
@@ -208,7 +208,7 @@ static partial class Tests
         var flashes = new List<long>();
         var preparing = new List<long>();
         SimulationWorld? restored = null;
-        for (var index = 0; index < 600; index++)
+        for (var index = 0; index < world.Frames(600); index++)
         {
             var result = world.Step();
             if (restored is not null) Check.That(restored.Step().StateHash == result.StateHash, "The restored capture flashes identically at tick " + result.Tick + ".");
@@ -236,11 +236,11 @@ static partial class Tests
         var samples = ObserveCapture(world, 1, 2, 400);
         var unpack = StageRun(samples, AbilityStage.Unpacking);
         var prepare = StageRun(samples, AbilityStage.Preparing);
-        Check.That(unpack.Length == StagedUnpack && prepare.Length == StagedPrepare, "Unpack and preparation take their configured times.");
+        Check.That(unpack.Length == world.Frames(StagedUnpack) && prepare.Length == world.Frames(StagedPrepare), "Unpack and preparation take their configured times.");
         Check.That(lotus.X == Fixed.FromInt(100) && lotus.Y == Fixed.FromInt(50), "The station is 140 units away, within StartAbilityRange 150: the Lotus does not move at all.");
         Check.That(samples.First(value => value.Stage == AbilityStage.Unpacking).Angle.Raw is var raw && Math.Abs(raw - FixedTrig.Atan2(Fixed.FromInt(140), Fixed.Zero).Raw) < 100,
             "She has turned to face the building (north) before she starts to unpack.");
-        Check.That(unpack.Start >= 8, $"Turning 90 degrees at 360 degrees per second takes about 8 ticks, unpacking started at tick {unpack.Start}.");
+        Check.That(unpack.Start >= world.Frames(8), $"Turning 90 degrees at 360 degrees per second takes about 8 ticks, unpacking started at tick {unpack.Start}.");
         Check.That(world.FindEntity(new EntityId(2))!.Owner == new PlayerId(1), "The building is captured.");
         Check.That(lotus.Modules.OfType<SpecialAbilityUpdate>().Count(value => value.IsCapture(world)) == 1, "Only the capture ability of the Lotus is staged; her cash hack keeps the plain recharge behaviour.");
         Check.That(lotus.Modules.OfType<SpecialAbilityUpdate>().Where(value => !value.IsCapture(world)).All(value => !value.IsActive), "The unstaged ability never becomes active.");
@@ -253,9 +253,9 @@ static partial class Tests
         var world = StagedWorld(out fixture, out feeder);
         Check.That(feeder.Capture(1, 1, 2).Accepted, "Capture accepted.");
         var ability = world.FindEntity(new EntityId(1))!.Modules.OfType<SpecialAbilityUpdate>().Single();
-        for (var index = 0; index < 600 && ability.Stage != stage; index++) world.Step();
+        for (var index = 0; index < world.Frames(600) && ability.Stage != stage; index++) world.Step();
         Check.That(ability.Stage == stage, $"The ability reached {stage}.");
-        for (var index = 0; index < extra; index++) world.Step();
+        for (var index = 0; index < world.Frames(extra); index++) world.Step();
         return world;
     }
 
@@ -268,7 +268,7 @@ static partial class Tests
             var after = ObserveCapture(world, 1, 2, StagedPack + 10);
             // A destroyed target is gone from the world (continuePreparation: "Target is dead, stop"): the preparation is cancelled, the unit packs up and the ability ends.
             Check.That(after.All(value => !value.UsingAbility && !value.CapturedThisTick), "A destroyed target cancels the preparation: no capture, USING_ABILITY cleared.");
-            Check.That(StageRun(after, AbilityStage.Packing).Length == StagedPack && after[^1].Stage == AbilityStage.None, "The unit packs up, then the ability is over.");
+            Check.That(StageRun(after, AbilityStage.Packing).Length == world.Frames(StagedPack) && after[^1].Stage == AbilityStage.None, "The unit packs up, then the ability is over.");
             Check.That(world.FindEntity(new EntityId(1))!.Modules.OfType<SpecialAbilityUpdate>().Single().Target == EntityId.Invalid, "The ability forgot its target.");
         }
 
@@ -336,7 +336,7 @@ static partial class Tests
         Check.That(feeder.UseSpecialPower(1, 1, "SPECIAL_StagedCapture", SpecialPowerTargetKind.Object, target: 2).Accepted,
             "The capture power was refused with SpecialPowerHandlerMissing before the staging existed; as a command button it is now a handler use.");
         var samples = ObserveCapture(world, 1, 2, 600);
-        Check.That(StageRun(samples, AbilityStage.Unpacking).Length == StagedUnpack && StageRun(samples, AbilityStage.Preparing).Length == StagedPrepare && StageRun(samples, AbilityStage.Packing).Length == StagedPack,
+        Check.That(StageRun(samples, AbilityStage.Unpacking).Length == world.Frames(StagedUnpack) && StageRun(samples, AbilityStage.Preparing).Length == world.Frames(StagedPrepare) && StageRun(samples, AbilityStage.Packing).Length == world.Frames(StagedPack),
             "The power command runs the same stages as the capture command.");
         Check.That(world.FindEntity(new EntityId(2))!.Owner == new PlayerId(1), "The building is captured.");
     }
@@ -350,7 +350,7 @@ static partial class Tests
             var cut = world.Tick;
             var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
             Check.That(restored.StateHash == world.StateHash, $"A snapshot at tick {cut} restores to the same state hash.");
-            for (var index = 0; index < 200; index++)
+            for (var index = 0; index < world.Frames(200); index++)
             {
                 world.Step();
                 restored.Step();
@@ -360,10 +360,10 @@ static partial class Tests
         }
 
         // An object that never uses the ability saves exactly what it saved before the staging existed.
-        var idleFixture = new SyntheticFixture(SimulationRate.Original, files: StagedCaptureFiles());
+        var idleFixture = new SyntheticFixture(TestRate.Default, files: StagedCaptureFiles());
         var idle = NewWorld(idleFixture);
         new Feeder(idle).Spawn(1, "StagedCapturer", owner: 1, x: 100, y: 50);
-        for (var index = 0; index < 50; index++) idle.Step();
+        for (var index = 0; index < idle.Frames(50); index++) idle.Step();
         var text = System.Text.Encoding.UTF8.GetString(WorldSnapshot.Write(idle));
         Check.That(!text.Contains("abilityActive", StringComparison.Ordinal), "An idle SpecialAbilityUpdate writes nothing of the staging into the snapshot.");
         var busy = StagedWorldAt(AbilityStage.Preparing, 1, out _, out _);
@@ -374,7 +374,7 @@ static partial class Tests
         {
             var world = StagedWorld(out _, out var runFeeder);
             runFeeder.Capture(1, 1, 2);
-            for (var index = 0; index < 300; index++) world.Step();
+            for (var index = 0; index < world.Frames(300); index++) world.Step();
             return world.StateHash.ToString("X16");
         }
         Check.That(Run() == Run(), "Two independent runs end with the same state hash.");
@@ -388,14 +388,14 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
 
         (long Unpack, long Prepare, long Pack, bool Captured, long CaptureTick, long PackStart, bool HackStyle, string Hash) Run(string unitTemplate, string buildingTemplate, string? upgrade, int unpack, int prepare, int pack)
         {
             var terrain = TerrainMap.Build(SyntheticMaps.Build(120, 120, 1, (_, _) => 0), "capture");
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, players, "real-capture", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 7, players, "real-capture", fingerprint, terrain.Fingerprint), catalog, terrain);
             var feeder = new Feeder(world);
             Check.That(feeder.Spawn(1, unitTemplate, owner: 1, x: 300, y: 600).Accepted, unitTemplate + " spawns.");
             Check.That(feeder.Spawn(2, buildingTemplate, owner: 2, x: 700, y: 600).Accepted, buildingTemplate + " spawns.");
@@ -430,14 +430,14 @@ static partial class Tests
         {
             Check.That(catalog.TryGet(unit, out _), unit + " is a retail template.");
             var first = Run(unit, "ChinaBarracks", upgrade, unpack, prepare, pack);
-            Check.That(first.Unpack == unpack && first.Prepare == prepare && first.Pack == pack, $"{unit}: the stages take UnpackTime/PreparationTime/PackTime of the data ({first.Unpack}/{first.Prepare}/{first.Pack}).");
+            Check.That(first.Unpack == TestRate.Frames(unpack) && first.Prepare == TestRate.Frames(prepare) && first.Pack == TestRate.Frames(pack), $"{unit}: the stages take UnpackTime/PreparationTime/PackTime of the data ({first.Unpack}/{first.Prepare}/{first.Pack}).");
             Check.That(first.Captured && first.CaptureTick == first.PackStart, $"{unit}: the barracks changes hands when the preparation ends.");
             Check.That(!first.HackStyle, $"{unit}: the infantry capture raises a flag.");
             Check.That(Run(unit, "ChinaBarracks", upgrade, unpack, prepare, pack).Hash == first.Hash, $"{unit}: two runs end identically.");
         }
 
         var lotus = Run("ChinaInfantryBlackLotus", "AmericaBarracks", null, 202, 180, 84);
-        Check.That(lotus.Unpack == 202 && lotus.Prepare == 180 && lotus.Pack == 84, $"Black Lotus: UnpackTime 6730 ms, PreparationTime 6000 ms, PackTime 2800 ms ({lotus.Unpack}/{lotus.Prepare}/{lotus.Pack} ticks).");
+        Check.That(lotus.Unpack == TestRate.Frames(202) && lotus.Prepare == TestRate.Frames(180) && lotus.Pack == TestRate.Frames(84), $"Black Lotus: UnpackTime 6730 ms, PreparationTime 6000 ms, PackTime 2800 ms ({lotus.Unpack}/{lotus.Prepare}/{lotus.Pack} ticks).");
         Check.That(lotus.Captured && lotus.HackStyle, "Black Lotus: captures the barracks and types.");
     }
 }

@@ -100,7 +100,7 @@ static partial class Tests
 
     public static void PowerPlantUpgradeAddsAndRemovesTheBonus()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: PowerPlantFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: PowerPlantFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var owner = new PlayerId(1);
@@ -117,7 +117,7 @@ static partial class Tests
         world.Step();
         Check.That(world.EnergyProductionOf(owner) == 8, "PowerPlantUpgrade adds EnergyBonus (3) to the owner.");
         Check.That(plant.Extended && !plant.IsExtendComplete(world.Tick), "The upgrade extends the rods; the animation timer is still running.");
-        for (var i = 0; i < 40; i++) world.Step();
+        for (var i = 0; i < world.Frames(40); i++) world.Step();
         Check.That(plant.IsExtendComplete(world.Tick), "The extension completes after RodsExtendTime.");
 
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
@@ -131,7 +131,7 @@ static partial class Tests
 
     public static void OverchargeTogglesDrainsAndSwitchesItselfOff()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: PowerPlantFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: PowerPlantFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var owner = new PlayerId(1);
@@ -154,11 +154,11 @@ static partial class Tests
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == world.StateHash && restored.FindEntity(new EntityId(1))!.Modules.OfType<OverchargeBehavior>().Single().Active, "The active state round-trips.");
 
-        for (var i = 0; i < 40; i++) world.Step();
+        for (var i = 0; i < world.Frames(40); i++) world.Step();
         Check.That(!overcharge.Active && !plant.Extended && world.EnergyProductionOf(owner) == 10,
             "Below NotAllowedWhenHealthBelowPercent the plant switches itself off and the bonus is withdrawn.");
         var health = first.Body.Health;
-        for (var i = 0; i < 10; i++) world.Step();
+        for (var i = 0; i < world.Frames(10); i++) world.Step();
         Check.That(first.Body.Health == health, "A switched-off plant stops draining.");
 
         var second = world.FindEntity(new EntityId(2))!.Modules.OfType<OverchargeBehavior>().Single();
@@ -173,7 +173,7 @@ static partial class Tests
     /// <summary>Phase 10: the TOGGLE_OVERCHARGE command (CommandButton.ini) reaches OverchargeBehavior.Toggle, which was reachable from code only.</summary>
     public static void OverchargeCommandTogglesTheModule()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: PowerPlantFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: PowerPlantFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "OverStation", owner: 1, x: 50, y: 50);
@@ -198,7 +198,7 @@ static partial class Tests
     /// </summary>
     public static void CaptureTransfersOwnershipAndThePowerPool()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: PowerPlantFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: PowerPlantFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var attacker = new PlayerId(1);

@@ -111,7 +111,7 @@ static partial class Tests
 
     public static void FiringTrackerSpinsUpCoastsAndCoolsDown()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: FiringTrackerFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: FiringTrackerFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "SpinTank", owner: 1, x: 0, y: 0);
@@ -125,9 +125,9 @@ static partial class Tests
         var east = IdOf(world, "TurretTarget", 1);
 
         var shots = new List<(long Tick, ContinuousFireStage After)>();
-        void Fire(SimulationWorld into, Feeder with, uint victim, int ticks, List<(long, ContinuousFireStage)>? record)
+        void Fire(SimulationWorld into, Feeder with, uint victim, int frames, List<(long, ContinuousFireStage)>? record)
         {
-            for (var i = 0; i < ticks; i++)
+            for (var i = 0; i < into.Frames(frames); i++)
             {
                 with.FireWeapon(1, tank.Id.Value, victim);
                 var result = into.Step();
@@ -142,10 +142,10 @@ static partial class Tests
         Check.That(shots[0].After == ContinuousFireStage.None && shots[2].After == ContinuousFireStage.None, "Up to ContinuousFireOne shots there is no stage.");
         Check.That(shots[3].After == ContinuousFireStage.Mean && shots[5].After == ContinuousFireStage.Mean, "More than ContinuousFireOne shots in a row: the mean stage.");
         Check.That(shots[6].After == ContinuousFireStage.Fast && shots[^1].After == ContinuousFireStage.Fast, "More than ContinuousFireTwo: the fast stage, and it stays.");
-        Check.That(gaps[0] == 18 && gaps[1] == 18 && gaps[2] == 18 && gaps[3] == 18, "Without a stage the weapon fires every 18 ticks: " + string.Join(",", gaps));
+        Check.That(gaps[0] == world.Frames(18) && gaps[1] == world.Frames(18) && gaps[2] == world.Frames(18) && gaps[3] == world.Frames(18), "Without a stage the weapon fires every 18 ticks: " + string.Join(",", gaps));
         // The shot that reaches a stage was still timed without it (the tracker is told after the shot).
-        Check.That(gaps[4] == 9 && gaps[5] == 9 && gaps[6] == 9, "The mean stage (RATE_OF_FIRE 200%) halves the delay: " + string.Join(",", gaps));
-        Check.That(gaps.Skip(7).All(gap => gap is 4 or 5), "The fast stage (400%) quarters it: " + string.Join(",", gaps));
+        Check.That(gaps[4] == world.Frames(9) && gaps[5] == world.Frames(9) && gaps[6] == world.Frames(9), "The mean stage (RATE_OF_FIRE 200%) halves the delay: " + string.Join(",", gaps));
+        Check.That(gaps.Skip(7).All(gap => world.InFrames(gap) is 4 or 5), "The fast stage (400%) quarters it: " + string.Join(",", gaps));
         Check.That((tank.WeaponBonusConditions & (1u << WeaponBonusTable.ContinuousFireFastCondition)) != 0 && (tank.WeaponBonusConditions & (1u << WeaponBonusTable.ContinuousFireMeanCondition)) == 0,
             "The stages are weapon bonus conditions and exclusive.");
 
@@ -162,7 +162,7 @@ static partial class Tests
 
         // No more shots: the stage holds for the coast time after the next possible shot, drops to slow for a second and then ends.
         var stages = new List<ContinuousFireStage>();
-        for (var i = 0; i < 90; i++)
+        for (var i = 0; i < world.Frames(90); i++)
         {
             var hash = world.Step().StateHash;
             Check.That(restored.Step().StateHash == hash, "The restored world cools down identically at step " + i + ".");
@@ -170,8 +170,8 @@ static partial class Tests
         }
         var fast = stages.TakeWhile(value => value == ContinuousFireStage.Fast).Count();
         var slow = stages.Skip(fast).TakeWhile(value => value == ContinuousFireStage.Slow).Count();
-        Check.That(fast is >= 30 and <= 36, "The fast stage outlasts the last shot by the coast time (30 ticks past the next possible shot): " + fast);
-        Check.That(slow == 31, "The slow stage lasts a second: " + slow);
+        Check.That(world.InFrames(fast) is >= 30 and <= 36, "The fast stage outlasts the last shot by the coast time (30 ticks past the next possible shot): " + fast);
+        Check.That(slow == world.Frames(30) + 1, "The slow stage lasts a second: " + slow);
         Check.That(stages.Skip(fast + slow).All(value => value == ContinuousFireStage.None) && tank.WeaponBonusConditions == 0, "Then no stage is left.");
 
         // After the cool-down the count starts over.
@@ -180,7 +180,7 @@ static partial class Tests
         Check.That(again[0].After == ContinuousFireStage.None && again[2].After == ContinuousFireStage.None && again[3].After == ContinuousFireStage.Mean, "After the cool-down the weapon spins up from the start.");
 
         // A weapon without stages never gets a stage.
-        for (var i = 0; i < 100; i++)
+        for (var i = 0; i < world.Frames(100); i++)
         {
             feeder.FireWeapon(1, plain.Id.Value, north);
             world.Step();
@@ -191,11 +191,11 @@ static partial class Tests
     /// <summary><c>PreAttackDelay</c>: the weapon winds up before the shot (<c>Weapon::preFireWeapon</c>), per shot, per attack or per clip.</summary>
     public static void PreAttackDelayWindsUpBeforeTheShot()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: FiringTrackerFiles());
-        Check.That(fixture.Templates.Weapons.TryGet("ClipWindupGun", out var clipGun) && clipGun.PreAttackDelayTicks == 15 && clipGun.PreAttackType == WeaponPrefire.PerClip, "PreAttackDelay (500 ms = 15 ticks) and PreAttackType are read.");
+        var fixture = new SyntheticFixture(TestRate.Default, files: FiringTrackerFiles());
+        Check.That(fixture.Templates.Weapons.TryGet("ClipWindupGun", out var clipGun) && clipGun.PreAttackDelayTicks == TestRate.Frames(15) && clipGun.PreAttackType == WeaponPrefire.PerClip, "PreAttackDelay (500 ms = 15 ticks) and PreAttackType are read.");
         Check.That(fixture.Templates.Weapons.TryGet("SpinGun", out var spinGun) && spinGun.PreAttackDelayTicks == 0 && spinGun.PreAttackType == WeaponPrefire.PerShot, "A weapon without the keys has no delay (default PER_SHOT).");
 
-        List<long> Shots(string template, int ticks, out SimulationWorld world, out Feeder feeder, Action<SimulationWorld, Feeder, Entity, int>? each = null, bool twoVictims = false)
+        List<long> Shots(string template, int frames, out SimulationWorld world, out Feeder feeder, Action<SimulationWorld, Feeder, Entity, int>? each = null, bool twoVictims = false)
         {
             world = NewWorld(fixture);
             feeder = new Feeder(world);
@@ -208,12 +208,12 @@ static partial class Tests
             var east = IdOf(world, "TurretTarget", 1);
             var shots = new List<long>();
             var start = world.Tick;
-            for (var i = 0; i < ticks; i++)
+            for (var i = 0; i < world.Frames(frames); i++)
             {
                 each?.Invoke(world, feeder, tank, i);
-                feeder.FireWeapon(1, tank.Id.Value, twoVictims && i >= ticks / 2 ? east : north);
+                feeder.FireWeapon(1, tank.Id.Value, twoVictims && i >= world.Frames(frames) / 2 ? east : north);
                 var result = world.Step();
-                if (result.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id)) shots.Add(result.Tick - start);
+                if (result.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id)) shots.Add(world.InFrames(result.Tick - start));
             }
             return shots;
         }
@@ -222,7 +222,7 @@ static partial class Tests
         var windup = new List<int>();
         var perShot = Shots("WindupTank", 100, out _, out _, (world, _, tank, i) => windup.Add(world.PreAttackSlotOf(tank)));
         Check.That(perShot.SequenceEqual([15L, 60L]), "PER_SHOT: the first shot after the wind-up, the next after reload plus wind-up: " + string.Join(",", perShot));
-        Check.That(windup.Skip(1).Take(15).All(slot => slot == 0) && windup[16] == -1 && windup[30] == -1 && windup[46] == 0, "While it winds up the object reports its slot (PREATTACK_A), not afterwards: " + string.Join("", windup.Take(50).Select(slot => slot < 0 ? "-" : "A")));
+        Check.That(windup.Skip(1).Take(TestRate.Frames(15)).All(slot => slot == 0) && windup[TestRate.Frames(16)] == -1 && windup[TestRate.Frames(30)] == -1 && windup[TestRate.Frames(46)] == 0, "While it winds up the object reports its slot (PREATTACK_A), not afterwards: " + string.Join("", windup.Take(50).Select(slot => slot < 0 ? "-" : "A")));
 
         // Per attack: only the first shot at a victim waits; another victim waits again.
         var perAttack = Shots("AttackWindupTank", 200, out _, out _, twoVictims: true);
@@ -239,7 +239,7 @@ static partial class Tests
         // Another order drops the wind-up; the next attack starts it afresh. A snapshot taken mid-wind-up continues identically.
         var moved = Shots("WindupTank", 60, out var world2, out var feeder2, (world, feeder, tank, i) =>
         {
-            if (i == 8) feeder.SetMoveTarget(1, tank.Id.Value, 5, 0);
+            if (i == world.Frames(8)) feeder.SetMoveTarget(1, tank.Id.Value, 5, 0);
         });
         Check.That(moved.SequenceEqual([8L + 15L]), "A move order during the wind-up drops it; the fire order of the same tick winds up afresh: " + string.Join(",", moved));
         var tank2 = Slotted(world2, "WindupTank");
@@ -248,7 +248,7 @@ static partial class Tests
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world2), fixture.Templates, fixture.Fingerprint);
         var fork = feeder2.ForkTo(restored);
         Check.That(restored.PreAttackSlotOf(restored.FindEntity(tank2.Id)!) == 0, "The wind-up is part of the snapshot.");
-        for (var i = 0; i < 60; i++)
+        for (var i = 0; i < world2.Frames(60); i++)
         {
             feeder2.FireWeapon(1, tank2.Id.Value, victim2);
             fork.FireWeapon(1, tank2.Id.Value, victim2);

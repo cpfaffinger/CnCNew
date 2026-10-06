@@ -297,7 +297,7 @@ static partial class Tests
 
     private static SimulationWorld PowerWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: SpecialPowerFiles());
+        fixture = new SyntheticFixture(TestRate.Default, files: SpecialPowerFiles());
         var world = NewWorld(fixture);
         feeder = new Feeder(world);
         return world;
@@ -310,7 +310,7 @@ static partial class Tests
     {
         var world = PowerWorld(out var fixture, out var feeder);
         Check.That(fixture.Templates.TryGet("Center", out var center) && center.IsInstantiable, "The special-power modules bind: the carrier is instantiable.");
-        Check.That(world.SpecialPowers.TryGet("SPECIAL_Airdrop", out var airdrop) && airdrop.ReloadTicks == 300 && world.SpecialPowers.TryGet("SPECIAL_Gated", out var gated) && gated.RequiredScience >= 0,
+        Check.That(world.SpecialPowers.TryGet("SPECIAL_Airdrop", out var airdrop) && airdrop.ReloadTicks == world.Frames(300) && world.SpecialPowers.TryGet("SPECIAL_Gated", out var gated) && gated.RequiredScience >= 0,
             "SpecialPower definitions carry reload ticks (10,000 ms = 300 ticks) and the required science.");
         Check.That(world.SpecialPowers.DefaultedReloadCount == 1, "Exactly the definition without ReloadTime takes the DefaultSpecialPower reload time.");
 
@@ -363,7 +363,7 @@ static partial class Tests
         Check.That(CountOf(world, "DropUp") == 1, "The first UpgradeOCL whose science the owner has replaces the default OCL.");
 
         // Terrain edges do not exist: the power still fires and recharges, and the missing delivery is reported.
-        StepTo(world, world.Tick + 100);
+        StepTo(world, world.Tick + world.Frames(100));
         var before = world.Entities.Count;
         Check.That(feeder.UseSpecialPower(1, id, "SPECIAL_Edge", SpecialPowerTargetKind.Location, x: 1, y: 1).Accepted, "An edge power is accepted.");
         result = world.Step();
@@ -373,14 +373,14 @@ static partial class Tests
         Check.That(Rejected(feeder.UseSpecialPower(1, id, "SPECIAL_Edge"), CommandRejection.SpecialPowerNotReady), "The skipped edge power still recharged.");
 
         // StartsPaused + UnpauseSpecialPowerUpgrade.
-        StepTo(world, world.Tick + 400);
+        StepTo(world, world.Tick + world.Frames(400));
         Check.That(Rejected(feeder.UseSpecialPower(1, id, "SPECIAL_Paused"), CommandRejection.SpecialPowerNotReady), "A paused power never becomes ready, however long it waits.");
         feeder.GiveMoney(1, 100);
         world.Step();
         feeder.PurchaseUpgrade(1, "Upgrade_Unpause", id);
         StepTo(world, world.Tick + 3);
         Check.That(Rejected(feeder.UseSpecialPower(1, id, "SPECIAL_Paused"), CommandRejection.SpecialPowerNotReady), "Unpausing adds the paused time back, so the countdown restarts from the pause point.");
-        StepTo(world, world.Tick + 61);
+        StepTo(world, world.Tick + world.Frames(61));
         Check.That(feeder.UseSpecialPower(1, id, "SPECIAL_Paused").Accepted, "After the remaining countdown the unpaused power is ready.");
         world.Step();
     }
@@ -416,7 +416,7 @@ static partial class Tests
         feeder.Spawn(1, "Gunship");
         world.Step();
         var gunship = IdOf(world, "Gunship");
-        StepTo(world, world.Tick + 130);
+        StepTo(world, world.Tick + world.Frames(130));
         Check.That(Rejected(feeder.UseSpecialPower(1, gunship, "SPECIAL_Gunship", SpecialPowerTargetKind.Location, x: 3, y: 3), CommandRejection.SpecialPowerHandlerMissing),
             "A power whose effect is an update module with no matching handler is refused, not silently ignored.");
         feeder.PurchaseUpgrade(1, "Upgrade_Scholar", scholar);
@@ -451,7 +451,7 @@ static partial class Tests
         world.Step();
         var defaulted = IdOf(world, "Defaulted");
         world.SpecialPowers.TryGet("SPECIAL_Defaulted", out var fallback);
-        Check.That(fallback.ReloadTicks == 30, "An absent ReloadTime uses 1,000 ms (30 ticks).");
+        Check.That(fallback.ReloadTicks == world.Frames(30), "An absent ReloadTime uses 1,000 ms (30 ticks).");
         StepTo(world, world.Tick + fallback.ReloadTicks);
         Check.That(feeder.UseSpecialPower(1, defaulted, "SPECIAL_Defaulted").Accepted, "A plain SpecialAbility with no handler is used like any power.");
     }
@@ -467,13 +467,13 @@ static partial class Tests
         var victim = IdOf(world, "Grunt");
         feeder.GiveMoney(2, 60);
         world.Step();
-        StepTo(world, world.Tick + 40);
+        StepTo(world, world.Tick + world.Frames(40));
         Check.That(Rejected(feeder.UseSpecialPower(1, hacker, "SPECIAL_Hack"), CommandRejection.InvalidSpecialPowerTarget) && Rejected(feeder.UseSpecialPower(1, hacker, "SPECIAL_Hack", SpecialPowerTargetKind.Location, x: 1, y: 1), CommandRejection.InvalidSpecialPowerTarget),
             "A cash hack needs an object target.");
         Check.That(feeder.UseSpecialPower(1, hacker, "SPECIAL_Hack", SpecialPowerTargetKind.Object, victim).Accepted, "The hack is accepted.");
         world.Step();
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(50) && world.MoneyOf(new PlayerId(2)) == Fixed.FromInt(10), "The hack steals MoneyAmount from the victim's owner.");
-        StepTo(world, world.Tick + 40);
+        StepTo(world, world.Tick + world.Frames(40));
         feeder.UseSpecialPower(1, hacker, "SPECIAL_Hack", SpecialPowerTargetKind.Object, victim);
         world.Step();
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(60) && world.MoneyOf(new PlayerId(2)) == Fixed.Zero, "A poorer victim loses only what it has.");
@@ -482,7 +482,7 @@ static partial class Tests
         feeder.GiveSciencePoints(1, 1);
         world.Step();
         feeder.PurchaseScience(1, "SCIENCE_Strike");
-        StepTo(world, world.Tick + 40);
+        StepTo(world, world.Tick + world.Frames(40));
         feeder.UseSpecialPower(1, hacker, "SPECIAL_Hack", SpecialPowerTargetKind.Object, victim);
         world.Step();
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(140) && world.MoneyOf(new PlayerId(2)) == Fixed.FromInt(120), "An owned UpgradeMoneyAmount science raises the stolen amount.");
@@ -498,7 +498,7 @@ static partial class Tests
         Check.That(world.CashBountyOf(new PlayerId(1)) == Fixed.Zero, "Without the science the bounty ratio stays zero.");
         var money = world.MoneyOf(new PlayerId(1));
         feeder.FireWeapon(1, fighter, grunts[0]);
-        StepTo(world, world.Tick + 30);
+        StepTo(world, world.Tick + world.Frames(30));
         Check.That(world.FindEntity(new EntityId(grunts[0])) is null && world.MoneyOf(new PlayerId(1)) == money, "The first kill pays nothing.");
         feeder.GiveSciencePoints(1, 1);
         world.Step();
@@ -506,7 +506,7 @@ static partial class Tests
         world.Step();
         Check.That(world.CashBountyOf(new PlayerId(1)) > Fixed.Zero, "Granting the science raises the owner's bounty ratio (onSpecialPowerCreation).");
         feeder.FireWeapon(1, fighter, grunts[1]);
-        StepTo(world, world.Tick + 30);
+        StepTo(world, world.Tick + world.Frames(30));
         Check.That(world.FindEntity(new EntityId(grunts[1])) is null && world.MoneyOf(new PlayerId(1)) == money + Fixed.FromInt(20), "The next kill pays 20% of the victim's build cost.");
         Check.That(world.CashBountyOf(new PlayerId(2)) == Fixed.Zero, "The other player is unaffected.");
     }
@@ -522,13 +522,13 @@ static partial class Tests
         var center = IdOf(live, "Center");
         var fresh = IdOf(live, "SharedFresh");
         feeder.UseSpecialPower(1, fresh, "SPECIAL_Shared");
-        StepTo(live, 200);
+        StepTo(live, live.Frames(200));
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(live), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == live.StateHash, "The special-power state round-trips (recharge frames, pause counts, shared timers, wake ticks).");
         var fork = feeder.ForkTo(restored);
-        for (var i = 0; i < 400; i++)
+        for (var i = 0; i < live.Frames(400); i++)
         {
-            if (live.Tick == 320)
+            if (live.Tick == live.Frames(320))
             {
                 Check.That(feeder.UseSpecialPower(1, center, "SPECIAL_Airdrop", SpecialPowerTargetKind.Location, x: 11, y: 12).Accepted && fork.UseSpecialPower(1, center, "SPECIAL_Airdrop", SpecialPowerTargetKind.Location, x: 11, y: 12).Accepted,
                     "The power is ready in both the live and the restored world.");
@@ -539,7 +539,7 @@ static partial class Tests
 
         var command = new UseSpecialPowerCommand(new PlayerId(1), 12, 12, new EntityId(4), "SPECIAL_Airdrop", SpecialPowerTargetKind.Location, new EntityId(0), Fixed.FromInt(3), Fixed.FromInt(-4));
         var objectCommand = new UseSpecialPowerCommand(new PlayerId(2), 13, 13, new EntityId(5), "SPECIAL_Hack", SpecialPowerTargetKind.Object, new EntityId(6), Fixed.Zero, Fixed.Zero);
-        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, 30, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), TwoPlayers, 10, 5);
+        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, TestRate.Default.TicksPerSecond, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), TwoPlayers, 10, 5);
         ImmutableArray<SimCommand> commands = [command, objectCommand];
         var read = ReplayFormat.Read(ReplayFormat.Write(new ReplayFile(header, commands, [])));
         Check.That(read.Commands.SequenceEqual(commands), "UseSpecialPowerCommand survives the replay file.");

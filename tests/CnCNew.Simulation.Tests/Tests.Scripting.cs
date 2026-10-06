@@ -290,7 +290,7 @@ static partial class Tests
     /// </summary>
     private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) MissionMap(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null, IReadOnlyDictionary<string, string>? extraFiles = null, SimulationRate? rate = null)
     {
-        var fixture = new SyntheticFixture(rate ?? SimulationRate.Original, files: extraFiles is null ? ScriptFiles() : new Dictionary<string, string>(ScriptFiles()).Concat(extraFiles).ToDictionary(pair => pair.Key, pair => pair.Value));
+        var fixture = new SyntheticFixture(rate ?? TestRate.Default, files: extraFiles is null ? ScriptFiles() : new Dictionary<string, string>(ScriptFiles()).Concat(extraFiles).ToDictionary(pair => pair.Key, pair => pair.Value));
         var area = new MapPolygonTrigger("LeftArea", string.Empty, 7, false, false, 0, [new MapPoint(0, 0, 0), new MapPoint(200, 0, 0), new MapPoint(200, 400, 0), new MapPoint(0, 400, 0)]);
         var baseMap = SyntheticMaps.Build(60, 40, 1, triggers: [area], waypoints: [("Spawn", 100m, 200m, 0m), ("Far", 400m, 200m, 0m), ("Mid", 250m, 200m, 0m)]);
         // Waypoint paths: extra waypoints, the first labelled with the path name (waypointPathLabel1), linked in order by waypointID.
@@ -381,14 +381,14 @@ static partial class Tests
         var engine = session.Engine;
         Run(session, 1);
         Check.That(engine.CounterValue("c") == 7 && engine.FlagValue("f"), "Set, increment and decrement leave the counter at 7; the flag is set.");
-        Check.That(engine.CounterIsTimer("t") && engine.CounterValue("t") == 60, $"A 2 s timer holds 60 frames right after it was set (got {engine.CounterValue("t")}).");
+        Check.That(engine.CounterIsTimer("t") && engine.CounterValue("t") == session.Frames(60), $"A 2 s timer holds 60 frames right after it was set (got {engine.CounterValue("t")}).");
         Check.That(!engine.IsScriptActive("Start"), "A one-shot script deactivates itself after it fired.");
-        Run(session, 58);
+        Run(session, session.Frames(58));
         Check.That(engine.CounterValue("done") == 0, "The timer has not expired after 59 ticks.");
-        Run(session, 4);
+        Run(session, session.Frames(4));
         Check.That(engine.CounterValue("done") == 1, $"The timer expired ('done' = {engine.CounterValue("done")}, timer {engine.CounterValue("t")}).");
         Check.That(engine.CounterValue("bad") == 0 && !engine.CounterIsTimer("other"), "A timer that was never started is not expired.");
-        Run(session, 120);
+        Run(session, session.Frames(120));
         Check.That(engine.CounterValue("t") == -1, "Timers count down to -1 and stop.");
     }
 
@@ -408,13 +408,13 @@ static partial class Tests
             Scr.Script("Delayed", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("delayed"))], delaySeconds: 1),
         ], [group, library]);
         var engine = session.Engine;
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(engine.CounterValue("subs") == 111, $"A subroutine script and a subroutine group both ran once when called (got {engine.CounterValue("subs")}); a subroutine never runs on its own.");
         Check.That(engine.CounterValue("slept") == 0 && !engine.IsScriptActive("Sleeper"), "An inactive script does not run.");
         Check.That(engine.CounterValue("normal") == 1 && engine.CounterValue("easy") == 0, "Difficulty flags gate scripts: the Normal game runs the normal-only script, not the easy-only one.");
         Check.That(engine.CounterValue("else") == 1 && !engine.IsScriptActive("Else"), "A false condition runs the false actions once; a one-shot script ends after them.");
         var delayedAtStart = engine.CounterValue("delayed");
-        Run(session, 120);
+        Run(session, session.Frames(120));
         Check.That(engine.CounterValue("delayed") - delayedAtStart is >= 3 and <= 4, $"A 1 s delayed script evaluates about once a second (got {engine.CounterValue("delayed")} after 4 s).");
         engine.SignalUiInteraction("wake");
         engine.SignalUiInteraction("none");
@@ -424,7 +424,7 @@ static partial class Tests
 
         var easy = StartMission([Scr.Script("EasyOnly", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_COUNTER", Scr.Counter("easy"), Scr.Int(1))], normal: false, hard: false, oneShot: true)],
             options: MissionOptions.Standard with { Difficulty = ScriptDifficulty.Easy });
-        Run(easy, 2);
+        Run(easy, easy.Frames(2));
         Check.That(easy.Engine.CounterValue("easy") == 1, "On Easy the easy-only script runs.");
     }
 
@@ -455,11 +455,11 @@ static partial class Tests
         Check.That(engine.FlagValue("two"), "The object comparison counts the created units as the team owner's.");
         Check.That(engine.FlagValue("credits"), "The credit comparison has the parameter on the left.");
         Check.That(engine.FlagValue("crateMoved"), "A named object changes owner.");
-        Run(session, 4);
+        Run(session, session.Frames(4));
         Check.That(engine.FlagValue("bossDead"), "A killed named object counts as destroyed. " + string.Join(";", engine.ExplainScript("Dead").Select(e => e.Label + "=" + e.Result)) + " named " + string.Join(",", engine.NamedObjects.Select(n => n.Key)) + " ents " + string.Join(",", world.Entities.Select(e => e.Template.Name + (e.EffectivelyDead ? "(dead)" : ""))) + " tick " + world.Tick);
         Check.That(engine.Outcome == MissionOutcome.Victory && engine.OutcomeTick >= 0, "VICTORY sets the outcome once every object of the opponent is gone.");
         Check.That(!session.IsOver, "The mission runs on for the end-game delay after a victory.");
-        Run(session, ScriptEngine.EndGameDelayFrames + 5);
+        Run(session, session.Frames(ScriptEngine.EndGameDelayFrames + 5));
         Check.That(engine.IsEnded && session.IsOver, "The end-game delay ends the mission.");
     }
 
@@ -470,7 +470,7 @@ static partial class Tests
             Scr.Script("March", [Scr.And(Scr.If("NAMED_CREATED", Scr.Unit("Runner")))], [Scr.Do("MOVE_NAMED_UNIT_TO", Scr.Unit("Runner"), Scr.Waypoint("Mid"))], oneShot: true),
             Scr.Script("Arrived", [Scr.And(Scr.If("NAMED_OUTSIDE_AREA", Scr.Unit("Runner"), Scr.Area("LeftArea")))], [Scr.Do("SET_FLAG", Scr.Flag("outside"), Scr.Bool(true))], oneShot: true),
         ]);
-        Run(session, 600);
+        Run(session, session.Frames(600));
         var runner = session.World.Entities.First(entity => entity.Template.Name == "AlphaSoldier");
         Check.That(runner.X > Fixed.FromInt(200), $"The unit walked out of the area toward the waypoint (x = {runner.X}).");
         Check.That(session.Engine.FlagValue("outside"), "The area condition saw it leave.");
@@ -484,7 +484,7 @@ static partial class Tests
                 Scr.Do("CALL_SUBROUTINE", Scr.Script("Nope")), Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("u"), Scr.Type("NoSuchObject"), Scr.Team("teamA"), Scr.Waypoint("Spawn"))], oneShot: true),
             Scr.Script("Sighted", [Scr.And(new MapCondition(9999, "NOT_A_REAL_CONDITION", []))], [Scr.Do("SET_FLAG", Scr.Flag("seen"), Scr.Bool(true))]),
         ]);
-        Run(session, 3);
+        Run(session, 3); // three script updates: the count below is per evaluation
         var engine = session.Engine;
         Check.That(engine.MissingActionHits.GetValueOrDefault("NOT_A_REAL_ACTION") == 1, "An unimplemented action is counted, not skipped silently.");
         Check.That(engine.MissingConditionHits.GetValueOrDefault("NOT_A_REAL_CONDITION") == 3 && !engine.FlagValue("seen"), "An unimplemented condition is counted on every evaluation and evaluates to false.");
@@ -553,7 +553,7 @@ static partial class Tests
         ], objects: [Placed("AlphaSoldier", 100m, 300m, "teamA", "A1"), Placed("BetaSoldier", 140m, 300m, "teamB", "B1"), Placed("AlphaSoldier", 100m, 100m, "teamA", "Walker")],
             paths: [("Route", [("Mid", 130m, 100m), ("Far", 220m, 100m)])]);
         var engine = session.Engine;
-        Run(session, 900);
+        Run(session, session.Frames(900));
         Check.That(engine.FlagValue("byPlayer") && engine.FlagValue("byType"), "The last attacker of an object is remembered by player and by type.");
         Check.That(engine.FlagValue("teamHit"), "A team counts as attacked when a member was.");
         Check.That(engine.FlagValue("inArea"), "The kind condition counts live infantry of the player in the area.");
@@ -574,13 +574,13 @@ static partial class Tests
                 Scr.Do("CREATE_REINFORCEMENT_TEAM", Scr.Team("Raiders"), Scr.Waypoint("Mid"))], oneShot: true),
         ], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Shooter"), Placed("BetaBarracks", 130m, 100m, "teamB", "Near"), Placed("BetaSoldier", 170m, 100m, "teamB", "Far")]);
         var engine = session.Engine;
-        Run(session, 2);
+        Run(session, session.Frames(2));
         var shooter = session.World.FindEntity(new EntityId(engine.NamedObjects.First(item => item.Key == "Shooter").Value))!;
         var near = session.World.FindEntity(new EntityId(engine.NamedObjects.First(item => item.Key == "Near").Value))!;
         var far = session.World.FindEntity(new EntityId(engine.NamedObjects.First(item => item.Key == "Far").Value))!;
         Check.That(engine.AttackPriority(shooter, far) == 5 && engine.AttackPriority(shooter, near) == 0, "The set gives soldiers priority 5 and everything else the set's default.");
         Check.That(engine.AttackPriority(far, shooter) == ScriptEngine.DefaultAttackPriority, "An object without a set uses the default priority.");
-        Run(session, 30);
+        Run(session, session.Frames(30));
         Check.That(far.Body!.Health < far.Body.MaxHealth && near.Body!.Health == near.Body.MaxHealth, $"The shooter went for the higher-priority target although another one was nearer (far {far.Body.Health}/{far.Body.MaxHealth}, near {near.Body!.Health}/{near.Body!.MaxHealth}, shots {session.CombatStats}).");
     }
 
@@ -596,19 +596,19 @@ static partial class Tests
             Scr.Script("Count", [Scr.And(Scr.If("TIMER_EXPIRED", Scr.Counter("r")))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("hits")), Scr.Do("SET_MILLISECOND_TIMER", Scr.Counter("r"), Scr.Real(3m))]),
         ];
         var (map, fixture, terrain) = MissionMap(Scripts());
-        var (original, restored, bytes) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 900);
+        var (original, restored, bytes) = MissionScenario.VerifyContinuation(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, TestRate.Frames(900));
         Check.That(original.Chain == restored.Chain && original.FinalHash == restored.FinalHash,
             $"A saved and restored mission continues hash-identically (chain {original.Chain:X16} vs {restored.Chain:X16}, {bytes} bytes).");
         Check.That(original.ExecutedScripts > 0 && original.Shots + original.Entities > 0, "The mission did something.");
 
-        var again = MissionScenario.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, 900);
+        var again = MissionScenario.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, TestRate.Frames(900));
         Check.That(again.Chain == original.Chain && again.FinalHash == original.FinalHash, "Two fresh runs of the same mission are identical.");
-        var other = MissionScenario.Run(MissionOptions.Standard with { WorldSeed = 12345 }, fixture.Templates, fixture.Fingerprint, terrain, map, 900);
+        var other = MissionScenario.Run(MissionOptions.Standard with { WorldSeed = 12345 }, fixture.Templates, fixture.Fingerprint, terrain, map, TestRate.Frames(900));
         Check.That(other.Chain != original.Chain, "A different logic seed changes the script timers and so the run.");
 
         // Save, restore and save again: the byte stream is canonical.
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 200);
+        Run(session, session.Frames(200));
         var first = MissionSnapshot.Write(session);
         var copy = MissionSnapshot.Restore(first, fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(MissionSnapshot.Write(copy).AsSpan().SequenceEqual(first), "Restoring and saving again reproduces the snapshot byte for byte.");
@@ -620,7 +620,7 @@ static partial class Tests
         var scripts = new[] { Scr.Script("S", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_COUNTER", Scr.Counter("c"), Scr.Int(1))], oneShot: true) };
         var (map, fixture, terrain) = MissionMap(scripts);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 10);
+        Run(session, session.Frames(10));
         var bytes = MissionSnapshot.Write(session);
         Check.That(MissionSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain, map).Engine.CounterValue("c") == 1, "The intact snapshot restores.");
 
@@ -668,11 +668,11 @@ static partial class Tests
             End
             """,
         };
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: files);
+        var fixture = new SyntheticFixture(TestRate.Default, files: files);
         Check.That(fixture.Templates.TryGet("Hunter", out var hunter) && hunter.IsInstantiable, "An object with the command-button hunt shell and a locked primary slot can be created.");
         // With the weapon slot model the module locks whichever slot it names (locks are tested in Tests.WeaponSlots.cs); an unknown slot name is a build error, not a guess.
         Check.That(fixture.Templates.TryGet("Switcher", out var switcher) && switcher.IsInstantiable, "Locking another slot is supported: " + string.Join(",", switcher?.MissingModules ?? []));
         files["Data/INI/Object/Shells.ini"] += "\nObject Typo\n  KindOf = INFANTRY\n  Behavior = LockWeaponCreate Lock01\n    SlotToLock = QUATERNARY\n  End\nEnd\n";
-        Check.Throws<FormatException>(() => _ = new SyntheticFixture(SimulationRate.Original, files: files).Templates, "QUATERNARY"); // an unknown SlotToLock is already rejected by the strictly typed module schema
+        Check.Throws<FormatException>(() => _ = new SyntheticFixture(TestRate.Default, files: files).Templates, "QUATERNARY"); // an unknown SlotToLock is already rejected by the strictly typed module schema
     }
 }

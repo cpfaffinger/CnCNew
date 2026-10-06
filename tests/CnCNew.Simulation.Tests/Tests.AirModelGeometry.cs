@@ -32,16 +32,16 @@ static partial class Tests
     /// </summary>
     public static void AirAirfieldUsesTheModelBones()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: WingAirfieldFiles);
+        var fixture = new SyntheticFixture(TestRate.Default, files: WingAirfieldFiles);
         var geometry = AirfieldBones();
         Check.That(geometry.Fingerprint.Length == 64 && geometry.Combine("abc") != "abc" && ModelGeometry.None.Combine("abc") == "abc", "The table has a fingerprint and changes the world fingerprint; the empty table does not.");
         Check.That(new ModelGeometry(geometry.Airfields).Fingerprint == geometry.Fingerprint, "The fingerprint depends on the content only.");
-        Check.Throws<TemplateBuildException>(() => TemplateCatalog.Build(fixture.Graph, fixture.Bindings, SimulationRate.Original, new ModelGeometry([new KeyValuePair<string, AirfieldLayout>("NoSuchAirfield", geometry.Airfields["AirTestAirfield"])])), "NoSuchAirfield");
+        Check.Throws<TemplateBuildException>(() => TemplateCatalog.Build(fixture.Graph, fixture.Bindings, TestRate.Default, new ModelGeometry([new KeyValuePair<string, AirfieldLayout>("NoSuchAirfield", geometry.Airfields["AirTestAirfield"])])), "NoSuchAirfield");
 
         SimulationWorld Create(ModelGeometry table)
         {
-            var templates = TemplateCatalog.Build(fixture.Graph, fixture.Bindings, SimulationRate.Original, table);
-            return new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 9, CombatPlayers, SyntheticFixture.FixtureId, table.Combine(fixture.Fingerprint), string.Empty), templates, null);
+            var templates = TemplateCatalog.Build(fixture.Graph, fixture.Bindings, TestRate.Default, table);
+            return new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 9, CombatPlayers, SyntheticFixture.FixtureId, table.Combine(fixture.Fingerprint), string.Empty), templates, null);
         }
 
         // a table with other dimensions is refused when the airfield first needs it
@@ -53,7 +53,7 @@ static partial class Tests
         brokenFeeder.GiveMoney(1, 1000);
         broken.Step();
         Check.That(brokenFeeder.QueueProduction(1, Get(broken, "AirTestAirfield").Id.Value, "AirTestJet").Accepted, "The jet is queued.");
-        Check.Throws<InvalidDataException>(() => { for (var tick = 0; tick < 200; tick++) broken.Step(); }, "spaces");
+        Check.Throws<InvalidDataException>(() => { for (var tick = 0; tick < broken.Frames(200); tick++) broken.Step(); }, "spaces");
 
         var world = Create(geometry);
         var feeder = new Feeder(world);
@@ -76,7 +76,7 @@ static partial class Tests
         var liftedAt = (X: Fixed.Zero, Y: Fixed.Zero);
         var worstOffLine = Fixed.Zero;
         var restored = false;
-        for (var tick = 0; tick < 1500 && liftedAt.X == Fixed.Zero; tick++)
+        for (var tick = 0; tick < world.Frames(1500) && liftedAt.X == Fixed.Zero; tick++)
         {
             world.Step();
             // from the runway start on, the roll stays on the runway line y = 450
@@ -86,7 +86,7 @@ static partial class Tests
                 restored = true;
                 var copy = WorldSnapshot.Restore(WorldSnapshot.Write(world), world.Templates, world.Configuration.DefinitionFingerprint, world.Terrain);
                 Check.That(copy.StateHash == world.StateHash, "A snapshot during the taxi to the runway restores to the same hash.");
-                for (var follow = 0; follow < 60; follow++) Check.That(copy.Step().StateHash == world.Step().StateHash, $"The restored world follows (step {follow}).");
+                for (var follow = 0; follow < copy.Frames(60); follow++) Check.That(copy.Step().StateHash == world.Step().StateHash, $"The restored world follows (step {follow}).");
             }
             if (jet.Z >= Fixed.FromInt(5) && ai.AllowAirLoco) liftedAt = (jet.X, jet.Y);
         }
@@ -100,12 +100,12 @@ static partial class Tests
         for (var shot = 0; shot < 2; shot++)
         {
             Check.That(feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted, "A shot is accepted.");
-            for (var i = 0; i < 6; i++) world.Step();
+            for (var i = 0; i < world.Frames(6); i++) world.Step();
         }
         Check.That(ai.IsOutOfSpecialReloadAmmo(world), "The jet is out of ammunition.");
         var touchdown = (X: Fixed.Zero, Y: Fixed.Zero);
         var phases = new List<JetAIUpdate.JetPhase>();
-        for (var tick = 0; tick < 4000 && !(phases.Contains(JetAIUpdate.JetPhase.ReloadAmmo) && ai.Phase == JetAIUpdate.JetPhase.None && !ai.AllowAirLoco); tick++)
+        for (var tick = 0; tick < world.Frames(4000) && !(phases.Contains(JetAIUpdate.JetPhase.ReloadAmmo) && ai.Phase == JetAIUpdate.JetPhase.None && !ai.AllowAirLoco); tick++)
         {
             world.Step();
             if (phases.Count == 0 || phases[^1] != ai.Phase) phases.Add(ai.Phase);

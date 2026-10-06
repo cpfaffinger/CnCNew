@@ -229,7 +229,7 @@ static partial class Tests
         }
 
         // 30 Hz: the snapshot of a 30 Hz world is refused by a 60 Hz catalog as well.
-        var (fixture30, replay30, _) = ShortReplay();
+        var (fixture30, replay30, _) = ShortReplay(rate: SimulationRate.Hz30);
         var world30 = ReplayRunner.CreateWorld(replay30.Header, fixture30.Templates);
         ReplayRunner.Run(replay30, world30, new ReplayRunOptions { StopTick = 300 });
         var sixty = new SyntheticFixture(SimulationRate.Hz60);
@@ -257,7 +257,7 @@ static partial class Tests
         }
 
         // An unsupported rate is refused before any world exists.
-        var (fixture30, replay30, _) = ShortReplay();
+        var (fixture30, replay30, _) = ShortReplay(rate: SimulationRate.Hz30);
         var fifty = ReplayFormat.Read(ReplayFormat.Write(replay30 with { Header = replay30.Header with { TickRate = 50 } }));
         Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(fifty, fixture30.Templates, fixture30.Fingerprint), "50 Hz");
         Check.Throws<ReplayRejectedException>(() => ReplayRunner.CreateWorld(fifty.Header, fixture30.Templates), "50 Hz");
@@ -270,7 +270,7 @@ static partial class Tests
     public static void TickRateMissionSnapshotsCarryTheirRate()
     {
         var scripts = new[] { Scr.Script("S", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_COUNTER", Scr.Counter("c"), Scr.Int(1))], oneShot: true) };
-        var (_, fixture30, _) = MissionMap(scripts);
+        var (_, fixture30, _) = MissionMap(scripts, rate: SimulationRate.Hz30);
         foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
         {
             var (map, fixture, terrain) = MissionMap(scripts, rate: rate);

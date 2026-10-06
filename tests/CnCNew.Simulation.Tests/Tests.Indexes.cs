@@ -320,7 +320,7 @@ static partial class Tests
         session.Step();
         var answers = new int[4];
         var compared = 0;
-        for (var round = 0; round < 600; round++)
+        for (var round = 0; round < session.Frames(600); round++)
         {
             RandomWorldChange(session, fixture, dice, step: false, templates: templates);
             var expected = new Dictionary<uint, (bool Enemy, bool Ally)>();
@@ -392,7 +392,7 @@ static partial class Tests
     public static void KindLookupMatchesComparerLookup()
     {
         // IsKindOf was ImmutableArray.Contains(kind, OrdinalIgnoreCase); the loop that replaced it answers the same for every kind and spelling.
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: ScriptFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: ScriptFiles());
         string[] kinds = ["INFANTRY", "infantry", "Infantry", "STRUCTURE", "SELECTABLE", "FS_BASE_DEFENSE", "TECH_BUILDING", "SUPPLY_SOURCE", "PROJECTILE", "INERT", "MINE", "", "INFANTR", "INFANTRYX", "ıNFANTRY"];
         var checkedTemplates = 0;
         var hits = 0;

@@ -92,8 +92,8 @@ static partial class Tests
 
     private static SimulationWorld RepairWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: RepairFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, RepairPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        fixture = new SyntheticFixture(TestRate.Default, files: RepairFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, RepairPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }
@@ -115,7 +115,7 @@ static partial class Tests
         Check.That(feeder.Dock(1, truck.Id.Value, pad.Id.Value).Accepted, "The dock order is accepted.");
 
         var history = new List<Fixed>();
-        for (var i = 0; i < 400 && truck.Body.Health < truck.Body.MaxHealth; i++)
+        for (var i = 0; i < world.Frames(400) && truck.Body.Health < truck.Body.MaxHealth; i++)
         {
             world.Step();
             history.Add(truck.Body.Health);
@@ -124,11 +124,11 @@ static partial class Tests
         var steps = new List<Fixed>();
         for (var i = 1; i < history.Count; i++)
             if (history[i] > history[i - 1]) steps.Add(history[i] - history[i - 1]);
-        Check.That(steps.Count is >= 8 and <= 10, $"Nine repair ticks (300 ms), got {steps.Count}.");
+        Check.That(steps.Count >= world.Frames(8) && steps.Count <= world.Frames(10), $"Nine repair ticks (300 ms), got {steps.Count}.");
         Check.That(steps.Take(steps.Count - 1).Distinct().Count() == 1, "Every repair tick adds the same amount.");
-        Check.That(steps[0] == (Fixed.FromInt(60) / Fixed.FromInt(9)), "The step is the missing health divided by the frames for a full heal.");
+        Check.That(steps[0] == (Fixed.FromInt(60) / Fixed.FromInt(world.Frames(9))), "The step is the missing health divided by the frames for a full heal.");
 
-        for (var i = 0; i < 20; i++) world.Step();
+        for (var i = 0; i < world.Frames(20); i++) world.Step();
         Check.That(!truck.HasMoveTarget && truck.Body.Health == truck.Body.MaxHealth, "The docking is over and the truck is idle.");
 
         // A healthy docker finishes at once; the damaged one behind it is still repaired.
@@ -140,10 +140,10 @@ static partial class Tests
         feeder.Damage(hurt.Id.Value, 30);
         world.Step();
         feeder.Dock(1, healthy.Id.Value, pad.Id.Value);
-        for (var i = 0; i < 100; i++) world.Step();
+        for (var i = 0; i < world.Frames(100); i++) world.Step();
         Check.That(healthy.Body!.Health == healthy.Body.MaxHealth && !healthy.HasMoveTarget, "A healthy docker has left the dock free after 100 ticks.");
         feeder.Dock(1, hurt.Id.Value, pad.Id.Value);
-        for (var i = 0; i < 300 && hurt.Body!.Health < hurt.Body.MaxHealth; i++) world.Step();
+        for (var i = 0; i < world.Frames(300) && hurt.Body!.Health < hurt.Body.MaxHealth; i++) world.Step();
         Check.That(hurt.Body!.Health == hurt.Body.MaxHealth, "The damaged docker behind it is repaired.");
     }
 
@@ -159,7 +159,7 @@ static partial class Tests
         world.Step();
         feeder.Dock(1, truck.Id.Value, Get(world, "RepairPad").Id.Value);
         var midRepair = false;
-        for (var i = 0; i < 100 && !midRepair; i++)
+        for (var i = 0; i < world.Frames(100) && !midRepair; i++)
         {
             world.Step();
             midRepair = truck.Body!.Health > Fixed.FromInt(50) && truck.Body.Health < Fixed.FromInt(90);
@@ -168,9 +168,9 @@ static partial class Tests
         SnapshotContinues(world, fixture);
     }
 
-    private static Entity? RunUntilContained(SimulationWorld world, Entity patient, int maxTicks)
+    private static Entity? RunUntilContained(SimulationWorld world, Entity patient, int maxFrames)
     {
-        for (var i = 0; i < maxTicks && !patient.ContainedBy.IsValid; i++) world.Step();
+        for (var i = 0; i < world.Frames(maxFrames) && !patient.ContainedBy.IsValid; i++) world.Step();
         return patient.ContainedBy.IsValid ? world.FindEntity(patient.ContainedBy) : null;
     }
 
@@ -188,7 +188,7 @@ static partial class Tests
         Check.That(patient.Body!.Health == Fixed.FromInt(30), "The patient is at 30 of 50 (60 %).");
 
         var walking = false;
-        for (var i = 0; i < 40 && !walking; i++)
+        for (var i = 0; i < world.Frames(40) && !walking; i++)
         {
             world.Step();
             walking = patient.HasMoveTarget;
@@ -199,9 +199,9 @@ static partial class Tests
         var host = RunUntilContained(world, patient, 400);
         Check.That(host == clinic, "The patient entered the pad.");
         Check.That(patient.X > Fixed.FromInt(50), "It walked there first; the entry is not instant.");
-        for (var i = 0; i < 100 && patient.ContainedBy.IsValid; i++) world.Step();
+        for (var i = 0; i < world.Frames(100) && patient.ContainedBy.IsValid; i++) world.Step();
         Check.That(!patient.ContainedBy.IsValid && patient.Body.Health == patient.Body.MaxHealth, "The pad healed the patient to full health and released it.");
-        for (var i = 0; i < 60; i++) world.Step();
+        for (var i = 0; i < world.Frames(60); i++) world.Step();
         Check.That(!patient.HasMoveTarget && !patient.ContainedBy.IsValid, "A healthy patient is not sent in again.");
     }
 
@@ -215,7 +215,7 @@ static partial class Tests
         world.Step();
         var patient = Get(world, "Patient");
         feeder.Damage(patient.Id.Value, 30);
-        for (var i = 0; i < 100; i++) world.Step();
+        for (var i = 0; i < world.Frames(100); i++) world.Step();
         Check.That(!patient.HasMoveTarget && !patient.ContainedBy.IsValid && patient.X == Fixed.Zero, "A human player's infantry never looks for healing by itself.");
 
         // Above NeverHeal (88 %).
@@ -225,7 +225,7 @@ static partial class Tests
         world.Step();
         patient = Get(world, "Patient");
         feeder.Damage(patient.Id.Value, 6);
-        for (var i = 0; i < 100; i++) world.Step();
+        for (var i = 0; i < world.Frames(100); i++) world.Step();
         Check.That(!patient.HasMoveTarget && !patient.ContainedBy.IsValid && patient.X == Fixed.Zero, "An object above NeverHeal is not sent to the pad.");
         feeder.Damage(patient.Id.Value, 2);
         Check.That(RunUntilContained(world, patient, 400) is not null, "Below NeverHeal (84 %) it does go.");
@@ -238,7 +238,7 @@ static partial class Tests
         patient = Get(world, "Patient");
         feeder.Damage(patient.Id.Value, 20);
         feeder.SetMoveTarget(1, patient.Id.Value, -500, 0);
-        for (var i = 0; i < 100; i++) world.Step();
+        for (var i = 0; i < world.Frames(100); i++) world.Step();
         Check.That(patient.X < Fixed.Zero && !patient.ContainedBy.IsValid && patient.Body!.Health == Fixed.FromInt(30), "A busy object keeps its order.");
 
         // Enemy pad.
@@ -248,7 +248,7 @@ static partial class Tests
         world.Step();
         patient = Get(world, "Patient");
         feeder.Damage(patient.Id.Value, 20);
-        for (var i = 0; i < 100; i++) world.Step();
+        for (var i = 0; i < world.Frames(100); i++) world.Step();
         Check.That(!patient.HasMoveTarget && !patient.ContainedBy.IsValid && patient.X == Fixed.Zero, "An enemy's pad is not entered.");
 
         // Out of range (ScanRange 300).
@@ -258,7 +258,7 @@ static partial class Tests
         world.Step();
         patient = Get(world, "Patient");
         feeder.Damage(patient.Id.Value, 20);
-        for (var i = 0; i < 100; i++) world.Step();
+        for (var i = 0; i < world.Frames(100); i++) world.Step();
         Check.That(!patient.HasMoveTarget && !patient.ContainedBy.IsValid && patient.X == Fixed.Zero, "A pad beyond ScanRange is not seen.");
     }
 
@@ -291,8 +291,8 @@ static partial class Tests
     /// <summary>The computer flag survives the replay header.</summary>
     public static void RepairPlayerTypeReplayHeader()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: RepairFiles());
-        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, 30, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), RepairPlayers, 20, 5);
+        var fixture = new SyntheticFixture(TestRate.Default, files: RepairFiles());
+        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, TestRate.Default.TicksPerSecond, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), RepairPlayers, 20, 5);
         var read = ReplayFormat.Read(ReplayFormat.Write(new ReplayFile(header, [], [])));
         Check.That(read.Header.Players.SequenceEqual(RepairPlayers), "The replay header keeps every player's computer flag.");
         Check.That(read.Header.Players.Select(value => value.IsComputer).SequenceEqual([true, false, true]), "The flags are read back in order.");

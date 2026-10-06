@@ -17,7 +17,7 @@ static partial class Tests
             Scr.Script("Quit", [Scr.And(Scr.If("FLAG", Scr.Flag("quit"), Scr.Bool(true)))], [Scr.Do("LOCALDEFEAT")], oneShot: true),
         ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Pole")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 3);
+        Run(session, session.Frames(3));
         var pole = NamedIn(session, "Pole")!;
         Check.That(session.World.TryGetToppleDirectionOverride(pole, out var x, out var y) && (x - Fixed.FromDecimal(0.6m)).Abs() < Fixed.FromDecimal(0.01m) && (y - Fixed.FromDecimal(0.8m)).Abs() < Fixed.FromDecimal(0.01m),
             $"The scripted topple direction is handed to the world normalised ({x}, {y}).");
@@ -28,7 +28,7 @@ static partial class Tests
         Check.That(restored.StateHash() == session.StateHash() && restored.World.TryGetToppleDirectionOverride(NamedIn(restored, "Pole")!, out _, out _) && restored.World.BuildableOf(soldier) == "No",
             "A restored mission keeps the tables and installs the hooks again.");
         session.Engine.SignalUiInteraction("quit");
-        Run(session, 60);
+        Run(session, session.Frames(60));
         Check.That(session.Engine.Outcome == MissionOutcome.Defeat, $"LOCALDEFEAT ends the mission as a defeat ({session.Engine.Outcome}).");
     }
 
@@ -47,7 +47,7 @@ static partial class Tests
                      Placed("BetaSoldier", 140m, 300m, "teamB", "Empty"), Placed("AlphaSoldier", 110m, 300m, "teamPlayerA", "Taker")],
             paths: [("Approach1", [("A", 130m, 100m), ("B", 220m, 100m), ("C", 300m, 100m)])]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 600);
+        Run(session, session.Frames(600));
         var hiker = NamedIn(session, "Hiker")!;
         Check.That(hiker.X > Fixed.FromInt(100) && session.Engine.MissingActionHits.Count == 0, $"UNIT_MOVE_TOWARDS_NEAREST_OBJECT_TYPE and the approach paths move units (hiker at {hiker.X},{hiker.Y}; missing {string.Join(", ", session.Engine.MissingActionHits.Keys)}).");
         var empty = NamedIn(session, "Empty")!;
@@ -55,7 +55,7 @@ static partial class Tests
         Check.That(empty.Owner == taker.Owner, $"The capturing team takes over the unmanned object (owner {empty.Owner}, taker {taker.Owner}).");
         Check.That(session.Engine.FlagValue("captured") && !session.Engine.FlagValue("never"), "The captured vehicle is counted; obsolete conditions never hold.");
         var again = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(again, 600);
+        Run(again, again.Frames(600));
         Check.That(again.StateHash() == session.StateHash(), "A second run reaches the same state.");
     }
 
@@ -77,7 +77,7 @@ static partial class Tests
             Flag("midway", Scr.If("PLAYER_MIDWAY_SPECIAL_POWER", Scr.Side(PlayerA), Scr.Named(MapScriptParameterType.SpecialPower, "SuperweaponTest"))),
         ], objects: [Placed("AlphaSoldier", 100m, 100m, "Squad", "Scout"), Placed("AlphaBunker", 150m, 100m, "teamA", "Bunker"), Placed("BetaSoldier", 140m, 300m, "teamB", "Empty"), Placed("AlphaTech", 120m, 150m, "teamB", "Tech")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 5);
+        Run(session, session.Frames(5));
         foreach (var name in new[] { "state", "notState", "slots", "excess", "percent", "unowned", "tech" })
             Check.That(session.Engine.FlagValue(name), $"Condition '{name}' holds.");
         Check.That(!session.Engine.FlagValue("power") && !session.Engine.FlagValue("upgrade") && !session.Engine.FlagValue("midway"), "Notification conditions are false before the notifications.");
@@ -85,7 +85,7 @@ static partial class Tests
         session.Engine.Observe([
             new CnCNew.Simulation.Events.SimEvent(new CnCNew.Simulation.Ids.EventId(900), session.World.Tick, CnCNew.Simulation.Events.SimEventKind.SpecialPowerCompleted, new CnCNew.Simulation.Ids.EntityId(1), new CnCNew.Simulation.Ids.EntityId(2), default, "SuperweaponTest", player.Value),
             new CnCNew.Simulation.Events.SimEvent(new CnCNew.Simulation.Ids.EventId(901), session.World.Tick, CnCNew.Simulation.Events.SimEventKind.UpgradeCompleted, new CnCNew.Simulation.Ids.EntityId(3), default, player, "Upgrade_Test", 0)]);
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(session.Engine.FlagValue("power") && session.Engine.FlagValue("upgrade") && !session.Engine.FlagValue("midway"), "The completed power and the built upgrade are seen once; the midway condition never fires.");
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches (team states, caches and notification lists survive).");
@@ -107,7 +107,7 @@ static partial class Tests
                 Scr.Do("DEBUG_CRASH_BOX", Scr.Named(MapScriptParameterType.TextString, "x"))], oneShot: true),
         ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Walker"), Placed("AlphaBunker", 300m, 200m, "teamA", "Bunker"), Placed("BetaSoldier", 100m, 400m, "teamB", "Beacon")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 3);
+        Run(session, session.Frames(3));
         var walker = NamedIn(session, "Walker")!;
         Check.That((walker.Angle - Fixed.FromDecimal(1.5707963m)).Abs() < Fixed.FromDecimal(0.05m), $"NAMED_FACE_NAMED turns the unit towards the object ({walker.Angle}).");
         var owner = walker.Owner.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -126,7 +126,7 @@ static partial class Tests
         var wing = NamedIn(session, "Wing")!;
         var minGap = Fixed.MaxValue;
         var maxGap = Fixed.Zero;
-        for (var tick = 0; tick < 700; tick++)
+        for (var tick = 0; tick < session.Frames(700); tick++)
         {
             session.Step();
             if (lead.X > Fixed.FromInt(150) && lead.X < Fixed.FromInt(380))
@@ -139,10 +139,10 @@ static partial class Tests
         Check.That(lead.X > Fixed.FromInt(370) && wing.X > Fixed.FromInt(370), $"Both reach the end of the path (lead {lead.X}, wing {wing.X}).");
         Check.That(minGap > Fixed.FromInt(25) && maxGap < Fixed.FromInt(55), $"The wing keeps its place beside the lead while they march (gap {minGap}..{maxGap}).");
         var restored = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        for (var tick = 0; tick < 120; tick++) restored.Step();
+        for (var tick = 0; tick < restored.Frames(120); tick++) restored.Step();
         var snapshot = MissionSnapshot.Write(restored);
         var continued = MissionSnapshot.Restore(snapshot, fixture.Templates, fixture.Fingerprint, terrain, map);
-        for (var tick = 0; tick < 200; tick++) Check.That(restored.Step().StateHash == continued.Step().StateHash, $"A formation march restored from a snapshot continues identically (tick {tick}).");
+        for (var tick = 0; tick < restored.Frames(200); tick++) Check.That(restored.Step().StateHash == continued.Step().StateHash, $"A formation march restored from a snapshot continues identically (tick {tick}).");
     }
 
     public static void ScriptAiExpandsToASupplyWarehouse()
@@ -154,9 +154,9 @@ static partial class Tests
         ], objects: [Placed("AlphaDozer", 100m, 100m, "teamA", "Dozer"), Placed("ScriptWarehouse", 170m, 100m, "teamPlayerA", "Warehouse"), Placed("AlphaSoldier", 100m, 140m, "Squad", "Guard")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(session.SkippedObjects.IsEmpty, "The fixture instantiates: " + string.Join(",", session.SkippedObjects));
-        Run(session, 5);
+        Run(session, session.Frames(5));
         session.Engine.SignalUiInteraction("go");
-        Run(session, 900);
+        Run(session, session.Frames(900));
         var depot = session.World.Entities.FirstOrDefault(entity => entity.Template.Name == "AlphaDepot");
         Check.That(depot is not null && depot.Owner == session.Program.FindPlayer(PlayerA)!.Id, $"The dozer builds the depot (diagnostics: {string.Join("; ", session.Engine.Diagnostics.Keys)}; money {session.World.MoneyOf(session.Program.FindPlayer(PlayerA)!.Id)}; objects {string.Join(",", session.World.Entities.Select(entity => entity.Template.Name))}).");
         Check.That(depot is not null && (depot.X - Fixed.FromInt(170)).Abs() < Fixed.FromInt(60) && (depot.Y - Fixed.FromInt(100)).Abs() < Fixed.FromInt(60), $"The depot stands next to the warehouse ({depot?.X}, {depot?.Y}).");
@@ -176,7 +176,7 @@ static partial class Tests
         ], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Held"), Placed("AlphaSoldier", 100m, 140m, "teamA", "Free"), Placed("AlphaBunker", 100m, 60m, "teamA", "Bunker"), Placed("AlphaSoldier", 100m, 180m, "teamA", "Other")],
             paths: [("Route", [("Far", 300m, 100m)])]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 60);
+        Run(session, session.Frames(60));
         var held = NamedIn(session, "Held")!;
         var free = NamedIn(session, "Free")!;
         var bunker = NamedIn(session, "Bunker")!;
@@ -187,7 +187,7 @@ static partial class Tests
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches (script disables and evacuation side are state).");
         session.Engine.SignalUiInteraction("release");
-        Run(session, 120);
+        Run(session, session.Frames(120));
         Check.That(held.ScriptDisableMask == 0 && bunker.ScriptDisableMask == 0, "Releasing clears both disables.");
     }
 
@@ -202,14 +202,14 @@ static partial class Tests
         ], objects: [Placed("AlphaBunker", 200m, 100m, "teamPlayerA", "Victim"), Placed("AlphaSoldier", 100m, 100m, "Squad", "Guard"), Placed("ScriptBridge", 60m, 60m, "", "Bridge")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(session.SkippedObjects.IsEmpty, "The fixture instantiates: " + string.Join(",", session.SkippedObjects));
-        Run(session, 20);
+        Run(session, session.Frames(20));
         var traps = session.World.Entities.Where(entity => entity.Template.Name == "ScriptTrap").OrderBy(entity => entity.Id.Value).ToArray();
         Check.That(traps.Length == 2, $"One trap per victim ({traps.Length}).");
         var victim = NamedIn(session, "Victim")!;
         Check.That(victim.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.Index("BOOBY_TRAPPED")) && NamedIn(session, "Guard")!.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.Index("BOOBY_TRAPPED")), "Both victims are booby-trapped.");
         Check.That(!session.Engine.FlagValue("broken") && !session.Engine.FlagValue("repaired"), "An intact bridge is neither broken nor repaired.");
         session.Engine.SignalUiInteraction("blow");
-        Run(session, 4);
+        Run(session, session.Frames(4));
         Check.That(session.Engine.FlagValue("broken") && !session.Engine.FlagValue("repaired"), "The killed bridge reads as broken.");
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches.");
@@ -219,11 +219,11 @@ static partial class Tests
     {
         // ObjectNameTransferred (car bomb, hijack, pilot): the script name of the consumed object moves to the one that took over.
         var session = StartMission([], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Old"), Placed("AlphaSoldier", 140m, 100m, "teamA", "New")]);
-        Run(session, 2);
+        Run(session, session.Frames(2));
         var old = NamedIn(session, "Old")!;
         var successor = NamedIn(session, "New")!;
         session.World.Emit(CnCNew.Simulation.Events.SimEventKind.ObjectNameTransferred, old.Id, successor.Id, string.Empty, 0);
-        Run(session, 2);
+        Run(session, session.Frames(2));
         Check.That(NamedIn(session, "Old")?.Id == successor.Id, "The name Old now belongs to the object that took over.");
     }
 }

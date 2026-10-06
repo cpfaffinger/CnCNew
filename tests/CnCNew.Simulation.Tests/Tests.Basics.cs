@@ -242,9 +242,9 @@ static partial class Tests
         Check.That(ModuleBindingTable.Default.TryGet("destroydie", out var binding) && binding.Name == "DestroyDie", "Lookup is case-insensitive.");
 
         // Factory produces a working, typed module.
-        var upgrades = new SyntheticFixture(SimulationRate.Original).Templates.Upgrades;
+        var upgrades = new SyntheticFixture(TestRate.Default).Templates.Upgrades;
         var body = all.Single(value => value.Name == "ActiveBody");
-        var data = body.ParseData(new RatedModuleConfiguration(new ModuleConfiguration("ActiveBody", "T", ModuleOwnerKind.Object, [], new("x", 1, 1)), SimulationRate.Original.Time), upgrades);
+        var data = body.ParseData(new RatedModuleConfiguration(new ModuleConfiguration("ActiveBody", "T", ModuleOwnerKind.Object, [], new("x", 1, 1)), TestRate.Default.Time), upgrades);
         Check.That(body.Create(data) is ActiveBody, "The ActiveBody binding creates an ActiveBody.");
 
         Check.Throws<ModuleBindingException>(() => Build(all.Concat([all[0]]).OrderBy(value => value.Name, StringComparer.Ordinal)), "Duplicate");
@@ -264,7 +264,7 @@ static partial class Tests
 
     public static void FixtureTemplates()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var catalog = fixture.Templates;
         Check.That(catalog.Templates.Select(value => value.Name).Contains("DefaultThingTemplate"), "The default template is an object too.");
         Check.That(catalog.Templates.Select(value => value.Id.ToString()).SequenceEqual(catalog.Templates.Select(value => value.Id.ToString()).Order(StringComparer.Ordinal)), "Template indices follow the ordinal id order.");
@@ -285,7 +285,7 @@ static partial class Tests
         var standIn = StandInRegistry("PreorderCreate", "SpecialPowerCreate");
         var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new InMemoryDefinitionSource(files), standIn,
             CnCNew.Data.Compilation.DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true });
-        var blockedCatalog = TemplateCatalog.Build(graph, new ModuleBindingTable(BuiltInModules.Bindings.Where(value => value.Name is not ("PreorderCreate" or "SpecialPowerCreate")), standIn), SimulationRate.Original);
+        var blockedCatalog = TemplateCatalog.Build(graph, new ModuleBindingTable(BuiltInModules.Bindings.Where(value => value.Name is not ("PreorderCreate" or "SpecialPowerCreate")), standIn), TestRate.Default);
         Check.That(blockedCatalog.TryGet("Blocked", out var blocked) && !blocked.IsInstantiable && blocked.MissingModules.SequenceEqual(["PreorderCreate", "SpecialPowerCreate"]), "Missing modules are listed sorted and never dropped.");
         var report = ModuleCoverage.Compute(blockedCatalog);
         Check.That(report.Blocked == 1 && report.Blockers.Length == 2 && report.Blockers.All(value => value.ObjectsBlocked == 1 && value.ObjectsBlockedOnlyByThisModule == 0), "Coverage names each blocker.");

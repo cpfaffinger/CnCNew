@@ -211,9 +211,9 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, TerrainMap? Terrain) ConstructionSetup(bool withTerrain = false, IEnumerable<(int X, int Y)>? cliffs = null, int money = 1000)
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: ConstructionFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: ConstructionFiles());
         var terrain = withTerrain ? NavTerrain(cliffs) : null;
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
         var feeder = new Feeder(world);
         if (money > 0)
         {
@@ -230,14 +230,14 @@ static partial class Tests
     private static bool IsSite(Entity entity) => entity.HasStatus(ObjectStatusBits.UnderConstruction);
 
     /// <summary>Steps until the predicate holds and returns the number of steps (the limit when it never does).</summary>
-    private static int StepUntil(SimulationWorld world, int limit, Func<bool> done)
+    private static int StepUntil(SimulationWorld world, int limitFrames, Func<bool> done) // budget and result in original frames (1/30 s)
     {
-        for (var tick = 0; tick < limit; tick++)
+        for (var tick = 0; tick < world.Frames(limitFrames); tick++)
         {
             world.Step();
-            if (done()) return tick + 1;
+            if (done()) return (int)world.InFrames(tick + 1);
         }
-        return limit;
+        return limitFrames;
     }
 
     public static void ConstructionBuildsAStructure()
@@ -257,7 +257,7 @@ static partial class Tests
         var previous = site.Body!.Health;
         var work = 0;
         var completedAt = -1;
-        for (var tick = 0; tick < 400 && completedAt < 0; tick++)
+        for (var tick = 0; tick < world.Frames(400) && completedAt < 0; tick++)
         {
             var before = site.ConstructionWork;
             var result = world.Step();
@@ -266,7 +266,7 @@ static partial class Tests
             previous = site.Body.Health;
             if (result.Events.Any(value => value.Kind == SimEventKind.ConstructionCompleted && value.Entity == site.Id)) completedAt = tick;
         }
-        Check.That(completedAt >= 0 && work == 60, $"BuildTime 2 s means 60 ticks of builder work (measured {work}).");
+        Check.That(completedAt >= 0 && work == world.Frames(60), $"BuildTime 2 s means 60 ticks of builder work (measured {work}).");
         Check.That(!IsSite(site) && site.Body!.Health == site.Body.MaxHealth, "The finished structure has exactly its maximum health.");
         Check.That(world.EnergyProductionOf(new PlayerId(1)) == 5, "Energy production starts on completion.");
         StepUntil(world, 5, () => false);
@@ -305,7 +305,7 @@ static partial class Tests
         Check.That(feeder.Sell(1, 1).Accepted, "The owner sells a finished structure.");
         var start = 0L;
         var sold = -1L;
-        for (var tick = 0; tick < 300 && sold < 0; tick++)
+        for (var tick = 0; tick < world.Frames(300) && sold < 0; tick++)
         {
             var result = world.Step();
             if (tick == 0)
@@ -315,7 +315,7 @@ static partial class Tests
             }
             if (result.Events.Any(value => value.Kind == SimEventKind.StructureSold && value.Entity == plant.Id && value.Value == Fixed.FromInt(50).Raw)) sold = world.Tick - start;
         }
-        Check.That(sold == 179, $"The refund arrives 179 ticks after the order (measured {sold}).");
+        Check.That(sold == world.Frames(180) - 1, $"The refund arrives 179 ticks after the order (measured {sold}).");
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(1050), "SellPercentage 50 % of BuildCost 100 is paid out.");
         world.Step();
         Check.That(world.FindEntity(plant.Id) is null && world.EnergyProductionOf(new PlayerId(1)) == 0, "The sold structure is removed and stops producing energy.");
@@ -357,8 +357,8 @@ static partial class Tests
         var forked = feeder.ForkTo(restored);
         feeder.QueueProduction(1, 1, "Grunt");
         forked.QueueProduction(1, 1, "Grunt");
-        for (var tick = 0; tick < 60; tick++) world.Step();
-        for (var tick = 0; tick < 60; tick++) restored.Step();
+        for (var tick = 0; tick < world.Frames(60); tick++) world.Step();
+        for (var tick = 0; tick < restored.Frames(60); tick++) restored.Step();
         Check.That(world.StateHash == restored.StateHash, "The rally point survives a snapshot and steers the next unit identically.");
     }
 
@@ -399,7 +399,7 @@ static partial class Tests
         world.Step();
         Check.That(site.BuilderId.Value == 2, "The site now belongs to the second builder.");
         var ticks = StepUntil(world, 200, () => !IsSite(site));
-        Check.That(!IsSite(site) && site.ConstructionWork == 60, "The structure completes after exactly BuildTime ticks of work, whoever did them.");
+        Check.That(!IsSite(site) && site.ConstructionWork == world.Frames(60), "The structure completes after exactly BuildTime ticks of work, whoever did them.");
                 Check.That(feeder.ResumeConstruct(1, 2, site.Id.Value).Reason == CommandRejection.CannotConstruct, "A finished structure cannot be resumed.");
         StepUntil(world, 5, () => false);
         Check.That(!world.FindEntity(new EntityId(1))!.HasMoveTarget && !world.FindEntity(new EntityId(2))!.HasMoveTarget, "Both dozers are idle afterwards.");
@@ -479,7 +479,7 @@ static partial class Tests
     {
         var (world, feeder, _, _) = ConstructionSetup(withTerrain: true, cliffs: [(15, 15)]);
         feeder.Spawn(1, "Dozer", x: 20, y: 20);
-        for (var tick = 0; tick < 6; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(6); tick++) world.Step();
         Check.That(feeder.Construct(1, 1, "Plant", 60, 60).Accepted, "A free explored spot is legal.");
         world.Step();
         Check.That(feeder.Construct(1, 1, "Plant", 65, 60).Reason == CommandRejection.InvalidPlacement, "A site blocks its footprint for the next order.");
@@ -508,7 +508,7 @@ static partial class Tests
         var restored = WorldSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint);
         Check.That(WorldSnapshot.Write(restored).AsSpan().SequenceEqual(bytes), "The snapshot round-trips byte-identically.");
         Check.That(restored.EnergyProductionOf(new PlayerId(1)) == world.EnergyProductionOf(new PlayerId(1)), "Energy is rebuilt correctly (sites do not count).");
-        for (var tick = 0; tick < 260; tick++)
+        for (var tick = 0; tick < world.Frames(260); tick++)
             Check.That(world.Step().StateHash == restored.Step().StateHash, "The restored world builds and sells identically.");
         Check.That(!IsSite(ConstructionFind(world, "Tower")) && world.Entities.All(value => value.Template.Name != "Barracks"), "The construction finished and the sale completed.");
         Check.That(world.MoneyOf(new PlayerId(1)) == restored.MoneyOf(new PlayerId(1)), "Money agrees.");
@@ -529,7 +529,7 @@ static partial class Tests
             new RepairCommand(new PlayerId(1), 10, 60, new EntityId(1), new EntityId(3)),
             new ResumeConstructCommand(new PlayerId(1), 11, 70, new EntityId(1), new EntityId(4)));
         commands = [..commands.OrderBy(value => value.Tick).ThenBy(value => value.Player.Value).ThenBy(value => value.Sequence)];
-        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, 30, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), players, 400, 50);
+        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, TestRate.Default.TicksPerSecond, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), players, 400, 50);
         var probe = ReplayRunner.Run(new ReplayFile(header, commands, []), fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
         var file = ReplayFormat.Read(ReplayFormat.Write(new ReplayFile(header, commands, probe.Checkpoints)));
         Check.That(file.Commands.SequenceEqual(commands), "All six construction commands survive the replay file.");

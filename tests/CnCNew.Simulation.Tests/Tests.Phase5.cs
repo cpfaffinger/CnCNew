@@ -419,7 +419,7 @@ static partial class Tests
 
     public static void Phase5Economy()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Fighter");
@@ -460,7 +460,7 @@ static partial class Tests
 
     public static void Phase5Combat()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Fighter", x: 0, y: 0);
@@ -479,7 +479,7 @@ static partial class Tests
         world.Step();
         Check.That(world.RejectionCounts[(int)CommandRejection.WeaponNotReady] == 1, "Firing again before DelayBetweenShots (500ms = 15 ticks) elapses is rejected.");
 
-        for (var i = 0; i < 16; i++) world.Step();
+        for (var i = 0; i < world.Frames(16); i++) world.Step();
         feeder.FireWeapon(1, 1, 2);
         world.Step();
         Check.That(attacker.WeaponClip == 0 && target.Body.Health == Fixed.FromInt(60), "The clip empties on the second shot once the delay has elapsed.");
@@ -488,14 +488,14 @@ static partial class Tests
         world.Step();
         Check.That(world.RejectionCounts[(int)CommandRejection.WeaponNotReady] == 2, "Firing an empty clip is rejected while it reloads.");
 
-        for (var i = 0; i < 62; i++) world.Step();
+        for (var i = 0; i < world.Frames(62); i++) world.Step();
         feeder.FireWeapon(1, 1, 2);
         world.Step();
         Check.That(attacker.WeaponClip == 1 && target.Body.Health == Fixed.FromInt(40), "The clip refills after ClipReloadTime (2000ms = 60 ticks) and firing resumes.");
 
         feeder.Spawn(2, "Fighter", x: 1000, y: 0);
         world.Step();
-        for (var i = 0; i < 16; i++) world.Step(); // let DelayBetweenShots (15 ticks) elapse so the rejection below is OutOfRange, not WeaponNotReady.
+        for (var i = 0; i < world.Frames(16); i++) world.Step(); // let DelayBetweenShots (15 ticks) elapse so the rejection below is OutOfRange, not WeaponNotReady.
         feeder.FireWeapon(1, 1, 3);
         world.Step();
         Check.That(world.RejectionCounts[(int)CommandRejection.OutOfRange] == 1, "A target beyond AttackRange (50) is rejected.");
@@ -509,7 +509,7 @@ static partial class Tests
 
     public static void Phase5UpgradeEffects()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Fighter", x: 0, y: 0);
@@ -536,7 +536,7 @@ static partial class Tests
         feeder.PurchaseUpgrade(1, "Upgrade_Weapon", target: 1);
         world.Step();
         Check.That(attacker.HasPlayerUpgradeWeapon && attacker.WeaponClip == int.MaxValue, "WeaponSetUpgrade switches weapons and refills the (unlimited) clip.");
-        for (var i = 0; i < 10; i++) world.Step();
+        for (var i = 0; i < world.Frames(10); i++) world.Step();
         feeder.FireWeapon(1, 1, 2);
         world.Step();
         Check.That(target.Body.Health == Fixed.FromInt(70), "The upgraded BigGun deals 40 damage at 50% armor (20), leaving 70.");
@@ -550,7 +550,7 @@ static partial class Tests
 
     public static void Phase5Movement()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Fighter", x: 0, y: 0);
@@ -560,7 +560,7 @@ static partial class Tests
 
         feeder.SetMoveTarget(1, 1, 100, 0);
         var arrived = false;
-        for (var i = 0; i < 200 && !arrived; i++)
+        for (var i = 0; i < world.Frames(200) && !arrived; i++)
         {
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.MoveArrived)) arrived = true;
@@ -578,7 +578,7 @@ static partial class Tests
 
     public static void Phase5Production()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Factory", x: 5, y: 5);
@@ -591,7 +591,7 @@ static partial class Tests
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(800), "BuildCost (200) is withdrawn in full immediately at queue time.");
 
         Entity? spawned = null;
-        for (var i = 0; i < 70 && spawned is null; i++)
+        for (var i = 0; i < world.Frames(70) && spawned is null; i++)
         {
             world.Step();
             spawned = world.Entities.FirstOrDefault(value => value.Template.Name == "Fighter");
@@ -616,7 +616,7 @@ static partial class Tests
 
     public static void Phase5StealthAndHeal()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var stealthedBit = ObjectStatusBits.Index("STEALTHED");
@@ -625,11 +625,11 @@ static partial class Tests
         var ninja = world.FindEntity(new EntityId(1))!;
         Check.That(!ninja.HasStatus(stealthedBit), "Not stealthed immediately at spawn: StealthDelay has not elapsed.");
 
-        for (var i = 0; i < 35; i++) world.Step();
+        for (var i = 0; i < world.Frames(35); i++) world.Step();
         Check.That(ninja.HasStatus(stealthedBit), "The object cloaks after StealthDelay (1000ms = 30 ticks) of no forbidden condition.");
 
         feeder.Spawn(1, "Visible", x: 50, y: 0);
-        for (var i = 0; i < 90; i++) world.Step();
+        for (var i = 0; i < world.Frames(90); i++) world.Step();
         var visible = world.Entities.First(entity => entity.Template.Name == "Visible");
         Check.That(!visible.HasStatus(stealthedBit), "A StealthUpdate without InnateStealth or a granted CAN_STEALTH never cloaks (the default module every object carries).");
 
@@ -637,7 +637,7 @@ static partial class Tests
         feeder.Damage(1, 30);
         world.Step();
         Check.That(ninja.Body!.Health == Fixed.FromInt(20), "The ninja takes 30 damage (50 -> 20).");
-        for (var i = 0; i < 10; i++) world.Step();
+        for (var i = 0; i < world.Frames(10); i++) world.Step();
         Check.That(ninja.Body.Health > Fixed.FromInt(20), "AutoHealBehavior (AffectsWholePlayer) heals the damaged ally over time.");
     }
 
@@ -651,7 +651,7 @@ static partial class Tests
             return state;
         }
 
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Barrel"); // ActiveBody MaxHealth=100, no OnSpawn RNG draw (no LifetimeUpdate).
@@ -685,9 +685,9 @@ static partial class Tests
     /// <summary>Player/faction data model and science purchase (block 0.1 continuation): <c>PlayerTemplate</c> credits start money and intrinsic sciences once at construction; <c>PurchaseScienceCommand</c> ports <c>Player::attemptToPurchaseScience</c>'s gate order.</summary>
     public static void Phase5Sciences()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha", "TestFaction"), new(new PlayerId(2), "Beta")];
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         var feeder = new Feeder(world);
 
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(500), "PlayerTemplate.StartMoney is credited once at construction.");
@@ -732,7 +732,7 @@ static partial class Tests
     /// <summary>The next blocker module by frequency (<c>docs/HANDOFF-PHASE5.md</c>): <c>FlammableUpdate</c> ignites once accumulated flame damage exceeds its limit, burns periodically, turns permanently <c>BURNED</c> if it stays aflame long enough, and its <c>onDamage</c> hook runs through the new <see cref="IDamageModule"/> callback in <c>ActiveBody.AttemptDamage</c>.</summary>
     public static void Phase5Flammable()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var aflameBit = ObjectStatusBits.Index("AFLAME");
@@ -752,16 +752,16 @@ static partial class Tests
         var igniteTick = world.Tick - 1;
 
         // AflameDamageDelay = 100ms = 3 ticks: periodic self-damage of AflameDamageAmount (5) each time.
-        while (world.Tick <= igniteTick + 3) world.Step();
+        while (world.Tick <= igniteTick + world.Frames(3)) world.Step();
         Check.That(body.Health == Fixed.FromInt(84), "The first periodic aflame-damage tick deals AflameDamageAmount (5).");
 
         // BurnedDelay = 200ms = 6 ticks: BURNED sets while still AFLAME (and a second damage tick has landed by then).
-        while (world.Tick <= igniteTick + 6) world.Step();
+        while (world.Tick <= igniteTick + world.Frames(6)) world.Step();
         Check.That(target.HasStatus(aflameBit) && target.HasStatus(burnedBit) && body.Health == Fixed.FromInt(79),
             "BURNED sets after BurnedDelay while still AFLAME; a second periodic damage tick has also landed.");
 
         // AflameDuration = 300ms = 9 ticks: AFLAME clears; already BURNED, so it can never ignite again.
-        while (world.Tick <= igniteTick + 9) world.Step();
+        while (world.Tick <= igniteTick + world.Frames(9)) world.Step();
         Check.That(!target.HasStatus(aflameBit) && target.HasStatus(burnedBit) && body.Health == Fixed.FromInt(74),
             "AFLAME clears after AflameDuration; a third periodic damage tick lands first. BURNED stays set.");
 
@@ -779,7 +779,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5DamageStateTransitions()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Shooter", x: 0, y: 0);
@@ -801,6 +801,7 @@ static partial class Tests
         Check.That(body.DamageState == BodyDamageStates.ReallyDamaged, "Health 30% (<= 0.35) is REALLYDAMAGED.");
         Check.That(result.Events.Any(value => value.Kind == SimEventKind.CreationListRequested && value.Text == "OCL_ReallyDamaged"), "The REALLYDAMAGED OCL fires with a real damage source.");
 
+        for (var wait = 1; wait < world.Frames(1); wait++) world.Step(); // a weapon without a delay fires once per frame
         feeder.FireWeapon(1, 1, 2);
         result = world.Step();
         Check.That(body.Health == Fixed.Zero && body.DamageState == BodyDamageStates.Rubble, "Overkill clamps health to 0 (RUBBLE), not negative.");
@@ -816,7 +817,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5SlowDeath()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Zombie");
@@ -836,10 +837,10 @@ static partial class Tests
 
         // DestructionDelay = 500ms = 15 ticks for either applicable sibling (Death03 is inapplicable: its DeathTypes
         // filter only matches BURNED, not the Normal death type KillCommand uses, so it never joins the lottery pool).
-        while (world.Tick <= deathTick + 14) world.Step();
+        while (world.Tick <= deathTick + world.Frames(14)) world.Step();
         Check.That(world.FindEntity(new EntityId(1)) is not null, "Still alive one tick before DestructionDelay elapses.");
 
-        while (world.Tick <= deathTick + 15) world.Step();
+        while (world.Tick <= deathTick + world.Frames(15)) world.Step();
         Check.That(world.FindEntity(new EntityId(1)) is null, "Destroyed exactly once DestructionDelay (15 ticks) has elapsed, regardless of which of the two applicable siblings won the lottery.");
 
         // Same seed, same command sequence: the lottery roll and delay draws reproduce identically (determinism).
@@ -850,9 +851,9 @@ static partial class Tests
         feeder2.Kill(1);
         world2.Step();
         var deathTick2 = world2.Tick - 1;
-        while (world2.Tick <= deathTick2 + 14) world2.Step();
+        while (world2.Tick <= deathTick2 + world2.Frames(14)) world2.Step();
         Check.That(world2.FindEntity(new EntityId(1)) is not null, "Determinism: still alive one tick early on a fresh, identically seeded world.");
-        while (world2.Tick <= deathTick2 + 15) world2.Step();
+        while (world2.Tick <= deathTick2 + world2.Frames(15)) world2.Step();
         Check.That(world2.FindEntity(new EntityId(1)) is null, "Determinism: destroyed at the identical tick offset on a fresh, identically seeded world.");
     }
 
@@ -866,7 +867,7 @@ static partial class Tests
     public static void Phase5FireWeaponWhenDead()
     {
         // StartsActive fires; the TriggeredBy sibling does not, since its upgrade was never purchased.
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Suicider");
@@ -917,7 +918,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5StealthDetector()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var detectedBit = ObjectStatusBits.Index("DETECTED");
@@ -935,7 +936,7 @@ static partial class Tests
         for (var i = 0; i < 3; i++) world.Step();
         Check.That(enemy.HasStatus(stealthedBit) && ally.HasStatus(stealthedBit), "InnateStealth cloaks both within a few ticks (StealthDelay 0).");
 
-        for (var i = 0; i < 20; i++) world.Step(); // DetectionRate = 500ms = 15 ticks, plus the random initial phasing (1..15).
+        for (var i = 0; i < world.Frames(20); i++) world.Step(); // DetectionRate = 500ms = 15 ticks, plus the random initial phasing (1..15).
         Check.That(enemy.HasStatus(detectedBit), "The enemy stealthed unit is DETECTED once the detector's periodic scan reaches it.");
         Check.That(enemy.HasStatus(stealthedBit), "DETECTED coexists with STEALTHED: it reveals the unit but does not un-cloak it.");
         Check.That(!ally.HasStatus(detectedBit), "A stealthed unit owned by the detector itself is never marked DETECTED.");
@@ -943,7 +944,7 @@ static partial class Tests
         // Destroying the detector stops the periodic re-marking; the DETECTED mark then expires on its own (its duration
         // is UpdateRateTicks + 1, StealthDetectorUpdate.cpp's "updateRate PLUS 1... 'till we are called again").
         feeder.Destroy(1);
-        var expiry = world.Tick + 16;
+        var expiry = world.Tick + world.Frames(16);
         while (world.Tick <= expiry) world.Step();
         Check.That(!enemy.HasStatus(detectedBit), "DETECTED expires once nothing re-marks it before its duration elapses.");
     }
@@ -951,33 +952,33 @@ static partial class Tests
     /// <summary>Phase 10: a <see cref="TerrainMap.HasHeightLineOfSight"/> occlusion check on top of the range test in <see cref="Phase5StealthDetector"/>.</summary>
     public static void Phase5StealthDetectorHeightLineOfSight()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var detectedBit = ObjectStatusBits.Index("DETECTED");
         var stealthedBit = ObjectStatusBits.Index("STEALTHED");
 
         // A 25 m ridge (vertices 2..4, world x roughly 10..30) sits between the detector (x=0) and the target (x=40); both are
         // comfortably inside DetectionRange = 50.
         var ridged = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1, (x, _) => x is >= 2 and <= 4 ? 40 : 0), "detector-ridge");
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, ridged.Fingerprint), fixture.Templates, ridged);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, ridged.Fingerprint), fixture.Templates, ridged);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Spotter", x: 0, y: 15);
         feeder.Spawn(2, "Cloaked", x: 40, y: 15);
         world.Step();
         var enemy = world.FindEntity(new EntityId(2))!;
-        for (var i = 0; i < 6; i++) world.Step();
+        for (var i = 0; i < world.Frames(6); i++) world.Step();
         Check.That(enemy.HasStatus(stealthedBit), "The target is cloaked.");
-        for (var i = 0; i < 20; i++) world.Step();
+        for (var i = 0; i < world.Frames(20); i++) world.Step();
         Check.That(!enemy.HasStatus(detectedBit), "A ridge between the detector and the target blocks detection even within DetectionRange.");
 
         // The identical layout without the ridge detects normally: the range test alone is not what is being exercised here.
         var flat = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1), "detector-flat");
-        var openWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, flat.Fingerprint), fixture.Templates, flat);
+        var openWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, flat.Fingerprint), fixture.Templates, flat);
         var openFeeder = new Feeder(openWorld);
         openFeeder.Spawn(1, "Spotter", x: 0, y: 15);
         openFeeder.Spawn(2, "Cloaked", x: 40, y: 15);
         openWorld.Step();
         var openEnemy = openWorld.FindEntity(new EntityId(2))!;
-        for (var i = 0; i < 26; i++) openWorld.Step();
+        for (var i = 0; i < openWorld.Frames(26); i++) openWorld.Step();
         Check.That(openEnemy.HasStatus(detectedBit), "The same layout without the ridge detects normally.");
     }
 
@@ -990,7 +991,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5Poisoned()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Poisonable");
@@ -1004,19 +1005,19 @@ static partial class Tests
         var doseTick = world.Tick - 1;
 
         // PoisonDamageInterval = 100ms = 3 ticks: the actual damage dealt by the original hit (10) reapplies every interval.
-        while (world.Tick <= doseTick + 3) world.Step();
+        while (world.Tick <= doseTick + world.Frames(3)) world.Step();
         Check.That(body.Health == Fixed.FromInt(280), "The first periodic poison tick reapplies the original actual damage dealt (10).");
 
-        while (world.Tick <= doseTick + 12) world.Step();
+        while (world.Tick <= doseTick + world.Frames(12)) world.Step();
         Check.That(body.Health == Fixed.FromInt(250), "Four periodic ticks have landed by now (at +3, +6, +9, +12).");
 
         // PoisonDuration = 500ms = 15 ticks: the fifth and final periodic tick lands exactly at the duration boundary,
         // then the poison wears off (the reference: "unless the poison killed us... turn off our special effects").
-        while (world.Tick <= doseTick + 15) world.Step();
+        while (world.Tick <= doseTick + world.Frames(15)) world.Step();
         Check.That(body.Health == Fixed.FromInt(240), "The fifth periodic tick lands exactly at the duration boundary, then the poison wears off.");
 
         var healthAfterWearOff = body.Health;
-        while (world.Tick <= doseTick + 18) world.Step();
+        while (world.Tick <= doseTick + world.Frames(18)) world.Step();
         Check.That(body.Health == healthAfterWearOff, "No further ticks land once the poison has worn off.");
 
         // A fresh dose while not currently poisoned starts a clean cycle; a second dose shortly after, while the first
@@ -1032,7 +1033,7 @@ static partial class Tests
         var healthAfterThirdDose = body.Health;
         Check.That(healthAfterThirdDose == healthAfterWearOff - Fixed.FromInt(5) - Fixed.FromInt(20), "Re-poisoning while still ticking applies its own damage too.");
 
-        while (world.Tick <= secondDoseTick + 3) world.Step();
+        while (world.Tick <= secondDoseTick + world.Frames(3)) world.Step();
         Check.That(body.Health == healthAfterThirdDose - Fixed.FromInt(20),
             "The periodic tick lands at the FIRST dose's schedule (+3 from the second dose, not +3 from the third) but reapplies the LATEST dose's amount (20, not 5).");
 
@@ -1043,7 +1044,7 @@ static partial class Tests
         var healTick = world.Tick - 1;
         Check.That(body.Health == healthBeforeHeal + Fixed.FromInt(5), "Healing applies normally.");
         var healthAfterHeal = body.Health;
-        while (world.Tick <= healTick + 20) world.Step();
+        while (world.Tick <= healTick + world.Frames(20)) world.Step();
         Check.That(body.Health == healthAfterHeal, "Healing cures the poison outright: no further periodic ticks land.");
     }
 
@@ -1071,7 +1072,7 @@ static partial class Tests
             End
             """,
         };
-        var world = NewWorld(new SyntheticFixture(SimulationRate.Original, files: files));
+        var world = NewWorld(new SyntheticFixture(TestRate.Default, files: files));
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Regenerator");
         world.Step();
@@ -1084,13 +1085,13 @@ static partial class Tests
         Check.That(body.Health == Fixed.FromInt(700), "The hit lands immediately.");
 
         // BaseRegenDelay = 1000 ms = 30 ticks: nothing heals before the delay has elapsed.
-        while (world.Tick <= hitTick + 29) world.Step();
+        while (world.Tick <= hitTick + world.Frames(29)) world.Step();
         Check.That(body.Health == Fixed.FromInt(700), "No healing before BaseRegenDelay has elapsed.");
 
         // 1000 * 12.5% * 3 / 30 = 12.5 per burst (12.5% is exact in fixed point), one burst every three ticks.
-        while (world.Tick <= hitTick + 30) world.Step();
+        while (world.Tick <= hitTick + world.Frames(30)) world.Step();
         Check.That(body.Health == Fixed.FromDecimal(712.5m), "The first burst heals three ticks' worth once the delay elapsed.");
-        while (world.Tick <= hitTick + 33) world.Step();
+        while (world.Tick <= hitTick + world.Frames(33)) world.Step();
         Check.That(body.Health == Fixed.FromInt(725), "One burst every three ticks.");
 
         // A fresh hit restarts the delay.
@@ -1099,11 +1100,11 @@ static partial class Tests
         var secondHit = world.Tick - 1;
         var afterSecondHit = body.Health;
         Check.That(afterSecondHit == Fixed.FromInt(675), "The second hit lands immediately.");
-        while (world.Tick <= secondHit + 29) world.Step();
+        while (world.Tick <= secondHit + world.Frames(29)) world.Step();
         Check.That(body.Health == afterSecondHit, "The second hit restarted the delay.");
 
         // Heals up to the maximum, then sleeps for good until damaged again.
-        while (world.Tick <= secondHit + 30 + 3 * 40) world.Step();
+        while (world.Tick <= secondHit + world.Frames(30 + 3 * 40)) world.Step();
         Check.That(body.Health == Fixed.FromInt(1000), "Regeneration stops at the maximum health.");
         Check.That(world.Metrics.ScheduledUpdates == 0, "A fully healed structure has no scheduled update left.");
     }
@@ -1117,7 +1118,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5Garrison()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Bunker", x: 0, y: 0);
@@ -1152,7 +1153,7 @@ static partial class Tests
         Check.That(world.RejectionCounts[(int)CommandRejection.CannotEnterContainer] == 2, "A full Garrison (ContainMax = 2) rejects further entry.");
 
         // HealObjects: TimeForFullHeal = 300ms = 9 ticks; MaxHealth 50 heals in slivers of 50/9 per tick.
-        for (var i = 0; i < 9; i++) world.Step();
+        for (var i = 0; i < world.Frames(9); i++) world.Step();
         Check.That(enemyRebel.Body!.Health == Fixed.FromInt(50), "HealObjects heals a contained occupant back to full within TimeForFullHeal.");
 
         feeder.ExitContainer(1, 2);
@@ -1200,7 +1201,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5Transport()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Chinook", x: 0, y: 0);
@@ -1230,7 +1231,7 @@ static partial class Tests
 
         // HealthRegen%PerSec = 30: MaxHealth 60 heals continuously at 60*30/100 = 18/sec = 0.6/tick, every tick (unlike
         // GarrisonContain's ramp-to-full-over-a-fixed-duration).
-        for (var i = 0; i < 10; i++) world.Step();
+        for (var i = 0; i < world.Frames(10); i++) world.Step();
         Check.That(trooper1.Body!.Health > Fixed.FromInt(30) && trooper1.Body.Health < Fixed.FromInt(60), "HealthRegen%PerSec heals a contained occupant continuously, not all at once.");
 
         feeder.Kill(1);
@@ -1240,7 +1241,7 @@ static partial class Tests
 
     public static void Phase5Victory()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         Check.That(world.IsPlayerDefeated(new PlayerId(1)) && world.IsPlayerDefeated(new PlayerId(2)) && world.TryGetWinner() is null,

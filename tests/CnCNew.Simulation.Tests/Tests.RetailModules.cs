@@ -235,12 +235,12 @@ static partial class Tests
         """,
     };
 
-    private static List<long> SpawnTicks(SimulationWorld world, Feeder feeder, string template, int count, int maxTicks)
+    private static List<long> SpawnTicks(SimulationWorld world, Feeder feeder, string template, int count, int maxFrames)
     {
         var ticks = new List<long>();
         var seen = 0;
         for (var i = 0; i < count; i++) feeder.QueueProduction(1, 1, template);
-        for (var i = 0; i < maxTicks && ticks.Count < count; i++)
+        for (var i = 0; i < world.Frames(maxFrames) && ticks.Count < count; i++)
         {
             world.Step();
             var now = CountOf(world, template);
@@ -252,7 +252,7 @@ static partial class Tests
     /// <summary>The production exits: units appear at the transformed <c>UnitCreatePoint</c>, and <c>QueueProductionExitUpdate</c> holds finished units back by its exit delay once the initial burst is spent.</summary>
     public static void RetailProductionExits()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: RetailModuleFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: RetailModuleFiles());
         Check.That(fixture.Templates.TryGet("DefaultExitFactory", out var factoryTemplate) && factoryTemplate.IsInstantiable && fixture.Templates.TryGet("QueueExitFactory", out var queueTemplate) && queueTemplate.IsInstantiable,
             "Both exit modules bind and leave their producers instantiable.");
 
@@ -263,7 +263,7 @@ static partial class Tests
         feeder.GiveMoney(1, 1000);
         world.Step();
         var defaultTicks = SpawnTicks(world, feeder, "QuickUnit", 3, 400);
-        Check.That(defaultTicks.Count == 3 && defaultTicks[1] - defaultTicks[0] == 30 && defaultTicks[2] - defaultTicks[1] == 30, $"The default exit is always free: units leave every BuildTime ({string.Join(", ", defaultTicks)}).");
+        Check.That(defaultTicks.Count == 3 && defaultTicks[1] - defaultTicks[0] == world.Frames(30) && defaultTicks[2] - defaultTicks[1] == world.Frames(30), $"The default exit is always free: units leave every BuildTime ({string.Join(", ", defaultTicks)}).");
         var unit = world.Entities.First(value => value.Template.Name == "QuickUnit");
         Check.That((unit.X - Fixed.FromInt(15)).Abs() < Fixed.FromDecimal(0.01m) && (unit.Y - Fixed.FromInt(1)).Abs() < Fixed.FromDecimal(0.01m), $"The unit appears at the producer position plus UnitCreatePoint ({unit.X}, {unit.Y}).");
 
@@ -275,7 +275,7 @@ static partial class Tests
         queued.Step();
         var queueTicks = SpawnTicks(queued, queuedFeeder, "QuickUnit", 3, 600);
         Check.That(queueTicks.Count == 3, $"All three queued units eventually leave ({queueTicks.Count}).");
-        Check.That(queueTicks[1] - queueTicks[0] is >= 88 and <= 92 && queueTicks[2] - queueTicks[1] is >= 88 and <= 92,
+        Check.That(queued.InFrames(queueTicks[1] - queueTicks[0]) is >= 88 and <= 92 && queued.InFrames(queueTicks[2] - queueTicks[1]) is >= 88 and <= 92,
             $"After the one-unit initial burst every exit closes the door for ExitDelay (90 ticks): {string.Join(", ", queueTicks)}.");
         var queuedUnit = queued.Entities.First(value => value.Template.Name == "QuickUnit");
         Check.That(queuedUnit.X.Abs() < Fixed.FromDecimal(0.01m) && (queuedUnit.Y - Fixed.FromInt(8)).Abs() < Fixed.FromDecimal(0.01m), $"The queue exit places the unit at its own create point ({queuedUnit.X}, {queuedUnit.Y}).");
@@ -288,11 +288,11 @@ static partial class Tests
         liveFeeder.GiveMoney(1, 1000);
         live.Step();
         for (var i = 0; i < 3; i++) liveFeeder.QueueProduction(1, 1, "QuickUnit");
-        for (var i = 0; i < 50; i++) live.Step();
+        for (var i = 0; i < live.Frames(50); i++) live.Step();
         Check.That(CountOf(live, "QuickUnit") == 1, "Setup: one unit left, the door is closed.");
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(live), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == live.StateHash, "The exit delay round-trips through a snapshot.");
-        for (var i = 0; i < 200; i++)
+        for (var i = 0; i < live.Frames(200); i++)
             Check.That(live.Step().StateHash == restored.Step().StateHash, "The delayed exit is hash-identical after a restore at step " + i + ".");
         Check.That(CountOf(restored, "QuickUnit") == 3, "The restored world released the remaining units.");
     }
@@ -300,7 +300,7 @@ static partial class Tests
     /// <summary><c>HealContain</c> heals its occupants over <c>TimeForFullHeal</c>, then lets them go; vehicles, enemies and a full house are refused.</summary>
     public static void RetailHealContain()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: RetailModuleFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: RetailModuleFiles());
         Check.That(fixture.Templates.TryGet("Barracks", out var barracksTemplate) && barracksTemplate.IsInstantiable, "HealContain binds: " + (barracksTemplate is null ? "missing" : string.Join(", ", barracksTemplate.MissingModules)));
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
@@ -325,7 +325,7 @@ static partial class Tests
         Check.That(barracks.Container!.ContainCount == 1 && rebel.ContainedBy == barracks.Id, "An allied infantry unit enters.");
         var afterEntry = rebel.Body!.Health;
         Check.That(afterEntry > Fixed.FromInt(20), "Healing starts on the tick of entry.");
-        for (var i = 0; i < 12; i++) world.Step();
+        for (var i = 0; i < world.Frames(12); i++) world.Step();
         Check.That(rebel.Body.Health == Fixed.FromInt(50), "The occupant is healed to full within TimeForFullHeal.");
         Check.That(!rebel.ContainedBy.IsValid && barracks.Container.ContainCount == 0, "A fully healed occupant leaves the building.");
 
@@ -333,7 +333,7 @@ static partial class Tests
         feeder.Damage(2, 25);
         world.Step();
         feeder.EnterContainer(1, 2, 1);
-        for (var i = 0; i < 12; i++) world.Step();
+        for (var i = 0; i < world.Frames(12); i++) world.Step();
         Check.That(rebel.Body.Health == Fixed.FromInt(50) && !rebel.ContainedBy.IsValid, "The barracks heals a second visitor after it fell asleep.");
 
         // snapshot with an occupant inside
@@ -348,7 +348,7 @@ static partial class Tests
         for (var i = 0; i < 4; i++) live.Step();
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(live), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == live.StateHash, "An occupied HealContain round-trips.");
-        for (var i = 0; i < 12; i++)
+        for (var i = 0; i < live.Frames(12); i++)
             Check.That(live.Step().StateHash == restored.Step().StateHash, "Healing after a restore is hash-identical at step " + i + ".");
         Check.That(!restored.FindEntity(new EntityId(2))!.ContainedBy.IsValid, "The restored occupant was released after the heal.");
     }
@@ -356,7 +356,7 @@ static partial class Tests
     /// <summary><c>EjectPilotDie</c>, <c>VeterancyGainCreate</c>, <c>PreorderCreate</c> and <c>RadarUpdate</c>.</summary>
     public static void RetailSmallModules()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: RetailModuleFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: RetailModuleFiles());
         foreach (var name in new[] { "Jeep", "EliteTank", "VeteranTank", "DrillTank", "RadarBuilding", "Shack", "ShackHole", "HoleWorker" })
             Check.That(fixture.Templates.TryGet(name, out var template) && template.IsInstantiable, $"{name} is instantiable: " + (template is null ? "missing" : string.Join(", ", template.MissingModules)));
 
@@ -371,7 +371,7 @@ static partial class Tests
 
         // VeterancyGainCreate: the player with the science gets the level, the one without stays regular; untrainable objects are untouched
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "Alpha", "TestFaction"), new PlayerConfiguration(new PlayerId(2), "Beta"));
-        var vetWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var vetWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         var vetFeeder = new Feeder(vetWorld);
         vetFeeder.Spawn(1, "EliteTank");
         vetFeeder.Spawn(1, "DrillTank");
@@ -395,7 +395,7 @@ static partial class Tests
         radarFeeder.PurchaseUpgrade(1, "Upgrade_Radar", target: 1);
         for (var i = 0; i < 3; i++) radarWorld.Step();
         Check.That(radar.RadarActive && !radar.IsExtendComplete(radarWorld.Tick), "RadarUpgrade activates the radar; the extension is still running.");
-        for (var i = 0; i < 100; i++) radarWorld.Step();
+        for (var i = 0; i < radarWorld.Frames(100); i++) radarWorld.Step();
         Check.That(radar.IsExtendComplete(radarWorld.Tick), "The extension completes after RadarExtendTime.");
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(radarWorld), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == radarWorld.StateHash && restored.FindEntity(new EntityId(1))!.Modules.OfType<RadarUpdate>().Single().RadarActive, "The radar state round-trips.");
@@ -404,7 +404,7 @@ static partial class Tests
     /// <summary>A dying GLA structure leaves a hole that regenerates and counts down to its (unmodeled) worker; neutral and unbuildable cases are explicit.</summary>
     public static void RetailRebuildHole()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: RetailModuleFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: RetailModuleFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Shack", x: 7, y: 9);
@@ -428,17 +428,17 @@ static partial class Tests
         feeder.Damage(hole.Id.Value, 50);
         Step(1);
         var damaged = hole.Body.Health;
-        Step(40);
+        Step(world.Frames(40));
         Check.That(hole.Body.Health > damaged && hole.Body.Health <= hole.Body.MaxHealth, $"The hole regenerates ({damaged} -> {hole.Body.Health}).");
         var workerEvents = events.Where(value => value.Kind == SimEventKind.CreationSkipped && value.Text == "HoleWorker").ToArray();
         Check.That(workerEvents.Length == 1 && workerEvents[0].Value == CreationSkipReasons.SettingNotSimulated, "The worker respawn is reported once as not simulated.");
-        Step(60);
+        Step(world.Frames(60));
         Check.That(events.Count(value => value.Kind == SimEventKind.CreationSkipped && value.Text == "HoleWorker") == 1, "The countdown does not repeat.");
 
         // snapshot with the hole alive
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == world.StateHash, "A world with a hole round-trips through a snapshot.");
-        for (var i = 0; i < 20; i++)
+        for (var i = 0; i < world.Frames(20); i++)
             Check.That(world.Step().StateHash == restored.Step().StateHash, "The hole is hash-identical after a restore at step " + i + ".");
     }
 }

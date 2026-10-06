@@ -71,7 +71,7 @@ static partial class Tests
             map = map with { Teams = [..map.Teams, Team("Öland"), Team("Zulu"), Team("alpha")] };
             var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
             var outputs = new List<string>();
-            for (var tick = 0; tick < 5; tick++)
+            for (var tick = 0; tick < session.Frames(5); tick++)
             {
                 session.Step();
                 foreach (var output in session.Engine.DrainOutputs()) outputs.Add(output.Action + "(" + string.Join("|", output.Arguments) + ")");
@@ -120,7 +120,7 @@ static partial class Tests
     /// </summary>
     public static void EntityEnumerationIsOrderedById()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         for (var index = 0; index < 8; index++) feeder.Spawn(1, "Barrel");
@@ -158,7 +158,7 @@ static partial class Tests
     /// </summary>
     public static void IncrementalHashHoldsInEveryTick()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var replay = new StressScenario(new StressOptions(6_000, 600, 0xC0FFEE01, 0x5EED0001, 1_500, 1_000)).Record(fixture);
         var plain = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
         var verified = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 1 });
@@ -181,16 +181,16 @@ static partial class Tests
         // The script fires on a quiet tick, long after the warehouse was created (a fresh entity is in the dirty list anyway).
         foreach (var session in new[] { plain, saved })
         {
-            Run(session, 20);
+            Run(session, session.Frames(20));
             session.Engine.SignalUiInteraction("go");
-            Run(session, 3);
+            Run(session, session.Frames(3));
         }
         Check.That(plain.World.WarehouseBoxes(NamedIn(plain, "Store")!.Id) == 3, "Fixture: the script changed the warehouse's stock.");
         // Writing a save must be an observation: the mission that was saved hashes like the one that was not.
         var bytes = MissionSnapshot.Write(saved);
         Check.That(saved.StateHash() == plain.StateHash(), "A mission hashes differently after a save was written: a cached entity hash was stale.");
         var restored = MissionSnapshot.Restore(bytes, saved.World.Templates, saved.World.Configuration.DefinitionFingerprint, saved.World.Terrain!, saved.Map);
-        for (var tick = 0; tick < 30; tick++)
+        for (var tick = 0; tick < plain.Frames(30); tick++)
         {
             var expected = plain.Step().StateHash;
             Check.That(saved.Step().StateHash == expected && restored.Step().StateHash == expected, $"Saved, restored and undisturbed mission agree in tick {plain.World.Tick - 1}.");
