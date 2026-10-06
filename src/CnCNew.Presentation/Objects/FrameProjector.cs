@@ -59,6 +59,9 @@ public sealed class FrameProjector
     private readonly bool[] _claimed;
     private readonly bool[] _explored;
     private readonly bool[] _sceneryFogged;
+    // Where each scenery item stands, as the simulation's vision queries want it. Scenery never moves, so the conversion is done once.
+    private readonly Fixed[] _sceneryX;
+    private readonly Fixed[] _sceneryY;
     private readonly TurretTracker _turrets = new();
     private readonly SuspensionTracker _suspension = new();
     private readonly UnitConditionTracker _units = new();
@@ -80,6 +83,15 @@ public sealed class FrameProjector
         _claimed = new bool[_options.Scenery.Length];
         _explored = new bool[_options.Scenery.Length];
         _sceneryFogged = new bool[_options.Scenery.Length];
+        _sceneryX = new Fixed[_options.Scenery.Length];
+        _sceneryY = new Fixed[_options.Scenery.Length];
+        // Only a viewer asks the vision map about scenery.
+        if (_options.Viewer is not null)
+            foreach (var item in _options.Scenery)
+            {
+                _sceneryX[item.Index] = Fixed.FromDecimal((decimal)item.Position.X);
+                _sceneryY[item.Index] = Fixed.FromDecimal((decimal)item.Position.Y);
+            }
         _sceneryByTemplate = _options.Scenery.GroupBy(item => item.Visual.TemplateName, StringComparer.OrdinalIgnoreCase)
             .ToImmutableDictionary(group => group.Key, group => group.Select(item => item.Index).ToImmutableArray(), StringComparer.OrdinalIgnoreCase);
     }
@@ -200,8 +212,8 @@ public sealed class FrameProjector
         foreach (var item in _options.Scenery)
         {
             if (_claimed[item.Index]) continue;
-            var x = Fixed.FromDecimal((decimal)item.Position.X);
-            var y = Fixed.FromDecimal((decimal)item.Position.Y);
+            var x = _sceneryX[item.Index];
+            var y = _sceneryY[item.Index];
             var newlyExplored = false;
             if (!_explored[item.Index])
             {
