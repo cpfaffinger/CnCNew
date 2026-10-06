@@ -15,6 +15,7 @@ internal static class VisionTests
         var t = new TestHarness("Vision");
         t.Run("states from the vision map", States);
         t.Run("fading between updates", Fading);
+        t.Run("fading visits only moving cells and equals the full pass", FadingEqualsTheFullPass);
         t.Run("world mapping and helpers", Mapping);
         t.Run("smoothed level texture", Smoothing);
         t.Run("argument checks", Checks);
@@ -69,6 +70,79 @@ internal static class VisionTests
         Assert(FogOfWarGrid.CellOf(39.99f) == 3 && FogOfWarGrid.CellOf(40f) == 4 && FogOfWarGrid.CellOf(-0.1f) == -1, "cell of a coordinate");
         Assert(FogOfWarGrid.CellCenter(4, 3) == new Vector2(45, 35), "cell centre");
         Assert(!fog.IsExploredAt(new Vector2(-5, 5)), "outside is unexplored");
+    }
+
+    /// <summary>
+    /// The grid only visits cells whose level is still moving. The reference here is the plain rule applied to every cell in every step; both must give the
+    /// same levels and the same number of cells still on their way, through state changes in mid-fade, steps of length zero, snaps and the vision-map path.
+    /// </summary>
+    private static void FadingEqualsTheFullPass()
+    {
+        const int width = 23, height = 17;
+        // Equal fog and shroud levels: a state change that does not move the level must leave the cell at rest.
+        foreach (var settings in new[] { Settings, new FogSettings(0, 127, 255, 97.3f), new FogSettings(40, 40, 200, 333f) })
+        {
+            var fog = new FogOfWarGrid(width, height, settings);
+            var states = new FogCellState[width * height];
+            var expected = new float[width * height];
+            Array.Fill(expected, settings.ShroudLevel);
+            var actual = new byte[width * height];
+            var vision = new VisionMap(width, height, 2);
+            uint random = 12345;
+            uint Next() => random = random * 1664525u + 1013904223u;
+            for (var round = 0; round < 400; round++)
+            {
+                switch (Next() >> 28)
+                {
+                    case 0 or 1 or 2:
+                        // A handful of cells change state.
+                        for (var change = (int)(Next() >> 27); change > 0; change--) states[(int)(Next() % (uint)states.Length)] = (FogCellState)(Next() % 3);
+                        fog.SetStates(states);
+                        break;
+                    case 3:
+                        // The path the game takes: states from the simulation's vision map.
+                        vision.BeginRefresh();
+                        vision.Reveal(1, Fixed.FromInt((int)(Next() % (width * 10))), Fixed.FromInt((int)(Next() % (height * 10))), Fixed.FromInt(10 + (int)(Next() % 60)));
+                        fog.Update(vision, 1);
+                        for (var cy = 0; cy < height; cy++)
+                            for (var cx = 0; cx < width; cx++)
+                                states[cy * width + cx] = vision.IsVisible(1, cx, cy) ? FogCellState.Visible : vision.IsExplored(1, cx, cy) ? FogCellState.Fogged : FogCellState.Unexplored;
+                        break;
+                    case 4:
+                        fog.Snap();
+                        for (var index = 0; index < expected.Length; index++) expected[index] = settings.LevelOf(states[index]);
+                        Assert(fog.FadingCells == 0, "nothing fades after a snap");
+                        break;
+                }
+
+                var dt = (Next() >> 29) switch { 0 => 0f, 1 => 1f / 30, 2 => 1f / 144, 3 => 0.25f, _ => (Next() % 1000) / 20000f };
+                fog.Advance(dt);
+                var step = settings.FadeLevelsPerSecond * dt;
+                var moving = 0;
+                for (var index = 0; index < expected.Length; index++)
+                {
+                    float target = settings.LevelOf(states[index]);
+                    var current = expected[index];
+                    expected[index] = current < target ? Math.Min(target, current + step) : Math.Max(target, current - step);
+                    if (expected[index] != target) moving++;
+                }
+
+                fog.CopyLevels(actual);
+                for (var index = 0; index < expected.Length; index++)
+                {
+                    Assert(actual[index] == (byte)MathF.Round(expected[index]), $"round {round}, cell {index}: level {actual[index]} instead of {(byte)MathF.Round(expected[index])}");
+                    Assert(fog.StateAt(index % width, index / width) == states[index], $"round {round}, cell {index}: state");
+                }
+                // A cell counts as arrived exactly when the plain rule has reached the target float.
+                Assert(fog.FadingCells == moving, $"round {round}: {fog.FadingCells} fading cells instead of {moving}");
+            }
+
+            // Long enough for every fade to end: nothing is left to visit, and the levels are exactly the levels of the states.
+            for (var round = 0; round < 40; round++) fog.Advance(1f);
+            Assert(fog.FadingCells == 0, "every fade ends");
+            for (var index = 0; index < states.Length; index++)
+                Assert(fog.LevelAt(index % width, index / width) == settings.LevelOf(states[index]), $"cell {index} at rest");
+        }
     }
 
     private static void Smoothing()
