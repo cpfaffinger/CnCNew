@@ -106,10 +106,10 @@ Stand 5. Oktober 2026, belegt durch Lesen des Codes (`2a66661`), zwei Suchläufe
 
 | Nr. | Art | Befund | Beleg | Phase | Ergebnis |
 |---|---|---|---|---|---|
-| E1 | Showstopper | Determinismus ist nur auf einem Rechner belegt | alle bisherigen Vergleichsläufe | 18 | offen |
-| E2 | Risiko | Knochentabelle und Kartenkoordinaten entstehen über `float`/`MathF`/`(decimal)float`; Dictionary-Aufzählung mit Nebenwirkung; kulturabhängiger Skript-Hash; Lücken in Fingerabdrücken und `SourceRules` | `docs/HANDOFF-PHASE18.md` D1–D9 | 18 | offen |
-| E3 | Engstelle | Referenzwerte stehen nur in der Doku, nicht in Tests | `docs/TICKRATE-AUDIT.md` §7 | 18 | offen |
-| E4 | Showstopper | Echtes 8-Spieler-Match kostet rund 7–9 ms je Tick bei wenigen hundert Objekten (nicht ruhige Probe); bei 60 Hz rund ein halber Kern, Aufholtempo etwa 2-fach | `docs/HANDOFF-PHASE18.md` Punkt 4 | 18 (Profil), 19, 23 (Tor) | offen |
+| E1 | Showstopper | Determinismus ist nur auf einem Rechner belegt | alle bisherigen Vergleichsläufe | 18 | **teilweise belegt (Phase 18):** ein Rechner, 13 Zeilen der Matrix identisch, darunter Linux unter WSL2, Kulturen, JIT-/GC-Schalter (`docs/DETERMINISM.md` §2); **offen:** zweiter physischer Rechner mit anderer CPU, andere .NET-Version |
+| E2 | Risiko | Knochentabelle und Kartenkoordinaten entstehen über `float`/`MathF`/`(decimal)float`; Dictionary-Aufzählung mit Nebenwirkung; kulturabhängiger Skript-Hash; Lücken in Fingerabdrücken und `SourceRules` | `docs/HANDOFF-PHASE18.md` D1–D9 | 18 | **behoben (Phase 18):** D1–D9 je mit Test bestätigt oder widerlegt und korrigiert (`docs/DETERMINISM-FINDINGS.md`); real waren D4 (Kultur), D5 (Fingerabdruck), D8 (fehlendes `MarkDirty` auf 19 von 45 Missionskarten), D9 (Zeilenenden: Linux lehnte Windows ab); Rest: eigenes Escaping des Fingerabdrucks, Kennung des Codestands (Phase 25) |
+| E3 | Engstelle | Referenzwerte stehen nur in der Doku, nicht in Tests | `docs/TICKRATE-AUDIT.md` §7 | 18 | **behoben (Phase 18):** `baselines/reference-manifest.json` (50 Läufe) und `baselines/input-manifest.json`, `SimTool reference-manifest check` (`docs/SIMULATION-CORE.md` §37) |
+| E4 | Showstopper | Echtes 8-Spieler-Match kostet rund 7–9 ms je Tick bei wenigen hundert Objekten (nicht ruhige Probe); bei 60 Hz rund ein halber Kern, Aufholtempo etwa 2-fach | `docs/HANDOFF-PHASE18.md` Punkt 4 | 18 (Profil), 19, 23 (Tor) | **vermessen (Phase 18, ruhig):** 8 Spieler 4,98 ms je Tick (99 %: 13,6 ms, Maximum 547 ms), bei 60 Hz 30 % eines Kerns und 3,4-faches Aufholtempo; `MD_GLA05` 12,6–13,5 ms, bei 60 Hz 76–81 % und 1,2-fach; 81 % der Update-Zeit `AIUpdateInterface`, ein Drittel Sicht und Hash (`docs/PERFORMANCE.md` §6); Abtragen in Phase 19 |
 | E5 | Showstopper | Tickrate ist eine `const`; 61 Verwendungen, rund 110 nackte Tickzahlen in der Simulation, Kataloge rechnen beim Bau um | `docs/TICKRATE-AUDIT.md` §1–§3 | 20 | offen |
 | E6 | Showstopper | Daten als rohe Bildwerte (Zug, Dämpfungen, Skript-Bildzähler, Ersatzwerte) | `docs/TICKRATE-AUDIT.md` §4 | 20, 23 | offen |
 | E7 | Showstopper | Partikeleffekte laufen am Simulationstick; Hüllkurven, EVA, HUD und Missionspräsentation zählen Ticks; Kopien der 30 außerhalb der Simulation | `docs/TICKRATE-AUDIT.md` §2, §6 | 21 | offen |
@@ -122,14 +122,23 @@ Stand 5. Oktober 2026, belegt durch Lesen des Codes (`2a66661`), zwei Suchläufe
 | E14 | Showstopper | `LiveGame.Advance` besitzt die Zeit (Akkumulator, 8 Ticks je Bild, lokale Pause/Geschwindigkeit) | `LiveGame.cs` | 24 | offen |
 | E15 | Engstelle | Match-Eingabe unvollständig: keine Teams/Farben/Startpositionen/KI-Stärke in `MatchSetup`, Mensch fest Spieler 1, Zufallsfraktion aus Shell-Zufall | `LiveMatch.cs`, `SkirmishScreens.cs` | 24, 25 | offen |
 | E16 | Showstopper | Kein Netzwerkcode, kein Protokoll, keine Kennung des Simulationsstands | – | 25, 26 | offen |
-| E17 | Engstelle | Snapshot ist JSON, 485–776 Byte je Objekt (10–12 MB im Stresstest), für Übertragung unvermessen; Wiederherstellung fügt Objekte in anderer Reihenfolge ein als das laufende Spiel | `docs/SIMULATION-CORE.md`, D3 | 18, 27 | offen |
+| E17 | Engstelle | Snapshot ist JSON, 485–776 Byte je Objekt (10–12 MB im Stresstest), für Übertragung unvermessen; Wiederherstellung fügt Objekte in anderer Reihenfolge ein als das laufende Spiel | `docs/SIMULATION-CORE.md`, D3 | 18, 27 | **teilweise (Phase 18):** Aufzählung jetzt in ID-Reihenfolge (`EntityTable`, D3); Snapshot vermessen: 3,2 MB bei 155 Objekten (Twilight Flame, 8 Spieler), 9,0 MB bei 2.249 Objekten (`MD_GLA05`), Schreiben 9–43 ms, Lesen 23–164 ms; Übertragung offen (Phase 27) |
 | E18 | Engstelle | Ohne Werkzeug ist ein Desync nicht auf Objekt und Feld zurückführbar | – | 27 | offen |
 | E19 | Risiko | Offener UDP-Port: Flut, gefälschte Absender, fehlerhafte Pakete, Mitlesen | – | 26 (Cookie, Parser), 28 | offen |
-| E20 | Engstelle | Speicherbereinigung und lange Bilder lassen einen Client stocken; im Lockstep muss er aufholen können | E4 | 19, 23, 26 | offen |
+| E20 | Engstelle | Speicherbereinigung und lange Bilder lassen einen Client stocken; im Lockstep muss er aufholen können | E4 | 19, 23, 26 | **vermessen (Phase 18):** 95 KB Allokation je Tick und 2 Gen-2-Läufe in 54.000 Ticks (8 Spieler); `MD_GLA05` 4 MB je Tick, 7 Gen-2-Läufe in 9.000 Ticks; Abtragen in Phase 19 |
 | E21 | Grenze | Mission: Präsentation meldet an die Skript-VM zurück (`CompletePresentation`, `SelectNamed`, `SignalUiInteraction`), `<Local Player>` je Rechner, `_selected` nicht gehasht | `MissionPresentation.cs`, `ScriptEngine*.cs` | – (Kampagne bleibt lokal; in Phase 24 dokumentiert) | bewusst |
 | E22 | Grenze | Kartenaufdeckung im Lockstep nicht verhinderbar | §2.8 | – | bewusst |
 | E23 | Engstelle | Oberfläche: Mehrspieler-Knopf deaktiviert, kein Raum, keine Anzeigen im Spiel; Interpolation nur für Position und Rumpfdrehung | `docs/GAME-SHELL.md`, `FrameProjector.cs` | 29 | offen |
 | E24 | Risiko | Nichts aus Phase 15–17 ist von einem Menschen abgenommen; ein Netzwerkspiel auf einem Spiel mit unbelegter Spielbarkeit verdeckt Ursachen | `CLAUDE.md` | 17, 29, 30 | offen |
+
+### 4a. Freigabe nach Phase 18 (6. Oktober 2026)
+
+**Das Programm wird wie geplant fortgesetzt**, mit zwei Auflagen.
+
+- *Dafür spricht:* die Rechnung ist auf dem gemessenen Rechner von JIT, GC, Kultur und Betriebssystem unabhängig (13 Matrixzeilen identisch, `docs/DETERMINISM.md`); die Messlatte existiert und besteht zweimal hintereinander; alle neun Befunde des Suchlaufs sind abgearbeitet; das Tickraten-Inventar ist geprüft (1.959 Stellen in acht Klassen, `docs/TICKRATE-AUDIT.md`).
+- *Auflage 1 (E1):* der Lauf auf einem zweiten physischen Rechner mit anderer CPU steht aus (`docs/DETERMINISM.md` §4). Er ist vor Phase 26 (erstes Netzwerkspiel zwischen Rechnern) nachzuholen; bis dahin gilt der Determinismus über Rechnergrenzen als *wahrscheinlich, nicht belegt*.
+- *Auflage 2 (E4):* die Leistung ist der eigentliche Engpass. Ohne Phase 19 kostet ein 8-Spieler-Gefecht bei 60 Hz 30 % eines Kerns mit Ausreißern bis 547 ms je Tick, und eine große Mission 76–81 %. Phase 19 bleibt deshalb vor Phase 20; ihr Sollwert „Mittel ≤ 1,0 ms“ verlangt rund den Faktor 5 und ist nach dem Profil nur erreichbar, wenn Bewegung/Wegsuche (`AIUpdateInterface`, 81 % der Update-Zeit) sinkt – Sicht und Hash allein bringen höchstens ein Drittel.
+- *Aus dem Inventar für die Phasen 20–23 (Widersprüche zum Plan, `docs/TICKRATE-AUDIT.md` Zusammenfassung):* „gleiche Balance bei jeder Rate“ gilt nur für die Katalogrundung, nicht für Abrundungen, Ein-Tick-Minima und N+1-Zähler zur Laufzeit; Literale, die Reihenfolge statt Zeit bedeuten, dürfen nicht skaliert werden; gemischte Rekurrenzen (Zug, Zugformation, MOAB) brauchen mehr als Quadratwurzeln; die Präsentation greift heute über `StandingOrders` und den Missions-Director in die Simulation ein; `SaveGame` schreibt keine Rate.
 
 ## 5. Phasenübersicht
 

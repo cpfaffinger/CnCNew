@@ -15,6 +15,8 @@ Die Simulation kennt keine fest einkodierte Tickrate mehr; die Rate ist ein Wert
 - Daten, die als rohe Bildwerte verbraucht werden: Ersatzwerte von `ModuleConfigReader.Ticks`, Zug-, Dämpfungs- und Wurfwerte, `InstantSpeed`, `TurretInfo.DefaultRate`, die Bildzähler der Kartenskripte (`SET_TIMER`, `*_FOR_FRAMECOUNT`).
 - `WorldSnapshot`, `MissionSnapshot`, Replay-Kopf und `ReplayRunner` schreiben die Rate und lehnen jede andere als 30 ab; `Tests.State.cs` prüft, dass 60 abgelehnt wird.
 
+**Nachtrag aus Phase 18 (6. Oktober 2026):** `docs/TICKRATE-AUDIT.md` ist jetzt die geprüfte Fassung (Stand `e5046b7`): 1.959 gekoppelte Stellen, davon 660 in `CnCNew.Simulation` (A 39, B 267, C 81, D 43, E 138, F 12, G 15, H 65); 63 Verwendungen der Konstante in 32 Dateien, 159 nackte Tickzahlen, 15 Ersatzwerte von `ModuleConfigReader.Ticks`, 222 gespeicherte absolute Tickfelder in 56 Dateien (310 tickbezogene Felder insgesamt). Zehn Widersprüche zum Plan stehen in der Zusammenfassung des Inventars (W1–W10) und in `docs/MULTIPLAYER-PLAN.md` §4a; für diese Phase wichtig: W2 (Literale, die Reihenfolge bedeuten, nicht skalieren), W3 (13 `const`-Ausdrücke und 31 Handrechnungen mit der Konstante), W6 (Skripte: Auswertung je Tick, Phasenmodul `% (2*30+1)`), W8 (`SaveGame` schreibt keine Rate, `ReplayRunner.Run(replay, world, …)` prüft sie nicht). Messlatte ist `SimTool reference-manifest check` (`baselines/`), nicht mehr die Hashes der Doku.
+
 ## Entscheidungen, die feststehen (`docs/MULTIPLAYER-PLAN.md` §2)
 
 1. **Unterstützte Raten sind 30 · 2ᵏ: 30, 60, 120.** Jede andere wird beim Erzeugen der Welt abgelehnt. Grund: Bildwerte des Originals lassen sich exakt skalieren (× 2, × 4), und multiplikative Faktoren je Bild brauchen später nur Quadratwurzeln (Phase 23).

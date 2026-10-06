@@ -171,8 +171,49 @@ Das Werkzeug kann jede der drei unbelegten Spuren aus `docs/HANDOFF-PHASE18.md` 
 
 ## 6. Ergebnisse (ruhige Messung)
 
-*Noch leer. Der Koordinator trägt hier die Tabellen aus `summary.md` ein: Datum, Commit, Hardwarezeile, Übersicht,
-Tickphasen, die Hochrechnung auf 60 Hz und die Befunde zu den drei Spuren.*
+Gemessen am 6. Oktober 2026, Stand `b432fb7`, mit `scripts/perf-profile.ps1` (Standardliste, strikt nacheinander, nichts sonst auf dem Rechner; CPU-Last vor den Läufen 0–6 %, vor dem ersten 15 %). Hardware: AMD Ryzen 7 PRO 6850U (AMD64 Family 25 Model 68), 16 logische Prozessoren, 28 GiB, Windows 10.0.26200, .NET 10.0.12, Workstation-GC. Ein Rechner, ein Lauf je Zeile – keine Streuung erhoben. In allen zehn Läufen ist der inkrementelle Hash am Ende gleich dem voll berechneten.
+
+### 6.1 Übersicht (Zeiten in Mikrosekunden je Tick)
+
+| Lauf | Karte (Zellen) | Spieler | Ticks | Mittel | Median | 95 % | 99 % | Maximum | Bytes je Tick | GC 0/1/2 | Objekte min/max/Ende | Wiedergabe ohne KI | Aufholen bei 60 Hz | Kernanteil bei 60 Hz | Snapshot (Bytes; schreiben/lesen ms) | Endhash |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---|---|
+| small-2p | Scorched Earth (190×190) | 2 | 23.656 (entschieden) | 505,8 | 375,1 | 959,7 | 1.647,8 | 37.349 | 12.629 | 36/1/0 | 8/77/51 | 387,4 | 43,0× | 3,0 % | 294.114; 1,9/5,1 | `A8969552F4CE324B` |
+| medium-2p | Tournament Tundra (268×269) | 2 | 21.706 (entschieden) | 784,0 | 693,4 | 1.682,2 | 2.025,9 | 56.250 | 24.460 | 64/6/0 | 16/152/67 | 668,1 | 24,9× | 4,7 % | 484.356; 2,7/7,0 | `FF4E157157884F29` |
+| medium-4p | Tournament Tundra | 4 | 54.000 | 1.866,3 | 1.371,5 | 5.149,9 | 7.371,2 | 86.975 | 34.095 | 221/35/1 | 20/274/46 | 1.795,3 | 9,3× | 11,2 % | 577.560; 1,7/5,4 | `95EC2A8639D7A807` |
+| large-2p | Twilight Flame (486×469) | 2 | 54.000 | 797,4 | 489,6 | 1.680,5 | 1.879,5 | 138.596 | 24.065 | 156/8/0 | 16/105/61 | 749,0 | 22,3× | 4,8 % | 1.066.372; 3,3/8,5 | `868959729974E7FD` |
+| large-4p | Twilight Flame | 4 | 52.441 (entschieden) | 2.071,2 | 1.593,4 | 3.943,8 | 5.156,3 | 253.739 | 28.620 | 180/24/1 | 20/200/124 | 2.014,8 | 8,3× | 12,4 % | 1.923.632; 5,6/16,7 | `F34474400B0A780D` |
+| large-8p | Twilight Flame | 8 | 54.000 | **4.978,1** | 4.294,5 | 8.358,5 | 13.597,8 | **547.113** | 95.273 | 616/68/2 | 28/337/155 | 4.870,3 | **3,4×** | **29,9 %** | 3.198.580; 8,9/22,7 | `0A69FC72FF6975CD` |
+| mission-MD_USA05 | MD_USA05 (527×521), 10 Seiten | – | 3.000 | 5.944,9 | 4.502,0 | 9.435,2 | 20.081,8 | 114.379 | 208.129 | 74/2/0 | 1.835/1.909/1.869 | – | 2,8× (live) | 35,7 % | 6.549.327; 33,8/134,6 | `1CB28E6AA923BDEF` |
+| mission-MD_USA05 | | – | 9.000 | 5.546,7 | 4.190,0 | 8.681,2 | 12.145,5 | 116.693 | 202.246 | 218/5/0 | 1.835/1.909/1.869 | – | 3,0× (live) | 33,3 % | 6.550.224; 33,7/130,6 | `D5AC3B28DC65F103` |
+| mission-MD_GLA05 | MD_GLA05 (589×589), 12 Seiten | – | 3.000 | **13.468,0** | 10.942,7 | 20.047,3 | 37.188,2 | 160.996 | 4.093.904 | 1.435/6/2 | 2.249/2.304/2.249 | – | **1,2× (live)** | **80,8 %** | 9.009.216; 43,1/163,7 | `826CCD82C8536DC2` |
+| mission-MD_GLA05 | | – | 9.000 | 12.644,2 | 9.909,4 | 18.759,9 | 35.937,5 | 168.834 | 4.088.597 | 4.302/92/7 | 2.243/2.304/2.247 | – | 1,3× (live) | 75,9 % | 9.022.665; 43,0/119,1 | `5733B70B4C846DB1` |
+
+### 6.2 Tickphasen (Mittel in Mikrosekunden je Tick; Phasen unter 5 µs weggelassen)
+
+| Lauf | Updates | Acquisition | Vision | VisionHash | Hash | KI | Skripte |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| small-2p | 221,9 | 12,5 | 108,9 | 22,1 | 116,1 | 18,6 | – |
+| medium-2p | 370,8 | 15,4 | 162,2 | 41,7 | 171,1 | 17,1 | – |
+| medium-4p | 1.167,2 | 21,1 | 284,4 | 67,0 | 297,5 | 24,0 | – |
+| large-2p | 293,4 | 9,0 | 215,7 | 128,5 | 134,7 | 12,4 | – |
+| large-4p | 1.090,5 | 17,6 | 407,1 | 212,0 | 315,6 | 23,7 | – |
+| large-8p | 3.264,2 | 36,9 | 716,0 | 378,5 | 530,8 | 44,7 | – |
+| MD_USA05 (3.000) | 2.179,5 | 311,5 | 921,3 | 562,3 | 1.681,2 | – | 278,8 |
+| MD_USA05 (9.000) | 1.980,1 | 276,4 | 854,7 | 564,5 | 1.635,0 | – | 231,4 |
+| MD_GLA05 (3.000) | 5.261,5 | 540,8 | 1.531,8 | 841,2 | 2.271,3 | – | 2.999,7 |
+| MD_GLA05 (9.000) | 4.628,1 | 502,8 | 1.670,3 | 822,4 | 2.164,6 | – | 2.844,0 |
+
+### 6.3 Was die Messung sagt
+
+1. **Die Kosten hängen an Spielerzahl und Karte, nicht an der Objektzahl.** 8 Spieler mit höchstens 337 Objekten kosten 4,98 ms je Tick; der synthetische Stresstest mit über 13.000 Objekten 61 µs. Von 2 auf 8 Spieler auf derselben Karte steigt der Tick um das 6,2-Fache.
+2. **Zwei Drittel sind Modul-Updates, und davon vier Fünftel `AIUpdateInterface`** (large-8p: 81,4 % der Update-Zeit, 28,8 µs im Mittel je Aufruf, bis 52 ms in einem Aufruf). Das ist Bewegung samt Wegsuche. Der längste Tick überhaupt (547 ms bei Tick 52.843, 158 Objekte) besteht zu 100 % aus Updates: ein einzelner Tick, der 16 Bilder bei 30 Hz kostet. In `MD_GLA05` kommt `PointDefenseLaserUpdate` mit 30,6 % der Update-Zeit dazu.
+3. **Sicht und Hash zusammen kosten ein Drittel** (large-8p: Vision 716 + VisionHash 379 + Hash 531 = 1.626 µs von 4.978). Alle drei wachsen mit Kartenfläche und Spielerzahl, nicht mit dem, was sich ändert.
+4. **Die drei Spuren des Handoffs:** (a) bestätigt – `VisionHash` 379 µs im Mittel auf Twilight Flame mit 8 Spielern, 822–841 µs auf `MD_GLA05`; (b) teilweise – die Hash-Phase kostet 135–531 µs in Gefechten und 1,6–2,3 ms in Missionen, der größere Hebel ist laut Vorabmessung (§7), dass die meisten Objekte jeden Tick als geändert gelten; (c) trifft zu, wirkt aber nicht auf den Tick (niemand ruft `MissionSession.StateHash()` je Tick).
+5. **Skripte:** in `MD_GLA05` 2,8–3,0 ms je Tick (22 % des Ticks) und 4 MB Allokation je Tick mit 1.435 Gen-0-Sammlungen in 3.000 Ticks; in `MD_USA05` 0,23–0,28 ms.
+6. **Hochrechnung auf 60 Hz** (Mittel × 60, ohne dass sich etwas am Code ändert): Gefecht mit 8 Spielern **30 % eines Kerns**, Aufholtempo **3,4-fach**; `MD_USA05` 33–36 % und rund 3-fach; `MD_GLA05` **76–81 %** und nur **1,2- bis 1,3-fach**. Die Sollwerte für Phase 19 (`docs/HANDOFF-PHASE19.md`) sind daran zu messen; die Quantile zählen mehr als das Mittel: das 99-%-Quantil des 8-Spieler-Laufs liegt bei 13,6 ms und damit nahe an einem ganzen 60-Hz-Tick (16,7 ms), das von `MD_GLA05` bei 36–37 ms darüber.
+7. **Snapshot:** 3,2 MB für 155 Objekte auf Twilight Flame (der größte Teil ist nicht das Objekt, sondern Karte und Sicht), 9,0 MB für 2.249 Objekte in `MD_GLA05`; Schreiben 9–43 ms, Lesen 23–164 ms.
+
+Nicht gemessen: Streuung zwischen Läufen, ein zweiter Rechner, Server-GC, der Client (Darstellung) neben der Simulation, die Kosten des Beobachters selbst (der Lauf ohne Beobachter ist die Spalte „Wiedergabe ohne KI“; large-8p: 4.870 gegenüber 4.978 µs mit Beobachter und KI).
 
 ## 7. Vorläufig, nicht ruhig gemessen
 
