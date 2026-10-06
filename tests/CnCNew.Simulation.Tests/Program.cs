@@ -133,6 +133,9 @@ run.Test("Vision: circular reveal, exploration memory and shroud clearing range"
 run.Test("Vision: allies, construction sites and reveal-to-all", Tests.VisionAlliesSharingAndConstruction);
 run.Test("Vision: targeting is gated by visibility and stealth", Tests.VisionGatesTargeting);
 run.Test("Vision: snapshot round trip and two-run determinism", Tests.VisionSnapshotAndDeterminism);
+run.Test("Vision: reveal, refresh and kept hash match the original computation on random sequences", Tests.VisionMapMatchesTheReferenceComputation);
+run.Test("Vision: the kept hash mixes only from the first changed byte", Tests.VisionHashOnlyMixesFromTheFirstChangedByte);
+run.Test("Vision: a random world matches the original computation in every tick", Tests.VisionWorldMatchesTheReferenceComputation);
 run.Test("Construction: a dozer builds a structure over BuildTime ticks", Tests.ConstructionBuildsAStructure);
 run.Test("Construction: cancelling a site refunds it in full", Tests.ConstructionCancelRefunds);
 run.Test("Construction: sale takes 179 ticks and pays SellPercentage", Tests.ConstructionSellTimingAndPayout);
