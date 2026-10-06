@@ -215,6 +215,56 @@ Gemessen am 6. Oktober 2026, Stand `b432fb7`, mit `scripts/perf-profile.ps1` (St
 
 Nicht gemessen: Streuung zwischen Läufen, ein zweiter Rechner, Server-GC, der Client (Darstellung) neben der Simulation, die Kosten des Beobachters selbst (der Lauf ohne Beobachter ist die Spalte „Wiedergabe ohne KI“; large-8p: 4.870 gegenüber 4.978 µs mit Beobachter und KI).
 
+## 6a. Ergebnisse nach Phase 19 (ruhige Messung, 6. Oktober 2026, Stand `16d337c`)
+
+Dieselbe Liste, derselbe Rechner, dasselbe Skript wie §6 (`scripts/perf-profile.ps1`, strikt nacheinander, CPU-Last vor den Läufen 0–6 %, vor dem ersten 14 %). **Alle zehn Endhashes sind die aus §6** – es wurde kein Ergebnis geändert. Ein Lauf je Zeile, keine Streuung erhoben.
+
+### 6a.1 Übersicht (Mikrosekunden je Tick; in Klammern der Wert aus §6)
+
+| Lauf | Mittel | Median | 95 % | 99 % | Maximum | Bytes je Tick | GC 0/1/2 | Wiedergabe ohne KI | Aufholen bei 60 Hz | Kernanteil bei 60 Hz |
+|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|
+| small-2p | 290,3 (505,8) | 209,1 | 768,3 | 1.408,0 | 43.399 (37.349) | 3.260 (12.629) | 9/2/0 | 131,0 | 127× | 1,7 % |
+| medium-2p | 368,5 (784,0) | 268,3 | 869,2 | 1.482,6 | 45.378 (56.250) | 4.059 (24.460) | 11/1/0 | 200,4 | 83× | 2,2 % |
+| medium-4p | 543,6 (1.866,3) | 444,0 | 1.261,8 | 2.100,5 | 42.869 (86.975) | 7.625 (34.095) | 49/5/0 | 424,1 | 39× | 3,3 % |
+| large-2p | 267,5 (797,4) | 193,6 | 605,3 | 1.343,7 | 43.757 (138.596) | 3.768 (24.065) | 25/2/0 | 191,9 | 87× | 1,6 % |
+| large-4p | 595,8 (2.071,2) | 456,3 | 1.066,9 | 1.804,0 | 114.619 (253.739) | 7.231 (28.620) | 45/10/0 | 514,2 | 32× | 3,6 % |
+| **large-8p** | **1.141,2 (4.978,1)** | 870,0 | 2.027,0 | **3.202,4 (13.597,8)** | **93.710 (547.113)** | 52.123 (95.273) | 337/39/0 (616/68/2) | 1.029,1 | **16,2× (3,4×)** | **6,8 % (29,9 %)** |
+| MD_USA05, 3.000 Ticks | 2.463,3 (5.944,9) | 1.840,9 | 4.975,0 | 12.323,2 (20.081,8) | 112.306 (114.379) | 16.470 (208.129) | 6/1/0 | – | 6,8× live (2,8×) | 14,8 % (35,7 %) |
+| MD_USA05, 9.000 Ticks | 1.990,2 (5.546,7) | 1.509,7 | 3.010,4 | 8.999,6 | 113.753 | 12.588 | 13/2/0 | – | 8,4× live | 11,9 % |
+| MD_GLA05, 3.000 Ticks | **3.430,3 (13.468,0)** | 2.624,8 | 7.958,2 | 14.611,1 (37.188,2) | 151.803 (160.996) | 10.187 (4.093.904) | 4/2/0 (1.435/6/2) | – | 4,9× live (1,2×) | 20,6 % (80,8 %) |
+| MD_GLA05, 9.000 Ticks | 2.924,9 (12.644,2) | 2.202,0 | 4.821,4 | 9.654,0 | 119.479 | 11.423 | 12/1/0 (4.302/92/7) | – | 5,7× live | 17,5 % |
+
+### 6a.2 Tickphasen (Mittel in Mikrosekunden je Tick; in Klammern §6)
+
+| Lauf | Updates | Acquisition | Vision | VisionHash | Hash | KI | Skripte |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| large-2p | 82,8 (293,4) | 9,9 | 34,0 (215,7) | 40,3 (128,5) | 83,6 (134,7) | 12,6 | – |
+| large-4p | 232,0 (1.090,5) | 15,4 | 54,6 (407,1) | 102,5 (212,0) | 163,2 (315,6) | 22,9 | – |
+| large-8p | 472,3 (3.264,2) | 27,5 (36,9) | 85,0 (716,0) | 228,2 (378,5) | 279,1 (530,8) | 42,1 | – |
+| MD_USA05 (3.000) | 967,8 (2.179,5) | 25,3 (311,5) | 110,1 (921,3) | 237,5 (562,3) | 956,4 (1.681,2) | – | 153,6 (278,8) |
+| MD_GLA05 (3.000) | 1.111,0 (5.261,5) | 45,6 (540,8) | 301,8 (1.531,8) | 497,5 (841,2) | 1.245,1 (2.271,3) | – | 204,3 (2.999,7) |
+
+### 6a.3 Gegen die Sollwerte der Phase (`docs/HANDOFF-PHASE19.md`; 8 Spieler, 30 Spielminuten, große Karte)
+
+| Größe | Soll | vorher | nachher | erreicht? |
+|---|---|---:|---:|---|
+| Tickzeit Mittel | ≤ 1,0 ms | 4,98 ms | 1,14 ms | **knapp nicht** (Faktor 4,4 gewonnen) |
+| 99-%-Quantil | ≤ 3 ms | 13,60 ms | 3,20 ms | **knapp nicht** |
+| Maximum | ≤ 8 ms | 547 ms | 94 ms | **nein** |
+| Aufholtempo | ≥ 8-fach bei 60 Hz | 3,4-fach | 16,2-fach | **ja** |
+| Gen-2-Läufe im Match | keine | 2 | 0 | **ja** |
+| Allokation je Tick | nahe 0 | 95 KB | 52 KB | **nein** |
+| Kampagnenaudit je Karte (900 Ticks) | unter 1 Minute | bis 168 s (unter Last) | 9–57 s (24 Karten, unter paralleler Last) | **ja** |
+
+### 6a.4 Was bleibt und warum es ohne Ergebnisänderung nicht weiter sinkt
+
+1. **Das Maximum (94 ms im Gefecht, 112–152 ms in Missionen).** Im Gefecht sind es Ticks, in denen viele Einheiten zugleich lange, erfolgreiche Wege suchen (ein Fall mit 69 Suchen und 1,89 Millionen Zellen); jede Suche liefert ihren heutigen Weg, eine billigere Suche wählte unter gleich teuren Wegen einen anderen. In den Missionen ist es der erste Tick (laut Messung des Missions-Agenten zum größten Teil JIT-Übersetzung, keine Missionsarbeit). Weiter geht es nur mit einer Verhaltensänderung in einem eigenen Commit mit neu geschriebenem Manifest: ein gemeinsamer Weg je Gruppe, ein Zellbudget je Tick mit Warteschlange, oder eine andere Suche (`docs/PERF-MOVEMENT.md`).
+2. **Der Zustands-Hash** ist jetzt die größte Einzelphase (8 Spieler 279 µs, `MD_GLA05` 1.245 µs) vor dem Sicht-Hash (228 bzw. 498 µs). Beide sind eine einzige Kette über alle Wörter bzw. alle Zellbytes; exakt inkrementell geht das nicht. Zwei dokumentierte Vorschläge für eine andere Konstruktion, **nicht umgesetzt, Entscheidung des Projektinhabers**: Sicht-Hash zeilenweise (Prototyp 11- bis 21-fach schneller, `docs/PERF-VISION.md` §7.1); Objekt-Hash mit Rahmenschlüssel, Modul-Hashes und „wach“ statt absolutem Wecktick (`docs/PERF-HASH.md` §6–§7). Beides ändert jeden Hash im Manifest.
+3. **Allokation:** 52 KB je Tick mit 8 Spielern (vorher 95 KB), in den Missionen 10–16 KB (vorher 0,2–4 MB). Der Rest verteilt sich auf die KI und die Modul-Updates und ist nicht einzeln abgetragen.
+4. **Lineare Suchen über bewegliche Objekte** (Ausweichen, Kollision, Fallen, Detektoren): ein räumlicher Index wäre ergebnisneutral, braucht aber einen Haken an jeder Positionsänderung in `Entity.cs`.
+
+Einzelheiten je Kostenstelle mit dem Nachweis der Ergebnisgleichheit: `docs/PERF-MOVEMENT.md`, `docs/PERF-VISION.md`, `docs/PERF-HASH.md`, `docs/PERF-MISSIONS.md`, `docs/PERF-GAME-LAYER.md` (Spielschicht, `perf-compare`, was einem eigenen Simulations-Thread im Weg steht). Vergleich zweier Messverzeichnisse: `pwsh scripts/perf-compare.ps1 <alt> <neu>`.
+
 ## 7. Vorläufig, nicht ruhig gemessen
 
 Alles in diesem Abschnitt stammt vom 6. Oktober 2026, Stand `b6b7454` plus Werkzeug, **von einem Rechner, auf dem

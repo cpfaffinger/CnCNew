@@ -19,6 +19,8 @@ Verworfen: Q31.32 (Bereich ±2,1 · 10⁹; Abstandsquadrate über eine große Ka
 - Snapshots (`JsonState`) und Replays (`ReplayFormat`) schreiben Rohwerte; Befehle tragen Rohkoordinaten.
 - Ganzzahl-Hashfunktionen über Rohwerte (Turm-Scan, Stimmung) in `SimulationWorld.Turrets.cs`/`.Acquisition.cs`.
 
+**Nachtrag aus Phase 19 (6. Oktober 2026):** `Fixed.Mul`, `Fixed.Div` und `Fixed.Sqrt` sind seit `40fcbc6`/`da6a4ed` handoptimiert (keine 128-Bit-Softwaredivision, Newton-Startwert nahe der Wurzel) und mit Äquivalenztests gegen die frühere Fassung abgesichert (`Tests.PerfMovement.cs`, `Tests.Indexes.cs`). Diese Routinen und ihre Tests sind auf 16 Nachkommabits zugeschnitten und müssen beim Wechsel auf Q39.24 neu hergeleitet werden; die Messlatte für die Geschwindigkeit ist `docs/PERFORMANCE.md` §6a.
+
 ## Auftrag (in dieser Reihenfolge)
 
 1. **Ausgangszustand reproduzieren.** Build, Tests, `reference-manifest check --set full`, Leistungsprofil. Zusätzlich für alle Läufe des Manifests **Ergebnisgrößen** sichern, die keine Hashes sind: Sieger, Endtick, Objektzahl je Spieler am Ende, Geld, Zahl der Schüsse/Produktionen/Bauten; für Missionen der Ausgang und der Tick des Endskripts. Sie sind der Vergleichsmaßstab nach der Umstellung.
