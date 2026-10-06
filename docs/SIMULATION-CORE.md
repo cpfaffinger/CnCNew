@@ -43,10 +43,15 @@ Die Tickrate ist ein **Wert der Welt** (Phase 20; Einzelheiten, Zählungen und d
   (`docs/TICKRATE-MIGRATION.md` §11); Integration je Tick, multiplikative Faktoren je Bild und Abtastung je Tick stehen als Liste für
   Phase 23 in §5 dort.
 
-- **Zahlenart:** Zustand besteht nur aus Ganzzahlen und `Fixed`. `Fixed` ist ein Q47.16-Festkomma in
-  einem `long` (16 Nachkommabits, Auflösung 1/65536 Weltinheit, Bereich ±1,4·10^14). Begründung: Das Original hält
+- **Zahlenart:** Zustand besteht nur aus Ganzzahlen und `Fixed`. `Fixed` ist seit Phase 22 ein Q39.24-Festkomma in
+  einem `long` (24 Nachkommabits, Auflösung 2⁻²⁴ ≈ 6·10⁻⁸ Welteinheiten, Bereich ±5,5·10^11; bis Phase 22: Q47.16,
+  Auflösung 2⁻¹⁶, Bereich ±1,4·10^14 – alle Rohwerte, Hashes und Formatversionen in den Abschnitten vor §38 stammen
+  aus dieser Zeit und sind überholt). Die Zahl der Nachkommabits steht an genau einer Stelle (`Fixed.FractionBits`);
+  die Arithmetik (`FixedMath`) ist für eine Bitzahl hergeleitet, nicht für sechzehn (§38, `docs/FIXED-POINT-Q39-24.md`).
+  Begründung der Zahlenart: Das Original hält
   binary32-`Real` im Zustand und setzt dafür `setFPMode()` (`INI::load`); Ganzzahlarithmetik ist auf jeder Plattform
-  bitgleich. Produkte und Quotienten laufen über `Int128`.
+  bitgleich. Produkte und Quotienten sind exakt die der 128-Bit-Formeln. Ein Wert über 741.455 darf nicht quadriert
+  werden (sein Quadrat verlässt den Bereich und wirft).
 - **Rundungsregel (überall):** zur nächsten Zahl, Halbwerte weg von null. Überlauf wirft `OverflowException`;
   nichts wickelt oder sättigt still. Division durch null wirft.
 - **Umrechnungen** (`SimulationTime`; R = Rate, f = R/30). Rundung und Reihenfolge je Funktion stehen in
@@ -1863,3 +1868,55 @@ ausführbares Projekt, keine neue Abhängigkeit). Die Läufe selbst prüft `chec
 - Missionen laufen 3.000 Ticks, Acht-Spieler-Läufe 9.000: spätes Spielgeschehen dieser Läufe ist nicht erfasst. Die 16 KI-Läufe decken bis zu 45.000 Ticks ab.
 - Der Sweep und die Missionen sind keine Replays; ihr Befehlsstrom steht nicht im Manifest.
 - `write --set quick` schreibt eine Datei nur mit den Quick-Läufen; die eingecheckte Datei wird mit `--set full` geschrieben.
+
+## 38. Phase 22 (6. Oktober 2026): Festkomma Q39.24, Formate und neue Referenzwerte
+
+Das vollständige Protokoll (Vorarbeit, Vergleich aller Ergebnisgrößen, Überlaufanalyse, Matrix, Leistung, Zähler bei 60 und 120 Hz) ist `docs/FIXED-POINT-Q39-24.md`. Hier steht, was am Kern gilt.
+
+### 38.1 Numerik
+
+- `Fixed`: `long`, **24 Nachkommabits** (`Fixed.FractionBits`), Auflösung 2⁻²⁴, Bereich ± 5,5 · 10¹¹. Rundung unverändert (zur nächsten Zahl, Halbwerte weg von null), Überlauf wirft.
+  Neu: `Fixed.FromFraction(zähler, nenner)` für Konstanten, die ein Bruch sind, `Fixed.Epsilon` (ein Schritt). `ToDecimal()` ist bis 65.536 Einheiten exakt, darüber auf die 28 Stellen eines `decimal`
+  gerundet (weit unter einem halben Rohschritt).
+- `FixedMath` (`Numerics/FixedMath.cs`) trägt die Arithmetik auf Rohwerten mit der Bitzahl als Argument: Produkt, Quotient (schriftliche Division auf Maschinenworten für große Dividenden), Wurzel
+  (64-Bit-Wurzel plus bitweise Erweiterung gegen das exakte 128-Bit-Quadrat), π und seine Bruchteile, Arkustangens-Tabelle, `Atan2` (CORDIC, ein Schritt je Nachkommabit), `Sin`/`Cos`
+  (Taylor bis x¹³/x¹²). Konstanten mit 61 Nachkommabits, auf die Auflösung gerundet. Gemessener größter Fehler bei 24 Bit: `Sin` 1,0 · 10⁻⁷, `Cos` 1,2 · 10⁻⁷, `Atan2` 2,7 · 10⁻⁷ rad (bei 16 Bit:
+  2,6 · 10⁻⁵, 2,4 · 10⁻⁵, 5,9 · 10⁻⁵). Die frühere Angabe im Quelltext („`Atan2` unter 10⁻³ rad“) war eine Schranke, kein Messwert.
+- `FixedTrig.PiFraction(zähler, nenner)` für Winkelkonstanten (π/6 der Bewegung).
+- **Kein Wert über 741.455 wird quadriert** (die Wurzel der größten Zahl). Die Daten enthalten solche Werte (Reichweiten 999.999 und 1.000.000, „sofort“-Geschwindigkeiten 999.999, Gesundheit 99.999.999,
+  `AbilityAbortRange` 10.000.000); zwei davon werden in Reichweitenprüfungen quadriert und werfen dann – **offener Befund**, `docs/FIXED-POINT-Q39-24.md` §5. `SimTool rate-audit <content>` listet sie.
+- **Die Simulation ist nicht insgesamt `checked`**, nur die Operatoren von `Fixed`. Rohwertrechnungen stehen in `checked(…)` oder rechnen in 128 Bit (`VisionMap`, `StructureToppleUpdate`,
+  `ConstructionHealthTarget`).
+- **Sichtkreise** (`VisionMap`): der Test „Zellmitte im Kreis“ ist bei 16 Nachkommabits definiert (Mittelpunkt und Radius darauf gekürzt), gleich welche Auflösung `Fixed` hat; Radien bis 46.000 Einheiten,
+  darüber wirft er.
+- **Leerlauf-Scan der Türme:** der Bruchteil eines Zugs sind die niedrigsten 16 Bit des Hashs als führende Binärstellen, weitere Stellen aus den Bits darüber.
+
+### 38.2 Formate
+
+`WorldSnapshot.Version` **10**, `ReplayFormat.CurrentVersion` **12**, `CommandTypes.Version` **15**, `MissionSnapshot.Version` **3**, `SaveGame.Version` **2**. Alle fünf tragen Rohwerte; ein Stand mit 16
+Nachkommabits (9 / 11 / 14 / 2 / 1) wird an seiner Version mit klarer Meldung abgelehnt und nie umgedeutet (`Tests.StatesOfSixteenFractionBitsAreRejected`, `Tests.Scripting`, `CampaignTests`). Die
+Versionsangaben in den Abschnitten davor sind Geschichte.
+
+### 38.3 Referenzwerte (Messlatte: `baselines/reference-manifest.json`, Stand `d7fca91`)
+
+| Größe | Wert | vorher |
+|---|---|---|
+| Referenzmatch (`ReferenceMatchOptions.Standard`, Treiber-Startwert jetzt `5EED0007`) | Sieger FactionGLA bei Tick **17.805**, Endhash `D0CA5F4EE456D6CE`, Kette `C5EE1090E1C24D7B` | bis Phase 21: Tick 14.490, `23B4B25DF62765D8` / `DE5849AF9F8493C4` (Startwert `5EED0005`); mit dem neuen Startwert bei 16 Bit: Tick 14.055, `AE9C688309DA37E4` / `FC6DFA759B1DCAF0` |
+| Stresstest (216.000 Ticks) | Endhash `56882F763EABEF67` (leerer Endzustand, unverändert), Kette **`754FA4DCB9A41DF7`** | Kette `B8E663493F2C73D5` |
+| 16 KI-Läufe | 12 entschieden; fünf mit anderem Ausgang als bei 16 Bit, ein Siegerwechsel (`docs/FIXED-POINT-Q39-24.md` §7.2) | 12 entschieden |
+| 27 Missionsläufe, Skirmish-Übersicht, 8-Spieler-Läufe | Ausgänge wie zuvor; neue Hashes | – |
+| Kampagne | Zielfahrer Sieg 24/24, Niederlage 24/24 (auf jeder Karte dasselbe Endskript im selben Tick wie bei 16 Bit); Audit 24/24 deterministisch und nach Speichern/Laden identisch, Endproben 13/24 und 15/24; Erreichbarkeit sauber 24/24 und 24/24 | dieselben Zahlen |
+| Welt-Fingerabdruck der Eingänge | `49A55E310F780F60` | – |
+
+Der Startwert des Referenzmatchs wurde in einem eigenen Commit gewechselt (`41c3bc0`), weil das Match mit dem alten bei 24 Bit nicht endet; die Erhebung über 36 Startwerte steht in
+`docs/FIXED-POINT-Q39-24.md` §6. Die KI-Tabellen in §19, §32 und §36 und alle Hashes in den Abschnitten davor sind überholt.
+
+### 38.4 Werkzeuge
+
+- `SimTool reference-manifest results <content> --out <json> [--commands <dir>] [--set quick|full] [--only …]`: je Lauf, was kein Hash ist (Ausgang, Endtick, Objekte und Geld je Spieler, Befehle nach Typ,
+  Ereignisse nach Art; Missionen: Ausgang, Tick und Name des Endskripts, Skriptzähler) – und auf Wunsch der Befehlsstrom als Text mit Mengen in ganzen Einheiten. Zwei Stände, die sich unterscheiden
+  **sollen** (Auflösung, Tickrate), werden damit verglichen: Größe für Größe und über die erste abweichende Befehlszeile.
+- `SimTool reference-match … [--world-seed HEX] [--driver-seed HEX] [--record-only]`: der Verlauf des Referenzmatchs unter anderen Startwerten.
+- `SimTool rate-audit <content> [--tick-rate N]`: läuft auch bei 30 Hz und listet den Wertebereich des Katalogs (größter Betrag, jeder Wert über der Wurzel der größten Zahl).
+- `Tests.FixedScaleSourceRules`: die Skala steht einmal – kein `65536`/`16777216`/`<< 16`/`<< 24` in irgendeinem Projekt (33 benannte Ausnahmen), außerhalb der Simulation nur
+  `CnCNew.Presentation.FixedConvert`, kein Rohwert als Zahl.

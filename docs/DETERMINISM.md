@@ -1,6 +1,6 @@
 # Determinismus über Rechnergrenzen (Phase 18)
 
-Stand: 6. Oktober 2026, Commit `b432fb7`. Dieses Dokument beschreibt, **wie** geprüft wird, dass zwei Rechner dieselbe Welt rechnen, und **was** davon gemessen ist. Die Einzelbefunde D1–D9 mit Test,
+Stand: 6. Oktober 2026, Commit `b432fb7`; §2a (die Matrix mit dem Manifest der Phase 22, Q39.24) am Stand `d7fca91`. Dieses Dokument beschreibt, **wie** geprüft wird, dass zwei Rechner dieselbe Welt rechnen, und **was** davon gemessen ist. Die Einzelbefunde D1–D9 mit Test,
 Korrektur und Vorher/Nachher-Werten stehen in `docs/DETERMINISM-FINDINGS.md`; die Messlatte selbst (Referenzmanifest, Eingangsmanifest) in `docs/SIMULATION-CORE.md` §37.
 
 ## 1. Was verglichen wird
@@ -42,6 +42,36 @@ Threads, bevor irgendein Befehl läuft.
 
 **Vor den Korrekturen** (Stand `981aec4`) bestand der Linux-Lauf nicht: der Definitions-Snapshot hatte 139.503.384 statt 144.626.133 Byte (Zeilenenden der Plattform), damit einen anderen Fingerabdruck; die
 Endhashes und Ketten aller neun Läufe des Schnellsatzes waren dagegen schon identisch – die Rechnung selbst war portabel, nur ein Eingang nicht (D9).
+
+## 2a. Die Matrix mit dem Manifest der Phase 22 (Q39.24, gemessen am 6. Oktober 2026, Stand `d7fca91`)
+
+Phase 22 hat die Festkomma-Auflösung von 16 auf 24 Nachkommabits gestellt und damit beide Manifeste neu geschrieben (`docs/FIXED-POINT-Q39-24.md`). Die Zeilen dieses Rechners wurden mit den neuen Dateien
+wiederholt; jede Zeile ist wieder `input-manifest check` plus `reference-manifest check` gegen die eingecheckten Dateien, „identisch“ heißt Exitcode 0 bei beiden und kein abweichendes Feld.
+
+| Zeile | Wie | Eingänge | Rechnung (Satz) | Ergebnis |
+|---|---|---|---|---|
+| Release, Lauf 1 | `CnCNew.SimTool.exe …` (Kopie des `bin`-Verzeichnisses) | identisch | 50/50 (full) | **identisch** |
+| Release, Lauf 2 | derselbe Aufruf noch einmal | identisch | 50/50 (full) | **identisch** |
+| Debug-Build | `dotnet build -c Debug tools/CnCNew.SimTool` | identisch | 9/9 (**quick**) | **identisch** (der volle Satz wurde im Debug-Build wie in Phase 18 nicht gefahren) |
+| Tiered Compilation aus | `DOTNET_TieredCompilation=0` | identisch | 50/50 (full) | **identisch** |
+| Tiered PGO aus | `DOTNET_TieredPGO=0` | identisch | 50/50 (full) | **identisch** |
+| ReadyToRun aus | `DOTNET_ReadyToRun=0` | identisch | 50/50 (full) | **identisch** |
+| Hardware-Intrinsics aus | `DOTNET_EnableHWIntrinsic=0` | identisch | 50/50 (full) | **identisch** |
+| AVX2 aus | `DOTNET_EnableAVX2=0` | identisch | 50/50 (full) | **identisch** |
+| Server-GC | `DOTNET_gcServer=1` | identisch | 50/50 (full) | **identisch** |
+| Kultur `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identisch | 50/50 (full) | **identisch** |
+| Kultur `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identisch | 50/50 (full) | **identisch** |
+| Kultur `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identisch | 50/50 (full) | **identisch** |
+| **Linux** auf demselben Rechner | WSL2 (Ubuntu, Kernel 6.6.87), `dotnet publish -r linux-x64 --self-contained`, derselbe Inhalt über `/mnt/c` | identisch | 50/50 (full) | **identisch** |
+| andere .NET-Patchversion | – | – | – | **offen** wie in §2 |
+| **zweiter physischer Rechner, andere CPU** | Anleitung in §4 | – | – | **offen** wie in §2 |
+
+Für die Arithmetik heißt das: die für eine Bitzahl hergeleiteten Routinen (`FixedMath`: schriftliche Division auf Maschinenworten, bitweise erweiterte Wurzel, CORDIC mit 24 Schritten) rechnen mit und ohne
+Hardware-Intrinsics dasselbe (`Math.BigMul` und `BitOperations.LeadingZeroCount` haben dann Softwarepfade) und unter Linux dasselbe wie unter Windows. Was §3 als nicht belegt nennt, bleibt nicht belegt.
+Zusätzlich deterministisch gelaufen, ohne Teil des Manifests zu sein: zwölf Läufe bei 60 und 120 Hz (`docs/TICKRATE-MIGRATION.md` §11.5; zweiter frischer Lauf und Fortsetzung gleich, wo geprüft).
+
+Neue Regel zu §5: **die Skala von `Fixed` steht an einer Stelle.** `Tests.FixedScaleSourceRules` verbietet sie als Zahl oder Verschiebung in allen Projekten und ihre Verwendung außerhalb der Simulation
+(Ausnahme: `CnCNew.Presentation.FixedConvert`). Formate, die Rohwerte tragen, wechseln mit der Auflösung ihre Version; ein alter Stand wird abgelehnt, nie umgedeutet.
 
 ## 3. Was daraus folgt und was nicht
 

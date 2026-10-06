@@ -265,6 +265,29 @@ Dieselbe Liste, derselbe Rechner, dasselbe Skript wie §6 (`scripts/perf-profile
 
 Einzelheiten je Kostenstelle mit dem Nachweis der Ergebnisgleichheit: `docs/PERF-MOVEMENT.md`, `docs/PERF-VISION.md`, `docs/PERF-HASH.md`, `docs/PERF-MISSIONS.md`, `docs/PERF-GAME-LAYER.md` (Spielschicht, `perf-compare`, was einem eigenen Simulations-Thread im Weg steht). Vergleich zweier Messverzeichnisse: `pwsh scripts/perf-compare.ps1 <alt> <neu>`.
 
+## 6b. Nachtrag Phase 22 (6. Oktober 2026): Festkomma Q39.24, Rücken an Rücken gemessen
+
+Phase 22 hat `Fixed` von 16 auf 24 Nachkommabits gestellt (`docs/FIXED-POINT-Q39-24.md`). Die Rechenkosten sollten dabei nicht steigen. Absolute Zahlen anderer Tage sind auf diesem Rechner nicht vergleichbar
+(die Werte hier liegen über denen aus §6a, weil mit Beobachter und nicht mit `scripts/perf-profile.ps1` gemessen wurde und ein zweiter Agent zeitweise mitrechnete); verglichen wurden deshalb die
+`SimTool`-Binärdateien der Phase 20 (`4c45764`), der Vorarbeit (`a0e7b23`, noch 16 Bit) und der Umstellung (`d7fca91`) abwechselnd im selben Zeitfenster. Mittel je Tick in Mikrosekunden.
+
+| Lauf | gleiche Arbeit? | Phase 20, 16 Bit | Umstellung, 24 Bit |
+|---|---|---|---|
+| Stresstest, 216.000 Ticks, erster Lauf (`SimTool stress`), drei Läufe abwechselnd | ja (Befehlsstrom und Ereignisse identisch) | 57,6 / 57,7 / 58,3 | **57,1 / 56,7 / 56,7** |
+| `MD_USA05`, 3.000 Ticks, sechs Läufe | ja | Mittel 3.233 (2.582 – 3.899) | Mittel 3.330 (2.820 – 3.894) |
+| `MD_GLA05`, 3.000 Ticks, fünf Läufe | fast | Mittel 4.957 (4.537 – 5.865) | Mittel 5.106 (4.261 – 6.068) |
+| 8 Spieler, Twilight Flame, 12.000 Ticks, fünf Läufe | nein (anderes Gefecht ab Tick 2.773) | Mittel 1.765 (1.597 – 1.944) | Mittel 1.772 (1.612 – 1.940) |
+
+- **Kein messbarer Anstieg.** Der Stresstest – dieselbe Arbeit, ruhiges Fenster – ist bei 24 Bit ein bis zwei Prozent schneller; die anderen Läufe streuen um ± 15 % und ihre Mittel unterscheiden sich um weniger.
+- Dass es so ist, liegt an zwei Stücken der Vorarbeit: (1) `FixedMath` leitet Quotient und Wurzel für die Bitzahl her – bei 24 Bit nähme sonst jeder Quotient mit einem Dividenden über 32.768 Einheiten und jede
+  Wurzel über 32.768 (jedes Abstandsquadrat über 181 Einheiten) den 128-Bit-Softwarepfad, den Phase 19 herausgenommen hatte; (2) der Sichtkreis-Test rechnet weiter in Maschinenworten (bei 16 Nachkommabits
+  definiert): mit exakten 128-Bit-Quadraten brauchte die Phase „Vision“ 171 – 187 µs statt 132 – 135 µs. Vorarbeit gegen Phase 20, beide 16 Bit, dieselben Endhashes: ganzer Tick 1.666 / 1.647 gegen
+  1.670 / 1.649 µs, Vision 146 / 135 gegen 147 / 140 µs, `MD_GLA05` 4.547 / 4.601 gegen 4.583 / 4.569 µs.
+- **Snapshotgröße:** + 0,82 % über alle Snapshots des Referenzmanifests im selben Tick (118.737.497 → 119.710.407 Byte); Stresstest bei Tick 108.000 + 2,0 %, `MD_GLA05` + 0,4 %.
+- `reference-manifest check --set full`: 439 s allein mit sechs Arbeitern (am Ende der Vorarbeit bei 16 Bit: 427 s).
+- **Nicht gemessen:** `scripts/perf-profile.ps1` mit dem ruhigen Vergleich gegen den vorigen Lauf (§4) – die Maschine war nicht ruhig zu bekommen; die Tabellen in §6a sind damit die letzten ruhig gemessenen
+  absoluten Zahlen und gelten für 16 Bit.
+
 ## 7. Vorläufig, nicht ruhig gemessen
 
 Alles in diesem Abschnitt stammt vom 6. Oktober 2026, Stand `b6b7454` plus Werkzeug, **von einem Rechner, auf dem
