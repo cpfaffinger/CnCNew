@@ -258,7 +258,7 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
         }
         if (_draining && Entity.Body is { } body)
         {
-            var amount = body.MaxHealth * data.DegenPerSecond / world.Time.TicksPerSecondFixed;
+            var amount = world.Time.PerSecondToPerTick(body.MaxHealth * data.DegenPerSecond);
             world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Unresistable, DeathTypes.Normal, false));
         }
         return CalcSleepTime(now);

@@ -271,7 +271,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     public void OnDie(IWorldServices world, in DamageInfo info)
     {
         if (_state != State.Standing || !data.Mux.IsApplicable(Entity, info)) return;
-        var delay = Math.Max(0L, TickGrid.RandomTicks(world, data.MinToppleDelayTicks, data.MaxToppleDelayTicks));
+        var delay = Math.Max(0L, world.Time.DrawFrames(world.LogicRandom, data.MinToppleDelayTicks, data.MaxToppleDelayTicks));
         _toppleFrame = world.Tick + delay;
         var attacker = world.FindEntity(info.Source);
         Fixed angle;

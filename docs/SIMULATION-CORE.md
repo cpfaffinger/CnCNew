@@ -16,34 +16,53 @@ Die Fachgrundlagen der Definitionsdaten (Block 0 der Phase) stehen in `TYPED-DEF
 
 ## 1. Tick und Numerik
 
-- **Takt:** Die Tickrate ist seit Phase 20 ein Wert der Welt (`WorldConfiguration.Rate`, Typ `SimulationRate`): unterstützt sind genau
-  30, 60 und 120 Hz, alles andere wird beim Erzeugen von Welt, Katalog, Snapshot und Replay abgelehnt. Das Original rechnet mit
-  30 Logikframes pro Sekunde (`LOGICFRAMES_PER_SECOND`, `GameCommon.h:72`); diese 30 ist als `SimulationRate.OriginalFramesPerSecond`
-  die einzige benannte Rate der Simulation. Bis Phase 23 laufen alle Sitzungen mit 30 Hz, und bei 30 Hz ist jedes Ergebnis
-  unverändert (`docs/TICKRATE-MIGRATION.md`). `SimulationWorld.Tick` ist die Zahl der ausgeführten Ticks und zugleich die Nummer
-  des nächsten. Es gibt keine Wandzeit im Kern.
+### Zeit und Einheiten
+
+Die Tickrate ist ein **Wert der Welt** (Phase 20; Einzelheiten, Zählungen und die offenen Listen in `docs/TICKRATE-MIGRATION.md`):
+
+- **Rate:** `WorldConfiguration.Rate` vom Typ `SimulationRate`. Unterstützt sind genau 30, 60 und 120 Hz (30 · 2ᵏ); alles andere wird beim
+  Erzeugen von Welt, Katalog, Snapshot und Replay abgelehnt. Der Katalog (`TemplateCatalog.Build(…, rate, …)`) wird **für eine Rate gebaut**
+  – er enthält Ticks und Werte je Tick –, und eine Welt lehnt einen Katalog einer anderen Rate ab. Bis Phase 23 laufen alle Sitzungen mit
+  30 Hz; **bei 30 Hz ist jedes Ergebnis unverändert** (Beleg: `SimTool reference-manifest check`, `input-manifest check`).
+- **Drei Einheiten für Zeit.** *Tick*: ein Schritt der Simulation (`SimulationWorld.Tick` ist die Zahl der ausgeführten Ticks und zugleich
+  die Nummer des nächsten); Zustand, Snapshots, Replays und Befehle tragen Ticks der Rate der Welt. *Bild des Originals*: 1/30 s
+  (`LOGICFRAMES_PER_SECOND`, `GameCommon.h:72`; `SimulationRate.OriginalFramesPerSecond` ist die einzige benannte 30 der Simulation) –
+  die Einheit aller Konstanten des Originals, aller eigenen Fristen und Rhythmen und der Bildzähler der Kartenskripte. *Sekunden und
+  Millisekunden*: die Einheit der Daten. Es gibt keine Wandzeit im Kern.
+- **Rasterregel:** Dauern bleiben auf dem 30-Hz-Raster des Originals. Eine Dauer aus den Daten wird wie im Original auf ganze Bilder
+  aufgerundet und dann mit Rate/30 multipliziert (eine Nachladezeit von 50 ms dauert bei jeder Rate zwei Bilder); eine Konstante in Bildern
+  wird mit Rate/30 multipliziert; was zur Laufzeit gerundet, begrenzt, gezählt oder gewürfelt wird, wird in Bildern gerechnet und erst das
+  Ergebnis skaliert (`FrameGrid`: `AtLeastOneFrame`, `CountdownReload`, `DrawFrames`, `FloorToFrame`). Größen je Sekunde werden durch die
+  Rate bzw. ihr Quadrat geteilt, additive Rohwerte je Bild durch Rate/30 bzw. dessen Quadrat.
+- **Ein Weg:** jede Umrechnung geht über den Zeitdienst `SimulationTime` – zur Laufzeit `world.Time`, beim Katalogbau der Zeitdienst der
+  Rate (`configuration.Time`, `timing`). Kein Modul rechnet mit einer Rate. Literale, die Reihenfolge meinen („im nächsten Tick“), werden
+  mit `TickOrder.Next` geschrieben und nie skaliert; `SimulationTiming` enthält nur noch, was nicht von der Rate abhängt (`SleepNone`,
+  `SleepForever`, Grad → Bogenmaß, Verhältnisse). Der Test `SourceRules` verbietet nackte Tickzahlen in der Simulation
+  (`docs/TICKRATE-MIGRATION.md` §10).
+- **Nicht erledigt:** richtiges Verhalten bei 60 und 120 Hz. Die Simulation läuft dort durch und ist deterministisch
+  (`docs/TICKRATE-MIGRATION.md` §11); Integration je Tick, multiplikative Faktoren je Bild und Abtastung je Tick stehen als Liste für
+  Phase 23 in §5 dort.
+
 - **Zahlenart:** Zustand besteht nur aus Ganzzahlen und `Fixed`. `Fixed` ist ein Q47.16-Festkomma in
   einem `long` (16 Nachkommabits, Auflösung 1/65536 Weltinheit, Bereich ±1,4·10^14). Begründung: Das Original hält
   binary32-`Real` im Zustand und setzt dafür `setFPMode()` (`INI::load`); Ganzzahlarithmetik ist auf jeder Plattform
   bitgleich. Produkte und Quotienten laufen über `Int128`.
 - **Rundungsregel (überall):** zur nächsten Zahl, Halbwerte weg von null. Überlauf wirft `OverflowException`;
   nichts wickelt oder sättigt still. Division durch null wirft.
-- **Umrechnungen** (Zeitdienst `SimulationTime`: zur Laufzeit `world.Time`, beim Katalogbau der Zeitdienst der Rate, für die der
-  Katalog gebaut wird; alle explizit). Die Tabelle nennt die Regel bei 30 Hz. Bei 60 und 120 Hz bleiben **Dauern auf dem
-  30-Hz-Raster des Originals** (erst auf ganze Bilder des Originals aufrunden, dann mal Rate/30 – eine Nachladezeit von 50 ms
-  dauert bei jeder Rate zwei Bilder des Originals), Größen je Sekunde werden durch die Rate bzw. ihr Quadrat geteilt; Rundung
-  und Reihenfolge je Funktion stehen in `docs/TICKRATE-MIGRATION.md` §2. `SimulationTiming` enthält nur noch, was nicht von der
-  Rate abhängt (Schlafwerte, Grad → Bogenmaß, Verhältnisse).
+- **Umrechnungen** (`SimulationTime`; R = Rate, f = R/30). Rundung und Reihenfolge je Funktion stehen in
+  `docs/TICKRATE-MIGRATION.md` §2; bei 30 Hz ist jede Zeile der frühere Ausdruck.
 
 | Datenwert | Regel | Referenz |
 |---|---|---|
-| Dauer in ms → ganze Ticks | `ceil(ms · 30 / 1000)`, exakt in Ganzzahl-/Dezimalarithmetik; 0 ms = 0 Ticks; negativ → Fehler | `INI::parseDurationUnsignedInt` (`ceilf`) |
-| Dauer in ms → Ticks (ungerundet) | `Fixed(ms · 30 / 1000)` | `INI::parseDurationReal` |
-| Sekunden (`BuildTime`) → Ticks | `ceil(s · 30)` | – |
-| Geschwindigkeit pro s → pro Tick | `v / 30` | `ConvertVelocityInSecsToFrames` |
-| Beschleunigung pro s² → pro Tick² | `a / 900` | `ConvertAccelerationInSecsToFrames` |
+| Dauer in ms → ganze Ticks | `ceil(ms · 30 / 1000) · f`, exakt in Ganzzahl-/Dezimalarithmetik; 0 ms = 0 Ticks; negativ → Fehler | `INI::parseDurationUnsignedInt` (`ceilf`) |
+| Dauer in ms → Ticks (ungerundet) | `Fixed(ms · R / 1000)` | `INI::parseDurationReal` |
+| Sekunden (`BuildTime`) → Ticks | `ceil(s · 30) · f` | – |
+| Bilder des Originals → Ticks | `n · f` (exakt) | Konstanten des Originals in Logikbildern |
+| Geschwindigkeit pro s → pro Tick | `v / R` | `ConvertVelocityInSecsToFrames` |
+| Beschleunigung pro s² → pro Tick² | `a / R²` | `ConvertAccelerationInSecsToFrames` |
+| Rohwert je Bild → je Tick (additiv) | `v / f`, je Bild² `v / f²` | Felder, die das Original je Bild anwendet |
 | Grad → Bogenmaß | `deg · π / 180`, π auf 28 Stellen | `INI::parseAngleReal` |
-| Grad/s → Bogenmaß/Tick | `deg · π / 180 / 30` | `ConvertAngularVelocityInDegreesPerSecToRadsPerFrame` |
+| Grad/s → Bogenmaß/Tick | `deg · π / 180 / R` | `ConvertAngularVelocityInDegreesPerSecToRadsPerFrame` |
 | Prozent | Verhältnis (`50 %` → 0,5) als `Fixed` | `INI::parsePercentToReal` |
 
 - **Abweichung Dauern:** Das Original rechnet `ceilf((Real)msec · (30.0f/1000.0f))` in binary32. Ein Test emuliert das

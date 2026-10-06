@@ -127,22 +127,6 @@ public sealed record WeaponInfo(
         if (multiplier <= Fixed.Zero) return SimulationTiming.SleepForever;
         return time.OriginalFrames(Math.Max(MinimumShotDelayFrames, (Fixed.FromInt(time.ToOriginalFrames(ticks)) / multiplier).Floor()));
     }
-
-    /// <summary>
-    /// The same without the time service: floored in ticks, at least one tick. Equal to the overload with a time service at 30 Hz only. Kept for the two callers in
-    /// <c>Modules/BuiltIn</c> (<c>CombatModules.cs</c>, <c>JetAIUpdate.cs</c>) until they pass <c>world.Time</c>; new code uses the overloads above.
-    /// </summary>
-    public long DelayBetweenShotsWith(WeaponBonusTable global, uint conditions) => ScaledByRateOfFire(global, conditions, DelayBetweenShotsTicks);
-
-    /// <summary>See <see cref="DelayBetweenShotsWith(WeaponBonusTable, uint)"/>.</summary>
-    public long ClipReloadWith(WeaponBonusTable global, uint conditions) => ClipReloadTicks == 0 ? 0 : ScaledByRateOfFire(global, conditions, ClipReloadTicks);
-
-    private long ScaledByRateOfFire(WeaponBonusTable global, uint conditions, long ticks)
-    {
-        var multiplier = Multiplier(global, conditions, WeaponBonusTable.RateOfFire);
-        if (multiplier <= Fixed.Zero) return SimulationTiming.SleepForever;
-        return Math.Max(SimulationTiming.SleepNone, (Fixed.FromInt(ticks) / multiplier).Floor());
-    }
 }
 
 /// <summary><c>WeaponPrefireType</c> (<c>TheWeaponPrefireNames</c>).</summary>

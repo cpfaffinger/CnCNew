@@ -420,7 +420,7 @@ internal static class PerfCommand
         Array.Sort(sortedAllocations);
         Console.WriteLine();
         Console.WriteLine($"Allocations: {allocated / Math.Max(1, recorder.Count)} bytes/tick mean, {sortedAllocations[sortedAllocations.Length / 2]} median, {sortedAllocations[^1]} max; {allocated / (1024.0 * 1024.0):F1} MiB over the run "
-                          + $"({allocated / (1024.0 * 1024.0) / Math.Max(1, recorder.Count) * 60 * 30:F0} MiB per game minute at 30 Hz); GC gen0/1/2 = {gcAfter.Gen0 - gcBefore.Gen0}/{gcAfter.Gen1 - gcBefore.Gen1}/{gcAfter.Gen2 - gcBefore.Gen2}.");
+                          + $"({allocated / (1024.0 * 1024.0) / Math.Max(1, recorder.Count) * ToolRate.Current.Time.TicksPerMinute:F0} MiB per game minute at {ToolRate.Current}); GC gen0/1/2 = {gcAfter.Gen0 - gcBefore.Gen0}/{gcAfter.Gen1 - gcBefore.Gen1}/{gcAfter.Gen2 - gcBefore.Gen2}.");
         if (recorder.Observed)
         {
             // Where the bytes come from: the allocation counter of the thread read at the phase boundaries.

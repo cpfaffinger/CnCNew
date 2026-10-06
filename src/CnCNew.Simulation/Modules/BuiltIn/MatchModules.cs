@@ -69,7 +69,7 @@ public sealed class BaseRegenerateUpdate : SimModule, IUpdateModule, IDamageModu
         if (body is null || body.MaxHealth == body.Health) return SimulationTiming.SleepForever;
         // Sleep and factor go through the same scaled value: a burst every three frames of the original with that many ticks' worth of healing.
         var healRate = world.Time.OriginalFrames(HealRateFrames);
-        var amount = body.MaxHealth * world.BaseRegenHealthPercentPerSecond * Fixed.FromInt(healRate) / world.Time.TicksPerSecondFixed;
+        var amount = world.Time.PerSecondToPerTick(body.MaxHealth * world.BaseRegenHealthPercentPerSecond * Fixed.FromInt(healRate));
         world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
         return healRate;
     }

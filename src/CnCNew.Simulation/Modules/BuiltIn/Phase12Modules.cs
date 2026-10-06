@@ -152,7 +152,7 @@ public sealed class FireWeaponWhenDamagedBehavior(FireWeaponWhenDamagedData data
         var name = weapons[state];
         if (name.Length == 0 || world.Tick < ready[state] || !world.Weapons.TryGet(name, out var weapon)) return;
         // A weapon without a delay fires once per logic frame of the original, at every rate.
-        ready[state] = world.Tick + Math.Max(weapon.DelayBetweenShotsTicks, world.Time.TicksPerOriginalFrame);
+        ready[state] = world.Tick + world.Time.AtLeastOneFrame(weapon.DelayBetweenShotsTicks);
         world.FireWeaponAt(Entity, weapon, null, Entity.X, Entity.Y, Entity.Z);
     }
 
@@ -229,7 +229,7 @@ public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModu
         if (!world.FireCurrentWeaponAtPosition(Entity, x, y, z, victim)) return StopShooting();
         _shotsLeft--;
         // At least one logic frame of the original between two shots, at every rate.
-        return _shotsLeft <= 0 ? SimulationTiming.SleepForever : Math.Max(weapon.DelayBetweenShotsTicks, world.Time.TicksPerOriginalFrame);
+        return _shotsLeft <= 0 ? SimulationTiming.SleepForever : world.Time.AtLeastOneFrame(weapon.DelayBetweenShotsTicks);
     }
 
     private long StopShooting()
@@ -337,7 +337,7 @@ public sealed class HordeUpdate(HordeData data) : SimModule, IUpdateModule
     {
         _lastRefresh = world.Tick;
         // The stagger is drawn in logic frames of the original (GameLogicRandomValue(1, delay)) and then scaled, so the drawn value stays on the 30 Hz grid.
-        _nextWake = world.Tick + world.Time.OriginalFrames(world.LogicRandom.Range(1, (int)Math.Max(1, world.Time.ToOriginalFrames(data.UpdateRateTicks))));
+        _nextWake = world.Tick + world.Time.DrawFrames(world.LogicRandom, world.Time.TicksPerOriginalFrame, world.Time.AtLeastOneFrame(data.UpdateRateTicks));
     }
 
     public long Update(IWorldServices world)

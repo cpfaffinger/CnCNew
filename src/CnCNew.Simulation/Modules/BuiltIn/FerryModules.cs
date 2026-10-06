@@ -348,7 +348,7 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
         _docking = docker.Id;
         docker.Status |= 1UL << UnselectableBit;
         Hold(docker, true);
-        _pullPerTick = magnitude / Fixed.FromInt(world.Time.AtLeastOneFrame(data.PullInsideTicks));
+        _pullPerTick = world.Time.SharePerTick(magnitude, Fixed.FromInt(world.Time.AtLeastOneFrame(data.PullInsideTicks)));
         docker.Angle = FixedTrig.Atan2(dy, dx);
         world.MarkDirty(docker);
         world.MarkDirty(Entity);
@@ -478,7 +478,7 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
         var dx = ex - unloader.X;
         var dy = ey - unloader.Y;
         var dz = ez - unloader.Z;
-        _pushPerTick = Fixed.Sqrt(dx * dx + dy * dy + dz * dz) / Fixed.FromInt(world.Time.AtLeastOneFrame(data.PushOutsideTicks));
+        _pushPerTick = world.Time.SharePerTick(Fixed.Sqrt(dx * dx + dy * dy + dz * dz), Fixed.FromInt(world.Time.AtLeastOneFrame(data.PushOutsideTicks)));
         _unloading = unloader.Id;
         if (_unloadCount != UnloadAllRiders) _unloadCount--;
         world.MarkDirty(unloader);

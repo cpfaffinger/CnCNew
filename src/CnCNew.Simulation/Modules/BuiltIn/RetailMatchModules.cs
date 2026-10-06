@@ -86,7 +86,7 @@ public sealed class HealContain(HealContainData data) : ContainModuleBase(data.B
             if (rider?.Body is null) continue;
             var since = _containedSinceTick.GetValueOrDefault(riderId.Value, world.Tick);
             var done = data.TimeForFullHealTicks <= 0 || world.Tick - since >= data.TimeForFullHealTicks;
-            var amount = done ? rider.Body.MaxHealth : rider.Body.MaxHealth / Fixed.FromInt(data.TimeForFullHealTicks);
+            var amount = done ? rider.Body.MaxHealth : world.Time.SharePerTick(rider.Body.MaxHealth, Fixed.FromInt(data.TimeForFullHealTicks));
             world.Damage(rider.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
             if (done) Remove(world, rider, true);
         }
@@ -369,7 +369,7 @@ public sealed class OverchargeBehavior(OverchargeData data) : SimModule, IUpdate
     public long Update(IWorldServices world)
     {
         if (!_active || Entity.Body is not { } body) return SimulationTiming.SleepForever;
-        var amount = body.MaxHealth * data.HealthDrainRatioPerSecond / world.Time.TicksPerSecondFixed;
+        var amount = world.Time.PerSecondToPerTick(body.MaxHealth * data.HealthDrainRatioPerSecond);
         world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Penalty, DeathTypes.Normal, false));
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         if (body.Health < body.MaxHealth * data.NotAllowedBelowRatio)
@@ -472,7 +472,7 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
         var body = Entity.Body;
         if (body is not null && body.Health < body.MaxHealth && data.HealthRegenPercentPerSecond > Fixed.Zero)
         {
-            var amount = body.MaxHealth * data.HealthRegenPercentPerSecond / world.Time.TicksPerSecondFixed;
+            var amount = world.Time.PerSecondToPerTick(body.MaxHealth * data.HealthRegenPercentPerSecond);
             world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
         }
 

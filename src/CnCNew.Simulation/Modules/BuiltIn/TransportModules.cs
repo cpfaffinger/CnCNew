@@ -187,9 +187,9 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     {
         _activated = true;
         // SlowDeathBehavior::beginSlowDeath: both variance draws happen, the sink animation is presentation.
-        _ = data.Base.SinkDelayTicks + TickGrid.RandomTicks(world, 0, data.Base.SinkDelayVarianceTicks);
-        var destruction = data.Base.DestructionDelayTicks + TickGrid.RandomTicks(world, 0, data.Base.DestructionDelayVarianceTicks);
-        _destructionTick = Math.Min(world.Tick + Math.Max(destruction, world.Time.TicksPerOriginalFrame), SimulationTiming.SleepForever);
+        _ = data.Base.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.SinkDelayVarianceTicks);
+        var destruction = data.Base.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.DestructionDelayVarianceTicks);
+        _destructionTick = Math.Min(world.Tick + world.Time.AtLeastOneFrame(destruction), SimulationTiming.SleepForever);
         _bladeFlyOff = world.LogicRandom.Range(data.MinBladeFlyOffDelay, data.MaxBladeFlyOffDelay);
         _forwardAngle = Entity.Angle;
         _forwardSpeed = data.SpiralOrbitForwardSpeed;
@@ -214,7 +214,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
             Entity.Angle = FixedTrig.Normalize(Entity.Angle + _selfSpin);
             if (data.SelfSpinUpdateDelay > Fixed.Zero && Fixed.FromInt(world.Tick - _lastSelfSpinUpdate) > data.SelfSpinUpdateDelay)
             {
-                var change = data.SelfSpinUpdateAmount / world.Time.TicksPerSecondFixed;
+                var change = world.Time.PerSecondToPerTick(data.SelfSpinUpdateAmount);
                 if (_selfSpinTowardsMax)
                 {
                     _selfSpin += change;
@@ -525,7 +525,7 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
             var inside = world.Tick - tracker.EnteredAt(riderId);
             var amount = data.TicksForFullHeal <= Fixed.Zero || Fixed.FromInt(inside) >= data.TicksForFullHeal
                 ? rider.Body.MaxHealth
-                : rider.Body.MaxHealth / data.TicksForFullHeal;
+                : world.Time.SharePerTick(rider.Body.MaxHealth, data.TicksForFullHeal);
             if (rider.Body.Health < rider.Body.MaxHealth)
                 world.Damage(rider.Id, new DamageInfo(EntityId.Invalid, amount, DamageTypes.Healing, DeathTypes.None, false));
         }

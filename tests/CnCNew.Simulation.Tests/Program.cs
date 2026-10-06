@@ -75,6 +75,8 @@ run.Test("Tick rate (skirmish): victory check, grace period and science points a
 run.Test("Tick rate (skirmish): the AI thinks on the same frames of the original at every rate", Tests.TickRateSkirmishAiRhythm);
 run.Test("Tick rate (scenarios): income, production, order and victory rhythm of the reference match are frames of the original", Tests.TickRateReferenceMatchGeneratorRhythm);
 run.Test("Tick rate (scenarios): the stress schedule counts steps and is the same at every rate", Tests.TickRateStressScheduleCountsSteps);
+run.Test("Tick rate: the merged grid helper equals both former helpers on a sweep at 30, 60 and 120 Hz", Tests.TickRateGridMergedHelpersAreTheSameFunctions);
+run.Test("Tick rate: the time probe only observes and counts what a conversion lost", Tests.TickRateProbeOnlyObserves);
 run.Test("Replay equality, divergence detection and continuation", Tests.ReplayRuns);
 run.Test("Stress scenario returns to baseline (short run)", Tests.ShortStress);
 run.Test("Definition insertion order does not change the simulation", Tests.DefinitionOrderIndependence);

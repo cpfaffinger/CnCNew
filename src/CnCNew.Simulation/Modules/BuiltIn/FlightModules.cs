@@ -386,7 +386,7 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
             var ratio = size == 1 ? Fixed.Zero : Fixed.FromInt(index) / Fixed.FromInt(size - 1) * Fixed.FromInt(2) - Fixed.One;
             var angle = FixedTrig.Normalize(Entity.Angle + ratio * data.VolleyArcRadians);
             // "if velocity < 1 then -10": a parked plane throws its flares backwards.
-            var speed = Entity.Speed * world.Time.TicksPerSecondFixed < Fixed.One ? -Fixed.FromInt(10) / world.Time.TicksPerSecondFixed : Entity.Speed;
+            var speed = Entity.Speed * world.Time.TicksPerSecondFixed < Fixed.One ? world.Time.PerSecondToPerTick(-Fixed.FromInt(10)) : Entity.Speed;
             var id = world.RequestSpawn(template.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
             _flares.Add(new Flare(id, now, FixedTrig.Cos(angle) * speed * data.VolleyVelocityFactor, FixedTrig.Sin(angle) * speed * data.VolleyVelocityFactor));
             _available--;
@@ -971,7 +971,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     private long TurnTicks(IWorldServices world)
     {
         var locomotor = Entity.Template.Locomotor;
-        return locomotor is { Speed.Raw: > 0 } ? world.Time.AtLeastOneFrame(world.Time.Ceiling((MinTurnRadius() / locomotor.Speed).Ceiling())) : world.Time.OriginalFrames(FrameGrid.OneFrame);
+        return locomotor is { Speed.Raw: > 0 } ? world.Time.AtLeastOneFrame(world.Time.CeilingToFrame((MinTurnRadius() / locomotor.Speed).Ceiling())) : world.Time.TicksPerOriginalFrame;
     }
 
     private void ConsiderNewApproach(IWorldServices world)

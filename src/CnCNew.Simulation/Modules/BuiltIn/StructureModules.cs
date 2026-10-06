@@ -137,7 +137,7 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
     public void OnDie(IWorldServices world, in DamageInfo info)
     {
         if (!data.Mux.IsApplicable(Entity, info) || _state != State.Standing) return;
-        _collapseTick = world.Tick + TickGrid.RandomTicks(world, data.MinCollapseDelay, data.MaxCollapseDelay);
+        _collapseTick = world.Tick + world.Time.DrawFrames(world.LogicRandom, data.MinCollapseDelay, data.MaxCollapseDelay);
         DoPhase(world, 0, Entity.X, Entity.Y, Entity.Z);
         _state = State.WaitingForCollapseStart;
         _height = Fixed.Zero;
@@ -152,7 +152,7 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
         {
             _state = State.Collapsing;
             DoPhase(world, 2, Entity.X, Entity.Y, Entity.Z);
-            _burstTick = now + TickGrid.RandomTicks(world, data.MinBurstDelay, data.MaxBurstDelay);
+            _burstTick = now + world.Time.DrawFrames(world.LogicRandom, data.MinBurstDelay, data.MaxBurstDelay);
         }
         if (_state == State.Collapsing)
         {
@@ -162,7 +162,7 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
             {
                 // GameLogicRandomValue(1, BigBurstFrequency) == 1: a big burst, otherwise the smaller delay effect.
                 DoPhase(world, world.LogicRandom.Range(1, data.BigBurstFrequency) == 1 ? 2 : 1, Entity.X, Entity.Y, Entity.Z);
-                _burstTick += TickGrid.RandomTicks(world, data.MinBurstDelay, data.MaxBurstDelay);
+                _burstTick += world.Time.DrawFrames(world.LogicRandom, data.MinBurstDelay, data.MaxBurstDelay);
             }
             if (_height + StructureModules.MaxHeightAbovePosition(Entity.Template) <= Fixed.Zero)
             {
@@ -277,7 +277,7 @@ public sealed class FireSpreadUpdate(FireSpreadData data) : SimModule, IUpdateMo
         world.WakeAt(Entity, this, world.Tick + NextDelay(world));
     }
 
-    private long NextDelay(IWorldServices world) => Math.Max(TickGrid.RandomTicks(world, data.MinDelay, data.MaxDelay), world.Time.TicksPerOriginalFrame);
+    private long NextDelay(IWorldServices world) => world.Time.AtLeastOneFrame(world.Time.DrawFrames(world.LogicRandom, data.MinDelay, data.MaxDelay));
 
     public long Update(IWorldServices world)
     {

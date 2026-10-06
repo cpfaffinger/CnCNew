@@ -421,7 +421,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         }
         if (closeEnough && _repairing && master.Body is not null)
         {
-            var amount = data.RepairRatePerSecond / world.Time.TicksPerSecondFixed;
+            var amount = world.Time.PerSecondToPerTick(data.RepairRatePerSecond);
             world.Damage(master.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
         }
     }
@@ -459,7 +459,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
                         break;
                     default:
                         _repairState = RepairState.Ready;
-                        _framesToWait = checked((int)TickGrid.RandomTicks(world, data.MinReadyTicks, data.MaxReadyTicks));
+                        _framesToWait = checked((int)world.Time.DrawFrames(world.LogicRandom, data.MinReadyTicks, data.MaxReadyTicks));
                         break;
                 }
                 break;
@@ -472,7 +472,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
                 else
                 {
                     _repairState = RepairState.Welding;
-                    _framesToWait = checked((int)TickGrid.RandomTicks(world, data.MinWeldTicks, data.MaxWeldTicks));
+                    _framesToWait = checked((int)world.Time.DrawFrames(world.LogicRandom, data.MinWeldTicks, data.MaxWeldTicks));
                     // "Don't actually start healing until we fire our first sparks."
                     _repairing = true;
                 }

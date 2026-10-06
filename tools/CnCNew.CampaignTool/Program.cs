@@ -386,7 +386,8 @@ static int Playthrough(ContentFileSystem content, CampaignCatalog campaigns, str
         var mission = controller.CurrentMission;
         var run = controller.StartCurrentMission(humanSideName: humanSideName);
         var session = run.Session;
-        while (session.World.Tick < 150 && !session.IsOver) session.Step();
+        // Five seconds of game time before the save (150 logic frames of the original), at every tick rate.
+        while (session.World.Tick < session.World.Time.OriginalFrames(150) && !session.IsOver) session.Step();
         var save = SaveGame.Write(run, controller.Progress, $"{campaign.Name} {mission.Name}");
         var loaded = SaveGame.Load(save, context, campaigns);
         var reloadOk = loaded.Run.Session.StateHash() == session.StateHash() && loaded.Progress is not null && loaded.Progress.CurrentMission == mission.Name;
@@ -517,7 +518,7 @@ static Action<MissionSession> WatchEntities(string text, bool victory)
         {
             Console.WriteLine($"      {(victory ? "V" : "D")} @{world.Tick} watch {line}");
             // who stands near a hurt object: the three closest objects of other sides (a hint at the attacker, not a proof)
-            if (known.ContainsKey(id) && world.FindEntity(new CnCNew.Simulation.Ids.EntityId(id)) is { } hurt && hurt.Body is not null && hurt.Body.Health < hurt.Body.MaxHealth && world.Tick % 150 < 2)
+            if (known.ContainsKey(id) && world.FindEntity(new CnCNew.Simulation.Ids.EntityId(id)) is { } hurt && hurt.Body is not null && hurt.Body.Health < hurt.Body.MaxHealth && world.Time.ToOriginalFrames(world.Tick) % 150 < 2)
             {
                 var near = world.Entities.Where(other => other.Owner != hurt.Owner && !other.EffectivelyDead && other.Template.Locomotor is not null)
                     .Select(other => (other, d: (long)((other.X - hurt.X).Floor() * (other.X - hurt.X).Floor() + (other.Y - hurt.Y).Floor() * (other.Y - hurt.Y).Floor())))

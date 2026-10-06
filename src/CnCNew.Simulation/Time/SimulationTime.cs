@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using CnCNew.Simulation.Numerics;
 
 namespace CnCNew.Simulation.Time;
@@ -37,6 +38,12 @@ public sealed class SimulationTime
     public int TicksPerOriginalFrame => _ticksPerOriginalFrame;
     public long TicksPerMinute => 60L * _ticksPerSecond;
 
+    /// <summary>
+    /// Diagnostic counters, null unless a tool attaches them (<see cref="SimulationTimeProbe"/>). Not state: nothing in the simulation reads them. The
+    /// caller information some functions take only names the place a counter belongs to and is never passed by hand.
+    /// </summary>
+    public SimulationTimeProbe? Probe { get; set; }
+
     /// <summary>The rate as a <see cref="Fixed"/>, for run-time divisions "per second → per tick" of values that only exist at run time (a ratio of the current maximum health).</summary>
     public Fixed TicksPerSecondFixed { get; }
 
@@ -52,7 +59,18 @@ public sealed class SimulationTime
     /// Whole logic frames of the original that have fully elapsed in <paramref name="ticks"/> (<c>floor(ticks · 30 / rate)</c>). The inverse of
     /// <see cref="OriginalFrames"/> for values on the grid. 30 Hz: the tick count itself.
     /// </summary>
-    public long ToOriginalFrames(long ticks)
+    public long ToOriginalFrames(long ticks, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+    {
+        if (Probe is { } probe)
+        {
+            probe.Call(TimeProbeKind.OffGrid, nameof(ToOriginalFrames));
+            if (ticks % _ticksPerOriginalFrame != 0) probe.Hit(TimeProbeKind.OffGrid, nameof(ToOriginalFrames), file, line);
+        }
+        return FramesIn(ticks);
+    }
+
+    /// <summary><see cref="ToOriginalFrames"/> without the probe, for <see cref="FrameGrid"/> (which counts under its own names).</summary>
+    internal long FramesIn(long ticks)
     {
         var frames = ticks / _ticksPerOriginalFrame;
         return ticks < 0 && frames * _ticksPerOriginalFrame != ticks ? frames - 1 : frames;
@@ -93,7 +111,7 @@ public sealed class SimulationTime
     public Fixed DurationMillisecondsToFixedTicks(decimal milliseconds)
     {
         if (milliseconds < 0m) throw new ArgumentOutOfRangeException(nameof(milliseconds), "Durations must not be negative.");
-        return Fixed.FromDecimal(milliseconds * _ticksPerSecond / SimulationTiming.MillisecondsPerSecond);
+        return Quantised(nameof(DurationMillisecondsToFixedTicks), milliseconds * _ticksPerSecond / SimulationTiming.MillisecondsPerSecond);
     }
 
     /// <summary>
@@ -117,26 +135,43 @@ public sealed class SimulationTime
     /// Units per second to units per tick (<c>ConvertVelocityInSecsToFrames</c>): <c>value / rate</c> in decimal, rounded once to <see cref="Fixed"/>
     /// (nearest, ties away from zero). 30 Hz: the former expression <c>value / 30</c>.
     /// </summary>
-    public Fixed PerSecondToPerTick(decimal unitsPerSecond) => Fixed.FromDecimal(unitsPerSecond / _ticksPerSecond);
+    public Fixed PerSecondToPerTick(decimal unitsPerSecond) => Quantised(nameof(PerSecondToPerTick), unitsPerSecond / _ticksPerSecond);
 
     /// <summary>
     /// Units per second² to units per tick²: <c>value / (rate · rate)</c> in decimal (the divisor is formed as an integer first, as before), rounded
     /// once to <see cref="Fixed"/>. 30 Hz: the former expression <c>value / 900</c>.
     /// </summary>
-    public Fixed PerSecondSquaredToPerTickSquared(decimal unitsPerSecondSquared) => Fixed.FromDecimal(unitsPerSecondSquared / (_ticksPerSecond * _ticksPerSecond));
+    public Fixed PerSecondSquaredToPerTickSquared(decimal unitsPerSecondSquared) => Quantised(nameof(PerSecondSquaredToPerTickSquared), unitsPerSecondSquared / (_ticksPerSecond * _ticksPerSecond));
 
     /// <summary>
     /// Degrees per second to radians per tick: <c>degrees · π / 180 / rate</c> in decimal, in this order, rounded once to <see cref="Fixed"/>.
     /// 30 Hz: the former expression with 30 as the last divisor.
     /// </summary>
-    public Fixed DegreesPerSecondToRadiansPerTick(decimal degreesPerSecond) => Fixed.FromDecimal(degreesPerSecond * Pi / 180m / _ticksPerSecond);
+    public Fixed DegreesPerSecondToRadiansPerTick(decimal degreesPerSecond) => Quantised(nameof(DegreesPerSecondToRadiansPerTick), degreesPerSecond * Pi / 180m / _ticksPerSecond);
 
     /// <summary>
     /// A run-time value per second as a value per tick: <c>value / rate</c> in <see cref="Fixed"/> (one fixed-point division, rounded as
     /// <see cref="Fixed"/> divides). For amounts that depend on run-time state; catalog values use the decimal overload. 30 Hz: the former
     /// <c>value / Fixed.FromInt(30)</c>.
     /// </summary>
-    public Fixed PerSecondToPerTick(Fixed unitsPerSecond) => unitsPerSecond / TicksPerSecondFixed;
+    public Fixed PerSecondToPerTick(Fixed unitsPerSecond, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+    {
+        var perTick = unitsPerSecond / TicksPerSecondFixed;
+        Probe?.RunTime(nameof(PerSecondToPerTick), unitsPerSecond, perTick, file, line);
+        return perTick;
+    }
+
+    /// <summary>
+    /// A run-time amount spread evenly over a duration: <c>total / ticks</c> in <see cref="Fixed"/> (one fixed-point division) – the health a full heal
+    /// adds per tick, the distance a pull covers per tick. The plain division, written through the time service so that a share that rounds to zero can
+    /// be counted (<see cref="Probe"/>). The same expression at every rate.
+    /// </summary>
+    public Fixed SharePerTick(Fixed total, Fixed ticks, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+    {
+        var perTick = total / ticks;
+        Probe?.RunTime(nameof(SharePerTick), total, perTick, file, line);
+        return perTick;
+    }
 
     // ------------------------------------------------------------------------------------ raw values per frame of the original
 
@@ -146,23 +181,42 @@ public sealed class SimulationTime
     /// divided by one is itself, so the result is <c>Fixed.FromDecimal(value)</c> – what reading the raw value gave.
     /// <para>Not for multiplicative factors per frame (damping, friction): those need a root, not a division.</para>
     /// </summary>
-    public Fixed PerOriginalFrameToPerTick(decimal valuePerFrame) => Fixed.FromDecimal(valuePerFrame / _ticksPerOriginalFrame);
+    public Fixed PerOriginalFrameToPerTick(decimal valuePerFrame) => Quantised(nameof(PerOriginalFrameToPerTick), valuePerFrame / _ticksPerOriginalFrame);
 
     /// <summary>
     /// The same for a value that already is a <see cref="Fixed"/>: divided by the whole factor (one fixed-point division; the factors 2 and 4 lose at
     /// most the last bit or two). 30 Hz: the value is returned untouched, without any arithmetic.
     /// </summary>
-    public Fixed PerOriginalFrameToPerTick(Fixed valuePerFrame) => _ticksPerOriginalFrame == 1 ? valuePerFrame : valuePerFrame / Fixed.FromInt(_ticksPerOriginalFrame);
+    public Fixed PerOriginalFrameToPerTick(Fixed valuePerFrame, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+    {
+        if (_ticksPerOriginalFrame == 1) return valuePerFrame;
+        var perTick = valuePerFrame / Fixed.FromInt(_ticksPerOriginalFrame);
+        Probe?.RunTime(nameof(PerOriginalFrameToPerTick), valuePerFrame, perTick, file, line);
+        return perTick;
+    }
 
     /// <summary>
     /// An additive amount per logic frame² of the original (an acceleration per frame) as an amount per tick²: <c>value · 900 / rate²</c>, one decimal
     /// division by 1, 4 or 16, rounded once to <see cref="Fixed"/>. 30 Hz: the divisor is 1.
     /// </summary>
-    public Fixed PerOriginalFrameSquaredToPerTickSquared(decimal valuePerFrameSquared) => Fixed.FromDecimal(valuePerFrameSquared / (_ticksPerOriginalFrame * _ticksPerOriginalFrame));
+    public Fixed PerOriginalFrameSquaredToPerTickSquared(decimal valuePerFrameSquared) => Quantised(nameof(PerOriginalFrameSquaredToPerTickSquared), valuePerFrameSquared / (_ticksPerOriginalFrame * _ticksPerOriginalFrame));
 
     /// <summary>The same for a <see cref="Fixed"/>: one fixed-point division by 4 or 16. 30 Hz: the value is returned untouched.</summary>
-    public Fixed PerOriginalFrameSquaredToPerTickSquared(Fixed valuePerFrameSquared)
-        => _ticksPerOriginalFrame == 1 ? valuePerFrameSquared : valuePerFrameSquared / Fixed.FromInt(_ticksPerOriginalFrame * _ticksPerOriginalFrame);
+    public Fixed PerOriginalFrameSquaredToPerTickSquared(Fixed valuePerFrameSquared, [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+    {
+        if (_ticksPerOriginalFrame == 1) return valuePerFrameSquared;
+        var perTick = valuePerFrameSquared / Fixed.FromInt(_ticksPerOriginalFrame * _ticksPerOriginalFrame);
+        Probe?.RunTime(nameof(PerOriginalFrameSquaredToPerTickSquared), valuePerFrameSquared, perTick, file, line);
+        return perTick;
+    }
+
+    // The one rounding of a catalog value to Fixed (nearest, ties away from zero); with a probe attached the loss against the exact value is counted.
+    private Fixed Quantised(string function, decimal exact)
+    {
+        var value = Fixed.FromDecimal(exact);
+        Probe?.Quantised(function, exact, value);
+        return value;
+    }
 
     // ------------------------------------------------------------------------------------ ticks back to game time
 

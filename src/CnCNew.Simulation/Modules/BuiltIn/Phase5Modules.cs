@@ -156,7 +156,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         }
         else if (!Entity.HasStatus(StealthedBit))
         {
-            if (_readyTick == long.MaxValue) _readyTick = world.Tick + Math.Max(data.StealthDelayTicks, world.Time.TicksPerOriginalFrame);
+            if (_readyTick == long.MaxValue) _readyTick = world.Tick + world.Time.AtLeastOneFrame(data.StealthDelayTicks);
             if (world.Tick >= _readyTick) Entity.Status |= 1UL << StealthedBit;
         }
         return SimulationTiming.SleepNone;
@@ -254,13 +254,13 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     public override void OnSpawn(IWorldServices world)
     {
         _active = data.StartsActive;
-        _nextWake = _active ? Math.Min(world.Tick + Math.Max(data.StartHealingDelayTicks, world.Time.TicksPerOriginalFrame), SimulationTiming.SleepForever) : SimulationTiming.SleepForever;
+        _nextWake = _active ? Math.Min(world.Tick + world.Time.AtLeastOneFrame(data.StartHealingDelayTicks), SimulationTiming.SleepForever) : SimulationTiming.SleepForever;
     }
 
     public void TryActivate(IWorldServices world, UpgradeMask keyMask)
     {
         if (!_mux.AttemptUpgrade(world, Entity, keyMask, _ => _active = true)) return;
-        world.WakeAt(Entity, this, world.Tick + Math.Max(data.StartHealingDelayTicks, world.Time.TicksPerOriginalFrame));
+        world.WakeAt(Entity, this, world.Tick + world.Time.AtLeastOneFrame(data.StartHealingDelayTicks));
     }
 
     public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
@@ -284,7 +284,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
             if (Matches(candidate)) world.Damage(candidate.Id, new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false));
         if (data.SingleBurst) { _active = false; return SimulationTiming.SleepForever; }
         // A missing or zero HealingDelay heals once per logic frame of the original, at every rate.
-        return Math.Max(data.HealingDelayTicks, world.Time.TicksPerOriginalFrame);
+        return world.Time.AtLeastOneFrame(data.HealingDelayTicks);
     }
 
     private bool Matches(Entity candidate)
@@ -534,7 +534,7 @@ public sealed record AIUpdateData(AutoAcquire AutoAcquire, Fixed RepairRatePerSe
     public static AIUpdateData Parse(RatedModuleConfiguration configuration) => new(
         ParseAutoAcquire(configuration),
         ModuleConfigReader.Real(configuration, "RepairHealthPercentPerSecond", Fixed.Zero),
-        Math.Max(configuration.Time.TicksPerOriginalFrame, ModuleConfigReader.Ticks(configuration, "MoodAttackCheckRate", DefaultMoodCheckFrames)));
+        configuration.Time.AtLeastOneFrame(ModuleConfigReader.Ticks(configuration, "MoodAttackCheckRate", DefaultMoodCheckFrames)));
 
     private static AutoAcquire ParseAutoAcquire(RatedModuleConfiguration configuration)
     {
@@ -881,7 +881,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         var body = target.Body!;
-        var amount = body.MaxHealth * data.RepairRatePerSecond / world.Time.TicksPerSecondFixed;
+        var amount = world.Time.PerSecondToPerTick(body.MaxHealth * data.RepairRatePerSecond);
         world.Damage(target.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
     }
 
@@ -1420,7 +1420,8 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
-    public void Enqueue(int templateIndex, Fixed cost, long totalTicks) => _queue.Add(new ProductionEntry(templateIndex, cost, Math.Max(totalTicks, 1)));
+    /// <param name="time">The time service of the world: a build time of zero still takes one logic frame of the original, not one tick.</param>
+    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks) => _queue.Add(new ProductionEntry(templateIndex, cost, time.AtLeastOneFrame(totalTicks)));
 
     public bool HasSlot(int slot) => slot >= 0 && slot < _queue.Count;
 
@@ -1490,7 +1491,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         if (world.Tick < _disabledUntil || Entity.ScriptDisableMask != 0) return SimulationTiming.SleepNone;
         var head = _queue[0];
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
-        var remaining = head.RemainingTicks - 1;
+        var remaining = head.RemainingTicks - TickOrder.Next;
         if (remaining <= 0 && exit is not null && !exit.IsFreeToExitFor(world.Templates[head.TemplateIndex]))
         {
             // The door is closed (QueueProductionExitUpdate delay): the finished unit waits at the head of the queue.

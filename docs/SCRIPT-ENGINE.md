@@ -53,6 +53,16 @@ instanziierbare Prototypen haben Vorrang vor Singletons); `<This Team>`, `<This 
 `CALL_SUBROUTINE` ruft Gruppen (nur aktive Unterprogramm-Gruppen) und Einzelskripte (nur Unterprogramme), Rekursionstiefe 32
 (Überschreitung wird als Diagnose gezählt).
 
+**Bildzähler und Tickrate (Phase 20, `docs/TICKRATE-MIGRATION.md` §1 Fall (f), §8).** Die Tickrate ist ein Wert der Welt; die VM rechnet über `_world.Time`. *Skaliert* wird jeder Wert, der in der
+Simulation zu einem Tick-Countdown wird: die Bildzahlen der Karte (`SET_TIMER`, `SET_RANDOM_TIMER` – der Zufall wird in Bildern gezogen, dann skaliert –, die `*_FOR_FRAMECOUNT`-Aktionen,
+`teamInitialIdleFrames`), Sekundenwerte (`SET_MILLISECOND_TIMER` und Verwandte, `DelayEvaluationSeconds`: auf ganze Bilder des Originals aufgerundet, dann mal Rate/30), der Endspiel-Zeitgeber
+(`EndGameDelayFrames` = 120 Bilder; `QUICKVICTORY` bleibt ein Update, das ist Reihenfolge), der erste Auswertungstick verzögerter Skripte (`NameHash % 61` Bilder), die Präsentationslatenz
+(`PresentationLatencyTicks`, trotz des Namens in Bildern) und die eigenen Rhythmen (Neuziel alle 30 Bilder, Übernahme-Wiederholung, Versorgungsscan). Die „Ticks“ in diesem Abschnitt sind Werte bei
+30 Hz. *Nicht skaliert* wird, was die Simulation als Text verlässt: die `Arguments` eines `ScriptOutput` sind die Parameter der Karte, eine Bildzahl darunter (`CAMERA_FADE_*`,
+`CAMERA_BW_MODE_*`) ist bei jeder Rate eine Zahl von Bildern des Originals (1/30 s); `ScriptOutput.Tick` ist ein Tick der Welt. Der Wert eines Timers (`CounterValue`) ist Zustand in **Ticks**.
+Offen für Phase 23: die VM wertet jedes aktive Skript in **jedem Tick** aus und zählt Timer je Tick – ein Skript, das je Auswertung einen Zähler erhöht oder einen Timer gegen ein Bildliteral
+vergleicht, läuft bei 60 Hz anders (`docs/TICKRATE-MIGRATION.md` §5.4).
+
 `Observe` nimmt die Ereignisse des Ticks entgegen: `EntityDamaged` → letzter Angreifer eines Objekts (Besitzer, Typ; Grundlage der
 `*_ATTACKED_BY_*`-Bedingungen, nie zurückgesetzt wie `getLastDamageInfo`), `EntityContained` → letzter Spieler, der ein Gebäude betrat.
 
