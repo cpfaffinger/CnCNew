@@ -374,7 +374,7 @@ public sealed class HordeUpdate(HordeData data) : SimModule, IUpdateModule
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
             var limit = reach + Entity.Template.BoundingCircleRadius + other.Template.BoundingCircleRadius;
-            if (dx * dx + dy * dy <= limit * limit) near.Add(other);
+            if (SquaredReach.Of(limit).Contains(dx * dx + dy * dy)) near.Add(other);
         }
         if (near.Count >= data.MinCount - 1)
         {
@@ -384,13 +384,13 @@ public sealed class HordeUpdate(HordeData data) : SimModule, IUpdateModule
         }
         _inHorde = false;
         _trueMember = false;
-        var rubOff = data.RubOffRadius * data.RubOffRadius;
+        var rubOff = SquaredReach.Of(data.RubOffRadius);
         foreach (var other in near)
         {
             if (!other.ModuleArray.OfType<HordeUpdate>().First().IsTrueHordeMember) continue;
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
-            if (dx * dx + dy * dy > rubOff) continue;
+            if (!rubOff.Contains(dx * dx + dy * dy)) continue;
             _inHorde = true;
             break;
         }

@@ -8,8 +8,10 @@ namespace CnCNew.Simulation.Numerics;
 /// Why fixed point: the reference engine keeps <c>Real</c> (binary32) values in its state, which ties determinism to
 /// compiler flags and FPU modes (<c>setFPMode()</c> in <c>INI::load</c>). Integer arithmetic gives bit-identical results
 /// on every platform. 24 fractional bits give a resolution of 2^-24 (6·10^-8) world units, fine enough for amounts per tick and per tick squared at
-/// 60 and 120 Hz, and a 64-bit raw value keeps ±5.5·10^11 units: squared distances over the largest map are four orders of magnitude below that, but a
-/// value above 741,455 must not be squared (docs/FIXED-POINT-Q39-24.md lists the data values that large). Products and quotients use 128-bit intermediates.
+/// 60 and 120 Hz, and a 64-bit raw value keeps ±5.5·10^11 units: squared distances over the largest map are four orders of magnitude below that, but the
+/// square of a value above 741,455 does not fit. The data hold such values (ranges of 1,000,000 for "everywhere"); a range, a radius or a limit is
+/// therefore never squared with <c>*</c> but compared through <see cref="SquaredReach"/>, and a ratio of two large values goes through
+/// <see cref="MultiplyDivide"/> (docs/FIXED-POINT-Q39-24.md §5). Products and quotients use 128-bit intermediates.
 /// </para>
 /// <para>
 /// Rounding rule (all operations): to nearest, ties away from zero. Overflow throws <see cref="OverflowException"/>;
@@ -96,6 +98,12 @@ public readonly struct Fixed : IEquatable<Fixed>, IComparable<Fixed>
     public static Fixed operator *(Fixed a, Fixed b) => new(FixedMath.Multiply(a._raw, b._raw, FractionBits));
 
     public static Fixed operator /(Fixed a, Fixed b) => new(FixedMath.Divide(a._raw, b._raw, FractionBits));
+
+    /// <summary>
+    /// <c>a * b / c</c> with both roundings of the two operators, for a product that may leave the range although the quotient does not (a ratio of two
+    /// large values). Where <c>a * b</c> fits, the result is that of the two operators.
+    /// </summary>
+    public static Fixed MultiplyDivide(Fixed a, Fixed b, Fixed c) => new(FixedMath.MultiplyDivide(a._raw, b._raw, c._raw, FractionBits));
 
     /// <summary>Multiplies by an integer without intermediate rounding.</summary>
     public static Fixed operator *(Fixed a, long factor) => new(checked(a._raw * factor));

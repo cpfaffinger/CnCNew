@@ -441,7 +441,7 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
                     if (other.Id == Entity.Id || !other.Template.IsKindOf("STRUCTURE")) continue;
                     var dx = other.X - Entity.X;
                     var dy = other.Y - Entity.Y;
-                    if (dx * dx + dy * dy > range * range) continue;
+                    if (!SquaredReach.Of(range).Contains(dx * dx + dy * dy)) continue;
                     var height = ToppleAndFallModules.MaxHeightAbovePosition(other.Template);
                     if (height > tallest) tallest = height;
                 }

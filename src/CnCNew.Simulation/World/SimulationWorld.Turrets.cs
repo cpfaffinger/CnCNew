@@ -280,7 +280,7 @@ public sealed partial class SimulationWorld
         var range = MaxWeaponRange(attacker);
         var dx = victim.X - attacker.X;
         var dy = victim.Y - attacker.Y;
-        if (dx * dx + dy * dy <= range * range) { state.LoseInterestAt = 0; return true; }
+        if (SquaredReach.Of(range).Contains(dx * dx + dy * dy)) { state.LoseInterestAt = 0; return true; }
         if (state.LoseInterestAt == 0) state.LoseInterestAt = tick + _turretLoseInterestTicks;
         return tick < state.LoseInterestAt;
     }

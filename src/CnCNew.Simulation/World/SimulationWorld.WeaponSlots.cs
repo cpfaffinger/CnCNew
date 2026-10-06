@@ -137,10 +137,10 @@ public sealed partial class SimulationWorld
         var dy = victim.Y - source.Y;
         var distanceSquared = dx * dx + dy * dy;
         var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
-        if (distanceSquared > reach * reach) return false;
+        if (!SquaredReach.Of(reach).Contains(distanceSquared)) return false;
         var minimum = weapon.MinimumAttackRange;
         // Weapon.cpp: "distSqr < minAttackRangeSqr - 0.5f" (the shipped, non-RATIONALIZE_ATTACK_RANGE build).
-        return minimum <= Fixed.Zero || distanceSquared >= minimum * minimum - Fixed.FromDecimal(0.5m);
+        return minimum <= Fixed.Zero || !SquaredReach.ContainsStrictly(minimum, distanceSquared, Fixed.FromDecimal(0.5m));
     }
 
     private static bool IsPreferredAgainst(WeaponSetInfo set, int slot, Entity victim)

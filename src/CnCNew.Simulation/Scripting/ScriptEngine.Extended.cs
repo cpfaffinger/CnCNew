@@ -196,11 +196,11 @@ public sealed partial class ScriptEngine
     private IEnumerable<Entity> SightedObjects(Entity watcher)
     {
         var range = watcher.Template.VisionRange;
-        var limit = range * range;
+        var limit = SquaredReach.Of(range);
         foreach (var entity in _world.Entities.OrderBy(value => value.Id.Value))
         {
             if (entity == watcher || entity.EffectivelyDead || entity.DestroyRequested || IsHiddenByStealth(entity)) continue;
-            if (DistanceSquared(watcher, entity.X, entity.Y) <= limit) yield return entity;
+            if (limit.Contains(DistanceSquared(watcher, entity.X, entity.Y))) yield return entity;
         }
     }
 

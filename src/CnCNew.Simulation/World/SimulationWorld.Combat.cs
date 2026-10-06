@@ -51,7 +51,7 @@ public sealed partial class SimulationWorld
         var victims = new List<(Entity Victim, Fixed DistanceSquared)>();
         if (radius > Fixed.Zero)
         {
-            var radiusSquared = radius * radius;
+            var radiusSquared = SquaredReach.Of(radius);
             foreach (var candidate in _entities.Values)
             {
                 if (candidate.DestroyRequested || candidate.Body is null) continue;
@@ -65,12 +65,12 @@ public sealed partial class SimulationWorld
                 if (sphere > Fixed.Zero)
                 {
                     var reach = radius + sphere;
-                    if (distanceSquared > reach * reach) continue;
+                    if (!SquaredReach.Of(reach).Contains(distanceSquared)) continue;
                     var shrunk = Fixed.Sqrt(distanceSquared) - sphere;
                     if (shrunk > Fixed.Zero) shrunkSquared = shrunk * shrunk;
                 }
                 else shrunkSquared = distanceSquared;
-                if (shrunkSquared < radiusSquared) victims.Add((candidate, shrunkSquared));
+                if (radiusSquared.ContainsStrictly(shrunkSquared)) victims.Add((candidate, shrunkSquared));
             }
             victims.Sort((a, b) => a.Victim.Id.Value.CompareTo(b.Victim.Id.Value));
         }
@@ -84,7 +84,7 @@ public sealed partial class SimulationWorld
             if (primaryVictim is not null && !primaryVictim.DestroyRequested) victims.Add((primaryVictim, Fixed.Zero));
         }
 
-        var primaryRadiusSquared = primaryRadius * primaryRadius;
+        var primaryRadiusSquared = SquaredReach.Of(primaryRadius);
         var dealt = Fixed.Zero;
         foreach (var (victim, distanceSquared) in victims)
         {
@@ -108,7 +108,7 @@ public sealed partial class SimulationWorld
                 }
             }
 
-            var amount = killSelf ? HugeDamage : distanceSquared <= primaryRadiusSquared ? primaryDamage : secondaryDamage;
+            var amount = killSelf ? HugeDamage : primaryRadiusSquared.Contains(distanceSquared) ? primaryDamage : secondaryDamage;
             var adjusted = ActiveArmor(victim).Adjust(weapon.DamageType, amount);
             if (victim == primaryVictim) dealt = adjusted;
             Damage(victim.Id, new DamageInfo(damageSource, adjusted, weapon.DamageType, weapon.DeathType, false));

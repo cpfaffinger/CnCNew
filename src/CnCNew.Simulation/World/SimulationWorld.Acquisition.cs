@@ -302,7 +302,7 @@ public sealed partial class SimulationWorld
         var leash = AcquireRadius(entity, true) * ChaseLeashFactor;
         var dx = victim.X - entity.X;
         var dy = victim.Y - entity.Y;
-        if (dx * dx + dy * dy > leash * leash) return false;
+        if (!SquaredReach.Of(leash).Contains(dx * dx + dy * dy)) return false;
         if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
         {
             if (!ai.StartInternalMove(victim.X, victim.Y)) return false;
@@ -371,7 +371,7 @@ public sealed partial class SimulationWorld
         var chase = mode == AcquireMode.AttackMove && MayChase(entity, aircraft);
         var radius = AcquireRadius(entity, chase);
         if (radius <= Fixed.Zero) return null;
-        var limit = radius * radius;
+        var limit = SquaredReach.Of(radius);
         var turretOnly = mode == AcquireMode.Turret;
         var buildings = computer || (ai.AutoAcquire & AutoAcquire.AttackBuildings) != 0;
         var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue };
@@ -398,7 +398,7 @@ public sealed partial class SimulationWorld
 
     private struct MoodSearch
     {
-        public Fixed Limit;
+        public SquaredReach Limit;
         public bool TurretOnly;
         public bool Chase;
         public bool Buildings;
@@ -414,7 +414,7 @@ public sealed partial class SimulationWorld
         var dx = candidate.X - entity.X;
         var dy = candidate.Y - entity.Y;
         var distance = dx * dx + dy * dy;
-        if (distance > search.Limit) return;
+        if (!search.Limit.Contains(distance)) return;
         if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT") || candidate.Template.IsKindOf("MINE")) return;
         if (!IsAttackable(entity, candidate) || !AcquiresStructure(candidate, search.Buildings)) return;
         if (!CanAttack(entity, candidate, search.TurretOnly, out var inRange) || (!inRange && !search.Chase)) return;

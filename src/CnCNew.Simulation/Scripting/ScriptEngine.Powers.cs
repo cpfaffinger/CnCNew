@@ -144,7 +144,7 @@ public sealed partial class ScriptEngine
     {
         if (!_world.SpecialPowers.TryGet(power, out var info)) { Diagnose($"unknown special power '{power}'"); return; }
         var radius = info.RadiusCursorRadius > Fixed.FromInt(50) ? info.RadiusCursorRadius : Fixed.FromInt(50);
-        var limit = radius * radius;
+        var limit = SquaredReach.Of(radius);
         var enemies = _world.Entities.Where(entity => !entity.Owner.IsSystem && CountsAsObject(entity) && _world.AreEnemies(player, entity.Owner)).OrderBy(entity => entity.Id.Value).ToArray();
         if (enemies.Length == 0) return;
         foreach (var holder in PlayerEntities(player))
@@ -156,7 +156,7 @@ public sealed partial class ScriptEngine
             {
                 var cost = Fixed.Zero;
                 foreach (var other in enemies)
-                    if (DistanceSquared(other, center.X, center.Y) <= limit) cost += other.Template.BuildCost;
+                    if (limit.Contains(DistanceSquared(other, center.X, center.Y))) cost += other.Template.BuildCost;
                 if (cost > bestCost) { best = center; bestCost = cost; }
             }
             if (best is not null) FireSpecialPower(holder, power, SpecialPowerTargetKind.Location, EntityId.Invalid, best.X, best.Y);
@@ -184,7 +184,7 @@ public sealed partial class ScriptEngine
         if (home is null) { Diagnose($"RECRUIT_TEAM '{teamName}': team has no home position"); return; }
         var team = (singleton ? FindTeamInstance(teamName) : null) ?? CreateTeam(teamName);
         if (team is null) return;
-        var maxDistanceSquared = radius < Fixed.One ? Fixed.MaxValue : radius * radius;
+        var maxDistanceSquared = radius < Fixed.One ? SquaredReach.OfSquare(Fixed.MaxValue) : SquaredReach.Of(radius);
         var recruited = 0;
         foreach (var unit in prototype.Units)
         {
@@ -208,7 +208,7 @@ public sealed partial class ScriptEngine
         }
     }
 
-    private Entity? FindRecruit(PlayerId owner, string template, ScriptTeamPrototype prototype, ScriptTeam into, ScriptWaypoint home, Fixed maxDistanceSquared)
+    private Entity? FindRecruit(PlayerId owner, string template, ScriptTeamPrototype prototype, ScriptTeam into, ScriptWaypoint home, SquaredReach maxDistanceSquared)
     {
         Entity? recruit = null;
         var bestDistance = maxDistanceSquared;
@@ -229,9 +229,9 @@ public sealed partial class ScriptEngine
             var distance = DistanceSquared(candidate, home.X, home.Y);
             // A unit of the default team is taken even outside the radius while nothing was found yet, then nearer ones win (Team::tryToRecruit).
             var inDefaultTeam = current is null || (_program.FindTeam(current.Prototype) is { } ownTeam && ownTeam.Name == "team" + ownTeam.Owner);
-            if (inDefaultTeam && recruit is null) { recruit = candidate; bestDistance = distance; continue; }
-            if (distance > bestDistance) continue;
-            bestDistance = distance;
+            if (inDefaultTeam && recruit is null) { recruit = candidate; bestDistance = SquaredReach.OfSquare(distance); continue; }
+            if (!bestDistance.Contains(distance)) continue;
+            bestDistance = SquaredReach.OfSquare(distance);
             recruit = candidate;
         }
         return recruit;

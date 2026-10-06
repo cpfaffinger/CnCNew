@@ -72,7 +72,7 @@ public static class SimulationQueries
         var reach = WeaponRange(world, source);
         var dx = target.X - source.X;
         var dy = target.Y - source.Y;
-        return reach > Fixed.Zero && dx * dx + dy * dy <= reach * reach;
+        return reach > Fixed.Zero && SquaredReach.Of(reach).Contains(dx * dx + dy * dy);
     }
 
     /// <summary><c>SimulationWorld.CanBuildTemplate</c>: a buildable structure of the builder's side (<c>Player::canBuild</c>).</summary>

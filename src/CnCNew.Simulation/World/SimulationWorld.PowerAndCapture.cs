@@ -62,7 +62,7 @@ public sealed partial class SimulationWorld
         var dx = target.X - actor.X;
         var dy = target.Y - actor.Y;
         var reach = target.Template.BoundingCircleRadius + CaptureReachCells;
-        if (dx * dx + dy * dy > reach * reach) return CommandRejection.CannotCapture;
+        if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy)) return CommandRejection.CannotCapture;
         return 0;
     }
 

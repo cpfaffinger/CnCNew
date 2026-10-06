@@ -454,7 +454,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         var reach = range + target.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius;
         var dx = target.X - Entity.X;
         var dy = target.Y - Entity.Y;
-        return dx * dx + dy * dy <= reach * reach;
+        return SquaredReach.Of(reach).Contains(dx * dx + dy * dy);
     }
 
     /// <summary><c>approachTarget</c>: <c>aiMoveToObject</c>. The path ends at the nearest cell the grid allows; a few failed approaches in a row end the ability (see <see cref="MaxApproachOrders"/>).</summary>

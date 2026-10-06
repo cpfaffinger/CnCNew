@@ -489,7 +489,7 @@ public sealed class SkirmishAi
             {
                 if ((RoleOf(own.Template) & Role.SupplyCenter) == 0) continue;
                 var limit = reach + own.Template.BoundingCircleRadius;
-                if (DistanceSquared(own.X, own.Y, entity.X, entity.Y) > limit * limit) continue;
+                if (!SquaredReach.Of(limit).Contains(DistanceSquared(own.X, own.Y, entity.X, entity.Y))) continue;
                 total += (long)boxes * _catalog.ValuePerSupplyBox;
                 break;
             }
@@ -504,15 +504,15 @@ public sealed class SkirmishAi
     private bool SupplySourceSafe(Entity source)
     {
         var radius = SupplyCenterSafeRadius + source.Template.BoundingCircleRadius;
-        var limit = radius * radius;
+        var limit = SquaredReach.Of(radius);
         foreach (var enemy in _enemyTargets)
         {
             if ((RoleOf(enemy.Template) & (Role.Builder | Role.Carrier)) != 0) continue;
             if (enemy.Template.IsKindOf("STRUCTURE") && enemy.Template.DefaultWeapon < 0) continue;
-            if (DistanceSquared(enemy.X, enemy.Y, source.X, source.Y) <= limit) return false;
+            if (limit.Contains(DistanceSquared(enemy.X, enemy.Y, source.X, source.Y))) return false;
         }
         foreach (var entry in _enemies.Values)
-            if (entry.IsStructure && entry.Template.DefaultWeapon >= 0 && DistanceSquared(entry.X, entry.Y, source.X, source.Y) <= limit) return false;
+            if (entry.IsStructure && entry.Template.DefaultWeapon >= 0 && limit.Contains(DistanceSquared(entry.X, entry.Y, source.X, source.Y))) return false;
         return true;
     }
 
@@ -718,7 +718,7 @@ public sealed class SkirmishAi
                 {
                     if ((RoleOf(own.Template) & Role.SupplyCenter) == 0) continue;
                     var limit = reach + own.Template.BoundingCircleRadius;
-                    if (DistanceSquared(own.X, own.Y, entity.X, entity.Y) <= limit * limit) { taken = true; break; }
+                    if (SquaredReach.Of(limit).Contains(DistanceSquared(own.X, own.Y, entity.X, entity.Y))) { taken = true; break; }
                 }
                 if (taken) continue;
                 var distance = DistanceSquared(entity.X, entity.Y, _options.HomeX, _options.HomeY);
@@ -810,14 +810,14 @@ public sealed class SkirmishAi
         foreach (var warehouse in _warehouses.Values)
             if (DistanceSquared(warehouse.X, warehouse.Y, x, y) < Fixed.FromInt(3600)) return false;
         // The army gathers on the rally point: no structure goes up on it.
-        if (_rally is { } rally && DistanceSquared(rally.X, rally.Y, x, y) < (radius + Fixed.FromInt(15)) * (radius + Fixed.FromInt(15))) return false;
+        if (_rally is { } rally && SquaredReach.Of(radius + Fixed.FromInt(15)).ContainsStrictly(DistanceSquared(rally.X, rally.Y, x, y))) return false;
         return true;
     }
 
     private static bool Clash(Entity entity, Fixed radius, Fixed gap, Fixed x, Fixed y)
     {
         var limit = entity.Template.BoundingCircleRadius + radius + gap;
-        return DistanceSquared(entity.X, entity.Y, x, y) < limit * limit;
+        return SquaredReach.Of(limit).ContainsStrictly(DistanceSquared(entity.X, entity.Y, x, y));
     }
 
     /// <summary>Sites whose builder stopped are resumed; a site that does not progress after repeated resumes is cancelled and its spot avoided.</summary>
@@ -1087,11 +1087,12 @@ public sealed class SkirmishAi
         Entity? Nearest(List<Entity> candidates, Fixed x, Fixed y, Fixed reach)
         {
             Entity? best = null;
-            var bestDistance = reach * reach;
+            var limit = SquaredReach.Of(reach);
+            var bestDistance = Fixed.Zero;
             foreach (var candidate in candidates)
             {
                 var distance = DistanceSquared(candidate.X, candidate.Y, x, y);
-                if (distance < bestDistance) { best = candidate; bestDistance = distance; }
+                if (limit.ContainsStrictly(distance) && (best is null || distance < bestDistance)) { best = candidate; bestDistance = distance; }
             }
             return best;
         }
@@ -1132,7 +1133,7 @@ public sealed class SkirmishAi
             var role = RoleOf(transport.Template);
             if ((role & Role.Transport) == 0 || (role & Role.Army) == 0 || transport.Container is not { ContainCount: > 0 }) continue;
             var arrived = _armyGoal is { } goal && DistanceSquared(transport.X, transport.Y, goal.X, goal.Y) < Fixed.FromInt(90_000);
-            var engaged = _enemyTargets.Any(enemy => DistanceSquared(enemy.X, enemy.Y, transport.X, transport.Y) < EngageRadius * EngageRadius);
+            var engaged = _enemyTargets.Any(enemy => SquaredReach.Of(EngageRadius).ContainsStrictly(DistanceSquared(enemy.X, enemy.Y, transport.X, transport.Y)));
             if (!arrived && !engaged) continue;
             if (Backoff(unchecked(0x82000000u + transport.Id.Value), ShortRetryFrames)) continue;
             if (Send(sequence => new EvacuateCommand(_player, sequence, _tick, transport.Id, false, Fixed.Zero, Fixed.Zero)).Accepted) Stats.Evacuations++;
@@ -1144,13 +1145,14 @@ public sealed class SkirmishAi
             if ((role & Role.Transport) == 0 || (role & Role.Army) == 0 || transport.Container is not { } contain) continue;
             if (contain.ContainMax >= 0 && contain.ContainCount >= contain.ContainMax) continue;
             Entity? pick = null;
-            var best = BoardingReach * BoardingReach;
+            var limit = SquaredReach.Of(BoardingReach);
+            var best = Fixed.Zero;
             foreach (var unit in _units)
             {
                 if (!unit.Template.IsKindOf("INFANTRY") || (RoleOf(unit.Template) & Role.Army) == 0 || unit.Template.TransportSlotCount <= 0) continue;
                 if (_boarding.TryGetValue(unit.Id.Value, out var until) && until > _tick) continue;
                 var distance = DistanceSquared(unit.X, unit.Y, transport.X, transport.Y);
-                if (distance >= best || !contain.IsValidContainerFor(_world, unit, true)) continue;
+                if (!limit.ContainsStrictly(distance) || (pick is not null && distance >= best) || !contain.IsValidContainerFor(_world, unit, true)) continue;
                 best = distance;
                 pick = unit;
             }
@@ -1166,14 +1168,15 @@ public sealed class SkirmishAi
     private (Fixed X, Fixed Y)? FindThreat()
     {
         Entity? nearest = null;
-        var best = DefenseRadius * DefenseRadius;
+        var limit = SquaredReach.Of(DefenseRadius);
+        var best = Fixed.Zero;
         foreach (var enemy in _enemyTargets)
         {
             if (enemy.Template.IsKindOf("STRUCTURE")) continue;
             foreach (var structure in _structures)
             {
                 var distance = DistanceSquared(enemy.X, enemy.Y, structure.X, structure.Y);
-                if (distance >= best) continue;
+                if (!limit.ContainsStrictly(distance) || (nearest is not null && distance >= best)) continue;
                 best = distance;
                 nearest = enemy;
             }

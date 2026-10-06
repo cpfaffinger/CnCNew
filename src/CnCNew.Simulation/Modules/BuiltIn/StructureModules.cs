@@ -289,7 +289,7 @@ public sealed class FireSpreadUpdate(FireSpreadData data) : SimModule, IUpdateMo
 
     private void Spread(IWorldServices world)
     {
-        var limit = data.Range * data.Range;
+        var limit = SquaredReach.Of(data.Range);
         Entity? best = null;
         var bestDistance = Fixed.MaxValue;
         foreach (var other in world.Entities)
@@ -301,7 +301,7 @@ public sealed class FireSpreadUpdate(FireSpreadData data) : SimModule, IUpdateMo
             var dy = other.Y - Entity.Y;
             var dz = other.Z - Entity.Z;
             var distance = dx * dx + dy * dy + dz * dz;
-            if (distance > limit || distance > bestDistance || (distance == bestDistance && best is not null && other.Id.Value > best.Id.Value)) continue;
+            if (!limit.Contains(distance) || distance > bestDistance || (distance == bestDistance && best is not null && other.Id.Value > best.Id.Value)) continue;
             best = other;
             bestDistance = distance;
         }

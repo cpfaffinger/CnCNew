@@ -53,11 +53,11 @@ internal static class AirWeaponModules
         if (sphere > Fixed.Zero)
         {
             var reach = radius + sphere;
-            if (distanceSquared > reach * reach) return false;
+            if (!SquaredReach.Of(reach).Contains(distanceSquared)) return false;
             var shrunk = Fixed.Sqrt(distanceSquared) - sphere;
             shrunkSquared = shrunk > Fixed.Zero ? shrunk * shrunk : Fixed.Zero;
         }
-        return shrunkSquared < radius * radius;
+        return SquaredReach.Of(radius).ContainsStrictly(shrunkSquared);
     }
 
     /// <summary><c>Object::isAirborneTarget</c> as far as it can be known here: flying clearly above the terrain, or flagged so.</summary>
@@ -418,13 +418,13 @@ public sealed class NeutronBlastBehavior(NeutronBlastData data) : SimModule, IUp
 
     public void OnDie(IWorldServices world, in DamageInfo info)
     {
-        var radiusSquared = data.BlastRadius * data.BlastRadius;
+        var radiusSquared = SquaredReach.Of(data.BlastRadius);
         foreach (var candidate in AirWeaponModules.Snapshot(world))
         {
             if (candidate == Entity || candidate.EffectivelyDead) continue;
             var dx = candidate.X - Entity.X;
             var dy = candidate.Y - Entity.Y;
-            if (dx * dx + dy * dy > radiusSquared) continue;
+            if (!radiusSquared.Contains(dx * dx + dy * dy)) continue;
             if (!data.AffectAirborne && (candidate.Template.IsKindOf("AIRCRAFT") || AirWeaponModules.IsAirborne(world, candidate))) continue;
             BlastObject(world, candidate);
         }
@@ -529,7 +529,7 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
         {
             var sphere = Entity.Template.BoundingSphereRadius;
             var distance = AirWeaponModules.Length(_intermediate.X - Entity.X, _intermediate.Y - Entity.Y, _intermediate.Z - Entity.Z);
-            if (distance * distance <= sphere * sphere)
+            if (SquaredReach.Compare(distance, sphere) <= 0)
             {
                 _reachedIntermediate = true;
                 Entity.X = _intermediate.X;
@@ -776,13 +776,13 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
     private void DoBlast(IWorldServices world, NeutronBlast blast)
     {
         if (blast.OuterRadius <= Fixed.Zero) return;
-        var outerSquared = blast.OuterRadius * blast.OuterRadius;
+        var outerSquared = SquaredReach.Of(blast.OuterRadius);
         foreach (var other in AirWeaponModules.Snapshot(world))
         {
             if (other == Entity || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
-            if (dx * dx + dy * dy > outerSquared) continue;
+            if (!outerSquared.Contains(dx * dx + dy * dy)) continue;
             var dz = other.Z - Entity.Z;
             if (Array.Find(other.ModuleArray, module => module is ToppleUpdate) is ToppleUpdate topple) topple.ApplyTopplingForce(world, dx, dy, blast.ToppleSpeed);
             var distance = AirWeaponModules.Length(dx, dy, dz);

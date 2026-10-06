@@ -162,7 +162,7 @@ public sealed partial class SimulationWorld
             {
                 var ddx = other.X - _sampleX[sample];
                 var ddy = other.Y - _sampleY[sample];
-                if (ddx * ddx + ddy * ddy < limit * limit) blocked = true;
+                if (SquaredReach.Of(limit).ContainsStrictly(ddx * ddx + ddy * ddy)) blocked = true;
             }
 
             if (blocked) break;
@@ -172,14 +172,14 @@ public sealed partial class SimulationWorld
         var circles = _stationaryCircles;
         circles.Clear();
         var around = Fixed.FromInt(150);
-        var aroundSquared = around * around;
+        var aroundSquared = SquaredReach.Of(around);
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
             if (!StandsStill(other, mover, goal) || FurtherThan(other.X, mover.X, around) || FurtherThan(other.Y, mover.Y, around)) continue;
             var ddx = other.X - mover.X;
             var ddy = other.Y - mover.Y;
-            if (ddx * ddx + ddy * ddy > aroundSquared) continue;
+            if (!aroundSquared.Contains(ddx * ddx + ddy * ddy)) continue;
             circles.Add((other.X, other.Y, CircleRadius(other) + moverRadius + StandingBlockerMargin));
         }
 
@@ -204,7 +204,7 @@ public sealed partial class SimulationWorld
             if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
             var ddx = other.X - x;
             var ddy = other.Y - y;
-            if (ddx * ddx + ddy * ddy < limit * limit) return true;
+            if (SquaredReach.Of(limit).ContainsStrictly(ddx * ddx + ddy * ddy)) return true;
         }
         return false;
     }
@@ -331,7 +331,7 @@ public sealed partial class SimulationWorld
         if (FurtherThan(a.X, b.X, limit) || FurtherThan(a.Y, b.Y, limit)) return false;
         var dx = a.X - b.X;
         var dy = a.Y - b.Y;
-        return dx * dx + dy * dy <= limit * limit;
+        return SquaredReach.Of(limit).Contains(dx * dx + dy * dy);
     }
 
     /// <summary><c>ToppleUpdate.cpp onCollide</c>: a crusher above level 1 running into a toppable, upright object pushes it over, away from itself.</summary>
@@ -365,7 +365,7 @@ public sealed partial class SimulationWorld
         var limit = CircleRadius(mover) + SquishVictimRadius;
         var dx = other.X - mover.X;
         var dy = other.Y - mover.Y;
-        if (dx * dx + dy * dy > limit * limit) return;
+        if (!SquaredReach.Of(limit).Contains(dx * dx + dy * dy)) return;
         // The position just before this tick's step: a victim this close is "approached" unless the mover was moving away
         // from it even a moment ago.
         var beforeDx = other.X - (mover.X - stepX);

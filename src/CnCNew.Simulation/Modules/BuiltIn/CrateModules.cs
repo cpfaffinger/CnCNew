@@ -231,7 +231,7 @@ public sealed class VeterancyCrateCollide(VeterancyCrateData data) : CrateCollid
                 if (candidate.Owner != other.Owner || candidate.EffectivelyDead || candidate.DestroyRequested) continue;
                 var dx = candidate.X - other.X;
                 var dy = candidate.Y - other.Y;
-                if (dx * dx + dy * dy <= range * range) world.GainExperienceForLevels(candidate, levels, !data.IsPilot);
+                if (SquaredReach.Of(range).Contains(dx * dx + dy * dy)) world.GainExperienceForLevels(candidate, levels, !data.IsPilot);
             }
         }
         if (data.IsPilot) world.Emit(SimEventKind.ObjectNameTransferred, Entity.Id, other.Id, string.Empty, 0);
@@ -614,14 +614,15 @@ public sealed class PilotFindVehicleUpdate(PilotFindVehicleData data) : SimModul
     private Entity? Scan(IWorldServices world)
     {
         Entity? best = null;
-        var bestDistance = data.ScanRange * data.ScanRange;
+        var limit = SquaredReach.Of(data.ScanRange);
+        var bestDistance = Fixed.Zero;
         foreach (var other in world.Entities)
         {
             if (other.Id == Entity.Id || other.Owner != Entity.Owner || other.EffectivelyDead || other.DestroyRequested || !other.Template.IsKindOf("VEHICLE")) continue;
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
             var distance = dx * dx + dy * dy;
-            if (distance > data.ScanRange * data.ScanRange) continue;
+            if (!limit.Contains(distance)) continue;
             if (best is not null && (distance > bestDistance || (distance == bestDistance && other.Id.Value > best.Id.Value))) continue;
             if (other.Body is not { } body || body.Health < body.MaxHealth * data.MinHealth) continue;
             if (!Entity.Modules.Any(module => module is ICollideModule collide && collide.WouldLikeToCollideWith(world, other))) continue;

@@ -89,14 +89,14 @@ public sealed partial class ScriptEngine
     /// <summary><c>getClosestObject(visionRange, ALLOW_ENEMIES, alive)</c> for one member: any enemy object inside its vision range.</summary>
     private bool EnemyInSight(Entity member)
     {
-        var limit = member.Template.VisionRange * member.Template.VisionRange;
+        var limit = SquaredReach.Of(member.Template.VisionRange);
         if (_world.RelationshipOverride is not null)
         {
             // A script set a relation between teams: whether two objects are enemies is then a question per pair of objects.
             foreach (var entity in _world.Entities)
             {
                 if (entity.Owner.IsSystem || entity.EffectivelyDead || entity.DestroyRequested || !_world.AreEnemies(member, entity)) continue;
-                if (DistanceSquared(member, entity.X, entity.Y) <= limit) return true;
+                if (limit.Contains(DistanceSquared(member, entity.X, entity.Y))) return true;
             }
             return false;
         }
@@ -108,7 +108,7 @@ public sealed partial class ScriptEngine
             foreach (var entity in _world.EntitiesOwnedBy(player.Id).AsSpan())
             {
                 if (entity.EffectivelyDead || entity.DestroyRequested) continue;
-                if (DistanceSquared(member, entity.X, entity.Y) <= limit) return true;
+                if (limit.Contains(DistanceSquared(member, entity.X, entity.Y))) return true;
             }
         }
         return false;

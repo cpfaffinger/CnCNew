@@ -135,13 +135,13 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
             if (carrier.ContainedBy.IsValid) return;
         }
         var found = new List<Entity>();
-        var reach = data.Radius * data.Radius;
+        var reach = SquaredReach.Of(data.Radius);
         foreach (var candidate in world.Entities)
         {
             if (candidate.EffectivelyDead || candidate.DestroyRequested || candidate.ContainedBy.IsValid || candidate.Template.IsKindOf("STRUCTURE")) continue;
             if (candidate.Id == Entity.Id && !data.AffectsSelf) continue;
             if (candidate.Id != Entity.Id && world.RelationshipOf(Entity.Owner, candidate.Owner) != Relationship.Allies) continue;
-            if (SlaveSupport.CenterDistanceSquared2D(Entity, candidate) > reach) continue;
+            if (!reach.Contains(SlaveSupport.CenterDistanceSquared2D(Entity, candidate))) continue;
             found.Add(candidate);
         }
         found.Sort((a, b) => a.Id.Value.CompareTo(b.Id.Value));
@@ -379,7 +379,7 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
             var dy = other.Y - Entity.Y;
             var dz = other.Z - Entity.Z;
             var reach = DislodgeReach + Entity.Template.BoundingSphereRadius + other.Template.BoundingSphereRadius;
-            if (dx * dx + dy * dy + dz * dz <= reach * reach) tensile.Dislodge();
+            if (SquaredReach.Of(reach).Contains(dx * dx + dy * dy + dz * dz)) tensile.Dislodge();
         }
         foreach (var (id, _, _, _) in _links)
             if (world.FindEntity(id) is { } linked && TensileOf(linked) is { } tensile) tensile.Dislodge();

@@ -87,7 +87,7 @@ internal sealed partial class ObjectiveDriver
             }
             if (nearest is null) continue;
             _assaults[unit.Id.Value] = nearest.Id.Value;
-            if (best <= range * range || (_agent is not null && _agent.LeadsUnit(unit))) continue;
+            if (SquaredReach.Of(range).Contains(best) || (_agent is not null && _agent.LeadsUnit(unit))) continue;
             any |= SendAttackMove(unit, (nearest.X, nearest.Y));
         }
         return any;

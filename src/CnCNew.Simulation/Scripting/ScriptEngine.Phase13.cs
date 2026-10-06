@@ -337,7 +337,7 @@ public sealed partial class ScriptEngine
             }
             var dx = member.X - target.X;
             var dy = member.Y - target.Y;
-            if (dx * dx + dy * dy <= reach * reach)
+            if (SquaredReach.Of(reach).Contains(dx * dx + dy * dy))
             {
                 if (_world.TransferOwnership(target.Id, member.Owner)) { _unmanned.Remove(targetId); target.Captured = true; }
                 foreach (var key in _captureOrders.Where(pair => pair.Value == targetId).Select(pair => pair.Key).ToArray()) _captureOrders.Remove(key);
@@ -438,7 +438,7 @@ public sealed partial class ScriptEngine
                 if (dock.Boxes * valuePerBox < minimumCash) continue;
                 if (!warehouse.Owner.IsSystem && _world.AreEnemies(player, warehouse.Owner)) continue;
                 var radius = closeDistance + warehouse.Template.BoundingCircleRadius;
-                if (_world.Entities.Any(entity => entity.Owner == player && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && Distance2(entity, warehouse.X, warehouse.Y) <= radius * radius)) continue;
+                if (_world.Entities.Any(entity => entity.Owner == player && !entity.EffectivelyDead && entity.Template.IsKindOf("CASH_GENERATOR") && SquaredReach.Of(radius).Contains(Distance2(entity, warehouse.X, warehouse.Y)))) continue;
                 var distance = Distance2(warehouse, baseCentre.X, baseCentre.Y);
                 if (enemyCentre is { } centre && distance * Fixed.FromDecimal(0.4m) > Distance2(warehouse, centre.X, centre.Y) * Fixed.FromDecimal(0.6m)) continue;
                 if (best is null || bestDistance > distance) { best = warehouse; bestDistance = distance; }
@@ -779,7 +779,7 @@ public sealed partial class ScriptEngine
         var farthest = area.Points.Max(point => (Fixed.FromInt(point.X) - centreX) * (Fixed.FromInt(point.X) - centreX) + (Fixed.FromInt(point.Y) - centreY) * (Fixed.FromInt(point.Y) - centreY));
         var reach = Fixed.Sqrt(farthest) + Fixed.FromInt(distance);
         var best = Fixed.Zero;
-        foreach (var warehouse in _world.Entities.Where(entity => entity.Template.IsKindOf("STRUCTURE") && entity.Owner.IsSystem && !entity.EffectivelyDead && Distance2(entity, centreX, centreY) <= reach * reach))
+        foreach (var warehouse in _world.Entities.Where(entity => entity.Template.IsKindOf("STRUCTURE") && entity.Owner.IsSystem && !entity.EffectivelyDead && SquaredReach.Of(reach).Contains(Distance2(entity, centreX, centreY))))
             if (warehouse.Modules.OfType<SupplyWarehouseDockUpdate>().FirstOrDefault() is { } dock) best = Fixed.Max(best, Fixed.FromInt((long)_world.ValuePerSupplyBox * dock.Boxes));
         return best > Fixed.FromDecimal(value);
     }
@@ -821,7 +821,7 @@ public sealed partial class ScriptEngine
         // PolygonTrigger::getRadius: the largest distance of a corner from the centre.
         var farthest = area.Points.Max(point => (Fixed.FromInt(point.X) - centreX) * (Fixed.FromInt(point.X) - centreX) + (Fixed.FromInt(point.Y) - centreY) * (Fixed.FromInt(point.Y) - centreY));
         var reach = Fixed.Sqrt(farthest) + Fixed.FromInt(distance);
-        var found = _world.Entities.Any(entity => entity.Template.IsKindOf("TECH_BUILDING") && CountsAsObject(entity) && entity.Owner != player.Id && !_world.AreAllies(player.Id, entity.Owner) && Distance2(entity, centreX, centreY) <= reach * reach);
+        var found = _world.Entities.Any(entity => entity.Template.IsKindOf("TECH_BUILDING") && CountsAsObject(entity) && entity.Owner != player.Id && !_world.AreAllies(player.Id, entity.Owner) && SquaredReach.Of(reach).Contains(Distance2(entity, centreX, centreY)));
         _techBuildingAnswers[key] = found;
         return found;
     }
@@ -833,7 +833,7 @@ public sealed partial class ScriptEngine
         var radius = Fixed.FromDecimal(SupplyCenterSafeRadius) + warehouse.Template.BoundingCircleRadius;
         return !_world.Entities.Any(entity => !entity.Owner.IsSystem && entity.Owner != player && _world.AreEnemies(player, entity.Owner) && CountsAsObject(entity) && !entity.EffectivelyDead
                                               && !entity.Template.IsKindOf("HARVESTER") && !entity.Template.IsKindOf("DOZER") && !IsHiddenByStealth(entity)
-                                              && Distance2(entity, warehouse.X, warehouse.Y) <= (radius + entity.Template.BoundingCircleRadius) * (radius + entity.Template.BoundingCircleRadius));
+                                              && SquaredReach.Of(radius + entity.Template.BoundingCircleRadius).Contains(Distance2(entity, warehouse.X, warehouse.Y)));
     }
 
     private bool SupplySourceAttacked(PlayerId player)

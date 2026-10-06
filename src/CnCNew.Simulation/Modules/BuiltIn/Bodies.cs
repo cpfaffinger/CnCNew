@@ -158,7 +158,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         MaxHealth = newMax;
         Health = changeType.ToUpperInvariant() switch
         {
-            "PRESERVE_RATIO" => oldMax > Fixed.Zero ? Fixed.Min(newMax, Health * newMax / oldMax) : Health,
+            "PRESERVE_RATIO" => oldMax > Fixed.Zero ? Fixed.Min(newMax, Fixed.MultiplyDivide(Health, newMax, oldMax)) : Health,
             "ADD_CURRENT_HEALTH_TOO" => Fixed.Min(newMax, Health + delta),
             "FULLY_HEAL" => newMax,
             _ => Fixed.Min(Health, newMax), // SAME_CURRENTHEALTH
