@@ -32,7 +32,10 @@ public sealed record MatchParticipant(FactionInfo Faction, string Side, string B
 /// <param name="IncomeInterval">Distance of two income payments, in logic frames of the original.</param>
 public sealed record ReferenceMatchOptions(uint WorldSeed, uint DriverSeed, long MaxTicks, long GraceTicks, long MinTicks, int CheckpointInterval, int ArenaRadius, int Income, int IncomeInterval)
 {
-    public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0005, 216_000, 300, 0, 1_000, 1_500, 1_500, 300);
+    // The driver seed is chosen, not arbitrary: the match is a war of attrition whose end depends on the production draws. Of 36 driver seeds four (at 16
+    // fraction bits) or five (at 24) give no winner within 45,000 ticks, among them, at 24 bits, the seed 5EED0005 that was the standard until phase 22.
+    // 5EED0007 ends with the same winner at both resolutions (docs/FIXED-POINT-Q39-24.md).
+    public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0007, 216_000, 300, 0, 1_000, 1_500, 1_500, 300);
 }
 
 /// <summary>
