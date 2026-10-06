@@ -6,11 +6,12 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
 {
-    // Speed etc. are per-second (SimulationTiming.LogicFramesPerSecond = 30 ticks/second): 300/sec = 10 world units/tick.
+    // Speed etc. are per-second (SimulationRate.OriginalFramesPerSecond = 30 ticks/second): 300/sec = 10 world units/tick.
     private const string CollisionLoco = """
           Surfaces = GROUND
           TurnRate = 99999.0
@@ -263,7 +264,7 @@ static partial class Tests
         """,
     };
 
-    private static readonly SyntheticFixture CollisionFixture = new(files: CollisionFiles());
+    private static readonly SyntheticFixture CollisionFixture = new(SimulationRate.Original, files: CollisionFiles());
 
     private static TerrainMap CollisionTerrain(int cells = 30, Func<int, int, int>? height = null)
         => TerrainMap.Build(SyntheticMaps.Build(cells, cells, 1, height ?? ((_, _) => 0)), "collision");
@@ -271,7 +272,7 @@ static partial class Tests
     private static (SimulationWorld World, Feeder Feeder) CollisionWorld(TerrainMap? terrain = null)
     {
         var map = terrain ?? CollisionTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, CollisionFixture.Fingerprint, map.Fingerprint), CollisionFixture.Templates, map);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, CollisionFixture.Fingerprint, map.Fingerprint), CollisionFixture.Templates, map);
         return (world, new Feeder(world));
     }
 

@@ -10,6 +10,7 @@ using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Game.Tests;
 
@@ -174,7 +175,7 @@ internal static class CampaignTests
 
     private static (MissionContext Context, CampaignCatalog Catalog, CampaignDefinition Campaign, SyntheticFixture Fixture) SyntheticCampaign()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var maps = new Dictionary<string, MapData>(StringComparer.OrdinalIgnoreCase)
         {
             ["Maps/One/One.map"] = SyntheticMap(WinAndLose),

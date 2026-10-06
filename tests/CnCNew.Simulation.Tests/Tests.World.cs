@@ -11,6 +11,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Random;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.Timers;
 using CnCNew.Simulation.World;
 
@@ -136,13 +137,13 @@ static partial class Tests
     private static readonly ImmutableArray<PlayerConfiguration> TwoPlayers = [new(new PlayerId(1), "Alpha"), new(new PlayerId(2), "Beta")];
 
     public static SimulationWorld NewWorld(SyntheticFixture fixture, uint seed = 1)
-        => new(new WorldConfiguration(new WorldId(1), seed, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        => new(new WorldConfiguration(new WorldId(1), SimulationRate.Original, seed, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
 
     private static string Describe(SimEvent simEvent) => $"{simEvent.Kind}:{simEvent.Entity}:{simEvent.Text}:{simEvent.Value}";
 
     public static void Lifecycle()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         Check.That(world.Tick == 0 && world.Metrics.Entities == 0, "A new world is empty at tick 0.");
@@ -177,7 +178,7 @@ static partial class Tests
 
     public static void BodyAndDieModules()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         foreach (var template in new[] { "Tank", "Building", "Ghost", "Highlander", "Prop", "Sleeper" }) feeder.Spawn(1, template);
@@ -264,7 +265,7 @@ static partial class Tests
 
     public static void LifetimeAndDeletion()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         const uint seed = 4242;
         var world = NewWorld(fixture, seed);
         var feeder = new Feeder(world);
@@ -293,7 +294,7 @@ static partial class Tests
         {
             ["Data/INI/Object/Zero.ini"] = "Object Zero\n  Behavior = DeletionUpdate D\n    MinLifetime = 0\n    MaxLifetime = 0\n  End\nEnd\nObject Forever\n  Behavior = DeletionUpdate D\n    MinLifetime = -1\n    MaxLifetime = -1\n  End\nEnd\n",
         };
-        var custom = new SyntheticFixture(files: files);
+        var custom = new SyntheticFixture(SimulationRate.Original, files: files);
         var zeroWorld = NewWorld(custom, 9);
         var zeroFeeder = new Feeder(zeroWorld);
         zeroFeeder.Spawn(1, "Zero");
@@ -313,7 +314,7 @@ static partial class Tests
                 new FieldSchema("FirstWake", FieldType.Integer), new FieldSchema("Sleep", FieldType.Integer), new FieldSchema("DestroyTarget", FieldType.Integer),
                 new FieldSchema("DestroyAtTick", FieldType.Integer), new FieldSchema("EmitAtTick", FieldType.Integer),
             ], false, null, ModuleCategory.Simulation)));
-        static long Field(ModuleConfiguration configuration, string name, long fallback)
+        static long Field(RatedModuleConfiguration configuration, string name, long fallback)
             => configuration.Fields.FirstOrDefault(field => field.Name == name)?.Value.Value is long value ? value : fallback;
         var probe = new ModuleBinding<ProbeData>("ProbeModule", ModuleOwnerKind.Object,
             (configuration, _) => new ProbeData(Field(configuration, "FirstWake", 0), Field(configuration, "Sleep", CnCNew.Simulation.Time.SimulationTiming.SleepForever),
@@ -368,7 +369,7 @@ static partial class Tests
             End
             """,
         };
-        var fixture = new SyntheticFixture(bindings, files);
+        var fixture = new SyntheticFixture(SimulationRate.Original, bindings, files);
         return (NewWorld(fixture), log, fixture);
     }
 
@@ -423,7 +424,7 @@ static partial class Tests
 
     public static void TimerBehaviour()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Barrel");
@@ -478,7 +479,7 @@ static partial class Tests
 
     public static void CommandValidationAndOrder()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var world = NewWorld(fixture);
         // Execution order is (player id, sequence) regardless of submission order.
         var p1 = new PlayerId(1);

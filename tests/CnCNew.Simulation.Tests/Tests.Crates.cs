@@ -5,6 +5,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -99,9 +100,9 @@ static partial class Tests
 
     public static void Phase5CreateCrateDie()
     {
-        var fixture = new SyntheticFixture(files: CrateFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: CrateFiles());
         ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha", "TestFaction"), new(new PlayerId(2), "Beta")];
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 7, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         var feeder = new Feeder(world);
 
         Check.That(world.Crates.Crates.Length == 5, "The catalog holds every CrateData definition.");

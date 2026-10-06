@@ -177,7 +177,7 @@ internal static class ReferenceManifest
         .Add("commandTableVersion", CommandTypes.Version)
         .Add("missionSnapshotVersion", MissionSnapshot.Version)
         .Add("replayFormatVersion", ReplayFormat.CurrentVersion)
-        .Add("tickRate", SimulationTiming.LogicFramesPerSecond)
+        .Add("tickRate", ToolRate.Manifest.TicksPerSecond)
         .Add("worldSnapshotVersion", WorldSnapshot.Version);
 
     private static int Write(string path, List<RunSpec> selected, Dictionary<string, RunOutcome> outcomes, ManifestObject unavailable)
@@ -292,7 +292,7 @@ internal static class ReferenceManifest
     {
         var plan = new List<RunSpec>();
         unavailable = new ManifestObject();
-        var rate = (long)SimulationTiming.LogicFramesPerSecond;
+        var rate = (long)ToolRate.Manifest.TicksPerSecond;
 
         var reference = ReferenceMatchOptions.Standard;
         plan.Add(Single("reference-match", true, "reference-match", new ManifestObject()
@@ -508,7 +508,7 @@ internal static class ReferenceManifest
 
     private static JobResult StressJob(StressOptions options, VerifyMode verify)
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(ToolRate.Manifest);
         var scenario = new StressScenario(options);
         var recorded = scenario.Record(fixture);
         var verifier = new IncrementalVerifier(verify, StressVerifyInterval);

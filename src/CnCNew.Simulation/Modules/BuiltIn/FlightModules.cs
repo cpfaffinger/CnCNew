@@ -71,7 +71,7 @@ internal static class FlightModules
 public sealed record JetSlowDeathData(SlowDeathData Base, string FxOnGroundDeath, string OclOnGroundDeath, string FxInitialDeath, string OclInitialDeath, long DelaySecondaryTicks,
     string FxSecondary, string OclSecondary, string FxHitGround, string OclHitGround, long DelayFinalBlowUpTicks, string FxFinalBlowUp, string OclFinalBlowUp, Fixed FallHowFast) : ModuleData
 {
-    public static JetSlowDeathData Parse(ModuleConfiguration configuration) => new(
+    public static JetSlowDeathData Parse(RatedModuleConfiguration configuration) => new(
         SlowDeathData.Parse(configuration),
         ModuleConfigReader.Text(configuration, "FXOnGroundDeath"), ModuleConfigReader.Text(configuration, "OCLOnGroundDeath"),
         ModuleConfigReader.Text(configuration, "FXInitialDeath"), ModuleConfigReader.Text(configuration, "OCLInitialDeath"),
@@ -215,7 +215,7 @@ public interface ICountermeasuresModule
 public sealed record CountermeasuresData(UpgradeMuxData UpgradeMux, string FlareTemplate, Fixed EvasionRate, int VolleySize, Fixed VolleyArcRadians, Fixed VolleyVelocityFactor,
     long TicksBetweenVolleys, int NumberOfVolleys, long ReloadTicks, long MissileDecoyTicks, long ReactionTicks) : ModuleData
 {
-    public static CountermeasuresData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
+    public static CountermeasuresData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
         UpgradeMuxData.Parse(configuration, upgrades),
         ModuleConfigReader.Text(configuration, "FlareTemplateName"),
         ModuleConfigReader.Real(configuration, "EvasionRate", Fixed.Zero),
@@ -384,7 +384,7 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
             var ratio = size == 1 ? Fixed.Zero : Fixed.FromInt(index) / Fixed.FromInt(size - 1) * Fixed.FromInt(2) - Fixed.One;
             var angle = FixedTrig.Normalize(Entity.Angle + ratio * data.VolleyArcRadians);
             // "if velocity < 1 then -10": a parked plane throws its flares backwards.
-            var speed = Entity.Speed * Fixed.FromInt(SimulationTiming.LogicFramesPerSecond) < Fixed.One ? -Fixed.FromInt(10) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond) : Entity.Speed;
+            var speed = Entity.Speed * world.Time.TicksPerSecondFixed < Fixed.One ? -Fixed.FromInt(10) / world.Time.TicksPerSecondFixed : Entity.Speed;
             var id = world.RequestSpawn(template.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
             _flares.Add(new Flare(id, now, FixedTrig.Cos(angle) * speed * data.VolleyVelocityFactor, FixedTrig.Sin(angle) * speed * data.VolleyVelocityFactor));
             _available--;
@@ -437,7 +437,7 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
 /// </summary>
 public sealed record ParachuteData(OpenContainData Base, Fixed OpenDistance, Fixed FreeFallDamagePercent, Fixed WaterSlop) : ModuleData
 {
-    public static ParachuteData Parse(ModuleConfiguration configuration) => new(
+    public static ParachuteData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, []),
         ModuleConfigReader.Real(configuration, "ParachuteOpenDist", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "FreeFallDamagePercent", Fixed.FromDecimal(0.5m)),
@@ -635,7 +635,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
 /// </summary>
 public sealed record DeliverPayloadData(AIUpdateData Base, long DoorDelayTicks, string PutInContainer, Fixed DeliveryDistance, int MaxAttempts, long DropDelayTicks, Point3 DropOffset, Point3 DropVariance) : ModuleData
 {
-    public static DeliverPayloadData Parse(ModuleConfiguration configuration) => new(
+    public static DeliverPayloadData Parse(RatedModuleConfiguration configuration) => new(
         AIUpdateData.Parse(configuration),
         ModuleConfigReader.Ticks(configuration, "DoorDelay", 0),
         ModuleConfigReader.Text(configuration, "PutInContainer"),
@@ -1055,7 +1055,7 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
     long TotalFiringTicks, Fixed SwathDistance, Fixed SwathAmplitude, long TotalScorchMarks, int TotalDamagePulses, Fixed DamagePerSecond, int DamageType, int DeathType, Fixed DamageRadiusScalar,
     Fixed ManualDrivingSpeed, Fixed ManualFastDrivingSpeed = default, long BeginChargeTicks = 0, long RaiseAntennaTicks = 0, long ReadyDelayTicks = 0) : ModuleData
 {
-    public static ParticleUplinkData Parse(ModuleConfiguration configuration)
+    public static ParticleUplinkData Parse(RatedModuleConfiguration configuration)
     {
         var damageType = ModuleConfigReader.Text(configuration, "DamageType");
         var deathType = ModuleConfigReader.Text(configuration, "DeathType");
@@ -1068,8 +1068,8 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
             ModuleConfigReader.Real(configuration, "DamagePerSecond", Fixed.Zero),
             damageType.Length == 0 ? DamageTypes.Explosion : NameTables.DamageType.TryIndexOf(damageType, out var damageIndex) ? damageIndex : throw new InvalidDataException($"Unknown damage type '{damageType}'."),
             deathType.Length == 0 ? DeathTypes.Normal : NameTables.DeathType.TryIndexOf(deathType, out var deathIndex) ? deathIndex : throw new InvalidDataException($"Unknown death type '{deathType}'."),
-            ModuleConfigReader.Real(configuration, "DamageRadiusScalar", Fixed.Zero), ModuleConfigReader.Real(configuration, "ManualDrivingSpeed", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond),
-            ModuleConfigReader.Real(configuration, "ManualFastDrivingSpeed", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond),
+            ModuleConfigReader.Real(configuration, "DamageRadiusScalar", Fixed.Zero), ModuleConfigReader.Real(configuration, "ManualDrivingSpeed", Fixed.Zero) / configuration.Time.TicksPerSecondFixed,
+            ModuleConfigReader.Real(configuration, "ManualFastDrivingSpeed", Fixed.Zero) / configuration.Time.TicksPerSecondFixed,
             ModuleConfigReader.Ticks(configuration, "BeginChargeTime", 0), ModuleConfigReader.Ticks(configuration, "RaiseAntennaTime", 0), ModuleConfigReader.Ticks(configuration, "ReadyDelayTime", 0));
     }
 }
@@ -1310,7 +1310,7 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     /// <summary>One damage pulse: every living object with a body within <paramref name="radius"/> (2D from its centre) takes the pulse's share of <c>TotalFiringTime · DamagePerSecond</c>.</summary>
     private void Pulse(IWorldServices world, Fixed radius)
     {
-        var seconds = Fixed.FromInt(data.TotalFiringTicks) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+        var seconds = Fixed.FromInt(data.TotalFiringTicks) / world.Time.TicksPerSecondFixed;
         var amount = seconds * data.DamagePerSecond / Fixed.FromInt(data.TotalDamagePulses);
         var limit = radius * radius;
         foreach (var entity in world.Entities.OrderBy(value => value.Id.Value).ToArray())

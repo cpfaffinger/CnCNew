@@ -359,7 +359,7 @@ public sealed partial class ScriptEngine
             if (_world.FindEntity(new EntityId(id)) is not { DestroyRequested: false, EffectivelyDead: false } hunter) { _buttonHunts.Remove(id); _buttonHuntNext.Remove(id); continue; }
             if (_tick < _buttonHuntNext.GetValueOrDefault(id)) continue;
             var data = hunter.ModuleArray.OfType<CommandButtonHuntUpdate>().First().Data;
-            _buttonHuntNext[id] = _tick + Math.Max(data.ScanTicks, SimulationTiming.LogicFramesPerSecond);
+            _buttonHuntNext[id] = _tick + Math.Max(data.ScanTicks, _world.Time.TicksPerSecond);
             if (Marching(hunter) || _busyThisTick.Contains(id)) continue;
             var range = data.ScanRange <= Fixed.Zero ? Fixed.FromInt(9999) : data.ScanRange;
             var limit = range * range;

@@ -28,7 +28,7 @@ internal static class RailroadModules
 public sealed record RailroadData(bool IsLocomotive, ImmutableArray<string> Carriages, Fixed RunningGarrisonSpeedMax, Fixed KillSpeedMin, Fixed SpeedMax, Fixed Acceleration, Fixed Braking, Fixed Friction,
     long WaitAtStationTicks) : ModuleData
 {
-    public static RailroadData Parse(ModuleConfiguration configuration) => new(
+    public static RailroadData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Bool(configuration, "IsLocomotive", false), ModuleConfigReader.AccumulatedNames(configuration, "CarriageTemplateName"),
         ModuleConfigReader.Real(configuration, "RunningGarrisonSpeedMax", Fixed.One), ModuleConfigReader.Real(configuration, "KillSpeedMin", Fixed.One),
         ModuleConfigReader.Real(configuration, "SpeedMax", Fixed.FromInt(4)), ModuleConfigReader.Real(configuration, "Acceleration", Fixed.FromDecimal(1.01m)),

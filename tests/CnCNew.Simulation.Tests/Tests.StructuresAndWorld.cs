@@ -12,6 +12,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>The structures-and-world module group: upgrade die, collapsing buildings, burning trees, deploy-style units, trains, traps and mines, bridges and the world effect modules.</summary>
@@ -674,9 +675,9 @@ static partial class Tests
     {
         public StructuresWorld(bool lake = false)
         {
-            Fixture = new SyntheticFixture(files: StructuresFiles());
+            Fixture = new SyntheticFixture(SimulationRate.Original, files: StructuresFiles());
             Terrain = StructuresTerrain(lake);
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, StructuresPlayers, SyntheticFixture.FixtureId, Fixture.Fingerprint, Terrain.Fingerprint), Fixture.Templates, Terrain);
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, StructuresPlayers, SyntheticFixture.FixtureId, Fixture.Fingerprint, Terrain.Fingerprint), Fixture.Templates, Terrain);
             Feeder = new Feeder(World);
         }
 
@@ -1284,7 +1285,7 @@ static partial class Tests
         var content = CnCNew.Content.ContentFileSystem.Open(directory);
         var options = CnCNew.Data.Compilation.DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = CnCNew.Data.Compilation.MapOverlayMode.Exclude };
         var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new RealSource(content), CnCNew.Data.Registry.ModuleRegistry.Default, options);
-        var catalog = CnCNew.Simulation.Templates.TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default);
+        var catalog = CnCNew.Simulation.Templates.TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var carriers = catalog.Templates.Where(template => template.Modules.Any(module => StructureGroupModules.Contains(module.Name)) || template.MissingModules.Any(module => StructureGroupModules.Contains(module))).ToArray();
         var refused = carriers.Where(template => template.MissingModules.Any(module => StructureGroupModules.Any(name => module.Contains(name, StringComparison.Ordinal)))).ToArray();
@@ -1300,7 +1301,7 @@ static partial class Tests
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
         (ulong[] Hashes, int Collapsed, int Collapsing) Run()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 11, players, "real-structures", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 11, players, "real-structures", fingerprint), catalog);
             var sequence = 0UL;
             var column = 0;
             foreach (var template in spawnable)
@@ -1329,7 +1330,7 @@ static partial class Tests
         var terrain = StructuresTerrain();
         TrainRun RunTrain()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(2), 3, players, "real-train", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(2), SimulationRate.Original, 3, players, "real-train", fingerprint, terrain.Fingerprint), catalog, terrain);
             Check.That(world.Submit(new SpawnCommand(PlayerId.System, 1, world.Tick, "TrainEngine", PlayerId.System, Fixed.FromInt(60), Fixed.FromInt(100), Fixed.Zero, Fixed.Zero)).Accepted, "The retail locomotive spawns.");
             var hashes = new List<ulong>();
             var seen = 0;

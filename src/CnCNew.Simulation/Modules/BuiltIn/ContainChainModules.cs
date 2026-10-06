@@ -76,7 +76,7 @@ internal static class ContainChainModules
 /// <summary><c>InternetHackContainModuleData</c> = <c>TransportContainModuleData</c> (<c>InternetHackContain.cpp</c> adds no field) plus the initial <c>PassengersAllowedToFire</c> flag.</summary>
 public sealed record InternetHackContainData(TransportContainData Transport, bool PassengersAllowedToFire) : ModuleData
 {
-    public static InternetHackContainData Parse(ModuleConfiguration configuration)
+    public static InternetHackContainData Parse(RatedModuleConfiguration configuration)
         => new(TransportContainData.Parse(configuration), ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false));
 }
 
@@ -131,7 +131,7 @@ public sealed record RiderInfo(string TemplateName, string ModelCondition, strin
 /// </summary>
 public sealed record RiderChangeContainData(TransportContainData Transport, bool PassengersAllowedToFire, ImmutableArray<RiderInfo> Riders, long ScuttleTicks, string InitialPayload, int InitialPayloadCount) : ModuleData
 {
-    public static RiderChangeContainData Parse(ModuleConfiguration configuration)
+    public static RiderChangeContainData Parse(RatedModuleConfiguration configuration)
     {
         var riders = ImmutableArray.CreateBuilder<RiderInfo>();
         for (var slot = 1; slot <= 8; slot++)
@@ -298,7 +298,7 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
 /// </summary>
 public sealed record OverlordContainData(TransportContainData Transport, bool PassengersAllowedToFire, ImmutableArray<string> Payload, bool ExperienceSinkForRider) : ModuleData
 {
-    public static OverlordContainData Parse(ModuleConfiguration configuration) => new(
+    public static OverlordContainData Parse(RatedModuleConfiguration configuration) => new(
         TransportContainData.Parse(configuration), ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
         ModuleConfigReader.AccumulatedNames(configuration, "PayloadTemplateName"), ModuleConfigReader.Bool(configuration, "ExperienceSinkForRider", true));
 }

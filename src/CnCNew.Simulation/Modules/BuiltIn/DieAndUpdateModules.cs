@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// </summary>
 public sealed record DieMuxData(uint DeathTypes, uint VeterancyLevels, ulong ExemptStatus, ulong RequiredStatus)
 {
-    public static DieMuxData Parse(ModuleConfiguration configuration) => new(
+    public static DieMuxData Parse(RatedModuleConfiguration configuration) => new(
         Mask(ModuleConfigReader.Flags(configuration, "DeathTypes"), NameTables.DeathType, uint.MaxValue),
         Mask(ModuleConfigReader.Flags(configuration, "VeterancyLevels"), NameTables.Veterancy, uint.MaxValue),
         ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "ExemptStatus"), NameTables.ObjectStatus),
@@ -46,7 +46,7 @@ public abstract class DieModuleBase(DieMuxData mux) : SimModule, IDieModule
 
 public sealed record PlainDieData(DieMuxData Mux) : DieData(Mux)
 {
-    public static PlainDieData Parse(ModuleConfiguration configuration) => new(DieMuxData.Parse(configuration));
+    public static PlainDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration));
 }
 
 /// <summary><c>DestroyDie</c>: removes the entity at the end of the tick when the die filter applies.</summary>
@@ -69,7 +69,7 @@ public sealed class KeepObjectDie(PlainDieData data) : DieModuleBase(data.Mux)
 
 public sealed record CreateObjectDieData(DieMuxData Mux, string CreationList, bool TransferPreviousHealth) : DieData(Mux)
 {
-    public static CreateObjectDieData Parse(ModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
+    public static CreateObjectDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
         ModuleConfigReader.Text(configuration, "CreationList"), ModuleConfigReader.Bool(configuration, "TransferPreviousHealth", false));
 }
 
@@ -90,7 +90,7 @@ public sealed class CreateObjectDie(CreateObjectDieData data) : DieModuleBase(da
 
 public sealed record FxListDieData(DieMuxData Mux, string DeathFx, bool OrientToObject, bool StartsActive) : DieData(Mux)
 {
-    public static FxListDieData Parse(ModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
+    public static FxListDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
         ModuleConfigReader.Text(configuration, "DeathFX"), ModuleConfigReader.Bool(configuration, "OrientToObject", false),
         // FXListDieModuleData sets m_initiallyActive = TRUE: the reference documents that only one of 847 uses turns it off.
         ModuleConfigReader.Bool(configuration, "StartsActive", true));
@@ -119,7 +119,7 @@ public sealed class FxListDie(FxListDieData data) : DieModuleBase(data.Mux)
 
 public sealed record InstantDeathData(DieMuxData Mux, ImmutableArray<string> Fx, ImmutableArray<string> CreationLists, ImmutableArray<string> Weapons) : DieData(Mux)
 {
-    public static InstantDeathData Parse(ModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
+    public static InstantDeathData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
         ModuleConfigReader.Names(configuration, "FX"), ModuleConfigReader.Names(configuration, "OCL"), ModuleConfigReader.Names(configuration, "Weapon"));
 }
 
@@ -148,7 +148,7 @@ public sealed class InstantDeathBehavior(InstantDeathData data) : DieModuleBase(
 
 public sealed record LifetimeData(long MinTicks, long MaxTicks) : ModuleData
 {
-    public static LifetimeData Parse(ModuleConfiguration configuration) => new(
+    public static LifetimeData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "MinLifetime", 0), ModuleConfigReader.Ticks(configuration, "MaxLifetime", 0));
 }
 

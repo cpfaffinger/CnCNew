@@ -58,7 +58,7 @@ public sealed class StressScenario
     /// <summary>Records the command stream by running a world with the generator attached. Checkpoints are added by a second run.</summary>
     public ReplayFile Record(SyntheticFixture fixture)
     {
-        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, SimulationTiming.LogicFramesPerSecond, fixture.Fingerprint,
+        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, fixture.Rate.TicksPerSecond, fixture.Fingerprint,
             SyntheticFixture.FixtureId, _options.WorldSeed, new WorldId(1), Players, _options.Ticks, _options.CheckpointInterval);
         var world = ReplayRunner.CreateWorld(header, fixture.Templates);
         while (world.Tick < _options.Ticks)

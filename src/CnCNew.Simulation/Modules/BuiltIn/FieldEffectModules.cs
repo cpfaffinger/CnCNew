@@ -27,7 +27,7 @@ internal static class FieldEffectModules
 /// </summary>
 public sealed record PropagandaTowerData(Fixed Radius, long ScanDelayTicks, Fixed HealPerSecond, Fixed UpgradedHealPerSecond, string UpgradeRequired, bool AffectsSelf) : ModuleData
 {
-    public static PropagandaTowerData Parse(ModuleConfiguration configuration) => new(
+    public static PropagandaTowerData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Real(configuration, "Radius", Fixed.One),
         ModuleConfigReader.Ticks(configuration, "DelayBetweenUpdates", 100),
         ModuleConfigReader.Real(configuration, "HealPercentEachSecond", Fixed.FromDecimal(0.01m)),
@@ -165,7 +165,7 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
             }
         }
         if (target.Body is not { } body) return;
-        var amount = (upgraded ? data.UpgradedHealPerSecond : data.HealPerSecond) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond) * body.MaxHealth;
+        var amount = (upgraded ? data.UpgradedHealPerSecond : data.HealPerSecond) / world.Time.TicksPerSecondFixed * body.MaxHealth;
         // Healing does not stack: another tower that healed this object recently keeps it.
         foreach (var other in _others)
             if (other.HoldsClaim(target.Id, world.Tick)) return;
@@ -256,7 +256,7 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
 /// <summary><c>TensileFormationUpdateModuleData</c> (<c>TensileFormationUpdate.cpp</c>): whether the formation already moves (<c>Enabled</c>, default no); the crack sound is presentation.</summary>
 public sealed record TensileFormationData(bool Enabled) : ModuleData
 {
-    public static TensileFormationData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Bool(configuration, "Enabled", false));
+    public static TensileFormationData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Bool(configuration, "Enabled", false));
 }
 
 /// <summary>

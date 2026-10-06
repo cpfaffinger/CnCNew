@@ -8,6 +8,7 @@ using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>Builds small synthetic <see cref="MapData"/> instances (no original map content).</summary>
@@ -101,10 +102,10 @@ static partial class Tests
 
     public static void TerrainInWorldSnapshotAndReplay()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var terrain = TerrainMap.Build(SyntheticMaps.Build(4, 4, 1, (x, _) => x * 8), "ramp");
         var other = TerrainMap.Build(SyntheticMaps.Build(4, 4, 1, (x, _) => x * 4), "flatter");
-        var configuration = new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint);
+        var configuration = new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint);
         Check.Throws<ArgumentException>(() => new SimulationWorld(configuration, fixture.Templates), "terrain fingerprint");
         Check.Throws<ArgumentException>(() => new SimulationWorld(configuration, fixture.Templates, other), "terrain fingerprint");
 
@@ -116,7 +117,7 @@ static partial class Tests
         Check.That(barrel.Z == Fixed.FromInt(10), "A spawn at height 0 is placed on the terrain (10 m one cell east of the origin).");
         Check.That(world.IsSignificantlyAboveTerrain(barrel) == false, "An entity on the ground is not above the terrain.");
 
-        var flat = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var flat = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         new Feeder(flat).Spawn(1, "Barrel", x: 10, y: 0);
         flat.Step();
         Check.That(flat.FindEntity(new EntityId(1))!.Z == Fixed.Zero && flat.Terrain is null, "Without terrain the ground stays at height 0.");

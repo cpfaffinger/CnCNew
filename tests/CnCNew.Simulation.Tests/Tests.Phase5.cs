@@ -10,6 +10,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -418,7 +419,7 @@ static partial class Tests
 
     public static void Phase5Economy()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Fighter");
@@ -459,7 +460,7 @@ static partial class Tests
 
     public static void Phase5Combat()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Fighter", x: 0, y: 0);
@@ -508,7 +509,7 @@ static partial class Tests
 
     public static void Phase5UpgradeEffects()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Fighter", x: 0, y: 0);
@@ -549,7 +550,7 @@ static partial class Tests
 
     public static void Phase5Movement()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Fighter", x: 0, y: 0);
@@ -577,7 +578,7 @@ static partial class Tests
 
     public static void Phase5Production()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Factory", x: 5, y: 5);
@@ -615,7 +616,7 @@ static partial class Tests
 
     public static void Phase5StealthAndHeal()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var stealthedBit = ObjectStatusBits.Index("STEALTHED");
@@ -650,7 +651,7 @@ static partial class Tests
             return state;
         }
 
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Barrel"); // ActiveBody MaxHealth=100, no OnSpawn RNG draw (no LifetimeUpdate).
@@ -684,9 +685,9 @@ static partial class Tests
     /// <summary>Player/faction data model and science purchase (block 0.1 continuation): <c>PlayerTemplate</c> credits start money and intrinsic sciences once at construction; <c>PurchaseScienceCommand</c> ports <c>Player::attemptToPurchaseScience</c>'s gate order.</summary>
     public static void Phase5Sciences()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha", "TestFaction"), new(new PlayerId(2), "Beta")];
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         var feeder = new Feeder(world);
 
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(500), "PlayerTemplate.StartMoney is credited once at construction.");
@@ -731,7 +732,7 @@ static partial class Tests
     /// <summary>The next blocker module by frequency (<c>docs/HANDOFF-PHASE5.md</c>): <c>FlammableUpdate</c> ignites once accumulated flame damage exceeds its limit, burns periodically, turns permanently <c>BURNED</c> if it stays aflame long enough, and its <c>onDamage</c> hook runs through the new <see cref="IDamageModule"/> callback in <c>ActiveBody.AttemptDamage</c>.</summary>
     public static void Phase5Flammable()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var aflameBit = ObjectStatusBits.Index("AFLAME");
@@ -778,7 +779,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5DamageStateTransitions()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Shooter", x: 0, y: 0);
@@ -815,7 +816,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5SlowDeath()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Zombie");
@@ -865,7 +866,7 @@ static partial class Tests
     public static void Phase5FireWeaponWhenDead()
     {
         // StartsActive fires; the TriggeredBy sibling does not, since its upgrade was never purchased.
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Suicider");
@@ -916,7 +917,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5StealthDetector()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var detectedBit = ObjectStatusBits.Index("DETECTED");
@@ -950,14 +951,14 @@ static partial class Tests
     /// <summary>Phase 10: a <see cref="TerrainMap.HasHeightLineOfSight"/> occlusion check on top of the range test in <see cref="Phase5StealthDetector"/>.</summary>
     public static void Phase5StealthDetectorHeightLineOfSight()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var detectedBit = ObjectStatusBits.Index("DETECTED");
         var stealthedBit = ObjectStatusBits.Index("STEALTHED");
 
         // A 25 m ridge (vertices 2..4, world x roughly 10..30) sits between the detector (x=0) and the target (x=40); both are
         // comfortably inside DetectionRange = 50.
         var ridged = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1, (x, _) => x is >= 2 and <= 4 ? 40 : 0), "detector-ridge");
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, ridged.Fingerprint), fixture.Templates, ridged);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, ridged.Fingerprint), fixture.Templates, ridged);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Spotter", x: 0, y: 15);
         feeder.Spawn(2, "Cloaked", x: 40, y: 15);
@@ -970,7 +971,7 @@ static partial class Tests
 
         // The identical layout without the ridge detects normally: the range test alone is not what is being exercised here.
         var flat = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1), "detector-flat");
-        var openWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, flat.Fingerprint), fixture.Templates, flat);
+        var openWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, flat.Fingerprint), fixture.Templates, flat);
         var openFeeder = new Feeder(openWorld);
         openFeeder.Spawn(1, "Spotter", x: 0, y: 15);
         openFeeder.Spawn(2, "Cloaked", x: 40, y: 15);
@@ -989,7 +990,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5Poisoned()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Poisonable");
@@ -1070,7 +1071,7 @@ static partial class Tests
             End
             """,
         };
-        var world = NewWorld(new SyntheticFixture(files: files));
+        var world = NewWorld(new SyntheticFixture(SimulationRate.Original, files: files));
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Regenerator");
         world.Step();
@@ -1116,7 +1117,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5Garrison()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Bunker", x: 0, y: 0);
@@ -1199,7 +1200,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5Transport()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Chinook", x: 0, y: 0);
@@ -1239,7 +1240,7 @@ static partial class Tests
 
     public static void Phase5Victory()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         Check.That(world.IsPlayerDefeated(new PlayerId(1)) && world.IsPlayerDefeated(new PlayerId(2)) && world.TryGetWinner() is null,

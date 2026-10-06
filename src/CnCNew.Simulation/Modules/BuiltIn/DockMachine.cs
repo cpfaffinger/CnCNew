@@ -22,7 +22,7 @@ internal enum DockState { None, Approach, WaitForClearance, AdvancePosition, Mov
 internal sealed class DockMachine(EntityId dockId)
 {
     private const int MaxTransitionDepth = 20;
-    private const long ClearanceTimeoutTicks = 30L * SimulationTiming.LogicFramesPerSecond;
+    private const long ClearanceTimeoutFrames = 30L * SimulationRate.OriginalFramesPerSecond;
 
     private DockState _state;
     private int _approachPosition = -1;
@@ -164,7 +164,7 @@ internal sealed class DockMachine(EntityId dockId)
                 if (dock is null) return DockStatus.Failure;
                 if (!dock.IsOpen) return RefuseClosed(dock, ai);
                 if (dock.IsClearToEnter(world, ai.Entity.Id)) return DockStatus.Success;
-                return _enterTick + ClearanceTimeoutTicks < world.Tick ? DockStatus.Failure : DockStatus.Continue;
+                return _enterTick + world.Time.OriginalFrames(ClearanceTimeoutFrames) < world.Tick ? DockStatus.Failure : DockStatus.Continue;
             case DockState.ProcessDock:
                 if (dock is null) return DockStatus.Failure;
                 if (world.Tick < _nextActionTick) return DockStatus.Continue;

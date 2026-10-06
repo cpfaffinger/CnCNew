@@ -40,7 +40,7 @@ internal static class AirModules
 /// <summary><c>ParkingPlaceBehaviorModuleData</c> (<c>ParkingPlaceBehavior.h</c>); <c>NumRows</c>/<c>NumCols</c> default to 0 (no spaces), as the reference constructor.</summary>
 public sealed record ParkingPlaceData(int Rows, int Cols, Fixed ApproachHeight, Fixed LandingDeckHeightOffset, bool HasRunways, bool ParkInHangars, Fixed HealAmountPerSecond) : ModuleData
 {
-    public static ParkingPlaceData Parse(ModuleConfiguration configuration) => new(
+    public static ParkingPlaceData Parse(RatedModuleConfiguration configuration) => new(
         checked((int)ModuleConfigReader.Int(configuration, "NumRows", 0)),
         checked((int)ModuleConfigReader.Int(configuration, "NumCols", 0)),
         ModuleConfigReader.Real(configuration, "ApproachHeight", Fixed.Zero),
@@ -76,7 +76,7 @@ public readonly record struct ParkingInfo(Point3 ParkingSpace, Point3 RunwayPrep
 public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUpdateModule, IDieModule, IProductionExit
 {
     /// <summary><c>HEAL_RATE_FRAMES = LOGICFRAMES_PER_SECOND / 5</c>: "don't really need to autoheal every frame".</summary>
-    private const int HealRateTicks = SimulationTiming.LogicFramesPerSecond / 5;
+    private const int HealRateFrames = SimulationRate.OriginalFramesPerSecond / 5;
 
     private static readonly int DeckHeightBit = ObjectStatusBits.Index("DECK_HEIGHT_OFFSET");
 
@@ -379,7 +379,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
 
     // ------------------------------------------------------------------------------------------------------------------ healing
 
-    private void ResetHealWake(IWorldServices world) => _nextHeal = _healing.Count == 0 ? -1 : world.Tick + HealRateTicks;
+    private void ResetHealWake(IWorldServices world) => _nextHeal = _healing.Count == 0 ? -1 : world.Tick + world.Time.OriginalFrames(HealRateFrames);
 
     /// <summary><c>setHealee</c>: an aircraft parked on the airfield gets healed; leaving (or taking off) stops it.</summary>
     public void SetHealee(IWorldServices world, Entity aircraft, bool add)
@@ -399,8 +399,8 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         _arrivals.RemoveAll(arrival => world.Tick - arrival.Tick > 2);
         if (_nextHeal >= 0 && world.Tick >= _nextHeal)
         {
-            _nextHeal = world.Tick + HealRateTicks;
-            var amount = Fixed.FromInt(HealRateTicks) * data.HealAmountPerSecond / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+            _nextHeal = world.Tick + world.Time.OriginalFrames(HealRateFrames);
+            var amount = Fixed.FromInt(world.Time.OriginalFrames(HealRateFrames)) * data.HealAmountPerSecond / world.Time.TicksPerSecondFixed;
             foreach (var id in _healing.ToArray())
                 if (world.FindEntity(id) is { } patient) world.Damage(patient.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
         }

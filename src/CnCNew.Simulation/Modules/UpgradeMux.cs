@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Modules;
 /// </summary>
 public sealed record UpgradeMuxData(UpgradeMask Activation, UpgradeMask Conflicting, ImmutableArray<string> RemovalNames, bool RequiresAllTriggers, ImmutableArray<string> TriggerNames)
 {
-    public static UpgradeMuxData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog)
+    public static UpgradeMuxData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog)
     {
         var triggers = ModuleConfigReaderNames(configuration, "TriggeredBy");
         var conflicts = ModuleConfigReaderNames(configuration, "ConflictsWith");
@@ -23,10 +23,10 @@ public sealed record UpgradeMuxData(UpgradeMask Activation, UpgradeMask Conflict
         return new UpgradeMuxData(catalog.MaskOf(triggers), catalog.MaskOf(conflicts), removals, ModuleConfigReaderBool(configuration, "RequiresAllTriggers"), triggers);
     }
 
-    private static ImmutableArray<string> ModuleConfigReaderNames(ModuleConfiguration configuration, string name)
+    private static ImmutableArray<string> ModuleConfigReaderNames(RatedModuleConfiguration configuration, string name)
         => BuiltIn.ModuleConfigReader.Names(configuration, name);
 
-    private static bool ModuleConfigReaderBool(ModuleConfiguration configuration, string name)
+    private static bool ModuleConfigReaderBool(RatedModuleConfiguration configuration, string name)
         => BuiltIn.ModuleConfigReader.Bool(configuration, name, false);
 
     public bool IsTriggeredBy(string upgradeName) => TriggerNames.Any(value => value.Equals(upgradeName, StringComparison.OrdinalIgnoreCase));

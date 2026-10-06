@@ -47,7 +47,7 @@ internal interface ISupplyCarrier
 
 public sealed record SupplyCarrierData(AIUpdateData Ai, int MaxBoxes, long CenterDelayTicks, long WarehouseDelayTicks, Fixed ScanDistance, int UpgradedSupplyBoost) : ModuleData
 {
-    public static SupplyCarrierData Parse(ModuleConfiguration configuration) => new(
+    public static SupplyCarrierData Parse(RatedModuleConfiguration configuration) => new(
         AIUpdateData.Parse(configuration),
         checked((int)ModuleConfigReader.Int(configuration, "MaxBoxes", 0)),
         ModuleConfigReader.Ticks(configuration, "SupplyCenterActionDelay", 0),

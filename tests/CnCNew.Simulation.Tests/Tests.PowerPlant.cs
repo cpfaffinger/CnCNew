@@ -6,6 +6,7 @@ using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -99,7 +100,7 @@ static partial class Tests
 
     public static void PowerPlantUpgradeAddsAndRemovesTheBonus()
     {
-        var fixture = new SyntheticFixture(files: PowerPlantFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: PowerPlantFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var owner = new PlayerId(1);
@@ -130,7 +131,7 @@ static partial class Tests
 
     public static void OverchargeTogglesDrainsAndSwitchesItselfOff()
     {
-        var fixture = new SyntheticFixture(files: PowerPlantFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: PowerPlantFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var owner = new PlayerId(1);
@@ -172,7 +173,7 @@ static partial class Tests
     /// <summary>Phase 10: the TOGGLE_OVERCHARGE command (CommandButton.ini) reaches OverchargeBehavior.Toggle, which was reachable from code only.</summary>
     public static void OverchargeCommandTogglesTheModule()
     {
-        var fixture = new SyntheticFixture(files: PowerPlantFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: PowerPlantFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "OverStation", owner: 1, x: 50, y: 50);
@@ -197,7 +198,7 @@ static partial class Tests
     /// </summary>
     public static void CaptureTransfersOwnershipAndThePowerPool()
     {
-        var fixture = new SyntheticFixture(files: PowerPlantFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: PowerPlantFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         var attacker = new PlayerId(1);

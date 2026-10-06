@@ -26,7 +26,7 @@ namespace CnCNew.Game.Live;
 /// </summary>
 public abstract class LiveGame
 {
-    private const double TickSeconds = 1.0 / SimulationTiming.LogicFramesPerSecond;
+    private const double TickSeconds = 1.0 / SimulationRate.OriginalFramesPerSecond;
     private const int MaxTicksPerFrame = 8;
 
     private readonly FrameProjector _projector;

@@ -41,7 +41,7 @@ internal static class RetailMatchModules
 /// <summary><c>OpenContainModuleData</c> plus the two <c>HealContainModuleData</c> keys. <c>ContainMax</c> below zero means unlimited, as in <see cref="GarrisonContain"/>.</summary>
 public sealed record HealContainData(OpenContainData Base, int ContainMax, long TimeForFullHealTicks) : ModuleData
 {
-    public static HealContainData Parse(ModuleConfiguration configuration) => new(
+    public static HealContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, []),
         checked((int)ModuleConfigReader.Int(configuration, "ContainMax", -1)),
         ModuleConfigReader.Ticks(configuration, "TimeForFullHeal", 0));
@@ -128,7 +128,7 @@ public sealed class HealContain(HealContainData data) : ContainModuleBase(data.B
 /// </summary>
 public sealed record EjectPilotDieData(DieMuxData Mux, string GroundCreationList, string AirCreationList, long InvulnerableTicks) : DieData(Mux)
 {
-    public static EjectPilotDieData Parse(ModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
+    public static EjectPilotDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
         ModuleConfigReader.Text(configuration, "GroundCreationList"), ModuleConfigReader.Text(configuration, "AirCreationList"),
         ModuleConfigReader.Ticks(configuration, "InvulnerableTime", 0));
 }
@@ -150,7 +150,7 @@ public sealed class EjectPilotDie(EjectPilotDieData data) : DieModuleBase(data.M
 
 public sealed record VeterancyGainCreateData(int StartingLevel, string ScienceRequired) : ModuleData
 {
-    public static VeterancyGainCreateData Parse(ModuleConfiguration configuration)
+    public static VeterancyGainCreateData Parse(RatedModuleConfiguration configuration)
     {
         var level = ModuleConfigReader.Find(configuration, "StartingLevel")?.Value.Value is EnumValue rank && NameTables.Veterancy.TryIndexOf(rank.Name, out var index) ? index : 0;
         return new(level, ModuleConfigReader.Text(configuration, "ScienceRequired"));
@@ -194,7 +194,7 @@ public sealed class PreorderCreate : SimModule
 
 public sealed record CommandButtonHuntData(long ScanTicks, Fixed ScanRange) : ModuleData
 {
-    public static CommandButtonHuntData Parse(ModuleConfiguration configuration)
+    public static CommandButtonHuntData Parse(RatedModuleConfiguration configuration)
         => new(ModuleConfigReader.Ticks(configuration, "ScanRate", 0), ModuleConfigReader.Real(configuration, "ScanRange", Fixed.Zero));
 }
 
@@ -217,7 +217,7 @@ public sealed class CommandButtonHuntUpdate(CommandButtonHuntData data) : SimMod
 
 public sealed record LockWeaponCreateData(int Slot) : ModuleData
 {
-    public static LockWeaponCreateData Parse(ModuleConfiguration configuration)
+    public static LockWeaponCreateData Parse(RatedModuleConfiguration configuration)
     {
         // LockWeaponCreateModuleData: m_slotToLock defaults to PRIMARY_WEAPON; SlotToLock is a TheWeaponSlotTypeNames lookup.
         var slot = ModuleConfigReader.Text(configuration, "SlotToLock");
@@ -250,7 +250,7 @@ public sealed class LockWeaponCreate(LockWeaponCreateData data) : SimModule
 
 public sealed record RadarUpdateData(long ExtendTicks) : ModuleData
 {
-    public static RadarUpdateData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "RadarExtendTime", 0));
+    public static RadarUpdateData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "RadarExtendTime", 0));
 }
 
 /// <summary>
@@ -289,7 +289,7 @@ public sealed class RadarUpdate(RadarUpdateData data) : SimModule
 
 public sealed record PowerPlantUpdateData(long ExtendTicks) : ModuleData
 {
-    public static PowerPlantUpdateData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "RodsExtendTime", 0));
+    public static PowerPlantUpdateData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "RodsExtendTime", 0));
 }
 
 /// <summary>
@@ -331,7 +331,7 @@ public sealed class PowerPlantUpdate(PowerPlantUpdateData data) : SimModule
 
 public sealed record OverchargeData(Fixed HealthDrainRatioPerSecond, Fixed NotAllowedBelowRatio) : ModuleData
 {
-    public static OverchargeData Parse(ModuleConfiguration configuration) => new(
+    public static OverchargeData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Real(configuration, "HealthPercentToDrainPerSecond", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "NotAllowedWhenHealthBelowPercent", Fixed.Zero));
 }
@@ -369,7 +369,7 @@ public sealed class OverchargeBehavior(OverchargeData data) : SimModule, IUpdate
     public long Update(IWorldServices world)
     {
         if (!_active || Entity.Body is not { } body) return SimulationTiming.SleepForever;
-        var amount = body.MaxHealth * data.HealthDrainRatioPerSecond / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+        var amount = body.MaxHealth * data.HealthDrainRatioPerSecond / world.Time.TicksPerSecondFixed;
         world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Penalty, DeathTypes.Normal, false));
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         if (body.Health < body.MaxHealth * data.NotAllowedBelowRatio)
@@ -404,7 +404,7 @@ public sealed class OverchargeBehavior(OverchargeData data) : SimModule, IUpdate
 
 public sealed record RebuildHoleExposeDieData(DieMuxData Mux, string HoleName, Fixed HoleMaxHealth, bool TransferAttackers) : DieData(Mux)
 {
-    public static RebuildHoleExposeDieData Parse(ModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
+    public static RebuildHoleExposeDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
         ModuleConfigReader.Text(configuration, "HoleName"), ModuleConfigReader.Real(configuration, "HoleMaxHealth", Fixed.Zero),
         // RebuildHoleExposeDieModuleData sets m_transferAttackers = true; the attacker hand-over is AI (phase 6).
         ModuleConfigReader.Bool(configuration, "TransferAttackers", true));
@@ -438,7 +438,7 @@ public sealed class RebuildHoleExposeDie(RebuildHoleExposeDieData data) : DieMod
 
 public sealed record RebuildHoleBehaviorData(string WorkerName, long WorkerRespawnDelayTicks, Fixed HealthRegenPercentPerSecond) : ModuleData
 {
-    public static RebuildHoleBehaviorData Parse(ModuleConfiguration configuration) => new(
+    public static RebuildHoleBehaviorData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Text(configuration, "WorkerObjectName"), ModuleConfigReader.Ticks(configuration, "WorkerRespawnDelay", 0),
         ModuleConfigReader.Real(configuration, "HoleHealthRegen%PerSecond", Fixed.Zero));
 }
@@ -472,7 +472,7 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
         var body = Entity.Body;
         if (body is not null && body.Health < body.MaxHealth && data.HealthRegenPercentPerSecond > Fixed.Zero)
         {
-            var amount = body.MaxHealth * data.HealthRegenPercentPerSecond / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+            var amount = body.MaxHealth * data.HealthRegenPercentPerSecond / world.Time.TicksPerSecondFixed;
             world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
         }
 

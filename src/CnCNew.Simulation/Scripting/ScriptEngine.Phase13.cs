@@ -522,7 +522,7 @@ public sealed partial class ScriptEngine
     /// <summary>Retries the structures that waited for money, at most once a second.</summary>
     private void UpdatePendingStructures(long tick)
     {
-        if (_pendingStructures.Count == 0 || tick % SimulationTiming.LogicFramesPerSecond != 0) return;
+        if (_pendingStructures.Count == 0 || tick % _world.Time.TicksPerSecond != 0) return;
         foreach (var (key, order) in _pendingStructures.ToArray())
         {
             var player = new PlayerId(order.Owner);
@@ -616,7 +616,7 @@ public sealed partial class ScriptEngine
 
 public sealed partial class ScriptEngine
 {
-    private const long SupplyScanFrames = 10 * SimulationTiming.LogicFramesPerSecond;
+    private const long SupplyScanSeconds = 10;
     private const decimal SupplyCenterSafeRadius = 250m;
 
     private readonly SortedDictionary<int, string> _teamStates = [];
@@ -837,7 +837,7 @@ public sealed partial class ScriptEngine
         var now = _world.Tick;
         if (now == 0) return false;
         foreach (var entity in _world.Entities.Where(entity => entity.Owner == player && !entity.EffectivelyDead && (entity.Template.IsKindOf("CASH_GENERATOR") || entity.Template.IsKindOf("DOZER") || entity.Template.IsKindOf("HARVESTER"))))
-            if (entity.LastDamageTick >= 0 && now - entity.LastDamageTick < SupplyScanFrames) return true;
+            if (entity.LastDamageTick >= 0 && now - entity.LastDamageTick < _world.Time.WholeSecondsToTicks(SupplyScanSeconds)) return true;
         return false;
     }
 

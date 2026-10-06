@@ -6,6 +6,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Presentation.Tests;
@@ -125,9 +126,9 @@ internal static class JetOrderTests
 
         public Rig()
         {
-            Fixture = new SyntheticFixture(files: Files);
+            Fixture = new SyntheticFixture(SimulationRate.Original, files: Files);
             var players = ImmutableArray.Create(new PlayerConfiguration(Me, "Me"), new PlayerConfiguration(Enemy, "Enemy"));
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), 7, players, SyntheticFixture.FixtureId, Fixture.Fingerprint), Fixture.Templates);
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, players, SyntheticFixture.FixtureId, Fixture.Fingerprint), Fixture.Templates);
             _sink = new InputTests.WorldSink(World, []);
         }
 
@@ -187,7 +188,7 @@ internal static class JetOrderTests
         TestHarness.Assert(rig.Orders.TryGet(jet.Id, out _), "the attack order stands while the target lives");
     }
 
-    private static readonly Fixed SimulationTimingMin = CnCNew.Simulation.Time.SimulationTiming.PerSecondToPerTick(60m) - Fixed.FromRaw(16);
+    private static readonly Fixed SimulationTimingMin = CnCNew.Simulation.Time.SimulationRate.Original.Time.PerSecondToPerTick(60m) - Fixed.FromRaw(16);
 
     private static void MissileFighterEndsItsAttack()
     {

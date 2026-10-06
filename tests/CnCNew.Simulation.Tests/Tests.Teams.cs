@@ -7,6 +7,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -37,8 +38,8 @@ static partial class Tests
 
     private static SimulationWorld TeamsWorld(IReadOnlyDictionary<string, string> files, out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(files: files);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TeamPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        fixture = new SyntheticFixture(SimulationRate.Original, files: files);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TeamPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }

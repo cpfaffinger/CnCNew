@@ -9,6 +9,7 @@ using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Ui.Layout;
 
 namespace CnCNew.Game.Tests;
@@ -128,7 +129,7 @@ internal static class CampaignShellTests
 
     private static (MissionContext Context, CampaignDefinition Campaign) SyntheticCampaign()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var maps = new Dictionary<string, MapData>(StringComparer.OrdinalIgnoreCase)
         {
             ["Maps/One/One.map"] = SyntheticMap(WinAndLose),

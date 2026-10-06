@@ -452,9 +452,9 @@ static partial class Tests
     /// <summary>Alpha (1) and Beta (2), enemies; a terrain only when the test needs one.</summary>
     private static SimulationWorld LbWorld(out Feeder feeder, out SyntheticFixture fixture, TerrainMap? terrain = null, uint seed = 1)
     {
-        fixture = new SyntheticFixture(files: LastBlockerFiles());
+        fixture = new SyntheticFixture(SimulationRate.Original, files: LastBlockerFiles());
         ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha"), new(new PlayerId(2), "Beta")];
-        var configuration = new WorldConfiguration(new WorldId(1), seed, players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? string.Empty);
+        var configuration = new WorldConfiguration(new WorldId(1), SimulationRate.Original, seed, players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? string.Empty);
         var world = terrain is null ? new SimulationWorld(configuration, fixture.Templates) : new SimulationWorld(configuration, fixture.Templates, terrain);
         feeder = new Feeder(world);
         return world;
@@ -484,7 +484,7 @@ static partial class Tests
             Check.That(ModuleBindingTable.Default.TryGet(name, out _), $"{name} has a binding.");
         }
         Check.That(!registry.Descriptors.Any(value => value.Category == ModuleCategory.Simulation && value.CompatibilityOnly), "No simulation module of the catalog is left unimplemented.");
-        var fixture = new SyntheticFixture(files: LastBlockerFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: LastBlockerFiles());
         var missing = fixture.Templates.Templates.Where(value => value.Name.StartsWith("Lb", StringComparison.Ordinal) && !value.IsInstantiable).Select(value => value.Name + ":" + string.Join(",", value.MissingModules)).ToArray();
         Check.That(missing.Length == 1 && missing[0].StartsWith("LbBrokenUnit", StringComparison.Ordinal), "Every fixture object instantiates except the deliberately broken one: " + string.Join("; ", missing));
         Check.That(fixture.Templates.TryGet("LbSalvageTank", out var tank) && CrateWeapon(tank, 0) < 0 && CrateWeapon(tank, 1) >= 0
@@ -981,7 +981,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
 
         var blocked = catalog.Templates.Where(template => !template.IsInstantiable).Select(template => template.Name + ":" + string.Join("/", template.MissingModules)).ToArray();
@@ -995,7 +995,7 @@ static partial class Tests
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
         (ulong[] Hashes, int Created) Run()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 5, players, "real-last-blockers", fingerprint, ferryTerrain.Fingerprint), catalog, ferryTerrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-last-blockers", fingerprint, ferryTerrain.Fingerprint), catalog, ferryTerrain);
             var sequence = 0UL;
             var column = 0;
             foreach (var template in carriers)
@@ -1021,7 +1021,7 @@ static partial class Tests
 
         // The retail salvager takes the retail salvage crate: GLA players only (PickupScience), armor first.
         var gla = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East", "FactionGLA"), new PlayerConfiguration(new PlayerId(2), "West", "FactionAmerica"));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(2), 5, gla, "real-salvage", fingerprint), catalog);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(2), SimulationRate.Original, 5, gla, "real-salvage", fingerprint), catalog);
         Check.That(world.Sciences.TryGet("SCIENCE_GLA", out var glaScience) && world.PlayerSciences(new PlayerId(1)).Has(glaScience.Index) && !world.PlayerSciences(new PlayerId(2)).Has(glaScience.Index), "The GLA player owns SCIENCE_GLA through its faction, the American does not.");
         var feeder = new Feeder(world);
         var lane = 0;
@@ -1050,7 +1050,7 @@ static partial class Tests
 
         // The retail ferry reads the "Ferry" waypoint paths of a map made for it.
         var terrain = FerryTerrain();
-        var ferryWorld = new SimulationWorld(new WorldConfiguration(new WorldId(3), 5, players, "real-ferry", fingerprint, terrain.Fingerprint), catalog, terrain);
+        var ferryWorld = new SimulationWorld(new WorldConfiguration(new WorldId(3), SimulationRate.Original, 5, players, "real-ferry", fingerprint, terrain.Fingerprint), catalog, terrain);
         var ferryFeeder = new Feeder(ferryWorld);
         var ferry = CsSpawn(ferryWorld, ferryFeeder, "CivilianVehicleFerry", 1, 390, 110);
         var ai = ferry.Modules.OfType<RailedTransportAIUpdate>().Single();

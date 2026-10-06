@@ -22,6 +22,7 @@ using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 const string Usage = """
@@ -63,6 +64,16 @@ if (Environment.GetEnvironmentVariable("CNCNEW_TEST_CULTURE") is { Length: > 0 }
 if (args.Length == 0)
 {
     Console.Error.WriteLine(Usage);
+    return 2;
+}
+
+try
+{
+    CnCNew.SimTool.ToolRate.Read(args);
+}
+catch (Exception exception) when (exception is ArgumentException or FormatException or OverflowException)
+{
+    Console.Error.WriteLine($"error: {exception.Message}");
     return 2;
 }
 
@@ -264,8 +275,8 @@ static (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, string Fingerpri
     var graph = DefinitionCompiler.Compile(source, ModuleRegistry.Default, options);
     // The same world the client simulates (GameData.Load): the airfields' parking and runway points come from the draw models' bones and are part of the fingerprint.
     var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
-    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, geometry);
-    return (graph, catalog, geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256));
+    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.SimTool.ToolRate.Current, geometry);
+    return (graph, catalog, catalog.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256)));
 }
 
 static int AuditCoverage(string directory, string[] args)
@@ -295,7 +306,7 @@ static int AuditCoverage(string directory, string[] args)
 
     // Instantiate every instantiable object, tick, kill: proves the compiled definitions drive the simulation.
     var players = System.Collections.Immutable.ImmutableArray.Create(new PlayerConfiguration(new CnCNew.Simulation.Ids.PlayerId(1), "P1"));
-    var world = new SimulationWorld(new WorldConfiguration(new CnCNew.Simulation.Ids.WorldId(1), 1, players, "shipped-objects", fingerprint), catalog);
+    var world = new SimulationWorld(new WorldConfiguration(new CnCNew.Simulation.Ids.WorldId(1), catalog.Rate, 1, players, "shipped-objects", fingerprint), catalog);
     var sequence = 0UL;
     foreach (var template in catalog.Templates.Where(value => value.IsInstantiable))
         world.Submit(new SpawnCommand(new CnCNew.Simulation.Ids.PlayerId(1), ++sequence, 0, template.Name, CnCNew.Simulation.Ids.PlayerId.System,
@@ -340,7 +351,7 @@ static int ReferenceMatch(string directory, string[] args)
     Console.WriteLine($"Supply deliveries at supply centers: {scenario.SupplyDeliveries}, paying {scenario.SupplyDeliveryMoney} in total.");
     Console.WriteLine(scenario.Winner is null
         ? $"No winner within {recorded.Header.EndTick} ticks."
-        : $"Winner: player {scenario.Winner.Value.Value} ({scenario.WinnerFaction}) at tick {scenario.VictoryTick} ({scenario.VictoryTick / 30 / 60.0:F1} game minutes); replay length {recorded.Header.EndTick} ticks.");
+        : $"Winner: player {scenario.Winner.Value.Value} ({scenario.WinnerFaction}) at tick {scenario.VictoryTick} ({CnCNew.SimTool.ToolRate.Minutes(scenario.VictoryTick):F1} game minutes); replay length {recorded.Header.EndTick} ticks.");
 
     var checkpointRun = ReplayRunner.Run(recorded, catalog, fingerprint, new ReplayRunOptions { RecordCheckpointInterval = options.CheckpointInterval });
     var replay = recorded with { Checkpoints = checkpointRun.Checkpoints };
@@ -456,7 +467,7 @@ static int AiMatch(string directory, string[] args)
     }
     Console.WriteLine(scenario.Winner is null
         ? $"No winner within {recorded.Header.EndTick} ticks (stalemate)."
-        : $"Winner: player {scenario.Winner.Value.Value} ({scenario.Players.First(value => value.Id == scenario.Winner.Value).Faction}) at tick {scenario.VictoryTick} ({scenario.VictoryTick / 30 / 60.0:F1} game minutes).");
+        : $"Winner: player {scenario.Winner.Value.Value} ({scenario.Players.First(value => value.Id == scenario.Winner.Value).Faction}) at tick {scenario.VictoryTick} ({CnCNew.SimTool.ToolRate.Minutes(scenario.VictoryTick):F1} game minutes).");
 
     var checkpointRun = ReplayRunner.Run(recorded, catalog, fingerprint, new ReplayRunOptions { RecordCheckpointInterval = options.CheckpointInterval }, terrain);
     var replay = recorded with { Checkpoints = checkpointRun.Checkpoints };
@@ -553,7 +564,7 @@ static int SkirmishSweep(string directory, string[] args)
 
 static int RecordReplay(string path, StressOptions options)
 {
-    var fixture = new SyntheticFixture();
+    var fixture = new SyntheticFixture(CnCNew.SimTool.ToolRate.Current);
     var scenario = new StressScenario(options);
     var recorded = scenario.Record(fixture);
     var checkpoints = ReplayRunner.Run(recorded, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordCheckpointInterval = options.CheckpointInterval });
@@ -566,7 +577,7 @@ static int RecordReplay(string path, StressOptions options)
 
 static int RunReplay(string path)
 {
-    var fixture = new SyntheticFixture();
+    var fixture = new SyntheticFixture(CnCNew.SimTool.ToolRate.Current);
     var replay = ReplayFormat.Read(File.ReadAllBytes(path));
     var result = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { VerifyIncrementalEvery = 5000 });
     Console.WriteLine($"Replay ok: {result.TicksExecuted} ticks, {result.VerifiedCheckpoints}/{replay.Checkpoints.Length} checkpoints verified, final hash {result.FinalHash:X16}.");
@@ -575,7 +586,7 @@ static int RunReplay(string path)
 
 static int HashReplay(string path)
 {
-    var fixture = new SyntheticFixture();
+    var fixture = new SyntheticFixture(CnCNew.SimTool.ToolRate.Current);
     var replay = ReplayFormat.Read(File.ReadAllBytes(path));
     var result = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
     Console.WriteLine($"final hash {result.FinalHash:X16}; hash chain {Chain(result.TickHashes):X16}; {result.TicksExecuted} ticks");
@@ -636,7 +647,7 @@ static int Stress(StressOptions options, string? replayOut)
     Say($"Stress: {options.Ticks} ticks, target {options.TargetPopulation} long-lived entities, world seed {options.WorldSeed:X8}, driver seed {options.DriverSeed:X8}.");
     Say($"Hardware: {Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER")}; {Environment.ProcessorCount} logical processors; {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024)} MiB memory; {RuntimeInformation.OSDescription}; {RuntimeInformation.FrameworkDescription}; Server GC {System.Runtime.GCSettings.IsServerGC}.");
 
-    var fixture = new SyntheticFixture();
+    var fixture = new SyntheticFixture(CnCNew.SimTool.ToolRate.Current);
     var watch = Stopwatch.StartNew();
     var scenario = new StressScenario(options);
     var recorded = scenario.Record(fixture);

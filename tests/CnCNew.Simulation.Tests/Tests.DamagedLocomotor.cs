@@ -1,6 +1,7 @@
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary><c>SpeedDamaged</c>/<c>TurnRateDamaged</c>/<c>AccelerationDamaged</c> (<c>Locomotor::getMaxSpeedForCondition</c>): a really damaged object moves with its locomotor's damaged constants.</summary>
@@ -51,7 +52,7 @@ static partial class Tests
 
     public static void DamagedLocomotorSlowsAReallyDamagedObject()
     {
-        var fixture = new SyntheticFixture(files: DamagedLocomotorFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: DamagedLocomotorFiles());
         fixture.Templates.TryGet("LimpTank", out var limp);
         fixture.Templates.TryGet("SturdyTank", out var sturdy);
         var loco = limp!.Locomotor!;

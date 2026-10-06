@@ -123,7 +123,7 @@ public sealed class EvaCatalog
             ? number
             : throw error($"'{value}' is not a non-negative integer{(allowNegativeOne ? " (or -1)" : "")}");
 
-    private static int Frames(int milliseconds) => checked((int)Math.Ceiling(milliseconds * (double)SimulationTiming.LogicFramesPerSecond / 1000.0));
+    private static int Frames(int milliseconds) => checked((int)Math.Ceiling(milliseconds * (double)SimulationRate.OriginalFramesPerSecond / 1000.0));
 
     private sealed class SideBuilder
     {

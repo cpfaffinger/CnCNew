@@ -188,7 +188,7 @@ public sealed partial class ScriptEngine
             _scriptActive[index] = script.IsActive;
             // ScriptEngine::checkConditionsForTeamNames draws the first evaluation frame of a delayed script from the logic random stream; a
             // name-derived offset in the same 0..2 s range keeps the spread without consuming a stream that a restored world would not replay.
-            _nextEvaluation[index] = script.DelayEvaluationSeconds > 0 ? (long)(NameHash(script.Name) % (2 * SimulationTiming.LogicFramesPerSecond + 1)) : 0;
+            _nextEvaluation[index] = script.DelayEvaluationSeconds > 0 ? _world.Time.OriginalFrames((long)(NameHash(script.Name) % (2 * SimulationRate.OriginalFramesPerSecond + 1))) : 0;
             _conditionTeam[index] = FindConditionTeam(script);
         }
         for (var index = 0; index < program.Groups.Length; index++) _groupActive[index] = program.Groups[index].Group.IsActive;
@@ -437,7 +437,7 @@ public sealed partial class ScriptEngine
         };
         if (!allowed) return;
         if (_tick < _nextEvaluation[unit.Index]) return;
-        if (script.DelayEvaluationSeconds > 0) _nextEvaluation[unit.Index] = _tick + (long)script.DelayEvaluationSeconds * SimulationTiming.LogicFramesPerSecond;
+        if (script.DelayEvaluationSeconds > 0) _nextEvaluation[unit.Index] = _tick + _world.Time.WholeSecondsToTicks((long)script.DelayEvaluationSeconds);
 
         var previousTeam = _callingTeam;
         // The instances of the team the conditions talk about, as they are before the first evaluation (in id order): none, one, or - rarely - several.

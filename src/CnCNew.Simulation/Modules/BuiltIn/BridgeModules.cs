@@ -25,13 +25,13 @@ public sealed record BridgeEffect(string Name, long DelayTicks, string Bone);
 /// <summary><c>BridgeBehaviorModuleData</c> (<c>BridgeBehavior.cpp</c>): the scaffold speeds (per tick) and the lists of effects and creation lists that go off during the collapse.</summary>
 public sealed record BridgeData(Fixed LateralScaffoldSpeed, Fixed VerticalScaffoldSpeed, ImmutableArray<BridgeEffect> DieFx, ImmutableArray<BridgeEffect> DieOcl) : ModuleData
 {
-    public static BridgeData Parse(ModuleConfiguration configuration) => new(
-        ModuleConfigReader.Real(configuration, "LateralScaffoldSpeed", Fixed.One) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond),
-        ModuleConfigReader.Real(configuration, "VerticalScaffoldSpeed", Fixed.One) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond),
+    public static BridgeData Parse(RatedModuleConfiguration configuration) => new(
+        ModuleConfigReader.Real(configuration, "LateralScaffoldSpeed", Fixed.One) / configuration.Time.TicksPerSecondFixed,
+        ModuleConfigReader.Real(configuration, "VerticalScaffoldSpeed", Fixed.One) / configuration.Time.TicksPerSecondFixed,
         Effects(configuration, "BridgeDieFX", "FX"), Effects(configuration, "BridgeDieOCL", "OCL"));
 
     /// <summary><c>parseFX</c>/<c>parseOCL</c> + <c>parseTimeAndLocationInfo</c>: <c>&lt;FX|OCL&gt;:&lt;name&gt; Delay:&lt;ms&gt; [Bone:&lt;name&gt;]</c>, colons and blanks both separating tokens.</summary>
-    private static ImmutableArray<BridgeEffect> Effects(ModuleConfiguration configuration, string key, string label)
+    private static ImmutableArray<BridgeEffect> Effects(RatedModuleConfiguration configuration, string key, string label)
     {
         var effects = ImmutableArray.CreateBuilder<BridgeEffect>();
         foreach (var field in ModuleConfigReader.All(configuration, key))
@@ -41,7 +41,7 @@ public sealed record BridgeData(Fixed LateralScaffoldSpeed, Fixed VerticalScaffo
                         && long.TryParse(tokens[3], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _)
                         && (tokens.Length == 4 || tokens[4].Equals("Bone", StringComparison.OrdinalIgnoreCase));
             if (!valid) throw new InvalidDataException($"{field.Location.Source}({field.Location.Line}): BridgeBehavior {key} expects '{label}:<name> Delay:<ms> [Bone:<name>]', got '{field.Value.OriginalText.Trim()}'.");
-            effects.Add(new BridgeEffect(tokens[1], SimulationTiming.DurationMillisecondsToTicks(long.Parse(tokens[3], System.Globalization.CultureInfo.InvariantCulture)), tokens.Length == 6 ? tokens[5] : string.Empty));
+            effects.Add(new BridgeEffect(tokens[1], configuration.Time.DurationMillisecondsToTicks(long.Parse(tokens[3], System.Globalization.CultureInfo.InvariantCulture)), tokens.Length == 6 ? tokens[5] : string.Empty));
         }
         return effects.ToImmutable();
     }

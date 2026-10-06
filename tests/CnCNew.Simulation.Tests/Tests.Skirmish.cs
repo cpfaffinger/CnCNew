@@ -7,6 +7,7 @@ using CnCNew.Simulation.Skirmish;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 
 static partial class Tests
 {
@@ -192,7 +193,7 @@ static partial class Tests
 
     public static void CommandCatalogBuilds()
     {
-        var catalog = new SyntheticFixture(files: SkirmishFiles()).Templates;
+        var catalog = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles()).Templates;
         var commands = catalog.Commands;
         Check.That(commands.BuildsOf("AlphaCenterSet").SequenceEqual(["AlphaDozer", "AlphaSoldier"]),
             $"A producer's set lists each UNIT_BUILD object once, in button order, and skips other commands (got {string.Join(", ", commands.BuildsOf("AlphaCenterSet"))}).");
@@ -207,7 +208,7 @@ static partial class Tests
 
     private static (ReplayFile Replay, SkirmishMatchScenario Scenario, TemplateCatalogHolder Holder) SkirmishRecord(long maxTicks, uint aiSeed = 7)
     {
-        var fixture = new SyntheticFixture(files: SkirmishFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles());
         var map = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
         var terrain = TerrainMap.Build(map, "skirmish");
         var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
@@ -279,7 +280,7 @@ static partial class Tests
     /// </summary>
     public static void SkirmishLiveSessionMatchesItsOwnReplay()
     {
-        var fixture = new SyntheticFixture(files: SkirmishFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles());
         var map = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
         var terrain = TerrainMap.Build(map, "skirmish");
         var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
@@ -304,7 +305,7 @@ static partial class Tests
     /// </summary>
     public static void SkirmishSessionRefusesToSave()
     {
-        var fixture = new SyntheticFixture(files: SkirmishFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles());
         var map = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
         var terrain = TerrainMap.Build(map, "skirmish");
         var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);

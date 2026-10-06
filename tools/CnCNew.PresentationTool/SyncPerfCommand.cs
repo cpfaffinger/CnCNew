@@ -81,7 +81,7 @@ internal static class SyncPerfCommand
         var buffer = new MemoryStream();
         var writer = new BinaryWriter(buffer, Encoding.UTF8);
         var fogLevels = new byte[live.Fog.CellsX * live.Fog.CellsY];
-        var tickSeconds = 1.0 / SimulationTiming.LogicFramesPerSecond;
+        var tickSeconds = 1.0 / SimulationRate.OriginalFramesPerSecond;
         var total = new List<long>();
         var hudUpdate = new List<long>();
         var hudDraw = new List<long>();

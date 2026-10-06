@@ -16,8 +16,11 @@ namespace CnCNew.Simulation.World;
 /// <summary><paramref name="IsComputer"/> is <c>PLAYER_COMPUTER</c> (the AI-driven modules such as <c>AutoFindHealingUpdate</c> only act for computer players); <see langword="false"/> is <c>PLAYER_HUMAN</c>. <paramref name="Team"/> groups players into an alliance (same non-zero team: mutual <see cref="Relationship.Allies"/>; 0: no team, everybody else is an enemy); <see cref="SetRelationshipCommand"/> overrides single directed relations afterwards. <paramref name="Faction"/> names a <c>PlayerTemplate</c> (<see cref="Templates.FactionCatalog"/>); when set, the world credits its <c>StartMoney</c> and <c>IntrinsicSciences</c> once at construction (<c>Player::Player()</c>). <see langword="null"/>: no faction, starts with nothing (fixtures/tests that set up money and sciences explicitly).</summary>
 public sealed record PlayerConfiguration(PlayerId Id, string Name, string? Faction = null, int Team = 0, bool IsComputer = false);
 
-/// <summary>Everything that identifies a run apart from the definitions and the command stream.</summary>
-public sealed record WorldConfiguration(WorldId Id, uint Seed, ImmutableArray<PlayerConfiguration> Players, string FixtureId, string DefinitionFingerprint, string TerrainFingerprint = "");
+/// <summary>
+/// Everything that identifies a run apart from the definitions and the command stream. <paramref name="Rate"/> is the tick rate the world runs at;
+/// the catalog handed to the world must have been built for the same rate.
+/// </summary>
+public sealed record WorldConfiguration(WorldId Id, SimulationRate Rate, uint Seed, ImmutableArray<PlayerConfiguration> Players, string FixtureId, string DefinitionFingerprint, string TerrainFingerprint = "");
 
 /// <summary>
 /// Outcome of one tick. <see cref="Events"/> and <see cref="Rejections"/> are reused buffers: they are valid until the next
@@ -157,9 +160,14 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(templates);
+        ArgumentNullException.ThrowIfNull(configuration.Rate, nameof(configuration));
         if (!string.Equals(configuration.TerrainFingerprint, terrain?.Fingerprint ?? string.Empty, StringComparison.Ordinal))
             throw new ArgumentException("The configured terrain fingerprint does not match the supplied terrain.", nameof(terrain));
+        // Every tick count and per-tick value of a catalog is computed for one rate; a world that stepped such a catalog at another rate would be silently wrong.
+        if (templates.Rate != configuration.Rate)
+            throw new ArgumentException($"The catalog was built for {templates.Rate}, the world is configured for {configuration.Rate}.", nameof(templates));
         Configuration = configuration;
+        Time = configuration.Rate.Time;
         Terrain = terrain;
         Navigation = terrain is null ? null : new NavigationGrid(terrain);
         _templates = templates;
@@ -191,6 +199,12 @@ public sealed partial class SimulationWorld : IWorldServices
     }
 
     public WorldConfiguration Configuration { get; }
+
+    /// <summary>The tick rate of this world (<see cref="WorldConfiguration.Rate"/>); the same as the catalog's.</summary>
+    public SimulationRate Rate => Configuration.Rate;
+
+    /// <summary>The time service: every conversion between game time, logic frames of the original and ticks of this world.</summary>
+    public SimulationTime Time { get; }
     public IdCounters Ids { get; }
     public RandomStreams Streams { get; }
     public TemplateCatalog Templates => _templates;

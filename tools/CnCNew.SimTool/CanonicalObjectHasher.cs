@@ -23,6 +23,12 @@ public sealed record CanonicalHash(string Sha256, long Values, IReadOnlyDictiona
 /// objects and pointers are only named: code is not part of the description.
 /// </para>
 /// <para>Not covered, by construction: the comparer of a dictionary or set (ordinal or case-insensitive), static state, and the code behind delegates.</para>
+/// <para>
+/// A caller may name fields that are left out while they hold their neutral value (<c>omit</c>). The input manifest uses this for exactly one field:
+/// the tick rate of a catalog while it is the original's 30 Hz. The recorded manifest was written before catalogs carried a rate, so a catalog at
+/// 30 Hz keeps the description it had; at any other rate the field is described like every other, and a catalog of another rate never shares a
+/// digest with the 30 Hz one (its tick counts differ as well).
+/// </para>
 /// </summary>
 public sealed class CanonicalObjectHasher
 {
@@ -31,26 +37,28 @@ public sealed class CanonicalObjectHasher
     private readonly Dictionary<Type, FieldInfo[]> _fields = [];
     private readonly Dictionary<Type, string> _names = [];
     private readonly SortedDictionary<string, long> _opaque = new(StringComparer.Ordinal);
+    private Func<FieldInfo, object?, bool>? _omit;
     private long _values;
     private int _depth;
 
     /// <summary>Describes <paramref name="root"/> and everything it references. Deep graphs need a deep stack: see <see cref="HashOnLargeStack"/>.</summary>
-    public static CanonicalHash Hash(object? root)
+    /// <param name="omit">Fields that are not described while this returns true for the field and its value (see the type remarks); null: every field is described.</param>
+    public static CanonicalHash Hash(object? root, Func<FieldInfo, object?, bool>? omit = null)
     {
-        var hasher = new CanonicalObjectHasher();
+        var hasher = new CanonicalObjectHasher { _omit = omit };
         var text = new StringBuilder("canonical-object-v1\n");
         hasher.Describe(text, root);
         return new CanonicalHash(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()))), hasher._values, hasher._opaque);
     }
 
     /// <summary><see cref="Hash"/> on a thread of its own with a 256 MiB stack (the description recurses once per level of the graph).</summary>
-    public static CanonicalHash HashOnLargeStack(object? root)
+    public static CanonicalHash HashOnLargeStack(object? root, Func<FieldInfo, object?, bool>? omit = null)
     {
         CanonicalHash? result = null;
         Exception? failure = null;
         var thread = new Thread(() =>
         {
-            try { result = Hash(root); }
+            try { result = Hash(root, omit); }
             catch (Exception exception) { failure = exception; }
         }, 256 * 1024 * 1024);
         thread.Start();
@@ -190,8 +198,10 @@ public sealed class CanonicalObjectHasher
         text.Append('(');
         foreach (var field in FieldsOf(type))
         {
+            var content = field.GetValue(value);
+            if (_omit is not null && _omit(field, content)) continue;
             text.Append(field.Name).Append('=');
-            up = Math.Min(up, Describe(text, field.GetValue(value)));
+            up = Math.Min(up, Describe(text, content));
             text.Append(';');
         }
         text.Append(')');

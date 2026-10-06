@@ -9,6 +9,7 @@ using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>The weapon and pulse modules of the air group: EMP, leaflets, bunker buster, neutron blast, neutron missile, silo doors and the Spectre gunship.</summary>
@@ -464,9 +465,9 @@ static partial class Tests
 
     private static SimulationWorld AirWeaponWorld(out SyntheticFixture fixture, out Feeder feeder, bool terrain = false)
     {
-        fixture = new SyntheticFixture(files: AirWeaponFixtureFiles);
+        fixture = new SyntheticFixture(SimulationRate.Original, files: AirWeaponFixtureFiles);
         var map = terrain ? CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(200, 200, 1, (_, _) => 0), "airweapons") : null;
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 13, AirPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 13, AirPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
         feeder = new Feeder(world);
         return world;
     }

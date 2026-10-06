@@ -23,7 +23,7 @@ public sealed record SpecialAbilityUpdateData(
     /// <summary><c>SPECIAL_ABILITY_HUGE_DISTANCE</c>: "no limit". Compared, never squared (the square would not fit a <see cref="Fixed"/>).</summary>
     public static readonly Fixed HugeDistance = Fixed.FromInt(10000000);
 
-    public static SpecialAbilityUpdateData Parse(ModuleConfiguration configuration) => new(
+    public static SpecialAbilityUpdateData Parse(RatedModuleConfiguration configuration) => new(
         SpecialPowerBaseData.Parse(configuration),
         ModuleConfigReader.Real(configuration, "StartAbilityRange", HugeDistance),
         ModuleConfigReader.Real(configuration, "AbilityAbortRange", HugeDistance),

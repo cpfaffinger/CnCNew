@@ -9,6 +9,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -192,8 +193,8 @@ static partial class Tests
 
     private static SimulationWorld TransportWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(files: TransportFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 11, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        fixture = new SyntheticFixture(SimulationRate.Original, files: TransportFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 11, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }

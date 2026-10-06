@@ -43,7 +43,7 @@ public sealed record ToppleUpdateData(
     string StumpName, bool KillWhenStartToppled, bool KillWhenToppled, bool KillStumpWhenToppled, bool ToppleLeftOrRightOnly,
     Fixed InitialVelocityPercent, Fixed InitialAccelPercent, Fixed BounceVelocityPercent) : ModuleData
 {
-    public static ToppleUpdateData Parse(ModuleConfiguration configuration) => new(
+    public static ToppleUpdateData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Text(configuration, "StumpName"),
         ModuleConfigReader.Bool(configuration, "KillWhenStartToppling", false),
         ModuleConfigReader.Bool(configuration, "KillWhenFinishedToppling", true),
@@ -201,7 +201,7 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
 public sealed record StructureToppleData(
     DieMuxData Mux, long MinToppleDelayTicks, long MaxToppleDelayTicks, Fixed StructuralIntegrity, Fixed StructuralDecay, string CrushingWeapon) : ModuleData
 {
-    public static StructureToppleData Parse(ModuleConfiguration configuration) => new(
+    public static StructureToppleData Parse(RatedModuleConfiguration configuration) => new(
         DieMuxData.Parse(configuration),
         ModuleConfigReader.Ticks(configuration, "MinToppleDelay", 0),
         ModuleConfigReader.Ticks(configuration, "MaxToppleDelay", 0),
@@ -388,7 +388,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
 /// <summary><c>HeightDieUpdateModuleData</c> field set. <c>DestroyAttachedParticlesAtHeight</c> is a presentation cleanup hint (no particle systems exist) and stays Opaque.</summary>
 public sealed record HeightDieData(Fixed TargetHeightAboveTerrain, bool TargetHeightIncludesStructures, bool OnlyWhenMovingDown, bool SnapToGroundOnDeath, long InitialDelayTicks) : ModuleData
 {
-    public static HeightDieData Parse(ModuleConfiguration configuration) => new(
+    public static HeightDieData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Real(configuration, "TargetHeight", Fixed.Zero),
         ModuleConfigReader.Bool(configuration, "TargetHeightIncludesStructures", false),
         ModuleConfigReader.Bool(configuration, "OnlyWhenMovingDown", false),

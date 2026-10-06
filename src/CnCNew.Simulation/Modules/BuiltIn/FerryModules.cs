@@ -18,7 +18,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// <summary><c>RailedTransportAIUpdateModuleData</c>: the <c>AIUpdate</c> base plus <c>PathPrefixName</c> (default none: the paths are looked up as <c>Start01</c>/<c>End01</c>).</summary>
 public sealed record RailedTransportAiData(AIUpdateData Base, string PathPrefix) : ModuleData
 {
-    public static RailedTransportAiData Parse(ModuleConfiguration configuration) => new(AIUpdateData.Parse(configuration), ModuleConfigReader.Text(configuration, "PathPrefixName"));
+    public static RailedTransportAiData Parse(RatedModuleConfiguration configuration) => new(AIUpdateData.Parse(configuration), ModuleConfigReader.Text(configuration, "PathPrefixName"));
 }
 
 /// <summary>
@@ -275,7 +275,7 @@ public sealed class RailedTransportContain(TransportContainData data) : Transpor
 /// <summary><c>RailedTransportDockUpdateModuleData</c>: the <c>DockUpdate</c> fields plus <c>PullInsideDuration</c> and <c>PushOutsideDuration</c> (ticks, default 0) and <c>ToleranceDistance</c> (default 50).</summary>
 public sealed record RailedTransportDockData(int NumberApproachPositions, long PullInsideTicks, long PushOutsideTicks, Fixed ToleranceDistance) : DockData(NumberApproachPositions)
 {
-    public static RailedTransportDockData Parse(ModuleConfiguration configuration) => new(
+    public static RailedTransportDockData Parse(RatedModuleConfiguration configuration) => new(
         ParseApproachPositions(configuration), ModuleConfigReader.Ticks(configuration, "PullInsideDuration", 0), ModuleConfigReader.Ticks(configuration, "PushOutsideDuration", 0),
         ModuleConfigReader.Real(configuration, "ToleranceDistance", Fixed.FromInt(50)));
 }

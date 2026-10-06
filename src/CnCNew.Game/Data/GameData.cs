@@ -10,6 +10,7 @@ using CnCNew.Presentation.Objects;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Ui.Images;
 using CnCNew.Ui.Text;
 
@@ -55,6 +56,12 @@ public sealed class GameData
     /// </summary>
     public string MapFileHash(string mapPath) => Content.FileHash(mapPath);
 
+    /// <summary>
+    /// The tick rate the game layer runs its sessions at for now: the original's 30 Hz. The one place the game layer names a rate; everything else reads
+    /// <c>Templates.Rate</c> or the world. Replaced by a session parameter when the presentation clocks are rate-independent (phases 21 and 23).
+    /// </summary>
+    public static SimulationRate SessionRate => SimulationRate.Hz30;
+
     /// <summary>Compiles the retail base data (map overlays excluded) and builds every catalog; the slow part of starting the game.</summary>
     public static GameData Load(string contentDirectory, Action<string>? progress = null, bool modelGeometry = true)
     {
@@ -69,8 +76,8 @@ public sealed class GameData
         var visuals = ObjectVisualCatalog.Build(graph);
         // The airfields' parking and runway points come from the draw models' bones, which the simulation cannot read: they enter the world as fingerprinted data (docs/SIM-JET-FLIGHT.md).
         var geometry = modelGeometry ? ModelGeometryLoader.Load(graph, visuals, content) : ModelGeometry.None;
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, geometry);
-        var fingerprint = geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256);
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SessionRate, geometry);
+        var fingerprint = templates.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256));
         var fx = FxCatalog.Build(graph);
         var audio = AudioCatalog.FromGraph(graph, content.Exists);
         var images = MappedImageTable.FromGraph(graph);

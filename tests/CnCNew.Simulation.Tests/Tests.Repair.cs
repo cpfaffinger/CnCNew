@@ -6,6 +6,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -91,8 +92,8 @@ static partial class Tests
 
     private static SimulationWorld RepairWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(files: RepairFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, RepairPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        fixture = new SyntheticFixture(SimulationRate.Original, files: RepairFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, RepairPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }
@@ -290,7 +291,7 @@ static partial class Tests
     /// <summary>The computer flag survives the replay header.</summary>
     public static void RepairPlayerTypeReplayHeader()
     {
-        var fixture = new SyntheticFixture(files: RepairFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: RepairFiles());
         var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, 30, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), RepairPlayers, 20, 5);
         var read = ReplayFormat.Read(ReplayFormat.Write(new ReplayFile(header, [], [])));
         Check.That(read.Header.Players.SequenceEqual(RepairPlayers), "The replay header keeps every player's computer flag.");

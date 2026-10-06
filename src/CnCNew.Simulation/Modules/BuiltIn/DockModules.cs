@@ -77,7 +77,7 @@ public record DockData(int NumberApproachPositions) : ModuleData
     public const int DynamicApproachPositions = -1;
     private const int DefaultDynamicSize = 10;
 
-    internal static int ParseApproachPositions(ModuleConfiguration configuration)
+    internal static int ParseApproachPositions(RatedModuleConfiguration configuration)
         => checked((int)ModuleConfigReader.Int(configuration, "NumberApproachPositions", 0));
 
     internal int InitialSlots => NumberApproachPositions == DynamicApproachPositions ? DefaultDynamicSize : NumberApproachPositions;
@@ -85,12 +85,12 @@ public record DockData(int NumberApproachPositions) : ModuleData
 
 public sealed record SupplyCenterDockData(int NumberApproachPositions) : DockData(NumberApproachPositions)
 {
-    public static SupplyCenterDockData Parse(ModuleConfiguration configuration) => new(ParseApproachPositions(configuration));
+    public static SupplyCenterDockData Parse(RatedModuleConfiguration configuration) => new(ParseApproachPositions(configuration));
 }
 
 public sealed record SupplyWarehouseDockData(int NumberApproachPositions, int StartingBoxes, bool DeleteWhenEmpty) : DockData(NumberApproachPositions)
 {
-    public static SupplyWarehouseDockData Parse(ModuleConfiguration configuration) => new(
+    public static SupplyWarehouseDockData Parse(RatedModuleConfiguration configuration) => new(
         ParseApproachPositions(configuration),
         checked((int)ModuleConfigReader.Int(configuration, "StartingBoxes", 1)),
         ModuleConfigReader.Bool(configuration, "DeleteWhenEmpty", false));
@@ -435,7 +435,7 @@ internal sealed class SupplyWarehouseCreate : SimModule
 /// <summary><c>AutoDepositUpdate.cpp</c> field set. <c>InitialCaptureBonus</c> is typed but not applied (no capture mechanic).</summary>
 public sealed record AutoDepositData(long DepositTimingTicks, int DepositAmount, bool ActualMoney, ImmutableArray<(string Upgrade, int Boost)> UpgradedBoosts) : ModuleData
 {
-    public static AutoDepositData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades)
+    public static AutoDepositData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades)
     {
         var boosts = ImmutableArray.CreateBuilder<(string, int)>();
         foreach (var field in ModuleConfigReader.All(configuration, "UpgradedBoost"))

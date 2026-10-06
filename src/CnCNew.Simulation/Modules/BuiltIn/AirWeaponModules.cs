@@ -92,12 +92,12 @@ internal static class AirWeaponModules
     }
 
     /// <summary>A duration in milliseconds as unrounded ticks (<c>INI::parseDurationReal</c>).</summary>
-    public static Fixed FixedTicks(ModuleConfiguration configuration, string name)
+    public static Fixed FixedTicks(RatedModuleConfiguration configuration, string name)
     {
         var field = ModuleConfigReader.Find(configuration, name);
         if (field is null) return Fixed.Zero;
         return field.Value.Value is GameTime time
-            ? SimulationTiming.DurationMillisecondsToFixedTicks(time.Milliseconds)
+            ? configuration.Time.DurationMillisecondsToFixedTicks(time.Milliseconds)
             : throw new InvalidDataException($"{field.Location.Source}({field.Location.Line}): '{name}' of module '{configuration.Name}' is not a duration.");
     }
 
@@ -110,7 +110,7 @@ internal static class AirWeaponModules
 public sealed record EmpData(long LifetimeTicks, long StartFadeTicks, Fixed StartScale, long DisabledDurationTicks, Fixed TargetScaleMax, Fixed TargetScaleMin, Fixed EffectRadius,
     uint RejectMask, bool DoesNotAffectMyOwnBuildings) : ModuleData
 {
-    public static EmpData Parse(ModuleConfiguration configuration) => new(
+    public static EmpData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "Lifetime", 1),
         ModuleConfigReader.Ticks(configuration, "StartFadeTime", 0),
         ModuleConfigReader.Real(configuration, "StartScale", Fixed.One),
@@ -226,7 +226,7 @@ public sealed class EmpUpdate(EmpData data) : SimModule, IUpdateModule
 /// <summary><c>LeafletDropBehaviorModuleData</c> (<c>EMPUpdate.h</c>): the delay, the disable time and the radius; the leaflet particle system is presentation.</summary>
 public sealed record LeafletData(long DelayTicks, long DisabledDurationTicks, Fixed AffectRadius) : ModuleData
 {
-    public static LeafletData Parse(ModuleConfiguration configuration) => new(
+    public static LeafletData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "Delay", 1),
         ModuleConfigReader.Ticks(configuration, "DisabledDuration", 0),
         ModuleConfigReader.Real(configuration, "AffectRadius", Fixed.FromInt(60)));
@@ -295,7 +295,7 @@ public sealed class LeafletDropBehavior(LeafletData data) : SimModule, IUpdateMo
 /// </summary>
 public sealed record BunkerBusterData(string UpgradeRequired, string DetonationFx, string CrashFx, long CrashFxFrequencyTicks, string ShockwaveWeapon, string OccupantDamageWeapon) : ModuleData
 {
-    public static BunkerBusterData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades)
+    public static BunkerBusterData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades)
     {
         _ = upgrades;
         return new BunkerBusterData(
@@ -389,7 +389,7 @@ public sealed class BunkerBusterBehavior(BunkerBusterData data) : SimModule, IUp
 /// <summary><c>NeutronBlastBehaviorModuleData</c> (<c>NeutronBlastBehavior.h</c>); a missing <c>AffectAirborne</c>/<c>AffectAllies</c> is the reference default (true).</summary>
 public sealed record NeutronBlastData(Fixed BlastRadius, bool AffectAirborne, bool AffectAllies) : ModuleData
 {
-    public static NeutronBlastData Parse(ModuleConfiguration configuration) => new(
+    public static NeutronBlastData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Real(configuration, "BlastRadius", Fixed.FromInt(10)),
         ModuleConfigReader.Bool(configuration, "AffectAirborne", true),
         ModuleConfigReader.Bool(configuration, "AffectAllies", true));
@@ -454,9 +454,9 @@ public sealed class NeutronBlastBehavior(NeutronBlastData data) : SimModule, IUp
 public sealed record NeutronMissileData(Fixed DistanceBeforeTurning, Fixed MaxTurnPerTick, Fixed ForwardDamping, Fixed RelativeSpeed, Fixed TargetFromDirectlyAbove, string LaunchFx, string IgnitionFx,
     long SpecialSpeedTicks, Fixed SpecialSpeedHeight, Fixed SpecialAccelFactor) : ModuleData
 {
-    public static NeutronMissileData Parse(ModuleConfiguration configuration)
+    public static NeutronMissileData Parse(RatedModuleConfiguration configuration)
     {
-        var rate = ModuleConfigReader.Find(configuration, "MaxTurnRate") is null ? FixedTrig.TwoPi * 100 : SimulationTiming.DegreesPerSecondToRadiansPerTick(ModuleConfigReader.Real(configuration, "MaxTurnRate", Fixed.Zero).ToDecimal());
+        var rate = ModuleConfigReader.Find(configuration, "MaxTurnRate") is null ? FixedTrig.TwoPi * 100 : configuration.Time.DegreesPerSecondToRadiansPerTick(ModuleConfigReader.Real(configuration, "MaxTurnRate", Fixed.Zero).ToDecimal());
         return new NeutronMissileData(
             ModuleConfigReader.Real(configuration, "DistanceToTravelBeforeTurning", Fixed.Zero),
             rate,
@@ -688,7 +688,7 @@ public sealed record NeutronBlast(bool Enabled, Fixed DelayTicks, Fixed ScorchDe
 /// <summary><c>NeutronMissileSlowDeathBehaviorModuleData</c> (<c>NeutronMissileSlowDeathUpdate.cpp</c>): the slow-death base, the ground effect list and the blast stages; the scorch mark size is presentation.</summary>
 public sealed record NeutronSlowDeathData(SlowDeathData Base, string GroundFx, ImmutableArray<NeutronBlast> Blasts) : ModuleData
 {
-    public static NeutronSlowDeathData Parse(ModuleConfiguration configuration)
+    public static NeutronSlowDeathData Parse(RatedModuleConfiguration configuration)
     {
         var blasts = ImmutableArray.CreateBuilder<NeutronBlast>();
         for (var stage = 1; stage <= 9; stage++)
@@ -821,7 +821,7 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
 /// <summary><c>MissileLauncherBuildingUpdateModuleData</c> (<c>MissileLauncherBuildingUpdate.h</c>): the power it serves, the door timing and the effect lists played at each door state; the idle audio is presentation.</summary>
 public sealed record MissileLauncherData(string PowerName, long DoorOpenTicks, long DoorWaitOpenTicks, long DoorCloseTicks, string OpeningFx, string OpenFx, string WaitingToCloseFx, string ClosingFx, string ClosedFx) : ModuleData
 {
-    public static MissileLauncherData Parse(ModuleConfiguration configuration) => new(
+    public static MissileLauncherData Parse(RatedModuleConfiguration configuration) => new(
         SpecialPowerModules.RequiredPower(configuration),
         ModuleConfigReader.Ticks(configuration, "DoorOpenTime", 0), ModuleConfigReader.Ticks(configuration, "DoorWaitOpenTime", 0), ModuleConfigReader.Ticks(configuration, "DoorCloseTime", 0),
         ModuleConfigReader.Text(configuration, "DoorOpeningFX"), ModuleConfigReader.Text(configuration, "DoorOpenFX"), ModuleConfigReader.Text(configuration, "DoorWaitingToCloseFX"),
@@ -951,7 +951,7 @@ public sealed class MissileLauncherBuildingUpdate(MissileLauncherData data) : Si
 public sealed record SpectreData(string PowerName, string GattlingTemplate, string HowitzerWeapon, long HowitzerFiringRateTicks, long OrbitTicks, long HowitzerFollowLagTicks, Fixed AttackAreaRadius,
     Fixed StrafingIncrement, Fixed OrbitInsertionSlope, Fixed RandomOffsetForHowitzer, Fixed TargetingReticleRadius, Fixed GunshipOrbitRadius, bool Strafes) : ModuleData
 {
-    public static SpectreData Parse(ModuleConfiguration configuration) => new(
+    public static SpectreData Parse(RatedModuleConfiguration configuration) => new(
         SpecialPowerModules.RequiredPower(configuration),
         ModuleConfigReader.Text(configuration, "GattlingTemplateName"),
         ModuleConfigReader.Text(configuration, "HowitzerWeaponTemplate"),

@@ -189,7 +189,7 @@ public sealed class WeaponCatalog
     public WeaponInfo this[int index] => Weapons[index];
     public bool TryGet(string name, out WeaponInfo info) => _byName.TryGetValue(name, out info!);
 
-    public static WeaponCatalog Build(CompiledDefinitionGraph graph)
+    public static WeaponCatalog Build(CompiledDefinitionGraph graph, SimulationTime timing)
     {
         ArgumentNullException.ThrowIfNull(graph);
         var index = 0;
@@ -205,9 +205,9 @@ public sealed class WeaponCatalog
             var deathType = Field("DeathType")?.Value.Value is EnumValue deathEnum ? NameTables.DeathType.TryIndexOf(deathEnum.Name, out var deathIndex) ? deathIndex : 0 : 0;
             var range = Field("AttackRange")?.Value.Value is Distance attackRange ? Fixed.FromDecimal(attackRange.Value) : Fixed.Zero;
             var clipSize = Field("ClipSize")?.Value.Value is long clip ? checked((int)clip) : 0;
-            var reload = Field("ClipReloadTime")?.Value.Value is GameTime reloadTime ? SimulationTiming.DurationMillisecondsToTicks(reloadTime.Milliseconds) : 0;
+            var reload = Field("ClipReloadTime")?.Value.Value is GameTime reloadTime ? timing.DurationMillisecondsToTicks(reloadTime.Milliseconds) : 0;
             var delay = Field("DelayBetweenShots")?.Value.Value is ShotDelayValue shotDelay
-                ? SimulationTiming.DurationMillisecondsToTicks(shotDelay.Min.Milliseconds) : SimulationTiming.SleepNone;
+                ? timing.DurationMillisecondsToTicks(shotDelay.Min.Milliseconds) : SimulationTiming.SleepNone;
             var primaryRadius = Field("PrimaryDamageRadius")?.Value.Value is Distance primaryRadiusValue ? Fixed.FromDecimal(primaryRadiusValue.Value) : Fixed.Zero;
             var secondaryRadius = Field("SecondaryDamageRadius")?.Value.Value is Distance secondaryRadiusValue ? Fixed.FromDecimal(secondaryRadiusValue.Value) : Fixed.Zero;
             var secondaryDamage = Field("SecondaryDamage")?.Value.Value is decimal secondary ? Fixed.FromDecimal(secondary) : Fixed.Zero;
@@ -240,7 +240,7 @@ public sealed class WeaponCatalog
                 null => false,
                 var other => throw new InvalidDataException($"{definition.OriginalName}: '{key}' has the unexpected value {other}."),
             };
-            Fixed Speed(string key) => Field(key)?.Value.Value is decimal perSecond ? SimulationTiming.PerSecondToPerTick(perSecond) : WeaponInfo.InstantSpeed;
+            Fixed Speed(string key) => Field(key)?.Value.Value is decimal perSecond ? timing.PerSecondToPerTick(perSecond) : WeaponInfo.InstantSpeed;
             // Weapon.cpp TheWeaponTemplateFieldParseTable: one boolean key per m_antiMask bit, starting from WEAPON_ANTI_GROUND.
             int AntiMaskOf()
             {
@@ -280,8 +280,8 @@ public sealed class WeaponCatalog
                 AntiMask = AntiMaskOf(),
                 ContinuousFireOneShots = Number("ContinuousFireOne") is { } one ? checked((int)one) : int.MaxValue,
                 ContinuousFireTwoShots = Number("ContinuousFireTwo") is { } two ? checked((int)two) : int.MaxValue,
-                ContinuousFireCoastTicks = Number("ContinuousFireCoast") is { } coast ? SimulationTiming.DurationMillisecondsToTicks(coast) : 0,
-                PreAttackDelayTicks = Number("PreAttackDelay") is { } preAttack ? SimulationTiming.DurationMillisecondsToTicks(preAttack) : 0,
+                ContinuousFireCoastTicks = Number("ContinuousFireCoast") is { } coast ? timing.DurationMillisecondsToTicks(coast) : 0,
+                PreAttackDelayTicks = Number("PreAttackDelay") is { } preAttack ? timing.DurationMillisecondsToTicks(preAttack) : 0,
                 // TheWeaponPrefireNames; the constructor default is PREFIRE_PER_SHOT.
                 PreAttackType = Name("PreAttackType").Split([' ', '\t', ';'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToUpperInvariant() switch
                 {

@@ -74,7 +74,7 @@ internal static class MissionPresentationTests
         var teams = ImmutableArray.Create(new MapProperties([Text("teamName", "teamHero"), Text("teamOwner", "Hero"), new MapProperty("teamIsSingleton", MapPropertyType.Bool, 1, 0m, string.Empty)]));
         var map = new MapData("mission-presentation", new MapHeightField(width, width, border, [..Enumerable.Repeat(new MapBoundary(cells, cells), boundaries)], [..new byte[width * width]]), blend, MapProperties.Empty,
             sides, teams, [..objects ?? []], [], [], [new MapScriptList([], []), new MapScriptList([..scripts], [])], []);
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         return (map, fixture, TerrainMap.Build(map, "mission-presentation"));
     }
 
@@ -116,7 +116,7 @@ internal static class MissionPresentationTests
         // CompletePresentation must land before the Update() call of this exact engine tick to unblock that tick's
         // CAMERA_MOVEMENT_FINISHED check (BeforeStep()'s own doc comment explains why: same timing as the engine's own
         // PresentationLatencyTicks auto-expiry, which also runs at the top of Update, before that tick's scripts).
-        var completionTick = fireTick + (long)Math.Round((double)durationSeconds * SimulationTiming.LogicFramesPerSecond);
+        var completionTick = fireTick + (long)Math.Round((double)durationSeconds * SimulationRate.OriginalFramesPerSecond);
         while (true)
         {
             var dueThisStep = session.World.Tick >= completionTick;

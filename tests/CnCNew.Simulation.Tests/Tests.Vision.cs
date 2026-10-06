@@ -8,6 +8,7 @@ using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -98,9 +99,9 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, TerrainMap Terrain) VisionSetup()
     {
-        var fixture = new SyntheticFixture(files: VisionFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: VisionFiles());
         var terrain = NavTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         return (world, new Feeder(world), fixture, terrain);
     }
 
@@ -224,7 +225,7 @@ static partial class Tests
         Check.That(WorldSnapshot.Write(restored).AsSpan().SequenceEqual(bytes), "A snapshot with vision round-trips byte-identically.");
         for (var tick = 0; tick < 30; tick++) Check.That(first.Step().StateHash == restored.Step().StateHash, "A restored world continues hash-identically.");
 
-        var plain = NewWorld(new SyntheticFixture());
+        var plain = NewWorld(new SyntheticFixture(SimulationRate.Original));
         Check.That(plain.Vision is null && plain.IsPositionVisibleTo(new PlayerId(1), Fixed.FromInt(5), Fixed.FromInt(5)), "Without a terrain there is no fog: everything is visible.");
     }
 }

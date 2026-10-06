@@ -41,6 +41,14 @@ run.Test("State hash: determinism, order independence, incremental == full", Tes
 run.Test("Snapshot round trip and continuation", Tests.SnapshotRoundTrip);
 run.Test("Corrupt, truncated and foreign snapshots are rejected", Tests.SnapshotRejection);
 run.Test("Replay format round trip and rejection", Tests.ReplayFormatTests);
+run.Test("Tick rate: at 30 Hz the time service equals the former formulas on a wide sweep", Tests.TickRateContractAtThirtyEqualsTheFormerFormulas);
+run.Test("Tick rate: at 60 and 120 Hz durations stay on the 30 Hz grid, rates of change scale", Tests.TickRateContractAtSixtyAndOneTwenty);
+run.Test("Tick rate: 30, 60 and 120 Hz are supported, 50 is rejected; the rate enters the fingerprint above 30 Hz", Tests.TickRateSupportedRates);
+run.Test("Tick rate: the catalog is built per rate", Tests.TickRateCatalogIsBuiltPerRate);
+run.Test("Tick rate: a world refuses a catalog of another rate", Tests.TickRateWorldRefusesACatalogOfAnotherRate);
+run.Test("Tick rate: snapshots at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateSnapshotsCarryTheirRate);
+run.Test("Tick rate: replays at 60 and 120 Hz run; 50 Hz, a catalog and a world of another rate are rejected", Tests.TickRateReplaysCarryTheirRate);
+run.Test("Tick rate: mission states at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateMissionSnapshotsCarryTheirRate);
 run.Test("Replay equality, divergence detection and continuation", Tests.ReplayRuns);
 run.Test("Stress scenario returns to baseline (short run)", Tests.ShortStress);
 run.Test("Definition insertion order does not change the simulation", Tests.DefinitionOrderIndependence);

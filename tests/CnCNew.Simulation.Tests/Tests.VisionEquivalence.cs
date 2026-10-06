@@ -6,6 +6,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -293,10 +294,10 @@ static partial class Tests
     /// </summary>
     public static void VisionWorldMatchesTheReferenceComputation()
     {
-        var fixture = new SyntheticFixture(files: VisionEquivalenceFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: VisionEquivalenceFiles());
         const int cellsX = 61, cellsY = 47;
         var terrain = TerrainMap.Build(SyntheticMaps.Build(cellsX, cellsY, 1, (_, _) => 0, null, null), "vision-equivalence");
-        SimulationWorld Create() => new(new WorldConfiguration(new WorldId(1), 7, VisionThreePlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        SimulationWorld Create() => new(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, VisionThreePlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         var fast = Create();
         var reference = Create();
         reference.Vision!.ReferenceMode = true;

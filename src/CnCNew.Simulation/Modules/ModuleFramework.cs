@@ -8,6 +8,7 @@ using CnCNew.Simulation.Random;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Modules;
@@ -22,6 +23,9 @@ public abstract record ModuleData;
 public interface IWorldServices
 {
     long Tick { get; }
+
+    /// <summary>The time service of the world's tick rate: logic frames of the original, seconds and per-second values to ticks and per-tick values.</summary>
+    SimulationTime Time { get; }
 
     /// <summary>The loaded map's terrain; <see langword="null"/> in fixture worlds (flat ground at height 0, no boundaries).</summary>
     TerrainMap? Terrain { get; }

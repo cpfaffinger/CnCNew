@@ -100,7 +100,7 @@ internal static class WorldEffectModules
 /// <summary><c>OCLUpdate.cpp</c>'s fields: the creation list, the per-side lists (<c>FactionOCL = Faction:&lt;side&gt; OCL:&lt;name&gt;</c>), the delay range (ticks), whether it is created at the map edge and whether the lists depend on the owner's faction.</summary>
 public sealed record OclUpdateData(string Ocl, ImmutableArray<(string Side, string Ocl)> FactionOcls, long MinDelay, long MaxDelay, bool CreateAtEdge, bool FactionTriggered) : ModuleData
 {
-    public static OclUpdateData Parse(ModuleConfiguration configuration)
+    public static OclUpdateData Parse(RatedModuleConfiguration configuration)
     {
         var factions = ImmutableArray.CreateBuilder<(string, string)>();
         foreach (var field in ModuleConfigReader.All(configuration, "FactionOCL"))
@@ -214,7 +214,7 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
 /// <summary><c>DynamicShroudClearingRangeUpdate.cpp</c>'s fields: when and how long the clearing range shrinks to <c>FinalVision</c> and grows back, and how often the range is applied (ticks). The decal template is presentation.</summary>
 public sealed record DynamicShroudData(long ChangeInterval, long GrowInterval, long ShrinkDelay, long ShrinkTime, long GrowDelay, long GrowTime, Fixed FinalVision) : ModuleData
 {
-    public static DynamicShroudData Parse(ModuleConfiguration configuration) => new(
+    public static DynamicShroudData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "ChangeInterval", 0), ModuleConfigReader.Ticks(configuration, "GrowInterval", 0), ModuleConfigReader.Ticks(configuration, "ShrinkDelay", 0),
         ModuleConfigReader.Ticks(configuration, "ShrinkTime", 0), ModuleConfigReader.Ticks(configuration, "GrowDelay", 0), ModuleConfigReader.Ticks(configuration, "GrowTime", 0),
         ModuleConfigReader.Real(configuration, "FinalVision", Fixed.Zero));
@@ -337,7 +337,7 @@ public sealed class DynamicShroudClearingRangeUpdate(DynamicShroudData data) : S
 /// <summary><c>FireOCLAfterWeaponCooldownUpdate.cpp</c>'s fields and the <c>UpgradeMux</c>: the weapon slot watched, the creation list, how many shots in a row it takes, and the life of the created objects per second of firing (milliseconds of life per second) up to a cap (ticks).</summary>
 public sealed record FireOclAfterCooldownData(UpgradeMuxData UpgradeMux, int WeaponSlot, string Ocl, int MinShots, long LifetimePerSecond, long MaxLifetimeTicks) : ModuleData
 {
-    public static FireOclAfterCooldownData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
+    public static FireOclAfterCooldownData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
         UpgradeMuxData.Parse(configuration, upgrades),
         ModuleConfigReader.Find(configuration, "WeaponSlot")?.Value.Value is EnumValue value && NameTablesPhase5.WeaponSlot.TryIndexOf(value.Name, out var slot) ? slot : 0,
         ModuleConfigReader.Text(configuration, "OCL"), checked((int)ModuleConfigReader.Int(configuration, "MinShotsToCreateOCL", 1)),
@@ -439,7 +439,7 @@ public sealed class FireOCLAfterWeaponCooldownUpdate(FireOclAfterCooldownData da
 /// <summary><c>WaveGuideUpdate.cpp</c>'s fields: the delay before the wave starts moving (ticks), the width and the spacing and bend of its front, the damage zone and amount, the topple force and the water height it brings. Sounds, particles and the shore effects are presentation; <c>WaterVelocity</c> pushes the water surface (terrain, not simulated).</summary>
 public sealed record WaveGuideData(long WaveDelay, Fixed YSize, Fixed LinearSpacing, Fixed BendMagnitude, Fixed PreferredHeight, Fixed DamageRadius, Fixed DamageAmount, Fixed ToppleForce, int SplashFrequency) : ModuleData
 {
-    public static WaveGuideData Parse(ModuleConfiguration configuration) => new(
+    public static WaveGuideData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "WaveDelay", 0), ModuleConfigReader.Real(configuration, "YSize", Fixed.Zero), ModuleConfigReader.Real(configuration, "LinearWaveSpacing", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "WaveBendMagnitude", Fixed.Zero), ModuleConfigReader.Real(configuration, "PreferredHeight", Fixed.Zero), ModuleConfigReader.Real(configuration, "DamageRadius", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "DamageAmount", Fixed.Zero), ModuleConfigReader.Real(configuration, "ToppleForce", Fixed.Zero), checked((int)ModuleConfigReader.Int(configuration, "RandomSplashSoundFrequency", 0)));
@@ -502,7 +502,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
         }
 
         // Every half second a random splash sound is rolled; the roll is state of the logic stream even though the sound is presentation.
-        if (now - _splashTick > SimulationTiming.LogicFramesPerSecond / 2)
+        if (now - _splashTick > world.Time.OriginalFrames(SimulationRate.OriginalFramesPerSecond / 2))
         {
             _splashTick = now;
             _ = world.LogicRandom.Range(1, 100);
@@ -655,7 +655,7 @@ public sealed class DamDie(PlainDieData data) : DieModuleBase(data.Mux)
 /// <summary><c>CheckpointUpdate.h</c>/<c>EnemyNearUpdate.h</c>: the scan delay (ticks; default one second).</summary>
 public sealed record ScanData(long ScanDelayTicks) : ModuleData
 {
-    public static ScanData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "ScanDelayTime", SimulationTiming.LogicFramesPerSecond));
+    public static ScanData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "ScanDelayTime", SimulationRate.OriginalFramesPerSecond));
 }
 
 /// <summary>
@@ -774,7 +774,7 @@ public sealed class EnemyNearUpdate(ScanData data) : SimModule, IUpdateModule
 public sealed record FirestormData(long InitialDelay, Fixed InitialHeight, Fixed InitialMajor, Fixed InitialMinor, Fixed FinalHeight, Fixed FinalMajor, Fixed FinalMinor, long TransitionTime,
     bool ReverseAtTransitionTime, long DamageDelay, Fixed DamageAmount, Fixed MaxHeightForDamage, string FxList) : ModuleData
 {
-    public static FirestormData Parse(ModuleConfiguration configuration) => new(
+    public static FirestormData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "InitialDelay", 0), ModuleConfigReader.Real(configuration, "InitialHeight", Fixed.Zero), ModuleConfigReader.Real(configuration, "InitialMajorRadius", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "InitialMinorRadius", Fixed.Zero), ModuleConfigReader.Real(configuration, "FinalHeight", Fixed.Zero), ModuleConfigReader.Real(configuration, "FinalMajorRadius", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "FinalMinorRadius", Fixed.Zero), ModuleConfigReader.Ticks(configuration, "TransitionTime", 0), ModuleConfigReader.Bool(configuration, "ReverseAtTransitionTime", false),
@@ -937,7 +937,7 @@ public sealed class FirestormDynamicGeometryInfoUpdate(FirestormData data) : Sim
 /// <summary><c>WeaponBonusUpdate.cpp</c>'s fields: the kinds an affected object must have and must not have, the duration of the bonus and the pulse interval (ticks), the range and the bonus condition given.</summary>
 public sealed record WeaponBonusUpdateData(ImmutableArray<string> RequiredKinds, ImmutableArray<string> ForbiddenKinds, long Duration, long Delay, Fixed Range, int Condition) : ModuleData
 {
-    public static WeaponBonusUpdateData Parse(ModuleConfiguration configuration)
+    public static WeaponBonusUpdateData Parse(RatedModuleConfiguration configuration)
     {
         var condition = ModuleConfigReader.Find(configuration, "BonusConditionType")?.Value.Value is EnumValue value && NameTablesPhase5.WeaponBonusCondition.TryIndexOf(value.Name, out var index) ? index : -1;
         return new WeaponBonusUpdateData(ModuleConfigReader.Flags(configuration, "RequiredAffectKindOf")?.Names ?? [], ModuleConfigReader.Flags(configuration, "ForbiddenAffectKindOf")?.Names ?? [],
@@ -1078,7 +1078,7 @@ public sealed class WeaponBonusUpdate(WeaponBonusUpdateData data) : SimModule, I
 /// <summary><c>CostModifierUpgrade.cpp</c>: the <c>UpgradeMux</c>, the kinds the discount applies to (<c>EffectKindOf</c>) and the change (<c>Percentage</c>, negative: cheaper).</summary>
 public sealed record CostModifierData(UpgradeMuxData Mux, ImmutableArray<string> Kinds, Fixed Percentage) : ModuleData
 {
-    public static CostModifierData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
+    public static CostModifierData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
         UpgradeMuxData.Parse(configuration, upgrades), ModuleConfigReader.Flags(configuration, "EffectKindOf")?.Names ?? [], ModuleConfigReader.Real(configuration, "Percentage", Fixed.Zero));
 }
 
@@ -1132,7 +1132,7 @@ public sealed class BoneFXUpdate : SimModule
     public override void Load(IStateReader reader) { }
 
     /// <summary>Rejects a configuration that would create objects at bones.</summary>
-    public static NoFieldsData Check(ModuleConfiguration configuration)
+    public static NoFieldsData Check(RatedModuleConfiguration configuration)
     {
         foreach (var state in new[] { "Pristine", "Damaged", "ReallyDamaged", "Rubble" })
             for (var slot = 1; slot <= 8; slot++)

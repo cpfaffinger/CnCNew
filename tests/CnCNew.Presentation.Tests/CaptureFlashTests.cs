@@ -7,6 +7,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 using static CnCNew.Presentation.Tests.TestHarness;
 
@@ -101,8 +102,8 @@ internal static class CaptureFlashTests
 
     private static (SimulationWorld World, FrameProjector Projector, EntityId Capturer, EntityId Station) Stage(bool withSettings)
     {
-        var fixture = new SyntheticFixture(files: Files());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, ""), fixture.Templates);
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Files());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, ""), fixture.Templates);
         ulong sequence = 0;
         world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, "FlashCapturer", new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(50), Fixed.Zero, Fixed.Zero));
         world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, "FlashStation", new PlayerId(2), Fixed.FromInt(200), Fixed.FromInt(50), Fixed.Zero, Fixed.Zero));

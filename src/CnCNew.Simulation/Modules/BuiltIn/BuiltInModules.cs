@@ -12,7 +12,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// </summary>
 public static class BuiltInModules
 {
-    private static ModuleBinding<TData> Bind<TData>(string name, ModuleOwnerKind owner, Func<ModuleConfiguration, TData> parse, Func<TData, SimModule> create)
+    private static ModuleBinding<TData> Bind<TData>(string name, ModuleOwnerKind owner, Func<RatedModuleConfiguration, TData> parse, Func<TData, SimModule> create)
         where TData : ModuleData
         => new(name, owner, (configuration, _) => parse(configuration), create);
 

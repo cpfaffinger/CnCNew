@@ -47,17 +47,27 @@ public static class ReplayRunner
         if (header.FormatVersion != ReplayFormat.CurrentVersion) throw new ReplayRejectedException($"Replay format version {header.FormatVersion} is not supported.");
         if (header.CommandTableVersion != CommandTypes.Version)
             throw new ReplayRejectedException($"The replay uses command table version {header.CommandTableVersion}; this build implements {CommandTypes.Version}.");
-        if (header.TickRate != SimulationTiming.LogicFramesPerSecond)
-            throw new ReplayRejectedException($"The replay was recorded at {header.TickRate} Hz; the simulation runs at {SimulationTiming.LogicFramesPerSecond} Hz.");
+        if (!SimulationRate.IsSupported(header.TickRate))
+            throw new ReplayRejectedException($"The replay was recorded at {header.TickRate} Hz; supported are 30, 60 and 120 Hz.");
         if (!string.Equals(header.DefinitionFingerprint, definitionFingerprint, StringComparison.OrdinalIgnoreCase))
             throw new ReplayRejectedException("The replay was recorded against different definitions (fingerprint mismatch); it is refused.");
     }
 
+    /// <summary>The tick rate of a replay header; an unsupported rate is refused.</summary>
+    public static SimulationRate RateOf(ReplayHeader header)
+        => SimulationRate.IsSupported(header.TickRate) ? SimulationRate.FromTicksPerSecond(header.TickRate)
+            : throw new ReplayRejectedException($"The replay was recorded at {header.TickRate} Hz; supported are 30, 60 and 120 Hz.");
+
+    /// <summary>Creates the world a replay starts from, at the replay's tick rate; <paramref name="templates"/> must be a catalog of that rate.</summary>
     public static SimulationWorld CreateWorld(ReplayHeader header, TemplateCatalog templates, TerrainMap? terrain = null)
     {
+        ArgumentNullException.ThrowIfNull(templates);
         if (!string.Equals(header.TerrainFingerprint, terrain?.Fingerprint ?? string.Empty, StringComparison.Ordinal))
             throw new ReplayRejectedException("The replay was recorded on a different terrain (fingerprint mismatch); it is refused.");
-        return new(new WorldConfiguration(header.WorldId, header.Seed, header.Players, header.FixtureId, header.DefinitionFingerprint.ToUpperInvariant(), header.TerrainFingerprint), templates, terrain);
+        var rate = RateOf(header);
+        if (rate != templates.Rate)
+            throw new ReplayRejectedException($"The replay was recorded at {rate}; the catalog was built for {templates.Rate}.");
+        return new(new WorldConfiguration(header.WorldId, rate, header.Seed, header.Players, header.FixtureId, header.DefinitionFingerprint.ToUpperInvariant(), header.TerrainFingerprint), templates, terrain);
     }
 
     /// <summary>Runs the replay from a fresh world.</summary>
@@ -71,6 +81,9 @@ public static class ReplayRunner
     public static ReplayRunResult Run(ReplayFile replay, SimulationWorld world, ReplayRunOptions? options = null)
     {
         options ??= new ReplayRunOptions();
+        // The command stream is addressed in ticks: on a world of another rate every command would land at a different game time.
+        if (world.Rate.TicksPerSecond != replay.Header.TickRate)
+            throw new ReplayRejectedException($"The replay was recorded at {replay.Header.TickRate} Hz; the world runs at {world.Rate}.");
         var end = Math.Min(options.StopTick ?? replay.Header.EndTick, replay.Header.EndTick);
         var startTick = world.Tick;
         var hashes = options.RecordTickHashes ? new ulong[Math.Max(0, end - startTick)] : [];

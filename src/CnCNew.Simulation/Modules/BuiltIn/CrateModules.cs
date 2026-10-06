@@ -50,7 +50,7 @@ internal static class CrateModules
     public static bool UsesAirborneLocomotor(Entity entity) => entity.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
 
     /// <summary><c>UpgradeType:&lt;name&gt; Boost:&lt;int&gt;</c> (<c>INI::parseUpgradePair</c>), every occurrence in file order; an unknown upgrade name is an error, never a silent zero.</summary>
-    public static ImmutableArray<(string Upgrade, int Boost)> UpgradePairs(ModuleConfiguration configuration, string key, UpgradeCatalog upgrades)
+    public static ImmutableArray<(string Upgrade, int Boost)> UpgradePairs(RatedModuleConfiguration configuration, string key, UpgradeCatalog upgrades)
     {
         var pairs = ImmutableArray.CreateBuilder<(string, int)>();
         foreach (var field in ModuleConfigReader.All(configuration, key))
@@ -106,7 +106,7 @@ internal static class CrateModules
 public sealed record CrateCollideData(
     ImmutableArray<string> RequiredKindOf, ImmutableArray<string> ForbiddenKindOf, bool ForbidOwnerPlayer, bool BuildingPickup, bool HumanOnly, string PickupScience, string ExecuteFx) : ModuleData
 {
-    public static CrateCollideData Parse(ModuleConfiguration configuration) => new(
+    public static CrateCollideData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Flags(configuration, "RequiredKindOf")?.Names ?? [],
         ModuleConfigReader.Flags(configuration, "ForbiddenKindOf")?.Names ?? [],
         ModuleConfigReader.Bool(configuration, "ForbidOwnerPlayer", false),
@@ -162,7 +162,7 @@ public abstract class CrateCollideBase(CrateCollideData crate) : SimModule, ICol
 /// <summary><c>MoneyCrateCollideModuleData</c>: <c>MoneyProvided</c> (default 0) and the repeatable <c>UpgradedBoost</c> pairs.</summary>
 public sealed record MoneyCrateData(CrateCollideData Crate, int MoneyProvided, ImmutableArray<(string Upgrade, int Boost)> UpgradedBoosts) : ModuleData
 {
-    public static MoneyCrateData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades)
+    public static MoneyCrateData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades)
         => new(CrateCollideData.Parse(configuration), checked((int)ModuleConfigReader.Int(configuration, "MoneyProvided", 0)), CrateModules.UpgradePairs(configuration, "UpgradedBoost", upgrades));
 }
 
@@ -191,7 +191,7 @@ public sealed class MoneyCrateCollide(MoneyCrateData data) : CrateCollideBase(da
 /// <summary><c>VeterancyCrateCollideModuleData</c>: <c>EffectRange</c> (0 = only the toucher), <c>AddsOwnerVeterancy</c> and <c>IsPilot</c>.</summary>
 public sealed record VeterancyCrateData(CrateCollideData Crate, int EffectRange, bool AddsOwnerVeterancy, bool IsPilot) : ModuleData
 {
-    public static VeterancyCrateData Parse(ModuleConfiguration configuration) => new(CrateCollideData.Parse(configuration),
+    public static VeterancyCrateData Parse(RatedModuleConfiguration configuration) => new(CrateCollideData.Parse(configuration),
         checked((int)ModuleConfigReader.Int(configuration, "EffectRange", 0)), ModuleConfigReader.Bool(configuration, "AddsOwnerVeterancy", false), ModuleConfigReader.Bool(configuration, "IsPilot", false));
 }
 
@@ -245,7 +245,7 @@ public sealed class VeterancyCrateCollide(VeterancyCrateData data) : CrateCollid
 /// <summary><c>ConvertToCarBombCrateCollideModuleData</c>: the FX played at the converted vehicle (<c>FXList</c>).</summary>
 public sealed record ConvertToCarBombData(CrateCollideData Crate, string Fx) : ModuleData
 {
-    public static ConvertToCarBombData Parse(ModuleConfiguration configuration) => new(CrateCollideData.Parse(configuration), ModuleConfigReader.Text(configuration, "FXList"));
+    public static ConvertToCarBombData Parse(RatedModuleConfiguration configuration) => new(CrateCollideData.Parse(configuration), ModuleConfigReader.Text(configuration, "FXList"));
 }
 
 /// <summary>
@@ -291,7 +291,7 @@ public sealed class ConvertToCarBombCrateCollide(ConvertToCarBombData data) : Cr
 /// <summary><c>HijackerUpdateModuleData</c>: <c>ParachuteName</c> (the container the hijacker falls out of an airborne wreck in); <c>AttachToTargetBone</c> is a model detail.</summary>
 public sealed record HijackerUpdateData(string ParachuteName) : ModuleData
 {
-    public static HijackerUpdateData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Text(configuration, "ParachuteName"));
+    public static HijackerUpdateData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Text(configuration, "ParachuteName"));
 }
 
 /// <summary>
@@ -458,13 +458,13 @@ public sealed class HijackerUpdate(HijackerUpdateData data) : SimModule, IUpdate
 /// <summary>A sabotage module's duration in ticks (<c>SabotageDuration</c> of the military factory, <c>SabotagePowerDuration</c> of the power plant; default 0 like the reference).</summary>
 public sealed record SabotageDurationData(CrateCollideData Crate, long DurationTicks) : ModuleData
 {
-    public static SabotageDurationData Parse(ModuleConfiguration configuration, string key) => new(CrateCollideData.Parse(configuration), ModuleConfigReader.Ticks(configuration, key, 0));
+    public static SabotageDurationData Parse(RatedModuleConfiguration configuration, string key) => new(CrateCollideData.Parse(configuration), ModuleConfigReader.Ticks(configuration, key, 0));
 }
 
 /// <summary><c>SabotageSupplyCenterCrateCollideModuleData</c>: <c>StealCashAmount</c> (default 0).</summary>
 public sealed record SabotageSupplyCenterData(CrateCollideData Crate, int StealCashAmount) : ModuleData
 {
-    public static SabotageSupplyCenterData Parse(ModuleConfiguration configuration) => new(CrateCollideData.Parse(configuration), checked((int)ModuleConfigReader.Int(configuration, "StealCashAmount", 0)));
+    public static SabotageSupplyCenterData Parse(RatedModuleConfiguration configuration) => new(CrateCollideData.Parse(configuration), checked((int)ModuleConfigReader.Int(configuration, "StealCashAmount", 0)));
 }
 
 /// <summary>
@@ -583,7 +583,7 @@ public sealed class SabotageSupplyCenterCrateCollide(SabotageSupplyCenterData da
 /// <summary><c>PilotFindVehicleUpdateModuleData</c>: <c>ScanRate</c> (default 0), <c>ScanRange</c> (default 0), <c>MinHealth</c> (default 0.5).</summary>
 public sealed record PilotFindVehicleData(long ScanTicks, Fixed ScanRange, Fixed MinHealth) : ModuleData
 {
-    public static PilotFindVehicleData Parse(ModuleConfiguration configuration) => new(
+    public static PilotFindVehicleData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "ScanRate", 0), ModuleConfigReader.Real(configuration, "ScanRange", Fixed.Zero), ModuleConfigReader.Real(configuration, "MinHealth", Fixed.FromDecimal(0.5m)));
 }
 

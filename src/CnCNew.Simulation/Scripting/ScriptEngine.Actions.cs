@@ -363,11 +363,12 @@ public sealed partial class ScriptEngine
         _executedActions++;
     }
 
-    private static long SecondsToFrames(Fixed seconds)
+    private long SecondsToFrames(Fixed seconds)
     {
-        // REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value * 1000)): seconds times the logic rate, rounded up.
-        var frames = seconds * SimulationTiming.LogicFramesPerSecond;
-        return frames.Ceiling();
+        // REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value * 1000)): seconds times the logic rate of the original, rounded up to whole
+        // frames of the original, then scaled to ticks (the grid rule of SimulationTime).
+        var frames = seconds * SimulationRate.OriginalFramesPerSecond;
+        return _world.Time.OriginalFrames(frames.Ceiling());
     }
 
     private void SetScriptActive(string name, bool active)

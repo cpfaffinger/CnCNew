@@ -9,6 +9,7 @@ using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -210,9 +211,9 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, TerrainMap? Terrain) ConstructionSetup(bool withTerrain = false, IEnumerable<(int X, int Y)>? cliffs = null, int money = 1000)
     {
-        var fixture = new SyntheticFixture(files: ConstructionFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: ConstructionFiles());
         var terrain = withTerrain ? NavTerrain(cliffs) : null;
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
         var feeder = new Feeder(world);
         if (money > 0)
         {

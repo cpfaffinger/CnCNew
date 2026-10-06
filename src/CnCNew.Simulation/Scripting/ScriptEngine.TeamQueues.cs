@@ -80,7 +80,7 @@ public sealed partial class ScriptEngine
     /// <summary><c>AIPlayer::checkReadyTeams</c> for one team.</summary>
     private void UpdateReadyTeam(TeamQueueEntry entry, ScriptTeam team, ScriptTeamPrototype prototype, Entity[] members)
     {
-        var timeExpired = entry.Started + 60 * SimulationTiming.LogicFramesPerSecond < _tick;
+        var timeExpired = entry.Started + _world.Time.WholeSecondsToTicks(60) < _tick;
         var allIdle = members.All(IsIdle);
         var anyIdle = members.Any(IsIdle);
         if (anyIdle && prototype.ExecutesActionsOnCreate && _program.FindScript(prototype.ProductionCondition) is { Script.Actions.IsDefaultOrEmpty: false }) allIdle = true;

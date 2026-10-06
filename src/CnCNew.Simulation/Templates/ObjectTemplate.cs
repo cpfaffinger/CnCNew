@@ -79,7 +79,7 @@ public sealed class ObjectTemplate
         ImmutableArray<string> presentationModules, ImmutableArray<string> missingModules,
         ArmorInfo defaultArmor, ArmorInfo? playerUpgradeArmor, ImmutableArray<ArmorInfo?> veteranArmor,
         ImmutableArray<WeaponSetInfo> weaponSets, LocomotorInfo? locomotor,
-        ImmutableArray<PrerequisiteLine> prerequisites, ImmutableArray<string> commandSets)
+        ImmutableArray<PrerequisiteLine> prerequisites, ImmutableArray<string> commandSets, SimulationTime timing)
     {
         CommandSets = commandSets;
         Buildable = definition.Fields.LastOrDefault(field => field.Name.Equals("Buildable", StringComparison.OrdinalIgnoreCase))?.Value.Value is EnumValue buildable ? buildable.Name : "Yes";
@@ -103,7 +103,7 @@ public sealed class ObjectTemplate
         ShroudClearingRange = definition.Fields.Any(field => field.Name.Equals("ShroudClearingRange", StringComparison.OrdinalIgnoreCase)) ? Real(definition, "ShroudClearingRange") : VisionRange;
         TransportSlotCount = definition.Fields.LastOrDefault(field => field.Name.Equals("TransportSlotCount", StringComparison.OrdinalIgnoreCase))?.Value.Value is long slots ? checked((int)slots) : 0;
         BuildCost = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildCost", StringComparison.OrdinalIgnoreCase))?.Value.Value is Money cost ? Fixed.FromInt(cost.Value) : Fixed.Zero;
-        BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? SimulationTiming.SecondsToTicks(seconds) : 0;
+        BuildTicks = definition.Fields.LastOrDefault(field => field.Name.Equals("BuildTime", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal seconds ? timing.SecondsToTicks(seconds) : 0;
         EnergyProduction = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyProduction", StringComparison.OrdinalIgnoreCase))?.Value.Value is long energy ? checked((int)energy) : 0;
         EnergyBonus = definition.Fields.LastOrDefault(field => field.Name.Equals("EnergyBonus", StringComparison.OrdinalIgnoreCase))?.Value.Value is long bonus ? checked((int)bonus) : 0;
         MaxSimultaneousOfType = definition.Fields.LastOrDefault(field => field.Name.Equals("MaxSimultaneousOfType", StringComparison.OrdinalIgnoreCase))?.Value.Value is long maxType ? checked((int)maxType) : 0;
@@ -118,7 +118,7 @@ public sealed class ObjectTemplate
         DefaultWeapon = DefaultWeaponSet?.Primary ?? -1;
         HasMultipleWeaponSlots = weaponSets.Any(set => set.WeaponCount > 1);
         Locomotor = locomotor;
-        Turrets = TurretSet.Read(definition.Modules);
+        Turrets = TurretSet.Read(definition.Modules, timing);
         Prerequisites = prerequisites;
         CrusherLevel = definition.Fields.LastOrDefault(field => field.Name.Equals("CrusherLevel", StringComparison.OrdinalIgnoreCase))?.Value.Value is long crusher ? checked((int)crusher) : 0;
         CrushableLevel = definition.Fields.LastOrDefault(field => field.Name.Equals("CrushableLevel", StringComparison.OrdinalIgnoreCase))?.Value.Value is long crushable ? checked((int)crushable) : 255;
@@ -364,22 +364,24 @@ public sealed class TemplateCatalog
     /// <paramref name="geometry"/>: the model-derived constants (airfield bones) the client layer read from the draw models; omitted, the airfields keep their computed layout.
     /// A table that names an airfield this catalog does not know is refused.
     /// </summary>
-    public static TemplateCatalog Build(CompiledDefinitionGraph graph, ModuleBindingTable bindings, ModelGeometry? geometry = null)
+    public static TemplateCatalog Build(CompiledDefinitionGraph graph, ModuleBindingTable bindings, SimulationRate rate, ModelGeometry? geometry = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(bindings);
-        var upgrades = UpgradeCatalog.Build(graph);
-        var weapons = WeaponCatalog.Build(graph);
+        ArgumentNullException.ThrowIfNull(rate);
+        var timing = rate.Time;
+        var upgrades = UpgradeCatalog.Build(graph, timing);
+        var weapons = WeaponCatalog.Build(graph, timing);
         var armors = ArmorCatalog.Build(graph);
-        var locomotors = BuildLocomotors(graph);
+        var locomotors = BuildLocomotors(graph, timing);
         var sciences = ScienceCatalog.Build(graph);
-        var specialPowers = SpecialPowerCatalog.Build(graph, sciences);
+        var specialPowers = SpecialPowerCatalog.Build(graph, sciences, timing);
         var factions = FactionCatalog.Build(graph, sciences);
         var crates = CrateCatalog.Build(graph, sciences);
-        var creationLists = ObjectCreationListCatalog.Build(graph);
+        var creationLists = ObjectCreationListCatalog.Build(graph, timing);
         var (unitDamagedThreshold, unitReallyDamagedThreshold) = ResolveDamageThresholds(graph);
         var gravity = ResolveGravity(graph);
-        var (baseRegen, baseRegenDelay) = ResolveBaseRegen(graph);
+        var (baseRegen, baseRegenDelay) = ResolveBaseRegen(graph, timing);
         var minefieldDistance = ResolveMinefieldDistance(graph);
         var valuePerSupplyBox = ResolveValuePerSupplyBox(graph);
         var sellPercentage = ResolveSellPercentage(graph);
@@ -411,7 +413,7 @@ public sealed class TemplateCatalog
                 }
                 try
                 {
-                    specs.Add(new ModuleSpec(module.Name, module.Tag, binding, binding.ParseData(module, upgrades)));
+                    specs.Add(new ModuleSpec(module.Name, module.Tag, binding, binding.ParseData(new RatedModuleConfiguration(module, timing), upgrades)));
                 }
                 catch (UnsupportedModuleConfigurationException unsupported)
                 {
@@ -433,7 +435,7 @@ public sealed class TemplateCatalog
                 foreach (var field in module.Fields.Where(value => value.Name.Equals("CommandSet", StringComparison.OrdinalIgnoreCase) || value.Name.Equals("CommandSetAlt", StringComparison.OrdinalIgnoreCase)))
                     if (field.Value.OriginalText.Trim() is { Length: > 0 } name && !commandSets.Contains(name)) commandSets.Add(name);
             templates.Add(new ObjectTemplate(index++, definition, specs.ToImmutable(), presentation.ToImmutable(), [..missing],
-                defaultArmor, playerUpgradeArmor, veteranArmor, weaponSets, locomotor, prerequisites, commandSets.ToImmutable())
+                defaultArmor, playerUpgradeArmor, veteranArmor, weaponSets, locomotor, prerequisites, commandSets.ToImmutable(), timing)
             {
                 LocomotorSets = ResolveLocomotorSets(definition, locomotors),
                 CrateUpgradeArmor = ResolveCrateUpgradeArmor(definition, armors),
@@ -444,6 +446,7 @@ public sealed class TemplateCatalog
         {
             MaxTunnelCapacity = ResolveMaxTunnelCapacity(graph),
             Geometry = geometry ?? ModelGeometry.None,
+            Rate = rate,
         };
         foreach (var name in catalog.Geometry.Airfields.Keys)
             if (!catalog.TryGet(name, out _)) throw new TemplateBuildException($"Model geometry names '{name}', which is not an Object definition.");
@@ -482,8 +485,17 @@ public sealed class TemplateCatalog
     /// <summary>Per weapon index, the index of its <see cref="WeaponInfo.ProjectileObject"/> template, or -1 when it fires none.</summary>
     public ImmutableArray<int> ProjectileTemplates { get; private set; } = [];
 
-    /// <summary><see cref="Gravity"/> in world units per tick² (<c>GameData.ini Gravity</c> / 900), negative (downward).</summary>
-    public Fixed GravityPerTickSquared => SimulationTiming.PerSecondSquaredToPerTickSquared(Gravity);
+    /// <summary>
+    /// The tick rate every tick count and per-tick value of this catalog was computed for. A world refuses a catalog of another rate. The definitions
+    /// carry no rate; one definition graph yields one catalog per rate.
+    /// </summary>
+    public required SimulationRate Rate { get; init; }
+
+    /// <summary>The conversions of <see cref="Rate"/>.</summary>
+    public SimulationTime Time => Rate.Time;
+
+    /// <summary><see cref="Gravity"/> in world units per tick² (<c>GameData.ini Gravity</c> / rate², 900 at the original's 30 Hz), negative (downward).</summary>
+    public Fixed GravityPerTickSquared => Rate.Time.PerSecondSquaredToPerTickSquared(Gravity);
 
     /// <summary>
     /// <c>calcDamageState</c> falls back to <c>BODY_PRISTINE</c> when <c>TheGlobalData</c> is unavailable; the closest
@@ -511,12 +523,12 @@ public sealed class TemplateCatalog
     }
 
     /// <summary>Absent keys mean "no base regeneration" (the reference default is 0, which parks every <c>BaseRegenerateUpdate</c>).</summary>
-    private static (Fixed PerSecond, long DelayTicks) ResolveBaseRegen(CompiledDefinitionGraph graph)
+    private static (Fixed PerSecond, long DelayTicks) ResolveBaseRegen(CompiledDefinitionGraph graph, SimulationTime timing)
     {
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
         object? Get(string name) => gameData?.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value;
         var perSecond = Get("BaseRegenHealthPercentPerSecond") is Percentage percentage ? Fixed.FromDecimal(percentage.Ratio) : Fixed.Zero;
-        var delay = Get("BaseRegenDelay") is GameTime time ? SimulationTiming.DurationMillisecondsToTicks(time.Milliseconds) : 0;
+        var delay = Get("BaseRegenDelay") is GameTime time ? timing.DurationMillisecondsToTicks(time.Milliseconds) : 0;
         return (perSecond, delay);
     }
 
@@ -618,7 +630,7 @@ public sealed class TemplateCatalog
         return condition.Equals(prefix + "TWO", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
     }
 
-    private static ImmutableDictionary<string, LocomotorInfo> BuildLocomotors(CompiledDefinitionGraph graph)
+    private static ImmutableDictionary<string, LocomotorInfo> BuildLocomotors(CompiledDefinitionGraph graph, SimulationTime timing)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, LocomotorInfo>(StringComparer.OrdinalIgnoreCase);
         // TheBodyDamageTypeNames; GlobalData's constructor default is BODY_REALLYDAMAGED.
@@ -680,16 +692,16 @@ public sealed class TemplateCatalog
             var lift = Get("Lift");
             var liftDamaged = Optional("LiftDamaged") is { } ld && ld >= 0 ? ld : lift;
             var normal = new LocomotorInfo(
-                SimulationTiming.PerSecondToPerTick(speed), SimulationTiming.PerSecondSquaredToPerTickSquared(acceleration),
-                SimulationTiming.DegreesPerSecondToRadiansPerTick(turnRate),
-                braking > 0 ? SimulationTiming.PerSecondSquaredToPerTickSquared(braking) : SimulationTiming.PerSecondSquaredToPerTickSquared(acceleration),
-                SimulationTiming.PerSecondToPerTick(minSpeed),
+                timing.PerSecondToPerTick(speed), timing.PerSecondSquaredToPerTickSquared(acceleration),
+                timing.DegreesPerSecondToRadiansPerTick(turnRate),
+                braking > 0 ? timing.PerSecondSquaredToPerTickSquared(braking) : timing.PerSecondSquaredToPerTickSquared(acceleration),
+                timing.PerSecondToPerTick(minSpeed),
                 // CloseEnoughDist is a plain distance (not a rate): no per-tick conversion. 0 falls back to one tick's travel below.
                 Fixed.FromDecimal(closeEnough), surfaces)
             {
                 PreferredHeight = Fixed.FromDecimal(Get("PreferredHeight")),
-                SpeedLimitZ = SimulationTiming.PerSecondToPerTick(Get("SpeedLimitZ")),
-                Lift = SimulationTiming.PerSecondSquaredToPerTickSquared(lift),
+                SpeedLimitZ = timing.PerSecondToPerTick(Get("SpeedLimitZ")),
+                Lift = timing.PerSecondSquaredToPerTickSquared(lift),
                 IsHover = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("HOVER", StringComparison.OrdinalIgnoreCase) == true,
                 IsWings = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("WINGS", StringComparison.OrdinalIgnoreCase) == true,
                 CirclingRadius = Fixed.FromDecimal(Signed("CirclingRadius")),
@@ -700,12 +712,12 @@ public sealed class TemplateCatalog
                 {
                     Damaged = normal with
                     {
-                        Speed = SimulationTiming.PerSecondToPerTick(speedDamaged),
-                        TurnRatePerTick = SimulationTiming.DegreesPerSecondToRadiansPerTick(turnRateDamaged),
-                        Acceleration = SimulationTiming.PerSecondSquaredToPerTickSquared(accelerationDamaged),
+                        Speed = timing.PerSecondToPerTick(speedDamaged),
+                        TurnRatePerTick = timing.DegreesPerSecondToRadiansPerTick(turnRateDamaged),
+                        Acceleration = timing.PerSecondSquaredToPerTickSquared(accelerationDamaged),
                         // Braking has no damaged key; a locomotor without Braking brakes with its acceleration, damaged or not.
-                        Braking = braking > 0 ? normal.Braking : SimulationTiming.PerSecondSquaredToPerTickSquared(accelerationDamaged),
-                        Lift = SimulationTiming.PerSecondSquaredToPerTickSquared(liftDamaged),
+                        Braking = braking > 0 ? normal.Braking : timing.PerSecondSquaredToPerTickSquared(accelerationDamaged),
+                        Lift = timing.PerSecondSquaredToPerTickSquared(liftDamaged),
                     },
                 };
             builder[definition.OriginalName] = normal;

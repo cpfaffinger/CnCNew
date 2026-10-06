@@ -73,7 +73,7 @@ public sealed class SkirmishMatchSession
         if (slots.Length > starts.Length) throw new ArgumentException($"The map has {starts.Length} start positions for {slots.Length} participants.", nameof(slots));
         var players = ImmutableArray.CreateRange(slots.Select((slot, index) =>
             new PlayerConfiguration(new PlayerId(index + 1), slot.Participant.Faction.Name, slot.Participant.Faction.Name, slot.Team, IsComputer: !slot.IsHuman)));
-        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, SimulationTiming.LogicFramesPerSecond, fingerprint,
+        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, catalog.Rate.TicksPerSecond, fingerprint,
             FixtureId, options.WorldSeed, new WorldId(1), players, options.MaxTicks, options.CheckpointInterval, terrain.Fingerprint);
         var world = ReplayRunner.CreateWorld(header, catalog, terrain);
         var session = new SkirmishMatchSession(options, header, world) { Players = players };

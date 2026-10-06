@@ -27,7 +27,7 @@ internal static class MineModules
 public sealed record DemoTrapData(bool DefaultProximityMode, int DetonationSlot, int ProximitySlot, int ManualSlot, Fixed TriggerRange, ImmutableArray<string> IgnoreKinds, long ScanTicks,
     bool FriendlyDetonation, string DetonationWeapon, bool DetonateWhenKilled) : ModuleData
 {
-    public static DemoTrapData Parse(ModuleConfiguration configuration)
+    public static DemoTrapData Parse(RatedModuleConfiguration configuration)
     {
         int Slot(string name, int fallback) => ModuleConfigReader.Find(configuration, name)?.Value.Value is EnumValue value && NameTablesPhase5.WeaponSlot.TryIndexOf(value.Name, out var index) ? index : fallback;
         return new DemoTrapData(
@@ -175,7 +175,7 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
 public sealed record MinefieldData(string DetonationWeapon, uint DetonatedByMask, bool StopsRegenAfterCreatorDies, bool Regenerates, bool WorkersDetonate, long CreatorDeathCheckTicks,
     int NumVirtualMines, Fixed RepeatDetonateMoveThreshold, Fixed DegenPerSecond, string CreationList) : ModuleData
 {
-    public static MinefieldData Parse(ModuleConfiguration configuration)
+    public static MinefieldData Parse(RatedModuleConfiguration configuration)
     {
         var flags = ModuleConfigReader.Flags(configuration, "DetonatedBy");
         uint mask = (1u << (int)Relationship.Enemies) | (1u << (int)Relationship.Neutral);
@@ -188,7 +188,7 @@ public sealed record MinefieldData(string DetonationWeapon, uint DetonatedByMask
         return new MinefieldData(
             ModuleConfigReader.Text(configuration, "DetonationWeapon"), mask, ModuleConfigReader.Bool(configuration, "StopsRegenAfterCreatorDies", true),
             ModuleConfigReader.Bool(configuration, "Regenerates", false), ModuleConfigReader.Bool(configuration, "WorkersDetonate", false),
-            ModuleConfigReader.Ticks(configuration, "CreatorDeathCheckRate", SimulationTiming.LogicFramesPerSecond), checked((int)ModuleConfigReader.Int(configuration, "NumVirtualMines", 1)),
+            ModuleConfigReader.Ticks(configuration, "CreatorDeathCheckRate", SimulationRate.OriginalFramesPerSecond), checked((int)ModuleConfigReader.Int(configuration, "NumVirtualMines", 1)),
             ModuleConfigReader.Real(configuration, "RepeatDetonateMoveThresh", Fixed.One), ModuleConfigReader.Real(configuration, "DegenPercentPerSecondAfterCreatorDies", Fixed.Zero),
             ModuleConfigReader.Text(configuration, "CreationList"));
     }
@@ -257,7 +257,7 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
         }
         if (_draining && Entity.Body is { } body)
         {
-            var amount = body.MaxHealth * data.DegenPerSecond / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+            var amount = body.MaxHealth * data.DegenPerSecond / world.Time.TicksPerSecondFixed;
             world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Unresistable, DeathTypes.Normal, false));
         }
         return CalcSleepTime(now);

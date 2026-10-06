@@ -7,6 +7,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
@@ -144,7 +145,7 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) SlotIntegrationWorld(params (string Template, int Owner, int X, int Y)[] objects)
     {
-        var fixture = new SyntheticFixture(files: WeaponSlotIntegrationFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: WeaponSlotIntegrationFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         foreach (var (template, owner, x, y) in objects) feeder.Spawn(owner, template, owner: owner, x: x, y: y);
@@ -359,8 +360,8 @@ static partial class Tests
             End
             """,
         };
-        var fixture = new SyntheticFixture(files: files);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: files);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "AirSlotJet", owner: 1, x: 500, y: 500);
         feeder.Spawn(2, "AirDummy", owner: 2, x: 600, y: 500);

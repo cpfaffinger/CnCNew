@@ -40,7 +40,7 @@ public sealed class SpecialPowerCatalog
     public SpecialPowerInfo this[int index] => Powers[index];
     public bool TryGet(string name, out SpecialPowerInfo info) => _byName.TryGetValue(name, out info!);
 
-    public static SpecialPowerCatalog Build(CompiledDefinitionGraph graph, ScienceCatalog sciences)
+    public static SpecialPowerCatalog Build(CompiledDefinitionGraph graph, ScienceCatalog sciences, SimulationTime timing)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(sciences);
@@ -51,7 +51,7 @@ public sealed class SpecialPowerCatalog
             DefinitionField? Field(string name) => definition.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
             var reload = Field("ReloadTime")?.Value.Value;
             if (reload is null) defaulted++;
-            var reloadTicks = SimulationTiming.DurationMillisecondsToTicks(reload is GameTime time ? time.Milliseconds : DefaultReloadMilliseconds);
+            var reloadTicks = timing.DurationMillisecondsToTicks(reload is GameTime time ? time.Milliseconds : DefaultReloadMilliseconds);
             var science = -1;
             if (Field("RequiredScience")?.Value.Value is DefinitionReference { IsNone: false } reference)
             {

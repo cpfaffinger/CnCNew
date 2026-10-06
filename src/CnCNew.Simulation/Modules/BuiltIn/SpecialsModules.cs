@@ -42,7 +42,7 @@ internal static class SpecialsModules
 /// </summary>
 public sealed record StickyBombData(Fixed OffsetZ, string GeometryWeapon, string GeometryFx) : ModuleData
 {
-    public static StickyBombData Parse(ModuleConfiguration configuration) => new(
+    public static StickyBombData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Real(configuration, "OffsetZ", Fixed.FromInt(10)),
         ModuleConfigReader.Text(configuration, "GeometryBasedDamageWeapon"),
         ModuleConfigReader.Text(configuration, "GeometryBasedDamageFX"));
@@ -195,7 +195,7 @@ public sealed class StickyBombUpdate(StickyBombData data) : SimModule, IUpdateMo
 /// <summary><c>GrantStealthBehaviorModuleData</c>: the scan radius grows from <c>StartRadius</c> by <c>RadiusGrowRate</c> per tick up to <c>FinalRadius</c>; <c>KindOf</c> is what gets stealth. The radius particle system is presentation.</summary>
 public sealed record GrantStealthData(Fixed StartRadius, Fixed FinalRadius, Fixed RadiusGrowRate, ImmutableArray<string> KindOf) : ModuleData
 {
-    public static GrantStealthData Parse(ModuleConfiguration configuration) => new(
+    public static GrantStealthData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Real(configuration, "StartRadius", Fixed.Zero), ModuleConfigReader.Real(configuration, "FinalRadius", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "RadiusGrowRate", Fixed.Zero), ModuleConfigReader.Flags(configuration, "KindOf")?.Names ?? []);
 }

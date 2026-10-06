@@ -13,6 +13,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -296,7 +297,7 @@ static partial class Tests
 
     private static SimulationWorld PowerWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(files: SpecialPowerFiles());
+        fixture = new SyntheticFixture(SimulationRate.Original, files: SpecialPowerFiles());
         var world = NewWorld(fixture);
         feeder = new Feeder(world);
         return world;

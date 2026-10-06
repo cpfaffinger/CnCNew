@@ -5,6 +5,7 @@ using CnCNew.Simulation.Skirmish;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>The measuring hook of <c>SimTool perf</c> (<see cref="ITickPhaseObserver"/>): it sees every phase once per tick in the documented order and changes nothing.</summary>
@@ -101,7 +102,7 @@ static partial class Tests
     public static void TickPhaseObserverSessions()
     {
         // A skirmish on a terrain: the AIs think, the vision is refreshed every third tick.
-        var skirmishFixture = new SyntheticFixture(files: SkirmishFiles());
+        var skirmishFixture = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles());
         var skirmishMap = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
         var skirmishTerrain = TerrainMap.Build(skirmishMap, "skirmish");
         var participants = ReferenceMatchScenario.Participants(skirmishFixture.Templates, out _);

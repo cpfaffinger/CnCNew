@@ -55,7 +55,7 @@ public sealed partial class ScriptEngine
             case "NAMED_ADD_SPECIAL_POWER_COUNTDOWN":
                 if (Has(type, p, 3) && PowerModuleOf(Str(p, 0), Str(p, 1)) is { } timed)
                 {
-                    var frames = Int(p, 2) * SimulationTiming.LogicFramesPerSecond;
+                    var frames = _world.Time.WholeSecondsToTicks(Int(p, 2));
                     timed.SetReadyFrame(type == "NAMED_SET_SPECIAL_POWER_COUNTDOWN" ? _world.Tick + frames : (timed is SpecialPowerModuleBase known ? known.AvailableOnFrame(_world) : _world.Tick) + frames);
                     if (NamedEntity(Str(p, 0)) is { } timedOwner) _world.MarkDirty(timedOwner);
                 }

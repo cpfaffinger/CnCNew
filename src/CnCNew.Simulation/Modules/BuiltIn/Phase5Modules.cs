@@ -20,11 +20,11 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// </summary>
 internal static class Phase5Modules
 {
-    private static ModuleBinding<TData> Bind<TData>(string name, ModuleOwnerKind owner, Func<ModuleConfiguration, TData> parse, Func<TData, SimModule> create)
+    private static ModuleBinding<TData> Bind<TData>(string name, ModuleOwnerKind owner, Func<RatedModuleConfiguration, TData> parse, Func<TData, SimModule> create)
         where TData : ModuleData
         => new(name, owner, (configuration, _) => parse(configuration), create);
 
-    private static ModuleBinding<TData> BindUpgrade<TData>(string name, ModuleOwnerKind owner, Func<ModuleConfiguration, UpgradeCatalog, TData> parse, Func<TData, SimModule> create)
+    private static ModuleBinding<TData> BindUpgrade<TData>(string name, ModuleOwnerKind owner, Func<RatedModuleConfiguration, UpgradeCatalog, TData> parse, Func<TData, SimModule> create)
         where TData : ModuleData
         => new(name, owner, parse, create);
 
@@ -66,7 +66,7 @@ public sealed record StealthData(
     long StealthDelayTicks, Fixed MoveThresholdSpeed, ImmutableArray<string> ForbiddenConditions,
     ulong RequiredStatus, ulong ForbiddenStatus, bool InnateStealth) : ModuleData
 {
-    public static StealthData Parse(ModuleConfiguration configuration) => new(
+    public static StealthData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "StealthDelay", 0),
         ModuleConfigReader.Real(configuration, "MoveThresholdSpeed", Fixed.Zero),
         ModuleConfigReader.Flags(configuration, "StealthForbiddenConditions")?.Names ?? [],
@@ -222,7 +222,7 @@ public sealed record AutoHealData(
     ImmutableArray<string> KindOf, ImmutableArray<string> ForbiddenKindOf, long StartHealingDelayTicks,
     bool AffectsWholePlayer, bool SkipSelfForHealing) : ModuleData
 {
-    public static AutoHealData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog) => new(
+    public static AutoHealData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog) => new(
         UpgradeMuxData.Parse(configuration, catalog),
         ModuleConfigReader.Bool(configuration, "StartsActive", false),
         ModuleConfigReader.Bool(configuration, "SingleBurst", false),
@@ -317,7 +317,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
 /// <summary>Data shared by every module whose entire job is the <see cref="UpgradeMuxState"/> state machine (no fields of its own).</summary>
 public sealed record UpgradeMuxOnlyData(UpgradeMuxData Mux) : ModuleData
 {
-    public static UpgradeMuxOnlyData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog) => new(UpgradeMuxData.Parse(configuration, catalog));
+    public static UpgradeMuxOnlyData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog) => new(UpgradeMuxData.Parse(configuration, catalog));
 }
 
 /// <summary>Base of a module that is purely a named <see cref="UpgradeMuxState"/> with one activation effect and its inverse.</summary>
@@ -395,7 +395,7 @@ public sealed class StealthUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(d
 /// <summary><c>MaxHealthUpgrade.cpp</c>: raises the body's health cap by <see cref="AddMaxHealth"/> per <see cref="ChangeType"/>.</summary>
 public sealed record MaxHealthUpgradeData(UpgradeMuxData Mux, Fixed AddMaxHealth, string ChangeType) : ModuleData
 {
-    public static MaxHealthUpgradeData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog)
+    public static MaxHealthUpgradeData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog)
     {
         var field = ModuleConfigReader.Find(configuration, "ChangeType");
         return new MaxHealthUpgradeData(UpgradeMuxData.Parse(configuration, catalog),
@@ -420,7 +420,7 @@ public sealed class MaxHealthUpgrade(MaxHealthUpgradeData data) : UpgradeMuxModu
 /// </summary>
 public sealed record RadarUpgradeData(UpgradeMuxData Mux, bool DisableProof) : ModuleData
 {
-    public static RadarUpgradeData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog)
+    public static RadarUpgradeData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog)
         => new(UpgradeMuxData.Parse(configuration, catalog), ModuleConfigReader.Bool(configuration, "DisableProof", false));
 }
 
@@ -460,7 +460,7 @@ public sealed class PowerPlantUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModul
 /// <summary><c>CommandSetUpgrade.cpp</c>: swaps which <c>CommandSet</c> (UI button layout) is active — a presentation concern the headless simulation does not model; upgrade state machine only.</summary>
 public sealed record CommandSetUpgradeData(UpgradeMuxData Mux, string CommandSet, string CommandSetAlt, string TriggerAlt) : ModuleData
 {
-    public static CommandSetUpgradeData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog) => new(UpgradeMuxData.Parse(configuration, catalog),
+    public static CommandSetUpgradeData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog) => new(UpgradeMuxData.Parse(configuration, catalog),
         ModuleConfigReader.Text(configuration, "CommandSet"), ModuleConfigReader.Text(configuration, "CommandSetAlt"), ModuleConfigReader.Text(configuration, "TriggerAlt"));
 }
 
@@ -473,7 +473,7 @@ public sealed class CommandSetUpgrade(CommandSetUpgradeData data) : UpgradeMuxMo
 /// <summary><c>ExperienceScalarUpgrade.cpp upgradeImplementation</c>: adds <c>AddXPScalar</c> to the object's experience gain scalar (never undone, like the reference).</summary>
 public sealed record ExperienceScalarUpgradeData(UpgradeMuxData Mux, Fixed AddXpScalar) : ModuleData
 {
-    public static ExperienceScalarUpgradeData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog)
+    public static ExperienceScalarUpgradeData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog)
         => new(UpgradeMuxData.Parse(configuration, catalog), ModuleConfigReader.Real(configuration, "AddXPScalar", Fixed.Zero));
 }
 
@@ -486,7 +486,7 @@ public sealed class ExperienceScalarUpgrade(ExperienceScalarUpgradeData data) : 
 /// <summary><c>ModelConditionUpgrade.cpp</c>: sets a draw-time model condition flag — pure presentation, not modeled in the simulation.</summary>
 public sealed record ModelConditionUpgradeData(UpgradeMuxData Mux) : ModuleData
 {
-    public static ModelConditionUpgradeData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog) => new(UpgradeMuxData.Parse(configuration, catalog));
+    public static ModelConditionUpgradeData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog) => new(UpgradeMuxData.Parse(configuration, catalog));
 }
 
 public sealed class ModelConditionUpgrade(ModelConditionUpgradeData data) : UpgradeMuxModule(data.Mux)
@@ -502,7 +502,7 @@ public sealed class ModelConditionUpgrade(ModelConditionUpgradeData data) : Upgr
 /// </summary>
 public sealed record ObjectCreationUpgradeData(UpgradeMuxData Mux, string UpgradeObject) : ModuleData
 {
-    public static ObjectCreationUpgradeData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog)
+    public static ObjectCreationUpgradeData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog)
         => new(UpgradeMuxData.Parse(configuration, catalog), ModuleConfigReader.Text(configuration, "UpgradeObject"));
 }
 
@@ -524,17 +524,17 @@ public sealed class ObjectCreationUpgrade(ObjectCreationUpgradeData data) : Upgr
 /// <c>AutoAcquireEnemiesWhenIdle</c> (the <c>AAS_*</c> bits) and <c>MoodAttackCheckRate</c> drive the unit's own target acquisition
 /// (<see cref="World.SimulationWorld"/>, docs/SIMULATION-CORE.md §33); <c>ForbidPlayerCommands</c> is typed but not consumed.
 /// </summary>
-public sealed record AIUpdateData(AutoAcquire AutoAcquire, Fixed RepairRatePerSecond = default, long MoodCheckTicks = AIUpdateData.DefaultMoodCheckTicks) : ModuleData
+public sealed record AIUpdateData(AutoAcquire AutoAcquire, Fixed RepairRatePerSecond, long MoodCheckTicks) : ModuleData
 {
     /// <summary><c>AIUpdateModuleData::AIUpdateModuleData</c>: <c>m_moodAttackCheckRate = LOGICFRAMES_PER_SECOND * 2</c>.</summary>
-    public const long DefaultMoodCheckTicks = 2 * SimulationTiming.LogicFramesPerSecond;
+    public const long DefaultMoodCheckFrames = 2 * SimulationRate.OriginalFramesPerSecond;
 
-    public static AIUpdateData Parse(ModuleConfiguration configuration) => new(
+    public static AIUpdateData Parse(RatedModuleConfiguration configuration) => new(
         ParseAutoAcquire(configuration),
         ModuleConfigReader.Real(configuration, "RepairHealthPercentPerSecond", Fixed.Zero),
-        Math.Max(1, ModuleConfigReader.Ticks(configuration, "MoodAttackCheckRate", DefaultMoodCheckTicks)));
+        Math.Max(1, ModuleConfigReader.Ticks(configuration, "MoodAttackCheckRate", DefaultMoodCheckFrames)));
 
-    private static AutoAcquire ParseAutoAcquire(ModuleConfiguration configuration)
+    private static AutoAcquire ParseAutoAcquire(RatedModuleConfiguration configuration)
     {
         if (ModuleConfigReader.Flags(configuration, "AutoAcquireEnemiesWhenIdle") is not { } flags) return AutoAcquire.None;
         var result = AutoAcquire.None;
@@ -879,7 +879,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         var body = target.Body!;
-        var amount = body.MaxHealth * data.RepairRatePerSecond / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+        var amount = body.MaxHealth * data.RepairRatePerSecond / world.Time.TicksPerSecondFixed;
         world.Damage(target.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
     }
 
@@ -1346,20 +1346,20 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 /// </summary>
 public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations = 0, long DoorOpeningTicks = 0, long DoorWaitOpenTicks = 0, long DoorCloseTicks = 0, long ConstructionCompleteTicks = 0) : ModuleData
 {
-    public static ProductionData Parse(ModuleConfiguration configuration)
+    public static ProductionData Parse(RatedModuleConfiguration configuration)
     {
         var max = ModuleConfigReader.Int(configuration, "MaxQueueEntries", 0);
         return new ProductionData(
             max <= 0 ? int.MaxValue : checked((int)max),
             checked((int)OpaqueNumber(configuration, "NumDoorAnimations")),
-            SimulationTiming.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorOpeningTime")),
-            SimulationTiming.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorWaitOpenTime")),
-            SimulationTiming.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorCloseTime")),
-            SimulationTiming.DurationMillisecondsToTicks(OpaqueNumber(configuration, "ConstructionCompleteDuration")));
+            configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorOpeningTime")),
+            configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorWaitOpenTime")),
+            configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorCloseTime")),
+            configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "ConstructionCompleteDuration")));
     }
 
     /// <summary><c>INI::parseInt</c>/<c>parseDurationUnsignedInt</c> input of a field the catalog keeps Opaque: the first token as a whole number; absent: zero (the constructor default).</summary>
-    private static long OpaqueNumber(ModuleConfiguration configuration, string name)
+    private static long OpaqueNumber(RatedModuleConfiguration configuration, string name)
     {
         var field = ModuleConfigReader.Find(configuration, name);
         if (field is null) return 0;

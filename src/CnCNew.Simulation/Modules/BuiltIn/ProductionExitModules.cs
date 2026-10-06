@@ -16,7 +16,7 @@ public readonly record struct Point3(Fixed X, Fixed Y, Fixed Z);
 /// </summary>
 public sealed record ProductionExitData(Point3 UnitCreatePoint, long ExitDelayTicks, int InitialBurst) : ModuleData
 {
-    public static ProductionExitData Parse(ModuleConfiguration configuration) => new(
+    public static ProductionExitData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Vector(configuration, "UnitCreatePoint"),
         ModuleConfigReader.Ticks(configuration, "ExitDelay", 0),
         checked((int)ModuleConfigReader.Int(configuration, "InitialBurst", 0)));
