@@ -215,6 +215,14 @@ Nicht durch einen eigenen Ratentest belegt: die einzelnen Fristen von `SkirmishA
 
 Bestehende Tests: unverändert bis auf **ein Token** in `Tests.Scripting.cs` (`ScriptEngine.EndGameDelayTicks` → `EndGameDelayFrames`, erzwungen durch die Umbenennung der öffentlichen Konstante; derselbe Wert).
 
+## 8a. Nachweise (6. Oktober 2026, Release, Retaildaten)
+
+- `reference-manifest check --set quick` und `input-manifest check`: identisch nach jedem der vier Quelltext-Commits (die drei Zwischenstände aus einem Export des jeweiligen Commits gebaut und geprüft, der letzte im Arbeitsbaum).
+- `reference-manifest check --set full`: 50 Läufe identisch (1.241 s, parallel zu anderen Läufen); `input-manifest check`: identisch.
+- `tests/CnCNew.Simulation.Tests`: Debug grün; Release mit `--long --content-dir` grün.
+- Sauberer Build von `CnCNew.slnx` (`bin`/`obj` von `CnCNew.Client.Stride` gelöscht): 0 Warnungen, 0 Fehler.
+- Probelauf bei 60 Hz, **nur „läuft durch“, keine Referenzwerte** (Stand dieses Zweigs allein, ohne die drei anderen Aufträge der Stufe 2): `reference-match --tick-rate 60` Sieger FactionGLA bei Tick 27.690 (7,7 Spielminuten), Endhash `15873B1BB4672711`, zweiter Lauf und Snapshot-Fortsetzung identisch; `mission-run MD_USA05 --ticks 6000 --tick-rate 60` läuft durch, 0 fehlende Bedingungen, Endhash `F5E568B144A5B2A8`, zweiter Lauf und Speichern/Laden identisch.
+
 ## 9. Helfer außerhalb des Auftrags, Hinweise für andere
 
 - **Keine** Ergänzung an `SimulationTime` oder anderen Dateien außerhalb der vier Verzeichnisse. Außerhalb berührt: `tests/CnCNew.Simulation.Tests/Program.cs` (Registrierung, ein Block), `Tests.Scripting.cs` (ein Token).
