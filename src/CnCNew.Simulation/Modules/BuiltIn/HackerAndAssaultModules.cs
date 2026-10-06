@@ -94,13 +94,19 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
         world.MarkDirty(Entity);
     }
 
+    /// <summary>
+    /// <c>m_framesRemaining = getUnpackTime() * variation</c> (<c>HackInternetAIUpdate.cpp</c>, <c>UnpackingState::onEnter</c>/<c>PackingState::onEnter</c>): varied and floored in
+    /// logic frames of the original, then turned into the reload of the per-tick countdown (every phase lasts its frames plus one, like the reference's
+    /// "if (m_framesRemaining &gt; 0) m_framesRemaining--; else …").
+    /// </summary>
     private long Varied(IWorldServices world, long ticks)
     {
         var variation = world.LogicRandom.Range(Fixed.One - data.VariationFactor, Fixed.One + data.VariationFactor);
-        return (Fixed.FromInt(ticks) * variation).Floor();
+        var frames = (Fixed.FromInt(world.Time.ToOriginalFrames(ticks)) * variation).Floor();
+        return world.Time.CountdownReload(world.Time.OriginalFrames(frames));
     }
 
-    private long CashDelay() => Entity.ContainedBy.IsValid ? data.CashDelayFastTicks : data.CashDelayTicks;
+    private long CashDelay(IWorldServices world) => world.Time.CountdownReload(Entity.ContainedBy.IsValid ? data.CashDelayFastTicks : data.CashDelayTicks);
 
     public override void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer, bool attackMove = false)
     {
@@ -114,7 +120,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
             if (_state == HackState.Hacking)
             {
                 _state = HackState.Packing;
-                _remaining = Entity.ContainedBy.IsValid ? 0 : Varied(world, data.PackTicks);
+                _remaining = Entity.ContainedBy.IsValid ? world.Time.CountdownReload(0) : Varied(world, data.PackTicks);
             }
             world.WakeAt(Entity, this, world.Tick);
             world.MarkDirty(Entity);
@@ -143,7 +149,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
                 else
                 {
                     _state = HackState.Hacking;
-                    _remaining = CashDelay();
+                    _remaining = CashDelay(world);
                 }
                 break;
             case HackState.Hacking:
@@ -151,7 +157,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
                 else
                 {
                     Pay(world);
-                    _remaining = CashDelay();
+                    _remaining = CashDelay(world);
                 }
                 break;
             case HackState.Packing:

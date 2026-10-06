@@ -270,7 +270,13 @@ public sealed record TensileFormationData(bool Enabled) : ModuleData
 public sealed class TensileFormationUpdate(TensileFormationData data) : SimModule, IUpdateModule
 {
     private const int MaxLinks = 4;
-    private const int Lifetime = 300;
+    /// <summary><c>TensileFormationUpdate.cpp</c>, <c>TensileFormationUpdate::update</c>: <c>if (++m_life &gt; 300)</c> – the slide lasts 300 logic frames of the original.</summary>
+    private const long LifetimeFrames = 300;
+    /// <summary>The same function: <c>return UPDATE_SLEEP(30)</c> – a dormant rock checks for damage every 30 logic frames of the original.</summary>
+    private const long DormantCheckFrames = 30;
+    /// <summary>The same function: <c>if ( m_life%30 == 29 )</c> – period and phase of passing the dislodgement on, in logic frames of the original.</summary>
+    private const long PropagatePeriodFrames = 30;
+    private const long PropagatePhaseFrames = 29;
     private static readonly Fixed Friction = Fixed.FromDecimal(0.95m);
     private static readonly Fixed NewShare = Fixed.FromDecimal(0.93m);
     private static readonly Fixed LinkShare = Fixed.FromDecimal(0.07m);
@@ -293,7 +299,10 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public bool Enabled => _enabled;
 
-    /// <summary><c>m_life</c>: the updates the formation has moved so far (read by the presentation: the reference shows <c>FREEFALL</c> while it is below 100 and the rock drops).</summary>
+    /// <summary>
+    /// <c>m_life</c>: the updates (ticks) the formation has moved so far (read by the presentation: the reference shows <c>FREEFALL</c> while it is below 100 frames and the rock drops –
+    /// a reader must compare with <c>Time.OriginalFrames(100)</c>).
+    /// </summary>
     public int Life => _life;
 
     public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
@@ -307,11 +316,12 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
         if (!_enabled)
         {
             var hurt = _dislodged || (Entity.Body is ActiveBody { DamageState: >= BodyDamageStates.Damaged });
-            if (!hurt) return 30;
+            if (!hurt) return world.Time.OriginalFrames(DormantCheckFrames);
             _enabled = true;
         }
-        if (++_life > Lifetime) return SimulationTiming.SleepForever;
-        if (_life % 30 == 29) PropagateDislodgement(world);
+        // _life counts updates, one per tick: lifetime, period and phase are frames of the original and scale together.
+        if (++_life > world.Time.OriginalFrames(LifetimeFrames)) return SimulationTiming.SleepForever;
+        if (_life % world.Time.OriginalFrames(PropagatePeriodFrames) == world.Time.OriginalFrames(PropagatePhaseFrames)) PropagateDislodgement(world);
 
         // Apply physics: flow down the slope with friction.
         var (nx, ny, nz) = GroundNormal(world, Entity.X, Entity.Y);

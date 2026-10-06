@@ -124,9 +124,11 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
     {
         _activated = true;
         // SlowDeathBehavior::beginSlowDeath: both variance draws happen, the sink animation is presentation.
-        _ = data.Base.SinkDelayTicks + world.LogicRandom.Range(0, checked((int)data.Base.SinkDelayVarianceTicks));
-        var destruction = data.Base.DestructionDelayTicks + world.LogicRandom.Range(0, checked((int)data.Base.DestructionDelayVarianceTicks));
-        _destructionTick = world.Tick + Math.Max(destruction, SimulationTiming.SleepNone);
+        // SlowDeathBehavior.cpp, SlowDeathBehavior::beginSlowDeath: GameLogicRandomValue(0, m_sinkDelayVariance) / (0, m_destructionDelayVariance) –
+        // both drawn in frames of the original, then scaled; the destruction is at least one frame away.
+        _ = data.Base.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.SinkDelayVarianceTicks);
+        var destruction = data.Base.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.DestructionDelayVarianceTicks);
+        _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
         _deathTick = world.Tick;
         _groundTick = 0;
         _fallSpeed = Fixed.Zero;
@@ -288,7 +290,7 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
         if (projectile is null) return;
         projectile.SetFramesTillCountermeasureDiversionOccurs(world, data.MissileDecoyTicks);
         _diverted++;
-        if (_flares.Count == 0 && _reactionTick == 0) _reactionTick = world.Tick + Math.Max(data.ReactionTicks, 1);
+        if (_flares.Count == 0 && _reactionTick == 0) _reactionTick = world.Tick + world.Time.AtLeastOneFrame(data.ReactionTicks);
     }
 
     public EntityId CalculateCountermeasureToDivertTo(IWorldServices world, Entity victim)
@@ -779,7 +781,8 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
                 base.OrderMove(world, _moveToX, _moveToY, false);
                 break;
             case Phase.Delivering:
-                _dropDelayLeft = data.DoorDelayTicks;
+                // DeliverPayloadAIUpdate.cpp: m_dropDelayLeft = getDoorDelay(), counted down once per update – DoorDelay + 1 frames of the original until the first drop.
+                _dropDelayLeft = world.Time.CountdownReload(data.DoorDelayTicks);
                 break;
             case Phase.ConsiderNewApproach:
                 ConsiderNewApproach(world);
@@ -787,7 +790,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
             case Phase.RecoverFromOffMap:
                 StopInternalMove();
                 Entity.Speed = Fixed.Zero;
-                _reentryTick = world.Tick + TurnTicks();
+                _reentryTick = world.Tick + TurnTicks(world);
                 break;
             case Phase.HeadOffMap:
                 HeadOffMap(world);
@@ -878,7 +881,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
             return;
         }
         _freeToExit = true;
-        _dropDelayLeft = run.DropDelayTicks;
+        _dropDelayLeft = world.Time.CountdownReload(run.DropDelayTicks); // m_dropDelayLeft = getDropDelay(): a drop every DropDelay + 1 frames of the original
         if (!CloseEnoughToTarget())
         {
             _freeToExit = false;
@@ -962,10 +965,13 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         return locomotor is { TurnRatePerTick.Raw: > 0 } ? locomotor.Speed / locomotor.TurnRatePerTick : Fixed.FromInt(999999);
     }
 
-    private long TurnTicks()
+    /// <summary>
+    /// <c>DeliverPayloadAIUpdate::calcMinTurnRadius</c> (<c>timeToTravelThatDist</c>): the time to fly one turn radius, rounded up to whole logic frames of the original, at least one.
+    /// </summary>
+    private long TurnTicks(IWorldServices world)
     {
         var locomotor = Entity.Template.Locomotor;
-        return locomotor is { Speed.Raw: > 0 } ? Math.Max(1, (MinTurnRadius() / locomotor.Speed).Ceiling()) : 1;
+        return locomotor is { Speed.Raw: > 0 } ? world.Time.AtLeastOneFrame(world.Time.Ceiling((MinTurnRadius() / locomotor.Speed).Ceiling())) : world.Time.OriginalFrames(FrameGrid.OneFrame);
     }
 
     private void ConsiderNewApproach(IWorldServices world)
@@ -1090,6 +1096,9 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
 {
     private enum Beam : byte { None, Born, Decaying, Dead }
 
+    /// <summary>Own value: a scripted waypoint path waits this many logic frames of the original for the use of the power that follows it.</summary>
+    private const long PendingPathFrames = 3;
+
     private long _nextWake = -1;
     private long _startAttack;
     private long _startDecay;
@@ -1166,7 +1175,7 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     {
         _path = null;
         _pathIndex = 0;
-        if (_pendingPath is { Count: > 0 } offered && world.Tick - _pendingPathTick <= 3) _path = offered;
+        if (_pendingPath is { Count: > 0 } offered && world.Tick - _pendingPathTick <= world.Time.OriginalFrames(PendingPathFrames)) _path = offered;
         _pendingPath = null;
         world.MarkDirty(Entity);
         var aimed = target.Kind == SpecialPowerTargetKind.Object ? world.FindEntity(target.Entity) : null;
@@ -1234,19 +1243,21 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
             {
                 _scorches++;
                 if (data.GroundHitFx.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.GroundHitFx, 0, _current.X, _current.Y, _current.Z);
-                _nextScorch = data.TotalScorchMarks > 0 ? birth + (death - birth) * _scorches / data.TotalScorchMarks : death + 1;
+                // The n-th share of the beam's life is cut off in frames of the original, then scaled (the same frame at every rate).
+                _nextScorch = data.TotalScorchMarks > 0 ? birth + world.Time.OriginalFrames(world.Time.ToOriginalFrames(death - birth) * _scorches / data.TotalScorchMarks) : death + TickOrder.Next;
             }
             if (_nextPulse <= now && data.TotalDamagePulses > 0)
             {
                 _pulses++;
                 Pulse(world, radius);
-                _nextPulse = birth + (death - birth) * _pulses / data.TotalDamagePulses;
+                // ParticleUplinkCannonUpdate.cpp, update: m_nextDamagePulseFrame = orbitalBirthFrame + nextFactor * (orbitalDeathFrame - orbitalBirthFrame), in frames of the original.
+                _nextPulse = birth + world.Time.OriginalFrames(world.Time.ToOriginalFrames(death - birth) * _pulses / data.TotalDamagePulses);
             }
         }
         if (_startDecay > now && data.BeamLaunchFx.Length > 0 && _nextLaunchFx <= now)
         {
             world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.BeamLaunchFx, 0, Entity.X, Entity.Y, Entity.Z);
-            _nextLaunchFx = now + Math.Max(data.LaunchFxTicks, 1);
+            _nextLaunchFx = now + world.Time.AtLeastOneFrame(data.LaunchFxTicks);
         }
         return SimulationTiming.SleepNone;
     }
