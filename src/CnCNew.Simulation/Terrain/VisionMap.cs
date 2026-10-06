@@ -11,9 +11,9 @@ namespace CnCNew.Simulation.Terrain;
 /// </summary>
 public sealed class VisionCounters
 {
-    /// <summary>Calls of <see cref="VisionMap.BeginRefresh"/>.</summary>
+    /// <summary>Refreshes started (<see cref="VisionMap.BeginRefresh"/> or <see cref="VisionMap.BeginCollectedRefresh"/>).</summary>
     public long Refreshes;
-    /// <summary>Cell bytes <see cref="VisionMap.BeginRefresh"/> went over (the whole table in the reference mode).</summary>
+    /// <summary>Cell bytes a refresh went over to forget what was visible (the whole table in the reference mode).</summary>
     public long CellsCleared;
     /// <summary>Calls of <see cref="VisionMap.Reveal"/> with a positive radius (in the reference mode also those beside the map).</summary>
     public long Circles;
@@ -82,7 +82,8 @@ public sealed class VisionMap
     private readonly List<Circle> _gone = [];  // work lists of EndRefresh: circles of the last refresh that are no longer there, ...
     private readonly List<Circle> _stayed = []; // ... that are there again, ...
     private readonly List<Circle> _came = [];   // ... and new ones
-    private readonly bool[] _redraw;          // per slot: the cells were written by something else than the refresh since it last drew them
+    private readonly bool[] _redraw;          // per slot: the cells were written by something else than a collected refresh since it last drew them
+    private bool _collecting;                 // between BeginCollectedRefresh and EndCollectedRefresh
     private ulong _hash;
 
     public VisionMap(int cellsX, int cellsY, int playerSlots)
@@ -131,7 +132,7 @@ public sealed class VisionMap
     public VisionCounters Counters { get; } = new();
 
     /// <summary>
-    /// A hook for tests and measuring tools, not state: while set, a refresh (<see cref="BeginRefresh"/>, <see cref="Reveal"/>) and <see cref="CurrentHash"/> run
+    /// A hook for tests and measuring tools, not state: while set, a refresh (plain or collected, with its <see cref="Reveal"/> calls) and <see cref="CurrentHash"/> run
     /// the original computation over every cell (<see cref="BeginRefreshReference"/>, <see cref="RevealReference"/>, <see cref="Hash"/>). The cell
     /// bytes and the hash value are the same in both modes; only the work differs. May be switched between two refreshes.
     /// </summary>
@@ -178,11 +179,35 @@ public sealed class VisionMap
     }
 
     /// <summary>
-    /// Starts a refresh: what is visible is forgotten, exploration stays, and the <see cref="Reveal"/> calls up to <see cref="EndRefresh"/> say
-    /// what is visible now. The cells are written in <see cref="EndRefresh"/>; nothing may read them in between.
+    /// Forgets what is currently visible, at once; exploration stays. The <see cref="Reveal"/> calls that follow write their cells at once too.
+    /// This is the plain form for callers that draw a few circles by hand; the world's refresh uses <see cref="BeginCollectedRefresh"/>.
     /// </summary>
     public void BeginRefresh()
     {
+        if (_collecting) throw new InvalidOperationException("A collected vision refresh is in progress.");
+        if (ReferenceMode)
+        {
+            BeginRefreshReference();
+            return;
+        }
+        Counters.Refreshes++;
+        for (var slot = 0; slot < _cells.Length; slot++)
+        {
+            ForgetVisible(slot);
+            // The circles kept from the last collected refresh no longer describe the cells.
+            _redraw[slot] = true;
+        }
+    }
+
+    /// <summary>
+    /// Starts a refresh whose circles are collected: what is visible is forgotten, exploration stays, and the <see cref="Reveal"/> calls up to
+    /// <see cref="EndCollectedRefresh"/> say what is visible now. The cells are written in <see cref="EndCollectedRefresh"/>; nothing may read
+    /// them in between. Collecting is what lets a refresh leave alone what did not change.
+    /// </summary>
+    public void BeginCollectedRefresh()
+    {
+        if (_collecting) throw new InvalidOperationException("A collected vision refresh is already in progress.");
+        _collecting = true;
         if (ReferenceMode)
         {
             BeginRefreshReference();
@@ -193,7 +218,7 @@ public sealed class VisionMap
     }
 
     /// <summary>
-    /// Ends a refresh. The cells afterwards are those <see cref="BeginRefreshReference"/> followed by one <see cref="RevealReference"/> per circle
+    /// Ends a collected refresh. The cells afterwards are those <see cref="BeginRefreshReference"/> followed by one <see cref="RevealReference"/> per circle
     /// leave behind (visible exactly where a circle of this refresh or a permanent mark is; exploration only grows). Per slot, cheapest first:
     /// <list type="bullet">
     /// <item>The circles are those of the refresh before and nothing else wrote the cells since: the slot is left alone. Forgetting the visible
@@ -206,8 +231,10 @@ public sealed class VisionMap
     /// circle drawn.</item>
     /// </list>
     /// </summary>
-    public void EndRefresh()
+    public void EndCollectedRefresh()
     {
+        if (!_collecting) throw new InvalidOperationException("No collected vision refresh is in progress.");
+        _collecting = false;
         if (ReferenceMode) return;
         for (var slot = 0; slot < _cells.Length; slot++)
         {
@@ -412,8 +439,8 @@ public sealed class VisionMap
     }
 
     /// <summary>
-    /// Between <see cref="BeginRefresh"/> and <see cref="EndRefresh"/>: every cell whose centre lies within <paramref name="radius"/> of the point
-    /// is visible and explored for the slot after the refresh.
+    /// Every cell whose centre lies within <paramref name="radius"/> of the point is visible and explored for the slot: at once, or, inside a
+    /// collected refresh, when it ends.
     /// </summary>
     public void Reveal(int slot, Fixed x, Fixed y, Fixed radius)
     {
@@ -430,7 +457,15 @@ public sealed class VisionMap
         var maxX = Math.Min(CellsX - 1, CellOf(x + radius));
         // A circle beside the map covers no cell: it is not part of what the slot shows.
         if (minY > maxY || minX > maxX) return;
-        _pending[slot].Add(new Circle(x.Raw, y.Raw, radius.Raw, minX, maxX, minY, maxY, CellOf(x)));
+        var circle = new Circle(x.Raw, y.Raw, radius.Raw, minX, maxX, minY, maxY, CellOf(x));
+        if (_collecting)
+        {
+            _pending[slot].Add(circle);
+            return;
+        }
+        Trace(slot, circle, circle, forget: false);
+        // Drawn outside a collected refresh: the circles kept from the last one no longer describe the cells.
+        _redraw[slot] = true;
     }
 
     /// <summary>

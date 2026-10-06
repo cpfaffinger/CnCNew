@@ -93,15 +93,15 @@ static partial class Tests
                         };
                         lookers.Add((dice.Below(slots), dice.Coordinate(-60, width + 60), dice.Coordinate(-60, height + 60), radius));
                     }
-                    fast.BeginRefresh();
-                    reference.BeginRefresh();
+                    fast.BeginCollectedRefresh();
+                    reference.BeginCollectedRefresh();
                     foreach (var looker in lookers)
                     {
                         fast.Reveal(looker.Slot, looker.X, looker.Y, looker.Radius);
                         reference.Reveal(looker.Slot, looker.X, looker.Y, looker.Radius);
                     }
-                    fast.EndRefresh();
-                    reference.EndRefresh();
+                    fast.EndCollectedRefresh();
+                    reference.EndCollectedRefresh();
                 }
                 else if (roll < 85)
                 {
@@ -145,19 +145,42 @@ static partial class Tests
                     fast = nextFast;
                     reference = nextReference;
                 }
+                else if (roll < 93)
+                {
+                    // The plain form, cells written at once: readable after every call, and the next collected refresh has to draw everything again.
+                    fast.BeginRefresh();
+                    reference.BeginRefresh();
+                    VisionMapsAgree(fast, reference, label + " (plain refresh start)");
+                    foreach (var looker in lookers)
+                    {
+                        fast.Reveal(looker.Slot, looker.X, looker.Y, looker.Radius);
+                        reference.Reveal(looker.Slot, looker.X, looker.Y, looker.Radius);
+                        if (dice.Chance(30)) VisionMapsAgree(fast, reference, label + " (plain reveal)");
+                    }
+                }
                 else if (roll < 95)
+                {
+                    var slot = dice.Below(slots);
+                    var x = dice.Coordinate(-20, width + 20);
+                    var y = dice.Coordinate(-20, height + 20);
+                    var radius = dice.Coordinate(1, Math.Max(12, width / 3));
+                    // A single circle outside any refresh.
+                    fast.Reveal(slot, x, y, radius);
+                    reference.Reveal(slot, x, y, radius);
+                }
+                else if (roll < 97)
                 {
                     // The fast map computes one refresh the original way and returns to its own.
                     fast.ReferenceMode = true;
-                    fast.BeginRefresh();
-                    reference.BeginRefresh();
+                    fast.BeginCollectedRefresh();
+                    reference.BeginCollectedRefresh();
                     foreach (var looker in lookers)
                     {
                         fast.Reveal(looker.Slot, looker.X, looker.Y, looker.Radius);
                         reference.Reveal(looker.Slot, looker.X, looker.Y, looker.Radius);
                     }
-                    fast.EndRefresh();
-                    reference.EndRefresh();
+                    fast.EndCollectedRefresh();
+                    reference.EndCollectedRefresh();
                     if (dice.Chance(50)) VisionMapsAgree(fast, reference, label + " (reference mode)");
                     fast.ReferenceMode = false;
                 }
@@ -175,33 +198,47 @@ static partial class Tests
     /// <summary>The kept hash does no work when nothing changed and resumes behind the unchanged start of the chain when something did.</summary>
     public static void VisionHashOnlyMixesFromTheFirstChangedByte()
     {
+        var plain = new VisionMap(8, 6, 1);
+        plain.Reveal(0, Fixed.FromInt(25), Fixed.FromInt(25), Fixed.FromInt(10));
+        Check.That(plain.IsVisible(0, 2, 2) && !plain.IsVisible(0, 6, 4), "Outside a collected refresh a reveal writes its cells at once.");
+        plain.BeginRefresh();
+        Check.That(!plain.IsVisible(0, 2, 2) && plain.IsExplored(0, 2, 2), "The plain refresh start forgets at once.");
+        Check.Throws<InvalidOperationException>(() => plain.EndCollectedRefresh(), "No collected vision refresh");
+        plain.BeginCollectedRefresh();
+        plain.Reveal(0, Fixed.FromInt(65), Fixed.FromInt(45), Fixed.FromInt(5));
+        Check.That(!plain.IsVisible(0, 6, 4), "Inside a collected refresh the cells wait for its end.");
+        Check.Throws<InvalidOperationException>(() => plain.BeginRefresh(), "in progress");
+        Check.Throws<InvalidOperationException>(() => plain.BeginCollectedRefresh(), "already in progress");
+        plain.EndCollectedRefresh();
+        Check.That(plain.IsVisible(0, 6, 4) && plain.CurrentHash() == plain.Hash(), "The end of the collected refresh writes them.");
+
         var map = new VisionMap(64, 64, 3);
         var counters = map.Counters;
         var total = 3L * 64 * 64;
         Check.That(counters.BytesHashed == total, "A new map mixes every byte once.");
         Check.That(map.CurrentHash() == map.Hash() && counters.BytesHashed == total && counters.HashUnchanged == 1, "Without a change the kept value stands.");
 
-        map.BeginRefresh();
+        map.BeginCollectedRefresh();
         map.Reveal(2, Fixed.FromInt(320), Fixed.FromInt(325), Fixed.FromInt(40));
-        map.EndRefresh();
+        map.EndCollectedRefresh();
         Check.That(map.CurrentHash() == map.Hash(), "A reveal in the last slot changes the hash to the full pass's value.");
         var afterFirst = counters.BytesHashed - total;
         Check.That(afterFirst > 0 && afterFirst <= 64 * 64 - 28 * 64 + 512, $"Only the last slot from the checkpoint before the first revealed row is mixed again ({afterFirst} bytes).");
 
         var before = counters.BytesHashed;
         var cleared = counters.CellsCleared;
-        map.BeginRefresh();
+        map.BeginCollectedRefresh();
         map.Reveal(2, Fixed.FromInt(320), Fixed.FromInt(325), Fixed.FromInt(40));
-        map.EndRefresh();
+        map.EndCollectedRefresh();
         Check.That(map.CurrentHash() == map.Hash() && counters.BytesHashed == before, "A refresh that ends with the same bytes mixes nothing.");
         Check.That(counters.SlotsUnchanged == 2 + 3 && counters.CirclesSkipped == 1 && counters.CellsCleared == cleared, "A refresh with the same circles leaves every slot alone (the two empty slots were left alone the first time too).");
 
         // A script write in between: the same circles have to be drawn again, as the pass over every cell would.
         map.ShroudCircle(2, Fixed.FromInt(320), Fixed.FromInt(325), Fixed.FromInt(15));
         Check.That(!map.IsVisible(2, 32, 32) && !map.IsExplored(2, 32, 32), "The shroud action darkens the cell under the looker.");
-        map.BeginRefresh();
+        map.BeginCollectedRefresh();
         map.Reveal(2, Fixed.FromInt(320), Fixed.FromInt(325), Fixed.FromInt(40));
-        map.EndRefresh();
+        map.EndCollectedRefresh();
         Check.That(map.IsVisible(2, 32, 32) && counters.SlotsUnchanged == 2 + 3 + 2 && counters.CellsCleared > cleared, "After a script write the slot is drawn again; the two others stay alone.");
         Check.That(map.CurrentHash() == map.Hash(), "The redrawn slot hashes to the full pass's value.");
         before = counters.BytesHashed;
