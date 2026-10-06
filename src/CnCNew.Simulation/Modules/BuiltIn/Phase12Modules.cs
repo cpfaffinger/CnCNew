@@ -161,8 +161,9 @@ public sealed class FireWeaponWhenDamagedBehavior(FireWeaponWhenDamagedData data
         writer.Int("nextWake", _nextWake);
         for (var state = 0; state < 4; state++)
         {
-            writer.Int("reactionReady" + state, _reactionReady[state]);
-            writer.Int("continuousReady" + state, _continuousReady[state]);
+            // Names are built only for a writer that keeps them; the hash drops them.
+            writer.Int(writer.KeepsNames ? "reactionReady" + state : "reactionReady", _reactionReady[state]);
+            writer.Int(writer.KeepsNames ? "continuousReady" + state : "continuousReady", _continuousReady[state]);
         }
     }
 

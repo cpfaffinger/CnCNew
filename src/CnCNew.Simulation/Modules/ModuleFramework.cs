@@ -553,6 +553,12 @@ public abstract class SimModule
     public string Tag { get; internal set; } = string.Empty;
     public abstract string ModuleName { get; }
 
+    /// <summary>
+    /// The words <see cref="World.Entity.DescribeModuleFrame"/> writes for this module, prepared when it was attached and shared by all modules of the same template slot.
+    /// A shortcut for the hash only, never state: <see langword="null"/> means "write them out".
+    /// </summary>
+    internal ulong[]? FrameWords { get; set; }
+
     /// <summary>Runs once when the entity is created (not when restored from a snapshot). May schedule updates and draw random numbers.</summary>
     public virtual void OnSpawn(IWorldServices world) { }
 

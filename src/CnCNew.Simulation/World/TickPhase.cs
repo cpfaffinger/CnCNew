@@ -63,3 +63,6 @@ public interface ITickPhaseObserver
     void UpdateStarted(SimModule module);
     void UpdateEnded(SimModule module);
 }
+
+/// <summary>Counters of the incremental state hash (<see cref="SimulationWorld.HashWorkDone"/>): deterministic, so two builds can be compared without a clock.</summary>
+public readonly record struct HashWork(long Entities, long Words, long Unchanged);

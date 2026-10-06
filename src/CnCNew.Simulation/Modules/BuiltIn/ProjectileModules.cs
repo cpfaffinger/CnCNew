@@ -308,6 +308,14 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
 
     internal static void WritePoint(IStateWriter writer, string name, Point3 point)
     {
+        // The three names are built only for a writer that keeps them (the snapshot); the hash drops names and this runs for every touched projectile and aircraft each tick.
+        if (!writer.KeepsNames)
+        {
+            writer.Fixed(name, point.X);
+            writer.Fixed(name, point.Y);
+            writer.Fixed(name, point.Z);
+            return;
+        }
         writer.Fixed(name + "X", point.X);
         writer.Fixed(name + "Y", point.Y);
         writer.Fixed(name + "Z", point.Z);

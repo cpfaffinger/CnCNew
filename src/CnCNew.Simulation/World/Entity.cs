@@ -257,18 +257,30 @@ public sealed class Entity
             writer.EndArray();
         }
         writer.BeginArray("modules");
+        // The hash path writes words down (WordStateWriter); for it the opening of a module, which never changes, is copied from the words prepared when the module was attached.
+        var words = writer as WordStateWriter;
         foreach (var module in ModuleArray)
         {
-            writer.BeginObject(null);
-            writer.Int("index", module.Index);
-            writer.Text("name", module.ModuleName);
-            writer.Text("tag", module.Tag);
-            writer.BeginObject("state");
+            if (words is not null && module.FrameWords is { } frame) words.Append(frame);
+            else DescribeModuleFrame(writer, module);
             module.Describe(writer);
             writer.EndObject();
             writer.EndObject();
         }
         writer.EndArray();
         writer.EndObject();
+    }
+
+    /// <summary>
+    /// The opening of one module inside <see cref="Describe"/>, up to the module's own state: its index, its name and its tag. None of them changes after the module was attached,
+    /// which is why the words this writes may be prepared once (<see cref="SimModule.FrameWords"/>). This routine is the only definition of those words.
+    /// </summary>
+    internal static void DescribeModuleFrame(IStateWriter writer, SimModule module)
+    {
+        writer.BeginObject(null);
+        writer.Int("index", module.Index);
+        writer.Text("name", module.ModuleName);
+        writer.Text("tag", module.Tag);
+        writer.BeginObject("state");
     }
 }

@@ -33,8 +33,8 @@ internal delegate (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, strin
 internal static class PerfCommand
 {
     private const string Usage = """
-        perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--replay] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer] [--movement [--movement-tick N]] [--vision-probe] [--vision-reference]
-        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer] [--script-detail] [--movement [--movement-tick N]] [--vision-probe] [--vision-reference]
+        perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--replay] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer] [--movement [--movement-tick N]] [--vision-probe] [--vision-reference] [--prefix-probe]
+        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer] [--script-detail] [--movement [--movement-tick N]] [--vision-probe] [--vision-reference] [--prefix-probe]
         """;
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
@@ -100,7 +100,7 @@ internal static class PerfCommand
 
         var session = SkirmishMatchSession.Start(options, catalog, fingerprint, terrain, map.Objects, [..chosen.Select(participant => new SkirmishSlot(participant))]);
         var world = session.World;
-        var recorder = new TickRecorder(world, common.Modules) { VisionProbe = common.VisionProbe };
+        var recorder = new TickRecorder(world, common.Modules) { VisionProbe = common.VisionProbe, PrefixProbe = args.Contains("--prefix-probe") };
         if (common.Observe) world.PhaseObserver = recorder;
         var movement = MovementProbe(args, world, recorder);
         if (common.VisionReference && world.Vision is { } referenceVision) referenceVision.ReferenceMode = true;
@@ -211,7 +211,7 @@ internal static class PerfCommand
         var session = MissionSession.Start(options, catalog, fingerprint, terrain, map);
         var world = session.World;
         Console.WriteLine($"Session start (objects placed): {start.Elapsed.TotalMilliseconds:F0} ms, {world.Entities.Count} objects, {world.Configuration.Players.Length} players.");
-        var recorder = new TickRecorder(world, common.Modules) { VisionProbe = common.VisionProbe };
+        var recorder = new TickRecorder(world, common.Modules) { VisionProbe = common.VisionProbe, PrefixProbe = args.Contains("--prefix-probe") };
         if (common.Observe) world.PhaseObserver = recorder;
         // Opt-in: the per-condition clock reads would otherwise be part of the MissionScripts phase of every profile.
         var scriptRecorder = args.Contains("--script-detail") ? new ScriptRecorder() : null;
@@ -575,12 +575,128 @@ internal static class PerfCommand
         var realNs = Us(realTicks) * 1000 / rounds / entities.Length;
         var lengthNs = Us(lengthTicks) * 1000 / rounds / entities.Length;
         Console.WriteLine($"      hashing every object once ({rounds} rounds): {realNs:F0} ns per object with the real hash writer, {lengthNs:F0} ns with a writer that mixes only the length of a text: the characters cost {realNs - lengthNs:F0} ns per object = {100 * (realNs - lengthNs) / realNs:F0} % of describing it.");
+        ProbeDescribeByModule(entities);
         if (!recorder.Observed) return;
         var total = Distribution.Of(recorder.Total).Sum;
         var hash = Distribution.Of(recorder.Phase(TickPhase.Hash));
         var dirty = recorder.Dirty.Count == 0 ? 0 : recorder.Dirty.Average(value => (double)value);
         Console.WriteLine($"      in the run: the hash phase took {hash.Mean:F1} us per tick ({100 * hash.Sum / total:F1} % of all tick time) for {dirty:F1} touched objects per tick on average ({100 * dirty / Math.Max(1.0, recorder.Objects.Average(value => (double)value)):F0} % of the objects) "
                           + $"= {(dirty <= 0 ? 0 : hash.Mean * 1000 / dirty):F0} ns per touched object; by the ratio above about {hash.Mean * (realNs - lengthNs) / realNs:F1} us per tick ({100 * hash.Sum / total * (realNs - lengthNs) / realNs:F1} % of all tick time) go into text characters.");
+        if (recorder.PrefixProbe)
+        {
+            var (moved, still) = (recorder.PrefixMoved, recorder.PrefixStill);
+            Console.WriteLine(string.Create(Invariant, $"      prefix probe (pairs of consecutive ticks every 250): {recorder.PrefixSame} object samples unchanged; {moved.Objects} changed in their first words (position: they moved), {moved.Words} words, {moved.Prefix} of them before the first change; "
+                              + $"{still.Objects} changed later, {still.Words} words, {still.Prefix} of them ({(still.Words == 0 ? 0 : 100.0 * still.Prefix / still.Words):F1} %) before the first change; "
+                              + $"of all words of changed objects {(moved.Words + still.Words == 0 ? 0 : 100.0 * (moved.Prefix + still.Prefix) / (moved.Words + still.Words)):F1} % lie before the first change."));
+            var parts = recorder.Parts;
+            var changedObjects = Math.Max(1, moved.Objects + still.Objects);
+            Console.WriteLine(string.Create(Invariant, $"      the changed objects taken apart: the object's own fields ({(double)parts.HeadWords / changedObjects:F1} words per object) changed in {100.0 * parts.HeadChanged / changedObjects:F1} % of them; "
+                              + $"of {(double)parts.Modules / changedObjects:F1} modules per object {(double)parts.ModulesChanged / changedObjects:F2} changed in their own state ({(double)parts.ChangedModuleWords / changedObjects:F1} of {(double)parts.ModuleWords / changedObjects:F1} module-state words per object); "
+                              + $"the rest of the {(double)(moved.Words + still.Words) / changedObjects:F0} words per object are module frames (index, name, tag)."));
+            var single = recorder.SingleModuleChanges;
+            Console.WriteLine(string.Create(Invariant, $"      {single.Values.Sum()} of the changed object samples ({100.0 * single.Values.Sum() / changedObjects:F1} %) changed in exactly one module and not in their own fields: "
+                              + $"{string.Join(", ", single.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal).Take(10).Select(pair => pair.Key + " " + pair.Value.ToString(Invariant)))}."));
+            var only = recorder.OnlyWakeMoved;
+            Console.WriteLine(string.Create(Invariant, $"      of the {moved.Objects + still.Objects} changed object samples {only.Objects} ({(moved.Objects + still.Objects == 0 ? 0 : 100.0 * only.Objects / (moved.Objects + still.Objects)):F1} %) changed in nothing but wake ticks that moved from this tick to the next "
+                              + $"({only.Words} of {moved.Words + still.Words} words = {(moved.Words + still.Words == 0 ? 0 : 100.0 * only.Words / (moved.Words + still.Words)):F1} %): modules that ran, changed nothing and asked to run again."));
+        }
+        var work = recorder.HashWork;
+        var steps = Math.Max(1, recorder.Count);
+        Console.WriteLine(string.Create(Invariant, $"      counters of the incremental hash over the run (deterministic): {work.Entities} objects described ({(double)work.Entities / steps:F1} per tick), {work.Words} words folded ({(double)work.Words / steps:F0} per tick, "
+                          + $"{(work.Entities == 0 ? 0 : (double)work.Words / work.Entities):F0} per object), {work.Unchanged} of the described objects ({(work.Entities == 0 ? 0 : 100.0 * work.Unchanged / work.Entities):F2} %) came out with the hash they had; "
+                          + $"{(work.Words == 0 ? 0 : hash.Sum * 1000 / work.Words):F2} ns per word; the hash phase allocated {recorder.HashAllocated} bytes ({(double)recorder.HashAllocated / steps:F1} per tick)."));
+    }
+
+    /// <summary>
+    /// The two halves of the hash phase on the end state, in a warm loop: writing the words of every object down, and folding them (in one chain, and side by side as the
+    /// incremental hash does). Then, per module type, what one Describe writes and allocates: counted, not timed (one call is far shorter than the clock's resolution).
+    /// </summary>
+    private static void ProbeDescribeByModule(Entity[] entities)
+    {
+        const int repeats = 200;
+        var writer = new WordStateWriter();
+        var byName = new SortedDictionary<string, (long Modules, long Words, long Bytes)>(StringComparer.Ordinal);
+        long wholeTicks = 0, wholeWords = 0, foldTicks = 0, moduleWords = 0;
+        foreach (var entity in entities)
+        {
+            for (var warm = 0; warm < 3; warm++) { writer.Reset(); entity.Describe(writer); }
+            var start = Stopwatch.GetTimestamp();
+            for (var repeat = 0; repeat < repeats; repeat++) { writer.Reset(); entity.Describe(writer); }
+            wholeTicks += Stopwatch.GetTimestamp() - start;
+            wholeWords += writer.Count;
+            ulong sink = 0;
+            start = Stopwatch.GetTimestamp();
+            for (var repeat = 0; repeat < repeats; repeat++) sink += StateHash.Fold(StateHash.Seed, writer.Words);
+            foldTicks += Stopwatch.GetTimestamp() - start;
+            GC.KeepAlive(sink);
+            foreach (var module in entity.Modules)
+            {
+                writer.Reset();
+                module.Describe(writer);
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                writer.Reset();
+                module.Describe(writer);
+                var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+                var entry = byName.GetValueOrDefault(module.ModuleName);
+                byName[module.ModuleName] = (entry.Modules + 1, entry.Words + writer.Count, entry.Bytes + bytes);
+                moduleWords += writer.Count;
+            }
+        }
+        // The same words folded the way the incremental hash folds them: batches of objects, four chains side by side.
+        long streamTicks = 0;
+        var ends = new int[64];
+        var hashes = new ulong[64];
+        for (var from = 0; from < entities.Length; from += ends.Length)
+        {
+            var count = Math.Min(ends.Length, entities.Length - from);
+            writer.Reset();
+            for (var index = 0; index < count; index++)
+            {
+                entities[from + index].Describe(writer);
+                ends[index] = writer.Count;
+            }
+            StateHash.FoldStreams(writer.Words, ends.AsSpan(0, count), hashes.AsSpan(0, count));
+            var start = Stopwatch.GetTimestamp();
+            for (var repeat = 0; repeat < repeats; repeat++) StateHash.FoldStreams(writer.Words, ends.AsSpan(0, count), hashes.AsSpan(0, count));
+            streamTicks += Stopwatch.GetTimestamp() - start;
+        }
+        // Prototype for docs/PERF-HASH.md (a different construction, not the hash of this build): module name and tag as one prepared word each instead of one word per character.
+        long shortWriteTicks = 0, shortFoldTicks = 0, shortWords = 0;
+        var compact = new CompactNameWriter();
+        for (var from = 0; from < entities.Length; from += ends.Length)
+        {
+            var count = Math.Min(ends.Length, entities.Length - from);
+            for (var warm = 0; warm < 3; warm++)
+            {
+                compact.Reset();
+                for (var index = 0; index < count; index++) entities[from + index].Describe(compact);
+            }
+            var start = Stopwatch.GetTimestamp();
+            for (var repeat = 0; repeat < repeats; repeat++)
+            {
+                compact.Reset();
+                for (var index = 0; index < count; index++)
+                {
+                    entities[from + index].Describe(compact);
+                    ends[index] = compact.Count;
+                }
+            }
+            shortWriteTicks += Stopwatch.GetTimestamp() - start;
+            shortWords += compact.Count;
+            start = Stopwatch.GetTimestamp();
+            for (var repeat = 0; repeat < repeats; repeat++) StateHash.FoldStreams(compact.Words, ends.AsSpan(0, count), hashes.AsSpan(0, count));
+            shortFoldTicks += Stopwatch.GetTimestamp() - start;
+        }
+        double PerObject(long ticks) => Us(ticks) * 1000 / repeats / entities.Length;
+        double PerWord(long ticks) => wholeWords == 0 ? 0 : Us(ticks) * 1000 / repeats / wholeWords;
+        Console.WriteLine(string.Create(Invariant, $"      the two halves, warm ({repeats} repeats per object): writing the words down {PerObject(wholeTicks):F0} ns per object ({(double)wholeWords / entities.Length:F0} words, {PerWord(wholeTicks):F2} ns per word); "
+                          + $"folding them in one chain {PerObject(foldTicks):F0} ns per object ({PerWord(foldTicks):F2} ns per word), side by side as the incremental hash does (StateHash.FoldStreams, batches of {ends.Length} objects) {PerObject(streamTicks):F0} ns per object ({PerWord(streamTicks):F2} ns per word)."));
+        Console.WriteLine(string.Create(Invariant, $"      prototype, NOT this build's hash (docs/PERF-HASH.md): module name and tag as one word each leave {(double)shortWords / entities.Length:F0} words per object; writing them down {PerObject(shortWriteTicks):F0} ns per object "
+                          + $"(through the plain interface, no prepared frames), folding side by side {PerObject(shortFoldTicks):F0} ns per object."));
+        Console.WriteLine(string.Create(Invariant, $"      of the {wholeWords} words {moduleWords} ({100.0 * moduleWords / Math.Max(1, wholeWords):F1} %) are the modules' own state; module types by what one Describe allocates, then by words:"));
+        Console.WriteLine("      module type                              modules   words/call  bytes/call");
+        foreach (var (name, value) in byName.OrderByDescending(pair => pair.Value.Bytes).ThenByDescending(pair => pair.Value.Words).ThenBy(pair => pair.Key, StringComparer.Ordinal).Take(12))
+            Console.WriteLine(string.Create(Invariant, $"      {name,-40} {value.Modules,7} {(double)value.Words / value.Modules,12:F1} {(double)value.Bytes / value.Modules,11:F1}"));
     }
 
     /// <summary>(c) "MissionSession.StateHash() describes the script state completely every time."</summary>
@@ -608,6 +724,46 @@ internal static class PerfCommand
         if (recorder.ScriptHashSamples.Count > 0)
             Console.WriteLine($"      over the run ({recorder.ScriptHashSamples.Count} samples, one call each, outside the tick time): median {Us(recorder.ScriptHashSamples.Select(value => value.Elapsed).Order().ElementAt(recorder.ScriptHashSamples.Count / 2)):F1} us, min {Us(recorder.ScriptHashSamples.Min(value => value.Elapsed)):F1} us, max {Us(recorder.ScriptHashSamples.Max(value => value.Elapsed)):F1} us, "
                               + $"first {Us(recorder.ScriptHashSamples[0].Elapsed):F1} us (tick {recorder.ScriptHashSamples[0].Tick}), last {Us(recorder.ScriptHashSamples[^1].Elapsed):F1} us (tick {recorder.ScriptHashSamples[^1].Tick}).");
+    }
+
+    /// <summary>
+    /// Prototype writer for the proposal in docs/PERF-HASH.md: like <see cref="WordStateWriter"/>, but the texts named "name" and "tag" (module name and tag) become one word
+    /// each, as if their hash had been prepared. The result is a different hash construction; it is measured here, never used.
+    /// </summary>
+    private sealed class CompactNameWriter : IStateWriter
+    {
+        private ulong[] _words = new ulong[65536];
+        private int _count;
+        public int Count => _count;
+        public ReadOnlySpan<ulong> Words => _words.AsSpan(0, _count);
+        public bool KeepsNames => false;
+        public void Reset() => _count = 0;
+
+        private void Add(ulong word)
+        {
+            if (_count == _words.Length) Array.Resize(ref _words, _words.Length * 2);
+            _words[_count++] = word;
+        }
+
+        public void BeginObject(string? name) => Add(0xB1);
+        public void EndObject() => Add(0xE1);
+        public void BeginArray(string name) => Add(0xB2);
+        public void EndArray() => Add(0xE2);
+        public void Bool(string name, bool value) => Add(value ? 0xF1UL : 0xF0UL);
+        public void Int(string name, long value) => Add(unchecked((ulong)value));
+        public void UInt(string name, ulong value) => Add(value);
+        public void Fixed(string name, Fixed value) => Add(unchecked((ulong)value.Raw));
+
+        public void Text(string name, string value)
+        {
+            if (name is "name" or "tag")
+            {
+                Add((ulong)value.Length);
+                return;
+            }
+            Add((ulong)value.Length);
+            foreach (var character in value) Add(character);
+        }
     }
 
     /// <summary>Counts what a description feeds into <see cref="HashStateWriter"/>: one word per call, a text one word for its length and one per character.</summary>
@@ -682,6 +838,13 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
     private long _updateStart;
     private int _dirty;
     private bool _sawPhase;
+    private long _hashAllocationStart;
+
+    /// <summary>Bytes allocated inside the hash phase over the run.</summary>
+    public long HashAllocated { get; private set; }
+
+    /// <summary>The world's own counters of the incremental hash at the end of the last hash phase.</summary>
+    public HashWork HashWork { get; private set; }
 
     public bool ModuleTiming { get; } = moduleTiming;
     public bool Observed { get; private set; }
@@ -707,7 +870,11 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
     {
         _sawPhase = true;
         // What the hash phase is about to describe again; read before it clears the list.
-        if (phase == TickPhase.Hash) _dirty = world.DirtyEntityCount;
+        if (phase == TickPhase.Hash)
+        {
+            _dirty = world.DirtyEntityCount;
+            _hashAllocationStart = GC.GetAllocatedBytesForCurrentThread();
+        }
         _phaseStartBytes = GC.GetAllocatedBytesForCurrentThread();
         _phaseStart = Stopwatch.GetTimestamp();
     }
@@ -717,6 +884,11 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
         _current[(int)phase] += Stopwatch.GetTimestamp() - _phaseStart;
         _phaseBytes[(int)phase] += GC.GetAllocatedBytesForCurrentThread() - _phaseStartBytes;
         if (VisionProbe && phase == TickPhase.VisionHash && world.Vision is { } vision && world.Tick % SimulationWorld.VisionIntervalTicks == 0) ProbeVisionRefresh(vision);
+        if (phase != TickPhase.Hash) return;
+        HashAllocated += GC.GetAllocatedBytesForCurrentThread() - _hashAllocationStart;
+        // Read here, before the probes at the end of the run ask for the hash again.
+        HashWork = world.HashWorkDone;
+        if (PrefixProbe && world.Tick % PrefixProbeInterval is 0 or 1) SamplePrefix(world.Tick % PrefixProbeInterval == 1);
     }
 
     /// <summary>Bytes allocated inside a phase over the whole run (the phases of a tick do not nest).</summary>
@@ -792,6 +964,116 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
 
     private ulong _prototypeSink;
     public ulong VisionProbePrototypeSink => _prototypeSink;
+
+    private const int PrefixProbeInterval = 250;
+    private readonly Dictionary<ulong, ulong[]> _previousWords = [];
+    private readonly Dictionary<ulong, ulong[]> _previousParts = [];
+    private readonly WordStateWriter _probeWords = new();
+    private readonly WordStateWriter _partWords = new();
+
+    /// <summary>With <c>--prefix-probe</c>: every 250 ticks all objects are written down in two consecutive ticks and compared (costs tick time; not for timing runs).</summary>
+    public bool PrefixProbe { get; init; }
+
+    /// <summary>Objects whose words changed from one sampled tick to the next, their words, and the words before the first changed one; split into objects that moved and others.</summary>
+    public (long Objects, long Words, long Prefix) PrefixMoved, PrefixStill;
+    public long PrefixSame { get; private set; }
+
+    /// <summary>Changed objects whose only changed words are wake ticks that moved from this tick to the next (an update ran and had nothing else to say), and their words.</summary>
+    public (long Objects, long Words) OnlyWakeMoved;
+
+    /// <summary>Changed objects whose own fields did not change and exactly one module did, by that module's type.</summary>
+    public SortedDictionary<string, long> SingleModuleChanges { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The changed objects taken apart: how often the object's own fields (everything before the module list) changed and how many words they are; how many of the modules changed
+    /// in their own state and how many words those are; how many modules and module-state words the changed objects have in all.
+    /// </summary>
+    public (long HeadChanged, long HeadWords, long ModulesChanged, long ChangedModuleWords, long Modules, long ModuleWords) Parts;
+
+    /// <summary>Head hash, head word count, then per module the hash and the word count of its own state.</summary>
+    private ulong[] TakeApart(Entity entity, int totalWords)
+    {
+        var modules = entity.Modules;
+        var parts = new ulong[2 + 2 * modules.Count];
+        var rest = totalWords - 2;
+        for (var index = 0; index < modules.Count; index++)
+        {
+            var module = modules[index];
+            _partWords.Reset();
+            module.Describe(_partWords);
+            parts[2 + 2 * index] = StateHash.Fold(StateHash.Seed, _partWords.Words);
+            parts[3 + 2 * index] = (ulong)_partWords.Count;
+            // The frame of a module: BeginObject, index, the two texts with their lengths, BeginObject, and two EndObject after the state.
+            rest -= 7 + module.ModuleName.Length + module.Tag.Length + _partWords.Count;
+        }
+        parts[0] = StateHash.Fold(StateHash.Seed, _probeWords.Words[..rest]);
+        parts[1] = (ulong)rest;
+        return parts;
+    }
+
+    private void SamplePrefix(bool second)
+    {
+        if (!second)
+        {
+            _previousWords.Clear();
+            _previousParts.Clear();
+        }
+        foreach (var entity in world.Entities)
+        {
+            _probeWords.Reset();
+            entity.Describe(_probeWords);
+            var now = _probeWords.Words;
+            if (!second)
+            {
+                _previousWords[entity.Id.Value] = now.ToArray();
+                _previousParts[entity.Id.Value] = TakeApart(entity, now.Length);
+                continue;
+            }
+            if (!_previousWords.TryGetValue(entity.Id.Value, out var before)) continue;
+            var common = now.CommonPrefixLength(before);
+            if (common == now.Length && common == before.Length)
+            {
+                PrefixSame++;
+                continue;
+            }
+            // A description starts with BeginObject, id, template, the template name, owner, x, y, z and angle.
+            var head = 4 + entity.Template.Name.Length + 5;
+            ref var bucket = ref common < head ? ref PrefixMoved : ref PrefixStill;
+            bucket = (bucket.Objects + 1, bucket.Words + now.Length, bucket.Prefix + common);
+            // After the tick, a module that ran and wants to run again next tick has the wake tick world.Tick; before, it had the one before.
+            var onlyWake = now.Length == before.Length;
+            for (var index = common; onlyWake && index < now.Length; index++)
+                onlyWake = now[index] == before[index] || (now[index] == (ulong)world.Tick && before[index] == now[index] - 1);
+            if (onlyWake) OnlyWakeMoved = (OnlyWakeMoved.Objects + 1, OnlyWakeMoved.Words + now.Length);
+            var parts = TakeApart(entity, now.Length);
+            var old = _previousParts[entity.Id.Value];
+            if (old.Length != parts.Length) continue;
+            // Which module types are behind the objects that changed in one module only (and not in their own fields): the candidates for hashing a module change alone.
+            var changedModules = 0;
+            var changedIndex = -1;
+            for (var index = 2; index < parts.Length; index += 2)
+            {
+                if (parts[index] == old[index] && parts[index + 1] == old[index + 1]) continue;
+                changedModules++;
+                changedIndex = (index - 2) / 2;
+            }
+            if (parts[0] == old[0] && changedModules == 1)
+            {
+                var name = entity.Modules[changedIndex].ModuleName + (onlyWake ? " (wake tick only)" : " (more than the wake tick)");
+                SingleModuleChanges[name] = SingleModuleChanges.GetValueOrDefault(name) + 1;
+            }
+            if (parts[0] != old[0]) Parts.HeadChanged++;
+            Parts.HeadWords += (long)parts[1];
+            for (var index = 2; index < parts.Length; index += 2)
+            {
+                Parts.Modules++;
+                Parts.ModuleWords += (long)parts[index + 1];
+                if (parts[index] == old[index] && parts[index + 1] == old[index + 1]) continue;
+                Parts.ModulesChanged++;
+                Parts.ChangedModuleWords += (long)parts[index + 1];
+            }
+        }
+    }
 
     public void UpdateStarted(SimModule module)
     {
