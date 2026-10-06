@@ -34,7 +34,7 @@ public sealed class ScriptTeam(int id, string prototype, PlayerId owner)
     public int Id { get; } = id;
     public string Prototype { get; } = prototype;
     public PlayerId Owner { get; set; } = owner;
-    public List<uint> Members { get; } = [];
+    public TeamMembers Members { get; } = new();
 
     /// <summary><c>Team::isCreated</c>: the team has been activated (here: it has ever had a member).</summary>
     public bool Created { get; set; }
@@ -127,7 +127,8 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<string, uint> _named = new(StringComparer.Ordinal);
     private readonly SortedSet<string> _everNamed = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, SortedSet<string>> _objectLists = new(StringComparer.Ordinal);
-    private readonly SortedDictionary<int, ScriptTeam> _teams = [];
+    private readonly MembershipStamp _membership = new();
+    private readonly TeamTable _teams;
     private readonly SortedDictionary<uint, Follower> _followers = [];
     private readonly SortedDictionary<uint, LastDamage> _lastDamage = [];
     private readonly SortedDictionary<uint, string> _completedPath = [];
@@ -165,6 +166,7 @@ public sealed partial class ScriptEngine
         _world = world;
         _options = options;
         _issue = issue;
+        _teams = new TeamTable(_membership);
         _scriptActive = new bool[program.Units.Length];
         _nextEvaluation = new long[program.Units.Length];
         _groupActive = new bool[program.Groups.Length];
@@ -661,6 +663,7 @@ public sealed partial class ScriptEngine
         {
             var owner = _program.FindPlayer(prototype.Owner);
             team = new ScriptTeam(_nextTeamId++, prototypeName, owner is null ? PlayerId.System : owner.Id);
+            team.Members.Stamp = _membership;
             _teams[team.Id] = team;
         }
         if (runStartActions && prototype.ExecutesActionsOnCreate && prototype.ProductionCondition.Length > 0)
@@ -1006,6 +1009,7 @@ public sealed partial class ScriptEngine
                 team.SeeEnemy = item.Bool("eventsSeeEnemy");
                 team.WasIdle = item.Bool("eventsWasIdle");
             }
+            team.Members.Stamp = _membership;
             foreach (var member in item.Array("members")) team.Members.Add(checked((uint)member.UInt("id")));
             _teams[team.Id] = team;
         }

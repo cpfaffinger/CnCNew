@@ -34,6 +34,10 @@ public sealed partial class ScriptEngine
     private Dictionary<uint, ScriptTeam>? _entityTeams;
     private long _entityTeamsTick = -1;
     private int _entityTeamsMembers = -1;
+    // The membership version the table was filled at, and the one the member total was counted at (MembershipStamp).
+    private long _entityTeamsVersion = -1;
+    private long _memberTotalVersion = -1;
+    private int _memberTotal;
 
     /// <summary>The rank level script actions set for a player (recorded: the simulation has no rank system to read it).</summary>
     public int RankLevelOf(PlayerId player) => _rankLevel.GetValueOrDefault(player.Value);
@@ -242,15 +246,32 @@ public sealed partial class ScriptEngine
         return null;
     }
 
+    /// <summary>
+    /// The first team instance (by id) that lists the object. The table is refreshed when the tick or the total number of members differs from the last
+    /// refresh - that rule is kept as it was, since it decides which answer a caller gets after a membership change inside a tick. What is saved is the
+    /// work: the total is only counted again and the table only filled again when a membership changed since (<see cref="MembershipStamp"/>); otherwise
+    /// counting gives the same number and filling the same table.
+    /// </summary>
     private ScriptTeam? TeamOfEntity(uint entity)
     {
-        var members = 0;
-        foreach (var team in _teams.Values) members += team.Members.Count;
+        var version = _membership.Version;
+        if (_memberTotalVersion != version)
+        {
+            var total = 0;
+            foreach (var team in _teams.Values) total += team.Members.Count;
+            _memberTotal = total;
+            _memberTotalVersion = version;
+        }
+        var members = _memberTotal;
         if (_entityTeams is null || _entityTeamsTick != _world.Tick || _entityTeamsMembers != members)
         {
-            _entityTeams = [];
-            foreach (var team in _teams.Values)
-                foreach (var id in team.Members) _entityTeams.TryAdd(id, team);
+            if (_entityTeams is null || _entityTeamsVersion != version)
+            {
+                (_entityTeams ??= []).Clear();
+                foreach (var team in _teams.Values)
+                    foreach (var id in team.Members) _entityTeams.TryAdd(id, team);
+                _entityTeamsVersion = version;
+            }
             _entityTeamsTick = _world.Tick;
             _entityTeamsMembers = members;
         }
