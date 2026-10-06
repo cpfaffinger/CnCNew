@@ -17,6 +17,11 @@ public sealed partial class SimulationWorld
     private VisionMap? _vision;
     private Dictionary<int, int>? _playerSlots;
 
+    // Work tables of RevealVision, rebuilt in every refresh (alliances change); kept only to avoid allocating them again. Not state.
+    private int[][]? _visionViewers;
+    private int[]? _visionViewerCounts;
+    private int[]? _visionEverybody;
+
     /// <summary>The fog of war; <see langword="null"/> in a world without a terrain (everything is visible there).</summary>
     public VisionMap? Vision => _vision;
 
@@ -29,6 +34,10 @@ public sealed partial class SimulationWorld
         _playerSlots = [];
         for (var slot = 0; slot < _playerList.Length; slot++) _playerSlots[_playerList[slot].Id.Value] = slot;
         _vision = new VisionMap(terrain.CellsX, terrain.CellsY, _playerList.Length);
+        _visionViewers = new int[_playerList.Length][];
+        for (var slot = 0; slot < _playerList.Length; slot++) _visionViewers[slot] = new int[_playerList.Length];
+        _visionViewerCounts = new int[_playerList.Length];
+        _visionEverybody = [..Enumerable.Range(0, _playerList.Length).Where(slot => !_playerList[slot].Id.IsSystem)];
     }
 
     /// <summary>
@@ -52,16 +61,17 @@ public sealed partial class SimulationWorld
     {
         var vision = _vision!;
         vision.BeginRefresh();
-        var allySlots = new int[_playerList.Length][];
+        var allySlots = _visionViewers!;
+        var allyCounts = _visionViewerCounts!;
         for (var slot = 0; slot < _playerList.Length; slot++)
         {
-            var viewers = new List<int>();
+            var count = 0;
             for (var other = 0; other < _playerList.Length; other++)
-                if (!_playerList[other].Id.IsSystem && (other == slot || AreAllies(_playerList[slot].Id, _playerList[other].Id))) viewers.Add(other);
-            allySlots[slot] = [..viewers];
+                if (!_playerList[other].Id.IsSystem && (other == slot || AreAllies(_playerList[slot].Id, _playerList[other].Id))) allySlots[slot][count++] = other;
+            allyCounts[slot] = count;
         }
-        var everybody = Enumerable.Range(0, _playerList.Length).Where(slot => !_playerList[slot].Id.IsSystem).ToArray();
-        var anySightBonus = _players.Values.Any(player => player.BattlePlan is { SearchAndDestroy: > 0 });
+        var anySightBonus = false;
+        foreach (var player in _players.Values) anySightBonus |= player.BattlePlan is { SearchAndDestroy: > 0 };
         foreach (var entity in _entities.Values)
         {
             if (entity.Owner.IsSystem || entity.DestroyRequested || entity.EffectivelyDead || entity.ContainedBy.IsValid) continue;
@@ -71,7 +81,8 @@ public sealed partial class SimulationWorld
             // The strategy center's own wider shroud and the search-and-destroy plan's sight bonus for the army.
             if (entity.ShroudScalar != Fixed.One) range *= entity.ShroudScalar;
             if (anySightBonus) range *= BattlePlanSightScalarOf(entity);
-            var viewers = entity.Template.IsKindOf("REVEAL_TO_ALL") ? everybody : allySlots[_playerSlots![entity.Owner.Value]];
+            var ownerSlot = _playerSlots![entity.Owner.Value];
+            var viewers = entity.Template.RevealsToAll ? _visionEverybody.AsSpan() : allySlots[ownerSlot].AsSpan(0, allyCounts[ownerSlot]);
             foreach (var slot in viewers) vision.Reveal(slot, entity.X, entity.Y, range);
             // SpyVisionUpdate: a player that spies through this object (reference count above zero) sees what it sees, though not its allies.
             if (entity.VisionSpiedBy is { Count: > 0 } spied)
