@@ -34,8 +34,11 @@ internal static class DeterminismTests
     private const long TailTicks = 2_000;
     private const string AlpineAssault = "Maps/Alpine Assault/Alpine Assault.map";
 
-    /// <summary>SHA-256 of the airfield bone table (<c>ModelGeometry.Fingerprint</c>) of the retail content. It is part of the world fingerprint; a different value on another machine means the inputs differ before a single tick ran.</summary>
-    private const string BoneTableGolden = "93D5819BF231304D112CABABBC0A69986E82CF7E353BBC8742EEBE7A88F1DA47";
+    /// <summary>
+    /// SHA-256 of the airfield bone table (<c>ModelGeometry.Fingerprint</c>) of the retail content. It is part of the world fingerprint; a different value on another machine means the inputs differ before a single tick ran.
+    /// The table is hashed as raw fixed-point values: the value changed with the resolution (phase 22, 24 fraction bits; at 16 it was 93D5819B…F1DA47). The poses are the same numbers, quantised as before.
+    /// </summary>
+    private const string BoneTableGolden = "EA1915EB902CCE9B2242C32CCEC16BB356AF282A40F91F2741503D5C00DAC858";
 
     public static int Run(string[] args)
     {

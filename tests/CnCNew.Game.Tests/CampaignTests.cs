@@ -285,7 +285,9 @@ internal static class CampaignTests
         Refused(save.AsSpan(0, save.Length / 2).ToArray(), "damaged", "a truncated file");
         Refused("not json"u8.ToArray(), "damaged", "garbage");
         Refused("{\"format\":\"something-else\"}"u8.ToArray(), "Not a CnCNew savegame", "a foreign document");
-        Refused(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(save).Replace("\"version\":1,", "\"version\":7,", StringComparison.Ordinal)), "Unsupported savegame version 7", "another version");
+        Refused(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(save).Replace("\"format\":\"cncnew-savegame\",\"version\":2,", "\"format\":\"cncnew-savegame\",\"version\":7,", StringComparison.Ordinal)), "Unsupported savegame version 7", "another version");
+        // Phase 22: a savegame of 16 fraction bits (version 1) is refused by its version, never read with the new scale.
+        Refused(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(save).Replace("\"format\":\"cncnew-savegame\",\"version\":2,", "\"format\":\"cncnew-savegame\",\"version\":1,", StringComparison.Ordinal)), "Unsupported savegame version 1", "a savegame of 16 fraction bits");
         var otherData = new MissionContext(fixture.Templates, "00" + context.Fingerprint, context.LoadMap);
         try { SaveGame.Load(save, otherData, catalog); throw new InvalidOperationException("other game data accepted"); }
         catch (SaveGameException exception) { TestHarness.Assert(exception.Message.Contains("different game data"), "other game data is named"); }

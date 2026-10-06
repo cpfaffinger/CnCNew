@@ -1,5 +1,8 @@
 using System.Numerics;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Replay;
+using CnCNew.Simulation.Snapshots;
 
 /// <summary>
 /// Phase 22: the fixed-point routines are derived for a number of fraction bits, not for sixteen. Proven here before the resolution changes: at 16 and at
@@ -330,5 +333,33 @@ static partial class Tests
                 Check.That(difference < 1e-3, $"{bits} bits: the angle of the long vector ({x}, {y}) is off by {difference:E2}.");
             }
         }
+    }
+
+    /// <summary>
+    /// The formats carry raw values, so their versions changed with the resolution: world snapshot 9 → 10, replay 11 → 12, command table 14 → 15 (mission
+    /// state 2 → 3: <c>Tests.Scripting</c>; savegame 1 → 2: the game tests). A state of 16 fraction bits is refused by its version with a message that
+    /// names it; nothing reads it with the new scale.
+    /// </summary>
+    public static void StatesOfSixteenFractionBitsAreRejected()
+    {
+        Check.That(Fixed.FractionBits == 24 && WorldSnapshot.Version == 10 && ReplayFormat.CurrentVersion == 12 && CommandTypes.Version == 15, "The formats of 24 fraction bits: snapshot 10, replay 12, command table 15.");
+        var (fixture, replay, _) = ShortReplay();
+        var world = ReplayRunner.CreateWorld(replay.Header, fixture.Templates);
+        ReplayRunner.Run(replay, world, new ReplayRunOptions { StopTick = 300 });
+        var text = System.Text.Encoding.UTF8.GetString(WorldSnapshot.Write(world));
+        var sixteen = text.Replace($"\"version\":{WorldSnapshot.Version}", "\"version\":9", StringComparison.Ordinal);
+        Check.That(sixteen != text, "The snapshot names its version.");
+        Check.Throws<SnapshotFormatException>(() => WorldSnapshot.Restore(System.Text.Encoding.UTF8.GetBytes(sixteen), fixture.Templates, fixture.Fingerprint), "Unsupported snapshot version 9");
+
+        // The replay container: the version is the word after the magic, checked before anything else is read.
+        var bytes = ReplayFormat.Write(replay);
+        var oldContainer = (byte[])bytes.Clone();
+        BitConverter.TryWriteBytes(oldContainer.AsSpan(8, 4), 11u);
+        Check.That(BitConverter.ToUInt32(bytes, 8) == (uint)ReplayFormat.CurrentVersion, "The version word follows the eight bytes of the magic.");
+        Check.Throws<ReplayFormatException>(() => ReplayFormat.Read(oldContainer), "Unsupported replay format version 11");
+
+        // The command table: a replay that names table 14 is not run, whatever its container says.
+        var oldTable = replay with { Header = replay.Header with { CommandTableVersion = 14 } };
+        Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(oldTable, fixture.Templates, fixture.Fingerprint), "command table version 14");
     }
 }

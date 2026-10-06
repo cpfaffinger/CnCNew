@@ -29,7 +29,8 @@ public sealed record LoadedSave(SaveGameHeader Header, MissionRun Run, CampaignP
 public static class SaveGame
 {
     public const string Format = "cncnew-savegame";
-    public const int Version = 1;
+    // Version 2 (phase 22): the mission state inside carries fixed-point values with 24 fraction bits instead of 16; a version 1 file is refused.
+    public const int Version = 2;
 
     public static byte[] Write(MissionRun run, CampaignProgress? progress, string title)
     {

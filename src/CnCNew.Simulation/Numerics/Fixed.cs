@@ -3,12 +3,13 @@ using System.Globalization;
 namespace CnCNew.Simulation.Numerics;
 
 /// <summary>
-/// Signed fixed-point number with 16 fractional bits stored in a <see cref="long"/> (Q47.16).
+/// Signed fixed-point number with 24 fractional bits stored in a <see cref="long"/> (Q39.24; until phase 22: 16 bits, Q47.16).
 /// <para>
 /// Why fixed point: the reference engine keeps <c>Real</c> (binary32) values in its state, which ties determinism to
 /// compiler flags and FPU modes (<c>setFPMode()</c> in <c>INI::load</c>). Integer arithmetic gives bit-identical results
-/// on every platform. 16 fractional bits give a resolution of 1/65536 world units, and a 64-bit raw value keeps
-/// ±1.4·10^14 units, far beyond any map. Products and quotients use 128-bit intermediates.
+/// on every platform. 24 fractional bits give a resolution of 2^-24 (6·10^-8) world units, fine enough for amounts per tick and per tick squared at
+/// 60 and 120 Hz, and a 64-bit raw value keeps ±5.5·10^11 units: squared distances over the largest map are four orders of magnitude below that, but a
+/// value above 741,455 must not be squared (docs/FIXED-POINT-Q39-24.md lists the data values that large). Products and quotients use 128-bit intermediates.
 /// </para>
 /// <para>
 /// Rounding rule (all operations): to nearest, ties away from zero. Overflow throws <see cref="OverflowException"/>;
@@ -17,7 +18,7 @@ namespace CnCNew.Simulation.Numerics;
 /// </summary>
 public readonly struct Fixed : IEquatable<Fixed>, IComparable<Fixed>
 {
-    public const int FractionBits = 16;
+    public const int FractionBits = 24;
     public const long ScaleRaw = 1L << FractionBits;
 
     private readonly long _raw;
@@ -60,7 +61,10 @@ public readonly struct Fixed : IEquatable<Fixed>, IComparable<Fixed>
         return new((numerator < 0) != (denominator < 0) ? -(long)quotient : (long)quotient);
     }
 
-    /// <summary>Exact conversion (every raw value is representable as a decimal).</summary>
+    /// <summary>
+    /// The value as a decimal: exact up to 2^40 raw (65,536 units; a decimal holds 96 bits and the 24 binary places need 24 decimal ones), beyond that
+    /// rounded to the 28 significant digits of a decimal, which is still far below half a raw step (<see cref="FromDecimal"/> of it returns the same raw value).
+    /// </summary>
     public decimal ToDecimal() => (decimal)_raw / ScaleRaw;
 
     /// <summary>Whole units, rounded toward negative infinity.</summary>

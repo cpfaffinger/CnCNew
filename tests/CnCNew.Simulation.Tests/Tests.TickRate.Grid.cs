@@ -127,11 +127,13 @@ static partial class Tests
             Check.That(perSecond is { Calls: 1, NonZero: 1, RoundedToZero: 0 } && probe.Quantisation[nameof(SimulationTime.PerSecondSquaredToPerTickSquared)].Calls == 1, $"{rate}: catalog conversions are counted per function.");
         }
 
-        // A value per second² that is lost entirely at 120 Hz: 0.1 / 14400 is below half a Fixed step.
+        // A value per second² that is lost entirely at 120 Hz: 0.0004 / 14400 is below half a Fixed step (2^-25). The 0.1 of the NapalmBombLocomotor, which was
+        // lost at 16 fraction bits, is 117 raw steps at 24.
         var fast = SimulationRate.Hz120.Time;
+        Check.That(fast.PerSecondSquaredToPerTickSquared(0.1m) == Fixed.FromRaw(117), "120 Hz: 0.1 per second squared is 117 raw steps per tick squared.");
         var lost = new SimulationTimeProbe();
         fast.Probe = lost;
-        try { Check.That(fast.PerSecondSquaredToPerTickSquared(0.1m) == Fixed.Zero, "120 Hz: 0.1 per second squared is zero per tick squared."); }
+        try { Check.That(fast.PerSecondSquaredToPerTickSquared(0.0004m) == Fixed.Zero, "120 Hz: 0.0004 per second squared is zero per tick squared."); }
         finally { fast.Probe = null; }
         Check.That(lost.Quantisation[nameof(SimulationTime.PerSecondSquaredToPerTickSquared)] is { RoundedToZero: 1, AboveTenPercent: 1, AboveOnePercent: 1 }, "The probe counts the value as rounded to zero.");
     }

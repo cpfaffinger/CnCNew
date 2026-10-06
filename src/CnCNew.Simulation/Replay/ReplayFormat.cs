@@ -32,10 +32,11 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// u32 command count (i64 tick, u16 type, i32 player, u64 sequence, type-specific payload), u32 checkpoint count (i64 tick, u64 hash),
 /// and a trailing SHA-256 over everything before it. Strings are u16-length-prefixed UTF-8.
 /// Commands are stored ordered by (tick, player, sequence). Truncated, corrupted (hash mismatch) and version-foreign files are rejected.
+/// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 11;
+    public const int CurrentVersion = 12;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 

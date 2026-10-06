@@ -23,7 +23,8 @@ public static class MissionSnapshot
 {
     public const string Format = "cncnew-mission-state";
     // Version 2 adds options.humanSideName (MissionOptions.HumanSideName, docs/SCRIPT-ENGINE.md §7); older snapshots are refused, never defaulted.
-    public const int Version = 2;
+    // Version 3 (phase 22): fixed-point values are raw values with 24 fraction bits instead of 16; a version 2 state is refused, never rescaled.
+    public const int Version = 3;
 
     public static byte[] Write(MissionSession session)
     {

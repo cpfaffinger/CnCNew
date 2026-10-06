@@ -9,11 +9,12 @@ namespace CnCNew.Simulation.Commands;
 
 /// <summary>
 /// Versioned command type table. A command type code is part of the replay format; codes are never reused or changed within
-/// a table version. Adding a type increases <see cref="Version"/>.
+/// a table version. Adding a type increases <see cref="Version"/>; so does a change of what the payloads mean (version 15, phase 22: positions and
+/// amounts are raw values with 24 fraction bits instead of 16).
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 14;
+    public const int Version = 15;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
