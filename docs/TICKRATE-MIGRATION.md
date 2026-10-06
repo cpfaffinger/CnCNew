@@ -658,6 +658,53 @@ Aufrufe / Treffer je Zähler. `PerSecondToPerTick` usw. sind die Umrechnungen au
 - **Grobe Werte** (§11.2): bei 120 Hz haben 321 Katalogwerte weniger als acht signifikante Bits, bei 60 Hz 46; null wird im benutzten Katalog keiner. Für Phase 22 (Q39.24) sind die Felder `LocomotorInfo.Braking`/`Acceleration`/`Lift`/`TurnRatePerTick`, `TurretInfo.PitchRate`/`TurnRate` und `WeaponInfo.WeaponSpeed` die Messlatte.
 - **Verletzte Annahmen, die beim Lesen auffielen** (alle in §5.3): ein Schlaf von einem Tick, der ein Bild war (`RunUpdates`, jedes Modul mit `return SleepNone`); „halten bis einschließlich Frist“ (N + 1 Schritte: der Zusatzschritt ist ein Tick); der Verkauf (180 Bilder weniger ein Tick); der erste Zähler nach einem Befehl von außen (Versatz unter einem Bild); `LeafletDropBehavior` (erstes Update einen Tick nach dem Entstehen, ein `Delay` von einem Bild ist dann noch nicht abgelaufen).
 
+### 11.5 Nachtrag Phase 22: dieselben Zähler bei 24 Nachkommabits (6. Oktober 2026, Stand `d7fca91`)
+
+`Fixed` hat seit Phase 22 24 statt 16 Nachkommabits (`docs/FIXED-POINT-Q39-24.md`). Die Zähler aus §11.2 und §11.3 wurden am Stand der Umstellung neu erhoben; die 16-Bit-Zahlen wurden am Stand unmittelbar davor
+(`a0e7b23`) noch einmal gemessen und stimmen mit §11.2 überein. Wie in §11 gilt: das Verhalten bei 60 und 120 Hz ist nicht bewertet, die Ergebnisse sind keine Referenzwerte.
+
+**Katalogbau (`SimTool rate-audit <content> --tick-rate N`):**
+
+| Zähler | 60 Hz, 16 Bit | 60 Hz, 24 Bit | 120 Hz, 16 Bit | 120 Hz, 24 Bit |
+|---|---|---|---|---|
+| Umrechnungen, die auf null runden | 0 | **0** | 1 | **0** |
+| Umrechnungen über 1 % / über 10 % Fehler (Summe der vier Funktionen) | 5 / 0 | **0 / 0** | 39 / 1 | **0 / 0** |
+| schlechtester Fehler einer Umrechnung | 9,863 % | 0,007 % | 100 % | 0,422 % (`Acceleration = 0.1` des `NapalmBombLocomotor`: 117 Rohschritte statt 0) |
+| Katalogwerte: bei 30 Hz ≠ 0, bei der Rate 0 | 0 | 0 | 0 | 0 |
+| Katalogwerte über 1 % bis 10 % gegen den exakt skalierten 30-Hz-Wert | 1 | **0** | 41 in 5 Feldern | **0** |
+| Katalogwerte über 10 % | 0 | 0 | 0 | 0 |
+| Katalogwerte unter acht signifikanten Bits (Rohwert unter 256, ≠ 0) | 46 in 5 Feldern | **0** | 321 in 7 Feldern | **0** |
+| ganze Zahlen abseits des Rasters | 0 | 0 | 0 | 0 |
+
+Bei 30 Hz selbst lagen bei 16 Bit zwei Umrechnungen über 1 % (4,912 % und 3,870 %); bei 24 Bit ist der schlechteste Fall 0,007 %. Verglichen wurden dieselben 62.648 Festkommawerte und 83.166 ganzen Zahlen;
+2.410 Festkommawerte und 12.766 ganze Zahlen unterscheiden sich zwischen den Raten wie zuvor (je Tick 1.634, je Tick² 603, Dauer 173).
+
+**Laufzeit (`--time-probe`, erster Lauf jedes Befehls, 24 Bit).** Aufrufe / Treffer wie in §11.3. Das Referenzmatch läuft seit Phase 22 mit dem Treiber-Startwert `5EED0007` und wurde hier nur aufgenommen
+(`--record-only`, Budgets 90.000 bzw. 180.000 Ticks); die übrigen Befehle mit ihren Prüfläufen (zweiter frischer Lauf, Fortsetzung aus Snapshot bzw. Speicherstand).
+
+| Lauf | Rate | Ergebnis (Spielzeit) | `RunTimeRoundedToZero` | `MinimumOneFrame` | `OffGrid` | Endhash | Lauf 2 / Fortsetzung gleich |
+|---|---|---|---|---|---|---|---|
+| `reference-match` | 60 | Sieger FactionGLA bei Tick 28.590 (7,9 min) | 75.552 / 0 | 6.087 / 0 | 46.594 / 0 | nicht geprüft | nicht geprüft |
+| `reference-match` | 120 | Sieger FactionGLA bei Tick 112.920 (15,7 min) | 379.904 / 0 | 7.956 / 0 | 66.884 / 0 | nicht geprüft | nicht geprüft |
+| `ai-match` Alpine Assault, FactionChina/FactionGLA | 60 | Sieger FactionChina bei Tick 23.220 (6,5 min) | 13.090 / 0 | 477 / 0 | 2.540 / 0 | `17F89955311BDDAE` | ja / ja |
+| `ai-match` Alpine Assault, FactionChina/FactionGLA | 120 | Sieger FactionChina bei Tick 49.440 (6,9 min) | 21.259 / 0 | 505 / 0 | 2.667 / 0 | `BFF1C33F041ACDF8` | ja / ja |
+| `ai-match` Alpine Assault, FactionAmerica/FactionChina | 60 | Sieger FactionAmerica bei Tick 24.240 (6,7 min) | 2.771 / 0 | 389 / 0 | 9.206 / 0 | `52E95115272B9463` | ja / ja |
+| `ai-match` Alpine Assault, FactionAmerica/FactionChina | 120 | Sieger FactionAmerica bei Tick 48.240 (6,7 min) | 4.845 / 0 | 362 / 0 | 8.868 / 0 | `20870C5115C41ABC` | ja / ja |
+| `mission-run` `MD_USA05` | 60 | 6.000 Ticks, Ausgang offen | 4.812 / 0 | 214 / 0 | 45.468 / 0 | `199D42C8B0B88DF6` | ja / ja |
+| `mission-run` `MD_USA05` | 120 | 12.000 Ticks, Ausgang offen | 9.610 / 0 | 214 / 0 | 45.469 / 0 | `F036DAAF9DEEC606` | ja / ja |
+| `mission-run` `MD_GLA05` | 60 | 6.000 Ticks, Ausgang offen | 30.759 / 0 | 257 / 11 | 47.331 / 0 | `0992106EBA5D865A` | ja / ja |
+| `mission-run` `MD_GLA05` | 120 | 12.000 Ticks, Ausgang offen | 37.033 / 0 | 253 / 11 | 47.386 / 0 | `66BC9427E265652E` | ja / ja |
+| `mission-run` `GC_ChemGeneral` | 60 | 6.000 Ticks, Ausgang offen | 0 / 0 | 2.428 / 13 | 66.283 / 0 | `3ECA1E1988852F4C` | ja / ja |
+| `mission-run` `GC_ChemGeneral` | 120 | 12.000 Ticks, Ausgang offen | 0 / 0 | 2.428 / 13 | 66.283 / 0 | `A4C732DFBC83F4AF` | ja / ja |
+
+- **Rundung auf null zur Laufzeit: weiterhin keine**, bei 60 und bei 120 Hz. Das Ziel der Phase 22 – null Fälle bei 60 Hz – ist beim Katalogbau und zur Laufzeit erreicht; es bleibt kein Fall zu benennen. Wie in
+  §11.3 nicht gezählt: Beträge je Tick, die Module ohne den Zeitdienst bilden.
+- Die Zähler der Missionen sind die von §11.3 (dieselben Stellen, dieselben Zahlen bis auf einzelne Aufrufe): die Auflösung ändert nicht, wie oft die Untergrenze „ein Bild“ greift.
+- Kein Überlauf, keine Ausnahme, keine Ablehnung in einem der zwölf Läufe.
+- **Beobachtung für Phase 23, nicht bewertet:** bei 24 Bit endet das Referenzmatch auch bei 120 Hz (bei 16 Bit fand es dort in 864.000 Ticks keinen Sieger, mit anderem Startwert), und die Spielzeit bis zum Sieg
+  der beiden KI-Läufe liegt bei 60 und 120 Hz nah beieinander (China/GLA 6,5 und 6,9 min; America/China 6,7 und 6,7 min; bei 16 Bit 6,5 / 6,4 und 12,3 / 9,1 min). Bei 30 Hz und 24 Bit sind es 6,0 und 9,3 min
+  (Ticks 10.710 und 16.665, Referenzmanifest).
+
 ## 12. Tests
 
 `tests/CnCNew.Simulation.Tests`, alle bei 30, 60 und 120 Hz auf der synthetischen Fixture der jeweiligen Rate, wo nicht anders gesagt. Die bestehenden Tests mit Tickerwartungen bei 30 Hz (179 Ticks Verkauf, 45 Ticks Interesse, 18/9/4 Ticks Schussabstand …) laufen unverändert und sind der 30-Hz-Beleg auf Testebene.

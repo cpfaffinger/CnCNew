@@ -51,7 +51,8 @@ internal static class ManifestCommands
 /// <param name="Findings">With <c>--explain-incremental</c>: per object type and fields, how often an object changed without being marked dirty.</param>
 internal sealed record JobResult(ManifestObject Values, long TicksVerified = 0, long IncrementalMismatches = 0, ImmutableArray<string> FirstMismatches = default, ImmutableArray<string> Findings = default);
 
-internal sealed record RunJob(string Label, long Weight, bool NeedsContent, Func<SimContext?, VerifyMode, JobResult> Work);
+/// <param name="Details">The result quantities of the job that are not hashes (<c>reference-manifest results</c>).</param>
+internal sealed record RunJob(string Label, long Weight, bool NeedsContent, Func<SimContext?, VerifyMode, JobResult> Work, Func<SimContext?, ManifestObject> Details);
 
 /// <summary>One run of the manifest: a stable id, its set, its parameters and the work that produces its results (one job, or one per map for the sweep).</summary>
 internal sealed record RunSpec(string Id, bool Quick, string Kind, ManifestObject Parameters, ImmutableArray<RunJob> Jobs, Func<ImmutableArray<JobResult>, ManifestObject> Combine)
@@ -112,12 +113,16 @@ internal static class ReferenceManifest
 
     private const string UsageText = """
         Usage: CnCNew.SimTool reference-manifest write <content-dir> <file> [--set quick|full] [--jobs N]
+               CnCNew.SimTool reference-manifest results <content-dir> --out <file> [--commands <dir>] [--set quick|full] [--only <run-id>[,<run-id>]] [--jobs N]
                CnCNew.SimTool reference-manifest check <content-dir> <file> [--set quick|full] [--only <run-id>[,<run-id>]] [--verify-incremental|--explain-incremental] [--jobs N]
                CnCNew.SimTool reference-manifest list  <content-dir>
                CnCNew.SimTool reference-manifest show  <content-dir> [--set quick|full] [--only <run-id>[,<run-id>]] [--verify-incremental|--explain-incremental] [--jobs N]
           write   computes the runs of the set and writes the file; a run that does not repeat is recorded as such, with a warning
           check   computes them again; one line per run with OK or the first differing field, exit code 1 on any difference
           show    computes runs and prints their entries; reads and writes no file
+          results runs every run once and writes what is not a hash: outcome, end tick, objects and money per player, commands by type,
+                  events by kind; it reads no manifest and changes none. --commands also writes the command stream of every recorded
+                  run as text (amounts in whole units): two resolutions or rates are compared by the first line that differs
           --set   quick: a few minutes; full (default): every run. --only picks runs by id, whatever their set.
           --verify-incremental   in run 1 of every checked run, compare the incremental state hash with a full recomputation
                                  after every tick (the synthetic stress run: every 1,000 ticks)
@@ -134,13 +139,15 @@ internal static class ReferenceManifest
             foreach (var pair in missing.Values) Console.WriteLine($"{pair.Key,-58} unavailable: {pair.Value.Display}");
             return 0;
         }
+        var results = args.Length >= 3 && args[1] == "results";
+        if (results && ManifestCommands.Option(args, "--out") is null) return ManifestCommands.Fail(UsageText);
         var show = args.Length >= 3 && args[1] == "show";
-        if (!show && (args.Length < 4 || args[1] is not ("write" or "check"))) return ManifestCommands.Fail(UsageText);
+        if (!show && !results && (args.Length < 4 || args[1] is not ("write" or "check"))) return ManifestCommands.Fail(UsageText);
         var set = ManifestCommands.Option(args, "--set") ?? FullSet;
         if (set is not (QuickSet or FullSet)) return ManifestCommands.Fail($"Unknown set '{set}'; use {QuickSet} or {FullSet}.");
         var jobs = ManifestCommands.Jobs(args);
         var verify = args.Contains("--explain-incremental") ? VerifyMode.Explain : args.Contains("--verify-incremental") ? VerifyMode.Verify : VerifyMode.None;
-        var path = show ? string.Empty : Path.GetFullPath(args[3]);
+        var path = show || results ? string.Empty : Path.GetFullPath(args[3]);
         var plan = Plan(ContentFileSystem.Open(args[2]), out var unavailable);
         var selected = plan.Where(spec => set == FullSet || spec.Quick).ToList();
         if (ManifestCommands.Option(args, "--only") is { } only)
@@ -156,8 +163,22 @@ internal static class ReferenceManifest
 
         var watch = Stopwatch.StartNew();
         Console.Error.WriteLine($"{selected.Count} runs ({selected.Sum(spec => spec.Jobs.Length)} jobs), {jobs} side by side{(verify != VerifyMode.None ? ", incremental hash verified" : string.Empty)}.");
-        var outcomes = Execute(args[2], selected, jobs, verify);
+        if (results && ManifestCommands.Option(args, "--commands") is { } commands) ResultQuantities.CommandsDirectory = Path.GetFullPath(commands);
+        var outcomes = Execute(args[2], selected, jobs, verify, results);
         Console.Error.WriteLine($"Computed in {watch.Elapsed.TotalSeconds:F1} s.");
+        if (results)
+        {
+            var quantities = new ManifestObject();
+            var failed = 0;
+            foreach (var spec in selected)
+            {
+                if (outcomes[spec.Id].Entry is null) failed++;
+                quantities.Add(spec.Id, outcomes[spec.Id].Entry ?? new ManifestObject().Add("error", outcomes[spec.Id].Error ?? "unknown"));
+            }
+            File.WriteAllBytes(Path.GetFullPath(ManifestCommands.Option(args, "--out")!), ManifestDocument.WriteBytes(new ManifestObject().Add("kind", "reference-results").Add("simulation", Header()).Add("runs", quantities)));
+            Console.WriteLine($"Result quantities written: {selected.Count} runs, {failed} failed.");
+            return failed == 0 ? 0 : 1;
+        }
         if (show)
         {
             var shown = new ManifestObject();
@@ -298,13 +319,13 @@ internal static class ReferenceManifest
         plan.Add(Single("reference-match", true, "reference-match", new ManifestObject()
             .Add("worldSeed", Hex(reference.WorldSeed)).Add("driverSeed", Hex(reference.DriverSeed)).Add("maxTicks", reference.MaxTicks).Add("graceTicks", reference.GraceTicks)
             .Add("minTicks", reference.MinTicks).Add("arenaRadius", reference.ArenaRadius).Add("income", reference.Income).Add("incomeInterval", reference.IncomeInterval).Add("tickRate", rate),
-            60, true, (context, verify) => ReferenceMatchJob(context!, reference, verify)));
+            60, true, (context, verify) => ReferenceMatchJob(context!, reference, verify), context => ResultQuantities.ReferenceMatch(context!, reference)));
 
         var stress = StressOptions.Standard;
         plan.Add(Single("stress", true, "stress", new ManifestObject()
             .Add("worldSeed", Hex(stress.WorldSeed)).Add("driverSeed", Hex(stress.DriverSeed)).Add("ticks", stress.Ticks).Add("targetPopulation", stress.TargetPopulation)
             .Add("drainTicks", stress.DrainTicks).Add("fixture", "synthetic").Add("tickRate", rate),
-            120, false, (_, verify) => StressJob(stress, verify)));
+            120, false, (_, verify) => StressJob(stress, verify), _ => ResultQuantities.Stress(stress)));
 
         var skirmish = SkirmishMatchOptions.Standard;
         ManifestObject AiParameters(string map, string[] factions, long maxTicks) => new ManifestObject()
@@ -315,7 +336,8 @@ internal static class ReferenceManifest
             {
                 var id = $"{name}_{string.Join("-", pairing.Select(Short))}";
                 plan.Add(Single(id, QuickAiRuns.Contains(id), "ai-match", AiParameters(map, pairing, AiMatchTicks), AiMatchTicks / 500, true,
-                    (context, verify) => AiMatchJob(context!, map, pairing, skirmish with { MaxTicks = AiMatchTicks }, verify)));
+                    (context, verify) => AiMatchJob(context!, map, pairing, skirmish with { MaxTicks = AiMatchTicks }, verify),
+                    context => ResultQuantities.AiMatch(context!, map, pairing, skirmish with { MaxTicks = AiMatchTicks }, Participants)));
             }
         foreach (var id in QuickAiRuns)
             if (plan.All(spec => spec.Id != id)) throw new InvalidOperationException($"The quick set names the unknown run {id}.");
@@ -324,10 +346,12 @@ internal static class ReferenceManifest
         {
             var (name, map) = EightPlayerMaps[index];
             plan.Add(Single($"ai8_{name}", false, "ai-match", AiParameters(map, EightPlayerFactions, EightPlayerTicks), EightPlayerTicks / 20, true,
-                (context, verify) => AiMatchJob(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerTicks }, verify)));
+                (context, verify) => AiMatchJob(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerTicks }, verify),
+                context => ResultQuantities.AiMatch(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerTicks }, Participants)));
             if (index == 0)
                 plan.Add(Single($"ai8_{name}_short", true, "ai-match", AiParameters(map, EightPlayerFactions, EightPlayerQuickTicks), EightPlayerQuickTicks / 20, true,
-                    (context, verify) => AiMatchJob(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerQuickTicks }, verify)));
+                    (context, verify) => AiMatchJob(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerQuickTicks }, verify),
+                    context => ResultQuantities.AiMatch(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerQuickTicks }, Participants)));
         }
 
         var sweepOptions = skirmish with { MaxTicks = SweepTicks, GraceTicks = ToolRate.GraceWithinBudget(skirmish.GraceTicks, SweepTicks, ToolRate.Manifest) };
@@ -335,7 +359,7 @@ internal static class ReferenceManifest
         plan.Add(new RunSpec("skirmish-sweep", false, "skirmish-sweep", new ManifestObject()
                 .Add("maps", paths.Length).Add("factions", "the first two playable factions in catalog order").Add("maxTicks", SweepTicks).Add("graceTicks", sweepOptions.GraceTicks)
                 .Add("worldSeed", Hex(skirmish.WorldSeed)).Add("aiSeed", Hex(skirmish.AiSeed)).Add("tickRate", rate),
-            [..paths.Select(path => new RunJob($"skirmish-sweep {path}", 4, true, (context, verify) => SweepMapJob(context!, path, sweepOptions, verify)))],
+            [..paths.Select(path => new RunJob($"skirmish-sweep {path}", 4, true, (context, verify) => SweepMapJob(context!, path, sweepOptions, verify), context => ResultQuantities.SweepMap(context!, path, sweepOptions)))],
             results => CombineSweep(paths, results)));
 
         // Per campaign its first and its last mission (one when it has only one). Campaigns that share a map with the same human faction share the run.
@@ -362,15 +386,16 @@ internal static class ReferenceManifest
             plan.Add(Single(id, QuickMissions.Contains(id), "mission-run", new ManifestObject()
                     .Add("map", mission.Map).Add("campaigns", string.Join(",", mission.Campaigns)).Add("ticks", MissionTicks).Add("difficulty", standard.Difficulty.ToString())
                     .Add("worldSeed", Hex(standard.WorldSeed)).Add("challenge", mission.Challenge).Add("humanFaction", mission.Faction).Add("tickRate", rate),
-                12, true, (context, verify) => MissionJob(context!, mission.Map, mission.Challenge, mission.Faction, MissionTicks, verify)));
+                12, true, (context, verify) => MissionJob(context!, mission.Map, mission.Challenge, mission.Faction, MissionTicks, verify),
+                context => ResultQuantities.Mission(context!, mission.Map, mission.Challenge, mission.Faction, MissionTicks)));
         foreach (var id in QuickMissions)
             if (plan.All(spec => spec.Id != id)) throw new InvalidOperationException($"The quick set names the unknown run {id}.");
 
         if (plan.Select(spec => spec.Id).Distinct(StringComparer.Ordinal).Count() != plan.Count) throw new InvalidOperationException("Run ids are not unique.");
         return plan;
 
-        static RunSpec Single(string id, bool quick, string kind, ManifestObject parameters, long weight, bool needsContent, Func<SimContext?, VerifyMode, JobResult> work)
-            => new(id, quick, kind, parameters, [new RunJob(id, weight, needsContent, work)], results => results[0].Values);
+        static RunSpec Single(string id, bool quick, string kind, ManifestObject parameters, long weight, bool needsContent, Func<SimContext?, VerifyMode, JobResult> work, Func<SimContext?, ManifestObject> details)
+            => new(id, quick, kind, parameters, [new RunJob(id, weight, needsContent, work, details)], results => results[0].Values);
 
         static string Short(string faction) => faction.StartsWith("Faction", StringComparison.Ordinal) ? faction["Faction".Length..] : faction;
 
@@ -387,7 +412,7 @@ internal static class ReferenceManifest
     /// the simulation is shared between threads), and all workers must arrive at the same world fingerprint. The result does not depend on the order in
     /// which jobs finish.
     /// </summary>
-    private static Dictionary<string, RunOutcome> Execute(string directory, List<RunSpec> selected, int jobs, VerifyMode verify)
+    private static Dictionary<string, RunOutcome> Execute(string directory, List<RunSpec> selected, int jobs, VerifyMode verify, bool details = false)
     {
         var queue = selected.SelectMany(spec => spec.Jobs.Select((job, index) => (Spec: spec, Job: job, Index: index)))
             .OrderByDescending(item => item.Job.Weight).ThenBy(item => item.Job.Label, StringComparer.Ordinal).ToArray();
@@ -415,7 +440,8 @@ internal static class ReferenceManifest
                         context = SimContext.Load(directory);
                         fingerprints[worker] = context.Fingerprint;
                     }
-                    var result = job.Work(context, verify);
+                    if (details) ResultQuantities.Begin(spec.Id);
+                    var result = details ? new JobResult(job.Details(context)) : job.Work(context, verify);
                     lock (gate) results[spec.Id][slot] = result;
                 }
                 catch (Exception exception) when (exception is not OutOfMemoryException)
@@ -445,12 +471,21 @@ internal static class ReferenceManifest
                 continue;
             }
             var complete = parts.Select(part => part!).ToImmutableArray();
-            var entry = new ManifestObject().Add("kind", spec.Kind).Add("set", spec.Set).Add("parameters", spec.Parameters).Add("results", spec.Combine(complete));
+            var entry = new ManifestObject().Add("kind", spec.Kind).Add("set", spec.Set).Add("parameters", spec.Parameters).Add("results", details ? CombineDetails(spec, complete) : spec.Combine(complete));
             outcomes[spec.Id] = new RunOutcome(entry, null, complete.Sum(part => part.TicksVerified), complete.Sum(part => part.IncrementalMismatches),
                 [..complete.SelectMany(part => part.FirstMismatches.IsDefault ? [] : part.FirstMismatches).Take(4)],
                 [..complete.SelectMany(part => part.Findings.IsDefault ? [] : part.Findings)], seconds[spec.Id][0]);
         }
         return outcomes;
+    }
+
+    /// <summary>The result quantities of a run: those of its one job, or one entry per job (the maps of the sweep).</summary>
+    private static ManifestObject CombineDetails(RunSpec spec, ImmutableArray<JobResult> results)
+    {
+        if (results.Length == 1) return results[0].Values;
+        var values = new ManifestObject();
+        for (var index = 0; index < results.Length; index++) values.Add(spec.Jobs[index].Label, results[index].Values);
+        return values;
     }
 
     private static ulong Chain(ReadOnlySpan<ulong> hashes)

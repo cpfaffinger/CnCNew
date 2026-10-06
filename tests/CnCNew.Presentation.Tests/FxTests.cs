@@ -699,9 +699,9 @@ public static partial class FxTests
 
         executor.ExecuteEvents(
         [
-            Event(SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestGun", 20 * 65536L),
-            Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 20 * 65536L),
-            Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 2 * 65536L),
+            Event(SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestGun", 20 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw),
+            Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 20 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw),
+            Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 2 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw),
         ], view);
         var cues = executor.DrainSoundCues().Select(cue => cue.EventName).ToArray();
         Assert(cues.Contains("TestMuzzleSound") && cues.Contains("TestGunShot"), $"FireFX sound nugget and weapon FireSound: {string.Join(",", cues)}");
@@ -713,13 +713,13 @@ public static partial class FxTests
         tick += 31;
         executor.ExecuteEvents(
         [
-            Event(SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestGun", 2 * 65536L),
-            Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 2 * 65536L),
-            Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 2 * 65536L),
+            Event(SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestGun", 2 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw),
+            Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 2 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw),
+            Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 2 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw),
         ], view);
         Assert(executor.Capture().ViewShakes.Single().Type == ViewShakeType.Subtle, "after the throttle window a small hit picks MinorFX");
         Assert(executor.Counters["damagefx-throttled"] == 2, "same damage type inside the window is throttled");
-        executor.ExecuteEvents([Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 2 * 65536L)], view);
+        executor.ExecuteEvents([Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 2 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw)], view);
         Assert(executor.Counters["damagefx-without-weapon"] == 1, "damage without a shot in the same tick has no damage type and is counted");
     }
 
@@ -789,8 +789,8 @@ public static partial class FxTests
         ]), "rule table: " + string.Join(", ", cues.Select(cue => cue.EventName)));
         Assert(cues[2].Player == new PlayerId(2), "a module-emitted deposit is addressed to the owner of the supply center");
         cues.Clear();
-        deriver.Derive(Event(3, SimEventKind.EntityDamaged, TestView.Base, TestView.Tank, string.Empty, 65536), view, cues);
-        deriver.Derive(Event(4, SimEventKind.EntityDamaged, TestView.Base, TestView.Tank, string.Empty, 65536), view, cues);
+        deriver.Derive(Event(3, SimEventKind.EntityDamaged, TestView.Base, TestView.Tank, string.Empty, CnCNew.Simulation.Numerics.Fixed.ScaleRaw), view, cues);
+        deriver.Derive(Event(4, SimEventKind.EntityDamaged, TestView.Base, TestView.Tank, string.Empty, CnCNew.Simulation.Numerics.Fixed.ScaleRaw), view, cues);
         Assert(cues.Select(cue => cue.EventName).SequenceEqual(["BaseUnderAttack", "TestRadarStructure"]), "one under-attack notification per 10 s and 250 units");
         cues.Clear();
         deriver.Derive(Event(5, SimEventKind.EntityDied, TestView.Base, TestView.Tank, string.Empty, 0), view, cues);

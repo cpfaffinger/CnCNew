@@ -290,6 +290,9 @@ internal static class CampaignTests
         Refused("not json"u8.ToArray(), "damaged", "garbage");
         Refused("{\"format\":\"something-else\"}"u8.ToArray(), "Not a CnCNew savegame", "a foreign document");
         Refused(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(save).Replace($"\"version\":{SaveGame.Version},", "\"version\":7,", StringComparison.Ordinal)), "Unsupported savegame version 7", "another version");
+        // Older savegames are refused by their version, never read with the new scale: 1 had no tick rate, 2 had 16 fraction bits.
+        Refused(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(save).Replace($"\"version\":{SaveGame.Version},", "\"version\":1,", StringComparison.Ordinal)), "Unsupported savegame version 1", "version 1");
+        Refused(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(save).Replace($"\"version\":{SaveGame.Version},", "\"version\":2,", StringComparison.Ordinal)), "Unsupported savegame version 2", "version 2");
         var otherData = new MissionContext(fixture.Templates, "00" + context.Fingerprint, context.LoadMap);
         try { SaveGame.Load(save, otherData, catalog); throw new InvalidOperationException("other game data accepted"); }
         catch (SaveGameException exception) { TestHarness.Assert(exception.Message.Contains("different game data"), "other game data is named"); }
@@ -307,7 +310,7 @@ internal static class CampaignTests
     /// </summary>
     private static void SaveCarriesItsRate()
     {
-        TestHarness.Assert(SaveGame.Version == 2, "the savegame format is version 2 (tick rate in the header)");
+        TestHarness.Assert(SaveGame.Version == 3, "the savegame format is version 3 (tick rate in the header since 2, 24 fraction bits since 3)");
         var (context30, catalog, campaign, _) = SyntheticCampaign(SimulationRate.Hz30);
         var (context60, _, _, _) = SyntheticCampaign(SimulationRate.Hz60);
         byte[] SaveAt(MissionContext context, int frames, out MissionRun run)
@@ -349,11 +352,11 @@ internal static class CampaignTests
         // Version 1 had no rate: refused by its version, never read as "30 Hz".
         var text30 = Encoding.UTF8.GetString(save30);
         var version1 = text30.Replace($"\"version\":{SaveGame.Version},", "\"version\":1,", StringComparison.Ordinal).Replace("\"tickRate\":30,", string.Empty, StringComparison.Ordinal);
-        Refused(Encoding.UTF8.GetBytes(version1), context30, "Unsupported savegame version 1 (this game reads version 2)", "a version 1 save");
+        Refused(Encoding.UTF8.GetBytes(version1), context30, "Unsupported savegame version 1 (this game reads version 3)", "a version 1 save");
         try { SaveGame.ReadHeader(Encoding.UTF8.GetBytes(version1)); throw new InvalidOperationException("the header of a version 1 save was read"); }
         catch (SaveGameException exception) { TestHarness.Assert(exception.Message.Contains("version 1", StringComparison.Ordinal), "the list names the old version as the problem of the slot"); }
 
-        // A version 2 file without a rate, with an unsupported rate, or with a header that claims another rate than its state.
+        // A current file without a rate, with an unsupported rate, or with a header that claims another rate than its state.
         Refused(Encoding.UTF8.GetBytes(text30.Replace("\"tickRate\":30,", string.Empty, StringComparison.Ordinal)), context30, "damaged or incomplete", "a save without a tick rate");
         Refused(Encoding.UTF8.GetBytes(text30.Replace("\"tick\":95,\"tickRate\":30,", "\"tick\":95,\"tickRate\":50,", StringComparison.Ordinal)), context30, "Unsupported tick rate 50 Hz", "a save at 50 Hz");
         Refused(Encoding.UTF8.GetBytes(text30.Replace("\"tick\":95,\"tickRate\":30,", "\"tick\":95,\"tickRate\":60,", StringComparison.Ordinal)), context30, "written at 60 Hz", "a header that claims 60 Hz in a 30 Hz session");

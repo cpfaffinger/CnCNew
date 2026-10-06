@@ -17,11 +17,12 @@ public sealed class SnapshotFormatException(string message, Exception? inner = n
 /// integers), no paths, no timestamps, every collection sorted by id. <see cref="Sha256"/> identifies a snapshot.
 /// The header carries the definition fingerprint and the world hash; <see cref="Restore"/> rejects truncated, corrupted,
 /// version-foreign or definition-foreign snapshots. Restore is internal-contract minimal: it serves the replay harness.
+/// Version 10 (phase 22): the raw integers carry 24 fraction bits instead of 16; a version 9 snapshot is rejected, never rescaled.
 /// </summary>
 public static class WorldSnapshot
 {
     public const string Format = "cncnew-world-snapshot";
-    public const int Version = 9;
+    public const int Version = 10;
 
     public static byte[] Write(SimulationWorld world)
     {

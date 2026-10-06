@@ -723,7 +723,9 @@ static partial class ObjectTests
             maxSteer = Math.Max(maxSteer, Math.Abs(pose.WheelAngle));
         }
 
-        Check.That(maxPitch > 0.005f && maxPitch <= motion.AccelPitchLimit + 0.1f, $"Setting off tilts the body by acceleration ({maxPitch} rad; at {entity.X},{entity.Y} speed {entity.Speed}).");
+        // The sway overshoots its limit by one step before it is clamped: three steps of 4 * (1/30) are 0.4 exactly, the limit plus 0.1. Since the
+        // acceleration per tick is 1/30 to seven digits (24 fraction bits) the peak is that value to the last bit of a single, so the bound allows for it.
+        Check.That(maxPitch > 0.005f && maxPitch <= motion.AccelPitchLimit + 0.1f + 0.0001f, $"Setting off tilts the body by acceleration ({maxPitch} rad; at {entity.X},{entity.Y} speed {entity.Speed}).");
         Check.That(maxSteer < 0.05f, $"Driving straight keeps the wheels straight ({maxSteer}).");
 
         var exact = new SuspensionTracker();

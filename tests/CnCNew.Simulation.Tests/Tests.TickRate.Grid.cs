@@ -93,7 +93,7 @@ static partial class Tests
         {
             var time = rate.Time;
             Check.That(time.Probe is null, $"{rate}: no probe is attached by default.");
-            long[] raws = [0, 1, 2, 3, 7, 29, 30, 59, 60, 119, 120, 121, 65_535, 65_536, 1_000_000, 123_456_789, -1, -29, -30, -65_536, -987_654_321];
+            long[] raws = [0, 1, 2, 3, 7, 29, 30, 59, 60, 119, 120, 121, Fixed.ScaleRaw - 1, Fixed.ScaleRaw, 1_000_000, 123_456_789, -1, -29, -30, -Fixed.ScaleRaw, -987_654_321];
             var plain = raws.Select(raw => Fixed.FromRaw(raw)).Select(value => (time.PerSecondToPerTick(value), time.PerOriginalFrameToPerTick(value), time.PerOriginalFrameSquaredToPerTickSquared(value),
                 time.SharePerTick(value, Fixed.FromInt(45)), time.AtLeastOneFrame(value.Raw), time.CountdownReload(value.Raw), time.ToOriginalFrames(value.Raw))).ToArray();
             for (var index = 0; index < raws.Length; index++)
@@ -127,11 +127,13 @@ static partial class Tests
             Check.That(perSecond is { Calls: 1, NonZero: 1, RoundedToZero: 0 } && probe.Quantisation[nameof(SimulationTime.PerSecondSquaredToPerTickSquared)].Calls == 1, $"{rate}: catalog conversions are counted per function.");
         }
 
-        // A value per second² that is lost entirely at 120 Hz: 0.1 / 14400 is below half a Fixed step.
+        // A value per second² that is lost entirely at 120 Hz: 0.0004 / 14400 is below half a Fixed step (2^-25). The 0.1 of the NapalmBombLocomotor, which was
+        // lost at 16 fraction bits, is 117 raw steps at 24.
         var fast = SimulationRate.Hz120.Time;
+        Check.That(fast.PerSecondSquaredToPerTickSquared(0.1m) == Fixed.FromRaw(117), "120 Hz: 0.1 per second squared is 117 raw steps per tick squared.");
         var lost = new SimulationTimeProbe();
         fast.Probe = lost;
-        try { Check.That(fast.PerSecondSquaredToPerTickSquared(0.1m) == Fixed.Zero, "120 Hz: 0.1 per second squared is zero per tick squared."); }
+        try { Check.That(fast.PerSecondSquaredToPerTickSquared(0.0004m) == Fixed.Zero, "120 Hz: 0.0004 per second squared is zero per tick squared."); }
         finally { fast.Probe = null; }
         Check.That(lost.Quantisation[nameof(SimulationTime.PerSecondSquaredToPerTickSquared)] is { RoundedToZero: 1, AboveTenPercent: 1, AboveOnePercent: 1 }, "The probe counts the value as rounded to zero.");
     }

@@ -79,8 +79,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private enum PendingKind : byte { None, Move, Land }
 
     private static readonly Fixed ParkedOrientationTolerance = Fixed.FromDecimal(0.001m);
-    private static readonly Fixed Misaligned = Fixed.FromRaw(34315); // π/6, as the ground movement of AIUpdateInterface
-    private static readonly Fixed Epsilon = Fixed.FromRaw(1024);
+    private static readonly Fixed Misaligned = FixedTrig.PiFraction(1, 6); // as the ground movement of AIUpdateInterface
+    private static readonly Fixed Epsilon = Fixed.FromFraction(1, 64);
     // Own speeds of the kinematic stand-in, written as distances per logic frame of the original and scaled where they are used (untouched at 30 Hz).
     /// <summary>The taxi speed of an aircraft without an active locomotor.</summary>
     private static readonly Fixed FallbackTaxiSpeedPerFrame = Fixed.One;

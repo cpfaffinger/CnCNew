@@ -166,7 +166,10 @@ static partial class Tests
         Check.That(excluded.Length == 1 && excluded[0].Contains("FactionNobody") && excluded[0].Contains("no instantiable armed unit"), "A faction whose side cannot field a unit is listed as excluded, never dropped silently.");
         Check.That(ReferenceMatchScenario.DescribeCoverage(catalog).Any(line => line.Contains("side Alpha: 1/1 armed units")), "The coverage report counts instantiable armed units per side.");
 
-        var options = ReferenceMatchOptions.Standard with { MaxTicks = 60_000, MinTicks = 62_000, CheckpointInterval = 500, ArenaRadius = 400, GraceTicks = 100 };
+        // The fixture has no random draw: three equal sides wear each other down until a nearest-target choice between two almost equally distant units tips the
+        // balance. When that happens depends on the arena radius by an order of magnitude (2,900 to 49,000 ticks for radii from 300 to 500 at 16 fraction bits,
+        // docs/FIXED-POINT-Q39-24.md). 398 is a radius whose match takes the same course at 16 and at 24 fraction bits (player 1 at tick 10,200).
+        var options = ReferenceMatchOptions.Standard with { MaxTicks = 60_000, MinTicks = 62_000, CheckpointInterval = 500, ArenaRadius = 398, GraceTicks = 100 };
         var scenario = new ReferenceMatchScenario(options);
         var recorded = scenario.Record(catalog, fixture.Fingerprint);
         Check.That(scenario.Winner is not null && scenario.VictoryTick > 0, $"A three-way match on an obstacle-free map ends with a winner (orders {scenario.Orders}, shots {scenario.Shots}, production {scenario.ProductionOrders}, peak {scenario.PeakAlive}, skipped {scenario.StartObjectsSkipped}, victory {scenario.VictoryTick}).");

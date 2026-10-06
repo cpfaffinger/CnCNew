@@ -40,8 +40,9 @@ public sealed record LoadedSave(SaveGameHeader Header, MissionRun Run, CampaignP
 public static class SaveGame
 {
     public const string Format = "cncnew-savegame";
-    /// <summary>2: the header carries the tick rate of the saved world (<c>tickRate</c>). Version 1 had none and is refused.</summary>
-    public const int Version = 2;
+    /// <summary>3: fixed-point values of the mission state inside have 24 fraction bits (phase 22). 2: the header carries the tick rate of the saved world
+    /// (<c>tickRate</c>), still with 16 fraction bits. Versions 1 and 2 are refused, never reinterpreted.</summary>
+    public const int Version = 3;
 
     public static byte[] Write(MissionRun run, CampaignProgress? progress, string title)
     {

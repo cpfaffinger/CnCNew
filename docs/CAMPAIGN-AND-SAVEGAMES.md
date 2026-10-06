@@ -59,7 +59,7 @@ Definitionen, anderes Gelände, anderes Kartenskript, gekippte/fehlende Bytes.
 Gemessen: gespeichert und wiederhergestellt läuft eine Mission Tick für Tick hash-identisch weiter; Speichern → Laden → Speichern
 reproduziert die Bytes.
 
-### `SaveGame` (Game, Version 2)
+### `SaveGame` (Game, Version 3)
 
 Eine Datei, ein UTF-8-JSON-Dokument: `format` (`cncnew-savegame`), `version`, `title`, `mapPath` (virtuell), `campaign`, `mission`,
 `difficulty`, `tick`, `tickRate` (seit Version 2), `definitionFingerprint`, `stateHash`, `stateSha256` (SHA-256 über den eingebetteten Zustand – deckt jedes Byte, auch
@@ -67,18 +67,20 @@ den Präsentationsstrom, den der Simulationshash bewusst nicht enthält), `progr
 `MissionSnapshot`, roh). Dieselbe Sitzung im selben Tick ergibt dieselben Bytes; Laden + erneutes Speichern reproduziert die Datei.
 
 `SaveGame.ReadHeader` liest nur den Kopf (Ladeliste). `Load` meldet verständlich, **warum** eine Datei nicht lädt:
-„Not a CnCNew savegame“, „Unsupported savegame version N (this game reads version 2)“, „Unsupported tick rate N Hz in the savegame“,
+„Not a CnCNew savegame“, „Unsupported savegame version N (this game reads version 3)“, „Unsupported tick rate N Hz in the savegame“,
 „written at 60 Hz; this session runs at 30 Hz“ (Rate des Spielstands gegen die Rate der Sitzung, in beiden Richtungen),
 „written with different game data“ (Definitions-Fingerprint), „belongs to campaign X, which this game does not have“,
 „damaged or truncated“, „checksum does not match“, „state does not match its header“ (Tick, Rate oder Zustandshash des Kopfs passen nicht zum
 eingebetteten Zustand).
+
+**Version 3 – Festkomma Q39.24 (7. Oktober 2026, `docs/FIXED-POINT-Q39-24.md`).** Der eingebettete Missionszustand trägt Festkommawerte mit 24 statt 16 Nachkommabits; Stände der Versionen 1 und 2 werden über ihre Version abgelehnt, nie mit dem neuen Maßstab gelesen.
 
 **Version 2 – die Hülle trägt ihre Rate (6. Oktober 2026, `docs/TICKRATE-MIGRATION.md` §14.9).** `tick` zählt Ticks der Welt, die gespeichert wurde, und
 sagt ohne Rate nichts; Version 1 schrieb keine Rate (ein Spielstand anderer Rate fiel nur mittelbar auf, über den Fingerabdruck, der die Rate
 enthält). Seit Version 2 steht `tickRate` (Ticks je Sekunde: 30, 60 oder 120) direkt hinter `tick`. Regeln:
 
 - **Version 1 wird abgelehnt, nie umgedeutet.** Eine Datei ohne Rate als „30 Hz“ zu lesen wäre eine stille Annahme; die vorhandene Versionsprüfung
-  weist sie mit „Unsupported savegame version 1 (this game reads version 2)“ ab, in der Ladeliste erscheint der Slot mit diesem Grund. Es gibt keine
+  weist sie mit „Unsupported savegame version 1 (this game reads version 3)“ ab, in der Ladeliste erscheint der Slot mit diesem Grund. Es gibt keine
   Umwandlung alter Spielstände (binäre Kompatibilität zu alten Savegames ist nicht im Scope).
 - **Die Rate wird vor dem Fingerabdruck geprüft**, damit die Meldung die Ursache nennt. Ein Spielstand von 60 Hz lädt nur in einer Sitzung mit 60 Hz.
 - **Kopf und Zustand müssen übereinstimmen:** nach dem Wiederherstellen werden Tick und Rate des Kopfs mit der Welt verglichen (der eingebettete

@@ -156,7 +156,7 @@ public sealed class FxExecutor
         var sourceLevel = Math.Clamp(view.GetPose(simEvent.Other)?.Veterancy ?? 0, 0, 3);
         var (major, minor, amount, throttle) = table.Resolve(damageType, sourceLevel);
         _damageThrottle[simEvent.Entity.Value] = (damageType, simEvent.Tick + _time.OriginalFrames(throttle));
-        var damage = simEvent.Value / 65536f;
+        var damage = FixedConvert.RawToSingle(simEvent.Value);
         var fx = damage >= amount ? major : minor;
         if (fx is not null) ExecuteFxListAtEntity(fx, simEvent.Entity, simEvent.Other, view);
     }

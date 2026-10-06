@@ -109,7 +109,7 @@ public sealed partial class SimulationWorld
     private readonly Fixed[] _sampleY = new Fixed[4];
 
     // Before the exact circle test (rounded fixed-point squares) a pair is dropped when one coordinate alone is further apart than the limit plus one unit. The unit of slack is far more
-    // than the rounding of a product (half of 1/65536), so a pair dropped here fails the exact test as well, whether that one compares with "<" or "<=". A negative limit skips the shortcut.
+    // than the rounding of a product (half a raw step), so a pair dropped here fails the exact test as well, whether that one compares with "<" or "<=". A negative limit skips the shortcut.
     private static readonly long ScanSlack = Fixed.One.Raw;
 
     private static bool FurtherThan(Fixed a, Fixed b, Fixed limit)

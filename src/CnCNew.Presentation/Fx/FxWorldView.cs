@@ -63,7 +63,7 @@ public sealed class SimulationFxWorldView(
         => new(new Vector3(ToFloat(entity.X.Raw), ToFloat(entity.Y.Raw), ToFloat(entity.Z.Raw)), ToFloat(entity.Angle.Raw),
             entity.Template.Name, entity.Owner, entity.VeterancyLevel, ToFloat(entity.Template.BoundingCircleRadius.Raw));
 
-    private static float ToFloat(long raw) => raw / 65536f;
+    private static float ToFloat(long raw) => FixedConvert.RawToSingle(raw);
 
     public FxEntityPose? GetPose(EntityId entity)
     {
@@ -81,7 +81,7 @@ public sealed class SimulationFxWorldView(
 
     public float GroundHeight(float x, float y)
     {
-        var height = world.GroundHeightAt(CnCNew.Simulation.Numerics.Fixed.FromRaw((long)(x * 65536f)), CnCNew.Simulation.Numerics.Fixed.FromRaw((long)(y * 65536f)));
+        var height = world.GroundHeightAt(FixedConvert.FromSingleTruncated(x), FixedConvert.FromSingleTruncated(y));
         return ToFloat(height.Raw);
     }
 

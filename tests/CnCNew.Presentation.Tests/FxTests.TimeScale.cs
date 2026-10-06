@@ -3,6 +3,7 @@ using CnCNew.Data;
 using CnCNew.Presentation.Fx;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Time;
 
 namespace CnCNew.Presentation.Tests;
@@ -45,7 +46,7 @@ public static partial class FxTests
             for (long tick = 1; tick <= 12 * rate.TicksPerSecond && second < 0; tick++)
             {
                 cues.Clear();
-                deriver.Derive(Event(tick, SimEventKind.EntityDamaged, TestView.Base, TestView.Tank, string.Empty, 65536), view, cues);
+                deriver.Derive(Event(tick, SimEventKind.EntityDamaged, TestView.Base, TestView.Tank, string.Empty, Fixed.FromInt(1).Raw), view, cues);
                 if (cues.Count == 0) continue;
                 Assert(cues.Select(cue => cue.EventName).SequenceEqual(["BaseUnderAttack", "TestRadarStructure"]), $"at {rate} the notification is the base's ({string.Join(",", cues.Select(cue => cue.EventName))})");
                 if (first < 0) first = tick;
@@ -63,8 +64,8 @@ public static partial class FxTests
                 var before = executor.Counters.GetValueOrDefault("damagefx-throttled");
                 executor.ExecuteEvents(
                 [
-                    Event(tick, SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestGun", 20 * 65536L),
-                    Event(tick, SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 20 * 65536L),
+                    Event(tick, SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestGun", Fixed.FromInt(20).Raw),
+                    Event(tick, SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, Fixed.FromInt(20).Raw),
                 ], view);
                 if (executor.Counters.GetValueOrDefault("damagefx-throttled") != before) continue;
                 if (shown < 0) shown = tick;

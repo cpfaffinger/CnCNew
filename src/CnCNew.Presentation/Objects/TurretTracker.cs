@@ -39,5 +39,5 @@ public sealed class TurretTracker
         foreach (var key in _rotating.Keys.Where(key => !exists(key.Entity)).ToArray()) _rotating.Remove(key);
     }
 
-    private static float ToFloat(Fixed value) => (float)(value.Raw / (double)Fixed.ScaleRaw);
+    private static float ToFloat(Fixed value) => FixedConvert.ToSingle(value);
 }

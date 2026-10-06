@@ -634,6 +634,10 @@ static partial class Tests
         Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain, otherMap), "script program");
         var text = System.Text.Encoding.UTF8.GetString(bytes).Replace($"\"version\":{MissionSnapshot.Version},", "\"version\":99,");
         Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(System.Text.Encoding.UTF8.GetBytes(text), fixture.Templates, fixture.Fingerprint, terrain, map), "Unsupported mission state version");
+        // Phase 22: a mission state of 16 fraction bits (version 2) is refused by its version, never read with the new scale.
+        var sixteen = System.Text.Encoding.UTF8.GetString(bytes).Replace($"\"version\":{MissionSnapshot.Version},", "\"version\":2,");
+        Check.That(MissionSnapshot.Version == 3, "The mission state of 24 fraction bits is version 3.");
+        Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(System.Text.Encoding.UTF8.GetBytes(sixteen), fixture.Templates, fixture.Fingerprint, terrain, map), "Unsupported mission state version 2");
     }
 }
 

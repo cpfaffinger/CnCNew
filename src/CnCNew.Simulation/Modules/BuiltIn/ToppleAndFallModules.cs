@@ -233,8 +233,10 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
 
     private const int FineBits = 32;
     private const long FineMask = (1L << FineBits) - 1;
-    /// <summary>0.001 at 48 fraction bits.</summary>
-    private const long StartAngleFine = 281_474_976_711;
+    /// <summary>0.001 with the fine fraction bits (those of Fixed plus <see cref="FineBits"/>), rounded to nearest.</summary>
+    private const long StartAngleFine = ((1L << (Fixed.FractionBits + FineBits)) + 500) / 1000;
+    /// <summary>The product of three raw values carries three times the fraction bits of Fixed; this many of them are below the fine resolution.</summary>
+    private const int ProductExcessBits = 2 * Fixed.FractionBits - FineBits;
 
     private enum State : byte { Standing, WaitingForToppleStart, Toppling, WaitingForDone, Done }
 
@@ -245,7 +247,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     private Fixed _directionX;
     private Fixed _directionY;
     // Angle and angular velocity carry 32 more fraction bits than Fixed: with the retail StructuralIntegrity of 0.75 the first acceleration (0.02 * sin(0.001) * 0.25, about 5e-6)
-    // is below 1/65536, and a Fixed velocity would stay zero for ever (the tower never fell).
+    // was below one step of a Fixed with 16 fraction bits, and a Fixed velocity would have stayed zero for ever (the tower never fell).
     private long _velocityFine;
     private long _angleFine;
     private Fixed _structuralIntegrity;
@@ -311,8 +313,10 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
 
     private void StepToppling(IWorldServices world)
     {
-        // TOPPLE_ACCELERATION_FACTOR * sin(angle) * (1 - integrity): the product of three Fixed raw values is exact at 48 fraction bits.
-        _velocityFine += world.Time.PerOriginalFrameSquaredToPerTickSquared(AccelFactorPerFrameSquared).Raw * FixedTrig.Sin(Angle).Raw * (Fixed.One - _structuralIntegrity).Raw;
+        // TOPPLE_ACCELERATION_FACTOR * sin(angle) * (1 - integrity): the exact product of the three raw values, cut to the fine resolution (toward negative
+        // infinity; at 16 fraction bits nothing is cut, the product has exactly the fine bits).
+        var product = (Int128)world.Time.PerOriginalFrameSquaredToPerTickSquared(AccelFactorPerFrameSquared).Raw * FixedTrig.Sin(Angle).Raw * (Fixed.One - _structuralIntegrity).Raw;
+        _velocityFine = checked(_velocityFine + (long)(product >> ProductExcessBits));
         if (_structuralIntegrity > Fixed.Zero)
         {
             _structuralIntegrity *= data.StructuralDecay;

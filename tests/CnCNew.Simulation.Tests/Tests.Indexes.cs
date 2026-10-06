@@ -364,7 +364,7 @@ static partial class Tests
     public static void FixedSqrtMatchesReferenceIteration()
     {
         var dice = new Dice(0x50A7);
-        var values = new List<long> { 0, 1, 2, 3, 65535, 65536, 65537, 4L * 65536, long.MaxValue, long.MaxValue - 1, 1L << 62, (1L << 62) - 1, (1L << 32) + 1 };
+        var values = new List<long> { 0, 1, 2, 3, Fixed.ScaleRaw - 1, Fixed.ScaleRaw, Fixed.ScaleRaw + 1, 4 * Fixed.ScaleRaw, long.MaxValue, long.MaxValue - 1, 1L << 62, (1L << 62) - 1, (1L << 32) + 1 };
         for (var bit = 0; bit < 63; bit++) values.AddRange([1L << bit, (1L << bit) + 1, (1L << bit) - 1]);
         // Perfect squares and their neighbours: where a rounding slip would show.
         for (var index = 0; index < 400; index++)
@@ -375,7 +375,7 @@ static partial class Tests
             values.AddRange([(long)square - 1, (long)square, (long)square + 1]);
         }
         // Squared distances as the simulation has them, and arbitrary bit patterns.
-        for (var index = 0; index < 20000; index++) values.Add(dice.Next(72_000_000) * Fixed.ScaleRaw + dice.Next(65536));
+        for (var index = 0; index < 20000; index++) values.Add(dice.Next(72_000_000) * Fixed.ScaleRaw + dice.Next((int)Fixed.ScaleRaw));
         for (var index = 0; index < 20000; index++) values.Add((((long)dice.Next(1 << 24) << 39) | ((long)dice.Next(1 << 24) << 15) | (uint)dice.Next(1 << 15)) >> dice.Next(40));
         foreach (var raw in values)
         {

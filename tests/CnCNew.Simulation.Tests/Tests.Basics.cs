@@ -17,23 +17,28 @@ static partial class Tests
 {
     public static void FixedPoint()
     {
-        Check.That(Fixed.One.Raw == 65536 && Fixed.FromInt(3).Raw == 196608, "Scale is 16 fractional bits.");
-        Check.That(Fixed.FromDecimal(1.5m).Raw == 98304, "1.5 is exact.");
+        // Stated on the scale, not on a number of fraction bits: the same statements hold at every resolution (a power of four, so that scale / 3 leaves a third).
+        var scale = Fixed.ScaleRaw;
+        var half = scale / 2;
+        var third = scale / 3;
+        Check.That(Fixed.One.Raw == 1L << Fixed.FractionBits && Fixed.FromInt(3).Raw == 3 * scale && scale % 3 == 1, "The scale is two to the fraction bits.");
+        Check.That(Fixed.FromDecimal(1.5m).Raw == scale + half, "1.5 is exact.");
         // Ties round away from zero in every operation.
-        Check.That(Fixed.FromRaw(1) * Fixed.FromRaw(32768) == Fixed.FromRaw(1), "1 * 0.5 rounds 0.5 up to 1 raw.");
-        Check.That(Fixed.FromRaw(-1) * Fixed.FromRaw(32768) == Fixed.FromRaw(-1), "-1 * 0.5 rounds away from zero.");
-        Check.That(Fixed.FromRaw(3) * Fixed.FromRaw(21845) == Fixed.FromRaw(1), "3 * 0.33333 = 0.99999 raw rounds to 1.");
-        Check.That(Fixed.FromInt(1) / Fixed.FromInt(3) == Fixed.FromRaw(21845), "1/3 rounds to 21845.33 -> 21845.");
-        Check.That(Fixed.FromInt(2) / Fixed.FromInt(3) == Fixed.FromRaw(43691), "2/3 rounds to 43690.67 -> 43691.");
-        Check.That(Fixed.FromInt(-2) / Fixed.FromInt(3) == Fixed.FromRaw(-43691), "-2/3 rounds symmetrically.");
+        Check.That(Fixed.FromRaw(1) * Fixed.FromRaw(half) == Fixed.FromRaw(1), "1 * 0.5 rounds 0.5 up to 1 raw.");
+        Check.That(Fixed.FromRaw(-1) * Fixed.FromRaw(half) == Fixed.FromRaw(-1), "-1 * 0.5 rounds away from zero.");
+        Check.That(Fixed.FromRaw(3) * Fixed.FromRaw(third) == Fixed.FromRaw(1), "3 raw * 0.33333 = 0.99999 raw rounds to 1.");
+        Check.That(Fixed.FromInt(1) / Fixed.FromInt(3) == Fixed.FromRaw(third), "1/3 ends in a third of a raw unit and rounds down.");
+        Check.That(Fixed.FromInt(2) / Fixed.FromInt(3) == Fixed.FromRaw(2 * third + 1), "2/3 ends in two thirds of a raw unit and rounds up.");
+        Check.That(Fixed.FromInt(-2) / Fixed.FromInt(3) == Fixed.FromRaw(-2 * third - 1), "-2/3 rounds symmetrically.");
         Check.That(Fixed.FromRaw(1) / Fixed.FromInt(2) == Fixed.FromRaw(1), "0.5 raw tie divides away from zero.");
-        Check.That(Fixed.FromDecimal(0.000007629394531250m).Raw == 1, "Decimal half raw rounds away from zero (2^-17 = 0.5 raw).");
-        Check.That(Fixed.FromDecimal(-0.000007629394531250m).Raw == -1, "Negative decimal half raw rounds away from zero.");
-        Check.That(Fixed.FromDecimal(100000.123456m).ToDecimal() == 100000.123459m || Math.Abs(Fixed.FromDecimal(100000.123456m).ToDecimal() - 100000.123456m) < 0.00001m, "Round trip within one raw unit.");
-        foreach (var raw in new long[] { 0, 1, -1, 65535, 65536, -65537, 123456789, long.MaxValue / 3 })
+        var halfStep = 1m / (2 * scale);
+        Check.That(Fixed.FromDecimal(halfStep).Raw == 1, "Decimal half raw rounds away from zero.");
+        Check.That(Fixed.FromDecimal(-halfStep).Raw == -1, "Negative decimal half raw rounds away from zero.");
+        Check.That(Math.Abs(Fixed.FromDecimal(100000.123456m).ToDecimal() - 100000.123456m) <= halfStep, "Round trip within half a raw unit.");
+        foreach (var raw in new long[] { 0, 1, -1, scale - 1, scale, -scale - 1, 123456789, long.MaxValue / 3 })
             Check.That(Fixed.FromDecimal(Fixed.FromRaw(raw).ToDecimal()).Raw == raw, $"Raw {raw} must survive a decimal round trip.");
-        Check.That(Fixed.FromRaw(-65537).Floor() == -2 && Fixed.FromRaw(-65537).Ceiling() == -1 && Fixed.FromRaw(-98304).Round() == -2 && Fixed.FromRaw(98304).Round() == 2, "Floor, ceiling and round on negatives.");
-        Check.That(Fixed.FromRaw(65536).Floor() == 1 && Fixed.FromRaw(65536).Ceiling() == 1 && Fixed.FromRaw(65537).Ceiling() == 2, "Whole values are unchanged.");
+        Check.That(Fixed.FromRaw(-scale - 1).Floor() == -2 && Fixed.FromRaw(-scale - 1).Ceiling() == -1 && Fixed.FromRaw(-scale - half).Round() == -2 && Fixed.FromRaw(scale + half).Round() == 2, "Floor, ceiling and round on negatives.");
+        Check.That(Fixed.FromRaw(scale).Floor() == 1 && Fixed.FromRaw(scale).Ceiling() == 1 && Fixed.FromRaw(scale + 1).Ceiling() == 2, "Whole values are unchanged.");
         Check.That(Fixed.Max(Fixed.One, Fixed.Zero) == Fixed.One && Fixed.Min(Fixed.One, -Fixed.One) == -Fixed.One && (-Fixed.One).Abs() == Fixed.One, "Min, max and abs.");
         Check.Throws<OverflowException>(() => _ = Fixed.MaxValue + Fixed.One, "overflow");
         Check.Throws<OverflowException>(() => _ = Fixed.MinValue - Fixed.One, "overflow");
@@ -41,7 +46,7 @@ static partial class Tests
         Check.Throws<OverflowException>(() => _ = Fixed.MaxValue * Fixed.FromInt(2), "range");
         Check.Throws<OverflowException>(() => _ = Fixed.FromDecimal(1e15m), "fit");
         Check.Throws<DivideByZeroException>(() => _ = Fixed.One / Fixed.Zero, "");
-        Check.That(Fixed.FromInt(1_000_000_000) * Fixed.FromInt(1_000) == Fixed.FromInt(1_000_000_000_000), "128-bit intermediates keep large products exact.");
+        Check.That(Fixed.FromInt(100_000_000) * Fixed.FromInt(1_000) == Fixed.FromInt(100_000_000_000), "128-bit intermediates keep large products exact.");
         Check.That(Fixed.MaxValue / Fixed.One == Fixed.MaxValue, "Division by one is exact at the limit.");
     }
 
@@ -63,8 +68,8 @@ static partial class Tests
         Check.That(SimulationRate.Original.Time.SecondsToTicks(1m) == 30 && SimulationRate.Original.Time.SecondsToTicks(0.01m) == 1 && SimulationRate.Original.Time.SecondsToTicks(0m) == 0, "Seconds to ticks round up.");
         Check.That(SimulationRate.Original.Time.PerSecondToPerTick(30m) == Fixed.One && SimulationRate.Original.Time.PerSecondToPerTick(15m) == Fixed.FromDecimal(0.5m), "Velocity per tick.");
         Check.That(SimulationRate.Original.Time.PerSecondSquaredToPerTickSquared(900m) == Fixed.One, "Acceleration per tick squared.");
-        Check.That(SimulationTiming.DegreesToRadians(180m).Raw == 205887 && SimulationTiming.DegreesToRadians(0m) == Fixed.Zero && SimulationTiming.DegreesToRadians(-90m).Raw == -102944, "Degrees to radians uses pi to 28 digits, rounded to nearest.");
-        Check.That(SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(180m * 30m).Raw == 205887, "Angular velocity per tick.");
+        Check.That(SimulationTiming.DegreesToRadians(180m) == FixedTrig.Pi && SimulationTiming.DegreesToRadians(0m) == Fixed.Zero && SimulationTiming.DegreesToRadians(-90m) == -FixedTrig.HalfPi, "Degrees to radians uses pi to 28 digits, rounded to nearest.");
+        Check.That(SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(180m * 30m) == FixedTrig.Pi, "Angular velocity per tick.");
         Check.That(SimulationTiming.RatioToFixed(1.25m) == Fixed.FromDecimal(1.25m), "Percent ratio.");
     }
 

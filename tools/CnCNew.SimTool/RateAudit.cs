@@ -50,7 +50,7 @@ internal static class RateAudit
 
         Console.WriteLine($"Rate audit of the catalog at {rate} against 30 Hz ({catalogs[rate].Templates.Length} templates, retail base data).");
         Console.WriteLine();
-        Console.WriteLine("By conversion (exact decimal value against its fixed-point result, Q47.16), while the catalog is built:");
+        Console.WriteLine($"By conversion (exact decimal value against its fixed-point result, Q{63 - Fixed.FractionBits}.{Fixed.FractionBits}), while the catalog is built:");
         Console.WriteLine($"  {"function",-42} {"rate",7} {"calls",8} {"non-zero",9} {"-> zero",8} {"> 1 %",8} {"> 10 %",8}  worst relative error (exact value)");
         foreach (var built in probes.Keys.OrderBy(value => value.TicksPerSecond))
             foreach (var (function, entry) in probes[built].Quantisation.OrderBy(pair => pair.Key, StringComparer.Ordinal))
@@ -60,10 +60,14 @@ internal static class RateAudit
             var sites = probes[built].Sites;
             Console.WriteLine($"  other counters at {built} during the build: {(sites.Count == 0 ? "none" : string.Join(", ", sites.GroupBy(pair => (pair.Key.Kind, pair.Key.Function)).OrderBy(group => group.Key.Function, StringComparer.Ordinal).Select(group => $"{group.Key.Kind} in {group.Key.Function} x{group.Sum(pair => pair.Value)}")))}.");
         }
-        if (rate == SimulationRate.Hz30) return 0;
-
         var walk = new Walk(rate.TicksPerOriginalFrame);
         walk.Compare(catalogs[SimulationRate.Hz30], catalogs[rate], "catalog", string.Empty);
+        // The range: a value that is squared (a radius, a range) must stay below the square root of the largest fixed-point value.
+        Console.WriteLine();
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Range of the catalog at {rate} (largest fixed-point value {Fixed.MaxValue.ToDecimal():F0}, its square root {Walk.SquareLimit.ToDecimal():F0}): the largest magnitude is {walk.LargestText}."));
+        Print($"magnitude above the square root of the largest value (a square of it overflows)", walk.Large);
+        if (rate == SimulationRate.Hz30) return 0;
+
         Console.WriteLine();
         Console.WriteLine($"By field (30 Hz catalog against the {rate} catalog): {walk.FixedValues} fixed-point values and {walk.WholeValues} whole numbers compared; {walk.FixedChanged} fixed-point values and {walk.WholeChanged} whole numbers differ.");
         Print($"non-zero at 30 Hz, zero at {rate}", walk.Zero);
@@ -107,6 +111,10 @@ internal static class RateAudit
         public SortedDictionary<string, Bucket> Coarse { get; } = new(StringComparer.Ordinal);
         public SortedDictionary<string, Bucket> OffGrid { get; } = new(StringComparer.Ordinal);
         public SortedDictionary<string, long> ByFactor { get; } = new(StringComparer.Ordinal);
+        public SortedDictionary<string, Bucket> Large { get; } = new(StringComparer.Ordinal);
+        public static readonly Fixed SquareLimit = Fixed.Sqrt(Fixed.MaxValue);
+        public string LargestText { get; private set; } = "none";
+        private Fixed _largest;
 
         private static Bucket Of(SortedDictionary<string, Bucket> table, string path) => table.TryGetValue(path, out var bucket) ? bucket : table[path] = new Bucket();
 
@@ -118,6 +126,7 @@ internal static class RateAudit
                 case Fixed a when right is Fixed b:
                     FixedValues++;
                     if (a != b) Changed(a, b, path, owner);
+                    Range(b, path, owner);
                     return;
                 case long a when right is long b:
                     Whole(a, b, path, owner);
@@ -148,6 +157,14 @@ internal static class RateAudit
             var named = fields.FirstOrDefault(field => field.FieldType == typeof(string) && NameOf(field) == "Name")?.GetValue(left) as string;
             var inner = string.IsNullOrEmpty(named) ? owner : owner.Length == 0 ? named : owner + "/" + named;
             foreach (var field in fields) Compare(field.GetValue(left), field.GetValue(right), type.Name + "." + NameOf(field), inner);
+        }
+
+        private void Range(Fixed value, string path, string owner)
+        {
+            var magnitude = value == Fixed.MinValue ? Fixed.MaxValue : value.Abs();
+            var text = string.Create(CultureInfo.InvariantCulture, $"{owner}: {value.ToDecimal():G12}");
+            if (magnitude > _largest) (_largest, LargestText) = (magnitude, $"{text} ({path})");
+            if (magnitude > SquareLimit) Of(Large, path).Add(magnitude.ToDecimal(), text);
         }
 
         private void Whole(long a, long b, string path, string owner)

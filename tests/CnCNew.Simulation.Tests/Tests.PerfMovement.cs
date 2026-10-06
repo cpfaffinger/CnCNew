@@ -75,11 +75,11 @@ static partial class Tests
     {
         long[] edges =
         [
-            0, 1, -1, 2, -2, 3, 32767, 32768, 32769, 65535, 65536, 65537, -32768, -65536,
+            0, 1, -1, 2, -2, 3, Fixed.ScaleRaw / 2 - 1, Fixed.ScaleRaw / 2, Fixed.ScaleRaw / 2 + 1, Fixed.ScaleRaw - 1, Fixed.ScaleRaw, Fixed.ScaleRaw + 1, -Fixed.ScaleRaw / 2, -Fixed.ScaleRaw,
             (1L << 31) - 1, 1L << 31, (1L << 31) + 1, -(1L << 31), (1L << 32) - 1, 1L << 32,
             (1L << 47) - 1, 1L << 47, (1L << 47) + 1, -(1L << 47), -(1L << 47) + 1, (1L << 48) - 1, 1L << 48,
             (1L << 62) - 1, 1L << 62, long.MaxValue - 1, long.MaxValue, long.MinValue + 1, long.MinValue,
-            3037000499, 3037000500, 46341L << 16, 2147483647L << 16,
+            3037000499, 3037000500, 46341 * Fixed.ScaleRaw, 2147483647 * Fixed.ScaleRaw,
         ];
         var checkedPairs = 0;
         void Pair(long a, long b)
@@ -99,8 +99,8 @@ static partial class Tests
         // What the simulation mostly multiplies: coordinates, radii and their squares (up to a few thousand units) and values around one.
         for (var round = 0; round < 400_000; round++)
         {
-            var a = (long)(random.Next() % (8000UL << 16)) - (4000L << 16);
-            var b = round % 3 == 0 ? (long)(random.Next() % (2UL << 16)) - (1L << 16) : (long)(random.Next() % (8000UL << 16)) - (4000L << 16);
+            var a = (long)(random.Next() % (ulong)(8000 * Fixed.ScaleRaw)) - 4000 * Fixed.ScaleRaw;
+            var b = round % 3 == 0 ? (long)(random.Next() % (ulong)(2 * Fixed.ScaleRaw)) - Fixed.ScaleRaw : (long)(random.Next() % (ulong)(8000 * Fixed.ScaleRaw)) - 4000 * Fixed.ScaleRaw;
             Pair(a, b);
             Pair(a, edges[round % edges.Length]);
             Pair(edges[round % edges.Length], b);
@@ -241,7 +241,7 @@ static partial class Tests
                     for (var probe = 0; probe < 24; probe++)
                     {
                         // Steps from a fraction of a unit to a long look-ahead, in every direction; every fourth one aims exactly at another object.
-                        var length = Fixed.FromRaw((long)(random.Next() % (ulong)(probe % 3 == 0 ? 2L << 16 : 220L << 16)));
+                        var length = Fixed.FromRaw((long)(random.Next() % (ulong)(probe % 3 == 0 ? 2 * Fixed.ScaleRaw : 220 * Fixed.ScaleRaw)));
                         var angle = Fixed.FromRaw((long)(random.Next() % (ulong)FixedTrig.TwoPi.Raw));
                         var dx = FixedTrig.Cos(angle) * length;
                         var dy = FixedTrig.Sin(angle) * length;
@@ -564,7 +564,7 @@ static partial class Tests
     {
         var extentX = terrain.CellsX * TerrainMap.CellSize;
         var extentY = terrain.CellsY * TerrainMap.CellSize;
-        Fixed Coordinate(int extent) => Fixed.FromRaw((long)(random.Next() % (ulong)((extent + 40L) << 16)) - (20L << 16));
+        Fixed Coordinate(int extent) => Fixed.FromRaw((long)(random.Next() % (ulong)((extent + 40L) * Fixed.ScaleRaw)) - 20 * Fixed.ScaleRaw);
         var startX = Coordinate(extentX);
         var startY = Coordinate(extentY);
         var goalX = Coordinate(extentX);
@@ -581,7 +581,7 @@ static partial class Tests
             var where = random.Below(6);
             var x = where == 0 ? goalX : where == 1 ? startX : startX + (goalX - startX) * along + Fixed.FromInt(random.Below(21) - 10);
             var y = where == 0 ? goalY : where == 1 ? startY : startY + (goalY - startY) * along + Fixed.FromInt(random.Below(21) - 10);
-            blocks[index] = (x, y, Fixed.FromRaw((long)(random.Next() % (40L << 16))));
+            blocks[index] = (x, y, Fixed.FromRaw((long)(random.Next() % (ulong)(40 * Fixed.ScaleRaw))));
         }
         return new PerfQuery(startX, startY, goalX, goalY, PerfSurfaces[random.Below(PerfSurfaces.Length)], blocks);
     }
@@ -638,7 +638,7 @@ static partial class Tests
                         {
                             var cellX = Fixed.FromInt(TerrainMap.CellOf(query.GoalX) * TerrainMap.CellSize);
                             var cellY = Fixed.FromInt(TerrainMap.CellOf(query.GoalY) * TerrainMap.CellSize);
-                            query = query with { GoalX = cellX + Fixed.FromRaw((long)(random.Next() % (10L << 16))), GoalY = cellY + Fixed.FromRaw((long)(random.Next() % (10L << 16))) };
+                            query = query with { GoalX = cellX + Fixed.FromRaw((long)(random.Next() % (ulong)(10 * Fixed.ScaleRaw))), GoalY = cellY + Fixed.FromRaw((long)(random.Next() % (ulong)(10 * Fixed.ScaleRaw))) };
                         }
                         repeated++;
                     }

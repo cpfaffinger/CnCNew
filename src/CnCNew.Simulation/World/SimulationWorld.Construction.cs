@@ -255,7 +255,8 @@ public sealed partial class SimulationWorld
     {
         var one = Fixed.One.Raw;
         var max = Math.Max(site.Body!.MaxHealth.Raw, one);
-        return one + (max - one) * work / total;
+        // Raw health times work units: 128 bits, the product of a large health (the data has 99,999,999) and a long build leaves a machine word at a fine resolution.
+        return one + (long)((Int128)(max - one) * work / total);
     }
 
     private void CompleteConstruction(Entity site)

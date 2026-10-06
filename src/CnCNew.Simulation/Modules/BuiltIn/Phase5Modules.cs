@@ -600,7 +600,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private bool _returning;
     private Fixed _exitX;
     private Fixed _exitY;
-    private static readonly Fixed MisalignedAngle = Fixed.FromRaw(34315); // π/6
+    private static readonly Fixed MisalignedAngle = FixedTrig.PiFraction(1, 6);
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
     private static readonly int NoCollisionsBit = ObjectStatusBits.Index("NO_COLLISIONS");
 
@@ -1154,7 +1154,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         OnWingedArrival(targetX, targetY);
     }
 
-    private static readonly Fixed WingEpsilon = Fixed.FromRaw(1024);
+    private static readonly Fixed WingEpsilon = Fixed.FromFraction(1, 64);
 
     /// <summary><c>Locomotor::calcMinTurnRadius</c>: the radius of the circle an aircraft flies at <paramref name="speed"/> with its turn rate (a huge radius when it cannot turn).</summary>
     protected static Fixed TurnRadius(LocomotorInfo locomotor, Fixed speed)
