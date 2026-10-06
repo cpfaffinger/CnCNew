@@ -7,6 +7,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
+using CnCNew.Tests;
 using static CnCNew.Presentation.Tests.TestHarness;
 
 namespace CnCNew.Presentation.Tests;
@@ -115,7 +116,7 @@ internal static class CaptureConditionTests
 
         string Names() => string.Join(" ", new[] { "UNPACKING", "RAISING_FLAG", "FIRING_A", "PACKING" }.Where(name => ConditionDeriver.Derive(capturer, world, null, default).Contains(ModelConditions.Parse(name))));
         var runs = new List<(string Names, int Length)>();
-        for (var tick = 0; tick < 200; tick++)
+        for (var tick = 0; tick < TestTime.Frames(world, 200); tick++)
         {
             world.Step();
             var names = Names();
@@ -126,7 +127,7 @@ internal static class CaptureConditionTests
         var sequenceOfStages = string.Join(" > ", runs.Select(run => run.Names.Length == 0 ? "-" : run.Names));
         Assert(sequenceOfStages == $"- > UNPACKING > {preparation} > PACKING > -" || sequenceOfStages == $"UNPACKING > {preparation} > PACKING > -",
             $"the conditions go through the stages in order ({sequenceOfStages})");
-        Assert(runs.Single(run => run.Names == "UNPACKING").Length == 15 && runs.Single(run => run.Names == preparation).Length == 30 && runs.Single(run => run.Names == "PACKING").Length == 9,
+        Assert(runs.Single(run => run.Names == "UNPACKING").Length == TestTime.Frames(world, 15) && runs.Single(run => run.Names == preparation).Length == TestTime.Frames(world, 30) && runs.Single(run => run.Names == "PACKING").Length == TestTime.Frames(world, 9),
             $"UnpackTime 500 ms, PreparationTime 1000 ms and PackTime 300 ms are 15, 30 and 9 ticks ({string.Join(", ", runs.Select(run => $"{run.Names}={run.Length}"))})");
         Assert(station.Owner == new PlayerId(1), "the building changed hands");
         Assert(!capturer.Modules.OfType<SpecialAbilityUpdate>().Single().IsActive, "the ability is over");

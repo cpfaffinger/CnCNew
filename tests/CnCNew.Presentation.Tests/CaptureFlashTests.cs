@@ -9,6 +9,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
+using CnCNew.Tests;
 using static CnCNew.Presentation.Tests.TestHarness;
 
 namespace CnCNew.Presentation.Tests;
@@ -84,7 +85,51 @@ internal static class CaptureFlashTests
         t.Run("without selection flash settings no tint is projected", () => Capture(false));
         t.Run("a flash during the decay starts at the peak again; a dead capturer starts nothing", Restart);
         t.Run("a script's NAMED_FLASH plays a colour flash every 15th logic frame, seconds * 2 times, unsaturated", ScriptedFlash);
+        t.Run("time scale: every flash of a capture shows the same envelope in game time at 30, 60 and 120 Hz; the sequence itself is the simulation's", TimeScaleBlinkSequence);
         return t.Failures;
+    }
+
+    /// <summary>
+    /// The blink sequence of a capture as a whole at 30, 60 and 120 Hz (docs/TICKRATE-MIGRATION.md §14.4). The presentation's share is the envelope: every
+    /// <c>CaptureFlash</c> event tints the building for the same game time, and nothing is tinted without an event. When the events come is the simulation's
+    /// (<c>SpecialAbilityUpdate.StepCaptureFlash</c> advances its phase once per tick, docs/TICKRATE-MIGRATION.md §5.1): the number of flashes of one preparation is
+    /// measured and printed here, not asserted to be equal.
+    /// </summary>
+    private static void TimeScaleBlinkSequence()
+    {
+        const double oneFrame = 1.0 / CnCNew.Data.OriginalFrame.PerSecond;
+        var envelope = new List<(SimulationRate Rate, double Seconds)>();
+        var span = new List<(SimulationRate Rate, double Seconds)>();
+        var counts = new List<(SimulationRate Rate, int Count)>();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, projector, capturer, station) = Stage(true, rate);
+            Assert(world.Submit(new CaptureCommand(new PlayerId(1), 1, world.Tick, capturer, station)).Accepted, $"at {rate} the capture is accepted");
+            var flashTicks = new List<long>();
+            var tinted = new List<long>();
+            for (var step = 0; step < TestTime.Frames(world, 200); step++)
+            {
+                var result = world.Step();
+                projector.Observe(result.Events, world);
+                projector.Advance(world);
+                if (result.Events.Any(value => value.Kind == SimEventKind.CaptureFlash)) flashTicks.Add(world.Tick);
+                if (projector.Project(1f).Drawables.Single(drawable => drawable.Entity == station).HasFlashTint) tinted.Add(world.Tick);
+            }
+
+            Assert(flashTicks.Count > 0 && world.FindEntity(station)!.Owner == new PlayerId(1), $"at {rate} the building flashed and changed hands");
+            // Every tinted tick lies inside the envelope of a flash, and the envelope after the last flash (nothing restarts it) has its full length.
+            var window = world.Time.OriginalFrames(SelectionFlashTracker.LastVisibleAge);
+            Assert(tinted.All(tick => flashTicks.Any(flash => tick >= flash && tick <= flash + window + world.Time.TicksPerOriginalFrame - 1)), $"at {rate} the building is tinted only within {SelectionFlashTracker.LastVisibleAge} original frames after a flash");
+            var afterLast = tinted.Count(tick => tick >= flashTicks[^1]);
+            envelope.Add((rate, (double)afterLast / world.Time.TicksPerSecond));
+            span.Add((rate, (double)(tinted[^1] - flashTicks[0]) / world.Time.TicksPerSecond));
+            counts.Add((rate, flashTicks.Count));
+        }
+
+        string Text(IEnumerable<(SimulationRate Rate, double Seconds)> values) => string.Join(", ", values.Select(value => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value.Rate}: {value.Seconds:F4} s")));
+        Console.WriteLine($"       capture blink: the last flash is shown for {Text(envelope)}; first flash to the end of the last tint {Text(span)}; flashes of one preparation {string.Join(", ", counts.Select(value => $"{value.Rate}: {value.Count}"))}");
+        foreach (var (rate, seconds) in envelope)
+            Assert(Math.Abs(seconds - envelope[0].Seconds) <= oneFrame + 1e-9, $"a flash is shown for {seconds:F4} s at {rate} and for {envelope[0].Seconds:F4} s at {envelope[0].Rate}: more than one original frame apart");
     }
 
     private static void Envelope()
@@ -100,10 +145,10 @@ internal static class CaptureFlashTests
         Assert(SelectionFlashTracker.Saturate(Blue, 2f) == new Vector3(-1f, -1f, 1f), "blue at 2 is (-1, -1, 1)");
     }
 
-    private static (SimulationWorld World, FrameProjector Projector, EntityId Capturer, EntityId Station) Stage(bool withSettings)
+    private static (SimulationWorld World, FrameProjector Projector, EntityId Capturer, EntityId Station) Stage(bool withSettings, SimulationRate? rate = null)
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Files());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, ""), fixture.Templates);
+        var fixture = new SyntheticFixture(rate ?? SimulationRate.Original, files: Files());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), fixture.Templates.Rate, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, ""), fixture.Templates);
         ulong sequence = 0;
         world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, "FlashCapturer", new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(50), Fixed.Zero, Fixed.Zero));
         world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, "FlashStation", new PlayerId(2), Fixed.FromInt(200), Fixed.FromInt(50), Fixed.Zero, Fixed.Zero));
@@ -125,7 +170,7 @@ internal static class CaptureFlashTests
         var peak = new Vector3(0.25f, -0.25f, -0.25f);
         var flashTicks = new List<long>();
         var tints = new Dictionary<long, Vector3>();
-        for (var step = 0; step < 200; step++)
+        for (var step = 0; step < TestTime.Frames(world, 200); step++)
         {
             var result = world.Step();
             projector.Observe(result.Events, world);

@@ -12,7 +12,7 @@ using CnCNew.Simulation.Testing;
 namespace CnCNew.Presentation.Tests;
 
 /// <summary>Tests of <c>CnCNew.Presentation.Fx</c>: FXList/particle parsing, the particle simulation, the executor and sound cues.</summary>
-public static class FxTests
+public static partial class FxTests
 {
     public static int Run(string[] args)
     {
@@ -31,6 +31,7 @@ public static class FxTests
         run.Test("Fx: decal ring buffer and scorch atlas", DecalBufferSemantics);
         run.Test("Fx: sound cue derivation rules", SoundCueRules);
         run.Test("Fx: sound cue rate limiter", RateLimiter);
+        run.Test("Fx time scale: the under-attack notification and the damage-effect throttle lock out for the same game time at 30, 60 and 120 Hz", TimeScaleLockouts);
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null) run.Test("Fx: real data parses cleanly and every FXList/particle system executes", () => RealData(contentDirectory));
         return run.Finish("fx");
