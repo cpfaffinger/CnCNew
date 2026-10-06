@@ -483,6 +483,14 @@ internal static class PerfCommand
             Console.WriteLine(string.Create(Invariant, $"      prefix probe (pairs of consecutive ticks every 250): {recorder.PrefixSame} object samples unchanged; {moved.Objects} changed in their first words (position: they moved), {moved.Words} words, {moved.Prefix} of them before the first change; "
                               + $"{still.Objects} changed later, {still.Words} words, {still.Prefix} of them ({(still.Words == 0 ? 0 : 100.0 * still.Prefix / still.Words):F1} %) before the first change; "
                               + $"of all words of changed objects {(moved.Words + still.Words == 0 ? 0 : 100.0 * (moved.Prefix + still.Prefix) / (moved.Words + still.Words)):F1} % lie before the first change."));
+            var parts = recorder.Parts;
+            var changedObjects = Math.Max(1, moved.Objects + still.Objects);
+            Console.WriteLine(string.Create(Invariant, $"      the changed objects taken apart: the object's own fields ({(double)parts.HeadWords / changedObjects:F1} words per object) changed in {100.0 * parts.HeadChanged / changedObjects:F1} % of them; "
+                              + $"of {(double)parts.Modules / changedObjects:F1} modules per object {(double)parts.ModulesChanged / changedObjects:F2} changed in their own state ({(double)parts.ChangedModuleWords / changedObjects:F1} of {(double)parts.ModuleWords / changedObjects:F1} module-state words per object); "
+                              + $"the rest of the {(double)(moved.Words + still.Words) / changedObjects:F0} words per object are module frames (index, name, tag)."));
+            var single = recorder.SingleModuleChanges;
+            Console.WriteLine(string.Create(Invariant, $"      {single.Values.Sum()} of the changed object samples ({100.0 * single.Values.Sum() / changedObjects:F1} %) changed in exactly one module and not in their own fields: "
+                              + $"{string.Join(", ", single.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal).Take(10).Select(pair => pair.Key + " " + pair.Value.ToString(Invariant)))}."));
             var only = recorder.OnlyWakeMoved;
             Console.WriteLine(string.Create(Invariant, $"      of the {moved.Objects + still.Objects} changed object samples {only.Objects} ({(moved.Objects + still.Objects == 0 ? 0 : 100.0 * only.Objects / (moved.Objects + still.Objects)):F1} %) changed in nothing but wake ticks that moved from this tick to the next "
                               + $"({only.Words} of {moved.Words + still.Words} words = {(moved.Words + still.Words == 0 ? 0 : 100.0 * only.Words / (moved.Words + still.Words)):F1} %): modules that ran, changed nothing and asked to run again."));
@@ -547,10 +555,39 @@ internal static class PerfCommand
             for (var repeat = 0; repeat < repeats; repeat++) StateHash.FoldStreams(writer.Words, ends.AsSpan(0, count), hashes.AsSpan(0, count));
             streamTicks += Stopwatch.GetTimestamp() - start;
         }
+        // Prototype for docs/PERF-HASH.md (a different construction, not the hash of this build): module name and tag as one prepared word each instead of one word per character.
+        long shortWriteTicks = 0, shortFoldTicks = 0, shortWords = 0;
+        var compact = new CompactNameWriter();
+        for (var from = 0; from < entities.Length; from += ends.Length)
+        {
+            var count = Math.Min(ends.Length, entities.Length - from);
+            for (var warm = 0; warm < 3; warm++)
+            {
+                compact.Reset();
+                for (var index = 0; index < count; index++) entities[from + index].Describe(compact);
+            }
+            var start = Stopwatch.GetTimestamp();
+            for (var repeat = 0; repeat < repeats; repeat++)
+            {
+                compact.Reset();
+                for (var index = 0; index < count; index++)
+                {
+                    entities[from + index].Describe(compact);
+                    ends[index] = compact.Count;
+                }
+            }
+            shortWriteTicks += Stopwatch.GetTimestamp() - start;
+            shortWords += compact.Count;
+            start = Stopwatch.GetTimestamp();
+            for (var repeat = 0; repeat < repeats; repeat++) StateHash.FoldStreams(compact.Words, ends.AsSpan(0, count), hashes.AsSpan(0, count));
+            shortFoldTicks += Stopwatch.GetTimestamp() - start;
+        }
         double PerObject(long ticks) => Us(ticks) * 1000 / repeats / entities.Length;
         double PerWord(long ticks) => wholeWords == 0 ? 0 : Us(ticks) * 1000 / repeats / wholeWords;
         Console.WriteLine(string.Create(Invariant, $"      the two halves, warm ({repeats} repeats per object): writing the words down {PerObject(wholeTicks):F0} ns per object ({(double)wholeWords / entities.Length:F0} words, {PerWord(wholeTicks):F2} ns per word); "
                           + $"folding them in one chain {PerObject(foldTicks):F0} ns per object ({PerWord(foldTicks):F2} ns per word), side by side as the incremental hash does (StateHash.FoldStreams, batches of {ends.Length} objects) {PerObject(streamTicks):F0} ns per object ({PerWord(streamTicks):F2} ns per word)."));
+        Console.WriteLine(string.Create(Invariant, $"      prototype, NOT this build's hash (docs/PERF-HASH.md): module name and tag as one word each leave {(double)shortWords / entities.Length:F0} words per object; writing them down {PerObject(shortWriteTicks):F0} ns per object "
+                          + $"(through the plain interface, no prepared frames), folding side by side {PerObject(shortFoldTicks):F0} ns per object."));
         Console.WriteLine(string.Create(Invariant, $"      of the {wholeWords} words {moduleWords} ({100.0 * moduleWords / Math.Max(1, wholeWords):F1} %) are the modules' own state; module types by what one Describe allocates, then by words:"));
         Console.WriteLine("      module type                              modules   words/call  bytes/call");
         foreach (var (name, value) in byName.OrderByDescending(pair => pair.Value.Bytes).ThenByDescending(pair => pair.Value.Words).ThenBy(pair => pair.Key, StringComparer.Ordinal).Take(12))
@@ -582,6 +619,46 @@ internal static class PerfCommand
         if (recorder.ScriptHashSamples.Count > 0)
             Console.WriteLine($"      over the run ({recorder.ScriptHashSamples.Count} samples, one call each, outside the tick time): median {Us(recorder.ScriptHashSamples.Select(value => value.Elapsed).Order().ElementAt(recorder.ScriptHashSamples.Count / 2)):F1} us, min {Us(recorder.ScriptHashSamples.Min(value => value.Elapsed)):F1} us, max {Us(recorder.ScriptHashSamples.Max(value => value.Elapsed)):F1} us, "
                               + $"first {Us(recorder.ScriptHashSamples[0].Elapsed):F1} us (tick {recorder.ScriptHashSamples[0].Tick}), last {Us(recorder.ScriptHashSamples[^1].Elapsed):F1} us (tick {recorder.ScriptHashSamples[^1].Tick}).");
+    }
+
+    /// <summary>
+    /// Prototype writer for the proposal in docs/PERF-HASH.md: like <see cref="WordStateWriter"/>, but the texts named "name" and "tag" (module name and tag) become one word
+    /// each, as if their hash had been prepared. The result is a different hash construction; it is measured here, never used.
+    /// </summary>
+    private sealed class CompactNameWriter : IStateWriter
+    {
+        private ulong[] _words = new ulong[65536];
+        private int _count;
+        public int Count => _count;
+        public ReadOnlySpan<ulong> Words => _words.AsSpan(0, _count);
+        public bool KeepsNames => false;
+        public void Reset() => _count = 0;
+
+        private void Add(ulong word)
+        {
+            if (_count == _words.Length) Array.Resize(ref _words, _words.Length * 2);
+            _words[_count++] = word;
+        }
+
+        public void BeginObject(string? name) => Add(0xB1);
+        public void EndObject() => Add(0xE1);
+        public void BeginArray(string name) => Add(0xB2);
+        public void EndArray() => Add(0xE2);
+        public void Bool(string name, bool value) => Add(value ? 0xF1UL : 0xF0UL);
+        public void Int(string name, long value) => Add(unchecked((ulong)value));
+        public void UInt(string name, ulong value) => Add(value);
+        public void Fixed(string name, Fixed value) => Add(unchecked((ulong)value.Raw));
+
+        public void Text(string name, string value)
+        {
+            if (name is "name" or "tag")
+            {
+                Add((ulong)value.Length);
+                return;
+            }
+            Add((ulong)value.Length);
+            foreach (var character in value) Add(character);
+        }
     }
 
     /// <summary>Counts what a description feeds into <see cref="HashStateWriter"/>: one word per call, a text one word for its length and one per character.</summary>
@@ -704,7 +781,9 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
 
     private const int PrefixProbeInterval = 250;
     private readonly Dictionary<ulong, ulong[]> _previousWords = [];
+    private readonly Dictionary<ulong, ulong[]> _previousParts = [];
     private readonly WordStateWriter _probeWords = new();
+    private readonly WordStateWriter _partWords = new();
 
     /// <summary>With <c>--prefix-probe</c>: every 250 ticks all objects are written down in two consecutive ticks and compared (costs tick time; not for timing runs).</summary>
     public bool PrefixProbe { get; init; }
@@ -716,9 +795,43 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
     /// <summary>Changed objects whose only changed words are wake ticks that moved from this tick to the next (an update ran and had nothing else to say), and their words.</summary>
     public (long Objects, long Words) OnlyWakeMoved;
 
+    /// <summary>Changed objects whose own fields did not change and exactly one module did, by that module's type.</summary>
+    public SortedDictionary<string, long> SingleModuleChanges { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The changed objects taken apart: how often the object's own fields (everything before the module list) changed and how many words they are; how many of the modules changed
+    /// in their own state and how many words those are; how many modules and module-state words the changed objects have in all.
+    /// </summary>
+    public (long HeadChanged, long HeadWords, long ModulesChanged, long ChangedModuleWords, long Modules, long ModuleWords) Parts;
+
+    /// <summary>Head hash, head word count, then per module the hash and the word count of its own state.</summary>
+    private ulong[] TakeApart(Entity entity, int totalWords)
+    {
+        var modules = entity.Modules;
+        var parts = new ulong[2 + 2 * modules.Count];
+        var rest = totalWords - 2;
+        for (var index = 0; index < modules.Count; index++)
+        {
+            var module = modules[index];
+            _partWords.Reset();
+            module.Describe(_partWords);
+            parts[2 + 2 * index] = StateHash.Fold(StateHash.Seed, _partWords.Words);
+            parts[3 + 2 * index] = (ulong)_partWords.Count;
+            // The frame of a module: BeginObject, index, the two texts with their lengths, BeginObject, and two EndObject after the state.
+            rest -= 7 + module.ModuleName.Length + module.Tag.Length + _partWords.Count;
+        }
+        parts[0] = StateHash.Fold(StateHash.Seed, _probeWords.Words[..rest]);
+        parts[1] = (ulong)rest;
+        return parts;
+    }
+
     private void SamplePrefix(bool second)
     {
-        if (!second) _previousWords.Clear();
+        if (!second)
+        {
+            _previousWords.Clear();
+            _previousParts.Clear();
+        }
         foreach (var entity in world.Entities)
         {
             _probeWords.Reset();
@@ -727,6 +840,7 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
             if (!second)
             {
                 _previousWords[entity.Id.Value] = now.ToArray();
+                _previousParts[entity.Id.Value] = TakeApart(entity, now.Length);
                 continue;
             }
             if (!_previousWords.TryGetValue(entity.Id.Value, out var before)) continue;
@@ -745,6 +859,33 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
             for (var index = common; onlyWake && index < now.Length; index++)
                 onlyWake = now[index] == before[index] || (now[index] == (ulong)world.Tick && before[index] == now[index] - 1);
             if (onlyWake) OnlyWakeMoved = (OnlyWakeMoved.Objects + 1, OnlyWakeMoved.Words + now.Length);
+            var parts = TakeApart(entity, now.Length);
+            var old = _previousParts[entity.Id.Value];
+            if (old.Length != parts.Length) continue;
+            // Which module types are behind the objects that changed in one module only (and not in their own fields): the candidates for hashing a module change alone.
+            var changedModules = 0;
+            var changedIndex = -1;
+            for (var index = 2; index < parts.Length; index += 2)
+            {
+                if (parts[index] == old[index] && parts[index + 1] == old[index + 1]) continue;
+                changedModules++;
+                changedIndex = (index - 2) / 2;
+            }
+            if (parts[0] == old[0] && changedModules == 1)
+            {
+                var name = entity.Modules[changedIndex].ModuleName + (onlyWake ? " (wake tick only)" : " (more than the wake tick)");
+                SingleModuleChanges[name] = SingleModuleChanges.GetValueOrDefault(name) + 1;
+            }
+            if (parts[0] != old[0]) Parts.HeadChanged++;
+            Parts.HeadWords += (long)parts[1];
+            for (var index = 2; index < parts.Length; index += 2)
+            {
+                Parts.Modules++;
+                Parts.ModuleWords += (long)parts[index + 1];
+                if (parts[index] == old[index] && parts[index + 1] == old[index + 1]) continue;
+                Parts.ModulesChanged++;
+                Parts.ChangedModuleWords += (long)parts[index + 1];
+            }
         }
     }
 

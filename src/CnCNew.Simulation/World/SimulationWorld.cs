@@ -1971,7 +1971,7 @@ public sealed partial class SimulationWorld : IWorldServices
         writer.EndArray();
         // Reasons added after this table was frozen are written only once they occurred, so a run without them hashes exactly as it did before.
         for (var index = LegacyRejectionEntries; index < _rejections.Length; index++)
-            if (_rejections[index] != 0) writer.Int("rejection" + index, _rejections[index]);
+            if (_rejections[index] != 0) writer.Int(writer.KeepsNames ? "rejection" + index : "rejection", _rejections[index]);
         writer.BeginArray("spawnQueue");
         foreach (var pending in _spawnQueue)
         {

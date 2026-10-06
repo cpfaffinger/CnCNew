@@ -161,7 +161,7 @@ public sealed class BridgeBehavior(BridgeData data) : SimModule, IUpdateModule, 
         writer.Int("deathTick", _deathTick);
         writer.Int("firedUpTo", _firedUpTo);
         for (var index = 0; index < MaxTowers; index++)
-            if (_towers[index].IsValid) writer.UInt("tower" + index, _towers[index].Value);
+            if (_towers[index].IsValid) writer.UInt(writer.KeepsNames ? "tower" + index : "tower", _towers[index].Value);
     }
 
     public override void Load(IStateReader reader)

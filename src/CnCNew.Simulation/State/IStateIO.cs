@@ -18,6 +18,12 @@ public interface IStateWriter
     void UInt(string name, ulong value);
     void Fixed(string name, Fixed value);
     void Text(string name, string value);
+
+    /// <summary>
+    /// <see langword="false"/> for a writer that drops every name (the hash writers: only values and structure reach the hash). A description that has to build a name at run
+    /// time (<c>"tower" + index</c>) may then pass any name and save the allocation; it must still build the real one for every writer that keeps names.
+    /// </summary>
+    bool KeepsNames => true;
 }
 
 public interface IStateReader
@@ -146,6 +152,7 @@ public sealed class WordStateWriter : IStateWriter
 
     public int Count => _count;
     public ReadOnlySpan<ulong> Words => _words.AsSpan(0, _count);
+    public bool KeepsNames => false;
     public void Reset() => _count = 0;
 
     /// <summary>Drops the words written after the first <paramref name="count"/>.</summary>
@@ -206,6 +213,7 @@ public sealed class HashStateWriter : IStateWriter
     private ulong _hash = StateHash.Seed;
     public ulong Hash => _hash;
     public void Reset() => _hash = StateHash.Seed;
+    public bool KeepsNames => false;
 
     public void BeginObject(string? name) => _hash = StateHash.Mix(_hash, 0xB1);
     public void EndObject() => _hash = StateHash.Mix(_hash, 0xE1);

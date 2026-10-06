@@ -113,9 +113,67 @@ static partial class Tests
             words.Reset();
             entity.Describe(words);
             Check.That(StateHash.Fold(StateHash.Seed, words.Words) == hasher.Hash, $"Tick {world.Tick}: the word description of {entity.Template.Name} ({entity.Id.Value}) folds to its hash.");
+            // A writer that keeps names (the snapshot) gets the same values in the same order: where a description saves building a name for the hash, it changes nothing else.
+            NamedHash.Reset();
+            entity.Describe(NamedHash);
+            Check.That(NamedHash.Hash == hasher.Hash, $"Tick {world.Tick}: {entity.Template.Name} ({entity.Id.Value}) describes the same values to a writer that keeps names.");
             count++;
         }
         return count;
+    }
+
+    private static readonly NameKeepingHashWriter NamedHash = new();
+
+    /// <summary>Mixes like <see cref="HashStateWriter"/> but is a writer that keeps names (<see cref="IStateWriter.KeepsNames"/> stays true) and insists on getting real ones.</summary>
+    private sealed class NameKeepingHashWriter : IStateWriter
+    {
+        private readonly HashStateWriter _inner = new();
+        private readonly Stack<HashSet<string>?> _scopes = new();
+        public ulong Hash => _inner.Hash;
+
+        public void Reset()
+        {
+            _inner.Reset();
+            _scopes.Clear();
+        }
+
+        /// <summary>Inside an object every name is used once: a shortened name ("tower" for "tower0" and "tower1") would collide here.</summary>
+        private void Name(string name)
+        {
+            if (_scopes.Count > 0 && _scopes.Peek() is { } scope) Check.That(scope.Add(name), $"The name '{name}' is written twice into one object.");
+        }
+
+        public void BeginObject(string? name)
+        {
+            if (name is not null) Name(name);
+            _scopes.Push(new HashSet<string>(StringComparer.Ordinal));
+            _inner.BeginObject(name);
+        }
+
+        public void EndObject()
+        {
+            _scopes.Pop();
+            _inner.EndObject();
+        }
+
+        public void BeginArray(string name)
+        {
+            Name(name);
+            _scopes.Push(null);
+            _inner.BeginArray(name);
+        }
+
+        public void EndArray()
+        {
+            _scopes.Pop();
+            _inner.EndArray();
+        }
+
+        public void Bool(string name, bool value) { Name(name); _inner.Bool(name, value); }
+        public void Int(string name, long value) { Name(name); _inner.Int(name, value); }
+        public void UInt(string name, ulong value) { Name(name); _inner.UInt(name, value); }
+        public void Fixed(string name, Fixed value) { Name(name); _inner.Fixed(name, value); }
+        public void Text(string name, string value) { Name(name); _inner.Text(name, value); }
     }
 
     /// <summary>

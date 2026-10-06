@@ -983,6 +983,14 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
 
     private static void WritePoint(IStateWriter writer, string name, Point3 point)
     {
+        // The three names are built only for a writer that keeps them (the snapshot); the hash drops names and this runs for every touched aircraft each tick.
+        if (!writer.KeepsNames)
+        {
+            writer.Fixed(name, point.X);
+            writer.Fixed(name, point.Y);
+            writer.Fixed(name, point.Z);
+            return;
+        }
         writer.Fixed(name + "X", point.X);
         writer.Fixed(name + "Y", point.Y);
         writer.Fixed(name + "Z", point.Z);
