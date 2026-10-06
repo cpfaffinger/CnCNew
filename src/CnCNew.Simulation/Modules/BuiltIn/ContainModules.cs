@@ -96,7 +96,10 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
 
     public virtual void Add(IWorldServices world, Entity candidate)
     {
-        _ = world;
+        // Both ends of the relation change their hashed state (the rider list here, the container link and position there). Marked here, once, so that no
+        // caller can forget it: a scripted garrison entry on arrival did (finding D8, GC_NukeGeneral tick 40 and six other missions).
+        world.MarkDirty(Entity);
+        world.MarkDirty(candidate);
         Riders.Add(candidate.Id);
         candidate.ContainedBy = Entity.Id;
         candidate.HasMoveTarget = false;
@@ -106,7 +109,8 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
 
     public virtual void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
     {
-        _ = world;
+        world.MarkDirty(Entity);
+        world.MarkDirty(candidate);
         Riders.Remove(candidate.Id);
         candidate.ContainedBy = EntityId.Invalid;
         if (positionAtContainer) { candidate.X = Entity.X; candidate.Y = Entity.Y; }

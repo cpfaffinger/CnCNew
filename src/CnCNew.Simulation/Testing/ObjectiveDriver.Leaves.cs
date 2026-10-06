@@ -411,6 +411,7 @@ internal sealed partial class ObjectiveDriver
                 {
                     if (SpecialPowerRouting.FindModule(carrier, power.Index) is not { } module) return false;
                     module.SetReadyFrame(_world.Tick);
+                    _world.MarkDirty(carrier);
                     return true;
                 }
                 var own = _world.Entities.Where(entity => entity.Owner == owner && Carries(entity)).OrderBy(entity => entity.Id.Value).ToArray();

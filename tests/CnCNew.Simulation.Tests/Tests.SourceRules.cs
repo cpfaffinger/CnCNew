@@ -26,6 +26,7 @@ static partial class Tests
     private const string RuleProcessHash = "process-dependent hash code";
     private const string RuleFloatConversion = "conversion of a floating-point number outside the checked routine";
     private const string RuleDirtyFlag = "dirty flag set without MarkDirty";
+    private const string RulePlatformText = "platform line end or path separator";
 
     private static readonly SourceRule[] CommonRules =
     [
@@ -44,6 +45,9 @@ static partial class Tests
         // Numbers as text: ToString without a format provider, string.Format/AppendFormat, and Parse/TryParse without the invariant culture.
         new(RuleNumberText, new Regex(@"\.ToString\(\)|\.ToString\(""""\)|\bstring\.Format\(|\.AppendFormat\(" +
                                   @"|\b(s?byte|u?short|u?int|u?long|decimal|U?Int(16|32|64|128)|BigInteger)\.(Try)?Parse\((?!.*(CultureInfo\.InvariantCulture|NumberFormatInfo\.InvariantInfo))")),
+        // The line end and the path separator of the platform: a text that is hashed (the definition fingerprint, the bone table) must not contain them.
+        // The definition snapshot differed between Windows and Linux by exactly this (D9); the serializer's line end is pinned there.
+        new(RulePlatformText, new Regex(@"Environment\.NewLine|\.AppendLine\(|\.WriteLine\(|\bPath\.(DirectorySeparatorChar|AltDirectorySeparatorChar|PathSeparator|Combine|Join|GetFullPath|GetRelativePath)")),
         // string.GetHashCode and HashCode.Combine are seeded per process: fine as a dictionary key hash, wrong anywhere a value or an order is derived from them.
         new(RuleProcessHash, new Regex(@"\.GetHashCode\(\)|\bHashCode\.")),
     ];
@@ -196,7 +200,7 @@ static partial class Tests
             "var x = Math.Atan2(a, b);", "var y = Math.Round(z);", "var half = 1.5;", "var big = 1e5;", "var f = 2f;", "Vector128<int> v;", "using System.Numerics;", "using System.Runtime.Intrinsics;",
             "var c = StringComparer.InvariantCulture;", "names.Sort(Comparer<string>.Default);", "var h = name.GetHashCode();", "var k = HashCode.Combine(a, b);", "var p = Environment.ProcessorCount;",
             "Parallel.For(0, 4, Body);", "await Task.Delay(1);", "var s = value.ToString();", "var n = int.Parse(text);", "if (name.StartsWith(prefix)) return;", "var u = name.ToUpper();",
-            "private readonly SortedDictionary<string, int> _table = [];", "var d = (decimal)single;", "var t = MathF.Tan(a);", "var q = Math.Sqrt(2);", "var w = Math.Floor(v);", "Entity.Dirty = true;",
+            "private readonly SortedDictionary<string, int> _table = [];", "var d = (decimal)single;", "var t = MathF.Tan(a);", "var q = Math.Sqrt(2);", "var w = Math.Floor(v);", "Entity.Dirty = true;", "text.AppendLine(line);", "var p = Path.Combine(a, b);", "var n = Environment.NewLine;",
         ];
         foreach (var line in caught)
             Check.That(SimulationRules.Concat(FeederRules).Any(rule => rule.Pattern.IsMatch(line)), $"No rule catches: {line}");

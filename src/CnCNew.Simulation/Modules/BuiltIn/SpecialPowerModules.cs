@@ -114,10 +114,12 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
             // Player::expressSpecialPowerReadyFrame: a freshly scienced shared power starts ready to fire.
             world.SetSharedReadyFrame(Entity.Owner, _power, world.Tick);
             _availableOnFrame = SharedReadyFrame(world);
+            world.MarkDirty(Entity);
         }
         if (baseData.StartsPaused) PauseCountdown(world, true);
     }
 
+    /// <summary>The caller marks the entity dirty (this method has no world).</summary>
     public void SetReadyFrame(long frame) => _availableOnFrame = frame;
 
     public void PauseCountdown(IWorldServices world, bool pause)
@@ -161,6 +163,7 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
         var ready = world.Tick + info.ReloadTicks;
         if (info.SharedSynced) world.SetSharedReadyFrame(Entity.Owner, _power, ready);
         else _availableOnFrame = ready;
+        world.MarkDirty(Entity);
     }
 
     public override void Describe(IStateWriter writer)

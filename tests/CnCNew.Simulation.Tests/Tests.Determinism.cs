@@ -198,6 +198,43 @@ static partial class Tests
     }
 
     /// <summary>
+    /// D8, found on eighteen campaign and challenge maps (GC_NukeGeneral tick 40: a guard tower's rider list grew without the tower being marked): an object
+    /// entering or leaving a container changes the hashed state of both. Some callers of <c>ContainModuleBase.Add</c>/<c>Remove</c> marked them, a scripted
+    /// garrison entry on arrival did not. The container base marks both now. Garrison, leave, garrison again - verified in every tick.
+    /// </summary>
+    public static void ContainerEntryAndExitReachTheHash()
+    {
+        var session = StartMission([
+            Scr.Script("Garrison", [Scr.And(Scr.If("FLAG", Scr.Flag("garrison"), Scr.Bool(true)))], [Scr.Do("NAMED_GARRISON_SPECIFIC_BUILDING", Scr.Unit("S1"), Scr.Unit("Bunk"))], oneShot: true),
+            Scr.Script("TeamNearest", [Scr.And(Scr.If("FLAG", Scr.Flag("team"), Scr.Bool(true)))], [Scr.Do("TEAM_GARRISON_NEAREST_BUILDING", Scr.Team("Squad"))], oneShot: true),
+            Scr.Script("Leave", [Scr.And(Scr.If("FLAG", Scr.Flag("leave"), Scr.Bool(true)))], [Scr.Do("NAMED_EXIT_BUILDING", Scr.Unit("S1"))], oneShot: true),
+            Scr.Script("Empty", [Scr.And(Scr.If("FLAG", Scr.Flag("empty"), Scr.Bool(true)))], [Scr.Do("EXIT_SPECIFIC_BUILDING", Scr.Unit("Bunk"))], oneShot: true),
+        ], objects: [Placed("AlphaBunker", 160m, 200m, "teamA", "Bunk"), Placed("AlphaSoldier", 100m, 200m, "Squad", "S1"), Placed("AlphaSoldier", 100m, 220m, "Squad", "S2")]);
+        var bunker = NamedIn(session, "Bunk")!;
+        void Verified(int ticks)
+        {
+            for (var tick = 0; tick < ticks && !session.IsOver; tick++)
+            {
+                session.Step();
+                session.World.VerifyIncrementalHash();
+            }
+        }
+        Verified(20);
+        session.Engine.SignalUiInteraction("garrison");
+        Verified(400);
+        Check.That(bunker.Container!.ContainCount == 1, $"Fixture: the soldier walked into the bunker ({bunker.Container.ContainCount}).");
+        session.Engine.SignalUiInteraction("leave");
+        Verified(30);
+        Check.That(bunker.Container.ContainCount == 0, "Fixture: the soldier left again.");
+        session.Engine.SignalUiInteraction("team");
+        Verified(400);
+        Check.That(bunker.Container.ContainCount == 2, $"Fixture: the team garrisoned the bunker ({bunker.Container.ContainCount}).");
+        session.Engine.SignalUiInteraction("empty");
+        Verified(30);
+        Check.That(bunker.Container.ContainCount == 0, "Fixture: the bunker was emptied.");
+    }
+
+    /// <summary>
     /// D5: the terrain fingerprint is what a replay, a snapshot and (later) a joining machine compare to know they stand on the same map. It covered heights,
     /// cells, water and the names and positions of the waypoints, but neither the waypoints' ids and links (the paths units and scripts follow) nor the objects
     /// placed on the map (start bases, supply warehouses, scripted units). Two maps that differ in those must not share a fingerprint.

@@ -1159,6 +1159,7 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     {
         _pendingPath = [..waypoints];
         _pendingPathTick = world.Tick;
+        world.MarkDirty(Entity);
     }
 
     public void Initiate(IWorldServices world, int powerIndex, in SpecialPowerTarget target)
@@ -1167,6 +1168,7 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         _pathIndex = 0;
         if (_pendingPath is { Count: > 0 } offered && world.Tick - _pendingPathTick <= 3) _path = offered;
         _pendingPath = null;
+        world.MarkDirty(Entity);
         var aimed = target.Kind == SpecialPowerTargetKind.Object ? world.FindEntity(target.Entity) : null;
         var x = _path is null ? aimed?.X ?? target.X : _path[0].X;
         var y = _path is null ? aimed?.Y ?? target.Y : _path[0].Y;
