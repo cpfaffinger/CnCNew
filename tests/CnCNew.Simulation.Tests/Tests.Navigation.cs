@@ -187,7 +187,7 @@ static partial class Tests
                 var x = (int)Math.Round(Math.Cos(angle) * magnitude * 100);
                 if (x == 0 && y == 0) continue;
                 var expected = Math.Atan2(y, x);
-                var actual = FixedTrig.Atan2(Fixed.FromRaw(y * 655), Fixed.FromRaw(x * 655)).Raw / 65536.0;
+                var actual = (double)FixedTrig.Atan2(Fixed.FromRaw(y * 655), Fixed.FromRaw(x * 655)).ToDecimal();
                 var difference = Math.Abs(actual - expected);
                 if (difference > Math.PI) difference = 2 * Math.PI - difference;
                 worst = Math.Max(worst, difference);
@@ -389,7 +389,7 @@ static partial class Tests
         var grid = world.Navigation!;
         feeder.SetMoveTarget(1, 1, 100, 175);
         for (var tick = 0; tick < 36; tick++) world.Step();
-        Check.That(walker.Y > Fixed.FromInt(26) && walker.Y < Fixed.FromInt(50), $"The walker is on its way, still north of where the wall will stand (y {walker.Y.Raw / 65536.0}).");
+        Check.That(walker.Y > Fixed.FromInt(26) && walker.Y < Fixed.FromInt(50), $"The walker is on its way, still north of where the wall will stand (y {walker.Y}).");
 
         feeder.Spawn(1, "Wall", x: 100, y: 100);
         var entered = 0;

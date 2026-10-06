@@ -345,6 +345,117 @@ static partial class Tests
         }
     }
 
+    // ------------------------------------------------------------------------------------------------------------------------------------------------
+    // Phase 22: the number of fraction bits of Fixed is a property of the simulation and is written in exactly one place (Fixed.FractionBits). A scale
+    // written out somewhere else does not crash when the resolution changes: it is silently wrong by a power of two. So the scale never appears as a
+    // number, in no project: neither two to the sixteenth (the resolution until phase 22) nor two to the twenty-fourth (the resolution since), neither
+    // as a literal nor as a shift. Outside the simulation nothing uses the scale at all except the one conversion to and from floating point
+    // (CnCNew.Presentation.FixedConvert); and no raw value is written as a number in product code. Lexical, like every rule here: the hits that are
+    // something else (colour channels, file format tags, hash constants) are named with what they are.
+
+    private const string RuleScaleLiteral = "fixed-point scale written as a number or a shift";
+    private const string RuleScaleOutside = "fixed-point scale used outside the simulation";
+    private const string RuleRawNumber = "raw fixed-point value written as a number";
+
+    private static readonly SourceRule[] ScaleLiteralRules =
+    [
+        new(RuleScaleLiteral, new Regex(@"(?<![\w.])(65_?536|16_?777_?216)(?![\d_])|\b0[xX](10{4}|10{6})(?![0-9a-fA-F_])|(<<|>>)=?\s*(16|24)\b")),
+    ];
+
+    private static readonly SourceRule[] ScaleOutsideRules =
+    [
+        new(RuleScaleOutside, new Regex(@"\bFixed\.(ScaleRaw|FractionBits)\b|\bFixedMath\.")),
+        new(RuleRawNumber, new Regex(@"\bFromRaw\(\s*-?\d[\d_]*L?\s*\)")),
+    ];
+
+    private static readonly SourceException[] ScaleLiteralExceptions =
+    [
+        // -- bytes of a colour or of a 32-bit word (channel n is shifted by 8 n)
+        new("Client.Stride/Layers/Fx/FxBuilder.cs", RuleScaleLiteral, "((uint)b << 16) | ((uint)ToByte(alpha) << 24)", "packs colour channels"),
+        new("Client.Stride/Layers/Objects/FlashTint.cs", RuleScaleLiteral, "(Steps << 16) | (Steps << 8) | Steps", "packs three tint steps into a key"),
+        new("Client.Stride/Layers/Objects/FlashTint.cs", RuleScaleLiteral, "(Quantise(tint.X) << 16)", "packs three tint steps into a key"),
+        new("Client.Stride/Layers/Objects/FlashTint.cs", RuleScaleLiteral, "((key >> 16) & 0xFF)", "unpacks the tint key"),
+        new("Client.Stride/Layers/Objects/ModelAsset.cs", RuleScaleLiteral, "((uint)color.Red << 16)", "packs colour channels"),
+        new("Client.Stride/Layers/Terrain/PngDump.cs", RuleScaleLiteral, "(byte)(value >> 24)", "big-endian bytes of a PNG chunk word"),
+        new("Client.Stride/Layers/Terrain/PngDump.cs", RuleScaleLiteral, "(byte)(value >> 16)", "big-endian bytes of a PNG chunk word"),
+        new("Client.Stride/Layers/Terrain/TerrainVertex.cs", RuleScaleLiteral, "((uint)b << 16) | ((uint)a << 24)", "packs colour channels"),
+        new("Client.Stride/Layers/Terrain/TerrainVertex.cs", RuleScaleLiteral, "(byte)(packed >> 24)", "the alpha channel of a packed colour"),
+        new("Client.Stride/Layers/Terrain/TerrainVertex.cs", RuleScaleLiteral, "((uint)alpha << 24)", "the alpha channel of a packed colour"),
+        new("Presentation/Objects/FrameProjector.cs", RuleScaleLiteral, "(byte)(argb >> 16)", "the red channel of a house colour"),
+        new("Audio.Tests/Tests.Decoding.cs", RuleScaleLiteral, "(byte)(value >> 16), (byte)(value >> 24)", "little-endian bytes of a test word"),
+        // -- file formats
+        new("Audio/Wav/WavReader.cs", RuleScaleLiteral, "((sbyte)data[at + 2] << 16)", "the top byte of a 24-bit PCM sample"),
+        new("Formats/LegacyAssetReaders.cs", RuleScaleLiteral, "packed[2] << 16 | packed[3] << 8 | packed[4]", "a 24-bit length of the RefPack header"),
+        new("Ui/Text/CsfFile.cs", RuleScaleLiteral, "public const uint FileId", "a four-character tag of the CSF format"),
+        new("Ui/Text/CsfFile.cs", RuleScaleLiteral, "public const uint LabelId", "a four-character tag of the CSF format"),
+        new("Ui/Text/CsfFile.cs", RuleScaleLiteral, "public const uint StringId", "a four-character tag of the CSF format"),
+        new("Ui/Text/CsfFile.cs", RuleScaleLiteral, "public const uint StringWithSpeechId", "a four-character tag of the CSF format"),
+        new("W3D/W3dBinary.cs", RuleScaleLiteral, "(major << 16) | minor", "a W3D version word (major in the upper half)"),
+        new("W3D/W3dMesh.cs", RuleScaleLiteral, "(Attributes >> 16) & 0xffu", "a field of the W3D mesh attributes"),
+        new("W3D/W3dTextureMapper.cs", RuleScaleLiteral, "(attributes >> 16) & 0xff", "a field of the W3D vertex material attributes"),
+        // -- other numbers that happen to be two to the sixteenth or use these shifts
+        new("Data/World/SingleBits.cs", RuleScaleLiteral, "((exponent * 19728) >> 16)", "log10(2) as 19728 / 2^16 in the exact decimal expansion of a single"),
+        new("Presentation/Input/CommandButtons.cs", RuleScaleLiteral, "NotQueueable = 0x10000,", "a bit of the command button options"),
+        new("SimTool/PerfCommand.cs", RuleScaleLiteral, "private ulong[] _words = new ulong[65536];", "the first size of a buffer"),
+        new("Data.Tests/Program.cs", RuleScaleLiteral, "9999999.5f, 16777216f, 16777217f,", "singles around the end of the exact integers (2^24), test values of the exact decimal expansion"),
+        new("Game.Tests/DeterminismTests.cs", RuleScaleLiteral,"((int)((state >> 16) & 0xFFFF) - 0x8000) / 256f", "bits of a test random number"),
+        new("Simulation.Tests/Tests.Indexes.cs", RuleScaleLiteral, "dice.Next(1 << 24) * (long)(1 + dice.Next(1 << 6))", "the range of a test draw"),
+        new("Simulation.Tests/Tests.Indexes.cs", RuleScaleLiteral, "((long)dice.Next(1 << 24) << 39)", "the range of a test draw"),
+        // -- the implementation with 16 fraction bits as it was before phase 22, kept word for word as the oracle of the 16-bit path
+        new("Simulation.Tests/Tests.FixedResolution.cs", RuleScaleLiteral, "private const long One = 65536;", "the 16-bit oracle"),
+        new("Simulation.Tests/Tests.FixedResolution.cs", RuleScaleLiteral, "(BigInteger)a << 16", "the 16-bit oracle"),
+        new("Simulation.Tests/Tests.FixedResolution.cs", RuleScaleLiteral, "vx <<= 16;", "the 16-bit oracle"),
+        new("Simulation.Tests/Tests.FixedResolution.cs", RuleScaleLiteral, "vy <<= 16;", "the 16-bit oracle"),
+        new("Simulation.Tests/Tests.FixedResolution.cs", RuleScaleLiteral, "Vector(y * 65536 * 7, x * 65536 * 7);", "vectors in whole units of the 16-bit oracle"),
+    ];
+
+    private static readonly SourceException[] ScaleOutsideExceptions =
+    [
+        new("Presentation/FixedConvert.cs", RuleScaleOutside, "public static double ToDouble(Fixed value) => value.Raw / (double)Fixed.ScaleRaw;", "the one conversion to floating point"),
+        new("Presentation/FixedConvert.cs", RuleScaleOutside, "public static Fixed FromDouble(double value)", "the one conversion from floating point"),
+        new("Presentation/FixedConvert.cs", RuleScaleOutside, "public static Fixed FromSingleTruncated(float value)", "the same conversion, cut instead of rounded"),
+        new("SimTool/PathBench.cs", RuleScaleOutside, "Fixed Coordinate(int cells)", "a random raw coordinate inside the map for the path benchmark: every raw value below cells * cell size"),
+    ];
+
+    private static IEnumerable<string> SourceFilesUnder(string root, params string[] directories)
+        => directories.SelectMany(directory => Directory.EnumerateFiles(Path.Combine(root, directory), "*.cs", SearchOption.AllDirectories));
+
+    /// <summary>The third rule set: the scale of the fixed-point numbers is written once.</summary>
+    public static void FixedScaleSourceRules()
+    {
+        var root = RepositoryRoot();
+        var violations = ScanSources(root, SourceFilesUnder(root, "src", "tools", "tests"), ScaleLiteralRules, ScaleLiteralExceptions);
+        Check.That(violations.Count == 0, $"The fixed-point scale as a number ({violations.Count}):\n  " + string.Join("\n  ", violations));
+
+        var simulation = Path.Combine(root, "src", "CnCNew.Simulation") + Path.DirectorySeparatorChar;
+        var outside = SourceFilesUnder(root, "src", "tools").Where(file => !file.StartsWith(simulation, StringComparison.Ordinal));
+        violations = ScanSources(root, outside, ScaleOutsideRules, ScaleOutsideExceptions);
+        Check.That(violations.Count == 0, $"The fixed-point scale outside the simulation ({violations.Count}):\n  " + string.Join("\n  ", violations));
+        // Inside the simulation a raw number is forbidden too; the scale itself is at home there.
+        violations = ScanSources(root, SourceFilesUnder(root, Path.Combine("src", "CnCNew.Simulation")), [ScaleOutsideRules[1]], []);
+        Check.That(violations.Count == 0, $"Raw fixed-point values written as numbers in the simulation ({violations.Count}):\n  " + string.Join("\n  ", violations));
+
+        (string Line, SourceRule[] Rules)[] caught =
+        [
+            ("var x = entity.X.Raw / 65536f;", ScaleLiteralRules), ("var raw = (long)(value * 65536);", ScaleLiteralRules), ("vx <<= 16;", ScaleLiteralRules), ("var whole = raw >> 16;", ScaleLiteralRules),
+            ("const long One = 0x10000;", ScaleLiteralRules), ("var y = raw / 16777216.0;", ScaleLiteralRules), ("var z = units << 24;", ScaleLiteralRules), ("var w = 65_536L * units;", ScaleLiteralRules),
+            ("var f = (float)(value.Raw / (double)Fixed.ScaleRaw);", ScaleOutsideRules), ("var s = raw >> Fixed.FractionBits;", ScaleOutsideRules), ("var e = Fixed.FromRaw(1024);", ScaleOutsideRules),
+            ("var p = Fixed.FromRaw(-34315L);", ScaleOutsideRules),
+        ];
+        foreach (var (line, rules) in caught)
+            Check.That(rules.Any(rule => rule.Hits(line)), $"No scale rule catches: {line}");
+        string[] allowed =
+        [
+            "var f = FixedConvert.ToSingle(value);", "var e = Fixed.FromFraction(1, 64);", "var mask = 0x100000;", "var a = value << 8;", "var b = Fixed.FromRaw(reader.ReadInt64());", "var c = 165536;",
+            "var d = raw >> 32;", "var g = FixedTrig.PiFraction(1, 6);", "var h = Fixed.Epsilon;", "var i = 0x1000;",
+        ];
+        foreach (var line in allowed)
+        {
+            var wrong = ScaleLiteralRules.Concat(ScaleOutsideRules).FirstOrDefault(rule => rule.Hits(line));
+            Check.That(wrong is null, $"A scale rule wrongly catches: {line} ({wrong?.Name})");
+        }
+    }
+
     /// <summary>Strips what the rules do not read from a source line: string contents and the trailing comment.</summary>
     private static string CodeOf(string raw)
     {

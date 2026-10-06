@@ -319,7 +319,7 @@ static partial class Tests
         {
             var angle = Fixed.FromRaw(raw);
             var (sin, cos) = (FixedTrig.Sin(angle), FixedTrig.Cos(angle));
-            worst = Math.Max(worst, Math.Max(Math.Abs((double)sin.Raw / 65536.0 - Math.Sin((double)raw / 65536.0)), Math.Abs((double)cos.Raw / 65536.0 - Math.Cos((double)raw / 65536.0))));
+            worst = Math.Max(worst, Math.Max(Math.Abs((double)sin.ToDecimal() - Math.Sin((double)angle.ToDecimal())), Math.Abs((double)cos.ToDecimal() - Math.Cos((double)angle.ToDecimal()))));
         }
         Check.That(worst < 0.0001, "Sin and Cos stay within 1e-4 of the exact functions over three turns: " + worst);
     }

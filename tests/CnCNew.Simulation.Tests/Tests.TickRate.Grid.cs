@@ -93,7 +93,7 @@ static partial class Tests
         {
             var time = rate.Time;
             Check.That(time.Probe is null, $"{rate}: no probe is attached by default.");
-            long[] raws = [0, 1, 2, 3, 7, 29, 30, 59, 60, 119, 120, 121, 65_535, 65_536, 1_000_000, 123_456_789, -1, -29, -30, -65_536, -987_654_321];
+            long[] raws = [0, 1, 2, 3, 7, 29, 30, 59, 60, 119, 120, 121, Fixed.ScaleRaw - 1, Fixed.ScaleRaw, 1_000_000, 123_456_789, -1, -29, -30, -Fixed.ScaleRaw, -987_654_321];
             var plain = raws.Select(raw => Fixed.FromRaw(raw)).Select(value => (time.PerSecondToPerTick(value), time.PerOriginalFrameToPerTick(value), time.PerOriginalFrameSquaredToPerTickSquared(value),
                 time.SharePerTick(value, Fixed.FromInt(45)), time.AtLeastOneFrame(value.Raw), time.CountdownReload(value.Raw), time.ToOriginalFrames(value.Raw))).ToArray();
             for (var index = 0; index < raws.Length; index++)

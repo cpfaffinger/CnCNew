@@ -32,7 +32,7 @@ static partial class Tests
         public bool Chance(int percent) => Below(100) < percent;
 
         /// <summary>A coordinate with a fraction, between the two whole numbers.</summary>
-        public Fixed Coordinate(int low, int high) => Fixed.FromRaw(((long)low << 16) + (long)(Next() % (ulong)(((long)(high - low)) << 16)));
+        public Fixed Coordinate(int low, int high) => Fixed.FromRaw(low * Fixed.ScaleRaw + (long)(Next() % (ulong)((high - low) * Fixed.ScaleRaw)));
     }
 
     private static void VisionMapsAgree(VisionMap fast, VisionMap reference, string step)
@@ -89,7 +89,7 @@ static partial class Tests
                             0 => Fixed.Zero,
                             1 => Fixed.FromInt(-5),
                             2 => Fixed.FromInt(width + height + 50),
-                            3 => Fixed.FromRaw(1 + (long)(dice.Next() % (ulong)(3 << 16))),
+                            3 => Fixed.FromRaw(1 + (long)(dice.Next() % (ulong)(3 * Fixed.ScaleRaw))),
                             _ => dice.Coordinate(1, Math.Max(12, width / 3)),
                         };
                         lookers.Add((dice.Below(slots), dice.Coordinate(-60, width + 60), dice.Coordinate(-60, height + 60), radius));
