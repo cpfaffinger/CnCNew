@@ -328,8 +328,8 @@ public sealed partial class SimulationWorld
         var emptied = clip == 0;
         // A RETURN_TO_BASE weapon that ran dry waits for the airfield reload (JetAIUpdate refills the clip and sets the ready tick then).
         var ready = emptied
-            ? weapon.ReloadsAtBase ? SimulationTiming.SleepForever : _tick + weapon.ClipReloadWith(bonuses, conditions)
-            : _tick + weapon.DelayBetweenShotsWith(bonuses, conditions);
+            ? weapon.ReloadsAtBase ? SimulationTiming.SleepForever : _tick + weapon.ClipReloadWith(Time, bonuses, conditions)
+            : _tick + weapon.DelayBetweenShotsWith(Time, bonuses, conditions);
         StoreSlot(source, slot, clip, ready);
         if (source.WeaponSlots is { } state)
         {

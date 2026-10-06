@@ -177,6 +177,11 @@ public sealed partial class SimulationWorld : IWorldServices
         _turretSweepEnableTicks = Time.OriginalFrames(TurretSweepEnableFrames);
         _turretLoseInterestTicks = Time.OriginalFrames(TurretLoseInterestFrames);
         VisionInterval = Time.OriginalFrames(VisionIntervalFrames);
+        _saleDurationTicks = Time.OriginalFrames(SaleDurationFrames) - TickOrder.Next;
+        _minimumBuildTicks = Time.OriginalFrames(1);
+        // Thing::isSignificantlyAboveTerrain: a height, not a rate - 3 x 3 logic frames of the original times the gravity per frame of the original squared (gravity per second² / 30²).
+        // The same at every tick rate, so it is written with the original's frame rate and never with the rate of the world.
+        _significantHeight = Fixed.FromDecimal(-9m * templates.Gravity / (SimulationRate.OriginalFramesPerSecond * SimulationRate.OriginalFramesPerSecond));
         Terrain = terrain;
         Navigation = terrain is null ? null : new NavigationGrid(terrain);
         _templates = templates;

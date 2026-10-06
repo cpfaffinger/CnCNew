@@ -23,7 +23,10 @@ public sealed record TurretInfo(
     ImmutableArray<Fixed> SweepAngle, ImmutableArray<Fixed> SweepSpeed,
     Fixed MinScanAngle = default, Fixed MaxScanAngle = default, long MinScanIntervalTicks = TurretInfo.NeverScanTicks, long MaxScanIntervalTicks = TurretInfo.NeverScanTicks)
 {
-    /// <summary><c>TurretAIData::m_minIdleScanInterval</c>/<c>m_maxIdleScanInterval</c> default (frames): practically never.</summary>
+    /// <summary>
+    /// <c>TurretAIData::m_minIdleScanInterval</c>/<c>m_maxIdleScanInterval</c> default (TurretAI.cpp, <c>TurretAIData::TurretAIData</c>: 9999999 frames): practically never.
+    /// A sentinel like <c>SleepForever</c>, compared by <see cref="CanScan"/> and never scaled with the tick rate (a turret without the keys never scans at any rate).
+    /// </summary>
     public const long NeverScanTicks = 9999999;
 
     /// <summary><c>DEFAULT_TURN_RATE</c>/<c>DEFAULT_PITCH_RATE</c> (TurretAI.h), radians per frame.</summary>

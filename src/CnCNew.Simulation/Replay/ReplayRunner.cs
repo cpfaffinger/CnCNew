@@ -110,9 +110,9 @@ public static class ReplayRunner
                 if (expectedHash != result.StateHash) throw new ReplayDivergenceException(tick, expectedHash, result.StateHash);
                 verified++;
             }
-            if (options.RecordCheckpointInterval > 0 && (tick + 1) % options.RecordCheckpointInterval == 0)
+            if (options.RecordCheckpointInterval > 0 && (tick + TickOrder.Next) % options.RecordCheckpointInterval == 0)
                 checkpoints.Add(new ReplayCheckpoint(tick, result.StateHash));
-            if (options.VerifyIncrementalEvery > 0 && (tick + 1) % options.VerifyIncrementalEvery == 0) world.VerifyIncrementalHash();
+            if (options.VerifyIncrementalEvery > 0 && (tick + TickOrder.Next) % options.VerifyIncrementalEvery == 0) world.VerifyIncrementalHash();
             options.AfterTick?.Invoke(world, result);
         }
         return new ReplayRunResult(world.Tick - startTick, world.Tick, world.StateHash, hashes, checkpoints.ToImmutable(), verified, submitted, rejected);
