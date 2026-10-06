@@ -959,7 +959,8 @@ public sealed record SpectreData(string PowerName, string GattlingTemplate, stri
         ModuleConfigReader.Ticks(configuration, "OrbitTime", 0),
         ModuleConfigReader.Ticks(configuration, "HowitzerFollowLag", 0),
         ModuleConfigReader.Real(configuration, "AttackAreaRadius", Fixed.FromInt(200)),
-        ModuleConfigReader.Real(configuration, "StrafingIncrement", Fixed.FromInt(20)),
+        // m_strafingIncrement: distance per logic frame of the original (INI::parseReal, applied once per update).
+        configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "StrafingIncrement", Fixed.FromInt(20))),
         ModuleConfigReader.Real(configuration, "OrbitInsertionSlope", Fixed.FromDecimal(0.7m)),
         ModuleConfigReader.Real(configuration, "RandomOffsetForHowitzer", Fixed.FromInt(20)),
         ModuleConfigReader.Real(configuration, "TargetingReticleRadius", Fixed.FromInt(25)),

@@ -55,7 +55,7 @@ public sealed partial class ScriptEngine
     private void UpdateBuildingTeam(TeamQueueEntry entry, ScriptTeam team, ScriptTeamPrototype prototype, Entity[] members)
     {
         var orders = _teamBuilds.Where(order => order.TeamId == team.Id).ToArray();
-        var expired = prototype.InitialIdleFrames >= 1 && _tick > entry.Started + prototype.InitialIdleFrames;
+        var expired = prototype.InitialIdleFrames >= 1 && _tick > entry.Started + _world.Time.OriginalFrames(prototype.InitialIdleFrames);
         if (expired)
         {
             // isMinimumBuilt: every required type has its minimum finished or in production; areBuildsComplete: nothing is in production any more.

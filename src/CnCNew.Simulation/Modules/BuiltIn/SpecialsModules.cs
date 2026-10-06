@@ -197,7 +197,7 @@ public sealed record GrantStealthData(Fixed StartRadius, Fixed FinalRadius, Fixe
 {
     public static GrantStealthData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Real(configuration, "StartRadius", Fixed.Zero), ModuleConfigReader.Real(configuration, "FinalRadius", Fixed.Zero),
-        ModuleConfigReader.Real(configuration, "RadiusGrowRate", Fixed.Zero), ModuleConfigReader.Flags(configuration, "KindOf")?.Names ?? []);
+        configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "RadiusGrowRate", Fixed.Zero)), ModuleConfigReader.Flags(configuration, "KindOf")?.Names ?? []);
 }
 
 /// <summary>

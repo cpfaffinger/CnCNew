@@ -107,7 +107,7 @@ public sealed record BattleBusData(SlowDeathData Base, string FxStartUndeath, st
         SlowDeathData.Parse(configuration),
         ModuleConfigReader.Text(configuration, "FXStartUndeath"), ModuleConfigReader.Text(configuration, "OCLStartUndeath"),
         ModuleConfigReader.Text(configuration, "FXHitGround"), ModuleConfigReader.Text(configuration, "OCLHitGround"),
-        ModuleConfigReader.Real(configuration, "ThrowForce", Fixed.One), ModuleConfigReader.Real(configuration, "PercentDamageToPassengers", Fixed.Zero),
+        configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "ThrowForce", Fixed.One)), ModuleConfigReader.Real(configuration, "PercentDamageToPassengers", Fixed.Zero),
         ModuleConfigReader.Ticks(configuration, "EmptyHulkDestructionDelay", 0));
 }
 

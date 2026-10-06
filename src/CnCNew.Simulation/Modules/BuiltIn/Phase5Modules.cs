@@ -68,7 +68,8 @@ public sealed record StealthData(
 {
     public static StealthData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "StealthDelay", 0),
-        ModuleConfigReader.Real(configuration, "MoveThresholdSpeed", Fixed.Zero),
+        // Read raw and compared with the speed per tick: a distance per logic frame of the original (the reference parses a velocity per second here; audit, side findings).
+        configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "MoveThresholdSpeed", Fixed.Zero)),
         ModuleConfigReader.Flags(configuration, "StealthForbiddenConditions")?.Names ?? [],
         ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "RequiredStatus"), NameTables.ObjectStatus),
         ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "ForbiddenStatus"), NameTables.ObjectStatus),

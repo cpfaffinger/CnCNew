@@ -166,8 +166,8 @@ public sealed class TurretSet
 
         return new TurretInfo(
             index,
-            Find("TurretTurnRate") is null ? TurretInfo.DefaultRate : timing.DegreesPerSecondToRadiansPerTick(Number("TurretTurnRate", 0m)),
-            Find("TurretPitchRate") is null ? TurretInfo.DefaultRate : timing.DegreesPerSecondToRadiansPerTick(Number("TurretPitchRate", 0m)),
+            Find("TurretTurnRate") is null ? timing.PerOriginalFrameToPerTick(TurretInfo.DefaultRate) : timing.DegreesPerSecondToRadiansPerTick(Number("TurretTurnRate", 0m)),
+            Find("TurretPitchRate") is null ? timing.PerOriginalFrameToPerTick(TurretInfo.DefaultRate) : timing.DegreesPerSecondToRadiansPerTick(Number("TurretPitchRate", 0m)),
             SimulationTiming.DegreesToRadians(Degrees("NaturalTurretAngle")), SimulationTiming.DegreesToRadians(Degrees("NaturalTurretPitch")),
             SimulationTiming.DegreesToRadians(Degrees("FirePitch")), SimulationTiming.DegreesToRadians(Degrees("MinPhysicalPitch")), SimulationTiming.DegreesToRadians(Degrees("GroundUnitPitch")),
             mask, recenter, Bool("AllowsPitch"), Bool("InitiallyDisabled"), Bool("FiresWhileTurning"), [..sweepAngle], [..sweepSpeed],
