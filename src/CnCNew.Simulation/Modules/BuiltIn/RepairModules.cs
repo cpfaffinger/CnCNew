@@ -57,7 +57,7 @@ internal sealed class RepairDockUpdate(RepairDockData data) : DockUpdateBase(dat
         if (!_lastRepair.IsValid)
         {
             _lastRepair = docker.Id;
-            _healthToAddPerTick = (body.MaxHealth - body.Health) / data.FramesForFullHeal;
+            _healthToAddPerTick = world.Time.SharePerTick(body.MaxHealth - body.Health, data.FramesForFullHeal);
         }
         if (body.Health >= body.MaxHealth)
         {
@@ -120,7 +120,7 @@ internal sealed class AutoFindHealingUpdate(AutoFindHealingData data) : SimModul
             return SimulationTiming.SleepNone;
         }
         // m_nextScanFrames-- / m_nextScanFrames = data->m_scanFrames (AutoFindHealingUpdate.cpp): a period of ScanRate + 1 frames of the original.
-        _nextScanTicks = TickGrid.CountdownActingAfterZero(world.Time, data.ScanTicks);
+        _nextScanTicks = world.Time.CountdownReload(data.ScanTicks);
 
         var ai = Entity.Modules.OfType<AIUpdateInterface>().FirstOrDefault();
         if (ai is null || Entity.Body is not { } body) return SimulationTiming.SleepNone;

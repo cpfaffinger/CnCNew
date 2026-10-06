@@ -145,8 +145,10 @@ static partial class Tests
                     var windUp30 = original.PreAttackDelayWith(time30, thirty.Templates.GlobalWeaponBonus, condition);
                     Check.That(delay == factor * delay30 && reload == factor * reload30 && windUp == factor * windUp30,
                         $"{rate}: {weapon.Name} under bonus {condition}: delay {delay} (30 Hz {delay30}), reload {reload} ({reload30}), wind-up {windUp} ({windUp30}) – expected {factor} x.");
-                    // 30 Hz: the overloads without a time service are the former expressions.
-                    Check.That(delay30 == original.DelayBetweenShotsWith(thirty.Templates.GlobalWeaponBonus, condition) && reload30 == original.ClipReloadWith(thirty.Templates.GlobalWeaponBonus, condition),
+                    // 30 Hz: the former expression (floored in ticks, at least one tick; the overloads without a time service computed it until phase 20).
+                    var multiplier = Fixed.One + thirty.Templates.GlobalWeaponBonus.Sum(condition, WeaponBonusTable.RateOfFire) + original.Bonuses.Sum(condition, WeaponBonusTable.RateOfFire);
+                    long Former(long ticks) => multiplier <= Fixed.Zero ? SimulationTiming.SleepForever : Math.Max(SimulationTiming.SleepNone, (Fixed.FromInt(ticks) / multiplier).Floor());
+                    Check.That(delay30 == Former(original.DelayBetweenShotsTicks) && reload30 == (original.ClipReloadTicks == 0 ? 0 : Former(original.ClipReloadTicks)),
                         $"30 Hz: {weapon.Name} under bonus {condition} differs from the tick-rounded form.");
                     if (delay30 != original.DelayBetweenShotsTicks) bonused++;
                     compared++;

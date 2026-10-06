@@ -401,7 +401,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         if (_nextHeal >= 0 && world.Tick >= _nextHeal)
         {
             _nextHeal = world.Tick + world.Time.OriginalFrames(HealRateFrames);
-            var amount = Fixed.FromInt(world.Time.OriginalFrames(HealRateFrames)) * data.HealAmountPerSecond / world.Time.TicksPerSecondFixed;
+            var amount = world.Time.PerSecondToPerTick(Fixed.FromInt(world.Time.OriginalFrames(HealRateFrames)) * data.HealAmountPerSecond);
             foreach (var id in _healing.ToArray())
                 if (world.FindEntity(id) is { } patient) world.Damage(patient.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
         }

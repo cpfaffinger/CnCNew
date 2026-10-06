@@ -759,7 +759,7 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
         }
         // The reference compares whole elapsed frames with the unrounded delay (currFrame - m_activationFrame > delay): the elapsed time is taken in
         // whole frames of the original, so a stage goes off on the same frame boundary at every rate.
-        var elapsed = Fixed.FromInt(world.Time.Floor(world.Tick - _activationTick));
+        var elapsed = Fixed.FromInt(world.Time.FloorToFrame(world.Tick - _activationTick));
         for (var stage = 0; stage < data.Blasts.Length; stage++)
         {
             var blast = data.Blasts[stage];

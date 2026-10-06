@@ -185,7 +185,7 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
 
     private void SetNextCreation(IWorldServices world)
     {
-        var delay = TickGrid.RandomTicks(world, data.MinDelay, data.MaxDelay);
+        var delay = world.Time.DrawFrames(world.LogicRandom, data.MinDelay, data.MaxDelay);
         _timerStarted = world.Tick;
         _nextCreation = _timerStarted + delay;
     }
@@ -277,14 +277,14 @@ public sealed class DynamicShroudClearingRangeUpdate(DynamicShroudData data) : S
         switch (_phase)
         {
             case Phase.Growing:
-                _current += _native / Fixed.FromInt(Math.Max(1, data.GrowTime));
+                _current += world.Time.SharePerTick(_native, Fixed.FromInt(Math.Max(1, data.GrowTime)));
                 if (_current >= _native) _phase = Phase.Sustaining;
                 break;
             case Phase.Sustaining:
                 _current = _native;
                 break;
             case Phase.Shrinking:
-                _current -= (_native - data.FinalVision) / Fixed.FromInt(Math.Max(1, data.ShrinkTime));
+                _current -= world.Time.SharePerTick(_native - data.FinalVision, Fixed.FromInt(Math.Max(1, data.ShrinkTime)));
                 break;
             case Phase.DoneForever:
                 _current = data.FinalVision;
@@ -296,7 +296,7 @@ public sealed class DynamicShroudClearingRangeUpdate(DynamicShroudData data) : S
         else
         {
             // "if (m_changeIntervalCountdown > 0) --; else { = interval; apply }": a period of interval + 1 frames of the original.
-            _changeIntervalCountdown = TickGrid.CountdownActingAfterZero(world.Time, _phase == Phase.Growing ? data.GrowInterval : data.ChangeInterval);
+            _changeIntervalCountdown = world.Time.CountdownReload(_phase == Phase.Growing ? data.GrowInterval : data.ChangeInterval);
             _applied = true;
             _appliedRange = _current;
             if (_phase == Phase.DoneForever) _phase = Phase.Sleeping;
@@ -695,7 +695,7 @@ public sealed class CheckpointUpdate(ScanData data) : SimModule, IUpdateModule
     {
         _gateRadius = Entity.Template.GeometryMinorRadius;
         // "bias a random amount so everyone doesn't spike at once": the draw is kept although the scan runs every tick.
-        _scanDelay = TickGrid.RandomTicks(world, 0, data.ScanDelayTicks);
+        _scanDelay = world.Time.DrawFrames(world.LogicRandom, 0, data.ScanDelayTicks);
     }
 
     public long Update(IWorldServices world)
@@ -747,14 +747,14 @@ public sealed class EnemyNearUpdate(ScanData data) : SimModule, IUpdateModule
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public bool IsEnemyNear => _enemyNear;
 
-    public override void OnSpawn(IWorldServices world) => _scanDelay = TickGrid.CountdownActingAfterZero(world.Time, TickGrid.RandomTicks(world, 0, data.ScanDelayTicks));
+    public override void OnSpawn(IWorldServices world) => _scanDelay = world.Time.CountdownReload(world.Time.DrawFrames(world.LogicRandom, 0, data.ScanDelayTicks));
 
     public long Update(IWorldServices world)
     {
         if (_scanDelay == 0)
         {
             // "if (m_enemyScanDelay == 0) { = m_enemyScanDelayTime; scan } else --" (EnemyNearUpdate.cpp): a period of delay + 1 frames of the original.
-            _scanDelay = TickGrid.CountdownActingAfterZero(world.Time, data.ScanDelayTicks);
+            _scanDelay = world.Time.CountdownReload(data.ScanDelayTicks);
             _enemyNear = WorldEffectModules.Closest(world, Entity, Entity.Template.VisionRange, enemies: true) is not null;
         }
         else _scanDelay--;
@@ -820,7 +820,7 @@ public sealed class FirestormDynamicGeometryInfoUpdate(FirestormData data) : Sim
 
     public override void OnSpawn(IWorldServices world)
     {
-        _startDelay = Math.Max(data.InitialDelay, world.Time.TicksPerOriginalFrame);
+        _startDelay = world.Time.AtLeastOneFrame(data.InitialDelay);
         _reverse = data.ReverseAtTransitionTime;
         _from = (data.InitialHeight, data.InitialMajor, data.InitialMinor);
         _to = (data.FinalHeight, data.FinalMajor, data.FinalMinor);
@@ -862,7 +862,7 @@ public sealed class FirestormDynamicGeometryInfoUpdate(FirestormData data) : Sim
             if (data.FxList.Length > 0 && !data.FxList.Equals("None", StringComparison.OrdinalIgnoreCase)) world.Emit(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.FxList, 0);
             _effectsFired = true;
         }
-        if (world.Tick - _lastDamage >= Math.Max(data.DamageDelay, world.Time.TicksPerOriginalFrame))
+        if (world.Tick - _lastDamage >= world.Time.AtLeastOneFrame(data.DamageDelay))
         {
             DoDamageScan(world);
             _lastDamage = world.Tick;
@@ -992,7 +992,7 @@ public sealed class WeaponBonusUpdate(WeaponBonusUpdateData data) : SimModule, I
         if (now >= _nextPulse)
         {
             Pulse(world);
-            _nextPulse = now + Math.Max(data.Delay, world.Time.TicksPerOriginalFrame);
+            _nextPulse = now + world.Time.AtLeastOneFrame(data.Delay);
         }
         var soonest = _nextPulse;
         foreach (var (_, expiry) in _active) soonest = Math.Min(soonest, expiry);

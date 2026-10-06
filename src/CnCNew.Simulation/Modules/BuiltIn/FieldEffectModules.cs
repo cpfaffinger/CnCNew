@@ -165,7 +165,7 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
             }
         }
         if (target.Body is not { } body) return;
-        var amount = (upgraded ? data.UpgradedHealPerSecond : data.HealPerSecond) / world.Time.TicksPerSecondFixed * body.MaxHealth;
+        var amount = world.Time.PerSecondToPerTick(upgraded ? data.UpgradedHealPerSecond : data.HealPerSecond) * body.MaxHealth;
         // Healing does not stack: another tower that healed this object recently keeps it.
         foreach (var other in _others)
             if (other.HoldsClaim(target.Id, world.Tick)) return;

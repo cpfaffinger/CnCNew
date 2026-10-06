@@ -285,7 +285,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     {
         var since = _containedSinceTick.GetValueOrDefault(rider.Id.Value, world.Tick);
         var full = data.TimeForFullHealTicks > 0 && world.Tick - since >= data.TimeForFullHealTicks;
-        var amount = full || data.TimeForFullHealTicks <= 0 ? rider.Body!.MaxHealth : rider.Body!.MaxHealth / Fixed.FromInt(data.TimeForFullHealTicks);
+        var amount = full || data.TimeForFullHealTicks <= 0 ? rider.Body!.MaxHealth : world.Time.SharePerTick(rider.Body!.MaxHealth, Fixed.FromInt(data.TimeForFullHealTicks));
         world.Damage(rider.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
     }
 
@@ -408,7 +408,7 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
                 var rider = world.FindEntity(riderId);
                 if (rider?.Body is null || rider.Body.Health >= rider.Body.MaxHealth) continue;
                 var perSecond = rider.Body.MaxHealth * data.HealthRegenPercentPerSecond / Fixed.FromInt(100);
-                var perTick = perSecond / world.Time.TicksPerSecondFixed;
+                var perTick = world.Time.PerSecondToPerTick(perSecond);
                 world.Damage(rider.Id, new DamageInfo(Entity.Id, perTick, DamageTypes.Healing, DeathTypes.None, false));
             }
         return data.HealthRegenPercentPerSecond > Fixed.Zero ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;

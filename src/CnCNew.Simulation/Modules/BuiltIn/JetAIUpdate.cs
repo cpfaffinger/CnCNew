@@ -745,7 +745,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     {
         if (data.OutOfAmmoDamageRatePerSecond > Fixed.Zero && Entity.Body is { } body)
         {
-            var amount = data.OutOfAmmoDamageRatePerSecond * body.MaxHealth / world.Time.TicksPerSecondFixed;
+            var amount = world.Time.PerSecondToPerTick(data.OutOfAmmoDamageRatePerSecond * body.MaxHealth);
             world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, amount, DamageTypes.Unresistable, DeathTypes.Normal, false));
         }
         if (world.Tick < _checkAirfieldTick) return;
@@ -886,7 +886,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             var weapon = world.Weapons[index];
             var clip = Entity.ClipOf(slot);
             if (weapon.ClipSize <= 0 || clip == int.MaxValue) continue;
-            var time = weapon.ClipReloadWith(world.Templates.GlobalWeaponBonus, Entity.WeaponBonusConditions);
+            var time = weapon.ClipReloadWith(world.Time, world.Templates.GlobalWeaponBonus, Entity.WeaponBonusConditions);
             // rt = (rt * needed) / clipSize is cut off in frames of the original, then scaled.
             total = Math.Max(total, world.Time.OriginalFrames(world.Time.ToOriginalFrames(time) * (weapon.ClipSize - Math.Max(clip, 0)) / weapon.ClipSize));
         }

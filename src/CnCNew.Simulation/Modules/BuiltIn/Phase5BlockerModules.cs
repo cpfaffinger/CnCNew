@@ -113,7 +113,7 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
         _aflame = true;
         Entity.Status |= 1UL << AflameBit;
         var now = world.Tick;
-        _aflameEndTick = now + Math.Max(data.AflameDurationTicks, world.Time.TicksPerOriginalFrame);
+        _aflameEndTick = now + world.Time.AtLeastOneFrame(data.AflameDurationTicks);
         _burnedEndTick = data.BurnedDelayTicks > 0 ? now + data.BurnedDelayTicks : 0;
         _damageEndTick = data.AflameDamageDelayTicks > 0 ? now + data.AflameDamageDelayTicks : 0;
         world.WakeAt(Entity, this, now + SimulationTiming.SleepNone);
@@ -127,7 +127,7 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
         var now = world.Tick;
         if (_damageEndTick != 0 && now >= _damageEndTick)
         {
-            _damageEndTick = now + Math.Max(data.AflameDamageDelayTicks, world.Time.TicksPerOriginalFrame);
+            _damageEndTick = now + world.Time.AtLeastOneFrame(data.AflameDamageDelayTicks);
             world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, data.AflameDamageAmount, DamageTypes.Flame, DeathTypes.Burned, false));
         }
         if (_burnedEndTick != 0 && now >= _burnedEndTick)
@@ -290,10 +290,10 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         _activated = true;
         // Both draws happen every time, matching the reference's unconditional GameLogicRandomValue(0, variance) calls.
         // The variances are drawn in logic frames of the original and then scaled: the same draw at every rate, and the result stays on the 30 Hz grid.
-        var sink = data.SinkDelayTicks + TickGrid.RandomTicks(world, 0, data.SinkDelayVarianceTicks);
-        var destruction = data.DestructionDelayTicks + TickGrid.RandomTicks(world, 0, data.DestructionDelayVarianceTicks);
+        var sink = data.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.SinkDelayVarianceTicks);
+        var destruction = data.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.DestructionDelayVarianceTicks);
         _ = sink; // the sinking-into-ground animation is presentation only; only the destruction timer is modeled.
-        _destructionTick = world.Tick + Math.Max(destruction, world.Time.TicksPerOriginalFrame);
+        _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
         world.WakeAt(Entity, this, _destructionTick);
     }
 
@@ -455,7 +455,7 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
     public override void OnSpawn(IWorldServices world)
-        => _nextWake = data.InitiallyDisabled ? SimulationTiming.SleepForever : world.Tick + TickGrid.RandomTicks(world, world.Time.TicksPerOriginalFrame, data.UpdateRateTicks);
+        => _nextWake = data.InitiallyDisabled ? SimulationTiming.SleepForever : world.Tick + world.Time.DrawFrames(world.LogicRandom, world.Time.TicksPerOriginalFrame, data.UpdateRateTicks);
 
     /// <summary><c>StealthDetectorUpdate::setSDEnabled</c> (the strategy center's search-and-destroy plan): an enabled detector scans again from the next tick, a disabled one sleeps.</summary>
     public void SetEnabled(IWorldServices world, bool enabled) => world.WakeAt(Entity, this, enabled ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever);
@@ -546,8 +546,8 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
     {
         if (info.DamageType != DamageTypes.Poison) return;
         _poisonDamageAmount = actualDamageDealt;
-        _poisonStopTick = world.Tick + Math.Max(data.PoisonDurationTicks, world.Time.TicksPerOriginalFrame);
-        var freshDamageTick = world.Tick + Math.Max(data.PoisonDamageIntervalTicks, world.Time.TicksPerOriginalFrame);
+        _poisonStopTick = world.Tick + world.Time.AtLeastOneFrame(data.PoisonDurationTicks);
+        var freshDamageTick = world.Tick + world.Time.AtLeastOneFrame(data.PoisonDamageIntervalTicks);
         _poisonDamageTick = _poisonDamageTick == long.MaxValue ? freshDamageTick : Math.Min(_poisonDamageTick, freshDamageTick);
         _deathType = info.DeathType;
         world.WakeAt(Entity, this, Math.Min(_poisonDamageTick, _poisonStopTick));
@@ -567,7 +567,7 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
         if (_poisonDamageTick != long.MaxValue && world.Tick >= _poisonDamageTick)
         {
             world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, _poisonDamageAmount, DamageTypes.Unresistable, _deathType, false));
-            _poisonDamageTick = world.Tick + Math.Max(data.PoisonDamageIntervalTicks, world.Time.TicksPerOriginalFrame);
+            _poisonDamageTick = world.Tick + world.Time.AtLeastOneFrame(data.PoisonDamageIntervalTicks);
         }
         // Unless the poison killed us: then we stay a pulsating toxic pus ball forever (no more ticks to schedule).
         if (world.Tick >= _poisonStopTick && !Entity.EffectivelyDead) StopPoisonedEffects();

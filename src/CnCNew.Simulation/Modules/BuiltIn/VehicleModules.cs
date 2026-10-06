@@ -163,10 +163,10 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
         if (_realDeath)
         {
             // SlowDeathBehavior::beginSlowDeath: both draws, then the destruction timer.
-            _ = data.Base.SinkDelayTicks + TickGrid.RandomTicks(world, 0, data.Base.SinkDelayVarianceTicks);
-            var destruction = data.Base.DestructionDelayTicks + TickGrid.RandomTicks(world, 0, data.Base.DestructionDelayVarianceTicks);
+            _ = data.Base.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.SinkDelayVarianceTicks);
+            var destruction = data.Base.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.DestructionDelayVarianceTicks);
             _activated = true;
-            _destructionTick = world.Tick + Math.Max(destruction, world.Time.TicksPerOriginalFrame);
+            _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
             world.WakeAt(Entity, this, _destructionTick);
             return;
         }
