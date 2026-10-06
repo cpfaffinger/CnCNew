@@ -78,6 +78,8 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly Entity[] _hashBatch = new Entity[HashBatchEntities];
     private readonly int[] _hashBatchEnds = new int[HashBatchEntities];
     private readonly ulong[] _hashBatchValues = new ulong[HashBatchEntities];
+    // Per template and module slot: the words that open the module in a description (index, name, tag).
+    private readonly ulong[]?[]?[] _moduleFrames;
     private long _hashedEntities;
     private long _hashedWords;
     private long _hashedUnchanged;
@@ -161,6 +163,7 @@ public sealed partial class SimulationWorld : IWorldServices
         Terrain = terrain;
         Navigation = terrain is null ? null : new NavigationGrid(terrain);
         _templates = templates;
+        _moduleFrames = new ulong[]?[]?[templates.Templates.Length];
         Ids = new IdCounters();
         Streams = new RandomStreams(configuration.Seed);
         foreach (var player in configuration.Players)
@@ -1593,6 +1596,10 @@ public sealed partial class SimulationWorld : IWorldServices
         var updates = new List<UpdateNode>();
         var upgrades = new List<IUpgradeModule>();
         var damages = new List<IDamageModule>();
+        // Index, name and tag of a module slot are the same for every entity of a template of this world's catalog; their words are prepared once per slot.
+        var frames = (uint)template.Index < (uint)_moduleFrames.Length && ReferenceEquals(_templates[template.Index], template)
+            ? _moduleFrames[template.Index] ??= new ulong[modules.Length][]
+            : null;
         for (var index = 0; index < modules.Length; index++)
         {
             var spec = template.Modules[index];
@@ -1600,6 +1607,7 @@ public sealed partial class SimulationWorld : IWorldServices
             module.Entity = entity;
             module.Index = index;
             module.Tag = spec.Tag;
+            module.FrameWords = frames is null ? ModuleFrameWords(module) : frames[index] ??= ModuleFrameWords(module);
             modules[index] = module;
             if (module is IBodyModule body && entity.Body is null) entity.Body = body;
             if (module is IContainerModule container && entity.Container is null) entity.Container = container;
@@ -1634,6 +1642,17 @@ public sealed partial class SimulationWorld : IWorldServices
         var state = new WeaponSlotState { SetIndex = set!.Index };
         entity.WeaponSlots = state;
         FillSlots(entity, set, 0);
+    }
+
+    /// <summary>The words that open this module in an entity description, written by the routine that defines them (<see cref="Entity.DescribeModuleFrame"/>).</summary>
+    private ulong[] ModuleFrameWords(SimModule module)
+    {
+        var words = _entityWords;
+        var start = words.Count;
+        Entity.DescribeModuleFrame(words, module);
+        var frame = words.Words[start..].ToArray();
+        words.Truncate(start);
+        return frame;
     }
 
     private static int ClipCapacity(Templates.WeaponInfo weapon) => weapon.ClipSize == 0 ? int.MaxValue : weapon.ClipSize;
