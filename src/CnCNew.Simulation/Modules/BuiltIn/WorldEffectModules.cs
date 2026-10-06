@@ -45,23 +45,53 @@ internal static class WorldEffectModules
     /// </summary>
     public static Entity? Closest(IWorldServices world, Entity me, Fixed range, bool enemies)
     {
-        var stealthed = ObjectStatusBits.Index("STEALTHED");
-        var detected = ObjectStatusBits.Index("DETECTED");
+        // The relationship is one between the two owners (RelationshipOf), so the candidates are the objects of the players that have the wanted one, read
+        // from the world's owner lists instead of every object of the world. The pick is the minimum of (distance, id), which does not depend on the order
+        // the candidates come in. The system player is never an enemy and is left out for allies; an owner the world does not know is neutral to everybody
+        // but itself.
+        var wanted = enemies ? Relationship.Enemies : Relationship.Allies;
         Entity? best = null;
         var bestDistance = Fixed.MaxValue;
-        foreach (var other in world.Entities)
+        var ownerListed = me.Owner.IsSystem;
+        foreach (var player in world.Configuration.Players)
         {
-            if (other.Id == me.Id || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid || other.Owner.IsSystem && !enemies) continue;
-            var relationship = world.RelationshipOf(me.Owner, other.Owner);
-            if (enemies ? relationship != Relationship.Enemies : relationship != Relationship.Allies) continue;
+            if (player.Id == me.Owner) ownerListed = true;
+            if (player.Id.IsSystem || world.RelationshipOf(me.Owner, player.Id) != wanted) continue;
+            ClosestOf(world.EntitiesOwnedBy(player.Id), me, range, enemies, ref best, ref bestDistance);
+        }
+        if (!enemies && !ownerListed) ClosestOf(world.EntitiesOwnedBy(me.Owner), me, range, enemies, ref best, ref bestDistance);
+        return best;
+    }
+
+    private static readonly int ClosestStealthed = ObjectStatusBits.Index("STEALTHED");
+    private static readonly int ClosestDetected = ObjectStatusBits.Index("DETECTED");
+
+    /// <summary>
+    /// Not less than the template's <c>BoundingCircleRadius</c>, without the square root a box needs for it: the corner distance of a box is at most the
+    /// sum of its two half extents, and one unit covers the rounding of the products and of the root.
+    /// </summary>
+    private static Fixed RadiusBound(ObjectTemplate template) => template.GeometryMajorRadius.Abs() + template.GeometryMinorRadius.Abs() + Fixed.One;
+
+    private static void ClosestOf(EntityList candidates, Entity me, Fixed range, bool enemies, ref Entity? best, ref Fixed bestDistance)
+    {
+        var myReach = range + RadiusBound(me.Template) + Fixed.One;
+        foreach (var other in candidates.AsSpan())
+        {
+            if (other.Id == me.Id || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid) continue;
+            // Further away on one axis than the range plus both radii (bounded from above) plus one unit: the edge distance is then above the range
+            // whatever the other axis says, and the object is passed over before the three square roots the edge distance of two boxes costs. One unit
+            // is far more than the rounding of the squares and of the root can take away.
+            var reach = myReach + RadiusBound(other.Template);
+            var dx = other.X - me.X;
+            var dy = other.Y - me.Y;
+            if (range >= Fixed.Zero && (dx > reach || dy > reach || -dx > reach || -dy > reach)) continue;
             if (other.Template.IsKindOf("STRUCTURE") && SimulationWorld.ActiveWeaponSet(other) is not { WeaponCount: > 0 }) continue;
-            if (enemies && other.HasStatus(stealthed) && !other.HasStatus(detected)) continue;
+            if (enemies && other.HasStatus(ClosestStealthed) && !other.HasStatus(ClosestDetected)) continue;
             var distance = EdgeDistance2D(me, other);
             if (distance > range || distance > bestDistance || (distance == bestDistance && best is not null && other.Id.Value > best.Id.Value)) continue;
             best = other;
             bestDistance = distance;
         }
-        return best;
     }
 }
 
