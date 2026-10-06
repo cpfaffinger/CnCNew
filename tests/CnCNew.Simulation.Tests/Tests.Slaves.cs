@@ -658,7 +658,7 @@ static partial class Tests
         var granted = false;
         for (var tick = 0; tick < world.Frames(200) && !granted; tick++)
         {
-            if (tick % 12 == 0) feeder.FireWeapon(1, master.Id.Value, enemy.Id.Value);
+            if (tick % world.Frames(12) == 0) feeder.FireWeapon(1, master.Id.Value, enemy.Id.Value);
             world.Step();
             granted = Spotting();
         }

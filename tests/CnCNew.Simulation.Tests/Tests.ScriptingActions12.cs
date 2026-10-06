@@ -59,8 +59,8 @@ static partial class Tests
             Scr.Script("Hunt", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_HUNT_WITH_COMMAND_BUTTON", Scr.Team("Squad"), Scr.Ability("Cmd_AlphaFire"))], oneShot: true),
         ], objects: [Placed("AlphaHunter", 100m, 100m, "Squad", "Hunter"), Placed("BetaSoldier", 330m, 100m, "teamB", "Prey")]);
         Run(session, session.Frames(240));
-        var prey = NamedIn(session, "Prey")!;
-        Check.That(prey.Body!.Health < prey.Body.MaxHealth || prey.EffectivelyDead, $"The hunting object attacked an enemy nobody ordered it to (hunter at {NamedIn(session, "Hunter")?.X}, diagnostics: {string.Join("; ", session.Engine.Diagnostics.Keys)}, rejections {string.Join(",", session.World.RejectionCounts.Select((count, index) => count > 0 ? $"{(CommandRejection)index}={count}" : ""))}).");
+        var prey = NamedIn(session, "Prey"); // gone when the hunter already killed it
+        Check.That(prey is null || prey.Body!.Health < prey.Body.MaxHealth || prey.EffectivelyDead, $"The hunting object attacked an enemy nobody ordered it to (hunter at {NamedIn(session, "Hunter")?.X}, diagnostics: {string.Join("; ", session.Engine.Diagnostics.Keys)}, rejections {string.Join(",", session.World.RejectionCounts.Select((count, index) => count > 0 ? $"{(CommandRejection)index}={count}" : ""))}).");
         Check.That(session.Engine.MissingActionHits.Count == 0, "TEAM_HUNT_WITH_COMMAND_BUTTON is implemented.");
     }
 

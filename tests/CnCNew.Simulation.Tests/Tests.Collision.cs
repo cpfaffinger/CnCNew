@@ -424,7 +424,7 @@ static partial class Tests
         {
             var hash = stiff.Step().StateHash;
             if (resumed is not null) Check.That(resumed.Step().StateHash == hash, "The fall continues identically from a snapshot at tick " + tick + ".");
-            if (tick == 60)
+            if (tick == stiff.Frames(60))
             {
                 Check.That(topple.Angle > Fixed.Zero && !topple.IsToppled, "Mid-fall the tower leans but is not down: " + topple.Angle.ToDecimal());
                 resumed = WorldSnapshot.Restore(WorldSnapshot.Write(stiff), CollisionFixture.Templates, CollisionFixture.Fingerprint, CollisionTerrain());

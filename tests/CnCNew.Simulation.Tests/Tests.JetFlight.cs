@@ -211,7 +211,7 @@ static partial class Tests
             farthest = Fixed.Max(farthest, jet.X);
         }
         Check.That(maxTurn <= WingTurnPerTick + Fixed.FromRaw(2), $"No tick turns the jet by more than the turn rate ({maxTurn} vs {WingTurnPerTick}).");
-        Check.That(turned >= 40, $"A U-turn takes many ticks ({turned}).");
+        Check.That(turned >= world.Frames(40), $"A U-turn takes many ticks ({turned}).");
         Check.That(maxStep <= TestRate.Default.Time.PerSecondToPerTick(150m) + Fixed.FromRaw(64), $"It never moves faster than its speed ({maxStep}).");
         Check.That(farthest > Fixed.FromInt(1000 + 40), $"The turn is a loop, not a pivot: the jet flew on to x = {farthest}.");
     }
