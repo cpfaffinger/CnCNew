@@ -13,6 +13,8 @@ Voraussetzung: die Phasen 20, 21 und 22 sind abgeschlossen und gemergt. Die Simu
 - Es gibt **keinen Test**, der zwei Raten vergleicht. Alle bestehenden Abnahmen (Referenzmatch, Stresstest, KI-Tabelle, Kampagnenaudit, Zielfahrer, Erreichbarkeit, Nur-Befehle-Agent) sind Hashes oder Zählungen bei 30 Hz mit Tickbudgets, die 30 Hz meinen (`drive` 60.000 Ticks, `audit --ticks 900`, `ai-match --max-ticks 45000`).
 - Die Skirmish-KI denkt nach Phase 20 in Spielzeit, ihre Ergebnisse bei 60 Hz sind unbewertet.
 
+**Nachtrag aus Phase 20 (6. Oktober 2026, Stand `9299a2d`):** die „Liste für Phase 23“ steht in `docs/TICKRATE-MIGRATION.md` §5 (95 Einträge: 11 multiplikative Faktoren und gemischte Rekursionen, 27 Integrationen je Tick und Schwellen, 18 Zähler N + 1 und Ein-Tick-Untergrenzen, 25 Auswertungen und Abtastungen je Tick, 4 Zufallszüge je Tick, 10 Reste umgestellter Stellen). Probelauf ohne Bewertung (§11): das Referenzmatch endet bei 60 Hz mit demselben Sieger (GLA) bei Tick 29.280 statt 2 × 14.490, bei 120 Hz findet es in 864.000 Ticks keinen Sieger; China gegen GLA auf Alpine Assault endet bei 60 Hz bei Tick 23.430 und bei 120 Hz bei 45.900. Die Hochrechnungen `catchup30`/`catchup60` in `SimTool perf` rechnen mit festen Raten.
+
 ## Entscheidungen, die feststehen (`docs/MULTIPLAYER-PLAN.md` §2)
 
 - Unterstützte Raten: 30, 60, 120. Produktrate nach dieser Phase: 60. Die Rate bleibt ein Parameter der Sitzung; 30 und 120 bleiben lauffähig und werden von der Raten-Äquivalenz-Suite dauerhaft mitgeprüft (das ist der Schutz gegen neue Kopplung).
