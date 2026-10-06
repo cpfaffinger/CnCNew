@@ -357,40 +357,65 @@ public sealed partial class SimulationWorld
         var limit = radius * radius;
         var turretOnly = mode == AcquireMode.Turret;
         var buildings = computer || (ai.AutoAcquire & AutoAcquire.AttackBuildings) != 0;
-        var advisor = AcquisitionAdvisor;
+        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue };
 
-        Entity? best = null;
-        var bestDistance = Fixed.MaxValue;
-        var bestEffective = 0;
-        var bestPriority = 0;
-        foreach (var candidate in _entities.Values)
+        if (RelationshipOverride is not null)
         {
-            if (candidate.Owner == entity.Owner || candidate.Owner.IsSystem) continue;
-            var dx = candidate.X - entity.X;
-            var dy = candidate.Y - entity.Y;
-            var distance = dx * dx + dy * dy;
-            if (distance > limit) continue;
-            if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT") || candidate.Template.IsKindOf("MINE")) continue;
-            if (!IsAttackable(entity, candidate) || !AcquiresStructure(candidate, buildings)) continue;
-            if (!CanAttack(entity, candidate, turretOnly, out var inRange) || (!inRange && !chase)) continue;
-
-            if (advisor is not null && advisor.TryAttackPriority(entity, candidate, out var priority))
-            {
-                if (priority == 0) continue;
-                var effective = (int)Math.Max(1, priority - (Fixed.Sqrt(distance) / AttackPriorityDistanceStep).Floor());
-                var better = effective > bestEffective || (effective == bestEffective && priority > bestPriority)
-                             || (effective == bestEffective && priority == bestPriority && IsNearer(candidate, distance, best, bestDistance));
-                if (!better) continue;
-                bestEffective = effective;
-                bestPriority = priority;
-            }
-            else if (!IsNearer(candidate, distance, best, bestDistance)) continue;
-
-            best = candidate;
-            bestDistance = distance;
+            // A script set a relation between teams: whether two objects are enemies is then a question per pair of objects, so every object is a candidate.
+            foreach (var candidate in _entities.Values) ConsiderMoodTarget(entity, candidate, ref search);
+            return search.Best;
         }
 
-        return best;
+        // Without such an override a victim must belong to a player the unit's player has as an enemy (IsAttackable -> AreEnemies), so only those players'
+        // objects are looked at. The pick is the maximum of one strict order over the candidates - (effective priority, priority, nearer, lower id) for a
+        // unit with a priority set, (nearer, lower id) otherwise, and which of the two applies depends on the unit alone -, so the order in which the
+        // candidates come does not matter. The system player and unknown owners are nobody's enemy (RelationshipOf).
+        foreach (var player in Configuration.Players)
+        {
+            if (!AreEnemies(entity.Owner, player.Id)) continue;
+            foreach (var candidate in EntitiesOwnedBy(player.Id).AsSpan()) ConsiderMoodTarget(entity, candidate, ref search);
+        }
+
+        return search.Best;
+    }
+
+    private struct MoodSearch
+    {
+        public Fixed Limit;
+        public bool TurretOnly;
+        public bool Chase;
+        public bool Buildings;
+        public Entity? Best;
+        public Fixed BestDistance;
+        public int BestEffective;
+        public int BestPriority;
+    }
+
+    private void ConsiderMoodTarget(Entity entity, Entity candidate, ref MoodSearch search)
+    {
+        if (candidate.Owner == entity.Owner || candidate.Owner.IsSystem) return;
+        var dx = candidate.X - entity.X;
+        var dy = candidate.Y - entity.Y;
+        var distance = dx * dx + dy * dy;
+        if (distance > search.Limit) return;
+        if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT") || candidate.Template.IsKindOf("MINE")) return;
+        if (!IsAttackable(entity, candidate) || !AcquiresStructure(candidate, search.Buildings)) return;
+        if (!CanAttack(entity, candidate, search.TurretOnly, out var inRange) || (!inRange && !search.Chase)) return;
+
+        if (AcquisitionAdvisor is { } advisor && advisor.TryAttackPriority(entity, candidate, out var priority))
+        {
+            if (priority == 0) return;
+            var effective = (int)Math.Max(1, priority - (Fixed.Sqrt(distance) / AttackPriorityDistanceStep).Floor());
+            var better = effective > search.BestEffective || (effective == search.BestEffective && priority > search.BestPriority)
+                         || (effective == search.BestEffective && priority == search.BestPriority && IsNearer(candidate, distance, search.Best, search.BestDistance));
+            if (!better) return;
+            search.BestEffective = effective;
+            search.BestPriority = priority;
+        }
+        else if (!IsNearer(candidate, distance, search.Best, search.BestDistance)) return;
+
+        search.Best = candidate;
+        search.BestDistance = distance;
     }
 
     private static bool IsNearer(Entity candidate, Fixed distance, Entity? best, Fixed bestDistance)
