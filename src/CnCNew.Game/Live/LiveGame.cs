@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using CnCNew.Data.World;
 using CnCNew.Game.Data;
+using CnCNew.Presentation;
 using CnCNew.Presentation.Camera;
 using CnCNew.Presentation.Fx;
 using CnCNew.Presentation.Input;
@@ -32,6 +33,7 @@ public abstract class LiveGame
     private readonly SimulationFxWorldView _fxView;
     private readonly List<SoundCue> _soundCues = [];
     private double _accumulator;
+    private IPresentationPhaseObserver? _phaseObserver;
 
     /// <param name="world">The simulation world the presentation reads.</param>
     /// <param name="players">The players the house colors are resolved for.</param>
@@ -154,6 +156,19 @@ public abstract class LiveGame
     /// <summary>Invoked immediately before every simulation step of <see cref="Advance"/> (per-tick input bookkeeping).</summary>
     public Action<SimulationWorld>? BeforeTick { get; set; }
 
+    /// <summary>
+    /// A measuring tool's hook into <see cref="Advance"/> (docs/PERF-GAME-LAYER.md): told where each part begins and ends. Null in the game. It observes only.
+    /// </summary>
+    public IPresentationPhaseObserver? PhaseObserver
+    {
+        get => _phaseObserver;
+        set
+        {
+            _phaseObserver = value;
+            _projector.PhaseObserver = value;
+        }
+    }
+
     /// <summary>Raised after every step with its result (events for statistics, ticker and sound).</summary>
     public event Action<TickResult>? TickStepped;
 
@@ -183,18 +198,34 @@ public abstract class LiveGame
             var steps = 0;
             while (_accumulator >= TickSeconds && steps < MaxTicksPerFrame && !IsOver)
             {
+                var observer = _phaseObserver;
+                observer?.PhaseStarted(PresentationPhase.BeforeTick);
                 BeforeTick?.Invoke(World);
+                observer?.PhaseEnded(PresentationPhase.BeforeTick);
+                observer?.PhaseStarted(PresentationPhase.StepSimulation);
                 var result = StepSimulation();
+                observer?.PhaseEnded(PresentationPhase.StepSimulation);
+                observer?.PhaseStarted(PresentationPhase.SyncAfterTick);
                 SyncAfterTick(result);
+                observer?.PhaseEnded(PresentationPhase.SyncAfterTick);
+                observer?.PhaseStarted(PresentationPhase.TickStepped);
                 TickStepped?.Invoke(result);
+                observer?.PhaseEnded(PresentationPhase.TickStepped);
                 _accumulator -= TickSeconds;
                 steps++;
             }
             if (steps == MaxTicksPerFrame) _accumulator = Math.Min(_accumulator, TickSeconds);
         }
+        var frameObserver = _phaseObserver;
+        frameObserver?.PhaseStarted(PresentationPhase.FogAdvance);
         Fog.Advance((float)seconds);
+        frameObserver?.PhaseEnded(PresentationPhase.FogAdvance);
+        frameObserver?.PhaseStarted(PresentationPhase.OnAdvanced);
         OnAdvanced(Paused ? 0 : seconds * Speed);
+        frameObserver?.PhaseEnded(PresentationPhase.OnAdvanced);
+        frameObserver?.PhaseStarted(PresentationPhase.Project);
         Frame = _projector.Project(Paused ? 1f : (float)Math.Clamp(_accumulator / TickSeconds, 0, 1));
+        frameObserver?.PhaseEnded(PresentationPhase.Project);
     }
 
     /// <summary>Called once per <see cref="Advance"/> after the ticks, before the frame is projected, with the game time that passed (0 while paused); a mission plays its scripted camera here.</summary>
@@ -202,12 +233,27 @@ public abstract class LiveGame
 
     private void SyncAfterTick(TickResult result)
     {
+        var observer = _phaseObserver;
+        observer?.PhaseStarted(PresentationPhase.ProjectorObserve);
         if (result.Events is not null) _projector.Observe(result.Events, World);
+        observer?.PhaseEnded(PresentationPhase.ProjectorObserve);
+        observer?.PhaseStarted(PresentationPhase.ProjectorAdvance);
         _projector.Advance(World);
+        observer?.PhaseEnded(PresentationPhase.ProjectorAdvance);
+        observer?.PhaseStarted(PresentationPhase.FxViewRefresh);
         _fxView.Refresh();
+        observer?.PhaseEnded(PresentationPhase.FxViewRefresh);
+        observer?.PhaseStarted(PresentationPhase.FxExecuteEvents);
         if (result.Events is not null) Fx.ExecuteEvents(result.Events, _fxView);
+        observer?.PhaseEnded(PresentationPhase.FxExecuteEvents);
+        observer?.PhaseStarted(PresentationPhase.FxUpdate);
         Fx.Update(_fxView);
+        observer?.PhaseEnded(PresentationPhase.FxUpdate);
+        observer?.PhaseStarted(PresentationPhase.DrainSoundCues);
         _soundCues.AddRange(Fx.DrainSoundCues());
+        observer?.PhaseEnded(PresentationPhase.DrainSoundCues);
+        observer?.PhaseStarted(PresentationPhase.FogUpdate);
         if (World.Tick % SimulationWorld.VisionIntervalTicks == 0) Fog.Update(World.Vision!, HumanVisionSlot);
+        observer?.PhaseEnded(PresentationPhase.FogUpdate);
     }
 }

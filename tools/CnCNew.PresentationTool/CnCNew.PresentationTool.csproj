@@ -3,6 +3,11 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The perf summary format lives in SimTool (which also compares two summaries); it is compiled in as source, like in the simulation tests. -->
+    <Compile Include="../CnCNew.SimTool/ManifestDocument.cs" Link="Linked/ManifestDocument.cs" />
+    <Compile Include="../CnCNew.SimTool/PerfSummary.cs" Link="Linked/PerfSummary.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
     <ProjectReference Include="../../src/CnCNew.Data/CnCNew.Data.csproj" />
     <ProjectReference Include="../../src/CnCNew.Formats/CnCNew.Formats.csproj" />

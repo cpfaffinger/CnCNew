@@ -366,6 +366,8 @@ run.Test("Attack-move: snapshot mid-fight, determinism and the replay of AttackM
 run.Test("Baseline manifests: canonical file form, round trip and strict reading", Tests.ManifestCanonicalRoundTrip);
 run.Test("Baseline manifests: a check reports the first differing field with both values", Tests.ManifestCheckReportsTheFirstDifference);
 run.Test("Baseline manifests: the content hash of an object graph ignores storage order", Tests.CanonicalObjectHashIgnoresStorageOrder);
+run.Test("Perf summary: canonical JSON round trip, whole nanoseconds, strict validation", Tests.PerfSummaryRoundTrip);
+run.Test("Perf compare: regressions beyond the threshold are marked, other parameters or another hash are refused", Tests.PerfCompareMarksRegressionsAndRefusesOtherRuns);
 run.Test("Determinism D4: script state, diagnoses and forwarded arguments do not depend on the culture", Tests.ScriptStateIsCultureIndependent);
 run.Test("Determinism D7: the waypoint order is total", Tests.WaypointOrderIsTotal);
 run.Test("Determinism D3: a running world and a restored one enumerate their entities in id order", Tests.EntityEnumerationIsOrderedById);

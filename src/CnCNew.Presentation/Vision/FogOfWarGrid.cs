@@ -53,6 +53,11 @@ public sealed class FogOfWarGrid
     private readonly FogCellState[] _states;
     private readonly float[] _levels;
     private readonly FogSettings _settings;
+    // The cells whose level has not reached the level of their state yet. Every other cell is at rest: Advance would compute the value it already has, so only
+    // these are visited. A cell enters when its state changes to one with another level and leaves when its level arrives.
+    private readonly int[] _fading;
+    private readonly bool[] _isFading;
+    private int _fadingCount;
 
     public FogOfWarGrid(int cellsX, int cellsY, FogSettings settings)
     {
@@ -64,6 +69,8 @@ public sealed class FogOfWarGrid
         _states = new FogCellState[cellsX * cellsY];
         _levels = new float[cellsX * cellsY];
         Array.Fill(_levels, settings.ShroudLevel);
+        _fading = new int[cellsX * cellsY];
+        _isFading = new bool[cellsX * cellsY];
     }
 
     public int CellsX { get; }
@@ -80,27 +87,48 @@ public sealed class FogOfWarGrid
         if ((uint)playerSlot >= (uint)vision.PlayerSlots) throw new ArgumentOutOfRangeException(nameof(playerSlot));
         for (var cy = 0; cy < CellsY; cy++)
             for (var cx = 0; cx < CellsX; cx++)
-                _states[cy * CellsX + cx] = vision.IsVisible(playerSlot, cx, cy) ? FogCellState.Visible
-                    : vision.IsExplored(playerSlot, cx, cy) ? FogCellState.Fogged : FogCellState.Unexplored;
+                SetState(cy * CellsX + cx, vision.IsVisible(playerSlot, cx, cy) ? FogCellState.Visible
+                    : vision.IsExplored(playerSlot, cx, cy) ? FogCellState.Fogged : FogCellState.Unexplored);
+    }
+
+    private void SetState(int index, FogCellState state)
+    {
+        if (_states[index] == state) return;
+        _states[index] = state;
+        if (_isFading[index] || _levels[index] == _settings.LevelOf(state)) return;
+        _isFading[index] = true;
+        _fading[_fadingCount++] = index;
     }
 
     /// <summary>Sets every cell state directly (tests, replays of saved fog); levels keep fading.</summary>
     public void SetStates(ReadOnlySpan<FogCellState> states)
     {
         if (states.Length != _states.Length) throw new ArgumentException("State count does not match the grid.", nameof(states));
-        states.CopyTo(_states);
+        for (var index = 0; index < states.Length; index++) SetState(index, states[index]);
     }
+
+    /// <summary>Cells whose level is still on its way to the level of their state.</summary>
+    public int FadingCells => _fadingCount;
 
     /// <summary>Moves every level towards its state's level by at most <c>FadeLevelsPerSecond * dt</c>.</summary>
     public void Advance(float dtSeconds)
     {
         if (dtSeconds < 0) throw new ArgumentOutOfRangeException(nameof(dtSeconds));
         var step = _settings.FadeLevelsPerSecond * dtSeconds;
-        for (var index = 0; index < _levels.Length; index++)
+        for (var slot = 0; slot < _fadingCount;)
         {
+            var index = _fading[slot];
             float target = _settings.LevelOf(_states[index]);
             var current = _levels[index];
-            _levels[index] = current < target ? Math.Min(target, current + step) : Math.Max(target, current - step);
+            var next = current < target ? Math.Min(target, current + step) : Math.Max(target, current - step);
+            _levels[index] = next;
+            if (next == target)
+            {
+                // Arrived: the last fading cell takes this slot and is visited next.
+                _isFading[index] = false;
+                _fading[slot] = _fading[--_fadingCount];
+            }
+            else slot++;
         }
     }
 
@@ -108,6 +136,8 @@ public sealed class FogOfWarGrid
     public void Snap()
     {
         for (var index = 0; index < _levels.Length; index++) _levels[index] = _settings.LevelOf(_states[index]);
+        Array.Clear(_isFading);
+        _fadingCount = 0;
     }
 
     public bool InBounds(int cx, int cy) => (uint)cx < (uint)CellsX && (uint)cy < (uint)CellsY;

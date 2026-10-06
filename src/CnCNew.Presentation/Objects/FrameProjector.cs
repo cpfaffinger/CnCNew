@@ -59,6 +59,9 @@ public sealed class FrameProjector
     private readonly bool[] _claimed;
     private readonly bool[] _explored;
     private readonly bool[] _sceneryFogged;
+    // Where each scenery item stands, as the simulation's vision queries want it. Scenery never moves, so the conversion is done once.
+    private readonly Fixed[] _sceneryX;
+    private readonly Fixed[] _sceneryY;
     private readonly TurretTracker _turrets = new();
     private readonly SuspensionTracker _suspension = new();
     private readonly UnitConditionTracker _units = new();
@@ -80,9 +83,21 @@ public sealed class FrameProjector
         _claimed = new bool[_options.Scenery.Length];
         _explored = new bool[_options.Scenery.Length];
         _sceneryFogged = new bool[_options.Scenery.Length];
+        _sceneryX = new Fixed[_options.Scenery.Length];
+        _sceneryY = new Fixed[_options.Scenery.Length];
+        // Only a viewer asks the vision map about scenery.
+        if (_options.Viewer is not null)
+            foreach (var item in _options.Scenery)
+            {
+                _sceneryX[item.Index] = Fixed.FromDecimal((decimal)item.Position.X);
+                _sceneryY[item.Index] = Fixed.FromDecimal((decimal)item.Position.Y);
+            }
         _sceneryByTemplate = _options.Scenery.GroupBy(item => item.Visual.TemplateName, StringComparer.OrdinalIgnoreCase)
             .ToImmutableDictionary(group => group.Key, group => group.Select(item => item.Index).ToImmutableArray(), StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>A measuring tool's hook into <see cref="Advance"/> (told where its parts begin and end); null in the game.</summary>
+    public IPresentationPhaseObserver? PhaseObserver { get; set; }
 
     /// <summary>The last simulated tick captured (-1 before the first <see cref="Advance"/>).</summary>
     public long Tick { get; private set; } = -1;
@@ -146,7 +161,11 @@ public sealed class FrameProjector
         Tick = world.Tick - 1;
         _flashes.Advance(Tick);
 
+        var observer = PhaseObserver;
+        observer?.PhaseStarted(PresentationPhase.ProjectorAdvanceVisibleEntities);
         var entities = _options.Viewer is { } viewer ? world.EntitiesVisibleTo(viewer) : [..world.Entities.OrderBy(entity => entity.Id.Value)];
+        observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceVisibleEntities);
+        observer?.PhaseStarted(PresentationPhase.ProjectorAdvanceCapture);
         var ordered = ImmutableArray.CreateBuilder<Capture>(entities.Count);
         foreach (var entity in entities)
         {
@@ -159,6 +178,7 @@ public sealed class FrameProjector
             if (_known.Add(entity.Id.Value)) Claim(capture);
         }
         _currentOrdered = ordered.ToImmutable();
+        observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceCapture);
         if (world.Tick % 150 == 0)
         {
             _turrets.Prune(id => world.FindEntity(new EntityId(id)) is not null);
@@ -170,8 +190,12 @@ public sealed class FrameProjector
         }
         if (_options.Viewer is { } fogViewer)
         {
+            observer?.PhaseStarted(PresentationPhase.ProjectorAdvanceGhosts);
             UpdateGhosts(world, fogViewer);
+            observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceGhosts);
+            observer?.PhaseStarted(PresentationPhase.ProjectorAdvanceScenery);
             UpdateSceneryExploration(world, fogViewer);
+            observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceScenery);
         }
     }
 
@@ -188,8 +212,8 @@ public sealed class FrameProjector
         foreach (var item in _options.Scenery)
         {
             if (_claimed[item.Index]) continue;
-            var x = Fixed.FromDecimal((decimal)item.Position.X);
-            var y = Fixed.FromDecimal((decimal)item.Position.Y);
+            var x = _sceneryX[item.Index];
+            var y = _sceneryY[item.Index];
             var newlyExplored = false;
             if (!_explored[item.Index])
             {
@@ -278,8 +302,10 @@ public sealed class FrameProjector
         var alt = _turrets.Update(entity, 1);
         var chassis = _suspension.Update(entity, visual, world, _options.SnapDistance) ?? ChassisPose.Level;
         conditions = conditions.Union(_units.Update(entity, world, world.Tick - 1, _turrets));
+        // The selected states are a function of the visual and the condition bits alone; most objects keep both from one tick to the next.
+        var selections = previous is not null && ReferenceEquals(previous.Visual, visual) && previous.Conditions == conditions ? previous.Selections : Select(visual, conditions);
         return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
-            ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, Select(visual, conditions),
+            ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, selections,
             entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis);
     }
 
@@ -322,9 +348,16 @@ public sealed class FrameProjector
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 
     internal static ImmutableArray<DrawModuleSelection> Select(ObjectVisual visual, ModelConditionSet conditions)
-        => [..visual.Draws.Select(draw => BestStateSelector.FindBest(draw, conditions) is var index and >= 0
-            ? new DrawModuleSelection(index, draw.States[index].Model)
-            : new DrawModuleSelection(-1, null))];
+    {
+        var draws = visual.Draws;
+        var selections = ImmutableArray.CreateBuilder<DrawModuleSelection>(draws.Length);
+        foreach (var draw in draws)
+        {
+            var index = BestStateSelector.FindBest(draw, conditions);
+            selections.Add(index >= 0 ? new DrawModuleSelection(index, draw.States[index].Model) : new DrawModuleSelection(-1, null));
+        }
+        return selections.MoveToImmutable();
+    }
 
     private static ModelConditionSet BaseConditions(FrameProjectorOptions options)
     {
