@@ -67,7 +67,7 @@ internal sealed class MovementRecorder(SimulationWorld world, TickRecorder ticks
             summary[$"move_{kind}_us_per_tick"] = (Us(_elapsed[index]) / Math.Max(1, steps)).ToString("F1", Invariant);
         }
 
-        long expansions = 0, pushes = 0, searchTicks = 0, cached = 0, cachedExpansions = 0, cachedTicks = 0;
+        long expansions = 0, pushes = 0, searchTicks = 0, cached = 0, cachedExpansions = 0, cachedTicks = 0, proved = 0, provedExpansions = 0, reverseCells = 0, provedTicks = 0;
         var byStatus = new SortedDictionary<string, (long Count, long Expansions, long Elapsed)>(StringComparer.Ordinal);
         var byCaller = new SortedDictionary<string, (long Count, long Expansions, long Elapsed)>(StringComparer.Ordinal);
         var byTick = new Dictionary<long, (int Count, long Expansions, long Elapsed)>();
@@ -93,7 +93,14 @@ internal sealed class MovementRecorder(SimulationWorld world, TickRecorder ticks
             expansions += info.Expansions;
             pushes += info.Pushes;
             searchTicks += search.Elapsed;
-            var status = info.Status + (info.TemporaryCells > 0 ? " (around blockers)" : string.Empty) + (info.Expansions >= 200_000 ? " budget exhausted" : string.Empty);
+            reverseCells += info.ReverseCells;
+            if (info.ProvedUnreachable)
+            {
+                proved++;
+                provedExpansions += info.Expansions;
+                provedTicks += search.Elapsed;
+            }
+            var status = (info.ProvedUnreachable ? "No path (proved)" : info.Status.ToString()) + (info.TemporaryCells > 0 ? " (around blockers)" : string.Empty) + (info.Expansions >= 200_000 ? " budget exhausted" : string.Empty);
             Add(byStatus, status, info.Expansions, search.Elapsed);
             Add(byCaller, search.Module, info.Expansions, search.Elapsed);
             var tick = byTick.GetValueOrDefault(search.Tick);
@@ -114,6 +121,9 @@ internal sealed class MovementRecorder(SimulationWorld world, TickRecorder ticks
         Console.WriteLine($"  Path searches: {_searches.Count} ({(double)_searches.Count / Math.Max(1, steps):F3} per tick), cells expanded {expansions} ({(double)expansions / Math.Max(1, _searches.Count):F0} per search, {(double)expansions / Math.Max(1, steps):F0} per tick), heap pushes {pushes}; "
                           + $"{Us(searchTicks) * 1000 / Math.Max(1, expansions):F0} ns per expanded cell.");
         Console.WriteLine($"  Answered from the grid's memory (same start cell, goal cell and surfaces, footprints unchanged): {cached} of {_searches.Count} searches, {cachedExpansions} cells not expanded again, {Us(cachedTicks) / 1000:F1} ms spent on them.");
+        Console.WriteLine($"  Stopped because the goal was proved unreachable (searches that only count when they arrive): {proved} searches after {provedExpansions} expanded cells, {Us(provedTicks) / 1000:F1} ms; cells of the floods from the goal, all such searches: {reverseCells}.");
+        summary["move_proved_unreachable"] = proved.ToString(Invariant);
+        summary["move_reverse_cells"] = reverseCells.ToString(Invariant);
         summary["move_cached"] = cached.ToString(Invariant);
         summary["move_cached_expansions"] = cachedExpansions.ToString(Invariant);
         summary["move_searches"] = _searches.Count.ToString(Invariant);

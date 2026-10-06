@@ -629,6 +629,10 @@ static partial class Tests
                     var expected = PerfAsk(reference, query);
                     var actual = PerfAsk(grid, query);
                     Check.That(SamePath(actual, expected), $"Map {map}, round {round}, query {index} ({query.StartX},{query.StartY}) -> ({query.GoalX},{query.GoalY}) {query.Surfaces}, {query.Blocks.Length} blockers: {PathText(actual)} instead of {PathText(expected)}.");
+                    // The search that only counts when it arrives: the same path when there is one, nothing otherwise.
+                    var arriving = grid.FindPathToGoal(query.StartX, query.StartY, query.GoalX, query.GoalY, query.Surfaces, query.Blocks);
+                    Check.That(expected.Status == PathStatus.Found ? arriving is not null && SamePath(arriving, expected) : arriving is null,
+                        $"Map {map}, round {round}, query {index}: the arriving-only search gives {(arriving is null ? "nothing" : PathText(arriving))}, the search {PathText(expected)}.");
                     statuses[(int)expected.Status]++;
                     if (query.Blocks.Length > 0) withBlockers++;
                     if (grid.IsBlockedByObstacle(TerrainMap.CellOf(query.StartX), TerrainMap.CellOf(query.StartY)) || grid.IsBlockedByObstacle(TerrainMap.CellOf(query.GoalX), TerrainMap.CellOf(query.GoalY))) fromObstacle++;
@@ -665,7 +669,32 @@ static partial class Tests
             var actual = PerfAsk(grid, query);
             Check.That(SamePath(actual, expected), $"Budget query {index}: {PathText(actual)} instead of {PathText(expected)}.");
             Check.That(SamePath(PerfAsk(grid, query), expected), $"Budget query {index}, asked again: the same path.");
+            Check.That(grid.FindPathToGoal(startX, startY, goalX, goalY, LocomotorSurfaces.Ground, blocks) is null, $"Budget query {index}: no path arrives behind the wall.");
         }
         Check.That(atBudget >= 6, $"The searches ran into the budget ({atBudget} of 8).");
+
+        // Long searches that do arrive, or end at a goal sealed off by its own blockers: the flood from the goal runs for many strides next to the search and must not change its answer.
+        var longArrivals = 0;
+        var sealedGoals = 0;
+        for (var index = 0; index < 24; index++)
+        {
+            var startX = Fixed.FromInt(20 + random.Below(600));
+            var startY = Fixed.FromInt(20 + random.Below(4_300));
+            var goalX = Fixed.FromInt(3_200 + random.Below(700));
+            var goalY = Fixed.FromInt(20 + random.Below(4_300));
+            // Every third goal stands in a closed ring of blockers two cells out (the cells next to the goal itself always stay open).
+            var blocks = new List<(Fixed X, Fixed Y, Fixed Radius)> { (startX + Fixed.FromInt(60), startY, Fixed.FromInt(25)) };
+            if (index % 3 == 0)
+                for (var step = 0; step < 16; step++)
+                    blocks.Add((goalX + FixedTrig.Cos(FixedTrig.TwoPi * step / Fixed.FromInt(16)) * Fixed.FromInt(35), goalY + FixedTrig.Sin(FixedTrig.TwoPi * step / Fixed.FromInt(16)) * Fixed.FromInt(35), Fixed.FromInt(12)));
+            var expected = reference.FindPath(startX, startY, goalX, goalY, LocomotorSurfaces.Ground, blocks);
+            var arriving = grid.FindPathToGoal(startX, startY, goalX, goalY, LocomotorSurfaces.Ground, blocks);
+            Check.That(expected.Status == PathStatus.Found ? arriving is not null && SamePath(arriving, expected) : arriving is null,
+                $"Long query {index}: the arriving-only search gives {(arriving is null ? "nothing" : PathText(arriving))}, the search {PathText(expected)}.");
+            Check.That(SamePath(grid.FindPath(startX, startY, goalX, goalY, LocomotorSurfaces.Ground, blocks), expected), $"Long query {index}: the plain search around the blockers.");
+            if (expected.Status == PathStatus.Found && reference.Expansions > 4_000) longArrivals++;
+            if (expected.Status != PathStatus.Found && index % 3 == 0) sealedGoals++;
+        }
+        Check.That(longArrivals >= 8 && sealedGoals >= 4, $"Long arrivals and sealed goals were among the queries ({longArrivals}, {sealedGoals}).");
     }
 }

@@ -80,6 +80,12 @@ public sealed class NavigationGrid
     private PathPoint[] _points = new PathPoint[32];
     private long[] _heap = new long[256];
     private int _heapCount;
+    // The flood from the goal of a search that only wants a path that arrives (FindPathToGoal).
+    private const int ReverseStride = 1024;
+    private int[]? _reverseStamp;
+    private int _reverseHead;
+    private int _reverseTail;
+    private int _reverseCells;
 
     // The results of the searches without temporary blockers since the footprints last changed. A search is a function of its start cell, its goal cell, the surfaces, the terrain
     // (which never changes) and the footprints: as long as no footprint was added or removed, the same question has the same answer, whoever asks and in whatever tick. Only the
@@ -349,7 +355,19 @@ public sealed class NavigationGrid
     /// touching a blocker, or a goal beside one, is not walled in.
     /// </summary>
     public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks)
-        => Run(startX, startY, goalX, goalY, surfaces, temporaryBlocks);
+        => Run(startX, startY, goalX, goalY, surfaces, temporaryBlocks, false)!;
+
+    /// <summary>
+    /// The path of <see cref="FindPath(Fixed, Fixed, Fixed, Fixed, LocomotorSurfaces, IReadOnlyList{ValueTuple{Fixed, Fixed, Fixed}})"/> if it reaches the goal
+    /// (<see cref="PathStatus.Found"/>), else <see langword="null"/>: for a caller that has no use for a path that ends short.
+    /// <para>
+    /// The answer is the same as running that search and looking at its status. What differs is the work when the goal cannot be reached at all: the plain search then expands every
+    /// cell it can reach, up to its budget, only to report a partial path the caller drops. Here a flood from the goal runs alongside (one cell per expanded cell, in strides); it
+    /// walks the same moves backwards, and when it runs dry without having met the start, no path exists and the search stops. A goal cell that is not open ends it before it starts.
+    /// </para>
+    /// </summary>
+    public PathResult? FindPathToGoal(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks)
+        => Run(startX, startY, goalX, goalY, surfaces, temporaryBlocks, true) is { Status: PathStatus.Found } found ? found : null;
 
     /// <summary>
     /// A* over the eight-connected cell grid (costs 10 and 14, no corner cutting, ties broken by cell index). The start cell is
@@ -358,9 +376,10 @@ public sealed class NavigationGrid
     /// (ties: lower cost, lower index).
     /// </summary>
     public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces)
-        => Run(startX, startY, goalX, goalY, surfaces, null);
+        => Run(startX, startY, goalX, goalY, surfaces, null, false)!;
 
-    private PathResult Run(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)>? temporaryBlocks)
+    /// <summary>One search. With <paramref name="arrivingOnly"/> the result is <see langword="null"/> when the goal was proved unreachable before the search ended.</summary>
+    private PathResult? Run(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)>? temporaryBlocks, bool arrivingOnly)
     {
         var start = ClampedCell(startX, startY);
         var goal = ClampedCell(goalX, goalY);
@@ -393,21 +412,22 @@ public sealed class NavigationGrid
         }
 
         _probeExpansions = _probePushes = _probePathCells = 0;
-        PathResult result;
+        _reverseCells = 0;
+        PathResult? result;
         var escapeCells = 0;
         var temporaryCells = 0;
         try
         {
             if (temporaryBlocks is not null) MarkTemporary(start.X, start.Y, goal.X, goal.Y, temporaryBlocks);
             temporaryCells = _temporaryCount;
-            result = Search(start.X, start.Y, goal.X, goal.Y, goalX, goalY, surfaces);
+            result = Search(start.X, start.Y, goal.X, goal.Y, goalX, goalY, surfaces, arrivingOnly);
             escapeCells = _escapeCount;
         }
         finally
         {
             ClearMarks();
         }
-        if (remember)
+        if (remember && result is not null)
         {
             if (_memo.Count >= MemoCapacity) _memo.Clear();
             _memo[key] = new MemoEntry(result, _probeExpansions, _probePushes, escapeCells, _probePathCells);
@@ -415,7 +435,8 @@ public sealed class NavigationGrid
         if (probe is not null)
         {
             probe.Ended(MovementWork.PathSearch);
-            probe.PathSearched(new PathSearchInfo(startIndex, goalIndex, surfaces, result.Status, _probeExpansions, _probePushes, escapeCells, temporaryCells, _probePathCells, result.Points.Length, false));
+            probe.PathSearched(new PathSearchInfo(startIndex, goalIndex, surfaces, result?.Status ?? PathStatus.Partial, _probeExpansions, _probePushes, escapeCells, temporaryCells, _probePathCells,
+                result?.Points.Length ?? 0, false, result is null, _reverseCells));
         }
         return result;
     }
@@ -424,7 +445,7 @@ public sealed class NavigationGrid
     private int _probePushes;
     private int _probePathCells;
 
-    private PathResult Search(int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces)
+    private PathResult? Search(int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, bool arrivingOnly)
     {
         var cellsX = _cellsX;
         var cellsY = _cellsY;
@@ -446,6 +467,16 @@ public sealed class NavigationGrid
         var open = _open;
         var state = _state;
         var search = _search;
+        // A search that only counts when it arrives: the goal must be a cell the search may enter, and the flood from the goal must not run dry (see FindPathToGoal).
+        var reverse = arrivingOnly;
+        if (reverse)
+        {
+            if (!open[state[goalIndex]]) return null;
+            _reverseStamp ??= new int[search.Length];
+            _reverseStamp[goalIndex] = stamp;
+            _reverseHead = _reverseTail = 0;
+            Enqueue(ref _reverseTail, goalIndex);
+        }
         ref var startCell = ref search[startIndex];
         startCell.Cost = 0;
         startCell.Parent = -1;
@@ -460,6 +491,16 @@ public sealed class NavigationGrid
         // A cell taken from the heap a second time (it was pushed again with a lower cost before it was expanded) counts toward the budget like an expansion; it always did.
         for (; _heapCount > 0 && expansions < ExpansionBudget; expansions++)
         {
+            if (reverse && (expansions & (ReverseStride - 1)) == ReverseStride - 1)
+            {
+                var verdict = AdvanceReverse(startIndex, stamp, ReverseStride);
+                if (verdict < 0)
+                {
+                    _probeExpansions = expansions;
+                    return null;
+                }
+                if (verdict > 0) reverse = false;
+            }
             var current = (int)(Pop() & 0xFFFFFFFFL);
             ref var cell = ref search[current];
             if (cell.ClosedStamp == stamp) continue;
@@ -516,6 +557,41 @@ public sealed class NavigationGrid
         }
         if (reached) _points[points - 1] = new PathPoint(goalX, goalY);
         return new PathResult(reached ? PathStatus.Found : PathStatus.Partial, ImmutableArray.Create(_points, 0, points));
+    }
+
+    /// <summary>
+    /// Continues the flood from the goal by up to <paramref name="budget"/> cells: every cell from which the goal can be reached by the moves of the search (into an open cell; a
+    /// diagonal move only between two open cells). Those moves are the same in both directions, except that the start cell need not be open itself. Returns 1 when the start is among
+    /// those cells (a path exists), -1 when the flood is complete without it (none exists), 0 when it is not done yet.
+    /// </summary>
+    private int AdvanceReverse(int startIndex, int stamp, int budget)
+    {
+        var cellsX = _cellsX;
+        var cellsY = _cellsY;
+        var open = _open;
+        var state = _state;
+        var seen = _reverseStamp!;
+        while (_reverseHead < _reverseTail && budget-- > 0)
+        {
+            var cell = _queue[_reverseHead++];
+            _reverseCells++;
+            var y = cell / cellsX;
+            var x = cell - y * cellsX;
+            for (var direction = 0; direction < 8; direction++)
+            {
+                var nx = x + StepX[direction];
+                var ny = y + StepY[direction];
+                if ((uint)nx >= (uint)cellsX || (uint)ny >= (uint)cellsY) continue;
+                // A diagonal move passes between the two cells that share a side with both ends.
+                if (direction >= 4 && (!open[state[y * cellsX + nx]] || !open[state[ny * cellsX + x]])) continue;
+                var from = ny * cellsX + nx;
+                if (from == startIndex) return 1;
+                if (seen[from] == stamp || !open[state[from]]) continue;
+                seen[from] = stamp;
+                Enqueue(ref _reverseTail, from);
+            }
+        }
+        return _reverseHead == _reverseTail ? -1 : 0;
     }
 
     /// <summary>One step of the search from <paramref name="current"/> to its open neighbour <paramref name="next"/>: records the cheaper way and queues the neighbour.</summary>
