@@ -37,6 +37,15 @@ public sealed partial class SimulationWorld
     public (Fixed Dx, Fixed Dy) AvoidLocalBlockers(Entity mover, Fixed dx, Fixed dy)
     {
         if (Navigation is null || (dx == Fixed.Zero && dy == Fixed.Zero)) return (dx, dy);
+        if (Navigation.Probe is not { } probe) return AvoidLocalBlockersCore(mover, dx, dy);
+        probe.Started(CnCNew.Simulation.Terrain.MovementWork.LocalAvoidance);
+        var result = AvoidLocalBlockersCore(mover, dx, dy);
+        probe.Ended(CnCNew.Simulation.Terrain.MovementWork.LocalAvoidance);
+        return result;
+    }
+
+    private (Fixed Dx, Fixed Dy) AvoidLocalBlockersCore(Entity mover, Fixed dx, Fixed dy)
+    {
         // The object an approach order aims at is never an obstacle (the reference's AI ignores its goal object when it steers), or a hijacker could never touch its car.
         var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
         if (!StepBlocked(mover, dx, dy, goal)) return (dx, dy);
@@ -58,18 +67,101 @@ public sealed partial class SimulationWorld
     public IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAhead(Entity mover, Fixed dx, Fixed dy)
     {
         if (Navigation is null || (dx == Fixed.Zero && dy == Fixed.Zero)) return [];
-        var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
-        var moverRadius = mover.Template.BoundingCircleRadius;
-        var blocked = false;
-        foreach (var other in Entities)
+        if (Navigation.Probe is not { } probe) return StationaryBlockersAheadCore(mover, dx, dy);
+        probe.Started(CnCNew.Simulation.Terrain.MovementWork.StationaryBlockers);
+        var result = StationaryBlockersAheadCore(mover, dx, dy);
+        probe.Ended(CnCNew.Simulation.Terrain.MovementWork.StationaryBlockers);
+        return result;
+    }
+
+    // The bounding circle of a template (ObjectTemplate.BoundingCircleRadius: a string comparison and, for a box, a square root), computed once per template of this world and looked
+    // up by the template's index. Every circle test of a movement step reads it for both objects of a pair. The table belongs to the world and not to the template, because the
+    // catalogs are hashed field by field into the input manifest; a template is immutable, so the value cannot go stale.
+    private Fixed[] _circleRadius = new Fixed[256];
+    private bool[] _circleKnown = new bool[256];
+
+    private Fixed CircleRadius(Entity entity)
+    {
+        var index = entity.Template.Index;
+        var known = _circleKnown;
+        return (uint)index < (uint)known.Length && known[index] ? _circleRadius[index] : RememberCircleRadius(entity.Template);
+    }
+
+    private Fixed RememberCircleRadius(Templates.ObjectTemplate template)
+    {
+        var index = template.Index;
+        if (index < 0) return template.BoundingCircleRadius;
+        if (index >= _circleKnown.Length)
         {
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
-            var limit = moverRadius + other.Template.BoundingCircleRadius + StandingBlockerMargin;
-            // The step is the look-ahead; the line from the mover to its end is tested at four points.
-            for (var sample = 1; sample <= 4 && !blocked; sample++)
+            var size = Math.Max(index + 1, _circleKnown.Length * 2);
+            Array.Resize(ref _circleRadius, size);
+            Array.Resize(ref _circleKnown, size);
+        }
+        var radius = template.BoundingCircleRadius;
+        _circleRadius[index] = radius;
+        _circleKnown[index] = true;
+        return radius;
+    }
+
+    // The answer of StationaryBlockersAhead, reused from call to call: the caller plans its detour at once and keeps nothing.
+    private readonly List<(Fixed X, Fixed Y, Fixed Radius)> _stationaryCircles = [];
+    private readonly Fixed[] _sampleX = new Fixed[4];
+    private readonly Fixed[] _sampleY = new Fixed[4];
+
+    // Before the exact circle test (rounded fixed-point squares) a pair is dropped when one coordinate alone is further apart than the limit plus one unit. The unit of slack is far more
+    // than the rounding of a product (half of 1/65536), so a pair dropped here fails the exact test as well, whether that one compares with "<" or "<=". A negative limit skips the shortcut.
+    private static readonly long ScanSlack = Fixed.One.Raw;
+
+    private static bool FurtherThan(Fixed a, Fixed b, Fixed limit)
+    {
+        var difference = a.Raw - b.Raw;
+        if (difference < 0) difference = -difference;
+        return limit.Raw >= 0 && difference > limit.Raw + ScanSlack;
+    }
+
+    /// <summary>A unit that stands in the way: one of <see cref="_mobiles"/> (so it has a locomotor) that is alive, not carried, not the mover or its goal, and neither moving nor ordered to.</summary>
+    // The widest bounding circle among the mobile objects this world has seen (as a magnitude, it only grows). With it a scan can drop an object by its position alone, before it
+    // reads anything else of it: an object further away on one axis than the mover's radius plus this radius plus the slack fails the exact test with its own, smaller radius too.
+    private long _widestMobile;
+
+    private static long Magnitude(Fixed value) => value.Raw < 0 ? -value.Raw : value.Raw;
+
+    private static bool StandsStill(Entity other, Entity mover, EntityId goal)
+        => !(other.HasMoveTarget || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || other.Speed != Fixed.Zero);
+
+    private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadCore(Entity mover, Fixed dx, Fixed dy)
+    {
+        var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
+        var moverRadius = CircleRadius(mover);
+        // The step is the look-ahead; the line from the mover to its end is tested at four points. They and their bounding box depend on the mover only.
+        Fixed minX = Fixed.MaxValue, maxX = Fixed.MinValue, minY = Fixed.MaxValue, maxY = Fixed.MinValue;
+        for (var sample = 1; sample <= 4; sample++)
+        {
+            var x = mover.X + dx * Fixed.FromInt(sample) / Fixed.FromInt(4);
+            var y = mover.Y + dy * Fixed.FromInt(sample) / Fixed.FromInt(4);
+            _sampleX[sample - 1] = x;
+            _sampleY[sample - 1] = y;
+            minX = Fixed.Min(minX, x);
+            maxX = Fixed.Max(maxX, x);
+            minY = Fixed.Min(minY, y);
+            maxY = Fixed.Max(maxY, y);
+        }
+
+        var blocked = false;
+        var mobiles = _mobiles;
+        var reach = Magnitude(moverRadius) + _widestMobile + Magnitude(StandingBlockerMargin) + ScanSlack;
+        long nearX = minX.Raw - reach, farX = maxX.Raw + reach, nearY = minY.Raw - reach, farY = maxY.Raw + reach;
+        for (var index = 0; index < mobiles.Count; index++)
+        {
+            var other = mobiles[index];
+            if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
+            if (!StandsStill(other, mover, goal)) continue;
+            var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
+            if (limit.Raw >= 0 && (other.X.Raw < minX.Raw - limit.Raw - ScanSlack || other.X.Raw > maxX.Raw + limit.Raw + ScanSlack || other.Y.Raw < minY.Raw - limit.Raw - ScanSlack || other.Y.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
+            for (var sample = 0; sample < 4 && !blocked; sample++)
             {
-                var ddx = other.X - (mover.X + dx * Fixed.FromInt(sample) / Fixed.FromInt(4));
-                var ddy = other.Y - (mover.Y + dy * Fixed.FromInt(sample) / Fixed.FromInt(4));
+                var ddx = other.X - _sampleX[sample];
+                var ddy = other.Y - _sampleY[sample];
                 if (ddx * ddx + ddy * ddy < limit * limit) blocked = true;
             }
 
@@ -77,15 +169,18 @@ public sealed partial class SimulationWorld
         }
 
         if (!blocked) return [];
-        var circles = new List<(Fixed X, Fixed Y, Fixed Radius)>();
+        var circles = _stationaryCircles;
+        circles.Clear();
         var around = Fixed.FromInt(150);
-        foreach (var other in Entities)
+        var aroundSquared = around * around;
+        for (var index = 0; index < mobiles.Count; index++)
         {
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
+            var other = mobiles[index];
+            if (!StandsStill(other, mover, goal) || FurtherThan(other.X, mover.X, around) || FurtherThan(other.Y, mover.Y, around)) continue;
             var ddx = other.X - mover.X;
             var ddy = other.Y - mover.Y;
-            if (ddx * ddx + ddy * ddy > around * around) continue;
-            circles.Add((other.X, other.Y, other.Template.BoundingCircleRadius + moverRadius + StandingBlockerMargin));
+            if (ddx * ddx + ddy * ddy > aroundSquared) continue;
+            circles.Add((other.X, other.Y, CircleRadius(other) + moverRadius + StandingBlockerMargin));
         }
 
         return circles;
@@ -96,11 +191,17 @@ public sealed partial class SimulationWorld
     {
         var x = mover.X + dx;
         var y = mover.Y + dy;
-        var moverRadius = mover.Template.BoundingCircleRadius;
-        foreach (var other in Entities)
+        var moverRadius = CircleRadius(mover);
+        var mobiles = _mobiles;
+        var reach = Magnitude(moverRadius) + _widestMobile + ScanSlack;
+        long nearX = x.Raw - reach, farX = x.Raw + reach, nearY = y.Raw - reach, farY = y.Raw + reach;
+        for (var index = 0; index < mobiles.Count; index++)
         {
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid) continue;
-            var limit = moverRadius + other.Template.BoundingCircleRadius;
+            var other = mobiles[index];
+            if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
+            var limit = moverRadius + CircleRadius(other);
+            if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
             var ddx = other.X - x;
             var ddy = other.Y - y;
             if (ddx * ddx + ddy * ddy < limit * limit) return true;
@@ -111,15 +212,32 @@ public sealed partial class SimulationWorld
     /// <inheritdoc cref="IWorldServices.ResolveFootprintCollisions"/>
     public void ResolveFootprintCollisions(Entity mover, Fixed stepX, Fixed stepY)
     {
+        if (Navigation?.Probe is not { } probe)
+        {
+            ResolveFootprintCollisionsCore(mover, stepX, stepY);
+            return;
+        }
+        probe.Started(CnCNew.Simulation.Terrain.MovementWork.FootprintCollisions);
+        ResolveFootprintCollisionsCore(mover, stepX, stepY);
+        probe.Ended(CnCNew.Simulation.Terrain.MovementWork.FootprintCollisions);
+    }
+
+    private void ResolveFootprintCollisionsCore(Entity mover, Fixed stepX, Fixed stepY)
+    {
         if (mover.EffectivelyDead) return;
         if (mover.Template.CrusherLevel > 0)
-            foreach (var other in Entities)
+        {
+            // Only an object with a ToppleUpdate or a SquishCollide module can be toppled or squished; for every other object the two calls below did nothing.
+            var targets = _crushTargets;
+            for (var index = 0; index < targets.Count; index++)
             {
+                var other = targets[index];
                 if (other.Id == mover.Id || other.EffectivelyDead) continue;
                 if (!FootprintsOverlap(mover, other)) continue;
                 TryTopple(mover, other);
                 TrySquish(mover, other, stepX, stepY);
             }
+        }
         DeliverCollisions(mover);
     }
 
@@ -128,18 +246,49 @@ public sealed partial class SimulationWorld
     /// <summary>Every registered entity that has at least one <see cref="ICollideModule"/> (crates, hijackers, saboteurs, ...), in registration order.</summary>
     private readonly List<Entity> _collidables = [];
 
+    /// <summary>
+    /// Every registered entity with a locomotor, in ascending id order: the only objects the avoidance and standing-blocker scans of a movement step look at. An entity's template
+    /// never changes, so membership is decided once, when the entity is registered.
+    /// </summary>
+    private readonly List<Entity> _mobiles = [];
+
+    /// <summary>Every registered entity that has a <see cref="ToppleUpdate"/> or a <see cref="SquishCollide"/> module, in ascending id order: what a crusher can topple or squish.</summary>
+    private readonly List<Entity> _crushTargets = [];
+
+    // Kept in ascending id order, so a live world and one restored from a snapshot (which registers in id order) visit the entities of a list in the same order: the order of the entity table.
+    private static void InsertById(List<Entity> list, Entity entity)
+    {
+        var index = list.Count;
+        while (index > 0 && list[index - 1].Id.Value > entity.Id.Value) index--;
+        list.Insert(index, entity);
+    }
+
+    private static bool IsCrushTarget(Entity entity)
+    {
+        foreach (var module in entity.ModuleArray)
+            if (module is ToppleUpdate or SquishCollide) return true;
+        return false;
+    }
+
+    /// <summary>Called when an entity enters the entity table (the name is older than the other two lists).</summary>
     private void TrackCollidable(Entity entity)
     {
         entity.CollideModules = [..entity.ModuleArray.OfType<ICollideModule>()];
+        if (entity.Template.Locomotor is not null)
+        {
+            InsertById(_mobiles, entity);
+            _widestMobile = Math.Max(_widestMobile, Magnitude(CircleRadius(entity)));
+        }
+        if (IsCrushTarget(entity)) InsertById(_crushTargets, entity);
         if (entity.CollideModules.Length == 0) return;
-        // Kept in ascending id order, so a live world and one restored from a snapshot (which registers in id order) visit overlapping holders in the same order.
-        var index = _collidables.Count;
-        while (index > 0 && _collidables[index - 1].Id.Value > entity.Id.Value) index--;
-        _collidables.Insert(index, entity);
+        InsertById(_collidables, entity);
     }
 
+    /// <summary>Called when an entity leaves the entity table.</summary>
     private void UntrackCollidable(Entity entity)
     {
+        if (entity.Template.Locomotor is not null) _mobiles.Remove(entity);
+        if (IsCrushTarget(entity)) _crushTargets.Remove(entity);
         if (entity.CollideModules.Length > 0) _collidables.Remove(entity);
     }
 
@@ -151,7 +300,7 @@ public sealed partial class SimulationWorld
     private void DeliverCollisions(Entity mover)
     {
         if (mover.CollideModules.Length > 0)
-            foreach (var other in Entities)
+            foreach (var other in _entities)
             {
                 if (other.Id == mover.Id || !CanCollide(other) || !FootprintsOverlap(mover, other)) continue;
                 CallCollide(mover, other);
@@ -176,9 +325,10 @@ public sealed partial class SimulationWorld
         }
     }
 
-    private static bool FootprintsOverlap(Entity a, Entity b)
+    private bool FootprintsOverlap(Entity a, Entity b)
     {
-        var limit = a.Template.BoundingCircleRadius + b.Template.BoundingCircleRadius;
+        var limit = CircleRadius(a) + CircleRadius(b);
+        if (FurtherThan(a.X, b.X, limit) || FurtherThan(a.Y, b.Y, limit)) return false;
         var dx = a.X - b.X;
         var dy = a.Y - b.Y;
         return dx * dx + dy * dy <= limit * limit;
@@ -188,9 +338,13 @@ public sealed partial class SimulationWorld
     private void TryTopple(Entity mover, Entity other)
     {
         if (mover.Template.CrusherLevel <= 1) return;
-        var topple = other.Modules.OfType<ToppleUpdate>().FirstOrDefault(module => module.IsAbleToBeToppled);
-        if (topple is null) return;
-        topple.ApplyTopplingForce(this, other.X - mover.X, other.Y - mover.Y, mover.Speed);
+        // The first ToppleUpdate that can still be toppled.
+        foreach (var module in other.ModuleArray)
+        {
+            if (module is not ToppleUpdate { IsAbleToBeToppled: true } topple) continue;
+            topple.ApplyTopplingForce(this, other.X - mover.X, other.Y - mover.Y, mover.Speed);
+            return;
+        }
     }
 
     /// <summary>
@@ -203,9 +357,12 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void TrySquish(Entity mover, Entity other, Fixed stepX, Fixed stepY)
     {
-        if (other.Modules.OfType<SquishCollide>().FirstOrDefault() is null) return;
+        var squishable = false;
+        foreach (var module in other.ModuleArray)
+            if (module is SquishCollide) { squishable = true; break; }
+        if (!squishable) return;
         if (RelationshipOf(other.Owner, mover.Owner) == Relationship.Allies) return;
-        var limit = mover.Template.BoundingCircleRadius + SquishVictimRadius;
+        var limit = CircleRadius(mover) + SquishVictimRadius;
         var dx = other.X - mover.X;
         var dy = other.Y - mover.Y;
         if (dx * dx + dy * dy > limit * limit) return;

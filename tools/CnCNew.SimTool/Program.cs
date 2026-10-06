@@ -85,6 +85,7 @@ try
         "perf" when args.Length >= 2 => CnCNew.SimTool.PerfCommand.Skirmish(args, CompileShipped),
         "perf-mission" when args.Length >= 2 => CnCNew.SimTool.PerfCommand.Mission(args, CompileShipped),
         "perf-compare" => CnCNew.SimTool.PerfCompareCommand.Run(args),
+        "path-bench" when args.Length >= 2 => CnCNew.SimTool.PathBench.Run(args),
         _ => Fail(Usage),
     };
 }

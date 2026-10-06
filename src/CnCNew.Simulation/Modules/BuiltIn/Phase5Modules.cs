@@ -1184,8 +1184,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private void ReplanAround(NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)
     {
         _blockerReplanTick = tick;
-        var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, blockers);
-        if (result.Status != PathStatus.Found || result.Points.IsDefaultOrEmpty) return;
+        // Only a detour that arrives replaces the path: the grid may stop as soon as it knows there is none.
+        var result = navigation.FindPathToGoal(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, blockers);
+        if (result is null || result.Points.IsDefaultOrEmpty) return;
         _path.Clear();
         _path.AddRange(result.Points);
         _pathIndex = 0;
