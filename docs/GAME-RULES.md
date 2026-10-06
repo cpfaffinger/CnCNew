@@ -8,6 +8,8 @@ und Spawnern (§6e), Reparatur (§6f), Erfahrung und Veteranenstufen (§6h) sowi
 abgeschlossen, weil Supply, Erfahrung und Teams stehen und der Referenzmatch auf Retail-Daten mit 0 übersprungenen
 Startobjekten läuft (§7a); die bewussten Grenzen stehen in §10, der Folgeauftrag stand in `docs/HANDOFF-PHASE7.md` (Phase 6 ist erledigt, der nächste Auftrag ist `docs/HANDOFF-PHASE8.md`).
 
+**Einheit „Tick“ in diesem Dokument (Phase 20):** Die Tickrate ist ein Wert der Welt (`docs/SIMULATION-CORE.md` §1, `docs/TICKRATE-MIGRATION.md`). Jede Tickangabe hier – „alle 15 Ticks“, „nach 300 Ticks“, „3 Ticks“ – ist ein Wert **bei 30 Hz** und meint Bilder des Originals (1/30 s): bei 60 und 120 Hz sind es doppelt bzw. viermal so viele Ticks und dieselbe Spielzeit. Umrechnungen „Millisekunden mit 30 Ticks je Sekunde“ heißen genau: auf ganze Bilder des Originals aufgerundet, mal Rate/30. Namen im Code, die hier noch als `…Ticks` stehen, enden seit Phase 20 auf `Frames`, wo sie eine Konstante in Bildern sind (`SaleDurationFrames`, `UpdateRateFrames` …). Was sich bei 60 Hz anders verhält, steht nicht hier, sondern in `docs/TICKRATE-MIGRATION.md` §5.
+
 Alle Regeln laufen innerhalb der bestehenden Tickphasen (`SIMULATION-CORE.md` §4): neue Befehle werden in Phase 1
 ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt keine zusätzliche Tickphase.
 
