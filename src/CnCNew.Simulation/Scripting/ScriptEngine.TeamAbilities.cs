@@ -26,7 +26,7 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<int, int> _teamWander = [];
     private readonly SortedDictionary<int, int> _rankLevel = [];
     private readonly SortedSet<uint> _unmanned = [];
-    private readonly SortedDictionary<string, int> _priorityDelta = [];
+    private readonly SortedDictionary<string, int> _priorityDelta = new(StringComparer.Ordinal);
     private readonly SortedDictionary<uint, string> _buttonHunts = [];
     private readonly SortedDictionary<uint, long> _buttonHuntNext = [];
     private int _rankLimit = -1;

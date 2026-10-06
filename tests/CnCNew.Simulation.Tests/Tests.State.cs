@@ -346,35 +346,11 @@ static partial class Tests
 
     public static void SourceRules()
     {
-        var root = AppContext.BaseDirectory;
-        while (root is not null && !File.Exists(Path.Combine(root, "CnCNew.slnx"))) root = Path.GetDirectoryName(root);
-        Check.That(root is not null, "Repository root not found.");
-        var source = Path.Combine(root!, "src", "CnCNew.Simulation");
-        var forbidden = new (string Name, Regex Pattern)[]
-        {
-            ("wall time", new Regex(@"\b(DateTime|DateTimeOffset|Stopwatch|TimeProvider)\b|Environment\.TickCount")),
-            ("ambient randomness", new Regex(@"Random\.Shared|System\.Random\b|new Random\(|Guid\.NewGuid|RandomNumberGenerator")),
-            ("floating point in state", new Regex(@"\b(float|double|Single|Double)\b|MathF\.|Math\.(Sin|Cos|Sqrt|Pow|Exp|Log)")),
-            ("threads in the core", new Regex(@"\bThread\b|Task\.Run|\bParallel\b|ThreadPool|lock \(")),
-            ("file system or process access", new Regex(@"\b(File|Directory|Process|Environment)\.")),
-            ("reflection", new Regex(@"System\.Reflection|GetType\(\)\.GetMethod|Activator\.|typeof\(.*\)\.GetProperties")),
-        };
-        var violations = new List<string>();
-        foreach (var file in Directory.EnumerateFiles(source, "*.cs", SearchOption.AllDirectories))
-        {
-            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
-            var lineNumber = 0;
-            foreach (var raw in File.ReadLines(file))
-            {
-                lineNumber++;
-                var line = Regex.Replace(raw, "\"(\\\\.|[^\"\\\\])*\"", "\"\"");
-                var comment = line.IndexOf("//", StringComparison.Ordinal);
-                if (comment >= 0) line = line[..comment];
-                foreach (var (name, pattern) in forbidden)
-                    if (pattern.IsMatch(line)) violations.Add($"{Path.GetRelativePath(root!, file)}({lineNumber}): {name}: {raw.Trim()}");
-            }
-        }
-        Check.That(violations.Count == 0, "Forbidden constructs in the simulation:\n  " + string.Join("\n  ", violations));
+        var root = RepositoryRoot();
+        var source = Path.Combine(root, "src", "CnCNew.Simulation");
+        // The rules and their explicit exceptions are in Tests.SourceRules.cs (D6).
+        var violations = ScanSources(root, Directory.EnumerateFiles(source, "*.cs", SearchOption.AllDirectories), SimulationRules, SimulationExceptions);
+        Check.That(violations.Count == 0, $"Forbidden constructs in the simulation ({violations.Count}):\n  " + string.Join("\n  ", violations));
 
         // A restored update module without its saved wake tick would be re-armed one tick late (World.Register) and the run would drift from the live one.
         var missingWake = new List<string>();
@@ -385,7 +361,7 @@ static partial class Tests
             {
                 var header = chunk[..Math.Max(chunk.IndexOf('\n'), 0)];
                 if (header.Contains("IUpdateModule", StringComparison.Ordinal) && !chunk.Contains("\"nextWake\"", StringComparison.Ordinal))
-                    missingWake.Add($"{Path.GetRelativePath(root!, file)}: {header.Trim()}");
+                    missingWake.Add($"{Path.GetRelativePath(root, file)}: {header.Trim()}");
             }
         }
         Check.That(missingWake.Count == 0, "Update modules must save and restore their wake tick (\"nextWake\"):\n  " + string.Join("\n  ", missingWake));

@@ -150,7 +150,12 @@ static partial class Tests
         Check.That(terrain.FindWaypoint("Nowhere") is null, "An unknown waypoint is absent, never defaulted.");
 
         var again = TerrainMap.Build(SyntheticMaps.Build(4, 4, 1, (x, y) => x + y, waypoints: waypoints.Reverse().ToArray()), "starts");
-        Check.That(terrain.Fingerprint == again.Fingerprint, "The fingerprint does not depend on waypoint object order.");
+        // The waypoint table is canonical (sorted); the fingerprint is not order-blind any more (D5): it covers the waypoint ids and the map objects in file
+        // order, because that order decides the ids the placed objects get. The same objects in another file order are another map.
+        Check.That(terrain.Waypoints.Select(point => (point.Name, point.X, point.Y, point.Z)).SequenceEqual(again.Waypoints.Select(point => (point.Name, point.X, point.Y, point.Z))),
+            "The waypoint table does not depend on waypoint object order.");
+        Check.That(terrain.Fingerprint != again.Fingerprint, "Another object order in the file is another fingerprint.");
+        Check.That(terrain.Fingerprint == TerrainMap.Build(SyntheticMaps.Build(4, 4, 1, (x, y) => x + y, waypoints: waypoints), "starts").Fingerprint, "The same file gives the same fingerprint.");
         var changed = TerrainMap.Build(SyntheticMaps.Build(4, 4, 1, (x, y) => x + y + (x == 2 && y == 2 ? 1 : 0), waypoints: waypoints), "starts");
         Check.That(terrain.Fingerprint != changed.Fingerprint, "A single height byte changes the fingerprint.");
         Check.That(terrain.Fingerprint.Length == 64, "The fingerprint is a SHA-256 hex string.");

@@ -19,13 +19,14 @@ public static class SageMapDecoder
     private const decimal MinObjectZ = -1000m;
     private const decimal MaxObjectZ = 2550m * MapData.HeightScale;
 
-    public static MapData Decode(Stream stream)
+    /// <param name="realBits">Receives the bit pattern of every single-precision number the decoder converts (an audit hook: the conversion is checked against all shipped maps).</param>
+    public static MapData Decode(Stream stream, Action<int>? realBits = null)
     {
         var (container, bytes) = LegacyAssetReaders.ExpandSageMap(stream);
-        return Decode(container, bytes);
+        return Decode(container, bytes, realBits);
     }
 
-    public static MapData Decode(string container, byte[] expanded)
+    public static MapData Decode(string container, byte[] expanded, Action<int>? realBits = null)
     {
         var (symbols, chunks) = LegacyAssetReaders.ParseSageChunks(expanded);
         string Symbol(int id) => symbols.TryGetValue(unchecked((uint)id), out var name)
@@ -47,7 +48,7 @@ public static class SageMapDecoder
         foreach (var chunk in chunks)
         {
             if (!seen.Add(chunk.Name)) throw new InvalidDataException($"Map contains chunk '{chunk.Name}' twice.");
-            var reader = new ChunkReader(expanded, checked((int)chunk.HeaderOffset + 10), chunk.Bytes, chunk.Name, Symbol);
+            var reader = new ChunkReader(expanded, checked((int)chunk.HeaderOffset + 10), chunk.Bytes, chunk.Name, Symbol, realBits);
             switch (chunk.Name)
             {
                 case "HeightMapData":
@@ -522,9 +523,10 @@ public static class SageMapDecoder
         private readonly int _end;
         private readonly string _label;
         private readonly Func<int, string> _symbol;
+        private readonly Action<int>? _realBits;
         private int _position;
 
-        public ChunkReader(byte[] data, int start, int size, string label, Func<int, string> symbol)
+        public ChunkReader(byte[] data, int start, int size, string label, Func<int, string> symbol, Action<int>? realBits)
         {
             if (start < 0 || size < 0 || start > data.Length - size) throw new InvalidDataException($"Chunk '{label}' lies outside the map.");
             _data = data;
@@ -532,13 +534,14 @@ public static class SageMapDecoder
             _end = start + size;
             _label = label;
             _symbol = symbol;
+            _realBits = realBits;
         }
 
         public bool AtEnd => _position == _end;
 
         public ChunkReader Sub(int size)
         {
-            var child = new ChunkReader(_data, _position, size <= _end - _position ? size : throw Truncated(), _label, _symbol);
+            var child = new ChunkReader(_data, _position, size <= _end - _position ? size : throw Truncated(), _label, _symbol, _realBits);
             _position += size;
             return child;
         }
@@ -579,11 +582,16 @@ public static class SageMapDecoder
             return value;
         }
 
+        /// <summary>
+        /// A single-precision number of the file as the decimal with its seven significant digits. The conversion is <see cref="SingleBits.ToDecimal"/>: integer
+        /// arithmetic on the bit pattern, not a cast of the runtime, so every machine reads the same coordinates and script numbers from the same file.
+        /// </summary>
         public decimal ReadReal()
         {
-            var value = BitConverter.Int32BitsToSingle(ReadInt());
-            if (!float.IsFinite(value)) throw new InvalidDataException($"Chunk '{_label}' contains a non-finite real.");
-            return (decimal)value;
+            var bits = ReadInt();
+            if (!SingleBits.IsFinite(bits)) throw new InvalidDataException($"Chunk '{_label}' contains a non-finite real.");
+            _realBits?.Invoke(bits);
+            return SingleBits.ToDecimal(bits);
         }
 
         public byte[] ReadBytes(int count)

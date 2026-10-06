@@ -187,7 +187,7 @@ public static partial class LegacyAssetReaders
         using var reader = new StreamReader(stream, Encoding.Latin1, false, leaveOpen: true);
         var text = reader.ReadToEnd();
         var versionMatch = WndVersionRegex().Match(text);
-        if (!versionMatch.Success || !int.TryParse(versionMatch.Groups[1].Value, out var version) || version != 2)
+        if (!versionMatch.Success || !int.TryParse(versionMatch.Groups[1].Value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var version) || version != 2)
             throw new InvalidDataException("WND FILE_VERSION must be 2.");
         ValidateBalanced(text, '{', '}', "WND braces");
         return new TextAssetMetadata(version, ExtractReferences(text));

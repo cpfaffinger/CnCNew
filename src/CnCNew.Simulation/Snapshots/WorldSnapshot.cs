@@ -40,7 +40,7 @@ public static class WorldSnapshot
             writer.Text("terrainFingerprint", world.Configuration.TerrainFingerprint);
             writer.UInt("worldId", world.Configuration.Id.Value);
             writer.UInt("seed", world.Configuration.Seed);
-            writer.Text("stateHash", hash.ToString("X16"));
+            writer.Text("stateHash", hash.ToString("X16", System.Globalization.CultureInfo.InvariantCulture));
             writer.BeginObject("state");
             world.DescribeFull(writer);
             writer.EndObject();
@@ -83,7 +83,7 @@ public static class WorldSnapshot
             world.LoadFull(state);
             world.Streams.LoadPresentation(root.Object("presentation"));
             var recorded = root.Text("stateHash");
-            var actual = world.ComputeFullHash().ToString("X16");
+            var actual = world.ComputeFullHash().ToString("X16", System.Globalization.CultureInfo.InvariantCulture);
             if (!string.Equals(recorded, actual, StringComparison.Ordinal))
                 throw new SnapshotFormatException($"Snapshot integrity check failed: recorded hash {recorded}, restored state hashes to {actual}.");
             return world;

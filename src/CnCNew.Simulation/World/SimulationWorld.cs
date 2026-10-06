@@ -51,7 +51,8 @@ public sealed partial class SimulationWorld : IWorldServices
     private const int MaxEventsPerTick = 20_000_000;
 
     private readonly TemplateCatalog _templates;
-    private readonly Dictionary<uint, Entity> _entities = [];
+    // Looked up by id, enumerated in ascending id order: the same in a running world and in one restored from a snapshot (EntityTable, finding D3).
+    private readonly EntityTable _entities = new();
     private readonly List<Entity> _dirty = [];
     private readonly IndexedHeap<UpdateNode> _updates;
     private readonly IndexedHeap<SimTimer> _timers;
@@ -1458,6 +1459,8 @@ public sealed partial class SimulationWorld : IWorldServices
             _destroyedTotal++;
         }
         _destroyQueue.Clear();
+        // A fixed point of the tick at which no loop over the entities is in flight.
+        _entities.Compact();
     }
 
     private void ProcessSpawns()
@@ -1811,9 +1814,15 @@ public sealed partial class SimulationWorld : IWorldServices
     public void VerifyIncrementalHash()
     {
         var incremental = ComputeIncrementalHash();
+        // Name the entities whose cached hash is stale before the full recomputation refreshes the caches: they changed without MarkDirty.
+        List<string>? stale = null;
+        foreach (var entity in _entities.Values)
+            if (HashEntity(entity) != entity.CachedHash) (stale ??= []).Add(Scripting.InvariantText.Format($"{entity.Id.Value} {entity.Template.Name}"));
         var full = ComputeFullHash();
-        if (full != incremental)
-            throw new InvalidOperationException($"Incremental state hash {incremental:X16} differs from the full hash {full:X16}.");
+        if (full == incremental) return;
+        var cause = stale is null ? "no entity is stale: timers, commands or global state"
+            : "changed without MarkDirty: " + string.Join(", ", stale.Take(12)) + (stale.Count > 12 ? Scripting.InvariantText.Format($" and {stale.Count - 12} more") : string.Empty);
+        throw new InvalidOperationException(Scripting.InvariantText.Format($"Incremental state hash {incremental:X16} differs from the full hash {full:X16} at tick {_tick} ({cause})."));
     }
 
     private ulong FinishHash()

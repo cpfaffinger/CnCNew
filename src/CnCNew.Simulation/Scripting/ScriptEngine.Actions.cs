@@ -386,7 +386,7 @@ public sealed partial class ScriptEngine
         for (var index = 0; index < arguments.Length; index++)
         {
             var parameter = action.Parameters[index];
-            arguments[index] = parameter.Type == MapScriptParameterType.Coord3D ? $"{parameter.CoordX},{parameter.CoordY},{parameter.CoordZ}"
+            arguments[index] = parameter.Type == MapScriptParameterType.Coord3D ? InvariantText.Format($"{parameter.CoordX},{parameter.CoordY},{parameter.CoordZ}")
                 : parameter.Text.Length > 0 ? parameter.Text
                 : parameter.Type is MapScriptParameterType.Real or MapScriptParameterType.Angle or MapScriptParameterType.Percent ? parameter.Real.ToString(System.Globalization.CultureInfo.InvariantCulture)
                 : parameter.Integer.ToString(System.Globalization.CultureInfo.InvariantCulture);

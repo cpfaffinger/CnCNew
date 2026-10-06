@@ -497,7 +497,7 @@ public sealed partial class ScriptEngine
         var y = length > Fixed.Zero ? warehouse.Y - dy / length * radius : warehouse.Y;
         var builder = _world.Entities.Where(entity => entity.Owner == player && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE")).OrderBy(entity => entity.Id.Value)
             .FirstOrDefault(entity => _world.CheckConstruct(player, new ConstructCommand(player, 0, 0, entity.Id, template.Name, x, y, Fixed.Zero)) is not (CommandRejection.CannotConstruct or CommandRejection.UnknownEntity or CommandRejection.NotPermitted));
-        if (builder is null) { Diagnose($"no builder of player {player} for '{templateName}'"); return; }
+        if (builder is null) { Diagnose($"no builder of player {player.Value} for '{templateName}'"); return; }
         var cell = Fixed.FromDecimal(TerrainMap.CellSize);
         var wanted = (X: x, Y: y);
         var rejection = CommandRejection.InvalidPlacement;

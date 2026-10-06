@@ -38,6 +38,8 @@ FullCompilationsAreByteIdentical();
 FingerprintStreamingMatchesBuffer();
 ObjectCreationListsAreTypedNuggets();
 WeaponBonusesAreTypedAndStrict();
+SingleBitsMatchTheRuntimeCast();
+FingerprintEncodingIsPinned();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
@@ -880,6 +882,96 @@ static void WeaponBonusesAreTypedAndStrict()
     Throws<FormatException>(() => DefinitionCompiler.Compile(One("Weapon W\n  WeaponBonus = VETERAN SPEED 125%\nEnd\n")), "not a member of WeaponBonusField");
     Throws<FormatException>(() => DefinitionCompiler.Compile(One("Weapon W\n  WeaponBonus = VETERAN DAMAGE 125\nEnd\n")), "percentage");
     Assert(NameTablesPhase5.WeaponBonusCondition.Count == 27, "WeaponBonus condition table size.");
+}
+
+// Phase 18, D9: the definition fingerprint is the SHA-256 of a JSON text. Its line ends used to be the platform's (CRLF on Windows, LF elsewhere) and its string
+// escaping is the runtime's default JSON encoder. The line end and the indentation are pinned now; the escaping is guarded by this golden value: a runtime that
+// escapes differently fails here instead of silently rejecting every other machine.
+static void FingerprintEncodingIsPinned()
+{
+    // Every class of character the default encoder treats specially: HTML-sensitive ASCII, quote, backslash, non-ASCII (Latin-1 source), and plain text.
+    var graph = DefinitionCompiler.Compile(One("Weapon Gun\n  PrimaryDamage = 10\nEnd\nObject T\u00E4nk\n  CommandSet = Cmds\n  DisplayName = OBJECT:<'+&`\"q\\x>\u00F6\u00DF\nEnd\n"));
+    var bytes = DefinitionSnapshotWriter.WriteCanonical(graph);
+    var text = System.Text.Encoding.UTF8.GetString(bytes);
+    var (sha, length) = DefinitionSnapshotWriter.ComputeFingerprint(graph);
+    Assert(length == bytes.Length && sha == Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)), "The streamed fingerprint is the hash of the canonical bytes.");
+    var lineFeeds = text.Count(value => value == '\n');
+    Assert(lineFeeds > 20 && lineFeeds == System.Text.RegularExpressions.Regex.Matches(text, "\r\n").Count, "The canonical snapshot ends its lines with CR LF on every platform.");
+    Assert(text.Contains("\n  \"definitions\": [\r\n    {", StringComparison.Ordinal), "The canonical snapshot is indented with two spaces.");
+    foreach (var escape in new[] { "\\u003C", "\\u0027", "\\u002B", "\\u0026", "\\u0060", "\\u0022", "\\\\x", "\\u003E", "\\u00F6\\u00DF", "T\\u00E4nk" })
+        Assert(text.Contains(escape, StringComparison.Ordinal), $"The canonical snapshot escapes as expected: {escape} is missing.");
+    Console.WriteLine($"  fingerprint encoding: {bytes.Length} bytes, SHA-256 {sha}");
+    Assert(sha == "024D8B2194B55BC497B1BD2DF50DFF4B5EE3A70BDC5256485D8E6FA28AD8BA43" && bytes.Length == 1884, $"The canonical encoding changed: SHA-256 {sha} of {bytes.Length} bytes.");
+}
+
+// Phase 18, D2: the integer conversion of single-precision bits is the runtime's (decimal)float, value and scale, for every bit pattern tried.
+static void SingleBitsMatchTheRuntimeCast()
+{
+    static bool Same(decimal a, decimal b)
+    {
+        Span<int> left = stackalloc int[4];
+        Span<int> right = stackalloc int[4];
+        decimal.GetBits(a, left);
+        decimal.GetBits(b, right);
+        return left.SequenceEqual(right);
+    }
+
+    long compared = 0, overflow = 0;
+    void Compare(int bits)
+    {
+        var single = BitConverter.Int32BitsToSingle(bits);
+        if (!float.IsFinite(single))
+        {
+            Assert(!CnCNew.Data.World.SingleBits.IsFinite(bits), $"Bits {bits:X8} are not finite.");
+            Throws<ArgumentException>(() => CnCNew.Data.World.SingleBits.ToDecimal(bits), "not a finite number");
+            return;
+        }
+        Assert(CnCNew.Data.World.SingleBits.IsFinite(bits), $"Bits {bits:X8} are finite.");
+        decimal expected;
+        try
+        {
+            expected = (decimal)single;
+        }
+        catch (OverflowException)
+        {
+            overflow++;
+            Throws<OverflowException>(() => CnCNew.Data.World.SingleBits.ToDecimal(bits), "does not fit a decimal");
+            return;
+        }
+        var actual = CnCNew.Data.World.SingleBits.ToDecimal(bits);
+        compared++;
+        if (!Same(expected, actual))
+            throw new InvalidOperationException($"Single bits {bits:X8} ({single:R}): the runtime cast gives {expected} (scale {expected.Scale}), the integer routine {actual} (scale {actual.Scale}).");
+    }
+
+    // Hand-picked: zeros, subnormals, the limits of the decimal range, exact halves of the seventh digit, powers of two and ten, map-like coordinates.
+    foreach (var value in new[] { 0f, -0f, float.Epsilon, -float.Epsilon, 1f, -1f, 0.1f, 0.5f, 1.5f, 2.5f, 10f, 100f, 1e6f, 1e7f, 9999999f, 9999999.5f, 16777216f, 16777217f, 1e-7f, 1e-10f, 1e-28f,
+                 5e-29f, 4.9e-29f, 1e-30f, 7.9e28f, 7.92e28f, 7.93e28f, 1e29f, float.MaxValue, float.MinValue, 1234567.5f, 123456.75f, 0.0625f, 3.1415927f, -1.5707964f, 2560f, 1265.625f,
+                 0.3333333f, 0.6666667f, 999999.94f, 999999.97f, 99999.99f, 9999999.9f, 1e22f, 1e23f, 3.4e-5f, float.PositiveInfinity, float.NegativeInfinity, float.NaN })
+        Compare(BitConverter.SingleToInt32Bits(value));
+
+    // Every exponent with a spread of mantissas, both signs: 256 * 2 * 4096 patterns.
+    for (var exponent = 0; exponent < 256; exponent++)
+        for (var step = 0; step < 4096; step++)
+        {
+            var mantissa = (int)((uint)step * 2_654_435_761u >> 9) & 0x7FFFFF;
+            Compare((exponent << 23) | mantissa);
+            Compare(unchecked((int)0x80000000) | (exponent << 23) | mantissa);
+        }
+
+    // A fixed pseudo-random walk over the whole 32-bit space (xorshift32), and one concentrated on the magnitudes of map coordinates (2^-8 .. 2^16).
+    var state = 0x9E3779B9u;
+    for (var index = 0; index < 4_000_000; index++)
+    {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        Compare(unchecked((int)state));
+        var exponent = 119 + (int)(state % 24);
+        Compare((int)((state & 0x807FFFFFu) | ((uint)exponent << 23)));
+    }
+    Console.WriteLine($"  single bits -> decimal: {compared} bit patterns identical to the runtime cast (value and scale), {overflow} overflow alike.");
+    Assert(compared > 9_000_000 && overflow > 0, "The comparison covered the range.");
 }
 
 static void Assert(bool condition, string message)

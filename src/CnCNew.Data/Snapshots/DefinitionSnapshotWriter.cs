@@ -10,10 +10,20 @@ public static class DefinitionSnapshotWriter
 {
     public const int SchemaVersion = 2;
 
+    /// <summary>
+    /// The canonical snapshot is hashed into the definition fingerprint two machines compare before they play together, so its bytes must not depend on the
+    /// machine. Everything the serializer would otherwise take from the platform is stated here: the line end (the default is the platform's, CR LF on Windows
+    /// and LF elsewhere - the fingerprints of a Windows and a Linux machine differed) and the indentation. The values are the ones the snapshot always had on
+    /// Windows, so existing fingerprints stay valid. String escaping is the serializer's default encoder; it is guarded by golden values in
+    /// <c>CnCNew.Data.Tests</c> (docs/DETERMINISM-FINDINGS.md, D9).
+    /// </summary>
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
+        NewLine = "\r\n",
+        IndentCharacter = ' ',
+        IndentSize = 2,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 

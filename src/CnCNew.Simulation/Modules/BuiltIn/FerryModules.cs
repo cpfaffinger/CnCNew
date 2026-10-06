@@ -163,7 +163,7 @@ public sealed class RailedTransportAIUpdate(RailedTransportAiData data) : AIUpda
     /// <summary><c>setInTransit</c>: "open up the dock" while not in transit.</summary>
     private void SetInTransit(IWorldServices world, bool inTransit)
     {
-        DockModules.DockOf(Entity)?.SetOpen(!inTransit);
+        DockModules.DockOf(Entity)?.SetOpen(world, !inTransit);
         _inTransit = inTransit;
         world.MarkDirty(Entity);
     }
@@ -257,7 +257,7 @@ public sealed class RailedTransportContain(TransportContainData data) : Transpor
     public override void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
     {
         base.Remove(world, candidate, positionAtContainer);
-        if (ContainCount == 0) DockModules.DockOf(Entity)?.SetOpen(true);
+        if (ContainCount == 0) DockModules.DockOf(Entity)?.SetOpen(world, true);
     }
 
     public bool IsRiderFreeToExit(Entity rider) => DockModules.DockOf(Entity) is not { IsOpen: false };

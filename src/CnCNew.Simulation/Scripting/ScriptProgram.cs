@@ -382,6 +382,6 @@ public sealed class ScriptProgram
         foreach (var player in Players) hash = StateHash.MixText(hash, player.Name);
         foreach (var team in Teams) hash = StateHash.MixText(hash, team.Name);
         hash = StateHash.Mix(hash, (ulong)Objects.Length);
-        return hash.ToString("X16");
+        return hash.ToString("X16", System.Globalization.CultureInfo.InvariantCulture);
     }
 }

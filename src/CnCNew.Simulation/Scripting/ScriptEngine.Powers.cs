@@ -57,6 +57,7 @@ public sealed partial class ScriptEngine
                 {
                     var frames = Int(p, 2) * SimulationTiming.LogicFramesPerSecond;
                     timed.SetReadyFrame(type == "NAMED_SET_SPECIAL_POWER_COUNTDOWN" ? _world.Tick + frames : (timed is SpecialPowerModuleBase known ? known.AvailableOnFrame(_world) : _world.Tick) + frames);
+                    if (NamedEntity(Str(p, 0)) is { } timedOwner) _world.MarkDirty(timedOwner);
                 }
                 return true;
             case "NAMED_STOP_SPECIAL_POWER_COUNTDOWN":

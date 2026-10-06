@@ -240,7 +240,8 @@ static partial class Tests
         Check.That(read.Commands.Any(value => value is ConstructCommand) && read.Commands.Any(value => value is QueueProductionCommand) && read.Commands.Any(value => value is AttackMoveCommand),
             "The replay carries construction, production and movement commands.");
 
-        var first = ReplayRunner.Run(read, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 500 }, terrain);
+        // D8: verified in every tick (a missing MarkDirty would otherwise only show if it survived to a sparse check).
+        var first = ReplayRunner.Run(read, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 1 }, terrain);
         Check.That(first.VerifiedCheckpoints == read.Checkpoints.Length, "Every checkpoint of the AI match verifies.");
         var second = ReplayRunner.Run(read, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true }, terrain);
         Check.That(first.TickHashes.AsSpan().SequenceEqual(second.TickHashes) && first.FinalHash == second.FinalHash, "Two fresh runs of the recorded match are hash identical on every tick.");

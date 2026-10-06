@@ -136,7 +136,7 @@ public sealed partial class ScriptEngine
             case "WAREHOUSE_SET_VALUE":
                 // doSetWarehouseValue -> SupplyWarehouseDockUpdate::setCashValue: boxes = ceil(cash / base value per box).
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } warehouse && warehouse.ModuleArray.OfType<SupplyWarehouseDockUpdate>().FirstOrDefault() is { } dock)
-                    dock.SetCashValue(Int(p, 1), _world.ValuePerSupplyBox);
+                    dock.SetCashValue(_world, Int(p, 1), _world.ValuePerSupplyBox);
                 return true;
 
             // ---- teams

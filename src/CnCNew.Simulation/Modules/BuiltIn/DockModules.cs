@@ -65,7 +65,7 @@ internal interface IDockModule
     bool IsOpen { get; }
 
     /// <summary><c>setDockOpen</c>.</summary>
-    void SetOpen(bool open);
+    void SetOpen(IWorldServices world, bool open);
 
     /// <summary><c>setDockCrippled</c>: a crippled dock accepts approaches but never grants entry (the supply warehouse below the really-damaged edge).</summary>
     void SetDockCrippled(IWorldServices world, bool crippled);
@@ -128,9 +128,9 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
     public bool IsOpen => !_closed;
     public bool IsCrippled => _crippled;
 
-    public void SetOpen(bool open)
+    public void SetOpen(IWorldServices world, bool open)
     {
-        if (_closed != !open) Entity.Dirty = true;
+        if (_closed != !open) world.MarkDirty(Entity);
         _closed = !open;
     }
 
@@ -364,10 +364,11 @@ internal sealed class SupplyWarehouseDockUpdate(SupplyWarehouseDockData data) : 
     public int Boxes => _boxes;
 
     /// <summary><c>SupplyWarehouseDockUpdate::setCashValue</c> (<c>WAREHOUSE_SET_VALUE</c>): the stock becomes enough boxes for the cash value, rounded up.</summary>
-    public void SetCashValue(int cash, int valuePerBox)
+    public void SetCashValue(IWorldServices world, int cash, int valuePerBox)
     {
         _boxes = valuePerBox > 0 ? (int)((Math.Max(cash, 0) + (long)valuePerBox - 1) / valuePerBox) : 0;
-        Entity.Dirty = true;
+        // MarkDirty, not the flag: the flag alone leaves the entity out of the world's dirty list and makes every later MarkDirty return early.
+        world.MarkDirty(Entity);
     }
 
     public override bool Action(IWorldServices world, Entity docker)

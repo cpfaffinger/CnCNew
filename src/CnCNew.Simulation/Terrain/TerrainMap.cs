@@ -60,7 +60,7 @@ public sealed class TerrainMap
         for (var cy = 0; cy < cellsY; cy++)
             for (var cx = 0; cx < cellsX; cx++) cells[cy * cellsX + cx] = Classify(map.BlendTiles, cx, cy);
         _cells = [..cells];
-        Fingerprint = ComputeFingerprint();
+        Fingerprint = ComputeFingerprint(map);
     }
 
     public string Name { get; }
@@ -141,12 +141,27 @@ public sealed class TerrainMap
             var id = obj.Properties.TryGetInt("waypointID", out var waypointId) ? waypointId : -1;
             waypoints.Add(new TerrainWaypoint(waypointName, Fixed.FromDecimal(obj.X), Fixed.FromDecimal(obj.Y), Fixed.FromDecimal(obj.Z), id, id >= 0 && links.TryGetValue(id, out var next) ? next : -1));
         }
-        waypoints.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name) is var order and not 0 ? order : a.X.Raw.CompareTo(b.X.Raw) is var xo and not 0 ? xo : a.Y.Raw.CompareTo(b.Y.Raw));
+        waypoints.Sort(CompareWaypoints);
 
         return new TerrainMap(name, map, cellsX, cellsY, water.ToImmutable(), waypoints.ToImmutable());
     }
 
     /// <summary><c>classifyMapCell</c>: CLIFF when the height cell is a cliff, WATER when any of its four corners lies below the water level at that corner.</summary>
+    /// <summary>
+    /// The canonical waypoint order. It compares every field, so two waypoints that tie are equal in everything and their order cannot matter: the sort is not
+    /// stable, and a comparison that left a field out would make the order of such waypoints a property of the file order and of the runtime's sort routine.
+    /// </summary>
+    public static int CompareWaypoints(TerrainWaypoint a, TerrainWaypoint b)
+    {
+        var order = string.CompareOrdinal(a.Name, b.Name);
+        if (order == 0) order = a.X.Raw.CompareTo(b.X.Raw);
+        if (order == 0) order = a.Y.Raw.CompareTo(b.Y.Raw);
+        if (order == 0) order = a.Z.Raw.CompareTo(b.Z.Raw);
+        if (order == 0) order = a.Id.CompareTo(b.Id);
+        if (order == 0) order = a.NextId.CompareTo(b.NextId);
+        return order;
+    }
+
     private CellFlags Classify(MapBlendTiles blend, int cx, int cy)
     {
         var flags = CellFlags.None;
@@ -274,11 +289,18 @@ public sealed class TerrainMap
         return inside;
     }
 
-    private string ComputeFingerprint()
+    /// <summary>
+    /// What a replay, a snapshot and a second machine compare to know they stand on the same terrain: heights, cells, water, the waypoints with their ids and
+    /// links (the paths units and scripts follow), and every object placed on the map (start bases, supply sources, scripted units, props) with its properties,
+    /// in file order. Not covered: sides, teams, scripts and trigger areas - a whole map is identified by the hash of its file (content manifest).
+    /// </summary>
+    private string ComputeFingerprint(MapData map)
     {
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
         {
+            // Version of this layout: 2 adds waypoint ids and links and the map objects.
+            writer.Write("terrain-fingerprint-2");
             writer.Write(_vertexWidth);
             writer.Write(_vertexHeight);
             writer.Write(_border);
@@ -305,6 +327,27 @@ public sealed class TerrainMap
                 writer.Write(waypoint.X.Raw);
                 writer.Write(waypoint.Y.Raw);
                 writer.Write(waypoint.Z.Raw);
+                writer.Write(waypoint.Id);
+                writer.Write(waypoint.NextId);
+            }
+            writer.Write(map.Objects.Length);
+            foreach (var placed in map.Objects)
+            {
+                writer.Write(placed.Name);
+                writer.Write(Fixed.FromDecimal(placed.X).Raw);
+                writer.Write(Fixed.FromDecimal(placed.Y).Raw);
+                writer.Write(Fixed.FromDecimal(placed.Z).Raw);
+                writer.Write(Fixed.FromDecimal(placed.Angle).Raw);
+                writer.Write(placed.Flags);
+                writer.Write(placed.Properties.Items.Length);
+                foreach (var property in placed.Properties.Items)
+                {
+                    writer.Write(property.Key);
+                    writer.Write((int)property.Type);
+                    writer.Write(property.Integer);
+                    writer.Write(property.Real);
+                    writer.Write(property.Text);
+                }
             }
         }
         return Convert.ToHexString(SHA256.HashData(stream.ToArray()));
