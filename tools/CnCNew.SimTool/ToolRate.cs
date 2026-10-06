@@ -26,6 +26,13 @@ internal static class ToolRate
             throw new ArgumentException($"The manifest commands run at the recorded rate of {Manifest}; {Option} {Current.TicksPerSecond} is refused.");
     }
 
+    /// <summary>
+    /// A grace period (logic frames of the original, the unit of <c>SkirmishMatchOptions.GraceTicks</c>) capped at a quarter of a run budget that is
+    /// given in ticks of <paramref name="rate"/>: the budget share is turned into frames before the two are compared, so the cap is the same game time at
+    /// every rate. 30 Hz: <c>Math.Min(graceFrames, maxTicks / 4)</c>.
+    /// </summary>
+    public static long GraceWithinBudget(long graceFrames, long maxTicks, SimulationRate rate) => Math.Min(graceFrames, rate.Time.ToOriginalFrames(maxTicks / 4));
+
     /// <summary>Game minutes of a tick count at the current rate, for reports.</summary>
     public static double Minutes(long ticks) => Minutes(ticks, Current);
 

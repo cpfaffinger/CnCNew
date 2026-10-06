@@ -548,7 +548,7 @@ static int SkirmishSweep(string directory, string[] args)
         started++;
         try
         {
-            var options = SkirmishMatchOptions.Standard with { MaxTicks = maxTicks, GraceTicks = Math.Min(SkirmishMatchOptions.Standard.GraceTicks, maxTicks / 4) };
+            var options = SkirmishMatchOptions.Standard with { MaxTicks = maxTicks, GraceTicks = CnCNew.SimTool.ToolRate.GraceWithinBudget(SkirmishMatchOptions.Standard.GraceTicks, maxTicks, catalog.Rate) };
             var scenario = new SkirmishMatchScenario(options);
             scenario.Record(catalog, fingerprint, terrain, mapObjects, chosen);
             if (scenario.Winner is not null) finishedWithWinner++;

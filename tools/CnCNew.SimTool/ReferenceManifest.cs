@@ -330,7 +330,7 @@ internal static class ReferenceManifest
                     (context, verify) => AiMatchJob(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerQuickTicks }, verify)));
         }
 
-        var sweepOptions = skirmish with { MaxTicks = SweepTicks, GraceTicks = Math.Min(skirmish.GraceTicks, SweepTicks / 4) };
+        var sweepOptions = skirmish with { MaxTicks = SweepTicks, GraceTicks = ToolRate.GraceWithinBudget(skirmish.GraceTicks, SweepTicks, ToolRate.Manifest) };
         var paths = SimContext.MapPaths(content);
         plan.Add(new RunSpec("skirmish-sweep", false, "skirmish-sweep", new ManifestObject()
                 .Add("maps", paths.Length).Add("factions", "the first two playable factions in catalog order").Add("maxTicks", SweepTicks).Add("graceTicks", sweepOptions.GraceTicks)
