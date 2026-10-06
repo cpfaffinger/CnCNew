@@ -5,6 +5,7 @@ using CnCNew.Data.Registry;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.State;
@@ -287,6 +288,25 @@ static partial class Tests
         Check.That(watched.TickHashes.AsSpan().SequenceEqual(plain.TickHashes), "The verified, watched stress run hashes like the plain one.");
         var work = watchedWorld.HashWorkDone;
         Check.That(work.Entities > 0 && work.Words > work.Entities && stressWatch.Updates > 0, $"The stress run described entities and ran updates ({work.Entities}, {work.Words}, {stressWatch.Updates}).");
+    }
+
+    /// <summary>
+    /// Finding D8, one more place: <c>StealthUpdate.MarkDetected</c> is called by the detector's update for another entity and has to mark that entity. It was hidden
+    /// because the detected entity carries a module that runs every tick, and the scheduler marks an entity whenever one of its modules ran; here the hash is verified right
+    /// after the call, before any tick can cover it. (A second place of this kind, <c>SpecialPowerModuleBase.PauseCountdown</c>, changes a reference value when fixed and is
+    /// therefore not fixed here: docs/PERF-HASH.md.)
+    /// </summary>
+    public static void DetectionFromAnotherEntitysUpdateIsMarked()
+    {
+        var fixture = new SyntheticFixture(files: Phase5Files());
+        var world = NewWorld(fixture, 5);
+        new Feeder(world).Spawn(2, "Cloaked", x: 10, y: 0);
+        for (var tick = 0; tick < 5; tick++) world.Step();
+        var cloaked = world.Entities.First(entity => entity.Template.Name == "Cloaked");
+        world.VerifyIncrementalHash();
+        cloaked.Modules.OfType<StealthUpdate>().First().MarkDetected(world, 20);
+        Check.That(cloaked.HasStatus(ObjectStatusBits.Index("DETECTED")), "The unit is marked as detected.");
+        world.VerifyIncrementalHash();
     }
 
     /// <summary>The same on the shipped data: every instantiable object, alive for a while and then dying, every module type with its first updates.</summary>

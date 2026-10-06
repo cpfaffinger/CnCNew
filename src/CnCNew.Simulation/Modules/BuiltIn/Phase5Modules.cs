@@ -132,6 +132,8 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         var until = world.Tick + Math.Max(ticks, SimulationTiming.SleepNone);
         if (until > _detectedUntilTick) _detectedUntilTick = until;
         Entity.Status |= 1UL << DetectedBit;
+        // Called from the detector's update, not this entity's: the change needs its own mark (finding D8).
+        world.MarkDirty(Entity);
     }
 
     public long Update(IWorldServices world)

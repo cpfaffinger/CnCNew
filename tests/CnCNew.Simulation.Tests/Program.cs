@@ -47,6 +47,7 @@ run.Test("Definition insertion order does not change the simulation", Tests.Defi
 run.Test("Idle ticks do not allocate", Tests.IdleAllocation);
 run.Test("State hash: written words and side-by-side streams equal the sequential hash", Tests.HashWordsAndStreamsEqualTheSequentialHash);
 run.Test("State hash: word descriptions of every fixture template, clean idle entities, every update moves the description", Tests.HashWorkOnTheSyntheticFixture);
+run.Test("Determinism D8: detection from another entity's update reaches the tick hash", Tests.DetectionFromAnotherEntitysUpdateIsMarked);
 run.Test("Determinism rules hold in the simulation sources", Tests.SourceRules);
 run.Test("Tick phase observer: every world phase once per tick in order, same hashes, not in the snapshot", Tests.TickPhaseObserverWorld);
 run.Test("Tick phase observer: skirmish and mission sessions report their parts, same hashes and commands", Tests.TickPhaseObserverSessions);
