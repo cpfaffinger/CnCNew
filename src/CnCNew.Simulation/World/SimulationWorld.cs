@@ -1453,6 +1453,7 @@ public sealed partial class SimulationWorld : IWorldServices
             _acquirers.Remove(entity.Id.Value);
             _coolingTrackers.Remove(entity.Id.Value);
             _entities.Remove(entity.Id.Value);
+            UnindexEntity(entity);
             UntrackCollidable(entity);
             entity.Registered = false;
             _moduleCount -= entity.ModuleArray.Length;
@@ -1632,6 +1633,7 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         _entities.Add(entity.Id.Value, entity);
         entity.Registered = true;
+        IndexEntity(entity);
         TrackCollidable(entity);
         _moduleCount += entity.ModuleArray.Length;
         // Energy::objectEnteringInfluence: incremental, not recomputed per frame.

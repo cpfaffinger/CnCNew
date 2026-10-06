@@ -772,6 +772,13 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
     private long _nextScan;
     private long _nextShot;
 
+    // Which of the two target lists a template belongs to, by template index: 0 not looked at yet, 1 primary, 2 secondary, 3 neither. A template's kinds and
+    // the module data never change, so this is a cache of a fixed answer - not state: it is not described and fills again after a restore.
+    private const byte ClassPrimary = 1;
+    private const byte ClassSecondary = 2;
+    private const byte ClassNone = 3;
+    private byte[] _targetClass = [];
+
     public override string ModuleName => "PointDefenseLaserUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
@@ -850,18 +857,36 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
     /// <summary><c>scanClosestTarget</c>: primary in range, secondary in range, primary out of range, secondary out of range.</summary>
     private bool ScanClosestTarget(IWorldServices world, WeaponInfo weapon)
     {
-        Entity?[] inRange = [null, null];
-        Entity?[] outOfRange = [null, null];
-        var inDistance = new Fixed[2];
-        var outDistance = new Fixed[2];
+        // The candidates are the entities of the listed kinds (the world's kind lists) instead of every entity of the world. Each pick below is the minimum
+        // of (distance, id) over its candidates - Closer breaks ties by id itself -, and an out-of-range pick is only used when its list has no in-range
+        // candidate at all, in which case it was never skipped. So the result does not depend on the order the candidates come in, and a candidate that
+        // has two of the listed kinds and comes twice changes nothing the second time.
+        var picks = default(ScanPicks);
         var scanSquared = data.ScanRange * data.ScanRange;
-        foreach (var other in world.Entities)
+        foreach (var kind in data.PrimaryTargetTypes) ScanCandidates(world, weapon, world.EntitiesOfKind(kind), scanSquared, ref picks);
+        foreach (var kind in data.SecondaryTargetTypes) ScanCandidates(world, weapon, world.EntitiesOfKind(kind), scanSquared, ref picks);
+        var pick = picks.InRange0 ?? picks.InRange1;
+        _inRange = pick is not null;
+        pick ??= picks.OutOfRange0 ?? picks.OutOfRange1;
+        _target = pick?.Id ?? EntityId.Invalid;
+        if (pick is null) _inRange = false;
+        return pick is not null;
+    }
+
+    /// <summary>Index 0 is the primary list, 1 the secondary one.</summary>
+    private struct ScanPicks
+    {
+        public Entity? InRange0, InRange1, OutOfRange0, OutOfRange1;
+        public Fixed InDistance0, InDistance1, OutDistance0, OutDistance1;
+    }
+
+    private void ScanCandidates(IWorldServices world, WeaponInfo weapon, EntityList candidates, Fixed scanSquared, ref ScanPicks picks)
+    {
+        foreach (var other in candidates.AsSpan())
         {
             if (other.DestroyRequested || other == Entity || other.ContainedBy.IsValid) continue;
-            int index;
-            if (data.PrimaryTargetTypes.Any(other.Template.IsKindOf)) index = 0;
-            else if (data.SecondaryTargetTypes.Any(other.Template.IsKindOf)) index = 1;
-            else continue;
+            var targetClass = TargetClassOf(other.Template);
+            if (targetClass == ClassNone) continue;
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
             if (dx * dx + dy * dy > scanSquared) continue;
@@ -869,22 +894,45 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
             if (world.RelationshipOf(Entity.Owner, other.Owner) != Relationship.Enemies) continue;
             if (other.HasStatus(StealthedBit) && !other.HasStatus(DetectedBit)) continue;
             var distance = Distance2D(other);
-            if (distance <= weapon.AttackRange)
+            if (targetClass == ClassPrimary)
             {
-                if (Closer(inRange[index], inDistance[index], other, distance)) { inRange[index] = other; inDistance[index] = distance; }
+                if (distance <= weapon.AttackRange)
+                {
+                    if (Closer(picks.InRange0, picks.InDistance0, other, distance)) { picks.InRange0 = other; picks.InDistance0 = distance; }
+                }
+                else if (picks.InRange0 is null && Closer(picks.OutOfRange0, picks.OutDistance0, other, distance))
+                {
+                    picks.OutOfRange0 = other;
+                    picks.OutDistance0 = distance;
+                }
             }
-            else if (inRange[index] is null && Closer(outOfRange[index], outDistance[index], other, distance))
+            else if (distance <= weapon.AttackRange)
             {
-                outOfRange[index] = other;
-                outDistance[index] = distance;
+                if (Closer(picks.InRange1, picks.InDistance1, other, distance)) { picks.InRange1 = other; picks.InDistance1 = distance; }
+            }
+            else if (picks.InRange1 is null && Closer(picks.OutOfRange1, picks.OutDistance1, other, distance))
+            {
+                picks.OutOfRange1 = other;
+                picks.OutDistance1 = distance;
             }
         }
-        var pick = inRange[0] ?? inRange[1];
-        _inRange = pick is not null;
-        pick ??= outOfRange[0] ?? outOfRange[1];
-        _target = pick?.Id ?? EntityId.Invalid;
-        if (pick is null) _inRange = false;
-        return pick is not null;
+    }
+
+    /// <summary>Primary before secondary, as the scan asked each time: <c>PrimaryTargetTypes</c> any kind matches, else <c>SecondaryTargetTypes</c>, else neither.</summary>
+    private byte TargetClassOf(ObjectTemplate template)
+    {
+        var index = template.Index;
+        if (index >= _targetClass.Length) Array.Resize(ref _targetClass, Math.Max(index + 1, _targetClass.Length * 2));
+        var known = _targetClass[index];
+        if (known != 0) return known;
+        known = ClassNone;
+        foreach (var kind in data.PrimaryTargetTypes)
+            if (template.IsKindOf(kind)) { known = ClassPrimary; break; }
+        if (known == ClassNone)
+            foreach (var kind in data.SecondaryTargetTypes)
+                if (template.IsKindOf(kind)) { known = ClassSecondary; break; }
+        _targetClass[index] = known;
+        return known;
     }
 
     private static bool Closer(Entity? best, Fixed bestDistance, Entity candidate, Fixed distance)
