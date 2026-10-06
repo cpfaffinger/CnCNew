@@ -39,6 +39,18 @@ public interface IWorldServices
 
     /// <summary>Every live entity (registered, not yet destroyed). Used by area-effect modules (<c>AutoHealBehavior</c>); O(n), fine at fixture scale.</summary>
     IReadOnlyCollection<Entity> Entities { get; }
+
+    /// <summary>The entities whose template has the kind, in ascending id order: what a scan over <see cref="Entities"/> with <c>Template.IsKindOf(kind)</c> visits.</summary>
+    EntityList EntitiesOfKind(string kind);
+
+    /// <summary>The entities of one owner, in ascending id order: what a scan over <see cref="Entities"/> with <c>Owner == owner</c> visits.</summary>
+    EntityList EntitiesOwnedBy(PlayerId owner);
+
+    /// <summary>The entities with a module that is a <typeparamref name="TModule"/>, in ascending id order: what a scan over <see cref="Entities"/> with that test visits.</summary>
+    EntityList EntitiesWithModule<TModule>() where TModule : class;
+
+    /// <summary>What the world was created with; <see cref="WorldConfiguration.Players"/> are all players there are besides the system player.</summary>
+    WorldConfiguration Configuration { get; }
     void Emit(SimEventKind kind, EntityId entity, EntityId other, string text, long value);
 
     /// <summary>Requests removal at the end of the tick. The entity receives no further updates, but its events are still delivered.</summary>

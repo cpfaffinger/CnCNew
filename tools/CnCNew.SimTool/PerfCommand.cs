@@ -34,7 +34,7 @@ internal static class PerfCommand
 {
     private const string Usage = """
         perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--replay] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
-        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
+        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer] [--script-detail]
         """;
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
@@ -198,9 +198,16 @@ internal static class PerfCommand
         Console.WriteLine($"Session start (objects placed): {start.Elapsed.TotalMilliseconds:F0} ms, {world.Entities.Count} objects, {world.Configuration.Players.Length} players.");
         var recorder = new TickRecorder(world, common.Modules);
         if (common.Observe) world.PhaseObserver = recorder;
+        // Opt-in: the per-condition clock reads would otherwise be part of the MissionScripts phase of every profile.
+        var scriptRecorder = args.Contains("--script-detail") ? new ScriptRecorder() : null;
+        session.Engine.Observer = scriptRecorder;
         var gcBefore = GcCounts();
         var wall = Stopwatch.StartNew();
         var chain = StateHash.Seed;
+        // How much of the first step is the runtime compiling the code it runs for the first time (the first step is the longest of most missions).
+        var jitBefore = System.Runtime.JitInfo.GetCompilationTime(currentThread: true);
+        var firstStepJit = TimeSpan.Zero;
+        var firstStep = TimeSpan.Zero;
         // The same loop as MissionScenario.Continue (mission-run), so that final hash and chain are comparable.
         while (world.Tick < common.Ticks && !session.IsOver)
         {
@@ -208,6 +215,11 @@ internal static class PerfCommand
             var begin = Stopwatch.GetTimestamp();
             var result = session.Step();
             var elapsed = Stopwatch.GetTimestamp() - begin;
+            if (recorder.Count == 0)
+            {
+                firstStepJit = System.Runtime.JitInfo.GetCompilationTime(currentThread: true) - jitBefore;
+                firstStep = Stopwatch.GetElapsedTime(begin, begin + elapsed);
+            }
             recorder.Commit(result.Tick, elapsed, GC.GetAllocatedBytesForCurrentThread() - allocated, world.Entities.Count);
             chain = StateHash.Mix(chain, result.StateHash);
             // Suspicion (c), outside the tick time: what one complete description of the script state costs at this point of the mission. Reading only.
@@ -221,6 +233,7 @@ internal static class PerfCommand
         wall.Stop();
         var gcAfter = GcCounts();
         world.PhaseObserver = null;
+        session.Engine.Observer = null;
         var finalHash = session.StateHash();
         var summary = new SortedDictionary<string, string>(StringComparer.Ordinal)
         {
@@ -229,6 +242,10 @@ internal static class PerfCommand
         Console.WriteLine($"Mission: {recorder.Count} steps to tick {world.Tick} in {wall.Elapsed.TotalSeconds:F1} s wall time; outcome {session.Outcome}; scripts executed {session.Engine.ExecutedScripts}, actions {session.Engine.ExecutedActions}.");
         var json = PerfSummary.Create("perf-mission", common.Label, hardware, common.Parameters().Add("difficulty", options.Difficulty.ToString()).Add("worldSeed", options.WorldSeed));
         Report(recorder, common, summary, json, gcBefore, gcAfter, [TickPhase.MissionScripts, TickPhase.MissionEvents], [TickPhase.SkirmishAi, TickPhase.SkirmishVictory]);
+        Console.WriteLine($"First step: {firstStep.TotalMilliseconds:F1} ms, of which {firstStepJit.TotalMilliseconds:F1} ms compiling methods on this thread (System.Runtime.JitInfo; a cost of the process, not of the mission).");
+        summary["first_step_us"] = (firstStep.TotalMilliseconds * 1000).ToString("F1", Invariant);
+        summary["first_step_jit_us"] = (firstStepJit.TotalMilliseconds * 1000).ToString("F1", Invariant);
+        scriptRecorder?.Report(recorder.Count, common.Top, summary);
         var results = new ManifestObject().Add("ticks", recorder.Count).Add("finalHash", finalHash.ToString("X16")).Add("chainHash", chain.ToString("X16")).Add("outcome", session.Outcome.ToString());
         json.Add("results", results);
         Console.WriteLine($"Final hash {finalHash:X16}, chain {chain:X16} (must equal the same run without the observer; `mission-run --ticks {common.Ticks}` prints the same pair).");
@@ -368,11 +385,11 @@ internal static class PerfCommand
                 var moduleSum = modules.Sum(value => Us(value.Ticks));
                 Console.WriteLine();
                 Console.WriteLine($"Update phase by module type, top {Math.Min(common.Top, modules.Count)} of {modules.Count} by total time (timed at the scheduler's dispatch; {modules.Sum(value => value.Calls)} calls = {(double)modules.Sum(value => value.Calls) / recorder.Count:F0} per tick, {100 * moduleSum / Math.Max(1, updates):F1} % of the phase inside module updates):");
-                Console.WriteLine($"  {"module",-36} {"calls",12} {"total ms",11} {"mean us",9} {"max us",10} {"of phase",9}");
+                Console.WriteLine($"  {"module",-36} {"calls",12} {"total ms",11} {"mean us",9} {"max us",10} {"of phase",9} {"bytes/tick",11} {"bytes/call",11}");
                 foreach (var module in modules.Take(common.Top))
                     modulesJson.Add(module.Name, new ManifestObject().Add("calls", module.Calls).Add("totalNs", PerfSummary.Nanoseconds(Us(module.Ticks))).Add("meanNs", PerfSummary.Nanoseconds(Us(module.Ticks) / module.Calls)).Add("maxNs", PerfSummary.Nanoseconds(Us(module.Max))));
                 foreach (var module in modules.Take(common.Top))
-                    Console.WriteLine($"  {module.Name,-36} {module.Calls,12} {Us(module.Ticks) / 1000,11:F1} {Us(module.Ticks) / module.Calls,9:F2} {Us(module.Max),10:F1} {100 * Us(module.Ticks) / Math.Max(1, updates),7:F1} %");
+                    Console.WriteLine($"  {module.Name,-36} {module.Calls,12} {Us(module.Ticks) / 1000,11:F1} {Us(module.Ticks) / module.Calls,9:F2} {Us(module.Max),10:F1} {100 * Us(module.Ticks) / Math.Max(1, updates),7:F1} % {module.Bytes / Math.Max(1, recorder.Count),11} {module.Bytes / module.Calls,11}");
             }
             else Console.WriteLine("Update phase by module type: switched off (--no-modules).");
         }
@@ -385,6 +402,15 @@ internal static class PerfCommand
         Console.WriteLine();
         Console.WriteLine($"Allocations: {allocated / Math.Max(1, recorder.Count)} bytes/tick mean, {sortedAllocations[sortedAllocations.Length / 2]} median, {sortedAllocations[^1]} max; {allocated / (1024.0 * 1024.0):F1} MiB over the run "
                           + $"({allocated / (1024.0 * 1024.0) / Math.Max(1, recorder.Count) * 60 * 30:F0} MiB per game minute at 30 Hz); GC gen0/1/2 = {gcAfter.Gen0 - gcBefore.Gen0}/{gcAfter.Gen1 - gcBefore.Gen1}/{gcAfter.Gen2 - gcBefore.Gen2}.");
+        if (recorder.Observed)
+        {
+            // Where the bytes come from: the allocation counter of the thread read at the phase boundaries.
+            var parts = TickRecorder.Phases.Where(phase => !foreignPhases.Contains(phase) && recorder.PhaseBytes(phase) / Math.Max(1, recorder.Count) > 0)
+                .OrderByDescending(recorder.PhaseBytes).Select(phase => $"{phase} {recorder.PhaseBytes(phase) / Math.Max(1, recorder.Count)}");
+            Console.WriteLine($"Allocated bytes per tick by phase: {string.Join(", ", parts)}.");
+            foreach (var phase in TickRecorder.Phases)
+                if (!foreignPhases.Contains(phase)) summary[$"alloc_{phase}_bytes"] = (recorder.PhaseBytes(phase) / Math.Max(1, recorder.Count)).ToString(Invariant);
+        }
         Console.WriteLine($"Objects: min {recorder.Objects.Min()}, max {recorder.Objects.Max()}, end {recorder.Objects[^1]}.");
         summary["alloc_bytes_per_tick"] = (allocated / Math.Max(1, recorder.Count)).ToString(Invariant);
         summary["gc"] = $"{gcAfter.Gen0 - gcBefore.Gen0}/{gcAfter.Gen1 - gcBefore.Gen1}/{gcAfter.Gen2 - gcBefore.Gen2}";
@@ -609,9 +635,13 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
         public long Calls;
         public long Ticks;
         public long Max;
+        public long Bytes;
     }
 
     private readonly long[] _current = new long[Phases.Length];
+    private readonly long[] _phaseBytes = new long[Phases.Length];
+    private long _phaseStartBytes;
+    private long _updateStartBytes;
     private readonly List<int>[] _phases = [..Phases.Select(_ => new List<int>())];
     // Keyed by the name's reference (cheap at the dispatch point); names that are equal but distinct instances are merged when reported.
     private readonly Dictionary<string, ModuleStat> _modules = new(ReferenceEqualityComparer.Instance);
@@ -645,14 +675,24 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
         _sawPhase = true;
         // What the hash phase is about to describe again; read before it clears the list.
         if (phase == TickPhase.Hash) _dirty = world.DirtyEntityCount;
+        _phaseStartBytes = GC.GetAllocatedBytesForCurrentThread();
         _phaseStart = Stopwatch.GetTimestamp();
     }
 
-    public void PhaseEnded(TickPhase phase) => _current[(int)phase] += Stopwatch.GetTimestamp() - _phaseStart;
+    public void PhaseEnded(TickPhase phase)
+    {
+        _current[(int)phase] += Stopwatch.GetTimestamp() - _phaseStart;
+        _phaseBytes[(int)phase] += GC.GetAllocatedBytesForCurrentThread() - _phaseStartBytes;
+    }
+
+    /// <summary>Bytes allocated inside a phase over the whole run (the phases of a tick do not nest).</summary>
+    public long PhaseBytes(TickPhase phase) => _phaseBytes[(int)phase];
 
     public void UpdateStarted(SimModule module)
     {
-        if (ModuleTiming) _updateStart = Stopwatch.GetTimestamp();
+        if (!ModuleTiming) return;
+        _updateStartBytes = GC.GetAllocatedBytesForCurrentThread();
+        _updateStart = Stopwatch.GetTimestamp();
     }
 
     public void UpdateEnded(SimModule module)
@@ -663,6 +703,7 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
         if (!_modules.TryGetValue(name, out var stat)) _modules[name] = stat = new ModuleStat();
         stat.Calls++;
         stat.Ticks += elapsed;
+        stat.Bytes += GC.GetAllocatedBytesForCurrentThread() - _updateStartBytes;
         if (elapsed > stat.Max) stat.Max = elapsed;
     }
 
@@ -684,9 +725,9 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
         _sawPhase = false;
     }
 
-    public List<(string Name, long Calls, long Ticks, long Max)> ModuleStats()
+    public List<(string Name, long Calls, long Ticks, long Max, long Bytes)> ModuleStats()
         => [.._modules.GroupBy(pair => pair.Key, StringComparer.Ordinal)
-            .Select(group => (group.Key, group.Sum(pair => pair.Value.Calls), group.Sum(pair => pair.Value.Ticks), group.Max(pair => pair.Value.Max)))
+            .Select(group => (group.Key, group.Sum(pair => pair.Value.Calls), group.Sum(pair => pair.Value.Ticks), group.Max(pair => pair.Value.Max), group.Sum(pair => pair.Value.Bytes)))
             .OrderByDescending(value => value.Item3).ThenBy(value => value.Key, StringComparer.Ordinal)];
 
     /// <summary>One row per <paramref name="window"/> steps: the object count at the end of the window and the means over it.</summary>

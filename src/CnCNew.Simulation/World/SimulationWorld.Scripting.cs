@@ -83,7 +83,7 @@ public sealed partial class SimulationWorld
         }
         RemoveBattlePlanFromEntity(entity);
         NotifyOwnerChange(entity, newOwner);
-        entity.Owner = newOwner;
+        SetOwner(entity, newOwner);
         ApplyBattlePlanToEntity(entity);
         MarkDirty(entity);
         return true;

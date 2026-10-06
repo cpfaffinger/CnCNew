@@ -166,6 +166,12 @@ run.Test("Scripts: other command buttons and waypoint abilities", Tests.ScriptOt
 run.Test("Scripts: named special powers, countdowns, named reveals and recorded-only actions", Tests.ScriptSpecialPowerActionsRevealsAndRecording);
 run.Test("Scripts: RECRUIT_TEAM takes free units into the team", Tests.ScriptRecruitTeam);
 run.Test("Scripts: team event scripts (create, enemy sighted, unit destroyed, destroyed)", Tests.ScriptTeamEventScripts);
+run.Test("Entity lists: owner and kind lists equal the scan on a randomly changed world, also when first asked late and after a restore", Tests.WorldEntityListsMatchScan);
+run.Test("Entity lists: the scripts' object conditions answer what the scan over the world answers", Tests.ScriptObjectQueriesMatchScan);
+run.Test("Entity lists: target acquisition and enemy-sighted by enemy owner equal the search per object", Tests.EnemyOwnerSearchesMatchPerObjectSearch);
+run.Test("Entity lists: a checkpoint's look for allies and enemies equals the scan over the world with edge distances", Tests.CheckpointScanMatchesWorldScan);
+run.Test("Fixed-point square root equals the reference iteration and is the floor of the root", Tests.FixedSqrtMatchesReferenceIteration);
+run.Test("Kind lookup of a template equals the comparer lookup it replaced", Tests.KindLookupMatchesComparerLookup);
 run.Test("Scripts: the objective driver ends a mission through its own victory and defeat scripts", Tests.ScriptObjectiveDriver);
 run.Test("Scripts: the goal-directed driver plans backwards from the ending and avoids the opposite ending", Tests.ScriptObjectiveDriverPlansBackwards);
 run.Test("Scripts: the commands-only driver uses orders, not world writes", Tests.ScriptCommandsOnlyDriverUsesOrdersNotWrites);

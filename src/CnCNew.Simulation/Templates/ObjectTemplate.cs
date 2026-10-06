@@ -256,7 +256,13 @@ public sealed class ObjectTemplate
     /// <summary><c>ThingTemplate::m_buildable</c> (<c>BuildableStatus</c>: <c>Yes</c>, <c>Ignore_Prerequisites</c>, <c>No</c>, <c>Only_By_AI</c>); absent key: <c>Yes</c>, the reference default.</summary>
     public string Buildable { get; }
 
-    public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
+    public bool IsKindOf(string kind)
+    {
+        // A loop instead of ImmutableArray.Contains(item, comparer): that call allocates 24 bytes and takes four times as long (docs/PERF-MISSIONS.md).
+        foreach (var name in KindOf)
+            if (string.Equals(name, kind, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 
     private static string Text(ObjectDefinition definition, string name)
         => definition.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty;

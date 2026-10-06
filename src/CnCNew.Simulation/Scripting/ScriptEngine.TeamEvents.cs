@@ -90,10 +90,26 @@ public sealed partial class ScriptEngine
     private bool EnemyInSight(Entity member)
     {
         var limit = member.Template.VisionRange * member.Template.VisionRange;
-        foreach (var entity in _world.Entities)
+        if (_world.RelationshipOverride is not null)
         {
-            if (entity.Owner.IsSystem || entity.EffectivelyDead || entity.DestroyRequested || !_world.AreEnemies(member, entity)) continue;
-            if (DistanceSquared(member, entity.X, entity.Y) <= limit) return true;
+            // A script set a relation between teams: whether two objects are enemies is then a question per pair of objects.
+            foreach (var entity in _world.Entities)
+            {
+                if (entity.Owner.IsSystem || entity.EffectivelyDead || entity.DestroyRequested || !_world.AreEnemies(member, entity)) continue;
+                if (DistanceSquared(member, entity.X, entity.Y) <= limit) return true;
+            }
+            return false;
+        }
+        // Without such an override "enemy" is the relation of the two owners, so only the objects of the member's enemy players can answer; "any" does not
+        // depend on the order they are looked at. The system player and unknown owners are nobody's enemy (SimulationWorld.RelationshipOf).
+        foreach (var player in _world.Configuration.Players)
+        {
+            if (!_world.AreEnemies(member.Owner, player.Id)) continue;
+            foreach (var entity in _world.EntitiesOwnedBy(player.Id).AsSpan())
+            {
+                if (entity.EffectivelyDead || entity.DestroyRequested) continue;
+                if (DistanceSquared(member, entity.X, entity.Y) <= limit) return true;
+            }
         }
         return false;
     }

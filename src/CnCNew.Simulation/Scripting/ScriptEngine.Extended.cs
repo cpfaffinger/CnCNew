@@ -52,11 +52,7 @@ public sealed partial class ScriptEngine
             {
                 // evaluateSkirmishValueInArea: the summed build cost of the player's live, non-inert objects inside the area, compared against the parameter.
                 if (!Has(type, p, 4) || ResolvePlayer(Str(p, 0)) is not { } valueOwner || AreaOrDiagnose(Str(p, 3)) is not { } valueArea) return true;
-                long total = 0;
-                foreach (var entity in _world.Entities)
-                    if (entity.Owner == valueOwner.Id && !entity.EffectivelyDead && !entity.DestroyRequested && !entity.Template.IsKindOf("INERT") && valueArea.Contains(entity.X, entity.Y))
-                        total += entity.Template.BuildCost.Floor();
-                result = Compare(Int(p, 1), total, Int(p, 2));
+                result = Compare(Int(p, 1), PlayerValueInArea(valueOwner.Id, valueArea), Int(p, 2));
                 return true;
             }
             case "SKIRMISH_SPECIAL_POWER_READY":
@@ -72,7 +68,7 @@ public sealed partial class ScriptEngine
             }
             case "SKIRMISH_PLAYER_HAS_DISCOVERED_PLAYER":
                 // evaluateSkirmishPlayerHasDiscoveredPlayer: some object of the first player stands in a cell the second player currently sees.
-                result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } seen && ResolvePlayer(Str(p, 1)) is { } seeing && _world.Entities.Any(entity => entity.Owner == seen.Id && !entity.DestroyRequested && _world.IsPositionVisibleTo(seeing.Id, entity.X, entity.Y));
+                result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } seen && ResolvePlayer(Str(p, 1)) is { } seeing && PlayerSeesObjectOf(seeing.Id, seen.Id);
                 return true;
             case "PLAYER_TRIGGERED_SPECIAL_POWER":
             case "PLAYER_TRIGGERED_SPECIAL_POWER_FROM_NAMED":
@@ -87,7 +83,7 @@ public sealed partial class ScriptEngine
                     source = fromUnit.Id;
                 }
                 if (ResolvePlayer(Str(p, 0)) is not { } triggerer) return true;
-                var index = _triggeredPowers.FindIndex(entry => entry.Player == triggerer.Id.Value && entry.Power == Str(p, 1) && (!source.IsValid || entry.Source == source.Value));
+                var index = FindTriggeredPower(triggerer.Id.Value, Str(p, 1), source);
                 if (index < 0) return true;
                 _triggeredPowers.RemoveAt(index);
                 result = true;
@@ -107,13 +103,13 @@ public sealed partial class ScriptEngine
                 result = Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } discovered && ResolvePlayer(Str(p, 1)) is { } discoverer && IsDiscoveredBy(discovered, discoverer.Id);
                 return true;
             case "TEAM_DISCOVERED":
-                result = Has(type, p, 2) && FindTeam(Str(p, 0)) is { } discoveredTeam && ResolvePlayer(Str(p, 1)) is { } teamDiscoverer && LiveMembers(discoveredTeam).Any(member => IsDiscoveredBy(member, teamDiscoverer.Id));
+                result = Has(type, p, 2) && FindTeam(Str(p, 0)) is { } discoveredTeam && ResolvePlayer(Str(p, 1)) is { } teamDiscoverer && TeamDiscoveredBy(discoveredTeam, teamDiscoverer.Id);
                 return true;
             case "TYPE_SIGHTED":
             {
                 // evaluateTypeSighted: within the unit's vision range there is a live, visible-by-stealth-rules object of the player with the type.
                 if (!Has(type, p, 3) || NamedEntity(Str(p, 0)) is not { } watcher || ResolvePlayer(Str(p, 2)) is not { } sightedOwner) return true;
-                result = SightedObjects(watcher).Any(entity => entity.Owner == sightedOwner.Id && TypeMatches(Str(p, 1), entity));
+                result = TypeSighted(watcher, sightedOwner.Id, Str(p, 1));
                 return true;
             }
             case "ENEMY_SIGHTED":
@@ -121,20 +117,12 @@ public sealed partial class ScriptEngine
                 // evaluateEnemySighted: like TYPE_SIGHTED for any object of the player whose relation to the watcher is the requested one (0 enemy, 1 neutral, 2 friend).
                 if (!Has(type, p, 3) || NamedEntity(Str(p, 0)) is not { } scout || ResolvePlayer(Str(p, 2)) is not { } sightedSide || !Enum.IsDefined((Relationship)Int(p, 1))) return true;
                 var wanted = (Relationship)Int(p, 1);
-                result = SightedObjects(scout).Any(entity => entity.Owner == sightedSide.Id && _world.RelationshipOf(scout.Owner, entity.Owner) == wanted);
+                result = RelationSighted(scout, sightedSide.Id, wanted);
                 return true;
             }
             default:
                 return false;
         }
-    }
-
-    private bool PlayerHasObjectsInArea(PlayerId player, ScriptArea area)
-    {
-        foreach (var entity in _world.Entities)
-            if (entity.Owner == player && !entity.EffectivelyDead && !entity.DestroyRequested && !entity.Template.IsKindOf("INERT") && !entity.Template.IsKindOf("PROJECTILE") && area.Contains(entity.X, entity.Y))
-                return true;
-        return false;
     }
 
     /// <summary>
@@ -145,16 +133,55 @@ public sealed partial class ScriptEngine
     {
         if (!_world.SpecialPowers.TryGet(powerName, out var info))
         {
-            Diagnose($"unknown special power '{powerName}'");
+            Diagnose(UnknownMessage(_unknownPowerMessages, "special power", powerName));
             return false;
         }
-        foreach (var entity in PlayerEntities(player))
+        foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
         {
-            if (entity.HasStatus(UnderConstructionBit)) continue;
+            if (!Counts(entity) || entity.HasStatus(UnderConstructionBit)) continue;
             if (SpecialPowerRouting.FindModule(entity, info.Index) is not { } module) continue;
             if (info.RequiredScience >= 0 && !_world.PlayerSciences(player).Has(info.RequiredScience)) continue;
             if (module.IsReady(_world)) return true;
         }
+        return false;
+    }
+
+    /// <summary><c>evaluateSkirmishPlayerHasDiscoveredPlayer</c>: some object of <paramref name="seen"/> stands where <paramref name="seeing"/> currently sees.</summary>
+    private bool PlayerSeesObjectOf(PlayerId seeing, PlayerId seen)
+    {
+        foreach (var entity in _world.EntitiesOwnedBy(seen).AsSpan())
+            if (!entity.DestroyRequested && _world.IsPositionVisibleTo(seeing, entity.X, entity.Y)) return true;
+        return false;
+    }
+
+    private bool TeamDiscoveredBy(ScriptTeam team, PlayerId player)
+    {
+        foreach (var id in team.Members)
+            if (LiveMember(id) is { } member && IsDiscoveredBy(member, player)) return true;
+        return false;
+    }
+
+    private bool RelationSighted(Entity scout, PlayerId owner, Relationship wanted)
+    {
+        foreach (var entity in SightedObjects(scout))
+            if (entity.Owner == owner && _world.RelationshipOf(scout.Owner, entity.Owner) == wanted) return true;
+        return false;
+    }
+
+    private int FindTriggeredPower(int player, string power, EntityId source)
+    {
+        for (var index = 0; index < _triggeredPowers.Count; index++)
+        {
+            var entry = _triggeredPowers[index];
+            if (entry.Player == player && entry.Power == power && (!source.IsValid || entry.Source == source.Value)) return index;
+        }
+        return -1;
+    }
+
+    private bool TypeSighted(Entity watcher, PlayerId owner, string typeParameter)
+    {
+        foreach (var entity in SightedObjects(watcher))
+            if (entity.Owner == owner && TypeMatches(typeParameter, entity)) return true;
         return false;
     }
 

@@ -105,7 +105,7 @@ public sealed partial class SimulationWorld
             AddEnergyProduction(newOwner, movingBonus);
         }
         NotifyOwnerChange(target, newOwner);
-        target.Owner = newOwner;
+        SetOwner(target, newOwner);
         MarkDirty(target);
         MarkDirty(actor);
         Emit(SimEventKind.StructureCaptured, target.Id, actor.Id, string.Empty, oldOwner.Value, newOwner);

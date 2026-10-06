@@ -475,17 +475,31 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
         var terrain = world.Terrain;
         foreach (var candidate in world.Entities)
         {
-            if (candidate.Id == Entity.Id || candidate.EffectivelyDead || world.RelationshipOf(Entity.Owner, candidate.Owner) == Relationship.Allies) continue;
+            // The status bit first: nearly no object is stealthed, and the tests are independent of each other, so their order only decides what is
+            // looked at in vain (the relationship is three table lookups per object). The objects that pass, and the order they are marked in, are the same.
             if (!candidate.HasStatus(StealthedBit)) continue;
-            if (!data.ExtraRequiredKindOf.IsEmpty && !data.ExtraRequiredKindOf.Any(candidate.Template.IsKindOf)) continue;
-            if (data.ExtraForbiddenKindOf.Any(candidate.Template.IsKindOf)) continue;
+            if (candidate.Id == Entity.Id || candidate.EffectivelyDead || world.RelationshipOf(Entity.Owner, candidate.Owner) == Relationship.Allies) continue;
+            if (!data.ExtraRequiredKindOf.IsEmpty && !HasAnyKind(candidate.Template, data.ExtraRequiredKindOf)) continue;
+            if (HasAnyKind(candidate.Template, data.ExtraForbiddenKindOf)) continue;
             var dx = candidate.X - Entity.X;
             var dy = candidate.Y - Entity.Y;
             if (dx * dx + dy * dy > range * range) continue;
             if (terrain is not null && !terrain.HasHeightLineOfSight(Entity.X, Entity.Y, EyeHeight(Entity), candidate.X, candidate.Y, EyeHeight(candidate))) continue;
-            candidate.Modules.OfType<StealthUpdate>().FirstOrDefault()?.MarkDetected(world, data.UpdateRateTicks + 1);
+            foreach (var module in candidate.Modules)
+            {
+                if (module is not StealthUpdate stealth) continue;
+                stealth.MarkDetected(world, data.UpdateRateTicks + 1);
+                break;
+            }
         }
         return Math.Max(data.UpdateRateTicks, SimulationTiming.SleepNone);
+    }
+
+    private static bool HasAnyKind(ObjectTemplate template, ImmutableArray<string> kinds)
+    {
+        foreach (var kind in kinds)
+            if (template.IsKindOf(kind)) return true;
+        return false;
     }
 
     public override void Describe(IStateWriter writer) => writer.Int("nextWake", _nextWake);

@@ -192,9 +192,10 @@ internal sealed class SupplyMachine
     {
         Entity? best = null;
         var bestDistance = Fixed.MaxValue;
-        foreach (var candidate in world.Entities)
+        // The objects of the kind (the world's kind list, in id order like the scan over every object it replaces).
+        foreach (var candidate in world.EntitiesOfKind(kind).AsSpan())
         {
-            if (candidate.Owner != self.Owner || candidate.EffectivelyDead || candidate.DestroyRequested || !candidate.Template.IsKindOf(kind)) continue;
+            if (candidate.Owner != self.Owner || candidate.EffectivelyDead || candidate.DestroyRequested) continue;
             var dx = candidate.X - self.X;
             var dy = candidate.Y - self.Y;
             var distance = dx * dx + dy * dy;
@@ -359,7 +360,9 @@ internal static class SupplyNetwork
         Entity? best = null;
         var limit = truck.WarehouseScanDistance * truck.WarehouseScanDistance;
         var bestCost = Fixed.MaxValue;
-        foreach (var candidate in world.Entities)
+        // Only an object with a dock module has a cost (Cost asks DockOf first), so the objects with one are all the candidates there are; the pick is the
+        // minimum of (cost, id) and does not depend on their order.
+        foreach (var candidate in world.EntitiesWithModule<IDockModule>().AsSpan())
         {
             if (Cost(self, truck, world, candidate, true) is not { } cost || cost >= limit) continue;
             if (best is null || cost < bestCost || (cost == bestCost && candidate.Id.Value < best.Id.Value))
@@ -378,7 +381,7 @@ internal static class SupplyNetwork
         if (truck.PreferredDock.IsValid && world.FindEntity(truck.PreferredDock) is { } preferred && Cost(self, truck, world, preferred, false) is not null) return preferred;
         Entity? best = null;
         Fixed bestCost = Fixed.MaxValue;
-        foreach (var candidate in world.Entities)
+        foreach (var candidate in world.EntitiesWithModule<IDockModule>().AsSpan())
         {
             if (Cost(self, truck, world, candidate, false) is not { } cost) continue;
             if (best is null || cost < bestCost || (cost == bestCost && candidate.Id.Value < best.Id.Value))

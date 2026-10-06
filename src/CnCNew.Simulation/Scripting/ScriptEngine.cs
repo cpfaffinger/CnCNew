@@ -34,7 +34,7 @@ public sealed class ScriptTeam(int id, string prototype, PlayerId owner)
     public int Id { get; } = id;
     public string Prototype { get; } = prototype;
     public PlayerId Owner { get; set; } = owner;
-    public List<uint> Members { get; } = [];
+    public TeamMembers Members { get; } = new();
 
     /// <summary><c>Team::isCreated</c>: the team has been activated (here: it has ever had a member).</summary>
     public bool Created { get; set; }
@@ -122,12 +122,24 @@ public sealed partial class ScriptEngine
     private readonly bool[] _groupActive;
     private readonly string?[] _conditionTeam;
 
+    // What the update walks per script list, in program order: the scripts outside groups that are no subroutines, and the groups that are no subroutine
+    // groups. All of it is fixed by the program; whether a script or a group is active is asked when it is reached, as before.
+    private readonly ScriptUnit[][] _listScripts;
+    private readonly ScriptGroupUnit[][] _listGroups;
+
     private readonly SortedDictionary<string, Counter> _counters = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, bool> _flags = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, uint> _named = new(StringComparer.Ordinal);
     private readonly SortedSet<string> _everNamed = new(StringComparer.Ordinal);
+
+    // The names of _named that are not in _everNamed yet: the only ones the sweep of PruneTeams has to look at. Derived from the two tables, not state.
+    private readonly SortedSet<string> _namedPending = new(StringComparer.Ordinal);
+    private readonly List<string> _nameScratch = [];
+    private readonly List<uint> _idScratch = [];
+    private Predicate<uint>? _memberIsGone;
     private readonly SortedDictionary<string, SortedSet<string>> _objectLists = new(StringComparer.Ordinal);
-    private readonly SortedDictionary<int, ScriptTeam> _teams = [];
+    private readonly MembershipStamp _membership = new();
+    private readonly TeamTable _teams;
     private readonly SortedDictionary<uint, Follower> _followers = [];
     private readonly SortedDictionary<uint, LastDamage> _lastDamage = [];
     private readonly SortedDictionary<uint, string> _completedPath = [];
@@ -165,6 +177,7 @@ public sealed partial class ScriptEngine
         _world = world;
         _options = options;
         _issue = issue;
+        _teams = new TeamTable(_membership);
         _scriptActive = new bool[program.Units.Length];
         _nextEvaluation = new long[program.Units.Length];
         _groupActive = new bool[program.Groups.Length];
@@ -179,11 +192,27 @@ public sealed partial class ScriptEngine
             _conditionTeam[index] = FindConditionTeam(script);
         }
         for (var index = 0; index < program.Groups.Length; index++) _groupActive[index] = program.Groups[index].Group.IsActive;
+        _listScripts = new ScriptUnit[program.ListCount][];
+        _listGroups = new ScriptGroupUnit[program.ListCount][];
+        for (var list = 0; list < program.ListCount; list++)
+        {
+            var scripts = new List<ScriptUnit>();
+            foreach (var unit in program.Units)
+                if (unit.ListIndex == list && unit.GroupIndex < 0 && !unit.IsSubroutine) scripts.Add(unit);
+            var groups = new List<ScriptGroupUnit>();
+            foreach (var group in program.Groups)
+                if (group.ListIndex == list && !group.Group.IsSubroutine) groups.Add(group);
+            _listScripts[list] = [..scripts];
+            _listGroups[list] = [..groups];
+        }
         foreach (var prototype in program.Teams)
             if (prototype.IsSingleton || prototype.MaxInstances < 2) CreateTeam(prototype.Name, runStartActions: false);
     }
 
     public ScriptProgram Program => _program;
+
+    /// <summary>A tool's measuring hook (<see cref="IScriptObserver"/>); <see langword="null"/> unless a tool installs one. Not part of the state: neither hashed nor saved.</summary>
+    public IScriptObserver? Observer { get; set; }
     public MissionOutcome Outcome { get; private set; }
 
     /// <summary>The tick the outcome was decided (<c>VICTORY</c>/<c>DEFEAT</c> executed), or -1.</summary>
@@ -255,7 +284,12 @@ public sealed partial class ScriptEngine
     {
         if (string.IsNullOrEmpty(name)) return;
         _named[name] = id.Value;
-        if (_world.FindEntity(id) is not null) _everNamed.Add(name);
+        if (_world.FindEntity(id) is not null)
+        {
+            _everNamed.Add(name);
+            _namedPending.Remove(name);
+        }
+        else if (!_everNamed.Contains(name)) _namedPending.Add(name);
     }
 
     /// <summary>Puts an object into a team instance (map objects join the singleton team of their <c>originalOwner</c>).</summary>
@@ -319,37 +353,68 @@ public sealed partial class ScriptEngine
             if (_endTimer < 1) IsEnded = true;
         }
         if (_endTimer >= 0) return;
+        var observer = Observer;
+        observer?.SectionStarted(ScriptSection.Housekeeping);
         if (_pendingPresentation.Count > 0)
             foreach (var name in _pendingPresentation.Where(pair => pair.Value <= tick).Select(pair => pair.Key).ToArray()) _pendingPresentation.Remove(name);
 
         PruneTeams();
         foreach (var counter in _counters.Values)
             if (counter.IsTimer && counter.Value >= 0) counter.Value--;
+        observer?.SectionEnded(ScriptSection.Housekeeping);
 
+        observer?.SectionStarted(ScriptSection.Scripts);
         for (var list = 0; list < _program.ListCount; list++)
         {
             _currentList = list;
-            foreach (var unit in _program.Units)
+            foreach (var unit in _listScripts[list]) ExecuteScript(unit);
+            foreach (var group in _listGroups[list])
             {
-                if (unit.ListIndex != list || unit.GroupIndex >= 0) continue;
-                if (!unit.IsSubroutine) ExecuteScript(unit);
-            }
-            foreach (var group in _program.Groups)
-            {
-                if (group.ListIndex != list || !_groupActive[group.Index] || group.Group.IsSubroutine) continue;
+                if (!_groupActive[group.Index]) continue;
                 foreach (var index in group.ScriptIndices)
                     if (!_program.Units[index].IsSubroutine) ExecuteScript(_program.Units[index]);
             }
         }
         _uiInteractions.Clear();
-        UpdateFollowers();
-        UpdateButtonHunts();
-        ProcessTeamEvents();
-        ProcessSequences();
-        ProcessTeamBuilds();
-        UpdateTeamQueues();
-        UpdatePhase13(tick);
+        observer?.SectionEnded(ScriptSection.Scripts);
+        if (observer is null)
+        {
+            UpdateFollowers();
+            UpdateButtonHunts();
+            ProcessTeamEvents();
+            ProcessSequences();
+            ProcessTeamBuilds();
+            UpdateTeamQueues();
+            UpdatePhase13(tick);
+        }
+        else UpdateTailObserved(observer, tick);
         _pruneBelow = _world.Ids.NextEntity;
+    }
+
+    /// <summary>The same calls in the same order as the tail of <see cref="Update"/>, each reported to the observer.</summary>
+    private void UpdateTailObserved(IScriptObserver observer, long tick)
+    {
+        observer.SectionStarted(ScriptSection.Followers);
+        UpdateFollowers();
+        observer.SectionEnded(ScriptSection.Followers);
+        observer.SectionStarted(ScriptSection.ButtonHunts);
+        UpdateButtonHunts();
+        observer.SectionEnded(ScriptSection.ButtonHunts);
+        observer.SectionStarted(ScriptSection.TeamEvents);
+        ProcessTeamEvents();
+        observer.SectionEnded(ScriptSection.TeamEvents);
+        observer.SectionStarted(ScriptSection.Sequences);
+        ProcessSequences();
+        observer.SectionEnded(ScriptSection.Sequences);
+        observer.SectionStarted(ScriptSection.TeamBuilds);
+        ProcessTeamBuilds();
+        observer.SectionEnded(ScriptSection.TeamBuilds);
+        observer.SectionStarted(ScriptSection.TeamQueues);
+        UpdateTeamQueues();
+        observer.SectionEnded(ScriptSection.TeamQueues);
+        observer.SectionStarted(ScriptSection.WorldOrders);
+        UpdatePhase13(tick);
+        observer.SectionEnded(ScriptSection.WorldOrders);
     }
 
     private void ExecuteScript(ScriptUnit unit)
@@ -375,23 +440,22 @@ public sealed partial class ScriptEngine
         if (script.DelayEvaluationSeconds > 0) _nextEvaluation[unit.Index] = _tick + (long)script.DelayEvaluationSeconds * SimulationTiming.LogicFramesPerSecond;
 
         var previousTeam = _callingTeam;
-        var conditionTeam = _conditionTeam[unit.Index];
-        var instances = conditionTeam is null ? [] : _teams.Values.Where(team => team.Prototype == conditionTeam).ToArray();
-        if (instances.Length > 0)
-        {
-            // One evaluation per instance of the team the conditions talk about; the actions of that round act for that instance.
-            foreach (var instance in instances)
+        // The instances of the team the conditions talk about, as they are before the first evaluation (in id order): none, one, or - rarely - several.
+        ScriptTeam? onlyInstance = null;
+        List<ScriptTeam>? instances = null;
+        if (_conditionTeam[unit.Index] is { } conditionTeam)
+            foreach (var team in _teams.Values)
             {
-                _callingTeam = instance;
-                if (EvaluateConditions(unit))
-                {
-                    _executedScripts++;
-                    ExecuteActions(script.Actions);
-                    if (script.IsOneShot) _scriptActive[unit.Index] = false;
-                }
-                else if (!script.FalseActions.IsDefaultOrEmpty) ExecuteActions(script.FalseActions);
+                if (team.Prototype != conditionTeam) continue;
+                if (onlyInstance is null && instances is null) onlyInstance = team;
+                else (instances ??= [onlyInstance!]).Add(team);
             }
+        if (instances is not null)
+        {
+            // One evaluation per instance; the actions of that round act for that instance.
+            foreach (var instance in instances) RunForInstance(unit, script, instance);
         }
+        else if (onlyInstance is not null) RunForInstance(unit, script, onlyInstance);
         else
         {
             _callingTeam = null;
@@ -408,6 +472,18 @@ public sealed partial class ScriptEngine
             }
         }
         _callingTeam = previousTeam;
+    }
+
+    private void RunForInstance(ScriptUnit unit, MapScript script, ScriptTeam instance)
+    {
+        _callingTeam = instance;
+        if (EvaluateConditions(unit))
+        {
+            _executedScripts++;
+            ExecuteActions(script.Actions);
+            if (script.IsOneShot) _scriptActive[unit.Index] = false;
+        }
+        else if (!script.FalseActions.IsDefaultOrEmpty) ExecuteActions(script.FalseActions);
     }
 
     /// <summary>
@@ -578,7 +654,7 @@ public sealed partial class ScriptEngine
         if (name == ThisPlayerName) return _currentList < _program.Players.Length ? _program.Players[_currentList] : null;
         if (name == LocalPlayerName) return PlayerById(_options.LocalPlayer);
         var player = _program.FindPlayer(name);
-        if (player is null) Diagnose($"unknown player '{name}'");
+        if (player is null) Diagnose(UnknownMessage(_unknownPlayerMessages, "player", name));
         return player;
     }
 
@@ -623,6 +699,7 @@ public sealed partial class ScriptEngine
         {
             var owner = _program.FindPlayer(prototype.Owner);
             team = new ScriptTeam(_nextTeamId++, prototypeName, owner is null ? PlayerId.System : owner.Id);
+            team.Members.Stamp = _membership;
             _teams[team.Id] = team;
         }
         if (runStartActions && prototype.ExecutesActionsOnCreate && prototype.ProductionCondition.Length > 0)
@@ -659,22 +736,40 @@ public sealed partial class ScriptEngine
     {
         // TheScriptEngine->didUnitExist: a name counts as having existed once its object was alive in the world. A requested spawn registers at the end of the
         // tick, so the first sweep after that records it; an object that dies and vanishes later is then "destroyed", one that was never created is not.
-        foreach (var (name, id) in _named)
-            if (!_everNamed.Contains(name) && _world.FindEntity(new EntityId(id)) is not null) _everNamed.Add(name);
-        foreach (var team in _teams.Values)
-            team.Members.RemoveAll(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null);
-        foreach (var gone in _lastDamage.Keys.Where(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null).ToArray()) _lastDamage.Remove(gone);
-        foreach (var gone in _lastEntered.Keys.Where(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null).ToArray()) _lastEntered.Remove(gone);
-        foreach (var gone in _prioritySetOf.Keys.Where(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null).ToArray()) _prioritySetOf.Remove(gone);
-        foreach (var gone in _completedPath.Keys.Where(id => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null).ToArray()) _completedPath.Remove(gone);
+        if (_namedPending.Count > 0)
+        {
+            _nameScratch.Clear();
+            foreach (var name in _namedPending)
+                if (_world.FindEntity(new EntityId(_named[name])) is not null) _nameScratch.Add(name);
+            foreach (var name in _nameScratch)
+            {
+                _everNamed.Add(name);
+                _namedPending.Remove(name);
+            }
+        }
+        _memberIsGone ??= IsGone;
+        foreach (var team in _teams.Values) team.Members.RemoveAll(_memberIsGone);
+        PruneGone(_lastDamage);
+        PruneGone(_lastEntered);
+        PruneGone(_prioritySetOf);
+        PruneGone(_completedPath);
+    }
+
+    /// <summary>An id allocated before the previous update whose object is not in the world (any more).</summary>
+    private bool IsGone(uint id) => id < _pruneBelow && _world.FindEntity(new EntityId(id)) is null;
+
+    private void PruneGone<TValue>(SortedDictionary<uint, TValue> table)
+    {
+        if (table.Count == 0) return;
+        _idScratch.Clear();
+        foreach (var id in table.Keys)
+            if (IsGone(id)) _idScratch.Add(id);
+        foreach (var id in _idScratch) table.Remove(id);
     }
 
     internal static bool CountsAsObject(Entity entity)
         => !entity.EffectivelyDead && !entity.DestroyRequested
            && !entity.Template.IsKindOf("PROJECTILE") && !entity.Template.IsKindOf("INERT") && !entity.Template.IsKindOf("MINE");
-
-    private IEnumerable<Entity> PlayerEntities(PlayerId player)
-        => _world.Entities.Where(entity => entity.Owner == player && CountsAsObject(entity)).OrderBy(entity => entity.Id.Value);
 
     // ------------------------------------------------------------------------------------------------ state
 
@@ -952,6 +1047,9 @@ public sealed partial class ScriptEngine
         foreach (var item in reader.Array("named")) _named[item.Text("name")] = checked((uint)item.UInt("id"));
         _everNamed.Clear();
         foreach (var item in reader.Array("everNamed")) _everNamed.Add(item.Text("name"));
+        _namedPending.Clear();
+        foreach (var name in _named.Keys)
+            if (!_everNamed.Contains(name)) _namedPending.Add(name);
         _objectLists.Clear();
         foreach (var item in reader.Array("objectLists"))
         {
@@ -971,6 +1069,7 @@ public sealed partial class ScriptEngine
                 team.SeeEnemy = item.Bool("eventsSeeEnemy");
                 team.WasIdle = item.Bool("eventsWasIdle");
             }
+            team.Members.Stamp = _membership;
             foreach (var member in item.Array("members")) team.Members.Add(checked((uint)member.UInt("id")));
             _teams[team.Id] = team;
         }
