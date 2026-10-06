@@ -65,6 +65,10 @@ static partial class Tests
             var height = cellsY * TerrainMap.CellSize;
             // Lookers that stay where they are for a while, as the buildings of a base do: most refreshes repeat most circles.
             var lookers = new List<(int Slot, Fixed X, Fixed Y, Fixed Radius)>();
+            // Even shapes: many lookers that seldom move (slots are patched around the few that do); odd shapes: few that move often (slots are redrawn).
+            var most = shape % 2 == 0 ? 40 : 12;
+            var moves = shape % 2 == 0 ? 6 : 25;
+            long unchanged = 0, patched = 0, redrawn = 0;
             for (var step = 0; step < 700; step++)
             {
                 var label = $"shape {shape}, step {step}";
@@ -74,10 +78,10 @@ static partial class Tests
                     // A refresh: some lookers move, appear or vanish.
                     for (var index = lookers.Count - 1; index >= 0; index--)
                     {
-                        if (dice.Chance(5)) lookers.RemoveAt(index);
-                        else if (dice.Chance(25)) lookers[index] = lookers[index] with { X = lookers[index].X + dice.Coordinate(-12, 12), Y = lookers[index].Y + dice.Coordinate(-12, 12) };
+                        if (dice.Chance(shape % 2 == 0 ? 2 : 5)) lookers.RemoveAt(index);
+                        else if (dice.Chance(moves)) lookers[index] = lookers[index] with { X = lookers[index].X + dice.Coordinate(-12, 12), Y = lookers[index].Y + dice.Coordinate(-12, 12) };
                     }
-                    while (lookers.Count < 12 && dice.Chance(40))
+                    while (lookers.Count < most && dice.Chance(shape % 2 == 0 ? 80 : 40))
                     {
                         var radius = dice.Below(10) switch
                         {
@@ -132,6 +136,12 @@ static partial class Tests
                         nextFast.Load(slot, text);
                         nextReference.Load(slot, text);
                     }
+                    if (fresh)
+                    {
+                        unchanged += fast.Counters.SlotsUnchanged;
+                        patched += fast.Counters.SlotsPatched;
+                        redrawn += fast.Counters.SlotsRedrawn;
+                    }
                     fast = nextFast;
                     reference = nextReference;
                 }
@@ -155,6 +165,10 @@ static partial class Tests
                 if (dice.Chance(70)) VisionMapsAgree(fast, reference, label);
             }
             VisionMapsAgree(fast, reference, $"shape {shape}, end");
+            unchanged += fast.Counters.SlotsUnchanged;
+            patched += fast.Counters.SlotsPatched;
+            redrawn += fast.Counters.SlotsRedrawn;
+            Check.That(unchanged > 20 && patched > 20 && redrawn > 20, $"shape {shape}: the run took all three ways of a refresh ({unchanged} slots left alone, {patched} patched, {redrawn} redrawn).");
         }
     }
 

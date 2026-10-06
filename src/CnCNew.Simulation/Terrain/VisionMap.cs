@@ -15,10 +15,15 @@ public sealed class VisionCounters
     public long Refreshes;
     /// <summary>Cell bytes <see cref="VisionMap.BeginRefresh"/> went over (the whole table in the reference mode).</summary>
     public long CellsCleared;
-    /// <summary>Calls of <see cref="VisionMap.Reveal"/> with a positive radius.</summary>
+    /// <summary>Calls of <see cref="VisionMap.Reveal"/> with a positive radius (in the reference mode also those beside the map).</summary>
     public long Circles;
-    /// <summary>Slots a refresh left alone because their circles were the same as in the refresh before, and the circles that were therefore not drawn.</summary>
+    /// <summary>Slots a refresh left alone because their circles were the same as in the refresh before.</summary>
     public long SlotsUnchanged;
+    /// <summary>Slots a refresh patched: only the circles that went were forgotten and the surroundings drawn again.</summary>
+    public long SlotsPatched;
+    /// <summary>Slots a refresh forgot and drew completely.</summary>
+    public long SlotsRedrawn;
+    /// <summary>Circles that were not drawn in full because they were there in the refresh before (in a slot left alone or patched).</summary>
     public long CirclesSkipped;
     /// <summary>Cell bytes <see cref="VisionMap.Reveal"/> wrote (the cells inside the circles; a cell under several circles counts once per circle).</summary>
     public long CellsRevealed;
@@ -40,8 +45,8 @@ public sealed class VisionCounters
 /// line of sight — <c>Object::look</c> only adds a radius. One byte per cell and player (bit 0 visible, bit 1 explored, bit 2 permanently revealed by a script; a snapshot that never used a map-reveal script contains only bits 0 and 1).
 /// <para>
 /// The cell bytes and <see cref="Hash"/> define the result. Everything else in this class is bookkeeping that makes a refresh cost what is in
-/// sight instead of the map area: the circles of the last refresh per slot (a slot whose circles did not change is left alone), the row extents
-/// <see cref="Reveal"/> wrote (so a refresh clears only those), the rows touched
+/// sight instead of the map area: the circles of the last refresh per slot (a slot whose circles did not change is left alone, one with few
+/// changes is patched around them), the row extents the circles wrote (so a full redraw clears only those), the rows touched
 /// since the last hash, a copy of the cells as they were hashed and the chain values at fixed distances (so <see cref="CurrentHash"/> resumes the
 /// chain at the first byte that really changed). None of it is state: it is rebuilt from the cells, never hashed, never saved.
 /// </para>
@@ -72,8 +77,11 @@ public sealed class VisionMap
     private readonly int[][] _revealMaxX;
     private readonly int[] _revealLow;        // rows with a non-empty extent, per slot; low > high when none
     private readonly int[] _revealHigh;
-    private readonly List<long>[] _pending;   // per slot: x, y, radius (raw) of the circles of the refresh in progress
-    private readonly List<long>[] _drawn;     // per slot: the circles the cells currently show
+    private readonly List<Circle>[] _pending; // per slot: the circles of the refresh in progress
+    private readonly List<Circle>[] _drawn;   // per slot: the circles the cells currently show, sorted
+    private readonly List<Circle> _gone = [];  // work lists of EndRefresh: circles of the last refresh that are no longer there, ...
+    private readonly List<Circle> _stayed = []; // ... that are there again, ...
+    private readonly List<Circle> _came = [];   // ... and new ones
     private readonly bool[] _redraw;          // per slot: the cells were written by something else than the refresh since it last drew them
     private ulong _hash;
 
@@ -91,8 +99,8 @@ public sealed class VisionMap
         _revealMaxX = new int[playerSlots][];
         _revealLow = new int[playerSlots];
         _revealHigh = new int[playerSlots];
-        _pending = new List<long>[playerSlots];
-        _drawn = new List<long>[playerSlots];
+        _pending = new List<Circle>[playerSlots];
+        _drawn = new List<Circle>[playerSlots];
         _redraw = new bool[playerSlots];
         var hash = StateHash.Seed;
         for (var slot = 0; slot < playerSlots; slot++)
@@ -186,8 +194,17 @@ public sealed class VisionMap
 
     /// <summary>
     /// Ends a refresh. The cells afterwards are those <see cref="BeginRefreshReference"/> followed by one <see cref="RevealReference"/> per circle
-    /// leave behind. A slot whose circles are, one by one, those of the refresh before and whose cells nothing else wrote since is left alone:
-    /// forgetting the visible cells and drawing the same circles again ends with the bytes it started from.
+    /// leave behind (visible exactly where a circle of this refresh or a permanent mark is; exploration only grows). Per slot, cheapest first:
+    /// <list type="bullet">
+    /// <item>The circles are those of the refresh before and nothing else wrote the cells since: the slot is left alone. Forgetting the visible
+    /// cells and drawing the same circles again would end with the bytes it started from.</item>
+    /// <item>Some circles went, some came: only the cells of the circles that went are forgotten; then every circle that stayed is drawn again
+    /// inside the bounding box of each circle that went, and the new circles are drawn. Outside the circles that went nothing was forgotten, so
+    /// the circles that stayed still show there.</item>
+    /// <item>Something else wrote the cells (a script, a load, a reference pass), or patching would go over at least as many cells as drawing
+    /// everything (many circles moved, or the ones that moved overlap many that stayed): everything visible in the slot is forgotten and every
+    /// circle drawn.</item>
+    /// </list>
     /// </summary>
     public void EndRefresh()
     {
@@ -196,25 +213,86 @@ public sealed class VisionMap
         {
             var pending = _pending[slot];
             var drawn = _drawn[slot];
-            if (!_redraw[slot] && CollectionsMarshal.AsSpan(pending).SequenceEqual(CollectionsMarshal.AsSpan(drawn)))
+            // The order of the circles does not matter to the cells (bits are only set); sorted, two refreshes compare circle by circle.
+            pending.Sort();
+            if (_redraw[slot])
+            {
+                Redraw(slot, pending);
+            }
+            else if (CollectionsMarshal.AsSpan(pending).SequenceEqual(CollectionsMarshal.AsSpan(drawn)))
             {
                 Counters.SlotsUnchanged++;
-                Counters.CirclesSkipped += pending.Count / 3;
+                Counters.CirclesSkipped += pending.Count;
                 continue;
             }
-            ForgetVisible(slot);
-            for (var index = 0; index < pending.Count; index += 3)
-                Draw(slot, Fixed.FromRaw(pending[index]), Fixed.FromRaw(pending[index + 1]), Fixed.FromRaw(pending[index + 2]));
+            else
+            {
+                _gone.Clear();
+                _stayed.Clear();
+                _came.Clear();
+                int old = 0, now = 0;
+                while (old < drawn.Count && now < pending.Count)
+                {
+                    var order = drawn[old].CompareTo(pending[now]);
+                    if (order == 0)
+                    {
+                        _stayed.Add(pending[now]);
+                        old++;
+                        now++;
+                    }
+                    else if (order < 0) _gone.Add(drawn[old++]);
+                    else _came.Add(pending[now++]);
+                }
+                while (old < drawn.Count) _gone.Add(drawn[old++]);
+                while (now < pending.Count) _came.Add(pending[now++]);
+                // Both ways end with the same cells; the choice is by work, counted in cells of the boxes each way goes over.
+                long redrawCells = 0, patchCells = 0;
+                foreach (var circle in pending) redrawCells += circle.BoxCells;
+                foreach (var circle in _gone) patchCells += circle.BoxCells;
+                foreach (var circle in _came) patchCells += circle.BoxCells;
+                foreach (var circle in _stayed)
+                {
+                    if (patchCells >= redrawCells) break;
+                    foreach (var hole in _gone)
+                    {
+                        var width = Math.Min(circle.MaxX, hole.MaxX) - Math.Max(circle.MinX, hole.MinX) + 1;
+                        var height = Math.Min(circle.MaxY, hole.MaxY) - Math.Max(circle.MinY, hole.MinY) + 1;
+                        if (width > 0 && height > 0) patchCells += (long)width * height;
+                    }
+                }
+                if (patchCells >= redrawCells)
+                {
+                    Redraw(slot, pending);
+                }
+                else
+                {
+                    Counters.SlotsPatched++;
+                    Counters.CirclesSkipped += _stayed.Count;
+                    foreach (var circle in _gone) Trace(slot, circle, circle, forget: true);
+                    foreach (var circle in _stayed)
+                        foreach (var hole in _gone)
+                            if (circle.MinX <= hole.MaxX && hole.MinX <= circle.MaxX && circle.MinY <= hole.MaxY && hole.MinY <= circle.MaxY)
+                                Trace(slot, circle, hole, forget: false);
+                    foreach (var circle in _came) Trace(slot, circle, circle, forget: false);
+                }
+            }
             _drawn[slot] = pending;
             _pending[slot] = drawn;
             _redraw[slot] = false;
         }
     }
 
+    private void Redraw(int slot, List<Circle> circles)
+    {
+        Counters.SlotsRedrawn++;
+        ForgetVisible(slot);
+        foreach (var circle in circles) Trace(slot, circle, circle, forget: false);
+    }
+
     /// <summary>
     /// The refresh start for one slot. The same bytes as <see cref="BeginRefreshReference"/>, which goes over every cell: that pass changes a
     /// cell only if it is visible without the permanent mark (a permanent cell always holds all three bits), and such cells exist only where
-    /// <see cref="Draw"/> wrote since the slot was last cleared or where <see cref="Load"/> put them — the recorded row extents.
+    /// a circle was drawn since the slot was last cleared or where <see cref="Load"/> put them — the recorded row extents.
     /// </summary>
     private void ForgetVisible(int slot)
     {
@@ -346,35 +424,56 @@ public sealed class VisionMap
         }
         if (radius <= Fixed.Zero) return;
         Counters.Circles++;
-        var pending = _pending[slot];
-        pending.Add(x.Raw);
-        pending.Add(y.Raw);
-        pending.Add(radius.Raw);
-    }
-
-    /// <summary>
-    /// Marks every cell whose centre lies within <paramref name="radius"/> of the point as visible and explored for the slot. The same cells as
-    /// <see cref="RevealReference"/>, which tests every cell of the bounding box: within a row the squared distance is convex in the column, so
-    /// the cells inside the circle are one run of columns around the cell nearest to the point. A row nearer to the point's row than the one
-    /// before holds a run that contains the previous one, a row farther away a run inside it, so the two ends only ever walk outwards or
-    /// inwards from the previous row's; the run is then written at once.
-    /// </summary>
-    private void Draw(int slot, Fixed x, Fixed y, Fixed radius)
-    {
-        var cellRaw = Fixed.FromInt(TerrainMap.CellSize).Raw;
         var minY = Math.Max(0, CellOf(y - radius));
         var maxY = Math.Min(CellsY - 1, CellOf(y + radius));
         var minX = Math.Max(0, CellOf(x - radius));
         var maxX = Math.Min(CellsX - 1, CellOf(x + radius));
+        // A circle beside the map covers no cell: it is not part of what the slot shows.
+        if (minY > maxY || minX > maxX) return;
+        _pending[slot].Add(new Circle(x.Raw, y.Raw, radius.Raw, minX, maxX, minY, maxY, CellOf(x)));
+    }
+
+    /// <summary>
+    /// A circle of a refresh with the cell box <see cref="RevealReference"/> would go over (clamped to the map) and the column under its
+    /// centre. Two circles are the same when centre and radius are; the rest follows from them.
+    /// </summary>
+    private readonly record struct Circle(long X, long Y, long Radius, int MinX, int MaxX, int MinY, int MaxY, int CentreColumn) : IComparable<Circle>
+    {
+        public int CompareTo(Circle other)
+            => X != other.X ? X.CompareTo(other.X) : Y != other.Y ? Y.CompareTo(other.Y) : Radius.CompareTo(other.Radius);
+
+        public long BoxCells => (long)(MaxX - MinX + 1) * (MaxY - MinY + 1);
+
+        public bool Equals(Circle other) => X == other.X && Y == other.Y && Radius == other.Radius;
+
+        // Never used as a key; defined with Equals so that the two cannot disagree.
+        public override int GetHashCode() => 0;
+    }
+
+    /// <summary>
+    /// Marks every cell whose centre lies within the circle as visible and explored for the slot, or (<paramref name="forget"/>) applies the
+    /// refresh start to those cells; only inside the cell box of <paramref name="clip"/>. The same cells as <see cref="RevealReference"/>, which
+    /// tests every cell of the bounding box: within a row the squared distance is convex in the column, so the cells inside the circle are one
+    /// run of columns around the column nearest to the centre. A row nearer to the centre's row than the one before holds a run that contains
+    /// the previous one, a row farther away a run inside it, so the two ends only ever walk outwards or inwards from the previous row's; the
+    /// run is then written at once. Clipping keeps all of that: the nearest column inside the clipped columns takes the place of the nearest.
+    /// </summary>
+    private void Trace(int slot, in Circle circle, in Circle clip, bool forget)
+    {
+        var cellRaw = Fixed.FromInt(TerrainMap.CellSize).Raw;
+        var minY = Math.Max(circle.MinY, clip.MinY);
+        var maxY = Math.Min(circle.MaxY, clip.MaxY);
+        var minX = Math.Max(circle.MinX, clip.MinX);
+        var maxX = Math.Min(circle.MaxX, clip.MaxX);
         if (minY > maxY || minX > maxX) return;
         var cells = _cells[slot];
         var rowMinX = _revealMinX[slot];
         var rowMaxX = _revealMaxX[slot];
-        var limit = (long)radius.Raw * radius.Raw;
+        var limit = circle.Radius * circle.Radius;
         var half = TerrainMap.CellSize * 65536L / 2;
-        // The in-bounds column whose centre is nearest to the point: if it is outside the circle in a row, every column of that row is.
-        var nearest = Math.Clamp(CellOf(x), minX, maxX);
-        var nearestDx = (long)nearest * cellRaw + half - x.Raw;
+        // The column in range whose centre is nearest to the point: if it is outside the circle in a row, every column of that row is.
+        var nearest = Math.Clamp(circle.CentreColumn, minX, maxX);
+        var nearestDx = (long)nearest * cellRaw + half - circle.X;
         var nearestDx2 = nearestDx * nearestDx;
         var left = nearest;
         var right = nearest;
@@ -384,34 +483,44 @@ public sealed class VisionMap
         long tested = 0, written = 0;
         for (var cy = minY; cy <= maxY; cy++)
         {
-            var dy = (long)cy * cellRaw + half - y.Raw;
+            var dy = (long)cy * cellRaw + half - circle.Y;
             var rest = limit - dy * dy;
             if (rest < 0 || nearestDx2 > rest) continue;
             if (rest >= previousRest)
             {
                 // At least as wide as the last run (on the first row that is the nearest column alone, which is inside): the ends move out while the next cell is inside.
-                while (left > minX && Inside(left - 1, cellRaw, half, x.Raw, rest)) { left--; tested++; }
-                while (right < maxX && Inside(right + 1, cellRaw, half, x.Raw, rest)) { right++; tested++; }
+                while (left > minX && Inside(left - 1, cellRaw, half, circle.X, rest)) { left--; tested++; }
+                while (right < maxX && Inside(right + 1, cellRaw, half, circle.X, rest)) { right++; tested++; }
             }
             else
             {
                 // Inside the last run and not empty (the nearest column is inside): the ends move in while they are outside.
-                while (!Inside(left, cellRaw, half, x.Raw, rest)) { left++; tested++; }
-                while (!Inside(right, cellRaw, half, x.Raw, rest)) { right--; tested++; }
+                while (!Inside(left, cellRaw, half, circle.X, rest)) { left++; tested++; }
+                while (!Inside(right, cellRaw, half, circle.X, rest)) { right--; tested++; }
             }
             previousRest = rest;
             tested += 2;
-            MarkVisible(cells.AsSpan(cy * CellsX + left, right - left + 1));
-            written += right - left + 1;
-            if (left < rowMinX[cy]) rowMinX[cy] = left;
-            if (right > rowMaxX[cy]) rowMaxX[cy] = right;
+            var run = cells.AsSpan(cy * CellsX + left, right - left + 1);
+            written += run.Length;
+            if (forget)
+            {
+                ForgetVisible(run);
+            }
+            else
+            {
+                MarkVisible(run);
+                if (left < rowMinX[cy]) rowMinX[cy] = left;
+                if (right > rowMaxX[cy]) rowMaxX[cy] = right;
+            }
             if (firstRow < 0) firstRow = cy;
             lastRow = cy;
         }
         Counters.CellsTested += tested;
-        Counters.CellsRevealed += written;
+        if (forget) Counters.CellsCleared += written;
+        else Counters.CellsRevealed += written;
         if (firstRow < 0) return;
         Touch(slot, firstRow, lastRow);
+        if (forget) return;
         if (firstRow < _revealLow[slot]) _revealLow[slot] = firstRow;
         if (lastRow > _revealHigh[slot]) _revealHigh[slot] = lastRow;
     }
