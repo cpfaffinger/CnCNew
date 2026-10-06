@@ -18,11 +18,13 @@ public enum MovementWork
 /// <summary>
 /// What one path search did: deterministic counters, the same in every run of the same inputs. A search answered from the grid's memory (<see cref="Cached"/>) reports the counters
 /// of the search that produced the answer; it did none of that work itself. A search that was stopped because the goal was proved unreachable (<see cref="ProvedUnreachable"/>,
-/// <see cref="NavigationGrid.FindPathToGoal"/>) reports the cells it expanded until then and the cells of the flood from the goal.
+/// <see cref="NavigationGrid.FindPathToGoal"/>) reports the cells it expanded until then and the cells of the flood from the goal. <see cref="EndDistance"/> is the octile distance
+/// (10 per straight cell, 14 per diagonal one) from the last cell of the path to the goal cell: 0 for a path that arrives. <see cref="ClosestProvedFinal"/>: the search ended early
+/// because no cell closer to the goal than its closest one can be reached (<see cref="ClosestChecks"/> counts the attempts of that proof).
 /// </summary>
 public readonly record struct PathSearchInfo(
     int StartCell, int GoalCell, LocomotorSurfaces Surfaces, PathStatus Status, int Expansions, int Pushes, int EscapeCells, int TemporaryCells, int PathCells, int Waypoints, bool Cached,
-    bool ProvedUnreachable = false, int ReverseCells = 0);
+    bool ProvedUnreachable = false, int ReverseCells = 0, int EndDistance = 0, bool ClosestProvedFinal = false, int ClosestChecks = 0);
 
 /// <summary>
 /// A tool's measuring hook for movement and path search, the counterpart of <c>ITickPhaseObserver</c> for what happens inside a movement update. The simulation has no clock: it only

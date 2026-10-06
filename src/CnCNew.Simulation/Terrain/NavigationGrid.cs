@@ -91,6 +91,16 @@ public sealed class NavigationGrid
     private int _reverseTail;
     private int _reverseCells;
 
+    // The test whether the closest cell found so far is the final answer (see ClosestCellIsFinal).
+    private const int ClosestCheckFirst = 256;
+    private const int ClosestCheckDistance = 160;
+    private const int ClosestCheckFlood = 4096;
+    private int[]? _closestSeen;
+    private int _closestStamp;
+    private int[] _closestQueue = new int[256];
+    private int _closestChecks;
+    private bool _closestFinal;
+
     // The results of the searches without temporary blockers since the footprints last changed. A search is a function of its start cell, its goal cell, the surfaces, the terrain
     // (which never changes) and the footprints: as long as no footprint was added or removed, the same question has the same answer, whoever asks and in whatever tick. Only the
     // last point of a path that reaches the goal is the asker's exact goal position instead of a cell centre; it is put in when an answer is handed out again.
@@ -415,8 +425,10 @@ public sealed class NavigationGrid
             }
         }
 
-        _probeExpansions = _probePushes = _probePathCells = 0;
+        _probeExpansions = _probePushes = _probePathCells = _probeEndDistance = 0;
         _reverseCells = 0;
+        _closestChecks = 0;
+        _closestFinal = false;
         PathResult? result;
         var escapeCells = 0;
         var temporaryCells = 0;
@@ -440,7 +452,7 @@ public sealed class NavigationGrid
         {
             probe.Ended(MovementWork.PathSearch);
             probe.PathSearched(new PathSearchInfo(startIndex, goalIndex, surfaces, result?.Status ?? PathStatus.Partial, _probeExpansions, _probePushes, escapeCells, temporaryCells, _probePathCells,
-                result?.Points.Length ?? 0, false, result is null, _reverseCells));
+                result?.Points.Length ?? 0, false, result is null, _reverseCells, _probeEndDistance, _closestFinal, _closestChecks));
         }
         return result;
     }
@@ -448,6 +460,7 @@ public sealed class NavigationGrid
     private int _probeExpansions;
     private int _probePushes;
     private int _probePathCells;
+    private int _probeEndDistance;
 
     private PathResult? Search(int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, bool arrivingOnly)
     {
@@ -494,9 +507,25 @@ public sealed class NavigationGrid
         var bestCost = 0;
         var reached = false;
         var expansions = 0;
+        var nextClosestCheck = ClosestCheckFirst;
         // A cell taken from the heap a second time (it was pushed again with a lower cost before it was expanded) counts toward the budget like an expansion; it always did.
         for (; _queued > 0 && expansions < ExpansionBudget; expansions++)
         {
+            if (expansions == nextClosestCheck)
+            {
+                // The search has not arrived and its closest cell lies near the goal: if nothing it could still expand can be closer, that cell is the answer already. Every cell
+                // still to come has at least the total of the next one; with the same distance to the goal as the closest cell it then has a higher cost and loses the tie.
+                nextClosestCheck <<= 1;
+                if (bestHeuristic <= ClosestCheckDistance)
+                {
+                    while (_bucketCounts[_currentTotal & (RingSize - 1)] == 0) _currentTotal++;
+                    if (_currentTotal > bestCost + bestHeuristic && ClosestCellIsFinal(goalCellX, goalCellY, bestHeuristic, stamp))
+                    {
+                        _closestFinal = true;
+                        break;
+                    }
+                }
+            }
             if (reverse && (expansions & (ReverseStride - 1)) == ReverseStride - 1)
             {
                 var verdict = AdvanceReverse(startIndex, stamp, ReverseStride);
@@ -539,6 +568,7 @@ public sealed class NavigationGrid
         }
 
         _probeExpansions = expansions;
+        _probeEndDistance = reached ? 0 : bestHeuristic;
         var end = reached ? goalIndex : best;
         if (end == startIndex) return new PathResult(PathStatus.Blocked, []);
 
@@ -563,6 +593,69 @@ public sealed class NavigationGrid
         }
         if (reached) _points[points - 1] = new PathPoint(goalX, goalY);
         return new PathResult(reached ? PathStatus.Found : PathStatus.Partial, ImmutableArray.Create(_points, 0, points));
+    }
+
+    /// <summary>
+    /// Whether no cell closer to the goal than the closest cell found so far (octile distance <paramref name="closest"/>) can be reached at all. Then the search can only confirm what it
+    /// has: it would expand the rest of what it can reach, up to its budget, without arriving and without finding a closer cell, and return the path to that cell. That is the usual
+    /// fate of an order to a place nobody can stand on (a cliff, water, a blocked cell): the path ends next to it, and the remaining search is a flood of the whole map.
+    /// <para>
+    /// The cells closer than <paramref name="closest"/> form a small block around the goal. The test floods from the open ones among them, backwards along the moves of the search
+    /// (see <see cref="AdvanceReverse"/>). If it meets a cell this search has queued or expanded, a closer cell can be reached and the search has to go on; the same if the flood
+    /// grows beyond <see cref="ClosestCheckFlood"/> cells. If it runs dry, every path from the start to a closer cell would have to pass a cell of the flood, and none does.
+    /// </para>
+    /// </summary>
+    private bool ClosestCellIsFinal(int goalCellX, int goalCellY, int closest, int stamp)
+    {
+        _closestChecks++;
+        var cellsX = _cellsX;
+        var cellsY = _cellsY;
+        var open = _open;
+        var state = _state;
+        var search = _search;
+        var seen = _closestSeen ??= new int[search.Length];
+        if (++_closestStamp == int.MaxValue)
+        {
+            Array.Clear(seen);
+            _closestStamp = 1;
+        }
+        var mark = _closestStamp;
+        var tail = 0;
+        // 10 * max(dx, dy) + 4 * min(dx, dy) < closest needs max(dx, dy) <= (closest - 1) / 10.
+        var radius = (closest - 1) / 10;
+        for (var y = Math.Max(0, goalCellY - radius); y <= Math.Min(cellsY - 1, goalCellY + radius); y++)
+            for (var x = Math.Max(0, goalCellX - radius); x <= Math.Min(cellsX - 1, goalCellX + radius); x++)
+            {
+                if (Heuristic(x, y, goalCellX, goalCellY) >= closest) continue;
+                var index = y * cellsX + x;
+                if (!open[state[index]]) continue;
+                if (search[index].Stamp == stamp) return false;
+                seen[index] = mark;
+                if (tail == _closestQueue.Length) Array.Resize(ref _closestQueue, _closestQueue.Length * 2);
+                _closestQueue[tail++] = index;
+            }
+        for (var head = 0; head < tail; head++)
+        {
+            if (head >= ClosestCheckFlood) return false;
+            var cell = _closestQueue[head];
+            var y = cell / cellsX;
+            var x = cell - y * cellsX;
+            for (var direction = 0; direction < 8; direction++)
+            {
+                var nx = x + StepX[direction];
+                var ny = y + StepY[direction];
+                if ((uint)nx >= (uint)cellsX || (uint)ny >= (uint)cellsY) continue;
+                if (direction >= 4 && (!open[state[y * cellsX + nx]] || !open[state[ny * cellsX + x]])) continue;
+                var from = ny * cellsX + nx;
+                // A cell of this search (the start included, open or not) that can step into the flood: a closer cell can be reached.
+                if (search[from].Stamp == stamp) return false;
+                if (seen[from] == mark || !open[state[from]]) continue;
+                seen[from] = mark;
+                if (tail == _closestQueue.Length) Array.Resize(ref _closestQueue, _closestQueue.Length * 2);
+                _closestQueue[tail++] = from;
+            }
+        }
+        return true;
     }
 
     /// <summary>

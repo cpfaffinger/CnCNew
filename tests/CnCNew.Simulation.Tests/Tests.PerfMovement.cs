@@ -495,6 +495,20 @@ static partial class Tests
         }
     }
 
+    /// <summary>Counts what the grid reports about its searches.</summary>
+    private sealed class PerfProbe : IMovementProbe
+    {
+        public int ClosestFinal, ProvedUnreachable;
+        public void Started(MovementWork work) { }
+        public void Ended(MovementWork work) { }
+
+        public void PathSearched(in PathSearchInfo info)
+        {
+            if (info.ClosestProvedFinal) ClosestFinal++;
+            if (info.ProvedUnreachable) ProvedUnreachable++;
+        }
+    }
+
     private static bool SamePath(PathResult a, PathResult b) => a.Status == b.Status && a.Points.AsSpan().SequenceEqual(b.Points.AsSpan());
 
     private static string PathText(PathResult path) => $"{path.Status} [{string.Join(" ", path.Points.Select(point => $"({point.X},{point.Y})"))}]";
@@ -703,5 +717,40 @@ static partial class Tests
             if (expected.Status != PathStatus.Found && index % 3 == 0) sealedGoals++;
         }
         Check.That(longArrivals >= 8 && sealedGoals >= 4, $"Long arrivals and sealed goals were among the queries ({longArrivals}, {sealedGoals}).");
+
+        // Orders to a place nobody can stand on, on the near side of the wall: a single cliff cell, a small block of them, the wall itself, a cell behind the wall right next to
+        // it. The original search ends next to the goal and then expands everything it can reach (about 170,000 cells here); the path it returns must be the same when the grid
+        // stops as soon as it knows that nothing closer can be reached. Blocks of several cliff cells with free cells inside test the flood that has to prove that.
+        var extra = new NavigationGrid(TerrainMap.Build(SyntheticMaps.Build(cellsX, cellsY, 1, (_, _) => 0,
+            cliffs.Concat(Enumerable.Range(0, 7).SelectMany(offset => new[] { (200 + offset, 200), (200 + offset, 206), (200, 200 + offset), (206, 200 + offset) }))
+                .Distinct().Select(cell => (cell.Item1 + 1, cell.Item2 + 1))), "perf-budget-ring"));
+        var extraReference = new ReferencePathfinder(extra);
+        var counting = new PerfProbe();
+        extra.Probe = counting;
+        var floods = 0;
+        (int X, int Y)[] goals = [.. cliffs.Where(cell => cell.X < 380 && cell.X > 20).Take(10), (400, 100), (400, 300), (401, 220), (402, 51), (203, 203), (201, 201), (205, 204), (200, 203), (206, 206)];
+        for (var index = 0; index < goals.Length; index++)
+        {
+            var startX = Fixed.FromInt(20 + random.Below(3_700));
+            var startY = Fixed.FromInt(20 + random.Below(4_300));
+            var goalX = TerrainMap.CellCenter(goals[index].X) + Fixed.FromInt(random.Below(7) - 3);
+            var goalY = TerrainMap.CellCenter(goals[index].Y) + Fixed.FromInt(random.Below(7) - 3);
+            foreach (var surfaces in new[] { LocomotorSurfaces.Ground, LocomotorSurfaces.Ground | LocomotorSurfaces.Cliff })
+            {
+                var expected = extraReference.FindPath(startX, startY, goalX, goalY, surfaces);
+                if (expected.Status == PathStatus.Partial && extraReference.Expansions > 100_000) floods++;
+                var actual = extra.FindPath(startX, startY, goalX, goalY, surfaces);
+                Check.That(SamePath(actual, expected), $"Goal {index} at cell {goals[index]} for {surfaces}: {PathText(actual)} instead of {PathText(expected)}.");
+                (Fixed X, Fixed Y, Fixed Radius)[] blocks = [(goalX + Fixed.FromInt(25), goalY, Fixed.FromInt(12)), (startX, startY + Fixed.FromInt(30), Fixed.FromInt(10))];
+                var around = extraReference.FindPath(startX, startY, goalX, goalY, surfaces, blocks);
+                Check.That(SamePath(extra.FindPath(startX, startY, goalX, goalY, surfaces, blocks), around), $"Goal {index} at cell {goals[index]} for {surfaces}, around blockers.");
+                var arriving = extra.FindPathToGoal(startX, startY, goalX, goalY, surfaces, blocks);
+                Check.That(around.Status == PathStatus.Found ? arriving is not null && SamePath(arriving, around) : arriving is null, $"Goal {index} at cell {goals[index]} for {surfaces}, arriving only.");
+            }
+        }
+        Check.That(floods >= 12, $"The original search flooded the map for the goals nobody can stand on ({floods}).");
+        // Not all of them: a goal in the large region behind the wall keeps its flood (the proof gives up after 4,096 cells), which is the remaining case of docs/PERF-MOVEMENT.md.
+        Check.That(counting.ClosestFinal >= 24 && counting.ProvedUnreachable >= 12,
+            $"The grid ended those searches early ({counting.ClosestFinal} with a final closest cell, {counting.ProvedUnreachable} detours proved impossible).");
     }
 }

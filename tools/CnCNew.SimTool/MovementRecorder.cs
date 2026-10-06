@@ -68,6 +68,7 @@ internal sealed class MovementRecorder(SimulationWorld world, TickRecorder ticks
         }
 
         long expansions = 0, pushes = 0, searchTicks = 0, cached = 0, cachedExpansions = 0, cachedTicks = 0, proved = 0, provedExpansions = 0, reverseCells = 0, provedTicks = 0;
+        long closestFinal = 0, closestFinalExpansions = 0, closestChecks = 0;
         var byStatus = new SortedDictionary<string, (long Count, long Expansions, long Elapsed)>(StringComparer.Ordinal);
         var byCaller = new SortedDictionary<string, (long Count, long Expansions, long Elapsed)>(StringComparer.Ordinal);
         var byTick = new Dictionary<long, (int Count, long Expansions, long Elapsed)>();
@@ -94,6 +95,12 @@ internal sealed class MovementRecorder(SimulationWorld world, TickRecorder ticks
             pushes += info.Pushes;
             searchTicks += search.Elapsed;
             reverseCells += info.ReverseCells;
+            closestChecks += info.ClosestChecks;
+            if (info.ClosestProvedFinal)
+            {
+                closestFinal++;
+                closestFinalExpansions += info.Expansions;
+            }
             if (info.ProvedUnreachable)
             {
                 proved++;
@@ -122,6 +129,9 @@ internal sealed class MovementRecorder(SimulationWorld world, TickRecorder ticks
                           + $"{Us(searchTicks) * 1000 / Math.Max(1, expansions):F0} ns per expanded cell.");
         Console.WriteLine($"  Answered from the grid's memory (same start cell, goal cell and surfaces, footprints unchanged): {cached} of {_searches.Count} searches, {cachedExpansions} cells not expanded again, {Us(cachedTicks) / 1000:F1} ms spent on them.");
         Console.WriteLine($"  Stopped because the goal was proved unreachable (searches that only count when they arrive): {proved} searches after {provedExpansions} expanded cells, {Us(provedTicks) / 1000:F1} ms; cells of the floods from the goal, all such searches: {reverseCells}.");
+        Console.WriteLine($"  Ended early because no closer cell can be reached (the path to the closest cell is final): {closestFinal} searches after {closestFinalExpansions} expanded cells; attempts of that proof, all searches: {closestChecks}.");
+        summary["move_closest_final"] = closestFinal.ToString(Invariant);
+        summary["move_closest_checks"] = closestChecks.ToString(Invariant);
         summary["move_proved_unreachable"] = proved.ToString(Invariant);
         summary["move_reverse_cells"] = reverseCells.ToString(Invariant);
         summary["move_cached"] = cached.ToString(Invariant);
@@ -131,6 +141,20 @@ internal sealed class MovementRecorder(SimulationWorld world, TickRecorder ticks
         summary["move_pushes"] = pushes.ToString(Invariant);
         Console.WriteLine("  by result:");
         foreach (var (name, value) in byStatus) Console.WriteLine($"    {name,-40} {value.Count,8} searches {value.Expansions,12} cells {Us(value.Elapsed) / 1000,10:F1} ms");
+        // Where the searches that do not arrive end: how far from the goal, in cells (octile distance / 10). A goal that is close to where the path ends cannot be reached "just about".
+        int[] distances = [1, 2, 4, 8, 16, 32, 64, int.MaxValue];
+        var byDistance = new (long Count, long Expansions, long AtBudget)[distances.Length];
+        foreach (var search in _searches)
+        {
+            var info = search.Info;
+            if (info.Cached || info.ProvedUnreachable || info.Status != PathStatus.Partial) continue;
+            var bucket = 0;
+            while (info.EndDistance / 10 > distances[bucket]) bucket++;
+            byDistance[bucket] = (byDistance[bucket].Count + 1, byDistance[bucket].Expansions + info.Expansions, byDistance[bucket].AtBudget + (info.Expansions >= 200_000 ? 1 : 0));
+        }
+        Console.WriteLine("  partial paths by the distance from their end to the goal:");
+        for (var bucket = 0; bucket < distances.Length; bucket++)
+            Console.WriteLine($"    {(distances[bucket] == int.MaxValue ? "more" : $"<= {distances[bucket]} cells"),-40} {byDistance[bucket].Count,8} searches {byDistance[bucket].Expansions,12} cells, {byDistance[bucket].AtBudget} at the budget");
         Console.WriteLine("  by calling module:");
         foreach (var (name, value) in byCaller) Console.WriteLine($"    {name,-40} {value.Count,8} searches {value.Expansions,12} cells {Us(value.Elapsed) / 1000,10:F1} ms");
         Console.WriteLine("  by cells expanded:");
