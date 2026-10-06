@@ -423,19 +423,29 @@ public sealed class VisionMap
         var minX = Math.Max(0, CellOf(x - radius));
         var maxX = Math.Min(CellsX - 1, CellOf(x + radius));
         if (minY <= maxY) Written(slot, minY, maxY);
-        var limit = (long)radius.Raw * radius.Raw;
-        var half = TerrainMap.CellSize * 65536L / 2;
+        var limit = Square(radius.Raw);
+        var half = cellSize.Raw / 2;
         for (var cy = minY; cy <= maxY; cy++)
         {
             var dy = (long)cy * cellSize.Raw + half - y.Raw;
-            var dy2 = dy * dy;
+            var dy2 = Square(dy);
             if (dy2 > limit) continue;
             for (var cx = minX; cx <= maxX; cx++)
             {
                 var dx = (long)cx * cellSize.Raw + half - x.Raw;
-                if (dx * dx + dy2 <= limit) action(ref cells[cy * CellsX + cx]);
+                if (Square(dx) + dy2 <= limit) action(ref cells[cy * CellsX + cx]);
             }
         }
+    }
+
+    /// <summary>
+    /// The square of a raw difference, exact in 128 bits. The circle tests compare raw squares, which carry twice the fraction bits: a radius of some
+    /// hundred units squared no longer fits a machine word once the resolution is finer than about twenty bits.
+    /// </summary>
+    private static UInt128 Square(long value)
+    {
+        var magnitude = value < 0 ? unchecked((ulong)(-value)) : (ulong)value;
+        return Math.BigMul(magnitude, magnitude);
     }
 
     /// <summary>
@@ -504,24 +514,28 @@ public sealed class VisionMap
         var cells = _cells[slot];
         var rowMinX = _revealMinX[slot];
         var rowMaxX = _revealMaxX[slot];
-        var limit = circle.Radius * circle.Radius;
-        var half = TerrainMap.CellSize * 65536L / 2;
+        var limit = Square(circle.Radius);
+        var half = cellRaw / 2;
         // The column in range whose centre is nearest to the point: if it is outside the circle in a row, every column of that row is.
         var nearest = Math.Clamp(circle.CentreColumn, minX, maxX);
         var nearestDx = (long)nearest * cellRaw + half - circle.X;
-        var nearestDx2 = nearestDx * nearestDx;
+        var nearestDx2 = Square(nearestDx);
         var left = nearest;
         var right = nearest;
         var firstRow = -1;
         var lastRow = -1;
-        long previousRest = -1;
+        // No row yet: the first one counts as wider than the one before.
+        var anyRow = false;
+        UInt128 previousRest = 0;
         long tested = 0, written = 0;
         for (var cy = minY; cy <= maxY; cy++)
         {
             var dy = (long)cy * cellRaw + half - circle.Y;
-            var rest = limit - dy * dy;
-            if (rest < 0 || nearestDx2 > rest) continue;
-            if (rest >= previousRest)
+            var dy2 = Square(dy);
+            if (dy2 > limit) continue;
+            var rest = limit - dy2;
+            if (nearestDx2 > rest) continue;
+            if (!anyRow || rest >= previousRest)
             {
                 // At least as wide as the last run (on the first row that is the nearest column alone, which is inside): the ends move out while the next cell is inside.
                 while (left > minX && Inside(left - 1, cellRaw, half, circle.X, rest)) { left--; tested++; }
@@ -534,6 +548,7 @@ public sealed class VisionMap
                 while (!Inside(right, cellRaw, half, circle.X, rest)) { right--; tested++; }
             }
             previousRest = rest;
+            anyRow = true;
             tested += 2;
             var run = cells.AsSpan(cy * CellsX + left, right - left + 1);
             written += run.Length;
@@ -560,10 +575,10 @@ public sealed class VisionMap
         if (lastRow > _revealHigh[slot]) _revealHigh[slot] = lastRow;
     }
 
-    private static bool Inside(int cx, long cellRaw, long half, long xRaw, long rest)
+    private static bool Inside(int cx, long cellRaw, long half, long xRaw, UInt128 rest)
     {
         var dx = cx * cellRaw + half - xRaw;
-        return dx * dx <= rest;
+        return Square(dx) <= rest;
     }
 
     private static void MarkVisible(Span<byte> cells)
@@ -590,19 +605,19 @@ public sealed class VisionMap
         var maxY = Math.Min(CellsY - 1, CellOf(y + radius));
         var minX = Math.Max(0, CellOf(x - radius));
         var maxX = Math.Min(CellsX - 1, CellOf(x + radius));
-        var limit = (long)radius.Raw * radius.Raw;
-        var half = TerrainMap.CellSize * 65536L / 2;
+        var limit = Square(radius.Raw);
+        var half = cellSize.Raw / 2;
         long tested = 0, written = 0;
         for (var cy = minY; cy <= maxY; cy++)
         {
             var dy = (long)cy * cellSize.Raw + half - y.Raw;
-            var dy2 = dy * dy;
+            var dy2 = Square(dy);
             if (dy2 > limit) continue;
             if (maxX >= minX) tested += maxX - minX + 1;
             for (var cx = minX; cx <= maxX; cx++)
             {
                 var dx = (long)cx * cellSize.Raw + half - x.Raw;
-                if (dx * dx + dy2 > limit) continue;
+                if (Square(dx) + dy2 > limit) continue;
                 cells[cy * CellsX + cx] |= VisibleBit | ExploredBit;
                 written++;
             }

@@ -540,9 +540,21 @@ public sealed partial class SimulationWorld
         return max <= min ? min : min + (long)(bits % (ulong)(max - min + 1));
     }
 
-    /// <summary><c>GameLogicRandomValueReal(0, 1)</c>: a fraction in [0, 1).</summary>
+    /// <summary>The bits of a scan draw that make the head of the fraction: a property of how the draw is read, not of the fixed-point resolution.</summary>
+    private const int ScanFractionHeadBits = 16;
+
+    /// <summary>
+    /// <c>GameLogicRandomValueReal(0, 1)</c>: a fraction in [0, 1). The lowest sixteen bits of the draw are its sixteen leading binary places; a finer
+    /// resolution takes its further places from the bits above them. A draw is therefore the same number at every resolution, to the places that one has
+    /// (and at sixteen fraction bits exactly the value it always was).
+    /// </summary>
     private Fixed DrawScanFraction(Entity entity, TurretInfo info, TurretState state)
-        => Fixed.FromRaw((long)(NextScanBits(entity, info, state) % (ulong)Fixed.ScaleRaw));
+    {
+        const int tailBits = Fixed.FractionBits - ScanFractionHeadBits;
+        var bits = NextScanBits(entity, info, state);
+        var head = (long)(bits & ((1UL << ScanFractionHeadBits) - 1));
+        return Fixed.FromRaw((head << tailBits) | (long)((bits >> ScanFractionHeadBits) & ((1UL << tailBits) - 1)));
+    }
 
     // ------------------------------------------------------------------------------------------------------ movement primitives
 
