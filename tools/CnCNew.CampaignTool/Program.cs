@@ -44,6 +44,7 @@ const string Usage = """
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
                                                 and a savegame from mission to mission
+    Every command that runs a mission takes --tick-rate N (30, 60 or 120; default 30); tick budgets stay ticks of that rate.
     """;
 
 if (args.Length < 2)

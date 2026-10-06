@@ -49,8 +49,11 @@ const string Usage = """
       perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--replay] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
       perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
                                                            time per tick and tick phase, module updates, allocations, replay catch-up speed, snapshot cost (docs/PERFORMANCE.md)
+      catalog-cost <content-dir> [--rounds N]              time of TemplateCatalog.Build for 30, 60 and 120 Hz (the catalog is built per tick rate)
       perf-compare <old.json> <new.json> [--threshold-percent N] [--min-us N] [--all] [--allow-different-hash] [--out FILE]
                                                            two --json summaries metric by metric; marks changes beyond the threshold (default 10 %); a report, never a failing test (docs/PERF-GAME-LAYER.md)
+    Every command that creates a world takes --tick-rate N (30, 60 or 120; default 30): the catalog is built for that rate and the world runs at it.
+    Tick budgets (--ticks, --max-ticks) stay ticks of that rate. The manifest commands always run at the recorded 30 Hz.
     """;
 
 // Determinism matrix (docs/DETERMINISM.md): every command can run under another culture to show that nothing culture-dependent reaches a result.
@@ -97,6 +100,7 @@ try
         "perf-mission" when args.Length >= 2 => CnCNew.SimTool.PerfCommand.Mission(args, CompileShipped),
         "perf-compare" => CnCNew.SimTool.PerfCompareCommand.Run(args),
         "path-bench" when args.Length >= 2 => CnCNew.SimTool.PathBench.Run(args),
+        "catalog-cost" when args.Length >= 2 => CnCNew.SimTool.CatalogCost.Run(args),
         _ => Fail(Usage),
     };
 }
