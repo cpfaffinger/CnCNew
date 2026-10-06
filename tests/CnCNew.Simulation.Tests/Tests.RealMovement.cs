@@ -22,14 +22,14 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
 
         (long Slowest, int Stalled, int Overlaps) Run()
         {
             var terrain = TerrainMap.Build(SyntheticMaps.Build(120, 120, 1, (_, _) => 0), "squad");
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, players, "real-squad", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 7, players, "real-squad", fingerprint, terrain.Fingerprint), catalog, terrain);
             var sequence = 0UL;
             void Spawn(string template, int x, int y)
                 => Check.That(world.Submit(new SpawnCommand(new PlayerId(1), ++sequence, world.Tick, template, new PlayerId(1), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, template + " spawns.");
@@ -43,14 +43,14 @@ static partial class Tests
             var arrived = new HashSet<uint>();
             long last = 0;
             int stalled = 0, overlaps = 0;
-            for (var tick = 0; tick < 1800 && arrived.Count < rangers.Length; tick++)
+            for (var tick = 0; tick < world.Frames(1800) && arrived.Count < rangers.Length; tick++)
             {
                 var result = world.Step();
                 foreach (var simEvent in result.Events)
                     if (simEvent.Kind == CnCNew.Simulation.Events.SimEventKind.MoveArrived && rangers.Any(value => value.Id == simEvent.Entity) && arrived.Add(simEvent.Entity.Value)) last = world.Tick;
                 foreach (var ranger in rangers)
                 {
-                    if (ranger.HasMoveTarget && ranger.Speed == Fixed.Zero && tick > 20) stalled++;
+                    if (ranger.HasMoveTarget && ranger.Speed == Fixed.Zero && tick > world.Frames(20)) stalled++;
                     var dx = ranger.X - dozer.X;
                     var dy = ranger.Y - dozer.Y;
                     var limit = ranger.Template.BoundingCircleRadius + dozer.Template.BoundingCircleRadius;

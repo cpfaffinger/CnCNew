@@ -147,7 +147,7 @@ public sealed class LoadGameScreen : ShellScreen
         var list = W("ListboxGames");
         list.ClearList();
         foreach (var slot in _slots)
-            list.AddListRow(new UiListRow(slot.Header is { } header ? $"{header.Title} (tick {header.Tick})" : $"{slot.Name} ({slot.Problem})"));
+            list.AddListRow(new UiListRow(slot.Header is { } header ? $"{header.Title} ({header.GameTime})" : $"{slot.Name} ({slot.Problem})"));
         UpdateButtons();
     }
 

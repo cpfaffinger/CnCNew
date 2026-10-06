@@ -193,8 +193,8 @@ static partial class Tests
 
     private static SimulationWorld TransportWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: TransportFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 11, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        fixture = new SyntheticFixture(TestRate.Default, files: TransportFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 11, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }
@@ -258,11 +258,11 @@ static partial class Tests
         world.Step();
         feeder.EnterContainer(1, grunt.Id.Value, a.Id.Value);
         world.Step();
-        var sliver = Fixed.FromInt(100) / Fixed.FromInt(30);
+        var sliver = Fixed.FromInt(100) / Fixed.FromInt(world.Frames(30));
         Check.That(grunt.Body!.Health == Fixed.FromInt(40) + sliver + sliver, $"Two tunnels heal two slivers in the entry tick (got {grunt.Body.Health}).");
-        for (var tick = 0; tick < 5; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(5); tick++) world.Step();
         Check.That(grunt.Body.Health < Fixed.FromInt(100), "Not yet whole after six ticks.");
-        for (var tick = 0; tick < 25; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(25); tick++) world.Step();
         Check.That(grunt.Body.Health == Fixed.FromInt(100), "Whole after TimeForFullHeal.");
 
         feeder.Kill(a.Id.Value);
@@ -288,7 +288,7 @@ static partial class Tests
         feeder.EnterContainer(1, grunt.Id.Value, tunnel.Id.Value);
         world.Step();
         Check.That(world.Submit(new SellCommand(new PlayerId(1), 100, world.Tick, tunnel.Id)).Accepted, "The tunnel can be sold.");
-        for (var tick = 0; tick < 200 && world.FindEntity(tunnel.Id) is not null; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(200) && world.FindEntity(tunnel.Id) is not null; tick++) world.Step();
         Check.That(world.FindEntity(tunnel.Id) is null, "The sale completes.");
         Check.That(world.FindEntity(grunt.Id) is { } survivor && !survivor.ContainedBy.IsValid, "The rider walked out of the sold tunnel.");
     }
@@ -304,12 +304,12 @@ static partial class Tests
         var grunt = Get(world, "Grunt");
         Check.That(feeder.MoveAndEnter(1, grunt.Id.Value, truck.Id.Value).Accepted, "The grunt is ordered in.");
         Check.That(feeder.MoveAndEnter(1, truck.Id.Value, grunt.Id.Value).Reason == CommandRejection.UnknownEntity, "A grunt is no container.");
-        for (var tick = 0; tick < 200 && !grunt.ContainedBy.IsValid; tick++) world.Step();
-        Check.That(grunt.ContainedBy == truck.Id && world.Tick > 90, $"The grunt walked about 100 units and got in (tick {world.Tick}).");
+        for (var tick = 0; tick < world.Frames(200) && !grunt.ContainedBy.IsValid; tick++) world.Step();
+        Check.That(grunt.ContainedBy == truck.Id && world.Tick > world.Frames(90), $"The grunt walked about 100 units and got in (tick {world.Tick}).");
         Check.That(feeder.Evacuate(1, truck.Id.Value, x: 200, y: 0).Accepted, "The owner orders an evacuation at (200, 0).");
         world.Step();
         Check.That(grunt.ContainedBy == truck.Id, "Nobody leaves while the truck drives.");
-        for (var tick = 0; tick < 300 && grunt.ContainedBy.IsValid; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(300) && grunt.ContainedBy.IsValid; tick++) world.Step();
         Check.That(!grunt.ContainedBy.IsValid && truck.X == Fixed.FromInt(200) && grunt.X == truck.X, "The grunt gets out at the destination.");
         Check.That(feeder.Evacuate(2, truck.Id.Value).Reason == CommandRejection.NotPermitted, "Only the owner may evacuate.");
     }
@@ -326,9 +326,9 @@ static partial class Tests
         feeder.Spawn(1, "Rotorcraft", x: 0, y: 0);
         world.Step();
         var chinook = Get(world, "Rotorcraft");
-        for (var tick = 0; tick < 19; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(19); tick++) world.Step();
         Check.That(chinook.Z == Fixed.FromInt(95), $"Climbing at 5 per tick (got {chinook.Z}).");
-        world.Step();
+        for (var wait = 0; wait < world.Frames(1); wait++) world.Step();
         Check.That(chinook.Z == Fixed.FromInt(100), "The Chinook reaches its preferred height after 20 ticks.");
 
         feeder.Dock(1, chinook.Id.Value, Get(world, "Stockpile").Id.Value);
@@ -336,7 +336,7 @@ static partial class Tests
         var bought = false;
         var ai = chinook.Modules.OfType<AIUpdateInterface>().First();
         var insideTicks = 0;
-        for (var tick = 0; tick < 2000 && deposits.Count < 3; tick++)
+        for (var tick = 0; tick < world.Frames(2000) && deposits.Count < 3; tick++)
         {
             foreach (var simEvent in world.Step().Events.Where(value => value.Kind == SimEventKind.SupplyDeposited)) deposits.Add(simEvent.Value);
             if (deposits.Count == 1 && !bought)
@@ -361,7 +361,7 @@ static partial class Tests
         world.Step();
         Check.That(feeder.Evacuate(1, chinook.Id.Value).Accepted, "Evacuation is ordered in the air.");
         long landedAt = -1;
-        for (var tick = 0; tick < 200 && passenger.ContainedBy.IsValid; tick++)
+        for (var tick = 0; tick < world.Frames(200) && passenger.ContainedBy.IsValid; tick++)
         {
             world.Step();
             if (landedAt < 0 && chinook.Z == world.GroundHeightAt(chinook.X, chinook.Y)) landedAt = world.Tick;
@@ -369,7 +369,7 @@ static partial class Tests
         }
         Check.That(!passenger.ContainedBy.IsValid && landedAt >= 0, "The grunt leaves the landed Chinook.");
         _ = grunt;
-        for (var tick = 0; tick < 25; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(25); tick++) world.Step();
         Check.That(chinook.Z == Fixed.FromInt(100), "Unloaded, the Chinook climbs back to its height.");
     }
 
@@ -384,26 +384,26 @@ static partial class Tests
         feeder.Spawn(1, "Rotorcraft", x: 0, y: 0);
         world.Step();
         var chinook = Get(world, "Rotorcraft");
-        for (var tick = 0; tick < 20; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(20); tick++) world.Step();
         Check.That(chinook.Z == Fixed.FromInt(100), "Setup: the Chinook flies at 100.");
         var death = world.Tick;
         feeder.Kill(chinook.Id.Value);
         world.Step();
         Check.That(chinook.EffectivelyDead && world.FindEntity(chinook.Id) is not null, "The Chinook is dead but falls instead of vanishing.");
         long hit = -1;
-        for (var tick = 0; tick < 200 && hit < 0; tick++)
+        for (var tick = 0; tick < world.Frames(200) && hit < 0; tick++)
         {
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.FxRequested && value.Text == "FX_Test" && value.HasPosition)) hit = result.Tick;
         }
-        Check.That(hit == death + 75, $"It hits the ground 75 updates after the death (got {hit - death}).");
+        Check.That(hit == death + 1 + world.Frames(74), $"It hits the ground 75 updates after the death (got {hit - death}).");
         long gone = -1;
-        for (var tick = 0; tick < 30 && gone < 0; tick++)
+        for (var tick = 0; tick < world.Frames(30) && gone < 0; tick++)
         {
             world.Step();
             if (world.FindEntity(chinook.Id) is null) gone = world.Tick - 1;
         }
-        Check.That(gone == hit + 10, $"The final blow-up is the tenth tick after the impact (got {gone - hit}).");
+        Check.That(gone == hit + 1 + world.Frames(9), $"The final blow-up is the tenth tick after the impact (got {gone - hit}).");
         Check.That(world.Entities.Any(value => value.Template.Name == "RotorHulk"), "The rubble hull remains.");
     }
 
@@ -423,7 +423,7 @@ static partial class Tests
         Check.That(contain.PortableStructure == turret.Id && contain.ContainCount == 0 && turret.ContainedBy == helix.Id, "It takes no slot.");
         Check.That(feeder.EnterContainer(1, Get(world, "Grunt").Id.Value, helix.Id.Value).Accepted, "Passengers still fit.");
         feeder.SetMoveTarget(1, helix.Id.Value, 60, 0);
-        for (var tick = 0; tick < 100; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(100); tick++) world.Step();
         Check.That(helix.X == Fixed.FromInt(60) && turret.X == helix.X && turret.Y == helix.Y, "The portable structure follows the Helix.");
         feeder.Kill(helix.Id.Value);
         world.Step();
@@ -447,9 +447,9 @@ static partial class Tests
             feeder.MoveAndEnter(1, grunts[0].Id.Value, At(world, "Tunnel", 0, 0).Id.Value);
             feeder.MoveAndEnter(1, grunts[1].Id.Value, Get(world, "Hauler4x4").Id.Value);
             var hashes = new List<ulong>();
-            for (var tick = 0; tick < 240; tick++)
+            for (var tick = 0; tick < world.Frames(240); tick++)
             {
-                if (tick == 120)
+                if (tick == world.Frames(120))
                 {
                     feeder.Evacuate(1, At(world, "Tunnel", 400, 0).Id.Value);
                     feeder.Evacuate(1, Get(world, "Hauler4x4").Id.Value, x: 100, y: 100);
@@ -465,8 +465,8 @@ static partial class Tests
         }
         var first = Run(-1);
         Check.That(first.SequenceEqual(Run(-1)), "Two fresh runs are identical.");
-        Check.That(first.SequenceEqual(Run(100)), "A snapshot with riders inside continues identically.");
-        Check.That(first.SequenceEqual(Run(130)), "A snapshot during the evacuation continues identically.");
+        Check.That(first.SequenceEqual(Run(TestRate.Frames(100))), "A snapshot with riders inside continues identically.");
+        Check.That(first.SequenceEqual(Run(TestRate.Frames(130))), "A snapshot during the evacuation continues identically.");
 
         var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, 30, new string('A', 64), "fixture", 1, new WorldId(1), CombatPlayers, 10, 5);
         ImmutableArray<SimCommand> commands =

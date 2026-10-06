@@ -24,7 +24,7 @@ namespace CnCNew.Presentation.Tests;
 /// The model condition bits of units, weapons, movement and death (docs/MODEL-CONDITIONS-UNITS.md): continuous fire, the lean of bikes, the turret turning, jet exhaust and afterburner, parachutes,
 /// toppling, the bus' second life, climbing, over water, crushing, splatting and cheering. Synthetic fixtures plus, with <c>--content-dir</c>, retail objects.
 /// </summary>
-internal static class UnitConditionTests
+internal static partial class UnitConditionTests
 {
     public static int Run(string[] args)
     {
@@ -41,6 +41,8 @@ internal static class UnitConditionTests
         t.Run("crushed ends and splatting from the death event", CrushAndSplat);
         t.Run("SPECIAL_CHEERING lasts three seconds", Cheering);
         t.Run("FREEFALL of a sliding avalanche rock", TensileFreefall);
+        t.Run("time scale: SPECIAL_CHEERING lasts three seconds at 30, 60 and 120 Hz", TimeScaleCheering);
+        t.Run("time scale: FREEFALL of an avalanche rock is limited to the first hundred original frames at 30, 60 and 120 Hz", TimeScaleTensileFreefall);
         t.Run("the names the presentation sets are exactly the implemented ones", ProducedNames);
         var index = Array.IndexOf(args, "--content-dir");
         if (index >= 0 && index + 1 < args.Length)
@@ -397,7 +399,7 @@ internal static class UnitConditionTests
         public Rig(SyntheticFixture fixture, TerrainMap? terrain = null)
         {
             Catalog = ObjectVisualCatalog.Build(fixture.Graph);
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), fixture.Templates.Rate, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
             Projector = new FrameProjector(Catalog);
         }
 

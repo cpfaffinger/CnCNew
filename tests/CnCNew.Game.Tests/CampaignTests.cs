@@ -11,6 +11,7 @@ using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
+using CnCNew.Tests;
 
 namespace CnCNew.Game.Tests;
 
@@ -67,6 +68,7 @@ internal static class CampaignTests
         harness.Run("Controller: start, win, lose, retry, attempts and seeds", ControllerFlow);
         harness.Run("Savegame: write, list, load and continue identically", SaveLoadContinues);
         harness.Run("Savegame: canonical bytes, rejection of foreign, damaged and truncated files", SaveRejection);
+        harness.Run("Savegame: the header carries the tick rate; version 1, a foreign rate and a save of another rate are refused", SaveCarriesItsRate);
         harness.Run("Savegame store: atomic save, listing with problems, delete", StoreBehaves);
         var contentDir = ContentDir(args);
         if (contentDir is null) Console.WriteLine("SKIP CampaignTests real data (pass --content-dir <dir>)");
@@ -173,9 +175,9 @@ internal static class CampaignTests
             Do("SET_FLAG", Named(MapScriptParameterType.Flag, "second try"), new(MapScriptParameterType.Boolean, 1, 0m, string.Empty, 0m, 0m, 0m))),
     ];
 
-    private static (MissionContext Context, CampaignCatalog Catalog, CampaignDefinition Campaign, SyntheticFixture Fixture) SyntheticCampaign()
+    private static (MissionContext Context, CampaignCatalog Catalog, CampaignDefinition Campaign, SyntheticFixture Fixture) SyntheticCampaign(SimulationRate? rate = null)
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(rate ?? SimulationRate.Original);
         var maps = new Dictionary<string, MapData>(StringComparer.OrdinalIgnoreCase)
         {
             ["Maps/One/One.map"] = SyntheticMap(WinAndLose),
@@ -186,8 +188,10 @@ internal static class CampaignTests
         return (context, catalog, catalog.Find("TWO")!, fixture);
     }
 
-    private static void Step(MissionRun run, int ticks)
+    /// <summary>Steps the mission for <paramref name="frames"/> original frames (1/30 s of game time each) or until it is over.</summary>
+    private static void Step(MissionRun run, int frames)
     {
+        var ticks = TestTime.Frames(run.Session.World, frames);
         for (var index = 0; index < ticks && !run.Session.IsOver; index++) run.Session.Step();
     }
 
@@ -241,16 +245,16 @@ internal static class CampaignTests
         Step(run, 40);
         var save = SaveGame.Write(run, controller.Progress, "Mission A, tick 40");
         var header = SaveGame.ReadHeader(save);
-        TestHarness.Assert(header.Title == "Mission A, tick 40" && header.Campaign == "TWO" && header.Mission == "A" && header.Tick == 40 && header.MapPath == "Maps/One/One.map" && header.Difficulty == ScriptDifficulty.Hard, "the header describes the save");
+        TestHarness.Assert(header.Title == "Mission A, tick 40" && header.Campaign == "TWO" && header.Mission == "A" && header.Tick == TestTime.Frames(run.Session.World, 40) && header.TickRate == run.Session.World.Time.TicksPerSecond && header.GameTime == "0:01" && header.MapPath == "Maps/One/One.map" && header.Difficulty == ScriptDifficulty.Hard, "the header describes the save");
 
         var loaded = SaveGame.Load(save, context, catalog);
         TestHarness.Assert(loaded.Progress is not null && loaded.Progress.Difficulty == ScriptDifficulty.Hard && loaded.Progress.AttemptsOf("A") == 1 && loaded.Run.Mission!.Name == "A", "progress and mission come back");
         TestHarness.Assert(loaded.Run.Session.StateHash() == run.Session.StateHash(), "the restored mission has the saved state hash");
         var chainOriginal = 0UL;
         var chainLoaded = 0UL;
-        for (var tick = 0; tick < 200; tick++)
+        for (var tick = 0; tick < TestTime.Frames(run.Session.World, 200); tick++)
         {
-            if (tick == 20) { Destroy(run, "VillainBarrel"); Destroy(loaded.Run, "VillainBarrel"); }
+            if (tick == TestTime.Frames(run.Session.World, 20)) { Destroy(run, "VillainBarrel"); Destroy(loaded.Run, "VillainBarrel"); }
             chainOriginal = StateHash.Mix(chainOriginal, run.Session.Step().StateHash);
             chainLoaded = StateHash.Mix(chainLoaded, loaded.Run.Session.Step().StateHash);
         }
@@ -285,7 +289,7 @@ internal static class CampaignTests
         Refused(save.AsSpan(0, save.Length / 2).ToArray(), "damaged", "a truncated file");
         Refused("not json"u8.ToArray(), "damaged", "garbage");
         Refused("{\"format\":\"something-else\"}"u8.ToArray(), "Not a CnCNew savegame", "a foreign document");
-        Refused(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(save).Replace("\"version\":1,", "\"version\":7,", StringComparison.Ordinal)), "Unsupported savegame version 7", "another version");
+        Refused(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(save).Replace($"\"version\":{SaveGame.Version},", "\"version\":7,", StringComparison.Ordinal)), "Unsupported savegame version 7", "another version");
         var otherData = new MissionContext(fixture.Templates, "00" + context.Fingerprint, context.LoadMap);
         try { SaveGame.Load(save, otherData, catalog); throw new InvalidOperationException("other game data accepted"); }
         catch (SaveGameException exception) { TestHarness.Assert(exception.Message.Contains("different game data"), "other game data is named"); }
@@ -294,6 +298,69 @@ internal static class CampaignTests
         var at = Array.LastIndexOf(flipped, (byte)'1', flipped.Length - 50);
         flipped[at] = (byte)(flipped[at] == '1' ? '2' : '1');
         Refused(flipped, "", "a flipped byte");
+    }
+
+    /// <summary>
+    /// Version 2: the header names the rate its ticks count. A version 1 file (no rate) is refused, never reinterpreted; so are an unsupported rate, a header
+    /// that claims another rate than its state, and a save of another rate than the session's - in both directions, and with a message that names the rates.
+    /// The list text is game time, the same for the same moment at 30 and at 60 Hz.
+    /// </summary>
+    private static void SaveCarriesItsRate()
+    {
+        TestHarness.Assert(SaveGame.Version == 2, "the savegame format is version 2 (tick rate in the header)");
+        var (context30, catalog, campaign, _) = SyntheticCampaign(SimulationRate.Hz30);
+        var (context60, _, _, _) = SyntheticCampaign(SimulationRate.Hz60);
+        byte[] SaveAt(MissionContext context, int frames, out MissionRun run)
+        {
+            var controller = new CampaignController(context, campaign, CampaignProgress.Begin(campaign, ScriptDifficulty.Normal));
+            run = controller.StartCurrentMission();
+            Step(run, frames);
+            return SaveGame.Write(run, controller.Progress, "rate");
+        }
+
+        void Refused(byte[] bytes, MissionContext context, string part, string why)
+        {
+            try { SaveGame.Load(bytes, context, catalog); }
+            catch (SaveGameException exception) when (exception.Message.Contains(part, StringComparison.OrdinalIgnoreCase)) { return; }
+            catch (Exception exception) { throw new InvalidOperationException($"{why}: expected a SaveGameException containing '{part}', got {exception.GetType().Name}: {exception.Message}"); }
+            throw new InvalidOperationException($"{why}: the save was accepted");
+        }
+
+        // 95 original frames are 3.17 s of game time: 95 ticks at 30 Hz, 190 at 60 Hz, and "0:03" in the list at both.
+        var save30 = SaveAt(context30, 95, out var run30);
+        var save60 = SaveAt(context60, 95, out var run60);
+        var header30 = SaveGame.ReadHeader(save30);
+        var header60 = SaveGame.ReadHeader(save60);
+        TestHarness.Assert(header30.TickRate == 30 && header30.Tick == 95 && header60.TickRate == 60 && header60.Tick == 190, $"the header carries tick and rate ({header30.Tick} at {header30.TickRate} Hz, {header60.Tick} at {header60.TickRate} Hz)");
+        TestHarness.Assert(header30.GameSeconds == 3 && header60.GameSeconds == 3 && header30.GameTime == "0:03" && header60.GameTime == "0:03", $"the same game time reads the same at both rates ({header30.GameTime}, {header60.GameTime})");
+        TestHarness.Assert(new SaveGameHeader("t", "m", "", "", ScriptDifficulty.Normal, 30 * 754, 30, "f", "h").GameTime == "12:34" && new SaveGameHeader("t", "m", "", "", ScriptDifficulty.Normal, 120 * 3725, 120, "f", "h").GameTime == "62:05",
+            "game time is minutes and two-digit seconds; minutes are not wrapped into hours");
+        TestHarness.Assert(Encoding.UTF8.GetString(save30).Contains("\"tick\":95,\"tickRate\":30,", StringComparison.Ordinal), "the rate follows the tick in the file");
+
+        // Accepted where the rate fits, at 30 and at 60 Hz; the loaded mission is the saved one.
+        TestHarness.Assert(SaveGame.Load(save30, context30, catalog).Run.Session.StateHash() == run30.Session.StateHash(), "a 30 Hz save loads into a 30 Hz session");
+        var loaded60 = SaveGame.Load(save60, context60, catalog);
+        TestHarness.Assert(loaded60.Run.Session.StateHash() == run60.Session.StateHash() && loaded60.Run.Session.World.Time.TicksPerSecond == 60 && loaded60.Header.TickRate == 60, "a 60 Hz save loads into a 60 Hz session and runs at 60 Hz");
+
+        // Refused across rates, in both directions, with the rates in the message.
+        Refused(save60, context30, "written at 60 Hz; this session runs at 30 Hz", "a 60 Hz save in a 30 Hz session");
+        Refused(save30, context60, "written at 30 Hz; this session runs at 60 Hz", "a 30 Hz save in a 60 Hz session");
+
+        // Version 1 had no rate: refused by its version, never read as "30 Hz".
+        var text30 = Encoding.UTF8.GetString(save30);
+        var version1 = text30.Replace($"\"version\":{SaveGame.Version},", "\"version\":1,", StringComparison.Ordinal).Replace("\"tickRate\":30,", string.Empty, StringComparison.Ordinal);
+        Refused(Encoding.UTF8.GetBytes(version1), context30, "Unsupported savegame version 1 (this game reads version 2)", "a version 1 save");
+        try { SaveGame.ReadHeader(Encoding.UTF8.GetBytes(version1)); throw new InvalidOperationException("the header of a version 1 save was read"); }
+        catch (SaveGameException exception) { TestHarness.Assert(exception.Message.Contains("version 1", StringComparison.Ordinal), "the list names the old version as the problem of the slot"); }
+
+        // A version 2 file without a rate, with an unsupported rate, or with a header that claims another rate than its state.
+        Refused(Encoding.UTF8.GetBytes(text30.Replace("\"tickRate\":30,", string.Empty, StringComparison.Ordinal)), context30, "damaged or incomplete", "a save without a tick rate");
+        Refused(Encoding.UTF8.GetBytes(text30.Replace("\"tick\":95,\"tickRate\":30,", "\"tick\":95,\"tickRate\":50,", StringComparison.Ordinal)), context30, "Unsupported tick rate 50 Hz", "a save at 50 Hz");
+        Refused(Encoding.UTF8.GetBytes(text30.Replace("\"tick\":95,\"tickRate\":30,", "\"tick\":95,\"tickRate\":60,", StringComparison.Ordinal)), context30, "written at 60 Hz", "a header that claims 60 Hz in a 30 Hz session");
+        // The same forged header in a 60 Hz session passes the rate check and fails on the game data (the fingerprint contains the rate).
+        Refused(Encoding.UTF8.GetBytes(text30.Replace("\"tick\":95,\"tickRate\":30,", "\"tick\":95,\"tickRate\":60,", StringComparison.Ordinal)), context60, "different game data", "a 30 Hz state under a 60 Hz header");
+        // A header tick that is not the state's tick (the list would show a wrong time).
+        Refused(Encoding.UTF8.GetBytes(text30.Replace("\"tick\":95,\"tickRate\":30,", "\"tick\":9500,\"tickRate\":30,", StringComparison.Ordinal)), context30, "does not match its header", "a forged tick in the header");
     }
 
     private static void StoreBehaves()

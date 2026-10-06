@@ -145,7 +145,7 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) SlotIntegrationWorld(params (string Template, int Owner, int X, int Y)[] objects)
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: WeaponSlotIntegrationFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: WeaponSlotIntegrationFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         foreach (var (template, owner, x, y) in objects) feeder.Spawn(owner, template, owner: owner, x: x, y: y);
@@ -184,7 +184,7 @@ static partial class Tests
         Check.That(fired.SequenceEqual(["BigGun"]) && dummy.Body!.Health == health - Fixed.FromInt(100), "It fires the CARBOMB weapon, not its old guns: " + string.Join(",", fired));
 
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
-        for (var tick = 0; tick < 40; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The converted car continues identically after a restore (tick {tick}).");
+        for (var tick = 0; tick < world.Frames(40); tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The converted car continues identically after a restore (tick {tick}).");
     }
 
     /// <summary>
@@ -221,7 +221,7 @@ static partial class Tests
 
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == world.StateHash && SetOf(restored, restored.FindEntity(tank.Id)!) == "RocketPods,MachineGun,-", "The upgraded set survives a snapshot.");
-        for (var tick = 0; tick < 40; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The upgraded salvager continues identically after a restore (tick {tick}).");
+        for (var tick = 0; tick < world.Frames(40); tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The upgraded salvager continues identically after a restore (tick {tick}).");
     }
 
     /// <summary>
@@ -234,7 +234,7 @@ static partial class Tests
 
         void FireSlotWhenReady(SimulationWorld world, Feeder feeder, Entity source, Entity target, int slot)
         {
-            for (var tick = 0; tick < 20; tick++)
+            for (var tick = 0; tick < world.Frames(20); tick++)
             {
                 if (feeder.FireWeaponSlot(1, source.Id.Value, target.Id.Value, slot).Accepted)
                 {
@@ -253,15 +253,15 @@ static partial class Tests
         FireSlotWhenReady(world, feeder, scud, dummy, WeaponSlot.Secondary);
         FireSlotWhenReady(world, feeder, scud, dummy, WeaponSlot.Secondary);
         Check.That(scud.CurrentWeaponSlot == WeaponSlot.Secondary && scud.ClipOf(1) == 1, "The toxin slot is the current weapon with one round left.");
-        for (var tick = 0; tick < 12; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(12); tick++) world.Step();
         Check.That(Clouds(world) == 1, $"After the series the cloud is created once the weapon could have fired again ({Clouds(world)}).");
-        for (var tick = 0; tick < 40; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(40); tick++) world.Step();
         Check.That(Clouds(world) == 1, "Only one cloud per series.");
 
         // A single shot is no series.
         var (single, singleFeeder, _) = SlotIntegrationWorld(("SlotScud", 1, 0, 0), ("Dummy", 2, 50, 0));
         FireSlotWhenReady(single, singleFeeder, Slotted(single, "SlotScud"), Slotted(single, "Dummy"), WeaponSlot.Secondary);
-        for (var tick = 0; tick < 60; tick++) single.Step();
+        for (var tick = 0; tick < single.Frames(60); tick++) single.Step();
         Check.That(Clouds(single) == 0, "One shot is below MinShotsToCreateOCL: no cloud.");
 
         // Switching to the other weapon in the middle of the series creates the cloud at once, long before the toxin slot reloads.
@@ -283,7 +283,7 @@ static partial class Tests
         Check.That(other.CurrentWeaponSlot == WeaponSlot.Primary && other.ReadyTickOf(1) > switched.Tick && Clouds(switched) == 1, $"Firing the primary gun ends the series at once ({Clouds(switched)} clouds, toxin ready at {other.ReadyTickOf(1)}, now {switched.Tick}).");
 
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(switched), switchedFixture.Templates, switchedFixture.Fingerprint);
-        for (var tick = 0; tick < 60; tick++) Check.That(switched.Step().StateHash == restored.Step().StateHash, $"The watcher continues identically after a restore (tick {tick}).");
+        for (var tick = 0; tick < switched.Frames(60); tick++) Check.That(switched.Step().StateHash == restored.Step().StateHash, $"The watcher continues identically after a restore (tick {tick}).");
         _ = fixture;
     }
 
@@ -302,13 +302,13 @@ static partial class Tests
         world.Step();
         Check.That(neighbour.WeaponLock == WeaponLockKind.Temporary && neighbour.CurrentWeaponSlot == WeaponSlot.Secondary, "The request pinned the assisting slot temporarily.");
         var shots = new List<long>();
-        for (var tick = 0; tick < 60; tick++)
+        for (var tick = 0; tick < world.Frames(60); tick++)
         {
             var before = neighbour.LastFireTickOf(WeaponSlot.Secondary);
             world.Step();
             if (neighbour.LastFireTickOf(WeaponSlot.Secondary) != before) shots.Add(neighbour.LastFireTickOf(WeaponSlot.Secondary));
         }
-        Check.That(shots.Count == 3 && shots[1] - shots[0] == 3 && shots[2] - shots[1] == 15, $"Three assisting shots: the delay between shots, then the clip reload ({string.Join(",", shots)}).");
+        Check.That(shots.Count == 3 && shots[1] - shots[0] == world.Frames(3) && shots[2] - shots[1] == world.Frames(15), $"Three assisting shots: the delay between shots, then the clip reload ({string.Join(",", shots)}).");
         Check.That(neighbour.ClipOf(1) == 1 && neighbour.ClipOf(0) == int.MaxValue, $"The slot's own clip was spent and reloaded ({neighbour.ClipOf(1)}).");
         Check.That(neighbour.LastFireTickOf(WeaponSlot.Primary) < 0, "The neighbour's primary weapon never fired.");
     }
@@ -360,8 +360,8 @@ static partial class Tests
             End
             """,
         };
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: files);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var fixture = new SyntheticFixture(TestRate.Default, files: files);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "AirSlotJet", owner: 1, x: 500, y: 500);
         feeder.Spawn(2, "AirDummy", owner: 2, x: 600, y: 500);
@@ -374,7 +374,7 @@ static partial class Tests
 
         void FireWhenReady(int slot)
         {
-            for (var tick = 0; tick < 10; tick++)
+            for (var tick = 0; tick < world.Frames(10); tick++)
             {
                 if (feeder.FireWeaponSlot(1, jet.Id.Value, dummy.Id.Value, slot).Accepted) { world.Step(); return; }
                 world.Step();

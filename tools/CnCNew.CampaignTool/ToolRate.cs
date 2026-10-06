@@ -23,4 +23,11 @@ internal static class ToolRate
 
     /// <summary>Game minutes of a tick count at the current rate, for reports.</summary>
     public static double Minutes(long ticks) => Current.Time.ToWholeSeconds(ticks) / 60.0;
+
+    /// <summary>The game time of a tick count at the current rate as <c>m:ss</c> (whole seconds; minutes are not wrapped into hours), for reports next to the tick.</summary>
+    public static string GameTime(long ticks)
+    {
+        var seconds = Current.Time.ToWholeSeconds(Math.Max(0, ticks));
+        return string.Create(CultureInfo.InvariantCulture, $"{seconds / 60}:{seconds % 60:D2}");
+    }
 }

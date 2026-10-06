@@ -220,7 +220,7 @@ static partial class Tests
 
     public static void HashWorkOnTheSyntheticFixture()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(TestRate.Default);
         var hasher = new HashStateWriter();
         var words = new WordStateWriter();
 
@@ -234,14 +234,14 @@ static partial class Tests
         for (var copy = 0; copy < 3; copy++)
             foreach (var template in templates) Check.That(feeder.Spawn(1 + copy % 2, template.Name, x: copy * 10).Accepted, template.Name + " spawns.");
         var described = 0;
-        for (var tick = 0; tick < 40; tick++)
+        for (var tick = 0; tick < world.Frames(40); tick++)
         {
             world.Step();
             world.VerifyIncrementalHash();
             described += CheckWordDescriptions(world, hasher, words);
         }
         foreach (var entity in world.Entities.ToArray()) feeder.Kill(entity.Id.Value);
-        for (var tick = 0; tick < 200; tick++)
+        for (var tick = 0; tick < world.Frames(200); tick++)
         {
             world.Step();
             world.VerifyIncrementalHash();
@@ -255,9 +255,9 @@ static partial class Tests
         idle.PhaseObserver = idleWatch;
         var idleFeeder = new Feeder(idle);
         for (var index = 0; index < 5; index++) idleFeeder.Spawn(1, "Barrel", x: index * 20);
-        for (var tick = 0; tick < 20; tick++) idle.Step();
+        for (var tick = 0; tick < idle.Frames(20); tick++) idle.Step();
         var before = idle.HashWorkDone;
-        for (var tick = 0; tick < 50; tick++)
+        for (var tick = 0; tick < idle.Frames(50); tick++)
         {
             idle.Step();
             Check.That(idleWatch.DirtyAtHash == 0, "No update ran and nothing changed: no entity is marked.");
@@ -299,10 +299,10 @@ static partial class Tests
     /// </summary>
     public static void DetectionFromAnotherEntitysUpdateIsMarked()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
+        var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
         var world = NewWorld(fixture, 5);
         new Feeder(world).Spawn(2, "Cloaked", x: 10, y: 0);
-        for (var tick = 0; tick < 5; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(5); tick++) world.Step();
         var cloaked = world.Entities.First(entity => entity.Template.Name == "Cloaked");
         world.VerifyIncrementalHash();
         cloaked.Modules.OfType<StealthUpdate>().First().MarkDetected(world, 20);
@@ -316,10 +316,10 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "P1"));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 77, players, "shipped-objects", fingerprint), catalog);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 77, players, "shipped-objects", fingerprint), catalog);
         var watch = new UpdateChangeWatch(world);
         world.PhaseObserver = watch;
         var sequence = 0UL;

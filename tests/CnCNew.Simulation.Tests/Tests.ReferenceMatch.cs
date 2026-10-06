@@ -155,7 +155,7 @@ static partial class Tests
     /// <summary>Scenario participants, stand-in bases, and the match itself: a deterministic replay whose runs, snapshot continuation and file round trip all agree.</summary>
     public static void ReferenceMatch()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: ReferenceMatchFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: ReferenceMatchFiles());
         var catalog = fixture.Templates;
         var participants = ReferenceMatchScenario.Participants(catalog, out var excluded);
         Check.That(participants.Select(value => value.Faction.Name).SequenceEqual(["FactionAlpha", "FactionBeta", "FactionGamma"]),

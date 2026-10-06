@@ -22,7 +22,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
 
         var sets = catalog.Templates.SelectMany(template => template.WeaponSets).ToArray();
@@ -47,7 +47,7 @@ static partial class Tests
         ulong Run()
         {
             var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-slots", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-slots", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             void Spawn(int player, string template, int x, int y, int z)
             {
@@ -72,13 +72,13 @@ static partial class Tests
             {
                 // A standing attack repeats its fire order every tick; the tank's turret first turns toward the victim (docs/SIM-TURRET-AIM.md), the shot follows.
                 var shots = fired.Count;
-                for (var attempt = 0; attempt < 40 && fired.Count == shots; attempt++)
+                for (var attempt = 0; attempt < world.Frames(40) && fired.Count == shots; attempt++)
                 {
                     sequence[1]++;
                     Check.That(world.Submit(new FireWeaponCommand(tank.Owner, sequence[1], world.Tick, tank.Id, victim.Id)).Accepted, $"The Gattling Tank fires at {victim.Template.Name}.");
                     fired.AddRange(world.Step().Events.Where(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id).Select(value => value.Text));
                 }
-                for (var i = 0; i < 20; i++) world.Step();
+                for (var i = 0; i < world.Frames(20); i++) world.Step();
             }
             var names = $"{catalog.Weapons[set.Weapons[WeaponSlot.Primary]].Name}/{catalog.Weapons[set.Weapons[WeaponSlot.Secondary]].Name}";
             Check.That(fired.Count == 4 && fired[0] == fired[2] && fired[1] == fired[3] && fired[0] != fired[1], $"The tank alternates between its two guns by target kind ({string.Join(", ", fired)}; weapons {names}).");
@@ -96,7 +96,7 @@ static partial class Tests
             Check.That(world.ChooseWeapon(scud, scudTank, FireOrigin.Ai) is { CanFire: true, Slot: WeaponSlot.Primary }, "...and its explosive warhead against a tank.");
             // The order is repeated every tick like a standing attack: the Scud first raises its launcher to the firing pitch (TurretAI), then the warhead leaves.
             var toxin = false;
-            for (var attempt = 0; attempt < 120 && !toxin; attempt++)
+            for (var attempt = 0; attempt < world.Frames(120) && !toxin; attempt++)
             {
                 sequence[1]++;
                 Check.That(world.Submit(new FireWeaponCommand(scud.Owner, sequence[1], world.Tick, scud.Id, scudInfantry.Id, WeaponSlot.Best, FireOrigin.Ai)).Accepted, "The toxin shot is ordered.");

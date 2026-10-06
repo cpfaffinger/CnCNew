@@ -99,9 +99,9 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, TerrainMap Terrain) VisionSetup()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: VisionFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: VisionFiles());
         var terrain = NavTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         return (world, new Feeder(world), fixture, terrain);
     }
 
@@ -195,7 +195,7 @@ static partial class Tests
 
         var stealthed = 1UL << ObjectStatusBits.Index("STEALTHED");
         world.SetStatus(target.Id, stealthed);
-        world.Step();
+        for (var wait = 0; wait < world.Frames(1); wait++) world.Step(); // one frame: the scout's weapon is ready again
         Check.That(!world.CanPlayerSee(new PlayerId(1), target) && world.CanPlayerSee(new PlayerId(2), target), "A stealthed enemy is hidden from the other side even in a visible cell.");
         Check.That(feeder.FireWeapon(1, scout.Id.Value, target.Id.Value).Reason == CommandRejection.TargetNotVisible, "A stealthed target cannot be shot.");
         world.SetStatus(target.Id, 1UL << ObjectStatusBits.Index("DETECTED"));
@@ -211,21 +211,21 @@ static partial class Tests
             feeder.Spawn(1, "Scout", x: 60, y: 60);
             feeder.Spawn(2, "Tower", x: 150, y: 150);
         }
-        for (var tick = 0; tick < 20; tick++)
+        for (var tick = 0; tick < first.Frames(20); tick++)
             Check.That(first.Step().StateHash == second.Step().StateHash, "Two identical runs agree in every tick, vision included.");
         var hashBefore = first.StateHash;
         firstFeeder.Kill(VisionAt(first, "Scout", 60, 60).Id.Value);
         first.Step();
         Check.That(first.StateHash != hashBefore, "The state hash covers the vision.");
-        for (var tick = 0; tick < 5; tick++) first.Step();
+        for (var tick = 0; tick < first.Frames(5); tick++) first.Step();
 
         var bytes = WorldSnapshot.Write(first);
         var restored = WorldSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain);
         Check.That(restored.Vision!.IsExplored(1, 6, 6) && !restored.Vision.IsVisible(1, 6, 6) && restored.Vision.IsVisible(2, 15, 15), "Explored and visible cells survive a restore.");
         Check.That(WorldSnapshot.Write(restored).AsSpan().SequenceEqual(bytes), "A snapshot with vision round-trips byte-identically.");
-        for (var tick = 0; tick < 30; tick++) Check.That(first.Step().StateHash == restored.Step().StateHash, "A restored world continues hash-identically.");
+        for (var tick = 0; tick < first.Frames(30); tick++) Check.That(first.Step().StateHash == restored.Step().StateHash, "A restored world continues hash-identically.");
 
-        var plain = NewWorld(new SyntheticFixture(SimulationRate.Original));
+        var plain = NewWorld(new SyntheticFixture(TestRate.Default));
         Check.That(plain.Vision is null && plain.IsPositionVisibleTo(new PlayerId(1), Fixed.FromInt(5), Fixed.FromInt(5)), "Without a terrain there is no fog: everything is visible.");
     }
 }

@@ -452,9 +452,9 @@ static partial class Tests
     /// <summary>Alpha (1) and Beta (2), enemies; a terrain only when the test needs one.</summary>
     private static SimulationWorld LbWorld(out Feeder feeder, out SyntheticFixture fixture, TerrainMap? terrain = null, uint seed = 1)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: LastBlockerFiles());
+        fixture = new SyntheticFixture(TestRate.Default, files: LastBlockerFiles());
         ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha"), new(new PlayerId(2), "Beta")];
-        var configuration = new WorldConfiguration(new WorldId(1), SimulationRate.Original, seed, players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? string.Empty);
+        var configuration = new WorldConfiguration(new WorldId(1), TestRate.Default, seed, players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? string.Empty);
         var world = terrain is null ? new SimulationWorld(configuration, fixture.Templates) : new SimulationWorld(configuration, fixture.Templates, terrain);
         feeder = new Feeder(world);
         return world;
@@ -484,7 +484,7 @@ static partial class Tests
             Check.That(ModuleBindingTable.Default.TryGet(name, out _), $"{name} has a binding.");
         }
         Check.That(!registry.Descriptors.Any(value => value.Category == ModuleCategory.Simulation && value.CompatibilityOnly), "No simulation module of the catalog is left unimplemented.");
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: LastBlockerFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: LastBlockerFiles());
         var missing = fixture.Templates.Templates.Where(value => value.Name.StartsWith("Lb", StringComparison.Ordinal) && !value.IsInstantiable).Select(value => value.Name + ":" + string.Join(",", value.MissingModules)).ToArray();
         Check.That(missing.Length == 1 && missing[0].StartsWith("LbBrokenUnit", StringComparison.Ordinal), "Every fixture object instantiates except the deliberately broken one: " + string.Join("; ", missing));
         Check.That(fixture.Templates.TryGet("LbSalvageTank", out var tank) && CrateWeapon(tank, 0) < 0 && CrateWeapon(tank, 1) >= 0
@@ -679,7 +679,7 @@ static partial class Tests
         var hitAt = world.Tick;
         Check.That(!CsExists(world, spy), "The saboteur reached the center.");
         var sabotaged = events.Single(value => value.Kind == SimEventKind.Sabotaged);
-        Check.That(sabotaged.Entity == center.Id && sabotaged.Value == 30, $"The sabotage is reported with its duration in ticks ({sabotaged.Value}).");
+        Check.That(sabotaged.Entity == center.Id && sabotaged.Value == world.Frames(30), $"The sabotage is reported with its duration in ticks ({sabotaged.Value}).");
         Check.That(!spyUpdate.Active && !secondSpy.Active, "Every Internet Center of the victim stops spying, the stacked second one too.");
         var frozen = world.MoneyOf(beta);
         CsRun(world, 24);
@@ -738,7 +738,7 @@ static partial class Tests
             Check.That(world.TryEnterContainer(bomb, bomber), "The bomb is loaded into the plane.");
             bomber.Modules.OfType<DeliverPayloadAIUpdate>().Single().DeliverViaModuleData(world, Fixed.FromInt(400), Fixed.Zero);
             Fixed dropX = Fixed.Zero;
-            for (var tick = 0; tick < 400; tick++)
+            for (var tick = 0; tick < world.Frames(400); tick++)
             {
                 world.Step();
                 if (!bomb.ContainedBy.IsValid && dropX == Fixed.Zero) dropX = bomb.X;
@@ -781,8 +781,8 @@ static partial class Tests
         world.Damage(warehouse.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(700), DamageTypes.Explosion, DeathTypes.Normal, false));
         var hit = world.Tick;
         Check.That(((ActiveBody)warehouse.Body!).DamageState == BodyDamageStates.ReallyDamaged, "The hit put the warehouse into the really-damaged state.");
-        Check.That(cripple.HealingSuppressedUntil == hit + 30, $"The hit starts the 1 s healing suppression ({cripple.HealingSuppressedUntil}, hit at {hit}).");
-        Check.That(cripple.NextWake == hit + 30, "The module wakes when the suppression ends.");
+        Check.That(cripple.HealingSuppressedUntil == hit + world.Frames(30), $"The hit starts the 1 s healing suppression ({cripple.HealingSuppressedUntil}, hit at {hit}).");
+        Check.That(cripple.NextWake == hit + world.Frames(30), "The module wakes when the suppression ends.");
         world.Step();
 
         feeder.Spawn(1, "Hauler", x: 0);
@@ -821,7 +821,7 @@ static partial class Tests
         CsRun(world, 10);
         var first = cripple.HealingSuppressedUntil;
         world.Damage(warehouse.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(10), DamageTypes.Explosion, DeathTypes.Normal, false));
-        Check.That(cripple.HealingSuppressedUntil == world.Tick + 30 && cripple.HealingSuppressedUntil > first, "A further hit pushes the end of the suppression out.");
+        Check.That(cripple.HealingSuppressedUntil == world.Tick + world.Frames(30) && cripple.HealingSuppressedUntil > first, "A further hit pushes the end of the suppression out.");
 
         // A warehouse that is only scratched heals back to full health and then sleeps for good.
         var scratched = LbWorld(out var scratchFeeder, out _);
@@ -924,13 +924,13 @@ static partial class Tests
         CsRun(world, 5);
         Check.That(ai.DockIsLoadingOrUnloading, "The evacuation starts the unloading.");
         var mid = LbRestore(world, fixture, terrain);
-        for (var tick = 0; tick < 120; tick++) Check.That(world.Step().StateHash == mid.Step().StateHash, $"A snapshot taken mid-unload continues identically (tick +{tick}).");
+        for (var tick = 0; tick < world.Frames(120); tick++) Check.That(world.Step().StateHash == mid.Step().StateHash, $"A snapshot taken mid-unload continues identically (tick +{tick}).");
         CsRun(world, 200, () => !ai.DockIsLoadingOrUnloading);
         Check.That(ferry.Container.ContainCount == 0 && !second.ContainedBy.IsValid && (second.ScriptDisableMask & Entity.ScriptHeld) == 0 && ai.DockIsOpen, "Everybody is out and the ferry is open for the next load.");
         world.VerifyIncrementalHash();
 
         // The snapshot of the first boarding replays it identically.
-        for (var tick = 0; tick < 10; tick++) snapshot.Step();
+        for (var tick = 0; tick < snapshot.Frames(10); tick++) snapshot.Step();
         Check.That(snapshot.FindEntity(first.Id)!.ContainedBy == ferry.Id, "The snapshot taken right after the first boarding still has the passenger inside.");
     }
 
@@ -981,7 +981,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
 
         var blocked = catalog.Templates.Where(template => !template.IsInstantiable).Select(template => template.Name + ":" + string.Join("/", template.MissingModules)).ToArray();
@@ -995,7 +995,7 @@ static partial class Tests
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
         (ulong[] Hashes, int Created) Run()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-last-blockers", fingerprint, ferryTerrain.Fingerprint), catalog, ferryTerrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-last-blockers", fingerprint, ferryTerrain.Fingerprint), catalog, ferryTerrain);
             var sequence = 0UL;
             var column = 0;
             foreach (var template in carriers)
@@ -1008,10 +1008,10 @@ static partial class Tests
             var hashes = new List<ulong>();
             hashes.Add(world.Step().StateHash);
             var created = carriers.Count(template => world.Entities.Any(entity => entity.Template.Index == template.Index));
-            for (var tick = 1; tick < 150; tick++) hashes.Add(world.Step().StateHash);
+            for (var tick = 1; tick < world.Frames(150); tick++) hashes.Add(world.Step().StateHash);
             foreach (var entity in world.Entities.OrderBy(value => value.Id.Value).ToArray())
                 world.Submit(new KillCommand(PlayerId.System, ++sequence, world.Tick, entity.Id));
-            for (var tick = 0; tick < 300; tick++) hashes.Add(world.Step().StateHash);
+            for (var tick = 0; tick < world.Frames(300); tick++) hashes.Add(world.Step().StateHash);
             world.VerifyIncrementalHash();
             return ([..hashes], created);
         }
@@ -1021,7 +1021,7 @@ static partial class Tests
 
         // The retail salvager takes the retail salvage crate: GLA players only (PickupScience), armor first.
         var gla = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East", "FactionGLA"), new PlayerConfiguration(new PlayerId(2), "West", "FactionAmerica"));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(2), SimulationRate.Original, 5, gla, "real-salvage", fingerprint), catalog);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(2), TestRate.Default, 5, gla, "real-salvage", fingerprint), catalog);
         Check.That(world.Sciences.TryGet("SCIENCE_GLA", out var glaScience) && world.PlayerSciences(new PlayerId(1)).Has(glaScience.Index) && !world.PlayerSciences(new PlayerId(2)).Has(glaScience.Index), "The GLA player owns SCIENCE_GLA through its faction, the American does not.");
         var feeder = new Feeder(world);
         var lane = 0;
@@ -1050,7 +1050,7 @@ static partial class Tests
 
         // The retail ferry reads the "Ferry" waypoint paths of a map made for it.
         var terrain = FerryTerrain();
-        var ferryWorld = new SimulationWorld(new WorldConfiguration(new WorldId(3), SimulationRate.Original, 5, players, "real-ferry", fingerprint, terrain.Fingerprint), catalog, terrain);
+        var ferryWorld = new SimulationWorld(new WorldConfiguration(new WorldId(3), TestRate.Default, 5, players, "real-ferry", fingerprint, terrain.Fingerprint), catalog, terrain);
         var ferryFeeder = new Feeder(ferryWorld);
         var ferry = CsSpawn(ferryWorld, ferryFeeder, "CivilianVehicleFerry", 1, 390, 110);
         var ai = ferry.Modules.OfType<RailedTransportAIUpdate>().Single();

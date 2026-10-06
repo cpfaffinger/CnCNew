@@ -52,7 +52,7 @@ static partial class Tests
 
     public static void DamagedLocomotorSlowsAReallyDamagedObject()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: DamagedLocomotorFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: DamagedLocomotorFiles());
         fixture.Templates.TryGet("LimpTank", out var limp);
         fixture.Templates.TryGet("SturdyTank", out var sturdy);
         var loco = limp!.Locomotor!;
@@ -71,7 +71,7 @@ static partial class Tests
             if (damage > 0) feeder.Damage(1, damage);
             world.Step();
             feeder.SetMoveTarget(1, 1, 2000, 0);
-            for (var i = 0; i < 60; i++) world.Step();
+            for (var i = 0; i < world.Frames(60); i++) world.Step();
             return world.FindEntity(new CnCNew.Simulation.Ids.EntityId(1))!.X.ToDecimal();
         }
 

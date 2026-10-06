@@ -24,7 +24,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
 
         var aircraft = catalog.Templates.Where(value => value.Modules.Any(module => module.Name == "JetAIUpdate")).ToArray();
@@ -49,7 +49,7 @@ static partial class Tests
         (ulong[] Hashes, List<string> Log) Run()
         {
             var log = new List<string>();
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-air", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-air", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             SubmitResult Send(int player, Func<ulong, SimCommand> make) => world.Submit(make(sequence[player] = sequence.GetValueOrDefault(player) + 1));
             void Spawn(int player, string template, int x, int y)
@@ -65,7 +65,7 @@ static partial class Tests
             Check.That(Send(1, next => new QueueProductionCommand(new PlayerId(1), next, world.Tick, airfield.Id, "AmericaVehicleComanche")).Accepted, "The Comanche is queued.");
             Entity? raptor = null;
             Entity? comanche = null;
-            for (var tick = 0; tick < 4000 && (raptor is null || comanche is null || raptor.Modules.OfType<JetAIUpdate>().Single().Phase != JetAIUpdate.JetPhase.None); tick++)
+            for (var tick = 0; tick < world.Frames(4000) && (raptor is null || comanche is null || raptor.Modules.OfType<JetAIUpdate>().Single().Phase != JetAIUpdate.JetPhase.None); tick++)
             {
                 hashes.Add(world.Step().StateHash);
                 raptor ??= world.Entities.FirstOrDefault(value => value.Template.Name == "AmericaJetRaptor");
@@ -84,7 +84,7 @@ static partial class Tests
             hashes.Add(world.Step().StateHash);
             var phases = new List<JetAIUpdate.JetPhase>();
             var idleInAirfieldState = false;
-            for (var tick = 0; tick < 3000 && !(jetAi.AllowAirLoco && jetAi.Phase == JetAIUpdate.JetPhase.None && !raptor.HasMoveTarget); tick++)
+            for (var tick = 0; tick < world.Frames(3000) && !(jetAi.AllowAirLoco && jetAi.Phase == JetAIUpdate.JetPhase.None && !raptor.HasMoveTarget); tick++)
             {
                 hashes.Add(world.Step().StateHash);
                 if (phases.Count == 0 || phases[^1] != jetAi.Phase) phases.Add(jetAi.Phase);
@@ -97,7 +97,7 @@ static partial class Tests
 
             // empty the clip on the Crusaders
             var shots = 0;
-            for (var tick = 0; tick < 2000 && raptor.WeaponClip > 0; tick++)
+            for (var tick = 0; tick < world.Frames(2000) && raptor.WeaponClip > 0; tick++)
             {
                 var target = world.Entities.Where(value => value.Template.Name == "AmericaTankCrusader" && !value.EffectivelyDead).OrderBy(value => value.Id.Value).FirstOrDefault();
                 if (target is not null && world.Tick >= raptor.WeaponReadyTick)
@@ -107,7 +107,7 @@ static partial class Tests
             Check.That(raptor.WeaponClip == 0 && shots == weapon.ClipSize, $"The Raptor emptied its clip ({shots} shots).");
             Check.That(jetAi.IsOutOfSpecialReloadAmmo(world), "It knows it is out of ammunition.");
             var back = new List<JetAIUpdate.JetPhase>();
-            for (var tick = 0; tick < 6000 && !(back.Count > 2 && jetAi.Phase == JetAIUpdate.JetPhase.None && !jetAi.AllowAirLoco); tick++)
+            for (var tick = 0; tick < world.Frames(6000) && !(back.Count > 2 && jetAi.Phase == JetAIUpdate.JetPhase.None && !jetAi.AllowAirLoco); tick++)
             {
                 hashes.Add(world.Step().StateHash);
                 if (back.Count == 0 || back[^1] != jetAi.Phase) back.Add(jetAi.Phase);
@@ -118,7 +118,7 @@ static partial class Tests
             // the helicopter rises from the pad and flies on a move order
             Check.That(Send(1, next => new SetMoveTargetCommand(new PlayerId(1), next, world.Tick, comanche.Id, Fixed.FromInt(2600), Fixed.FromInt(2000))).Accepted, "The Comanche is ordered out.");
             hashes.Add(world.Step().StateHash);
-            for (var tick = 0; tick < 1500 && !(heliAi.AllowAirLoco && !comanche.HasMoveTarget && heliAi.Phase == JetAIUpdate.JetPhase.None); tick++) hashes.Add(world.Step().StateHash);
+            for (var tick = 0; tick < world.Frames(1500) && !(heliAi.AllowAirLoco && !comanche.HasMoveTarget && heliAi.Phase == JetAIUpdate.JetPhase.None); tick++) hashes.Add(world.Step().StateHash);
             Check.That(heliAi.AllowAirLoco && comanche.Z > Fixed.Zero, $"The Comanche flew to its destination ({comanche.X}, {comanche.Y}, {comanche.Z}).");
             log.Add($"comanche flying at tick {world.Tick} at ({comanche.X}, {comanche.Y}, {comanche.Z})");
             // the cinematic cruise missile is a jet without an airfield: it simply flies where it is sent
@@ -127,35 +127,35 @@ static partial class Tests
             var cruiseMissile = world.Entities.First(value => value.Template.Name == "CINE_U06_CruiseMissileFLY");
             Check.That(Send(1, next => new SetMoveTargetCommand(new PlayerId(1), next, world.Tick, cruiseMissile.Id, Fixed.FromInt(1500), Fixed.FromInt(300))).Accepted, "The cruise missile is ordered.");
             hashes.Add(world.Step().StateHash);
-            for (var tick = 0; tick < 600 && cruiseMissile.HasMoveTarget; tick++) hashes.Add(world.Step().StateHash);
+            for (var tick = 0; tick < world.Frames(600) && cruiseMissile.HasMoveTarget; tick++) hashes.Add(world.Step().StateHash);
             Check.That(!cruiseMissile.HasMoveTarget && (cruiseMissile.X - Fixed.FromInt(1500)).Abs() < Fixed.FromInt(30) && cruiseMissile.Z > Fixed.Zero, $"The cruise missile flew to its destination ({cruiseMissile.X}, {cruiseMissile.Y}, {cruiseMissile.Z}).");
-            for (var tick = 0; tick < 300; tick++) hashes.Add(world.Step().StateHash);
+            for (var tick = 0; tick < world.Frames(300); tick++) hashes.Add(world.Step().StateHash);
             return ([..hashes], log);
         }
 
         // real EMP pulse and real neutron missile (fired by the weapon directly: the creation-list nugget that launches it from the silo is not simulated yet)
         void Pulse()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-air-emp", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-air-emp", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             void Spawn(int player, string template, int x, int y)
                 => Check.That(world.Submit(new SpawnCommand(new PlayerId(player), sequence[player] = sequence.GetValueOrDefault(player) + 1, world.Tick, template, new PlayerId(player), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, $"{template} spawns.");
             Spawn(2, "AmericaTankCrusader", 1010, 1000);
             Spawn(2, "AmericaJetRaptor", 1000, 1020);
-            for (var tick = 0; tick < 150; tick++) world.Step();
+            for (var tick = 0; tick < world.Frames(150); tick++) world.Step();
             var tank = world.Entities.First(value => value.Template.Name == "AmericaTankCrusader");
             var raptor = world.Entities.First(value => value.Template.Name == "AmericaJetRaptor");
             Check.That(raptor.Z > Fixed.FromInt(50), $"The Raptor flies ({raptor.Z}).");
             Spawn(1, "EMPPulseEffectSpheroid", 1000, 1000);
-            for (var tick = 0; tick < 30; tick++) world.Step();
-            Check.That(tank.EmpDisabledUntil > world.Tick + 800, $"The real EMP pulse disables the tank for 30 seconds ({tank.EmpDisabledUntil} at {world.Tick}).");
+            for (var tick = 0; tick < world.Frames(30); tick++) world.Step();
+            Check.That(tank.EmpDisabledUntil > world.Tick + world.Frames(800), $"The real EMP pulse disables the tank for 30 seconds ({tank.EmpDisabledUntil} at {world.Tick}).");
             Check.That(raptor.EffectivelyDead || !world.Entities.Contains(raptor), "The airborne Raptor was shot out of the sky by the pulse.");
         }
         Pulse();
 
         void Nuke()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-air-nuke", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-air-nuke", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             void Spawn(int player, string template, int x, int y)
                 => Check.That(world.Submit(new SpawnCommand(new PlayerId(player), sequence[player] = sequence.GetValueOrDefault(player) + 1, world.Tick, template, new PlayerId(player), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, $"{template} spawns.");
@@ -170,7 +170,7 @@ static partial class Tests
             world.FireWeaponAt(silo, weapon, null, Fixed.FromInt(3000), Fixed.FromInt(3000), Fixed.Zero);
             Entity? missile = null;
             var maxZ = Fixed.Zero;
-            for (var tick = 0; tick < 700; tick++)
+            for (var tick = 0; tick < world.Frames(700); tick++)
             {
                 world.Step();
                 missile ??= world.Entities.FirstOrDefault(value => value.Template.Name == "NeutronMissile");
@@ -189,7 +189,7 @@ static partial class Tests
         {
             // Through the real chain: UseSpecialPowerCommand -> OCLSpecialPower -> SUPERWEAPON_NeutronMissile (FireWeapon nugget) -> the silo is the weapon's source.
             var terrain = CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(400, 400, 1, (_, _) => 0), "real-air-silo"); // the silo OCL is created at the map edge near the source: it needs a terrain, as every match and mission has one
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-air-silo", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-air-silo", fingerprint, terrain.Fingerprint), catalog, terrain);
             var sequence = new Dictionary<int, ulong>();
             SubmitResult Send(int player, Func<ulong, SimCommand> make) => world.Submit(make(sequence[player] = sequence.GetValueOrDefault(player) + 1));
             Check.That(Send(1, next => new SpawnCommand(new PlayerId(1), next, world.Tick, "ChinaNuclearMissileLauncher", new PlayerId(1), Fixed.FromInt(1000), Fixed.FromInt(3000), Fixed.Zero, Fixed.Zero)).Accepted, "The silo spawns.");
@@ -198,12 +198,12 @@ static partial class Tests
             var silo = world.Entities.First(value => value.Template.Name == "ChinaNuclearMissileLauncher");
             var tank = world.Entities.First(value => value.Template.Name == "AmericaTankCrusader");
             var power = silo.Modules.OfType<SpecialPowerModuleBase>().First();
-            for (var tick = 0; tick < 12000 && !power.IsReady(world); tick++) world.Step();
+            for (var tick = 0; tick < world.Frames(12000) && !power.IsReady(world); tick++) world.Step();
             Check.That(power.IsReady(world), "The silo's superweapon becomes ready by recharging.");
             var launch = Send(1, next => new UseSpecialPowerCommand(new PlayerId(1), next, world.Tick, silo.Id, "SuperweaponNeutronMissile", SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(3000), Fixed.FromInt(3000)));
             Check.That(launch.Accepted, "The launch command is accepted (" + launch + ").");
             Entity? missile = null;
-            for (var tick = 0; tick < 40 && missile is null; tick++)
+            for (var tick = 0; tick < world.Frames(40) && missile is null; tick++)
             {
                 world.Step();
                 missile = world.Entities.FirstOrDefault(value => value.Template.Name == "NeutronMissile");
@@ -212,7 +212,7 @@ static partial class Tests
             var dx = missile!.X - silo.X;
             var dy = missile.Y - silo.Y;
             Check.That(dx * dx + dy * dy < Fixed.FromInt(120 * 120), $"It starts at the silo ({dx},{dy} away), not at the target.");
-            for (var tick = 0; tick < 900 && world.Entities.Contains(missile); tick++) world.Step();
+            for (var tick = 0; tick < world.Frames(900) && world.Entities.Contains(missile); tick++) world.Step();
             Check.That(tank.EffectivelyDead || !world.Entities.Contains(tank), "The target at ground zero is destroyed by the silo's missile.");
         }
         NukeFromSilo();

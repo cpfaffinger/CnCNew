@@ -102,7 +102,7 @@ static partial class Tests
     public static void TickPhaseObserverSessions()
     {
         // A skirmish on a terrain: the AIs think, the vision is refreshed every third tick.
-        var skirmishFixture = new SyntheticFixture(SimulationRate.Original, files: SkirmishFiles());
+        var skirmishFixture = new SyntheticFixture(TestRate.Default, files: SkirmishFiles());
         var skirmishMap = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
         var skirmishTerrain = TerrainMap.Build(skirmishMap, "skirmish");
         var participants = ReferenceMatchScenario.Participants(skirmishFixture.Templates, out _);
@@ -135,7 +135,7 @@ static partial class Tests
         var observedMission = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         var missionLog = new PhaseLog();
         observedMission.World.PhaseObserver = missionLog;
-        for (var tick = 0; tick < 400; tick++)
+        for (var tick = 0; tick < plainMission.Frames(400); tick++)
         {
             var expected = plainMission.Step();
             var actual = observedMission.Step();

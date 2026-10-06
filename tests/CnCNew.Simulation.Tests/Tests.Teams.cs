@@ -38,8 +38,8 @@ static partial class Tests
 
     private static SimulationWorld TeamsWorld(IReadOnlyDictionary<string, string> files, out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: files);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TeamPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        fixture = new SyntheticFixture(TestRate.Default, files: files);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TeamPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }
@@ -99,11 +99,11 @@ static partial class Tests
         var forkFeeder = feeder.ForkTo(restored);
         feeder.Spawn(1, "Tank", x: 1);
         forkFeeder.Spawn(1, "Tank", x: 1);
-        for (var i = 0; i < 30; i++) Check.That(world.Step().StateHash == restored.Step().StateHash, "The restored world continues identically (tick " + i + ").");
+        for (var i = 0; i < world.Frames(30); i++) Check.That(world.Step().StateHash == restored.Step().StateHash, "The restored world continues identically (tick " + i + ").");
 
         // Replay file: teams in the header, the command in the stream.
         var command = new SetRelationshipCommand(system, 7, 12, new PlayerId(3), new PlayerId(4), Relationship.Allies);
-        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, 30, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), TeamPlayers, 20, 5);
+        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, TestRate.Default.TicksPerSecond, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), TeamPlayers, 20, 5);
         ImmutableArray<SimCommand> commands = [command];
         var read = ReplayFormat.Read(ReplayFormat.Write(new ReplayFile(header, commands, [])));
         Check.That(read.Commands.SequenceEqual(commands), "SetRelationshipCommand survives the replay file.");
@@ -116,7 +116,7 @@ static partial class Tests
         feeder.Spawn(victimOwner, "Prize", x: 10);
         world.Step();
         var prize = world.Entities.Where(value => value.Template.Name == "Prize" && value.Owner.Value == victimOwner).OrderBy(value => value.Id.Value).Last();
-        for (var tick = 0; tick < 200 && world.FindEntity(prize.Id) is { } alive && alive.Body!.Health > Fixed.Zero; tick++)
+        for (var tick = 0; tick < world.Frames(200) && world.FindEntity(prize.Id) is { } alive && alive.Body!.Health > Fixed.Zero; tick++)
         {
             feeder.FireWeapon(1, shooter, prize.Id.Value);
             world.Step();

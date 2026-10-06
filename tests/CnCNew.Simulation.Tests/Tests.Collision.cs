@@ -264,7 +264,7 @@ static partial class Tests
         """,
     };
 
-    private static readonly SyntheticFixture CollisionFixture = new(SimulationRate.Original, files: CollisionFiles());
+    private static readonly SyntheticFixture CollisionFixture = new(TestRate.Default, files: CollisionFiles());
 
     private static TerrainMap CollisionTerrain(int cells = 30, Func<int, int, int>? height = null)
         => TerrainMap.Build(SyntheticMaps.Build(cells, cells, 1, height ?? ((_, _) => 0)), "collision");
@@ -272,7 +272,7 @@ static partial class Tests
     private static (SimulationWorld World, Feeder Feeder) CollisionWorld(TerrainMap? terrain = null)
     {
         var map = terrain ?? CollisionTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, CollisionFixture.Fingerprint, map.Fingerprint), CollisionFixture.Templates, map);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, CollisionFixture.Fingerprint, map.Fingerprint), CollisionFixture.Templates, map);
         return (world, new Feeder(world));
     }
 
@@ -288,7 +288,7 @@ static partial class Tests
         world.Step();
         feeder.SetMoveTarget(1, 1, 100, 0);
         long died = -1;
-        for (var tick = 0; tick < 20 && died < 0; tick++)
+        for (var tick = 0; tick < world.Frames(20) && died < 0; tick++)
         {
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.EntityDied && value.Entity.Value == 2)) died = world.Tick;
@@ -302,7 +302,7 @@ static partial class Tests
         allyFeeder.Spawn(1, "Infantry", x: 40, y: 0);
         allyWorld.Step();
         allyFeeder.SetMoveTarget(1, 1, 100, 0);
-        for (var tick = 0; tick < 20; tick++) allyWorld.Step();
+        for (var tick = 0; tick < allyWorld.Frames(20); tick++) allyWorld.Step();
         Check.That(allyWorld.FindEntity(new EntityId(2)) is not null, "An allied crusher does not squish its own infantry.");
 
         // CrusherLevel 0 cannot crush or squish anything.
@@ -311,7 +311,7 @@ static partial class Tests
         safeFeeder.Spawn(2, "Infantry", x: 40, y: 0);
         safeWorld.Step();
         safeFeeder.SetMoveTarget(1, 1, 100, 0);
-        for (var tick = 0; tick < 20; tick++) safeWorld.Step();
+        for (var tick = 0; tick < safeWorld.Frames(20); tick++) safeWorld.Step();
         Check.That(safeWorld.FindEntity(new EntityId(2)) is not null, "CrusherLevel 0 squishes nobody.");
 
         // Two independent runs of the lethal scenario are hash-identical.
@@ -325,7 +325,7 @@ static partial class Tests
         feederB.Spawn(2, "Infantry", x: 40, y: 0);
         runB.Step();
         feederB.SetMoveTarget(1, 1, 100, 0);
-        for (var tick = 0; tick < 20; tick++) Check.That(runA.Step().StateHash == runB.Step().StateHash, "Crush resolution is deterministic at tick " + tick + ".");
+        for (var tick = 0; tick < runA.Frames(20); tick++) Check.That(runA.Step().StateHash == runB.Step().StateHash, "Crush resolution is deterministic at tick " + tick + ".");
     }
 
     /// <summary><c>ToppleUpdate.cpp onCollide</c>/<c>applyTopplingForce</c>, now driven by <c>TryTopple</c>.</summary>
@@ -337,7 +337,7 @@ static partial class Tests
         world.Step();
         feeder.SetMoveTarget(1, 1, 100, 0);
         long died = -1;
-        for (var tick = 0; tick < 300 && died < 0; tick++)
+        for (var tick = 0; tick < world.Frames(300) && died < 0; tick++)
         {
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.EntityDied && value.Entity.Value == 2)) died = world.Tick;
@@ -351,7 +351,7 @@ static partial class Tests
         weakFeeder.Spawn(2, "Tree", x: 40, y: 0);
         weak.Step();
         weakFeeder.SetMoveTarget(1, 1, 100, 0);
-        for (var tick = 0; tick < 300; tick++) weak.Step();
+        for (var tick = 0; tick < weak.Frames(300); tick++) weak.Step();
         Check.That(weak.FindEntity(new EntityId(2)) is not null, "CrusherLevel 1 does not topple trees.");
 
         // KillWhenStartToppling dies the instant the push lands, no fall animation to wait out.
@@ -361,7 +361,7 @@ static partial class Tests
         instant.Step();
         instantFeeder.SetMoveTarget(1, 1, 100, 0);
         long instantDied = -1;
-        for (var tick = 0; tick < 20 && instantDied < 0; tick++)
+        for (var tick = 0; tick < instant.Frames(20) && instantDied < 0; tick++)
         {
             var result = instant.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.EntityDied && value.Entity.Value == 2)) instantDied = instant.Tick;
@@ -374,11 +374,11 @@ static partial class Tests
         liveFeeder.Spawn(2, "Tree", x: 40, y: 0);
         live.Step();
         liveFeeder.SetMoveTarget(1, 1, 100, 0);
-        for (var tick = 0; tick < 5; tick++) live.Step();
+        for (var tick = 0; tick < live.Frames(5); tick++) live.Step();
         Check.That(live.FindEntity(new EntityId(2)) is not null, "Setup: the tree is still falling (mid-bounce) at the snapshot point.");
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(live), CollisionFixture.Templates, CollisionFixture.Fingerprint, CollisionTerrain());
         Check.That(restored.StateHash == live.StateHash, "The mid-fall topple state round-trips through a snapshot.");
-        for (var tick = 0; tick < 20; tick++)
+        for (var tick = 0; tick < live.Frames(20); tick++)
             Check.That(live.Step().StateHash == restored.Step().StateHash, "The restored tree keeps toppling identically at step " + tick + ".");
         Check.That(live.FindEntity(new EntityId(2)) is null && restored.FindEntity(new EntityId(2)) is null, "Both the live and the restored run finish the topple with the same outcome.");
     }
@@ -391,7 +391,7 @@ static partial class Tests
         world.Step();
         feeder.Damage(1, 1000);
         var events = new List<SimEvent>();
-        for (var tick = 0; tick < 400; tick++) events.AddRange(world.Step().Events);
+        for (var tick = 0; tick < world.Frames(400); tick++) events.AddRange(world.Step().Events);
         Check.That(world.FindEntity(new EntityId(1)) is not null, "The building persists as rubble: StructureToppleUpdate is itself the only die module, and it never requests destruction.");
         // The crushing weapon only fires once the building has fallen close to flat (theta <= PI/6), so the skip fires at least once
         // once MinToppleDelay plus most of the fall has elapsed; a victim's exact position would depend on the random topple
@@ -408,7 +408,7 @@ static partial class Tests
         feederB.Spawn(1, "Building", x: 0, y: 0);
         runB.Step();
         feederB.Damage(1, 1000);
-        for (var tick = 0; tick < 400; tick++) Check.That(runA.Step().StateHash == runB.Step().StateHash, "The structure's collapse is deterministic at tick " + tick + ".");
+        for (var tick = 0; tick < runA.Frames(400); tick++) Check.That(runA.Step().StateHash == runB.Step().StateHash, "The structure's collapse is deterministic at tick " + tick + ".");
         Check.That(world.FindEntity(new EntityId(1))!.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.StructureToppleUpdate>().Single().IsToppled, "The building lies flat (TOPPLESTATE_DONE).");
 
         // The retail values (StructuralIntegrity 0.75, no decay): the first acceleration is about 5e-6 rad per tick squared, below the resolution of Fixed. The tower still falls:
@@ -420,18 +420,18 @@ static partial class Tests
         var topple = stiff.FindEntity(new EntityId(1))!.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.StructureToppleUpdate>().Single();
         var fallen = -1;
         SimulationWorld? resumed = null;
-        for (var tick = 0; tick < 300; tick++)
+        for (var tick = 0; tick < stiff.Frames(300); tick++)
         {
             var hash = stiff.Step().StateHash;
             if (resumed is not null) Check.That(resumed.Step().StateHash == hash, "The fall continues identically from a snapshot at tick " + tick + ".");
-            if (tick == 60)
+            if (tick == stiff.Frames(60))
             {
                 Check.That(topple.Angle > Fixed.Zero && !topple.IsToppled, "Mid-fall the tower leans but is not down: " + topple.Angle.ToDecimal());
                 resumed = WorldSnapshot.Restore(WorldSnapshot.Write(stiff), CollisionFixture.Templates, CollisionFixture.Fingerprint, CollisionTerrain());
             }
             if (fallen < 0 && topple.IsToppled) fallen = tick;
         }
-        Check.That(fallen is > 90 and < 130, "A tower with the retail structural integrity reaches the ground after about 104 ticks of falling: " + fallen);
+        Check.That(stiff.InFrames(fallen) is > 90 and < 130, "A tower with the retail structural integrity reaches the ground after about 104 ticks of falling: " + fallen);
         Check.That(topple.Angle == FixedTrig.HalfPi, "It lies at a quarter turn.");
     }
 
@@ -442,14 +442,14 @@ static partial class Tests
         var (world, feeder) = CollisionWorld();
         feeder.Spawn(1, "Faller", x: 0, y: 0);
         world.Step();
-        for (var tick = 0; tick < 10; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(10); tick++) world.Step();
         Check.That(world.FindEntity(new EntityId(1)) is not null, "On open ground the object stays above its target height.");
 
         // A tall structure nearby raises the target height past the object's position, so it now dies.
         // The structure scan range is the faller's own (small) bounding circle, just like the reference: the tall object must sit almost on top of it.
         feeder.Spawn(2, "TallHider", x: 1, y: 0);
         long died = -1;
-        for (var tick = 0; tick < 10 && died < 0; tick++)
+        for (var tick = 0; tick < world.Frames(10) && died < 0; tick++)
         {
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.EntityDied && value.Entity.Value == 1)) died = world.Tick;
@@ -461,14 +461,14 @@ static partial class Tests
         delayedFeeder.Spawn(1, "DelayedFaller", x: 0, y: 0);
         delayed.Step();
         Check.That(delayed.FindEntity(new EntityId(1)) is not null, "InitialDelay keeps the object alive before it elapses.");
-        for (var tick = 0; tick < 10; tick++) delayed.Step();
+        for (var tick = 0; tick < delayed.Frames(10); tick++) delayed.Step();
         Check.That(delayed.FindEntity(new EntityId(1)) is null, "The object dies once InitialDelay elapses and it is still below the target height.");
 
         // OnlyWhenMovingDown: the object's height never decreases here (nothing moves it), so the gate blocks death forever.
         var (guarded, guardedFeeder) = CollisionWorld();
         guardedFeeder.Spawn(1, "GuardedFaller", x: 0, y: 0);
         guarded.Step();
-        for (var tick = 0; tick < 20; tick++) guarded.Step();
+        for (var tick = 0; tick < guarded.Frames(20); tick++) guarded.Step();
         Check.That(guarded.FindEntity(new EntityId(1)) is not null, "OnlyWhenMovingDown blocks death while Z is constant.");
 
         // The object never ends up below the terrain, even when the whole map is a plateau well above world Z 0.
@@ -476,7 +476,7 @@ static partial class Tests
         groundedFeeder.Spawn(1, "GroundedFaller", x: 0, y: 0);
         grounded.Step();
         long groundDied = -1;
-        for (var tick = 0; tick < 5 && groundDied < 0; tick++)
+        for (var tick = 0; tick < grounded.Frames(5) && groundDied < 0; tick++)
         {
             var result = grounded.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.EntityDied && value.Entity.Value == 1)) groundDied = grounded.Tick;
@@ -504,12 +504,12 @@ static partial class Tests
             feeder.SetMoveTarget(1, 1, 110, 0);
             long arrival = -1;
             int stalled = 0, overlaps = 0;
-            for (var tick = 0; tick < 400 && arrival < 0; tick++)
+            for (var tick = 0; tick < world.Frames(400) && arrival < 0; tick++)
             {
                 var result = world.Step();
                 if (result.Events.Any(value => value.Kind == SimEventKind.MoveArrived && value.Entity.Value == 1)) arrival = world.Tick;
                 var mover = world.FindEntity(new EntityId(1))!;
-                if (mover.HasMoveTarget && mover.Speed == Fixed.Zero && tick > 5) stalled++;
+                if (mover.HasMoveTarget && mover.Speed == Fixed.Zero && tick > world.Frames(5)) stalled++;
                 foreach (var other in world.Entities.Where(value => value.Template.Name == "Blocker"))
                 {
                     var dx = mover.X - other.X;
@@ -543,7 +543,7 @@ static partial class Tests
         feeder.SetMoveTarget(1, 1, 100, 0);
         var deviated = false;
         var arrived = false;
-        for (var tick = 0; tick < 60 && !arrived; tick++)
+        for (var tick = 0; tick < world.Frames(60) && !arrived; tick++)
         {
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.MoveArrived && value.Entity.Value == 1)) arrived = true;
@@ -565,6 +565,6 @@ static partial class Tests
         feederB.Spawn(2, "Blocker", x: 50, y: 0);
         runB.Step();
         feederB.SetMoveTarget(1, 1, 100, 0);
-        for (var tick = 0; tick < 60; tick++) Check.That(runA.Step().StateHash == runB.Step().StateHash, "Avoidance is deterministic at tick " + tick + ".");
+        for (var tick = 0; tick < runA.Frames(60); tick++) Check.That(runA.Step().StateHash == runB.Step().StateHash, "Avoidance is deterministic at tick " + tick + ".");
     }
 }

@@ -3,12 +3,22 @@ using System.Numerics;
 using CnCNew.Data;
 using CnCNew.Data.World;
 using CnCNew.Game.Data;
+using CnCNew.Game.Hud;
 using CnCNew.Game.Live;
 using CnCNew.Game.Shell;
 using CnCNew.Presentation.Fx;
+using CnCNew.Simulation.Commands;
+using CnCNew.Simulation.Events;
+using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
+using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
+using CnCNew.Simulation.World;
+using CnCNew.Ui.Layout;
+using CnCNew.Ui.Wnd;
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Text;
 using static CnCNew.Game.Tests.MissionPresentationTests;
 
 namespace CnCNew.Game.Tests;
@@ -16,7 +26,7 @@ namespace CnCNew.Game.Tests;
 /// <summary>
 /// The time scale of the game layer (docs/HANDOFF-PHASE21.md, item 9): everything a mission shows for a duration, and the clock the effects run on, lasts the same game
 /// time at 30, 60 and 120 Hz. Each test plays the same script once per rate, counts the steps of that session, converts them with the session's own rate and compares the
-/// seconds; the tolerance is one original frame (1/30 s). The synthetic tests need no content. With <c>--content-dir</c> a staged scene is also played at 30 and at 60 Hz
+/// seconds; the tolerance is one original frame (1/30 s). The synthetic tests need no content. With <c>--content-dir</c> a staged scene is also played at 30, 60 and 120 Hz
 /// through <see cref="LiveGame"/>: the effect clock steps once per original frame and a particle system lives the same game time.
 /// Nothing here judges how the simulation behaves at the faster rates, and nothing here says that it looks or sounds right - only that durations are equal.
 /// </summary>
@@ -33,12 +43,16 @@ internal static class TimeScaleTests
         harness.Run("A message line, the cinematic text and the speech placeholder stay the same game time", Texts);
         harness.Run("A script fade, the letterbox fade and the grey-scale ramp take the same game time", FadesAndFilters);
         harness.Run("A radar event stays the same game time", RadarEvent);
+        harness.Run("The under-attack line of the message feed is locked out for the same game time (ten seconds)", UnderAttackLine);
+        harness.Run("A superweapon line counts the same seconds down and flashes in the same rhythm", SuperweaponLine);
+        harness.Run("A named countdown timer reads the same time and flashes in the same rhythm", NamedCountdown);
+        harness.Run("The zoom blur of a camera jump rises and falls over the same game time", ZoomBlur);
         harness.Run("The game clock counts original frames and seconds the same at every rate", ClockArithmetic);
         var index = Array.IndexOf(args, "--content-dir");
         if (index >= 0 && index + 1 < args.Length)
         {
             var directory = args[index + 1];
-            harness.Run("Real data: the effect clock steps once per original frame and a particle system lives the same game time at 30 and 60 Hz", () => EffectsOnTheFrameGrid(directory));
+            harness.Run("Real data: the effect clock steps once per original frame and a particle system lives the same game time at 30, 60 and 120 Hz", () => EffectsOnTheFrameGrid(directory));
         }
         return harness.Failures;
     }
@@ -220,6 +234,157 @@ internal static class TimeScaleTests
         }), 8.0);
     }
 
+    /// <summary><c>Radar::tryUnderAttackEvent</c> as the message list sees it (<see cref="HudMessageFeed"/>): the same object is hit in every tick; its line comes again ten seconds later.</summary>
+    private static void UnderAttackLine()
+    {
+        Same("under-attack line: time until the next one for the same place", PerRate(rate =>
+        {
+            var (map, fixture, terrain) = Mission([], [Placed("Barrel", 100m, 100m, "teamHero", "Victim")], rate: rate);
+            var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+            session.Step();
+            var world = session.World;
+            var victim = world.Entities.Single(entity => entity.Template.Name == "Barrel");
+            var feed = new HudMessageFeed(new UiMessageLog(TextFixtures.Style.Settings), new LocalizedText(new StringTable("time-scale", StringTableFormat.Csf, [])), fixture.Graph);
+            long first = -1, second = -1;
+            for (var tick = world.Tick; tick <= world.Tick + 12 * rate.TicksPerSecond && second < 0; tick++)
+            {
+                var before = feed.Shown;
+                feed.Observe(new SimEvent(default, tick, SimEventKind.EntityDamaged, victim.Id, default, victim.Owner, string.Empty, 100), world, victim.Owner);
+                if (feed.Shown == before) continue;
+                if (first < 0) first = tick;
+                else second = tick;
+            }
+            TestHarness.Assert(first == world.Tick && second > first, $"at {rate} the first hit prints a line and a later one again (first {first}, second {second})");
+            return (double)(second - first) / rate.TicksPerSecond;
+        }), 10.0);
+    }
+
+    /// <summary>The superweapon list (<see cref="SuperweaponTimers"/>): the seconds left of a recharging power and the flash of a ready one.</summary>
+    private static void SuperweaponLine()
+    {
+        var files = new Dictionary<string, string>(SyntheticFixture.Files)
+        {
+            ["Data/INI/Object/TimeScaleClock.ini"] = "SpecialPower SPECIAL_Clock\n  Enum = SPECIAL_PARADROP_AMERICA\n  ReloadTime = 10000\n  PublicTimer = Yes\nEnd\n"
+                + "Object ClockCenter\n  KindOf = STRUCTURE\n  Body = StructureBody Body01\n    MaxHealth = 500.0\n    InitialHealth = 500.0\n  End\n"
+                + "  Behavior = SpecialAbility Clock01\n    SpecialPowerTemplate = SPECIAL_Clock\n  End\nEnd\n",
+        };
+        var halfway = new List<(SimulationRate, double)>();
+        var ready = new List<(SimulationRate, double)>();
+        var flash = new List<(SimulationRate, double)>();
+        var readings = new List<string>();
+        foreach (var rate in Rates)
+        {
+            var fixture = new SyntheticFixture(rate, files: files);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, [new PlayerConfiguration(new PlayerId(1), "Alpha")], SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            TestHarness.Assert(world.Submit(new SpawnCommand(PlayerId.System, 1, world.Tick, "ClockCenter", new PlayerId(1), Fixed.FromInt(50), Fixed.FromInt(50), Fixed.Zero, Fixed.Zero)).Accepted, $"at {rate} the carrier spawns");
+            world.Step();
+            var timers = new SuperweaponTimers();
+            var measure = new ShellTextMeasure();
+            var own = new WndColor(10, 200, 10, 255);
+            long fiveAt = -1, readyAt = -1, whiteAt = -1;
+            var perSecond = new List<string>();
+            for (var tick = 0; tick < 13 * rate.TicksPerSecond; tick++)
+            {
+                var line = timers.Collect(world, _ => "Clock").Single();
+                if (world.Tick % rate.TicksPerSecond == 0) perSecond.Add(line.Time);
+                if (fiveAt < 0 && line.SecondsLeft <= 5) fiveAt = world.Tick;
+                if (readyAt < 0 && line.Ready) readyAt = world.Tick;
+                // The list is drawn on the game clock in original frames, as MatchController does.
+                var frame = new CnCNew.Presentation.GameClock(world.Tick, rate.TicksPerSecond, 0).OriginalFrames;
+                var colour = ((UiTextDraw)SuperweaponTimers.Draw([line], _ => own, frame, 1280, 720, 560, measure, TextFixtures.Style, TextFixtures.Options)[0]).Color;
+                TestHarness.Assert(line.Ready || colour == own, $"at {rate} a recharging power does not flash (tick {world.Tick})");
+                if (readyAt >= 0 && whiteAt < 0 && colour == WndColor.White) whiteAt = world.Tick;
+                world.Step();
+            }
+            TestHarness.Assert(fiveAt > 0 && readyAt > fiveAt && whiteAt >= readyAt, $"at {rate} the power counts down, gets ready and flashes (5 s left at tick {fiveAt}, ready at {readyAt}, white at {whiteAt})");
+            halfway.Add((rate, (double)fiveAt / rate.TicksPerSecond));
+            ready.Add((rate, (double)readyAt / rate.TicksPerSecond));
+            flash.Add((rate, (double)whiteAt / rate.TicksPerSecond));
+            readings.Add(string.Join(" ", perSecond));
+        }
+
+        Same("superweapon line: five seconds left", halfway);
+        Same("superweapon line: ready (ReloadTime 10000 ms)", ready, 10.0);
+        Same("superweapon line: first white flash of the ready line (SuperweaponCountdownFlashDuration 500 ms)", flash);
+        TestHarness.Assert(readings.Distinct().Count() == 1, $"the line reads the same on every whole second at every rate ({string.Join(" | ", readings)})");
+    }
+
+    /// <summary>A countdown timer of the scripts on the screen (<c>DISPLAY_COUNTDOWN_TIMER</c>): the value the VM counts in ticks reads the same m:ss, and the ready timer flashes on the same clock.</summary>
+    private static void NamedCountdown()
+    {
+        var script = Script("Timer", If("CONDITION_TRUE"), [Do("SET_MILLISECOND_TIMER", Named(MapScriptParameterType.Counter, "T"), Real(5m)), Do("DISPLAY_COUNTDOWN_TIMER", Named(MapScriptParameterType.Counter, "T"), Label("GUI:Time"))]);
+        var normal = new WndColor(255, 255, 0, 255);
+        var flashColour = new WndColor(0, 255, 255, 255);
+        var three = new List<(SimulationRate, double)>();
+        var zero = new List<(SimulationRate, double)>();
+        var flash = new List<(SimulationRate, double)>();
+        var readings = new List<string>();
+        foreach (var rate in Rates)
+        {
+            var play = new Play(rate, [script]);
+            play.Step();
+            UiTextDraw Timer() => play.Director.BuildOverlayCommands(1280, 720).OfType<UiTextDraw>().Single(draw => draw.Text.StartsWith("GUI:Time", StringComparison.Ordinal));
+            TestHarness.Assert(Timer().Text is "GUI:Time 0:05" or "GUI:Time 0:04", $"at {rate} the timer of five seconds is on the screen ({Timer().Text})");
+            var perSecond = new List<string>();
+            double threeAt = -1, zeroAt = -1, flashAt = -1;
+            // Game time since the step that set the timer.
+            var set = play.Seconds;
+            while (play.Seconds < 8)
+            {
+                var timer = Timer();
+                if (play.Steps % rate.TicksPerSecond == 0) perSecond.Add(timer.Text);
+                if (threeAt < 0 && timer.Text == "GUI:Time 0:03") threeAt = play.Seconds - set;
+                if (zeroAt < 0 && timer.Text == "GUI:Time 0:00") zeroAt = play.Seconds - set;
+                TestHarness.Assert(zeroAt >= 0 || timer.Color == normal, $"at {rate} a running timer keeps its colour ({timer.Text})");
+                if (zeroAt >= 0 && flashAt < 0 && timer.Color == flashColour) flashAt = play.Seconds - set;
+                play.Step();
+            }
+            TestHarness.Assert(threeAt > 0 && zeroAt > threeAt && flashAt >= zeroAt, $"at {rate} the timer runs down and flashes (0:03 at {threeAt} s, 0:00 at {zeroAt} s, flash colour at {flashAt} s)");
+            three.Add((rate, threeAt));
+            zero.Add((rate, zeroAt));
+            flash.Add((rate, flashAt));
+            readings.Add(string.Join(" ", perSecond.Select(text => text["GUI:Time ".Length..])));
+        }
+
+        Same("named countdown of 5 s: reads 0:03", three);
+        Same("named countdown of 5 s: reads 0:00", zero);
+        Same("named countdown: first flash colour after it ran out (NamedTimerCountdownFlashDuration 500 ms)", flash);
+        TestHarness.Assert(readings.Distinct().Count() == 1, $"the timer reads the same on every whole second at every rate ({string.Join(" | ", readings)})");
+    }
+
+    /// <summary><c>CAMERA_MOTION_BLUR_JUMP</c>: the blur count rises by five per original frame to sixty, the camera cuts, and it falls again (<c>ScreenMotionBlurFilter</c>).</summary>
+    private static void ZoomBlur()
+    {
+        var target = Waypoint("Target", 1, 400m, 500m);
+        var jump = Script("Jump", If("CONDITION_TRUE"), [Do("CAMERA_MOTION_BLUR_JUMP", Named(MapScriptParameterType.Waypoint, "Target"), Bool(true))]);
+        var apex = new List<(SimulationRate, double)>();
+        var over = new List<(SimulationRate, double)>();
+        foreach (var rate in Rates)
+        {
+            var session = Start([jump], [target], rate: rate);
+            var director = new MissionPresentationDirector(session);
+            long steps = 0;
+            void Step() { director.BeforeStep(); session.Step(); director.AfterStep(); steps++; }
+            // The script runs in this step; the filter advances on the ticks that begin an original frame.
+            Step();
+            long apexAt = -1, overAt = -1;
+            while (overAt < 0)
+            {
+                TestHarness.Assert(steps < 5 * rate.TicksPerSecond, $"at {rate} the zoom blur never ended");
+                var count = director.PostEffects.MotionBlurCount;
+                TestHarness.Assert(count % 5 == 0 && count <= 60, $"at {rate} the blur count moves in steps of five up to sixty ({count})");
+                if (apexAt < 0 && count == 60) apexAt = steps;
+                if (apexAt >= 0 && count == 0) overAt = steps;
+                else Step();
+            }
+            apex.Add((rate, (double)apexAt / rate.TicksPerSecond));
+            over.Add((rate, (double)overAt / rate.TicksPerSecond));
+        }
+
+        Same("zoom blur: at its apex (sixty, twelve frames)", apex, 12.0 / OriginalFrame.PerSecond);
+        Same("zoom blur: over (twelve frames up, eleven down)", over);
+    }
+
     private static void ClockArithmetic()
     {
         foreach (var rate in Rates)
@@ -245,7 +410,7 @@ internal static class TimeScaleTests
     {
         var lifetimes = new List<(SimulationRate, double)>();
         var counts = new List<long>();
-        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60 })
+        foreach (var rate in Rates)
         {
             var data = GameData.Load(directory, modelGeometry: false, rate: rate);
             TestHarness.Assert(data.Rate == rate, $"the data is built for {rate}");
@@ -285,7 +450,7 @@ internal static class TimeScaleTests
         }
 
         Same("particle system from its creation to its last particle", lifetimes);
-        TestHarness.Assert(counts.Distinct().Count() == 1, $"the same particles exist at both rates (peaks {string.Join(", ", counts)})");
+        TestHarness.Assert(counts.Distinct().Count() == 1, $"the same particles exist at every rate (peaks {string.Join(", ", counts)})");
     }
 
     private static long GameClockFrames(long tick, SimulationRate rate) => CnCNew.Presentation.GameClock.OriginalFrameOf(tick, rate.TicksPerOriginalFrame);

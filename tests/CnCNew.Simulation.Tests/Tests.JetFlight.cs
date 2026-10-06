@@ -126,8 +126,8 @@ static partial class Tests
         """,
     };
 
-    private static readonly Fixed WingMinSpeed = SimulationRate.Original.Time.PerSecondToPerTick(60m);
-    private static readonly Fixed WingTurnPerTick = SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(120m);
+    private static readonly Fixed WingMinSpeed = TestRate.Default.Time.PerSecondToPerTick(60m);
+    private static readonly Fixed WingTurnPerTick = TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(120m);
 
     private static SimulationWorld WingWorld(out SyntheticFixture fixture, out Feeder feeder, params (string Template, int X, int Y)[] jets)
     {
@@ -162,7 +162,7 @@ static partial class Tests
         var arrived = -1;
         var slowest = Fixed.MaxValue;
         var shortestStep = Fixed.MaxValue;
-        for (var tick = 0; tick < 900; tick++)
+        for (var tick = 0; tick < world.Frames(900); tick++)
         {
             var before = Pose(jet);
             world.Step();
@@ -171,7 +171,7 @@ static partial class Tests
             var step = Distance2D(before.X, before.Y, jet.X, jet.Y);
             shortestStep = Fixed.Min(shortestStep, step);
         }
-        Check.That(arrived > 0 && arrived < 400, $"The jet reached the end of its order (tick {arrived}).");
+        Check.That(arrived > 0 && arrived < world.Frames(400), $"The jet reached the end of its order (tick {arrived}).");
         Check.That(slowest >= WingMinSpeed, $"The jet never fell below its minimum speed ({slowest} vs {WingMinSpeed}).");
         Check.That(shortestStep >= WingMinSpeed - Fixed.FromRaw(64), $"It moved by at least the minimum speed on every tick, also after its order ended ({shortestStep}).");
         Check.That(jet.Z == Fixed.FromInt(60), $"It flies at the preferred height ({jet.Z}).");
@@ -179,7 +179,7 @@ static partial class Tests
         // a helicopter has no minimum speed: it stops where its order ends
         Check.That(!heli.HasMoveTarget && heli.Speed == Fixed.Zero, $"The helicopter stands still at the end of its order (speed {heli.Speed}).");
         var parked = (heli.X, heli.Y);
-        for (var i = 0; i < 30; i++) world.Step();
+        for (var i = 0; i < world.Frames(30); i++) world.Step();
         Check.That((heli.X, heli.Y) == parked, "It stays where it stopped.");
     }
 
@@ -192,7 +192,7 @@ static partial class Tests
         var world = WingWorld(out _, out var feeder, ("WingJet", 1000, 1000));
         var jet = Get(world, "WingJet");
         Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 1500, 1000).Accepted, "The jet is sent east.");
-        for (var i = 0; i < 40; i++) world.Step();
+        for (var i = 0; i < world.Frames(40); i++) world.Step();
         Check.That(FixedTrig.AngleDifference(jet.Angle, Fixed.Zero).Abs() < Fixed.FromDecimal(0.01m), "It flies east.");
         // now a destination straight behind it
         Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 600, 1000).Accepted, "The destination behind the jet is accepted.");
@@ -200,7 +200,7 @@ static partial class Tests
         var maxStep = Fixed.Zero;
         var turned = 0;
         var farthest = Fixed.Zero;
-        for (var tick = 0; tick < 500; tick++)
+        for (var tick = 0; tick < world.Frames(500); tick++)
         {
             var before = Pose(jet);
             world.Step();
@@ -211,8 +211,8 @@ static partial class Tests
             farthest = Fixed.Max(farthest, jet.X);
         }
         Check.That(maxTurn <= WingTurnPerTick + Fixed.FromRaw(2), $"No tick turns the jet by more than the turn rate ({maxTurn} vs {WingTurnPerTick}).");
-        Check.That(turned >= 40, $"A U-turn takes many ticks ({turned}).");
-        Check.That(maxStep <= SimulationRate.Original.Time.PerSecondToPerTick(150m) + Fixed.FromRaw(64), $"It never moves faster than its speed ({maxStep}).");
+        Check.That(turned >= world.Frames(40), $"A U-turn takes many ticks ({turned}).");
+        Check.That(maxStep <= TestRate.Default.Time.PerSecondToPerTick(150m) + Fixed.FromRaw(64), $"It never moves faster than its speed ({maxStep}).");
         Check.That(farthest > Fixed.FromInt(1000 + 40), $"The turn is a loop, not a pivot: the jet flew on to x = {farthest}.");
     }
 
@@ -226,7 +226,7 @@ static partial class Tests
         var jets = new[] { Get(world, "WingJet"), Get(world, "WingJetCcw"), Get(world, "WingJetSmallest"), Get(world, "WingJetWeakBrake") };
         var centers = new[] { (1200, 1000), (1200, 1500), (1200, 2000), (1200, 2500) };
         for (var index = 0; index < jets.Length; index++) Check.That(feeder.SetMoveTarget(1, jets[index].Id.Value, centers[index].Item1, centers[index].Item2).Accepted, "Move orders are accepted.");
-        for (var tick = 0; tick < 900; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(900); tick++) world.Step();
         var minTurnRadius = (decimal)(WingMinSpeed / WingTurnPerTick).ToDecimal();
         var measured = new List<string>();
         for (var index = 0; index < jets.Length; index++)
@@ -236,7 +236,7 @@ static partial class Tests
             var (cx, cy) = centers[index];
             decimal minRadius = decimal.MaxValue, maxRadius = 0, orbit = 0;
             var slowest = Fixed.MaxValue;
-            for (var tick = 0; tick < 600; tick++)
+            for (var tick = 0; tick < world.Frames(600); tick++)
             {
                 var before = Pose(jet);
                 world.Step();
@@ -278,16 +278,16 @@ static partial class Tests
         var world = WingWorld(out var fixture, out var feeder, ("WingJet", 500, 1000));
         var jet = Get(world, "WingJet");
         Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 1000, 1000).Accepted, "The order is accepted.");
-        for (var tick = 0; tick < 300; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(300); tick++) world.Step();
         Check.That(!jet.HasMoveTarget, "The jet circles.");
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, world.Terrain);
         Check.That(restored.StateHash == world.StateHash, "The snapshot of a circling jet restores to the same hash.");
-        for (var follow = 0; follow < 200; follow++)
+        for (var follow = 0; follow < restored.Frames(200); follow++)
             Check.That(restored.Step().StateHash == world.Step().StateHash, $"The restored world follows the circling jet (step {follow}).");
         // a new order leaves the circle
         Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 2000, 1000).Accepted, "A new order is accepted.");
         world.Step();
-        for (var tick = 0; tick < 500 && jet.HasMoveTarget; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(500) && jet.HasMoveTarget; tick++) world.Step();
         Check.That(!jet.HasMoveTarget && DistanceTo(jet, 2000, 1000) < 130m, $"The jet left the first circle for the new destination ({jet.X}, {jet.Y}).");
     }
 
@@ -313,7 +313,7 @@ static partial class Tests
         var dummy = Get(world, "AirDummy");
         var shots = 0;
         var phases = new List<JetAIUpdate.JetPhase>();
-        for (var tick = 0; tick < 400; tick++)
+        for (var tick = 0; tick < world.Frames(400); tick++)
         {
             if (jet.WeaponClip > 0 && world.Tick >= jet.WeaponReadyTick && feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted) shots++;
             world.Step();
@@ -322,7 +322,7 @@ static partial class Tests
         }
         Check.That(shots == 2 && jet.WeaponClip == 0, $"The jet fired its clip ({shots} shots).");
         Check.That(slowest >= WingMinSpeed, $"In the air the jet never fell below the minimum speed ({slowest}).");
-        for (var tick = 0; tick < 4000 && !(phases.Contains(JetAIUpdate.JetPhase.Landing) && ai.Phase == JetAIUpdate.JetPhase.None && !ai.AllowAirLoco); tick++)
+        for (var tick = 0; tick < world.Frames(4000) && !(phases.Contains(JetAIUpdate.JetPhase.Landing) && ai.Phase == JetAIUpdate.JetPhase.None && !ai.AllowAirLoco); tick++)
         {
             world.Step();
             if (phases.Count == 0 || phases[^1] != ai.Phase) phases.Add(ai.Phase);

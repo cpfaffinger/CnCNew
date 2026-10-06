@@ -522,7 +522,7 @@ static partial class Tests
 
     private static SimulationWorld SlaveWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: SlaveFiles());
+        fixture = new SyntheticFixture(TestRate.Default, files: SlaveFiles());
         var world = NewWorld(fixture);
         feeder = new Feeder(world);
         return world;
@@ -530,9 +530,9 @@ static partial class Tests
 
     private static Entity SlaveEntity(SimulationWorld world, string template, int nth = 0) => world.FindEntity(new EntityId(IdOf(world, template, nth)))!;
 
-    private static void StepN(SimulationWorld world, int ticks)
+    private static void StepN(SimulationWorld world, int frames) // original frames (1/30 s of game time)
     {
-        for (var tick = 0; tick < ticks; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(frames); tick++) world.Step();
     }
 
     private static T ModuleOf<T>(Entity entity) where T : class => entity.Modules.OfType<T>().Single();
@@ -546,7 +546,7 @@ static partial class Tests
 
     public static void SlaveFixtureObjectsAreInstantiable()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: SlaveFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: SlaveFiles());
         foreach (var name in new[] { "SvMaster", "SvScoutDrone", "SvBattleDrone", "SvNexus", "SvMobMember", "SvHive", "SvHiveSoldier", "SvTower", "SvBike", "SvOverlord", "SvBunker",
                      "SvHackCenter", "SvHacker", "SvFireTransport", "SvCrawler", "SvRock" })
             Check.That(fixture.Templates.TryGet(name, out var template) && template.IsInstantiable, $"{name} is instantiable: " + (template is null ? "missing" : string.Join(", ", template.MissingModules)));
@@ -568,7 +568,7 @@ static partial class Tests
             End
             """,
         };
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: broken), "STATUS_NO_SUCH_THING");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: broken), "STATUS_NO_SUCH_THING");
     }
 
     /// <summary>SlavedUpdate: a spawned drone is enslaved at once, follows its master, and is released when the master dies; a master without a spawner loses its flying drone.</summary>
@@ -631,7 +631,7 @@ static partial class Tests
         world.Step();
         Check.That(master.Body!.Health == Fixed.FromInt(30), "The master is at 30 of 100, below the 60 % threshold.");
         var repaired = false;
-        for (var tick = 0; tick < 600 && !repaired; tick++)
+        for (var tick = 0; tick < world.Frames(600) && !repaired; tick++)
         {
             world.Step();
             repaired = master.Body.Health > Fixed.FromInt(45);
@@ -656,9 +656,9 @@ static partial class Tests
         bool Spotting() => (master.WeaponBonusConditions & (1u << bit)) != 0;
         Check.That(!Spotting(), "Without an attack there is no spotting bonus.");
         var granted = false;
-        for (var tick = 0; tick < 200 && !granted; tick++)
+        for (var tick = 0; tick < world.Frames(200) && !granted; tick++)
         {
-            if (tick % 12 == 0) feeder.FireWeapon(1, master.Id.Value, enemy.Id.Value);
+            if (tick % world.Frames(12) == 0) feeder.FireWeapon(1, master.Id.Value, enemy.Id.Value);
             world.Step();
             granted = Spotting();
         }
@@ -976,10 +976,10 @@ static partial class Tests
     /// <summary>TensileFormationUpdate: a hurt rock sets its neighbours sliding down the slope; the formation stays together and stops after 300 ticks.</summary>
     public static void TensileFormationSlidesDownTheSlope()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: SlaveFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: SlaveFiles());
         var map = SyntheticMaps.Build(60, 40, 1, height: (x, _) => x);
         var terrain = TerrainMap.Build(map, "slope");
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "SvRock", x: 300, y: 200);
         feeder.Spawn(1, "SvRock", x: 310, y: 200);

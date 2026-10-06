@@ -16,11 +16,11 @@ static partial class Tests
             Scr.Script("Win", [Scr.And(Scr.If("TIMER_EXPIRED", Scr.Counter("endT")))], [Scr.Do("VICTORY")], active: false, oneShot: true),
             Scr.Script("LoseFinal", [Scr.And(Scr.If("TIMER_EXPIRED", Scr.Counter("endT")))], [Scr.Do("DEFEAT")], active: false, oneShot: true),
         ], objects: [Placed("AlphaHero", 100m, 100m, "teamA", "Hero"), Placed("BetaSoldier", 520m, 380m, "teamB", "Target"), Placed("BetaSoldier", 540m, 380m, "teamB", "Decoy")]);
-        var win = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, true, maxTicks: 3000);
+        var win = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, true, maxTicks: TestRate.Frames(3000));
         Check.That(win.ReachedByScript && win.OutcomeScript == "Win", $"The victory comes through 'Win' (outcome {win.Outcome} by '{win.OutcomeScript}', log: {string.Join("; ", win.Log)}).");
         Check.That(win.Log.Any(line => line.Contains("destroy named 'Target'", StringComparison.Ordinal)) && !win.Log.Any(line => line.Contains("Decoy", StringComparison.Ordinal)),
             "It destroyed the target of the win path and left the decoy of the lose path alone.");
-        var lose = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, false, maxTicks: 3000);
+        var lose = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, false, maxTicks: TestRate.Frames(3000));
         Check.That(lose.ReachedByScript && lose.OutcomeScript == "LoseFinal" && lose.Log.Any(line => line.Contains("Decoy", StringComparison.Ordinal)) && !lose.Log.Any(line => line.Contains("'Target'", StringComparison.Ordinal)),
             $"The defeat comes through the lose sequence ('{lose.OutcomeScript}', log: {string.Join("; ", lose.Log)}).");
     }
@@ -34,10 +34,10 @@ static partial class Tests
             Scr.Script("Down", [Scr.And(Scr.If("NAMED_DESTROYED", Scr.Unit("Down")))], [Scr.Do("DECREMENT_COUNTER", Scr.Int(20), Scr.Counter("Score"))], oneShot: true),
             Scr.Script("End", [Scr.And(Scr.If("COUNTER", Scr.Counter("Score"), Scr.Compare(Scr.LessEqual), Scr.Int(0)))], [Scr.Do("DEFEAT")], oneShot: true),
         ], objects: [Placed("AlphaHero", 100m, 100m, "teamA", "Hero"), Placed("AlphaSoldier", 120m, 100m, "teamA", "Up"), Placed("AlphaSoldier", 140m, 100m, "teamA", "Down")]);
-        var result = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, false, maxTicks: 1500);
+        var result = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, false, maxTicks: TestRate.Frames(1500));
         Check.That(result.ReachedByScript && result.OutcomeScript == "End", $"The counter ending fires through the script ('{result.OutcomeScript}', log: {string.Join("; ", result.Log)}).");
         Check.That(result.Log.Any(line => line.Contains("'Down'", StringComparison.Ordinal)) && !result.Log.Any(line => line.Contains("'Up'", StringComparison.Ordinal)), "Only the decrementing script's trigger was used.");
-        var again = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, false, maxTicks: 1500);
+        var again = MissionObjectiveDriver.Run(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map, false, maxTicks: TestRate.Frames(1500));
         Check.That(again.OutcomeTick == result.OutcomeTick && again.Log.SequenceEqual(result.Log), "A second run is identical.");
     }
 

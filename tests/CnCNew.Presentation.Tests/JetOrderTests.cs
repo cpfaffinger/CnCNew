@@ -116,6 +116,7 @@ internal static class JetOrderTests
         var harness = new TestHarness(nameof(JetOrderTests));
         harness.Run("A gun fighter on an attack order makes pass after pass: in, over, out for a weapon range, round and in again", GunFighterPasses);
         harness.Run("A missile fighter ends its attack when its airfield ammunition is gone", MissileFighterEndsItsAttack);
+        harness.Run("Time scale: a standing attack order issues its commands on the original-frame grid and at the same game times at 30, 60 and 120 Hz", TimeScaleStandingOrders);
         return harness.Failures;
     }
 
@@ -124,11 +125,11 @@ internal static class JetOrderTests
         private readonly InputTests.WorldSink _sink;
         private ulong _system;
 
-        public Rig()
+        public Rig(SimulationRate? rate = null)
         {
-            Fixture = new SyntheticFixture(SimulationRate.Original, files: Files);
+            Fixture = new SyntheticFixture(rate ?? SimulationRate.Original, files: Files);
             var players = ImmutableArray.Create(new PlayerConfiguration(Me, "Me"), new PlayerConfiguration(Enemy, "Enemy"));
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, players, SyntheticFixture.FixtureId, Fixture.Fingerprint), Fixture.Templates);
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), Fixture.Templates.Rate, 7, players, SyntheticFixture.FixtureId, Fixture.Fingerprint), Fixture.Templates);
             _sink = new InputTests.WorldSink(World, []);
         }
 
@@ -166,7 +167,7 @@ internal static class JetOrderTests
         var shots = 0;
         var slowest = Fixed.MaxValue;
         var shotDistances = new List<float>();
-        for (var tick = 0; tick < 2400; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 2400); tick++)
         {
             var before = rig.Issued.Count;
             rig.Tick();
@@ -188,6 +189,53 @@ internal static class JetOrderTests
         TestHarness.Assert(rig.Orders.TryGet(jet.Id, out _), "the attack order stands while the target lives");
     }
 
+    /// <summary>
+    /// Standing orders at 30, 60 and 120 Hz (docs/TICKRATE-MIGRATION.md §14.4): the orders are examined once per original frame, so a jet on an attack run is sent its
+    /// commands on frame boundaries only, never twice in one frame, and the fire orders of a pass follow each other in the same game time (the weapon's delay; one
+    /// original frame of tolerance). When the first order goes out depends on the jet's flight, which is the simulation's and is not judged here: it is printed.
+    /// </summary>
+    private static void TimeScaleStandingOrders()
+    {
+        var firstFire = new List<(SimulationRate Rate, double Seconds)>();
+        var perSecond = new List<(SimulationRate Rate, double Count)>();
+        var rhythm = new List<(SimulationRate Rate, double Seconds)>();
+        var passOrders = new List<int>();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var rig = new Rig(rate);
+            var target = rig.Spawn("SturdyTarget", Enemy, 1000, 1000);
+            var jet = rig.Spawn("GunFighter", Me, 400, 1000);
+            // Give the order on a whole second, so every rate gives it at the same game time.
+            while (rig.World.Tick % rig.World.Time.TicksPerSecond != 0) rig.Tick();
+            var start = rig.World.Tick;
+            rig.Orders.Set(jet.Id, new StandingOrder(StandingOrderKind.Attack, target.Id, new Vector2(1000, 1000), [], rig.World.Tick));
+            const int seconds = 6;
+            for (var tick = 0; tick < seconds * rig.World.Time.TicksPerSecond; tick++) rig.Tick();
+
+            var issued = rig.Issued.Where(command => command.Tick >= start).ToArray();
+            TestHarness.Assert(issued.Length > 0, $"at {rate} the order issued commands");
+            TestHarness.Assert(issued.All(command => rig.World.Time.IsOriginalFrameBoundary(command.Tick)), $"at {rate} every command of the standing order is issued on a tick that begins an original frame");
+            var fire = issued.OfType<FireWeaponCommand>().ToArray();
+            TestHarness.Assert(fire.Length > 0, $"at {rate} the jet was ordered to fire");
+            TestHarness.Assert(fire.GroupBy(command => rig.World.Time.ToOriginalFrames(command.Tick)).All(group => group.Count() == 1), $"at {rate} at most one fire order goes out per original frame");
+            firstFire.Add((rate, (double)(fire[0].Tick - start) / rig.World.Time.TicksPerSecond));
+            perSecond.Add((rate, (double)issued.Length / seconds));
+            // The first pass: the gun's DelayBetweenShots of 300 ms sets the rhythm of the fire orders (the order goes out in the frame the weapon is ready again).
+            var pass = fire.TakeWhile((command, index) => index == 0 || command.Tick - fire[index - 1].Tick < rig.World.Time.TicksPerSecond).ToArray();
+            TestHarness.Assert(pass.Length >= 3, $"at {rate} the first pass has several fire orders ({pass.Length})");
+            rhythm.Add((rate, (double)(pass[^1].Tick - pass[0].Tick) / (pass.Length - 1) / rig.World.Time.TicksPerSecond));
+            passOrders.Add(pass.Length);
+        }
+
+        string Text(IEnumerable<(SimulationRate Rate, double Value)> values, string format) => string.Join(", ", values.Select(value => $"{value.Rate}: {value.Value.ToString(format, System.Globalization.CultureInfo.InvariantCulture)}"));
+        Console.WriteLine($"       standing attack order: fire orders of the first pass every {Text(rhythm, "F4")} s ({string.Join(", ", passOrders)} orders); first fire order after {Text(firstFire, "F4")} s; commands per second {Text(perSecond, "F2")}");
+        const double oneFrame = 1.0 / CnCNew.Data.OriginalFrame.PerSecond;
+        foreach (var (rate, seconds) in rhythm)
+            TestHarness.Assert(Math.Abs(seconds - rhythm[0].Seconds) <= oneFrame + 1e-9 && Math.Abs(seconds - 0.3) <= oneFrame + 1e-9, $"the fire orders of a pass are {seconds:F4} s apart at {rate} and {rhythm[0].Seconds:F4} s at {rhythm[0].Rate} (DelayBetweenShots 300 ms): more than one original frame apart");
+        foreach (var (rate, count) in perSecond)
+            TestHarness.Assert(count <= CnCNew.Data.OriginalFrame.PerSecond, $"at {rate} no more commands go out than original frames pass ({count:F2} per second)");
+    }
+
     private static readonly Fixed SimulationTimingMin = CnCNew.Simulation.Time.SimulationRate.Original.Time.PerSecondToPerTick(60m) - Fixed.FromRaw(16);
 
     private static void MissileFighterEndsItsAttack()
@@ -201,7 +249,7 @@ internal static class JetOrderTests
         long emptiedAt = -1;
         long clearedAt = -1;
         var shotsAfterwards = 0;
-        for (var tick = 0; tick < 1500; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 1500); tick++)
         {
             var before = rig.Issued.Count;
             rig.Tick();

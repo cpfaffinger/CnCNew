@@ -16,6 +16,7 @@ using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
+using CnCNew.Tests;
 
 namespace CnCNew.Presentation.Tests;
 
@@ -514,11 +515,11 @@ internal static class StructureConditionTests
         var factory = rig.Spawn("DoorFactory", 1, 100, 100);
         rig.GiveMoney(1, 1000);
         var timeline = new List<(long Tick, ModelConditionSet Set)>();
-        for (var i = 0; i < 10; i++) timeline.Add(rig.Step(factory));
+        for (var i = 0; i < TestTime.Frames(rig.World, 10); i++) timeline.Add(rig.Step(factory));
         TestHarness.Assert(timeline.All(item => item.Set == ModelConditionSet.Empty), "An idle factory shows no door and no construction-complete phase.");
 
         rig.Queue(factory, "Grunt");
-        for (var i = 0; i < 260; i++) timeline.Add(rig.Step(factory));
+        for (var i = 0; i < TestTime.Frames(rig.World, 260); i++) timeline.Add(rig.Step(factory));
         var completed = rig.SampleOfFirst(SimEventKind.ProductionCompleted);
         var opening = Span(timeline, StructureConditions.DoorOpening[0]);
         var waiting = Span(timeline, StructureConditions.DoorWaitingOpen[0]);
@@ -528,12 +529,12 @@ internal static class StructureConditionTests
         TestHarness.Assert(opening is not null && waiting is not null && closing is not null && complete is not null, $"The door goes through opening, waiting-open and closing ({text}).");
 
         // DoorOpeningTime = 30 ticks: the door is fully open when the unit appears.
-        Near(30, completed - opening!.Value.First, 2, $"The door starts opening DoorOpeningTime before the unit appears ({text})");
+        Near(TestTime.Frames(rig.World, 30), completed - opening!.Value.First, 2, $"The door starts opening DoorOpeningTime before the unit appears ({text})");
         TestHarness.Assert(timeline.First(item => item.Tick == completed).Set.Contains(StructureConditions.DoorWaitingOpen[0]) || timeline.First(item => item.Tick == completed).Set.Contains(StructureConditions.DoorOpening[0]),
             "The unit appears at the end of the opening.");
-        Near(30, opening.Value.Last - opening.Value.First + 1, 2, "Opening lasts DoorOpeningTime");
-        Near(60, waiting!.Value.Last - waiting.Value.First + 1, 3, "Waiting open lasts DoorWaitOpenTime after the unit");
-        Near(30, closing!.Value.Last - closing.Value.First + 1, 2, "Closing lasts DoorCloseTime");
+        Near(TestTime.Frames(rig.World, 30), opening.Value.Last - opening.Value.First + 1, 2, "Opening lasts DoorOpeningTime");
+        Near(TestTime.Frames(rig.World, 60), waiting!.Value.Last - waiting.Value.First + 1, 3, "Waiting open lasts DoorWaitOpenTime after the unit");
+        Near(TestTime.Frames(rig.World, 30), closing!.Value.Last - closing.Value.First + 1, 2, "Closing lasts DoorCloseTime");
         TestHarness.Assert(opening.Value.Last < waiting.Value.First && waiting.Value.Last < closing.Value.First, "The phases follow one another without overlap.");
         TestHarness.Assert(timeline.All(item => new[] { StructureConditions.DoorOpening[0], StructureConditions.DoorWaitingOpen[0], StructureConditions.DoorClosing[0] }.Count(item.Set.Contains) <= 1),
             "Exactly one door bit at a time.");
@@ -541,7 +542,7 @@ internal static class StructureConditionTests
 
         // ConstructionCompleteDuration = 30 ticks from the moment the finished unit is handed to the exit.
         TestHarness.Assert(complete!.Value.First == opening.Value.First, "The construction-complete phase starts with the door.");
-        Near(30, complete.Value.Last - complete.Value.First + 1, 2, "Construction complete lasts ConstructionCompleteDuration");
+        Near(TestTime.Frames(rig.World, 30), complete.Value.Last - complete.Value.First + 1, 2, "Construction complete lasts ConstructionCompleteDuration");
     }
 
     private static void ProductionDoorReuse()
@@ -553,14 +554,14 @@ internal static class StructureConditionTests
         rig.Queue(factory, "Grunt");
         rig.Queue(factory, "Grunt");
         var timeline = new List<(long Tick, ModelConditionSet Set)>();
-        for (var i = 0; i < 360; i++) timeline.Add(rig.Step(factory));
+        for (var i = 0; i < TestTime.Frames(rig.World, 360); i++) timeline.Add(rig.Step(factory));
         var completions = rig.Events.Where(simEvent => simEvent.Kind == SimEventKind.ProductionCompleted).Select(simEvent => simEvent.Tick + 1).ToArray();
         TestHarness.Assert(completions.Length == 2, $"Both units were produced ({completions.Length}).");
         var closing = Span(timeline, StructureConditions.DoorClosing[0]);
         TestHarness.Assert(closing is not null && closing.Value.First > completions[1], $"The door does not close between the units ({Describe(timeline)}).");
         TestHarness.Assert(timeline.Where(item => item.Tick > completions[0] && item.Tick <= completions[1]).All(item => item.Set.Contains(StructureConditions.DoorWaitingOpen[0])),
             "It stays waiting-open until the second unit has left.");
-        Near(60, closing!.Value.First - completions[1], 4, "Closing starts DoorWaitOpenTime after the second unit");
+        Near(TestTime.Frames(rig.World, 60), closing!.Value.First - completions[1], 4, "Closing starts DoorWaitOpenTime after the second unit");
 
         // A door that is still closing when the next unit is ready pops back to waiting-open (ProductionUpdate::update).
         var pop = new Rig();
@@ -569,12 +570,12 @@ internal static class StructureConditionTests
         pop.Queue(factory2, "Grunt");
         pop.Queue(factory2, "Grunt");
         var timeline2 = new List<(long Tick, ModelConditionSet Set)>();
-        for (var i = 0; i < 300; i++) timeline2.Add(pop.Step(factory2));
+        for (var i = 0; i < TestTime.Frames(pop.World, 300); i++) timeline2.Add(pop.Step(factory2));
         var completions2 = pop.Events.Where(simEvent => simEvent.Kind == SimEventKind.ProductionCompleted).Select(simEvent => simEvent.Tick + 1).ToArray();
         TestHarness.Assert(completions2.Length == 2, "Both units were produced at the pop factory.");
-        var between = timeline2.Where(item => item.Tick > completions2[0] + 2 && item.Tick < completions2[1] - 32).ToArray();
+        var between = timeline2.Where(item => item.Tick > completions2[0] + 2 && item.Tick < completions2[1] - TestTime.Frames(pop.World, 32)).ToArray();
         TestHarness.Assert(between.Any(item => item.Set.Contains(StructureConditions.DoorClosing[0])), $"With no wait the door starts closing after the first unit ({Describe(timeline2)}).");
-        var atSecond = timeline2.Where(item => item.Tick >= completions2[1] - 25 && item.Tick <= completions2[1] - 2).ToArray();
+        var atSecond = timeline2.Where(item => item.Tick >= completions2[1] - TestTime.Frames(pop.World, 25) && item.Tick <= completions2[1] - 2).ToArray();
         TestHarness.Assert(atSecond.All(item => item.Set.Contains(StructureConditions.DoorWaitingOpen[0]) && !item.Set.Contains(StructureConditions.DoorClosing[0])),
             $"A closing door pops to waiting-open when the second unit is ready ({Describe(timeline2)}).");
         TestHarness.Assert(timeline2.All(item => !item.Set.Contains(StructureConditions.ConstructionComplete)), "ConstructionCompleteDuration absent: no construction-complete phase.");
@@ -587,7 +588,7 @@ internal static class StructureConditionTests
         rig.GiveMoney(1, 1000);
         rig.Queue(factory, "Grunt");
         var timeline = new List<(long Tick, ModelConditionSet Set)>();
-        for (var i = 0; i < 120; i++) timeline.Add(rig.Step(factory));
+        for (var i = 0; i < TestTime.Frames(rig.World, 120); i++) timeline.Add(rig.Step(factory));
         TestHarness.Assert(rig.Events.Any(simEvent => simEvent.Kind == SimEventKind.ProductionCompleted), "The unit was produced.");
         TestHarness.Assert(timeline.All(item => item.Set == ModelConditionSet.Empty), "A producer without door animations shows no door condition.");
         TestHarness.Assert(rig.Tracker.Count == 0, "and keeps no tracker entry.");
@@ -606,11 +607,11 @@ internal static class StructureConditionTests
         for (var i = 0; i < 3; i++) timeline.Add(rig.Step(airfield));
         TestHarness.Assert(timeline.All(item => item.Set == ModelConditionSet.Empty), "An empty airfield has closed doors.");
         TestHarness.Assert(parking.ReserveSpace(rig.World, plane, Fixed.Zero, out _) && parking.OccupantOf(0) == plane.Id, "The aircraft holds space 0.");
-        for (var i = 0; i < 150; i++) timeline.Add(rig.Step(airfield));
+        for (var i = 0; i < TestTime.Frames(rig.World, 150); i++) timeline.Add(rig.Step(airfield));
         var opening = Span(timeline, StructureConditions.DoorOpening[0]);
         var waiting = Span(timeline, StructureConditions.DoorWaitingOpen[0]);
         TestHarness.Assert(opening is not null && waiting is not null && waiting.Value.Last == timeline[^1].Tick, $"Door 1 opens and then stays waiting-open while the space is held ({Describe(timeline)}).");
-        Near(30, opening!.Value.Last - opening.Value.First + 1, 2, "Door 1 opens for DoorOpeningTime");
+        Near(TestTime.Frames(rig.World, 30), opening!.Value.Last - opening.Value.First + 1, 2, "Door 1 opens for DoorOpeningTime");
         TestHarness.Assert(timeline.All(item => !item.Set.Contains(StructureConditions.DoorOpening[1]) && !item.Set.Contains(StructureConditions.DoorWaitingOpen[1]) && !item.Set.Contains(StructureConditions.DoorClosing[0])),
             "The other door stays shut and door 1 never closes while held.");
 
@@ -618,11 +619,11 @@ internal static class StructureConditionTests
         parking.ReleaseSpace(rig.World, plane);
         var release = rig.World.Tick;
         var after = new List<(long Tick, ModelConditionSet Set)>();
-        for (var i = 0; i < 100; i++) after.Add(rig.Step(airfield));
+        for (var i = 0; i < TestTime.Frames(rig.World, 100); i++) after.Add(rig.Step(airfield));
         var closing = Span(after, StructureConditions.DoorClosing[0]);
         TestHarness.Assert(closing is not null, $"Door 1 closes after the aircraft left ({Describe(after)}).");
         Near(1, closing!.Value.First - release, 1, "Closing starts right after the release: the wait time has long elapsed");
-        Near(30, closing.Value.Last - closing.Value.First + 1, 2, "Closing lasts DoorCloseTime");
+        Near(TestTime.Frames(rig.World, 30), closing.Value.Last - closing.Value.First + 1, 2, "Closing lasts DoorCloseTime");
         TestHarness.Assert(after[^1].Set == ModelConditionSet.Empty, "and the door is closed.");
 
         // Production: a unit made at the airfield opens the door of the first free space before it appears and keeps it open afterwards (the space is reserved).
@@ -631,11 +632,11 @@ internal static class StructureConditionTests
         second.GiveMoney(1, 100);
         second.Queue(field, "Plane");
         var run = new List<(long Tick, ModelConditionSet Set)>();
-        for (var i = 0; i < 200; i++) run.Add(second.Step(field));
+        for (var i = 0; i < TestTime.Frames(second.World, 200); i++) run.Add(second.Step(field));
         var made = second.SampleOfFirst(SimEventKind.ProductionCompleted);
         var doorOne = Span(run, StructureConditions.DoorOpening[0]);
         TestHarness.Assert(doorOne is not null && run[^1].Set.Contains(StructureConditions.DoorWaitingOpen[0]), $"The produced aircraft's door opens and stays open ({Describe(run)}).");
-        Near(30, made - doorOne!.Value.First, 2, "Door 1 starts opening DoorOpeningTime before the aircraft appears");
+        Near(TestTime.Frames(second.World, 30), made - doorOne!.Value.First, 2, "Door 1 starts opening DoorOpeningTime before the aircraft appears");
         TestHarness.Assert(run.All(item => !item.Set.Contains(StructureConditions.DoorOpening[1])), "Only the door of the reserved space opens.");
     }
 
@@ -667,7 +668,7 @@ internal static class StructureConditionTests
         var visual = ConditionDeriver.Derive(watcher, rig.World, null, default);
         TestHarness.Assert(!visual.Contains(StructureConditions.EnemyNear), "No enemy within the watcher's vision range.");
         rig.Spawn("Grunt", 2, 130, 100);
-        for (var i = 0; i < 60; i++) rig.World.Step();
+        for (var i = 0; i < TestTime.Frames(rig.World, 60); i++) rig.World.Step();
         TestHarness.Assert(ConditionDeriver.Derive(watcher, rig.World, null, default).Contains(StructureConditions.EnemyNear), "An enemy within the vision range raises ENEMYNEAR.");
         TestHarness.Assert(enemy.Id.IsValid, "(the far enemy at the gate is irrelevant to the watcher)");
     }
@@ -680,7 +681,7 @@ internal static class StructureConditionTests
         var hauler = rig.Spawn("Hauler", 1, 200, 100);
         var samples = new List<(long Tick, ModelConditionSet Truck, ModelConditionSet Warehouse, ModelConditionSet Depot)>();
         rig.World.Submit(new DockCommand(new PlayerId(1), rig.Next(), rig.World.Tick, hauler.Id, warehouse.Id));
-        for (var i = 0; i < 1500; i++)
+        for (var i = 0; i < TestTime.Frames(rig.World, 1500); i++)
         {
             rig.World.Step();
             samples.Add((rig.World.Tick, ConditionDeriver.Derive(hauler, rig.World, null, default), ConditionDeriver.Derive(warehouse, rig.World, null, default), ConditionDeriver.Derive(depot, rig.World, null, default)));
@@ -709,7 +710,7 @@ internal static class StructureConditionTests
         TestHarness.Assert(rig.World.TryEnterContainer(bomb, bomber), "The bomb is loaded into the plane.");
         bomber.Modules.OfType<DeliverPayloadAIUpdate>().Single().DeliverViaModuleData(rig.World, Fixed.FromInt(400), Fixed.Zero);
         var timeline = new List<(long Tick, ModelConditionSet Set)>();
-        for (var i = 0; i < 400 && !bomber.DestroyRequested; i++) timeline.Add(rig.Step(bomber));
+        for (var i = 0; i < TestTime.Frames(rig.World, 400) && !bomber.DestroyRequested; i++) timeline.Add(rig.Step(bomber));
         var text = Describe(timeline);
         var opening = Span(timeline, StructureConditions.DoorOpening[0]);
         var closing = Span(timeline, StructureConditions.DoorClosing[0]);
@@ -751,7 +752,7 @@ internal static class StructureConditionTests
             var flags = new[] { StructureConditions.Unpacking, StructureConditions.Packing, ModelConditions.Deployed }.Where(item.Set.Contains).ToArray();
             TestHarness.Assert(expect is null ? flags.Length == 0 : flags.Length == 1 && flags[0] == expect.Value, $"Tick {item.Tick} ({item.Status}): {string.Join(' ', flags.Select(flag => flag.Name))}.");
         }
-        Near(9, timeline.Count(item => item.Status == ParticleUplinkCannonUpdate.UplinkStatus.Preparing), 1, "The antenna rises for RaiseAntennaTime");
+        Near(TestTime.Frames(rig.World, 9), timeline.Count(item => item.Status == ParticleUplinkCannonUpdate.UplinkStatus.Preparing), 1, "The antenna rises for RaiseAntennaTime");
 
         // Fire: the beam shows DEPLOYED while it burns and decays, PACKING while it dies away, and everything is cleared afterwards.
         TestHarness.Assert(rig.World.Submit(new UseSpecialPowerCommand(new PlayerId(1), rig.Next(), rig.World.Tick, cannon.Id, "UplinkPower", SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(300), Fixed.FromInt(300))).Accepted,
@@ -773,12 +774,12 @@ internal static class StructureConditionTests
     {
         var rig = new Rig();
         var master = rig.Spawn("RepairMaster", 1, 100, 100);
-        for (var i = 0; i < 20; i++) rig.World.Step();
+        for (var i = 0; i < TestTime.Frames(rig.World, 20); i++) rig.World.Step();
         var drone = rig.World.Entities.Single(entity => entity.Template.Name == "BattleDrone");
         var timeline = new List<(long Tick, ModelConditionSet Set)>();
-        void Sample(int ticks)
+        void Sample(int frames)
         {
-            for (var i = 0; i < ticks; i++) timeline.Add(rig.Step(drone));
+            for (var i = 0; i < TestTime.Frames(rig.World, frames); i++) timeline.Add(rig.Step(drone));
         }
 
         Sample(5);
@@ -789,7 +790,7 @@ internal static class StructureConditionTests
         var unpacking = Span(timeline, StructureConditions.Unpacking);
         TestHarness.Assert(unpacking is not null, $"The first repair unpacks the arm ({text}).");
         TestHarness.Assert(timeline.All(item => !(item.Set.Contains(StructureConditions.Packing) && item.Set.Contains(StructureConditions.Unpacking))), "Never both at once.");
-        TestHarness.Assert(unpacking!.Value.Last - unpacking.Value.First >= 14, "UNPACKING lasts at least the 15 ticks of the unpack and stays through the ready state.");
+        TestHarness.Assert(unpacking!.Value.Last - unpacking.Value.First >= TestTime.Frames(rig.World, 15) - 1, "UNPACKING lasts at least the 15 ticks of the unpack and stays through the ready state.");
         var arm = new[] { StructureConditions.Packing, StructureConditions.Unpacking, ModelConditions.Firing[1], ModelConditions.Firing[2] };
         TestHarness.Assert(timeline.All(item => arm.Count(item.Set.Contains) <= 1), $"One arm bit at a time ({text}).");
         var extending = Span(timeline, ModelConditions.Firing[1]);
@@ -812,7 +813,7 @@ internal static class StructureConditionTests
         TestHarness.Assert(!ConditionDeriver.Derive(dry, rig.World, null, default).Contains(StructureConditions.OverWater), "and not on the shore.");
         TestHarness.Assert(!ConditionDeriver.Derive(grunt, rig.World, null, default).Contains(StructureConditions.OverWater), "A foot soldier in the lake does not (only hover locomotors set it).");
         rig.World.Submit(new SetMoveTargetCommand(new PlayerId(1), rig.Next(), rig.World.Tick, wet.Id, Fixed.FromInt(150), Fixed.FromInt(50)));
-        for (var i = 0; i < 200; i++) rig.World.Step();
+        for (var i = 0; i < TestTime.Frames(rig.World, 200); i++) rig.World.Step();
         TestHarness.Assert(wet.X > Fixed.FromInt(120) && !ConditionDeriver.Derive(wet, rig.World, null, default).Contains(StructureConditions.OverWater), "Once it has driven out of the lake the bit is gone.");
     }
 
@@ -831,7 +832,7 @@ internal static class StructureConditionTests
         var denseWaiting = new List<long>();
         var sparseWaiting = new List<long>();
         var sparseLast = ModelConditionSet.Empty;
-        for (var i = 0; i < 260; i++)
+        for (var i = 0; i < TestTime.Frames(dense.World, 260); i++)
         {
             var (denseTick, denseSet) = dense.Step(denseFactory);
             if (denseSet.Contains(StructureConditions.DoorWaitingOpen[0])) denseWaiting.Add(denseTick);
@@ -880,7 +881,7 @@ internal static class StructureConditionTests
         Check(world.Submit(new QueueProductionCommand(new PlayerId(1), ++sequence, world.Tick, factory.Id, "AmericaTankCrusader")).Accepted, "The Crusader is queued at the war factory.");
         var timeline = new List<(long Tick, ModelConditionSet Set)>();
         var completed = -1L;
-        for (var i = 0; i < 1200 && (completed < 0 || timeline[^1].Set != ModelConditionSet.Empty); i++)
+        for (var i = 0; i < TestTime.Frames(world, 1200) && (completed < 0 || timeline[^1].Set != ModelConditionSet.Empty); i++)
         {
             var result = world.Step();
             if (completed < 0 && result.Events.Any(simEvent => simEvent.Kind == SimEventKind.ProductionCompleted)) completed = world.Tick;
@@ -891,9 +892,9 @@ internal static class StructureConditionTests
         var waiting = Span(timeline, StructureConditions.DoorWaitingOpen[0]);
         var closing = Span(timeline, StructureConditions.DoorClosing[0]);
         Check(completed > 0 && opening is not null && waiting is not null && closing is not null, $"The war factory shows DOOR_1_OPENING, DOOR_1_WAITING_OPEN, DOOR_1_CLOSING in turn ({text}).");
-        Near(98, completed - opening!.Value.First, 2, "The door starts opening 98 ticks before the Crusader appears");
-        Near(90, waiting!.Value.Last - waiting.Value.First + 1, 3, "The door waits open 90 ticks");
-        Near(120, closing!.Value.Last - closing.Value.First + 1, 2, "The door closes for 120 ticks");
+        Near(TestTime.Frames(world, 98), completed - opening!.Value.First, 2, "The door starts opening 98 ticks before the Crusader appears");
+        Near(TestTime.Frames(world, 90), waiting!.Value.Last - waiting.Value.First + 1, 3, "The door waits open 90 ticks");
+        Near(TestTime.Frames(world, 120), closing!.Value.Last - closing.Value.First + 1, 2, "The door closes for 120 ticks");
         Check(Span(timeline, StructureConditions.ConstructionComplete) is { } complete && complete.First == opening.Value.First, "CONSTRUCTION_COMPLETE starts with the door.");
         Console.WriteLine($"       real data: AmericaWarFactory door timeline {text}");
 
@@ -910,7 +911,7 @@ internal static class StructureConditionTests
         Check(ConditionDeriver.Derive(center, world, null, default).Flags().All(flag => !flag.Name.StartsWith("DOOR_", StringComparison.Ordinal)), "An idle strategy center has its doors closed.");
         plan.SelectPlan(BattlePlanKind.HoldTheLine);
         var seen = new List<string>();
-        for (var i = 0; i < 1200 && plan.Status != BattlePlanUpdate.TransitionStatus.Active; i++)
+        for (var i = 0; i < TestTime.Frames(world, 1200) && plan.Status != BattlePlanUpdate.TransitionStatus.Active; i++)
         {
             world.Step();
             var doors = string.Join(' ', ConditionDeriver.Derive(center, world, null, default).Flags().Where(flag => flag.Name.StartsWith("DOOR_", StringComparison.Ordinal)).Select(flag => flag.Name));
@@ -921,7 +922,7 @@ internal static class StructureConditionTests
         Check(ConditionDeriver.Derive(center, world, null, default).Contains(StructureConditions.DoorWaitingToClose[1]), "The running plan shows DOOR_2_WAITING_TO_CLOSE.");
         plan.SelectPlan(BattlePlanKind.SearchAndDestroy);
         var packed = false;
-        for (var i = 0; i < 1200 && !packed; i++)
+        for (var i = 0; i < TestTime.Frames(world, 1200) && !packed; i++)
         {
             world.Step();
             packed = ConditionDeriver.Derive(center, world, null, default).Contains(StructureConditions.DoorClosing[1]);
@@ -932,7 +933,7 @@ internal static class StructureConditionTests
         var silo = spawn("ChinaNuclearMissileLauncher", 2, 3000, 1000);
         var door = silo.Modules.OfType<MissileLauncherBuildingUpdate>().Single();
         var states = new SortedSet<string>(StringComparer.Ordinal);
-        for (var i = 0; i < 12000 && door.Door != MissileLauncherBuildingUpdate.DoorState.Open; i++)
+        for (var i = 0; i < TestTime.Frames(world, 12000) && door.Door != MissileLauncherBuildingUpdate.DoorState.Open; i++)
         {
             world.Step();
             var names = ConditionDeriver.Derive(silo, world, null, default).Flags().Where(flag => flag.Name.StartsWith("DOOR_1_", StringComparison.Ordinal)).Select(flag => flag.Name).ToArray();
@@ -951,7 +952,7 @@ internal static class StructureConditionTests
         var target = spawn("AmericaTankCrusader", 1, 3500 + 200, 1000);
         world.Submit(new FireWeaponCommand(new PlayerId(2), ++sequence, world.Tick, cannon.Id, target.Id));
         var unpacked = false;
-        for (var i = 0; i < 400 && !unpacked; i++)
+        for (var i = 0; i < TestTime.Frames(world, 400) && !unpacked; i++)
         {
             world.Step();
             unpacked = ConditionDeriver.Derive(cannon, world, null, default).Contains(StructureConditions.Unpacking);
@@ -978,7 +979,7 @@ internal static class StructureConditionTests
         var collapse = bank.Modules.OfType<StructureCollapseUpdate>().Single();
         Check(!ConditionDeriver.Derive(bank, world, null, default).Contains(StructureConditions.PostCollapse), "A standing building is not collapsed.");
         world.Kill(bank.Id);
-        for (var i = 0; i < 3000 && !collapse.IsCollapsed; i++) world.Step();
+        for (var i = 0; i < TestTime.Frames(world, 3000) && !collapse.IsCollapsed; i++) world.Step();
         var down = ConditionDeriver.Derive(bank, world, null, default);
         Check(collapse.IsCollapsed && down.Contains(StructureConditions.PostCollapse) && !down.Contains(ModelConditions.Rubble), $"The collapsed bank shows POST_COLLAPSE instead of RUBBLE ({down}).");
 
@@ -988,7 +989,7 @@ internal static class StructureConditionTests
         world.Kill(tower.Id);
         world.Step();
         Check(!ConditionDeriver.Derive(tower, world, null, default).Contains(StructureConditions.PostCollapse), "A tower that is still toppling is not POST_COLLAPSE.");
-        for (var i = 0; i < 600 && !topple.IsToppled; i++) world.Step();
+        for (var i = 0; i < TestTime.Frames(world, 600) && !topple.IsToppled; i++) world.Step();
         var flat = ConditionDeriver.Derive(tower, world, null, default);
         Check(topple.IsToppled && flat.Contains(StructureConditions.PostCollapse) && !flat.Contains(ModelConditions.Rubble), $"The toppled tower shows POST_COLLAPSE instead of RUBBLE ({flat}).");
 
@@ -1019,7 +1020,7 @@ internal static class StructureConditionTests
         if (wreck is not null)
         {
             world.Kill(comanche.Id);
-            for (var i = 0; i < 600 && !wreck.HasHitGround; i++) world.Step();
+            for (var i = 0; i < TestTime.Frames(world, 600) && !wreck.HasHitGround; i++) world.Step();
             Check(wreck.HasHitGround && ConditionDeriver.Derive(comanche, world, null, default).Contains(StructureConditions.SpecialDamaged), "A downed helicopter shows SPECIAL_DAMAGED once it hit the ground.");
         }
 

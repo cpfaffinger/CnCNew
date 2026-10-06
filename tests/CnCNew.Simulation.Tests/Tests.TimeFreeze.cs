@@ -17,14 +17,14 @@ static partial class Tests
         var frozenAt = session.World.Tick;
         var hashBefore = session.World.StateHash;
         var steps = 0;
-        while (session.Engine.TimeFrozen && steps < 200)
+        while (session.Engine.TimeFrozen && steps < session.Frames(200))
         {
             var result = session.Step();
             steps++;
             if (session.Engine.TimeFrozen) Check.That(result.Events.Count == 0 && session.World.Tick == frozenAt, $"A frozen step changes nothing in the world (tick {session.World.Tick}, events {result.Events.Count}).");
         }
         Check.That(!session.Engine.TimeFrozen && session.Engine.FlagValue("thawed"), $"The script timer ran out while the world stood still, and its script unfroze time (after {steps} steps).");
-        Check.That(steps is >= 28 and <= 40, $"A one second timer lasts its 30 script updates although the frame counter did not move ({steps} steps).");
+        Check.That(session.World.InFrames(steps) is >= 28 and <= 40, $"A one second timer lasts its 30 script updates although the frame counter did not move ({steps} steps).");
         Check.That(session.World.Tick == frozenAt + 1 && session.World.StateHash != hashBefore, "The step that unfroze time was the first to advance the world again.");
 
         session.Step();
@@ -38,12 +38,12 @@ static partial class Tests
             Scr.Script("Win", [Scr.And(Scr.If("FLAG", Scr.Flag("win"), Scr.Bool(true)))], [Scr.Do("VICTORY")], oneShot: true),
         ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Sleeper")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        for (var step = 0; step < 5; step++) session.Step();
+        for (var step = 0; step < session.Frames(5); step++) session.Step();
         Check.That(session.Engine.TimeFrozen, "The mission stays frozen until a script thaws it.");
 
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(restored.Engine.TimeFrozen && restored.StateHash() == session.StateHash(), "A saved frozen mission is frozen again when it is loaded (m_freezeByScript is part of the script state).");
-        for (var step = 0; step < 20; step++)
+        for (var step = 0; step < session.Frames(20); step++)
         {
             session.Step();
             restored.Step();

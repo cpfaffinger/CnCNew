@@ -154,7 +154,7 @@ static partial class Tests
 
     private static SimulationWorld VeterancyWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: VeterancyFiles());
+        fixture = new SyntheticFixture(TestRate.Default, files: VeterancyFiles());
         var world = NewWorld(fixture);
         feeder = new Feeder(world);
         return world;
@@ -177,7 +177,7 @@ static partial class Tests
         world.Step();
         var dummy = world.Entities.Where(value => value.Template.Name == "Dummy").OrderBy(value => value.Id.Value).Last();
         if (victimLevel > 0) world.SetVeterancy(dummy.Id, victimLevel);
-        for (var tick = 0; tick < 200 && world.FindEntity(dummy.Id) is { } alive && alive.Body!.Health > Fixed.Zero; tick++)
+        for (var tick = 0; tick < world.Frames(200) && world.FindEntity(dummy.Id) is { } alive && alive.Body!.Health > Fixed.Zero; tick++)
         {
             feeder.FireWeapon(1, shooter, dummy.Id.Value);
             world.Step();
@@ -244,7 +244,7 @@ static partial class Tests
         feeder.Spawn(2, "Decoy", x: 10);
         world.Step();
         var decoy = world.Entities.Single(value => value.Template.Name == "Decoy");
-        for (var tick = 0; tick < 200 && decoy.Body!.Health > Fixed.Zero; tick++)
+        for (var tick = 0; tick < world.Frames(200) && decoy.Body!.Health > Fixed.Zero; tick++)
         {
             feeder.FireWeapon(1, recruit.Id.Value, decoy.Id.Value);
             world.Step();
@@ -278,7 +278,7 @@ static partial class Tests
 
             var ticks = new List<long>();
             var damages = new List<long>();
-            for (var i = 0; i < 400 && ticks.Count < 6; i++)
+            for (var i = 0; i < world.Frames(400) && ticks.Count < 6; i++)
             {
                 feeder.FireWeapon(1, recruitId, near);
                 foreach (var simEvent in world.Step().Events.Where(value => value.Kind == SimEventKind.WeaponFired))
@@ -295,7 +295,7 @@ static partial class Tests
             rangeWorld.Step();
             rangeWorld.SetVeterancy(new EntityId(IdOf(rangeWorld, "Recruit")), level);
             var shots = 0;
-            for (var i = 0; i < 5; i++)
+            for (var i = 0; i < rangeWorld.Frames(5); i++)
             {
                 rangeFeeder.FireWeapon(1, IdOf(rangeWorld, "Recruit"), IdOf(rangeWorld, "Tank"));
                 shots += rangeWorld.Step().Events.Count(value => value.Kind == SimEventKind.WeaponFired);
@@ -311,8 +311,8 @@ static partial class Tests
             {
                 expected.Add(ready);
                 clip--;
-                if (clip == 0) { ready += reload; clip = 2; }
-                else ready += delay;
+                if (clip == 0) { ready += world.Frames(reload); clip = 2; }
+                else ready += world.Frames(delay);
             }
             Check.That(ticks.SequenceEqual(expected), $"Level {level}: shot ticks {string.Join(",", ticks)} must equal the model {string.Join(",", expected)} (delay {delay}, reload {reload}).");
             var expectedDamage = Fixed.FromInt(20 * damageQuarters[level] / 4).Raw;
@@ -341,7 +341,7 @@ static partial class Tests
         world.Step();
         feeder.PurchaseUpgrade(1, "Upgrade_Scalar", target: recruit.Id.Value);
         feeder.PurchaseUpgrade(1, "Upgrade_Booster", target: recruit.Id.Value);
-        for (var i = 0; i < 5; i++) world.Step();
+        for (var i = 0; i < world.Frames(5); i++) world.Step();
         Check.That(recruit.ExperienceScalar == Fixed.FromDecimal(1.25m), "ExperienceScalarUpgrade adds AddXPScalar to the scalar.");
         Check.That(recruit.WeaponBonusConditions == 1u << WeaponBonusTable.PlayerUpgradeCondition, "WeaponBonusUpgrade sets the PLAYER_UPGRADE condition.");
 
@@ -349,7 +349,7 @@ static partial class Tests
         Check.That(recruit.Experience == 12, "10 experience at scalar 1.25 is floor(12.5) = 12.");
 
         var damages = new List<long>();
-        for (var i = 0; i < 100 && damages.Count < 1; i++)
+        for (var i = 0; i < world.Frames(100) && damages.Count < 1; i++)
         {
             feeder.FireWeapon(1, recruit.Id.Value, tank);
             damages.AddRange(world.Step().Events.Where(value => value.Kind == SimEventKind.WeaponFired).Select(value => value.Value));
@@ -365,7 +365,7 @@ static partial class Tests
         Check.That(copy.Experience == recruit.Experience && copy.ExperienceScalar == recruit.ExperienceScalar
             && copy.WeaponBonusConditions == recruit.WeaponBonusConditions && copy.VeterancyLevel == 2, "Experience, scalar, level and bonus conditions survive the snapshot.");
         var second = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
-        for (var i = 0; i < 120; i++)
+        for (var i = 0; i < restored.Frames(120); i++)
             Check.That(restored.Step().StateHash == second.Step().StateHash, "Two restored copies stay identical (tick " + i + ").");
     }
 
@@ -453,8 +453,8 @@ static partial class Tests
     /// </summary>
     public static void VeterancyArmorAndWeaponSetSelection()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: VeteranSetFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var fixture = new SyntheticFixture(TestRate.Default, files: VeteranSetFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Promotable", x: 0, y: 0);
         feeder.Spawn(1, "VeteranDummy", x: 40, y: 0);
@@ -466,7 +466,7 @@ static partial class Tests
 
         long FireAt(uint source, int player, uint target)
         {
-            for (var i = 0; i < 50; i++)
+            for (var i = 0; i < world.Frames(50); i++)
             {
                 feeder.FireWeapon(player, source, target);
                 var hit = world.Step().Events.FirstOrDefault(value => value.Kind == SimEventKind.WeaponFired && value.Entity.Value == source);

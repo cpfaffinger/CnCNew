@@ -146,8 +146,10 @@ internal static class CampaignShellTests
         run.Session.World.Kill(new CnCNew.Simulation.Ids.EntityId(id));
     }
 
-    private static void StepUntilOver(MissionRun run, int maxTicks)
+    /// <summary>Steps the mission for at most <paramref name="maxFrames"/> original frames (1/30 s of game time each).</summary>
+    private static void StepUntilOver(MissionRun run, int maxFrames)
     {
+        var maxTicks = CnCNew.Tests.TestTime.Frames(run.Session.World, maxFrames);
         for (var i = 0; i < maxTicks && !run.Session.IsOver; i++) run.Session.Step();
     }
 
@@ -245,7 +247,7 @@ internal static class CampaignShellTests
             "the loaded controller carries the saved campaign progress");
 
         ulong chainOriginal = StateHash.Seed, chainLoaded = StateHash.Seed;
-        for (var tick = 0; tick < 120 && !run.Session.IsOver && !loaded.Run.Session.IsOver; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(run.Session.World, 120) && !run.Session.IsOver && !loaded.Run.Session.IsOver; tick++)
         {
             chainOriginal = StateHash.Mix(chainOriginal, run.Session.Step().StateHash);
             chainLoaded = StateHash.Mix(chainLoaded, loaded.Run.Session.Step().StateHash);

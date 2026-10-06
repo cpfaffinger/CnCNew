@@ -148,23 +148,23 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) NavSetup(TerrainMap? terrain = null)
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: NavigationFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: NavigationFiles());
         var map = terrain ?? NavTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map.Fingerprint), fixture.Templates, map);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map.Fingerprint), fixture.Templates, map);
         return (world, new Feeder(world), fixture);
     }
 
-    /// <summary>Steps until the entity ends its order; returns the tick count and whether MoveArrived fired.</summary>
-    private static (int Ticks, bool Arrived) NavRun(SimulationWorld world, uint id, int limit, Action<Entity>? perTick = null)
+    /// <summary>Steps until the entity ends its order; returns the time in original frames (1/30 s; the limit is in frames, too) and whether MoveArrived fired.</summary>
+    private static (int Frames, bool Arrived) NavRun(SimulationWorld world, uint id, int limit, Action<Entity>? perTick = null)
     {
         var entity = world.FindEntity(new EntityId(id))!;
         var arrived = false;
-        for (var tick = 0; tick < limit; tick++)
+        for (var tick = 0; tick < world.Frames(limit); tick++)
         {
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.MoveArrived && value.Entity.Value == id)) arrived = true;
             perTick?.Invoke(entity);
-            if (!entity.HasMoveTarget) return (tick + 1, arrived);
+            if (!entity.HasMoveTarget) return ((int)world.InFrames(tick + 1), arrived);
         }
         return (limit, arrived);
     }
@@ -388,7 +388,7 @@ static partial class Tests
         var walker = world.FindEntity(new EntityId(1))!;
         var grid = world.Navigation!;
         feeder.SetMoveTarget(1, 1, 100, 175);
-        for (var tick = 0; tick < 36; tick++) world.Step();
+        for (var tick = 0; tick < world.Frames(36); tick++) world.Step();
         Check.That(walker.Y > Fixed.FromInt(26) && walker.Y < Fixed.FromInt(50), $"The walker is on its way, still north of where the wall will stand (y {walker.Y.Raw / 65536.0}).");
 
         feeder.Spawn(1, "Wall", x: 100, y: 100);
@@ -405,7 +405,7 @@ static partial class Tests
         freed.Feeder.Spawn(1, "Walker", x: 100, y: 25);
         freed.World.Step();
         freed.Feeder.SetMoveTarget(1, 2, 100, 175);
-        for (var tick = 0; tick < 10; tick++) freed.World.Step();
+        for (var tick = 0; tick < freed.World.Frames(10); tick++) freed.World.Step();
         freed.Feeder.Destroy(1);
         var crossedFormerWall = false;
         var (_, freedArrived) = NavRun(freed.World, 2, 900, unit => crossedFormerWall |= NavCellOf(unit) == (10, 10));
@@ -441,14 +441,14 @@ static partial class Tests
     {
         var first = NavBusyWorld(out var fixture, out var terrain);
         var second = NavBusyWorld(out _, out _);
-        for (var tick = 0; tick < 40; tick++)
+        for (var tick = 0; tick < first.Frames(40); tick++)
             Check.That(first.Step().StateHash == second.Step().StateHash, "Two identical runs agree in every tick.");
 
         var bytes = WorldSnapshot.Write(first);
         var restored = WorldSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain);
         Check.That(restored.Navigation!.ObstacleSum == first.Navigation!.ObstacleSum && restored.Navigation.ObstacleSum != 0, "A restored world rebuilds the same footprints.");
         Check.That(WorldSnapshot.Write(restored).AsSpan().SequenceEqual(bytes), "A snapshot with paths in flight round-trips byte-identically.");
-        for (var tick = 0; tick < 400; tick++)
+        for (var tick = 0; tick < first.Frames(400); tick++)
         {
             var expected = first.Step().StateHash;
             var actual = restored.Step().StateHash;

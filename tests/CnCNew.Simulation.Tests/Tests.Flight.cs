@@ -459,7 +459,7 @@ static partial class Tests
     {
         var session = StartFlight("ParaTeam");
         Check.That(session.SkippedObjects.IsEmpty, "The flight fixture instantiates: " + string.Join(",", session.SkippedObjects));
-        Run(session, 3);
+        Run(session, session.Frames(3));
         var plane = Of(session, "AlphaPlane").Single();
         var chutes = Of(session, "AlphaChute");
         var troopers = Of(session, "AlphaTrooper");
@@ -471,7 +471,7 @@ static partial class Tests
 
         var dropped = false;
         var landed = false;
-        for (var tick = 0; tick < 400 && !landed; tick++)
+        for (var tick = 0; tick < session.Frames(400) && !landed; tick++)
         {
             session.Step();
             if (!dropped && chutes.Any(chute => !chute.ContainedBy.IsValid)) dropped = true;
@@ -482,7 +482,7 @@ static partial class Tests
         Check.That(troopers.All(trooper => !trooper.EffectivelyDead), "They landed alive.");
         Check.That(troopers.All(trooper => (trooper.X - Fixed.FromInt(400)).Abs() < Fixed.FromInt(120) && (trooper.Y - Fixed.FromInt(200)).Abs() < Fixed.FromInt(20)),
             $"They landed near the target (({troopers[0].X}, {troopers[0].Y}) and ({troopers[1].X}, {troopers[1].Y})).");
-        Run(session, 400);
+        Run(session, session.Frames(400));
         Check.That(Of(session, "AlphaPlane").Length == 0, "The plane flew off the map and was deleted.");
         Check.That(Of(session, "AlphaChute").Length == 0, "The landed parachutes were killed and are gone.");
         Check.That(Of(session, "AlphaTrooper").Length == 2, "Both troopers remain.");
@@ -495,29 +495,29 @@ static partial class Tests
     public static void FlightTransportReturnsAndLeaves()
     {
         var session = StartFlight("TruckTeam");
-        Run(session, 2);
+        Run(session, session.Frames(2));
         var truck = Of(session, "AlphaTruck").Single();
         var troopers = Of(session, "AlphaTrooper");
         Check.That(troopers.Length == 3 && troopers.All(trooper => trooper.ContainedBy == truck.Id), "The truck carries all three troopers from the start.");
-        Run(session, 300);
+        Run(session, session.Frames(300));
         Check.That(troopers.All(trooper => !trooper.ContainedBy.IsValid && !trooper.EffectivelyDead), "The troopers were set down.");
         Check.That(troopers.All(trooper => (trooper.X - Fixed.FromInt(400)).Abs() < Fixed.FromInt(60)), $"They stand at the destination (x {troopers[0].X}).");
-        Run(session, 400);
+        Run(session, session.Frames(400));
         Check.That(Of(session, "AlphaTruck").Length == 0, "With teamTransportsExit the truck drove back to where it was ordered and was deleted.");
     }
 
     public static void FlightShotDownPlaneDestroysItsPayload()
     {
         var session = StartFlight("ParaTeam");
-        Run(session, 12);
+        Run(session, session.Frames(12));
         var plane = Of(session, "AlphaPlane").Single();
         Check.That(plane.Container!.ContainCount == 2, "The plane still holds both parachutes (its doors are shut on the way).");
         session.World.Kill(plane.Id);
         var startZ = plane.Z;
-        Run(session, 3);
+        Run(session, session.Frames(3));
         Check.That(plane.Z < startZ, "The dying plane starts to fall.");
         Check.That(Of(session, "AlphaChute").Length == 0 && Of(session, "AlphaTrooper").Length == 0, "Riders that cannot get out die with the plane (doors shut).");
-        Run(session, 200);
+        Run(session, session.Frames(200));
         Check.That(Of(session, "AlphaPlane").Length == 0, "The wreck is gone after its destruction delay.");
     }
 
@@ -532,11 +532,11 @@ static partial class Tests
             _ = player;
             var owner = session.World.Entities.First(entity => entity.Template.Name == "BetaLauncher").Owner;
             Check.That(owner.IsSystem == false, "The launcher belongs to a real side.");
-            Run(session, 2);
+            Run(session, session.Frames(2));
             var plane = Of(session, "AlphaPlane").Single();
             if (flares) session.World.CompleteUpgrade(plane.Owner, null, "Upgrade_AlphaFlares");
             var module = plane.Modules.OfType<CountermeasuresBehavior>().Single();
-            Run(session, 60);
+            Run(session, session.Frames(60));
             var health = plane.Body!.Health;
             if (!flares) damaged = Fixed.FromInt(500) - health;
             else
@@ -556,7 +556,7 @@ static partial class Tests
         var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)], objects: Objects());
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(session.SkippedObjects.IsEmpty, "The cannon and its beam instantiate: " + string.Join(",", session.SkippedObjects));
-        Run(session, 3);
+        Run(session, session.Frames(3));
         var cannon = NamedIn(session, "Cannon")!;
         var module = cannon.Modules.OfType<ParticleUplinkCannonUpdate>().Single();
         var owner = cannon.Owner;
@@ -564,13 +564,13 @@ static partial class Tests
         Run(session, 1);
         Check.That(module.InUse, "The order is running.");
         var fired = session.World.Tick;
-        Run(session, 4);
+        Run(session, session.Frames(4));
         Check.That(NamedIn(session, "AtTarget")!.Body!.Health == Fixed.FromInt(100), "The beam has not arrived yet (BeamTravelTime 6 ticks).");
-        Run(session, 8);
+        Run(session, session.Frames(8));
         Check.That(NamedIn(session, "AtTarget")!.Body!.Health < Fixed.FromInt(100), "The growing beam burns what stands at the aim point.");
         var mid = MissionSnapshot.Write(session);
         var restored = MissionSnapshot.Restore(mid, fixture.Templates, fixture.Fingerprint, terrain, map);
-        for (var tick = 0; tick < 60; tick++)
+        for (var tick = 0; tick < session.Frames(60); tick++)
         {
             var left = session.Step().StateHash;
             var right = restored.Step().StateHash;
@@ -590,7 +590,7 @@ static partial class Tests
             objects: [Placed("AlphaBus", 300m, 200m, "teamA", "Bus"), Placed("AlphaTrooper", 300m, 200m, "teamA", "Rider"), Placed("AlphaBus", 300m, 300m, "teamA", "Other")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(session.SkippedObjects.IsEmpty, "The bus instantiates: " + string.Join(",", session.SkippedObjects));
-        Run(session, 3);
+        Run(session, session.Frames(3));
         var bus = NamedIn(session, "Bus")!;
         var rider = NamedIn(session, "Rider")!;
         Check.That(session.World.TryEnterContainer(rider, bus), "The trooper boards the bus.");
@@ -603,11 +603,11 @@ static partial class Tests
         Check.That(rider.Body!.Health == Fixed.FromInt(50), $"The passenger took 50 % of its maximum health ({rider.Body!.Health}).");
         var peak = Fixed.Zero;
         long landed = -1;
-        for (var tick = 0; tick < 200 && landed < 0; tick++)
+        for (var tick = 0; tick < session.Frames(200) && landed < 0; tick++)
         {
             session.Step();
             peak = Fixed.Max(peak, bus.Z);
-            if (tick > 12 && bus.Z == Fixed.Zero) landed = tick;
+            if (tick > session.Frames(12) && bus.Z == Fixed.Zero) landed = tick;
         }
         Check.That(peak > Fixed.FromInt(10), $"The bus was thrown into the air (peak {peak}).");
         Check.That(landed > 0, "It came down again.");
@@ -616,7 +616,7 @@ static partial class Tests
         // Second life: a normal death.
         session.World.Damage(bus.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(1000), DamageTypes.Explosion, DeathTypes.Normal, false));
         Check.That(bus.EffectivelyDead, "The second lethal hit kills it.");
-        Run(session, 40);
+        Run(session, session.Frames(40));
         Check.That(Of(session, "AlphaBus").All(entity => entity.Id != bus.Id), "The real death ends in destruction after its delay.");
 
         // Unresistable damage ignores the first life.
@@ -632,13 +632,13 @@ static partial class Tests
         var (map, fixture, terrain) = MissionMap([Scr.Script("Deliver", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("CREATE_REINFORCEMENT_TEAM", Scr.Team("PlaneOnly"), Scr.Waypoint("Far"))], oneShot: true), ready]);
         map = map with { Teams = [..map.Teams, ReinforcementTeam("PlaneOnly", "AlphaPlane", 0)] };
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 20);
+        Run(session, session.Frames(20));
         var before = session.Engine.CounterValue("ready");
         Check.That(before > 0, "The flares upgrade is available to a plane that does not have it.");
         session.World.CompleteUpgrade(Of(session, "AlphaPlane").Single().Owner, null, "Upgrade_AlphaFlares");
-        Run(session, 2);
+        Run(session, session.Frames(2));
         var after = session.Engine.CounterValue("ready");
-        Run(session, 20);
+        Run(session, session.Frames(20));
         Check.That(session.Engine.CounterValue("ready") == after, "Once the upgrade is complete the button is no longer ready.");
         Check.That(Of(session, "AlphaPlane").Single().Modules.OfType<CountermeasuresBehavior>().Single().IsActive, "The upgrade took effect.");
     }
@@ -652,7 +652,7 @@ static partial class Tests
             Scr.Text("teamUnitType1", "AlphaHunter"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 1, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 1, 0m, string.Empty)]);
         map = map with { Teams = [..map.Teams, Team("Starter", true), Team("Quiet", false)] };
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
-        Run(session, 10);
+        Run(session, session.Frames(10));
         Check.That(session.Engine.CounterValue("started") == 1, $"Creating the team with teamExecutesActionsOnCreate ran the true-actions of its production-condition script once; the team without the flag ran nothing ({session.Engine.CounterValue("started")}); the script itself never fires (its condition is false).");
     }
 
@@ -663,11 +663,11 @@ static partial class Tests
         var (map, fixture, terrain) = MissionMap([Notice()], objects: [Placed("AlphaCommander", 100m, 200m, "teamA", "Commander"), Placed("BetaSoldier", 400m, 200m, "teamB", "Victim"), Placed("BetaSoldier", 400m, 300m, "teamB", "Bystander")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(session.SkippedObjects.IsEmpty, "The strike fixture instantiates: " + string.Join(",", session.SkippedObjects));
-        Run(session, 3);
+        Run(session, session.Frames(3));
         var commander = NamedIn(session, "Commander")!;
         var owner = commander.Owner;
         Check.That(session.Issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, commander.Id, "StrikePower", SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(400), Fixed.FromInt(200))).Accepted, "The power is used.");
-        Run(session, 3);
+        Run(session, session.Frames(3));
         var bombers = Of(session, "AlphaBomber");
         Check.That(bombers.Length == 2, $"The formation has two bombers ({bombers.Length}).");
         Check.That(Of(session, "AlphaBomb").Length == 6 && Of(session, "AlphaBomb").All(bomb => bomb.ContainedBy.IsValid), "Each bomber carries its three bombs.");
@@ -677,18 +677,18 @@ static partial class Tests
         byte[]? mid = null;
         var seen = new SortedDictionary<string, int>();
         var lastBombs = new SortedDictionary<uint, string>();
-        for (var tick = 0; tick < 900 && Of(session, "AlphaBomber").Length > 0; tick++)
+        for (var tick = 0; tick < session.Frames(900) && Of(session, "AlphaBomber").Length > 0; tick++)
         {
             foreach (var bomb in Of(session, "AlphaBomb")) lastBombs[bomb.Id.Value] = $"{bomb.X}/{bomb.Y}/{bomb.Z}";
             foreach (var item in session.Step().Events) seen[item.Kind + ":" + item.Text] = seen.GetValueOrDefault(item.Kind + ":" + item.Text) + 1;
-            if (tick == 60) mid = MissionSnapshot.Write(session);
+            if (tick == session.Frames(60)) mid = MissionSnapshot.Write(session);
         }
         Check.That(victim.EffectivelyDead || victim.Body!.Health < victim.Body.MaxHealth, $"The bombs hurt what stood at the target (victim health {victim.Body!.Health}/{victim.Body.MaxHealth}, bystander {bystander.Body!.Health}, bombs left {Of(session, "AlphaBomb").Length}, seen {string.Join(";", seen.Select(pair => pair.Key + "=" + pair.Value))}, bombs {string.Join(" ", lastBombs.Values)}, tick {session.World.Tick}, events: {string.Join(",", session.World.Entities.Where(entity => entity.Template.Name == "AlphaBomb").Select(entity => $"{entity.X}/{entity.Y}/{entity.Z}"))}).");
         Check.That(!bystander.EffectivelyDead && bystander.Body!.Health == bystander.Body.MaxHealth, "A bystander outside the bomb radius is untouched.");
         Check.That(Of(session, "AlphaBomber").Length == 0, "The bombers flew off the map and were deleted.");
         Check.That(session.Engine.FlagValue("done"), "SpecialPowerCompletionDie told the script engine (PLAYER_COMPLETED_SPECIAL_POWER).");
         var restored = MissionSnapshot.Restore(mid!, fixture.Templates, fixture.Fingerprint, terrain, map);
-        for (var tick = 0; tick < 700; tick++) restored.Step();
+        for (var tick = 0; tick < restored.Frames(700); tick++) restored.Step();
         Check.That(restored.World.Entities.Count(entity => entity.Template.Name == "AlphaBomber") == 0 && restored.Engine.FlagValue("done"), "A delivery restored from a snapshot during the run ends the same way.");
     }
 
@@ -701,7 +701,7 @@ static partial class Tests
         Check.That(session.SkippedObjects.IsEmpty, "The cannon instantiates: " + string.Join(",", session.SkippedObjects));
         var module = NamedIn(session, "Cannon")!.Modules.OfType<ParticleUplinkCannonUpdate>().Single();
         var positions = new List<(Fixed X, Fixed Y)>();
-        for (var tick = 0; tick < 80; tick++)
+        for (var tick = 0; tick < session.Frames(80); tick++)
         {
             session.Step();
             if (module.InUse) positions.Add((module.BeamPosition.X, module.BeamPosition.Y));
@@ -711,6 +711,6 @@ static partial class Tests
         Check.That(positions.All(point => (point.Y - Fixed.FromInt(200)).Abs() < Fixed.FromInt(1)), "It stays on the path line.");
         Check.That(NamedIn(session, "Off")!.Body!.Health == Fixed.FromInt(100), "An object off the path is untouched.");
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
-        for (var tick = 0; tick < 60; tick++) Check.That(session.Step().StateHash == restored.Step().StateHash, $"A path-driven beam restored from a snapshot continues identically (tick {tick}).");
+        for (var tick = 0; tick < session.Frames(60); tick++) Check.That(session.Step().StateHash == restored.Step().StateHash, $"A path-driven beam restored from a snapshot continues identically (tick {tick}).");
     }
 }

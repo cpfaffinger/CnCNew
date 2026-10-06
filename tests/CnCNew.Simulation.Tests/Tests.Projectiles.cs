@@ -245,8 +245,8 @@ static partial class Tests
 
     private static SimulationWorld ProjectileWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: ProjectileFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        fixture = new SyntheticFixture(TestRate.Default, files: ProjectileFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 7, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }
@@ -379,9 +379,9 @@ static partial class Tests
         var shot = world.Step();
         Check.That(shot.Events.Single(value => value.Kind == SimEventKind.WeaponFired).Value == 0, "A delayed shot reports no damage at firing.");
         var launched = shot.Events.Single(value => value.Kind == SimEventKind.ProjectileLaunched);
-        Check.That(launched.Value == fire + 8 && !launched.Entity.IsValid, "The launch event names the landing tick F+8 and no projectile object.");
+        Check.That(launched.Value == fire + world.Frames(8) && !launched.Entity.IsValid, "The launch event names the landing tick F+8 and no projectile object.");
         Check.That(world.PendingDelayedDamage == 1, "One delayed hit is pending.");
-        while (world.Tick < fire + 8) world.Step();
+        while (world.Tick < fire + world.Frames(8)) world.Step();
         Check.That(dummy.Body!.Health == Fixed.FromInt(1000), "No damage before tick F+8.");
         var landing = world.Step();
         Check.That(landing.Events.Single(value => value.Kind == SimEventKind.WeaponImpact).Value == Fixed.FromInt(25).Raw, "The impact reports the damage.");
@@ -420,7 +420,7 @@ static partial class Tests
         feeder.Spawn(2, "LaserGuard", x: 150, y: 0);
         var fire = FireAtDummy(world, feeder, "MissileLauncher", 300, out var dummy);
         var shotDown = false;
-        while (world.Tick < fire + 40)
+        while (world.Tick < fire + world.Frames(40))
         {
             var result = world.Step();
             shotDown |= result.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Text == "LaserWeapon");
@@ -446,7 +446,7 @@ static partial class Tests
             foreach (var name in new[] { "ShellLauncher", "MissileLauncher", "Rifleman", "ScatterLauncher" })
                 feeder.FireWeapon(1, Get(world, name).Id.Value, dummy);
             var hashes = new List<ulong>();
-            for (var tick = 0; tick < 40; tick++)
+            for (var tick = 0; tick < world.Frames(40); tick++)
             {
                 if (tick == snapshotAt)
                 {

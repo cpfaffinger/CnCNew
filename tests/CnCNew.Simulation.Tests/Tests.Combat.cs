@@ -224,8 +224,8 @@ static partial class Tests
 
     private static SimulationWorld CombatWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(SimulationRate.Original, files: CombatFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        fixture = new SyntheticFixture(TestRate.Default, files: CombatFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }
@@ -293,22 +293,22 @@ static partial class Tests
         var near = At(world, "Bystander", 30, 0);
         var drops = new List<long>();
         var last = near.Body!.Health;
-        for (var i = 0; i < 60; i++)
+        for (var i = 0; i < world.Frames(60); i++)
         {
             world.Step();
             if (near.Body.Health < last) { drops.Add(world.Tick - start); Check.That(last - near.Body.Health == Fixed.FromInt(5), "Every pulse deals the primary damage."); }
             last = near.Body.Health;
         }
         Check.That(drops.Count >= 4, $"The field pulses repeatedly, got {drops.Count} pulses.");
-        Check.That(drops[0] >= 18 && drops[0] <= 20, $"InitialDelay 600 ms holds the first pulse back 18 ticks, first pulse after {drops[0]}.");
-        for (var i = 1; i < drops.Count; i++) Check.That(drops[i] - drops[i - 1] == 9, "DelayBetweenShots 300 ms is nine ticks.");
+        Check.That(drops[0] >= world.Frames(18) && drops[0] <= world.Frames(20), $"InitialDelay 600 ms holds the first pulse back 18 ticks, first pulse after {drops[0]}.");
+        for (var i = 1; i < drops.Count; i++) Check.That(drops[i] - drops[i - 1] == world.Frames(9), "DelayBetweenShots 300 ms is nine ticks.");
         Check.That(At(world, "Bystander", 80, 0).Body!.Health == Fixed.FromInt(100), "A bystander outside the radius is untouched.");
         Check.That(field.Body!.Health == Fixed.FromInt(100), "The default affects mask spares the emitter itself.");
 
         var selfWorld = CombatWorld(out _, out var selfFeeder);
         selfFeeder.Spawn(1, "SelfHarmField", x: 0, y: 0);
         selfWorld.Step();
-        for (var i = 0; i < 30; i++) selfWorld.Step();
+        for (var i = 0; i < selfWorld.Frames(30); i++) selfWorld.Step();
         Check.That(HealthOf(selfWorld, "SelfHarmField") < Fixed.FromInt(100), "With SELF in the affects mask the emitter hurts itself.");
     }
 
@@ -323,16 +323,16 @@ static partial class Tests
         var drops = new List<long>();
         var last = near.Body!.Health;
         var start = world.Tick;
-        for (var i = 0; i < 100; i++)
+        for (var i = 0; i < world.Frames(100); i++)
         {
             world.Step();
             if (near.Body.Health < last) drops.Add(world.Tick - start);
             last = near.Body.Health;
         }
         Check.That(drops.Count >= 4, $"The field keeps pulsing, got {drops.Count}.");
-        Check.That(drops[1] - drops[0] == 3, $"DelayBetweenShots 100 ms is three ticks inside a clip, got {drops[1] - drops[0]}.");
-        Check.That(drops[2] - drops[1] == 30, $"The reload after the second shot takes ClipReloadTime 1000 ms (30 ticks), got {drops[2] - drops[1]}.");
-        Check.That(drops[3] - drops[2] == 3, "The next clip starts with the short delay again.");
+        Check.That(drops[1] - drops[0] == world.Frames(3), $"DelayBetweenShots 100 ms is three ticks inside a clip, got {drops[1] - drops[0]}.");
+        Check.That(drops[2] - drops[1] == world.Frames(30), $"The reload after the second shot takes ClipReloadTime 1000 ms (30 ticks), got {drops[2] - drops[1]}.");
+        Check.That(drops[3] - drops[2] == world.Frames(3), "The next clip starts with the short delay again.");
     }
 
     /// <summary>ExclusiveWeaponDelay: the object's own real weapon silences the module for that long.</summary>
@@ -345,19 +345,19 @@ static partial class Tests
         world.Step();
         var sniper = Get(world, "Sniper");
         var near = At(world, "Bystander", 30, 0);
-        for (var i = 0; i < 20; i++) world.Step();
+        for (var i = 0; i < world.Frames(20); i++) world.Step();
         Check.That(near.Body!.Health < Fixed.FromInt(100), "Without a real shot the pulse hits the bystander.");
 
         Check.That(feeder.FireWeapon(1, sniper.Id.Value, At(world, "Bystander", 120, 0).Id.Value).Accepted, "The real shot is accepted.");
         world.Step();
         var shotTick = world.Tick;
         var frozen = near.Body.Health;
-        while (world.Tick < shotTick + 28)
+        while (world.Tick < shotTick + world.Frames(28))
         {
             world.Step();
             Check.That(near.Body.Health == frozen, $"The pulse stays silent right after a real shot (tick {world.Tick - shotTick}).");
         }
-        for (var i = 0; i < 20; i++) world.Step();
+        for (var i = 0; i < world.Frames(20); i++) world.Step();
         Check.That(near.Body.Health < frozen, "The pulse resumes once ExclusiveWeaponDelay has passed.");
     }
 
@@ -368,7 +368,7 @@ static partial class Tests
         feeder.Spawn(1, "ClipField", x: 0, y: 0);
         feeder.Spawn(2, "Bystander", x: 20, y: 0);
         world.Step();
-        for (var i = 0; i < 20; i++) world.Step();
+        for (var i = 0; i < world.Frames(20); i++) world.Step();
         SnapshotContinues(world, fixture);
     }
 
@@ -397,7 +397,7 @@ static partial class Tests
         world.Step();
         Check.That(outpost.Body!.Health == Fixed.FromInt(150), "The outpost is damaged before the upgrade.");
         Check.That(feeder.PurchaseUpgrade(1, "Upgrade_Fortify", target: outpost.Id.Value).Accepted, "The upgrade purchase is accepted.");
-        for (var i = 0; i < 10; i++) world.Step();
+        for (var i = 0; i < world.Frames(10); i++) world.Step();
         Check.That(!world.Entities.Any(value => value.Template.Name == "Outpost"), "The outpost is gone.");
         var fortress = Get(world, "Fortress");
         Check.That(fortress.Owner.Value == 1 && fortress.X == Fixed.FromInt(70) && fortress.Y == Fixed.FromInt(40), "The fortress keeps owner and position.");

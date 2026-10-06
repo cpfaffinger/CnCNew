@@ -214,12 +214,14 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             var terrain = TerrainMap.Build(map, mission.MapPath);
             var options = MissionOptions.Standard with { HumanSideName = campaign.IsChallenge ? ChallengeSides.HumanSideFor(map) : string.Empty, HumanFaction = campaign.IsChallenge ? campaign.PlayerFaction : string.Empty };
             var cells = new List<string>();
+            var times = new List<string>();
             foreach (var victory in new[] { true, false }.Where(value => outcomeOnly is null || outcomeOnly.Equals(value ? "victory" : "defeat", StringComparison.OrdinalIgnoreCase)))
             {
                 ObjectiveDriveResult result;
                 try { result = MissionObjectiveDriver.Run(options, catalog, fingerprint, terrain, map, victory, ticks, observe: watch is null && watchFlags.Length == 0 && timeline == 0 ? null : CombineWatches(CombineWatches(watch is null ? null : WatchEntities(watch, victory), watchFlags.Length == 0 ? null : WatchFlags(watchFlags, victory)), timeline == 0 ? null : Timeline(timeline)), commandsOnly: commandsOnly, agentThreshold: agentThreshold); }
                 catch (Exception exception) when (exception is not OutOfMemoryException) { cells.Add($"{(victory ? "victory" : "defeat")} FAILED {exception.GetType().Name}: {exception.Message}"); continue; }
                 if (result.ReachedByScript) { if (victory) victories++; else defeats++; }
+                if (result.ReachedByScript) times.Add($"{(victory ? "victory" : "defeat")} after {CnCNew.CampaignTool.ToolRate.GameTime(result.OutcomeTick)}");
                 cells.Add($"{(victory ? "victory" : "defeat")} {(result.ReachedByScript ? $"REACHED by '{result.OutcomeScript}' @{result.OutcomeTick}" : "not reached")} ({result.Interventions} interventions: {result.Commands} commands, {result.WorldWrites} world writes)");
                 if (explain)
                 {
@@ -228,9 +230,12 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
                 }
             }
             Console.WriteLine($"{campaign.Name,-12} {mission.Name,-9} {Path.GetFileNameWithoutExtension(mission.MapPath),-22} {string.Join("  |  ", cells)}");
+            // The row above is read by scripts and stays as it is; the game time of its ticks follows on a line of its own.
+            if (times.Count > 0) Console.WriteLine($"      game time (m:ss at {CnCNew.CampaignTool.ToolRate.Current}): {string.Join(", ", times)}");
         }
     }
     Console.WriteLine($"{maps} maps driven ({ticks} ticks): victory reached by the mission's own script on {victories}, defeat on {defeats}.");
+    Console.WriteLine($"Budget: {ticks} ticks are {CnCNew.CampaignTool.ToolRate.GameTime(ticks)} of game time (m:ss) at {CnCNew.CampaignTool.ToolRate.Current}.");
     return 0;
 }
 
@@ -318,6 +323,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
                     restoredOk = original.Chain == restored.Chain && original.FinalHash == restored.FinalHash;
                 }
                 string win = "-", lose = "-";
+                var probeTimes = new List<string>();
                 if (probes)
                 {
                     var victory = MissionProbe.Run(options, catalog, fingerprint, terrain, map, true);
@@ -326,6 +332,8 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
                     defeatProbes++;
                     if (victory.Reached) victoryReached++;
                     if (defeat.Reached) defeatReached++;
+                    if (victory.Reached) probeTimes.Add($"win after {CnCNew.CampaignTool.ToolRate.GameTime(victory.TicksToOutcome)}");
+                    if (defeat.Reached) probeTimes.Add($"lose after {CnCNew.CampaignTool.ToolRate.GameTime(defeat.TicksToOutcome)}");
                     win = victory.Reached ? $"win@{victory.TicksToOutcome}" : victory.DecidedBeforeProbe ? $"win:early-{victory.Outcome}[{victory.Report.OutcomeScript}]" : victory.EndingScripts.IsEmpty ? "win:no-script" : "win:UNMET";
                     lose = defeat.Reached ? $"lose@{defeat.TicksToOutcome}" : defeat.DecidedBeforeProbe ? $"lose:early-{defeat.Outcome}" : defeat.EndingScripts.IsEmpty ? "lose:no-script" : "lose:UNMET";
                     if (explain)
@@ -348,6 +356,8 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
                 foreach (var note in first.Notes) Console.WriteLine($"      note: {note}");
                 foreach (var item in first.Skipped) skippedTemplates[item.Template] = skippedTemplates.GetValueOrDefault(item.Template) + item.Count;
                 Console.WriteLine($"{campaign.Name,-12} {mission.Name,-9} {Path.GetFileNameWithoutExtension(mission.MapPath),-24} objs {first.PlacedObjects - first.SkippedObjects,5}/{first.PlacedObjects,-5} scripts {first.ExecutedScripts,4} acts {first.ExecutedActions,5} fwd {first.ForwardedActions,4} miss {first.MissingActionTotal,4}/{first.MissingConditionTotal,-8} {(same ? "det" : "DIVERGES")} {(restoredOk ? "sav" : "SAVE-DIVERGES")} {win} {lose} [{watch.Elapsed.TotalSeconds:F0}s]");
+                // The row above is read by scripts and stays as it is; the game time of win@/lose@ follows on a line of its own.
+                if (probeTimes.Count > 0) Console.WriteLine($"      game time (m:ss at {CnCNew.CampaignTool.ToolRate.Current}): {string.Join(", ", probeTimes)}");
             }
             catch (Exception exception)
             {
@@ -359,6 +369,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
     Console.WriteLine();
     Console.WriteLine($"{run} missions run ({failed} failed to load or run), {deterministic} identical on a second run, {continued} identical after save/restore; {watch.Elapsed.TotalSeconds:F0} s.");
     if (probes) Console.WriteLine($"Scripted endings reached by elimination: victory {victoryReached}/{victoryProbes}, defeat {defeatReached}/{defeatProbes} (an ending the mission reached by itself before the probe does not count).");
+    Console.WriteLine($"Budget: {ticks} ticks are {CnCNew.CampaignTool.ToolRate.GameTime(ticks)} of game time (m:ss) at {CnCNew.CampaignTool.ToolRate.Current}.");
     var actionTotal = executedActions + forwardedActions + missingActionTotal;
     Console.WriteLine($"Scripts executed {executedScripts}; actions executed {executedActions}, forwarded {forwardedActions}, missing hits {missingActionTotal} ({(actionTotal == 0 ? 0 : 100.0 * missingActionTotal / actionTotal):F1} % of action executions); missing condition hits {missingConditionTotal}.");
     Console.WriteLine("Missing actions (hits / missions):");
@@ -396,12 +407,12 @@ static int Playthrough(ContentFileSystem content, CampaignCatalog campaigns, str
         while (session.World.Tick < ticks && !session.IsOver) session.Step();
         if (session.Outcome == MissionOutcome.None)
         {
-            Console.WriteLine($"  {mission.Name}: no outcome after {session.World.Tick} ticks (save {save.Length} bytes, reload {(reloadOk ? "ok" : "BAD")}); the ending is not reachable by elimination.");
+            Console.WriteLine($"  {mission.Name}: no outcome after {session.World.Tick} ticks ({CnCNew.CampaignTool.ToolRate.GameTime(session.World.Tick)} of game time) (save {save.Length} bytes, reload {(reloadOk ? "ok" : "BAD")}); the ending is not reachable by elimination.");
             ok = false;
             break;
         }
         var conclusion = controller.Conclude(run);
-        Console.WriteLine($"  {mission.Name}: {conclusion} at tick {session.Engine.OutcomeTick} (save {save.Length} bytes, reload {(reloadOk ? "ok" : "BAD")}); next {(controller.IsFinished ? "campaign finished" : controller.Progress.CurrentMission)}");
+        Console.WriteLine($"  {mission.Name}: {conclusion} at tick {session.Engine.OutcomeTick} ({CnCNew.CampaignTool.ToolRate.GameTime(session.Engine.OutcomeTick)} of game time) (save {save.Length} bytes, reload {(reloadOk ? "ok" : "BAD")}); next {(controller.IsFinished ? "campaign finished" : controller.Progress.CurrentMission)}");
         if (conclusion == MissionConclusion.Defeat || !reloadOk) { ok = false; break; }
     }
     Console.WriteLine(ok ? $"Campaign {campaign.Name} played through: {controller.Progress.Completed.Count} missions." : $"Campaign {campaign.Name} did not finish.");
