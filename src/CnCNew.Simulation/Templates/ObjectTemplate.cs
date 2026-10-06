@@ -94,7 +94,6 @@ public sealed class ObjectTemplate
         MissingModules = missingModules;
         Side = Text(definition, "Side");
         KindOf = definition.Fields.LastOrDefault(field => field.Name.Equals("KindOf", StringComparison.OrdinalIgnoreCase))?.Value.Value is FlagsValue flags ? flags.Names : [];
-        RevealsToAll = IsKindOf("REVEAL_TO_ALL");
         Geometry = definition.Fields.LastOrDefault(field => field.Name.Equals("Geometry", StringComparison.OrdinalIgnoreCase))?.Value.Value is EnumValue geometry ? geometry.Name : string.Empty;
         GeometryMajorRadius = Real(definition, "GeometryMajorRadius");
         GeometryMinorRadius = Real(definition, "GeometryMinorRadius");
@@ -258,9 +257,6 @@ public sealed class ObjectTemplate
     public string Buildable { get; }
 
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
-
-    /// <summary><c>KINDOF_REVEAL_TO_ALL</c>, read once: the vision refresh asks every looking object.</summary>
-    public bool RevealsToAll { get; }
 
     private static string Text(ObjectDefinition definition, string name)
         => definition.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty;

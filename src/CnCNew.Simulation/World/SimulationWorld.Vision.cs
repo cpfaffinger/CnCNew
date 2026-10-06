@@ -82,7 +82,7 @@ public sealed partial class SimulationWorld
             if (entity.ShroudScalar != Fixed.One) range *= entity.ShroudScalar;
             if (anySightBonus) range *= BattlePlanSightScalarOf(entity);
             var ownerSlot = _playerSlots![entity.Owner.Value];
-            var viewers = entity.Template.RevealsToAll ? _visionEverybody.AsSpan() : allySlots[ownerSlot].AsSpan(0, allyCounts[ownerSlot]);
+            var viewers = entity.Template.IsKindOf("REVEAL_TO_ALL") ? _visionEverybody.AsSpan() : allySlots[ownerSlot].AsSpan(0, allyCounts[ownerSlot]);
             foreach (var slot in viewers) vision.Reveal(slot, entity.X, entity.Y, range);
             // SpyVisionUpdate: a player that spies through this object (reference count above zero) sees what it sees, though not its allies.
             if (entity.VisionSpiedBy is { Count: > 0 } spied)
