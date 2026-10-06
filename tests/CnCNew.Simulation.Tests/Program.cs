@@ -29,6 +29,12 @@ run.Test("Fixed point: products, quotients and roots equal the wide formulas at 
 run.Test("Fixed point: at 16 fraction bits the angle functions return the bits they returned before phase 22", Tests.FixedTrigReproducesTheSixteenBitResults);
 run.Test("Fixed point: the precision of the angle functions follows the resolution", Tests.FixedTrigPrecisionFollowsTheResolution);
 run.Test("Fixed point: snapshots, replays and command tables of 16 fraction bits are rejected by their version", Tests.StatesOfSixteenFractionBitsAreRejected);
+run.Test("Fixed point: a squared distance within the square of a reach is the exact comparison for every reach (big-integer oracle)", Tests.SquaredReachGivesTheExactComparison);
+run.Test("Fixed point: a quotient of a product equals the two operators and does not overflow on the product", Tests.MultiplyDivideEqualsTheTwoOperatorsWithoutTheirOverflow);
+run.Test("Sentinel ranges: weapons with an attack range of 999,999 and 1,000,000, a huge minimum range and a huge blast radius fire", Tests.WeaponsWithAnEverywhereRangeFire);
+run.Test("Sentinel ranges: an ability with a start range of 1,000,000 and a target begins where the unit stands", Tests.AbilityWithAnEverywhereStartRangeBeginsWhereTheUnitStands);
+run.Test("Sentinel ranges: the health ratio of a body with 99,999,999 survives a new maximum", Tests.HealthRatioOfTheLargestBodiesSurvivesANewMaximum);
+run.Test("Sentinel ranges: a vision circle with a radius beyond 46,340 units covers the map", Tests.VisionCircleWithAHugeRadiusCoversTheMap);
 run.Test("Tick rate, duration and unit conversions", Tests.Timing);
 run.Test("Reference float conversion vs exact ticks (documented deviation)", Tests.FloatDeviation);
 run.Test("Golden RNG sequences (independent transcription)", Tests.GoldenRandom);
@@ -94,6 +100,7 @@ run.Test("Tick phase observer: every world phase once per tick in order, same ha
 run.Test("Tick phase observer: skirmish and mission sessions report their parts, same hashes and commands", Tests.TickPhaseObserverSessions);
 run.Test("Determinism rules hold in the sources that feed the simulation (D6)", Tests.FeederSourceRules);
 run.Test("The fixed-point scale is written once: no scale literal in any project, one conversion outside the simulation", Tests.FixedScaleSourceRules);
+run.Test("No value is multiplied with itself in the simulation except coordinate components and named exceptions: reaches compare through SquaredReach", Tests.SquaredReachSourceRules);
 run.Test("Phase 5: fear-sound RNG consumption (block 0.3)", Tests.Phase5FearSoundRng);
 run.Test("Phase 5: economy and upgrade purchase", Tests.Phase5Economy);
 run.Test("Phase 5: weapon fire, armor, clip and reload", Tests.Phase5Combat);
@@ -449,6 +456,7 @@ if (contentDirectory is not null) run.Test("Real data: Ranger, Red Guard, Rebel 
 if (contentDirectory is not null) run.Test("Real data: turrets of the Crusader, the Battlemaster, the sweeping guns and the linked battleships", () => Tests.RealTurrets(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turret on a Battlemaster it chases; retail turrets scan while idle", () => Tests.RealTurretAttackAndScan(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail AutoAcquire flags; a Crusader and a Battlemaster fight without orders", () => Tests.RealAcquisition(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
 return run.Finish();
 
 /// <param name="only">With <c>--only TEXT</c>, just the tests whose name contains TEXT run (a development aid; the full run takes no argument).</param>
