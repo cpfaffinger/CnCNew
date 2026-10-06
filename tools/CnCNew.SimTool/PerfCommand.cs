@@ -186,6 +186,10 @@ internal static class PerfCommand
         var gcBefore = GcCounts();
         var wall = Stopwatch.StartNew();
         var chain = StateHash.Seed;
+        // How much of the first step is the runtime compiling the code it runs for the first time (the first step is the longest of most missions).
+        var jitBefore = System.Runtime.JitInfo.GetCompilationTime(currentThread: true);
+        var firstStepJit = TimeSpan.Zero;
+        var firstStep = TimeSpan.Zero;
         // The same loop as MissionScenario.Continue (mission-run), so that final hash and chain are comparable.
         while (world.Tick < common.Ticks && !session.IsOver)
         {
@@ -193,6 +197,11 @@ internal static class PerfCommand
             var begin = Stopwatch.GetTimestamp();
             var result = session.Step();
             var elapsed = Stopwatch.GetTimestamp() - begin;
+            if (recorder.Count == 0)
+            {
+                firstStepJit = System.Runtime.JitInfo.GetCompilationTime(currentThread: true) - jitBefore;
+                firstStep = Stopwatch.GetElapsedTime(begin, begin + elapsed);
+            }
             recorder.Commit(result.Tick, elapsed, GC.GetAllocatedBytesForCurrentThread() - allocated, world.Entities.Count);
             chain = StateHash.Mix(chain, result.StateHash);
             // Suspicion (c), outside the tick time: what one complete description of the script state costs at this point of the mission. Reading only.
@@ -214,6 +223,9 @@ internal static class PerfCommand
         };
         Console.WriteLine($"Mission: {recorder.Count} steps to tick {world.Tick} in {wall.Elapsed.TotalSeconds:F1} s wall time; outcome {session.Outcome}; scripts executed {session.Engine.ExecutedScripts}, actions {session.Engine.ExecutedActions}.");
         Report(recorder, common, summary, gcBefore, gcAfter, [TickPhase.MissionScripts, TickPhase.MissionEvents], [TickPhase.SkirmishAi, TickPhase.SkirmishVictory]);
+        Console.WriteLine($"First step: {firstStep.TotalMilliseconds:F1} ms, of which {firstStepJit.TotalMilliseconds:F1} ms compiling methods on this thread (System.Runtime.JitInfo; a cost of the process, not of the mission).");
+        summary["first_step_us"] = (firstStep.TotalMilliseconds * 1000).ToString("F1", Invariant);
+        summary["first_step_jit_us"] = (firstStepJit.TotalMilliseconds * 1000).ToString("F1", Invariant);
         scriptRecorder?.Report(recorder.Count, common.Top, summary);
         Console.WriteLine($"Final hash {finalHash:X16}, chain {chain:X16} (must equal the same run without the observer; `mission-run --ticks {common.Ticks}` prints the same pair).");
         summary["hash"] = finalHash.ToString("X16");
