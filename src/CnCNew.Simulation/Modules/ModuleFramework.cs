@@ -58,16 +58,6 @@ public interface IWorldServices
     /// <summary>Marks an entity whose state a module changed from outside that entity's own update (the world only tracks the updated entity on its own).</summary>
     void MarkDirty(Entity entity);
 
-    /// <summary>
-    /// Called by an update module at the end of its own <see cref="IUpdateModule.Update"/>: this update changed nothing of its entity that the state hash sees except what the
-    /// module's own <see cref="SimModule.Describe"/> writes (the wake tick the scheduler sets from the return value included). The hash then describes this module alone instead
-    /// of the whole entity. A promise with a proof obligation: the update wrote no field of the entity, of another module, of a turret, of anything else the entity describes
-    /// outside this module's state, and nothing else in the entity's description is derived from this module's fields. Changes made through the world (damage, status, container
-    /// calls) mark the entity as a whole on their own and stay correct. A wrong promise is a stale hash (finding D8); when in doubt, do not call it. Ignored outside the
-    /// module's own update.
-    /// </summary>
-    void OnlyOwnStateChanged(SimModule module);
-
     /// <summary><c>friend_awakenUpdateModule</c>: moves the module's next wake tick.</summary>
     void WakeAt(Entity entity, IUpdateModule module, long tick);
 

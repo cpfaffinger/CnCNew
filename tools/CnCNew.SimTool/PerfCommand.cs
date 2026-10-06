@@ -497,8 +497,8 @@ internal static class PerfCommand
         }
         var work = recorder.HashWork;
         var steps = Math.Max(1, recorder.Count);
-        Console.WriteLine(string.Create(Invariant, $"      counters of the incremental hash over the run (deterministic): {work.Entities} objects hashed again ({(double)work.Entities / steps:F1} per tick; {work.ModuleEntities} = {(work.Entities == 0 ? 0 : 100.0 * work.ModuleEntities / work.Entities):F1} % of them in single modules only), {work.Words} words folded ({(double)work.Words / steps:F0} per tick, "
-                          + $"{(work.Entities == 0 ? 0 : (double)work.Words / work.Entities):F0} per object), {work.Unchanged} of these objects ({(work.Entities == 0 ? 0 : 100.0 * work.Unchanged / work.Entities):F2} %) came out with the hash they had; "
+        Console.WriteLine(string.Create(Invariant, $"      counters of the incremental hash over the run (deterministic): {work.Entities} objects described ({(double)work.Entities / steps:F1} per tick), {work.Words} words folded ({(double)work.Words / steps:F0} per tick, "
+                          + $"{(work.Entities == 0 ? 0 : (double)work.Words / work.Entities):F0} per object), {work.Unchanged} of the described objects ({(work.Entities == 0 ? 0 : 100.0 * work.Unchanged / work.Entities):F2} %) came out with the hash they had; "
                           + $"{(work.Words == 0 ? 0 : hash.Sum * 1000 / work.Words):F2} ns per word; the hash phase allocated {recorder.HashAllocated} bytes ({(double)recorder.HashAllocated / steps:F1} per tick)."));
     }
 

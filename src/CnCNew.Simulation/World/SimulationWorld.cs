@@ -78,13 +78,6 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly Entity[] _hashBatch = new Entity[HashBatchEntities];
     private readonly int[] _hashBatchEnds = new int[HashBatchEntities];
     private readonly ulong[] _hashBatchValues = new ulong[HashBatchEntities];
-    private readonly ulong[] _hashBatchSeeds = new ulong[HashBatchEntities];
-    // Entities of which only single modules changed in their own state (IWorldServices.OnlyOwnStateChanged), and the scratch writer for one module's state.
-    private readonly List<Entity> _moduleDirty = [];
-    private readonly TemplateGlue?[] _templateGlue;
-    private readonly WordStateWriter _moduleWords = new();
-    private SimModule? _ownStateOnly;
-    private long _hashedModuleEntities;
     // Per template and module slot: the words that open the module in a description (index, name, tag).
     private readonly ulong[]?[]?[] _moduleFrames;
     private long _hashedEntities;
@@ -171,7 +164,6 @@ public sealed partial class SimulationWorld : IWorldServices
         Navigation = terrain is null ? null : new NavigationGrid(terrain);
         _templates = templates;
         _moduleFrames = new ulong[]?[]?[templates.Templates.Length];
-        _templateGlue = new TemplateGlue?[templates.Templates.Length];
         Ids = new IdCounters();
         Streams = new RandomStreams(configuration.Seed);
         foreach (var player in configuration.Players)
@@ -1330,8 +1322,8 @@ public sealed partial class SimulationWorld : IWorldServices
             var entity = node.Entity;
             if (entity.DestroyRequested) continue;
             if (++processed > MaxUpdatesPerTick) throw new InvalidOperationException("Update storm: too many module updates in one tick.");
+            MarkDirty(entity);
             _currentUpdate = node;
-            _ownStateOnly = null;
             observer?.UpdateStarted(node.Module);
             var sleep = node.Update.Update(this);
             observer?.UpdateEnded(node.Module);
@@ -1339,10 +1331,6 @@ public sealed partial class SimulationWorld : IWorldServices
             if (sleep < SimulationTiming.SleepNone) sleep = SimulationTiming.SleepNone;
             var wake = Math.Min(tick + sleep, SimulationTiming.SleepForever);
             node.Update.NextWake = wake;
-            // Every update changes its entity's description (the wake tick alone moves it). The entity is described again as a whole unless the module vouched that
-            // nothing outside its own state changed; then its state alone is.
-            if (ReferenceEquals(_ownStateOnly, node.Module)) MarkModuleDirty(entity, node.Module);
-            else MarkDirty(entity);
             if (wake < SimulationTiming.SleepForever) _updates.Push(node);
         }
     }
@@ -1704,24 +1692,6 @@ public sealed partial class SimulationWorld : IWorldServices
         _dirty.Add(entity);
     }
 
-    public void OnlyOwnStateChanged(SimModule module)
-    {
-        if (_currentUpdate is { } node && ReferenceEquals(node.Module, module)) _ownStateOnly = module;
-    }
-
-    /// <summary>The scheduler's mark for an update that vouched for <see cref="OnlyOwnStateChanged"/>. An entity already marked as a whole stays so, and a later whole mark wins.</summary>
-    private void MarkModuleDirty(Entity entity, SimModule module)
-    {
-        if (entity.Dirty) return;
-        if (module.Index >= 64)
-        {
-            MarkDirty(entity);
-            return;
-        }
-        if (entity.DirtyModules == 0) _moduleDirty.Add(entity);
-        entity.DirtyModules |= 1UL << module.Index;
-    }
-
     // ------------------------------------------------------------------------------------------------- step
 
     /// <summary>Executes one tick and returns its state hash. The returned buffers are reused by the next call.</summary>
@@ -1752,11 +1722,8 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     public ITickPhaseObserver? PhaseObserver { get; set; }
 
-    /// <summary>
-    /// Entities touched since the state hash was last computed: what the next hash has to look at again, as a whole or (the second summand) in single modules. An upper bound:
-    /// an entity marked in a module and later as a whole counts twice.
-    /// </summary>
-    public int DirtyEntityCount => _dirty.Count + _moduleDirty.Count;
+    /// <summary>Entities touched since the state hash was last computed: what the next hash has to describe again.</summary>
+    public int DirtyEntityCount => _dirty.Count;
 
     /// <summary>The same step as <see cref="Step"/>, statement for statement, with the observer told about every phase boundary (every phase exactly once per tick, also an empty one).</summary>
     private TickResult StepObserved(ITickPhaseObserver observer)
@@ -1840,133 +1807,18 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         var count = 0;
         var words = _entityWords;
-        foreach (var entity in _moduleDirty)
-        {
-            var modules = entity.DirtyModules;
-            entity.DirtyModules = 0;
-            // An entity that was also marked as a whole is described as a whole below.
-            if (entity.Dirty || !entity.Registered) continue;
-            if (!TryRehashModules(entity, modules, ref count)) DescribeForHash(entity, ref count);
-            if (count == HashBatchEntities || words.Count >= HashBatchWords) count = FoldHashBatch(count);
-        }
-        _moduleDirty.Clear();
         foreach (var entity in _dirty)
         {
             entity.Dirty = false;
             if (!entity.Registered) continue;
-            DescribeForHash(entity, ref count);
+            entity.Describe(words);
+            _hashBatch[count] = entity;
+            _hashBatchEnds[count++] = words.Count;
             if (count == HashBatchEntities || words.Count >= HashBatchWords) count = FoldHashBatch(count);
         }
         if (count > 0) FoldHashBatch(count);
         _dirty.Clear();
         return FinishHash();
-    }
-
-    /// <summary>Writes the whole entity down for the next <see cref="FoldHashBatch"/>. An entity with a word cache keeps the state of every module from it.</summary>
-    private void DescribeForHash(Entity entity, ref int count)
-    {
-        var words = _entityWords;
-        var cache = entity.HashCache;
-        var start = words.Count;
-        if (cache is not null && cache.WantedCheckpoint < 0)
-        {
-            // Nobody asked for a checkpoint: what was kept is outdated by this description and is taken again when the module path next wants it.
-            cache.Invalidate();
-            cache = null;
-        }
-        if (cache is not null)
-        {
-            words.Marks = cache.Marks;
-            words.MarkCount = 0;
-        }
-        entity.Describe(words);
-        if (cache is not null)
-        {
-            var marks = words.MarkCount;
-            words.Marks = null;
-            var template = entity.Template;
-            if ((uint)template.Index < (uint)_templateGlue.Length && ReferenceEquals(_templates[template.Index], template))
-            {
-                if (cache.WantedCheckpoint >= 0 && marks == cache.Marks.Length) _hashedWords += cache.Marks[2 * cache.WantedCheckpoint] - start;
-                cache.Keep(words.Words[start..], start, marks, ref _templateGlue[template.Index]);
-            }
-            else cache.Invalidate();
-        }
-        _hashBatch[count] = entity;
-        _hashBatchSeeds[count] = State.StateHash.Seed;
-        _hashBatchEnds[count++] = words.Count;
-    }
-
-    /// <summary>
-    /// The entity changed in the own state of the given modules only (<see cref="IWorldServices.OnlyOwnStateChanged"/>). Its description is then the last one with those
-    /// modules' words replaced, and its hash is the fold of that: every word before the first replaced one is as it was, so the fold may continue from the state it had
-    /// reached before that module (the checkpoint, taken when the entity was last described as a whole) instead of starting over. From there on the description is the kept
-    /// module states with the template's glue between them. Same words, same order, same function as describing the whole entity; <see cref="VerifyIncrementalHash"/>
-    /// compares exactly that. Returns <see langword="false"/> when the entity has to be described as a whole: nothing valid is kept, there is no checkpoint at or before the
-    /// first of these modules, or a module's state has another length than it had (an optional field appeared or went).
-    /// </summary>
-    private bool TryRehashModules(Entity entity, ulong modules, ref int count)
-    {
-        var cache = entity.HashCache ??= new EntityHashCache(entity.ModuleArray.Length);
-        var first = System.Numerics.BitOperations.TrailingZeroCount(modules);
-        if (!cache.Valid || cache.CheckpointModule < 0 || cache.CheckpointModule > first || cache.Glue is not { } glue)
-        {
-            // Taking a checkpoint costs a whole description plus a fold of its front part. An entity that is described as a whole again before the checkpoint was used once
-            // (it changes as a whole about as often as in single modules) sits out a growing number of module-only ticks with plain whole descriptions.
-            if (cache.Skip > 0)
-            {
-                cache.Skip--;
-                return false;
-            }
-            if (cache.Taken && !cache.Used)
-            {
-                cache.Taken = false;
-                cache.Backoff = Math.Min(64, cache.Backoff * 2 + 1);
-                cache.Skip = cache.Backoff - 1;
-                return false;
-            }
-            if (cache.Used) cache.Backoff = 0;
-            cache.Used = false;
-            // The whole description that follows takes the checkpoint.
-            cache.WantedCheckpoint = first;
-            return false;
-        }
-        cache.Used = true;
-        var state = _moduleWords;
-        var changed = false;
-        for (var index = first; modules >> index != 0; index++)
-        {
-            if ((modules >> index & 1) == 0) continue;
-            state.Reset();
-            entity.ModuleArray[index].Describe(state);
-            if (state.Count != cache.StateLength[index])
-            {
-                cache.WantedCheckpoint = cache.CheckpointModule;
-                return false;
-            }
-            var kept = cache.States.AsSpan(cache.StateStart[index], state.Count);
-            if (state.Words.SequenceEqual(kept)) continue;
-            state.Words.CopyTo(kept);
-            changed = true;
-        }
-        _hashedModuleEntities++;
-        if (!changed)
-        {
-            // The update changed nothing at all (it was woken where it would have been anyway).
-            _hashedEntities++;
-            _hashedUnchanged++;
-            return true;
-        }
-        var words = _entityWords;
-        for (var index = cache.CheckpointModule; index < cache.StateStart.Length; index++)
-        {
-            words.Append(cache.States.AsSpan(cache.StateStart[index], cache.StateLength[index]));
-            words.Append(glue.Words.AsSpan(glue.Start[index], glue.Length[index]));
-        }
-        _hashBatch[count] = entity;
-        _hashBatchSeeds[count] = cache.CheckpointHash;
-        _hashBatchEnds[count++] = words.Count;
-        return true;
     }
 
     /// <summary>
@@ -1977,7 +1829,7 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         var words = _entityWords;
         var hashes = _hashBatchValues.AsSpan(0, count);
-        State.StateHash.FoldStreams(words.Words, _hashBatchEnds.AsSpan(0, count), _hashBatchSeeds.AsSpan(0, count), hashes);
+        State.StateHash.FoldStreams(words.Words, _hashBatchEnds.AsSpan(0, count), hashes);
         for (var index = 0; index < hashes.Length; index++)
         {
             var entity = _hashBatch[index];
@@ -1997,7 +1849,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// What the incremental hash has done since the world was created, for a measuring tool: entities described again, words folded for them, and how many of those entities
     /// came out with the hash they already had (touched without a change the hash sees). Not part of the state: neither hashed nor saved.
     /// </summary>
-    public HashWork HashWorkDone => new(_hashedEntities, _hashedWords, _hashedUnchanged, _hashedModuleEntities);
+    public HashWork HashWorkDone => new(_hashedEntities, _hashedWords, _hashedUnchanged);
 
     /// <summary>Recomputes every hash from scratch (verification, snapshot integrity). Also refreshes the incremental caches.</summary>
     public ulong ComputeFullHash()
@@ -2010,15 +1862,7 @@ public sealed partial class SimulationWorld : IWorldServices
             entity.CachedHash = hash;
             entity.Dirty = false;
         }
-        // The words kept for an entity that was waiting to be described are older than the hash it has now.
-        foreach (var entity in _dirty) entity.HashCache?.Invalidate();
-        foreach (var entity in _moduleDirty)
-        {
-            entity.DirtyModules = 0;
-            entity.HashCache?.Invalidate();
-        }
         _dirty.Clear();
-        _moduleDirty.Clear();
         _entitySum = entitySum;
         ulong timerSum = 0;
         foreach (var timer in _timerById.Values) timerSum = unchecked(timerSum + HashTimer(timer));
@@ -2037,19 +1881,7 @@ public sealed partial class SimulationWorld : IWorldServices
         // Name the entities whose cached hash is stale before the full recomputation refreshes the caches: they changed without MarkDirty.
         List<string>? stale = null;
         foreach (var entity in _entities.Values)
-        {
             if (HashEntity(entity) != entity.CachedHash) (stale ??= []).Add(Scripting.InvariantText.Format($"{entity.Id.Value} {entity.Template.Name}"));
-            if (entity.HashCache is not { Valid: true } cache) continue;
-            // The kept words must be the entity's description: a module that vouched for "only my own state changed" and changed more leaves them behind.
-            var fresh = _moduleWords;
-            fresh.Reset();
-            fresh.Marks = cache.Marks;
-            fresh.MarkCount = 0;
-            entity.Describe(fresh);
-            fresh.Marks = null;
-            if (!cache.Matches(fresh.Words, fresh.MarkCount))
-                throw new InvalidOperationException(Scripting.InvariantText.Format($"The words kept for entity {entity.Id.Value} {entity.Template.Name} differ from its description at tick {_tick}: a module reported an own-state-only change and changed more."));
-        }
         var full = ComputeFullHash();
         if (full == incremental) return;
         var cause = stale is null ? "no entity is stale: timers, commands or global state"

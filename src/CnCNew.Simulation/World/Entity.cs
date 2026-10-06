@@ -180,12 +180,6 @@ public sealed class Entity
     internal List<Timers.SimTimer>? Timers { get; set; }
     internal bool Registered { get; set; }
     internal bool Dirty { get; set; }
-
-    /// <summary>Modules (bit = module index) whose own state alone changed since the last hash; only <c>SimulationWorld.MarkModuleDirty</c> sets it. Hash bookkeeping, not state.</summary>
-    internal ulong DirtyModules { get; set; }
-
-    /// <summary>The words of this entity's last description, kept once a module reported an own-state-only change. Hash bookkeeping, not state.</summary>
-    internal EntityHashCache? HashCache { get; set; }
     internal ulong CachedHash { get; set; }
 
     public bool HasStatus(int bit) => (Status & (1UL << bit)) != 0;
@@ -269,9 +263,7 @@ public sealed class Entity
         {
             if (words is not null && module.FrameWords is { } frame) words.Append(frame);
             else DescribeModuleFrame(writer, module);
-            words?.Mark();
             module.Describe(writer);
-            words?.Mark();
             writer.EndObject();
             writer.EndObject();
         }
