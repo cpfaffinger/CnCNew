@@ -12,6 +12,7 @@ const string Usage = """
       terrain-audit <content-dir> [--map <virtual map path>]   Terrain render data, atlas and GPU memory of every retail map.
       scenario-audit <content-dir> [--name NAME] [--every N] [--ticks N]   Runs a staged demo (capture-building, tank-duel, jet-strafe) headless and checks what it is meant to show; without --name lists them.
       road-audit <content-dir> [--map <virtual map path>]      Road layout (segments, curves, tees, crossings, joins), templates and textures of every retail map.
+      sync-perf <content-dir> --map <virtual map path> (--players N | --factions A,B,..) [--ticks N] [--hud] [--digest] [--json FILE] [--label TEXT]   Cost of the game layer per simulation tick (LiveGame.SyncAfterTick and its parts, the projection), headless with computer players (docs/PERF-GAME-LAYER.md).
     """;
 
 if (args.Length == 0)
@@ -31,6 +32,7 @@ try
         case "terrain-audit": return CnCNew.PresentationTool.TerrainAudit.Run(args[1..]);
         case "scenario-audit": return CnCNew.PresentationTool.ScenarioAudit.Run(args[1..]);
         case "road-audit": return CnCNew.PresentationTool.RoadAudit.Run(args[1..]);
+        case "sync-perf": return CnCNew.PresentationTool.SyncPerfCommand.Run(args[1..]);
         default:
             Console.Error.WriteLine(Usage);
             return 2;

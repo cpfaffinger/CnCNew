@@ -84,6 +84,9 @@ public sealed class FrameProjector
             .ToImmutableDictionary(group => group.Key, group => group.Select(item => item.Index).ToImmutableArray(), StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>A measuring tool's hook into <see cref="Advance"/> (told where its parts begin and end); null in the game.</summary>
+    public IPresentationPhaseObserver? PhaseObserver { get; set; }
+
     /// <summary>The last simulated tick captured (-1 before the first <see cref="Advance"/>).</summary>
     public long Tick { get; private set; } = -1;
 
@@ -146,7 +149,11 @@ public sealed class FrameProjector
         Tick = world.Tick - 1;
         _flashes.Advance(Tick);
 
+        var observer = PhaseObserver;
+        observer?.PhaseStarted(PresentationPhase.ProjectorAdvanceVisibleEntities);
         var entities = _options.Viewer is { } viewer ? world.EntitiesVisibleTo(viewer) : [..world.Entities.OrderBy(entity => entity.Id.Value)];
+        observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceVisibleEntities);
+        observer?.PhaseStarted(PresentationPhase.ProjectorAdvanceCapture);
         var ordered = ImmutableArray.CreateBuilder<Capture>(entities.Count);
         foreach (var entity in entities)
         {
@@ -159,6 +166,7 @@ public sealed class FrameProjector
             if (_known.Add(entity.Id.Value)) Claim(capture);
         }
         _currentOrdered = ordered.ToImmutable();
+        observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceCapture);
         if (world.Tick % 150 == 0)
         {
             _turrets.Prune(id => world.FindEntity(new EntityId(id)) is not null);
@@ -170,8 +178,12 @@ public sealed class FrameProjector
         }
         if (_options.Viewer is { } fogViewer)
         {
+            observer?.PhaseStarted(PresentationPhase.ProjectorAdvanceGhosts);
             UpdateGhosts(world, fogViewer);
+            observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceGhosts);
+            observer?.PhaseStarted(PresentationPhase.ProjectorAdvanceScenery);
             UpdateSceneryExploration(world, fogViewer);
+            observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceScenery);
         }
     }
 
