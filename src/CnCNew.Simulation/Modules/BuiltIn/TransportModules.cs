@@ -42,7 +42,7 @@ public sealed class TransportAIUpdate(AIUpdateData data) : AIUpdateInterface(dat
 /// <summary><c>ChinookAIUpdateModuleData</c>: the supply-truck fields plus the rappel and rope settings of the combat drop (typed, the drop is not simulated).</summary>
 public sealed record ChinookData(SupplyCarrierData Carrier) : ModuleData
 {
-    public static ChinookData Parse(ModuleConfiguration configuration) => new(SupplyCarrierData.Parse(configuration));
+    public static ChinookData Parse(RatedModuleConfiguration configuration) => new(SupplyCarrierData.Parse(configuration));
 }
 
 /// <summary>
@@ -114,19 +114,18 @@ public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrb
     string OclEjectPilot, string FxBlade, string OclBlade, string FxHitGround, string OclHitGround, string FxFinalBlowUp, string OclFinalBlowUp,
     Fixed DelayFromGroundToFinalDeath, string FinalRubbleObject) : ModuleData
 {
-    private static readonly Fixed FramesPerSecond = Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
-
-    public static HelicopterSlowDeathData Parse(ModuleConfiguration configuration)
+    public static HelicopterSlowDeathData Parse(RatedModuleConfiguration configuration)
     {
         Fixed Real(string name, Fixed fallback) => ModuleConfigReader.Real(configuration, name, fallback);
         Fixed Radians(string name) => SimulationTiming.DegreesToRadians(Real(name, Fixed.Zero).ToDecimal());
+        var ticksPerSecond = configuration.Time.TicksPerSecondFixed;
         return new HelicopterSlowDeathData(
             SlowDeathData.Parse(configuration),
-            Radians("SpiralOrbitTurnRate") / FramesPerSecond,
-            Real("SpiralOrbitForwardSpeed", Fixed.Zero) / FramesPerSecond,
+            Radians("SpiralOrbitTurnRate") / ticksPerSecond,
+            Real("SpiralOrbitForwardSpeed", Fixed.Zero) / ticksPerSecond,
             Real("SpiralOrbitForwardSpeedDamping", Fixed.One),
-            Radians("MinSelfSpin") / FramesPerSecond,
-            Radians("MaxSelfSpin") / FramesPerSecond,
+            Radians("MinSelfSpin") / ticksPerSecond,
+            Radians("MaxSelfSpin") / ticksPerSecond,
             FixedTicks(configuration, "SelfSpinUpdateDelay"),
             Radians("SelfSpinUpdateAmount"),
             Real("FallHowFast", Fixed.Zero),
@@ -144,9 +143,9 @@ public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrb
     }
 
     /// <summary><c>INI::parseDurationReal</c>: milliseconds to unrounded ticks.</summary>
-    private static Fixed FixedTicks(ModuleConfiguration configuration, string name)
+    private static Fixed FixedTicks(RatedModuleConfiguration configuration, string name)
         => ModuleConfigReader.Find(configuration, name)?.Value.Value is Data.Definitions.GameTime time
-            ? SimulationTiming.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero;
+            ? configuration.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero;
 }
 
 /// <summary>
@@ -215,7 +214,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
             Entity.Angle = FixedTrig.Normalize(Entity.Angle + _selfSpin);
             if (data.SelfSpinUpdateDelay > Fixed.Zero && Fixed.FromInt(world.Tick - _lastSelfSpinUpdate) > data.SelfSpinUpdateDelay)
             {
-                var change = data.SelfSpinUpdateAmount / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+                var change = data.SelfSpinUpdateAmount / world.Time.TicksPerSecondFixed;
                 if (_selfSpinTowardsMax)
                 {
                     _selfSpin += change;
@@ -312,7 +311,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
 /// is refused explicitly, the nested creation at construction time is not modeled) + <c>ShouldDrawPips</c> (UI).</summary>
 public sealed record HelixContainData(TransportContainData Transport) : ModuleData
 {
-    public static HelixContainData Parse(ModuleConfiguration configuration)
+    public static HelixContainData Parse(RatedModuleConfiguration configuration)
     {
         if (ModuleConfigReader.All(configuration, "PayloadTemplateName").Any()) throw new UnsupportedModuleConfigurationException("PayloadTemplateName");
         return new HelixContainData(TransportContainData.Parse(configuration));
@@ -414,9 +413,9 @@ public sealed class HelixContain(HelixContainData data) : TransportContain(data.
 /// <summary><c>TunnelContainModuleData</c>: the die filter and <c>TimeForFullHeal</c> (<c>parseDurationReal</c>, unrounded ticks). The shared <c>OpenContain</c> fields are typed; the capacity is <c>MaxTunnelCapacity</c> of <c>GameData.ini</c>.</summary>
 public sealed record TunnelContainData(DieMuxData DieMux, Fixed TicksForFullHeal) : ModuleData
 {
-    public static TunnelContainData Parse(ModuleConfiguration configuration) => new(
+    public static TunnelContainData Parse(RatedModuleConfiguration configuration) => new(
         DieMuxData.Parse(configuration),
-        ModuleConfigReader.Find(configuration, "TimeForFullHeal")?.Value.Value is Data.Definitions.GameTime time ? SimulationTiming.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero);
+        ModuleConfigReader.Find(configuration, "TimeForFullHeal")?.Value.Value is Data.Definitions.GameTime time ? configuration.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero);
 }
 
 /// <summary>

@@ -27,6 +27,7 @@ static partial class Tests
     private const string RuleFloatConversion = "conversion of a floating-point number outside the checked routine";
     private const string RuleDirtyFlag = "dirty flag set without MarkDirty";
     private const string RulePlatformText = "platform line end or path separator";
+    private const string RuleFixedTickRate = "hard-coded tick rate";
 
     private static readonly SourceRule[] CommonRules =
     [
@@ -67,6 +68,10 @@ static partial class Tests
         // The flag alone does not put the entity into the world's dirty list, and it makes every later MarkDirty return early: the cached hash stays stale
         // until something recomputes the full hash (D8, found on MD_GLA05).
         new(RuleDirtyFlag, new Regex(@"\bDirty\s*=\s*true")),
+        // Phase 20: the tick rate is a value of the world. The former constant must not come back, and nothing converts with the static class any more:
+        // every conversion that depends on the rate goes through the time service (world.Time, configuration.Time). Stage 2 of the phase extends this rule
+        // to bare tick literals (docs/TICKRATE-MIGRATION.md).
+        new(RuleFixedTickRate, new Regex(@"\bLogicFramesPerSecond\b|\bSimulationTiming\.(DurationMillisecondsTo\w+|SecondsToTicks|PerSecond\w+|DegreesPerSecond\w+)\(")),
     ];
 
     /// <summary>

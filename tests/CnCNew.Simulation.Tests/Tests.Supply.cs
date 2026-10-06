@@ -8,6 +8,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -235,7 +236,7 @@ static partial class Tests
 
     private static SimulationWorld SupplyWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(files: SupplyFiles());
+        fixture = new SyntheticFixture(SimulationRate.Original, files: SupplyFiles());
         var world = NewWorld(fixture);
         feeder = new Feeder(world);
         return world;
@@ -471,7 +472,7 @@ static partial class Tests
     /// <summary>Unsupported SpawnBehavior configurations keep the object out of the simulation with a named missing module.</summary>
     public static void SpawnBehaviorUnsupportedConfiguration()
     {
-        var fixture = new SyntheticFixture(files: SupplyFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: SupplyFiles());
         Check.That(fixture.Templates.TryGet("Colony", out var colony) && !colony.IsInstantiable && colony.MissingModules.Contains("SpawnBehavior[CanReclaimOrphans]"), "CanReclaimOrphans is reported as a missing feature.");
         Check.That(fixture.Templates.TryGet("Hive", out var hive) && hive.IsInstantiable && fixture.Templates.TryGet("Hauler", out var hauler) && hauler.IsInstantiable, "Supported spawners and haulers are instantiable.");
     }

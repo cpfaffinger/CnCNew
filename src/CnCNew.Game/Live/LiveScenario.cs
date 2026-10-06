@@ -9,6 +9,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Game.Live;
@@ -178,7 +179,7 @@ public sealed class LiveScenario : LiveGame
         var players = ImmutableArray.Create(
             new PlayerConfiguration(new PlayerId(1), scenario.HumanFaction, scenario.HumanFaction),
             new PlayerConfiguration(new PlayerId(2), scenario.OpponentFaction, scenario.OpponentFaction, 0, true));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1u, players, "demo-scenario", data.Fingerprint, terrain.Fingerprint), data.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), data.Templates.Rate, 1u, players, "demo-scenario", data.Fingerprint, terrain.Fingerprint), data.Templates, terrain);
         var live = new LiveScenario(data, scenario, world, map, terrain, players, viewport, anchor);
         live.Populate();
         return live;

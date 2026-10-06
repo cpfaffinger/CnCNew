@@ -11,6 +11,7 @@ using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
@@ -219,7 +220,7 @@ static partial class Tests
 
     public static void HashWorkOnTheSyntheticFixture()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var hasher = new HashStateWriter();
         var words = new WordStateWriter();
 
@@ -298,7 +299,7 @@ static partial class Tests
     /// </summary>
     public static void DetectionFromAnotherEntitysUpdateIsMarked()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture, 5);
         new Feeder(world).Spawn(2, "Cloaked", x: 10, y: 0);
         for (var tick = 0; tick < 5; tick++) world.Step();
@@ -315,10 +316,10 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "P1"));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 77, players, "shipped-objects", fingerprint), catalog);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 77, players, "shipped-objects", fingerprint), catalog);
         var watch = new UpdateChangeWatch(world);
         world.PhaseObserver = watch;
         var sequence = 0UL;

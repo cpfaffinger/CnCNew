@@ -6,6 +6,7 @@ using CnCNew.Data.Registry;
 using CnCNew.Data.Snapshots;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.Testing;
 
@@ -153,18 +154,22 @@ public sealed class SyntheticFixture
         """,
     };
 
-    public SyntheticFixture(ModuleBindingTable? bindings = null, IReadOnlyDictionary<string, string>? files = null)
+    /// <param name="rate">The tick rate the catalog is built for; worlds created from this fixture must be configured for the same rate.</param>
+    public SyntheticFixture(SimulationRate rate, ModuleBindingTable? bindings = null, IReadOnlyDictionary<string, string>? files = null)
     {
         Bindings = bindings ?? ModuleBindingTable.Default;
         Graph = DefinitionCompiler.Compile(new InMemoryDefinitionSource(files ?? Files), Bindings.Registry,
             DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, StrictReferences = true });
-        (Fingerprint, _) = DefinitionSnapshotWriter.ComputeFingerprint(Graph);
-        Templates = TemplateCatalog.Build(Graph, Bindings);
+        Fingerprint = rate.Combine(DefinitionSnapshotWriter.ComputeFingerprint(Graph).Sha256);
+        Templates = TemplateCatalog.Build(Graph, Bindings, rate);
     }
 
     public ModuleBindingTable Bindings { get; }
     public CompiledDefinitionGraph Graph { get; }
     public string Fingerprint { get; }
     public TemplateCatalog Templates { get; }
+
+    /// <summary>The tick rate <see cref="Templates"/> was built for.</summary>
+    public SimulationRate Rate => Templates.Rate;
 
 }

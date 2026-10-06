@@ -31,7 +31,7 @@ internal static class VehicleModules
 /// <summary><c>UndeadBodyModuleData</c> (<c>UndeadBody.cpp</c>): an <c>ActiveBody</c> plus the maximum health of the second life.</summary>
 public sealed record UndeadBodyData(BodyData Body, Fixed SecondLifeMaxHealth) : ModuleData
 {
-    public static UndeadBodyData Parse(ModuleConfiguration configuration) => new(BodyData.Parse(configuration), ModuleConfigReader.Real(configuration, "SecondLifeMaxHealth", Fixed.One));
+    public static UndeadBodyData Parse(RatedModuleConfiguration configuration) => new(BodyData.Parse(configuration), ModuleConfigReader.Real(configuration, "SecondLifeMaxHealth", Fixed.One));
 }
 
 /// <summary>
@@ -103,11 +103,11 @@ public sealed class UndeadBody(UndeadBodyData data) : ActiveBody(data.Body, "Und
 /// </summary>
 public sealed record BattleBusData(SlowDeathData Base, string FxStartUndeath, string OclStartUndeath, string FxHitGround, string OclHitGround, Fixed ThrowForce, Fixed PercentDamageToPassengers, long EmptyHulkDelayTicks) : ModuleData
 {
-    public static BattleBusData Parse(ModuleConfiguration configuration) => new(
+    public static BattleBusData Parse(RatedModuleConfiguration configuration) => new(
         SlowDeathData.Parse(configuration),
         ModuleConfigReader.Text(configuration, "FXStartUndeath"), ModuleConfigReader.Text(configuration, "OCLStartUndeath"),
         ModuleConfigReader.Text(configuration, "FXHitGround"), ModuleConfigReader.Text(configuration, "OCLHitGround"),
-        ModuleConfigReader.Real(configuration, "ThrowForce", Fixed.One), ModuleConfigReader.Real(configuration, "PercentDamageToPassengers", Fixed.Zero),
+        configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "ThrowForce", Fixed.One)), ModuleConfigReader.Real(configuration, "PercentDamageToPassengers", Fixed.Zero),
         ModuleConfigReader.Ticks(configuration, "EmptyHulkDestructionDelay", 0));
 }
 
@@ -266,7 +266,7 @@ public sealed class SubObjectsUpgrade(ModelConditionUpgradeData data) : UpgradeM
 /// <summary><c>AnimationSteeringUpdateModuleData</c>: <c>MinTransitionTime</c> (the reference's <c>m_transitionFrames</c>, a duration in whole ticks, default 0) is how long each turn animation state is held.</summary>
 public sealed record AnimationSteeringData(long MinTransitionTicks) : ModuleData
 {
-    public static AnimationSteeringData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "MinTransitionTime", 0));
+    public static AnimationSteeringData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "MinTransitionTime", 0));
 }
 
 /// <summary>

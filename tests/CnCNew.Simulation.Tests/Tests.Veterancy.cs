@@ -7,6 +7,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -153,7 +154,7 @@ static partial class Tests
 
     private static SimulationWorld VeterancyWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(files: VeterancyFiles());
+        fixture = new SyntheticFixture(SimulationRate.Original, files: VeterancyFiles());
         var world = NewWorld(fixture);
         feeder = new Feeder(world);
         return world;
@@ -452,8 +453,8 @@ static partial class Tests
     /// </summary>
     public static void VeterancyArmorAndWeaponSetSelection()
     {
-        var fixture = new SyntheticFixture(files: VeteranSetFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: VeteranSetFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Promotable", x: 0, y: 0);
         feeder.Spawn(1, "VeteranDummy", x: 40, y: 0);

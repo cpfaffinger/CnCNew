@@ -66,7 +66,7 @@ public sealed class BaseRegenerateUpdate : SimModule, IUpdateModule, IDamageModu
         if (Entity.HasStatus(SoldBit)) return SimulationTiming.SleepForever;
         var body = Entity.Body;
         if (body is null || body.MaxHealth == body.Health) return SimulationTiming.SleepForever;
-        var amount = body.MaxHealth * world.BaseRegenHealthPercentPerSecond * Fixed.FromInt(HealRate) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+        var amount = body.MaxHealth * world.BaseRegenHealthPercentPerSecond * Fixed.FromInt(HealRate) / world.Time.TicksPerSecondFixed;
         world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
         return HealRate;
     }

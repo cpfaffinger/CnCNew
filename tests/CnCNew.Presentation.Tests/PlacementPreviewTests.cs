@@ -5,6 +5,7 @@ using CnCNew.Presentation.Input;
 using CnCNew.Presentation.Objects;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 using static CnCNew.Presentation.Tests.TestHarness;
 
@@ -73,7 +74,7 @@ internal static class PlacementPreviewTests
         return t.Failures;
     }
 
-    private static ObjectVisualCatalog Catalog() => ObjectVisualCatalog.Build(new SyntheticFixture(files: Files()).Graph);
+    private static ObjectVisualCatalog Catalog() => ObjectVisualCatalog.Build(new SyntheticFixture(SimulationRate.Original, files: Files()).Graph);
 
     private static PlacementGhost Ghost(string template, bool valid = true, float angle = 0.5f, PlacementIssue reason = PlacementIssue.None)
         => new(template, new Vector3(120f, 80f, 7f), angle, valid, valid ? PlacementIssue.None : reason == PlacementIssue.None ? PlacementIssue.BlockedFootprint : reason, false);

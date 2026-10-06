@@ -71,8 +71,8 @@ public readonly record struct MissionPostEffects(float BlackWhite, int MotionBlu
 /// </summary>
 public sealed class MissionPresentationDirector
 {
-    private const long DefaultPlaceholderTicks = 3 * SimulationTiming.LogicFramesPerSecond;
-    private const long RadarBlipLifetimeTicks = 8 * SimulationTiming.LogicFramesPerSecond;
+    private const long DefaultPlaceholderTicks = 3 * SimulationRate.OriginalFramesPerSecond;
+    private const long RadarBlipLifetimeTicks = 8 * SimulationRate.OriginalFramesPerSecond;
     private const string CameraKey = "<camera>";
     private const int JournalCapacity = 4000;
 
@@ -770,7 +770,7 @@ public sealed class MissionPresentationDirector
             {
                 // cameraModFinalZoom/Pitch change where the move in progress ends; here they reach their value together with that move.
                 if (!Number(output, 0, out var factor)) { Problem(action, "value argument missing"); return; }
-                var seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)SimulationTiming.LogicFramesPerSecond);
+                var seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)SimulationRate.OriginalFramesPerSecond);
                 if (action == "CAMERA_MOD_SET_FINAL_ZOOM") _zoomRequest = (factor, seconds);
                 else _pitchRequest = (factor, seconds);
                 Handled(action, Channel.Camera);
@@ -788,7 +788,7 @@ public sealed class MissionPresentationDirector
                     _cameraPending = true;
                     _cameraCompletesAtTick = tick + DurationTicks(seconds);
                 }
-                else seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)SimulationTiming.LogicFramesPerSecond);
+                else seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)SimulationRate.OriginalFramesPerSecond);
                 _lookRequest = (new Vector2(lookAt.X, lookAt.Y), seconds);
                 Handled(action, Channel.Camera);
                 return;
@@ -907,7 +907,7 @@ public sealed class MissionPresentationDirector
                 if (output.Arguments.Length < 3) { Problem(action, "arguments missing"); return; }
                 if (!MissionTextOverlay.TryParseCinematicFont(output.Arguments[1], out var font, out var fontProblem)) { Problem(action, fontProblem); return; }
                 if (!Number(output, 2, out var seconds)) { Problem(action, "duration missing"); return; }
-                _cinematic = new CinematicTextState(ResolveLabel(action, output.Arguments[0]), font, tick + (long)seconds * SimulationTiming.LogicFramesPerSecond);
+                _cinematic = new CinematicTextState(ResolveLabel(action, output.Arguments[0]), font, tick + (long)seconds * SimulationRate.OriginalFramesPerSecond);
                 Handled(action, Channel.Overlay);
                 return;
             }
@@ -1302,7 +1302,7 @@ public sealed class MissionPresentationDirector
         return lines.ToImmutable();
     }
 
-    private static long DurationTicks(double seconds) => Math.Max(0, (long)Math.Round(seconds * SimulationTiming.LogicFramesPerSecond));
+    private static long DurationTicks(double seconds) => Math.Max(0, (long)Math.Round(seconds * SimulationRate.OriginalFramesPerSecond));
 
     /// <summary>The text of a CSF label; a label the host cannot resolve comes back unchanged and is counted as a problem, so the screen shows the label and the report says why.</summary>
     private string ResolveLabel(string action, string label)

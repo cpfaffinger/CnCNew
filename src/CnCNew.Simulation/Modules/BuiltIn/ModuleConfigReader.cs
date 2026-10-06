@@ -9,18 +9,18 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// <summary>Typed accessors over a compiled module configuration. Absent optional fields use the reference constructor default, stated at each call.</summary>
 internal static class ModuleConfigReader
 {
-    public static DefinitionField? Find(ModuleConfiguration configuration, string name)
+    public static DefinitionField? Find(RatedModuleConfiguration configuration, string name)
         => configuration.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Every occurrence of an accumulating key, in file order (<c>UpgradeOCL</c>, <c>UpgradeMoneyAmount</c>).</summary>
-    public static IEnumerable<DefinitionField> All(ModuleConfiguration configuration, string name)
+    public static IEnumerable<DefinitionField> All(RatedModuleConfiguration configuration, string name)
         => configuration.Fields.Where(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The <c>SCIENCE VALUE</c> pairs of an accumulating two-token key.</summary>
-    public static ImmutableArray<(string First, string Second)> Pairs(ModuleConfiguration configuration, string name)
+    public static ImmutableArray<(string First, string Second)> Pairs(RatedModuleConfiguration configuration, string name)
         => [..All(configuration, name).Select(field => field.Value.Value is ImmutableArray<string> { Length: 2 } tokens ? (tokens[0], tokens[1]) : throw Unexpected(configuration, field))];
 
-    public static Fixed Real(ModuleConfiguration configuration, string name, Fixed fallback)
+    public static Fixed Real(RatedModuleConfiguration configuration, string name, Fixed fallback)
     {
         var field = Find(configuration, name);
         if (field is null) return fallback;
@@ -36,15 +36,19 @@ internal static class ModuleConfigReader
         };
     }
 
-    /// <summary>A duration in milliseconds converted to whole ticks, rounded up (see <see cref="SimulationTiming"/>).</summary>
-    public static long Ticks(ModuleConfiguration configuration, string name, long fallback)
+    /// <summary>
+    /// A duration in milliseconds converted to whole ticks on the grid of the original (see <see cref="SimulationTime.DurationMillisecondsToTicks(long)"/>).
+    /// <paramref name="fallbackOriginalFrames"/> is the value of an absent key in logic frames of the original (the reference constructor default), never
+    /// in ticks: it is scaled like every other frame count.
+    /// </summary>
+    public static long Ticks(RatedModuleConfiguration configuration, string name, long fallbackOriginalFrames)
     {
         var field = Find(configuration, name);
-        if (field is null) return fallback;
-        return field.Value.Value is GameTime time ? SimulationTiming.DurationMillisecondsToTicks(time.Milliseconds) : throw Unexpected(configuration, field);
+        if (field is null) return configuration.Time.OriginalFrames(fallbackOriginalFrames);
+        return field.Value.Value is GameTime time ? configuration.Time.DurationMillisecondsToTicks(time.Milliseconds) : throw Unexpected(configuration, field);
     }
 
-    public static long Int(ModuleConfiguration configuration, string name, long fallback)
+    public static long Int(RatedModuleConfiguration configuration, string name, long fallback)
     {
         var field = Find(configuration, name);
         if (field is null) return fallback;
@@ -56,14 +60,14 @@ internal static class ModuleConfigReader
         };
     }
 
-    public static bool Bool(ModuleConfiguration configuration, string name, bool fallback)
+    public static bool Bool(RatedModuleConfiguration configuration, string name, bool fallback)
     {
         var field = Find(configuration, name);
         if (field is null) return fallback;
         return field.Value.Value is bool value ? value : throw Unexpected(configuration, field);
     }
 
-    public static string Text(ModuleConfiguration configuration, string name)
+    public static string Text(RatedModuleConfiguration configuration, string name)
     {
         var field = Find(configuration, name);
         if (field is null) return string.Empty;
@@ -76,7 +80,7 @@ internal static class ModuleConfigReader
         };
     }
 
-    public static ImmutableArray<string> Names(ModuleConfiguration configuration, string name)
+    public static ImmutableArray<string> Names(RatedModuleConfiguration configuration, string name)
     {
         var field = Find(configuration, name);
         if (field is null) return [];
@@ -92,7 +96,7 @@ internal static class ModuleConfigReader
     }
 
     /// <summary>The names of every occurrence of an accumulating reference key, in file order.</summary>
-    public static ImmutableArray<string> AccumulatedNames(ModuleConfiguration configuration, string name)
+    public static ImmutableArray<string> AccumulatedNames(RatedModuleConfiguration configuration, string name)
         => [..All(configuration, name).SelectMany(field => field.Value.Value switch
         {
             DefinitionReference { IsNone: true } => [],
@@ -101,7 +105,7 @@ internal static class ModuleConfigReader
             _ => throw Unexpected(configuration, field),
         })];
 
-    public static Point3 Vector(ModuleConfiguration configuration, string name)
+    public static Point3 Vector(RatedModuleConfiguration configuration, string name)
     {
         var field = Find(configuration, name);
         if (field is null) return default;
@@ -110,9 +114,9 @@ internal static class ModuleConfigReader
             : throw Unexpected(configuration, field);
     }
 
-    public static FlagsValue? Flags(ModuleConfiguration configuration, string name)
+    public static FlagsValue? Flags(RatedModuleConfiguration configuration, string name)
         => Find(configuration, name)?.Value.Value as FlagsValue;
 
-    private static InvalidDataException Unexpected(ModuleConfiguration configuration, DefinitionField field)
+    private static InvalidDataException Unexpected(RatedModuleConfiguration configuration, DefinitionField field)
         => new($"{field.Location.Source}({field.Location.Line}): field '{field.Name}' of module '{configuration.Name}' has an unexpected value kind {field.Value.Kind}.");
 }

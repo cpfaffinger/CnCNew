@@ -131,7 +131,7 @@ public sealed class ReferenceMatchScenario
         Players = [..factions.Select((participant, index) => new PlayerConfiguration(new PlayerId(index + 1), participant.Faction.Name, participant.Faction.Name, IsComputer: true))];
         _sequence = new ulong[Players.Length + 1];
         _sides = [..factions.Select(participant => participant.Side)];
-        var provisional = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, SimulationTiming.LogicFramesPerSecond, fingerprint,
+        var provisional = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, catalog.Rate.TicksPerSecond, fingerprint,
             FixtureId, _options.WorldSeed, new WorldId(1), Players, _options.MaxTicks, _options.CheckpointInterval);
         var world = ReplayRunner.CreateWorld(provisional, catalog);
         SpawnStartingObjects(world, catalog, factions);

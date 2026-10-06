@@ -29,7 +29,7 @@ internal static class HackerAndAssaultModules
 public sealed record HackInternetData(AIUpdateData Base, long UnpackTicks, long PackTicks, Fixed VariationFactor, long CashDelayTicks, long CashDelayFastTicks,
     int RegularCash, int VeteranCash, int EliteCash, int HeroicCash, int XpPerCash) : ModuleData
 {
-    public static HackInternetData Parse(ModuleConfiguration configuration) => new(
+    public static HackInternetData Parse(RatedModuleConfiguration configuration) => new(
         AIUpdateData.Parse(configuration),
         ModuleConfigReader.Ticks(configuration, "UnpackTime", 0), ModuleConfigReader.Ticks(configuration, "PackTime", 0),
         ModuleConfigReader.Real(configuration, "PackUnpackVariationFactor", Fixed.Zero),
@@ -212,7 +212,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
 /// <summary><c>AssaultTransportAIUpdateModuleData</c> (<c>AssaultTransportAIUpdate.h</c>): the life ratio below which a member counts as wounded (default 0) and <c>ClearRangeRequiredToContinueAttackMove</c> (default 50, used by the attack-move order that does not exist here).</summary>
 public sealed record AssaultTransportData(AIUpdateData Base, Fixed MembersGetHealedAtLifeRatio, Fixed ClearRangeRequiredToContinueAttackMove) : ModuleData
 {
-    public static AssaultTransportData Parse(ModuleConfiguration configuration) => new(
+    public static AssaultTransportData Parse(RatedModuleConfiguration configuration) => new(
         AIUpdateData.Parse(configuration),
         ModuleConfigReader.Real(configuration, "MembersGetHealedAtLifeRatio", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "ClearRangeRequiredToContinueAttackMove", Fixed.FromInt(50)));

@@ -34,7 +34,7 @@ public static class WorldSnapshot
             writer.BeginObject(null);
             writer.Text("format", Format);
             writer.Int("version", Version);
-            writer.Int("tickRate", SimulationTiming.LogicFramesPerSecond);
+            writer.Int("tickRate", world.Rate.TicksPerSecond);
             writer.Text("definitionFingerprint", world.Configuration.DefinitionFingerprint);
             writer.Text("fixture", world.Configuration.FixtureId);
             writer.Text("terrainFingerprint", world.Configuration.TerrainFingerprint);
@@ -54,7 +54,23 @@ public static class WorldSnapshot
 
     public static string Sha256(ReadOnlySpan<byte> snapshot) => Convert.ToHexString(SHA256.HashData(snapshot));
 
-    /// <summary>Rebuilds a world from a snapshot. Throws <see cref="SnapshotFormatException"/> for any defect.</summary>
+    /// <summary>
+    /// The tick rate a snapshot was written at. An unsupported rate is refused; a supported one must be the rate <paramref name="templates"/> was built
+    /// for, because the state holds absolute ticks and per-tick values of that rate.
+    /// </summary>
+    internal static SimulationRate ReadRate(JsonStateReader root, TemplateCatalog templates)
+    {
+        var stored = root.Int("tickRate");
+        if (!SimulationRate.IsSupported(stored)) throw new SnapshotFormatException($"Unsupported tick rate {stored} Hz (supported: 30, 60, 120).");
+        var rate = SimulationRate.FromTicksPerSecond(stored);
+        if (rate != templates.Rate) throw new SnapshotFormatException($"The snapshot was written at {rate}; the catalog was built for {templates.Rate}.");
+        return rate;
+    }
+
+    /// <summary>
+    /// Rebuilds a world from a snapshot, at the tick rate the snapshot was written at (<paramref name="templates"/> must be a catalog of that rate).
+    /// Throws <see cref="SnapshotFormatException"/> for any defect.
+    /// </summary>
     public static SimulationWorld Restore(ReadOnlySpan<byte> snapshot, TemplateCatalog templates, string expectedDefinitionFingerprint, TerrainMap? terrain = null)
     {
         ArgumentNullException.ThrowIfNull(templates);
@@ -64,7 +80,7 @@ public static class WorldSnapshot
             var root = new JsonStateReader(document.RootElement);
             if (root.Text("format") != Format) throw new SnapshotFormatException($"Not a {Format} document.");
             if (root.Int("version") != Version) throw new SnapshotFormatException($"Unsupported snapshot version {root.Int("version")} (expected {Version}).");
-            if (root.Int("tickRate") != SimulationTiming.LogicFramesPerSecond) throw new SnapshotFormatException("Tick rate mismatch.");
+            var rate = ReadRate(root, templates);
             if (root.Text("definitionFingerprint") != expectedDefinitionFingerprint)
                 throw new SnapshotFormatException("The snapshot was written for different definitions (fingerprint mismatch).");
 
@@ -75,7 +91,7 @@ public static class WorldSnapshot
                 var id = checked((int)player.Int("id"));
                 if (id != 0) players.Add(new PlayerConfiguration(new PlayerId(id), player.Text("name"), Team: checked((int)player.Int("team")), IsComputer: player.Bool("computer")));
             }
-            var configuration = new WorldConfiguration(new WorldId(checked((uint)root.UInt("worldId"))), checked((uint)root.UInt("seed")),
+            var configuration = new WorldConfiguration(new WorldId(checked((uint)root.UInt("worldId"))), rate, checked((uint)root.UInt("seed")),
                 players.ToImmutable(), root.Text("fixture"), root.Text("definitionFingerprint"), root.Text("terrainFingerprint"));
             if (!string.Equals(configuration.TerrainFingerprint, terrain?.Fingerprint ?? string.Empty, StringComparison.Ordinal))
                 throw new SnapshotFormatException("The snapshot was written for a different terrain (fingerprint mismatch).");

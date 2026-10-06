@@ -14,7 +14,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// </summary>
 public sealed record BodyData(Fixed MaxHealth, Fixed InitialHealth, Fixed SubdualDamageCap, long SubdualHealTicks, Fixed SubdualHealAmount) : ModuleData
 {
-    public static BodyData Parse(ModuleConfiguration configuration) => new(
+    public static BodyData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Real(configuration, "MaxHealth", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "InitialHealth", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "SubdualDamageCap", Fixed.Zero),

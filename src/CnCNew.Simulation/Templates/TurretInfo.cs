@@ -1,3 +1,4 @@
+using CnCNew.Simulation.Modules;
 using System.Collections.Immutable;
 using System.Globalization;
 using CnCNew.Data.Definitions;
@@ -73,7 +74,7 @@ public sealed class TurretSet
     /// Reads the <c>Turret</c>/<c>AltTurret</c> blocks of an object's modules; null when it has none. The blocks were compiled with <see cref="Data.Schema.TurretSchema"/>, so every field has its
     /// type; a block that appears twice for one turret (two AI modules) or a sweep line without a weapon slot is an error, never a guess.
     /// </summary>
-    public static TurretSet? Read(ImmutableArray<ModuleConfiguration> modules)
+    public static TurretSet? Read(ImmutableArray<ModuleConfiguration> modules, SimulationTime timing)
     {
         var turrets = new TurretInfo?[MaxTurrets];
         var linked = false;
@@ -87,17 +88,17 @@ public sealed class TurretSet
                     : section.Declaration.Trim().Equals("AltTurret", StringComparison.OrdinalIgnoreCase) ? 1 : -1;
                 if (index < 0) continue;
                 if (turrets[index] is not null) throw new InvalidDataException($"{section.Location.Source}({section.Location.Line}): {section.Declaration} is declared twice on one object.");
-                turrets[index] = ReadTurret(index, section);
+                turrets[index] = ReadTurret(index, section, timing);
                 found = true;
             }
 
-            if (found) linked |= ModuleConfigReader.Bool(module, "TurretsLinked", false);
+            if (found) linked |= ModuleConfigReader.Bool(new RatedModuleConfiguration(module, timing), "TurretsLinked", false);
         }
 
         return turrets[0] is null && turrets[1] is null ? null : new TurretSet([..turrets], linked);
     }
 
-    private static TurretInfo ReadTurret(int index, DefinitionSection section)
+    private static TurretInfo ReadTurret(int index, DefinitionSection section, SimulationTime timing)
     {
         DefinitionField? Find(string name) => section.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         InvalidDataException Unexpected(DefinitionField field) => new($"{field.Location.Source}({field.Location.Line}): turret field '{field.Name}' has an unexpected value kind {field.Value.Kind}.");
@@ -130,8 +131,8 @@ public sealed class TurretSet
         }
 
         var recenter = Find("RecenterTime") is { } recenterField
-            ? recenterField.Value.Value is GameTime time ? SimulationTiming.DurationMillisecondsToTicks(time.Milliseconds) : throw Unexpected(recenterField)
-            : 2 * SimulationTiming.LogicFramesPerSecond; // TurretAIData: m_recenterTime = 2*LOGICFRAMES_PER_SECOND
+            ? recenterField.Value.Value is GameTime time ? timing.DurationMillisecondsToTicks(time.Milliseconds) : throw Unexpected(recenterField)
+            : timing.OriginalFrames(2 * SimulationRate.OriginalFramesPerSecond); // TurretAIData: m_recenterTime = 2*LOGICFRAMES_PER_SECOND
 
         var slotsField = Find("ControlledWeaponSlots") ?? throw new InvalidDataException($"{section.Location.Source}({section.Location.Line}): {section.Declaration} lacks ControlledWeaponSlots.");
         if (slotsField.Value.Value is not FlagsValue slotNames) throw Unexpected(slotsField);
@@ -157,16 +158,16 @@ public sealed class TurretSet
         }
 
         var scanMinInterval = Find("MinIdleScanInterval") is { } minInterval
-            ? minInterval.Value.Value is GameTime minTime ? SimulationTiming.DurationMillisecondsToTicks(minTime.Milliseconds) : throw Unexpected(minInterval)
+            ? minInterval.Value.Value is GameTime minTime ? timing.DurationMillisecondsToTicks(minTime.Milliseconds) : throw Unexpected(minInterval)
             : TurretInfo.NeverScanTicks;
         var scanMaxInterval = Find("MaxIdleScanInterval") is { } maxInterval
-            ? maxInterval.Value.Value is GameTime maxTime ? SimulationTiming.DurationMillisecondsToTicks(maxTime.Milliseconds) : throw Unexpected(maxInterval)
+            ? maxInterval.Value.Value is GameTime maxTime ? timing.DurationMillisecondsToTicks(maxTime.Milliseconds) : throw Unexpected(maxInterval)
             : TurretInfo.NeverScanTicks;
 
         return new TurretInfo(
             index,
-            Find("TurretTurnRate") is null ? TurretInfo.DefaultRate : SimulationTiming.DegreesPerSecondToRadiansPerTick(Number("TurretTurnRate", 0m)),
-            Find("TurretPitchRate") is null ? TurretInfo.DefaultRate : SimulationTiming.DegreesPerSecondToRadiansPerTick(Number("TurretPitchRate", 0m)),
+            Find("TurretTurnRate") is null ? timing.PerOriginalFrameToPerTick(TurretInfo.DefaultRate) : timing.DegreesPerSecondToRadiansPerTick(Number("TurretTurnRate", 0m)),
+            Find("TurretPitchRate") is null ? timing.PerOriginalFrameToPerTick(TurretInfo.DefaultRate) : timing.DegreesPerSecondToRadiansPerTick(Number("TurretPitchRate", 0m)),
             SimulationTiming.DegreesToRadians(Degrees("NaturalTurretAngle")), SimulationTiming.DegreesToRadians(Degrees("NaturalTurretPitch")),
             SimulationTiming.DegreesToRadians(Degrees("FirePitch")), SimulationTiming.DegreesToRadians(Degrees("MinPhysicalPitch")), SimulationTiming.DegreesToRadians(Degrees("GroundUnitPitch")),
             mask, recenter, Bool("AllowsPitch"), Bool("InitiallyDisabled"), Bool("FiresWhileTurning"), [..sweepAngle], [..sweepSpeed],

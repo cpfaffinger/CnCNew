@@ -4,6 +4,7 @@ using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
@@ -391,7 +392,7 @@ static partial class Tests
     public static void KindLookupMatchesComparerLookup()
     {
         // IsKindOf was ImmutableArray.Contains(kind, OrdinalIgnoreCase); the loop that replaced it answers the same for every kind and spelling.
-        var fixture = new SyntheticFixture(files: ScriptFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: ScriptFiles());
         string[] kinds = ["INFANTRY", "infantry", "Infantry", "STRUCTURE", "SELECTABLE", "FS_BASE_DEFENSE", "TECH_BUILDING", "SUPPLY_SOURCE", "PROJECTILE", "INERT", "MINE", "", "INFANTR", "INFANTRYX", "ıNFANTRY"];
         var checkedTemplates = 0;
         var hits = 0;

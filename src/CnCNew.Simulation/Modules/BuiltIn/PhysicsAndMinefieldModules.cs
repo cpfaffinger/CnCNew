@@ -14,7 +14,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// <summary>The <c>PhysicsBehavior</c> fields the module carries; friction, shock, fall-damage and crash-weapon keys are typed by the catalog schema but have no consumer yet.</summary>
 public sealed record PhysicsData(Fixed Mass, bool AllowBouncing, bool AllowCollideForce, bool KillWhenRestingOnGround) : ModuleData
 {
-    public static PhysicsData Parse(ModuleConfiguration configuration) => new(
+    public static PhysicsData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Real(configuration, "Mass", Fixed.One),
         ModuleConfigReader.Bool(configuration, "AllowBouncing", false),
         ModuleConfigReader.Bool(configuration, "AllowCollideForce", true),
@@ -111,7 +111,7 @@ public sealed record GenerateMinefieldData(
     bool GenerateOnlyOnDeath, bool BorderOnly, bool SmartBorder, bool SmartBorderSkipInterior, bool AlwaysCircular, bool Upgradable,
     Fixed RandomJitter, Fixed SkipIfUnderStructure) : ModuleData
 {
-    public static GenerateMinefieldData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
+    public static GenerateMinefieldData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
         UpgradeMuxData.Parse(configuration, upgrades),
         ModuleConfigReader.Text(configuration, "MineName"),
         ModuleConfigReader.Text(configuration, "UpgradedMineName"),

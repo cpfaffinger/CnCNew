@@ -18,6 +18,7 @@ using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.W3D;
 
 namespace CnCNew.Game.Tests;
@@ -209,7 +210,7 @@ internal static class DeterminismTests
                 var compilerOptions = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
                 var graph = DefinitionCompiler.Compile(new ContentDefinitionSource(content), ModuleRegistry.Default, compilerOptions);
                 var geometry = ModelGeometryLoader.Load(graph, ObjectVisualCatalog.Build(graph), content);
-                var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, geometry);
+                var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original, geometry);
                 var definitions = DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256;
                 var fingerprint = geometry.Combine(definitions);
                 using var stream = content.OpenRead("Maps/GC_ChemGeneral/GC_ChemGeneral.map");

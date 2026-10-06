@@ -131,7 +131,7 @@ public sealed record SlavedData(
     int RepairRange, Fixed RepairMinAltitude, Fixed RepairMaxAltitude, Fixed RepairRatePerSecond, int RepairWhenHealthBelowPercentage,
     long MinReadyTicks, long MaxReadyTicks, long MinWeldTicks, long MaxWeldTicks) : ModuleData
 {
-    public static SlavedData Parse(ModuleConfiguration configuration)
+    public static SlavedData Parse(RatedModuleConfiguration configuration)
     {
         int Int(string name) => checked((int)ModuleConfigReader.Int(configuration, name, 0));
         var data = new SlavedData(
@@ -162,12 +162,12 @@ public sealed record SlavedData(
 /// </summary>
 public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, ISlavedModule
 {
-    /// <summary><c>SLAVED_UPDATE_RATE = LOGICFRAMES_PER_SECOND / 4</c> in integer arithmetic.</summary>
-    private const int UpdateRate = SimulationTiming.LogicFramesPerSecond / 4;
+    /// <summary><c>SLAVED_UPDATE_RATE = LOGICFRAMES_PER_SECOND / 4</c> in integer arithmetic: 7 logic frames of the original, at every rate.</summary>
+    private const long UpdateRateFrames = SimulationRate.OriginalFramesPerSecond / 4;
 
     private const int CloseEnoughSquared = 15 * 15;
     private const int RepairDistanceSquared = 12 * 12;
-    private const long RecentFireTicks = 2 * SimulationTiming.LogicFramesPerSecond;
+    private const long RecentFireFrames = 2 * SimulationRate.OriginalFramesPerSecond;
 
     private static readonly int UnselectableBit = ObjectStatusBits.Index("UNSELECTABLE");
     private static readonly int DroneSpottingBit = SlaveSupport.WeaponBonusBit("DRONE_SPOTTING");
@@ -226,7 +226,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         if (_repairState == RepairState.None)
         {
             if (_framesToWait > 0) return SimulationTiming.SleepNone;
-            _framesToWait = UpdateRate;
+            _framesToWait = checked((int)world.Time.OriginalFrames(UpdateRateFrames));
         }
         // Not enslaved (or released): nothing to follow. The reference polls; the world wakes this module again from OnEnslave.
         if (!_slaver.IsValid) return SimulationTiming.SleepForever;
@@ -262,7 +262,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
 
         if (data.AttackRange != 0 && MasterTarget(world, master) is { } target)
         {
-            EndRepair();
+            EndRepair(world);
             DoAttackLogic(world, master, ai, target);
             return SimulationTiming.SleepNone;
         }
@@ -272,7 +272,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
             var half = Fixed.FromInt(data.GuardMaxRange) / Fixed.FromInt(2);
             if (SlaveSupport.BoundingDistanceSquared2D(master, master.MoveTargetX, master.MoveTargetY) > half * half)
             {
-                EndRepair();
+                EndRepair(world);
                 DoScoutLogic(world, master, ai);
                 return SimulationTiming.SleepNone;
             }
@@ -295,12 +295,12 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
             var stray = Fixed.FromInt(2 * data.GuardMaxRange);
             if (ai.IsIdle && dx * dx + dy * dy + dz * dz > Fixed.FromInt(CloseEnoughSquared))
             {
-                EndRepair();
+                EndRepair(world);
                 DoGuardLogic(world, ai, pinnedX, pinnedY);
             }
             else if (SlaveSupport.CenterDistanceSquared3D(Entity, master) > stray * stray)
             {
-                EndRepair();
+                EndRepair(world);
                 DoGuardLogic(world, ai, pinnedX, pinnedY);
             }
         }
@@ -310,7 +310,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
     /// <summary>Stands in for <c>AIUpdateInterface::getCurrentVictim</c> of the master (see the class summary).</summary>
     private static Entity? MasterTarget(IWorldServices world, Entity master)
     {
-        if (master.LastFireTick < 0 || world.Tick - master.LastFireTick > RecentFireTicks || SimulationWorld.WeaponIndexIn(master, master.CurrentWeaponSlot) < 0) return null;
+        if (master.LastFireTick < 0 || world.Tick - master.LastFireTick > world.Time.OriginalFrames(RecentFireFrames) || SimulationWorld.WeaponIndexIn(master, master.CurrentWeaponSlot) < 0) return null;
         var range = world.Weapons[SimulationWorld.WeaponIndexIn(master, master.CurrentWeaponSlot)].RangeWith(world.Templates.GlobalWeaponBonus, master.WeaponBonusConditions);
         Entity? best = null;
         var bestDistance = range * range;
@@ -417,17 +417,17 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         }
         if (closeEnough && _repairing && master.Body is not null)
         {
-            var amount = data.RepairRatePerSecond / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+            var amount = data.RepairRatePerSecond / world.Time.TicksPerSecondFixed;
             world.Damage(master.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
         }
     }
 
     /// <summary><c>endRepair</c>.</summary>
-    private void EndRepair()
+    private void EndRepair(IWorldServices world)
     {
         if (_repairState == RepairState.None) return;
         _repairState = RepairState.None;
-        _framesToWait = UpdateRate;
+        _framesToWait = checked((int)world.Time.OriginalFrames(UpdateRateFrames));
         _repairing = false;
     }
 
@@ -518,7 +518,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
 /// </summary>
 public sealed record MobMemberData(int MustCatchUpRadius, int NoNeedToCatchUpRadius, Fixed Squirrelliness, long CatchUpCrisisBailTime) : ModuleData
 {
-    public static MobMemberData Parse(ModuleConfiguration configuration)
+    public static MobMemberData Parse(RatedModuleConfiguration configuration)
     {
         var squirrelliness = ModuleConfigReader.Real(configuration, "Squirrelliness", Fixed.Zero);
         return new MobMemberData(
@@ -639,12 +639,12 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
 /// </summary>
 public sealed record HiveStructureBodyData(BodyData Body, ulong PropagateMask, ulong SwallowMask) : ModuleData
 {
-    public static HiveStructureBodyData Parse(ModuleConfiguration configuration) => new(
+    public static HiveStructureBodyData Parse(RatedModuleConfiguration configuration) => new(
         BodyData.Parse(configuration),
         Mask(configuration, "PropagateDamageTypesToSlavesWhenExisting"),
         Mask(configuration, "SwallowDamageTypesIfSlavesNotExisting"));
 
-    private static ulong Mask(ModuleConfiguration configuration, string name)
+    private static ulong Mask(RatedModuleConfiguration configuration, string name)
         => ModuleConfigReader.Flags(configuration, name) is { } flags ? ObjectStatusBits.Mask(flags, NameTables.DamageType) : 0;
 }
 
@@ -679,7 +679,7 @@ public sealed class HiveStructureBody(HiveStructureBodyData data) : ActiveBody(d
 /// <summary><c>SpawnPointProductionExitUpdateModuleData</c>: the bone name (<c>SpawnPointBoneName</c>) that the object's model carries one bone with per spawn point; the model is presentation data, so the name has no consumer.</summary>
 public sealed record SpawnPointExitData(string SpawnPointBoneName) : ModuleData
 {
-    public static SpawnPointExitData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Text(configuration, "SpawnPointBoneName"));
+    public static SpawnPointExitData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Text(configuration, "SpawnPointBoneName"));
 }
 
 /// <summary>

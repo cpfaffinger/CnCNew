@@ -16,15 +16,24 @@ Die Fachgrundlagen der Definitionsdaten (Block 0 der Phase) stehen in `TYPED-DEF
 
 ## 1. Tick und Numerik
 
-- **Takt:** 30 Logikframes pro Sekunde (`LOGICFRAMES_PER_SECOND`, `GameCommon.h:72`). `SimulationWorld.Tick`
-  ist die Zahl der ausgeführten Ticks und zugleich die Nummer des nächsten. Es gibt keine Wandzeit im Kern.
+- **Takt:** Die Tickrate ist seit Phase 20 ein Wert der Welt (`WorldConfiguration.Rate`, Typ `SimulationRate`): unterstützt sind genau
+  30, 60 und 120 Hz, alles andere wird beim Erzeugen von Welt, Katalog, Snapshot und Replay abgelehnt. Das Original rechnet mit
+  30 Logikframes pro Sekunde (`LOGICFRAMES_PER_SECOND`, `GameCommon.h:72`); diese 30 ist als `SimulationRate.OriginalFramesPerSecond`
+  die einzige benannte Rate der Simulation. Bis Phase 23 laufen alle Sitzungen mit 30 Hz, und bei 30 Hz ist jedes Ergebnis
+  unverändert (`docs/TICKRATE-MIGRATION.md`). `SimulationWorld.Tick` ist die Zahl der ausgeführten Ticks und zugleich die Nummer
+  des nächsten. Es gibt keine Wandzeit im Kern.
 - **Zahlenart:** Zustand besteht nur aus Ganzzahlen und `Fixed`. `Fixed` ist ein Q47.16-Festkomma in
   einem `long` (16 Nachkommabits, Auflösung 1/65536 Weltinheit, Bereich ±1,4·10^14). Begründung: Das Original hält
   binary32-`Real` im Zustand und setzt dafür `setFPMode()` (`INI::load`); Ganzzahlarithmetik ist auf jeder Plattform
   bitgleich. Produkte und Quotienten laufen über `Int128`.
 - **Rundungsregel (überall):** zur nächsten Zahl, Halbwerte weg von null. Überlauf wirft `OverflowException`;
   nichts wickelt oder sättigt still. Division durch null wirft.
-- **Umrechnungen** (`SimulationTiming`, alle explizit):
+- **Umrechnungen** (Zeitdienst `SimulationTime`: zur Laufzeit `world.Time`, beim Katalogbau der Zeitdienst der Rate, für die der
+  Katalog gebaut wird; alle explizit). Die Tabelle nennt die Regel bei 30 Hz. Bei 60 und 120 Hz bleiben **Dauern auf dem
+  30-Hz-Raster des Originals** (erst auf ganze Bilder des Originals aufrunden, dann mal Rate/30 – eine Nachladezeit von 50 ms
+  dauert bei jeder Rate zwei Bilder des Originals), Größen je Sekunde werden durch die Rate bzw. ihr Quadrat geteilt; Rundung
+  und Reihenfolge je Funktion stehen in `docs/TICKRATE-MIGRATION.md` §2. `SimulationTiming` enthält nur noch, was nicht von der
+  Rate abhängt (Schlafwerte, Grad → Bogenmaß, Verhältnisse).
 
 | Datenwert | Regel | Referenz |
 |---|---|---|
@@ -288,7 +297,9 @@ sortiert): Kopf `format = cncnew-world-snapshot`, `version = 7` (2 ergänzte die
 `seed`, `stateHash` (Version 7, Phase 8: Tunnelnetz je Spieler, verzögerte Treffer, Startdaten eines Projektils in der Spawn-Queue, Ereignisposition), danach `state` (Tick, ID-Zähler, `logic`-Zustand, Spielertabelle, Ablehnungszähler, Spawn-/Destroy-Queue,
 Events, Entities mit Modulzuständen, Timer, Befehle) und `presentation` (`cosmetic`, `audio`). **SHA-256** identifiziert einen
 Snapshot (`WorldSnapshot.Sha256`). `Restore` ist bewusst minimal und intern gehalten (Phase 9 besitzt den späteren
-Speichervertrag) und weist ab: leere/abgeschnittene/verstümmelte Dateien, fremde Version/Format/Tickrate, abweichenden
+Speichervertrag) und weist ab: leere/abgeschnittene/verstümmelte Dateien, fremde Version/Format, eine nicht unterstützte
+Tickrate (seit Phase 20 wird die Welt mit der gespeicherten Rate erzeugt – 30, 60 oder 120 Hz –, und der übergebene Katalog
+muss für genau diese Rate gebaut sein; `docs/TICKRATE-MIGRATION.md` §7), abweichenden
 Definitionsfingerabdruck, abweichende Templates (Name und Index werden gegenseitig geprüft) und jeden Zustand, dessen
 wiederberechneter Hash nicht dem gespeicherten entspricht (Integritätsprüfung).
 
@@ -306,7 +317,8 @@ Definitionsfingerabdruck, Fixture-ID, u32 Seed, u32 Welt-ID, Spielertabelle, End
 (sortiert nach (Tick, Spieler, Sequenz)), Checkpoints (Tick, Hash) und ein abschließendes SHA-256 über alles Vorherige.
 `ReplayFormat.Read` weist ab: falsche Magic, fremde Version (vor der Hashprüfung, mit klarer Meldung), abgeschnittene oder
 verstümmelte Dateien (Hashabweichung), überzählige Bytes, unbekannte Befehlstypen, unsortierte Befehle. `ReplayRunner`
-lehnt ein Replay ab, dessen Fingerabdruck, Befehlstabellenversion oder Tickrate nicht passt, und meldet Abweichungen an
+lehnt ein Replay ab, dessen Fingerabdruck oder Befehlstabellenversion nicht passt, dessen Tickrate nicht unterstützt ist oder
+nicht die des Katalogs bzw. der übergebenen Welt ist (`Run(replay, world)` prüft die Rate der Welt), und meldet Abweichungen an
 Checkpoints als `ReplayDivergenceException` mit Tick und Hashes. Die Fortsetzung (Snapshot → Restore → Weiterlauf) nutzt
 denselben Runner und beginnt beim Tick der Welt.
 

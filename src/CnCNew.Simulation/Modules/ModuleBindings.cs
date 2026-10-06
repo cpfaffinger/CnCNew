@@ -1,7 +1,10 @@
+using CnCNew.Data.Definitions;
+using CnCNew.Data.Ini;
 using System.Collections.Immutable;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.Modules;
 
@@ -11,18 +14,34 @@ public interface IModuleBinding
     ModuleOwnerKind Owner { get; }
 
     /// <summary><paramref name="upgrades"/> lets upgrade-activated modules resolve <c>TriggeredBy</c>/<c>ConflictsWith</c> names to mask bits once, at template-build time.</summary>
-    ModuleData ParseData(ModuleConfiguration configuration, UpgradeCatalog upgrades);
+    /// <paramref name="configuration"/> carries the time service of the rate the catalog is built for: every tick count and per-tick value a module parses is for that rate.
+    ModuleData ParseData(RatedModuleConfiguration configuration, UpgradeCatalog upgrades);
     SimModule Create(ModuleData data);
 }
 
 /// <summary>Typed binding of one module name: parses the compiled configuration into <typeparamref name="TData"/> and creates the module.</summary>
-public sealed class ModuleBinding<TData>(string name, ModuleOwnerKind owner, Func<ModuleConfiguration, UpgradeCatalog, TData> parse, Func<TData, SimModule> create) : IModuleBinding
+public sealed class ModuleBinding<TData>(string name, ModuleOwnerKind owner, Func<RatedModuleConfiguration, UpgradeCatalog, TData> parse, Func<TData, SimModule> create) : IModuleBinding
     where TData : ModuleData
 {
     public string Name { get; } = name;
     public ModuleOwnerKind Owner { get; } = owner;
-    public ModuleData ParseData(ModuleConfiguration configuration, UpgradeCatalog upgrades) => parse(configuration, upgrades);
+    public ModuleData ParseData(RatedModuleConfiguration configuration, UpgradeCatalog upgrades) => parse(configuration, upgrades);
     public SimModule Create(ModuleData data) => create((TData)data);
+}
+
+/// <summary>
+/// A compiled module configuration together with the time service of the rate its data is parsed for. Module parsers read the fields through
+/// <c>ModuleConfigReader</c>; everything that becomes ticks or a per-tick value goes through <see cref="Time"/>.
+/// </summary>
+public readonly record struct RatedModuleConfiguration(ModuleConfiguration Source, SimulationTime Time)
+{
+    public string Name => Source.Name;
+    public string Tag => Source.Tag;
+    public ModuleOwnerKind OwnerKind => Source.OwnerKind;
+    public ImmutableArray<DefinitionField> Fields => Source.Fields;
+    public IniSourceLocation Location => Source.Location;
+    public ImmutableArray<DefinitionSection> Sections => Source.Sections;
+    public ModuleBlockKind BlockKind => Source.BlockKind;
 }
 
 public sealed class ModuleBindingException(string message) : InvalidOperationException(message);

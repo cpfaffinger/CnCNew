@@ -118,7 +118,7 @@ public sealed class MissionSession
         ArgumentNullException.ThrowIfNull(map);
         var program = ScriptProgram.Build(map).WithHumanSide(options.HumanSideName, options.HumanFaction);
         var notes = ImmutableArray.CreateBuilder<string>();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), options.WorldSeed, ConfiguredPlayers(program, catalog, notes), FixtureId, fingerprint, terrain.Fingerprint), catalog, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), catalog.Rate, options.WorldSeed, ConfiguredPlayers(program, catalog, notes), FixtureId, fingerprint, terrain.Fingerprint), catalog, terrain);
         ApplyRelations(world, program);
         var session = new MissionSession(options, world, program, map, [..notes]);
         session.PlaceObjects(catalog, terrain);

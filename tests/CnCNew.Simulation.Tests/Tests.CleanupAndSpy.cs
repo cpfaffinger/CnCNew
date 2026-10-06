@@ -8,6 +8,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>The hazard-cleaning ambulance with its area power, and the spy-vision update and power.</summary>
@@ -221,8 +222,8 @@ static partial class Tests
 
     private static SimulationWorld CleanupWorld(out Feeder feeder)
     {
-        var fixture = new SyntheticFixture(files: CleanupAndSpyFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: CleanupAndSpyFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }
@@ -273,7 +274,7 @@ static partial class Tests
         CsSpawn(cleanerWorld, cleanerFeeder, "FixtureHazard", 0, 90);
         CsSpawn(cleanerWorld, cleanerFeeder, "FixtureHazard", 0, 95, 20);
         CsRun(cleanerWorld, 25);
-        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(cleanerWorld), new SyntheticFixture(files: CleanupAndSpyFiles()).Templates, new SyntheticFixture(files: CleanupAndSpyFiles()).Fingerprint);
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(cleanerWorld), new SyntheticFixture(SimulationRate.Original, files: CleanupAndSpyFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: CleanupAndSpyFiles()).Fingerprint);
         for (var tick = 0; tick < 200; tick++) Check.That(cleanerWorld.Step().StateHash == restored.Step().StateHash, $"Cleaning continues identically after a restore (tick {tick}).");
         Check.That(cleanerWorld.Entities.All(value => value.Template.Name != "FixtureHazard"), "Both hazards are gone at the end.");
         _ = unit;
@@ -283,9 +284,9 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) SpyWorld()
     {
-        var fixture = new SyntheticFixture(files: CleanupAndSpyFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: CleanupAndSpyFiles());
         var terrain = NavTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         return (world, new Feeder(world), fixture);
     }
 
@@ -383,7 +384,7 @@ static partial class Tests
         Check.That(cycles >= 3, $"The module switched on again and again ({cycles} times).");
         Check.That(onTicks * 100 / 400 is >= 28 and <= 40, $"It spies for about a third of the time, 1 s on and 2 s off ({onTicks} on, {offTicks} off).");
 
-        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(files: CleanupAndSpyFiles()).Templates, new SyntheticFixture(files: CleanupAndSpyFiles()).Fingerprint, NavTerrain());
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(SimulationRate.Original, files: CleanupAndSpyFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: CleanupAndSpyFiles()).Fingerprint, NavTerrain());
         for (var tick = 0; tick < 200; tick++) Check.That(world.Step().StateHash == restored.Step().StateHash, $"The cycle continues identically after a restore (tick {tick}).");
     }
 
@@ -420,7 +421,7 @@ static partial class Tests
         var target = CsSpawn(again, againFeeder, "NetVictim", 2, 50, 80);
         againFeeder.FireWeapon(1, a.Id.Value, target.Id.Value);
         CsRun(again, 6);
-        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(again), new SyntheticFixture(files: CleanupAndSpyFiles()).Templates, new SyntheticFixture(files: CleanupAndSpyFiles()).Fingerprint);
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(again), new SyntheticFixture(SimulationRate.Original, files: CleanupAndSpyFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: CleanupAndSpyFiles()).Fingerprint);
         for (var tick = 0; tick < 80; tick++) Check.That(again.Step().StateHash == restored.Step().StateHash, $"An assist continues identically after a restore (tick {tick}).");
         Check.That(target.Body!.Health == Fixed.FromInt(960), "The restored run ends with the same damage.");
     }

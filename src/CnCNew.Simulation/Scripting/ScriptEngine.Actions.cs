@@ -63,9 +63,10 @@ public sealed partial class ScriptEngine
             case "SET_RANDOM_TIMER":
                 if (Has(type, p, type == "SET_RANDOM_TIMER" ? 3 : 2))
                 {
+                    // The map states logic frames of the original; a random timer is drawn in frames, so that its value stays on the 30 Hz grid at every rate.
                     var frames = type == "SET_RANDOM_TIMER" ? _world.LogicRandom.Range(Int(p, 1), Int(p, 2)) : Int(p, 1);
                     var timer = CounterFor(Str(p, 0));
-                    timer.Value = frames;
+                    timer.Value = _world.Time.OriginalFrames(frames);
                     timer.IsTimer = true;
                 }
                 break;
@@ -363,11 +364,12 @@ public sealed partial class ScriptEngine
         _executedActions++;
     }
 
-    private static long SecondsToFrames(Fixed seconds)
+    private long SecondsToFrames(Fixed seconds)
     {
-        // REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value * 1000)): seconds times the logic rate, rounded up.
-        var frames = seconds * SimulationTiming.LogicFramesPerSecond;
-        return frames.Ceiling();
+        // REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value * 1000)): seconds times the logic rate of the original, rounded up to whole
+        // frames of the original, then scaled to ticks (the grid rule of SimulationTime).
+        var frames = seconds * SimulationRate.OriginalFramesPerSecond;
+        return _world.Time.OriginalFrames(frames.Ceiling());
     }
 
     private void SetScriptActive(string name, bool active)

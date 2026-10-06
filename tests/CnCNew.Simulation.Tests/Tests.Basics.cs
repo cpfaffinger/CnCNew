@@ -47,24 +47,24 @@ static partial class Tests
 
     public static void Timing()
     {
-        Check.That(SimulationTiming.LogicFramesPerSecond == 30, "LOGICFRAMES_PER_SECOND is 30.");
+        Check.That(SimulationRate.OriginalFramesPerSecond == 30, "LOGICFRAMES_PER_SECOND is 30.");
         Check.That(SimulationTiming.SleepForever == 0x3fffffff && SimulationTiming.SleepNone == 1, "Sleep constants equal UpdateModule.h.");
         long[][] cases = [[0, 0], [1, 1], [33, 1], [34, 2], [100, 3], [999, 30], [1000, 30], [1001, 31], [1034, 32], [4294967295, 128849019]];
         foreach (var pair in cases)
         {
-            Check.That(SimulationTiming.DurationMillisecondsToTicks(pair[0]) == pair[1], $"{pair[0]} ms -> {pair[1]} ticks (integer).");
-            Check.That(SimulationTiming.DurationMillisecondsToTicks((decimal)pair[0]) == pair[1], $"{pair[0]} ms -> {pair[1]} ticks (decimal).");
+            Check.That(SimulationRate.Original.Time.DurationMillisecondsToTicks(pair[0]) == pair[1], $"{pair[0]} ms -> {pair[1]} ticks (integer).");
+            Check.That(SimulationRate.Original.Time.DurationMillisecondsToTicks((decimal)pair[0]) == pair[1], $"{pair[0]} ms -> {pair[1]} ticks (decimal).");
         }
-        Check.That(SimulationTiming.DurationMillisecondsToTicks(33.3m) == 1 && SimulationTiming.DurationMillisecondsToTicks(33.4m) == 2 && SimulationTiming.DurationMillisecondsToTicks(0.001m) == 1, "Fractional milliseconds round up.");
-        Check.Throws<ArgumentOutOfRangeException>(() => SimulationTiming.DurationMillisecondsToTicks(-1L), "negative");
-        Check.Throws<ArgumentOutOfRangeException>(() => SimulationTiming.DurationMillisecondsToTicks(-0.5m), "negative");
-        Check.Throws<OverflowException>(() => SimulationTiming.DurationMillisecondsToTicks(long.MaxValue), "");
-        Check.That(SimulationTiming.DurationMillisecondsToFixedTicks(1000m) == Fixed.FromInt(30) && SimulationTiming.DurationMillisecondsToFixedTicks(50m) == Fixed.FromDecimal(1.5m), "Unrounded durations.");
-        Check.That(SimulationTiming.SecondsToTicks(1m) == 30 && SimulationTiming.SecondsToTicks(0.01m) == 1 && SimulationTiming.SecondsToTicks(0m) == 0, "Seconds to ticks round up.");
-        Check.That(SimulationTiming.PerSecondToPerTick(30m) == Fixed.One && SimulationTiming.PerSecondToPerTick(15m) == Fixed.FromDecimal(0.5m), "Velocity per tick.");
-        Check.That(SimulationTiming.PerSecondSquaredToPerTickSquared(900m) == Fixed.One, "Acceleration per tick squared.");
+        Check.That(SimulationRate.Original.Time.DurationMillisecondsToTicks(33.3m) == 1 && SimulationRate.Original.Time.DurationMillisecondsToTicks(33.4m) == 2 && SimulationRate.Original.Time.DurationMillisecondsToTicks(0.001m) == 1, "Fractional milliseconds round up.");
+        Check.Throws<ArgumentOutOfRangeException>(() => SimulationRate.Original.Time.DurationMillisecondsToTicks(-1L), "negative");
+        Check.Throws<ArgumentOutOfRangeException>(() => SimulationRate.Original.Time.DurationMillisecondsToTicks(-0.5m), "negative");
+        Check.Throws<OverflowException>(() => SimulationRate.Original.Time.DurationMillisecondsToTicks(long.MaxValue), "");
+        Check.That(SimulationRate.Original.Time.DurationMillisecondsToFixedTicks(1000m) == Fixed.FromInt(30) && SimulationRate.Original.Time.DurationMillisecondsToFixedTicks(50m) == Fixed.FromDecimal(1.5m), "Unrounded durations.");
+        Check.That(SimulationRate.Original.Time.SecondsToTicks(1m) == 30 && SimulationRate.Original.Time.SecondsToTicks(0.01m) == 1 && SimulationRate.Original.Time.SecondsToTicks(0m) == 0, "Seconds to ticks round up.");
+        Check.That(SimulationRate.Original.Time.PerSecondToPerTick(30m) == Fixed.One && SimulationRate.Original.Time.PerSecondToPerTick(15m) == Fixed.FromDecimal(0.5m), "Velocity per tick.");
+        Check.That(SimulationRate.Original.Time.PerSecondSquaredToPerTickSquared(900m) == Fixed.One, "Acceleration per tick squared.");
         Check.That(SimulationTiming.DegreesToRadians(180m).Raw == 205887 && SimulationTiming.DegreesToRadians(0m) == Fixed.Zero && SimulationTiming.DegreesToRadians(-90m).Raw == -102944, "Degrees to radians uses pi to 28 digits, rounded to nearest.");
-        Check.That(SimulationTiming.DegreesPerSecondToRadiansPerTick(180m * 30m).Raw == 205887, "Angular velocity per tick.");
+        Check.That(SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(180m * 30m).Raw == 205887, "Angular velocity per tick.");
         Check.That(SimulationTiming.RatioToFixed(1.25m) == Fixed.FromDecimal(1.25m), "Percent ratio.");
     }
 
@@ -77,7 +77,7 @@ static partial class Tests
         for (long ms = 0; ms <= 5_000_000; ms++)
         {
             var reference = (long)MathF.Ceiling((float)ms * perMsec);
-            var exact = SimulationTiming.DurationMillisecondsToTicks(ms);
+            var exact = SimulationRate.Original.Time.DurationMillisecondsToTicks(ms);
             if (reference != exact) differences.Add((ms, reference, exact));
         }
         Console.WriteLine($"       binary32 reference vs exact ticks: {differences.Count} of 5000001 durations (0 to about 83 minutes) differ; first: "
@@ -242,9 +242,9 @@ static partial class Tests
         Check.That(ModuleBindingTable.Default.TryGet("destroydie", out var binding) && binding.Name == "DestroyDie", "Lookup is case-insensitive.");
 
         // Factory produces a working, typed module.
-        var upgrades = new SyntheticFixture().Templates.Upgrades;
+        var upgrades = new SyntheticFixture(SimulationRate.Original).Templates.Upgrades;
         var body = all.Single(value => value.Name == "ActiveBody");
-        var data = body.ParseData(new ModuleConfiguration("ActiveBody", "T", ModuleOwnerKind.Object, [], new("x", 1, 1)), upgrades);
+        var data = body.ParseData(new RatedModuleConfiguration(new ModuleConfiguration("ActiveBody", "T", ModuleOwnerKind.Object, [], new("x", 1, 1)), SimulationRate.Original.Time), upgrades);
         Check.That(body.Create(data) is ActiveBody, "The ActiveBody binding creates an ActiveBody.");
 
         Check.Throws<ModuleBindingException>(() => Build(all.Concat([all[0]]).OrderBy(value => value.Name, StringComparer.Ordinal)), "Duplicate");
@@ -264,7 +264,7 @@ static partial class Tests
 
     public static void FixtureTemplates()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var catalog = fixture.Templates;
         Check.That(catalog.Templates.Select(value => value.Name).Contains("DefaultThingTemplate"), "The default template is an object too.");
         Check.That(catalog.Templates.Select(value => value.Id.ToString()).SequenceEqual(catalog.Templates.Select(value => value.Id.ToString()).Order(StringComparer.Ordinal)), "Template indices follow the ordinal id order.");
@@ -285,7 +285,7 @@ static partial class Tests
         var standIn = StandInRegistry("PreorderCreate", "SpecialPowerCreate");
         var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new InMemoryDefinitionSource(files), standIn,
             CnCNew.Data.Compilation.DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true });
-        var blockedCatalog = TemplateCatalog.Build(graph, new ModuleBindingTable(BuiltInModules.Bindings.Where(value => value.Name is not ("PreorderCreate" or "SpecialPowerCreate")), standIn));
+        var blockedCatalog = TemplateCatalog.Build(graph, new ModuleBindingTable(BuiltInModules.Bindings.Where(value => value.Name is not ("PreorderCreate" or "SpecialPowerCreate")), standIn), SimulationRate.Original);
         Check.That(blockedCatalog.TryGet("Blocked", out var blocked) && !blocked.IsInstantiable && blocked.MissingModules.SequenceEqual(["PreorderCreate", "SpecialPowerCreate"]), "Missing modules are listed sorted and never dropped.");
         var report = ModuleCoverage.Compute(blockedCatalog);
         Check.That(report.Blocked == 1 && report.Blockers.Length == 2 && report.Blockers.All(value => value.ObjectsBlocked == 1 && value.ObjectsBlockedOnlyByThisModule == 0), "Coverage names each blocker.");

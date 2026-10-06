@@ -8,6 +8,7 @@ using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
@@ -263,7 +264,7 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) SlotWorld(params (string Template, int Owner, int X, int Y)[] objects)
     {
-        var fixture = new SyntheticFixture(files: WeaponSlotFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         foreach (var (template, owner, x, y) in objects) feeder.Spawn(owner, template, owner: owner, x: x, y: y, z: template == "Heli" ? 100 : 0);
@@ -278,7 +279,7 @@ static partial class Tests
 
     public static void WeaponSlotsTemplateModel()
     {
-        var fixture = new SyntheticFixture(files: WeaponSlotFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles());
         var catalog = fixture.Templates;
         string Name(int weapon) => weapon < 0 ? "-" : catalog.Weapons[weapon].Name;
 
@@ -309,11 +310,11 @@ static partial class Tests
         {
             ["Data/INI/Object/Broken.ini"] = "Object Broken\n  KindOf = SELECTABLE\n  Body = ActiveBody Body01\n  End\n  WeaponSet\n    Conditions = None\n" + weaponSet + "  End\nEnd\n",
         };
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(files: With("    Weapon = PRIMARY NoSuchWeapon\n")).Templates, "NoSuchWeapon");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(files: With("    Weapon = PRIMARY MainGun\n    Frobnicate = Yes\n")).Templates, "Frobnicate");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(files: With("    Weapon = PRIMARY MainGun\n    AutoChooseSources = PRIMARY FROM_NOBODY\n")).Templates, "FROM_NOBODY");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(files: With("    Weapon = PRIMARY MainGun\n    PreferredAgainst = PRIMARY NOT_A_KIND\n")).Templates, "NOT_A_KIND");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(files: With("    Weapon = QUARTERNARY MainGun\n")).Templates, "weapon slot name");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = PRIMARY NoSuchWeapon\n")).Templates, "NoSuchWeapon");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = PRIMARY MainGun\n    Frobnicate = Yes\n")).Templates, "Frobnicate");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = PRIMARY MainGun\n    AutoChooseSources = PRIMARY FROM_NOBODY\n")).Templates, "FROM_NOBODY");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = PRIMARY MainGun\n    PreferredAgainst = PRIMARY NOT_A_KIND\n")).Templates, "NOT_A_KIND");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: With("    Weapon = QUARTERNARY MainGun\n")).Templates, "weapon slot name");
     }
 
     public static void WeaponSlotsBothSlotsFireAtDifferentTargets()
@@ -457,7 +458,7 @@ static partial class Tests
         Check.That(sharing.ReadyTickOf(1) == start + 3 + 15 && sharing.ReadyTickOf(0) == start + 3 + 15, "The gun's 15-tick delay holds the machine gun back as well.");
         Check.That(!feeder.FireWeaponSlot(1, sharing.Id.Value, dummy, WeaponSlot.Secondary).Accepted, "So the machine gun cannot fire in between.");
         // The shared timers are in the snapshot.
-        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(files: WeaponSlotFiles()).Templates, new SyntheticFixture(files: WeaponSlotFiles()).Fingerprint);
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles()).Templates, new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles()).Fingerprint);
         var copy = restored.FindEntity(sharing.Id)!;
         Check.That(copy.ReadyTickOf(0) == sharing.ReadyTickOf(0) && copy.ReadyTickOf(1) == sharing.ReadyTickOf(1), "The restored object keeps the shared timers.");
     }
@@ -587,7 +588,7 @@ static partial class Tests
 
     public static void WeaponSlotsCommandsRoundTripInReplays()
     {
-        var fixture = new SyntheticFixture(files: WeaponSlotFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: WeaponSlotFiles());
         var player1 = new PlayerId(1);
         var player2 = new PlayerId(2);
         var commands = new List<SimCommand>

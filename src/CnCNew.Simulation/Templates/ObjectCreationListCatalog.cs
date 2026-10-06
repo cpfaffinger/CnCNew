@@ -103,7 +103,7 @@ public sealed class ObjectCreationListCatalog
     public ImmutableArray<CreationListInfo> Lists { get; }
     public bool TryGet(string name, out CreationListInfo info) => _byName.TryGetValue(name, out info!);
 
-    public static ObjectCreationListCatalog Build(CompiledDefinitionGraph graph)
+    public static ObjectCreationListCatalog Build(CompiledDefinitionGraph graph, SimulationTime timing)
     {
         ArgumentNullException.ThrowIfNull(graph);
         var lists = ImmutableArray.CreateBuilder<CreationListInfo>();
@@ -114,14 +114,14 @@ public sealed class ObjectCreationListCatalog
             {
                 if (!Enum.TryParse<CreationNuggetKind>(section.Declaration, true, out var kind))
                     throw new TemplateBuildException($"ObjectCreationList '{definition.OriginalName}': nugget '{section.Declaration}' is not known.");
-                nuggets.Add(BuildNugget(kind, section));
+                nuggets.Add(BuildNugget(kind, section, timing));
             }
             lists.Add(new CreationListInfo(definition.OriginalName, nuggets.ToImmutable()));
         }
         return new ObjectCreationListCatalog(lists.ToImmutable());
     }
 
-    private static CreationNugget BuildNugget(CreationNuggetKind kind, DefinitionSection section)
+    private static CreationNugget BuildNugget(CreationNuggetKind kind, DefinitionSection section, SimulationTime timing)
     {
         DefinitionField? Field(string name) => section.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         Fixed Real(string name, Fixed fallback) => Field(name)?.Value.Value switch
@@ -131,7 +131,7 @@ public sealed class ObjectCreationListCatalog
             _ => fallback,
         };
         bool Bool(string name) => Field(name)?.Value.Value is true;
-        long Ticks(string name) => Field(name)?.Value.Value is GameTime time ? SimulationTiming.DurationMillisecondsToTicks(time.Milliseconds) : 0;
+        long Ticks(string name) => Field(name)?.Value.Value is GameTime time ? timing.DurationMillisecondsToTicks(time.Milliseconds) : 0;
         string Reference(string name) => Field(name)?.Value.Value is DefinitionReference { IsNone: false } reference ? reference.Name : string.Empty;
 
         var disposition = CreationDisposition.OnGroundAligned;
@@ -169,10 +169,10 @@ public sealed class ObjectCreationListCatalog
             Real("MinDistanceAFormation", Fixed.Zero), Real("MinDistanceBFormation", Fixed.Zero), Real("MaxDistanceFormation", Fixed.Zero),
             offset.Item1, offset.Item2, offset.Item3, Ticks("MinLifetime"), Ticks("MaxLifetime"), objects.ToImmutable(), Reference("PutInContainer"),
             Bool("ContainInsideSourceObject"), Bool("InheritsVeterancy"), Bool("SkipIfSignificantlyAirborne"), health, maxHealth,
-            Bool("RequiresLivePlayer"), Reference("Weapon"), Ticks("InvulnerableTime"), Bool("DiesOnBadLand"), kind == CreationNuggetKind.DeliverPayload ? BuildDelivery(section) : null);
+            Bool("RequiresLivePlayer"), Reference("Weapon"), Ticks("InvulnerableTime"), Bool("DiesOnBadLand"), kind == CreationNuggetKind.DeliverPayload ? BuildDelivery(section, timing) : null);
     }
 
-    private static PayloadDelivery BuildDelivery(DefinitionSection section)
+    private static PayloadDelivery BuildDelivery(DefinitionSection section, SimulationTime timing)
     {
         DefinitionField? Field(string name) => section.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         Fixed Real(string name) => Field(name)?.Value.Value switch
@@ -183,7 +183,7 @@ public sealed class ObjectCreationListCatalog
         };
         bool Bool(string name, bool fallback = false) => Field(name)?.Value.Value is bool flag ? flag : fallback;
         int Int(string name, int fallback = 0) => Field(name)?.Value.Value is long number ? checked((int)number) : fallback;
-        long Ticks(string name) => Field(name)?.Value.Value is GameTime time ? SimulationTiming.DurationMillisecondsToTicks(time.Milliseconds) : 0;
+        long Ticks(string name) => Field(name)?.Value.Value is GameTime time ? timing.DurationMillisecondsToTicks(time.Milliseconds) : 0;
         string Reference(string name) => Field(name)?.Value.Value is DefinitionReference { IsNone: false } reference ? reference.Name : string.Empty;
         (Fixed X, Fixed Y, Fixed Z) Vector(string name) => Field(name)?.Value.Value is Vector3Value vector ? (Fixed.FromDecimal(vector.X), Fixed.FromDecimal(vector.Y), Fixed.FromDecimal(vector.Z)) : (Fixed.Zero, Fixed.Zero, Fixed.Zero);
 

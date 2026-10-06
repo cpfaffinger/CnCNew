@@ -5,6 +5,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -223,8 +224,8 @@ static partial class Tests
 
     private static SimulationWorld CombatWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(files: CombatFiles());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        fixture = new SyntheticFixture(SimulationRate.Original, files: CombatFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);
         return world;
     }

@@ -8,6 +8,7 @@ using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -147,9 +148,9 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) NavSetup(TerrainMap? terrain = null)
     {
-        var fixture = new SyntheticFixture(files: NavigationFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: NavigationFiles());
         var map = terrain ?? NavTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map.Fingerprint), fixture.Templates, map);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map.Fingerprint), fixture.Templates, map);
         return (world, new Feeder(world), fixture);
     }
 

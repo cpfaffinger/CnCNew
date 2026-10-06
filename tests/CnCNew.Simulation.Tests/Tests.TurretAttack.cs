@@ -13,6 +13,7 @@ using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
@@ -139,7 +140,7 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) AttackWorld(uint seed = 1, params (string Template, int Owner, int X, int Y, decimal Heading)[] objects)
     {
-        var fixture = new SyntheticFixture(files: TurretAttackFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: TurretAttackFiles());
         var world = NewWorld(fixture, seed);
         var feeder = new Feeder(world);
         foreach (var (template, owner, x, y, heading) in objects) feeder.Spawn(owner, template, owner: owner, x: x, y: y, angle: Fixed.FromDecimal(heading));
@@ -345,9 +346,9 @@ static partial class Tests
 
     public static void TurretAttackEndsWhenTheVictimIsNoLongerVisible()
     {
-        var fixture = new SyntheticFixture(files: TurretAttackFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: TurretAttackFiles());
         var terrain = NavTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         var feeder = new Feeder(world);
         world.RevealMapPermanently(new PlayerId(1), true);
         feeder.Spawn(1, "TurretTank", owner: 1, x: 20, y: 20);
@@ -368,9 +369,9 @@ static partial class Tests
     /// <summary>The fog half of the visibility rule: the victim stays in weapon range and unstealthed, but the only object that saw it is gone.</summary>
     public static void TurretAttackEndsWhenTheVictimFallsIntoTheFog()
     {
-        var fixture = new SyntheticFixture(files: TurretAttackFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: TurretAttackFiles());
         var terrain = NavTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "TurretTank", owner: 1, x: 20, y: 20);
         feeder.Spawn(2, "TurretTarget", owner: 2, x: 20, y: 100);
@@ -587,7 +588,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
 
@@ -600,7 +601,7 @@ static partial class Tests
 
         (ulong Hash, int Scans, Fixed Widest, bool Moved) Idle(string template, int ticks)
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 9, players, "real-scan", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 9, players, "real-scan", fingerprint), catalog);
             var feeder = new Feeder(world);
             feeder.Spawn(1, template, owner: 1, x: 500, y: 500);
             world.Step();
@@ -634,7 +635,7 @@ static partial class Tests
         (ulong Hash, decimal Worst, int Shots, long Waits, bool StillAttacking) Chase()
         {
             var terrain = TerrainMap.Build(SyntheticMaps.Build(120, 120, 1, (_, _) => 0), "chase");
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 7, players, "real-chase", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, players, "real-chase", fingerprint, terrain.Fingerprint), catalog, terrain);
             world.RevealMapPermanently(new PlayerId(1), true);
             world.RevealMapPermanently(new PlayerId(2), true);
             var feeder = new Feeder(world);

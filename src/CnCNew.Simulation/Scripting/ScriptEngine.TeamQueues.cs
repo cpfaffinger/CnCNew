@@ -55,7 +55,7 @@ public sealed partial class ScriptEngine
     private void UpdateBuildingTeam(TeamQueueEntry entry, ScriptTeam team, ScriptTeamPrototype prototype, Entity[] members)
     {
         var orders = _teamBuilds.Where(order => order.TeamId == team.Id).ToArray();
-        var expired = prototype.InitialIdleFrames >= 1 && _tick > entry.Started + prototype.InitialIdleFrames;
+        var expired = prototype.InitialIdleFrames >= 1 && _tick > entry.Started + _world.Time.OriginalFrames(prototype.InitialIdleFrames);
         if (expired)
         {
             // isMinimumBuilt: every required type has its minimum finished or in production; areBuildsComplete: nothing is in production any more.
@@ -80,7 +80,7 @@ public sealed partial class ScriptEngine
     /// <summary><c>AIPlayer::checkReadyTeams</c> for one team.</summary>
     private void UpdateReadyTeam(TeamQueueEntry entry, ScriptTeam team, ScriptTeamPrototype prototype, Entity[] members)
     {
-        var timeExpired = entry.Started + 60 * SimulationTiming.LogicFramesPerSecond < _tick;
+        var timeExpired = entry.Started + _world.Time.WholeSecondsToTicks(60) < _tick;
         var allIdle = members.All(IsIdle);
         var anyIdle = members.Any(IsIdle);
         if (anyIdle && prototype.ExecutesActionsOnCreate && _program.FindScript(prototype.ProductionCondition) is { Script.Actions.IsDefaultOrEmpty: false }) allIdle = true;

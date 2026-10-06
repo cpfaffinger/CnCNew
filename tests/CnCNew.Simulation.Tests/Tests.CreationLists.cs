@@ -7,6 +7,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -165,11 +166,11 @@ static partial class Tests
     };
 
     private static SimulationWorld NewCreationListWorld(SyntheticFixture fixture, uint seed = 5)
-        => new(new WorldConfiguration(new WorldId(1), seed, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        => new(new WorldConfiguration(new WorldId(1), SimulationRate.Original, seed, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
 
     public static void Phase5CreationLists()
     {
-        var fixture = new SyntheticFixture(files: CreationListFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: CreationListFiles());
         var world = NewCreationListWorld(fixture);
         var feeder = new Feeder(world);
         Check.That(world.CreationLists.Lists.Length == 16 && world.CreationLists.TryGet("OCL_Spread", out var spread) && spread.Nuggets[0].SpreadFormation && spread.Nuggets[0].Count == 4,
@@ -283,7 +284,7 @@ static partial class Tests
 
     public static void Phase5CreationListDeterminism()
     {
-        var fixture = new SyntheticFixture(files: CreationListFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: CreationListFiles());
         SimulationWorld Build()
         {
             var world = NewCreationListWorld(fixture, 11);

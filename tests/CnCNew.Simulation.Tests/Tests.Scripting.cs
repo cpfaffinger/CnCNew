@@ -8,6 +8,7 @@ using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>A tiny builder for decoded World Builder scripts, so a test states what a map designer would have clicked together.</summary>
@@ -287,9 +288,9 @@ static partial class Tests
     /// A 60x40-cell map with three sides (neutral, PlayerA human, PlayerB enemy of A), two waypoints, an area around the left spawn and two teams;
     /// <paramref name="scripts"/> run in PlayerA's list (index 1), <paramref name="neutral"/> in the neutral list (index 0).
     /// </summary>
-    private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) MissionMap(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null, IReadOnlyDictionary<string, string>? extraFiles = null)
+    private static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) MissionMap(MapScript[] scripts, MapScriptGroup[]? groups = null, MapObject[]? objects = null, MapScript[]? neutral = null, (string Label, (string Name, decimal X, decimal Y)[] Points)[]? paths = null, IReadOnlyDictionary<string, string>? extraFiles = null, SimulationRate? rate = null)
     {
-        var fixture = new SyntheticFixture(files: extraFiles is null ? ScriptFiles() : new Dictionary<string, string>(ScriptFiles()).Concat(extraFiles).ToDictionary(pair => pair.Key, pair => pair.Value));
+        var fixture = new SyntheticFixture(rate ?? SimulationRate.Original, files: extraFiles is null ? ScriptFiles() : new Dictionary<string, string>(ScriptFiles()).Concat(extraFiles).ToDictionary(pair => pair.Key, pair => pair.Value));
         var area = new MapPolygonTrigger("LeftArea", string.Empty, 7, false, false, 0, [new MapPoint(0, 0, 0), new MapPoint(200, 0, 0), new MapPoint(200, 400, 0), new MapPoint(0, 400, 0)]);
         var baseMap = SyntheticMaps.Build(60, 40, 1, triggers: [area], waypoints: [("Spawn", 100m, 200m, 0m), ("Far", 400m, 200m, 0m), ("Mid", 250m, 200m, 0m)]);
         // Waypoint paths: extra waypoints, the first labelled with the path name (waypointPathLabel1), linked in order by waypointID.
@@ -667,11 +668,11 @@ static partial class Tests
             End
             """,
         };
-        var fixture = new SyntheticFixture(files: files);
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: files);
         Check.That(fixture.Templates.TryGet("Hunter", out var hunter) && hunter.IsInstantiable, "An object with the command-button hunt shell and a locked primary slot can be created.");
         // With the weapon slot model the module locks whichever slot it names (locks are tested in Tests.WeaponSlots.cs); an unknown slot name is a build error, not a guess.
         Check.That(fixture.Templates.TryGet("Switcher", out var switcher) && switcher.IsInstantiable, "Locking another slot is supported: " + string.Join(",", switcher?.MissingModules ?? []));
         files["Data/INI/Object/Shells.ini"] += "\nObject Typo\n  KindOf = INFANTRY\n  Behavior = LockWeaponCreate Lock01\n    SlotToLock = QUATERNARY\n  End\nEnd\n";
-        Check.Throws<FormatException>(() => _ = new SyntheticFixture(files: files).Templates, "QUATERNARY"); // an unknown SlotToLock is already rejected by the strictly typed module schema
+        Check.Throws<FormatException>(() => _ = new SyntheticFixture(SimulationRate.Original, files: files).Templates, "QUATERNARY"); // an unknown SlotToLock is already rejected by the strictly typed module schema
     }
 }

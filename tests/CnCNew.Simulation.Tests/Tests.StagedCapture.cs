@@ -14,6 +14,7 @@ using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>The staged capture ability (<c>SpecialAbilityUpdate</c>, docs/SIM-STAGED-CAPTURE.md): approach, face, unpack, raise the flag, change owner, pack.</summary>
@@ -141,7 +142,7 @@ static partial class Tests
 
     private static SimulationWorld StagedWorld(out SyntheticFixture fixture, out Feeder feeder, int stationX = 200, int stationY = 50, string capturer = "StagedCapturer", bool upgrade = true)
     {
-        fixture = new SyntheticFixture(files: StagedCaptureFiles());
+        fixture = new SyntheticFixture(SimulationRate.Original, files: StagedCaptureFiles());
         var world = NewWorld(fixture);
         feeder = new Feeder(world);
         feeder.Spawn(1, capturer, owner: 1, x: 100, y: 50);                         // id 1
@@ -359,7 +360,7 @@ static partial class Tests
         }
 
         // An object that never uses the ability saves exactly what it saved before the staging existed.
-        var idleFixture = new SyntheticFixture(files: StagedCaptureFiles());
+        var idleFixture = new SyntheticFixture(SimulationRate.Original, files: StagedCaptureFiles());
         var idle = NewWorld(idleFixture);
         new Feeder(idle).Spawn(1, "StagedCapturer", owner: 1, x: 100, y: 50);
         for (var index = 0; index < 50; index++) idle.Step();
@@ -387,14 +388,14 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
 
         (long Unpack, long Prepare, long Pack, bool Captured, long CaptureTick, long PackStart, bool HackStyle, string Hash) Run(string unitTemplate, string buildingTemplate, string? upgrade, int unpack, int prepare, int pack)
         {
             var terrain = TerrainMap.Build(SyntheticMaps.Build(120, 120, 1, (_, _) => 0), "capture");
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 7, players, "real-capture", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, players, "real-capture", fingerprint, terrain.Fingerprint), catalog, terrain);
             var feeder = new Feeder(world);
             Check.That(feeder.Spawn(1, unitTemplate, owner: 1, x: 300, y: 600).Accepted, unitTemplate + " spawns.");
             Check.That(feeder.Spawn(2, buildingTemplate, owner: 2, x: 700, y: 600).Accepted, buildingTemplate + " spawns.");

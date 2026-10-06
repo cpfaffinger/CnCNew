@@ -13,6 +13,7 @@ using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
@@ -169,9 +170,9 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) AcquisitionWorld(bool computer, params (string Template, int Owner, int X, int Y)[] objects)
     {
-        var fixture = new SyntheticFixture(files: AcquisitionFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: AcquisitionFiles());
         var world = computer
-            ? new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, ComputerAgainstHuman, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates)
+            ? new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, ComputerAgainstHuman, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates)
             : NewWorld(fixture);
         var feeder = new Feeder(world);
         foreach (var (template, owner, x, y) in objects) feeder.Spawn(owner, template, owner: owner, x: x, y: y);
@@ -199,8 +200,8 @@ static partial class Tests
         {
             ["Data/INI/Object/AcqBad.ini"] = $"Object AcqBad\n  KindOf = SELECTABLE VEHICLE\n  Body = ActiveBody Body01\n    MaxHealth = 10.0\n    InitialHealth = 10.0\n  End\n  Behavior = AIUpdateInterface AI01\n    AutoAcquireEnemiesWhenIdle = {value}\n  End\nEnd\n",
         };
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(files: Files("Yes Sometimes")).Templates, "Sometimes");
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(files: Files("Yes +STEALTHED")).Templates, "mixed");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: Files("Yes Sometimes")).Templates, "Sometimes");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: Files("Yes +STEALTHED")).Templates, "mixed");
     }
 
     public static void AcquisitionIdleUnitPicksTheClosestEnemyInRange()
@@ -468,7 +469,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var ignored = graph.Diagnostics.Count(value => value.Code == "compatibility-ignored-tokens" && value.Message.Contains("AutoAcquireEnemiesWhenIdle", StringComparison.Ordinal));
         Check.That(ignored == 0, $"No AutoAcquireEnemiesWhenIdle value loses tokens any more ({ignored}).");
@@ -476,7 +477,7 @@ static partial class Tests
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
         AutoAcquire FlagsOf(string template)
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, players, "real-acquire-flags", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, players, "real-acquire-flags", fingerprint), catalog);
             new Feeder(world).Spawn(1, template, owner: 1, x: 100, y: 100);
             world.Step();
             return AiOfUnit(world.Entities.First(value => value.Template.Name == template)).AutoAcquire;
@@ -492,7 +493,7 @@ static partial class Tests
         (ulong Hash, int Shots, bool OneDied, long FirstShot) Duel()
         {
             var terrain = TerrainMap.Build(SyntheticMaps.Build(120, 120, 1, (_, _) => 0), "acquire");
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 7, players, "real-acquire", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, players, "real-acquire", fingerprint, terrain.Fingerprint), catalog, terrain);
             world.RevealMapPermanently(new PlayerId(1), true);
             world.RevealMapPermanently(new PlayerId(2), true);
             var feeder = new Feeder(world);

@@ -16,7 +16,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 public sealed record JetAIData(AIUpdateData Base, Fixed OutOfAmmoDamageRatePerSecond, bool NeedsRunway, bool KeepsParkingSpaceWhenAirborne, long TakeoffPauseTicks, Fixed ParkingOffset,
     string AttackLocomotor, long AttackLocomotorPersistTicks, string ReturnLocomotor, long ReturnToBaseIdleTicks) : ModuleData
 {
-    public static JetAIData Parse(ModuleConfiguration configuration)
+    public static JetAIData Parse(RatedModuleConfiguration configuration)
     {
         string Set(string key)
         {
@@ -548,9 +548,9 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             if (!_waitedFor.IsValid)
             {
                 _waitedFor = Entity.Id;
-                _transferTick = now + 1;
+                _transferTick = now + TickOrder.Next;
             }
-            else _transferTick = now + 2;
+            else _transferTick = now + 2 * TickOrder.Next;   // order, not time: after the jet that was waited for had its step
             _resetTimer = true;
         }
         if (now >= _transferTick) parking.TransferRunwayToNext(world, Entity.Id);
@@ -729,18 +729,18 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return;
         }
         Enter(JetPhase.CirclingDeadAirfield);
-        _checkAirfieldTick = world.Tick + SimulationTiming.LogicFramesPerSecond;
+        _checkAirfieldTick = world.Tick + world.Time.TicksPerSecond;
     }
 
     private void CircleDeadAirfield(IWorldServices world)
     {
         if (data.OutOfAmmoDamageRatePerSecond > Fixed.Zero && Entity.Body is { } body)
         {
-            var amount = data.OutOfAmmoDamageRatePerSecond * body.MaxHealth / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+            var amount = data.OutOfAmmoDamageRatePerSecond * body.MaxHealth / world.Time.TicksPerSecondFixed;
             world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, amount, DamageTypes.Unresistable, DeathTypes.Normal, false));
         }
         if (world.Tick < _checkAirfieldTick) return;
-        _checkAirfieldTick = world.Tick + SimulationTiming.LogicFramesPerSecond;
+        _checkAirfieldTick = world.Tick + world.Time.TicksPerSecond;
         var parking = FindSuitableAirfield(world);
         if (parking is null) return;
         _airfield = parking.Entity.Id;

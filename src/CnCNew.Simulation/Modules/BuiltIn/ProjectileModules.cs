@@ -41,17 +41,17 @@ public sealed record DumbProjectileData(long MaxLifespanTicks, bool TumbleRandom
     Fixed FirstPercentIndent, Fixed SecondPercentIndent, Fixed FlightPathAdjustPerTick) : ModuleData
 {
     // DEFAULT_MAX_LIFESPAN = 10 * LOGICFRAMES_PER_SECOND.
-    private const long DefaultMaxLifespanTicks = 10 * SimulationTiming.LogicFramesPerSecond;
+    private const long DefaultMaxLifespanFrames = 10 * SimulationRate.OriginalFramesPerSecond;
 
-    public static DumbProjectileData Parse(ModuleConfiguration configuration) => new(
-        ModuleConfigReader.Ticks(configuration, "MaxLifespan", DefaultMaxLifespanTicks),
+    public static DumbProjectileData Parse(RatedModuleConfiguration configuration) => new(
+        ModuleConfigReader.Ticks(configuration, "MaxLifespan", DefaultMaxLifespanFrames),
         ModuleConfigReader.Bool(configuration, "TumbleRandomly", false),
         ModuleConfigReader.Bool(configuration, "DetonateCallsKill", false),
         ModuleConfigReader.Real(configuration, "FirstHeight", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "SecondHeight", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "FirstPercentIndent", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "SecondPercentIndent", Fixed.Zero),
-        ModuleConfigReader.Real(configuration, "FlightPathAdjustDistPerSecond", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond));
+        ModuleConfigReader.Real(configuration, "FlightPathAdjustDistPerSecond", Fixed.Zero) / configuration.Time.TicksPerSecondFixed);
 }
 
 /// <summary>
@@ -335,11 +335,11 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
 public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks, long IgnitionDelayTicks, Fixed InitialVelocity, Fixed DistanceToTravelBeforeTurning,
     Fixed LockDistance, string IgnitionFx, bool UseWeaponSpeed, bool DetonateOnNoFuel, bool DetonateCallsKill, long KillSelfDelayTicks) : ModuleData
 {
-    public static MissileData Parse(ModuleConfiguration configuration) => new(
+    public static MissileData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Bool(configuration, "TryToFollowTarget", true),
         ModuleConfigReader.Ticks(configuration, "FuelLifetime", 0),
         ModuleConfigReader.Ticks(configuration, "IgnitionDelay", 0),
-        ModuleConfigReader.Real(configuration, "InitialVelocity", Fixed.Zero) / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond),
+        ModuleConfigReader.Real(configuration, "InitialVelocity", Fixed.Zero) / configuration.Time.TicksPerSecondFixed,
         ModuleConfigReader.Real(configuration, "DistanceToTravelBeforeTurning", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "DistanceToTargetForLock", Fixed.FromInt(75)),
         ModuleConfigReader.Text(configuration, "IgnitionFX"),
@@ -754,7 +754,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
 /// <summary><c>PointDefenseLaserUpdateModuleData</c>: the laser weapon, the target kinds (primary before secondary), the scan interval in ticks and the scan range.</summary>
 public sealed record PointDefenseLaserData(string Weapon, ImmutableArray<string> PrimaryTargetTypes, ImmutableArray<string> SecondaryTargetTypes, long ScanTicks, Fixed ScanRange) : ModuleData
 {
-    public static PointDefenseLaserData Parse(ModuleConfiguration configuration) => new(
+    public static PointDefenseLaserData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Text(configuration, "WeaponTemplate"),
         ModuleConfigReader.Flags(configuration, "PrimaryTargetTypes")?.Names ?? [],
         ModuleConfigReader.Flags(configuration, "SecondaryTargetTypes")?.Names ?? [],

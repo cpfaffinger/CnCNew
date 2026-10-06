@@ -14,6 +14,7 @@ using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.Timers;
 using CnCNew.Simulation.World;
 
@@ -25,7 +26,7 @@ static partial class Tests
     private static (SyntheticFixture Fixture, ReplayFile Replay, StressScenario Scenario) ShortReplay(StressOptions? options = null)
     {
         options ??= ShortOptions;
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var scenario = new StressScenario(options);
         var recorded = scenario.Record(fixture);
         var withCheckpoints = ReplayRunner.Run(recorded, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordCheckpointInterval = options.CheckpointInterval });
@@ -150,7 +151,9 @@ static partial class Tests
         var text = Encoding.UTF8.GetString(bytes);
         Rejected(Encoding.UTF8.GetBytes(text.Replace($"\"version\":{WorldSnapshot.Version}", $"\"version\":{WorldSnapshot.Version + 1}", StringComparison.Ordinal)), "foreign version");
         Rejected(Encoding.UTF8.GetBytes(text.Replace("cncnew-world-snapshot", "other-format", StringComparison.Ordinal)), "foreign format");
-        Rejected(Encoding.UTF8.GetBytes(text.Replace("\"tickRate\":30", "\"tickRate\":60", StringComparison.Ordinal)), "foreign tick rate");
+        // An unsupported rate is refused; a supported one needs a catalog of that rate (this one is a 30 Hz catalog). Accepted rates: Tests.TickRate.cs.
+        Rejected(Encoding.UTF8.GetBytes(text.Replace("\"tickRate\":30", "\"tickRate\":50", StringComparison.Ordinal)), "unsupported tick rate");
+        Rejected(Encoding.UTF8.GetBytes(text.Replace("\"tickRate\":30", "\"tickRate\":60", StringComparison.Ordinal)), "tick rate of another catalog");
         Rejected(bytes, "definition fingerprint mismatch", new string('0', 64));
         Rejected(Encoding.UTF8.GetBytes(text.Replace("\"tick\":600", "\"tick\":601", StringComparison.Ordinal)), "tampered tick");
 
@@ -173,7 +176,7 @@ static partial class Tests
         Check.That(flips > 200, $"Nearly every flipped byte must be detected ({flips} of about 240).");
 
         // A different template catalog is refused (names are cross-checked, not only indices).
-        var other = new SyntheticFixture(files: new Dictionary<string, string>(SyntheticFixture.Files)
+        var other = new SyntheticFixture(SimulationRate.Original, files: new Dictionary<string, string>(SyntheticFixture.Files)
         {
             ["Data/INI/Object/Extra.ini"] = "Object AAAFirst\nEnd\n",
         });
@@ -218,12 +221,15 @@ static partial class Tests
         Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(replay, fixture.Templates, new string('A', 64)), "fingerprint");
         var foreignTable = replay with { Header = replay.Header with { CommandTableVersion = CnCNew.Simulation.Commands.CommandTypes.Version + 1 } };
         Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(ReplayFormat.Read(ReplayFormat.Write(foreignTable)), fixture.Templates, fixture.Fingerprint), "command table");
+        var unsupportedRate = replay with { Header = replay.Header with { TickRate = 50 } };
+        Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(ReplayFormat.Read(ReplayFormat.Write(unsupportedRate)), fixture.Templates, fixture.Fingerprint), "50 Hz");
+        // 60 Hz is a supported rate, but this catalog was built for 30 Hz (a 60 Hz replay on a 60 Hz catalog runs: Tests.TickRate.cs).
         var foreignRate = replay with { Header = replay.Header with { TickRate = 60 } };
         Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(ReplayFormat.Read(ReplayFormat.Write(foreignRate)), fixture.Templates, fixture.Fingerprint), "60 Hz");
         Check.Throws<ReplayFormatException>(() => ReplayFormat.Write(replay with { Header = replay.Header with { DefinitionFingerprint = "abc" } }), "fingerprint");
 
         // The fingerprint really depends on the definitions.
-        var changed = new SyntheticFixture(files: new Dictionary<string, string>(SyntheticFixture.Files)
+        var changed = new SyntheticFixture(SimulationRate.Original, files: new Dictionary<string, string>(SyntheticFixture.Files)
         {
             ["Data/INI/Weapon.ini"] = "Weapon TestWeapon\n  PrimaryDamage = 11\nEnd\n",
         });
@@ -269,7 +275,7 @@ static partial class Tests
     public static void ShortStress()
     {
         var options = new StressOptions(12_000, 1_200, 0xC0FFEE01, 0x5EED0001, 1_500, 1_000);
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var scenario = new StressScenario(options);
         var replay = scenario.Record(fixture);
         var maxEntities = 0;
@@ -298,9 +304,9 @@ static partial class Tests
 
     public static void DefinitionOrderIndependence()
     {
-        var original = new SyntheticFixture();
+        var original = new SyntheticFixture(SimulationRate.Original);
         var reversedFiles = SyntheticFixture.Files.Reverse().ToDictionary(pair => pair.Key, pair => pair.Value);
-        var permuted = new SyntheticFixture(files: reversedFiles);
+        var permuted = new SyntheticFixture(SimulationRate.Original, files: reversedFiles);
         Check.That(original.Fingerprint == permuted.Fingerprint, "The definition fingerprint must not depend on file enumeration order.");
         Check.That(original.Templates.Templates.Select(value => value.Name).SequenceEqual(permuted.Templates.Templates.Select(value => value.Name)), "Template indices must not depend on file enumeration order.");
         var scenario = new StressScenario(ShortOptions);
@@ -314,7 +320,7 @@ static partial class Tests
     {
         // The full acceptance run of the phase: 216,000 ticks (two hours of game time), two fresh runs, snapshot continuation.
         var options = StressOptions.Standard;
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var scenario = new StressScenario(options);
         var replay = scenario.Record(fixture);
         Check.That(scenario.PeakAlive >= 10_000, $"At least 10,000 simultaneously living entities (peak {scenario.PeakAlive}).");
@@ -331,7 +337,7 @@ static partial class Tests
 
     public static void IdleAllocation()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         for (var index = 0; index < 500; index++) feeder.Spawn(1 + index % 2, "Barrel");
@@ -381,7 +387,7 @@ static partial class Tests
         var source = new RealSource(content);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(source, ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         SpecialPowerRealData(catalog);
         var report = ModuleCoverage.Compute(catalog);
         Console.WriteLine($"       real data: {report.Objects} objects, {report.Instantiable} instantiable, {report.Blocked} blocked, {report.WithoutSimulationModules} without simulation modules");
@@ -392,7 +398,7 @@ static partial class Tests
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "P1"));
         ulong[] Run()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 77, players, "shipped-objects", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 77, players, "shipped-objects", fingerprint), catalog);
             var sequence = 0UL;
             foreach (var template in catalog.Templates.Where(value => value.IsInstantiable))
                 world.Submit(new SpawnCommand(new PlayerId(1), ++sequence, 0, template.Name, PlayerId.System, Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero));
@@ -419,7 +425,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var participants = ReferenceMatchScenario.Participants(catalog, out _);
         Check.That(participants.Length >= 2, $"At least two retail factions can field a base and an armed unit ({participants.Length}).");

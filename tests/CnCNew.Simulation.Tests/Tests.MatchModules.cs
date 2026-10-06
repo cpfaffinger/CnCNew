@@ -5,6 +5,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -149,7 +150,7 @@ static partial class Tests
     /// </summary>
     public static void MatchMinefieldAndPhysics()
     {
-        var fixture = new SyntheticFixture(files: MinefieldFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: MinefieldFiles());
         Check.That(fixture.Templates.TryGet("Truck", out var truck) && truck.IsInstantiable, "PhysicsBehavior and SquishCollide leave a vehicle instantiable: " + (truck is null ? "missing" : string.Join(", ", truck.MissingModules)));
         Check.That(fixture.Templates.TryGet("BadMine", out var badMine) && !badMine.IsInstantiable, "A mine with a module that is not implemented stays non-instantiable.");
 
@@ -264,7 +265,7 @@ static partial class Tests
             End
             """,
         };
-        var fixture = new SyntheticFixture(files: files);
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: files);
         var live = NewWorld(fixture);
         var feeder = new Feeder(live);
         feeder.Spawn(1, "Regenerator");

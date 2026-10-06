@@ -28,10 +28,11 @@ internal static class RailroadModules
 public sealed record RailroadData(bool IsLocomotive, ImmutableArray<string> Carriages, Fixed RunningGarrisonSpeedMax, Fixed KillSpeedMin, Fixed SpeedMax, Fixed Acceleration, Fixed Braking, Fixed Friction,
     long WaitAtStationTicks) : ModuleData
 {
-    public static RailroadData Parse(ModuleConfiguration configuration) => new(
+    public static RailroadData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Bool(configuration, "IsLocomotive", false), ModuleConfigReader.AccumulatedNames(configuration, "CarriageTemplateName"),
-        ModuleConfigReader.Real(configuration, "RunningGarrisonSpeedMax", Fixed.One), ModuleConfigReader.Real(configuration, "KillSpeedMin", Fixed.One),
-        ModuleConfigReader.Real(configuration, "SpeedMax", Fixed.FromInt(4)), ModuleConfigReader.Real(configuration, "Acceleration", Fixed.FromDecimal(1.01m)),
+        // Speeds per logic frame of the original (INI::parseReal): scaled to per tick. The factors per frame that follow (Acceleration, Braking, Friction) are not: phase 23.
+        configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "RunningGarrisonSpeedMax", Fixed.One)), configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "KillSpeedMin", Fixed.One)),
+        configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "SpeedMax", Fixed.FromInt(4))), ModuleConfigReader.Real(configuration, "Acceleration", Fixed.FromDecimal(1.01m)),
         ModuleConfigReader.Real(configuration, "Braking", Fixed.FromDecimal(0.99m)), ModuleConfigReader.Real(configuration, "Friction", Fixed.FromDecimal(0.97m)),
         ModuleConfigReader.Ticks(configuration, "WaitAtStationTime", 150));
 }

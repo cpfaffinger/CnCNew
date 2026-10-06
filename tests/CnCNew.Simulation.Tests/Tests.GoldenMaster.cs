@@ -4,6 +4,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 
 static partial class Tests
 {
@@ -21,7 +22,7 @@ static partial class Tests
         // Golden armor arithmetic, by hand: 20 * 100% = 20, 20 * 50% = 10, 40 * 50% = 20.
         foreach (var (armored, expectedDamage, expectedShots) in new[] { (false, 20, 5), (true, 10, 10) })
         {
-            var fixture = new SyntheticFixture(files: Phase5Files());
+            var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
             var world = NewWorld(fixture);
             var feeder = new Feeder(world);
             feeder.Spawn(1, "Fighter", x: 0, y: 0);
@@ -74,7 +75,7 @@ static partial class Tests
     /// </summary>
     public static void Phase5GoldenProduction()
     {
-        var fixture = new SyntheticFixture(files: Phase5Files());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: Phase5Files());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Factory", x: 5, y: 5);

@@ -43,7 +43,7 @@ public sealed record OpenContainData(
     ImmutableArray<string> AllowInsideKindOf, ImmutableArray<string> ForbidInsideKindOf,
     bool AllowAlliesInside, bool AllowEnemiesInside, bool AllowNeutralInside)
 {
-    public static OpenContainData Parse(ModuleConfiguration configuration, ImmutableArray<string> defaultAllowInsideKindOf) => new(
+    public static OpenContainData Parse(RatedModuleConfiguration configuration, ImmutableArray<string> defaultAllowInsideKindOf) => new(
         DieMuxData.Parse(configuration),
         ModuleConfigReader.Real(configuration, "DamagePercentToUnits", Fixed.Zero),
         ModuleConfigReader.Flags(configuration, "AllowInsideKindOf")?.Names ?? defaultAllowInsideKindOf,
@@ -184,7 +184,7 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
 /// </summary>
 public sealed record GarrisonContainData(OpenContainData Base, int ContainMax, bool HealObjects, long TimeForFullHealTicks) : ModuleData
 {
-    public static GarrisonContainData Parse(ModuleConfiguration configuration) => new(
+    public static GarrisonContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "ContainMax", -1)),
         ModuleConfigReader.Bool(configuration, "HealObjects", false),
@@ -329,7 +329,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 /// </summary>
 public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed HealthRegenPercentPerSecond) : ModuleData
 {
-    public static TransportContainData Parse(ModuleConfiguration configuration) => new(
+    public static TransportContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "Slots", 0)),
         ModuleConfigReader.Real(configuration, "HealthRegen%PerSec", Fixed.Zero));
@@ -408,7 +408,7 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
                 var rider = world.FindEntity(riderId);
                 if (rider?.Body is null || rider.Body.Health >= rider.Body.MaxHealth) continue;
                 var perSecond = rider.Body.MaxHealth * data.HealthRegenPercentPerSecond / Fixed.FromInt(100);
-                var perTick = perSecond / Fixed.FromInt(SimulationTiming.LogicFramesPerSecond);
+                var perTick = perSecond / world.Time.TicksPerSecondFixed;
                 world.Damage(rider.Id, new DamageInfo(Entity.Id, perTick, DamageTypes.Healing, DeathTypes.None, false));
             }
         return data.HealthRegenPercentPerSecond > Fixed.Zero ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;

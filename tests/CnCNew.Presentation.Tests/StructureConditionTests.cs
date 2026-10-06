@@ -14,6 +14,7 @@ using CnCNew.Data.World;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Presentation.Tests;
@@ -452,8 +453,8 @@ internal static class StructureConditionTests
 
         public Rig(TerrainMap? terrain = null)
         {
-            var fixture = new SyntheticFixture(files: Files());
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
+            var fixture = new SyntheticFixture(SimulationRate.Original, files: Files());
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
         }
 
         public SimulationWorld World { get; }
@@ -857,10 +858,10 @@ internal static class StructureConditionTests
         var content = ContentFileSystem.Open(directory);
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default,
             DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude });
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East", "FactionAmerica"), new PlayerConfiguration(new PlayerId(2), "West", "FactionChina"));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, players, "presentation-structures", fingerprint), templates);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, players, "presentation-structures", fingerprint), templates);
         var tracker = new StructureConditionTracker();
         var sequence = 0UL;
         Entity Spawn(string template, int owner, int x, int y)
@@ -1042,7 +1043,7 @@ internal static class StructureConditionTests
     private static void RealSweep(CompiledDefinitionGraph graph, TemplateCatalog templates, string fingerprint, ImmutableArray<PlayerConfiguration> players)
     {
         var catalog = ObjectVisualCatalog.Build(graph);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 3, players, "presentation-structure-sweep", fingerprint), templates);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 3, players, "presentation-structure-sweep", fingerprint), templates);
         var instantiable = templates.Templates.Where(template => template.IsInstantiable).OrderBy(template => template.Name, StringComparer.Ordinal).ToArray();
         var sequence = 0UL;
         for (var index = 0; index < instantiable.Length; index++)

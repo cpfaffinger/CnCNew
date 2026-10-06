@@ -11,7 +11,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 
 public sealed record CreateCrateDieData(DieMuxData Mux, ImmutableArray<string> CrateNames) : DieData(Mux)
 {
-    public static CreateCrateDieData Parse(ModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
+    public static CreateCrateDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration),
         [..configuration.Fields.Where(field => field.Name.Equals("CrateData", StringComparison.OrdinalIgnoreCase))
             .SelectMany(field => field.Value.Value switch
             {

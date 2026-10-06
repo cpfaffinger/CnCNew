@@ -16,6 +16,7 @@ using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 
 const string Usage = """
     Usage: CnCNew.CampaignTool <command> <content-dir> [options]
@@ -43,6 +44,7 @@ const string Usage = """
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
                                                 and a savegame from mission to mission
+    Every command that runs a mission takes --tick-rate N (30, 60 or 120; default 30); tick budgets stay ticks of that rate.
     """;
 
 if (args.Length < 2)
@@ -53,6 +55,7 @@ if (args.Length < 2)
 
 try
 {
+    CnCNew.CampaignTool.ToolRate.Read(args);
     var content = ContentFileSystem.Open(args[1]);
     using var catalogStream = content.OpenRead("Data/INI/Campaign.ini");
     var campaigns = CampaignCatalog.Parse(catalogStream);
@@ -264,8 +267,8 @@ static (MissionContext Context, TemplateCatalog Catalog, string Fingerprint) Com
     var graph = DefinitionCompiler.Compile(new ContentDefinitionSource(content), ModuleRegistry.Default, options);
     // The same world the client simulates (GameData.Load): the airfields' parking and runway points come from the draw models' bones and are part of the fingerprint.
     var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
-    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, geometry);
-    var fingerprint = geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256);
+    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.CampaignTool.ToolRate.Current, geometry);
+    var fingerprint = catalog.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256));
     return (new MissionContext(catalog, fingerprint, path =>
     {
         using var stream = content.OpenRead(path);

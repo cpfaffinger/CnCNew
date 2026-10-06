@@ -3,6 +3,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -340,5 +341,8 @@ public sealed partial class SimulationWorld
     /// <summary><c>Thing::isSignificantlyAboveTerrain</c>: higher than three frames of free fall above the terrain height (flat 0 without terrain).</summary>
     public bool IsSignificantlyAboveTerrain(Entity entity) => IsSignificantlyAbove(entity.Z, GroundHeightAt(entity.X, entity.Y));
 
-    private bool IsSignificantlyAbove(Fixed z, Fixed ground) => z - ground > Fixed.FromDecimal(-9m * _templates.Gravity / 900m);
+    // A height, not a rate: 3 x 3 logic frames of the original times the gravity per frame of the original squared (gravity per second² / 30²). The same
+    // at every tick rate, so it is written with the original's frame rate and never with the rate of the world.
+    private bool IsSignificantlyAbove(Fixed z, Fixed ground)
+        => z - ground > Fixed.FromDecimal(-9m * _templates.Gravity / (SimulationRate.OriginalFramesPerSecond * SimulationRate.OriginalFramesPerSecond));
 }

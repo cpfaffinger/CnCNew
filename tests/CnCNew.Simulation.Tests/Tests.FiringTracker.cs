@@ -3,6 +3,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>The continuous-fire stages of <c>FiringTracker</c> (<c>SimulationWorld.FiringTracker.cs</c>): shots in a row at one victim speed the weapon up through its own weapon bonus lines.</summary>
@@ -110,7 +111,7 @@ static partial class Tests
 
     public static void FiringTrackerSpinsUpCoastsAndCoolsDown()
     {
-        var fixture = new SyntheticFixture(files: FiringTrackerFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: FiringTrackerFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "SpinTank", owner: 1, x: 0, y: 0);
@@ -190,7 +191,7 @@ static partial class Tests
     /// <summary><c>PreAttackDelay</c>: the weapon winds up before the shot (<c>Weapon::preFireWeapon</c>), per shot, per attack or per clip.</summary>
     public static void PreAttackDelayWindsUpBeforeTheShot()
     {
-        var fixture = new SyntheticFixture(files: FiringTrackerFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: FiringTrackerFiles());
         Check.That(fixture.Templates.Weapons.TryGet("ClipWindupGun", out var clipGun) && clipGun.PreAttackDelayTicks == 15 && clipGun.PreAttackType == WeaponPrefire.PerClip, "PreAttackDelay (500 ms = 15 ticks) and PreAttackType are read.");
         Check.That(fixture.Templates.Weapons.TryGet("SpinGun", out var spinGun) && spinGun.PreAttackDelayTicks == 0 && spinGun.PreAttackType == WeaponPrefire.PerShot, "A weapon without the keys has no delay (default PER_SHOT).");
 

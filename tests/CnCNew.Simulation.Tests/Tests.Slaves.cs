@@ -9,6 +9,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>Phase 14, slaves/spawns/containers: drones, the angry mob, hives, the propaganda tower, riders, overlords, hackers, troop crawlers and avalanche rocks.</summary>
@@ -521,7 +522,7 @@ static partial class Tests
 
     private static SimulationWorld SlaveWorld(out SyntheticFixture fixture, out Feeder feeder)
     {
-        fixture = new SyntheticFixture(files: SlaveFiles());
+        fixture = new SyntheticFixture(SimulationRate.Original, files: SlaveFiles());
         var world = NewWorld(fixture);
         feeder = new Feeder(world);
         return world;
@@ -545,7 +546,7 @@ static partial class Tests
 
     public static void SlaveFixtureObjectsAreInstantiable()
     {
-        var fixture = new SyntheticFixture(files: SlaveFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: SlaveFiles());
         foreach (var name in new[] { "SvMaster", "SvScoutDrone", "SvBattleDrone", "SvNexus", "SvMobMember", "SvHive", "SvHiveSoldier", "SvTower", "SvBike", "SvOverlord", "SvBunker",
                      "SvHackCenter", "SvHacker", "SvFireTransport", "SvCrawler", "SvRock" })
             Check.That(fixture.Templates.TryGet(name, out var template) && template.IsInstantiable, $"{name} is instantiable: " + (template is null ? "missing" : string.Join(", ", template.MissingModules)));
@@ -567,7 +568,7 @@ static partial class Tests
             End
             """,
         };
-        Check.Throws<Exception>(() => _ = new SyntheticFixture(files: broken), "STATUS_NO_SUCH_THING");
+        Check.Throws<Exception>(() => _ = new SyntheticFixture(SimulationRate.Original, files: broken), "STATUS_NO_SUCH_THING");
     }
 
     /// <summary>SlavedUpdate: a spawned drone is enslaved at once, follows its master, and is released when the master dies; a master without a spawner loses its flying drone.</summary>
@@ -975,10 +976,10 @@ static partial class Tests
     /// <summary>TensileFormationUpdate: a hurt rock sets its neighbours sliding down the slope; the formation stays together and stops after 300 ticks.</summary>
     public static void TensileFormationSlidesDownTheSlope()
     {
-        var fixture = new SyntheticFixture(files: SlaveFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: SlaveFiles());
         var map = SyntheticMaps.Build(60, 40, 1, height: (x, _) => x);
         var terrain = TerrainMap.Build(map, "slope");
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "SvRock", x: 300, y: 200);
         feeder.Spawn(1, "SvRock", x: 310, y: 200);

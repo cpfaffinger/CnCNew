@@ -488,7 +488,7 @@ static class InputTests
         """,
     };
 
-    private static readonly Lazy<SyntheticFixture> SharedFixture = new(() => new SyntheticFixture(files: Files()));
+    private static readonly Lazy<SyntheticFixture> SharedFixture = new(() => new SyntheticFixture(SimulationRate.Original, files: Files()));
 
     internal static SyntheticFixture Fixture => SharedFixture.Value;
 
@@ -561,7 +561,7 @@ static class InputTests
         {
             Terrain = terrain ? FlatTerrain() : null;
             Players = [new PlayerConfiguration(Me, "Me"), new PlayerConfiguration(Enemy, "Enemy")];
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), 7, Players, SyntheticFixture.FixtureId, Fixture.Fingerprint, Terrain?.Fingerprint ?? ""), Fixture.Templates, Terrain);
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, Players, SyntheticFixture.FixtureId, Fixture.Fingerprint, Terrain?.Fingerprint ?? ""), Fixture.Templates, Terrain);
             Sink = new WorldSink(World, Log);
             if (money > 0) System(sequence => new GiveMoneyCommand(PlayerId.System, sequence, World.Tick, Me, Fixed.FromInt(money)));
         }
@@ -594,7 +594,7 @@ static class InputTests
 
         public ReplayFile Replay(long endTick)
         {
-            var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, SimulationTiming.LogicFramesPerSecond, Fixture.Fingerprint, SyntheticFixture.FixtureId, 7,
+            var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, SimulationRate.OriginalFramesPerSecond, Fixture.Fingerprint, SyntheticFixture.FixtureId, 7,
                 new WorldId(1), Players, endTick, 0, Terrain?.Fingerprint ?? "");
             return new ReplayFile(header, [..Log.OrderBy(value => value.Tick).ThenBy(value => value.Player.Value).ThenBy(value => value.Sequence)], []);
         }
@@ -1383,10 +1383,10 @@ static class InputTests
                && buttons.TryGetButton("Command_ConstructAmericaDozer", out var dozerButton) && dozerButton.SpecialPowerOption == 0,
             "the strategy center's three battle plan buttons carry OPTION_ONE/TWO/THREE as the command's option");
 
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(Me, "America", "FactionAmerica"), new PlayerConfiguration(Enemy, "China", "FactionChina"));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 3, players, "input-real", fingerprint), catalog);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 3, players, "input-real", fingerprint), catalog);
         var system = 0UL;
         var names = new[] { "AmericaCommandCenter", "AmericaBarracks", "AmericaVehicleDozer", "AmericaTankCrusader" };
         for (var index = 0; index < names.Length; index++)

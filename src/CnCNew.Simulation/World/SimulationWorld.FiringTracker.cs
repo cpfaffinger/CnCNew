@@ -163,7 +163,7 @@ public sealed partial class SimulationWorld
     // ------------------------------------------------------------------------------------------------------ the wind-up before a shot
 
     /// <summary>A wind-up nobody followed up on (the attack was dropped without an order the simulation sees) is forgotten after this long past its end.</summary>
-    private const long PreAttackStaleTicks = SimulationTiming.LogicFramesPerSecond;
+    private const long PreAttackStaleFrames = SimulationRate.OriginalFramesPerSecond;
 
     /// <summary>
     /// <c>Object::preFireCurrentWeapon</c> / <c>Weapon::preFireWeapon</c> and the wait of <c>AIAttackFireWeaponState::update</c> (<c>PRE_ATTACK</c> → continue): a weapon with a
@@ -175,7 +175,7 @@ public sealed partial class SimulationWorld
     {
         if (weapon.PreAttackDelayTicks == 0) return true;
         var state = source.Firing;
-        if (state is not null && state.PreSlot == slot && state.PreVictim == victim.Id && _tick <= state.PreFinish + PreAttackStaleTicks) return _tick >= state.PreFinish;
+        if (state is not null && state.PreSlot == slot && state.PreVictim == victim.Id && _tick <= state.PreFinish + Time.OriginalFrames(PreAttackStaleFrames)) return _tick >= state.PreFinish;
 
         // Weapon::getPreAttackDelay: "Look for a reason to return zero and have no delay."
         if (weapon.PreAttackType == WeaponPrefire.PerClip && weapon.ClipSize > 0 && source.ClipOf(slot) is var clip && clip != 0 && clip < weapon.ClipSize) return true;
@@ -244,7 +244,7 @@ public sealed partial class SimulationWorld
             }
 
             if (tick <= state.CooldownFrame) continue;
-            state.CooldownFrame = tick + SimulationTiming.LogicFramesPerSecond;
+            state.CooldownFrame = tick + Time.TicksPerSecond;
             CoolDown(entity, state);
             MarkDirty(entity);
             if (state.CooldownFrame != 0) continue;

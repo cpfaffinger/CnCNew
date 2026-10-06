@@ -126,8 +126,8 @@ static partial class Tests
         """,
     };
 
-    private static readonly Fixed WingMinSpeed = SimulationTiming.PerSecondToPerTick(60m);
-    private static readonly Fixed WingTurnPerTick = SimulationTiming.DegreesPerSecondToRadiansPerTick(120m);
+    private static readonly Fixed WingMinSpeed = SimulationRate.Original.Time.PerSecondToPerTick(60m);
+    private static readonly Fixed WingTurnPerTick = SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(120m);
 
     private static SimulationWorld WingWorld(out SyntheticFixture fixture, out Feeder feeder, params (string Template, int X, int Y)[] jets)
     {
@@ -212,7 +212,7 @@ static partial class Tests
         }
         Check.That(maxTurn <= WingTurnPerTick + Fixed.FromRaw(2), $"No tick turns the jet by more than the turn rate ({maxTurn} vs {WingTurnPerTick}).");
         Check.That(turned >= 40, $"A U-turn takes many ticks ({turned}).");
-        Check.That(maxStep <= SimulationTiming.PerSecondToPerTick(150m) + Fixed.FromRaw(64), $"It never moves faster than its speed ({maxStep}).");
+        Check.That(maxStep <= SimulationRate.Original.Time.PerSecondToPerTick(150m) + Fixed.FromRaw(64), $"It never moves faster than its speed ({maxStep}).");
         Check.That(farthest > Fixed.FromInt(1000 + 40), $"The turn is a loop, not a pivot: the jet flew on to x = {farthest}.");
     }
 

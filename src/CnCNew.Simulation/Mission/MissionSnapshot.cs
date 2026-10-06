@@ -36,7 +36,7 @@ public static class MissionSnapshot
             writer.BeginObject(null);
             writer.Text("format", Format);
             writer.Int("version", Version);
-            writer.Int("tickRate", SimulationTiming.LogicFramesPerSecond);
+            writer.Int("tickRate", session.World.Rate.TicksPerSecond);
             writer.Text("programFingerprint", session.Program.Fingerprint);
             writer.Text("definitionFingerprint", session.World.Configuration.DefinitionFingerprint);
             writer.Text("terrainFingerprint", session.World.Configuration.TerrainFingerprint);
@@ -78,7 +78,7 @@ public static class MissionSnapshot
             var root = new JsonStateReader(document.RootElement);
             if (root.Text("format") != Format) throw new SnapshotFormatException($"Not a {Format} document.");
             if (root.Int("version") != Version) throw new SnapshotFormatException($"Unsupported mission state version {root.Int("version")} (expected {Version}).");
-            if (root.Int("tickRate") != SimulationTiming.LogicFramesPerSecond) throw new SnapshotFormatException("Tick rate mismatch.");
+            WorldSnapshot.ReadRate(root, templates);
             if (root.Text("definitionFingerprint") != expectedDefinitionFingerprint)
                 throw new SnapshotFormatException("The mission state was written for different definitions (fingerprint mismatch).");
             var program = ScriptProgram.Build(map);

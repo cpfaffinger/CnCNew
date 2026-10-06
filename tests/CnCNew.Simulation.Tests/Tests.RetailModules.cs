@@ -8,6 +8,7 @@ using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -251,7 +252,7 @@ static partial class Tests
     /// <summary>The production exits: units appear at the transformed <c>UnitCreatePoint</c>, and <c>QueueProductionExitUpdate</c> holds finished units back by its exit delay once the initial burst is spent.</summary>
     public static void RetailProductionExits()
     {
-        var fixture = new SyntheticFixture(files: RetailModuleFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: RetailModuleFiles());
         Check.That(fixture.Templates.TryGet("DefaultExitFactory", out var factoryTemplate) && factoryTemplate.IsInstantiable && fixture.Templates.TryGet("QueueExitFactory", out var queueTemplate) && queueTemplate.IsInstantiable,
             "Both exit modules bind and leave their producers instantiable.");
 
@@ -299,7 +300,7 @@ static partial class Tests
     /// <summary><c>HealContain</c> heals its occupants over <c>TimeForFullHeal</c>, then lets them go; vehicles, enemies and a full house are refused.</summary>
     public static void RetailHealContain()
     {
-        var fixture = new SyntheticFixture(files: RetailModuleFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: RetailModuleFiles());
         Check.That(fixture.Templates.TryGet("Barracks", out var barracksTemplate) && barracksTemplate.IsInstantiable, "HealContain binds: " + (barracksTemplate is null ? "missing" : string.Join(", ", barracksTemplate.MissingModules)));
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
@@ -355,7 +356,7 @@ static partial class Tests
     /// <summary><c>EjectPilotDie</c>, <c>VeterancyGainCreate</c>, <c>PreorderCreate</c> and <c>RadarUpdate</c>.</summary>
     public static void RetailSmallModules()
     {
-        var fixture = new SyntheticFixture(files: RetailModuleFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: RetailModuleFiles());
         foreach (var name in new[] { "Jeep", "EliteTank", "VeteranTank", "DrillTank", "RadarBuilding", "Shack", "ShackHole", "HoleWorker" })
             Check.That(fixture.Templates.TryGet(name, out var template) && template.IsInstantiable, $"{name} is instantiable: " + (template is null ? "missing" : string.Join(", ", template.MissingModules)));
 
@@ -370,7 +371,7 @@ static partial class Tests
 
         // VeterancyGainCreate: the player with the science gets the level, the one without stays regular; untrainable objects are untouched
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "Alpha", "TestFaction"), new PlayerConfiguration(new PlayerId(2), "Beta"));
-        var vetWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var vetWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         var vetFeeder = new Feeder(vetWorld);
         vetFeeder.Spawn(1, "EliteTank");
         vetFeeder.Spawn(1, "DrillTank");
@@ -403,7 +404,7 @@ static partial class Tests
     /// <summary>A dying GLA structure leaves a hole that regenerates and counts down to its (unmodeled) worker; neutral and unbuildable cases are explicit.</summary>
     public static void RetailRebuildHole()
     {
-        var fixture = new SyntheticFixture(files: RetailModuleFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: RetailModuleFiles());
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Shack", x: 7, y: 9);

@@ -8,6 +8,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -21,7 +22,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
 
         var sets = catalog.Templates.SelectMany(template => template.WeaponSets).ToArray();
@@ -46,7 +47,7 @@ static partial class Tests
         ulong Run()
         {
             var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 5, players, "real-slots", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-slots", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             void Spawn(int player, string template, int x, int y, int z)
             {

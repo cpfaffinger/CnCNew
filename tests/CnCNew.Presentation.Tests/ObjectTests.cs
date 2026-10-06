@@ -16,6 +16,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.Views;
 using CnCNew.Simulation.World;
 
@@ -266,10 +267,10 @@ static class ObjectTests
         """,
     };
 
-    private static SyntheticFixture Fixture() => new(files: Files());
+    private static SyntheticFixture Fixture() => new(SimulationRate.Original, files: Files());
 
     private static SimulationWorld NewWorld(SyntheticFixture fixture, TerrainMap? terrain = null)
-        => new(new WorldConfiguration(new WorldId(1), 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
+        => new(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
 
     /// <summary>A flat 20 x 20 cell synthetic map (no original data).</summary>
     private static TerrainMap FlatTerrain()
@@ -456,7 +457,7 @@ static class ObjectTests
             End
             """,
         };
-        var graph = new SyntheticFixture(files: files).Graph;
+        var graph = new SyntheticFixture(SimulationRate.Original, files: files).Graph;
         var catalog = ObjectVisualCatalog.Build(graph);
         var codes = catalog.Diagnostics.Select(value => $"{value.Code}:{value.Key}").ToHashSet();
         foreach (var expected in new[]
@@ -830,9 +831,9 @@ static class ObjectTests
                           $"models {first.ModelFilesResolved}/{first.ModelFiles}, animations {first.AnimationFilesResolved}/{first.AnimationFiles}, " +
                           $"skeletons {first.SkeletonFilesResolved}/{first.SkeletonFiles}, rule errors {first.RuleErrors}");
 
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, Players, "presentation-real", fingerprint), templates);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, Players, "presentation-real", fingerprint), templates);
         var sequence = 0UL;
         world.Submit(new SpawnCommand(PlayerId.System, ++sequence, 0, "AmericaTankCrusader", new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(100), Fixed.Zero, Fixed.Zero));
         world.Submit(new SpawnCommand(PlayerId.System, ++sequence, 0, "AmericaBarracks", new PlayerId(2), Fixed.FromInt(300), Fixed.FromInt(100), Fixed.Zero, Fixed.Zero));
@@ -851,7 +852,7 @@ static class ObjectTests
         Console.WriteLine($"       real data: {wheeled} objects with wheeled and {treaded} with treaded chassis dynamics");
         {
             var driveTerrain = FlatTerrain();
-            var driveWorld = new SimulationWorld(new WorldConfiguration(new WorldId(2), 1, Players, "presentation-chassis", fingerprint, driveTerrain.Fingerprint), templates, driveTerrain);
+            var driveWorld = new SimulationWorld(new WorldConfiguration(new WorldId(2), SimulationRate.Original, 1, Players, "presentation-chassis", fingerprint, driveTerrain.Fingerprint), templates, driveTerrain);
             driveWorld.Submit(new SpawnCommand(PlayerId.System, ++sequence, 0, "AmericaVehicleHumvee", new PlayerId(1), Fixed.FromInt(30), Fixed.FromInt(30), Fixed.Zero, Fixed.Zero));
             driveWorld.Step();
             var humvee = driveWorld.Entities.Single(entity => entity.Template.Name == "AmericaVehicleHumvee");

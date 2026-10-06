@@ -10,6 +10,7 @@ using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -23,7 +24,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
 
         var aircraft = catalog.Templates.Where(value => value.Modules.Any(module => module.Name == "JetAIUpdate")).ToArray();
@@ -48,7 +49,7 @@ static partial class Tests
         (ulong[] Hashes, List<string> Log) Run()
         {
             var log = new List<string>();
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 5, players, "real-air", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-air", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             SubmitResult Send(int player, Func<ulong, SimCommand> make) => world.Submit(make(sequence[player] = sequence.GetValueOrDefault(player) + 1));
             void Spawn(int player, string template, int x, int y)
@@ -135,7 +136,7 @@ static partial class Tests
         // real EMP pulse and real neutron missile (fired by the weapon directly: the creation-list nugget that launches it from the silo is not simulated yet)
         void Pulse()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 5, players, "real-air-emp", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-air-emp", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             void Spawn(int player, string template, int x, int y)
                 => Check.That(world.Submit(new SpawnCommand(new PlayerId(player), sequence[player] = sequence.GetValueOrDefault(player) + 1, world.Tick, template, new PlayerId(player), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, $"{template} spawns.");
@@ -154,7 +155,7 @@ static partial class Tests
 
         void Nuke()
         {
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 5, players, "real-air-nuke", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-air-nuke", fingerprint), catalog);
             var sequence = new Dictionary<int, ulong>();
             void Spawn(int player, string template, int x, int y)
                 => Check.That(world.Submit(new SpawnCommand(new PlayerId(player), sequence[player] = sequence.GetValueOrDefault(player) + 1, world.Tick, template, new PlayerId(player), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, $"{template} spawns.");
@@ -188,7 +189,7 @@ static partial class Tests
         {
             // Through the real chain: UseSpecialPowerCommand -> OCLSpecialPower -> SUPERWEAPON_NeutronMissile (FireWeapon nugget) -> the silo is the weapon's source.
             var terrain = CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(400, 400, 1, (_, _) => 0), "real-air-silo"); // the silo OCL is created at the map edge near the source: it needs a terrain, as every match and mission has one
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 5, players, "real-air-silo", fingerprint, terrain.Fingerprint), catalog, terrain);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 5, players, "real-air-silo", fingerprint, terrain.Fingerprint), catalog, terrain);
             var sequence = new Dictionary<int, ulong>();
             SubmitResult Send(int player, Func<ulong, SimCommand> make) => world.Submit(make(sequence[player] = sequence.GetValueOrDefault(player) + 1));
             Check.That(Send(1, next => new SpawnCommand(new PlayerId(1), next, world.Tick, "ChinaNuclearMissileLauncher", new PlayerId(1), Fixed.FromInt(1000), Fixed.FromInt(3000), Fixed.Zero, Fixed.Zero)).Accepted, "The silo spawns.");

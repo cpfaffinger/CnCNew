@@ -29,7 +29,7 @@ internal static class CombatModules
 /// <summary><c>FireWeaponUpdateModuleData</c> field set; both delays are <c>parseDurationUnsignedInt</c> (whole ticks, default 0).</summary>
 public sealed record FireWeaponUpdateData(string Weapon, long InitialDelayTicks, long ExclusiveWeaponDelayTicks) : ModuleData
 {
-    public static FireWeaponUpdateData Parse(ModuleConfiguration configuration) => new(
+    public static FireWeaponUpdateData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Text(configuration, "Weapon"),
         ModuleConfigReader.Ticks(configuration, "InitialDelay", 0),
         ModuleConfigReader.Ticks(configuration, "ExclusiveWeaponDelay", 0));
@@ -113,7 +113,7 @@ internal sealed class CrushDie(PlainDieData data) : DieModuleBase(data.Mux)
 
 public sealed record ReplaceObjectUpgradeData(UpgradeMuxData Mux, string ReplaceObject) : ModuleData
 {
-    public static ReplaceObjectUpgradeData Parse(ModuleConfiguration configuration, UpgradeCatalog catalog)
+    public static ReplaceObjectUpgradeData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog)
         => new(UpgradeMuxData.Parse(configuration, catalog), ModuleConfigReader.Text(configuration, "ReplaceObject"));
 }
 

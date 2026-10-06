@@ -27,12 +27,12 @@ internal static class RepairModules
 /// <summary><c>RepairDockUpdate.cpp</c> field set; <c>TimeForFullHeal</c> is <c>parseDurationReal</c> (fractional frames, reference default one frame).</summary>
 public sealed record RepairDockData(int NumberApproachPositions, Fixed FramesForFullHeal) : DockData(NumberApproachPositions)
 {
-    public static RepairDockData Parse(ModuleConfiguration configuration)
+    public static RepairDockData Parse(RatedModuleConfiguration configuration)
     {
         var field = ModuleConfigReader.Find(configuration, "TimeForFullHeal");
         var frames = field is null
             ? Fixed.One
-            : field.Value.Value is GameTime time ? SimulationTiming.DurationMillisecondsToFixedTicks(time.Milliseconds) : throw new InvalidDataException("RepairDockUpdate TimeForFullHeal is not a duration.");
+            : field.Value.Value is GameTime time ? configuration.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : throw new InvalidDataException("RepairDockUpdate TimeForFullHeal is not a duration.");
         if (frames <= Fixed.Zero) throw new InvalidDataException("RepairDockUpdate TimeForFullHeal must be positive.");
         return new RepairDockData(ParseApproachPositions(configuration), frames);
     }
@@ -87,7 +87,7 @@ internal sealed class RepairDockUpdate(RepairDockData data) : DockUpdateBase(dat
 /// <summary><c>AutoFindHealingUpdate.cpp</c> field set with the reference constructor defaults (scan every frame, range 0, never above 95 %, always below 25 %).</summary>
 public sealed record AutoFindHealingData(long ScanTicks, Fixed ScanRange, Fixed NeverHeal, Fixed AlwaysHeal) : ModuleData
 {
-    public static AutoFindHealingData Parse(ModuleConfiguration configuration) => new(
+    public static AutoFindHealingData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "ScanRate", 0),
         ModuleConfigReader.Real(configuration, "ScanRange", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "NeverHeal", Fixed.FromDecimal(0.95m)),

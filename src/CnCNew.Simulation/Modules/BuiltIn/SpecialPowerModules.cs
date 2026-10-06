@@ -35,7 +35,7 @@ internal static class SpecialPowerModules
         new ModuleBinding<SpectreGunshipData>("SpectreGunshipDeploymentUpdate", ModuleOwnerKind.Object, (configuration, _) => SpectreGunshipData.Parse(configuration), data => new SpectreGunshipDeploymentUpdate(data)),
     ];
 
-    public static string RequiredPower(ModuleConfiguration configuration)
+    public static string RequiredPower(RatedModuleConfiguration configuration)
     {
         var name = ModuleConfigReader.Text(configuration, "SpecialPowerTemplate");
         return name.Length > 0 ? name : throw new InvalidDataException($"Module '{configuration.Name}' names no SpecialPowerTemplate.");
@@ -47,7 +47,7 @@ internal static class SpecialPowerModules
 /// <summary><c>SpecialPowerModuleData</c>: the power's template name plus <c>UpdateModuleStartsAttack</c> and <c>StartsPaused</c>. Sounds and <c>ScriptedSpecialPowerOnly</c> are presentation/AI.</summary>
 public sealed record SpecialPowerBaseData(string PowerName, bool StartsAttack, bool StartsPaused) : ModuleData
 {
-    public static SpecialPowerBaseData Parse(ModuleConfiguration configuration) => new(
+    public static SpecialPowerBaseData Parse(RatedModuleConfiguration configuration) => new(
         SpecialPowerModules.RequiredPower(configuration),
         ModuleConfigReader.Bool(configuration, "UpdateModuleStartsAttack", false),
         ModuleConfigReader.Bool(configuration, "StartsPaused", false));
@@ -200,7 +200,7 @@ public sealed class SpecialAbility(SpecialPowerBaseData data) : SpecialPowerModu
 /// <summary><c>OCLSpecialPowerModuleData</c>. <c>OCLAdjustPositionToPassable</c> needs a terrain/passability model and is not read; <c>ReferenceObject</c> is UI.</summary>
 public sealed record OclSpecialPowerData(SpecialPowerBaseData Base, ImmutableArray<(string Science, string Ocl)> UpgradeOcls, string DefaultOcl, int CreateLocation) : ModuleData
 {
-    public static OclSpecialPowerData Parse(ModuleConfiguration configuration)
+    public static OclSpecialPowerData Parse(RatedModuleConfiguration configuration)
     {
         var location = ModuleConfigReader.Text(configuration, "CreateLocation");
         return new(
@@ -299,7 +299,7 @@ public sealed class OclSpecialPower(OclSpecialPowerData data) : SpecialPowerModu
 
 public sealed record CashBountyPowerData(SpecialPowerBaseData Base, Fixed Bounty) : ModuleData
 {
-    public static CashBountyPowerData Parse(ModuleConfiguration configuration)
+    public static CashBountyPowerData Parse(RatedModuleConfiguration configuration)
         => new(SpecialPowerBaseData.Parse(configuration), ModuleConfigReader.Real(configuration, "Bounty", Fixed.Zero));
 }
 
@@ -329,7 +329,7 @@ public sealed class CashBountyPower(CashBountyPowerData data) : SpecialPowerModu
 
 public sealed record CashHackData(SpecialPowerBaseData Base, long MoneyAmount, ImmutableArray<(string Science, string Amount)> UpgradeAmounts) : ModuleData
 {
-    public static CashHackData Parse(ModuleConfiguration configuration) => new(
+    public static CashHackData Parse(RatedModuleConfiguration configuration) => new(
         SpecialPowerBaseData.Parse(configuration),
         ModuleConfigReader.Int(configuration, "MoneyAmount", 0),
         ModuleConfigReader.Pairs(configuration, "UpgradeMoneyAmount"));
@@ -407,7 +407,7 @@ public sealed class SpecialPowerCreate : BuildCompleteModule
 
 public sealed record GrantUpgradeCreateData(string UpgradeName) : ModuleData
 {
-    public static GrantUpgradeCreateData Parse(ModuleConfiguration configuration)
+    public static GrantUpgradeCreateData Parse(RatedModuleConfiguration configuration)
     {
         var name = ModuleConfigReader.Text(configuration, "UpgradeToGrant");
         return name.Length > 0 ? new(name) : throw new InvalidDataException("GrantUpgradeCreate names no UpgradeToGrant.");
@@ -435,7 +435,7 @@ public sealed class GrantUpgradeCreate(GrantUpgradeCreateData data) : BuildCompl
 
 public sealed record GrantScienceUpgradeData(UpgradeMuxData Mux, string Science) : ModuleData
 {
-    public static GrantScienceUpgradeData Parse(ModuleConfiguration configuration, Templates.UpgradeCatalog catalog)
+    public static GrantScienceUpgradeData Parse(RatedModuleConfiguration configuration, Templates.UpgradeCatalog catalog)
         => new(UpgradeMuxData.Parse(configuration, catalog), ModuleConfigReader.Text(configuration, "GrantScience"));
 }
 
@@ -448,7 +448,7 @@ public sealed class GrantScienceUpgrade(GrantScienceUpgradeData data) : UpgradeM
 
 public sealed record UnpauseSpecialPowerUpgradeData(UpgradeMuxData Mux, string PowerName) : ModuleData
 {
-    public static UnpauseSpecialPowerUpgradeData Parse(ModuleConfiguration configuration, Templates.UpgradeCatalog catalog)
+    public static UnpauseSpecialPowerUpgradeData Parse(RatedModuleConfiguration configuration, Templates.UpgradeCatalog catalog)
         => new(UpgradeMuxData.Parse(configuration, catalog), SpecialPowerModules.RequiredPower(configuration));
 }
 
@@ -467,7 +467,7 @@ public sealed class UnpauseSpecialPowerUpgrade(UnpauseSpecialPowerUpgradeData da
 
 public sealed record SpecialPowerCompletionDieData(DieMuxData Mux, string PowerName) : DieData(Mux)
 {
-    public static SpecialPowerCompletionDieData Parse(ModuleConfiguration configuration)
+    public static SpecialPowerCompletionDieData Parse(RatedModuleConfiguration configuration)
         => new(DieMuxData.Parse(configuration), SpecialPowerModules.RequiredPower(configuration));
 }
 
@@ -504,7 +504,7 @@ public sealed class SpecialPowerCompletionDie(SpecialPowerCompletionDieData data
 
 public sealed record SpectreGunshipData(string PowerName, string RequiredScience, string GunshipTemplate, int CreateLocation) : ModuleData
 {
-    public static SpectreGunshipData Parse(ModuleConfiguration configuration)
+    public static SpectreGunshipData Parse(RatedModuleConfiguration configuration)
     {
         var location = ModuleConfigReader.Text(configuration, "CreateLocation");
         return new(

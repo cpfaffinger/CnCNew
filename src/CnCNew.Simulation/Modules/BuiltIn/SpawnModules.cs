@@ -27,7 +27,7 @@ public sealed record SpawnBehaviorData(
     int SpawnNumber, long ReplaceDelayTicks, bool OneShot, ImmutableArray<string> SpawnTemplates, bool RequireSpawner, DieMuxData Mux,
     bool AggregateHealth = false, bool ExitByBudding = false) : ModuleData
 {
-    public static SpawnBehaviorData Parse(ModuleConfiguration configuration)
+    public static SpawnBehaviorData Parse(RatedModuleConfiguration configuration)
     {
         var oneShot = ModuleConfigReader.Bool(configuration, "OneShot", false);
         if (!oneShot && ModuleConfigReader.Bool(configuration, "CanReclaimOrphans", false)) throw new UnsupportedModuleConfigurationException("CanReclaimOrphans");
@@ -70,7 +70,7 @@ public sealed record SpawnBehaviorData(
 /// </summary>
 internal sealed class SpawnBehavior(SpawnBehaviorData data) : SimModule, IUpdateModule, IDieModule, IDamageModule, ISpawnerModule
 {
-    private const long UpdateRate = SimulationTiming.LogicFramesPerSecond / 2;
+    private const long UpdateRateFrames = SimulationRate.OriginalFramesPerSecond / 2;
     private const long BeforeAnyTick = -1;
     private static readonly Fixed BuddingReach = Fixed.FromDecimal(999999.9m);
     private static readonly int MaskedBit = ObjectStatusBits.Index("MASKED");
@@ -124,10 +124,10 @@ internal sealed class SpawnBehavior(SpawnBehaviorData data) : SimModule, IUpdate
         }
         if (data.AggregateHealth)
         {
-            _workTick = world.Tick + UpdateRate;
+            _workTick = world.Tick + world.Time.OriginalFrames(UpdateRateFrames);
             return SimulationTiming.SleepNone;
         }
-        return _active && !_exitMissing ? UpdateRate : SimulationTiming.SleepForever;
+        return _active && !_exitMissing ? world.Time.OriginalFrames(UpdateRateFrames) : SimulationTiming.SleepForever;
     }
 
     private void CollectDead(IWorldServices world)

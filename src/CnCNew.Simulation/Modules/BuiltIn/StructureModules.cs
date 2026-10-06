@@ -40,7 +40,7 @@ internal static class StructureModules
 /// <summary><c>UpgradeDie.h</c>: the die filter (<c>DeathTypes</c> and the others) plus <c>UpgradeToRemove</c>. A trailing second token on the line (a stray module tag in the shipped data) is ignored, as the reference's single-token parse does.</summary>
 public sealed record UpgradeDieData(DieMuxData Mux, string UpgradeToRemove) : DieData(Mux)
 {
-    public static UpgradeDieData Parse(ModuleConfiguration configuration) => new(DieMuxData.Parse(configuration), ModuleConfigReader.Text(configuration, "UpgradeToRemove"));
+    public static UpgradeDieData Parse(RatedModuleConfiguration configuration) => new(DieMuxData.Parse(configuration), ModuleConfigReader.Text(configuration, "UpgradeToRemove"));
 }
 
 /// <summary>
@@ -84,7 +84,7 @@ public sealed record StructureCollapseData(DieMuxData Mux, long MinCollapseDelay
 {
     public static readonly string[] PhaseNames = ["INITIAL", "DELAY", "BURST", "FINAL"];
 
-    public static StructureCollapseData Parse(ModuleConfiguration configuration) => new(
+    public static StructureCollapseData Parse(RatedModuleConfiguration configuration) => new(
         DieMuxData.Parse(configuration),
         ModuleConfigReader.Ticks(configuration, "MinCollapseDelay", 0), ModuleConfigReader.Ticks(configuration, "MaxCollapseDelay", 0),
         // The constructor default of the minimum burst delay is 9999 frames and the maximum starts at zero (a data file always sets both).
@@ -93,7 +93,7 @@ public sealed record StructureCollapseData(DieMuxData Mux, long MinCollapseDelay
         Phased(configuration, "OCL"), Phased(configuration, "FXList"));
 
     /// <summary><c>parseOCL</c>/<c>parseFX</c>: a phase name (<c>scanIndexList</c>) followed by every name of the line, appended to that phase's list.</summary>
-    private static ImmutableArray<ImmutableArray<string>> Phased(ModuleConfiguration configuration, string key)
+    private static ImmutableArray<ImmutableArray<string>> Phased(RatedModuleConfiguration configuration, string key)
     {
         var lists = new List<string>[PhaseNames.Length];
         for (var phase = 0; phase < lists.Length; phase++) lists[phase] = [];
@@ -221,7 +221,7 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
 /// <summary><c>FireWeaponCollide.cpp</c>'s fields: the weapon, <c>FireOnce</c>, and the object statuses that must all be set (<c>RequiredStatus</c>) or none be set (<c>ForbiddenStatus</c>).</summary>
 public sealed record FireWeaponCollideData(string Weapon, bool FireOnce, ulong RequiredStatus, ulong ForbiddenStatus) : ModuleData
 {
-    public static FireWeaponCollideData Parse(ModuleConfiguration configuration) => new(
+    public static FireWeaponCollideData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Text(configuration, "CollideWeapon"), ModuleConfigReader.Bool(configuration, "FireOnce", false),
         ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "RequiredStatus"), NameTables.ObjectStatus),
         ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "ForbiddenStatus"), NameTables.ObjectStatus));
@@ -252,7 +252,7 @@ public sealed class FireWeaponCollide(FireWeaponCollideData data) : SimModule, I
 /// <summary><c>FireSpreadUpdate.cpp</c>'s fields: the ember creation list, the spread delay range (ticks) and how far a fire can jump (zero: only embers).</summary>
 public sealed record FireSpreadData(string OclEmbers, long MinDelay, long MaxDelay, Fixed Range) : ModuleData
 {
-    public static FireSpreadData Parse(ModuleConfiguration configuration) => new(
+    public static FireSpreadData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Text(configuration, "OCLEmbers"), ModuleConfigReader.Ticks(configuration, "MinSpreadDelay", 0), ModuleConfigReader.Ticks(configuration, "MaxSpreadDelay", 0),
         ModuleConfigReader.Real(configuration, "SpreadTryRange", Fixed.Zero));
 }
@@ -317,7 +317,7 @@ public sealed class FireSpreadUpdate(FireSpreadData data) : SimModule, IUpdateMo
 /// <summary><c>DeployStyleAIUpdate.h</c>: the AI base plus the time to unpack and to pack (ticks). The turret options and the manual animations are typed; the turrets themselves are the simulation's (docs/SIM-TURRET-AIM.md), the deploy-specific turret options are not modeled.</summary>
 public sealed record DeployStyleData(AIUpdateData Base, long UnpackTicks, long PackTicks) : ModuleData
 {
-    public static DeployStyleData Parse(ModuleConfiguration configuration) => new(
+    public static DeployStyleData Parse(RatedModuleConfiguration configuration) => new(
         AIUpdateData.Parse(configuration), ModuleConfigReader.Ticks(configuration, "UnpackTime", 0), ModuleConfigReader.Ticks(configuration, "PackTime", 0));
 }
 
@@ -486,7 +486,7 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
 /// <summary><c>FloatUpdate.cpp</c>: <c>Enabled</c> (default off).</summary>
 public sealed record FloatData(bool Enabled) : ModuleData
 {
-    public static FloatData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Bool(configuration, "Enabled", false));
+    public static FloatData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Bool(configuration, "Enabled", false));
 }
 
 /// <summary>

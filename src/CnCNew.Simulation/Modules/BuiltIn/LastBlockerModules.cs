@@ -38,7 +38,7 @@ internal static class LastBlockerModules
 /// </summary>
 public sealed record SalvageCrateData(CrateCollideData Crate, Fixed WeaponChance, Fixed LevelChance, Fixed MoneyChance, int MinMoney, int MaxMoney) : ModuleData
 {
-    public static SalvageCrateData Parse(ModuleConfiguration configuration) => new(
+    public static SalvageCrateData Parse(RatedModuleConfiguration configuration) => new(
         CrateCollideData.Parse(configuration),
         ModuleConfigReader.Real(configuration, "WeaponChance", Fixed.One),
         ModuleConfigReader.Real(configuration, "LevelChance", Fixed.FromDecimal(0.25m)),
@@ -109,7 +109,7 @@ public sealed class SalvageCrateCollide(SalvageCrateData data) : CrateCollideBas
 /// <summary><c>UnitCrateCollideModuleData</c>: <c>UnitCount</c> (default 0) units of <c>UnitName</c> (default none).</summary>
 public sealed record UnitCrateData(CrateCollideData Crate, int UnitCount, string UnitName) : ModuleData
 {
-    public static UnitCrateData Parse(ModuleConfiguration configuration) => new(
+    public static UnitCrateData Parse(RatedModuleConfiguration configuration) => new(
         CrateCollideData.Parse(configuration), checked((int)ModuleConfigReader.Int(configuration, "UnitCount", 0)), ModuleConfigReader.Text(configuration, "UnitName"));
 }
 
@@ -206,7 +206,7 @@ public sealed class SabotageInternetCenterCrateCollide(SabotageDurationData data
 /// <summary><c>SmartBombTargetHomingUpdateModuleData</c>: <c>CourseCorrectionScalar</c> (default 0.99; 1 = no homing, 0 = snap to the target).</summary>
 public sealed record SmartBombHomingData(Fixed CourseCorrectionScalar) : ModuleData
 {
-    public static SmartBombHomingData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Real(configuration, "CourseCorrectionScalar", Fixed.FromDecimal(0.99m)));
+    public static SmartBombHomingData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Real(configuration, "CourseCorrectionScalar", Fixed.FromDecimal(0.99m)));
 }
 
 /// <summary>
@@ -280,7 +280,7 @@ public sealed class SmartBombTargetHomingUpdate(SmartBombHomingData data) : SimM
 /// <summary><c>SupplyWarehouseCripplingBehaviorModuleData</c>: <c>SelfHealSupression</c> and <c>SelfHealDelay</c> (ticks, default 0), <c>SelfHealAmount</c> (health, default 0).</summary>
 public sealed record WarehouseCripplingData(long SuppressTicks, long DelayTicks, Fixed Amount) : ModuleData
 {
-    public static WarehouseCripplingData Parse(ModuleConfiguration configuration) => new(
+    public static WarehouseCripplingData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "SelfHealSupression", 0), ModuleConfigReader.Ticks(configuration, "SelfHealDelay", 0), ModuleConfigReader.Real(configuration, "SelfHealAmount", Fixed.Zero));
 }
 

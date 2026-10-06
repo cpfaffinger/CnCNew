@@ -41,7 +41,7 @@ public sealed record BattlePlanUpdateData(
     Fixed HoldTheLineArmorScalar, Fixed SearchAndDestroySightScalar, Fixed CenterSightScalar, bool CenterDetectsStealth, Fixed CenterMaxHealthScalar, string CenterMaxHealthChangeType,
     ImmutableArray<string> ValidKindOf, ImmutableArray<string> InvalidKindOf) : ModuleData
 {
-    public static BattlePlanUpdateData Parse(ModuleConfiguration configuration) => new(
+    public static BattlePlanUpdateData Parse(RatedModuleConfiguration configuration) => new(
         SpecialPowerModules.RequiredPower(configuration),
         ModuleConfigReader.Ticks(configuration, "BombardmentPlanAnimationTime", 0), ModuleConfigReader.Ticks(configuration, "HoldTheLinePlanAnimationTime", 0),
         ModuleConfigReader.Ticks(configuration, "SearchAndDestroyPlanAnimationTime", 0), ModuleConfigReader.Ticks(configuration, "TransitionIdleTime", 0),

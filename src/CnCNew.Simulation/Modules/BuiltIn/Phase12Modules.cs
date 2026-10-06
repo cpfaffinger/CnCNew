@@ -52,7 +52,7 @@ public sealed class RadiusDecalUpdate : SimModule
 /// </summary>
 public sealed record TechBuildingData(long PulseRateTicks) : ModuleData
 {
-    public static TechBuildingData Parse(ModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "PulseFXRate", 0));
+    public static TechBuildingData Parse(RatedModuleConfiguration configuration) => new(ModuleConfigReader.Ticks(configuration, "PulseFXRate", 0));
 }
 
 /// <summary>
@@ -84,7 +84,7 @@ public sealed record FireWeaponWhenDamagedData(
 {
     private static readonly string[] States = ["Pristine", "Damaged", "ReallyDamaged", "Rubble"];
 
-    public static FireWeaponWhenDamagedData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades)
+    public static FireWeaponWhenDamagedData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades)
     {
         var flags = ModuleConfigReader.Flags(configuration, "DamageTypes");
         return new FireWeaponWhenDamagedData(
@@ -184,7 +184,7 @@ public sealed class FireWeaponWhenDamagedBehavior(FireWeaponWhenDamagedData data
 /// <summary><c>FireWeaponPower.cpp</c>: the special-power base fields plus <c>MaxShotsToFire</c> (default 1).</summary>
 public sealed record FireWeaponPowerData(SpecialPowerBaseData Base, int MaxShots) : ModuleData
 {
-    public static FireWeaponPowerData Parse(ModuleConfiguration configuration)
+    public static FireWeaponPowerData Parse(RatedModuleConfiguration configuration)
         => new(SpecialPowerBaseData.Parse(configuration), checked((int)Math.Max(1, ModuleConfigReader.Int(configuration, "MaxShotsToFire", 1))));
 }
 
@@ -261,7 +261,7 @@ public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModu
 /// <summary><c>BaikonurLaunchPower.cpp</c>: the special-power base fields plus <c>DetonationObject</c>, the template created where the launch lands.</summary>
 public sealed record BaikonurLaunchData(SpecialPowerBaseData Base, string DetonationObject) : ModuleData
 {
-    public static BaikonurLaunchData Parse(ModuleConfiguration configuration)
+    public static BaikonurLaunchData Parse(RatedModuleConfiguration configuration)
         => new(SpecialPowerBaseData.Parse(configuration), ModuleConfigReader.Text(configuration, "DetonationObject"));
 }
 
@@ -296,8 +296,8 @@ public sealed class BaikonurLaunchPower(BaikonurLaunchData data) : SpecialPowerM
 /// </summary>
 public sealed record HordeData(long UpdateRateTicks, ImmutableArray<string> KindOf, int MinCount, Fixed Radius, Fixed RubOffRadius, bool AlliesOnly, bool ExactMatch, bool AllowedNationalism) : ModuleData
 {
-    public static HordeData Parse(ModuleConfiguration configuration) => new(
-        ModuleConfigReader.Ticks(configuration, "UpdateRate", SimulationTiming.LogicFramesPerSecond),
+    public static HordeData Parse(RatedModuleConfiguration configuration) => new(
+        ModuleConfigReader.Ticks(configuration, "UpdateRate", SimulationRate.OriginalFramesPerSecond),
         ModuleConfigReader.Flags(configuration, "KindOf")?.Names ?? [],
         checked((int)ModuleConfigReader.Int(configuration, "Count", 0)),
         ModuleConfigReader.Real(configuration, "Radius", Fixed.Zero),

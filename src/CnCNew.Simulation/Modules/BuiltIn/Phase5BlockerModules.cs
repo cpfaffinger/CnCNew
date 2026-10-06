@@ -44,7 +44,7 @@ public sealed record FlammableData(
     long BurnedDelayTicks, long AflameDurationTicks, long AflameDamageDelayTicks, Fixed AflameDamageAmount,
     Fixed FlameDamageLimit, long FlameDamageExpirationTicks) : ModuleData
 {
-    public static FlammableData Parse(ModuleConfiguration configuration) => new(
+    public static FlammableData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "BurnedDelay", 0),
         ModuleConfigReader.Ticks(configuration, "AflameDuration", 0),
         ModuleConfigReader.Ticks(configuration, "AflameDamageDelay", 0),
@@ -189,7 +189,7 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
 /// </summary>
 public sealed record TransitionDamageFXData(ulong DamageOclTypesMask, ImmutableArray<string> DamagedOcl, ImmutableArray<string> ReallyDamagedOcl, ImmutableArray<string> RubbleOcl) : ModuleData
 {
-    public static TransitionDamageFXData Parse(ModuleConfiguration configuration)
+    public static TransitionDamageFXData Parse(RatedModuleConfiguration configuration)
     {
         ImmutableArray<string> Slots(string prefix)
         {
@@ -251,7 +251,7 @@ public sealed class TransitionDamageFX(TransitionDamageFXData data) : SimModule,
 /// </summary>
 public sealed record SlowDeathData(DieMuxData Mux, int ProbabilityModifier, long SinkDelayTicks, long SinkDelayVarianceTicks, long DestructionDelayTicks, long DestructionDelayVarianceTicks) : DieData(Mux)
 {
-    public static SlowDeathData Parse(ModuleConfiguration configuration) => new(
+    public static SlowDeathData Parse(RatedModuleConfiguration configuration) => new(
         DieMuxData.Parse(configuration),
         checked((int)ModuleConfigReader.Int(configuration, "ProbabilityModifier", 0)),
         ModuleConfigReader.Ticks(configuration, "SinkDelay", 0),
@@ -361,7 +361,7 @@ internal static class SlowDeathLottery
 /// </summary>
 public sealed record FireWeaponWhenDeadData(DieMuxData DieMux, UpgradeMuxData UpgradeMux, bool StartsActive, string DeathWeapon) : ModuleData
 {
-    public static FireWeaponWhenDeadData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
+    public static FireWeaponWhenDeadData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
         DieMuxData.Parse(configuration),
         UpgradeMuxData.Parse(configuration, upgrades),
         ModuleConfigReader.Bool(configuration, "StartsActive", false),
@@ -422,7 +422,7 @@ public sealed record StealthDetectorData(
     long UpdateRateTicks, Fixed DetectionRange, bool InitiallyDisabled,
     ImmutableArray<string> ExtraRequiredKindOf, ImmutableArray<string> ExtraForbiddenKindOf) : ModuleData
 {
-    public static StealthDetectorData Parse(ModuleConfiguration configuration) => new(
+    public static StealthDetectorData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "DetectionRate", 1),
         ModuleConfigReader.Real(configuration, "DetectionRange", Fixed.Zero),
         ModuleConfigReader.Bool(configuration, "InitiallyDisabled", false),
@@ -511,7 +511,7 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
 /// <summary><c>PoisonedBehavior.h</c>'s two keys.</summary>
 public sealed record PoisonedData(long PoisonDamageIntervalTicks, long PoisonDurationTicks) : ModuleData
 {
-    public static PoisonedData Parse(ModuleConfiguration configuration) => new(
+    public static PoisonedData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "PoisonDamageInterval", 0),
         ModuleConfigReader.Ticks(configuration, "PoisonDuration", 0));
 }

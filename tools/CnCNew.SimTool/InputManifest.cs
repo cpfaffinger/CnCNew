@@ -11,6 +11,7 @@ using CnCNew.SimTool.Manifests;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.SimTool;
 
@@ -52,9 +53,9 @@ internal sealed class SimContext
             var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
             var graph = DefinitionCompiler.Compile(new ContentDefinitionSource(content), ModuleRegistry.Default, options);
             var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
-            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, geometry);
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, ToolRate.Manifest, geometry);
             var (sha256, length) = DefinitionSnapshotWriter.ComputeFingerprint(graph);
-            return new SimContext(content, catalog, geometry.Combine(sha256), sha256, length, graph.Audit.Definitions, geometry);
+            return new SimContext(content, catalog, catalog.Rate.Combine(geometry.Combine(sha256)), sha256, length, graph.Audit.Definitions, geometry);
         }
     }
 
@@ -155,9 +156,12 @@ internal static class InputManifest
 
         var catalog = context.Catalog;
         var catalogs = new ManifestObject();
+        // The rate a catalog was built for is part of it, but the recorded hashes are of catalogs that had no such field. While the rate is the original's
+        // 30 Hz the field is left out of the description, so the recorded 30 Hz values stay comparable; at any other rate it is described.
+        static bool RateAtOriginal(System.Reflection.FieldInfo field, object? value) => field.FieldType == typeof(SimulationRate) && ReferenceEquals(value, SimulationRate.Original);
         void Describe(string name, object value, long items)
         {
-            var hash = CanonicalObjectHasher.HashOnLargeStack(value);
+            var hash = CanonicalObjectHasher.HashOnLargeStack(value, RateAtOriginal);
             catalogs.Add(name, new ManifestObject().Add("items", items).Add("sha256", hash.Sha256).Add("values", hash.Values));
             log.WriteLine($"  catalog {name}: {items} items, {hash.Values} values described{(hash.Opaque.Count == 0 ? string.Empty : "; only named: " + string.Join(", ", hash.Opaque.Select(pair => $"{pair.Key} x{pair.Value}")))}");
         }

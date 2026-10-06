@@ -6,6 +6,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 static partial class Tests
@@ -31,16 +32,16 @@ static partial class Tests
     /// </summary>
     public static void AirAirfieldUsesTheModelBones()
     {
-        var fixture = new SyntheticFixture(files: WingAirfieldFiles);
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: WingAirfieldFiles);
         var geometry = AirfieldBones();
         Check.That(geometry.Fingerprint.Length == 64 && geometry.Combine("abc") != "abc" && ModelGeometry.None.Combine("abc") == "abc", "The table has a fingerprint and changes the world fingerprint; the empty table does not.");
         Check.That(new ModelGeometry(geometry.Airfields).Fingerprint == geometry.Fingerprint, "The fingerprint depends on the content only.");
-        Check.Throws<TemplateBuildException>(() => TemplateCatalog.Build(fixture.Graph, fixture.Bindings, new ModelGeometry([new KeyValuePair<string, AirfieldLayout>("NoSuchAirfield", geometry.Airfields["AirTestAirfield"])])), "NoSuchAirfield");
+        Check.Throws<TemplateBuildException>(() => TemplateCatalog.Build(fixture.Graph, fixture.Bindings, SimulationRate.Original, new ModelGeometry([new KeyValuePair<string, AirfieldLayout>("NoSuchAirfield", geometry.Airfields["AirTestAirfield"])])), "NoSuchAirfield");
 
         SimulationWorld Create(ModelGeometry table)
         {
-            var templates = TemplateCatalog.Build(fixture.Graph, fixture.Bindings, table);
-            return new SimulationWorld(new WorldConfiguration(new WorldId(1), 9, CombatPlayers, SyntheticFixture.FixtureId, table.Combine(fixture.Fingerprint), string.Empty), templates, null);
+            var templates = TemplateCatalog.Build(fixture.Graph, fixture.Bindings, SimulationRate.Original, table);
+            return new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 9, CombatPlayers, SyntheticFixture.FixtureId, table.Combine(fixture.Fingerprint), string.Empty), templates, null);
         }
 
         // a table with other dimensions is refused when the airfield first needs it

@@ -9,6 +9,7 @@ using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>The strategy center's battle plans: the unpack/active/pack cycle, the army bonuses, the center's own bonus and the paralysis of a plan change.</summary>
@@ -145,9 +146,9 @@ static partial class Tests
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) BattlePlanWorld()
     {
-        var fixture = new SyntheticFixture(files: BattlePlanFiles());
+        var fixture = new SyntheticFixture(SimulationRate.Original, files: BattlePlanFiles());
         var terrain = NavTerrain();
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         return (world, new Feeder(world), fixture);
     }
 
@@ -252,7 +253,7 @@ static partial class Tests
         var center = CsSpawn(world, feeder, "PlanCenter", 1, 100, 100);
         CsSpawn(world, feeder, "PlanSoldier", 1, 20, 100);
         var plan = center.Modules.OfType<BattlePlanUpdate>().Single();
-        var ready = new SyntheticFixture(files: BattlePlanFiles());
+        var ready = new SyntheticFixture(SimulationRate.Original, files: BattlePlanFiles());
         ChooseBattlePlan(world, feeder, center, 3);
         CsRun(world, 40, () => plan.Status == BattlePlanUpdate.TransitionStatus.Active);
 

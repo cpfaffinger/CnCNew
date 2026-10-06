@@ -74,7 +74,7 @@ public sealed class SuperweaponTimers
                     if (HiddenByScript?.Invoke(entity.Id) == true) continue;
                     var readyFrame = CommandBarModel.ReadyFrameOf(world, entity.Owner, module, power);
                     // "Integer math. We can't have float imprecision display 4:01 on a disabled superweapon" (InGameUI.cpp): a power that is ready, or disabled with its time over, shows 0:00.
-                    var seconds = readyFrame < world.Tick ? 0 : (int)((readyFrame - world.Tick) / SimulationTiming.LogicFramesPerSecond);
+                    var seconds = readyFrame < world.Tick ? 0 : (int)((readyFrame - world.Tick) / SimulationRate.OriginalFramesPerSecond);
                     var label = "GUI:" + name;
                     var text = labelText(label);
                     if (text is null)

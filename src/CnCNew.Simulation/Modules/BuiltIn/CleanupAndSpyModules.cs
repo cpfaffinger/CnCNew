@@ -35,7 +35,7 @@ internal static class CleanupAndSpyModules
 /// </summary>
 public sealed record CleanupHazardData(long ScanTicks, Fixed ScanRange, int Slot) : ModuleData
 {
-    public static CleanupHazardData Parse(ModuleConfiguration configuration)
+    public static CleanupHazardData Parse(RatedModuleConfiguration configuration)
     {
         var slot = WeaponSlot.Primary;
         if (ModuleConfigReader.Find(configuration, "WeaponSlot")?.Value.Value is EnumValue named && !WeaponSlot.TryParse(named.Name, out slot))
@@ -224,7 +224,7 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
 /// <summary><c>CleanupAreaPowerModuleData</c>: the shared special-power fields plus <c>MaxMoveDistanceFromLocation</c> (default 0).</summary>
 public sealed record CleanupAreaPowerData(SpecialPowerBaseData Base, Fixed MoveRange) : ModuleData
 {
-    public static CleanupAreaPowerData Parse(ModuleConfiguration configuration)
+    public static CleanupAreaPowerData Parse(RatedModuleConfiguration configuration)
         => new(SpecialPowerBaseData.Parse(configuration), ModuleConfigReader.Real(configuration, "MaxMoveDistanceFromLocation", Fixed.Zero));
 }
 
@@ -253,7 +253,7 @@ public sealed class CleanupAreaPower(CleanupAreaPowerData data) : SpecialPowerMo
 /// </summary>
 public sealed record SpyVisionData(UpgradeMuxData Mux, bool NeedsUpgrade, bool SelfPowered, long SelfPoweredDurationTicks, long SelfPoweredIntervalTicks, ImmutableArray<string> SpyOnKindOf) : ModuleData
 {
-    public static SpyVisionData Parse(ModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
+    public static SpyVisionData Parse(RatedModuleConfiguration configuration, UpgradeCatalog upgrades) => new(
         UpgradeMuxData.Parse(configuration, upgrades),
         ModuleConfigReader.Bool(configuration, "NeedsUpgrade", false),
         ModuleConfigReader.Bool(configuration, "SelfPowered", false),
@@ -404,7 +404,7 @@ public sealed class SpyVisionUpdate(SpyVisionData data) : SimModule, IUpdateModu
 /// <summary><c>SpyVisionSpecialPowerModuleData</c>: <c>BaseDuration</c>, <c>BonusDurationPerCaptured</c> and <c>MaxDuration</c> (all default 0).</summary>
 public sealed record SpyVisionPowerData(SpecialPowerBaseData Base, long BaseDurationTicks, long BonusPerCapturedTicks, long MaxDurationTicks) : ModuleData
 {
-    public static SpyVisionPowerData Parse(ModuleConfiguration configuration) => new(
+    public static SpyVisionPowerData Parse(RatedModuleConfiguration configuration) => new(
         SpecialPowerBaseData.Parse(configuration), ModuleConfigReader.Ticks(configuration, "BaseDuration", 0),
         ModuleConfigReader.Ticks(configuration, "BonusDurationPerCaptured", 0), ModuleConfigReader.Ticks(configuration, "MaxDuration", 0));
 }
@@ -439,7 +439,7 @@ public sealed class SpyVisionSpecialPower(SpyVisionPowerData data) : SpecialPowe
 /// </summary>
 public sealed record AssistedTargetingData(int ClipSize, int Slot) : ModuleData
 {
-    public static AssistedTargetingData Parse(ModuleConfiguration configuration)
+    public static AssistedTargetingData Parse(RatedModuleConfiguration configuration)
     {
         var slot = WeaponSlot.Primary;
         if (ModuleConfigReader.Find(configuration, "AssistingWeaponSlot")?.Value.Value is EnumValue value && !WeaponSlot.TryParse(value.Name, out slot))

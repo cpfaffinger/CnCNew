@@ -8,6 +8,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Game.Live;
@@ -48,7 +49,7 @@ public sealed class LiveMission : LiveGame, IMissionObjectEffects
     /// The <c>PresentationLatencyTicks</c> a client with a <see cref="MissionPresentationDirector"/> starts a mission with (60 seconds): the director ends camera moves,
     /// speech and movies at their own time, the latency only bounds how long the scripts wait for something nobody completed.
     /// </summary>
-    public const int ClientPresentationLatencyTicks = 60 * CnCNew.Simulation.Time.SimulationTiming.LogicFramesPerSecond;
+    public const int ClientPresentationLatencyTicks = 60 * CnCNew.Simulation.Time.SimulationRate.OriginalFramesPerSecond;
 
     public MissionRun Run { get; }
     public MissionSession Session => Run.Session;

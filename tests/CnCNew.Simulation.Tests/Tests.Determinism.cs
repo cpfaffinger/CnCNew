@@ -7,6 +7,7 @@ using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Time;
 
 /// <summary>Phase 18: determinism across machines (docs/DETERMINISM-FINDINGS.md). Every finding of the read-only search is confirmed or refuted here before it is fixed.</summary>
 static partial class Tests
@@ -119,7 +120,7 @@ static partial class Tests
     /// </summary>
     public static void EntityEnumerationIsOrderedById()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var world = NewWorld(fixture);
         var feeder = new Feeder(world);
         for (var index = 0; index < 8; index++) feeder.Spawn(1, "Barrel");
@@ -157,7 +158,7 @@ static partial class Tests
     /// </summary>
     public static void IncrementalHashHoldsInEveryTick()
     {
-        var fixture = new SyntheticFixture();
+        var fixture = new SyntheticFixture(SimulationRate.Original);
         var replay = new StressScenario(new StressOptions(6_000, 600, 0xC0FFEE01, 0x5EED0001, 1_500, 1_000)).Record(fixture);
         var plain = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
         var verified = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true, VerifyIncrementalEvery = 1 });

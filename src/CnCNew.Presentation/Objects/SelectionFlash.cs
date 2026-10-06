@@ -82,7 +82,7 @@ public sealed class SelectionFlashTracker
     /// </summary>
     public void StartScripted(uint entity, Vector3 peak, int seconds)
     {
-        var count = seconds * SimulationTiming.LogicFramesPerSecond / ScriptFlashInterval;
+        var count = seconds * SimulationRate.OriginalFramesPerSecond / ScriptFlashInterval;
         if (count > 0) _scripted[entity] = (peak, count);
     }
 
