@@ -81,6 +81,15 @@ public sealed class NavigationGrid
     private long[] _heap = new long[256];
     private int _heapCount;
 
+    // The results of the searches without temporary blockers since the footprints last changed. A search is a function of its start cell, its goal cell, the surfaces, the terrain
+    // (which never changes) and the footprints: as long as no footprint was added or removed, the same question has the same answer, whoever asks and in whatever tick. Only the
+    // last point of a path that reaches the goal is the asker's exact goal position instead of a cell centre; it is put in when an answer is handed out again.
+    private const int MemoCapacity = 4096;
+    private readonly record struct MemoKey(int StartCell, int GoalCell, LocomotorSurfaces Surfaces);
+    private readonly record struct MemoEntry(PathResult Result, int Expansions, int Pushes, int EscapeCells, int PathCells);
+    private readonly Dictionary<MemoKey, MemoEntry> _memo = [];
+    private bool _memoStale;
+
     public NavigationGrid(TerrainMap terrain)
     {
         Terrain = terrain;
@@ -192,6 +201,7 @@ public sealed class NavigationGrid
                 _obstacles[index] = count;
                 _state[index] = count > 0 ? (byte)(_state[index] | ObstacleBit) : (byte)(_state[index] & ~ObstacleBit);
             }
+        _memoStale = true;
     }
 
     /// <summary>
@@ -358,6 +368,30 @@ public sealed class NavigationGrid
         var goalIndex = goal.Y * _cellsX + goal.X;
         var probe = Probe;
         probe?.Started(MovementWork.PathSearch);
+        // Remembered answers: not for a search around temporary blockers (their cells are part of the question) and not for the trivial one inside a single cell.
+        var remember = (temporaryBlocks is null || temporaryBlocks.Count == 0) && startIndex != goalIndex;
+        var key = new MemoKey(startIndex, goalIndex, surfaces);
+        if (remember)
+        {
+            if (_memoStale)
+            {
+                _memo.Clear();
+                _memoStale = false;
+            }
+            if (_memo.TryGetValue(key, out var known))
+            {
+                var answer = known.Result;
+                if (answer.Status == PathStatus.Found && answer.Points[^1] != new PathPoint(goalX, goalY))
+                    answer = new PathResult(PathStatus.Found, answer.Points.SetItem(answer.Points.Length - 1, new PathPoint(goalX, goalY)));
+                if (probe is not null)
+                {
+                    probe.Ended(MovementWork.PathSearch);
+                    probe.PathSearched(new PathSearchInfo(startIndex, goalIndex, surfaces, answer.Status, known.Expansions, known.Pushes, known.EscapeCells, 0, known.PathCells, answer.Points.Length, true));
+                }
+                return answer;
+            }
+        }
+
         _probeExpansions = _probePushes = _probePathCells = 0;
         PathResult result;
         var escapeCells = 0;
@@ -372,6 +406,11 @@ public sealed class NavigationGrid
         finally
         {
             ClearMarks();
+        }
+        if (remember)
+        {
+            if (_memo.Count >= MemoCapacity) _memo.Clear();
+            _memo[key] = new MemoEntry(result, _probeExpansions, _probePushes, escapeCells, _probePathCells);
         }
         if (probe is not null)
         {

@@ -15,7 +15,10 @@ public enum MovementWork
     FootprintCollisions,
 }
 
-/// <summary>What one path search did: deterministic counters, the same in every run of the same inputs.</summary>
+/// <summary>
+/// What one path search did: deterministic counters, the same in every run of the same inputs. A search answered from the grid's memory (<see cref="Cached"/>) reports the counters
+/// of the search that produced the answer; it did none of that work itself.
+/// </summary>
 public readonly record struct PathSearchInfo(
     int StartCell, int GoalCell, LocomotorSurfaces Surfaces, PathStatus Status, int Expansions, int Pushes, int EscapeCells, int TemporaryCells, int PathCells, int Waypoints, bool Cached);
 
