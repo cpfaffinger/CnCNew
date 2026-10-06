@@ -1,4 +1,7 @@
+using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.World;
 
 /// <summary>
 /// Phase 19, movement and path search (docs/PERF-MOVEMENT.md): every faster routine is compared with the implementation it replaced, which is kept here in its
@@ -122,5 +125,136 @@ static partial class Tests
             }
         }
         Check.Throws<ArgumentOutOfRangeException>(() => _ = Fixed.Sqrt(Fixed.FromRaw(-1)), "negative");
+    }
+
+    // ------------------------------------------------------------------------------------------- entity scans of a movement step
+
+    // SimulationWorld.Collision.cs as it was before phase 19, on the public surface of the world: every entity, the exact circle test, no shortcut.
+    private static Fixed ReferenceBoundingCircle(Entity entity)
+    {
+        var template = entity.Template;
+        return template.Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase)
+            ? Fixed.Sqrt(template.GeometryMajorRadius * template.GeometryMajorRadius + template.GeometryMinorRadius * template.GeometryMinorRadius)
+            : template.GeometryMajorRadius;
+    }
+
+    private static EntityId ReferenceGoal(Entity mover) => mover.Modules.OfType<AIUpdateInterface>().FirstOrDefault()?.GoalObject ?? EntityId.Invalid;
+
+    private static bool ReferenceStepBlocked(SimulationWorld world, Entity mover, Fixed dx, Fixed dy, EntityId goal)
+    {
+        var x = mover.X + dx;
+        var y = mover.Y + dy;
+        var moverRadius = ReferenceBoundingCircle(mover);
+        foreach (var other in world.Entities)
+        {
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid) continue;
+            var limit = moverRadius + ReferenceBoundingCircle(other);
+            var ddx = other.X - x;
+            var ddy = other.Y - y;
+            if (ddx * ddx + ddy * ddy < limit * limit) return true;
+        }
+        return false;
+    }
+
+    private static (Fixed Dx, Fixed Dy) ReferenceAvoid(SimulationWorld world, Entity mover, Fixed dx, Fixed dy)
+    {
+        if (dx == Fixed.Zero && dy == Fixed.Zero) return (dx, dy);
+        var goal = ReferenceGoal(mover);
+        if (!ReferenceStepBlocked(world, mover, dx, dy, goal)) return (dx, dy);
+        Fixed[] angles = [-FixedTrig.HalfPi / Fixed.FromInt(2), FixedTrig.HalfPi / Fixed.FromInt(2), -FixedTrig.HalfPi, FixedTrig.HalfPi];
+        foreach (var angle in angles)
+        {
+            var cos = FixedTrig.Cos(angle);
+            var sin = FixedTrig.Sin(angle);
+            var rx = dx * cos - dy * sin;
+            var ry = dx * sin + dy * cos;
+            if (!ReferenceStepBlocked(world, mover, rx, ry, goal)) return (rx, ry);
+        }
+        return (dx, dy);
+    }
+
+    private static List<(Fixed X, Fixed Y, Fixed Radius)> ReferenceStationary(SimulationWorld world, Entity mover, Fixed dx, Fixed dy)
+    {
+        if (dx == Fixed.Zero && dy == Fixed.Zero) return [];
+        var goal = ReferenceGoal(mover);
+        var margin = Fixed.FromInt(5);
+        var moverRadius = ReferenceBoundingCircle(mover);
+        var blocked = false;
+        foreach (var other in world.Entities)
+        {
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
+            var limit = moverRadius + ReferenceBoundingCircle(other) + margin;
+            for (var sample = 1; sample <= 4 && !blocked; sample++)
+            {
+                var ddx = other.X - (mover.X + dx * Fixed.FromInt(sample) / Fixed.FromInt(4));
+                var ddy = other.Y - (mover.Y + dy * Fixed.FromInt(sample) / Fixed.FromInt(4));
+                if (ddx * ddx + ddy * ddy < limit * limit) blocked = true;
+            }
+            if (blocked) break;
+        }
+        if (!blocked) return [];
+        var circles = new List<(Fixed X, Fixed Y, Fixed Radius)>();
+        var around = Fixed.FromInt(150);
+        foreach (var other in world.Entities)
+        {
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
+            var ddx = other.X - mover.X;
+            var ddy = other.Y - mover.Y;
+            if (ddx * ddx + ddy * ddy > around * around) continue;
+            circles.Add((other.X, other.Y, ReferenceBoundingCircle(other) + moverRadius + margin));
+        }
+        return circles;
+    }
+
+    public static void MovementScansMatchTheFullScan()
+    {
+        var random = new PerfRandom(0x19_0002);
+        long blockedSteps = 0, turnedSteps = 0, detours = 0, compared = 0;
+        for (var scene = 0; scene < 6; scene++)
+        {
+            var (world, feeder, _) = NavSetup();
+            var count = 20 + 12 * scene;
+            for (var index = 0; index < count; index++)
+            {
+                var template = index % 9 == 0 ? "Wall" : index % 7 == 0 ? "Post" : index % 5 == 0 ? "Climber" : index % 11 == 0 ? "Flyer" : "Walker";
+                feeder.Spawn(1, template, owner: 1 + index % 2, x: 5 + random.Below(190), y: 5 + random.Below(190));
+            }
+            world.Step();
+            foreach (var entity in world.Entities) Check.That(entity.Template.BoundingCircleRadius == ReferenceBoundingCircle(entity), $"The stored bounding circle of {entity.Template.Name} is the computed one.");
+            // Half of the mobile objects walk (fractional positions, moving objects are not standing blockers), the others stand.
+            foreach (var entity in world.Entities.ToArray())
+                if (entity.Template.Locomotor is not null && entity.Id.Value % 2 == 0) feeder.SetMoveTarget(entity.Owner.Value, entity.Id.Value, 5 + random.Below(190), 5 + random.Below(190));
+            for (var round = 0; round < 12; round++)
+            {
+                for (var step = 0; step < 4; step++) world.Step();
+                var entities = world.Entities.ToArray();
+                foreach (var mover in entities)
+                    for (var probe = 0; probe < 24; probe++)
+                    {
+                        // Steps from a fraction of a unit to a long look-ahead, in every direction; every fourth one aims exactly at another object.
+                        var length = Fixed.FromRaw((long)(random.Next() % (ulong)(probe % 3 == 0 ? 2L << 16 : 220L << 16)));
+                        var angle = Fixed.FromRaw((long)(random.Next() % (ulong)FixedTrig.TwoPi.Raw));
+                        var dx = FixedTrig.Cos(angle) * length;
+                        var dy = FixedTrig.Sin(angle) * length;
+                        if (probe % 4 == 0)
+                        {
+                            var aim = entities[random.Below(entities.Length)];
+                            dx = aim.X - mover.X;
+                            dy = aim.Y - mover.Y;
+                        }
+                        var expectedStep = ReferenceAvoid(world, mover, dx, dy);
+                        var actualStep = world.AvoidLocalBlockers(mover, dx, dy);
+                        Check.That(actualStep == expectedStep, $"Scene {scene}, object {mover.Id.Value}, step ({dx}, {dy}): avoidance {actualStep} instead of {expectedStep}.");
+                        if (ReferenceStepBlocked(world, mover, dx, dy, ReferenceGoal(mover))) blockedSteps++;
+                        if (expectedStep != (dx, dy)) turnedSteps++;
+                        var expected = ReferenceStationary(world, mover, dx, dy);
+                        var actual = world.StationaryBlockersAhead(mover, dx, dy);
+                        Check.That(actual.SequenceEqual(expected), $"Scene {scene}, object {mover.Id.Value}, step ({dx}, {dy}): {actual.Count} standing blockers instead of {expected.Count}.");
+                        if (expected.Count > 0) detours++;
+                        compared++;
+                    }
+            }
+        }
+        Check.That(compared > 30_000 && blockedSteps > 1_000 && turnedSteps > 500 && detours > 1_000, $"The comparison saw blocked steps, turned steps and detours ({compared}, {blockedSteps}, {turnedSteps}, {detours}).");
     }
 }

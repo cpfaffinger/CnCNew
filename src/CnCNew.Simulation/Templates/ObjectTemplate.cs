@@ -99,6 +99,8 @@ public sealed class ObjectTemplate
         GeometryMinorRadius = Real(definition, "GeometryMinorRadius");
         GeometryHeight = Real(definition, "GeometryHeight");
         GeometryIsSmall = definition.Fields.LastOrDefault(field => field.Name.Equals("GeometryIsSmall", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
+        IsBox = Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
+        BoundingCircleRadius = IsBox ? Fixed.Sqrt(GeometryMajorRadius * GeometryMajorRadius + GeometryMinorRadius * GeometryMinorRadius) : GeometryMajorRadius;
         VisionRange = Real(definition, "VisionRange");
         ShroudClearingRange = definition.Fields.Any(field => field.Name.Equals("ShroudClearingRange", StringComparison.OrdinalIgnoreCase)) ? Real(definition, "ShroudClearingRange") : VisionRange;
         TransportSlotCount = definition.Fields.LastOrDefault(field => field.Name.Equals("TransportSlotCount", StringComparison.OrdinalIgnoreCase))?.Value.Value is long slots ? checked((int)slots) : 0;
@@ -155,11 +157,14 @@ public sealed class ObjectTemplate
     public Fixed GeometryMinorRadius { get; }
     public Fixed GeometryHeight { get; }
 
-    public bool IsBox => Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
+    public bool IsBox { get; }
     private bool IsSphere => Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary><c>GeometryInfo::getBoundingCircleRadius</c> (<c>calcBoundingStuff</c>): the corner distance of a box, the major radius of a cylinder or sphere.</summary>
-    public Fixed BoundingCircleRadius => IsBox ? Fixed.Sqrt(GeometryMajorRadius * GeometryMajorRadius + GeometryMinorRadius * GeometryMinorRadius) : GeometryMajorRadius;
+    /// <summary>
+    /// <c>GeometryInfo::getBoundingCircleRadius</c> (<c>calcBoundingStuff</c>): the corner distance of a box, the major radius of a cylinder or sphere. Computed once: every collision
+    /// and avoidance test of every moving object reads it for both objects of a pair.
+    /// </summary>
+    public Fixed BoundingCircleRadius { get; }
 
     /// <summary><c>GeometryInfo::getBoundingSphereRadius</c>: a sphere its radius, a cylinder half its height (at least the radius), a box the half-diagonal.</summary>
     public Fixed BoundingSphereRadius

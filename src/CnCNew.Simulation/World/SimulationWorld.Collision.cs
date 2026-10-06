@@ -74,20 +74,53 @@ public sealed partial class SimulationWorld
         return result;
     }
 
+    // The answer of StationaryBlockersAhead, reused from call to call: the caller plans its detour at once and keeps nothing.
+    private readonly List<(Fixed X, Fixed Y, Fixed Radius)> _stationaryCircles = [];
+    private readonly Fixed[] _sampleX = new Fixed[4];
+    private readonly Fixed[] _sampleY = new Fixed[4];
+
+    // Before the exact circle test (rounded fixed-point squares) a pair is dropped when one coordinate alone is further apart than the limit plus one unit. The unit of slack is far more
+    // than the rounding of a product (half of 1/65536), so a pair dropped here fails the exact test as well, whether that one compares with "<" or "<=". A negative limit skips the shortcut.
+    private static readonly long ScanSlack = Fixed.One.Raw;
+
+    private static bool FurtherThan(Fixed a, Fixed b, Fixed limit)
+    {
+        var difference = a.Raw - b.Raw;
+        if (difference < 0) difference = -difference;
+        return limit.Raw >= 0 && difference > limit.Raw + ScanSlack;
+    }
+
+    private static bool StandsStill(Entity other, Entity mover, EntityId goal)
+        => !(other.HasMoveTarget || other.Template.Locomotor is null || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || other.Speed != Fixed.Zero);
+
     private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadCore(Entity mover, Fixed dx, Fixed dy)
     {
         var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
         var moverRadius = mover.Template.BoundingCircleRadius;
-        var blocked = false;
-        foreach (var other in Entities)
+        // The step is the look-ahead; the line from the mover to its end is tested at four points. They and their bounding box depend on the mover only.
+        Fixed minX = Fixed.MaxValue, maxX = Fixed.MinValue, minY = Fixed.MaxValue, maxY = Fixed.MinValue;
+        for (var sample = 1; sample <= 4; sample++)
         {
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
+            var x = mover.X + dx * Fixed.FromInt(sample) / Fixed.FromInt(4);
+            var y = mover.Y + dy * Fixed.FromInt(sample) / Fixed.FromInt(4);
+            _sampleX[sample - 1] = x;
+            _sampleY[sample - 1] = y;
+            minX = Fixed.Min(minX, x);
+            maxX = Fixed.Max(maxX, x);
+            minY = Fixed.Min(minY, y);
+            maxY = Fixed.Max(maxY, y);
+        }
+
+        var blocked = false;
+        foreach (var other in _entities)
+        {
+            if (!StandsStill(other, mover, goal)) continue;
             var limit = moverRadius + other.Template.BoundingCircleRadius + StandingBlockerMargin;
-            // The step is the look-ahead; the line from the mover to its end is tested at four points.
-            for (var sample = 1; sample <= 4 && !blocked; sample++)
+            if (limit.Raw >= 0 && (other.X.Raw < minX.Raw - limit.Raw - ScanSlack || other.X.Raw > maxX.Raw + limit.Raw + ScanSlack || other.Y.Raw < minY.Raw - limit.Raw - ScanSlack || other.Y.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
+            for (var sample = 0; sample < 4 && !blocked; sample++)
             {
-                var ddx = other.X - (mover.X + dx * Fixed.FromInt(sample) / Fixed.FromInt(4));
-                var ddy = other.Y - (mover.Y + dy * Fixed.FromInt(sample) / Fixed.FromInt(4));
+                var ddx = other.X - _sampleX[sample];
+                var ddy = other.Y - _sampleY[sample];
                 if (ddx * ddx + ddy * ddy < limit * limit) blocked = true;
             }
 
@@ -95,14 +128,16 @@ public sealed partial class SimulationWorld
         }
 
         if (!blocked) return [];
-        var circles = new List<(Fixed X, Fixed Y, Fixed Radius)>();
+        var circles = _stationaryCircles;
+        circles.Clear();
         var around = Fixed.FromInt(150);
-        foreach (var other in Entities)
+        var aroundSquared = around * around;
+        foreach (var other in _entities)
         {
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid || other.HasMoveTarget || other.Speed != Fixed.Zero) continue;
+            if (!StandsStill(other, mover, goal) || FurtherThan(other.X, mover.X, around) || FurtherThan(other.Y, mover.Y, around)) continue;
             var ddx = other.X - mover.X;
             var ddy = other.Y - mover.Y;
-            if (ddx * ddx + ddy * ddy > around * around) continue;
+            if (ddx * ddx + ddy * ddy > aroundSquared) continue;
             circles.Add((other.X, other.Y, other.Template.BoundingCircleRadius + moverRadius + StandingBlockerMargin));
         }
 
@@ -115,10 +150,11 @@ public sealed partial class SimulationWorld
         var x = mover.X + dx;
         var y = mover.Y + dy;
         var moverRadius = mover.Template.BoundingCircleRadius;
-        foreach (var other in Entities)
+        foreach (var other in _entities)
         {
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.Template.Locomotor is null || other.ContainedBy.IsValid) continue;
+            if (other.Template.Locomotor is null || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
             var limit = moverRadius + other.Template.BoundingCircleRadius;
+            if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
             var ddx = other.X - x;
             var ddy = other.Y - y;
             if (ddx * ddx + ddy * ddy < limit * limit) return true;
@@ -143,7 +179,7 @@ public sealed partial class SimulationWorld
     {
         if (mover.EffectivelyDead) return;
         if (mover.Template.CrusherLevel > 0)
-            foreach (var other in Entities)
+            foreach (var other in _entities)
             {
                 if (other.Id == mover.Id || other.EffectivelyDead) continue;
                 if (!FootprintsOverlap(mover, other)) continue;
@@ -181,7 +217,7 @@ public sealed partial class SimulationWorld
     private void DeliverCollisions(Entity mover)
     {
         if (mover.CollideModules.Length > 0)
-            foreach (var other in Entities)
+            foreach (var other in _entities)
             {
                 if (other.Id == mover.Id || !CanCollide(other) || !FootprintsOverlap(mover, other)) continue;
                 CallCollide(mover, other);
@@ -209,6 +245,7 @@ public sealed partial class SimulationWorld
     private static bool FootprintsOverlap(Entity a, Entity b)
     {
         var limit = a.Template.BoundingCircleRadius + b.Template.BoundingCircleRadius;
+        if (FurtherThan(a.X, b.X, limit) || FurtherThan(a.Y, b.Y, limit)) return false;
         var dx = a.X - b.X;
         var dy = a.Y - b.Y;
         return dx * dx + dy * dy <= limit * limit;

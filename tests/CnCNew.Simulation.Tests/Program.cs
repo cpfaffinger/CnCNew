@@ -78,6 +78,7 @@ run.Test("Phase 5: ObjectCreationList execution and skip events", Tests.Phase5Cr
 run.Test("Phase 5: ObjectCreationList determinism and snapshot", Tests.Phase5CreationListDeterminism);
 run.Test("Fixed-point Sin/Cos accuracy", Tests.FixedTrigAccuracy);
 run.Test("Phase 19: fixed-point product, quotient and square root equal the 128-bit formulas", Tests.FixedFastPathsMatchWideArithmetic);
+run.Test("Phase 19: avoidance and standing-blocker scans equal the full scan over every object", Tests.MovementScansMatchTheFullScan);
 run.Test("Phase 5: last player standing wins", Tests.Phase5Victory);
 run.Test("Phase 5: reference match scenario, replay v2 factions, determinism", Tests.ReferenceMatch);
 run.Test("Special powers: use command, recharge, OCL origins, pause and science gating", Tests.SpecialPowerUse);

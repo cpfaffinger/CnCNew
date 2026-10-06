@@ -252,7 +252,8 @@ public interface IWorldServices
 
     /// <summary>
     /// When the step (<paramref name="dx"/>, <paramref name="dy"/>) of <paramref name="mover"/> would land in a unit that stands still, the bounding circles of the standing units around the mover
-    /// (the goal object excepted), else an empty list: what a path search has to route around, because the static obstacle set does not know units.
+    /// (the goal object excepted), else an empty list: what a path search has to route around, because the static obstacle set does not know units. The list is the world's own
+    /// buffer and only valid until the next call.
     /// </summary>
     IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAhead(Entity mover, Fixed dx, Fixed dy);
 
