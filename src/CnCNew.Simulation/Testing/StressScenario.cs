@@ -11,6 +11,10 @@ using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Testing;
 
+/// <summary>
+/// Options of the stress test. Every number here counts <b>simulation steps</b> (ticks of the fixture's rate), none of them game time: <paramref name="Ticks"/> is the length of the
+/// run, <paramref name="DrainTicks"/> the share of it at the end in which the survivors are removed, <paramref name="CheckpointInterval"/> the distance of the replay's checkpoints.
+/// </summary>
 public sealed record StressOptions(long Ticks, int TargetPopulation, uint WorldSeed, uint DriverSeed, long DrainTicks, int CheckpointInterval)
 {
     public static StressOptions Standard { get; } = new(216_000, 10_500, 0xC0FFEE01, 0x5EED0001, 6_000, 1_000);
@@ -26,6 +30,12 @@ public sealed record StressOptions(long Ticks, int TargetPopulation, uint WorldS
 /// (repeating notifications and damage) attached to a share of the new entities. The last <see cref="StressOptions.DrainTicks"/>
 /// ticks kill every survivor so all tables return to their baseline.
 /// </para>
+/// <para>
+/// <b>The schedule counts steps and does not scale with the tick rate.</b> The stress test loads every step of the world with a fixed churn (commands per step, timers per new
+/// entity); a schedule in game time would halve that load at 60 Hz and measure something else. The ramp, the modulo cadences, the timer delays of the commands (ticks by the
+/// command's own contract) and the drain are therefore the same numbers at every rate. Relative to the fixture's authored lifetimes (milliseconds, which do scale) the churn is
+/// twice as dense in game time at 60 Hz. The one game-time value is <see cref="DrainReserveFrames"/>: what dies has to be gone before the run ends, whatever the rate.
+/// </para>
 /// </summary>
 public sealed class StressScenario
 {
@@ -37,6 +47,19 @@ public sealed class StressScenario
     private readonly List<SimCommand> _commands = [];
     private readonly List<uint> _newlySpawned = [];
     private readonly string[] _longLived = ["Barrel", "Tank", "Building"];
+
+    // The schedule in simulation steps (see the class comment: not scaled with the rate).
+    private const long RampSteps = 100;
+    private const long SparkEverySteps = 2;
+    private const long PuffEverySteps = 3;
+    private const long DamageEverySteps = 2;
+    private const long GhostEverySteps = 40;
+    private const long InvalidCommandEverySteps = 97;
+    private const long WorldTimerEverySteps = 500;
+    private const long WorldTimerStepPhase = 250;
+
+    /// <summary>The drain has killed everything this long before the run ends, so that what dies slowly is gone by then: game time, in logic frames of the original (2 s).</summary>
+    private const long DrainReserveFrames = 60;
 
     private sealed record AliveEntity(uint Id, int Owner, bool LongLived, bool Rubble);
 
@@ -129,12 +152,12 @@ public sealed class StressScenario
                 Add(new SetTimerCommand(PlayerId.System, Next(0), tick, new EntityId(id), 120, 300, TimerActionKind.Damage, Fixed.FromInt(1), DamageTypes.Explosion, roll), world);
         }
         _newlySpawned.Clear();
-        if (tick % 500 == 250 && !draining)
+        if (tick % WorldTimerEverySteps == WorldTimerStepPhase && !draining)
             Add(new SetTimerCommand(PlayerId.System, Next(0), tick, EntityId.Invalid, 45, 0, TimerActionKind.Notify, Fixed.Zero, DamageTypes.Explosion, 7), world);
 
         if (draining)
         {
-            var remaining = (int)Math.Max(1, _options.Ticks - tick - 60);
+            var remaining = (int)Math.Max(1, _options.Ticks - tick - world.Time.OriginalFrames(DrainReserveFrames));
             var kills = Math.Max(1, (_alive.Count + remaining - 1) / remaining);
             for (var index = 0; index < kills && _alive.Count > 0; index++)
             {
@@ -145,14 +168,14 @@ public sealed class StressScenario
             return;
         }
 
-        var spawnLongLived = tick < 100 ? Math.Max(1, _options.TargetPopulation / 100) : (longLived < _options.TargetPopulation ? 2 : 1);
+        var spawnLongLived = tick < RampSteps ? Math.Max(1, _options.TargetPopulation / (int)RampSteps) : (longLived < _options.TargetPopulation ? 2 : 1);
         for (var index = 0; index < spawnLongLived; index++)
             SpawnRandom(world, tick, _longLived[_random.Range(0, 99) switch { < 50 => 0, < 90 => 1, _ => 2 }]);
-        if (tick % 2 == 0) SpawnRandom(world, tick, "Spark");
-        if (tick % 3 == 0) SpawnRandom(world, tick, "Puff");
-        if (tick % 40 == 0) SpawnRandom(world, tick, "Ghost");
+        if (tick % SparkEverySteps == 0) SpawnRandom(world, tick, "Spark");
+        if (tick % PuffEverySteps == 0) SpawnRandom(world, tick, "Puff");
+        if (tick % GhostEverySteps == 0) SpawnRandom(world, tick, "Ghost");
 
-        if (tick >= 100 && longLived >= _options.TargetPopulation)
+        if (tick >= RampSteps && longLived >= _options.TargetPopulation)
         {
             var victim = PickLongLived();
             if (victim is not null)
@@ -167,12 +190,12 @@ public sealed class StressScenario
                     Add(new KillCommand(PlayerId.System, Next(0), tick, new EntityId(victim.Id)), world);
             }
         }
-        if (_alive.Count > 0 && tick % 2 == 1)
+        if (_alive.Count > 0 && tick % DamageEverySteps == 1)
         {
             var target = _alive[_random.Range(0, _alive.Count - 1)];
             Add(new DamageCommand(PlayerId.System, Next(0), tick, new EntityId(target.Id), Fixed.FromInt(_random.Range(1, 20)), _random.Range(0, 30), _random.Range(0, 20)), world);
         }
-        if (tick % 97 == 0)
+        if (tick % InvalidCommandEverySteps == 0)
         {
             // Deliberately invalid commands: the harness must reject them explicitly and identically in every run.
             Add(new DestroyCommand(new PlayerId(1), Next(1), tick, new EntityId(uint.MaxValue - 5)), world);

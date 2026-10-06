@@ -9,13 +9,19 @@ using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Testing;
 
-/// <param name="MaxTicks">Hard stop when nobody has won by then.</param>
-/// <param name="GraceTicks">Ticks recorded after the winner is known.</param>
+/// <summary>
+/// Units: <paramref name="MaxTicks"/> and <paramref name="CheckpointInterval"/> are run budgets in <b>ticks</b> of the session's rate (they go into the replay header as they are);
+/// <paramref name="GraceTicks"/> and <paramref name="SciencePointInterval"/> are rule values in <b>logic frames of the original</b> (1/30 s) that the session scales to its rate, so the
+/// same options mean the same game time at every rate. At 30 Hz a frame is a tick and every value means what it always did.
+/// </summary>
+/// <param name="MaxTicks">Hard stop when nobody has won by then, in ticks (a run budget: at 60 Hz the same number is half the game time).</param>
+/// <param name="GraceTicks">Game time recorded after the winner is known, in logic frames of the original (the name is kept for the callers).</param>
+/// <param name="CheckpointInterval">Distance of the replay's checkpoints, in ticks.</param>
 /// <param name="StartMoney">Cash every player starts with, credited by the system at tick 0; the skirmish setup screen (<c>GameInfo</c>) sets it, the faction data holds none.</param>
-/// <param name="SciencePointInterval">Every this many ticks the system credits each living player one science point (0: never); stand-in for the rank system, which does not exist.</param>
+/// <param name="SciencePointInterval">Every this many logic frames of the original the system credits each living player one science point (0: never); stand-in for the rank system, which does not exist.</param>
 public sealed record SkirmishMatchOptions(uint WorldSeed, uint AiSeed, long MaxTicks, long GraceTicks, int CheckpointInterval, int StartMoney, int SciencePointInterval)
 {
-    /// <summary>One hour of game time.</summary>
+    /// <summary>The standard match: a budget of 108,000 ticks (one hour of game time at 30 Hz), 10 s of grace, a science point every 90 s.</summary>
     public static SkirmishMatchOptions Standard { get; } = new(0xC0FFEE06, 0x5EED0006, 108_000, 300, 1_000, 10_000, 2_700);
 }
 

@@ -18,11 +18,18 @@ namespace CnCNew.Simulation.Testing;
 /// <param name="Substitution">Why <paramref name="BaseBuilding"/> is not the faction's own starting building; null when it is.</param>
 public sealed record MatchParticipant(FactionInfo Faction, string Side, string BaseBuilding, string? Substitution);
 
-/// <param name="MaxTicks">Hard stop when nobody has won by then.</param>
-/// <param name="GraceTicks">Ticks recorded after the winner is known.</param>
-/// <param name="MinTicks">The replay is padded with idle ticks up to this length (0: none); shows the world stays stable over 216,000 ticks.</param>
+/// <summary>
+/// Units: <paramref name="MaxTicks"/>, <paramref name="MinTicks"/> and <paramref name="CheckpointInterval"/> are run budgets in <b>ticks</b> of the catalog's rate (they go into the
+/// replay header as they are); <paramref name="GraceTicks"/> and <paramref name="IncomeInterval"/> are rule values in <b>logic frames of the original</b> (1/30 s) that the scenario
+/// scales to the rate. At 30 Hz a frame is a tick and every value means what it always did.
+/// </summary>
+/// <param name="MaxTicks">Hard stop when nobody has won by then, in ticks (a run budget).</param>
+/// <param name="GraceTicks">Game time recorded after the winner is known, in logic frames of the original (the name is kept for the callers).</param>
+/// <param name="MinTicks">The replay is padded with idle ticks up to this length, in ticks (0: none; a run budget like <paramref name="MaxTicks"/>); shows the world stays stable over 216,000 ticks.</param>
+/// <param name="CheckpointInterval">Distance of the replay's checkpoints, in ticks.</param>
 /// <param name="ArenaRadius">Distance of every base from the map centre.</param>
-/// <param name="Income">Money the system credits every living player every <see cref="IncomeInterval"/> ticks (stand-in for supply gathering).</param>
+/// <param name="Income">Money the system credits every living player every <see cref="IncomeInterval"/> (stand-in for supply gathering).</param>
+/// <param name="IncomeInterval">Distance of two income payments, in logic frames of the original.</param>
 public sealed record ReferenceMatchOptions(uint WorldSeed, uint DriverSeed, long MaxTicks, long GraceTicks, long MinTicks, int CheckpointInterval, int ArenaRadius, int Income, int IncomeInterval)
 {
     public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0005, 216_000, 300, 0, 1_000, 1_500, 1_500, 300);
@@ -44,9 +51,10 @@ public sealed record ReferenceMatchOptions(uint WorldSeed, uint DriverSeed, long
 public sealed class ReferenceMatchScenario
 {
     public const string FixtureId = "reference-match";
-    private const int MoveCadence = 15;
-    private const int ProductionCadence = 30;
-    private const int OrderRefreshTicks = 150;
+    // The generator's own rhythms, in logic frames of the original; scaled once per run (Record), so it plays the same schedule in game time at every rate.
+    private const long MoveCadenceFrames = 15;
+    private const long ProductionCadenceFrames = 30;
+    private const long OrderRefreshFrames = 150;
 
     private readonly ReferenceMatchOptions _options;
     private readonly SageRandom _random;
@@ -57,6 +65,10 @@ public sealed class ReferenceMatchScenario
     private string[] _sides = [];
     private ulong[] _sequence = [];
     private int _alive;
+    private long _moveCadence;
+    private long _productionCadence;
+    private long _orderRefresh;
+    private long _incomeInterval;
 
     private readonly record struct UnitClass(bool Armed, bool Mobile);
 
@@ -134,6 +146,12 @@ public sealed class ReferenceMatchScenario
         var provisional = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, catalog.Rate.TicksPerSecond, fingerprint,
             FixtureId, _options.WorldSeed, new WorldId(1), Players, _options.MaxTicks, _options.CheckpointInterval);
         var world = ReplayRunner.CreateWorld(provisional, catalog);
+        var time = world.Time;
+        _moveCadence = time.OriginalFrames(MoveCadenceFrames);
+        _productionCadence = time.OriginalFrames(ProductionCadenceFrames);
+        _orderRefresh = time.OriginalFrames(OrderRefreshFrames);
+        _incomeInterval = time.OriginalFrames(_options.IncomeInterval);
+        var grace = time.OriginalFrames(_options.GraceTicks);
         SpawnStartingObjects(world, catalog, factions);
 
         var endTick = Math.Max(_options.MaxTicks, _options.MinTicks);
@@ -144,11 +162,11 @@ public sealed class ReferenceMatchScenario
             var result = world.Step();
             Observe(result.Events);
             PeakAlive = Math.Max(PeakAlive, _alive);
-            if (VictoryTick < 0 && tick > 0 && tick % MoveCadence == 0 && world.TryGetWinner() is { } winner)
+            if (VictoryTick < 0 && tick > 0 && tick % _moveCadence == 0 && world.TryGetWinner() is { } winner)
             {
                 Winner = winner;
                 VictoryTick = tick;
-                endTick = Math.Max(tick + 1 + _options.GraceTicks, _options.MinTicks);
+                endTick = Math.Max(tick + TickOrder.Next + grace, _options.MinTicks);
             }
         }
         var header = provisional with { EndTick = endTick };
@@ -331,13 +349,14 @@ public sealed class ReferenceMatchScenario
     private void Generate(SimulationWorld world, TemplateCatalog catalog, long tick)
     {
         if (tick == 0) return;
-        if (tick % _options.IncomeInterval == 0)
+        if (tick % _incomeInterval == 0)
             for (var index = 0; index < Players.Length; index++)
                 if (!world.IsPlayerDefeated(Players[index].Id))
                     Add(world, new GiveMoneyCommand(PlayerId.System, Next(PlayerId.System), tick, Players[index].Id, Fixed.FromInt(_options.Income)));
-        if (tick == 1) IssueDockOrders(world);
-        var productionTick = tick % ProductionCadence == 0;
-        var moveTick = tick % MoveCadence == 0;
+        // Order, not time: the carriers exist one step after their spawn commands of tick 0.
+        if (tick == TickOrder.Next) IssueDockOrders(world);
+        var productionTick = tick % _productionCadence == 0;
+        var moveTick = tick % _moveCadence == 0;
         if (!productionTick && !moveTick) return;
 
         var objects = world.Entities.OrderBy(value => value.Id.Value).ToArray();
@@ -353,7 +372,7 @@ public sealed class ReferenceMatchScenario
         {
             var nearest = warehouses.OrderBy(value => (value.X - carrier.X) * (value.X - carrier.X) + (value.Y - carrier.Y) * (value.Y - carrier.Y)).ThenBy(value => value.Id.Value).FirstOrDefault();
             if (nearest is null) continue;
-            Add(world, new DockCommand(carrier.Owner, Next(carrier.Owner), 1, carrier.Id, nearest.Id));
+            Add(world, new DockCommand(carrier.Owner, Next(carrier.Owner), TickOrder.Next, carrier.Id, nearest.Id));
             DockOrders++;
         }
     }
@@ -417,7 +436,7 @@ public sealed class ReferenceMatchScenario
                     Shots++;
                 }
             }
-            else if (kind.Mobile && (!_orders.TryGetValue(unit.Id.Value, out var order) || order.Target != nearest.Id.Value || tick - order.Tick >= OrderRefreshTicks))
+            else if (kind.Mobile && (!_orders.TryGetValue(unit.Id.Value, out var order) || order.Target != nearest.Id.Value || tick - order.Tick >= _orderRefresh))
             {
                 Add(world, new PursueCommand(unit.Owner, Next(unit.Owner), tick, unit.Id, nearest.Id, nearest.X, nearest.Y));
                 _orders[unit.Id.Value] = (nearest.Id.Value, tick);
