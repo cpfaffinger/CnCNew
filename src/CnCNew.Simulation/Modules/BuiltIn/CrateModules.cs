@@ -605,7 +605,7 @@ public sealed class PilotFindVehicleUpdate(PilotFindVehicleData data) : SimModul
     public long Update(IWorldServices world)
     {
         if (!world.IsComputerPlayer(Entity.Owner) || CrateModules.AiOf(Entity) is not { } ai) return SimulationTiming.SleepForever;
-        var scan = Math.Max(data.ScanTicks, SimulationTiming.SleepNone);
+        var scan = world.Time.AtLeastOneFrame(data.ScanTicks); // a ScanRate of 0 scans once per frame of the original, not once per tick
         if (!ai.IsIdle) return scan;
         if (Scan(world) is { } vehicle) ai.OrderApproachGoal(world, vehicle, false);
         return scan;

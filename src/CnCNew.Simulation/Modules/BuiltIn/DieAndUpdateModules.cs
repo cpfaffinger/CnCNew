@@ -177,9 +177,9 @@ public abstract class TimedExpiryModule(LifetimeData data) : SimModule, IUpdateM
 
     public override void OnSpawn(IWorldServices world)
     {
-        // calcSleepDelay: GameLogicRandomValue(min, max) inclusive, at least one frame.
-        var delay = world.LogicRandom.Range(checked((int)_minTicks), checked((int)_maxTicks));
-        if (delay < 1) delay = 1;
+        // LifetimeUpdate.cpp, LifetimeUpdate::calcSleepDelay: GameLogicRandomValue(minFrames, maxFrames) inclusive, "if (delay < 1) delay = 1" – drawn in
+        // frames of the original and then scaled, so the lifetime is the same game time at every rate; at least one frame.
+        var delay = world.Time.AtLeastOneFrame(world.Time.DrawFrames(world.LogicRandom, _minTicks, _maxTicks));
         _dieTick = world.Tick + delay;
         _nextWake = Math.Min(world.Tick + delay, SimulationTiming.SleepForever);
     }

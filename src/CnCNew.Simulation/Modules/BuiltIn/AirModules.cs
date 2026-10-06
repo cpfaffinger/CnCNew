@@ -396,7 +396,8 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     public long Update(IWorldServices world)
     {
         Purge(world);
-        _arrivals.RemoveAll(arrival => world.Tick - arrival.Tick > 2);
+        // Order, not time: the produced aircraft spawns in the tick of the exit or the one after and adopts its arrival there.
+        _arrivals.RemoveAll(arrival => world.Tick - arrival.Tick > 2 * TickOrder.Next);
         if (_nextHeal >= 0 && world.Tick >= _nextHeal)
         {
             _nextHeal = world.Tick + world.Time.OriginalFrames(HealRateFrames);

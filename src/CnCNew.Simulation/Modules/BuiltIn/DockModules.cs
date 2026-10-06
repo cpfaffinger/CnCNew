@@ -492,7 +492,8 @@ internal sealed class AutoDepositUpdate(AutoDepositData data) : SimModule, IUpda
     public long Update(IWorldServices world)
     {
         if (world.Tick < _depositOnTick) return _depositOnTick - world.Tick;
-        _depositOnTick = world.Tick + Math.Max(data.DepositTimingTicks, SimulationTiming.SleepNone);
+        // A DepositTiming of 0 pays once per frame of the original, not once per tick (the income per second must not depend on the rate).
+        _depositOnTick = world.Tick + world.Time.AtLeastOneFrame(data.DepositTimingTicks);
         if (!Entity.Owner.IsSystem && data.DepositAmount > 0 && !Entity.HasStatus(ObjectStatusBits.UnderConstruction) && data.ActualMoney)
         {
             var money = data.DepositAmount + Boost(world);

@@ -81,6 +81,13 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private static readonly Fixed ParkedOrientationTolerance = Fixed.FromDecimal(0.001m);
     private static readonly Fixed Misaligned = Fixed.FromRaw(34315); // π/6, as the ground movement of AIUpdateInterface
     private static readonly Fixed Epsilon = Fixed.FromRaw(1024);
+    // Own speeds of the kinematic stand-in, written as distances per logic frame of the original and scaled where they are used (untouched at 30 Hz).
+    /// <summary>The taxi speed of an aircraft without an active locomotor.</summary>
+    private static readonly Fixed FallbackTaxiSpeedPerFrame = Fixed.One;
+    /// <summary>The slowest horizontal approach of a helicopter to its landing spot.</summary>
+    private static readonly Fixed MinHelicopterApproachSpeedPerFrame = Fixed.One;
+    /// <summary>The slowest landing speed of a winged aircraft.</summary>
+    private static readonly Fixed MinLandingSpeedPerFrame = Fixed.One / Fixed.FromInt(2);
 
     private JetPhase _phase;
     private bool _allowAir = true;
@@ -254,7 +261,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         var taxi = ActiveLocomotor;
         var target = _path[_pathIndex];
         var last = _pathIndex == _path.Count - 1;
-        var speed = taxi?.Speed ?? Fixed.One;
+        var speed = taxi?.Speed ?? world.Time.PerOriginalFrameToPerTick(FallbackTaxiSpeedPerFrame);
         var dx = target.X - Entity.X;
         var dy = target.Y - Entity.Y;
         var distance = Fixed.Sqrt(dx * dx + dy * dy);
@@ -379,7 +386,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             Entity.Speed = Fixed.Zero;
             return SimulationTiming.SleepNone;
         }
-        UpdateAttackLocomotor(world.Tick);
+        UpdateAttackLocomotor(world);
         var parking = ParkingOf(world);
 
         switch (_phase)
@@ -441,10 +448,12 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         return SimulationTiming.SleepNone;
     }
 
-    private void UpdateAttackLocomotor(long now)
+    private void UpdateAttackLocomotor(IWorldServices world)
     {
         if (data.AttackLocomotor == "SET_NORMAL") return;
-        if (Entity.LastFireTick == now) _attackExpireTick = now + Math.Max(data.AttackLocomotorPersistTicks, 1);
+        var now = world.Tick;
+        // Own minimum (the reference has none): the attack set lasts at least one frame of the original, because 0 means "not attacking" here.
+        if (Entity.LastFireTick == now) _attackExpireTick = now + world.Time.AtLeastOneFrame(data.AttackLocomotorPersistTicks);
         else if (_attackExpireTick != 0 && now >= _attackExpireTick) _attackExpireTick = 0;
     }
 
@@ -780,7 +789,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             var toSpot = AirModules.Distance2D(Entity.X, Entity.Y, spot.X, spot.Y);
             if (toSpot > Fixed.Zero)
             {
-                var move = Fixed.Min(toSpot, Fixed.Max(flight.MinSpeed, Fixed.One));
+                var move = Fixed.Min(toSpot, Fixed.Max(flight.MinSpeed, world.Time.PerOriginalFrameToPerTick(MinHelicopterApproachSpeedPerFrame)));
                 Entity.X += (spot.X - Entity.X) * move / toSpot;
                 Entity.Y += (spot.Y - Entity.Y) * move / toSpot;
             }
@@ -800,7 +809,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return;
         }
         var target = _path[_pathIndex];
-        var minSpeed = Fixed.Max(flight.MinSpeed, Fixed.One / Fixed.FromInt(2));
+        var minSpeed = Fixed.Max(flight.MinSpeed, world.Time.PerOriginalFrameToPerTick(MinLandingSpeedPerFrame));
         // loco->setMaxSpeed(loco->getMinSpeed()): the landing is flown at the minimum speed.
         Entity.Speed = Entity.Speed > minSpeed
             ? Fixed.Max(minSpeed, Entity.Speed - Fixed.Max(flight.Braking, flight.Acceleration))
@@ -878,9 +887,11 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             var clip = Entity.ClipOf(slot);
             if (weapon.ClipSize <= 0 || clip == int.MaxValue) continue;
             var time = weapon.ClipReloadWith(world.Templates.GlobalWeaponBonus, Entity.WeaponBonusConditions);
-            total = Math.Max(total, time * (weapon.ClipSize - Math.Max(clip, 0)) / weapon.ClipSize);
+            // rt = (rt * needed) / clipSize is cut off in frames of the original, then scaled.
+            total = Math.Max(total, world.Time.OriginalFrames(world.Time.ToOriginalFrames(time) * (weapon.ClipSize - Math.Max(clip, 0)) / weapon.ClipSize));
         }
-        _reloadDoneTick = world.Tick + Math.Max(total, 1);
+        // JetOrHeliReloadAmmoState::onEnter: if (m_reloadTime < 1) m_reloadTime = 1 – one frame of the original.
+        _reloadDoneTick = world.Tick + world.Time.AtLeastOneFrame(total);
         _useReturnLocomotor = false;
     }
 
