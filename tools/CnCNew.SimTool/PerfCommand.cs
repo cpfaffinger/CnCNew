@@ -31,8 +31,8 @@ internal delegate (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, strin
 internal static class PerfCommand
 {
     private const string Usage = """
-        perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--replay] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer]
-        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer]
+        perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--replay] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer] [--movement [--movement-tick N]]
+        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer] [--movement [--movement-tick N]]
         """;
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
@@ -54,6 +54,15 @@ internal static class PerfCommand
     {
         var index = Array.IndexOf(args, name);
         return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+    }
+
+    /// <summary><c>--movement</c>: installs the movement probe (path searches and the entity scans of a movement step); it needs the observer to know which unit is being updated.</summary>
+    private static MovementRecorder? MovementProbe(string[] args, SimulationWorld world, TickRecorder recorder)
+    {
+        if (!args.Contains("--movement") || world.Navigation is not { } grid || world.PhaseObserver is null) return null;
+        var movement = new MovementRecorder(world, recorder) { DumpTick = long.Parse(Arg(args, "--movement-tick") ?? "-1", Invariant) };
+        grid.Probe = movement;
+        return movement;
     }
 
     // ------------------------------------------------------------------------------------------------- skirmish
@@ -83,6 +92,7 @@ internal static class PerfCommand
         var world = session.World;
         var recorder = new TickRecorder(world, common.Modules);
         if (common.Observe) world.PhaseObserver = recorder;
+        var movement = MovementProbe(args, world, recorder);
         var gcBefore = GcCounts();
         var wall = Stopwatch.StartNew();
         var chain = StateHash.Seed;
@@ -98,6 +108,7 @@ internal static class PerfCommand
         wall.Stop();
         var gcAfter = GcCounts();
         world.PhaseObserver = null;
+        if (world.Navigation is { } grid) grid.Probe = null;
         var finalHash = world.StateHash;
         var summary = new SortedDictionary<string, string>(StringComparer.Ordinal)
         {
@@ -107,6 +118,7 @@ internal static class PerfCommand
             ? $"Match: {recorder.Count} ticks in {wall.Elapsed.TotalSeconds:F1} s wall time, no winner (tick budget)."
             : $"Match: {recorder.Count} ticks in {wall.Elapsed.TotalSeconds:F1} s wall time, winner player {session.Winner.Value.Value} at tick {session.VictoryTick}.");
         Report(recorder, common, summary, gcBefore, gcAfter, [TickPhase.SkirmishAi, TickPhase.SkirmishVictory], [TickPhase.MissionScripts, TickPhase.MissionEvents]);
+        movement?.Report(terrain.CellsX, recorder.Count, summary);
         Console.WriteLine($"Final hash {finalHash:X16}, chain {chain:X16} (must equal the same run without the observer; `ai-match --max-ticks {common.Ticks}` prints the same pair).");
         summary["hash"] = finalHash.ToString("X16");
         summary["chain"] = chain.ToString("X16");
@@ -180,6 +192,7 @@ internal static class PerfCommand
         Console.WriteLine($"Session start (objects placed): {start.Elapsed.TotalMilliseconds:F0} ms, {world.Entities.Count} objects, {world.Configuration.Players.Length} players.");
         var recorder = new TickRecorder(world, common.Modules);
         if (common.Observe) world.PhaseObserver = recorder;
+        var movement = MovementProbe(args, world, recorder);
         var gcBefore = GcCounts();
         var wall = Stopwatch.StartNew();
         var chain = StateHash.Seed;
@@ -203,6 +216,7 @@ internal static class PerfCommand
         wall.Stop();
         var gcAfter = GcCounts();
         world.PhaseObserver = null;
+        if (world.Navigation is { } grid) grid.Probe = null;
         var finalHash = session.StateHash();
         var summary = new SortedDictionary<string, string>(StringComparer.Ordinal)
         {
@@ -210,6 +224,7 @@ internal static class PerfCommand
         };
         Console.WriteLine($"Mission: {recorder.Count} steps to tick {world.Tick} in {wall.Elapsed.TotalSeconds:F1} s wall time; outcome {session.Outcome}; scripts executed {session.Engine.ExecutedScripts}, actions {session.Engine.ExecutedActions}.");
         Report(recorder, common, summary, gcBefore, gcAfter, [TickPhase.MissionScripts, TickPhase.MissionEvents], [TickPhase.SkirmishAi, TickPhase.SkirmishVictory]);
+        movement?.Report(terrain.CellsX, recorder.Count, summary);
         Console.WriteLine($"Final hash {finalHash:X16}, chain {chain:X16} (must equal the same run without the observer; `mission-run --ticks {common.Ticks}` prints the same pair).");
         summary["hash"] = finalHash.ToString("X16");
         summary["chain"] = chain.ToString("X16");
@@ -604,13 +619,18 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
 
     public void PhaseEnded(TickPhase phase) => _current[(int)phase] += Stopwatch.GetTimestamp() - _phaseStart;
 
+    /// <summary>The module whose update is running right now (<see langword="null"/> between updates).</summary>
+    public SimModule? Current { get; private set; }
+
     public void UpdateStarted(SimModule module)
     {
+        Current = module;
         if (ModuleTiming) _updateStart = Stopwatch.GetTimestamp();
     }
 
     public void UpdateEnded(SimModule module)
     {
+        Current = null;
         if (!ModuleTiming) return;
         var elapsed = Stopwatch.GetTimestamp() - _updateStart;
         var name = module.ModuleName;

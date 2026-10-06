@@ -37,6 +37,15 @@ public sealed partial class SimulationWorld
     public (Fixed Dx, Fixed Dy) AvoidLocalBlockers(Entity mover, Fixed dx, Fixed dy)
     {
         if (Navigation is null || (dx == Fixed.Zero && dy == Fixed.Zero)) return (dx, dy);
+        if (Navigation.Probe is not { } probe) return AvoidLocalBlockersCore(mover, dx, dy);
+        probe.Started(CnCNew.Simulation.Terrain.MovementWork.LocalAvoidance);
+        var result = AvoidLocalBlockersCore(mover, dx, dy);
+        probe.Ended(CnCNew.Simulation.Terrain.MovementWork.LocalAvoidance);
+        return result;
+    }
+
+    private (Fixed Dx, Fixed Dy) AvoidLocalBlockersCore(Entity mover, Fixed dx, Fixed dy)
+    {
         // The object an approach order aims at is never an obstacle (the reference's AI ignores its goal object when it steers), or a hijacker could never touch its car.
         var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
         if (!StepBlocked(mover, dx, dy, goal)) return (dx, dy);
@@ -58,6 +67,15 @@ public sealed partial class SimulationWorld
     public IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAhead(Entity mover, Fixed dx, Fixed dy)
     {
         if (Navigation is null || (dx == Fixed.Zero && dy == Fixed.Zero)) return [];
+        if (Navigation.Probe is not { } probe) return StationaryBlockersAheadCore(mover, dx, dy);
+        probe.Started(CnCNew.Simulation.Terrain.MovementWork.StationaryBlockers);
+        var result = StationaryBlockersAheadCore(mover, dx, dy);
+        probe.Ended(CnCNew.Simulation.Terrain.MovementWork.StationaryBlockers);
+        return result;
+    }
+
+    private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadCore(Entity mover, Fixed dx, Fixed dy)
+    {
         var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
         var moverRadius = mover.Template.BoundingCircleRadius;
         var blocked = false;
@@ -110,6 +128,18 @@ public sealed partial class SimulationWorld
 
     /// <inheritdoc cref="IWorldServices.ResolveFootprintCollisions"/>
     public void ResolveFootprintCollisions(Entity mover, Fixed stepX, Fixed stepY)
+    {
+        if (Navigation?.Probe is not { } probe)
+        {
+            ResolveFootprintCollisionsCore(mover, stepX, stepY);
+            return;
+        }
+        probe.Started(CnCNew.Simulation.Terrain.MovementWork.FootprintCollisions);
+        ResolveFootprintCollisionsCore(mover, stepX, stepY);
+        probe.Ended(CnCNew.Simulation.Terrain.MovementWork.FootprintCollisions);
+    }
+
+    private void ResolveFootprintCollisionsCore(Entity mover, Fixed stepX, Fixed stepY)
     {
         if (mover.EffectivelyDead) return;
         if (mover.Template.CrusherLevel > 0)

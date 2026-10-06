@@ -67,6 +67,9 @@ public sealed class NavigationGrid
 
     public TerrainMap Terrain { get; }
 
+    /// <summary>A tool's measuring hook (<see cref="IMovementProbe"/>); <see langword="null"/> unless a tool installs one. Not part of the state: neither hashed nor saved.</summary>
+    public IMovementProbe? Probe { get; set; }
+
     /// <summary>Order-independent identity of the footprints currently on the grid.</summary>
     public ulong ObstacleSum { get; private set; }
 
@@ -219,6 +222,10 @@ public sealed class NavigationGrid
         finally { _temporary.Clear(); }
     }
 
+    private int _probeExpansions;
+    private int _probePushes;
+    private int _probePathCells;
+
     /// <summary>
     /// An object that stands inside a footprint (a unit that just left a factory whose approximated footprint covers its exit), or
     /// that is sent to a point inside one (a dock position of a supply center), may pass through the obstacle cells connected to that
@@ -263,6 +270,21 @@ public sealed class NavigationGrid
     /// </summary>
     public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces)
     {
+        if (Probe is not { } probe) return Search(startX, startY, goalX, goalY, surfaces);
+        probe.Started(MovementWork.PathSearch);
+        _probeExpansions = _probePushes = _probePathCells = 0;
+        var temporary = _temporary.Count;
+        var result = Search(startX, startY, goalX, goalY, surfaces);
+        probe.Ended(MovementWork.PathSearch);
+        var start = ClampedCell(startX, startY);
+        var goal = ClampedCell(goalX, goalY);
+        probe.PathSearched(new PathSearchInfo(start.Y * Terrain.CellsX + start.X, goal.Y * Terrain.CellsX + goal.X, surfaces, result.Status, _probeExpansions, _probePushes,
+            _probeExpansions == 0 && _probePushes == 0 ? 0 : _escape.Count, temporary, _probePathCells, result.Points.Length, false));
+        return result;
+    }
+
+    private PathResult Search(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces)
+    {
         var start = ClampedCell(startX, startY);
         var goal = ClampedCell(goalX, goalY);
         var cellsX = Terrain.CellsX;
@@ -289,7 +311,8 @@ public sealed class NavigationGrid
         var best = startIndex;
         var bestHeuristic = Heuristic(start.X, start.Y, goal.X, goal.Y);
         var reached = false;
-        for (var expansions = 0; _heapCount > 0 && expansions < ExpansionBudget; expansions++)
+        var expansions = 0;
+        for (; _heapCount > 0 && expansions < ExpansionBudget; expansions++)
         {
             var current = (int)(Pop() & 0xFFFFFFFFL);
             if (_closedStamp[current] == _currentStamp) continue;
@@ -321,12 +344,14 @@ public sealed class NavigationGrid
             }
         }
 
+        _probeExpansions = expansions;
         var end = reached ? goalIndex : best;
         if (end == startIndex) return new PathResult(PathStatus.Blocked, []);
 
         var cells = new List<int>();
         for (var cell = end; cell >= 0; cell = _parent[cell]) cells.Add(cell);
         cells.Reverse();
+        _probePathCells = cells.Count;
 
         var points = ImmutableArray.CreateBuilder<PathPoint>();
         var from = 0;
@@ -385,6 +410,7 @@ public sealed class NavigationGrid
     private void Push(int cost, int index)
     {
         if (_heapCount == _heap.Length) Array.Resize(ref _heap, _heap.Length * 2);
+        _probePushes++;
         var key = ((long)cost << 32) | (uint)index;
         var child = _heapCount++;
         while (child > 0)
