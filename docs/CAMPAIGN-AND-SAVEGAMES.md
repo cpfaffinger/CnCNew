@@ -59,16 +59,33 @@ Definitionen, anderes Gelände, anderes Kartenskript, gekippte/fehlende Bytes.
 Gemessen: gespeichert und wiederhergestellt läuft eine Mission Tick für Tick hash-identisch weiter; Speichern → Laden → Speichern
 reproduziert die Bytes.
 
-### `SaveGame` (Game, Version 1)
+### `SaveGame` (Game, Version 2)
 
 Eine Datei, ein UTF-8-JSON-Dokument: `format` (`cncnew-savegame`), `version`, `title`, `mapPath` (virtuell), `campaign`, `mission`,
-`difficulty`, `tick`, `definitionFingerprint`, `stateHash`, `stateSha256` (SHA-256 über den eingebetteten Zustand – deckt jedes Byte, auch
+`difficulty`, `tick`, `tickRate` (seit Version 2), `definitionFingerprint`, `stateHash`, `stateSha256` (SHA-256 über den eingebetteten Zustand – deckt jedes Byte, auch
 den Präsentationsstrom, den der Simulationshash bewusst nicht enthält), `progress` (`CampaignProgress` oder leer), `state` (das
 `MissionSnapshot`, roh). Dieselbe Sitzung im selben Tick ergibt dieselben Bytes; Laden + erneutes Speichern reproduziert die Datei.
 
 `SaveGame.ReadHeader` liest nur den Kopf (Ladeliste). `Load` meldet verständlich, **warum** eine Datei nicht lädt:
-„Not a CnCNew savegame“, „Unsupported savegame version N“, „written with different game data“ (Definitions-Fingerprint),
-„belongs to campaign X, which this game does not have“, „damaged or truncated“, „checksum does not match“.
+„Not a CnCNew savegame“, „Unsupported savegame version N (this game reads version 2)“, „Unsupported tick rate N Hz in the savegame“,
+„written at 60 Hz; this session runs at 30 Hz“ (Rate des Spielstands gegen die Rate der Sitzung, in beiden Richtungen),
+„written with different game data“ (Definitions-Fingerprint), „belongs to campaign X, which this game does not have“,
+„damaged or truncated“, „checksum does not match“, „state does not match its header“ (Tick, Rate oder Zustandshash des Kopfs passen nicht zum
+eingebetteten Zustand).
+
+**Version 2 – die Hülle trägt ihre Rate (6. Oktober 2026, `docs/TICKRATE-MIGRATION.md` §14.9).** `tick` zählt Ticks der Welt, die gespeichert wurde, und
+sagt ohne Rate nichts; Version 1 schrieb keine Rate (ein Spielstand anderer Rate fiel nur mittelbar auf, über den Fingerabdruck, der die Rate
+enthält). Seit Version 2 steht `tickRate` (Ticks je Sekunde: 30, 60 oder 120) direkt hinter `tick`. Regeln:
+
+- **Version 1 wird abgelehnt, nie umgedeutet.** Eine Datei ohne Rate als „30 Hz“ zu lesen wäre eine stille Annahme; die vorhandene Versionsprüfung
+  weist sie mit „Unsupported savegame version 1 (this game reads version 2)“ ab, in der Ladeliste erscheint der Slot mit diesem Grund. Es gibt keine
+  Umwandlung alter Spielstände (binäre Kompatibilität zu alten Savegames ist nicht im Scope).
+- **Die Rate wird vor dem Fingerabdruck geprüft**, damit die Meldung die Ursache nennt. Ein Spielstand von 60 Hz lädt nur in einer Sitzung mit 60 Hz.
+- **Kopf und Zustand müssen übereinstimmen:** nach dem Wiederherstellen werden Tick und Rate des Kopfs mit der Welt verglichen (der eingebettete
+  `MissionSnapshot` trägt seine Rate selbst); ein Kopf mit gefälschter Rate oder falschem Tick wird abgewiesen.
+- **Listen zeigen Spielzeit statt des Ticks:** `SaveGameHeader.GameTime` (`m:ss`, ganze Sekunden aus Tick und Rate, Minuten laufen über 59 hinaus) –
+  derselbe Text für denselben Zeitpunkt bei jeder Rate. Ladebildschirm (`LoadGameScreen`) und Pausenmenü (`MissionPauseMenu`) zeigen
+  „Titel (m:ss)“ statt „Titel (tick N)“. Kein eingecheckter Bildschirm-Hash enthält eine Ladeliste mit Einträgen; die 54 Screen-Hashes sind unverändert.
 
 **Bewusst außerhalb des Formats:** Skirmish-Partien. Die Skirmish-KI hält Zustand außerhalb der Welt, den dieses Format nicht trägt;
 ein Skirmish-Speicherstand würde also nicht identisch fortsetzen. Ein Speicherstand entspricht nie einem `ReplayFile` (der Fehler
@@ -84,7 +101,8 @@ Store.
 
 `tests/CnCNew.Game.Tests/CampaignTests.cs` (synthetische Daten): Parser, Validierung, Fortschritt inkl. JSON-Runde, Kontrollfluss mit
 Niederlage/Wiederholung/Versuchszähler/Seed, Speichern → Laden → identische Fortsetzung durch einen Sieg, Byte-Kanonizität,
-Ablehnung fremder/beschädigter/abgeschnittener Dateien, Store. Mit `--content-dir`: die echte `Campaign.ini` (17 Kampagnen, 85 Missionen,
+Ablehnung fremder/beschädigter/abgeschnittener Dateien, Store; seit Version 2 die Rate der Hülle (Laden bei 30 und bei 60 Hz, Ablehnung über Kreuz in
+beiden Richtungen, Version 1, fehlende und nicht unterstützte Rate, gefälschter Kopf, gleiche Spielzeit in der Liste bei beiden Raten). Mit `--content-dir`: die echte `Campaign.ini` (17 Kampagnen, 85 Missionen,
 0 unbekannte Schlüssel, einzige Auffälligkeit die im Retail-Bestand fehlende Karte `Maps/CampEADemo/CampEADemo.map`).
 
 ## 6. Werkzeug `CnCNew.CampaignTool`
@@ -99,6 +117,11 @@ dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough .local/
 
 `--human-side <Name>` (`audit` und `playthrough`): reicht `MissionOptions.HumanSideName` durch, für Karten ohne eigene `playerIsHuman`-Seite
 (`docs/SCRIPT-ENGINE.md` §7); ein Name, der keine Seite der Karte trifft, fällt mit einer Notiz auf den Standard zurück (nie still).
+
+**Spielzeit in der Ausgabe (6. Oktober 2026):** `drive` und `audit` schreiben unter jede Kartenzeile, in der ein Ende erreicht wurde, eine eigene Zeile
+`game time (m:ss at 30 Hz): victory after 0:26, defeat after 0:07` und am Schluss `Budget: N ticks are m:ss of game time (m:ss) at 30 Hz.`; `playthrough`
+nennt die Spielzeit in Klammern hinter dem Tick. Die Kartenzeilen selbst (`victory REACHED … @Tick`, `win@Tick`, `lose@Tick`) und die Summenzeilen
+(„… identical on a second run …“) sind Byte für Byte unverändert, weil sie ausgewertet werden; Ticks bleiben Ticks der gewählten Rate (`--tick-rate N`).
 
 `audit`: jede eindeutige Kampagnenkarte – zwei frische Läufe, Speichern/Wiederherstellen, Endproben Sieg/Niederlage, danach die
 Aggregation der fehlenden Aktions-/Bedingungstypen, nicht auflösbarer Verweise und nicht erzeugbarer Objekttypen; Exitcode ≠ 0 bei

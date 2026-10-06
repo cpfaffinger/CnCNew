@@ -409,7 +409,7 @@ Geprüft und **kein** Faktor je Bild: `StructureCollapseData` `CollapseDamping` 
 
 ## 6. Liste für Phase 21 (Verbraucher außerhalb der Simulation)
 
-> **Status nach Phase 21:** diese Liste ist abgearbeitet; der Stand je Nummer steht in §14.3 (offen: Nr. 3 und Nr. 12, unverändert nach Plan: Nr. 15). Die Tabelle beschreibt den Stand am Ende der Phase 20 und wird nicht fortgeschrieben.
+> **Status nach Phase 21:** diese Liste ist abgearbeitet; der Stand je Nummer steht in §14.3 (Nr. 3 und Nr. 12 im Nachtrag §14.9 erledigt; unverändert nach Plan: Nr. 15). Die Tabelle beschreibt den Stand am Ende der Phase 20 und wird nicht fortgeschrieben.
 
 Nach Phase 20 liest alles außerhalb die Rate aus der Welt bzw. vom Katalog. Was dort heute noch die 30 unterstellt oder eine Einheit falsch deutet:
 
@@ -438,7 +438,7 @@ Nach Phase 20 liest alles außerhalb die Rate aus der Welt bzw. vom Katalog. Was
 - Wiederherstellen erzeugt die Welt **mit der gespeicherten Rate**. Abgelehnt wird (a) eine nicht unterstützte Rate (`SnapshotFormatException` bzw. `ReplayRejectedException`: „Unsupported tick rate 50 Hz“), (b) ein Katalog, der für eine andere Rate gebaut wurde („The snapshot was written at 60 Hz; the catalog was built for 30 Hz.“). Der Zustand enthält absolute Ticks und Werte je Tick; er ist nur mit seiner Rate lesbar.
 - `ReplayRunner.Run(replay, world, …)` prüft, dass die Welt mit der Rate des Replays läuft (W8). `ReplayRunner.RateOf(header)` liefert die Rate eines Kopfs.
 - Befehle (`SimCommand.Tick`, `SetTimerCommand.DelayTicks`/`RepeatTicks`) tragen Ticks der Rate der Welt; wer den Befehl erzeugt, rechnet in dieser Rate.
-- **Nicht angefasst:** `SaveGame` (§6 Nr. 3).
+- `SaveGame` blieb in Phase 20 unberührt (§6 Nr. 3); seit dem Nachtrag der Phase 21 trägt die Hülle ihre Rate (**Version 2**, §14.9.3).
 
 ## 8. Einheiten
 
@@ -1004,7 +1004,7 @@ Nebenbefunde (keine Ratenfehler, nicht korrigiert): `SUB_FROM_MSEC_TIMER` zieht 
 
 ## 14. Phase 21: Präsentation, Spielschicht, UI, Ton, Client, Werkzeuge und Tests
 
-Stand: 6. Oktober 2026, Endstand der Phase 21 (`docs/HANDOFF-PHASE21.md`). Dieser Abschnitt ist der Bericht für alles außerhalb der Simulation; er schließt die Liste aus §6 ab. Ziel in einem Satz: nichts außerhalb der Simulation nimmt an, dass ein Tick 1/30 s dauert; bei 30 Hz bleibt jedes Bild, jeder Ton und jede Prüfsumme gleich; bei 60 Hz dauert alles Sichtbare und Hörbare in Sekunden gleich lang.
+Stand: 6. Oktober 2026, Endstand der Phase 21 (`docs/HANDOFF-PHASE21.md`) mit dem Nachtrag vom selben Tag (§14.9: Tests in Spielzeit, `SaveGame` mit Rate, restliche Zeitmaß-Tests, Werkzeugausgabe). Dieser Abschnitt ist der Bericht für alles außerhalb der Simulation; er schließt die Liste aus §6 ab. Ziel in einem Satz: nichts außerhalb der Simulation nimmt an, dass ein Tick 1/30 s dauert; bei 30 Hz bleibt jedes Bild, jeder Ton und jede Prüfsumme gleich; bei 60 Hz dauert alles Sichtbare und Hörbare in Sekunden gleich lang.
 
 **Was Phase 21 nicht ist:** eine Abnahme. Prüfsummen belegen Reproduzierbarkeit, der Zeitmaß-Test belegt Dauern. Ob irgendetwas bei 60 Hz richtig aussieht oder klingt, hat kein Mensch gesehen oder gehört (§14.7), und die Simulation selbst ist bei 60 Hz unbewertet (§5, Phase 23). Der Standard bleibt 30 Hz.
 
@@ -1068,7 +1068,7 @@ Simulation: `SimTool input-manifest check` identisch; `SimTool reference-manifes
 |---|---|---|
 | 1 | erledigt | `LiveGame`, `SimTool perf`, `ObjectTests`, `Tests.Vision` benutzen `world.VisionInterval`; `SimulationWorld.VisionIntervalTicks` ist entfernt |
 | 2 | erledigt | `GameData.Load(…, rate:)`; `GameData.Rate`; `DefaultSessionRate` als benannter Standard; Client `--tick-rate N`, `PresentationTool scenario-audit`/`sync-perf --tick-rate N`, `GameShell.CreateLoading(…, rate:)` |
-| 3 | **offen** | `SaveGame` (Version 1) schreibt weiter keine Rate und die Listen zeigen den rohen Tick. Ein Spielstand einer anderen Rate wird abgelehnt – über den Definitions-Fingerabdruck (er enthält die Rate, §4) und den eingebetteten Missionszustand, nicht über ein eigenes Feld. Ein Feld in der Hülle und Spielzeit in der Liste ändern das Format bzw. sichtbaren Text und sind nicht Teil der elf Punkte des Auftrags |
+| 3 | erledigt (Nachtrag) | `SaveGame` **Version 2** schreibt `tickRate` in die Hülle und prüft sie vor dem Fingerabdruck; Version 1 wird über die Versionsprüfung abgelehnt und nie umgedeutet; Ladebildschirm und Pausenmenü zeigen Spielzeit (`SaveGameHeader.GameTime`, m:ss) statt des Ticks (§14.9.3) |
 | 4 | erledigt | jede der 14 + 1 + 3 Verwendungen entschieden: Simulationsticks über `world.Time` (`LiveGame`, `SuperweaponTimers`, `MissionPresentation`, `SyncPerfCommand`) oder Originalbild (`EvaCatalog`, `LiveMission`, `SelectionFlash`); keine Verwendung von `SimulationRate.OriginalFramesPerSecond` mehr in `CnCNew.Game`, `CnCNew.Presentation`, `CnCNew.Ui`, `CnCNew.Client.Stride` (Quelltexttest, §14.6) |
 | 5 | geprüft, kein Leser | die Sabotagedauer im Ereigniswert liest außerhalb der Simulation niemand (Suche nach den drei Ereignisarten in `CnCNew.Game` und `CnCNew.Presentation`: kein Treffer auf den Wert); wer ihn künftig liest, rechnet mit `world.Time` |
 | 6 | erledigt | `UnitConditionTracker`: `Life < world.Time.OriginalFrames(100)`, Fallschwelle je Originalbild |
@@ -1077,7 +1077,7 @@ Simulation: `SimTool input-manifest check` identisch; `SimTool reference-manifes
 | 9 | erledigt | Bildzahlen der Skripte sind Originalbilder und werden beim Annehmen umgerechnet (`docs/SCRIPT-ENGINE.md` §7a, Tabelle) |
 | 10 | erledigt | `LiveMission.ClientPresentationLatencyFrames` (umbenannt; der Wert ist und war in Bildern) |
 | 11 | geprüft | Türuhr, Lenkhaltezeit, Baufortschritt und Bereitschaft der Spezialkräfte werden als Ticks gegen Ticks verglichen (Anteile, keine Sekunden); die einzige Sekundenanzeige (`SuperweaponTimers`) rechnet über `world.Time` |
-| 12 | **offen** | `CampaignTool` gibt `TicksToOutcome`, `AttackTicks` usw. weiter als Ticks der gewählten Rate aus (beschriftet); eine Ausgabe in Sekunden ist nicht gebaut |
+| 12 | erledigt (Nachtrag) | `CampaignTool drive`/`audit` schreiben die Spielzeit der Ticks einer Kartenzeile in eine eigene Zeile darunter und das Budget als Spielzeit; `playthrough` in Klammern hinter dem Tick; die ausgewerteten Zeilen sind bytegleich (§14.9.4). `SkirmishAiStats.AttackTicks` gibt kein Werkzeug aus |
 | 13 | erledigt | `ScenarioAudit` (ein Abtastwert je Originalbild, Ereignisticks und Turmzeiten beim Einlesen umgerechnet, `--tick-rate`), `SyncPerfCommand` (Schritt aus der Rate der Welt), `UiRenderTool` (Schritte `1.0 / OriginalFrame.PerSecond`, Budgets `WholeSecondsToTicks`, Timerwert in Originalbildern) |
 | 14 | erledigt (Schritte) | kein `1.0 / 30` mehr in den Tests außerhalb der Simulation; `tests/Shared/TestTime.cs` (§14.5) |
 | 15 | unverändert | `SimTool perf`: `catchup30`/`catchup60`/`core30_percent` nennen ihre Rate im Namen (Umstellung des Standards, Phase 23) |
@@ -1093,7 +1093,7 @@ Simulation: `SimTool input-manifest check` identisch; `SimTool reference-manifes
 
 ### 14.4 Zeitmaß-Test bei 60 Hz (und 120 Hz)
 
-Je Element dieselbe Szene je Rate, Dauer in Ticks der jeweiligen Welt gemessen und mit ihrer Rate in Sekunden umgerechnet; Toleranz ein Originalbild (0,0333 s). `ObjectTests.TimeScale.cs` (synthetische Fixture je Rate), `TimeScaleTests.cs` und `AudioDirectorTests` (synthetische Mission bzw. Fixture je Rate), `TimeScaleTests` mit `--content-dir` (Realdaten, `LiveScenario` bei 30 und 60 Hz).
+Je Element dieselbe Szene je Rate, Dauer in Ticks der jeweiligen Welt gemessen und mit ihrer Rate in Sekunden umgerechnet; Toleranz ein Originalbild (0,0333 s). `ObjectTests.TimeScale.cs` (synthetische Fixture je Rate), `TimeScaleTests.cs` und `AudioDirectorTests` (synthetische Mission bzw. Fixture je Rate), `TimeScaleTests` mit `--content-dir` (Realdaten, `LiveScenario` bei 30, 60 und 120 Hz); im Nachtrag dazu `FxTests.TimeScale.cs`, `UnitConditionTests.TimeScale.cs`, je ein Test in `JetOrderTests` und `CaptureFlashTests` (alle `Presentation.Tests`) und vier weitere in `TimeScaleTests` (`Game.Tests`).
 
 | Element | 30 Hz | 60 Hz | 120 Hz |
 |---|---|---|---|
@@ -1116,19 +1116,45 @@ Je Element dieselbe Szene je Rate, Dauer in Ticks der jeweiligen Welt gemessen u
 | Graustufen-Rampe von 30 Bildern | 1,0000 s | 1,0000 s | 1,0000 s |
 | Radarereignis | 8,0333 s | 8,0167 s | 8,0083 s |
 | Eva: Abstand zweier Ansagen desselben Ereignisses | 30,0000 s | 30,0000 s | 30,0000 s |
-| Partikelsystem von der Erzeugung bis zum letzten Partikel (Realdaten) | 11,4000 s | 11,3833 s | nicht gemessen |
+| Partikelsystem von der Erzeugung bis zum letzten Partikel (Realdaten, `AirF_AuroraBombExplosion`, je Rate 30 Partikel im Maximum) | 11,4000 s | 11,3833 s | 11,3917 s |
+| *Nachtrag:* Unter-Beschuss-Hinweis (`SoundCueDeriver`, `Radar::tryUnderAttackEvent`): Zeit bis zum nächsten für denselben Ort | 10,0000 s | 10,0000 s | 10,0000 s |
+| Unter-Beschuss-Zeile der Meldungsliste (`HudMessageFeed`): Zeit bis zur nächsten | 10,0000 s | 10,0000 s | 10,0000 s |
+| Schadenseffekt: Zeit bis zum nächsten derselben Schadensart (`ThrottleTime` 1000 ms, `FxExecutor`) | 1,0000 s | 1,0000 s | 1,0000 s |
+| Jubel (`SPECIAL_CHEERING` nach `ALL_CHEER`) | 2,9667 s | 2,9833 s | 2,9917 s |
+| Superwaffenzeile (`ReloadTime` 10000 ms): höchstens fünf Sekunden übrig / bereit | 4,0333 / 10,0000 s | 4,0167 / 10,0000 s | 4,0083 / 10,0000 s |
+| Superwaffenzeile: erster weißer Blitz der bereiten Zeile (`SuperweaponCountdownFlashDuration` 500 ms) | 10,5000 s | 10,5000 s | 10,5000 s |
+| Benannter Zähler von 5 s (`DISPLAY_COUNTDOWN_TIMER`): zeigt 0:03 / 0:00, gemessen ab dem Schritt, der ihn setzt | 1,0333 / 4,0333 s | 1,0167 / 4,0167 s | 1,0083 / 4,0083 s |
+| Benannter Zähler: erste Blinkfarbe nach dem Ablauf (`NamedTimerCountdownFlashDuration` 500 ms) | 4,4667 s | 4,4833 s | 4,4917 s |
+| Zoom-Unschärfe (`CAMERA_MOTION_BLUR_JUMP`): Scheitel (60) / vorbei | 0,4000 / 0,8000 s | 0,4000 / 0,8000 s | 0,4000 / 0,8000 s |
+| Dauerauftrag (Jet im Angriff): Abstand der Feuerbefehle eines Anflugs (`DelayBetweenShots` 300 ms), fünf Befehle je Anflug | 0,3000 s | 0,3000 s | 0,3000 s |
+| Übernahme: Dauer, die der letzte Blitz der Folge gezeigt wird | 0,1667 s | 0,1667 s | 0,1667 s |
 
 Die Unterschiede von 1/60 bzw. 1/120 s in einigen Zeilen sind der Schritt, in dem der Ablauf bemerkt wird (ein Tick der jeweiligen Rate), kein Skalierungsfehler. Dazu: `GameClock` gegen den Zeitdienst der Simulation für die Ticks −3 bis 499 bei allen drei Raten; der Flutschutz der Tonhinweise bei zwei Ticks je Originalbild (`FxTests.RateLimiter`).
 
 Läufe bei 60 Hz über die ganze Kette (keine Zeitmaß-Tests, nur „läuft durch“ und die Prüfungen der Szenen): `scripts/audit-scenarios.ps1 -TickRate 60` besteht alle drei Szenen (dafür nimmt `scenario-audit` seine Proben auf Bildgrenzen und rechnet die zwei bis drei Ticks Schrittversatz der Rückstellprüfung in Bilder um; bei 30 Hz ist seine Ausgabe byteidentisch); der Client läuft im Rauchtest mit `--tick-rate 60` durch (`--match "Maps/Alpine Assault/Alpine Assault.map" --autoplay --frames 600` und `--mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --frames 600`: 600 Bilder, Welttick 1.200, 1.200 Schritte der Skript-VM, 0 Treffer auf fehlende Typen; bei 30 Hz Welttick 600).
 
-**Nicht durch einen Zeitmaß-Test belegt:** die Unter-Beschuss-Sperre von `SoundCueDeriver` und `HudMessageFeed` (nur umgerechnet), die Drosselung der Schadenseffekte, Jubel und `FREEFALL` bei 60 Hz, die Superwaffenliste und die benannten Zähler bei 60 Hz, die Zoom-Unschärfe, die Daueraufträge bei 60 Hz, die Blinkfolge der Übernahme im Ganzen (ihre Abstände kommen aus der Simulation; belegt ist die Hüllkurve eines Blitzes).
+Die Superwaffenzeile und der benannte Zähler lesen außerdem auf jeder ganzen Sekunde bei allen drei Raten denselben Text (im Test verglichen). Die Daueraufträge geben bei jeder Rate nur auf Ticks, die ein Originalbild beginnen, Befehle aus und höchstens einen Feuerbefehl je Originalbild.
+
+**Gemessen und nicht gleich – die Ursache liegt in der Simulation, nicht in der Darstellung** (die Tests messen und drucken diese Werte, verlangen aber keine Gleichheit; alle drei Stellen stehen in §5):
+
+| Element | 30 Hz | 60 Hz | 120 Hz | Ursache |
+|---|---|---|---|---|
+| Blinkfolge einer Übernahme (Vorbereitung 2000 ms): Zahl der Blitze | 4 | 9 | 19 | `SpecialAbilityUpdate.StepCaptureFlash` erhöht die Blitzphase je Tick (§5.1); belegt ist, dass die Kaserne nur innerhalb der Hüllkurve eines Ereignisses getönt ist und jeder Blitz gleich lange dauert |
+| Blinkfolge: erster Blitz bis zum Ende der letzten Tönung | 1,0333 s | 1,4167 s | 1,6583 s | dieselbe |
+| `FREEFALL` eines Lawinenfelsens: gezeigt für | 2,3667 s | 1,3333 s | 0,6917 s | die Rutschphysik von `TensileFormationUpdate` rechnet je Tick (§5.1, §5.2): der letzte freie Fall liegt bei jeder Rate im 85. Tick des Rutschens (2,8333 / 1,4167 / 0,7083 s). Belegt ist das Fenster der Darstellung: nie ab dem hundertsten Originalbild |
+| Dauerauftrag: erster Feuerbefehl nach dem Auftrag | 2,0333 s | 2,1000 s | 2,1333 s | der Anflug des Jets (Flugmodell der Simulation, §5.2); der Rhythmus der Befehle selbst ist gleich (Tabelle oben) |
+
+**Nicht headless prüfbar:** ob irgendetwas davon richtig aussieht oder klingt (§14.7). Die Zoom-Unschärfe ist als Zustand des Directors belegt (`MissionPostEffects.MotionBlurCount`), nicht als gezeichnetes Bild.
 
 ### 14.5 Tests: Schritte, Zeiten, Liste
 
 `tests/Shared/TestTime.cs` (in `Game.Tests` und `Presentation.Tests` eingebunden): `FrameSeconds`/`FrameSecondsF` (ein Originalbild Wandzeit – der Schritt einer Anzeige mit 30 Bildern je Sekunde und von allem ohne Welt), `TickSeconds(world)` (genau ein Tick dieser Welt), `Ticks(world, sekunden)` und `Frames(world, originalbilder)` (Spielzeit in Ticks der Testwelt), `FramesPerSecond`. Kein Test außerhalb der Simulation schreibt mehr `1.0 / 30` oder `1f / 30` (vorher 95 Stellen).
 
-Stand je Testdatei (alle `*.cs` unter `tests/`, ohne `bin`/`obj`): 139 Dateien – umgestellt 18, neu 4, bewusst in Ticks 9, nicht betroffen 51, **offen 57**. „offen“ heißt: die Datei enthält Zeilen der Klassen `zeit` oder `budget` des Inventars (`docs/TICKRATE-AUDIT.md` §7.2), die als Tickzahl einer 30-Hz-Welt dastehen und nicht in Spielzeit ausgedrückt wurden. Das betrifft vor allem `CnCNew.Simulation.Tests`: diese Tests bauen ihre Welt ausdrücklich mit `SimulationRate.Original` und sind dort richtig; sie in Spielzeit auszudrücken gehört zur Bewertung der Simulation bei 60 Hz (Phase 23) und ist **nicht erledigt**.
+**Simulationstests (Nachtrag).** `tests/CnCNew.Simulation.Tests/TestTime.cs`: `world.Frames(n)` (Originalbilder in Ticks der Testwelt; auch auf `MissionSession` und `SkirmishMatchSession`), `world.InFrames(ticks)` (eine gemessene Tickzahl auf dem Raster des Originals, abgerundet – für Erwartungen der Form `is >= 44 and <= 47`, die Konstanten brauchen), `world.PerFrame(wert)` (eine Geschwindigkeit je Originalbild als Wert je Tick), `TestRate.Frames(n)`/`TestRate.InFrames`/`TestRate.Time` für Katalogerwartungen ohne Welt. Bei 30 Hz ist jeder Helfer die Identität: jede Erwartung behält ihren Zahlenwert. Stand: 629 Stellen `….Frames(…)` an einer Welt oder Sitzung, 36 `TestRate.Frames`, 20 `InFrames`, 4 `PerFrame`; acht Hilfsfunktionen zählen ihre Budgets selbst in Originalbildern, statt dass jeder Aufruf umgerechnet wird (`StepUntil` in `Tests.Air.cs` und `Tests.Construction.cs`, `CsRun`, `StepN`, `StructuresWorld.Run`, `NavRun`, `RunUntilContained`, `ObserveCapture`, `TicksUntilShot`). Die Standard-Testwelten und -kataloge nehmen ihre Rate von `TestRate.Default` (235 Stellen, 30 Hz; `--tick-rate N` oder `CNCNEW_TEST_TICK_RATE=N` baut sie mit 60 oder 120 Hz, §14.9.2); Tests über eine bestimmte Rate (`Tests.TickRate*.cs`, die Umrechnungstabellen in `Tests.Basics.cs`, die Ablehnung einer fremden Rate in `Tests.State.cs`) nennen diese Rate weiter selbst.
+
+**Regel.** Eine Zahl, die Zeit meint – eine Dauer aus den Daten, eine Frist, ein Budget „so lange laufen, bis X geschehen ist“ –, steht in Originalbildern und geht über einen Helfer. Eine Zahl, die wirklich Ticks meint, bleibt nackt und ist unten je Datei mit Grund genannt: Reihenfolge im Scheduler und „ein Schritt später“ (`Tick − 1`, `+ 1`, `Run(1)`), Schritte der Skript-VM, Befehlsticks und Verzögerungen von `SetTimerCommand` (§7), Laufbudgets und Prüfpunkte aufgezeichneter Replays und des Stresslaufs (§8.1, §8.3), von Hand je Schritt gerechnete Flugbahnen, Stichprobentakte, Wächterwerte.
+
+Stand je Testdatei (alle `*.cs` unter `tests/`, ohne `bin`/`obj`): **142 Dateien – umgestellt 46, gemischt 33, bewusst in Ticks 7, nicht betroffen 49, neu 7, offen 0.** „gemischt“ heißt: die Zeit- und Budgetzeilen der Datei sind umgestellt, und die Anmerkung nennt, was darin bewusst in Ticks (oder in Originalbildern einer Uhr ohne Welt) bleibt. Von den 57 Dateien, die am Ende der Phase 21 „offen“ waren, sind jetzt 27 umgestellt, 27 gemischt, 2 bewusst in Ticks und 1 nicht betroffen. Die Zahlen der „Zeit- und Budgetzeilen des Inventars“ in den Anmerkungen der schon in Phase 21 umgestellten Dateien stammen aus `docs/TICKRATE-AUDIT.md` §7.2 und sind dort nachzulesen.
 
 | Datei | Stand | Anmerkung |
 |---|---|---|
@@ -1143,8 +1169,8 @@ Stand je Testdatei (alle `*.cs` unter `tests/`, ohne `bin`/`obj`): 139 Dateien �
 | `CnCNew.Formats.Tests/MapDecoderTests.cs` | nicht betroffen |  |
 | `CnCNew.Formats.Tests/Program.cs` | nicht betroffen |  |
 | `CnCNew.Game.Tests/AudioDirectorTests.cs` | umgestellt | 13 Schritte über `TestTime`; 6 Zeit- und 2 Budgetzeilen des Inventars zählen weiter Schritte der 30-Hz-Fixture (Originalbilder), soweit sie nicht eine der umbenannten Dauern benutzen |
-| `CnCNew.Game.Tests/CampaignShellTests.cs` | offen | 0 Zeit- und 8 Budgetzeilen stehen als Tickzahl der 30-Hz-Fixture |
-| `CnCNew.Game.Tests/CampaignTests.cs` | offen | 3 Zeit- und 10 Budgetzeilen stehen als Tickzahl der 30-Hz-Fixture |
+| `CnCNew.Game.Tests/CampaignShellTests.cs` | umgestellt | Lauflängen über `StepUntilOver` und die Kettenhash-Schleife in Originalbildern (`TestTime.Frames`) |
+| `CnCNew.Game.Tests/CampaignTests.cs` | umgestellt | Lauflängen (`Step`), Kopf-Tick und Stichprobe über `TestTime.Frames`; `presentationLatencyTicks: 90` ist nach §8.1 ein Wert in Originalbildern und bleibt; neu: Ratenprüfungen der Spielstand-Hülle (§14.9) |
 | `CnCNew.Game.Tests/DeterminismTests.cs` | nicht betroffen |  |
 | `CnCNew.Game.Tests/HudTests.cs` | umgestellt | 1 Schritte über `TestTime`; 22 Zeit- und 5 Budgetzeilen des Inventars zählen weiter Schritte der 30-Hz-Fixture (Originalbilder), soweit sie nicht eine der umbenannten Dauern benutzen |
 | `CnCNew.Game.Tests/LiveMatchTests.cs` | umgestellt | 1 Schritte über `TestTime`; 1 Zeit- und 0 Budgetzeilen des Inventars zählen weiter Schritte der 30-Hz-Fixture (Originalbilder), soweit sie nicht eine der umbenannten Dauern benutzen |
@@ -1160,19 +1186,20 @@ Stand je Testdatei (alle `*.cs` unter `tests/`, ohne `bin`/`obj`): 139 Dateien �
 | `CnCNew.Game.Tests/SourceRuleTests.cs` | neu | Phase 21 (Zeithelfer, Zeitmaß-Test bzw. Quelltexttest) |
 | `CnCNew.Game.Tests/TestHarness.cs` | nicht betroffen |  |
 | `CnCNew.Game.Tests/TextFixtures.cs` | nicht betroffen |  |
-| `CnCNew.Game.Tests/TimeScaleTests.cs` | neu | Phase 21 (Zeithelfer, Zeitmaß-Test bzw. Quelltexttest) |
+| `CnCNew.Game.Tests/TimeScaleTests.cs` | neu | Phase 21 (Zeitmaß-Test); im Nachtrag um Unter-Beschuss-Zeile, Superwaffenliste, benannten Zähler, Zoom-Unschärfe und 120 Hz für das Partikelsystem erweitert |
 | `CnCNew.IO.Tests/Program.cs` | nicht betroffen |  |
 | `CnCNew.Images.Tests/CursorFixtures.cs` | nicht betroffen |  |
 | `CnCNew.Images.Tests/CursorReaderTests.cs` | nicht betroffen |  |
 | `CnCNew.Images.Tests/Program.cs` | nicht betroffen |  |
 | `CnCNew.Import.Tests/Program.cs` | nicht betroffen |  |
 | `CnCNew.Presentation.Tests/CameraTests.cs` | umgestellt | 16 Schritte über `TestTime`; 2 Zeit- und 0 Budgetzeilen des Inventars zählen weiter Schritte der 30-Hz-Fixture (Originalbilder), soweit sie nicht eine der umbenannten Dauern benutzen |
-| `CnCNew.Presentation.Tests/CaptureConditionTests.cs` | offen | 2 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Fixture |
-| `CnCNew.Presentation.Tests/CaptureFlashTests.cs` | offen | 14 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Fixture |
+| `CnCNew.Presentation.Tests/CaptureConditionTests.cs` | umgestellt | Laufbudget und die Stufenlängen 15/30/9 Bilder über `TestTime.Frames` |
+| `CnCNew.Presentation.Tests/CaptureFlashTests.cs` | gemischt | umgestellt: Laufbudget, neuer Zeitmaß-Test der Blinkfolge. Bewusst nicht in Ticks der Welt, sondern in Originalbildern der Präsentationsuhr: Hüllkurve (`TintAt`) und Skriptblitz (Bilder 15/30/45/60). „Vier Blitze je Vorbereitung“ ist der Rhythmus der Simulation bei 30 Hz (die Welt nennt 30 Hz; §5.1 `StepCaptureFlash`) |
 | `CnCNew.Presentation.Tests/CursorTests.cs` | umgestellt | 8 Schritte über `TestTime`; 1 Zeit- und 2 Budgetzeilen des Inventars zählen weiter Schritte der 30-Hz-Fixture (Originalbilder), soweit sie nicht eine der umbenannten Dauern benutzen |
-| `CnCNew.Presentation.Tests/FxTests.cs` | umgestellt | Aufrufstellen und Dauern über die benannten Konstanten; 32 Zeit- und 9 Budgetzeilen des Inventars zählen weiter Schritte der 30-Hz-Fixture (Originalbilder), soweit sie nicht eine der umbenannten Dauern benutzen |
+| `CnCNew.Presentation.Tests/FxTests.TimeScale.cs` | neu | Nachtrag Phase 21: Zeitmaß der Unter-Beschuss-Sperre und der Schadenseffekt-Drosselung |
+| `CnCNew.Presentation.Tests/FxTests.cs` | umgestellt | Aufrufstellen und Dauern über die benannten Konstanten; 32 Zeit- und 9 Budgetzeilen des Inventars zählen Schritte der Effektuhr (Originalbilder, ohne Welt); im Nachtrag nur `partial` und eine Registrierzeile |
 | `CnCNew.Presentation.Tests/InputTests.cs` | umgestellt | 4 Schritte über `TestTime`; 2 Zeit- und 3 Budgetzeilen des Inventars zählen weiter Schritte der 30-Hz-Fixture (Originalbilder), soweit sie nicht eine der umbenannten Dauern benutzen |
-| `CnCNew.Presentation.Tests/JetOrderTests.cs` | offen | 2 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Fixture |
+| `CnCNew.Presentation.Tests/JetOrderTests.cs` | gemischt | umgestellt: beide Laufbudgets; neuer Zeitmaß-Test der Daueraufträge. Bewusst in Ticks: „höchstens 3 Ticks nach der letzten Rakete“ (Reihenfolge); `SimulationTimingMin` nennt 30 Hz (Rohwert-Toleranz) |
 | `CnCNew.Presentation.Tests/MinimapTests.cs` | nicht betroffen |  |
 | `CnCNew.Presentation.Tests/ObjectTests.TimeScale.cs` | neu | Phase 21 (Zeithelfer, Zeitmaß-Test bzw. Quelltexttest) |
 | `CnCNew.Presentation.Tests/ObjectTests.cs` | umgestellt | Aufrufstellen und Dauern über die benannten Konstanten; 3 Zeit- und 3 Budgetzeilen des Inventars zählen weiter Schritte der 30-Hz-Fixture (Originalbilder), soweit sie nicht eine der umbenannten Dauern benutzen |
@@ -1180,90 +1207,92 @@ Stand je Testdatei (alle `*.cs` unter `tests/`, ohne `bin`/`obj`): 139 Dateien �
 | `CnCNew.Presentation.Tests/Program.cs` | nicht betroffen |  |
 | `CnCNew.Presentation.Tests/RoadRealDataTests.cs` | nicht betroffen |  |
 | `CnCNew.Presentation.Tests/RoadTests.cs` | nicht betroffen |  |
-| `CnCNew.Presentation.Tests/StructureConditionTests.cs` | offen | 21 Zeit- und 31 Budgetzeilen stehen als Tickzahl der 30-Hz-Fixture |
+| `CnCNew.Presentation.Tests/StructureConditionTests.cs` | gemischt | umgestellt: 23 Laufschleifen, 13 Dauern (`Near(TestTime.Frames(…), …)`), zwei Fenster. Bewusst in Ticks: Probentakt `i % 7`, Versätze der Abtastung (`Tick + 1`, `+ 2`), Toleranzen von `Near`, „Schließen direkt nach der Freigabe“, sechs Schritte Vorlauf vor der Projektion |
 | `CnCNew.Presentation.Tests/SyntheticTerrain.cs` | nicht betroffen |  |
 | `CnCNew.Presentation.Tests/TerrainTests.cs` | bewusst in Ticks | 0 Tickerwartungen (Reihenfolge, Bildnummern der Shell-Übergänge), 1 Ratenangaben |
 | `CnCNew.Presentation.Tests/TestHarness.cs` | nicht betroffen |  |
+| `CnCNew.Presentation.Tests/UnitConditionTests.TimeScale.cs` | neu | Nachtrag Phase 21: Zeitmaß von Jubel und `FREEFALL` |
 | `CnCNew.Presentation.Tests/UnitConditionTests.cs` | umgestellt | Aufrufstellen und Dauern über die benannten Konstanten; 6 Zeit- und 19 Budgetzeilen des Inventars zählen weiter Schritte der 30-Hz-Fixture (Originalbilder), soweit sie nicht eine der umbenannten Dauern benutzen |
 | `CnCNew.Presentation.Tests/VisionTests.cs` | umgestellt | nur Aufrufstellen geänderter Schnittstellen |
 | `CnCNew.Presentation.Tests/WorldRealDataTests.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Program.cs` | bewusst in Ticks | Welt mit `SimulationRate.Original`; 5 Tickerwartungen, 0 Ratenangaben |
-| `CnCNew.Simulation.Tests/Tests.Acquisition.cs` | offen | Welt mit `SimulationRate.Original`; 6 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Air.cs` | offen | Welt mit `SimulationRate.Original`; 3 Zeit- und 2 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.AirModelGeometry.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.AirReal.cs` | offen | Welt mit `SimulationRate.Original`; 2 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.AirWeapons.cs` | offen | Welt mit `SimulationRate.Original`; 7 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Basics.cs` | bewusst in Ticks | Welt mit `SimulationRate.Original`; 0 Tickerwartungen, 14 Ratenangaben |
-| `CnCNew.Simulation.Tests/Tests.BattlePlan.cs` | offen | Welt mit `SimulationRate.Original`; 1 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.CleanupAndSpy.cs` | offen | Welt mit `SimulationRate.Original`; 3 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Collision.cs` | offen | Welt mit `SimulationRate.Original`; 2 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Combat.cs` | offen | Welt mit `SimulationRate.Original`; 6 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Construction.cs` | offen | Welt mit `SimulationRate.Original`; 6 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
+| `CnCNew.Simulation.Tests/Program.cs` | bewusst in Ticks | Testmodul `ProbeModule` führt `nextWake` als absoluten Tick (Scheduler); im Nachtrag nur die Hinweiszeile für `--tick-rate` |
+| `CnCNew.Simulation.Tests/TestTime.cs` | neu | Nachtrag Phase 21: `TestRate` (Rate der Standard-Testwelten, `--tick-rate N`) und `TestTime` (`world.Frames`, `world.InFrames`, `world.PerFrame`) |
+| `CnCNew.Simulation.Tests/Tests.Acquisition.cs` | gemischt | umgestellt: Laufbudgets, `MoodCheckTicks`, Nachlade- und Haltefristen, erster Blick „zwei Bilder nach Leerlauf“. Bewusst in Ticks: `step > 1`/`> 2` (Reihenfolge nach einem Befehl), Replay-Kopf `EndTick 300`/Prüfpunkte 20 und die Befehlsticks des Replays |
+| `CnCNew.Simulation.Tests/Tests.Air.cs` | umgestellt | alle Budgets von `StepUntil` (Helfer zählt Originalbilder) und die Laufschleifen; `WeaponReadyTick >= SleepForever` ist ein Wächterwert |
+| `CnCNew.Simulation.Tests/Tests.AirModelGeometry.cs` | umgestellt | Budgets über `StepUntil` und Schleifen; „zwei Schüsse“ ist eine Anzahl |
+| `CnCNew.Simulation.Tests/Tests.AirReal.cs` | umgestellt | Budgets; EMP-Dauer „mehr als 800 Bilder“ |
+| `CnCNew.Simulation.Tests/Tests.AirWeapons.cs` | gemischt | umgestellt: `StartFadeTime`, EMP- und Flugblattdauer, Silotür (`ready − 40/20`, `use + 25/70`), Orbit-Einschwingzeit, Budgets. Bewusst in Ticks: `pulseTick = Tick − 1` und die Toleranz ±1 (der gerade ausgeführte Schritt), `Run(ready + 2)`, `Run(use + 3)` (Schritte nach einem Befehl), vier Schritte des zweiten Laufs |
+| `CnCNew.Simulation.Tests/Tests.Basics.cs` | bewusst in Ticks | die Umrechnungstabellen prüfen den Zeitdienst der Rate 30 Hz und nennen sie (`SimulationRate.Original`); die Katalogtests darunter laufen auf der Testrate |
+| `CnCNew.Simulation.Tests/Tests.BattlePlan.cs` | umgestellt | alle Wartezeiten über `CsRun` (Helfer zählt Originalbilder) |
+| `CnCNew.Simulation.Tests/Tests.CleanupAndSpy.cs` | umgestellt | gekappte Dauer 44–47 Bilder, An-/Aus-Anteil über 400 Bilder, Budgets, `CsRun` |
+| `CnCNew.Simulation.Tests/Tests.Collision.cs` | gemischt | umgestellt: Fallzeit des Turms (90–130 Bilder), Stichprobe bei Bild 60, Budgets, `tick > 5`. Bewusst in Ticks bzw. Phase 23: die Fixture-Faktoren `StructuralDecay` u. a., die die Simulation je Tick anwendet (§5.1) |
+| `CnCNew.Simulation.Tests/Tests.Combat.cs` | gemischt | umgestellt: Pulsabstände 18–20/9/3/30 Bilder, Sperrfenster 28 Bilder, Budgets. Bewusst in Ticks: drei Schritte nach dem Befehl (`ReplaceObjectUpgrade`) |
+| `CnCNew.Simulation.Tests/Tests.Construction.cs` | umgestellt | `StepUntil` nimmt und liefert Originalbilder; Bauarbeit 60 Bilder; Verkauf `Frames(180) − 1` (180 Bilder weniger ein Schritt, wie `TickRateWorldSaleTakesTheSameGameTime`); `tick == 0` ist der erste Schritt |
 | `CnCNew.Simulation.Tests/Tests.Crates.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.CratesAndSpecials.cs` | offen | Welt mit `SimulationRate.Original`; 3 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.CreationLists.cs` | offen | Welt mit `SimulationRate.Original`; 1 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.DamagedLocomotor.cs` | offen | Welt mit `SimulationRate.Original`; 1 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Determinism.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.FiringTracker.cs` | offen | Welt mit `SimulationRate.Original`; 10 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Flight.cs` | offen | Welt mit `SimulationRate.Original`; 2 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.GoldenMaster.cs` | offen | Welt mit `SimulationRate.Original`; 1 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.HashWork.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.Indexes.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.JetFlight.cs` | offen | Welt mit `SimulationRate.Original`; 2 Zeit- und 3 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.JetFlightReal.cs` | offen | Welt mit `SimulationRate.Original`; 1 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.LastBlockers.cs` | offen | Welt mit `SimulationRate.Original`; 5 Zeit- und 5 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.MatchModules.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.Navigation.cs` | offen | Welt mit `SimulationRate.Original`; 2 Zeit- und 5 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.NavigationEscape.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
+| `CnCNew.Simulation.Tests/Tests.CratesAndSpecials.cs` | umgestellt | `CsRun` zählt Originalbilder (118 Aufrufe in fünf Dateien); Sabotagedauer 59–61 Bilder, Wiederaufnahme nach 110 Bildern, Dauer eines Stealth-Grants |
+| `CnCNew.Simulation.Tests/Tests.CreationLists.cs` | umgestellt | Lebensdauer 25–35 Bilder, Budget |
+| `CnCNew.Simulation.Tests/Tests.DamagedLocomotor.cs` | umgestellt | Fahrzeit von 60 Bildern |
+| `CnCNew.Simulation.Tests/Tests.Determinism.cs` | gemischt | umgestellt: vier Laufschleifen. Bewusst in Ticks: je drei Schritte zwischen Befehlen (Reihenfolge), Stresslauf (§8.3) |
+| `CnCNew.Simulation.Tests/Tests.FiringTracker.cs` | umgestellt | Schussabstände 18/9/4–5 Bilder, Auslaufzeiten 30–36 und `Frames(30) + 1`, Vorlaufzeiten; `Shots` misst auf dem Bildraster (`InFrames`), der Rückruf bekommt den Schrittindex |
+| `CnCNew.Simulation.Tests/Tests.Flight.cs` | gemischt | umgestellt: alle `Run(session, n)` ab zwei Schritten, Budgets, Landung, Stichprobe bei Bild 60. Bewusst in Ticks: `Run(session, 1)` (ein Schritt der Skript-VM); `CombatIntervalTicks` ist ein Schalter (§8.1) |
+| `CnCNew.Simulation.Tests/Tests.GoldenMaster.cs` | umgestellt | das Modell rechnet Schusspause 15 und Nachladen 60 in Bildern; Produktionsabstand `Frames(2 · 30)` |
+| `CnCNew.Simulation.Tests/Tests.HashWork.cs` | gemischt | umgestellt: Laufschleifen. Bewusst in Ticks: Stichprobentakt (`% 97`, `% 10`) und der Stresslauf (§8.3); geprüft werden Hashgleichheiten, keine Zeiten |
+| `CnCNew.Simulation.Tests/Tests.Indexes.cs` | nicht betroffen | Listen gegen Weltdurchläufe; ein Laufbudget über `Frames`, sonst Rundenzähler |
+| `CnCNew.Simulation.Tests/Tests.JetFlight.cs` | gemischt | umgestellt: Budgets, Ankunft „vor Bild 400“, Kehrtwende „mindestens 40 Bilder“; Werte je Tick kommen vom Zeitdienst der Testrate. Bewusst unverändert: Rohwert-Toleranzen (64 bzw. 2 Rohbits, Phase 22) |
+| `CnCNew.Simulation.Tests/Tests.JetFlightReal.cs` | umgestellt | Budget 4200 Bilder, Messung ab Bild 20; Katalogwerte je Tick über den Zeitdienst der Testrate |
+| `CnCNew.Simulation.Tests/Tests.LastBlockers.cs` | umgestellt | `CsRun`; Sabotagedauer im Ereigniswert, Heilsperre `hit + Frames(30)`, Hashlauf 150 Bilder |
+| `CnCNew.Simulation.Tests/Tests.MatchModules.cs` | gemischt | umgestellt: Hashvergleichsschleifen. Bewusst in Ticks: `Step(3)`, `Step(4)` und die Schleifen mit drei/vier Schritten (Reihenfolge nach einem Befehl) |
+| `CnCNew.Simulation.Tests/Tests.Navigation.cs` | umgestellt | `NavRun` nimmt und liefert Originalbilder (15 Aufrufe); „Umweg länger als 75 Bilder“ |
+| `CnCNew.Simulation.Tests/Tests.NavigationEscape.cs` | umgestellt | über `NavRun` (Budget 900 Bilder) |
 | `CnCNew.Simulation.Tests/Tests.PerfMovement.cs` | nicht betroffen |  |
 | `CnCNew.Simulation.Tests/Tests.PerfSummary.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.Phase12Modules.cs` | bewusst in Ticks | Welt mit `SimulationRate.Original`; 1 Tickerwartungen, 0 Ratenangaben |
-| `CnCNew.Simulation.Tests/Tests.Phase13Actions.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Phase5.cs` | offen | Welt mit `SimulationRate.Original`; 28 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.PlayerAgent.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 3 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.PowerPlant.cs` | offen | Welt mit `SimulationRate.Original`; 1 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Projectiles.cs` | offen | Welt mit `SimulationRate.Original`; 4 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.RealFlight.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.RealMovement.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
+| `CnCNew.Simulation.Tests/Tests.Phase12Modules.cs` | gemischt | umgestellt: `Run(session, n)`. Bewusst in Ticks: `CombatIntervalTicks = 0` ist ein Schalter (§8.1) |
+| `CnCNew.Simulation.Tests/Tests.Phase13Actions.cs` | umgestellt | alle `Run(session, n)` in Bildern |
+| `CnCNew.Simulation.Tests/Tests.Phase5.cs` | gemischt | umgestellt: jede Frist der Form `while (Tick <= start + N)` (Brand, Gift, Regeneration, verzögerter Tod, Entdeckung), Budgets, „ein Bild“ zwischen zwei Schüssen ohne Schusspause. Bewusst in Ticks: `xTick = Tick − 1` (der ausgeführte Schritt), drei Schritte nach dem Erzeugen |
+| `CnCNew.Simulation.Tests/Tests.PlayerAgent.cs` | umgestellt | Laufbudgets des Zielfahrers (`maxTicks: TestRate.Frames(…)`) |
+| `CnCNew.Simulation.Tests/Tests.PowerPlant.cs` | gemischt | umgestellt: Budgets (`StepUntil` in Bildern), 40 Bilder Überlast. Bewusst in Ticks: „nach zwei Schritten ist Gesundheit abgezogen“ |
+| `CnCNew.Simulation.Tests/Tests.Projectiles.cs` | gemischt | umgestellt: verzögerter Treffer ohne Geschoss (Landung `F + Frames(8)`), Abfanglaser, Budgets. **Bewusst in Ticks:** vier von Hand gerechnete Flugbahnen je Schritt (Pfadpunkte der Granate, Bogen, Rakete mit und ohne Zündverzug: x je Tick) – sie beschreiben die 30-Hz-Welt Schritt für Schritt und schlagen bei 60 Hz fehl (4 der 6 Fehlschläge, §14.9) |
+| `CnCNew.Simulation.Tests/Tests.RealFlight.cs` | umgestellt | Budget 1800 Bilder, Evakuierung bei Bild 10 |
+| `CnCNew.Simulation.Tests/Tests.RealMovement.cs` | umgestellt | Budget 1800 Bilder, Stillstand ab Bild 20 |
 | `CnCNew.Simulation.Tests/Tests.ReferenceManifest.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.ReferenceMatch.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Repair.cs` | bewusst in Ticks | Welt mit `SimulationRate.Original`; 0 Tickerwartungen, 1 Ratenangaben |
-| `CnCNew.Simulation.Tests/Tests.RetailModules.cs` | offen | Welt mit `SimulationRate.Original`; 2 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Scripting.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 5 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.ScriptingActions12.cs` | bewusst in Ticks | Welt mit `SimulationRate.Original`; 1 Tickerwartungen, 0 Ratenangaben |
-| `CnCNew.Simulation.Tests/Tests.ScriptingPhase11.cs` | offen | Welt mit `SimulationRate.Original`; 1 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.ScriptingPhase12.cs` | bewusst in Ticks | Welt mit `SimulationRate.Original`; 1 Tickerwartungen, 0 Ratenangaben |
-| `CnCNew.Simulation.Tests/Tests.Skirmish.cs` | offen | Welt mit `SimulationRate.Original`; 1 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Slaves.cs` | offen | Welt mit `SimulationRate.Original`; 2 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
+| `CnCNew.Simulation.Tests/Tests.ReferenceMatch.cs` | bewusst in Ticks | Laufbudget, `MinTicks`, `EndTick == 62_000` und Prüfpunkte sind die Länge eines aufgezeichneten Replays (§8.1: Laufbudgets bleiben Ticks); `GraceTicks` ist dort schon ein Regelwert in Bildern |
+| `CnCNew.Simulation.Tests/Tests.Repair.cs` | umgestellt | Reparaturdauer 8–10 Bilder, Betrag je Tick aus `Frames(9)`, `RunUntilContained` in Bildern, Budgets |
+| `CnCNew.Simulation.Tests/Tests.RetailModules.cs` | gemischt | umgestellt: Produktionsabstand 30 Bilder, Ausgangssperre 88–92 Bilder, Budgets (`SpawnTicks`), `Step(40)`/`Step(60)`. Bewusst in Ticks: `Step(3)`, `Step(1)` und die Schleifen mit drei/vier Schritten (Reihenfolge nach einem Befehl) |
+| `CnCNew.Simulation.Tests/Tests.Scripting.cs` | gemischt | umgestellt: `Run(session, n)` ab zwei Schritten, Timerwert `Frames(60)`, Nachlauf `EndGameDelayFrames + 5`, Laufbudgets der Szenarien. Bewusst in Ticks: `Run(session, 1)` (ein Schritt der Skript-VM) und `Run(session, 3)` vor der Zählung „je Auswertung“ |
+| `CnCNew.Simulation.Tests/Tests.ScriptingActions12.cs` | gemischt | umgestellt: `Run(session, n)`, `HulkLifetimeOverrideTicks == Frames(60)`. Bewusst in Ticks: `CombatIntervalTicks = 0` (Schalter) |
+| `CnCNew.Simulation.Tests/Tests.ScriptingPhase11.cs` | gemischt | umgestellt: 40 `Run(session, n)`, Budgets des Zielfahrers. Bewusst in Ticks: `Run(session, 1)` (ein VM-Schritt) |
+| `CnCNew.Simulation.Tests/Tests.ScriptingPhase12.cs` | gemischt | umgestellt: Budgets des Zielfahrers. Bewusst in Ticks: „in jedem der drei Ticks ändert die Erklärung den Hash nicht“ |
+| `CnCNew.Simulation.Tests/Tests.Skirmish.cs` | gemischt | umgestellt: „60 Bilder sind 2 s“. Bewusst in Ticks: Laufbudget und Prüfpunkte des aufgezeichneten Gefechts (`SkirmishRecord(12_000)`, alle 500 Ticks; §8.1) |
+| `CnCNew.Simulation.Tests/Tests.Slaves.cs` | umgestellt | `StepN` zählt Originalbilder (48 Aufrufe); Feuertakt alle 12 Bilder, Budget |
 | `CnCNew.Simulation.Tests/Tests.SourceRules.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.SpecialPower.cs` | offen | Welt mit `SimulationRate.Original`; 11 Zeit- und 3 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.StagedCapture.cs` | offen | Welt mit `SimulationRate.Original`; 17 Zeit- und 11 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.State.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 16 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.StructuresAndWorld.cs` | offen | Welt mit `SimulationRate.Original`; 35 Zeit- und 29 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Supply.cs` | offen | Welt mit `SimulationRate.Original`; 7 Zeit- und 13 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Teams.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 2 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Terrain.cs` | bewusst in Ticks | Welt mit `SimulationRate.Original`; 0 Tickerwartungen, 1 Ratenangaben |
-| `CnCNew.Simulation.Tests/Tests.TickPhases.cs` | nicht betroffen |  |
+| `CnCNew.Simulation.Tests/Tests.SpecialPower.cs` | gemischt | umgestellt: Nachladezeiten (`ReloadTicks == Frames(300)`/`Frames(30)`), Wartezeiten über `StepTo(Tick + Frames(…))`, Stichprobe bei Bild 320. Bewusst in Ticks: `StepTo(Tick + 3)` und drei Schritte nach einem Kauf (Reihenfolge), `reload − 1`, Replay-Kopf einer nur geschriebenen und gelesenen Datei |
+| `CnCNew.Simulation.Tests/Tests.StagedCapture.cs` | gemischt | umgestellt: Stufenlängen (`Frames(StagedUnpack)` …, Realdaten 90/600/60 und 202/180/84 Bilder), `ObserveCapture` und `StagedWorldAt` in Bildern. **Bewusst in Ticks:** „vier Blitze je Vorbereitung“ – `StepCaptureFlash` wächst je Tick (§5.1) und liefert bei 60 Hz neun (1 der 6 Fehlschläge); Stichprobe nach 20 Vorbereitungsschritten |
+| `CnCNew.Simulation.Tests/Tests.State.cs` | bewusst in Ticks | der Stresslauf zählt Schritte (§8.3): Lauflängen und Stopp-Ticks 3000/1500/600/1234/216.000, `"tick":600`, Befehlsticks 9 und 12; die Ablehnungstests nennen 30 Hz als Rate ihres Katalogs. Umgestellt sind nur vier Hashvergleichsschleifen |
+| `CnCNew.Simulation.Tests/Tests.StructuresAndWorld.cs` | umgestellt | `StructuresWorld.Run` zählt Originalbilder (76 Aufrufe); Geschwindigkeiten je Bild über `PerFrame` (Zug, Gerüst), Budgets |
+| `CnCNew.Simulation.Tests/Tests.Supply.cs` | gemischt | umgestellt: `RunCollecting`-Grenzen (`Frames(30) + 1` …), Fahrtabstand, Ersatzfrist 70/140 Bilder, Budgets. Bewusst in Ticks: Stichproben `i == 8 || i == 25`, vier Schritte, Replay-Kopf |
+| `CnCNew.Simulation.Tests/Tests.Teams.cs` | umgestellt | Hashvergleich über 30 Bilder, Budget 200 Bilder; der Replay-Kopf nimmt die Testrate |
+| `CnCNew.Simulation.Tests/Tests.Terrain.cs` | bewusst in Ticks | ein Replay von zehn Ticks (`TicksExecuted == 10`); der Kopf nimmt die Testrate |
+| `CnCNew.Simulation.Tests/Tests.TickPhases.cs` | nicht betroffen | Phasenbeobachter über dem Stresslauf (§8.3); ein Laufbudget über `Frames` |
 | `CnCNew.Simulation.Tests/Tests.TickRate.Grid.cs` | nicht betroffen |  |
 | `CnCNew.Simulation.Tests/Tests.TickRate.ModulesAM.cs` | nicht betroffen |  |
 | `CnCNew.Simulation.Tests/Tests.TickRate.ModulesNZ.cs` | nicht betroffen |  |
 | `CnCNew.Simulation.Tests/Tests.TickRate.Scripting.cs` | nicht betroffen |  |
 | `CnCNew.Simulation.Tests/Tests.TickRate.World.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.TickRate.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.TimeFreeze.cs` | offen | Welt mit `SimulationRate.Original`; 1 Zeit- und 3 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Transports.cs` | offen | Welt mit `SimulationRate.Original`; 12 Zeit- und 14 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.TurretAttack.cs` | offen | Welt mit `SimulationRate.Original`; 15 Zeit- und 47 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Turrets.cs` | offen | Welt mit `SimulationRate.Original`; 13 Zeit- und 11 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Veterancy.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.Vision.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt; eine Zeile angepasst |
+| `CnCNew.Simulation.Tests/Tests.TickRate.cs` | nicht betroffen | nennt seine Raten; im Nachtrag drei Aufrufe mit ausdrücklicher Rate (`ShortReplay(rate: Hz30)`, `MissionMap(…, rate: Hz30)`) |
+| `CnCNew.Simulation.Tests/Tests.TimeFreeze.cs` | gemischt | umgestellt: Timerdauer 28–40 Bilder, Budgets. Bewusst in Ticks: `frozenAt + 1`/`+ 2`/`tick + 1` (ein Schritt weiter nach dem Auftauen) |
+| `CnCNew.Simulation.Tests/Tests.Transports.cs` | gemischt | umgestellt: Budgets, Heilbetrag je Tick aus `Frames(30)`, Steigzeit, Absturz und Explosion als „ein Schritt, dann N − 1 Bilder“ (`death + 1 + Frames(74)`), Stichproben. Bewusst in Ticks: `gone = Tick − 1`, Replay-Kopf einer nur geschriebenen Datei |
+| `CnCNew.Simulation.Tests/Tests.TurretAttack.cs` | gemischt | umgestellt: Budgets, Haltezeit `1 + Frames(15)`, Aufgabe nach 44–47 Bildern, Abtastpause, Befehlsplan des Determinismuslaufs (Bilder 3, 60–90, 150, 260), Realdaten. Bewusst in Ticks: Befehle des Replays (Ticks 70–110, Kopf 200/20), `tick % 2` (Befehlstakt), `step > …`-Reihenfolgen |
+| `CnCNew.Simulation.Tests/Tests.Turrets.cs` | gemischt | umgestellt: Wartezeit bis zum Schuss (`Frames(15)`, 8–10, 3–4, ≥ 30 Bilder), `RecenterTicks`, Ersatzwerte je Bild, Budgets. **Bewusst unverändert:** der Rohwert `TurnRate.Raw is > 6860 and < 6866` (30 Hz in Q47.16; 1 der 6 Fehlschläge, die Zeile gehört Phase 22); vier Befehle in vier Schritten |
+| `CnCNew.Simulation.Tests/Tests.Veterancy.cs` | umgestellt | das Modell rechnet Schusspause und Nachladen je Stufe in Bildern; Budgets |
+| `CnCNew.Simulation.Tests/Tests.Vision.cs` | gemischt | umgestellt: Hashvergleichsschleifen, „ein Bild“ bis die Waffe wieder bereit ist. Bewusst in Ticks: `world.VisionInterval` Schritte bis zur Auffrischung (schon ein Wert der Welt) |
 | `CnCNew.Simulation.Tests/Tests.VisionEquivalence.cs` | nicht betroffen |  |
-| `CnCNew.Simulation.Tests/Tests.WeaponSlots.cs` | offen | Welt mit `SimulationRate.Original`; 17 Zeit- und 9 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.WeaponSlotsIntegration.cs` | offen | Welt mit `SimulationRate.Original`; 2 Zeit- und 12 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.WeaponSlotsReal.cs` | offen | Welt mit `SimulationRate.Original`; 0 Zeit- und 3 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
-| `CnCNew.Simulation.Tests/Tests.World.cs` | offen | Welt mit `SimulationRate.Original`; 4 Zeit- und 1 Budgetzeilen stehen als Tickzahl der 30-Hz-Welt |
+| `CnCNew.Simulation.Tests/Tests.WeaponSlots.cs` | gemischt | umgestellt: Bereitschaftsticks je Slot (`start + Frames(15)`, `start + 1 + Frames(3)`, `Frames(15 + 60)` …), Budgets, Befehlstakt `% Frames(40)`. Bewusst in Ticks: `LastFireTick == start + 1` (ein Schritt später), Befehle des Replays (Ticks 2–150, 60, 100; Kopf 160/20), Formatversionen |
+| `CnCNew.Simulation.Tests/Tests.WeaponSlotsIntegration.cs` | gemischt | umgestellt: Schussabstände 3 und 15 Bilder, Budgets. Bewusst in Ticks: drei Schritte nach dem Umschalten, `ReadyTick >= SleepForever` (Wächterwert) |
+| `CnCNew.Simulation.Tests/Tests.WeaponSlotsReal.cs` | umgestellt | Feuerversuche und Pausen in Bildern; `ReadyTick > Tick − 1` bezieht sich auf den ausgeführten Schritt |
+| `CnCNew.Simulation.Tests/Tests.World.cs` | gemischt | umgestellt: Lebensdauern (gezogene Bilder, „eine Null wird ein Bild“, `DieTick`), Budget. **Bewusst in Ticks:** Scheduler-Reihenfolge und Ereignisticks (`update:2:5`), Befehlsticks, `SetTimerCommand`-Verzögerungen (nach §7 Ticks der Welt), Schritte `Run(1)`…`Run(15)` der Timerprüfung |
 | `CnCNew.Ui.Tests/Program.cs` | nicht betroffen |  |
 | `CnCNew.Ui.Tests/SentenceLayoutTests.cs` | nicht betroffen |  |
-| `CnCNew.Ui.Tests/TextAndSettingsTests.cs` | offen | 2 Zeit- und 0 Budgetzeilen stehen als Tickzahl der 30-Hz-Fixture |
+| `CnCNew.Ui.Tests/TextAndSettingsTests.cs` | nicht betroffen | die zwei Zeitzeilen prüfen `InGameUiSettings` in Originalbildern (500 ms = 15 Bilder, 333 ms = 10) – ohne Welt, ohne Tick |
 | `CnCNew.Ui.Tests/TransitionTests.cs` | bewusst in Ticks | 19 Tickerwartungen (Reihenfolge, Bildnummern der Shell-Übergänge), 3 Ratenangaben |
 | `CnCNew.Ui.Tests/UiRenderingTests.cs` | nicht betroffen |  |
 | `CnCNew.Ui.Tests/WndFixtures.cs` | nicht betroffen |  |
@@ -1317,10 +1346,62 @@ Nichts davon ist abgenommen. Vorgehen: dieselbe Szene im Fenster einmal mit 30 u
 12. **Daueraufträge:** eine angreifende Einheit schießt im gleichen Rhythmus, ein Jäger fliegt dieselben Anflüge; Wegpunktfolgen werden abgefahren.
 13. **Shell und Kamera:** Übergänge, Scrollen, Drehen und Zoomen sind von der Rate unberührt (Wandzeit).
 
-### 14.8 Offen nach Phase 21
+### 14.8 Offen nach Phase 21 (Stand nach dem Nachtrag §14.9)
 
-- Punkt 8 des Auftrags nur teilweise: Zeit- und Budgetzeilen der Tests stehen weiter als Tickzahlen der 30-Hz-Welt (§14.5).
-- `SaveGame` ohne Rate in der Hülle, Listen mit rohem Tick (§6 Nr. 3); `CampaignTool`-Ausgaben in Ticks (§6 Nr. 12); `SimTool perf`-Hochrechnungen (§6 Nr. 15).
-- Zeitmaß nicht für jedes umgestellte Element einzeln belegt (§14.4, letzter Absatz).
+- `SimTool perf`: die Hochrechnungen `catchup30`/`catchup60`/`core30_percent` nennen ihre Rate im Namen (§6 Nr. 15; Umstellung des Standards, Phase 23).
+- Drei Zeitmaße sind bei 60 Hz **nicht** gleich, weil die Simulation dort anders rechnet (§14.4, zweite Tabelle): Blinkfolge der Übernahme, Rutschen des Lawinenfelsens hinter `FREEFALL`, Anflug eines Jets. Sie gehören zur Liste der Phase 23 (§5).
+- Der Probelauf der Simulationstests bei 60 Hz besteht 396 von 402 Tests; die 6 Fehlschläge sind benannt (§14.9.2) und keine Fehler dieser Phase.
+- Die Tests von `Game.Tests`, `Presentation.Tests` und `Ui.Tests` haben keinen Schalter für die Standardrate: ihre Welten nennen 30 Hz (`SimulationRate.Original`) oder nehmen `GameData.DefaultSessionRate`; was dort bei 60 Hz gilt, belegen die Zeitmaß-Tests je Rate, nicht ein Probelauf der ganzen Suite.
 - Die Blende der Letterbox läuft auf der Präsentationsuhr statt auf Wandzeit; das Fahrwerk wird je Originalbild gestuft und nicht interpoliert.
 - Keine Sichtabnahme, kein Hörtest, kein Spielen – weder bei 30 noch bei 60 Hz.
+
+### 14.9 Nachtrag: Rest der Phase 21 (6. Oktober 2026)
+
+Vier Dinge, die der Bericht der Phase 21 offen ließ: Punkt 8 des Auftrags (Tests in Spielzeit), `SaveGame` mit Rate (§6 Nr. 3), die nicht belegten Zeitmaße (§14.4) und die Ausgabe von `CampaignTool` (§6 Nr. 12). `src/CnCNew.Simulation` ist dabei nicht angefasst.
+
+#### 14.9.1 Tests in Spielzeit
+
+Regel, Helfer und die vollständige Liste stehen in §14.5. Verfahren: zuerst die Rate der Standard-Testwelten auf einen Schalter gelegt (unten), dann jede Datei so lange umgestellt, bis bei 60 Hz nur noch übrig blieb, was wirklich Ticks meint oder was die Simulation dort anders rechnet; Budgets, die auch bei 60 Hz ausreichten, sind trotzdem umgestellt. Nicht mechanisch: wo eine Erwartung „ein Schritt, dann N − 1 Bilder“ meint, steht sie so da (`Frames(180) − 1` für den Verkauf, `death + 1 + Frames(74)` für den Absturz, `1 + Frames(15)` für die Haltezeit eines Turms, `Frames(30) + 1` für die erste Einzahlung) – diese Formen sind bei 30 Hz die alte Zahl und bei 60 Hz gemessen richtig.
+
+#### 14.9.2 Probelauf der Simulationstests bei 60 Hz
+
+```powershell
+dotnet run --project tests/CnCNew.Simulation.Tests -- --tick-rate 60 [--content-dir .local/phase2-import-a] [--only TEXT]
+$env:CNCNEW_TEST_TICK_RATE = '60'   # dasselbe über die Umgebung
+```
+
+Ohne die Option ändert sich nichts (30 Hz, kein Hinweis). Mit ihr meldet das Programm in der ersten Zeile die Rate. Der Lauf ist ein **Messfühler für Phase 23**, kein Abnahmetest: er sagt, welche Erwartungen brechen, wenn der Standard umgestellt wird.
+
+| Stand | bestanden | fehlgeschlagen |
+|---|---|---|
+| 30 Hz (Referenz), vor und nach der Umstellung | 402 von 402 | 0 |
+| 60 Hz, nur die Rate umgeschaltet, noch keine Erwartung umgestellt | 268 von 402 | 134 |
+| 60 Hz nach der Umstellung, ohne `--content-dir` | 396 von 402 | 6 |
+| 60 Hz nach der Umstellung, mit `--content-dir` (dazu die Realdatentests) | 410 von 416 | 6 |
+| 120 Hz nach der Umstellung, ohne `--content-dir` (nur zur Information) | 389 von 402 | 13 |
+
+Die 6 Fehlschläge bei 60 Hz, nach Klasse:
+
+| Klasse | Tests | Was bricht |
+|---|---|---|
+| von Hand je Schritt gerechnete Flugbahn (bewusst in Ticks) | „Projectiles: straight shell flight time…“, „…ballistic arc…“, „…missile flight time (instant acceleration)“, „…missile ignition delay and acceleration“ | Pfadpunkte und Position je Tick sind für 30 Schritte je Sekunde gerechnet (20 Pfadpunkte werden 40, x = 10 nach einem Schritt wird 2,5). Phase 23 entscheidet: neu rechnen oder diese vier Tests auf 30 Hz festlegen |
+| Rhythmus der Simulation je Tick (§5.1) | „Staged capture: the building flashes while the flag goes up…“ | vier Blitze je Vorbereitung werden neun |
+| Rohwert des Festkommaformats bei 30 Hz | „Turrets: template model, defaults and strict parsing“ | `TurnRate.Raw is > 6860 and < 6866` (6° je Tick in Q47.16); die Zeile gehört der Festkomma-Umstellung (Phase 22) |
+
+Ein siebter Test brach vor der Umstellung an einer Annahme, nicht an einer Zeit: „Scripts: hunting with a command button“ erwartete, dass das Opfer nach 240 Bildern noch existiert; bei 60 Hz ist es dann schon getötet und entfernt. Der Test nimmt jetzt auch das als Angriff (bei 30 Hz unverändert) – dass der Jäger bei 60 Hz schneller tötet, ist eine Beobachtung für Phase 23.
+
+Bei 120 Hz kommen weitere dazu (13 Fehlschläge; nicht einzeln bewertet – 120 Hz ist keine Produktrate).
+
+Was der Probelauf **nicht** sagt: dass sich die Simulation bei 60 Hz richtig verhält. Viele Tests prüfen Schranken (`>=`, Bereiche), die auch ein anderes Verhalten erfüllt; die Liste der Phase 23 bleibt §5.
+
+#### 14.9.3 `SaveGame` Version 2
+
+`src/CnCNew.Game/Save/SaveGame.cs`: die Hülle schreibt `"tickRate"` direkt hinter `"tick"`; `SaveGameHeader` trägt `TickRate`, `GameSeconds` und `GameTime` (m:ss). Geprüft wird in dieser Reihenfolge: Format, Version, Schwierigkeit, unterstützte Rate, **Rate gegen die Sitzung** (`context.Templates.Rate`), Fingerabdruck, Kampagne, Prüfsumme des Zustands, nach dem Wiederherstellen Tick und Rate des Kopfs gegen die Welt, Zustandshash. Meldungen: „Unsupported savegame version 1 (this game reads version 2).“, „Unsupported tick rate 50 Hz in the savegame.“, „This savegame was written at 60 Hz; this session runs at 30 Hz. It cannot be loaded.“, „The savegame's state does not match its header (tick or tick rate differ; the file is damaged).“. Version 1 wird nie als 30 Hz gelesen. Listen zeigen „Titel (m:ss)“; kein eingecheckter Bildschirm-Hash enthält eine Ladeliste mit Einträgen (`baselines/screens.txt` unverändert). Test `CampaignTests` „Savegame: the header carries the tick rate…“: derselbe Spielstand nach 95 Originalbildern bei 30 Hz (Tick 95) und bei 60 Hz (Tick 190) zeigt beide Male „0:03“, lädt jeweils in seiner Rate und wird über Kreuz in beiden Richtungen abgelehnt. Einzelheiten: `docs/CAMPAIGN-AND-SAVEGAMES.md` §4.
+
+#### 14.9.4 Ausgabe von `CampaignTool`
+
+`drive` und `audit` schreiben unter jede Kartenzeile, in der ein Ende erreicht wurde, eine eigene Zeile (`game time (m:ss at 30 Hz): victory after 0:26, defeat after 0:07` bzw. `…: lose after 0:05`) und am Ende `Budget: 9000 ticks are 5:00 of game time (m:ss) at 30 Hz.`; `playthrough` setzt die Spielzeit in Klammern hinter „at tick N“ und „no outcome after N ticks“. Die Kartenzeilen (`victory REACHED by '…' @Tick`, `win@Tick`, `lose@Tick`) und die Summenzeilen (`… maps driven (… ticks): victory reached …`, `… identical on a second run …`) sind Byte für Byte unverändert – sie werden mit `-cmatch 'victory REACHED'` und ähnlichen Mustern gezählt; kein Skript unter `scripts/` liest die Ausgabe von `CampaignTool`. Gemessen an `MD_USA01`: `audit --ticks 600` bei 30 Hz „lose@151“ und `--ticks 1200 --tick-rate 60` „lose@301“, beide „lose after 0:05“.
+
+#### 14.9.5 Beweis bei 30 Hz
+
+`SimTool input-manifest check` identisch und `reference-manifest check --set quick` (9 Läufe identisch) nach jedem Commit, der `src` oder die Werkzeuge berührt; `--set full` am Ende: 50 Läufe identisch (21 min 35 s bei drei Läufen nebeneinander auf einem belasteten Rechner). Simulationstests: 402 von 402 (Debug), 416 von 416 mit `--content-dir`, `-c Release -- --long` 403 von 403. `Game.Tests` (Release, `--content-dir`): 137 Tests bestanden, 0 fehlgeschlagen; `Presentation.Tests` mit `--content-dir`: alle bestanden; die übrigen Testprogramme: Archives, Content, Data (auch mit `--content-dir`), IO, Images, Formats, Import, W3D, Ui und Audio bestanden. Die Golden-Dateien unter `tests/**/baselines` sind unverändert (`git status` leer für diese Pfade). `scripts/audit-scenarios.ps1`: drei von drei Szenen bestanden, mit `-TickRate 60` ebenfalls drei von drei. `IniTool compat-check`: 751 Einträge, unverändert. Sauberer Solution-Build: 0 Warnungen, 0 Fehler (mit gelöschtem `bin`/`obj` von `CnCNew.Client.Stride`); `tools/CnCNew.UiRenderTool`: 0 Warnungen.
