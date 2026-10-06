@@ -1741,7 +1741,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (refresh) RevealVision();
         observer.PhaseEnded(TickPhase.Vision);
         observer.PhaseStarted(TickPhase.VisionHash);
-        if (refresh) _visionHash = _vision!.Hash();
+        if (refresh) HashVision();
         observer.PhaseEnded(TickPhase.VisionHash);
         observer.PhaseStarted(TickPhase.Hash);
         _tick = tick + 1;
@@ -1850,7 +1850,7 @@ public sealed partial class SimulationWorld : IWorldServices
         writer.Int("destroyedTotal", _destroyedTotal);
         // Written only once a fire order waited for a turret, so a world without turrets keeps its serialized form (and hash).
         if (_turretWaits != 0) writer.Int("turretWaits", _turretWaits);
-        if (_vision is not null) writer.UInt("visionHash", _visionHash);
+        if (_vision is not null) writer.UInt("visionHash", HashVision());
         writer.BeginArray("players");
         foreach (var player in _playerList)
         {

@@ -16,7 +16,6 @@ public sealed partial class SimulationWorld
 
     private VisionMap? _vision;
     private Dictionary<int, int>? _playerSlots;
-    private ulong _visionHash;
 
     /// <summary>The fog of war; <see langword="null"/> in a world without a terrain (everything is visible there).</summary>
     public VisionMap? Vision => _vision;
@@ -30,7 +29,6 @@ public sealed partial class SimulationWorld
         _playerSlots = [];
         for (var slot = 0; slot < _playerList.Length; slot++) _playerSlots[_playerList[slot].Id.Value] = slot;
         _vision = new VisionMap(terrain.CellsX, terrain.CellsY, _playerList.Length);
-        _visionHash = _vision.Hash();
     }
 
     /// <summary>
@@ -40,8 +38,14 @@ public sealed partial class SimulationWorld
     private void RefreshVision()
     {
         RevealVision();
-        _visionHash = _vision!.Hash();
+        HashVision();
     }
+
+    /// <summary>
+    /// The hash over the vision cells as they are now (<see cref="VisionMap.Hash"/>). The map keeps the value and only works when a cell byte
+    /// changed since the last call, so the callers that change cells (refresh, script reveals, a load) need not recompute it themselves.
+    /// </summary>
+    private ulong HashVision() => _vision!.CurrentHash();
 
     /// <summary>The reveal part of <see cref="RefreshVision"/> without the hash over the cells (the two are separate tick phases for a measuring tool).</summary>
     private void RevealVision()
@@ -128,6 +132,5 @@ public sealed partial class SimulationWorld
         var slots = state.Array("vision");
         if (slots.Count != _playerList.Length) throw new InvalidDataException("Vision table size mismatch.");
         for (var slot = 0; slot < slots.Count; slot++) _vision.Load(slot, slots[slot].Text("cells"));
-        _visionHash = _vision.Hash();
     }
 }

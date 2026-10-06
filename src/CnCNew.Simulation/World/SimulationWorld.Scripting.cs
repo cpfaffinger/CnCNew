@@ -56,7 +56,6 @@ public sealed partial class SimulationWorld
     {
         if (_vision is null || SlotOf(player) < 0) return;
         change(_vision);
-        _visionHash = _vision.Hash();
     }
 
     /// <summary>Sets one directed relation (<c>Player::setPlayerRelationship</c>), as <see cref="Commands.SetRelationshipCommand"/> does.</summary>

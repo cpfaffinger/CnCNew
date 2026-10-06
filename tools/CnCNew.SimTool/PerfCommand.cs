@@ -31,13 +31,13 @@ internal delegate (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, strin
 internal static class PerfCommand
 {
     private const string Usage = """
-        perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--replay] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer]
-        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer]
+        perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--replay] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer] [--vision-probe] [--vision-reference]
+        perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N] [--csv FILE] [--top K] [--sample N] [--no-modules] [--no-observer] [--vision-probe] [--vision-reference]
         """;
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-    private sealed record Common(string Directory, string MapPath, long Ticks, string? Csv, int Top, int Sample, bool Modules, bool Observe)
+    private sealed record Common(string Directory, string MapPath, long Ticks, string? Csv, int Top, int Sample, bool Modules, bool Observe, bool VisionProbe, bool VisionReference)
     {
         public static Common Parse(string[] args) => new(
             args[1],
@@ -47,7 +47,9 @@ internal static class PerfCommand
             int.Parse(Arg(args, "--top") ?? "15", Invariant),
             Math.Max(1, int.Parse(Arg(args, "--sample") ?? "300", Invariant)),
             !args.Contains("--no-modules"),
-            !args.Contains("--no-observer"));
+            !args.Contains("--no-observer"),
+            args.Contains("--vision-probe"),
+            args.Contains("--vision-reference"));
     }
 
     private static string? Arg(string[] args, string name)
@@ -81,8 +83,9 @@ internal static class PerfCommand
 
         var session = SkirmishMatchSession.Start(options, catalog, fingerprint, terrain, map.Objects, [..chosen.Select(participant => new SkirmishSlot(participant))]);
         var world = session.World;
-        var recorder = new TickRecorder(world, common.Modules);
+        var recorder = new TickRecorder(world, common.Modules) { VisionProbe = common.VisionProbe };
         if (common.Observe) world.PhaseObserver = recorder;
+        if (common.VisionReference && world.Vision is { } referenceVision) referenceVision.ReferenceMode = true;
         var gcBefore = GcCounts();
         var wall = Stopwatch.StartNew();
         var chain = StateHash.Seed;
@@ -178,8 +181,9 @@ internal static class PerfCommand
         var session = MissionSession.Start(options, catalog, fingerprint, terrain, map);
         var world = session.World;
         Console.WriteLine($"Session start (objects placed): {start.Elapsed.TotalMilliseconds:F0} ms, {world.Entities.Count} objects, {world.Configuration.Players.Length} players.");
-        var recorder = new TickRecorder(world, common.Modules);
+        var recorder = new TickRecorder(world, common.Modules) { VisionProbe = common.VisionProbe };
         if (common.Observe) world.PhaseObserver = recorder;
+        if (common.VisionReference && world.Vision is { } referenceVision) referenceVision.ReferenceMode = true;
         var gcBefore = GcCounts();
         var wall = Stopwatch.StartNew();
         var chain = StateHash.Seed;
@@ -411,12 +415,26 @@ internal static class PerfCommand
             return;
         }
         var cells = (long)vision.CellsX * vision.CellsY * vision.PlayerSlots;
+        // Read before the probe below adds its own calls.
+        var counters = vision.Counters;
+        long counted = counters.Refreshes, cleared = counters.CellsCleared, circles = counters.Circles, revealed = counters.CellsRevealed, tested = counters.CellsTested;
+        long hashCalls = counters.HashCalls, hashUnchanged = counters.HashUnchanged, compared = counters.BytesCompared, hashed = counters.BytesHashed;
+        var kept = vision.CurrentHash();
         const int rounds = 20;
         ulong sink = 0;
         var start = Stopwatch.GetTimestamp();
         for (var round = 0; round < rounds; round++) sink = vision.Hash();
         var perCall = Us(Stopwatch.GetTimestamp() - start) / rounds;
-        Console.WriteLine($"  (a) vision: {vision.CellsX}x{vision.CellsY} cells x {vision.PlayerSlots} slots (players + system) = {cells} cell bytes. VisionMap.Hash() alone, {rounds} calls on the end state: {perCall:F1} us per call = {perCall * 1000 / cells:F2} ns per cell byte (check {sink:X16}).");
+        Console.WriteLine($"  (a) vision: {vision.CellsX}x{vision.CellsY} cells x {vision.PlayerSlots} slots (players + system) = {cells} cell bytes. VisionMap.Hash() alone (the full pass, the definition of the value), {rounds} calls on the end state: {perCall:F1} us per call = {perCall * 1000 / cells:F2} ns per cell byte (check {sink:X16}).");
+        Console.WriteLine($"      the kept hash (VisionMap.CurrentHash) on the end state {(kept == sink ? "equals the full pass" : $"is {kept:X16}: WARNING, it DIFFERS from the full pass")}; mode: {(vision.ReferenceMode ? "REFERENCE (--vision-reference: the original computation over every cell)" : "incremental")}.");
+        if (counted > 0 && hashCalls > 0)
+            Console.WriteLine(string.Create(Invariant, $"      counters (deterministic): {counted} refreshes; per refresh {(double)cleared / counted:F0} cell bytes cleared ({100.0 * cleared / counted / cells:F1} % of the table), {(double)circles / counted:F1} circles, {(double)tested / counted:F0} radius tests, {(double)revealed / counted:F0} cell bytes written; ")
+                              + string.Create(Invariant, $"{hashCalls} hash calls, {hashUnchanged} of them without a changed byte ({100.0 * hashUnchanged / hashCalls:F1} %); per call {(double)hashed / hashCalls:F0} bytes mixed ({100.0 * hashed / hashCalls / cells:F1} % of the table) and {(double)compared / hashCalls:F0} bytes compared."));
+        if (recorder.VisionProbe && recorder.VisionProbeRefreshes > 0)
+            Console.WriteLine(string.Create(Invariant, $"      probe (--vision-probe, its time is in 'unattributed'): {recorder.VisionProbeRefreshes} refreshes, {recorder.VisionProbeUnchanged} left every cell byte as it was; changed cell bytes per refresh: mean {(double)recorder.VisionProbeChanged / recorder.VisionProbeRefreshes:F1}, maximum {recorder.VisionProbeChangedMax}; ")
+                              + $"kept hash against the full pass after every refresh: {(recorder.VisionProbeMismatches == 0 ? "always equal" : $"WARNING, {recorder.VisionProbeMismatches} MISMATCHES")}.");
+        if (recorder.VisionProbe && recorder.VisionProbeRefreshes > 1)
+            Console.WriteLine(string.Create(Invariant, $"      prototype of a two-level hash (NOT the value in use; one chain per row, one chain over the {(long)vision.CellsY * vision.PlayerSlots} row values): changed rows per refresh mean {(double)recorder.VisionProbeChangedRows / (recorder.VisionProbeRefreshes - 1):F1}; hashing them again plus the chain over the row values took {Us((double)recorder.VisionProbePrototypeTicks / (recorder.VisionProbeRefreshes - 1)):F1} us per refresh (check {recorder.VisionProbePrototypeSink:X16})."));
         if (!recorder.Observed) return;
         var total = Distribution.Of(recorder.Total).Sum;
         var hashing = recorder.Phase(TickPhase.VisionHash);
@@ -432,7 +450,7 @@ internal static class PerfCommand
         }
         if (refreshes == 0) return;
         Console.WriteLine($"      in the run: {refreshes} refreshes in {recorder.Count} ticks (every {SimulationWorld.VisionIntervalTicks} ticks); per refresh the hash phase took {Us((double)hashTicks / refreshes):F1} us and the reveal phase "
-                          + $"(clear every cell of every slot, then one circle per looking object and viewer) {Us((double)revealTicks / refreshes):F1} us; "
+                          + $"(forget what was visible, then one circle per looking object and viewer) {Us((double)revealTicks / refreshes):F1} us; "
                           + $"share of all tick time: hash {100 * Us(hashTicks) / total:F1} %, reveal {100 * Us(revealTicks) / total:F1} %.");
     }
 
@@ -602,7 +620,79 @@ internal sealed class TickRecorder(SimulationWorld world, bool moduleTiming) : I
         _phaseStart = Stopwatch.GetTimestamp();
     }
 
-    public void PhaseEnded(TickPhase phase) => _current[(int)phase] += Stopwatch.GetTimestamp() - _phaseStart;
+    public void PhaseEnded(TickPhase phase)
+    {
+        _current[(int)phase] += Stopwatch.GetTimestamp() - _phaseStart;
+        if (VisionProbe && phase == TickPhase.VisionHash && world.Vision is { } vision && world.Tick % SimulationWorld.VisionIntervalTicks == 0) ProbeVisionRefresh(vision);
+    }
+
+    /// <summary>With <c>--vision-probe</c>: after every refresh, counts the cell bytes that differ from the refresh before and compares the kept hash with the full pass.</summary>
+    public bool VisionProbe { get; init; }
+    public long VisionProbeRefreshes { get; private set; }
+    public long VisionProbeUnchanged { get; private set; }
+    public long VisionProbeChanged { get; private set; }
+    public long VisionProbeChangedMax { get; private set; }
+    public long VisionProbeMismatches { get; private set; }
+    /// <summary>Rows (of one slot) that differed from the refresh before, summed over the probed refreshes.</summary>
+    public long VisionProbeChangedRows { get; private set; }
+    /// <summary>Clock units the prototype of a two-level hash took (changed rows hashed again, then one chain over the row hashes), summed.</summary>
+    public long VisionProbePrototypeTicks { get; private set; }
+    private byte[][]? _visionBefore;
+    private ulong[][]? _prototypeRows;
+    private readonly List<(int Slot, int Row)> _changedRows = [];
+
+    private void ProbeVisionRefresh(CnCNew.Simulation.Terrain.VisionMap vision)
+    {
+        var first = _visionBefore is null;
+        _visionBefore ??= [..Enumerable.Range(0, vision.PlayerSlots).Select(slot => new byte[vision.CellBytes(slot).Length])];
+        _prototypeRows ??= [..Enumerable.Range(0, vision.PlayerSlots).Select(_ => new ulong[vision.CellsY])];
+        long changed = 0;
+        _changedRows.Clear();
+        for (var slot = 0; slot < vision.PlayerSlots; slot++)
+        {
+            var now = vision.CellBytes(slot);
+            var before = _visionBefore[slot];
+            if (!first && now.SequenceEqual(before)) continue;
+            for (var row = 0; row < vision.CellsY; row++)
+            {
+                var nowRow = now.Slice(row * vision.CellsX, vision.CellsX);
+                var beforeRow = before.AsSpan(row * vision.CellsX, vision.CellsX);
+                if (!first && nowRow.SequenceEqual(beforeRow)) continue;
+                _changedRows.Add((slot, row));
+                for (var index = 0; index < nowRow.Length; index++)
+                    if (nowRow[index] != beforeRow[index]) changed++;
+            }
+            now.CopyTo(before);
+        }
+        VisionProbeRefreshes++;
+        if (changed == 0) VisionProbeUnchanged++;
+        VisionProbeChanged += changed;
+        if (changed > VisionProbeChangedMax) VisionProbeChangedMax = changed;
+        if (vision.CurrentHash() != vision.Hash()) VisionProbeMismatches++;
+
+        // Prototype of another construction (a decision for later, see docs/PERF-VISION.md): one chain per row, one chain over the row values.
+        // Timed: hashing the changed rows again and the chain over all row values. Not timed: finding the changed rows (the map already knows the touched rows).
+        if (!first) VisionProbeChangedRows += _changedRows.Count;
+        var start = Stopwatch.GetTimestamp();
+        foreach (var (slot, row) in _changedRows)
+        {
+            var cells = vision.CellBytes(slot).Slice(row * vision.CellsX, vision.CellsX);
+            var hash = StateHash.Mix(StateHash.Seed, ((ulong)slot << 32) | (uint)row);
+            var words = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, ulong>(cells);
+            foreach (var word in words) hash = StateHash.Mix(hash, word);
+            ulong rest = 0;
+            for (int index = words.Length * 8, filled = 0; index < cells.Length; index++, filled++) rest |= (ulong)cells[index] << (filled * 8);
+            _prototypeRows[slot][row] = StateHash.Mix(hash, rest);
+        }
+        var top = StateHash.Seed;
+        foreach (var rows in _prototypeRows)
+            foreach (var value in rows) top = StateHash.Mix(top, value);
+        _prototypeSink ^= top;
+        if (!first) VisionProbePrototypeTicks += Stopwatch.GetTimestamp() - start;
+    }
+
+    private ulong _prototypeSink;
+    public ulong VisionProbePrototypeSink => _prototypeSink;
 
     public void UpdateStarted(SimModule module)
     {
