@@ -185,7 +185,7 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
 
     private void SetNextCreation(IWorldServices world)
     {
-        var delay = world.LogicRandom.Range(checked((int)data.MinDelay), checked((int)data.MaxDelay));
+        var delay = TickGrid.RandomTicks(world, data.MinDelay, data.MaxDelay);
         _timerStarted = world.Tick;
         _nextCreation = _timerStarted + delay;
     }
@@ -295,7 +295,8 @@ public sealed class DynamicShroudClearingRangeUpdate(DynamicShroudData data) : S
         if (_changeIntervalCountdown > 0) _changeIntervalCountdown--;
         else
         {
-            _changeIntervalCountdown = _phase == Phase.Growing ? data.GrowInterval : data.ChangeInterval;
+            // "if (m_changeIntervalCountdown > 0) --; else { = interval; apply }": a period of interval + 1 frames of the original.
+            _changeIntervalCountdown = TickGrid.CountdownActingAfterZero(world.Time, _phase == Phase.Growing ? data.GrowInterval : data.ChangeInterval);
             _applied = true;
             _appliedRange = _current;
             if (_phase == Phase.DoneForever) _phase = Phase.Sleeping;
@@ -386,7 +387,7 @@ public sealed class FireOCLAfterWeaponCooldownUpdate(FireOclAfterCooldownData da
         var now = world.Tick;
         if (validThisFrame)
         {
-            if (Entity.LastFireTickOf(slot) == now - 1)
+            if (Entity.LastFireTickOf(slot) == now - TickOrder.Next)
             {
                 _consecutiveShots++;
                 if (_consecutiveShots == 1) _startTick = now;
@@ -412,7 +413,8 @@ public sealed class FireOCLAfterWeaponCooldownUpdate(FireOclAfterCooldownData da
     private void FireOcl(IWorldServices world)
     {
         // seconds fired * (OCLLifetimePerSecond / 1000) seconds, in ticks: (ticks fired * per-second) / 1000, capped.
-        var lifetime = Math.Min((world.Tick - _startTick) * data.LifetimePerSecond / 1000, data.MaxLifetimeTicks);
+        // The truncating division runs on logic frames of the original, the result is scaled: the same lifetime at every rate.
+        var lifetime = Math.Min(world.Time.OriginalFrames(world.Time.ToOriginalFrames(world.Tick - _startTick) * data.LifetimePerSecond / 1000), data.MaxLifetimeTicks);
         if (data.Ocl.Length > 0 && !data.Ocl.Equals("None", StringComparison.OrdinalIgnoreCase)) world.CreateFromListWithLifetime(Entity, data.Ocl, Entity.Id, lifetime);
         ResetStats();
     }
@@ -457,6 +459,8 @@ public sealed record WaveGuideData(long WaveDelay, Fixed YSize, Fixed LinearSpac
 /// </summary>
 public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModule
 {
+    /// <summary><c>LOGICFRAMES_PER_SECOND / 2.0f</c> (WaveGuideUpdate.cpp, <c>update</c>): the splash roll comes after more than 15 logic frames of the original.</summary>
+    private const long SplashFrames = SimulationRate.OriginalFramesPerSecond / 2;
     private static readonly Fixed PathExtraDistance = Fixed.FromInt(10 * TerrainMap.CellSize);
     private static readonly int WetBit = ObjectStatusBits.Index("WET");
     private static readonly int WaterDamage = NameTables.DamageType.TryIndexOf("WATER", out var water) ? water : throw new InvalidOperationException("WATER is not a damage type.");
@@ -502,7 +506,8 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
         }
 
         // Every half second a random splash sound is rolled; the roll is state of the logic stream even though the sound is presentation.
-        if (now - _splashTick > world.Time.OriginalFrames(SimulationRate.OriginalFramesPerSecond / 2))
+        // "getFrame() - m_splashSoundFrame > LOGICFRAMES_PER_SECOND / 2.0f": strictly more than 15 frames of the original, so a period of 16.
+        if (now - _splashTick >= world.Time.OriginalFrames(SplashFrames) + world.Time.TicksPerOriginalFrame)
         {
             _splashTick = now;
             _ = world.LogicRandom.Range(1, 100);
@@ -667,7 +672,8 @@ public sealed record ScanData(long ScanDelayTicks) : ModuleData
 /// </summary>
 public sealed class CheckpointUpdate(ScanData data) : SimModule, IUpdateModule
 {
-    private static readonly Fixed GateStep = Fixed.FromDecimal(0.333m);
+    /// <summary><c>radius - 0.333f</c> / <c>radius + 0.333f</c> (CheckpointUpdate.cpp, <c>update</c>): the gate moves by a third of a unit per logic frame of the original.</summary>
+    private static readonly Fixed GateStepPerFrame = Fixed.FromDecimal(0.333m);
 
     private long _nextWake = -1;
     private bool _allyNear;
@@ -689,7 +695,7 @@ public sealed class CheckpointUpdate(ScanData data) : SimModule, IUpdateModule
     {
         _gateRadius = Entity.Template.GeometryMinorRadius;
         // "bias a random amount so everyone doesn't spike at once": the draw is kept although the scan runs every tick.
-        _scanDelay = world.LogicRandom.Range(0, checked((int)data.ScanDelayTicks));
+        _scanDelay = TickGrid.RandomTicks(world, 0, data.ScanDelayTicks);
     }
 
     public long Update(IWorldServices world)
@@ -698,11 +704,12 @@ public sealed class CheckpointUpdate(ScanData data) : SimModule, IUpdateModule
         _enemyNear = WorldEffectModules.Closest(world, Entity, range, enemies: true) is not null;
         _allyNear = WorldEffectModules.Closest(world, Entity, range, enemies: false) is not null;
         var max = Entity.Template.GeometryMinorRadius;
+        var step = world.Time.PerOriginalFrameToPerTick(GateStepPerFrame);
         if (IsOpen)
         {
-            if (_gateRadius > Fixed.Zero) _gateRadius -= GateStep;
+            if (_gateRadius > Fixed.Zero) _gateRadius -= step;
         }
-        else if (_gateRadius < max) _gateRadius += GateStep;
+        else if (_gateRadius < max) _gateRadius += step;
         return SimulationTiming.SleepNone;
     }
 
@@ -740,13 +747,14 @@ public sealed class EnemyNearUpdate(ScanData data) : SimModule, IUpdateModule
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public bool IsEnemyNear => _enemyNear;
 
-    public override void OnSpawn(IWorldServices world) => _scanDelay = world.LogicRandom.Range(0, checked((int)data.ScanDelayTicks));
+    public override void OnSpawn(IWorldServices world) => _scanDelay = TickGrid.CountdownActingAfterZero(world.Time, TickGrid.RandomTicks(world, 0, data.ScanDelayTicks));
 
     public long Update(IWorldServices world)
     {
         if (_scanDelay == 0)
         {
-            _scanDelay = data.ScanDelayTicks;
+            // "if (m_enemyScanDelay == 0) { = m_enemyScanDelayTime; scan } else --" (EnemyNearUpdate.cpp): a period of delay + 1 frames of the original.
+            _scanDelay = TickGrid.CountdownActingAfterZero(world.Time, data.ScanDelayTicks);
             _enemyNear = WorldEffectModules.Closest(world, Entity, Entity.Template.VisionRange, enemies: true) is not null;
         }
         else _scanDelay--;
@@ -812,7 +820,7 @@ public sealed class FirestormDynamicGeometryInfoUpdate(FirestormData data) : Sim
 
     public override void OnSpawn(IWorldServices world)
     {
-        _startDelay = Math.Max(data.InitialDelay, 1);
+        _startDelay = Math.Max(data.InitialDelay, world.Time.TicksPerOriginalFrame);
         _reverse = data.ReverseAtTransitionTime;
         _from = (data.InitialHeight, data.InitialMajor, data.InitialMinor);
         _to = (data.FinalHeight, data.FinalMajor, data.FinalMinor);
@@ -854,7 +862,7 @@ public sealed class FirestormDynamicGeometryInfoUpdate(FirestormData data) : Sim
             if (data.FxList.Length > 0 && !data.FxList.Equals("None", StringComparison.OrdinalIgnoreCase)) world.Emit(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.FxList, 0);
             _effectsFired = true;
         }
-        if (world.Tick - _lastDamage >= data.DamageDelay)
+        if (world.Tick - _lastDamage >= Math.Max(data.DamageDelay, world.Time.TicksPerOriginalFrame))
         {
             DoDamageScan(world);
             _lastDamage = world.Tick;
@@ -984,7 +992,7 @@ public sealed class WeaponBonusUpdate(WeaponBonusUpdateData data) : SimModule, I
         if (now >= _nextPulse)
         {
             Pulse(world);
-            _nextPulse = now + Math.Max(data.Delay, SimulationTiming.SleepNone);
+            _nextPulse = now + Math.Max(data.Delay, world.Time.TicksPerOriginalFrame);
         }
         var soonest = _nextPulse;
         foreach (var (_, expiry) in _active) soonest = Math.Min(soonest, expiry);

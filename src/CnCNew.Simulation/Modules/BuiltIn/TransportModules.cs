@@ -187,9 +187,9 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     {
         _activated = true;
         // SlowDeathBehavior::beginSlowDeath: both variance draws happen, the sink animation is presentation.
-        _ = data.Base.SinkDelayTicks + world.LogicRandom.Range(0, checked((int)data.Base.SinkDelayVarianceTicks));
-        var destruction = data.Base.DestructionDelayTicks + world.LogicRandom.Range(0, checked((int)data.Base.DestructionDelayVarianceTicks));
-        _destructionTick = Math.Min(world.Tick + Math.Max(destruction, SimulationTiming.SleepNone), SimulationTiming.SleepForever);
+        _ = data.Base.SinkDelayTicks + TickGrid.RandomTicks(world, 0, data.Base.SinkDelayVarianceTicks);
+        var destruction = data.Base.DestructionDelayTicks + TickGrid.RandomTicks(world, 0, data.Base.DestructionDelayVarianceTicks);
+        _destructionTick = Math.Min(world.Tick + Math.Max(destruction, world.Time.TicksPerOriginalFrame), SimulationTiming.SleepForever);
         _bladeFlyOff = world.LogicRandom.Range(data.MinBladeFlyOffDelay, data.MaxBladeFlyOffDelay);
         _forwardAngle = Entity.Angle;
         _forwardSpeed = data.SpiralOrbitForwardSpeed;

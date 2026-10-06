@@ -121,8 +121,9 @@ public sealed record BattleBusData(SlowDeathData Base, string FxStartUndeath, st
 /// </summary>
 public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
 {
-    private const long GroundCheckDelay = 10;
-    private const long EmptyHulkCheckDelay = 15;
+    /// <summary><c>GROUND_CHECK_DELAY = 10</c> and <c>EMPTY_HULK_CHECK_DELAY = 15</c> (BattleBusSlowDeathBehavior.cpp), in logic frames of the original.</summary>
+    private const long GroundCheckDelayFrames = 10;
+    private const long EmptyHulkCheckDelayFrames = 15;
 
     private long _nextWake = -1;
     private bool _realDeath;
@@ -162,15 +163,15 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
         if (_realDeath)
         {
             // SlowDeathBehavior::beginSlowDeath: both draws, then the destruction timer.
-            _ = data.Base.SinkDelayTicks + world.LogicRandom.Range(0, checked((int)data.Base.SinkDelayVarianceTicks));
-            var destruction = data.Base.DestructionDelayTicks + world.LogicRandom.Range(0, checked((int)data.Base.DestructionDelayVarianceTicks));
+            _ = data.Base.SinkDelayTicks + TickGrid.RandomTicks(world, 0, data.Base.SinkDelayVarianceTicks);
+            var destruction = data.Base.DestructionDelayTicks + TickGrid.RandomTicks(world, 0, data.Base.DestructionDelayVarianceTicks);
             _activated = true;
-            _destructionTick = world.Tick + Math.Max(destruction, SimulationTiming.SleepNone);
+            _destructionTick = world.Tick + Math.Max(destruction, world.Time.TicksPerOriginalFrame);
             world.WakeAt(Entity, this, _destructionTick);
             return;
         }
         _inFirstDeath = true;
-        _groundCheckTick = world.Tick + GroundCheckDelay;
+        _groundCheckTick = world.Tick + world.Time.OriginalFrames(GroundCheckDelayFrames);
         Effects(world, data.FxStartUndeath, data.OclStartUndeath);
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
@@ -220,7 +221,7 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
             }
         }
         else if (passengers.ContainCount == 0) _penaltyDeathTick = world.Tick + data.EmptyHulkDelayTicks;
-        return EmptyHulkCheckDelay;
+        return world.Time.OriginalFrames(EmptyHulkCheckDelayFrames);
     }
 
     private void Effects(IWorldServices world, string fx, string ocl)

@@ -70,7 +70,8 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     // Damage.h HUGE_DAMAGE_AMOUNT; ToppleUpdate.cpp deathByToppling uses it with DAMAGE_UNRESISTABLE/DEATH_TOPPLED.
     private static readonly Fixed HugeDamage = Fixed.FromInt(999999);
     private static readonly Fixed AngularLimit = FixedTrig.HalfPi - FixedTrig.Pi / Fixed.FromInt(64);
-    private static readonly Fixed VelocityBounceLimit = Fixed.FromDecimal(0.01m);
+    /// <summary><c>VELOCITY_BOUNCE_LIMIT = 0.01f</c> (ToppleUpdate.cpp, <c>ToppleUpdate::update</c>): radians per logic frame of the original.</summary>
+    private static readonly Fixed VelocityBounceLimitPerFrame = Fixed.FromDecimal(0.01m);
     private static readonly int ToppledDeathType = NameTables.DeathType.TryIndexOf("TOPPLED", out var toppled) ? toppled : throw new InvalidOperationException("TOPPLED is not a death type.");
 
     private enum State : byte { Upright, Falling, Down }
@@ -150,7 +151,7 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         if (_angularAccumulation >= AngularLimit && _angularVelocity > Fixed.Zero)
         {
             _angularVelocity = -(_angularVelocity * data.BounceVelocityPercent);
-            if (_angularVelocity.Abs() < VelocityBounceLimit)
+            if (_angularVelocity.Abs() < world.Time.PerOriginalFrameToPerTick(VelocityBounceLimitPerFrame))
             {
                 _angularVelocity = Fixed.Zero;
                 _state = State.Down;
@@ -225,7 +226,8 @@ public sealed record StructureToppleData(
 /// </summary>
 public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule, IUpdateModule, IDieModule
 {
-    private static readonly Fixed AccelFactor = Fixed.FromDecimal(0.02m);
+    /// <summary><c>TOPPLE_ACCELERATION_FACTOR = 0.02f</c> (StructureToppleUpdate.cpp, <c>update</c>): radians per logic frame² of the original.</summary>
+    private static readonly Fixed AccelFactorPerFrameSquared = Fixed.FromDecimal(0.02m);
     private static readonly Fixed ThetaCeiling = FixedTrig.Pi / Fixed.FromInt(6);
     private static readonly Fixed EighthPi = FixedTrig.Pi / Fixed.FromInt(8);
 
@@ -269,7 +271,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     public void OnDie(IWorldServices world, in DamageInfo info)
     {
         if (_state != State.Standing || !data.Mux.IsApplicable(Entity, info)) return;
-        var delay = Math.Max(0L, world.LogicRandom.Range(checked((int)data.MinToppleDelayTicks), checked((int)data.MaxToppleDelayTicks)));
+        var delay = Math.Max(0L, TickGrid.RandomTicks(world, data.MinToppleDelayTicks, data.MaxToppleDelayTicks));
         _toppleFrame = world.Tick + delay;
         var attacker = world.FindEntity(info.Source);
         Fixed angle;
@@ -310,7 +312,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     private void StepToppling(IWorldServices world)
     {
         // TOPPLE_ACCELERATION_FACTOR * sin(angle) * (1 - integrity): the product of three Fixed raw values is exact at 48 fraction bits.
-        _velocityFine += AccelFactor.Raw * FixedTrig.Sin(Angle).Raw * (Fixed.One - _structuralIntegrity).Raw;
+        _velocityFine += world.Time.PerOriginalFrameSquaredToPerTickSquared(AccelFactorPerFrameSquared).Raw * FixedTrig.Sin(Angle).Raw * (Fixed.One - _structuralIntegrity).Raw;
         if (_structuralIntegrity > Fixed.Zero)
         {
             _structuralIntegrity *= data.StructuralDecay;
