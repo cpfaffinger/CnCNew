@@ -16,7 +16,11 @@ public enum MissionOutcome { None = 0, Victory = 1, Defeat = 2 }
 /// <param name="Difficulty">The game difficulty scripts are gated with (<c>Script::isEasy/isNormal/isHard</c>; the reference uses the current player's difficulty, which for every player of a campaign is the chosen one).</param>
 /// <param name="LocalPlayer">What <c>&lt;Local Player&gt;</c> and the multiplayer victory/defeat conditions refer to: the human viewer.</param>
 /// <param name="MissionAttempts">Start count of this mission in the campaign profile, for <c>MISSION_ATTEMPTS</c>.</param>
-/// <param name="PresentationLatencyTicks">How long a speech/sound/movie/camera move counts as still playing for <c>HAS_FINISHED_*</c> and <c>CAMERA_MOVEMENT_FINISHED</c>; a live client may instead end them with <see cref="ScriptEngine.CompletePresentation"/>. 0: finished as soon as started (headless).</param>
+/// <param name="PresentationLatencyTicks">
+/// How long a speech/sound/movie/camera move counts as still playing for <c>HAS_FINISHED_*</c> and <c>CAMERA_MOVEMENT_FINISHED</c>; a live client may instead end them with
+/// <see cref="ScriptEngine.CompletePresentation"/>. 0: finished as soon as started (headless). <b>Unit: logic frames of the original (1/30 s)</b>, whatever the tick rate of the world
+/// is - the engine scales the value when it uses it, so a host states the same number at every rate (the name is kept because <c>MissionSnapshot</c> stores the option under it).
+/// </param>
 public sealed record ScriptEngineOptions(ScriptDifficulty Difficulty, PlayerId LocalPlayer, int PresentationLatencyTicks = 0, int MissionAttempts = 1)
 {
     public static ScriptEngineOptions Default { get; } = new(ScriptDifficulty.Normal, new PlayerId(1));
@@ -68,8 +72,14 @@ public sealed class ScriptTeam(int id, string prototype, PlayerId owner)
 /// </summary>
 public sealed partial class ScriptEngine
 {
-    /// <summary><c>FRAMES_TO_SHOW_WIN_LOSE_MESSAGE</c> (<c>ScriptEngine.cpp</c>): how long scripts keep running after a victory or defeat before the game ends.</summary>
-    public const int EndGameDelayTicks = 120;
+    /// <summary>
+    /// <c>FRAMES_TO_SHOW_WIN_LOSE_MESSAGE</c> (<c>ScriptEngine.cpp</c>, <c>ScriptEngine::startEndGameTimer</c>): how long scripts keep running after a victory or defeat before the
+    /// game ends, in logic frames of the original (4 s). The countdown itself runs in ticks: <see cref="EndGameDelay"/>.
+    /// </summary>
+    public const int EndGameDelayFrames = 120;
+
+    /// <summary><see cref="EndGameDelayFrames"/> in ticks of this engine's world.</summary>
+    public long EndGameDelay => _world.Time.OriginalFrames(EndGameDelayFrames);
 
     /// <summary><c>ATTACK_PRIORITY_DEFAULT</c> (<c>ScriptEngine.cpp</c>).</summary>
     public const int DefaultAttackPriority = 1;
