@@ -16,7 +16,11 @@ public sealed partial class SimulationWorld
 
     private VisionMap? _vision;
     private Dictionary<int, int>? _playerSlots;
-    private ulong _visionHash;
+
+    // Work tables of RevealVision, rebuilt in every refresh (alliances change); kept only to avoid allocating them again. Not state.
+    private int[][]? _visionViewers;
+    private int[]? _visionViewerCounts;
+    private int[]? _visionEverybody;
 
     /// <summary>The fog of war; <see langword="null"/> in a world without a terrain (everything is visible there).</summary>
     public VisionMap? Vision => _vision;
@@ -30,7 +34,10 @@ public sealed partial class SimulationWorld
         _playerSlots = [];
         for (var slot = 0; slot < _playerList.Length; slot++) _playerSlots[_playerList[slot].Id.Value] = slot;
         _vision = new VisionMap(terrain.CellsX, terrain.CellsY, _playerList.Length);
-        _visionHash = _vision.Hash();
+        _visionViewers = new int[_playerList.Length][];
+        for (var slot = 0; slot < _playerList.Length; slot++) _visionViewers[slot] = new int[_playerList.Length];
+        _visionViewerCounts = new int[_playerList.Length];
+        _visionEverybody = [..Enumerable.Range(0, _playerList.Length).Where(slot => !_playerList[slot].Id.IsSystem)];
     }
 
     /// <summary>
@@ -40,24 +47,31 @@ public sealed partial class SimulationWorld
     private void RefreshVision()
     {
         RevealVision();
-        _visionHash = _vision!.Hash();
+        HashVision();
     }
+
+    /// <summary>
+    /// The hash over the vision cells as they are now (<see cref="VisionMap.Hash"/>). The map keeps the value and only works when a cell byte
+    /// changed since the last call, so the callers that change cells (refresh, script reveals, a load) need not recompute it themselves.
+    /// </summary>
+    private ulong HashVision() => _vision!.CurrentHash();
 
     /// <summary>The reveal part of <see cref="RefreshVision"/> without the hash over the cells (the two are separate tick phases for a measuring tool).</summary>
     private void RevealVision()
     {
         var vision = _vision!;
-        vision.BeginRefresh();
-        var allySlots = new int[_playerList.Length][];
+        vision.BeginCollectedRefresh();
+        var allySlots = _visionViewers!;
+        var allyCounts = _visionViewerCounts!;
         for (var slot = 0; slot < _playerList.Length; slot++)
         {
-            var viewers = new List<int>();
+            var count = 0;
             for (var other = 0; other < _playerList.Length; other++)
-                if (!_playerList[other].Id.IsSystem && (other == slot || AreAllies(_playerList[slot].Id, _playerList[other].Id))) viewers.Add(other);
-            allySlots[slot] = [..viewers];
+                if (!_playerList[other].Id.IsSystem && (other == slot || AreAllies(_playerList[slot].Id, _playerList[other].Id))) allySlots[slot][count++] = other;
+            allyCounts[slot] = count;
         }
-        var everybody = Enumerable.Range(0, _playerList.Length).Where(slot => !_playerList[slot].Id.IsSystem).ToArray();
-        var anySightBonus = _players.Values.Any(player => player.BattlePlan is { SearchAndDestroy: > 0 });
+        var anySightBonus = false;
+        foreach (var player in _players.Values) anySightBonus |= player.BattlePlan is { SearchAndDestroy: > 0 };
         foreach (var entity in _entities.Values)
         {
             if (entity.Owner.IsSystem || entity.DestroyRequested || entity.EffectivelyDead || entity.ContainedBy.IsValid) continue;
@@ -67,13 +81,15 @@ public sealed partial class SimulationWorld
             // The strategy center's own wider shroud and the search-and-destroy plan's sight bonus for the army.
             if (entity.ShroudScalar != Fixed.One) range *= entity.ShroudScalar;
             if (anySightBonus) range *= BattlePlanSightScalarOf(entity);
-            var viewers = entity.Template.IsKindOf("REVEAL_TO_ALL") ? everybody : allySlots[_playerSlots![entity.Owner.Value]];
+            var ownerSlot = _playerSlots![entity.Owner.Value];
+            var viewers = entity.Template.IsKindOf("REVEAL_TO_ALL") ? _visionEverybody.AsSpan() : allySlots[ownerSlot].AsSpan(0, allyCounts[ownerSlot]);
             foreach (var slot in viewers) vision.Reveal(slot, entity.X, entity.Y, range);
             // SpyVisionUpdate: a player that spies through this object (reference count above zero) sees what it sees, though not its allies.
             if (entity.VisionSpiedBy is { Count: > 0 } spied)
                 for (var index = 0; index < spied.Count; index++)
                     if (spied.Values[index] > 0 && SlotOf(new PlayerId(spied.Keys[index])) is var spy and >= 0 && !viewers.Contains(spy)) vision.Reveal(spy, entity.X, entity.Y, range);
         }
+        vision.EndCollectedRefresh();
     }
 
     private int SlotOf(PlayerId player) => _playerSlots is not null && _playerSlots.TryGetValue(player.Value, out var slot) ? slot : -1;
@@ -128,6 +144,5 @@ public sealed partial class SimulationWorld
         var slots = state.Array("vision");
         if (slots.Count != _playerList.Length) throw new InvalidDataException("Vision table size mismatch.");
         for (var slot = 0; slot < slots.Count; slot++) _vision.Load(slot, slots[slot].Text("cells"));
-        _visionHash = _vision.Hash();
     }
 }
