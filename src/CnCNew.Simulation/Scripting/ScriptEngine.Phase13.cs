@@ -789,7 +789,7 @@ public sealed partial class ScriptEngine
             _transportStatus[entity.Id.Value] = (frame, count);
             return false;
         }
-        if (status.Frame == frame - 1 && status.Count > 0 && count == 0) return true;
+        if (status.Frame == frame - TickOrder.Next && status.Count > 0 && count == 0) return true;   // order: what the previous tick saw
         _transportStatus[entity.Id.Value] = (frame, count);
         return false;
     }

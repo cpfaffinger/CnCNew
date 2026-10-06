@@ -548,9 +548,9 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             if (!_waitedFor.IsValid)
             {
                 _waitedFor = Entity.Id;
-                _transferTick = now + 1;
+                _transferTick = now + TickOrder.Next;
             }
-            else _transferTick = now + 2;
+            else _transferTick = now + 2 * TickOrder.Next;   // order, not time: after the jet that was waited for had its step
             _resetTimer = true;
         }
         if (now >= _transferTick) parking.TransferRunwayToNext(world, Entity.Id);
