@@ -534,7 +534,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     private long Finish(IWorldServices world) => _state == MissileState.Dead ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
 
     /// <summary><c>MissileAIUpdate::setFramesTillCountermeasureDiversionOccurs</c>: <paramref name="frames"/> ticks from now the missile gives up its victim for a decoy flare.</summary>
-    public void SetFramesTillCountermeasureDiversionOccurs(IWorldServices world, long frames) => _decoyTick = world.Tick + Math.Max(frames, 1);
+    public void SetFramesTillCountermeasureDiversionOccurs(IWorldServices world, long frames) => _decoyTick = world.Tick + Math.Max(frames, world.Time.TicksPerOriginalFrame);
 
     /// <summary>
     /// The diversion of <c>MissileAIUpdate::update</c>: the missile no longer does damage and, when its victim has a flare out, flies at the closest flare of the newest volley
@@ -777,6 +777,9 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
     private long _nextWake = -1;
     private EntityId _target;
     private bool _inRange;
+    /// <summary><c>m_nextScanFrames = GameLogicRandomValue( 0, 3 )</c> (PointDefenseLaserUpdate.cpp, <c>fireWhenReady</c>): the upper bound of the wait before the next scan, in logic frames of the original.</summary>
+    private const int RescanMaxFrames = 3;
+
     private long _nextScan;
     private long _nextShot;
 
@@ -806,7 +809,7 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
             FireWhenReady(world, weapon);
             return SimulationTiming.SleepNone;
         }
-        _nextScan = data.ScanTicks;
+        _nextScan = TickGrid.CountdownActingAfterZero(world.Time, data.ScanTicks);
         if (ScanClosestTarget(world, weapon)) FireWhenReady(world, weapon);
         return SimulationTiming.SleepNone;
     }
@@ -820,12 +823,13 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
             if (Distance2D(target) < weapon.AttackRange) _inRange = true;
             else if (_inRange)
             {
-                _nextScan = world.LogicRandom.Range(0, 3);
+                var wait = world.LogicRandom.Range(0, RescanMaxFrames);
+                _nextScan = TickGrid.CountdownActingAfterZero(world.Time, world.Time.OriginalFrames(wait));
                 _target = EntityId.Invalid;
-                if (_nextScan == 0)
+                if (wait == 0)
                 {
                     ScanClosestTarget(world, weapon);
-                    _nextScan = data.ScanTicks;
+                    _nextScan = TickGrid.CountdownActingAfterZero(world.Time, data.ScanTicks);
                     target = null;
                 }
             }
@@ -841,16 +845,17 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
         {
             var damage = world.FireWeaponAt(Entity, weapon, target, target.X, target.Y, target.Z);
             world.Emit(SimEventKind.WeaponFired, Entity.Id, target.Id, weapon.Name, damage.Raw);
-            _nextShot = weapon.DelayBetweenShotsTicks;
+            _nextShot = TickGrid.CountdownActingAfterZero(world.Time, weapon.DelayBetweenShotsTicks);
         }
         if (target.EffectivelyDead)
         {
-            _nextScan = world.LogicRandom.Range(0, 3);
+            var wait = world.LogicRandom.Range(0, RescanMaxFrames);
+            _nextScan = TickGrid.CountdownActingAfterZero(world.Time, world.Time.OriginalFrames(wait));
             _target = EntityId.Invalid;
-            if (_nextScan == 0)
+            if (wait == 0)
             {
                 ScanClosestTarget(world, weapon);
-                _nextScan = data.ScanTicks;
+                _nextScan = TickGrid.CountdownActingAfterZero(world.Time, data.ScanTicks);
             }
         }
     }

@@ -592,7 +592,7 @@ public sealed class SpectreGunshipDeploymentUpdate(SpectreGunshipData data) : Si
             foreach (var module in candidate.ModuleArray)
             {
                 if (module is not SpectreGunshipDeploymentUpdate deployment) continue;
-                var found = deployment._pending.Find(value => value.Template == gunship.Template.Index && world.Tick - value.Tick <= 2);
+                var found = deployment._pending.Find(value => value.Template == gunship.Template.Index && world.Tick - value.Tick <= 2 * TickOrder.Next);
                 if (found is null) continue;
                 deployment._pending.Remove(found);
                 (targetX, targetY) = (found.TargetX, found.TargetY);

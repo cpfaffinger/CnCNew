@@ -137,7 +137,7 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
     public void OnDie(IWorldServices world, in DamageInfo info)
     {
         if (!data.Mux.IsApplicable(Entity, info) || _state != State.Standing) return;
-        _collapseTick = world.Tick + world.LogicRandom.Range(checked((int)data.MinCollapseDelay), checked((int)data.MaxCollapseDelay));
+        _collapseTick = world.Tick + TickGrid.RandomTicks(world, data.MinCollapseDelay, data.MaxCollapseDelay);
         DoPhase(world, 0, Entity.X, Entity.Y, Entity.Z);
         _state = State.WaitingForCollapseStart;
         _height = Fixed.Zero;
@@ -152,7 +152,7 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
         {
             _state = State.Collapsing;
             DoPhase(world, 2, Entity.X, Entity.Y, Entity.Z);
-            _burstTick = now + world.LogicRandom.Range(checked((int)data.MinBurstDelay), checked((int)data.MaxBurstDelay));
+            _burstTick = now + TickGrid.RandomTicks(world, data.MinBurstDelay, data.MaxBurstDelay);
         }
         if (_state == State.Collapsing)
         {
@@ -162,7 +162,7 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
             {
                 // GameLogicRandomValue(1, BigBurstFrequency) == 1: a big burst, otherwise the smaller delay effect.
                 DoPhase(world, world.LogicRandom.Range(1, data.BigBurstFrequency) == 1 ? 2 : 1, Entity.X, Entity.Y, Entity.Z);
-                _burstTick += world.LogicRandom.Range(checked((int)data.MinBurstDelay), checked((int)data.MaxBurstDelay));
+                _burstTick += TickGrid.RandomTicks(world, data.MinBurstDelay, data.MaxBurstDelay);
             }
             if (_height + StructureModules.MaxHeightAbovePosition(Entity.Template) <= Fixed.Zero)
             {
@@ -277,7 +277,7 @@ public sealed class FireSpreadUpdate(FireSpreadData data) : SimModule, IUpdateMo
         world.WakeAt(Entity, this, world.Tick + NextDelay(world));
     }
 
-    private long NextDelay(IWorldServices world) => Math.Max(world.LogicRandom.Range(checked((int)data.MinDelay), checked((int)data.MaxDelay)), SimulationTiming.SleepNone);
+    private long NextDelay(IWorldServices world) => Math.Max(TickGrid.RandomTicks(world, data.MinDelay, data.MaxDelay), world.Time.TicksPerOriginalFrame);
 
     public long Update(IWorldServices world)
     {

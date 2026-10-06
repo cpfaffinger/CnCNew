@@ -169,6 +169,10 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
     private const int RepairDistanceSquared = 12 * 12;
     private const long RecentFireFrames = 2 * SimulationRate.OriginalFramesPerSecond;
 
+    /// <summary><c>m_framesToWait = 15</c> for packing and unpacking, <c>= 5</c> for extending and retracting the arm (SlavedUpdate.cpp, <c>setRepairState</c>), in logic frames of the original.</summary>
+    private const long PackFrames = 15;
+    private const long ArmFrames = 5;
+
     private static readonly int UnselectableBit = ObjectStatusBits.Index("UNSELECTABLE");
     private static readonly int DroneSpottingBit = SlaveSupport.WeaponBonusBit("DRONE_SPOTTING");
 
@@ -439,23 +443,23 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         {
             case RepairState.Unpacking:
             case RepairState.Packing:
-                _framesToWait = 15;
+                _framesToWait = checked((int)world.Time.OriginalFrames(PackFrames));
                 break;
             case RepairState.Ready:
                 switch (_repairState)
                 {
                     case RepairState.None:
                         _repairState = RepairState.Unpacking;
-                        _framesToWait = 15;
+                        _framesToWait = checked((int)world.Time.OriginalFrames(PackFrames));
                         break;
                     case RepairState.Welding:
                         _repairState = RepairState.Retracting;
-                        _framesToWait = 5;
+                        _framesToWait = checked((int)world.Time.OriginalFrames(ArmFrames));
                         MoveToNewRepairSpot(world, master);
                         break;
                     default:
                         _repairState = RepairState.Ready;
-                        _framesToWait = world.LogicRandom.Range(checked((int)data.MinReadyTicks), checked((int)data.MaxReadyTicks));
+                        _framesToWait = checked((int)TickGrid.RandomTicks(world, data.MinReadyTicks, data.MaxReadyTicks));
                         break;
                 }
                 break;
@@ -463,12 +467,12 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
                 if (_repairState == RepairState.Ready)
                 {
                     _repairState = RepairState.Extending;
-                    _framesToWait = 5;
+                    _framesToWait = checked((int)world.Time.OriginalFrames(ArmFrames));
                 }
                 else
                 {
                     _repairState = RepairState.Welding;
-                    _framesToWait = world.LogicRandom.Range(checked((int)data.MinWeldTicks), checked((int)data.MaxWeldTicks));
+                    _framesToWait = checked((int)TickGrid.RandomTicks(world, data.MinWeldTicks, data.MaxWeldTicks));
                     // "Don't actually start healing until we fire our first sparks."
                     _repairing = true;
                 }
@@ -539,7 +543,11 @@ public sealed record MobMemberData(int MustCatchUpRadius, int NoNeedToCatchUpRad
 /// </summary>
 public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpdateModule, ISlavedModule
 {
-    private const int CheckInterval = 16;
+    /// <summary><c>if ( ++m_framesToWait < 16 )</c> (MobMemberSlavedUpdate.cpp, <c>update</c>): the distance check runs every 16th logic frame of the original.</summary>
+    private const long CheckIntervalFrames = 16;
+
+    /// <summary><c>m_framesToWait = GameLogicRandomValue(0,20)</c> (MobMemberSlavedUpdate.cpp, constructor): the stagger of the first check, in logic frames of the original.</summary>
+    private const int FirstCheckStaggerFrames = 20;
 
     private long _nextWake = -1;
     private EntityId _slaver;
@@ -553,7 +561,7 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
 
     public override void OnSpawn(IWorldServices world)
     {
-        _framesToWait = world.LogicRandom.Range(0, 20);
+        _framesToWait = checked((int)world.Time.OriginalFrames(world.LogicRandom.Range(0, FirstCheckStaggerFrames)));
         _nextWake = world.Tick + SimulationTiming.SleepNone;
     }
 
@@ -574,7 +582,7 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
             return SimulationTiming.SleepNone;
         }
         if (SlaveSupport.AiOf(Entity) is not { } ai || SlaveSupport.AiOf(master) is null) return SimulationTiming.SleepNone;
-        if (++_framesToWait < CheckInterval) return SimulationTiming.SleepNone;
+        if (++_framesToWait < world.Time.OriginalFrames(CheckIntervalFrames)) return SimulationTiming.SleepNone;
         _framesToWait = 0;
         if (Entity.Template.Locomotor is null) return SimulationTiming.SleepNone;
 
