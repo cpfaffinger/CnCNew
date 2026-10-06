@@ -73,6 +73,20 @@ public readonly struct Fixed : IEquatable<Fixed>, IComparable<Fixed>
     {
         if (value._raw < 0) throw new ArgumentOutOfRangeException(nameof(value), "Cannot take the square root of a negative fixed-point value.");
         if (value._raw == 0) return Zero;
+        if (value._raw < 1L << (63 - FractionBits))
+        {
+            // raw * ScaleRaw fits 64 bits: the same Newton iteration on machine words. It ends at floor(sqrt(target)) from every start at or above the root, so the
+            // closer start (a power of two just above the root) changes the number of steps, not the result.
+            var small = (ulong)value._raw << FractionBits;
+            var root = 1UL << ((65 - System.Numerics.BitOperations.LeadingZeroCount(small)) >> 1);
+            while (true)
+            {
+                var next = (root + small / root) >> 1;
+                if (next >= root) break;
+                root = next;
+            }
+            return new((long)root);
+        }
         // result_raw = floor(sqrt(raw * ScaleRaw)), see ToDecimal()/FromDecimal() round trip reasoning above.
         var target = (Int128)value._raw * ScaleRaw;
         var x = (Int128)value._raw > ScaleRaw ? (Int128)value._raw : ScaleRaw; // initial guess >= true root
@@ -89,17 +103,38 @@ public readonly struct Fixed : IEquatable<Fixed>, IComparable<Fixed>
     public static Fixed operator -(Fixed a, Fixed b) => new(checked(a._raw - b._raw));
     public static Fixed operator -(Fixed a) => new(checked(-a._raw));
 
+    // Products and quotients are computed on magnitudes: "to nearest, ties away from zero" is then "add half, truncate", and the sign goes back on at the end.
+    // The result is the one of the 128-bit formula (magnitude(a) * magnitude(b) + ScaleRaw / 2) / ScaleRaw in every case, including the overflow.
     public static Fixed operator *(Fixed a, Fixed b)
     {
-        var product = (Int128)a._raw * b._raw;
-        return new(Narrow(RoundDivide(product, ScaleRaw)));
+        var high = Math.BigMul(Magnitude(a._raw), Magnitude(b._raw), out var low);
+        var rounded = unchecked(low + (ulong)(ScaleRaw >> 1));
+        if (rounded < low) high++;
+        if (high >> FractionBits != 0) throw new OverflowException("Fixed-point result out of range.");
+        return new(Signed((high << (64 - FractionBits)) | (rounded >> FractionBits), (a._raw ^ b._raw) < 0));
     }
 
     public static Fixed operator /(Fixed a, Fixed b)
     {
         if (b._raw == 0) throw new DivideByZeroException();
+        var dividend = Magnitude(a._raw);
+        if (dividend >> (63 - FractionBits) == 0)
+        {
+            // magnitude(a) * ScaleRaw is below 2^63 and half the divisor at most 2^62: the rounded quotient needs no 128-bit division.
+            var divisor = Magnitude(b._raw);
+            return new(Signed(((dividend << FractionBits) + (divisor >> 1)) / divisor, (a._raw ^ b._raw) < 0));
+        }
         var numerator = (Int128)a._raw << FractionBits;
         return new(Narrow(RoundDivide(numerator, b._raw)));
+    }
+
+    private static ulong Magnitude(long raw) => raw < 0 ? unchecked((ulong)(-raw)) : (ulong)raw;
+
+    private static long Signed(ulong magnitude, bool negative)
+    {
+        if (magnitude <= long.MaxValue) return negative ? -(long)magnitude : (long)magnitude;
+        if (negative && magnitude == 1UL << 63) return long.MinValue;
+        throw new OverflowException("Fixed-point result out of range.");
     }
 
     /// <summary>Multiplies by an integer without intermediate rounding.</summary>
