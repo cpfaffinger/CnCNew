@@ -139,7 +139,7 @@ public sealed partial class ScriptEngine
             {
                 if (!Has(type, p, 2) || AreaOrDiagnose(Str(p, 1)) is not { } transitionArea || NamedEntity(Str(p, 0)) is not { } mover) return false;
                 var now = transitionArea.Contains(mover.X, mover.Y);
-                var key = $"{Str(p, 0)}|{Str(p, 1)}";
+                var key = AreaMemoryKey(condition);
                 var was = _areaInside.GetValueOrDefault(key);
                 _areaInside[key] = now;
                 return type == "NAMED_ENTERED_AREA" ? now && !was : !now && was;
@@ -148,8 +148,8 @@ public sealed partial class ScriptEngine
                 return Has(type, p, 1) && _named.TryGetValue(Str(p, 0), out var selectedId) && _selected.Contains(selectedId);
 
             // ---- teams
-            case "TEAM_HAS_UNITS": return Has(type, p, 1) && TeamsNamed(Str(p, 0)).Any(team => LiveMembers(team).Any(IsUnit));
-            case "TEAM_DESTROYED": return Has(type, p, 1) && FindTeam(Str(p, 0)) is { } destroyed && !LiveMembers(destroyed).Any(CountsAsObject);
+            case "TEAM_HAS_UNITS": return Has(type, p, 1) && AnyTeamNamedHasUnits(Str(p, 0));
+            case "TEAM_DESTROYED": return Has(type, p, 1) && FindTeam(Str(p, 0)) is { } destroyed && !TeamHasCountingMember(destroyed);
             case "TEAM_CREATED": return Has(type, p, 1) && FindTeam(Str(p, 0)) is { Created: true };
             case "TEAM_OWNED_BY_PLAYER":
                 return Has(type, p, 2) && ResolvePlayer(Str(p, 1)) is { } teamOwner && FindTeam(Str(p, 0)) is { } ownedTeam && ownedTeam.Owner == teamOwner.Id;
@@ -164,7 +164,7 @@ public sealed partial class ScriptEngine
             {
                 if (!Has(type, p, 3)) return false;
                 var now = type.EndsWith("ENTIRELY", StringComparison.Ordinal) ? TeamAreaEntirely(Str(p, 0), Str(p, 1), Int(p, 2)) : TeamAreaPartially(Str(p, 0), Str(p, 1), Int(p, 2));
-                var key = $"{type[..(type.IndexOf("_AREA", StringComparison.Ordinal))]}|{Str(p, 0)}|{Str(p, 1)}|{type.EndsWith("ENTIRELY", StringComparison.Ordinal)}";
+                var key = AreaMemoryKey(condition);
                 var was = _areaInside.GetValueOrDefault(key);
                 _areaInside[key] = now;
                 return type.StartsWith("TEAM_ENTERED", StringComparison.Ordinal) ? now && !was : !now && was;
@@ -183,11 +183,11 @@ public sealed partial class ScriptEngine
             case "NAMED_ATTACKED_BY_PLAYER":
                 return Has(type, p, 2) && ResolvePlayer(Str(p, 1)) is { } namedAttacker && NamedEntity(Str(p, 0)) is { } attacked && AttackedByPlayer(attacked, namedAttacker.Id);
             case "TEAM_ATTACKED_BY_PLAYER":
-                return Has(type, p, 2) && ResolvePlayer(Str(p, 1)) is { } teamAttacker && FindTeam(Str(p, 0)) is { } attackedTeam && LiveMembers(attackedTeam).Any(member => AttackedByPlayer(member, teamAttacker.Id));
+                return Has(type, p, 2) && ResolvePlayer(Str(p, 1)) is { } teamAttacker && FindTeam(Str(p, 0)) is { } attackedTeam && TeamAttackedByPlayer(attackedTeam, teamAttacker.Id);
             case "NAMED_ATTACKED_BY_OBJECTTYPE":
                 return Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } attackedNamed && AttackedByType(attackedNamed, Str(p, 1));
             case "TEAM_ATTACKED_BY_OBJECTTYPE":
-                return Has(type, p, 2) && FindTeam(Str(p, 0)) is { } typedTeam && LiveMembers(typedTeam).Any(member => AttackedByType(member, Str(p, 1)));
+                return Has(type, p, 2) && FindTeam(Str(p, 0)) is { } typedTeam && TeamAttackedByType(typedTeam, Str(p, 1));
             case "PLAYER_HAS_COMPARISON_UNIT_KIND_IN_TRIGGER_AREA":
             {
                 // evaluatePlayerHasUnitKindInArea: live, non-inert objects of the player with the kind inside the area.
@@ -209,14 +209,13 @@ public sealed partial class ScriptEngine
             {
                 // evaluateTeamHasObjectStatus: all members (true for an empty team) or any member.
                 if (!Has(type, p, 2) || StatusBit(Str(p, 1)) is not { } teamBit || FindTeam(Str(p, 0)) is not { } statusTeam) return false;
-                var members = LiveMembers(statusTeam).ToArray();
-                return type == "TEAM_ALL_HAS_OBJECT_STATUS" ? members.All(member => member.HasStatus(teamBit)) : members.Any(member => member.HasStatus(teamBit));
+                return TeamHasStatus(statusTeam, teamBit, all: type == "TEAM_ALL_HAS_OBJECT_STATUS");
             }
             case "NAMED_REACHED_WAYPOINTS_END":
                 return Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } walker && _completedPath.TryGetValue(walker.Id.Value, out var walked) && walked.Equals(Str(p, 1), StringComparison.OrdinalIgnoreCase);
             case "TEAM_REACHED_WAYPOINTS_END":
                 // evaluateTeamReachedWaypointsEnd is true when any member completed the path.
-                return Has(type, p, 2) && FindTeam(Str(p, 0)) is { } pathTeam && LiveMembers(pathTeam).Any(member => _completedPath.TryGetValue(member.Id.Value, out var done) && done.Equals(Str(p, 1), StringComparison.OrdinalIgnoreCase));
+                return Has(type, p, 2) && FindTeam(Str(p, 0)) is { } pathTeam && TeamReachedPathEnd(pathTeam, Str(p, 1));
 
             // ---- multiplayer victory/defeat (VictoryConditions::isLocalAlliedVictory/Defeat/isLocalDefeat)
             case "MULTIPLAYER_ALLIED_VICTORY": return IsAlliedVictory();
@@ -263,14 +262,102 @@ public sealed partial class ScriptEngine
 
     private bool IsUnit(Entity entity) => !entity.Template.IsKindOf("STRUCTURE") && CountsAsObject(entity);
 
+    // ---- team tests written as loops over the member ids: a lambda in EvaluateConditionCore that reads its parameters makes every evaluation of every
+    // condition allocate the closure, whether the lambda is reached or not. A live member is one that exists and is not marked for destruction (LiveMembers).
+
+    private Entity? LiveMember(uint id) => _world.FindEntity(new EntityId(id)) is { DestroyRequested: false } entity ? entity : null;
+
+    private bool TeamHasUnit(ScriptTeam team)
+    {
+        foreach (var id in team.Members)
+            if (LiveMember(id) is { } member && IsUnit(member)) return true;
+        return false;
+    }
+
+    /// <summary>Some team <see cref="TeamsNamed"/> yields has a unit.</summary>
+    private bool AnyTeamNamedHasUnits(string name)
+    {
+        if (name == ThisTeamName) return _callingTeam is { } calling && TeamHasUnit(calling);
+        if (_callingTeam is { } instance && instance.Prototype == name) return TeamHasUnit(instance);
+        foreach (var team in _teams.Values)
+            if (team.Prototype == name && TeamHasUnit(team)) return true;
+        return false;
+    }
+
+    private bool TeamHasCountingMember(ScriptTeam team)
+    {
+        foreach (var id in team.Members)
+            if (LiveMember(id) is { } member && CountsAsObject(member)) return true;
+        return false;
+    }
+
+    private bool TeamAttackedByPlayer(ScriptTeam team, PlayerId player)
+    {
+        foreach (var id in team.Members)
+            if (LiveMember(id) is { } member && AttackedByPlayer(member, player)) return true;
+        return false;
+    }
+
+    private bool TeamAttackedByType(ScriptTeam team, string typeParameter)
+    {
+        foreach (var id in team.Members)
+            if (LiveMember(id) is { } member && AttackedByType(member, typeParameter)) return true;
+        return false;
+    }
+
+    /// <summary>All live members have the status (true for a team without any) or some live member has it.</summary>
+    private bool TeamHasStatus(ScriptTeam team, int bit, bool all)
+    {
+        foreach (var id in team.Members)
+        {
+            if (LiveMember(id) is not { } member) continue;
+            if (member.HasStatus(bit) != all) return !all;
+        }
+        return all;
+    }
+
+    private bool TeamReachedPathEnd(ScriptTeam team, string path)
+    {
+        foreach (var id in team.Members)
+            if (LiveMember(id) is { } member && _completedPath.TryGetValue(member.Id.Value, out var done) && done.Equals(path, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    // The key under which an entered/exited condition remembers its last answer: a function of the condition alone, so it is built once per condition.
+    private readonly Dictionary<MapCondition, string> _areaMemoryKeys = new(ReferenceEqualityComparer.Instance);
+
+    private string AreaMemoryKey(MapCondition condition)
+    {
+        if (_areaMemoryKeys.TryGetValue(condition, out var key)) return key;
+        var p = condition.Parameters;
+        var type = condition.TypeName;
+        key = type.StartsWith("NAMED_", StringComparison.Ordinal)
+            ? $"{Str(p, 0)}|{Str(p, 1)}"
+            : $"{type[..(type.IndexOf("_AREA", StringComparison.Ordinal))]}|{Str(p, 0)}|{Str(p, 1)}|{type.EndsWith("ENTIRELY", StringComparison.Ordinal)}";
+        _areaMemoryKeys.Add(condition, key);
+        return key;
+    }
+
     // ThingTemplate::isBuildFacility is derived from other templates' prerequisites in the reference; the simulation has no such back-reference, so a
     // structure that can produce (has a production module) stands in for it (TemplateFacts.BuildFacility). Documented in MAP-SCRIPTS.md §8.
 
     private ScriptArea? AreaOrDiagnose(string name)
     {
         var area = _program.FindArea(name);
-        if (area is null) Diagnose($"unknown trigger area '{name}'");
+        if (area is null) Diagnose(UnknownMessage(_unknownAreaMessages, "trigger area", name));
         return area;
+    }
+
+    // A script that names something the map does not have is counted every time it runs (Diagnose); the message is the same text each time.
+    private readonly Dictionary<string, string> _unknownAreaMessages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _unknownWaypointMessages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _unknownPlayerMessages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _unknownPowerMessages = new(StringComparer.Ordinal);
+
+    private static string UnknownMessage(Dictionary<string, string> messages, string what, string name)
+    {
+        if (!messages.TryGetValue(name, out var message)) messages.Add(name, message = $"unknown {what} '{name}'");
+        return message;
     }
 
     private IEnumerable<ScriptTeam> TeamsNamed(string name)
@@ -308,11 +395,11 @@ public sealed partial class ScriptEngine
         if (AreaOrDiagnose(areaName) is not { } area) return false;
         var team = teamName == ThisTeamName ? _callingTeam : FindTeam(teamName);
         if (team is null) return false;
-        var members = LiveMembers(team).ToArray();
-        if (!members.Any(CountsAsObject)) return false;
+        if (!TeamHasCountingMember(team)) return false;
         var considered = false;
-        foreach (var member in members)
+        foreach (var id in team.Members)
         {
+            if (LiveMember(id) is not { } member) continue;
             if (!SurfacesMatch(member, surfaceMask) || member.EffectivelyDead || member.Template.IsKindOf("INERT")) continue;
             considered = true;
             if (!area.Contains(member.X, member.Y)) return false;
@@ -326,8 +413,9 @@ public sealed partial class ScriptEngine
         if (AreaOrDiagnose(areaName) is not { } area) return false;
         var team = teamName == ThisTeamName ? _callingTeam : FindTeam(teamName);
         if (team is null) return false;
-        foreach (var member in LiveMembers(team))
+        foreach (var id in team.Members)
         {
+            if (LiveMember(id) is not { } member) continue;
             if (!SurfacesMatch(member, surfaceMask) || member.EffectivelyDead || member.Template.IsKindOf("INERT")) continue;
             if (area.Contains(member.X, member.Y)) return true;
         }

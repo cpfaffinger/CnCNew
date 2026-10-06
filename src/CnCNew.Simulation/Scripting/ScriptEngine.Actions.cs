@@ -422,7 +422,7 @@ public sealed partial class ScriptEngine
     private ScriptWaypoint? WaypointOrDiagnose(string name)
     {
         var waypoint = _program.FindWaypoint(name);
-        if (waypoint is null) Diagnose($"unknown waypoint '{name}'");
+        if (waypoint is null) Diagnose(UnknownMessage(_unknownWaypointMessages, "waypoint", name));
         return waypoint;
     }
 
@@ -586,14 +586,17 @@ public sealed partial class ScriptEngine
     private void UpdateFollowers()
     {
         if (_followers.Count == 0) return;
-        foreach (var follower in _followers.Values.ToArray())
+        // A copy to walk (orders end while it runs), kept between ticks; the update is not entered a second time while it runs.
+        _followerScratch.Clear();
+        foreach (var value in _followers.Values) _followerScratch.Add(value);
+        foreach (var follower in _followerScratch)
         {
             var entity = _world.FindEntity(new EntityId(follower.Entity));
             if (entity is null || entity.DestroyRequested || entity.EffectivelyDead) { _followers.Remove(follower.Entity); continue; }
             var mode = follower.Path;
             if (mode.StartsWith(PathMode, StringComparison.Ordinal))
             {
-                if (_program.FindPath(mode[PathMode.Length..]) is not { } path || path.Waypoints.IsDefaultOrEmpty) { Diagnose($"unknown waypoint path '{mode[PathMode.Length..]}'"); _followers.Remove(follower.Entity); continue; }
+                if (_program.FindPath(ModeArgument(mode, PathMode.Length)) is not { } path || path.Waypoints.IsDefaultOrEmpty) { Diagnose($"unknown waypoint path '{ModeArgument(mode, PathMode.Length)}'"); _followers.Remove(follower.Entity); continue; }
                 if (follower.AsTeam)
                 {
                     UpdateTeamFollower(follower, entity, path);
@@ -619,11 +622,11 @@ public sealed partial class ScriptEngine
                 continue;
             }
             // aiAttackObject: the named victim is the unit's order, whatever the unit would pick by itself; the shot goes out as soon as a weapon reaches it.
-            if (mode.StartsWith(NamedMode, StringComparison.Ordinal) && NamedEntity(mode[NamedMode.Length..]) is { EffectivelyDead: false } ordered && FireAtOrdered(entity, ordered)) continue;
+            if (mode.StartsWith(NamedMode, StringComparison.Ordinal) && NamedEntity(ModeArgument(mode, NamedMode.Length)) is { EffectivelyDead: false } ordered && FireAtOrdered(entity, ordered)) continue;
             if (_tick % RetargetInterval != follower.Entity % RetargetInterval) continue;
             if (mode.StartsWith(PositionMode, StringComparison.Ordinal))
             {
-                if (WaypointOrDiagnose(mode[PositionMode.Length..]) is { } spot)
+                if (WaypointOrDiagnose(ModeArgument(mode, PositionMode.Length)) is { } spot)
                 {
                     if (DistanceSquared(entity, spot.X, spot.Y) <= ArrivalDistanceSquared) _followers.Remove(follower.Entity);
                     else if (!Marching(entity)) MoveTo(entity, spot.X, spot.Y);
@@ -633,9 +636,9 @@ public sealed partial class ScriptEngine
             }
             (Fixed X, Fixed Y)? target = null;
             if (mode == HuntMode) target = NearestEnemy(entity) is { } enemy ? (enemy.X, enemy.Y) : null;
-            else if (mode.StartsWith(NamedMode, StringComparison.Ordinal)) target = NamedEntity(mode[NamedMode.Length..]) is { EffectivelyDead: false } named ? (named.X, named.Y) : null;
-            else if (mode.StartsWith(TeamMode, StringComparison.Ordinal)) target = NearestOfTeam(entity, mode[TeamMode.Length..]);
-            else if (mode.StartsWith(AreaMode, StringComparison.Ordinal)) target = AreaCentre(mode[AreaMode.Length..]);
+            else if (mode.StartsWith(NamedMode, StringComparison.Ordinal)) target = NamedEntity(ModeArgument(mode, NamedMode.Length)) is { EffectivelyDead: false } named ? (named.X, named.Y) : null;
+            else if (mode.StartsWith(TeamMode, StringComparison.Ordinal)) target = NearestOfTeam(entity, ModeArgument(mode, TeamMode.Length));
+            else if (mode.StartsWith(AreaMode, StringComparison.Ordinal)) target = AreaCentre(ModeArgument(mode, AreaMode.Length));
             if (target is not { } goal)
             {
                 if (mode != HuntMode) _followers.Remove(follower.Entity);
@@ -643,6 +646,17 @@ public sealed partial class ScriptEngine
             }
             if (DistanceSquared(entity, goal.X, goal.Y) > ArrivalDistanceSquared) AttackToward(entity, goal.X, goal.Y);
         }
+    }
+
+    private readonly List<Follower> _followerScratch = [];
+
+    // The part of a standing order's mode behind its prefix ("path:Route" -> "Route"): a function of the mode text, cut once per text.
+    private readonly Dictionary<string, string> _modeArguments = new(StringComparer.Ordinal);
+
+    private string ModeArgument(string mode, int prefixLength)
+    {
+        if (!_modeArguments.TryGetValue(mode, out var argument)) _modeArguments.Add(mode, argument = mode[prefixLength..]);
+        return argument;
     }
 
     /// <summary>The object marches: it has a move target, or it is on an attack-move and stopped on the way for a fight (it will march on by itself).</summary>
