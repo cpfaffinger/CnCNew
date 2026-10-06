@@ -7,6 +7,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Random;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Skirmish;
@@ -59,11 +60,31 @@ public sealed class SkirmishAiStats
 /// </summary>
 public sealed class SkirmishAi
 {
-    private const int FireInterval = 5;
-    private const int ThinkInterval = 15;
-    private const int RetryTicks = 300;
-    private const int MemoryTicks = 900;
-    private const int OrderRefreshTicks = 150;
+    // Own rhythms and deadlines of the AI, all in logic frames of the original (1/30 s) and scaled once per use through the world's time service, so the AI
+    // observes, thinks and waits at the same moments of game time at every tick rate. ThinkIntervalFrames must stay a multiple of FireIntervalFrames.
+    private const long FireIntervalFrames = 5;
+    private const long ThinkIntervalFrames = 15;
+    private const long RetryFrames = 300;
+    private const long MemoryFrames = 900;
+    private const long OrderRefreshFrames = 150;
+    /// <summary>Back-off of a worker order per producer and template, of the first supply center's placement, of a transport's unload order and the shortest time between two resumes of a site or two different marching orders (2 s).</summary>
+    private const long ShortRetryFrames = 60;
+    /// <summary>Margin on a worker's build time before its production counts as lost (1 s).</summary>
+    private const long InFlightMarginFrames = 30;
+    /// <summary>Back-off of the builder's walk to an unexplored supply source (5 s).</summary>
+    private const long SupplyLookRetryFrames = 150;
+    /// <summary>Back-off per science after a purchase attempt (60 s).</summary>
+    private const long ScienceRetryFrames = 1800;
+    /// <summary>Back-off per special power after a refusal for a missing science (100 s) and after any other refusal (30 s).</summary>
+    private const long PowerMissingScienceRetryFrames = 3000;
+    private const long PowerRefusedRetryFrames = 900;
+    /// <summary>Back-off of the tunnel network's evacuation (3 s) and the time a carrier stands idle before it is sent to a warehouse (3 s).</summary>
+    private const long TunnelEvacuationRetryFrames = 90;
+    private const long CarrierIdleFrames = 90;
+    /// <summary>Time a scouting target has to be reached in before its cell is written off as unreachable (15 s).</summary>
+    private const long ScoutReachFrames = 450;
+    /// <summary>Back-off per idle carrier for the search for a warehouse (10 s).</summary>
+    private const long WarehouseScoutRetryFrames = 300;
     private const int MinAttackThreshold = 8;
     private const int MaxAttackThreshold = 30;
     private const int PlacementChecksPerThink = 400;
@@ -73,7 +94,7 @@ public sealed class SkirmishAi
     private static readonly Fixed TunnelHealBelow = Fixed.FromDecimal(0.5m);
     private static readonly Fixed TunnelReach = Fixed.FromInt(600);
     private static readonly Fixed BoardingReach = Fixed.FromInt(250);
-    private const int BoardingTicks = 300;
+    private const long BoardingFrames = 300;
 
     [Flags]
     private enum Role
@@ -107,7 +128,10 @@ public sealed class SkirmishAi
     private readonly PlayerId _player;
     private readonly SageRandom _random;
     private readonly string _side;
-    private readonly int _phase;
+    private readonly SimulationTime _time;
+    private readonly long _fireInterval;
+    private readonly long _thinkInterval;
+    private readonly long _phase;
     private readonly Dictionary<int, Role> _roles = [];
     private readonly Dictionary<int, ImmutableArray<ObjectTemplate>> _producible = [];
     private readonly Dictionary<int, ImmutableArray<ObjectTemplate>> _structureCandidates = [];
@@ -143,7 +167,7 @@ public sealed class SkirmishAi
     private bool _scoutRevisit;
     private readonly Dictionary<int, long> _seenAt = [];
     private readonly HashSet<int> _unreachable = [];
-    private const int RevisitTicks = 3600;
+    private const long RevisitFrames = 3600;
     private readonly Dictionary<uint, long> _boarding = [];
     private (Fixed X, Fixed Y)? _armyGoal;
 
@@ -155,7 +179,11 @@ public sealed class SkirmishAi
         _submit = submit;
         _player = options.Player;
         _random = new SageRandom(options.Seed);
-        _phase = options.Player.Value % FireInterval;
+        _time = world.Time;
+        _fireInterval = _time.OriginalFrames(FireIntervalFrames);
+        _thinkInterval = _time.OriginalFrames(ThinkIntervalFrames);
+        // The stagger between the players is drawn in frames of the original and then scaled like the intervals: at every rate the same players share a frame.
+        _phase = _time.OriginalFrames(options.Player.Value % FireIntervalFrames);
         _side = options.Side;
         if (options.AttackThreshold > 0) _threshold = options.AttackThreshold;
         if (options.MaxAttackThreshold > 0) _maxThreshold = Math.Max(options.MaxAttackThreshold, _threshold);
@@ -197,10 +225,10 @@ public sealed class SkirmishAi
     public void Update()
     {
         _tick = _world.Tick;
-        if (_tick == 0 || (_tick + _phase) % FireInterval != 0) return;
+        if (_tick == 0 || (_tick + _phase) % _fireInterval != 0) return;
         if (_world.IsPlayerDefeated(_player)) return;
         Observe();
-        if ((_tick + _phase) % ThinkInterval != 0) return;
+        if ((_tick + _phase) % _thinkInterval != 0) return;
         Think();
     }
 
@@ -223,7 +251,7 @@ public sealed class SkirmishAi
         UseTransports();
         OrderCarriers();
         if (Stats.Commands == before) Stats.IdleThinks++;
-        if (_attacking) Stats.AttackTicks += ThinkInterval;
+        if (_attacking) Stats.AttackTicks += _thinkInterval;
     }
 
     // ------------------------------------------------------------------------------------------------------ command plumbing
@@ -241,10 +269,10 @@ public sealed class SkirmishAi
         return result;
     }
 
-    private bool Backoff(uint key, int ticks = RetryTicks)
+    private bool Backoff(uint key, long frames = RetryFrames)
     {
         if (_retryAt.TryGetValue(key, out var until) && until > _tick) return true;
-        _retryAt[key] = _tick + ticks;
+        _retryAt[key] = _tick + _time.OriginalFrames(frames);
         return false;
     }
 
@@ -297,7 +325,7 @@ public sealed class SkirmishAi
         foreach (var (id, entry) in memory)
         {
             if (seen.Contains(id)) continue;
-            var stale = !entry.IsStructure && !entry.Owner.IsSystem && _tick - entry.Seen > MemoryTicks;
+            var stale = !entry.IsStructure && !entry.Owner.IsSystem && _tick - entry.Seen > _time.OriginalFrames(MemoryFrames);
             if (stale || _world.IsPositionVisibleTo(_player, entry.X, entry.Y)) (drop ??= []).Add(id);
         }
         if (drop is not null)
@@ -417,11 +445,11 @@ public sealed class SkirmishAi
             foreach (var template in ProducibleBy(producer.Template))
             {
                 if ((RoleOf(template) & wanted) == 0 || template.BuildCost > _budget || !PrerequisitesMet(template)) continue;
-                if (Backoff(unchecked(producer.Id.Value * 31u + (uint)template.Index + 1_000_000u), 60)) continue;
+                if (Backoff(unchecked(producer.Id.Value * 31u + (uint)template.Index + 1_000_000u), ShortRetryFrames)) continue;
                 var result = Send(sequence => new QueueProductionCommand(_player, sequence, _tick, producer.Id, template.Name));
                 if (!result.Accepted) continue;
                 _budget -= template.BuildCost;
-                _inFlight.Add((RoleOf(template), _tick + template.BuildTicks + 30));
+                _inFlight.Add((RoleOf(template), _tick + template.BuildTicks + _time.OriginalFrames(InFlightMarginFrames)));
                 Stats.Productions++;
                 return;
             }
@@ -585,7 +613,7 @@ public sealed class SkirmishAi
                 reserved = next.BuildCost;
                 break;
             }
-            if (Backoff(unchecked(0x40000000u + (uint)next.Index), essential ? 60 : RetryTicks)) { if (essential) break; continue; }
+            if (Backoff(unchecked(0x40000000u + (uint)next.Index), essential ? ShortRetryFrames : RetryFrames)) { if (essential) break; continue; }
             var bySupplies = (RoleOf(next) & Role.SupplyCenter) != 0;
             var spot = bySupplies ? FindSupplyPlacement(next, builder, used) : FindPlacement(next, builder);
             if (bySupplies)
@@ -719,7 +747,7 @@ public sealed class SkirmishAi
         if (!_world.IsPositionExploredBy(_player, originX, originY))
         {
             // Look first: the builder walks to the source; the placement is tried again once the ground is known.
-            if (!Backoff(unchecked(0x48000000u + builder.Id.Value), 150)
+            if (!Backoff(unchecked(0x48000000u + builder.Id.Value), SupplyLookRetryFrames)
                 && Send(sequence => new SetMoveTargetCommand(_player, sequence, _tick, builder.Id, originX, originY)).Accepted)
             {
                 used.Add(builder.Id.Value);
@@ -802,7 +830,7 @@ public sealed class SkirmishAi
             var working = builder is not null && !builder.DestroyRequested && !builder.EffectivelyDead && builder.Owner == _player && AiOf(builder) is { IsBuilding: true };
             if (working) continue;
             var watch = _siteWatch.GetValueOrDefault(site.Id.Value);
-            if (watch.LastResume > 0 && _tick - watch.LastResume < 60) continue;
+            if (watch.LastResume > 0 && _tick - watch.LastResume < _time.OriginalFrames(ShortRetryFrames)) continue;
             var strikes = watch.LastResume > 0 && site.ConstructionWork == watch.Work ? watch.Strikes + 1 : 0;
             if (strikes >= 3)
             {
@@ -848,7 +876,7 @@ public sealed class SkirmishAi
             if (pick is null || science.PurchasePointCost < pick.PurchasePointCost) pick = science;
         }
         if (pick is null) return;
-        _scienceRetry[pick.Name] = _tick + 1800;
+        _scienceRetry[pick.Name] = _tick + _time.OriginalFrames(ScienceRetryFrames);
         if (Send(sequence => new PurchaseScienceCommand(_player, sequence, _tick, pick.Name)).Accepted) Stats.SciencePurchases++;
     }
 
@@ -869,7 +897,7 @@ public sealed class SkirmishAi
                 var command = MakePower(entity, info.Name, power);
                 if (command is null) continue;
                 var result = Send(command);
-                _powerRetry[(entity.Id.Value, info.Name)] = _tick + (result.Accepted ? RetryTicks : result.Reason == CommandRejection.MissingScience ? 3000 : 900);
+                _powerRetry[(entity.Id.Value, info.Name)] = _tick + _time.OriginalFrames(result.Accepted ? RetryFrames : result.Reason == CommandRejection.MissingScience ? PowerMissingScienceRetryFrames : PowerRefusedRetryFrames);
                 if (result.Accepted) Stats.PowerUses++;
             }
         }
@@ -1041,8 +1069,8 @@ public sealed class SkirmishAi
             if (_orders.TryGetValue(unit.Id.Value, out var order))
             {
                 var same = DistanceSquared(order.X, order.Y, x, y) < Fixed.FromInt(900);
-                if (same && (marching || _tick - order.Tick < OrderRefreshTicks)) continue;
-                if (!same && marching && _tick - order.Tick < 60) continue;
+                if (same && (marching || _tick - order.Tick < _time.OriginalFrames(OrderRefreshFrames))) continue;
+                if (!same && marching && _tick - order.Tick < _time.OriginalFrames(ShortRetryFrames)) continue;
             }
             if (Send(sequence => new AttackMoveCommand(_player, sequence, _tick, unit.Id, x, y)).Accepted) Stats.MoveOrders++;
             _orders[unit.Id.Value] = new Goal(x, y, _tick);
@@ -1078,14 +1106,14 @@ public sealed class SkirmishAi
             if ((RoleOf(unit.Template) & Role.Army) == 0 || unit.Template.IsKindOf("AIRCRAFT") || unit.Body is not { } body || body.Health >= body.MaxHealth * TunnelHealBelow) continue;
             if (_boarding.TryGetValue(unit.Id.Value, out var until) && until > _tick) continue;
             var tunnel = Nearest(tunnels, unit.X, unit.Y, TunnelReach);
-            if (tunnel is null || Backoff(unchecked(0x80000000u + unit.Id.Value), RetryTicks)) continue;
+            if (tunnel is null || Backoff(unchecked(0x80000000u + unit.Id.Value), RetryFrames)) continue;
             if (!Send(sequence => new MoveAndEnterCommand(_player, sequence, _tick, unit.Id, tunnel.Id)).Accepted) continue;
-            _boarding[unit.Id.Value] = _tick + BoardingTicks;
+            _boarding[unit.Id.Value] = _tick + _time.OriginalFrames(BoardingFrames);
             _orders.Remove(unit.Id.Value);
             Stats.TunnelEntries++;
             room--;
         }
-        if (network.ContainCount == 0 || Backoff(0x81000000u, 90)) return;
+        if (network.ContainCount == 0 || Backoff(0x81000000u, TunnelEvacuationRetryFrames)) return;
         foreach (var riderId in network.Riders)
             if (_world.FindEntity(riderId) is { Body: { } riderBody } && riderBody.Health < riderBody.MaxHealth) return;
         var (goalX, goalY) = _armyGoal ?? _rally ?? (_options.HomeX, _options.HomeY);
@@ -1106,7 +1134,7 @@ public sealed class SkirmishAi
             var arrived = _armyGoal is { } goal && DistanceSquared(transport.X, transport.Y, goal.X, goal.Y) < Fixed.FromInt(90_000);
             var engaged = _enemyTargets.Any(enemy => DistanceSquared(enemy.X, enemy.Y, transport.X, transport.Y) < EngageRadius * EngageRadius);
             if (!arrived && !engaged) continue;
-            if (Backoff(unchecked(0x82000000u + transport.Id.Value), 60)) continue;
+            if (Backoff(unchecked(0x82000000u + transport.Id.Value), ShortRetryFrames)) continue;
             if (Send(sequence => new EvacuateCommand(_player, sequence, _tick, transport.Id, false, Fixed.Zero, Fixed.Zero)).Accepted) Stats.Evacuations++;
         }
         if (!_attacking) return;
@@ -1126,9 +1154,9 @@ public sealed class SkirmishAi
                 best = distance;
                 pick = unit;
             }
-            if (pick is null || Backoff(unchecked(0x83000000u + pick.Id.Value), RetryTicks)) continue;
+            if (pick is null || Backoff(unchecked(0x83000000u + pick.Id.Value), RetryFrames)) continue;
             if (!Send(sequence => new MoveAndEnterCommand(_player, sequence, _tick, pick.Id, transport.Id)).Accepted) continue;
-            _boarding[pick.Id.Value] = _tick + BoardingTicks;
+            _boarding[pick.Id.Value] = _tick + _time.OriginalFrames(BoardingFrames);
             _orders.Remove(pick.Id.Value);
             Stats.TransportLoads++;
         }
@@ -1189,7 +1217,7 @@ public sealed class SkirmishAi
 
         foreach (var hint in _options.HintPositions)
         {
-            if (_clearedHints.TryGetValue(hint, out var clearedAt) && _tick - clearedAt < RevisitTicks) continue;
+            if (_clearedHints.TryGetValue(hint, out var clearedAt) && _tick - clearedAt < _time.OriginalFrames(RevisitFrames)) continue;
             if (_world.IsPositionVisibleTo(_player, hint.X, hint.Y) && DistanceSquared(hint.X, hint.Y, cx, cy) < Fixed.FromInt(90_000)) { _clearedHints[hint] = _tick; continue; }
             var distance = DistanceSquared(hint.X, hint.Y, cx, cy);
             if (distance < best) { best = distance; target = new Remembered(EntityId.Invalid, army[0].Template, PlayerId.System, hint.X, hint.Y, _tick, false); }
@@ -1211,7 +1239,7 @@ public sealed class SkirmishAi
         {
             var key = CoarseKey(grid, current);
             var reached = _world.IsPositionExploredBy(_player, current.X, current.Y) && (!_scoutRevisit || _seenAt.GetValueOrDefault(key, -1) >= _scoutAt);
-            if (!reached && _tick - _scoutAt < 450) return current;
+            if (!reached && _tick - _scoutAt < _time.OriginalFrames(ScoutReachFrames)) return current;
             if (!reached) _unreachable.Add(key);
         }
         _scoutRevisit = false;
@@ -1245,7 +1273,7 @@ public sealed class SkirmishAi
             for (var x = 4; x < terrain.CellsX; x += 8)
             {
                 var key = y / 8 * terrain.CellsX + x / 8;
-                if (_unreachable.Contains(key) || _tick - _seenAt.GetValueOrDefault(key, long.MinValue / 2) < RevisitTicks || !grid.IsPassable(x, y, LocomotorSurfaces.Ground)) continue;
+                if (_unreachable.Contains(key) || _tick - _seenAt.GetValueOrDefault(key, long.MinValue / 2) < _time.OriginalFrames(RevisitFrames) || !grid.IsPassable(x, y, LocomotorSurfaces.Ground)) continue;
                 var wx = Fixed.FromInt(x * TerrainMap.CellSize + TerrainMap.CellSize / 2);
                 var wy = Fixed.FromInt(y * TerrainMap.CellSize + TerrainMap.CellSize / 2);
                 var distance = DistanceSquared(wx, wy, cx, cy);
@@ -1277,7 +1305,7 @@ public sealed class SkirmishAi
         if (_world.Navigation is not { } grid) return;
         foreach (var unit in _units)
         {
-            if ((RoleOf(unit.Template) & Role.Carrier) == 0 || AiOf(unit) is not { } ai || !ai.IsIdle || Backoff(unchecked(0x70000000u + unit.Id.Value), 300)) continue;
+            if ((RoleOf(unit.Template) & Role.Carrier) == 0 || AiOf(unit) is not { } ai || !ai.IsIdle || Backoff(unchecked(0x70000000u + unit.Id.Value), WarehouseScoutRetryFrames)) continue;
             if (NearestUnexplored(grid, unit.X, unit.Y) is not { } spot) continue;
             if (Send(sequence => new SetMoveTargetCommand(_player, sequence, _tick, unit.Id, spot.X, spot.Y)).Accepted) Stats.MoveOrders++;
         }
@@ -1301,7 +1329,7 @@ public sealed class SkirmishAi
                 continue;
             }
             var since = _idleSince.TryGetValue(unit.Id.Value, out var start) ? start : _idleSince[unit.Id.Value] = _tick;
-            if (_tick - since < 90 || Backoff(unchecked(0x60000000u + unit.Id.Value))) continue;
+            if (_tick - since < _time.OriginalFrames(CarrierIdleFrames) || Backoff(unchecked(0x60000000u + unit.Id.Value))) continue;
             Remembered? nearest = null;
             var best = Fixed.MaxValue;
             // The nearest warehouse that still holds something (an empty one has nothing to give; the idle carrier stood beside it forever).
