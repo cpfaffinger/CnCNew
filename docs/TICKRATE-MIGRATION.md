@@ -565,7 +565,7 @@ Jeder Befehl nimmt auf, lässt zwei frische Läufe gegen die Aufnahme laufen (Pr
 | `reference-match` | 30 | Sieger FactionGLA bei Tick 14.490 (8,1 min) | `23B4B25DF62765D8` | ja | ja |
 | `reference-match` | 60 | Sieger FactionGLA bei Tick 29.280 (8,1 min) | `EEBBD93BB03EBE8A` | ja | ja |
 | `reference-match` (`--max-ticks 216000`) | 120 | kein Sieger in 216.000 Ticks (30 min), Spitze 252 lebende Objekte | `DE475CBB34080F25` | ja | ja |
-| `reference-match` (`--max-ticks 864000`) | 120 | kein Sieger in 864.000 Ticks (120 min), Spitze 2.039 lebende Objekte | nicht belegt | nicht belegt | nicht belegt |
+| `reference-match` (`--max-ticks 864000`) | 120 | kein Sieger in 864.000 Ticks (120 min), Spitze 2.039 lebende Objekte | `F597B73A4DEB35C7` | nicht belegt | nicht belegt |
 | `ai-match` Alpine Assault, FactionChina/FactionGLA | 30 | Sieger FactionChina bei Tick 23.370 (13,0 min) | `0BD4FE5EEB2C37E7` | ja | ja |
 | `ai-match` Alpine Assault, FactionChina/FactionGLA | 60 | Sieger FactionChina bei Tick 23.430 (6,5 min) | `B05BD85E6644CF26` | ja | ja |
 | `ai-match` Alpine Assault, FactionChina/FactionGLA | 120 | Sieger FactionChina bei Tick 45.900 (6,4 min) | `DF4127D263A690FB` | ja | ja |
@@ -582,7 +582,7 @@ Jeder Befehl nimmt auf, lässt zwei frische Läufe gegen die Aufnahme laufen (Pr
 | `mission-run` `GC_ChemGeneral` | 60 | 6.000 Ticks, Ausgang offen, 0 fehlende | `1DFDF910057F2353` | ja | ja |
 | `mission-run` `GC_ChemGeneral` | 120 | 12.000 Ticks, Ausgang offen, 0 fehlende | `4F05AAFF1ADB080A` | ja | ja |
 
-Keine Ausnahme, kein Überlauf (`checked`-Arithmetik des Zeitdiensts und von `Fixed`), keine Ablehnung wegen der Rate in einem der Läufe. Das Referenzmatch findet bei 120 Hz in zwei Stunden Spielzeit keinen Sieger (bei 30 und 60 Hz nach 8,1 Minuten); der Lauf mit dem vollen Budget (864.000 Ticks, Aufnahme 30 Minuten Rechenzeit, bis 2.039 lebende Objekte) wurde aufgenommen, seine Prüfläufe (zweiter frischer Lauf, Snapshot-Fortsetzung) passten nicht in das Zeitlimit eines Hintergrundlaufs und sind **nicht belegt**, soweit die Tabelle es sagt; vollständig geprüft ist der Lauf mit 216.000 Ticks (30 Spielminuten, das 3,7-Fache der Spielzeit des 30-Hz-Laufs).
+Keine Ausnahme, kein Überlauf (`checked`-Arithmetik des Zeitdiensts und von `Fixed`), keine Ablehnung wegen der Rate in einem der Läufe. Das Referenzmatch findet bei 120 Hz in zwei Stunden Spielzeit keinen Sieger (bei 30 und 60 Hz nach 8,1 Minuten); der Lauf mit dem vollen Budget (864.000 Ticks, Aufnahme 30 Minuten Rechenzeit, bis 2.039 lebende Objekte) wurde aufgenommen und von einem frischen Lauf an allen 864 Prüfpunkten bestätigt (Endhash in der Tabelle); der zweite frische Lauf mit Tick-Hashes und die Snapshot-Fortsetzung passten nicht in das Zeitlimit eines Hintergrundlaufs (je Durchgang rund 29 Minuten) und sind **nicht belegt**; vollständig geprüft ist der Lauf mit 216.000 Ticks (30 Spielminuten, das 3,7-Fache der Spielzeit des 30-Hz-Laufs).
 
 ### 11.2 Rundung beim Katalogbau (`SimTool rate-audit <content> --tick-rate N`)
 
