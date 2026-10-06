@@ -50,10 +50,14 @@ const string Usage = """
       perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
                                                            time per tick and tick phase, module updates, allocations, replay catch-up speed, snapshot cost (docs/PERFORMANCE.md)
       catalog-cost <content-dir> [--rounds N]              time of TemplateCatalog.Build for 30, 60 and 120 Hz (the catalog is built per tick rate)
+      rate-audit <content-dir> --tick-rate N               what the catalog loses at the rate: conversions and catalog values that round to zero or are
+                                                           more than 1 % / 10 % off, by function and by type and field, with the worst examples
       perf-compare <old.json> <new.json> [--threshold-percent N] [--min-us N] [--all] [--allow-different-hash] [--out FILE]
                                                            two --json summaries metric by metric; marks changes beyond the threshold (default 10 %); a report, never a failing test (docs/PERF-GAME-LAYER.md)
     Every command that creates a world takes --tick-rate N (30, 60 or 120; default 30): the catalog is built for that rate and the world runs at it.
     Tick budgets (--ticks, --max-ticks) stay ticks of that rate. The manifest commands always run at the recorded 30 Hz.
+    reference-match, ai-match and mission-run take --time-probe: counters of the time service over the first run (per-tick amounts that round to
+    zero at run time, the one-frame minimum engaging, durations off the grid), by place in the source. Diagnostics, not state.
     """;
 
 // Determinism matrix (docs/DETERMINISM.md): every command can run under another culture to show that nothing culture-dependent reaches a result.
@@ -101,6 +105,7 @@ try
         "perf-compare" => CnCNew.SimTool.PerfCompareCommand.Run(args),
         "path-bench" when args.Length >= 2 => CnCNew.SimTool.PathBench.Run(args),
         "catalog-cost" when args.Length >= 2 => CnCNew.SimTool.CatalogCost.Run(args),
+        "rate-audit" when args.Length >= 2 => CnCNew.SimTool.RateAudit.Run(args),
         _ => Fail(Usage),
     };
 }
@@ -131,6 +136,9 @@ static int UnitAudit(string directory, string[] args)
         : [..wanted.Select(name => everyone.FirstOrDefault(value => value.Faction.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) ?? throw new ArgumentException($"Unknown or unplayable faction {name}."))];
     var session = SkirmishMatchSession.Start(options, catalog, fingerprint, terrain, map.Objects, [..chosen.Select(participant => new SkirmishSlot(participant))]);
     var world = session.World;
+    // Sampled every 15 logic frames of the original and reported from two seconds on, at every tick rate (15 and 60 ticks at 30 Hz).
+    var sampleEvery = world.Time.OriginalFrames(15);
+    var reportFrom = world.Time.OriginalFrames(60);
     var insideRun = new Dictionary<uint, (long Start, string Template, string Structure)>();
     var stallRun = new Dictionary<uint, (long Start, string Template)>();
     var insideReports = new List<string>();
@@ -142,7 +150,7 @@ static int UnitAudit(string directory, string[] args)
     while (!session.IsOver)
     {
         session.Step();
-        if (world.Tick % 15 != 0 || world.Navigation is not { } grid) continue;
+        if (world.Tick % sampleEvery != 0 || world.Navigation is not { } grid) continue;
         var seenInside = new HashSet<uint>();
         var seenStalled = new HashSet<uint>();
         foreach (var entity in world.Entities)
@@ -195,13 +203,13 @@ static int UnitAudit(string directory, string[] args)
         foreach (var id in insideRun.Keys.Where(id => !seenInside.Contains(id)).ToArray())
         {
             var run = insideRun[id];
-            if (world.Tick - run.Start >= 60) insideReports.Add($"unit #{id} {run.Template} inside {run.Structure} for {world.Tick - run.Start} ticks (from {run.Start})");
+            if (world.Tick - run.Start >= reportFrom) insideReports.Add($"unit #{id} {run.Template} inside {run.Structure} for {world.Tick - run.Start} ticks (from {run.Start})");
             insideRun.Remove(id);
         }
         foreach (var id in stallRun.Keys.Where(id => !seenStalled.Contains(id)).ToArray()) stallRun.Remove(id);
     }
     foreach (var (id, run) in insideRun) insideReports.Add($"unit #{id} {run.Template} inside {run.Structure} since tick {run.Start} (still at the end, {world.Tick - run.Start} ticks)");
-    Console.WriteLine($"unit audit on {mapPath}, {world.Tick} ticks, {samples} unit samples (every 15 ticks): inside a structure footprint {insideSamples}, move order without movement {stallSamples}");
+    Console.WriteLine($"unit audit on {mapPath}, {world.Tick} ticks, {samples} unit samples (every {sampleEvery} ticks): inside a structure footprint {insideSamples}, move order without movement {stallSamples}");
     foreach (var pair in insideTemplates) Console.WriteLine($"  first seen inside: {pair.Key} x{pair.Value}");
     foreach (var line in insideReports.Take(30)) Console.WriteLine("  " + line);
     Console.WriteLine($"idle (no order, not moving) inside a structure footprint cell: {idleInside.Values.Sum()} samples");
@@ -348,7 +356,9 @@ static int ReferenceMatch(string directory, string[] args)
 
     var scenario = new ReferenceMatchScenario(options);
     watch.Restart();
+    var timeProbe = CnCNew.SimTool.TimeProbeReport.Attach(args, catalog.Rate);
     var recorded = scenario.Record(catalog, fingerprint);
+    CnCNew.SimTool.TimeProbeReport.Detach(timeProbe, catalog.Rate, recorded.Header.EndTick);
     Console.WriteLine($"Recorded {recorded.Commands.Length} commands ({scenario.ProductionOrders} production orders, {scenario.Orders} move orders, {scenario.DockOrders} dock orders, {scenario.Shots} shots) in {watch.Elapsed.TotalSeconds:F1} s; peak {scenario.PeakAlive} living objects; {scenario.StartObjectsSkipped} starting objects skipped.");
     foreach (var line in scenario.SkippedStartObjects) Console.WriteLine($"  skipped start object: {line}");
     foreach (var line in scenario.SupplyNotes) Console.WriteLine($"  supply note: {line}");
@@ -412,6 +422,7 @@ static int AiMatch(string directory, string[] args)
     var scenario = new SkirmishMatchScenario(options);
     // --trace N: every N ticks one line per player (money, structures, army, harvesters, attack waves) and the supply boxes left on the map: where a match's economy and armies go over time.
     var trace = Arg(args, "--trace") is { } every ? long.Parse(every, CultureInfo.InvariantCulture) : 0;
+    var timeProbe = CnCNew.SimTool.TimeProbeReport.Attach(args, catalog.Rate);
     var recorded = scenario.Record(catalog, fingerprint, terrain, map.Objects, chosen, trace <= 0 ? null : session =>
     {
         var world = session.World;
@@ -460,6 +471,7 @@ static int AiMatch(string directory, string[] args)
             if (session.Ais[index] is { } ai) Console.WriteLine($"      {player.Faction?.Replace("Faction", string.Empty)} AI: {ai.DescribeState()}");
         }
     });
+    CnCNew.SimTool.TimeProbeReport.Detach(timeProbe, catalog.Rate, recorded.Header.EndTick);
     Console.WriteLine($"Recorded {recorded.Commands.Length} commands over {recorded.Header.EndTick} ticks in {watch.Elapsed.TotalSeconds:F1} s; {scenario.WarehousesSpawned} map warehouses spawned.");
     foreach (var note in scenario.Notes) Console.WriteLine($"  note: {note}");
     for (var index = 0; index < scenario.Ais.Length; index++)
@@ -617,7 +629,9 @@ static int MissionRun(string directory, string[] args)
     var terrain = TerrainMap.Build(map, mapPath);
     Console.WriteLine($"Mission {mapPath} ({terrain.CellsX}x{terrain.CellsY} cells), {options.Difficulty}, definitions {fingerprint[..16]}, terrain {terrain.Fingerprint[..16]}.");
     var watch = Stopwatch.StartNew();
+    var timeProbe = CnCNew.SimTool.TimeProbeReport.Attach(args, catalog.Rate);
     var first = MissionScenario.Run(options, catalog, fingerprint, terrain, map, ticks);
+    CnCNew.SimTool.TimeProbeReport.Detach(timeProbe, catalog.Rate, first.Ticks);
     Console.WriteLine($"Run 1: {watch.Elapsed.TotalSeconds:F1} s.");
     Print(first);
     var second = MissionScenario.Run(options, catalog, fingerprint, terrain, map, ticks);
