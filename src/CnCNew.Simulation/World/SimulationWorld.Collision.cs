@@ -74,6 +74,35 @@ public sealed partial class SimulationWorld
         return result;
     }
 
+    // The bounding circle of a template (ObjectTemplate.BoundingCircleRadius: a string comparison and, for a box, a square root), computed once per template of this world and looked
+    // up by the template's index. Every circle test of a movement step reads it for both objects of a pair. The table belongs to the world and not to the template, because the
+    // catalogs are hashed field by field into the input manifest; a template is immutable, so the value cannot go stale.
+    private Fixed[] _circleRadius = new Fixed[256];
+    private bool[] _circleKnown = new bool[256];
+
+    private Fixed CircleRadius(Entity entity)
+    {
+        var index = entity.Template.Index;
+        var known = _circleKnown;
+        return (uint)index < (uint)known.Length && known[index] ? _circleRadius[index] : RememberCircleRadius(entity.Template);
+    }
+
+    private Fixed RememberCircleRadius(Templates.ObjectTemplate template)
+    {
+        var index = template.Index;
+        if (index < 0) return template.BoundingCircleRadius;
+        if (index >= _circleKnown.Length)
+        {
+            var size = Math.Max(index + 1, _circleKnown.Length * 2);
+            Array.Resize(ref _circleRadius, size);
+            Array.Resize(ref _circleKnown, size);
+        }
+        var radius = template.BoundingCircleRadius;
+        _circleRadius[index] = radius;
+        _circleKnown[index] = true;
+        return radius;
+    }
+
     // The answer of StationaryBlockersAhead, reused from call to call: the caller plans its detour at once and keeps nothing.
     private readonly List<(Fixed X, Fixed Y, Fixed Radius)> _stationaryCircles = [];
     private readonly Fixed[] _sampleX = new Fixed[4];
@@ -103,7 +132,7 @@ public sealed partial class SimulationWorld
     private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadCore(Entity mover, Fixed dx, Fixed dy)
     {
         var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
-        var moverRadius = mover.Template.BoundingCircleRadius;
+        var moverRadius = CircleRadius(mover);
         // The step is the look-ahead; the line from the mover to its end is tested at four points. They and their bounding box depend on the mover only.
         Fixed minX = Fixed.MaxValue, maxX = Fixed.MinValue, minY = Fixed.MaxValue, maxY = Fixed.MinValue;
         for (var sample = 1; sample <= 4; sample++)
@@ -127,7 +156,7 @@ public sealed partial class SimulationWorld
             var other = mobiles[index];
             if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
             if (!StandsStill(other, mover, goal)) continue;
-            var limit = moverRadius + other.Template.BoundingCircleRadius + StandingBlockerMargin;
+            var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
             if (limit.Raw >= 0 && (other.X.Raw < minX.Raw - limit.Raw - ScanSlack || other.X.Raw > maxX.Raw + limit.Raw + ScanSlack || other.Y.Raw < minY.Raw - limit.Raw - ScanSlack || other.Y.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
             for (var sample = 0; sample < 4 && !blocked; sample++)
             {
@@ -151,7 +180,7 @@ public sealed partial class SimulationWorld
             var ddx = other.X - mover.X;
             var ddy = other.Y - mover.Y;
             if (ddx * ddx + ddy * ddy > aroundSquared) continue;
-            circles.Add((other.X, other.Y, other.Template.BoundingCircleRadius + moverRadius + StandingBlockerMargin));
+            circles.Add((other.X, other.Y, CircleRadius(other) + moverRadius + StandingBlockerMargin));
         }
 
         return circles;
@@ -162,7 +191,7 @@ public sealed partial class SimulationWorld
     {
         var x = mover.X + dx;
         var y = mover.Y + dy;
-        var moverRadius = mover.Template.BoundingCircleRadius;
+        var moverRadius = CircleRadius(mover);
         var mobiles = _mobiles;
         var reach = Magnitude(moverRadius) + _widestMobile + ScanSlack;
         long nearX = x.Raw - reach, farX = x.Raw + reach, nearY = y.Raw - reach, farY = y.Raw + reach;
@@ -171,7 +200,7 @@ public sealed partial class SimulationWorld
             var other = mobiles[index];
             if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
             if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
-            var limit = moverRadius + other.Template.BoundingCircleRadius;
+            var limit = moverRadius + CircleRadius(other);
             if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
             var ddx = other.X - x;
             var ddy = other.Y - y;
@@ -248,7 +277,7 @@ public sealed partial class SimulationWorld
         if (entity.Template.Locomotor is not null)
         {
             InsertById(_mobiles, entity);
-            _widestMobile = Math.Max(_widestMobile, Magnitude(entity.Template.BoundingCircleRadius));
+            _widestMobile = Math.Max(_widestMobile, Magnitude(CircleRadius(entity)));
         }
         if (IsCrushTarget(entity)) InsertById(_crushTargets, entity);
         if (entity.CollideModules.Length == 0) return;
@@ -296,9 +325,9 @@ public sealed partial class SimulationWorld
         }
     }
 
-    private static bool FootprintsOverlap(Entity a, Entity b)
+    private bool FootprintsOverlap(Entity a, Entity b)
     {
-        var limit = a.Template.BoundingCircleRadius + b.Template.BoundingCircleRadius;
+        var limit = CircleRadius(a) + CircleRadius(b);
         if (FurtherThan(a.X, b.X, limit) || FurtherThan(a.Y, b.Y, limit)) return false;
         var dx = a.X - b.X;
         var dy = a.Y - b.Y;
@@ -333,7 +362,7 @@ public sealed partial class SimulationWorld
             if (module is SquishCollide) { squishable = true; break; }
         if (!squishable) return;
         if (RelationshipOf(other.Owner, mover.Owner) == Relationship.Allies) return;
-        var limit = mover.Template.BoundingCircleRadius + SquishVictimRadius;
+        var limit = CircleRadius(mover) + SquishVictimRadius;
         var dx = other.X - mover.X;
         var dy = other.Y - mover.Y;
         if (dx * dx + dy * dy > limit * limit) return;
