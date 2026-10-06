@@ -49,6 +49,13 @@ run.Test("Tick rate: a world refuses a catalog of another rate", Tests.TickRateW
 run.Test("Tick rate: snapshots at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateSnapshotsCarryTheirRate);
 run.Test("Tick rate: replays at 60 and 120 Hz run; 50 Hz, a catalog and a world of another rate are rejected", Tests.TickRateReplaysCarryTheirRate);
 run.Test("Tick rate: mission states at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateMissionSnapshotsCarryTheirRate);
+run.Test("Tick rate (scripts): the end-game delay is 120 frames of the original, QUICKVICTORY one step at every rate", Tests.TickRateScriptEndGameDelay);
+run.Test("Tick rate (scripts): the presentation latency is frames of the original, forwarded arguments are untouched", Tests.TickRateScriptPresentationLatency);
+run.Test("Tick rate (scenarios): the mission probe settles and waits in frames of the original", Tests.TickRateMissionProbeWaitsInGameTime);
+run.Test("Tick rate (skirmish): victory check, grace period and science points are frames of the original", Tests.TickRateSkirmishSessionRules);
+run.Test("Tick rate (skirmish): the AI thinks on the same frames of the original at every rate", Tests.TickRateSkirmishAiRhythm);
+run.Test("Tick rate (scenarios): income, production, order and victory rhythm of the reference match are frames of the original", Tests.TickRateReferenceMatchGeneratorRhythm);
+run.Test("Tick rate (scenarios): the stress schedule counts steps and is the same at every rate", Tests.TickRateStressScheduleCountsSteps);
 run.Test("Replay equality, divergence detection and continuation", Tests.ReplayRuns);
 run.Test("Stress scenario returns to baseline (short run)", Tests.ShortStress);
 run.Test("Definition insertion order does not change the simulation", Tests.DefinitionOrderIndependence);
