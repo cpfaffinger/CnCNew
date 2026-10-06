@@ -29,6 +29,10 @@ public sealed record PathResult(PathStatus Status, ImmutableArray<PathPoint> Poi
 /// clear. Search, no corner cutting and the smoothing pass are rewritten, not copied: the reference searches a zone hierarchy with
 /// per-frame cell budgets, this search is a flat A* with one fixed budget and no stochastic tie-break.
 /// </para>
+/// <para>
+/// The search keeps no state between calls that a result depends on. What it keeps (the per-cell search records, the heap, the buffers)
+/// is scratch memory of one search; none of it is part of the world state, hashed or saved (docs/PERF-MOVEMENT.md).
+/// </para>
 /// </summary>
 public sealed class NavigationGrid
 {
@@ -43,26 +47,52 @@ public sealed class NavigationGrid
     private static readonly int[] StepX = [0, 1, 0, -1, 1, 1, -1, -1];
     private static readonly int[] StepY = [-1, 0, 1, 0, -1, 1, 1, -1];
 
+    // One byte per cell: the terrain class in the two low bits (the CellFlags of the terrain, which never change), whether a footprint covers the cell, and two marks that live for one
+    // search (the escape cells of that search and the cells under its temporary blockers). Whether a search may enter a cell is one table lookup on this byte.
+    private const byte TerrainBits = (byte)(CellFlags.Cliff | CellFlags.Water);
+    private const byte ObstacleBit = 4;
+    private const byte EscapeBit = 8;
+    private const byte TemporaryBit = 16;
+    private const int CellStates = 32;
+
+    /// <summary>What one search knows about a cell; valid when <see cref="Stamp"/> is the number of the running search.</summary>
+    private struct SearchCell
+    {
+        public int Stamp;
+        public int ClosedStamp;
+        public int Cost;
+        public int Parent;
+    }
+
+    private readonly int _cellsX;
+    private readonly int _cellsY;
     private readonly ushort[] _obstacles;
-    private readonly int[] _cost;
-    private readonly int[] _parent;
-    private readonly int[] _stamp;
-    private readonly int[] _closedStamp;
+    private readonly byte[] _state;
+    private readonly SearchCell[] _search;
+    private readonly bool[] _open = new bool[CellStates];
     private int _currentStamp;
-    private readonly HashSet<int> _escape = [];
-    private readonly HashSet<int> _temporary = [];
+    private int[] _marked = new int[256];
+    private int _markedCount;
+    private int _escapeCount;
+    private int _temporaryCount;
+    private int[] _queue = new int[256];
+    private int[] _pathCells = new int[256];
+    private PathPoint[] _points = new PathPoint[32];
     private long[] _heap = new long[256];
     private int _heapCount;
 
     public NavigationGrid(TerrainMap terrain)
     {
         Terrain = terrain;
-        var cells = checked(terrain.CellsX * terrain.CellsY);
+        _cellsX = terrain.CellsX;
+        _cellsY = terrain.CellsY;
+        var cells = checked(_cellsX * _cellsY);
         _obstacles = new ushort[cells];
-        _cost = new int[cells];
-        _parent = new int[cells];
-        _stamp = new int[cells];
-        _closedStamp = new int[cells];
+        _state = new byte[cells];
+        _search = new SearchCell[cells];
+        for (var cy = 0; cy < _cellsY; cy++)
+            for (var cx = 0; cx < _cellsX; cx++)
+                _state[cy * _cellsX + cx] = (byte)((byte)terrain.CellAt(cx, cy) & TerrainBits);
     }
 
     public TerrainMap Terrain { get; }
@@ -158,7 +188,9 @@ public sealed class NavigationGrid
             {
                 if (!footprint.Contains(cx, cy)) continue;
                 var index = cy * Terrain.CellsX + cx;
-                _obstacles[index] = checked((ushort)(_obstacles[index] + delta));
+                var count = checked((ushort)(_obstacles[index] + delta));
+                _obstacles[index] = count;
+                _state[index] = count > 0 ? (byte)(_state[index] | ObstacleBit) : (byte)(_state[index] & ~ObstacleBit);
             }
     }
 
@@ -189,42 +221,73 @@ public sealed class NavigationGrid
         return SurfaceAllows(Terrain.CellAt(cx, cy), surfaces);
     }
 
-    private bool IsOpen(int cx, int cy, LocomotorSurfaces surfaces)
-        => (IsPassable(cx, cy, surfaces) && (_temporary.Count == 0 || !_temporary.Contains(cy * Terrain.CellsX + cx)))
-           || (_escape.Count > 0 && Terrain.IsInside(cx, cy) && _escape.Contains(cy * Terrain.CellsX + cx));
+    /// <summary>Priority cliff, then water, then clear: a cliff cell that is also under water is still a cliff.</summary>
+    public static bool SurfaceAllows(CellFlags flags, LocomotorSurfaces surfaces)
+    {
+        if ((flags & CellFlags.Cliff) != 0) return (surfaces & LocomotorSurfaces.Cliff) != 0;
+        if ((flags & CellFlags.Water) != 0) return (surfaces & LocomotorSurfaces.Water) != 0;
+        return (surfaces & LocomotorSurfaces.Ground) != 0;
+    }
+
+    // ------------------------------------------------------------------------------------------------------- one search
 
     /// <summary>
-    /// <see cref="FindPath(Fixed, Fixed, Fixed, Fixed, LocomotorSurfaces)"/> that also treats the cells under the given circles as blocked for this one search (units that
-    /// stand still where a mover's path leads: the static obstacle set does not know them). The cells next to the start and the goal stay open, so a mover that is
-    /// touching a blocker, or a goal beside one, is not walled in.
+    /// Fills the table that says for every cell state whether this search may enter the cell: a passable cell (the surface allows its terrain class and no footprint covers it) that is
+    /// not under a temporary blocker, or an escape cell.
     /// </summary>
-    public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks)
+    private void PrepareOpenTable(LocomotorSurfaces surfaces)
     {
-        _temporary.Clear();
-        var start = ClampedCell(startX, startY);
-        var goal = ClampedCell(goalX, goalY);
-        foreach (var (x, y, radius) in temporaryBlocks)
+        for (var state = 0; state < CellStates; state++)
         {
+            var passable = (state & ObstacleBit) == 0 && SurfaceAllows((CellFlags)(state & TerrainBits), surfaces);
+            _open[state] = (passable && (state & TemporaryBit) == 0) || (state & EscapeBit) != 0;
+        }
+    }
+
+    private bool IsOpen(int cx, int cy) => (uint)cx < (uint)_cellsX && (uint)cy < (uint)_cellsY && _open[_state[cy * _cellsX + cx]];
+
+    private void Mark(int index, byte bit)
+    {
+        if ((_state[index] & (EscapeBit | TemporaryBit)) == 0)
+        {
+            if (_markedCount == _marked.Length) Array.Resize(ref _marked, _marked.Length * 2);
+            _marked[_markedCount++] = index;
+        }
+        _state[index] |= bit;
+    }
+
+    private void ClearMarks()
+    {
+        for (var index = 0; index < _markedCount; index++) _state[_marked[index]] &= unchecked((byte)~(EscapeBit | TemporaryBit));
+        _markedCount = 0;
+        _escapeCount = 0;
+        _temporaryCount = 0;
+    }
+
+    /// <summary>The cells under the given circles, except those next to the start and the goal cell, become closed for the search that follows.</summary>
+    private void MarkTemporary(int startX, int startY, int goalX, int goalY, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks)
+    {
+        for (var block = 0; block < temporaryBlocks.Count; block++)
+        {
+            var (x, y, radius) = temporaryBlocks[block];
             var centreX = TerrainMap.CellOf(x);
             var centreY = TerrainMap.CellOf(y);
             var reach = TerrainMap.CellOf(radius) + 1;
+            var radiusSquared = radius * radius;
             for (var cy = centreY - reach; cy <= centreY + reach; cy++)
                 for (var cx = centreX - reach; cx <= centreX + reach; cx++)
                 {
-                    if (!Terrain.IsInside(cx, cy) || Math.Abs(cx - start.X) <= 1 && Math.Abs(cy - start.Y) <= 1 || Math.Abs(cx - goal.X) <= 1 && Math.Abs(cy - goal.Y) <= 1) continue;
+                    if (!Terrain.IsInside(cx, cy) || Math.Abs(cx - startX) <= 1 && Math.Abs(cy - startY) <= 1 || Math.Abs(cx - goalX) <= 1 && Math.Abs(cy - goalY) <= 1) continue;
                     var ddx = TerrainMap.CellCenter(cx) - x;
                     var ddy = TerrainMap.CellCenter(cy) - y;
-                    if (ddx * ddx + ddy * ddy <= radius * radius) _temporary.Add(cy * Terrain.CellsX + cx);
+                    if (ddx * ddx + ddy * ddy > radiusSquared) continue;
+                    var index = cy * _cellsX + cx;
+                    if ((_state[index] & TemporaryBit) != 0) continue;
+                    Mark(index, TemporaryBit);
+                    _temporaryCount++;
                 }
         }
-
-        try { return FindPath(startX, startY, goalX, goalY, surfaces); }
-        finally { _temporary.Clear(); }
     }
-
-    private int _probeExpansions;
-    private int _probePushes;
-    private int _probePathCells;
 
     /// <summary>
     /// An object that stands inside a footprint (a unit that just left a factory whose approximated footprint covers its exit), or
@@ -234,33 +297,49 @@ public sealed class NavigationGrid
     /// </summary>
     private void CollectEscapeCells(int startX, int startY, int radius, LocomotorSurfaces surfaces)
     {
-        var cellsX = Terrain.CellsX;
+        var cellsX = _cellsX;
         if (!Terrain.IsInside(startX, startY) || _obstacles[startY * cellsX + startX] == 0) return;
-        var queue = new Queue<(int X, int Y)>();
-        _escape.Add(startY * cellsX + startX);
-        queue.Enqueue((startX, startY));
-        while (queue.Count > 0)
+        var head = 0;
+        var tail = 0;
+        var first = startY * cellsX + startX;
+        if ((_state[first] & EscapeBit) == 0)
         {
-            var (x, y) = queue.Dequeue();
+            Mark(first, EscapeBit);
+            _escapeCount++;
+        }
+        Enqueue(ref tail, first);
+        while (head < tail)
+        {
+            var cell = _queue[head++];
+            var x = cell % cellsX;
+            var y = cell / cellsX;
             for (var direction = 0; direction < 8; direction++)
             {
                 var nx = x + StepX[direction];
                 var ny = y + StepY[direction];
                 if (Math.Abs(nx - startX) > radius || Math.Abs(ny - startY) > radius || !Terrain.IsInside(nx, ny)) continue;
                 var index = ny * cellsX + nx;
-                if (_obstacles[index] == 0 || !SurfaceAllows(Terrain.CellAt(nx, ny), surfaces) || !_escape.Add(index)) continue;
-                queue.Enqueue((nx, ny));
+                if (_obstacles[index] == 0 || !SurfaceAllows((CellFlags)(_state[index] & TerrainBits), surfaces) || (_state[index] & EscapeBit) != 0) continue;
+                Mark(index, EscapeBit);
+                _escapeCount++;
+                Enqueue(ref tail, index);
             }
         }
     }
 
-    /// <summary>Priority cliff, then water, then clear: a cliff cell that is also under water is still a cliff.</summary>
-    public static bool SurfaceAllows(CellFlags flags, LocomotorSurfaces surfaces)
+    private void Enqueue(ref int tail, int cell)
     {
-        if ((flags & CellFlags.Cliff) != 0) return (surfaces & LocomotorSurfaces.Cliff) != 0;
-        if ((flags & CellFlags.Water) != 0) return (surfaces & LocomotorSurfaces.Water) != 0;
-        return (surfaces & LocomotorSurfaces.Ground) != 0;
+        if (tail == _queue.Length) Array.Resize(ref _queue, _queue.Length * 2);
+        _queue[tail++] = cell;
     }
+
+    /// <summary>
+    /// <see cref="FindPath(Fixed, Fixed, Fixed, Fixed, LocomotorSurfaces)"/> that also treats the cells under the given circles as blocked for this one search (units that
+    /// stand still where a mover's path leads: the static obstacle set does not know them). The cells next to the start and the goal stay open, so a mover that is
+    /// touching a blocker, or a goal beside one, is not walled in.
+    /// </summary>
+    public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks)
+        => Run(startX, startY, goalX, goalY, surfaces, temporaryBlocks);
 
     /// <summary>
     /// A* over the eight-connected cell grid (costs 10 and 14, no corner cutting, ties broken by cell index). The start cell is
@@ -269,101 +348,148 @@ public sealed class NavigationGrid
     /// (ties: lower cost, lower index).
     /// </summary>
     public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces)
+        => Run(startX, startY, goalX, goalY, surfaces, null);
+
+    private PathResult Run(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)>? temporaryBlocks)
     {
-        if (Probe is not { } probe) return Search(startX, startY, goalX, goalY, surfaces);
-        probe.Started(MovementWork.PathSearch);
-        _probeExpansions = _probePushes = _probePathCells = 0;
-        var temporary = _temporary.Count;
-        var result = Search(startX, startY, goalX, goalY, surfaces);
-        probe.Ended(MovementWork.PathSearch);
         var start = ClampedCell(startX, startY);
         var goal = ClampedCell(goalX, goalY);
-        probe.PathSearched(new PathSearchInfo(start.Y * Terrain.CellsX + start.X, goal.Y * Terrain.CellsX + goal.X, surfaces, result.Status, _probeExpansions, _probePushes,
-            _probeExpansions == 0 && _probePushes == 0 ? 0 : _escape.Count, temporary, _probePathCells, result.Points.Length, false));
+        var startIndex = start.Y * _cellsX + start.X;
+        var goalIndex = goal.Y * _cellsX + goal.X;
+        var probe = Probe;
+        probe?.Started(MovementWork.PathSearch);
+        _probeExpansions = _probePushes = _probePathCells = 0;
+        PathResult result;
+        var escapeCells = 0;
+        var temporaryCells = 0;
+        try
+        {
+            if (temporaryBlocks is not null) MarkTemporary(start.X, start.Y, goal.X, goal.Y, temporaryBlocks);
+            temporaryCells = _temporaryCount;
+            result = Search(start.X, start.Y, goal.X, goal.Y, goalX, goalY, surfaces);
+            escapeCells = _escapeCount;
+        }
+        finally
+        {
+            ClearMarks();
+        }
+        if (probe is not null)
+        {
+            probe.Ended(MovementWork.PathSearch);
+            probe.PathSearched(new PathSearchInfo(startIndex, goalIndex, surfaces, result.Status, _probeExpansions, _probePushes, escapeCells, temporaryCells, _probePathCells, result.Points.Length, false));
+        }
         return result;
     }
 
-    private PathResult Search(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces)
+    private int _probeExpansions;
+    private int _probePushes;
+    private int _probePathCells;
+
+    private PathResult Search(int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces)
     {
-        var start = ClampedCell(startX, startY);
-        var goal = ClampedCell(goalX, goalY);
-        var cellsX = Terrain.CellsX;
-        var startIndex = start.Y * cellsX + start.X;
-        var goalIndex = goal.Y * cellsX + goal.X;
+        var cellsX = _cellsX;
+        var cellsY = _cellsY;
+        var startIndex = startCellY * cellsX + startCellX;
+        var goalIndex = goalCellY * cellsX + goalCellX;
         if (startIndex == goalIndex)
             return new PathResult(PathStatus.Found, [new PathPoint(goalX, goalY)]);
 
         if (++_currentStamp == int.MaxValue)
         {
-            Array.Clear(_stamp);
-            Array.Clear(_closedStamp);
+            Array.Clear(_search);
             _currentStamp = 1;
         }
+        var stamp = _currentStamp;
         _heapCount = 0;
-        _escape.Clear();
-        CollectEscapeCells(start.X, start.Y, EscapeRadius, surfaces);
-        CollectEscapeCells(goal.X, goal.Y, GoalEscapeRadius, surfaces);
-        _cost[startIndex] = 0;
-        _parent[startIndex] = -1;
-        _stamp[startIndex] = _currentStamp;
-        Push(Heuristic(start.X, start.Y, goal.X, goal.Y), startIndex);
+        CollectEscapeCells(startCellX, startCellY, EscapeRadius, surfaces);
+        CollectEscapeCells(goalCellX, goalCellY, GoalEscapeRadius, surfaces);
+        PrepareOpenTable(surfaces);
+        var open = _open;
+        var state = _state;
+        var search = _search;
+        ref var startCell = ref search[startIndex];
+        startCell.Cost = 0;
+        startCell.Parent = -1;
+        startCell.Stamp = stamp;
+        Push(Heuristic(startCellX, startCellY, goalCellX, goalCellY), startIndex);
 
         var best = startIndex;
-        var bestHeuristic = Heuristic(start.X, start.Y, goal.X, goal.Y);
+        var bestHeuristic = Heuristic(startCellX, startCellY, goalCellX, goalCellY);
+        var bestCost = 0;
         var reached = false;
         var expansions = 0;
+        // A cell taken from the heap a second time (it was pushed again with a lower cost before it was expanded) counts toward the budget like an expansion; it always did.
         for (; _heapCount > 0 && expansions < ExpansionBudget; expansions++)
         {
             var current = (int)(Pop() & 0xFFFFFFFFL);
-            if (_closedStamp[current] == _currentStamp) continue;
-            _closedStamp[current] = _currentStamp;
-            var cx = current % cellsX;
-            var cy = current / cellsX;
+            ref var cell = ref search[current];
+            if (cell.ClosedStamp == stamp) continue;
+            cell.ClosedStamp = stamp;
             if (current == goalIndex) { reached = true; break; }
-            var heuristic = Heuristic(cx, cy, goal.X, goal.Y);
-            if (heuristic < bestHeuristic || (heuristic == bestHeuristic && (_cost[current] < _cost[best] || (_cost[current] == _cost[best] && current < best))))
+            var cy = current / cellsX;
+            var cx = current - cy * cellsX;
+            var currentCost = cell.Cost;
+            var heuristic = Heuristic(cx, cy, goalCellX, goalCellY);
+            if (heuristic < bestHeuristic || (heuristic == bestHeuristic && (currentCost < bestCost || (currentCost == bestCost && current < best))))
             {
                 best = current;
                 bestHeuristic = heuristic;
+                bestCost = currentCost;
             }
-            for (var direction = 0; direction < 8; direction++)
-            {
-                var nx = cx + StepX[direction];
-                var ny = cy + StepY[direction];
-                if (!IsOpen(nx, ny, surfaces)) continue;
-                var diagonal = direction >= 4;
-                if (diagonal && (!IsOpen(cx + StepX[direction], cy, surfaces) || !IsOpen(cx, cy + StepY[direction], surfaces))) continue;
-                var next = ny * cellsX + nx;
-                if (_closedStamp[next] == _currentStamp) continue;
-                var cost = _cost[current] + (diagonal ? DiagonalCost : StraightCost) * (_escape.Contains(next) ? EscapePenalty : 1);
-                if (_stamp[next] == _currentStamp && _cost[next] <= cost) continue;
-                _stamp[next] = _currentStamp;
-                _cost[next] = cost;
-                _parent[next] = current;
-                Push(cost + Heuristic(nx, ny, goal.X, goal.Y), next);
-            }
+
+            // The four straight neighbours first (north, east, south, west), then the diagonals, each of which needs both straight neighbours it passes between.
+            var north = cy > 0 && open[state[current - cellsX]];
+            var east = cx < cellsX - 1 && open[state[current + 1]];
+            var south = cy < cellsY - 1 && open[state[current + cellsX]];
+            var west = cx > 0 && open[state[current - 1]];
+            if (north) Relax(search, state, stamp, current, current - cellsX, currentCost, StraightCost, cx, cy - 1, goalCellX, goalCellY);
+            if (east) Relax(search, state, stamp, current, current + 1, currentCost, StraightCost, cx + 1, cy, goalCellX, goalCellY);
+            if (south) Relax(search, state, stamp, current, current + cellsX, currentCost, StraightCost, cx, cy + 1, goalCellX, goalCellY);
+            if (west) Relax(search, state, stamp, current, current - 1, currentCost, StraightCost, cx - 1, cy, goalCellX, goalCellY);
+            if (east && north && open[state[current - cellsX + 1]]) Relax(search, state, stamp, current, current - cellsX + 1, currentCost, DiagonalCost, cx + 1, cy - 1, goalCellX, goalCellY);
+            if (east && south && open[state[current + cellsX + 1]]) Relax(search, state, stamp, current, current + cellsX + 1, currentCost, DiagonalCost, cx + 1, cy + 1, goalCellX, goalCellY);
+            if (west && south && open[state[current + cellsX - 1]]) Relax(search, state, stamp, current, current + cellsX - 1, currentCost, DiagonalCost, cx - 1, cy + 1, goalCellX, goalCellY);
+            if (west && north && open[state[current - cellsX - 1]]) Relax(search, state, stamp, current, current - cellsX - 1, currentCost, DiagonalCost, cx - 1, cy - 1, goalCellX, goalCellY);
         }
 
         _probeExpansions = expansions;
         var end = reached ? goalIndex : best;
         if (end == startIndex) return new PathResult(PathStatus.Blocked, []);
 
-        var cells = new List<int>();
-        for (var cell = end; cell >= 0; cell = _parent[cell]) cells.Add(cell);
-        cells.Reverse();
-        _probePathCells = cells.Count;
-
-        var points = ImmutableArray.CreateBuilder<PathPoint>();
-        var from = 0;
-        while (from < cells.Count - 1)
+        // The cells from the end back to the start, then walked forward: a waypoint is the last cell of the chain that a straight grid walk from the previous waypoint still reaches.
+        var count = 0;
+        for (var cell = end; cell >= 0; cell = search[cell].Parent)
         {
-            var to = from + 1;
-            while (to + 1 < cells.Count && LineClear(cells[from], cells[to + 1], surfaces)) to++;
-            points.Add(new PathPoint(TerrainMap.CellCenter(cells[to] % cellsX), TerrainMap.CellCenter(cells[to] / cellsX)));
+            if (count == _pathCells.Length) Array.Resize(ref _pathCells, _pathCells.Length * 2);
+            _pathCells[count++] = cell;
+        }
+        _probePathCells = count;
+        var cells = _pathCells;
+        var points = 0;
+        var from = count - 1;
+        while (from > 0)
+        {
+            var to = from - 1;
+            while (to > 0 && LineClear(cells[from], cells[to - 1])) to--;
+            if (points == _points.Length) Array.Resize(ref _points, _points.Length * 2);
+            _points[points++] = new PathPoint(TerrainMap.CellCenter(cells[to] % cellsX), TerrainMap.CellCenter(cells[to] / cellsX));
             from = to;
         }
-        if (reached) points[^1] = new PathPoint(goalX, goalY);
-        return new PathResult(reached ? PathStatus.Found : PathStatus.Partial, points.ToImmutable());
+        if (reached) _points[points - 1] = new PathPoint(goalX, goalY);
+        return new PathResult(reached ? PathStatus.Found : PathStatus.Partial, ImmutableArray.Create(_points, 0, points));
+    }
+
+    /// <summary>One step of the search from <paramref name="current"/> to its open neighbour <paramref name="next"/>: records the cheaper way and queues the neighbour.</summary>
+    private void Relax(SearchCell[] search, byte[] state, int stamp, int current, int next, int currentCost, int stepCost, int nx, int ny, int goalCellX, int goalCellY)
+    {
+        ref var cell = ref search[next];
+        if (cell.ClosedStamp == stamp) return;
+        var cost = currentCost + ((state[next] & EscapeBit) != 0 ? stepCost * EscapePenalty : stepCost);
+        if (cell.Stamp == stamp && cell.Cost <= cost) return;
+        cell.Stamp = stamp;
+        cell.Cost = cost;
+        cell.Parent = current;
+        Push(cost + Heuristic(nx, ny, goalCellX, goalCellY), next);
     }
 
     private (int X, int Y) ClampedCell(Fixed x, Fixed y)
@@ -377,9 +503,9 @@ public sealed class NavigationGrid
     }
 
     /// <summary>Grid walk between two cells: every visited cell must be passable and a diagonal step needs both orthogonal neighbours.</summary>
-    private bool LineClear(int fromIndex, int toIndex, LocomotorSurfaces surfaces)
+    private bool LineClear(int fromIndex, int toIndex)
     {
-        var cellsX = Terrain.CellsX;
+        var cellsX = _cellsX;
         int x = fromIndex % cellsX, y = fromIndex / cellsX;
         int x1 = toIndex % cellsX, y1 = toIndex / cellsX;
         var dx = Math.Abs(x1 - x);
@@ -394,14 +520,14 @@ public sealed class NavigationGrid
             var stepY = doubled < dx;
             if (stepX && stepY)
             {
-                if (!IsOpen(x + sx, y, surfaces) || !IsOpen(x, y + sy, surfaces)) return false;
+                if (!IsOpen(x + sx, y) || !IsOpen(x, y + sy)) return false;
                 error += dx - dy;
                 x += sx;
                 y += sy;
             }
             else if (stepX) { error -= dy; x += sx; }
             else { error += dx; y += sy; }
-            if (!IsOpen(x, y, surfaces)) return false;
+            if (!IsOpen(x, y)) return false;
         }
         return true;
     }
@@ -411,35 +537,38 @@ public sealed class NavigationGrid
     {
         if (_heapCount == _heap.Length) Array.Resize(ref _heap, _heap.Length * 2);
         _probePushes++;
+        var heap = _heap;
         var key = ((long)cost << 32) | (uint)index;
         var child = _heapCount++;
         while (child > 0)
         {
             var parent = (child - 1) >> 1;
-            if (_heap[parent] <= key) break;
-            _heap[child] = _heap[parent];
+            if (heap[parent] <= key) break;
+            heap[child] = heap[parent];
             child = parent;
         }
-        _heap[child] = key;
+        heap[child] = key;
     }
 
     private long Pop()
     {
-        var top = _heap[0];
-        var last = _heap[--_heapCount];
-        if (_heapCount > 0)
+        var heap = _heap;
+        var top = heap[0];
+        var count = --_heapCount;
+        var last = heap[count];
+        if (count > 0)
         {
             var parent = 0;
             while (true)
             {
                 var child = 2 * parent + 1;
-                if (child >= _heapCount) break;
-                if (child + 1 < _heapCount && _heap[child + 1] < _heap[child]) child++;
-                if (_heap[child] >= last) break;
-                _heap[parent] = _heap[child];
+                if (child >= count) break;
+                if (child + 1 < count && heap[child + 1] < heap[child]) child++;
+                if (heap[child] >= last) break;
+                heap[parent] = heap[child];
                 parent = child;
             }
-            _heap[parent] = last;
+            heap[parent] = last;
         }
         return top;
     }
