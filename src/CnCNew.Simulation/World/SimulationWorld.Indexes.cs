@@ -59,10 +59,10 @@ public sealed class EntityList
 }
 
 /// <summary>
-/// Views of the entity table that replace scans over all entities: the entities of one owner and the entities of one kind, each in ascending id order.
-/// They are caches of what the table says, not state: neither hashed nor saved, built by one pass over the table when first asked for (so a world that never
-/// asks pays nothing, and a restored world builds the same lists from the same table) and kept exact afterwards at the three places where the answer can
-/// change - an entity is registered, removed, or changes its owner.
+/// Views of the entity table that replace scans over all entities: the entities of one owner, of one kind, or with a module of one type, each in ascending
+/// id order. They are caches of what the table says, not state: neither hashed nor saved, built by one pass over the table when first asked for (so a world
+/// that never asks pays nothing, and a restored world builds the same lists from the same table) and kept exact afterwards at the three places where the
+/// answer can change - an entity is registered, removed, or changes its owner (kinds and modules of an entity never change).
 /// </summary>
 public sealed partial class SimulationWorld
 {
@@ -70,6 +70,7 @@ public sealed partial class SimulationWorld
 
     private Dictionary<int, EntityList>? _byOwner;
     private readonly Dictionary<string, EntityList> _byKind = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<Type, (EntityList List, Func<Entity, bool> Has)> _byModule = [];
 
     /// <summary>
     /// The registered entities whose <see cref="Entity.Owner"/> is <paramref name="owner"/>, in ascending id order: exactly the entities a scan over
@@ -101,6 +102,27 @@ public sealed partial class SimulationWorld
         return list;
     }
 
+    /// <summary>
+    /// The registered entities that have a module which is a <typeparamref name="TModule"/> (a module class or an interface modules implement), in ascending
+    /// id order: exactly what a scan over <see cref="Entities"/> with that test visits. The modules of an entity are fixed when it is built.
+    /// </summary>
+    public EntityList EntitiesWithModule<TModule>() where TModule : class
+    {
+        if (_byModule.TryGetValue(typeof(TModule), out var entry)) return entry.List;
+        var list = new EntityList();
+        foreach (var entity in _entities.Values)
+            if (HasModule<TModule>(entity)) list.Insert(entity);
+        _byModule.Add(typeof(TModule), (list, HasModule<TModule>));
+        return list;
+    }
+
+    private static bool HasModule<TModule>(Entity entity) where TModule : class
+    {
+        foreach (var module in entity.ModuleArray)
+            if (module is TModule) return true;
+        return false;
+    }
+
     private static EntityList OwnerList(Dictionary<int, EntityList> index, PlayerId owner)
     {
         if (!index.TryGetValue(owner.Value, out var list)) index.Add(owner.Value, list = new EntityList());
@@ -113,6 +135,8 @@ public sealed partial class SimulationWorld
         if (_byOwner is { } index) OwnerList(index, entity.Owner).Insert(entity);
         foreach (var (kind, list) in _byKind)
             if (entity.Template.IsKindOf(kind)) list.Insert(entity);
+        foreach (var (list, has) in _byModule.Values)
+            if (has(entity)) list.Insert(entity);
     }
 
     /// <summary>Called where an entity leaves the table (<c>ProcessDestroys</c>).</summary>
@@ -121,6 +145,8 @@ public sealed partial class SimulationWorld
         if (_byOwner is { } index) OwnerList(index, entity.Owner).Remove(entity);
         foreach (var (kind, list) in _byKind)
             if (entity.Template.IsKindOf(kind)) list.Remove(entity);
+        foreach (var (list, has) in _byModule.Values)
+            if (has(entity)) list.Remove(entity);
     }
 
     /// <summary>The one place that assigns <see cref="Entity.Owner"/> of a registered entity, so that the owner lists follow.</summary>

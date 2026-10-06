@@ -46,6 +46,9 @@ public interface IWorldServices
     /// <summary>The entities of one owner, in ascending id order: what a scan over <see cref="Entities"/> with <c>Owner == owner</c> visits.</summary>
     EntityList EntitiesOwnedBy(PlayerId owner);
 
+    /// <summary>The entities with a module that is a <typeparamref name="TModule"/>, in ascending id order: what a scan over <see cref="Entities"/> with that test visits.</summary>
+    EntityList EntitiesWithModule<TModule>() where TModule : class;
+
     /// <summary>What the world was created with; <see cref="WorldConfiguration.Players"/> are all players there are besides the system player.</summary>
     WorldConfiguration Configuration { get; }
     void Emit(SimEventKind kind, EntityId entity, EntityId other, string text, long value);
