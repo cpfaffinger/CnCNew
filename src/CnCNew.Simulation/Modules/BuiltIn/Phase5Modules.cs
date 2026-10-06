@@ -156,7 +156,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         }
         else if (!Entity.HasStatus(StealthedBit))
         {
-            if (_readyTick == long.MaxValue) _readyTick = world.Tick + Math.Max(data.StealthDelayTicks, SimulationTiming.SleepNone);
+            if (_readyTick == long.MaxValue) _readyTick = world.Tick + Math.Max(data.StealthDelayTicks, world.Time.TicksPerOriginalFrame);
             if (world.Tick >= _readyTick) Entity.Status |= 1UL << StealthedBit;
         }
         return SimulationTiming.SleepNone;
@@ -254,13 +254,13 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     public override void OnSpawn(IWorldServices world)
     {
         _active = data.StartsActive;
-        _nextWake = _active ? Math.Min(world.Tick + Math.Max(data.StartHealingDelayTicks, SimulationTiming.SleepNone), SimulationTiming.SleepForever) : SimulationTiming.SleepForever;
+        _nextWake = _active ? Math.Min(world.Tick + Math.Max(data.StartHealingDelayTicks, world.Time.TicksPerOriginalFrame), SimulationTiming.SleepForever) : SimulationTiming.SleepForever;
     }
 
     public void TryActivate(IWorldServices world, UpgradeMask keyMask)
     {
         if (!_mux.AttemptUpgrade(world, Entity, keyMask, _ => _active = true)) return;
-        world.WakeAt(Entity, this, world.Tick + Math.Max(data.StartHealingDelayTicks, SimulationTiming.SleepNone));
+        world.WakeAt(Entity, this, world.Tick + Math.Max(data.StartHealingDelayTicks, world.Time.TicksPerOriginalFrame));
     }
 
     public bool WouldUpgrade(UpgradeMask keyMask) => _mux.WouldUpgrade(keyMask);
@@ -283,7 +283,8 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         foreach (var candidate in world.Entities)
             if (Matches(candidate)) world.Damage(candidate.Id, new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false));
         if (data.SingleBurst) { _active = false; return SimulationTiming.SleepForever; }
-        return Math.Max(data.HealingDelayTicks, SimulationTiming.SleepNone);
+        // A missing or zero HealingDelay heals once per logic frame of the original, at every rate.
+        return Math.Max(data.HealingDelayTicks, world.Time.TicksPerOriginalFrame);
     }
 
     private bool Matches(Entity candidate)
@@ -533,7 +534,7 @@ public sealed record AIUpdateData(AutoAcquire AutoAcquire, Fixed RepairRatePerSe
     public static AIUpdateData Parse(RatedModuleConfiguration configuration) => new(
         ParseAutoAcquire(configuration),
         ModuleConfigReader.Real(configuration, "RepairHealthPercentPerSecond", Fixed.Zero),
-        Math.Max(1, ModuleConfigReader.Ticks(configuration, "MoodAttackCheckRate", DefaultMoodCheckFrames)));
+        Math.Max(configuration.Time.TicksPerOriginalFrame, ModuleConfigReader.Ticks(configuration, "MoodAttackCheckRate", DefaultMoodCheckFrames)));
 
     private static AutoAcquire ParseAutoAcquire(RatedModuleConfiguration configuration)
     {
@@ -1105,11 +1106,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             ? Fixed.Min(goalSpeed, Entity.Speed + locomotor.Acceleration)
             : Fixed.Max(goalSpeed, Entity.Speed - locomotor.Braking);
         // Standing units on the way (a dozer at work, a halted group) are unknown to the static path: plan once around them instead of rubbing along them while the local avoidance
-        // below shoves the step aside (docs/DEMO-FINDINGS.md #12). At most once per 30 ticks; a plan that no longer reaches the goal is dropped and the old path kept.
-        if (!air && world.Tick - _blockerReplanTick >= 30 && Entity.Speed > Fixed.Zero)
+        // below shoves the step aside (docs/DEMO-FINDINGS.md #12). At most once per second; a plan that no longer reaches the goal is dropped and the old path kept.
+        if (_blockerReplanInterval == 0) ResolveBlockerTiming(world.Time);
+        if (!air && world.Tick - _blockerReplanTick >= _blockerReplanInterval && Entity.Speed > Fixed.Zero)
         {
-            // Look-ahead: about 25 ticks of travel (a walking infantry sees 17 units, a fast vehicle 60).
-            var ahead = world.StationaryBlockersAhead(Entity, FixedTrig.Cos(Entity.Angle) * Entity.Speed * Fixed.FromInt(25), FixedTrig.Sin(Entity.Angle) * Entity.Speed * Fixed.FromInt(25));
+            // Look-ahead: the travel of about 25 logic frames of the original (a walking infantry sees 17 units, a fast vehicle 60).
+            var ahead = world.StationaryBlockersAhead(Entity, FixedTrig.Cos(Entity.Angle) * Entity.Speed * _blockerLookAhead, FixedTrig.Sin(Entity.Angle) * Entity.Speed * _blockerLookAhead);
             if (ahead.Count > 0) ReplanAround(navigation, locomotor, ahead, world.Tick);
         }
 
@@ -1182,7 +1184,24 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         Entity.Y += FixedTrig.Sin(Entity.Angle) * speed;
     }
 
+    /// <summary>Own rhythm: a replan around standing units at most once per 30 logic frames of the original (one second).</summary>
+    private const long BlockerReplanFrames = SimulationRate.OriginalFramesPerSecond;
+
+    /// <summary>Own value: the look-ahead for standing units is the travel of 25 logic frames of the original (the speed is per tick).</summary>
+    private const long BlockerLookAheadFrames = 25;
+
+    /// <summary>"Never replanned": further back than any replan interval. A sentinel (also the snapshot's default), not a time.</summary>
     private long _blockerReplanTick = -1000;
+
+    // Both in ticks of the world's rate, resolved once on the first move (a module is created and restored without a world); derived, not state.
+    private long _blockerReplanInterval;
+    private Fixed _blockerLookAhead;
+
+    private void ResolveBlockerTiming(SimulationTime time)
+    {
+        _blockerReplanInterval = time.OriginalFrames(BlockerReplanFrames);
+        _blockerLookAhead = Fixed.FromInt(time.OriginalFrames(BlockerLookAheadFrames));
+    }
 
     private void ReplanAround(NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)
     {
@@ -1475,7 +1494,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         if (remaining <= 0 && exit is not null && !exit.IsFreeToExitFor(world.Templates[head.TemplateIndex]))
         {
             // The door is closed (QueueProductionExitUpdate delay): the finished unit waits at the head of the queue.
-            _queue[0] = head with { RemainingTicks = 1 };
+            _queue[0] = head with { RemainingTicks = TickOrder.Next };
         }
         else if (remaining <= 0)
         {

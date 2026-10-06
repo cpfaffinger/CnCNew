@@ -151,7 +151,8 @@ public sealed class FireWeaponWhenDamagedBehavior(FireWeaponWhenDamagedData data
     {
         var name = weapons[state];
         if (name.Length == 0 || world.Tick < ready[state] || !world.Weapons.TryGet(name, out var weapon)) return;
-        ready[state] = world.Tick + Math.Max(weapon.DelayBetweenShotsTicks, SimulationTiming.SleepNone);
+        // A weapon without a delay fires once per logic frame of the original, at every rate.
+        ready[state] = world.Tick + Math.Max(weapon.DelayBetweenShotsTicks, world.Time.TicksPerOriginalFrame);
         world.FireWeaponAt(Entity, weapon, null, Entity.X, Entity.Y, Entity.Z);
     }
 
@@ -227,7 +228,8 @@ public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModu
         else if (_target.Kind == SpecialPowerTargetKind.Location) (x, y) = (_target.X, _target.Y);
         if (!world.FireCurrentWeaponAtPosition(Entity, x, y, z, victim)) return StopShooting();
         _shotsLeft--;
-        return _shotsLeft <= 0 ? SimulationTiming.SleepForever : Math.Max(weapon.DelayBetweenShotsTicks, SimulationTiming.SleepNone);
+        // At least one logic frame of the original between two shots, at every rate.
+        return _shotsLeft <= 0 ? SimulationTiming.SleepForever : Math.Max(weapon.DelayBetweenShotsTicks, world.Time.TicksPerOriginalFrame);
     }
 
     private long StopShooting()
@@ -334,14 +336,16 @@ public sealed class HordeUpdate(HordeData data) : SimModule, IUpdateModule
     public override void OnSpawn(IWorldServices world)
     {
         _lastRefresh = world.Tick;
-        _nextWake = world.Tick + world.LogicRandom.Range(1, (int)Math.Max(1, data.UpdateRateTicks));
+        // The stagger is drawn in logic frames of the original (GameLogicRandomValue(1, delay)) and then scaled, so the drawn value stays on the 30 Hz grid.
+        _nextWake = world.Tick + world.Time.OriginalFrames(world.LogicRandom.Range(1, (int)Math.Max(1, world.Time.ToOriginalFrames(data.UpdateRateTicks))));
     }
 
     public long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         var infantry = Entity.Template.IsKindOf("INFANTRY");
-        if (infantry || world.Tick > _lastRefresh + data.UpdateRateTicks)
+        // "getFrame() > m_lastHordeRefreshFrame + m_updateRate": the first frame of the original after the rate has passed (a period of rate + 1 frames).
+        if (infantry || world.Tick >= _lastRefresh + data.UpdateRateTicks + world.Time.TicksPerOriginalFrame)
         {
             _lastRefresh = world.Tick;
             Evaluate(world);
