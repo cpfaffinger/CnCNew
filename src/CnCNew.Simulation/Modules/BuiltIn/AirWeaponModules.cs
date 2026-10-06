@@ -318,6 +318,9 @@ public sealed record BunkerBusterData(string UpgradeRequired, string DetonationF
 /// </summary>
 public sealed class BunkerBusterBehavior(BunkerBusterData data) : SimModule, IUpdateModule, IDieModule
 {
+    /// <summary>The remainder the effect fires on (<c>getFrame() % frequency == 1</c>), in logic frames of the original.</summary>
+    private const long CrashFxPhaseFrames = 1;
+
     private long _nextWake = -1;
     private EntityId _victim;
 
@@ -331,7 +334,8 @@ public sealed class BunkerBusterBehavior(BunkerBusterData data) : SimModule, IUp
         var missile = Entity.ModuleArray.OfType<MissileAIUpdate>().FirstOrDefault();
         if (missile is null) return SimulationTiming.SleepNone; // only a smart bomb (one with an AI) picks up a victim and digs in
         if (!_victim.IsValid && missile.Victim.IsValid) _victim = missile.Victim;
-        if (data.CrashFxFrequencyTicks > 0 && world.Tick % data.CrashFxFrequencyTicks == 1 && missile.IsKillingSelf && data.CrashFx.Length > 0)
+        // BunkerBusterBehavior.cpp, update: getFrame() % m_crashThroughBunkerFXFrequency == 1 – period (data) and phase (one frame) both scale.
+        if (data.CrashFxFrequencyTicks > 0 && world.Tick % data.CrashFxFrequencyTicks == world.Time.OriginalFrames(CrashFxPhaseFrames) && missile.IsKillingSelf && data.CrashFx.Length > 0)
             world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.CrashFx, 0, Entity.X, Entity.Y, Entity.Z);
         return SimulationTiming.SleepNone;
     }
@@ -736,9 +740,11 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
     public void BeginSlowDeath(IWorldServices world)
     {
         _activated = true;
-        _ = data.Base.SinkDelayTicks + world.LogicRandom.Range(0, checked((int)data.Base.SinkDelayVarianceTicks));
-        var destruction = data.Base.DestructionDelayTicks + world.LogicRandom.Range(0, checked((int)data.Base.DestructionDelayVarianceTicks));
-        _destructionTick = world.Tick + Math.Max(destruction, SimulationTiming.SleepNone);
+        // SlowDeathBehavior.cpp, SlowDeathBehavior::beginSlowDeath: GameLogicRandomValue(0, m_sinkDelayVariance) / (0, m_destructionDelayVariance) –
+        // both drawn in frames of the original, then scaled; the destruction is at least one frame away.
+        _ = data.Base.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.SinkDelayVarianceTicks);
+        var destruction = data.Base.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.DestructionDelayVarianceTicks);
+        _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 
@@ -751,11 +757,14 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
             _activationTick = world.Tick;
             if (data.GroundFx.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.GroundFx, 0, Entity.X, Entity.Y, world.GroundHeightAt(Entity.X, Entity.Y));
         }
+        // The reference compares whole elapsed frames with the unrounded delay (currFrame - m_activationFrame > delay): the elapsed time is taken in
+        // whole frames of the original, so a stage goes off on the same frame boundary at every rate.
+        var elapsed = Fixed.FromInt(world.Time.Floor(world.Tick - _activationTick));
         for (var stage = 0; stage < data.Blasts.Length; stage++)
         {
             var blast = data.Blasts[stage];
             if (!blast.Enabled || _completedBlasts[stage]) continue;
-            if (Fixed.FromInt(world.Tick - _activationTick) > blast.DelayTicks)
+            if (elapsed > blast.DelayTicks)
             {
                 DoBlast(world, blast);
                 _completedBlasts[stage] = true;
@@ -891,7 +900,7 @@ public sealed class MissileLauncherBuildingUpdate(MissileLauncherData data) : Si
                 break;
             case DoorState.Opening:
                 // "we want this to be done BEFORE the power is ready, so end it one frame ahead".
-                _timeoutTick = SpecialPowerRouting.FindModule(Entity, _power) is SpecialPowerModuleBase opening ? opening.AvailableOnFrame(world) - 1 : 0;
+                _timeoutTick = SpecialPowerRouting.FindModule(Entity, _power) is SpecialPowerModuleBase opening ? opening.AvailableOnFrame(world) - TickOrder.Next : 0;
                 _timeoutState = DoorState.Open;
                 fx = data.OpeningFx;
                 break;
@@ -909,7 +918,8 @@ public sealed class MissileLauncherBuildingUpdate(MissileLauncherData data) : Si
                 _timeoutTick = now + data.DoorCloseTicks;
                 if (SpecialPowerRouting.FindModule(Entity, _power) is SpecialPowerModuleBase closing)
                 {
-                    var half = (closing.AvailableOnFrame(world) - now) / 2;
+                    // Halved in frames of the original (the reference halves a frame count), then scaled.
+                    var half = world.Time.OriginalFrames(world.Time.ToOriginalFrames(closing.AvailableOnFrame(world) - now) / 2);
                     if (_timeoutTick > now + half) _timeoutTick = now + half;
                 }
                 _timeoutState = DoorState.Closed;
@@ -955,7 +965,7 @@ public sealed record SpectreData(string PowerName, string GattlingTemplate, stri
         SpecialPowerModules.RequiredPower(configuration),
         ModuleConfigReader.Text(configuration, "GattlingTemplateName"),
         ModuleConfigReader.Text(configuration, "HowitzerWeaponTemplate"),
-        Math.Max(ModuleConfigReader.Ticks(configuration, "HowitzerFiringRate", 10), 1),
+        configuration.Time.AtLeastOneFrame(ModuleConfigReader.Ticks(configuration, "HowitzerFiringRate", 10)),
         ModuleConfigReader.Ticks(configuration, "OrbitTime", 0),
         ModuleConfigReader.Ticks(configuration, "HowitzerFollowLag", 0),
         ModuleConfigReader.Real(configuration, "AttackAreaRadius", Fixed.FromInt(200)),
@@ -989,6 +999,9 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
     private static readonly Fixed OrbitSlopeMax = Fixed.FromDecimal(0.8m);
     private static readonly Fixed OrbitSlopeMin = Fixed.FromDecimal(0.5m);
     private static readonly Fixed FairDistanceShare = Fixed.FromDecimal(0.75m);
+
+    /// <summary>Own value: "the gattling is firing" (the reference's <c>OBJECT_STATUS_IS_FIRING_WEAPON</c>) means its last shot is at most two logic frames of the original old.</summary>
+    private const long GattlingFiringWindowFrames = 2;
 
     private long _nextWake = SimulationTiming.SleepForever;
     private int _power = -1;
@@ -1174,7 +1187,7 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
             var victim = world.FindEntity(_currentVictim);
             if (victim is not null && !victim.EffectivelyDead) FireGattling(world, gattling, victim, victim.X, victim.Y, victim.Z);
             else FireGattling(world, gattling, null, _gattlingTarget.X, _gattlingTarget.Y, _gattlingTarget.Z);
-            if (data.Strafes && world.Tick - gattling.LastFireTick <= 2 && gattling.LastFireTick >= 0) Strafe();
+            if (data.Strafes && world.Tick - gattling.LastFireTick <= world.Time.OriginalFrames(GattlingFiringWindowFrames) && gattling.LastFireTick >= 0) Strafe();
         }
     }
 

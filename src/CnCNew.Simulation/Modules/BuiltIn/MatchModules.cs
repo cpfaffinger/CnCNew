@@ -42,7 +42,8 @@ public sealed record NoFieldsData : ModuleData
 /// </summary>
 public sealed class BaseRegenerateUpdate : SimModule, IUpdateModule, IDamageModule
 {
-    private const int HealRate = 3;
+    /// <summary><c>BaseRenerateUpdate.cpp</c>, <c>BaseRegenerateUpdate::update</c>: <c>const Int HEAL_RATE = 3</c> – both the sleep and the factor of the amount, in logic frames of the original.</summary>
+    private const int HealRateFrames = 3;
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
     private long _nextWake = -1;
 
@@ -66,9 +67,11 @@ public sealed class BaseRegenerateUpdate : SimModule, IUpdateModule, IDamageModu
         if (Entity.HasStatus(SoldBit)) return SimulationTiming.SleepForever;
         var body = Entity.Body;
         if (body is null || body.MaxHealth == body.Health) return SimulationTiming.SleepForever;
-        var amount = body.MaxHealth * world.BaseRegenHealthPercentPerSecond * Fixed.FromInt(HealRate) / world.Time.TicksPerSecondFixed;
+        // Sleep and factor go through the same scaled value: a burst every three frames of the original with that many ticks' worth of healing.
+        var healRate = world.Time.OriginalFrames(HealRateFrames);
+        var amount = body.MaxHealth * world.BaseRegenHealthPercentPerSecond * Fixed.FromInt(healRate) / world.Time.TicksPerSecondFixed;
         world.Damage(Entity.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
-        return HealRate;
+        return healRate;
     }
 
     public override void Describe(IStateWriter writer) => writer.Int("nextWake", _nextWake);
