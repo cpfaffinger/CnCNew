@@ -19,7 +19,7 @@ public sealed class VisionCounters
     public long Circles;
     /// <summary>Cell bytes <see cref="VisionMap.Reveal"/> wrote (the cells inside the circles; a cell under several circles counts once per circle).</summary>
     public long CellsRevealed;
-    /// <summary>Tests of a cell against the radius in <see cref="VisionMap.Reveal"/>: the reference mode tests every cell of the bounding box, the run walk about five per row plus the steps its two ends move.</summary>
+    /// <summary>Tests of a cell against the radius in <see cref="VisionMap.Reveal"/>: the reference mode tests every cell of the bounding box, the run walk two per row plus the steps its two ends move.</summary>
     public long CellsTested;
     /// <summary>Calls of <see cref="VisionMap.CurrentHash"/>.</summary>
     public long HashCalls;
@@ -36,9 +36,10 @@ public sealed class VisionCounters
 /// looking object of the player or its allies covers its centre, and <em>explored</em> once it has been visible. Circular, no height
 /// line of sight — <c>Object::look</c> only adds a radius. One byte per cell and player (bit 0 visible, bit 1 explored, bit 2 permanently revealed by a script; a snapshot that never used a map-reveal script contains only bits 0 and 1).
 /// <para>
-/// The cell bytes and <see cref="Hash"/> define the result. Everything else in this class is bookkeeping for <see cref="CurrentHash"/>: the rows
-/// touched since the last hash, a copy of the cells as they were hashed and the chain values at fixed distances, so the chain resumes at the
-/// first byte that really changed. None of it is state: it is rebuilt from the cells, never hashed, never saved.
+/// The cell bytes and <see cref="Hash"/> define the result. Everything else in this class is bookkeeping that makes a refresh cost what is in
+/// sight instead of the map area: the row extents <see cref="Reveal"/> wrote (so <see cref="BeginRefresh"/> clears only those), the rows touched
+/// since the last hash, a copy of the cells as they were hashed and the chain values at fixed distances (so <see cref="CurrentHash"/> resumes the
+/// chain at the first byte that really changed). None of it is state: it is rebuilt from the cells, never hashed, never saved.
 /// </para>
 /// </summary>
 public sealed class VisionMap
@@ -49,6 +50,8 @@ public sealed class VisionMap
     /// <summary>The cell is revealed for good (<c>revealMapForPlayerPermanently</c>): <see cref="BeginRefresh"/> keeps it visible and explored. Always set together with both other bits.</summary>
     private const byte PermanentBit = 4;
 
+    private const ulong Ones = 0x0101010101010101UL;
+    private const ulong VisibleAndExploredWord = (VisibleBit | ExploredBit) * Ones;
 
     /// <summary>A chain value is kept before every this many hash words (64 words = 512 cell bytes).</summary>
     private const int CheckpointShift = 6;
@@ -61,6 +64,10 @@ public sealed class VisionMap
     private readonly ulong[][] _checkpoints;  // chain value before hash word (index << CheckpointShift) of the slot
     private readonly int[] _touchedLow;       // rows written since the last CurrentHash, per slot; low > high when none
     private readonly int[] _touchedHigh;
+    private readonly int[][] _revealMinX;     // per slot and row: the columns Reveal (or Load) may have left visible without the permanent mark
+    private readonly int[][] _revealMaxX;
+    private readonly int[] _revealLow;        // rows with a non-empty extent, per slot; low > high when none
+    private readonly int[] _revealHigh;
     private ulong _hash;
 
     public VisionMap(int cellsX, int cellsY, int playerSlots)
@@ -73,14 +80,24 @@ public sealed class VisionMap
         _checkpoints = new ulong[playerSlots][];
         _touchedLow = new int[playerSlots];
         _touchedHigh = new int[playerSlots];
+        _revealMinX = new int[playerSlots][];
+        _revealMaxX = new int[playerSlots][];
+        _revealLow = new int[playerSlots];
+        _revealHigh = new int[playerSlots];
         var hash = StateHash.Seed;
         for (var slot = 0; slot < playerSlots; slot++)
         {
             _cells[slot] = new byte[length];
             _hashed[slot] = new byte[length];
             _checkpoints[slot] = new ulong[((length >> 3) >> CheckpointShift) + 1];
+            _revealMinX[slot] = new int[cellsY];
+            _revealMaxX[slot] = new int[cellsY];
+            Array.Fill(_revealMinX[slot], int.MaxValue);
+            Array.Fill(_revealMaxX[slot], -1);
             _touchedLow[slot] = int.MaxValue;
             _touchedHigh[slot] = -1;
+            _revealLow[slot] = int.MaxValue;
+            _revealHigh[slot] = -1;
             hash = MixSlot(slot, 0, hash);
         }
         _hash = hash;
@@ -94,8 +111,9 @@ public sealed class VisionMap
     public VisionCounters Counters { get; } = new();
 
     /// <summary>
-    /// A hook for tests and measuring tools, not state: while set, <see cref="CurrentHash"/> runs the full pass (<see cref="Hash"/>) on every
-    /// call. The value is the same in both modes; only the work differs. May be switched at any time.
+    /// A hook for tests and measuring tools, not state: while set, <see cref="BeginRefresh"/>, <see cref="Reveal"/> and <see cref="CurrentHash"/> run
+    /// the original computation over every cell (<see cref="BeginRefreshReference"/>, <see cref="RevealReference"/>, <see cref="Hash"/>). The cell
+    /// bytes and the hash value are the same in both modes; only the work differs. May be switched at any time.
     /// </summary>
     public bool ReferenceMode { get; set; }
 
@@ -120,10 +138,70 @@ public sealed class VisionMap
 
     private void TouchAll(int slot) => Touch(slot, 0, CellsY - 1);
 
-    /// <summary>Forgets what is currently visible; exploration stays.</summary>
-    public void BeginRefresh() => BeginRefreshReference();
+    /// <summary>Any cell of the slot may be visible without the permanent mark from now on (after a load or a reference reveal).</summary>
+    private void ExtendRevealToAll(int slot)
+    {
+        if (CellsX == 0 || CellsY == 0) return;
+        Array.Fill(_revealMinX[slot], 0);
+        Array.Fill(_revealMaxX[slot], CellsX - 1);
+        _revealLow[slot] = 0;
+        _revealHigh[slot] = CellsY - 1;
+    }
 
-    /// <summary>The refresh start over every cell of every slot.</summary>
+    /// <summary>
+    /// Forgets what is currently visible; exploration stays. The same bytes as <see cref="BeginRefreshReference"/>, which goes over every cell:
+    /// that pass changes a cell only if it is visible without the permanent mark (a permanent cell always holds all three bits), and such cells
+    /// exist only where <see cref="Reveal"/> wrote since the last refresh or where <see cref="Load"/> put them — the recorded row extents.
+    /// </summary>
+    public void BeginRefresh()
+    {
+        if (ReferenceMode)
+        {
+            BeginRefreshReference();
+            return;
+        }
+        Counters.Refreshes++;
+        for (var slot = 0; slot < _cells.Length; slot++)
+        {
+            var low = _revealLow[slot];
+            var high = _revealHigh[slot];
+            if (low > high) continue;
+            var cells = _cells[slot];
+            var minX = _revealMinX[slot];
+            var maxX = _revealMaxX[slot];
+            for (var row = low; row <= high; row++)
+            {
+                var from = minX[row];
+                var to = maxX[row];
+                if (from > to) continue;
+                ForgetVisible(cells.AsSpan(row * CellsX + from, to - from + 1));
+                Counters.CellsCleared += to - from + 1;
+                minX[row] = int.MaxValue;
+                maxX[row] = -1;
+            }
+            Touch(slot, low, high);
+            _revealLow[slot] = int.MaxValue;
+            _revealHigh[slot] = -1;
+        }
+    }
+
+    /// <summary>The cell rule of <see cref="BeginRefreshReference"/> for every byte value, eight cells at a time.</summary>
+    private static void ForgetVisible(Span<byte> cells)
+    {
+        var words = MemoryMarshal.Cast<byte, ulong>(cells);
+        for (var index = 0; index < words.Length; index++)
+        {
+            var word = words[index];
+            // Per byte: 0xFF where the permanent bit is set, else 0 (a byte-wise rule, so the byte order of the word does not matter).
+            var permanent = (word >> 2) & Ones;
+            permanent = (permanent << 8) - permanent;
+            words[index] = (word & ~Ones & ~permanent) | (permanent & ((VisibleBit | ExploredBit | PermanentBit) * Ones));
+        }
+        for (var index = words.Length * 8; index < cells.Length; index++)
+            cells[index] = (cells[index] & PermanentBit) != 0 ? unchecked((byte)(VisibleBit | ExploredBit | PermanentBit)) : (byte)(cells[index] & ~VisibleBit);
+    }
+
+    /// <summary>The original refresh start over every cell of every slot: the oracle for <see cref="BeginRefresh"/>.</summary>
     public void BeginRefreshReference()
     {
         Counters.Refreshes++;
@@ -201,10 +279,97 @@ public sealed class VisionMap
         }
     }
 
-    /// <summary>Marks every cell whose centre lies within <paramref name="radius"/> of the point as visible and explored for the slot.</summary>
-    public void Reveal(int slot, Fixed x, Fixed y, Fixed radius) => RevealReference(slot, x, y, radius);
+    /// <summary>
+    /// Marks every cell whose centre lies within <paramref name="radius"/> of the point as visible and explored for the slot. The same cells as
+    /// <see cref="RevealReference"/>, which tests every cell of the bounding box: within a row the squared distance is convex in the column, so
+    /// the cells inside the circle are one run of columns around the cell nearest to the point. A row nearer to the point's row than the one
+    /// before holds a run that contains the previous one, a row farther away a run inside it, so the two ends only ever walk outwards or
+    /// inwards from the previous row's; the run is then written at once.
+    /// </summary>
+    public void Reveal(int slot, Fixed x, Fixed y, Fixed radius)
+    {
+        if (ReferenceMode)
+        {
+            RevealReference(slot, x, y, radius);
+            return;
+        }
+        if (radius <= Fixed.Zero) return;
+        Counters.Circles++;
+        var cellRaw = Fixed.FromInt(TerrainMap.CellSize).Raw;
+        var minY = Math.Max(0, CellOf(y - radius));
+        var maxY = Math.Min(CellsY - 1, CellOf(y + radius));
+        var minX = Math.Max(0, CellOf(x - radius));
+        var maxX = Math.Min(CellsX - 1, CellOf(x + radius));
+        if (minY > maxY || minX > maxX) return;
+        var cells = _cells[slot];
+        var rowMinX = _revealMinX[slot];
+        var rowMaxX = _revealMaxX[slot];
+        var limit = (long)radius.Raw * radius.Raw;
+        var half = TerrainMap.CellSize * 65536L / 2;
+        // The in-bounds column whose centre is nearest to the point: if it is outside the circle in a row, every column of that row is.
+        var nearest = Math.Clamp(CellOf(x), minX, maxX);
+        var nearestDx = (long)nearest * cellRaw + half - x.Raw;
+        var nearestDx2 = nearestDx * nearestDx;
+        var left = nearest;
+        var right = nearest;
+        var firstRow = -1;
+        var lastRow = -1;
+        long previousRest = -1;
+        long tested = 0, written = 0;
+        for (var cy = minY; cy <= maxY; cy++)
+        {
+            var dy = (long)cy * cellRaw + half - y.Raw;
+            var rest = limit - dy * dy;
+            if (rest < 0 || nearestDx2 > rest) continue;
+            if (rest >= previousRest)
+            {
+                // At least as wide as the last run (on the first row that is the nearest column alone, which is inside): the ends move out while the next cell is inside.
+                while (left > minX && Inside(left - 1, cellRaw, half, x.Raw, rest)) { left--; tested++; }
+                while (right < maxX && Inside(right + 1, cellRaw, half, x.Raw, rest)) { right++; tested++; }
+            }
+            else
+            {
+                // Inside the last run and not empty (the nearest column is inside): the ends move in while they are outside.
+                while (!Inside(left, cellRaw, half, x.Raw, rest)) { left++; tested++; }
+                while (!Inside(right, cellRaw, half, x.Raw, rest)) { right--; tested++; }
+            }
+            previousRest = rest;
+            tested += 2;
+            MarkVisible(cells.AsSpan(cy * CellsX + left, right - left + 1));
+            written += right - left + 1;
+            if (left < rowMinX[cy]) rowMinX[cy] = left;
+            if (right > rowMaxX[cy]) rowMaxX[cy] = right;
+            if (firstRow < 0) firstRow = cy;
+            lastRow = cy;
+        }
+        Counters.CellsTested += tested;
+        Counters.CellsRevealed += written;
+        if (firstRow < 0) return;
+        Touch(slot, firstRow, lastRow);
+        if (firstRow < _revealLow[slot]) _revealLow[slot] = firstRow;
+        if (lastRow > _revealHigh[slot]) _revealHigh[slot] = lastRow;
+    }
 
-    /// <summary>The reveal, one test per cell of the bounding box.</summary>
+    private static bool Inside(int cx, long cellRaw, long half, long xRaw, long rest)
+    {
+        var dx = cx * cellRaw + half - xRaw;
+        return dx * dx <= rest;
+    }
+
+    private static void MarkVisible(Span<byte> cells)
+    {
+        if (cells.Length < 8)
+        {
+            for (var index = 0; index < cells.Length; index++) cells[index] |= VisibleBit | ExploredBit;
+            return;
+        }
+        var words = MemoryMarshal.Cast<byte, ulong>(cells);
+        for (var index = 0; index < words.Length; index++) words[index] |= VisibleAndExploredWord;
+        // The last up to seven cells as one word that overlaps the cells before: setting the bits twice changes nothing.
+        if ((cells.Length & 7) != 0) MemoryMarshal.Cast<byte, ulong>(cells[^8..])[0] |= VisibleAndExploredWord;
+    }
+
+    /// <summary>The original reveal, one test per cell of the bounding box: the oracle for <see cref="Reveal"/>.</summary>
     public void RevealReference(int slot, Fixed x, Fixed y, Fixed radius)
     {
         if (radius <= Fixed.Zero) return;
@@ -234,7 +399,9 @@ public sealed class VisionMap
         }
         Counters.CellsTested += tested;
         Counters.CellsRevealed += written;
-        if (minY <= maxY) Touch(slot, minY, maxY);
+        // The reference keeps no extents: a later BeginRefresh has to go over the whole slot once.
+        TouchAll(slot);
+        ExtendRevealToAll(slot);
     }
 
     /// <summary>
@@ -359,6 +526,8 @@ public sealed class VisionMap
                 || ((value & PermanentBit) != 0 && (value & (VisibleBit | ExploredBit)) != (VisibleBit | ExploredBit)))
                 throw new InvalidDataException("Vision map holds an invalid cell state.");
         bytes.CopyTo(_cells[slot], 0);
+        // A loaded slot may hold visible cells anywhere: the next refresh goes over all of it once.
         TouchAll(slot);
+        ExtendRevealToAll(slot);
     }
 }
