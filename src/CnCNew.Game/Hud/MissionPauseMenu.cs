@@ -144,7 +144,7 @@ public sealed class MissionPauseMenu
         var list = W("ListboxGames");
         list.ClearList();
         foreach (var slot in _slots)
-            list.AddListRow(new UiListRow(slot.Header is { } header ? $"{header.Title} (tick {header.Tick})" : $"{slot.Name} ({slot.Problem})"));
+            list.AddListRow(new UiListRow(slot.Header is { } header ? $"{header.Title} ({header.GameTime})" : $"{slot.Name} ({slot.Problem})"));
     }
 
     private void OnSaveLoadSystem(UiWindowTree tree, UiEvent e)
