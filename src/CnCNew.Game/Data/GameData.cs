@@ -57,13 +57,18 @@ public sealed class GameData
     public string MapFileHash(string mapPath) => Content.FileHash(mapPath);
 
     /// <summary>
-    /// The tick rate the game layer runs its sessions at for now: the original's 30 Hz. The one place the game layer names a rate; everything else reads
-    /// <c>Templates.Rate</c> or the world. Replaced by a session parameter when the presentation clocks are rate-independent (phases 21 and 23).
+    /// The tick rate a session runs at when its host names none: the original's rate, until the product rate changes (phase 23). The one place outside the simulation that
+    /// names a simulation rate; a host that wants another one passes it to <see cref="Load"/> (the client's <c>--tick-rate</c>), and everything else reads <see cref="Rate"/>
+    /// or the world. Not to be confused with <see cref="CnCNew.Data.OriginalFrame"/>, the unit the original's client content is authored in.
     /// </summary>
-    public static SimulationRate SessionRate => SimulationRate.Hz30;
+    public static SimulationRate DefaultSessionRate => SimulationRate.Original;
+
+    /// <summary>The tick rate the catalogs were built for: every world of this data runs at it (a setting of the session, chosen at <see cref="Load"/>).</summary>
+    public SimulationRate Rate => Templates.Rate;
 
     /// <summary>Compiles the retail base data (map overlays excluded) and builds every catalog; the slow part of starting the game.</summary>
-    public static GameData Load(string contentDirectory, Action<string>? progress = null, bool modelGeometry = true)
+    /// <param name="rate">The tick rate of the sessions this data is for; <see cref="DefaultSessionRate"/> when null.</param>
+    public static GameData Load(string contentDirectory, Action<string>? progress = null, bool modelGeometry = true, SimulationRate? rate = null)
     {
         progress?.Invoke("Opening content");
         var content = ContentFileSystem.Open(contentDirectory);
@@ -76,7 +81,7 @@ public sealed class GameData
         var visuals = ObjectVisualCatalog.Build(graph);
         // The airfields' parking and runway points come from the draw models' bones, which the simulation cannot read: they enter the world as fingerprinted data (docs/SIM-JET-FLIGHT.md).
         var geometry = modelGeometry ? ModelGeometryLoader.Load(graph, visuals, content) : ModelGeometry.None;
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SessionRate, geometry);
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate ?? DefaultSessionRate, geometry);
         var fingerprint = templates.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256));
         var fx = FxCatalog.Build(graph);
         var audio = AudioCatalog.FromGraph(graph, content.Exists);

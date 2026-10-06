@@ -1,4 +1,5 @@
 using System.Globalization;
+using CnCNew.Data;
 using CnCNew.Data.Definitions;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
@@ -10,7 +11,7 @@ public enum SuspensionKind { Treads, Wheels }
 
 /// <summary>
 /// The chassis dynamics of a ground locomotor (<c>Locomotor.cpp</c> template fields read by <c>Drawable::calcPhysicsXformTreads/Wheels</c>): spring and damper constants for pitch
-/// and roll, how strongly acceleration tilts the body, the wheel steering angle and the suspension travel. Angles are radians, rates per logic tick. Defaults are the reference's
+/// and roll, how strongly acceleration tilts the body, the wheel steering angle and the suspension travel. Angles are radians, rates per original frame (1/30 s). Defaults are the reference's
 /// (<c>LocomotorTemplate::LocomotorTemplate</c>): stiffness 0.1, damping 0.9, everything else zero.
 /// </summary>
 public sealed record SuspensionMotion(
@@ -18,7 +19,6 @@ public sealed record SuspensionMotion(
     float UniformAxialDamping, float AccelPitchLimit, float BounceKick, bool HasSuspension, float WheelTurnAngle, float MaxWheelExtension)
 {
     private const float Degrees = MathF.PI / 180f;
-    private const int LogicTicksPerSecond = 30;
 
     /// <summary>Null for every appearance without a chassis simulation (legs, hover, wings, thrust, other): <c>Drawable::calcPhysicsXform</c> handles only <c>FOUR_WHEELS</c> and <c>TREADS</c> on the ground.</summary>
     public static SuspensionMotion? FromLocomotor(LocomotorDefinition locomotor)
@@ -33,7 +33,7 @@ public sealed record SuspensionMotion(
         return new SuspensionMotion(
             kind, Number("PitchStiffness", 0.1f), Number("RollStiffness", 0.1f), Number("PitchDamping", 0.9f), Number("RollDamping", 0.9f),
             Number("ForwardAccelerationPitchFactor", 0f), Number("LateralAccelerationRollFactor", 0f), Number("UniformAxialDamping", 1f),
-            Number("AccelerationPitchLimit", 0f) * Degrees, Number("BounceAmount", 0f) * Degrees / LogicTicksPerSecond,
+            Number("AccelerationPitchLimit", 0f) * Degrees, Number("BounceAmount", 0f) * Degrees / OriginalFrame.PerSecond,
             Text("HasSuspension") is { } suspension && suspension.StartsWith("Yes", StringComparison.OrdinalIgnoreCase),
             Number("FrontWheelTurnAngle", 0f) * Degrees, Number("MaximumWheelExtension", 0f));
     }
@@ -50,8 +50,14 @@ public readonly record struct ChassisPose(float Pitch, float Roll, float LiftZ, 
 /// The chassis pitch and roll, body lift and wheel springs of every object whose locomotor is <c>TREADS</c> or <c>FOUR_WHEELS</c> (what the original computes client-side in
 /// <c>Drawable::calcPhysicsXformTreads/Wheels</c>; the simulation keeps none of it). The body settles onto the terrain slope with a damped spring, tilts with acceleration
 /// and turns, wheeled vehicles bounce a little while they drive and steer their front wheels toward the turn. This is a port of the algorithm with these deliberate differences:
-/// no crushing/overlap lift (the simulation has no overlap state), the bounce direction comes from a hash of (object, tick) instead of the client random generator, and the
-/// terrain normal is taken by central differences of the simulation height field. The state advances once per simulated tick and never influences the simulation.
+/// no crushing/overlap lift (the simulation has no overlap state), the bounce direction comes from a hash of (object, original frame) instead of the client random generator, and the
+/// terrain normal is taken by central differences of the simulation height field. The state never influences the simulation.
+/// <para>
+/// The recursion is the original's, one step per original frame (1/30 s): its constants are factors per frame (damping 0.9, a rising nose halved, wheels following by a half,
+/// steering by a tenth), not rates of a differential equation, so it cannot be stepped at another width without changing how it swings. It therefore advances on the ticks
+/// that begin an original frame (every tick at 30 Hz, every second one at 60 Hz) and holds its pose on the ticks in between; velocity and acceleration are differences over
+/// one original frame at every rate.
+/// </para>
 /// </summary>
 public sealed class SuspensionTracker
 {
@@ -66,15 +72,26 @@ public sealed class SuspensionTracker
         public float WheelAngle, FrontLeft, FrontRight, RearLeft, RearRight;
         public float X, Y, Yaw, VelX, VelY;
         public bool HasPrevious;
+        public ChassisPose Pose;
     }
 
     private readonly Dictionary<uint, State> _states = [];
 
-    /// <summary>Advances one object by one tick; null when the object has no chassis simulation.</summary>
+    /// <summary>
+    /// The pose of one object after the tick just simulated: advanced by one original frame when that tick began one, held otherwise; null when the object has no chassis
+    /// simulation. Call once per simulated tick.
+    /// </summary>
     public ChassisPose? Update(Entity entity, ObjectVisual visual, SimulationWorld world, float snapDistance)
     {
         if (visual.Suspension is not { } motion) return null;
+        // An object first seen between two original frames starts with the next one, so its first velocity is a difference over a whole frame.
+        if (!world.Time.IsOriginalFrameBoundary(world.Tick)) return _states.TryGetValue(entity.Id.Value, out var held) ? held.Pose : ChassisPose.Level;
         if (!_states.TryGetValue(entity.Id.Value, out var state)) _states[entity.Id.Value] = state = new State();
+        return state.Pose = Step(state, motion, entity, world, snapDistance);
+    }
+
+    private static ChassisPose Step(State state, SuspensionMotion motion, Entity entity, SimulationWorld world, float snapDistance)
+    {
         var x = ToFloat(entity.X);
         var y = ToFloat(entity.Y);
         var yaw = ToFloat(entity.Angle);
@@ -123,14 +140,16 @@ public sealed class SuspensionTracker
             return new ChassisPose(0f, 0f, MathF.Abs(airPitchHeight) / 4f + MathF.Abs(airRollHeight) / 4f, state.WheelAngle, state.FrontLeft, state.FrontRight, state.RearLeft, state.RearRight);
         }
 
-        if (wheels && !airborne && speed > ToFloat(entity.Template.Locomotor?.Speed ?? Fixed.Zero) / 10f)
+        // The locomotor's speed is distance per tick of the world; the chassis measures distance per original frame.
+        var topSpeed = ToFloat(entity.Template.Locomotor?.Speed ?? Fixed.Zero) * world.Time.TicksPerOriginalFrame;
+        if (wheels && !airborne && speed > topSpeed / 10f)
         {
             // Rough ground: kick the body when it is not already moving (BOUNCE_ANGLE_KICK scaled by speed over top speed).
-            var maxSpeed = ToFloat(entity.Template.Locomotor?.Speed ?? Fixed.Zero);
+            var maxSpeed = topSpeed;
             var factor = maxSpeed > 0f ? speed / maxSpeed : 0f;
             if (MathF.Abs(state.PitchRate) < factor * motion.BounceKick / 4f && MathF.Abs(state.RollRate) < factor * motion.BounceKick / 8f)
             {
-                var pick = Hash(entity.Id.Value, world.Tick) & 3;
+                var pick = Hash(entity.Id.Value, world.Time.ToOriginalFrames(world.Tick)) & 3;
                 state.PitchRate += (pick & 1) == 0 ? -motion.BounceKick * factor : motion.BounceKick * factor;
                 state.RollRate += pick < 2 ? -motion.BounceKick * factor / 2f : motion.BounceKick * factor / 2f;
             }
@@ -171,7 +190,7 @@ public sealed class SuspensionTracker
         return new ChassisPose(totalPitch, totalRoll, wheels ? lift : 0f, state.WheelAngle, state.FrontLeft, state.FrontRight, state.RearLeft, state.RearRight);
     }
 
-    /// <summary>The four wheel offsets from the body tilt and the steering angle toward the turn (<c>calcPhysicsXformWheels</c>, <c>SPRING_FACTOR</c> 0.9, steering smoothed over ten ticks).</summary>
+    /// <summary>The four wheel offsets from the body tilt and the steering angle toward the turn (<c>calcPhysicsXformWheels</c>, <c>SPRING_FACTOR</c> 0.9, steering smoothed over ten original frames).</summary>
     private static void UpdateWheels(State state, SuspensionMotion motion, float yawStep, float forwardSpeed, float pitchHeight, float rollHeight)
     {
         var wanted = yawStep > TurnEpsilon ? motion.WheelTurnAngle : yawStep < -TurnEpsilon ? -motion.WheelTurnAngle : 0f;
@@ -234,11 +253,11 @@ public sealed class SuspensionTracker
         return (-dx / length, -dy / length);
     }
 
-    private static uint Hash(uint id, long tick)
+    private static uint Hash(uint id, long frame)
     {
         unchecked
         {
-            var value = id * 2654435761u ^ (uint)tick * 40503u;
+            var value = id * 2654435761u ^ (uint)frame * 40503u;
             value ^= value >> 15;
             value *= 2246822519u;
             return value >> 8;

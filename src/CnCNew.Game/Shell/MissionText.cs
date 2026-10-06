@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
+using CnCNew.Data;
 using CnCNew.Game.Data;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Rendering;
@@ -20,8 +21,8 @@ public readonly record struct UiMessageLine(string Text, WndColor Color);
 /// <para>
 /// A line fades once it is older than <c>MessageDelayMS / 30 / 1000</c> logic frames - computed in <b>integer</b> arithmetic exactly as the original does, so it is 0 for the retail value
 /// (75000 ms) and a line starts to lose alpha at once: each update takes <c>floor(age * 0.01)</c> from the alpha (nothing for 100 frames, then 1 per update, then 2 ...), the line is gone
-/// when the alpha reaches 0 (about 9 seconds after it appeared). The original updates once per rendered frame; this class is updated once per logic step (<see cref="Update"/>), which is
-/// the same at 30 frames per second and slower to fade above it.
+/// when the alpha reaches 0 (about 9 seconds after it appeared). The original updates once per rendered frame; this class is updated once per original frame of the presentation clock
+/// (<see cref="Update"/>, 1/30 s of game time whatever the tick rate), which is the same at 30 frames per second and slower to fade above it. Every frame number here is an original frame.
 /// </para>
 /// </summary>
 public sealed class UiMessageLog(InGameUiSettings settings)
@@ -53,7 +54,7 @@ public sealed class UiMessageLog(InGameUiSettings settings)
     /// <summary>One update (<c>InGameUI::update</c>): lines past their delay lose alpha, a line without alpha is removed.</summary>
     public void Update(long frame)
     {
-        var timeout = settings.MessageDelayMilliseconds / InGameUiSettings.LogicFramesPerSecond / 1000;
+        var timeout = settings.MessageDelayMilliseconds / OriginalFrame.PerSecond / 1000;
         for (var index = Capacity - 1; index >= 0; index--)
         {
             if (_texts[index] is null) continue;
@@ -83,7 +84,7 @@ public sealed class UiMessageLog(InGameUiSettings settings)
 /// <summary>
 /// The typed-out caption of <c>SHOW_MILITARY_CAPTION</c> (<c>InGameUI::militarySubtitle</c> and the <c>m_militarySubtitle</c> part of <c>InGameUI::update</c>): the text of the label is typed one
 /// character at a time, the first line in the title font and the following ones in the caption font, a block cursor blinks behind the last character, and after its duration the
-/// caption fades out. Everything counts in logic frames of the presentation clock, so the state at any frame is a function of the frames since it began.
+/// caption fades out. Everything counts in original frames (1/30 s) of the presentation clock, so the state at any frame is a function of the frames since it began.
 /// <list type="bullet">
 /// <item><description>The first character appears after <c>MilitaryCaptionDelayMS</c> (<c>Language.ini</c>, 750 ms = 22 frames; <c>(Int)(30 * 750 / 1000.0f)</c>), each next one
 /// <c>MilitaryCaptionSpeed</c> (<c>Language.ini</c>, 1) frames after the previous. The test is <c>incrementOnFrame &lt; frame</c>, so a speed of 1 types one character every two frames.</description></item>
@@ -133,8 +134,8 @@ public sealed class MilitaryCaptionState
         problem = null;
         if (text.Length == 0) { problem = "the caption text is empty"; return null; }
         if (durationMilliseconds <= 0) { problem = $"the caption duration {durationMilliseconds} ms is not positive"; return null; }
-        var lifetime = frame + (long)(InGameUiSettings.LogicFramesPerSecond * (float)durationMilliseconds / 1000f);
-        var delay = (int)(InGameUiSettings.LogicFramesPerSecond * (float)languageDelayMilliseconds / 1000f);
+        var lifetime = frame + (long)(OriginalFrame.PerSecond * (float)durationMilliseconds / 1000f);
+        var delay = (int)(OriginalFrame.PerSecond * (float)languageDelayMilliseconds / 1000f);
         return new MilitaryCaptionState(text.Replace("\r", string.Empty, StringComparison.Ordinal), lifetime, frame, languageSpeed, delay, settings.MilitaryCaptionColor);
     }
 
@@ -162,7 +163,7 @@ public sealed class MilitaryCaptionState
     /// <summary>The index of the next character to type.</summary>
     public int Index => _index;
 
-    /// <summary>One update of <c>InGameUI::update</c> at <paramref name="frame"/>; call it once per presentation step.</summary>
+    /// <summary>One update of <c>InGameUI::update</c> at <paramref name="frame"/>; call it once per original frame of the presentation clock.</summary>
     public void Update(long frame)
     {
         if (Finished) return;
@@ -306,7 +307,7 @@ public static class MissionTextOverlay
     /// <summary>
     /// <c>InGameUI::postDraw</c>, named timers and counters: from <c>NamedTimerCountdownPosition</c> (shares of the screen) upward, one line per timer in name order, right-aligned when the
     /// position is in the right half. A countdown shows <c>text m:ss</c> and, at 0, the ready font and a flash between its color and <c>NamedTimerCountdownFlashColor</c> every flash period; a
-    /// counter shows <c>text value</c>.
+    /// counter shows <c>text value</c>. A timer's value and <paramref name="frame"/> are original frames (the host converts the script VM's ticks).
     /// </summary>
     public static ImmutableArray<UiDrawCommand> NamedTimers(IEnumerable<(string Label, bool IsTimer, long Value)> timers, long frame, InGameUiStyle style, UiScaleOptions options, IUiTextMeasure measure, int width, int height)
     {
@@ -323,7 +324,7 @@ public static class MissionTextOverlay
         var black = new WndColor(0, 0, 0, 255);
         foreach (var (label, isTimer, value) in timers)
         {
-            var seconds = Math.Max(0L, value) / InGameUiSettings.LogicFramesPerSecond;
+            var seconds = Math.Max(0L, value) / OriginalFrame.PerSecond;
             var isReady = isTimer && seconds == 0;
             var font = isReady ? ready : normal;
             var text = isTimer ? string.Create(CultureInfo.InvariantCulture, $"{label} {seconds / 60}:{seconds % 60:00}") : string.Create(CultureInfo.InvariantCulture, $"{label} {value}");

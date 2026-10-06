@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using CnCNew.Data;
 using CnCNew.Data.Definitions;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -47,11 +48,14 @@ public sealed class FrameProjector
     /// <summary>A scenery item within this distance of a live entity of the same template is replaced by it for good.</summary>
     public const float ClaimRadius = 1f;
 
-    /// <summary>How long a muzzle flash stays visible after a shot, in ticks (the original shows it for the first drawn frame of the recoil; at 30 ticks per second this is about 0.13 s).</summary>
-    public const int MuzzleFlashTicks = 4;
+    /// <summary>How long a muzzle flash stays visible after a shot, in original frames (the original shows it for the first drawn frame of the recoil; four frames are about 0.13 s).</summary>
+    public const int MuzzleFlashFrames = 4;
 
-    /// <summary><c>HEALING_ICON_DISPLAY_TIME</c> (<c>Drawable.cpp</c>): the wrench or cross over a healed object stays for three seconds after health last rose.</summary>
-    public const int HealingIconTicks = 3 * 30;
+    /// <summary><c>HEALING_ICON_DISPLAY_TIME</c> (<c>Drawable.cpp</c>, <c>LOGICFRAMES_PER_SECOND * 3</c>): the wrench or cross over a healed object stays for three seconds after health last rose, in original frames.</summary>
+    public const int HealingIconFrames = 3 * OriginalFrame.PerSecond;
+
+    /// <summary>The tracker tables are cleaned of entities that are gone every this many original frames (five seconds).</summary>
+    public const int PruneIntervalFrames = 150;
 
     private readonly ObjectVisualCatalog _catalog;
     private readonly FrameProjectorOptions _options;
@@ -73,6 +77,9 @@ public sealed class FrameProjector
     private Dictionary<uint, Capture> _previous = [];
     private Dictionary<uint, Capture> _current = [];
     private ImmutableArray<Capture> _currentOrdered = [];
+    // The durations above in ticks of the world last captured, and the original frame the projector's tick lies in (all three equal the frame numbers at 30 Hz).
+    private long _healingIconTicks = HealingIconFrames;
+    private long _frame = -1;
 
     public FrameProjector(ObjectVisualCatalog catalog, FrameProjectorOptions? options = null)
     {
@@ -117,8 +124,8 @@ public sealed class FrameProjector
         }
     }
 
-    /// <summary><c>AIGroup::groupCheer</c> (the <c>ALL_CHEER</c> meta action): the objects show SPECIAL_CHEERING for <see cref="UnitConditionTracker.CheerTicks"/> ticks.</summary>
-    public void Cheer(IEnumerable<EntityId> entities) => _units.Cheer(entities, Tick);
+    /// <summary><c>AIGroup::groupCheer</c> (the <c>ALL_CHEER</c> meta action): the objects show SPECIAL_CHEERING for <see cref="UnitConditionTracker.CheerFrames"/> original frames.</summary>
+    public void Cheer(IEnumerable<EntityId> entities, SimulationWorld world) => _units.Cheer(entities, Tick, world.Time.OriginalFrames(UnitConditionTracker.CheerFrames));
 
     private readonly Dictionary<uint, ColorValue> _houseColors = [];
 
@@ -159,7 +166,11 @@ public sealed class FrameProjector
         _current.Clear();
         MissingVisuals = 0;
         Tick = world.Tick - 1;
-        _flashes.Advance(Tick);
+        var time = world.Time;
+        _healingIconTicks = time.OriginalFrames(HealingIconFrames);
+        // The flash envelope is a table per original frame: it steps when the projector's tick begins one (every tick at 30 Hz).
+        _frame = GameClock.OriginalFrameOf(Tick, time.TicksPerOriginalFrame);
+        if (GameClock.BeginsOriginalFrame(Tick, time.TicksPerOriginalFrame)) _flashes.Advance(_frame);
 
         var observer = PhaseObserver;
         observer?.PhaseStarted(PresentationPhase.ProjectorAdvanceVisibleEntities);
@@ -179,13 +190,13 @@ public sealed class FrameProjector
         }
         _currentOrdered = ordered.ToImmutable();
         observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceCapture);
-        if (world.Tick % 150 == 0)
+        if (world.Tick % time.OriginalFrames(PruneIntervalFrames) == 0)
         {
             _turrets.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _suspension.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _units.Prune(id => world.FindEntity(new EntityId(id)) is not null);
             _structures.Prune(id => world.FindEntity(new EntityId(id)) is not null);
-            _flashes.Prune(Tick, id => world.FindEntity(new EntityId(id)) is not null);
+            _flashes.Prune(_frame, id => world.FindEntity(new EntityId(id)) is not null);
             foreach (var id in _houseColors.Keys.Where(id => world.FindEntity(new EntityId(id)) is null).ToArray()) _houseColors.Remove(id);
         }
         if (_options.Viewer is { } fogViewer)
@@ -199,16 +210,16 @@ public sealed class FrameProjector
         }
     }
 
-    /// <summary>How often (ticks) the visibility of explored scenery is re-read; the fog changes slowly and the dimming has no transition.</summary>
-    public const int SceneryFogInterval = 5;
+    /// <summary>How often (original frames) the visibility of explored scenery is re-read; the fog changes slowly and the dimming has no transition.</summary>
+    public const int SceneryFogIntervalFrames = 5;
 
     /// <summary>
     /// Scenery counts as explored once the ground under it was seen (permanent, so a revealed item is not tested again). Explored scenery that is not in sight right now is
-    /// fogged (drawn dimmed); that flag is refreshed every <see cref="SceneryFogInterval"/> ticks.
+    /// fogged (drawn dimmed); that flag is refreshed every <see cref="SceneryFogIntervalFrames"/> original frames.
     /// </summary>
     private void UpdateSceneryExploration(SimulationWorld world, PlayerId viewer)
     {
-        var refreshFog = world.Tick % SceneryFogInterval == 0;
+        var refreshFog = world.Tick % world.Time.OriginalFrames(SceneryFogIntervalFrames) == 0;
         foreach (var item in _options.Scenery)
         {
             if (_claimed[item.Index]) continue;
@@ -292,12 +303,12 @@ public sealed class FrameProjector
             travel %= 100000f;
         }
 
-        // Drawable::drawHealing: the icon shows while the object is hurt and was healed (health rose by attemptHealing) within HealingIconTicks; construction progress is not healing.
+        // Drawable::drawHealing: the icon shows while the object is hurt and was healed (health rose by attemptHealing) within HealingIconFrames; construction progress is not healing.
         var healedAt = previous?.HealedAtTick ?? -1;
         if (previous is not null && !entity.HasStatus(ObjectStatusBits.UnderConstruction) && Math.Clamp(health, 0f, 1f) > previous.Health01 + 1e-4f) healedAt = world.Tick;
         var fired = 0;
         for (var slot = 0; slot < 3; slot++)
-            if (entity.LastFireTickOf(slot) is >= 0 and var lastFire && world.Tick - lastFire <= MuzzleFlashTicks) fired |= 1 << slot;
+            if (entity.LastFireTickOf(slot) is >= 0 and var lastFire && world.Tick - lastFire <= world.Time.OriginalFrames(MuzzleFlashFrames)) fired |= 1 << slot;
         var main = _turrets.Update(entity, 0);
         var alt = _turrets.Update(entity, 1);
         var chassis = _suspension.Update(entity, visual, world, _options.SnapDistance) ?? ChassisPose.Level;
@@ -342,8 +353,8 @@ public sealed class FrameProjector
         capture.Health01, capture.Construction01, capture.Conditions, capture.Selections,
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
         Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel, capture.FiredSlots,
-        capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= HealingIconTicks && capture.Health01 < 1f && Tick > HealingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
-        ghost, capture.Chassis, ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, Tick));
+        capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= _healingIconTicks && capture.Health01 < 1f && Tick > _healingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
+        ghost, capture.Chassis, ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame));
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
 

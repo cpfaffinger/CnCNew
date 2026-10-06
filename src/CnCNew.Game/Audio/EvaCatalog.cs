@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using CnCNew.Audio.Selection;
-using CnCNew.Simulation.Time;
+using CnCNew.Data;
 
 namespace CnCNew.Game.Audio;
 
@@ -123,7 +123,8 @@ public sealed class EvaCatalog
             ? number
             : throw error($"'{value}' is not a non-negative integer{(allowNegativeOne ? " (or -1)" : "")}");
 
-    private static int Frames(int milliseconds) => checked((int)Math.Ceiling(milliseconds * (double)SimulationRate.OriginalFramesPerSecond / 1000.0));
+    // INI::parseDurationUnsignedInt: milliseconds to original frames (1/30 s), rounded up. The announcer counts original frames at every tick rate.
+    private static int Frames(int milliseconds) => checked((int)Math.Ceiling(milliseconds * (double)OriginalFrame.PerSecond / 1000.0));
 
     private sealed class SideBuilder
     {
@@ -135,7 +136,7 @@ public sealed class EvaCatalog
     {
         public string Name { get; } = name;
 
-        // Defaults of EvaCheckInfo::EvaCheckInfo.
+        // Defaults of EvaCheckInfo::EvaCheckInfo, in original frames (30 s and 5 s).
         public int Priority { get; set; } = 1;
         public int FramesBetweenChecks { get; set; } = 900;
         public int FramesToExpire { get; set; } = 150;
@@ -147,7 +148,7 @@ public sealed class EvaCatalog
 }
 
 /// <summary>
-/// The announcer of <c>Eva::update</c>/<c>processPlayingMessages</c> (<c>Eva.cpp</c>), driven by logic frames. Game code flags
+/// The announcer of <c>Eva::update</c>/<c>processPlayingMessages</c> (<c>Eva.cpp</c>), driven by original frames (1/30 s of game time, never simulation ticks). Game code flags
 /// events with <see cref="Request"/>; <see cref="Update"/> turns the flags into queued checks, expires stale ones, and — when no
 /// announcement is speaking — picks the highest-priority waiting check and returns the dialog event to play for the local side.
 /// Flags are consumed by every update like <c>m_shouldPlay</c>, so a request made while its event is still in cool-down is lost.
@@ -208,7 +209,7 @@ public sealed class EvaAnnouncer(EvaCatalog catalog, SeededRng rng)
         return true;
     }
 
-    /// <param name="frame">Logic frame; the reference does nothing before frame 2 so that the initial power of 0 is ignored.</param>
+    /// <param name="frame">Original frame of game time (<c>GameClock.OriginalFrames</c>); the reference does nothing before frame 2 so that the initial power of 0 is ignored.</param>
     /// <param name="lowPower">The local player's energy is insufficient (<c>shouldPlayLowPower</c>), evaluated every frame.</param>
     /// <param name="speaking">An earlier announcement is still playing.</param>
     /// <param name="side">The local player's template side (<c>Player::getSide</c>), e.g. <c>America</c>.</param>

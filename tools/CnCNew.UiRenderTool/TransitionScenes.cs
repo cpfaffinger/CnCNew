@@ -18,7 +18,8 @@ namespace CnCNew.UiRenderTool;
 internal static class TransitionScenes
 {
     private const int Width = 1280, Height = 720;
-    private const double Frame = 1.0 / 30;
+    // Shell transitions are authored in original frames and run on wall time.
+    private const double Frame = 1.0 / CnCNew.Data.OriginalFrame.PerSecond;
 
     public static void Capture(GameData data, IUiTextMeasure textMeasure, string outputDirectory, Action<UiDrawList, int, int, string> capture)
     {
@@ -82,7 +83,7 @@ internal static class TransitionScenes
         Film(entry, "skirmish-in", 1, 3, 4, 5, 6, 8, 10);
 
         // 5. The skirmish score screen fills its rows and counts its numbers up.
-        var setup = new MatchSetup("Maps/Alpine Assault/Alpine Assault.map", "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.Standard with { MaxTicks = 900 });
+        var setup = new MatchSetup("Maps/Alpine Assault/Alpine Assault.map", "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.Standard with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(30) });
         var live = LiveMatch.Create(data, setup, new Vector2(Width, Height));
         var statistics = new MatchStatistics();
         while (!live.Session.IsOver) statistics.Record(live.Session.Step());

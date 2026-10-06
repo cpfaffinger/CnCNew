@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using CnCNew.Data;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.World;
 
@@ -38,7 +39,7 @@ public sealed record OrderHint(OrderHintKind Kind, Vector3 Position, EntityId Ta
 public sealed class OrderHintBook
 {
     public const int Capacity = 256;
-    private const int ClientFramesPerSecond = 30;
+    private const int ClientFramesPerSecond = OriginalFrame.PerSecond;
     private readonly List<OrderHint> _hints = [];
 
     /// <summary>Takes the feedback kinds that mark a place or an object; everything else (rejections, unsupported orders) is not a marker and returns false.</summary>

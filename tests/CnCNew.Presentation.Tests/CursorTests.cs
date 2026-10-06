@@ -279,33 +279,33 @@ internal static class CursorTests
         input.RefreshHint(world, view);
 
         // Scrolling: the directional cursor wins over everything else, with the direction of the scroll.
-        input.UpdateCamera(view, 1f / 30);
+        input.UpdateCamera(view, CnCNew.Tests.TestTime.FrameSecondsF);
         Expect(CursorKind.Move, "the pointer in the middle of the view does not scroll");
         Send(new MouseMoveEvent(time += 16, new Vector2(799, 300)));
-        input.UpdateCamera(view, 1f / 30);
+        input.UpdateCamera(view, CnCNew.Tests.TestTime.FrameSecondsF);
         var right = input.Cursor(false);
         TestHarness.Assert(right.Kind == CursorKind.Scroll && CursorSet.DirectionIndex(right.Direction, 8) == 0, $"the right edge scrolls right ({right})");
         TestHarness.Assert(input.Cursor(pointerOverWindow: true).Kind == CursorKind.Scroll, "also over a window");
         Send(new MouseMoveEvent(time += 16, new Vector2(400, 599)));
-        input.UpdateCamera(view, 1f / 30);
+        input.UpdateCamera(view, CnCNew.Tests.TestTime.FrameSecondsF);
         TestHarness.Assert(CursorSet.DirectionIndex(input.Cursor(false).Direction, 8) == 2, "the bottom edge: down");
         Send(new MouseMoveEvent(time += 16, new Vector2(0, 0)));
-        input.UpdateCamera(view, 1f / 30);
+        input.UpdateCamera(view, CnCNew.Tests.TestTime.FrameSecondsF);
         TestHarness.Assert(CursorSet.DirectionIndex(input.Cursor(false).Direction, 8) == 5, "the top left corner: up and left");
         MoveTo(100, 100);
         Key(KeyCode.Up, true);
-        input.UpdateCamera(view, 1f / 30);
+        input.UpdateCamera(view, CnCNew.Tests.TestTime.FrameSecondsF);
         var up = input.Cursor(false);
         TestHarness.Assert(up.Kind == CursorKind.Scroll && CursorSet.DirectionIndex(up.Direction, 8) == 6, "the up arrow key scrolls up");
         Key(KeyCode.Up, false);
-        input.UpdateCamera(view, 1f / 30);
+        input.UpdateCamera(view, CnCNew.Tests.TestTime.FrameSecondsF);
         Expect(CursorKind.Move, "scrolling over: the context cursor is back");
         Send(new MouseButtonEvent(time += 16, MouseButton.Right, true, InputTests.Screen(100, 100)));
         Send(new MouseMoveEvent(time += 16, InputTests.Screen(140, 100)));
-        input.UpdateCamera(view, 1f / 30);
+        input.UpdateCamera(view, CnCNew.Tests.TestTime.FrameSecondsF);
         TestHarness.Assert(input.Cursor(false).Kind == CursorKind.Scroll && CursorSet.DirectionIndex(input.Cursor(false).Direction, 8) == 0, "a right drag scrolls");
         Send(new MouseButtonEvent(time += 16, MouseButton.Right, false, InputTests.Screen(140, 100)));
-        input.UpdateCamera(view, 1f / 30);
+        input.UpdateCamera(view, CnCNew.Tests.TestTime.FrameSecondsF);
 
         TestHarness.Assert(arena.Sink.Issued.Count == commands, "looking at cursors issued no command");
     }

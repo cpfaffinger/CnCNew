@@ -32,7 +32,8 @@ namespace CnCNew.Game.Hud;
 public sealed class HudMessageFeed
 {
     private const float UnderAttackDistance = 250f;
-    private const long UnderAttackFrames = 30 * 10;
+    // Radar::tryEvent: LOGICFRAMES_PER_SECOND * 10, in original frames; compared in ticks of the world.
+    private const long UnderAttackFrames = CnCNew.Data.OriginalFrame.PerSecond * 10;
 
     private readonly LocalizedText _text;
     private readonly Dictionary<string, string> _objectLabels = new(StringComparer.OrdinalIgnoreCase);
@@ -183,7 +184,8 @@ public sealed class HudMessageFeed
         if (world.FindEntity(simEvent.Other) is { } attacker && attacker.Owner == human) return;
         var position = SimulationQueries.GroundOf(victim);
         var tick = simEvent.Tick;
-        _underAttack.RemoveAll(entry => tick - entry.Tick >= UnderAttackFrames);
+        var window = world.Time.OriginalFrames(UnderAttackFrames);
+        _underAttack.RemoveAll(entry => tick - entry.Tick >= window);
         if (_underAttack.Any(entry => Vector2.DistanceSquared(entry.Position, position) <= UnderAttackDistance * UnderAttackDistance)) return;
         _underAttack.Add((tick, position));
         var template = victim.Template;

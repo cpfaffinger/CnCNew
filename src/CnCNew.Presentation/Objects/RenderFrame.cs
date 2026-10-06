@@ -56,7 +56,7 @@ public sealed record DrawableInstance(
 
     // Fogged: explored but not currently visible to the viewer (remembered structure, scenery out of sight). The original draws such objects through the shroud texture, darkened like the ground.
 
-    /// <summary>Muzzle flash sub-objects are shown for the weapon slots whose bit is set here (<see cref="FrameProjector.MuzzleFlashTicks"/> after the last shot).</summary>
+    /// <summary>Muzzle flash sub-objects are shown for the weapon slots whose bit is set here (<see cref="FrameProjector.MuzzleFlashFrames"/> original frames after the last shot).</summary>
     public bool HasFired(int slot) => (FiredSlots & (1 << slot)) != 0;
 
     public string TemplateName => Visual.TemplateName;

@@ -33,7 +33,7 @@ public enum PresentationPhase
     FxUpdate,
     /// <summary><c>FxExecutor.DrainSoundCues</c> into the game's cue list.</summary>
     DrainSoundCues,
-    /// <summary><c>FogOfWarGrid.Update</c>, every <c>VisionIntervalTicks</c>.</summary>
+    /// <summary><c>FogOfWarGrid.Update</c>, every <c>SimulationWorld.VisionInterval</c> ticks.</summary>
     FogUpdate,
     /// <summary>The <c>TickStepped</c> handlers (statistics, ticker, sound; empty without a HUD).</summary>
     TickStepped,

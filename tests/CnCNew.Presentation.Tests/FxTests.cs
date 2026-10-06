@@ -602,7 +602,7 @@ public static class FxTests
         static byte[] Simulate(ulong seed)
         {
             var catalog = Catalog();
-            var executor = new FxExecutor(catalog, seed);
+            var executor = new FxExecutor(catalog, CnCNew.Tests.TestTime.Original, seed);
             var view = new TestView();
             using var stream = new MemoryStream();
             using var writer = new BinaryWriter(stream);
@@ -644,7 +644,7 @@ public static class FxTests
     private static void ExecutorNuggets()
     {
         var catalog = Catalog();
-        var executor = new FxExecutor(catalog, 11, new ParticleBudget());
+        var executor = new FxExecutor(catalog, CnCNew.Tests.TestTime.Original, 11, new ParticleBudget());
         var view = new TestView();
         executor.ExecuteFxListAtPosition("FX_TestAll", new FxInvocation(Vector3.Zero) { Secondary = new Vector3(100f, 0f, 0f) }, view);
         Assert(executor.Particles.SystemCount == 3, "Count = 3 creates three systems");
@@ -680,7 +680,7 @@ public static class FxTests
     private static void ExecutorEvents()
     {
         var catalog = Catalog();
-        var executor = new FxExecutor(catalog, 5, new ParticleBudget());
+        var executor = new FxExecutor(catalog, CnCNew.Tests.TestTime.Original, 5, new ParticleBudget());
         var view = new TestView();
         var tick = 100L;
         SimEvent Event(SimEventKind kind, EntityId entity, EntityId other, string text, long value, PlayerId? player = null)
@@ -760,7 +760,7 @@ public static class FxTests
     private static void SoundCueRules()
     {
         var catalog = Catalog();
-        var deriver = new SoundCueDeriver(catalog);
+        var deriver = new SoundCueDeriver(catalog, CnCNew.Tests.TestTime.Original);
         var view = new TestView();
         var cues = new List<SoundCue>();
         SimEvent Event(long tick, SimEventKind kind, EntityId entity, EntityId other, string text, long value, PlayerId? player = null)
@@ -801,18 +801,27 @@ public static class FxTests
     {
         SoundCue Cue(long tick, string name, float x = 0f, SoundCueKind kind = SoundCueKind.Effect)
             => new(tick, name, kind, new Vector3(x, 0f, 0f), EntityId.Invalid, PlayerId.System, 1f, 2, "test");
-        var limiter = new SoundCueRateLimiter(new SoundCueLimits(MaxPerEventName: 3, WindowTicks: 10, CutoffDistance: 500f, MaxPerTick: 5));
-        var burst = limiter.Filter(Enumerable.Range(0, 10).Select(_ => Cue(1, "Gun")));
+        var limiter = new SoundCueRateLimiter(new SoundCueLimits(MaxPerEventName: 3, WindowFrames: 10, CutoffDistance: 500f, MaxPerFrame: 5));
+        // The cues' ticks are ticks of a 30 Hz world: one tick per original frame.
+        const int perFrame = 1;
+        var burst = limiter.Filter(Enumerable.Range(0, 10).Select(_ => Cue(1, "Gun")), perFrame);
         Assert(burst.Length == 3 && limiter.DroppedByRate == 7, "at most three per name inside the window");
-        Assert(limiter.Filter([Cue(10, "gun")]).Length == 0, "the window is ten ticks and names ignore case");
-        Assert(limiter.Filter([Cue(11, "Gun")]).Length == 1, "after the window the name is free again");
-        Assert(limiter.Filter([Cue(12, "Far", 900f)], Vector3.Zero).Length == 0 && limiter.DroppedByDistance == 1, "distance cutoff");
-        Assert(limiter.Filter([Cue(12, "FarEva", 900f, SoundCueKind.Eva)], Vector3.Zero).Length == 1, "EVA ignores distance");
-        var many = limiter.Filter(Enumerable.Range(0, 8).Select(index => Cue(13, $"Name{index}")));
-        Assert(many.Length == 5 && limiter.DroppedByTickCap == 3, "per-tick cap");
+        Assert(limiter.Filter([Cue(10, "gun")], perFrame).Length == 0, "the window is ten original frames and names ignore case");
+        Assert(limiter.Filter([Cue(11, "Gun")], perFrame).Length == 1, "after the window the name is free again");
+        Assert(limiter.Filter([Cue(12, "Far", 900f)], perFrame, Vector3.Zero).Length == 0 && limiter.DroppedByDistance == 1, "distance cutoff");
+        Assert(limiter.Filter([Cue(12, "FarEva", 900f, SoundCueKind.Eva)], perFrame, Vector3.Zero).Length == 1, "EVA ignores distance");
+        var many = limiter.Filter(Enumerable.Range(0, 8).Select(index => Cue(13, $"Name{index}")), perFrame);
+        Assert(many.Length == 5 && limiter.DroppedByFrameCap == 3, "cap per original frame");
         var again = new SoundCueRateLimiter(limiter.Limits);
-        var replay = again.Filter(Enumerable.Range(0, 10).Select(_ => Cue(1, "Gun")));
+        var replay = again.Filter(Enumerable.Range(0, 10).Select(_ => Cue(1, "Gun")), perFrame);
         Assert(replay.SequenceEqual(burst), "deterministic");
+
+        // The limits are amounts per game time: at 60 Hz (two ticks per original frame) ticks 20 and 21 are one frame, and the window of ten frames is twenty ticks.
+        var fast = new SoundCueRateLimiter(new SoundCueLimits(MaxPerEventName: 3, WindowFrames: 10, CutoffDistance: 0f, MaxPerFrame: 5));
+        Assert(fast.Filter(Enumerable.Range(0, 4).Select(index => Cue(20 + index % 2, $"N{index}")).Concat(Enumerable.Range(4, 4).Select(index => Cue(21, $"N{index}"))), 2).Length == 5 && fast.DroppedByFrameCap == 3,
+            "at 60 Hz the cap counts both ticks of an original frame together");
+        Assert(fast.Filter(Enumerable.Range(0, 5).Select(_ => Cue(30, "Gun")), 2).Length == 3 && fast.Filter([Cue(49, "Gun")], 2).Length == 0 && fast.Filter([Cue(50, "Gun")], 2).Length == 1,
+            "at 60 Hz the window of ten original frames is twenty ticks");
     }
 
     private static void RealData(string contentDirectory)
@@ -834,9 +843,9 @@ public static class FxTests
         Assert(report.IsClean, "the audit is clean");
 
         clock.Restart();
-        var sweep = FxAudit.ExecuteAll(catalog);
+        var sweep = FxAudit.ExecuteAll(catalog, CnCNew.Tests.TestTime.Original);
         var sweepMs = clock.ElapsedMilliseconds;
-        var again = FxAudit.ExecuteAll(catalog);
+        var again = FxAudit.ExecuteAll(catalog, CnCNew.Tests.TestTime.Original);
         Assert(sweep.Checksum == again.Checksum && sweep.Counters.SequenceEqual(again.Counters), "the sweep is deterministic");
         Assert(sweep.FxListsExecuted == catalog.FxLists.Count && sweep.ParticleSystemsSpawned == catalog.ParticleSystems.Count, "everything executed");
         Assert(sweep.PeakParticles > 0, "particles were produced");

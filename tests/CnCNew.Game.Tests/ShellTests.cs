@@ -96,7 +96,7 @@ internal static class ShellTests
         TestHarness.Assert(shell.CurrentScreen is LoadingScreen, "match loading shows the single-player load screen");
         Capture(shell, "MatchLoading", baselines, updating);
 
-        shell.Update(1.0 / 30);
+        shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var outputs = shell.DrainOutputs();
         var startMatch = outputs.OfType<StartMatchOutput>().SingleOrDefault();
         TestHarness.Assert(startMatch is not null, "exactly one StartMatchOutput after one drawn frame");
@@ -425,7 +425,7 @@ internal static class ShellTests
         Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
         TestHarness.Assert(shell.Phase == ShellPhase.MatchLoading, "the computer army entry is an opponent: Start loads the match");
         shell.BuildDrawList(); // the match is handed off after one drawn frame of the load screen
-        shell.Update(1.0 / 30);
+        shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var started =shell.DrainOutputs().OfType<StartMatchOutput>().Single();
         TestHarness.Assert(started.Setup.Opponents.Length == 1, $"one computer army entry starts one computer player, got {started.Setup.Opponents.Length}");
 

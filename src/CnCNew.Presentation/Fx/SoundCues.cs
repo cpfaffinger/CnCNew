@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
 using System.Numerics;
 using CnCNew.Simulation.Events;
+using CnCNew.Data;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Presentation.Fx;
 
@@ -11,6 +13,7 @@ public enum SoundCueKind { Effect, Voice, Eva, Music, UiSound }
 /// An audio request by name. The audio layer resolves <see cref="EventName"/> (an <c>AudioEvent</c>, or an <c>EvaEvent</c> for
 /// <see cref="SoundCueKind.Eva"/>) and decides audibility for the local player; <see cref="Player"/> is the player the reference would
 /// address (<c>setPlayerIndex</c>), <see cref="PlayerId.System"/> when not player-specific. <see cref="Origin"/> names the rule.
+/// <see cref="Tick"/> is the simulation tick of the event (ticks of the world's rate).
 /// </summary>
 public sealed record SoundCue(long Tick, string EventName, SoundCueKind Kind, Vector3? Position, EntityId Entity, PlayerId Player, float Volume,
     int Priority, string Origin);
@@ -19,10 +22,14 @@ public sealed record SoundCue(long Tick, string EventName, SoundCueKind Kind, Ve
 /// Derives audio requests from simulation events, following the reference call sites (see <c>docs/PRESENTATION-FX.md</c> for the rule
 /// table). FX-list <c>Sound</c> nuggets are emitted by <see cref="FxExecutor"/>, not here.
 /// </summary>
-public sealed class SoundCueDeriver(FxCatalog catalog)
+/// <param name="time">The time service of the world whose events are derived: durations of the original are converted to its ticks.</param>
+public sealed class SoundCueDeriver(FxCatalog catalog, SimulationTime time)
 {
     private const float UnderAttackDistance = 250f;
-    private const long UnderAttackFrames = 30 * 10;
+
+    /// <summary><c>Radar::tryEvent</c>: <c>LOGICFRAMES_PER_SECOND * 10</c>, in original frames.</summary>
+    private const long UnderAttackFrames = OriginalFrame.PerSecond * 10;
+    private readonly long _underAttackTicks = time.OriginalFrames(UnderAttackFrames);
 
     /// <summary>The <c>MiscAudio</c> key of the tick a building gives while it is being captured.</summary>
     public const string CaptureTickHook = "DefectorTimerTickSound";
@@ -137,7 +144,7 @@ public sealed class SoundCueDeriver(FxCatalog catalog)
         if (view.GetPose(simEvent.Other) is { } attacker && attacker.Owner == victim.Owner) return;
         if (catalog.FindObject(victim.TemplateName) is not { } info) return;
         var tick = simEvent.Tick;
-        _underAttack.RemoveAll(entry => tick - entry.Tick >= UnderAttackFrames);
+        _underAttack.RemoveAll(entry => tick - entry.Tick >= _underAttackTicks);
         if (_underAttack.Any(entry => entry.Player == victim.Owner
                 && Vector2.DistanceSquared(new Vector2(entry.Position.X, entry.Position.Y), new Vector2(victim.Position.X, victim.Position.Y)) <= UnderAttackDistance * UnderAttackDistance))
             return;
@@ -176,32 +183,37 @@ public sealed class SoundCueDeriver(FxCatalog catalog)
 }
 
 /// <summary>Limits of <see cref="SoundCueRateLimiter"/>; a <see cref="CutoffDistance"/> of 0 disables the distance test.</summary>
-public sealed record SoundCueLimits(int MaxPerEventName = 3, long WindowTicks = 10, float CutoffDistance = 0f, int MaxPerTick = 48);
+/// <remarks>Window and cap are per time, not per tick: <see cref="WindowFrames"/> and <see cref="MaxPerFrame"/> count original frames (1/30 s).</remarks>
+public sealed record SoundCueLimits(int MaxPerEventName = 3, long WindowFrames = 10, float CutoffDistance = 0f, int MaxPerFrame = 48);
 
 /// <summary>
 /// Keeps big fights from spawning thousands of sounds: per event name at most <see cref="SoundCueLimits.MaxPerEventName"/> cues per
-/// <see cref="SoundCueLimits.WindowTicks"/> ticks, at most <see cref="SoundCueLimits.MaxPerTick"/> cues per tick, and positional
+/// <see cref="SoundCueLimits.WindowFrames"/> original frames, at most <see cref="SoundCueLimits.MaxPerFrame"/> cues per original frame, and positional
 /// effect/voice cues farther than <see cref="SoundCueLimits.CutoffDistance"/> (2D) from the listener are dropped. Deterministic:
-/// decisions depend only on the cue order and ticks. EVA, UI and music cues ignore the distance test.
+/// decisions depend only on the cue order and ticks. EVA, UI and music cues ignore the distance test. The limits are amounts per game time: a world
+/// at 60 Hz lets through as many sounds per second as one at 30 Hz.
 /// </summary>
 public sealed class SoundCueRateLimiter(SoundCueLimits limits)
 {
+    // Original frames of the accepted cues, per event name.
     private readonly Dictionary<string, Queue<long>> _recent = new(StringComparer.OrdinalIgnoreCase);
-    private long _currentTick = long.MinValue;
-    private int _acceptedThisTick;
+    private long _currentFrame = long.MinValue;
+    private int _acceptedThisFrame;
 
     public SoundCueLimits Limits { get; } = limits;
     public long Accepted { get; private set; }
     public long DroppedByRate { get; private set; }
     public long DroppedByDistance { get; private set; }
-    public long DroppedByTickCap { get; private set; }
+    public long DroppedByFrameCap { get; private set; }
 
-    public ImmutableArray<SoundCue> Filter(IEnumerable<SoundCue> cues, Vector3? listener = null)
+    /// <param name="ticksPerOriginalFrame">Of the world the cues' ticks belong to (<c>world.Time.TicksPerOriginalFrame</c>).</param>
+    public ImmutableArray<SoundCue> Filter(IEnumerable<SoundCue> cues, int ticksPerOriginalFrame, Vector3? listener = null)
     {
         var accepted = ImmutableArray.CreateBuilder<SoundCue>();
         foreach (var cue in cues)
         {
-            if (cue.Tick != _currentTick) { _currentTick = cue.Tick; _acceptedThisTick = 0; }
+            var frame = GameClock.OriginalFrameOf(cue.Tick, ticksPerOriginalFrame);
+            if (frame != _currentFrame) { _currentFrame = frame; _acceptedThisFrame = 0; }
             if (Limits.CutoffDistance > 0f && listener is { } ear && cue.Position is { } at && cue.Kind is SoundCueKind.Effect or SoundCueKind.Voice
                 && Vector2.Distance(new Vector2(at.X, at.Y), new Vector2(ear.X, ear.Y)) > Limits.CutoffDistance)
             {
@@ -209,11 +221,11 @@ public sealed class SoundCueRateLimiter(SoundCueLimits limits)
                 continue;
             }
             if (!_recent.TryGetValue(cue.EventName, out var times)) _recent[cue.EventName] = times = new Queue<long>();
-            while (times.Count > 0 && times.Peek() <= cue.Tick - Limits.WindowTicks) times.Dequeue();
+            while (times.Count > 0 && times.Peek() <= frame - Limits.WindowFrames) times.Dequeue();
             if (times.Count >= Limits.MaxPerEventName) { DroppedByRate++; continue; }
-            if (_acceptedThisTick >= Limits.MaxPerTick) { DroppedByTickCap++; continue; }
-            times.Enqueue(cue.Tick);
-            _acceptedThisTick++;
+            if (_acceptedThisFrame >= Limits.MaxPerFrame) { DroppedByFrameCap++; continue; }
+            times.Enqueue(frame);
+            _acceptedThisFrame++;
             Accepted++;
             accepted.Add(cue);
         }

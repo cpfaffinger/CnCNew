@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CnCNew.Data;
 using CnCNew.Ui.Runtime;
 
 namespace CnCNew.Ui.Transitions;
@@ -127,7 +128,7 @@ internal sealed class TransitionGroup
 public sealed class WindowTransitionHandler
 {
     /// <summary>Transition frames per second (<c>GameData.ini</c>: <c>UseFPSLimit = Yes</c>, <c>FramesPerSecondLimit = 30</c>).</summary>
-    public const int FramesPerSecond = 30;
+    public const int FramesPerSecond = OriginalFrame.PerSecond;
 
     private readonly WindowTransitionTable _table;
     private readonly ITransitionHost _host;

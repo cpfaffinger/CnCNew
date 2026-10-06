@@ -21,7 +21,7 @@ using CnCNew.Simulation.Views;
 using CnCNew.Simulation.World;
 
 /// <summary>Object presentation: model conditions, draw specs, state selection, condition derivation, frame projection and scenery.</summary>
-static class ObjectTests
+static partial class ObjectTests
 {
     public static int Run(string[] args)
     {
@@ -40,6 +40,7 @@ static class ObjectTests
         run.Test("Turrets are the simulation's: they turn toward the victim of the fire order at their turn rate, the shot waits, they hold and recentre", TurretFollowsOrders);
         run.Test("Wheeled chassis: acceleration tilts the body, straight driving keeps the wheels straight, no spring extends past its limit", ChassisFollowsMotion);
         run.Test("Team colors", Colors);
+        RegisterTimeScale(run.Test);
         var contentDir = ContentDir(args);
         if (contentDir is not null) run.Test("Real data: draw specs, audit, projection and scenery", () => RealData(contentDir));
         return run.Finish();
@@ -598,7 +599,7 @@ static class ObjectTests
         var bunker = Spawn(world, "Bunker", 2, 50, 30);
         var enemyScout = Spawn(world, "Scout", 2, 45, 35);
         var hidden = Spawn(world, "Bunker", 2, 180, 180);
-        void Settle() { for (var i = 0; i < SimulationWorld.VisionIntervalTicks + 1; i++) world.Step(); }
+        void Settle() { for (var i = 0; i < world.VisionInterval + 1; i++) world.Step(); }
         Settle();
         var projector = new FrameProjector(catalog, new FrameProjectorOptions { Viewer = new PlayerId(1) });
         projector.Advance(world);
@@ -679,7 +680,7 @@ static class ObjectTests
         ];
         var scenery = StaticScenery.Build(objects, catalog).Items;
         var scout = Spawn(world, "Scout", 1, 30, 30);
-        void Settle() { for (var i = 0; i < SimulationWorld.VisionIntervalTicks + 1; i++) world.Step(); }
+        void Settle() { for (var i = 0; i < world.VisionInterval + 1; i++) world.Step(); }
         Settle();
         var projector = new FrameProjector(catalog, new FrameProjectorOptions { Viewer = new PlayerId(1), Scenery = scenery });
         projector.Advance(world);
@@ -691,7 +692,7 @@ static class ObjectTests
         Settle();
         projector.Advance(world);
         Check.That(names().SequenceEqual(["Pine"]), "Once explored, the scenery stays drawn when the viewer loses sight of it (fog, not shroud).");
-        while (world.Tick % FrameProjector.SceneryFogInterval != 0) world.Step();
+        while (world.Tick % world.Time.OriginalFrames(FrameProjector.SceneryFogIntervalFrames) != 0) world.Step();
         projector.Advance(world);
         Check.That(projector.Project(1f).Drawables.Single(drawable => drawable.IsStatic).Fogged && projector.FoggedScenery == 1, "Out of sight but explored, the scenery is drawn dimmed (fogged).");
 

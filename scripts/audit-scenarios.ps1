@@ -18,6 +18,8 @@ param(
     [string]$ContentDir,
     [string]$OutDir,
     [int]$Every = 30,
+    # Simulationsrate (30, 60 oder 120 Hz); 0 = Standard der Spielschicht. -Every und alle Zeitangaben der Ausgabe zaehlen Originalbilder (1/30 s) bei jeder Rate.
+    [int]$TickRate = 0,
     [switch]$NoBuild
 )
 
@@ -41,7 +43,8 @@ $failed = 0
 foreach ($name in $names) {
     $log = Join-Path $OutDir "$name.txt"
     Write-Host "== $name" -ForegroundColor Cyan
-    dotnet run --project $project -c Release --no-build -- scenario-audit $ContentDir --name $name --every $Every *> $log
+    $rateArgs = if ($TickRate -gt 0) { @('--tick-rate', "$TickRate") } else { @() }
+    dotnet run --project $project -c Release --no-build -- scenario-audit $ContentDir --name $name --every $Every @rateArgs *> $log
     $code = $LASTEXITCODE
     Get-Content -LiteralPath $log | Where-Object { $_ -match '^(RESULT|  FAIL)' } | ForEach-Object { Write-Host $_ }
     if ($code -ne 0) { $failed++ }

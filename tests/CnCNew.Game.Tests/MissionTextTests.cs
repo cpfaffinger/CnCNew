@@ -484,7 +484,7 @@ internal static class MissionTextTests
     private static (LiveMission Live, MissionController Controller) LoadMission(GameData data, string map)
     {
         var text = data.LoadText("English");
-        var run = MissionRun.Load(MissionContext.From(data), map, MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyTicks });
+        var run = MissionRun.Load(MissionContext.From(data), map, MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
         var live = LiveMission.Create(data, run, new Vector2(1280, 720), label => text.TryGet(label, out var resolved) ? resolved : label);
         return (live, new MissionController(live, GameSettings.Default));
     }
@@ -520,7 +520,7 @@ internal static class MissionTextTests
         var lineStates = new List<string>();
         for (var frame = 0; frame < 190; frame++)
         {
-            controller.Update(1.0 / 30);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
             if (director.MilitaryCaption is { } caption)
             {
                 var line = string.Join("|", caption.Lines);
@@ -533,7 +533,7 @@ internal static class MissionTextTests
         TestHarness.Assert(lineStates[0].Length <= 1 && lineStates[^1] == "Somewhere in Southern Kazakhstan|En route to Baikonur", $"the label's two lines are typed one after the other ({lineStates[^1]})");
         // Draw it again at the typed state: two draws in Courier New at the scaled position.
         var restart = LoadMission(data, "Maps/MD_USA01/MD_USA01.map");
-        for (var frame = 0; frame < 120; frame++) restart.Controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 120; frame++) restart.Controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var texts = restart.Controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(text => text.Font.Name == "Courier New").ToArray();
         TestHarness.Assert(texts.Length == 2 && texts[0].Text == "Somewhere in Southern Kazakhstan" && texts[0].Font == title && texts[1].Font == body && texts[0].X == 16 && texts[0].Y == 408, $"the real HUD draws the typed caption at 16,408 ({string.Join(" | ", texts.Select(text => $"{text.Font} '{text.Text}' {text.X},{text.Y}"))})");
         TestHarness.Assert(!restart.Live.Director.Problems.Keys.Any(key => key.Contains("on-screen text", StringComparison.Ordinal) || key.Contains("has no text", StringComparison.Ordinal) || key.StartsWith("SHOW_MILITARY_CAPTION", StringComparison.Ordinal)), $"no text problems ({string.Join("; ", restart.Live.Director.Problems.Keys)})");
@@ -542,7 +542,7 @@ internal static class MissionTextTests
     private static void RealCountdown(GameData data)
     {
         var (live, controller) = LoadMission(data, "Maps/MD_CHI02/MD_CHI02.map");
-        for (var frame = 0; frame < 2100; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 2100; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var normal = controller.Hud.TextStyle.Font(InGameUiFontRole.NamedTimerNormal, new UiViewport(1280, 720), controller.Hud.ScaleOptions);
         var timer = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().FirstOrDefault(text => text.Text.Contains("Arrive", StringComparison.OrdinalIgnoreCase));
         TestHarness.Assert(timer is not null, $"the reinforcement countdown is on screen ({string.Join(" | ", controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Select(text => text.Text))})");
@@ -558,7 +558,7 @@ internal static class MissionTextTests
         using var audio = CnCNew.Game.Audio.GameAudio.Create(data, options: new CnCNew.Game.Audio.AudioDirectorOptions { Seed = 1 });
         live.Director.AudioControl = audio;
         TestHarness.Assert(data.Audio.Find(MissionPresentationDirector.TypingClickEvent) is not null, "SoundEffects.ini has the MilitarySubtitlesTyping event");
-        for (var frame = 0; frame < 190; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 190; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var director = live.Director;
         var expected = "Somewhere in Southern KazakhstanEn route to Baikonur".Length;
         TestHarness.Assert(director.TypingClicks == expected, $"one click asked per typed character of the two caption lines ({director.TypingClicks} of {expected})");
@@ -575,7 +575,7 @@ internal static class MissionTextTests
         var (live, controller) = LoadMission(data, "Maps/MD_USA01/MD_USA01.map");
         var director = live.Director;
         TestHarness.Assert(ReferenceEquals(director.Messages, controller.Hud.Messages.Log) && !controller.Hud.OwnsMessageList, "the mission HUD hands its message list to the director");
-        for (var frame = 0; frame < 30; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 30; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(director.Messages!.IsEmpty && controller.Hud.Messages.WithoutLine.ContainsKey("upgrade granted, not ordered"), "the radar the command center comes with is no 'Upgrade Complete' line (nobody ordered it)");
         // A line of the scripts' DISPLAY_TEXT stands in the same list: the HUD's line is the next, one font height below.
         director.Messages.Add("a line of the scripts", director.Clock);
@@ -588,9 +588,9 @@ internal static class MissionTextTests
         TestHarness.Assert(director.Messages.Lines[^1].Text == "You can't build here" && list is [{ X: 10 } line] && line.Y == expectedY && line.Font == font,
             $"the line is drawn once, by the director, as line {index} of the list from the message position in the message font ({string.Join(" | ", list.Select(draw => $"{draw.X},{draw.Y} {draw.Font}"))} vs {expectedY} {font})");
         var before = director.Messages.Lines[^1].Color.A;
-        for (var frame = 0; frame < 150; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 150; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(director.Messages.Lines.FirstOrDefault(entry => entry.Text == "You can't build here") is { Text: not null, Color.A: var after } && after < before, "the director fades it on its clock");
-        for (var frame = 0; frame < 200; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 200; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(director.Messages.IsEmpty, "and removes it");
     }
 
@@ -650,15 +650,15 @@ internal static class MissionTextTests
     private static void RealPopupInTheMission(GameData data)
     {
         var (live, controller) = LoadMission(data, "Maps/GC_ChemGeneral/GC_ChemGeneral.map");
-        for (var frame = 0; frame < 30; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 30; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var director = live.Director;
         var tick = live.World.Tick;
 
         director.ShowPopup(new PopupMessage("A message that stops the game.", 40, 40, 260, true));
-        controller.Update(1.0 / 30);
+        controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(controller.Popup is { IsOpen: true } && live.Paused, "a pausing popup opens its window and pauses the game");
         var pausedAt = live.World.Tick;
-        for (var frame = 0; frame < 30; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 30; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(live.World.Tick == pausedAt, "the world stands still while it is open");
         TestHarness.Assert(controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Any(draw => draw.Text.StartsWith("A message", StringComparison.Ordinal)), "the text is in the HUD's draw list");
         controller.Process(new MouseMoveEvent(100, new Vector2(300, 300)));
@@ -671,14 +671,14 @@ internal static class MissionTextTests
         controller.Process(new MouseButtonEvent(104, MouseButton.Left, true, onOk));
         controller.Process(new MouseButtonEvent(105, MouseButton.Left, false, onOk));
         TestHarness.Assert(director.Popup is null && controller.Popup is { IsOpen: false } && !live.Paused, "OK removes the popup on the script side and unpauses the game");
-        for (var frame = 0; frame < 30; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 30; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(live.World.Tick > pausedAt, "and the mission goes on");
         TestHarness.Assert(!controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Any(draw => draw.Text.StartsWith("A message", StringComparison.Ordinal)), "the text is gone");
 
         // A popup that does not pause leaves the game running and the world reachable away from the window.
         director.ShowPopup(new PopupMessage("Just so you know.", 40, 40, 260, false));
         var before = live.World.Tick;
-        for (var frame = 0; frame < 30; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 30; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(controller.Popup is { IsOpen: true } && !live.Paused && live.World.Tick > before, "a popup without the pause flag lets the game run");
         controller.Process(new KeyEvent(200, KeyCode.Escape, false));
         TestHarness.Assert(director.Popup is null && !controller.Hud.IsMenuOpen, "Escape closes the popup instead of opening the game menu");

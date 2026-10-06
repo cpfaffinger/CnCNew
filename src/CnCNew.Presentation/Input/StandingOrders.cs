@@ -74,8 +74,13 @@ public sealed class StandingOrders
         else Set(unit, new StandingOrder(StandingOrderKind.Waypoints, EntityId.Invalid, point, [], tick));
     }
 
+    /// <summary>
+    /// Call once per simulation tick, before the world steps. The orders are examined, and their commands issued, once per original frame (on the ticks that begin one:
+    /// every tick at 30 Hz, every second one at 60 Hz), so the commands a standing order produces - and with them the replay - follow game time, not the tick rate.
+    /// </summary>
     public void Update(SimulationWorld world, PlayerId player, Func<Func<ulong, long, SimCommand>, SubmitResult> issue)
     {
+        if (!world.Time.IsOriginalFrameBoundary(world.Tick)) return;
         foreach (var (id, order) in _orders.ToArray())
         {
             var unit = world.FindEntity(new EntityId(id));

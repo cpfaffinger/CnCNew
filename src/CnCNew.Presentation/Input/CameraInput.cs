@@ -1,4 +1,5 @@
 using System.Numerics;
+using CnCNew.Data;
 
 namespace CnCNew.Presentation.Input;
 
@@ -20,7 +21,7 @@ public sealed record CameraSettings(
     float ZoomPerWheelNotch = 10f,
     float KeyboardZoomPerFrame = 10f,
     float MiddleClickResetPixels = 5f,
-    float FramesPerSecond = 30f);
+    float FramesPerSecond = OriginalFrame.PerSecond);
 
 /// <summary>
 /// What the camera should do this frame, as plain data for the camera owner. <see cref="Scroll"/> is camera-relative (x right, y forward) and

@@ -28,7 +28,7 @@ namespace CnCNew.PresentationTool;
 /// </summary>
 internal static class SyncPerfCommand
 {
-    public const string Usage = "sync-perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--seed N] [--viewport WxH] [--hud] [--digest] [--json FILE] [--label TEXT]";
+    public const string Usage = "sync-perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--tick-rate N] [--seed N] [--viewport WxH] [--hud] [--digest] [--json FILE] [--label TEXT]";
 
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
     private static readonly PresentationPhase[] Phases = Enum.GetValues<PresentationPhase>();
@@ -60,7 +60,8 @@ internal static class SyncPerfCommand
                        + $"{RuntimeInformation.OSDescription}; {RuntimeInformation.FrameworkDescription}; Server GC {System.Runtime.GCSettings.IsServerGC}; clock resolution {(1e9 / Stopwatch.Frequency).ToString("F0", Invariant)} ns.";
         Console.WriteLine("Hardware: " + hardware);
         var setup = Stopwatch.StartNew();
-        var data = GameData.Load(contentDir);
+        var rate = Option("--tick-rate") is { } rateText ? SimulationRate.FromTicksPerSecond(int.Parse(rateText, Invariant)) : GameData.DefaultSessionRate;
+        var data = GameData.Load(contentDir, rate: rate);
         var wanted = Option("--factions")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var chosen = wanted is null
             ? data.Factions.Take(int.Parse(Option("--players") ?? "2", Invariant)).Select(value => value.Faction.Name).ToImmutableArray()
@@ -81,7 +82,8 @@ internal static class SyncPerfCommand
         var buffer = new MemoryStream();
         var writer = new BinaryWriter(buffer, Encoding.UTF8);
         var fogLevels = new byte[live.Fog.CellsX * live.Fog.CellsY];
-        var tickSeconds = 1.0 / SimulationRate.OriginalFramesPerSecond;
+        // One Advance per simulation tick of the session's rate: the cost measured is the cost per tick.
+        var tickSeconds = 1.0 / live.World.Time.TicksPerSecond;
         var total = new List<long>();
         var hudUpdate = new List<long>();
         var hudDraw = new List<long>();

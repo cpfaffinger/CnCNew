@@ -115,7 +115,7 @@ internal static class VisionTests
                         break;
                 }
 
-                var dt = (Next() >> 29) switch { 0 => 0f, 1 => 1f / 30, 2 => 1f / 144, 3 => 0.25f, _ => (Next() % 1000) / 20000f };
+                var dt = (Next() >> 29) switch { 0 => 0f, 1 => CnCNew.Tests.TestTime.FrameSecondsF, 2 => 1f / 144, 3 => 0.25f, _ => (Next() % 1000) / 20000f };
                 fog.Advance(dt);
                 var step = settings.FadeLevelsPerSecond * dt;
                 var moving = 0;

@@ -729,20 +729,21 @@ internal static class UnitConditionTests
         var units = new UnitConditionTracker();
         var turrets = new TurretTracker();
         Assert(!units.Update(entity, rig.World, 10, turrets).Contains(UnitFlags.SpecialCheering), "nobody cheers by default");
-        units.Cheer([scout], 10);
-        Assert(units.Update(entity, rig.World, 10, turrets).Contains(UnitFlags.SpecialCheering) && units.Update(entity, rig.World, 99, turrets).Contains(UnitFlags.SpecialCheering),
+        var cheer = CnCNew.Tests.TestTime.Frames(rig.World, UnitConditionTracker.CheerFrames);
+        units.Cheer([scout], 10, cheer);
+        Assert(units.Update(entity, rig.World, 10, turrets).Contains(UnitFlags.SpecialCheering) && units.Update(entity, rig.World, 10 + cheer - 1, turrets).Contains(UnitFlags.SpecialCheering),
             "the cheer starts at once");
-        Assert(!units.Update(entity, rig.World, 100, turrets).Contains(UnitFlags.SpecialCheering), "and ends three seconds (90 ticks) later");
-        units.Cheer([scout], 200);
+        Assert(!units.Update(entity, rig.World, 10 + cheer, turrets).Contains(UnitFlags.SpecialCheering), "and ends three seconds later");
+        units.Cheer([scout], 200, cheer);
         Assert(units.Update(entity, rig.World, 250, turrets).Contains(UnitFlags.SpecialCheering), "a new cheer restarts the time");
 
         // through the projector
         rig.Step();
-        rig.Projector.Cheer([scout]);
+        rig.Projector.Cheer([scout], rig.World);
         Assert(rig.Bits(scout).Contains(UnitFlags.SpecialCheering) is false, "the projector captures the bit with the next tick");
         rig.Step();
         Assert(rig.Bits(scout).Contains(UnitFlags.SpecialCheering), "and shows it");
-        for (var tick = 0; tick < UnitConditionTracker.CheerTicks + 2; tick++) rig.Step();
+        for (var tick = 0; tick < cheer + 2; tick++) rig.Step();
         Assert(!rig.Bits(scout).Contains(UnitFlags.SpecialCheering), "and it ends by itself");
     }
 

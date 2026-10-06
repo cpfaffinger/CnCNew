@@ -36,6 +36,10 @@ file sealed class FakeView : IAudioGameView
     public PlayerId Human { get; init; } = new(1);
     public string HumanSide { get; init; } = "America";
     public long Tick { get; set; }
+
+    /// <summary>The rate the fake world's ticks count at (the original's unless a test names another).</summary>
+    public CnCNew.Simulation.Time.SimulationRate Rate { get; init; } = CnCNew.Simulation.Time.SimulationRate.Original;
+    public CnCNew.Presentation.GameClock Clock => new(Tick, Rate.TicksPerSecond, 0);
     public bool LowPower { get; set; }
     public Dictionary<(int, int), Relationship> Relations { get; } = [];
     public bool Shrouded { get; set; }
@@ -65,6 +69,7 @@ internal static class AudioDirectorTests
         var harness = new TestHarness(nameof(AudioDirectorTests));
         harness.Run("Eva.ini parser reads blocks, converts ms to frames, rejects unknown keys", EvaParserBasics);
         harness.Run("Eva announcer: priority, cooldown, expiry, side-missing", EvaAnnouncerBehaviour);
+        harness.Run("Time scale: Eva's wait between two announcements of one event is the same game time at 30, 60 and 120 Hz", EvaLockTimeIsGameTime);
         harness.Run("Music playlist: side filter, silent/unresolved skipped, no immediate repeat", MusicPlaylistBehaviour);
         harness.Run("Director: bus mapping and shouldPlayLocally", DirectorCueDispatch);
         harness.Run("Director: rate limiting, unit voice interruption, missing voice keys", DirectorLimitsAndUnitVoices);
@@ -134,6 +139,42 @@ internal static class AudioDirectorTests
         TestHarness.Throws<InvalidDataException>(() => EvaCatalog.Parse("EvaEvent X\n  SideSounds\n    Sounds = A\n  End\nEnd\n"), "SideSounds without Side throws");
     }
 
+    /// <summary>
+    /// The announcer counts original frames, never ticks (docs/HANDOFF-PHASE21.md, item 9): an event without <c>TimeBetweenChecksMS</c> may be announced again after 900
+    /// original frames (30 s) at every tick rate. The director is driven as the client drives it, once per tick of the fake world, with the event requested every tick.
+    /// </summary>
+    private static void EvaLockTimeIsGameTime()
+    {
+        var (catalog, fx, _) = BuildDirectorFixture();
+        var measured = new List<(CnCNew.Simulation.Time.SimulationRate Rate, double Seconds)>();
+        foreach (var rate in new[] { CnCNew.Simulation.Time.SimulationRate.Hz30, CnCNew.Simulation.Time.SimulationRate.Hz60, CnCNew.Simulation.Time.SimulationRate.Hz120 })
+        {
+            using var director = NewDirector(catalog, fx);
+            using var render = new OfflineAudioRenderer(director.Mixer);
+            var view = new FakeView { Rate = rate };
+            var step = 1.0 / rate.TicksPerSecond;
+            long first = -1, second = -1;
+            for (long tick = rate.TicksPerSecond; tick < 40L * rate.TicksPerSecond && second < 0; tick++)
+            {
+                view.Tick = tick;
+                director.NotifyInsufficientFunds();
+                director.Tick(view, step);
+                render.Pump(step);
+                if (director.Stats.EvaPlayed >= 1 && first < 0) first = tick;
+                if (director.Stats.EvaPlayed >= 2) second = tick;
+            }
+            TestHarness.Assert(first >= 0 && second > first, $"at {rate} the event is announced twice within forty seconds (ticks {first} and {second})");
+            measured.Add((rate, (double)(second - first) / rate.TicksPerSecond));
+        }
+
+        Console.WriteLine("       Eva wait between two announcements: " + string.Join(", ", measured.Select(value => FormattableString.Invariant($"{value.Rate}: {value.Seconds:F4} s"))));
+        foreach (var (rate, seconds) in measured)
+        {
+            TestHarness.Assert(Math.Abs(seconds - measured[0].Seconds) <= CnCNew.Tests.TestTime.FrameSeconds + 1e-9, $"Eva waits {seconds:F4} s at {rate} and {measured[0].Seconds:F4} s at {measured[0].Rate}: more than one original frame apart");
+            TestHarness.Assert(Math.Abs(seconds - 30.0) <= 2 * CnCNew.Tests.TestTime.FrameSeconds, $"Eva waits about thirty seconds (900 original frames) at {rate} (was {seconds:F4} s)");
+        }
+    }
+
     private static void EvaAnnouncerBehaviour()
     {
         var catalog = EvaCatalog.Parse("""
@@ -181,7 +222,7 @@ internal static class AudioDirectorTests
         var solo = new EvaAnnouncer(catalog, new SeededRng(7));
         solo.Request("Low");
         TestHarness.Assert(solo.Update(2, false, true, "Test") is null, "no pick while speaking");
-        TestHarness.Assert(solo.Update(2 + 3334 * 30 / 1000 + 2, false, false, "Test") is null, "the check expired before it could be evaluated");
+        TestHarness.Assert(solo.Update(2 + 3334 * CnCNew.Tests.TestTime.FramesPerSecond / 1000 + 2, false, false, "Test") is null, "the check expired before it could be evaluated");
         TestHarness.Assert(solo.Expired == 1, "the expiry is counted");
 
         var missing = new EvaAnnouncer(catalog, new SeededRng(7));
@@ -472,7 +513,7 @@ internal static class AudioDirectorTests
         world.Poses[ranger.Value] = new FxEntityPose(new Vector3(90, 40, 3), 0f, "Ranger", new PlayerId(1), 0, 5f);
 
         var cues = new List<SoundCue>();
-        new SoundCueDeriver(fx).Derive(Flash(building, ranger), world, cues);
+        new SoundCueDeriver(fx, CnCNew.Tests.TestTime.Original).Derive(Flash(building, ranger), world, cues);
         TestHarness.Assert(cues.Count == 1, "one cue per flash");
         var cue = cues[0];
         TestHarness.Assert(cue.EventName == "CaptureTick", $"the cue is the event MiscAudio names for DefectorTimerTickSound (was {cue.EventName})");
@@ -488,11 +529,11 @@ internal static class AudioDirectorTests
 
         // A building that is gone gives no cue; a data set without the hook gives a cue the director reports as unknown.
         cues.Clear();
-        new SoundCueDeriver(fx).Derive(Flash(new EntityId(99), ranger), world, cues);
+        new SoundCueDeriver(fx, CnCNew.Tests.TestTime.Original).Derive(Flash(new EntityId(99), ranger), world, cues);
         TestHarness.Assert(cues.Count == 0, "no pose, no cue");
         var without = new Dictionary<string, string>(DirectorFixture, StringComparer.OrdinalIgnoreCase) { ["Data/INI/MiscAudio.ini"] = "MiscAudio\n  GUIClickSound = UiClick\nEnd\n" };
         var bare = FxCatalog.Build(DefinitionCompiler.Compile(new MemorySource(without)));
-        new SoundCueDeriver(bare).Derive(Flash(building, ranger), world, cues);
+        new SoundCueDeriver(bare, CnCNew.Tests.TestTime.Original).Derive(Flash(building, ranger), world, cues);
         TestHarness.Assert(cues.Count == 1 && cues[0].EventName == SoundCueDeriver.CaptureTickHook, "a missing hook is not silent: the cue carries the hook's own name");
         director.Submit([..cues], new FakeView());
         TestHarness.Assert(director.Stats.UnresolvedEvents.GetValueOrDefault(SoundCueDeriver.CaptureTickHook) == 1, "and the director reports it as an unknown event");
@@ -558,8 +599,8 @@ internal static class AudioDirectorTests
             director.OnUnitSelected("Tank", 1);
             for (var frame = 0; frame < 6; frame++)
             {
-                director.Tick(null, 1.0 / 30);
-                render.Pump(1.0 / 30);
+                director.Tick(null, CnCNew.Tests.TestTime.FrameSeconds);
+                render.Pump(CnCNew.Tests.TestTime.FrameSeconds);
             }
             stats = director.Stats;
             return render.Peak;
@@ -602,8 +643,8 @@ internal static class AudioDirectorTests
             play(director);
             for (var frame = 0; frame < 6; frame++)
             {
-                director.Tick(null, 1.0 / 30);
-                render.Pump(1.0 / 30);
+                director.Tick(null, CnCNew.Tests.TestTime.FrameSeconds);
+                render.Pump(CnCNew.Tests.TestTime.FrameSeconds);
             }
             return render.Peak;
         }
@@ -684,17 +725,17 @@ internal static class AudioDirectorTests
             var view = new FakeView { Tick = 10 };
             director.EvaEnabled = false;
             director.NotifyInsufficientFunds();
-            director.Tick(view, 1.0 / 30);
+            director.Tick(view, CnCNew.Tests.TestTime.FrameSeconds);
             view.Tick = 11;
-            director.Tick(view, 1.0 / 30);
+            director.Tick(view, CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(director.Stats.EvaPlayed == 0, "Eva stays silent while disabled");
             director.EvaEnabled = true;
             view.Tick = 12;
-            director.Tick(view, 1.0 / 30);
+            director.Tick(view, CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(director.Stats.EvaPlayed == 0, "the announcement raised while disabled was lost");
             director.NotifyInsufficientFunds();
             view.Tick = 13;
-            director.Tick(view, 1.0 / 30);
+            director.Tick(view, CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(director.Stats.EvaPlayed == 1, "enabled again, Eva announces");
         }
 
@@ -728,8 +769,8 @@ internal static class AudioDirectorTests
             {
                 if (frame == 3) director.PlayUi("UiClick");
                 if (frame == 9) director.OnUnitSelected("Tank", 1);
-                director.Tick(null, 1.0 / 30);
-                render.Pump(1.0 / 30);
+                director.Tick(null, CnCNew.Tests.TestTime.FrameSeconds);
+                render.Pump(CnCNew.Tests.TestTime.FrameSeconds);
             }
             var hash = render.Finish();
             return (hash, File.ReadAllBytes(path), render.Frames);
@@ -765,7 +806,7 @@ internal static class AudioDirectorTests
     {
         var scenario = DemoScenarios.CaptureBuilding;
         const int frames = 900;
-        const double step = 1.0 / 30;
+        const double step = CnCNew.Tests.TestTime.FrameSeconds;
 
         ulong Run(bool withAudio, out AudioDirectorStats? stats, out int flashes, out string report)
         {
@@ -818,8 +859,8 @@ internal static class AudioDirectorTests
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard) { AutoPlay = true };
 
-        const int frames = 30 * 20; // 20 s of game time at 30 Hz
-        const int blockFrames = 1470; // one tick's worth of audio at 44100 Hz / 30 Hz
+        const int frames = CnCNew.Tests.TestTime.FramesPerSecond * 20; // 20 s of game time, one original frame per step
+        const int blockFrames = 44100 / CnCNew.Tests.TestTime.FramesPerSecond; // one original frame's worth of audio at 44100 Hz
 
         (byte[] Hash, float[] Wave, AudioDirectorStats Stats, double WallMs) Once()
         {
@@ -832,8 +873,8 @@ internal static class AudioDirectorTests
             var clock = Stopwatch.StartNew();
             for (var frame = 0; frame < frames; frame++)
             {
-                live.Advance(1.0 / 30);
-                director.Update(live, 1.0 / 30);
+                live.Advance(CnCNew.Tests.TestTime.FrameSeconds);
+                director.Update(live, CnCNew.Tests.TestTime.FrameSeconds);
                 if (frame == frames / 4) director.NotifyInsufficientFunds();
                 var written = director.Mixer.Render(block);
                 block.AsSpan(0, written * 2).CopyTo(wave.AsSpan(frame * blockFrames * 2, written * 2));
@@ -868,7 +909,7 @@ internal static class AudioDirectorTests
         Console.WriteLine($"  missing unit voices: {string.Join(", ", stats.MissingUnitVoices.Select(pair => $"{pair.Key}={pair.Value}"))}");
         Console.WriteLine($"  outcomes: {string.Join(", ", stats.Outcomes.Select(pair => $"{pair.Key}={pair.Value}"))}");
         Console.WriteLine($"  mixer: rendered {stats.Mixer.RenderedFrames}, started {stats.Mixer.Started}, stolen {stats.Mixer.Stolen}, rejectedLimit {stats.Mixer.RejectedLimit}, rejectedNoChannel {stats.Mixer.RejectedNoChannel}, rejectedDistance {stats.Mixer.RejectedDistance}");
-        Console.WriteLine($"  {frames} frames ({frames / 30.0:F0} s game time) in {runA.WallMs:F0} ms wall time -> {runA.WallMs / frames:F3} ms/block, real-time factor {(frames / 30.0) / (runA.WallMs / 1000.0):F1}x, pool capacity reference {poolCapacity}");
+        Console.WriteLine($"  {frames} frames ({frames * CnCNew.Tests.TestTime.FrameSeconds:F0} s game time) in {runA.WallMs:F0} ms wall time -> {runA.WallMs / frames:F3} ms/block, real-time factor {(frames * CnCNew.Tests.TestTime.FrameSeconds) / (runA.WallMs / 1000.0):F1}x, pool capacity reference {poolCapacity}");
 
         TestHarness.Assert(stats.CuesReceived >= 0, "cue count is measured, never assumed");
         TestHarness.Assert(stats.Mixer.RejectedLimit >= 0 && stats.Mixer.Stolen >= 0, "the limit/steal counters exist (voice limits are enforced by the mixer's own Admit path, see SoftwareMixer)");

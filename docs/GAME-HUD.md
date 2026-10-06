@@ -566,3 +566,23 @@ der Anzeige bei Nacht (`setIndicatorColor` mit Nachtfarbe), ein Schatten des Vor
 
 **Nicht belegt:** wie das Vorschaumodell im laufenden Fenster aussieht (Lesbarkeit bei 0,45 gegen helles Gelände, Rottönung bei dunklen Texturen, Schatten- und Sortierreihenfolge mit den anderen
 durchscheinenden Objekten) – gesehen sind zwei Standbilder des Headless-Laufs; die Rottönung ist ein Faktor auf die Oberflächenfarbe (`FlashTint.Gain`), nicht die Licht-Addition des Originals.
+
+## 19. Phase 21: Zeit und Tickrate
+
+Das HUD nimmt nirgends mehr an, dass ein Tick 1/30 s dauert. Die Werte aus `InGameUI.ini` sind in **Originalbildern** (1/30 s; `InGameUiSettings` rechnet mit `CnCNew.Data.OriginalFrame.PerSecond`, die eigene Konstante `LogicFramesPerSecond` gibt es nicht mehr); verglichen werden sie mit der Spieluhr in Originalbildern (`LiveGame.Clock.OriginalFrames`), nie mit Simulationsticks. Bei 30 Hz sind alle 54 Screen-Hashes, der HUD-Drawlist-Hash und die 164 Dateien des `UiRenderTool` unverändert (`docs/TICKRATE-MIGRATION.md` §14.2).
+
+| Was | Vorher | Jetzt |
+|---|---|---|
+| Spielschleife (`LiveGame.Advance`) | fester Schritt `1.0 / 30`, höchstens 8 Ticks je Bild | Schritt `1.0 / world.Time.TicksPerSecond`; Aufholgrenze als Zeitbudget von 8 Originalbildern (0,27 s Spielzeit, bei 60 Hz 16 Ticks) |
+| Spieluhr | – | `LiveGame.Clock` (`GameClock`: Tick, Rate, Interpolationsanteil; ganzzahlig geführt, steht bei Pause, läuft mit der Spielgeschwindigkeit) |
+| Meldungsliste (`HudMessageFeed.Clock`, `UiMessageLog.Update`) | Stempel und ein Update je Tick | Stempel in Originalbildern, ein Update je Originalbild (`MatchController.OnTickStepped` nur auf Bildgrenzen) |
+| Unter-Beschuss-Zeile | `30 * 10` Ticks | `OriginalFrame.PerSecond * 10` Originalbilder, in Ticks der Welt verglichen |
+| Superwaffenliste | Restzeit `(readyFrame - Tick) / 30`, Blinken `tick / flashFrames` | Restzeit `world.Time.ToWholeSeconds`, Blinken auf der Originalbild-Uhr |
+| Benannte Zähler der Mission | Timerwert der Skript-VM (Ticks) durch 30 | der Director rechnet den Timerwert in Originalbilder um (`CounterForDisplay`), `MissionTextOverlay.NamedTimers` teilt durch `OriginalFrame.PerSecond` |
+| Nebeldarstellung | alle `SimulationWorld.VisionIntervalTicks` Ticks | alle `world.VisionInterval` Ticks (die Konstante ist entfernt) |
+| Daueraufträge (`StandingOrders.Update`) | je Tick geprüft, je Tick ein Feuerbefehl | je Originalbild (auf den Ticks, die eines beginnen): die Befehle, die ein Dauerauftrag erzeugt – und damit der Replay-Inhalt – folgen der Spielzeit; bei 30 Hz dieselben Befehle wie zuvor |
+| Befehlsmarken, Tooltip, Mauszeiger, Kamera | Wandzeit mit einer eigenen 30 | Wandzeit, die 30 ist `OriginalFrame.PerSecond` (`OrderHintBook`, `CameraSettings.FramesPerSecond`, `RtsCamera`) |
+
+Rauchtest und Eingabeskripte (§17): ein gezeichnetes Bild ist ein Originalbild Spielzeit bei jeder Rate; die Bildnummern eines Skripts bleiben gültig, wenn der Client mit `--tick-rate 60` läuft.
+
+**Offen:** die Spielstandslisten (`MissionPauseMenu`, `LoadGameScreen`) zeigen weiter den rohen Tick („tick N“), und `SaveGame` (Version 1) schreibt keine Rate; ein Spielstand einer anderen Rate wird über den Definitions-Fingerabdruck (der die Rate enthält) und den eingebetteten Missionszustand abgelehnt, nicht über ein eigenes Feld. **Nicht belegt:** Aussehen und Bedienung bei 60 Hz – kein Mensch hat es gesehen.

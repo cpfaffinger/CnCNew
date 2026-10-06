@@ -151,7 +151,7 @@ public sealed class GameShell
     }
 
     /// <summary>Starts in <see cref="ShellPhase.Boot"/>: <see cref="GameData.Load"/> runs on a worker thread while the boot load screen shows its stage.</summary>
-    public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false)
+    public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false, CnCNew.Simulation.Time.SimulationRate? rate = null)
     {
         var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure, animateTransitions);
         if (viewport is null) shell.Viewport = FitViewport(environment, shell.Settings);
@@ -163,7 +163,7 @@ public sealed class GameShell
         shell.TreeServices = new UiTreeServices(shell._textMeasure) { Text = shell.TextSource, HeaderTemplates = shell.Layouts.HeaderTemplates };
         shell.Phase = ShellPhase.Boot;
         shell.Push(new LoadingScreen(shell, ShellLayoutNames.ShellGameLoadScreen));
-        shell._loadTask = Task.Run(() => GameData.Load(contentDirectory, stage => shell._loadStage = stage));
+        shell._loadTask = Task.Run(() => GameData.Load(contentDirectory, stage => shell._loadStage = stage, rate: rate));
         return shell;
     }
 

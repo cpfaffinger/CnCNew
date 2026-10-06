@@ -18,6 +18,8 @@ param(
     [string]$ContentDir,
     [string]$OutDir,
     [string]$Size = '1280x720',
+    # Simulationsrate (30, 60 oder 120 Hz); 0 = Standard der Spielschicht. Die Bildzahlen der Szenen sind Originalbilder (1/30 s Spielzeit) bei jeder Rate.
+    [int]$TickRate = 0,
     [switch]$NoBuild
 )
 
@@ -84,6 +86,7 @@ foreach ($scene in $scenes) {
     $png = Join-Path $OutDir "$name.png"
     if (Test-Path -LiteralPath $png) { Remove-Item -LiteralPath $png }
     $clientArgs = @('--smoke-test', '--content-dir', $ContentDir, '--size', $Size) + $scene[1] + @('--capture', $png)
+    if ($TickRate -gt 0) { $clientArgs += @('--tick-rate', "$TickRate") }
     Write-Host "== $name" -ForegroundColor Cyan
     if ($scene.Count -gt 3 -and $scene[3] -eq 'reveal') { $env:CNCNEW_TERRAIN_REVEAL = '1' } else { Remove-Item Env:CNCNEW_TERRAIN_REVEAL -ErrorAction SilentlyContinue }
     dotnet run --project $project -c Release --no-build -- @clientArgs | Out-Null

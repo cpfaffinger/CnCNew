@@ -35,7 +35,7 @@ public sealed class MissionController : IMissionHudControl
         // One message list (InGameUI::m_uiMessages): the scripts' DISPLAY_TEXT and the game's own messages share it, the director fades and draws it.
         mission.Director.UseMessages(Hud.Messages.Log);
         Hud.OwnsMessageList = false;
-        Hud.Messages.Clock = () => mission.Director.Clock;
+        Hud.Messages.Clock = () => mission.Director.FrameClock;
         Hud.Messages.AnnounceDefeats = false;
         _textMeasure = textMeasure ?? new MonospaceTextMeasure();
     }

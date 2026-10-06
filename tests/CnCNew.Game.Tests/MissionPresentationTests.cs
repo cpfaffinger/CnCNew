@@ -61,7 +61,8 @@ internal static class MissionPresentationTests
     ]));
 
     /// <summary>A 30x30-cell map with a human side, one team, the given waypoints/objects and <paramref name="scripts"/> in the human's list.</summary>
-    internal static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) Mission(MapScript[] scripts, MapObject[]? objects = null, int boundaries = 1, int cells = 30)
+    /// <param name="rate">The tick rate of the fixture's catalog (the original's when null); the session started from it ticks at that rate.</param>
+    internal static (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) Mission(MapScript[] scripts, MapObject[]? objects = null, int boundaries = 1, int cells = 30, SimulationRate? rate = null)
     {
         const int border = 1;
         var width = cells + 2 * border;
@@ -74,13 +75,13 @@ internal static class MissionPresentationTests
         var teams = ImmutableArray.Create(new MapProperties([Text("teamName", "teamHero"), Text("teamOwner", "Hero"), new MapProperty("teamIsSingleton", MapPropertyType.Bool, 1, 0m, string.Empty)]));
         var map = new MapData("mission-presentation", new MapHeightField(width, width, border, [..Enumerable.Repeat(new MapBoundary(cells, cells), boundaries)], [..new byte[width * width]]), blend, MapProperties.Empty,
             sides, teams, [..objects ?? []], [], [], [new MapScriptList([], []), new MapScriptList([..scripts], [])], []);
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(rate ?? SimulationRate.Original);
         return (map, fixture, TerrainMap.Build(map, "mission-presentation"));
     }
 
-    internal static MissionSession Start(MapScript[] scripts, MapObject[]? objects, MissionOptions? options = null)
+    internal static MissionSession Start(MapScript[] scripts, MapObject[]? objects, MissionOptions? options = null, SimulationRate? rate = null)
     {
-        var (map, fixture, terrain) = Mission(scripts, objects);
+        var (map, fixture, terrain) = Mission(scripts, objects, rate: rate);
         return MissionSession.Start(options ?? MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
     }
 
@@ -116,7 +117,7 @@ internal static class MissionPresentationTests
         // CompletePresentation must land before the Update() call of this exact engine tick to unblock that tick's
         // CAMERA_MOVEMENT_FINISHED check (BeforeStep()'s own doc comment explains why: same timing as the engine's own
         // PresentationLatencyTicks auto-expiry, which also runs at the top of Update, before that tick's scripts).
-        var completionTick = fireTick + (long)Math.Round((double)durationSeconds * SimulationRate.OriginalFramesPerSecond);
+        var completionTick = fireTick + CnCNew.Tests.TestTime.Ticks(session.World, (long)durationSeconds);
         while (true)
         {
             var dueThisStep = session.World.Tick >= completionTick;

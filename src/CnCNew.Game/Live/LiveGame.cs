@@ -21,18 +21,25 @@ namespace CnCNew.Game.Live;
 /// <summary>
 /// A running game with everything the presentation needs around the simulation: projected frames, effects, fog, camera and minimap. The simulation behind
 /// it is a skirmish (<see cref="LiveMatch"/>) or a campaign mission (<see cref="LiveMission"/>); the HUD (<c>MatchController</c>), the audio director and the
-/// renderer only see this class. <see cref="Advance"/> is called once per rendered frame; it steps the simulation at 30 Hz and keeps every derived layer in
+/// renderer only see this class. <see cref="Advance"/> is called once per rendered frame; it steps the simulation at the rate of its world and keeps every derived layer in
 /// sync. No Stride types here, so the whole loop runs headless in tests.
 /// </summary>
 public abstract class LiveGame
 {
-    private const double TickSeconds = 1.0 / SimulationRate.OriginalFramesPerSecond;
-    private const int MaxTicksPerFrame = 8;
+    /// <summary>
+    /// How much game time one <see cref="Advance"/> may catch up at most, in original frames (0.27 s): a time budget, so a slow frame costs the same game time at every
+    /// tick rate. What is left over is dropped down to one tick.
+    /// </summary>
+    private const int MaxCatchUpFrames = 8;
+
+    private readonly double _tickSeconds;
+    private readonly long _maxTicksPerFrame;
 
     private readonly FrameProjector _projector;
     private readonly SimulationFxWorldView _fxView;
     private readonly List<SoundCue> _soundCues = [];
     private double _accumulator;
+    private double _fraction;
     private IPresentationPhaseObserver? _phaseObserver;
 
     /// <param name="world">The simulation world the presentation reads.</param>
@@ -48,6 +55,9 @@ public abstract class LiveGame
         Terrain = terrain;
         Map = map;
         Human = human;
+        // One tick of this world in seconds, and the catch-up budget in its ticks: both follow the rate of the world, never a constant of the game layer.
+        _tickSeconds = 1.0 / world.Time.TicksPerSecond;
+        _maxTicksPerFrame = world.Time.OriginalFrames(MaxCatchUpFrames);
 
         var renderOptions = TerrainRenderOptions.FromDefinitions(graph);
         var lookup = new TerrainTextureLookup(TerrainTextureCatalog.FromDefinitions(graph), path =>
@@ -68,7 +78,7 @@ public abstract class LiveGame
         Colors = TeamColors.Resolve(players, graph);
         var scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
         _projector = new FrameProjector(data.Visuals, new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph) });
-        Fx = new FxExecutor(data.Fx, fxSeed, new ParticleBudget());
+        Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
         _fxView = new SimulationFxWorldView(world);
         Frame = RenderFrame.Empty;
         SyncAfterTick(default);
@@ -115,6 +125,12 @@ public abstract class LiveGame
             ? Frame with { Drawables = Frame.Drawables.Add(preview) }
             : Frame;
     public long Tick => World.Tick;
+
+    /// <summary>
+    /// The presentation clock: game time from the world's tick, its rate and the interpolation fraction of the last <see cref="Advance"/>. It stands while paused and
+    /// runs with <see cref="Speed"/>. Everything that shows or sounds for a duration reads this (or the tick with <c>World.Time</c>), never a rate of its own.
+    /// </summary>
+    public GameClock Clock => GameClock.Of(World, _fraction);
 
     /// <summary>Faction name of the viewer's player (selects the control bar scheme and the Eva voice).</summary>
     public abstract string HumanFaction { get; }
@@ -196,7 +212,7 @@ public abstract class LiveGame
         {
             _accumulator += seconds * Speed;
             var steps = 0;
-            while (_accumulator >= TickSeconds && steps < MaxTicksPerFrame && !IsOver)
+            while (_accumulator >= _tickSeconds && steps < _maxTicksPerFrame && !IsOver)
             {
                 var observer = _phaseObserver;
                 observer?.PhaseStarted(PresentationPhase.BeforeTick);
@@ -211,10 +227,10 @@ public abstract class LiveGame
                 observer?.PhaseStarted(PresentationPhase.TickStepped);
                 TickStepped?.Invoke(result);
                 observer?.PhaseEnded(PresentationPhase.TickStepped);
-                _accumulator -= TickSeconds;
+                _accumulator -= _tickSeconds;
                 steps++;
             }
-            if (steps == MaxTicksPerFrame) _accumulator = Math.Min(_accumulator, TickSeconds);
+            if (steps == _maxTicksPerFrame) _accumulator = Math.Min(_accumulator, _tickSeconds);
         }
         var frameObserver = _phaseObserver;
         frameObserver?.PhaseStarted(PresentationPhase.FogAdvance);
@@ -224,7 +240,9 @@ public abstract class LiveGame
         OnAdvanced(Paused ? 0 : seconds * Speed);
         frameObserver?.PhaseEnded(PresentationPhase.OnAdvanced);
         frameObserver?.PhaseStarted(PresentationPhase.Project);
-        Frame = _projector.Project(Paused ? 1f : (float)Math.Clamp(_accumulator / TickSeconds, 0, 1));
+        var alpha = Paused ? 1f : (float)Math.Clamp(_accumulator / _tickSeconds, 0, 1);
+        if (!Paused) _fraction = alpha;
+        Frame = _projector.Project(alpha);
         frameObserver?.PhaseEnded(PresentationPhase.Project);
     }
 
@@ -247,13 +265,14 @@ public abstract class LiveGame
         if (result.Events is not null) Fx.ExecuteEvents(result.Events, _fxView);
         observer?.PhaseEnded(PresentationPhase.FxExecuteEvents);
         observer?.PhaseStarted(PresentationPhase.FxUpdate);
-        Fx.Update(_fxView);
+        // Effects are authored per original frame: their clock is game time on the 1/30 s grid, not the tick. At 30 Hz every tick begins a frame.
+        if (World.Time.IsOriginalFrameBoundary(World.Tick)) Fx.Update(_fxView);
         observer?.PhaseEnded(PresentationPhase.FxUpdate);
         observer?.PhaseStarted(PresentationPhase.DrainSoundCues);
         _soundCues.AddRange(Fx.DrainSoundCues());
         observer?.PhaseEnded(PresentationPhase.DrainSoundCues);
         observer?.PhaseStarted(PresentationPhase.FogUpdate);
-        if (World.Tick % SimulationWorld.VisionIntervalTicks == 0) Fog.Update(World.Vision!, HumanVisionSlot);
+        if (World.Tick % World.VisionInterval == 0) Fog.Update(World.Vision!, HumanVisionSlot);
         observer?.PhaseEnded(PresentationPhase.FogUpdate);
     }
 }

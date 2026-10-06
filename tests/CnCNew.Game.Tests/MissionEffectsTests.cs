@@ -260,10 +260,10 @@ internal static class MissionEffectsTests
             StepOnce(session, director);
             var camera = new RtsCamera(MinimalCameraSettings() with { MaxShakeIntensity = 10f, MaxShakeRange = 500f }, new TerrainHeightSampler(map.HeightField), new Vector2(1280, 720));
             var offsets = new List<float>();
-            director.ApplyCameraTo(camera, 1.0 / 30);
+            director.ApplyCameraTo(camera, CnCNew.Tests.TestTime.FrameSeconds);
             for (var frame = 0; frame < 8; frame++)
             {
-                camera.Update(1f / 30, false);
+                camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, false);
                 offsets.Add(camera.ShakeOffset.Length());
             }
             return ([..offsets], [..director.Problems.Keys], director.Counts().Single(count => count.Action == "SCREEN_SHAKE"));
@@ -290,11 +290,11 @@ internal static class MissionEffectsTests
         StepOnce(session, director);
         session.Engine.SignalUiInteraction("go");
         StepOnce(session, director);
-        director.ApplyCameraTo(camera, 1.0 / 30);
+        director.ApplyCameraTo(camera, CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(camera.ActiveBoundary == 1, "MAP_SWITCH_BORDER(1) switched the camera's border");
         session.Engine.SignalUiInteraction("missing");
         StepOnce(session, director);
-        director.ApplyCameraTo(camera, 1.0 / 30);
+        director.ApplyCameraTo(camera, CnCNew.Tests.TestTime.FrameSeconds);
         var result = director.Counts().ToDictionary(count => count.Action)["MAP_SWITCH_BORDER"];
         TestHarness.Assert(camera.ActiveBoundary == 1 && result is { Emitted: 2, Forwarded: 1, Displayed: 1 } && director.Problems.ContainsKey("MAP_SWITCH_BORDER: the map has no border 7"), $"a border the map lacks is reported and leaves the camera where it was ({result})");
     }
@@ -347,7 +347,7 @@ internal static class MissionEffectsTests
             var effects = director.PostEffects;
             blur.Add(effects.MotionBlurCount);
             factors.Add(effects.MotionBlurZoomFactor);
-            director.ApplyCameraTo(camera, 1.0 / 30);
+            director.ApplyCameraTo(camera, CnCNew.Tests.TestTime.FrameSeconds);
             if (cutAt < 0 && Vector2.Distance(camera.Pivot, new Vector2(1500, 1500)) < 1f) cutAt = step;
             TestHarness.Assert(effects.MotionBlurCount == 0 || effects.MotionBlurAdditive, "CAMERA_MOTION_BLUR_JUMP with saturate is the additive blur");
         }
@@ -371,7 +371,7 @@ internal static class MissionEffectsTests
 
     private static (LiveMission Live, MissionController Controller, FakeAudio Audio) LoadMission(GameData data, string map)
     {
-        var run = MissionRun.Load(MissionContext.From(data), map, MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyTicks });
+        var run = MissionRun.Load(MissionContext.From(data), map, MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
         var live = LiveMission.Create(data, run, new Vector2(1280, 720), label => label);
         var controller = new MissionController(live, GameSettings.Default);
         var audio = new FakeAudio();
@@ -391,7 +391,7 @@ internal static class MissionEffectsTests
         var flashed = false;
         for (var frame = 0; frame < 3900; frame++)
         {
-            controller.Update(1.0 / 30);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
             _ = director.PostEffects;
             maxShake = Math.Max(maxShake, live.Camera.ShakeOffset.Length());
             maxGrey = Math.Max(maxGrey, director.PostEffects.BlackWhite);
@@ -421,7 +421,7 @@ internal static class MissionEffectsTests
     private static void RealCommandBar(GameData data)
     {
         var (live, controller, _) = LoadMission(data, "Maps/MD_USA01/MD_USA01.map");
-        for (var frame = 0; frame < 120; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 120; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var catalog = controller.Hud.Input.CommandBar!.Catalog;
         var human = live.World.Entities.Where(entity => entity.Owner == live.Human && !entity.EffectivelyDead).OrderBy(entity => entity.Id.Value).ToArray();
         // Any own object with a command set and at least one button: remove its first button by script, the bar must lose it; add it back into its slot, the bar must show it again.
@@ -432,14 +432,14 @@ internal static class MissionEffectsTests
             if (slot < 0) continue;
             var button = set.Slots[slot]!;
             controller.Hud.Input.Selection.Replace([entity.Id]);
-            controller.Update(1.0 / 30);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
             var before = controller.Hud.CommandBar[slot + 1];
             if (before is null || before.Button.Name != button.Name) continue;
             TestHarness.Assert(controller.RemoveCommandButton(button.Name, entity.Template.Name), "the script's removal is accepted for a known type and button");
-            controller.Update(1.0 / 30);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(controller.Hud.CommandBar[slot + 1] is null, $"'{button.Name}' is gone from slot {slot + 1} of the bar of '{entity.Template.Name}'");
             TestHarness.Assert(controller.AddCommandButton(button.Name, entity.Template.Name, slot + 1), "the script puts it back");
-            controller.Update(1.0 / 30);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(controller.Hud.CommandBar[slot + 1]?.Button.Name == button.Name, "and the bar shows it again");
             TestHarness.Assert(!controller.RemoveCommandButton("Command_ThatDoesNotExist", entity.Template.Name) && !controller.RemoveCommandButton(button.Name, "NoSuchObjectType"), "an unknown button or type is refused, never ignored");
             return;
@@ -450,7 +450,7 @@ internal static class MissionEffectsTests
     private static void RealScienceAndSelection(GameData data)
     {
         var (live, controller, _) = LoadMission(data, "Maps/MD_USA01/MD_USA01.map");
-        for (var frame = 0; frame < 60; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 60; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var model = controller.Hud.Input.CommandBar!;
         var button = model.Catalog.Buttons.First(candidate => candidate.Kind == GuiCommandKind.PurchaseScience && candidate.Sciences.Length > 0);
         var science = button.Sciences[0];
@@ -477,23 +477,23 @@ internal static class MissionEffectsTests
     private static void RealColorsAndFlashes(GameData data)
     {
         var (live, controller, _) = LoadMission(data, "Maps/MD_USA01/MD_USA01.map");
-        for (var frame = 0; frame < 60; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 60; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var target = live.World.Entities.First(candidate => candidate.Owner == live.Human && !candidate.EffectivelyDead && live.Frame.Drawables.Any(drawable => drawable.Entity == candidate.Id));
         var effects = (IMissionObjectEffects)live;
         var before = live.Frame.Drawables.First(drawable => drawable.Entity == target.Id).TeamColor;
         TestHarness.Assert(effects.SetHouseColor(target.Id, 0xFFFF00FFu), "a drawn object takes a custom colour");
-        controller.Update(1.0 / 30);
+        controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var after = live.Frame.Drawables.First(drawable => drawable.Entity == target.Id).TeamColor;
         TestHarness.Assert(after.Red == 255 && after.Green == 0 && after.Blue == 255 && before != after, $"the drawable is drawn in the script's colour ({before} -> {after})");
         TestHarness.Assert(effects.SetHouseColor(target.Id, 0), "zero gives the owner's colour back");
-        controller.Update(1.0 / 30);
+        controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(live.Frame.Drawables.First(drawable => drawable.Entity == target.Id).TeamColor == before, "and it is the owner's colour again");
 
         TestHarness.Assert(effects.Flash(target.Id, Vector3.One, 1), "a drawn object flashes");
         var tints = new List<float>();
         for (var frame = 0; frame < 45; frame++)
         {
-            controller.Update(1.0 / 30);
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
             tints.Add(live.Frame.Drawables.First(drawable => drawable.Entity == target.Id).FlashTint.Length());
         }
         var flashes = tints.Zip(tints.Skip(1), (a, b) => (a, b)).Count(pair => pair.b > pair.a * 1.5f && pair.b > 0.1f);
@@ -530,7 +530,7 @@ internal static class MissionEffectsTests
         var (live, controller, _) = LoadMission(data, "Maps/GC_NukeGeneral/GC_NukeGeneral.map");
         var text = data.LoadText("English");
         string? Label(string label) => text.TryGet(label, out var resolved) ? resolved : null;
-        for (var frame = 0; frame < 60; frame++) controller.Update(1.0 / 30);
+        for (var frame = 0; frame < 60; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
 
         // GC_NukeGeneral hides the five nuclear missile launchers of the enemy general at the start (NAMED_HIDE_SPECIAL_POWER_DISPLAY).
         var superweapons = controller.Hud.Superweapons;

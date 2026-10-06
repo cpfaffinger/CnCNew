@@ -34,8 +34,9 @@ internal static class HudFeedbackScenes
             {
                 for (var frame = 0; frame < frames; frame++)
                 {
-                    match.Advance(1.0 / 30);
-                    controller.Update(1.0 / 30);
+                    // One original frame (1/30 s) of game and wall time per step, at whatever rate the data's sessions tick.
+                    match.Advance(1.0 / CnCNew.Data.OriginalFrame.PerSecond);
+                    controller.Update(1.0 / CnCNew.Data.OriginalFrame.PerSecond);
                 }
             }
             void Click(Vector2 at)

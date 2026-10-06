@@ -60,9 +60,9 @@ internal static class ShellFlowScenes
             Shot(shell, "skirmish-setup-map");
             Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
             Shot(shell, "match-loading");
-            shell.Update(1.0 / 30);
+            shell.Update(1.0 / CnCNew.Data.OriginalFrame.PerSecond);
             var start = shell.DrainOutputs().OfType<StartMatchOutput>().Single();
-            var setup = start.Setup with { Options = start.Setup.Options with { MaxTicks = 600 } };
+            var setup = start.Setup with { Options = start.Setup.Options with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(20) } };
             var live = LiveMatch.Create(data, setup, new Vector2(width, height));
             var stats = new MatchStatistics();
             while (!live.Session.IsOver) stats.Record(live.Session.Step());

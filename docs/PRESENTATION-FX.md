@@ -271,3 +271,16 @@ Kamerawackeln, Decalpuffer, Soundcue-Regeln und Ratenbegrenzer. Mit `--content-d
 - `GameLOD.ini`-Stufen (MaxParticleCount 500/1.500/3.000, MinParticlePriority, ParticleSkipMask) werden nicht gelesen;
   der Aufrufer setzt `ParticleBudget` passend zur gewählten Detailstufe.
 - Keine neuen NuGet-Abhängigkeiten (nur BCL, `System.Numerics`).
+
+## Zeit und Tickrate (Phase 21)
+
+FX-Daten sind in **Originalbildern** (1/30 s) verfasst: Lebensdauern, Verzögerungen, Geschwindigkeiten, Dämpfungen und Keyframes je Bild (`FxValueReader.FramesPerSecond = OriginalFrame.PerSecond`, die eine Konstante außerhalb der Simulation). Die Partikeluhr (`ParticleWorld.Step`, `FxExecutor.Frame`) zählt deshalb Originalbilder, nie Simulationsticks.
+
+- **Wer die Uhr treibt:** `LiveGame.SyncAfterTick` ruft `Fx.ExecuteEvents` nach jedem Tick, `Fx.Update` aber nur auf den Ticks, die ein Originalbild beginnen (`World.Time.IsOriginalFrameBoundary`): bei 30 Hz nach jedem Tick (unverändert), bei 60 Hz nach jedem zweiten. Die Uhr hängt damit ganzzahlig an Tick und Rate (kein in `double` summierter Akkumulator), steht bei Pause und läuft mit der Spielgeschwindigkeit. Ein Effekt, den ein Ereignis zwischen zwei Bildgrenzen auslöst, beginnt mit dem nächsten Originalbild – höchstens einen Tick später.
+- **Eine Uhr für die Drosselung der Schadenseffekte:** `DamageFX.ThrottleTime` ist eine Dauer in Originalbildern; `FxExecutor.Damaged` vergleicht sie mit Ereignisticks. Die Dauer wird jetzt über den Zeitdienst der Welt in Ticks umgerechnet (`_time.OriginalFrames(throttle)`), der Vergleich läuft einheitlich auf dem Simulationstick. `FxExecutor` und `SoundCueDeriver` bekommen dazu den Zeitdienst der Welt im Konstruktor (kein Standardwert).
+- **Tonhinweise:** `SoundCue.Tick` bleibt der Simulationstick des Ereignisses. Die Sperre der Unter-Beschuss-Meldung (`Radar::tryEvent`, 10 s) ist `OriginalFrame.PerSecond * 10` Originalbilder, in Ticks der Welt verglichen. Der Flutschutz (`SoundCueRateLimiter`) zählt je **Zeit** statt je Tick: `SoundCueLimits.WindowFrames` (10 Originalbilder) und `MaxPerFrame` (48 je Originalbild); `Filter(cues, ticksPerOriginalFrame, listener)` rechnet die Ticks der Hinweise um. Eine 60-Hz-Welt lässt damit so viele Töne je Sekunde durch wie eine 30-Hz-Welt (`FxTests`, `RateLimiter`).
+- **`FxAudit.ExecuteAll`** stuft Originalbilder und hat keine Welt; der Zeitdienst wird nur durchgereicht (`PresentationTool fx-audit` übergibt den der Originalrate).
+
+Bei 30 Hz unverändert: Prüfsumme des Ausführungslaufs von `fx-audit`, Digest von `sync-perf --digest` (enthält jedes Effektbild), die Aufnahmen und Tonmitschnitte des Clients (`docs/TICKRATE-MIGRATION.md` §14.2).
+
+Zeitmaß bei 60 Hz (`tests/CnCNew.Game.Tests/TimeScaleTests.cs`, Realdaten): die Effektuhr steht nach jedem Tick genau auf dem Originalbild der Spielzeit, und ein von Hand erzeugtes Partikelsystem lebt bei 30 und 60 Hz gleich lange mit derselben Höchstzahl an Partikeln (Zahlen in `docs/TICKRATE-MIGRATION.md` §14.4). **Nicht belegt:** wie Effekte bei 60 Hz aussehen; das Partikelbild ändert sich 30-mal je Sekunde, die Objekte 60-mal.

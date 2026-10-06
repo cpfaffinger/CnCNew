@@ -336,3 +336,16 @@ wird: SHA-256 der gesamten Ausgabe ist zwischen beiden Läufen byteidentisch (De
 (`Stats.UnresolvedEvents`), und ein Renderblock (33&nbsp;ms Ausgabe) braucht deutlich weniger als 33&nbsp;ms
 Rechenzeit. Ein Mitschnitt der ersten drei Sekunden geht als 16-Bit-Stereo-WAV in das Scratchpad der Session (Pfad
 über die Umgebungsvariable `CNCNEW_AUDIO_SCRATCH`, sonst `%TEMP%`), niemals in das Repository.
+
+## Zeit und Tickrate (Phase 21)
+
+Der Ton nimmt nirgends mehr an, dass ein Tick 1/30 s dauert. Bei 30 Hz sind die Tonmitschnitte des Clients byteidentisch zu vorher (`docs/TICKRATE-MIGRATION.md` §14.2).
+
+- **Uhr.** `IAudioGameView.Tick` ist durch `IAudioGameView.Clock` ersetzt (`GameClock` aus `LiveGame.Clock`: Tick, Rate der Welt, Interpolationsanteil).
+- **Eva.** `Eva.ini` nennt Millisekunden, das Original rechnet sie in Logikbilder (`parseDurationUnsignedInt`) und zählt `TheGameLogic->getFrame()`. `EvaCatalog` rechnet mit `OriginalFrame.PerSecond` in **Originalbilder** (Standardwerte 900 und 150 Bilder = 30 s und 5 s), und `AudioDirector.UpdateEva` gibt dem Ansager die Originalbildnummer der Spielzeit (`view.Clock.OriginalFrames`) – einmal je Originalbild statt einmal je Tick. Sperrzeit, Verfall, die Schonfrist „vor Bild 2“ und das „ein Bild vorher“ von `processPlayingMessages` dauern damit bei jeder Rate gleich lang.
+- **Flutschutz.** `AudioDirectorOptions.CueLimits` zählt je Zeit: höchstens 3 je Ereignisname in 10 Originalbildern, höchstens 48 je Originalbild (`SoundCueLimits.WindowFrames`/`MaxPerFrame`, früher `WindowTicks`/`MaxPerTick`). Der Zähler der Statistik heißt `DroppedByFrameCap`.
+- **Unter-Beschuss-Meldung** (`SoundCueDeriver`, `HudMessageFeed`): 10 s als Originalbilder, in Ticks der Welt verglichen.
+- **Mission.** Der Tippton der Untertitel folgt dem Tippen, das einmal je Originalbild der Präsentationsuhr läuft (`docs/SCRIPT-ENGINE.md` §7a).
+- Unverändert an Wandzeit: Musik, Überblendungen, Pausenblende, Umgebungsschleifen, Mischer.
+
+Zeitmaß-Test (`AudioDirectorTests`, „Time scale: Eva's wait …“): mit dem Ereignis in jedem Tick angefordert liegen zwei Ansagen bei 30, 60 und 120 Hz je 30,0000 s auseinander. **Nicht belegt:** wie es bei 60 Hz klingt – kein Mensch hat es gehört.

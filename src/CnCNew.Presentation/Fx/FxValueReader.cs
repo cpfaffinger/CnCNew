@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using CnCNew.Data;
 using CnCNew.Data.Definitions;
 
 namespace CnCNew.Presentation.Fx;
@@ -14,7 +15,8 @@ namespace CnCNew.Presentation.Fx;
 /// </summary>
 internal sealed class FxValueReader(FxDiagnosticBag diagnostics, string subject)
 {
-    public const float FramesPerSecond = 30f;
+    /// <summary>FX data is authored per original frame (1/30 s); the particle clock steps once per original frame, never per simulation tick.</summary>
+    public const float FramesPerSecond = OriginalFrame.PerSecond;
     private const float FramesPerMillisecond = FramesPerSecond / 1000f;
     private const float SecondsPerFrame = 1f / FramesPerSecond;
     private const float RadiansPerDegree = MathF.PI / 180f;

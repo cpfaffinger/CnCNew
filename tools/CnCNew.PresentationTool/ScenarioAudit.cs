@@ -1,10 +1,13 @@
 using System.Globalization;
 using System.Numerics;
+using CnCNew.Data;
 using CnCNew.Game.Data;
 using CnCNew.Game.Live;
 using CnCNew.Presentation.Objects;
+using CnCNew.Presentation;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.PresentationTool;
@@ -29,11 +32,15 @@ internal static class ScenarioAudit
         }
 
         var scenario = DemoScenarios.Find(name) ?? throw new ArgumentException($"Unknown scenario '{name}'.");
+        // The audit's unit of time is the original frame (1/30 s of game time): one sample per original frame, --every and --ticks count them, and every tick the simulation
+        // hands out (event ticks, turret times) is converted on the way in. At 30 Hz an original frame is a tick, so nothing changes there; at 60 Hz the checks mean the same time.
         var every = int.Parse(Option("--every") ?? "30", CultureInfo.InvariantCulture);
-        var ticks = long.Parse(Option("--ticks") ?? scenario.Ticks.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+        var ticks = long.Parse(Option("--ticks") ?? scenario.Frames.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+        var rate = Option("--tick-rate") is { } rateText ? SimulationRate.FromTicksPerSecond(int.Parse(rateText, CultureInfo.InvariantCulture)) : GameData.DefaultSessionRate;
         // --synthetic-airfield: the airfield without the model's bones (the computed layout the simulation used before the bones were read); the jet checks then fail, which shows what they detect.
-        var data = GameData.Load(contentDir, null, !args.Contains("--synthetic-airfield"));
+        var data = GameData.Load(contentDir, null, !args.Contains("--synthetic-airfield"), rate);
         var live = LiveScenario.Create(data, scenario, new Vector2(1280, 720));
+        var ticksPerFrame = live.World.Time.TicksPerOriginalFrame;
 
         var events = new List<SimEvent>();
         var log = new List<string>();
@@ -41,24 +48,28 @@ internal static class ScenarioAudit
         live.TickStepped += result =>
         {
             if (result.Events is null) return;
-            foreach (var simEvent in result.Events) events.Add(simEvent);
+            foreach (var simEvent in result.Events) events.Add(simEvent with { Tick = GameClock.OriginalFrameOf(simEvent.Tick, ticksPerFrame) });
         };
         Console.WriteLine($"scenario {scenario.Name}: {scenario.Title}");
         Console.WriteLine($"  {scenario.Description}");
         Console.WriteLine($"  map {scenario.Map}, origin ({live.Anchor.X:F1},{live.Anchor.Y:F1}), {ticks} ticks, objects {string.Join(", ", live.Tags.Keys)}");
+        if (!rate.IsOriginal) Console.WriteLine($"  simulation rate {rate}: every 't', 'tick' and tick count below is an original frame (1/30 s), {ticksPerFrame} simulation ticks each");
         Console.WriteLine();
 
         var shotsAt = new List<(long Tick, string Shooter, string Victim, float Bearing, float Turret, bool HasTurret)>();
-        while (live.Tick < ticks && !live.IsOver)
+        // A scene starts one tick after its objects were placed; above 30 Hz that is in the middle of an original frame. Step single ticks to the next frame
+        // boundary first, so every sample is taken exactly where an original frame ends (nothing to do at 30 Hz).
+        while (!live.Clock.IsOriginalFrameBoundary && !live.IsOver) live.Advance(1.0 / live.World.Time.TicksPerSecond + 1e-9);
+        while (live.Clock.OriginalFrames < ticks && !live.IsOver)
         {
             var eventsBefore = events.Count;
-            live.Advance(1.0 / 30 + 1e-6);
+            live.Advance(1.0 / OriginalFrame.PerSecond + 1e-6);
             var frame = live.Frame;
             var sample = Capture(live, frame);
             history.Add(sample);
             for (var i = eventsBefore; i < events.Count; i++) NoteEvent(live, events[i], frame, log, shotsAt);
-            if (live.Tick % every == 0) PrintSample(live, sample);
-            if (Option("--debug-fire") is { } pair && live.Tick % every == 0 && pair.Split(',') is [var shooterTag, var victimTag]
+            if (live.Clock.OriginalFrames % every == 0) PrintSample(live, sample);
+            if (Option("--debug-fire") is { } pair && live.Clock.OriginalFrames % every == 0 && pair.Split(',') is [var shooterTag, var victimTag]
                 && live.Tags.TryGetValue(shooterTag, out var shooterId) && live.Tags.TryGetValue(victimTag, out var victimId)
                 && live.World.FindEntity(shooterId) is { } shooter && live.World.FindEntity(victimId) is { } victim)
             {
@@ -108,10 +119,10 @@ internal static class ScenarioAudit
             var health = entity.Body is { } body && body.MaxHealth.Raw != 0 ? ToFloat(body.Health) / ToFloat(body.MaxHealth) * 100f : 100f;
             float? relative = entity.TurretOf(0) is { } reading ? ToFloat(reading.Angle) * 180f / MathF.PI : null;
             units[tag] = new UnitSample(tag, !entity.EffectivelyDead, ToFloat(entity.X) - live.Anchor.X, ToFloat(entity.Y) - live.Anchor.Y, ToFloat(entity.Z), health,
-                ToFloat(entity.Speed) * 30f, yaw, turret, entity.Owner.Value, drawable?.Conditions.ToString() ?? "(not drawn)", relative, drawable?.FlashTint ?? Vector3.Zero);
+                ToFloat(entity.Speed) * live.World.Time.TicksPerSecond, yaw, turret, entity.Owner.Value, drawable?.Conditions.ToString() ?? "(not drawn)", relative, drawable?.FlashTint ?? Vector3.Zero);
         }
 
-        return new Sample(live.Tick, units);
+        return new Sample(live.Clock.OriginalFrames, units);
     }
 
     private static readonly HashSet<string> Reported = [];
@@ -223,7 +234,10 @@ internal static class ScenarioAudit
             if (!deaths.TryGetValue(victimTag, out var death) || deaths.ContainsKey(shooterTag)) continue;
             var entity = live.World.FindEntity(live.Tags[shooterTag]);
             if (entity?.Template.Turrets?[0] is not { } info) { failures.Add($"{shooterTag} has no turret template"); continue; }
-            var recenter = info.RecenterTicks;
+            var recenter = live.World.Time.ToOriginalFrames(info.RecenterTicks);
+            // Two to three ticks of step order (the death is noticed in its tick or the next, a sample follows its step), in original frames rounded up: 2 and 3 at 30 Hz.
+            var perFrame = live.World.Time.TicksPerOriginalFrame;
+            var (earliestOffset, latestOffset) = ((2 + perFrame - 1) / perFrame, (3 + perFrame - 1) / perFrame);
             var natural = ToFloat(info.NaturalAngle) * 180f / MathF.PI;
             // sample k carries the state after the step of tick k-1; the death is noticed in the step of tick `death` (or the next one) and starts the hold there
             var series = history.Where(sample => sample.Tick > death && sample.Units[shooterTag].TurretRelativeDegrees is not null).Select(sample => (sample.Tick, Angle: sample.Units[shooterTag].TurretRelativeDegrees!.Value)).ToArray();
@@ -231,12 +245,12 @@ internal static class ScenarioAudit
             var held = series[0].Angle;
             var firstMove = series.FirstOrDefault(item => Math.Abs(item.Angle - held) > 0.05f);
             var moved = firstMove.Tick != 0;
-            var rate = ToFloat(info.TurnRate) * 180f / MathF.PI * 0.5f;
+            var rate = ToFloat(info.TurnRate) * 180f / MathF.PI * 0.5f * live.World.Time.TicksPerOriginalFrame;
             var rest = series.FirstOrDefault(item => Math.Abs(item.Angle - natural) < 0.05f && item.Tick >= firstMove.Tick);
-            Console.WriteLine($"  {shooterTag,-13}died victim at {death}, RecenterTime {recenter} ticks, angle held {held:F1}; first moves at tick {(moved ? firstMove.Tick.ToString(CultureInfo.InvariantCulture) : "never")} (earliest {death + recenter + 2}); rests at {natural:F0} from tick {(rest.Tick != 0 ? rest.Tick.ToString(CultureInfo.InvariantCulture) : "never")}");
+            Console.WriteLine($"  {shooterTag,-13}died victim at {death}, RecenterTime {recenter} ticks, angle held {held:F1}; first moves at tick {(moved ? firstMove.Tick.ToString(CultureInfo.InvariantCulture) : "never")} (earliest {death + recenter + earliestOffset}); rests at {natural:F0} from tick {(rest.Tick != 0 ? rest.Tick.ToString(CultureInfo.InvariantCulture) : "never")}");
             if (!moved) { failures.Add($"{shooterTag}'s turret never turns back after the victim died"); continue; }
-            if (firstMove.Tick < death + recenter + 2) failures.Add($"{shooterTag}'s turret turned back at tick {firstMove.Tick}, before the recentre time was over (tick {death + recenter + 2})");
-            if (firstMove.Tick > death + recenter + 3) failures.Add($"{shooterTag}'s turret waited until tick {firstMove.Tick} to turn back (due at {death + recenter + 2})");
+            if (firstMove.Tick < death + recenter + earliestOffset) failures.Add($"{shooterTag}'s turret turned back at tick {firstMove.Tick}, before the recentre time was over (tick {death + recenter + earliestOffset})");
+            if (firstMove.Tick > death + recenter + latestOffset) failures.Add($"{shooterTag}'s turret waited until tick {firstMove.Tick} to turn back (due at {death + recenter + earliestOffset})");
             var expectedRest = firstMove.Tick + (int)MathF.Ceiling(Math.Abs(held - natural) / rate) + 2;
             if (rest.Tick == 0 || rest.Tick > expectedRest) failures.Add($"{shooterTag}'s turret did not come to rest by tick {expectedRest} (rest {rest.Tick})");
         }
@@ -287,11 +301,12 @@ internal static class ScenarioAudit
         if (complete.Length < 4) failures.Add($"the sentinel scanned only {complete.Length} times in {series.Length} ticks");
         if (complete.Any(value => Math.Abs(value.Peak) < minScan - 0.1f || Math.Abs(value.Peak) > maxScan + 0.1f)) failures.Add("a scan angle lies outside MinIdleScanAngle..MaxIdleScanAngle");
         var holds = complete.Select(value => value.AtPeak).ToArray();
-        Console.WriteLine($"  scan angles: {string.Join(", ", complete.Take(10).Select(value => value.Peak.ToString("F0", CultureInfo.InvariantCulture)))}; ticks held at the angle: {string.Join(", ", holds.Take(10))} (RecenterTime {info.RecenterTicks} ticks)");
-        if (holds.Any(value => value < info.RecenterTicks || value > info.RecenterTicks + 2)) failures.Add($"a scan angle was not held for RecenterTime ({info.RecenterTicks} ticks): {string.Join(", ", holds)}");
+        var (recenterFrames, minScanFrames, maxScanFrames) = (live.World.Time.ToOriginalFrames(info.RecenterTicks), live.World.Time.ToOriginalFrames(info.MinScanIntervalTicks), live.World.Time.ToOriginalFrames(info.MaxScanIntervalTicks));
+        Console.WriteLine($"  scan angles: {string.Join(", ", complete.Take(10).Select(value => value.Peak.ToString("F0", CultureInfo.InvariantCulture)))}; ticks held at the angle: {string.Join(", ", holds.Take(10))} (RecenterTime {recenterFrames} ticks)");
+        if (holds.Any(value => value < recenterFrames || value > recenterFrames + 2)) failures.Add($"a scan angle was not held for RecenterTime ({recenterFrames} ticks): {string.Join(", ", holds)}");
         var gaps = complete.Zip(complete.Skip(1), (left, right) => right.Start - left.End).ToArray();
-        Console.WriteLine($"  rest between the scans: {string.Join(", ", gaps.Take(10))} ticks (MinIdleScanInterval {info.MinScanIntervalTicks}, MaxIdleScanInterval {info.MaxScanIntervalTicks})");
-        if (gaps.Any(gap => gap < info.MinScanIntervalTicks || gap > info.MaxScanIntervalTicks)) failures.Add("the rest between two scans lies outside the scan interval");
+        Console.WriteLine($"  rest between the scans: {string.Join(", ", gaps.Take(10))} ticks (MinIdleScanInterval {minScanFrames}, MaxIdleScanInterval {maxScanFrames})");
+        if (gaps.Any(gap => gap < minScanFrames || gap > maxScanFrames)) failures.Add("the rest between two scans lies outside the scan interval");
 
         // the drawn turret and TURRET_ROTATE come from the simulation
         var mismatched = 0;
@@ -301,6 +316,8 @@ internal static class ScenarioAudit
             float Off(int at) => Math.Abs(Wrap((world - series[at].Unit.YawDegrees - series[at].Unit.TurretRelativeDegrees!.Value) * MathF.PI / 180f)) * 180f / MathF.PI;
             // the frame the presentation draws may still carry the previous tick's turret: it has to equal the simulated angle of this sample or of the one before
             if (i == 0 || Off(i) <= 0.6f || Off(i - 1) <= 0.6f) continue;
+            // Above 30 Hz a sample spans several ticks and the drawn turret is the one of the tick before the last: it lies between the two samples.
+            if (live.World.Time.TicksPerOriginalFrame > 1 && Off(i) + Off(i - 1) <= Math.Abs(Wrap((series[i].Unit.YawDegrees + series[i].Unit.TurretRelativeDegrees!.Value - series[i - 1].Unit.YawDegrees - series[i - 1].Unit.TurretRelativeDegrees!.Value) * MathF.PI / 180f)) * 180f / MathF.PI + 0.6f) continue;
             mismatched++;
             if (mismatched < 4) Console.WriteLine($"    mismatch t={series[i].Tick}: drawn {world:F1}, simulated {series[i].Unit.TurretRelativeDegrees:F1} (previous {series[i - 1].Unit.TurretRelativeDegrees:F1}), yaw {series[i].Unit.YawDegrees:F1}");
         }

@@ -37,12 +37,12 @@ internal static class ScenarioTests
                         }
                     };
                     TestHarness.Assert(scenario.Units.All(unit => live.Tags.ContainsKey(unit.Tag)), "every placed object is tagged");
-                    while (live.Tick < ticks) live.Advance(1.0 / 30 + 1e-6);
+                    while (live.Clock.OriginalFrames < ticks) live.Advance(CnCNew.Tests.TestTime.FrameSeconds + 1e-6); // the budget counts original frames
                     return (live.World.StateHash, facts);
                 }
 
-                var (first, facts) = Play(Math.Min(scenario.Ticks, 1300));
-                var (second, _) = Play(Math.Min(scenario.Ticks, 1300));
+                var (first, facts) = Play(Math.Min(scenario.Frames, 1300));
+                var (second, _) = Play(Math.Min(scenario.Frames, 1300));
                 TestHarness.Assert(first == second, "two runs end in the same state hash");
                 switch (scenario.Name)
                 {

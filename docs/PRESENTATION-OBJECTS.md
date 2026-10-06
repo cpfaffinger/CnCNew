@@ -296,3 +296,28 @@ Flagableitung an einer echten `SimulationWorld` (Feuern/Nachladen, Schaden, Bewe
 Verkauf), Interpolation, Nebel mit Geistern, Kulisse mit Verdeckungsregel, Hausfarben. Mit
 `--content-dir .local/phase2-import-a` zusätzlich: Crusader und Kaserne gegen die Retaildaten, Audit ohne
 Unklassifiziertes und deterministisch, Projektion echter Vorlagen, Kulisse von „Alpine Assault“.
+
+## 11. Zeit und Tickrate (Phase 21)
+
+Die Objektdarstellung nimmt nirgends mehr an, dass ein Tick 1/30 s dauert. Zwei Begriffe, zwei Namen: die **Simulationsrate** kommt aus der Welt (`world.Time`), das **Originalbild** (1/30 s) ist die Einheit, in der das Original seine Client-Werte verfasst hat – außerhalb der Simulation genau eine Konstante, `CnCNew.Data.OriginalFrame.PerSecond`. Bei 30 Hz ist ein Originalbild ein Tick; deshalb ist dort jeder Wert und jede Prüfsumme unverändert (Beleg: `docs/TICKRATE-MIGRATION.md` §14).
+
+| Was | Vorher | Jetzt | Bei 60 Hz |
+|---|---|---|---|
+| Aufnahme und Interpolation (`FrameProjector.Advance`/`Project`) | je Tick | je Tick (unverändert) | doppelt so viele Aufnahmen, halb so große Interpolationsschritte – gewollt |
+| Mündungsfeuer (`FrameProjector.MuzzleFlashFrames = 4`) | `world.Tick - lastFire <= 4` | `<= world.Time.OriginalFrames(4)` | 9 statt 5 Ticks, gleiche Spielzeit |
+| `FIRING_A/B/C` (`ConditionDeriver.Weapon`) | „im letzten Tick gefeuert“ | „innerhalb des letzten Originalbilds gefeuert“ | zwei Ticks lang, 1/30 s wie bei 30 Hz |
+| Heilsymbol (`HealingIconFrames = 3 * OriginalFrame.PerSecond`) | `3 * 30` Ticks | in Ticks der Welt umgerechnet (`_healingIconTicks`) | 3 s |
+| Jubel (`UnitConditionTracker.CheerFrames`) | `3 * 30` Ticks | `FrameProjector.Cheer(entities, world)` rechnet um | 3 s |
+| Auswahl-/Übernahmeblitz (`SelectionFlashTracker`) | Alter in Ticks | Alter in Originalbildern (`GameClock.OriginalFrameOf` des Ereignisticks); die Hüllkurve (zwei Bilder Spitze, dann 3/4, 1/2, 1/4) ist eine Tabelle je Originalbild | gleiche Dauer; die Stufen wechseln alle zwei Ticks |
+| Skriptblitz (`ScriptFlashInterval = 15`, `StartScripted`) | `tick % 15`, `seconds * 30 / 15` | `Advance(frame)` einmal je Originalbild, Zahl der Blitze aus `OriginalFrame.PerSecond` | alle 0,5 s, vier Blitze in zwei Sekunden |
+| Fahrwerk (`SuspensionTracker`) | ein Schritt je Tick | ein Schritt je **Originalbild** (auf den Ticks, die eines beginnen); dazwischen wird die Pose gehalten | dieselbe Schwingung; die Pose ändert sich 30-mal je Sekunde |
+| `FREEFALL` der Lawinenfelsen | `Life < 100`, Fall je Tick > 0,2 | `Life < OriginalFrames(100)`, Fall je Tick mal Ticks je Originalbild > 0,2 | gleiche Schwelle je Spielzeit |
+| Aufräumen der Tabellen, Nebel der Szenerie | alle 150 bzw. 5 Ticks | alle 150 bzw. 5 Originalbilder (`PruneIntervalFrames`, `SceneryFogIntervalFrames`) | gleiche Spielzeit |
+
+**Fahrwerk: warum Bildraster und nicht Schrittweite.** Der Auftrag der Phase 21 nennt „Feder und Dämpfer mit der Schrittweite rechnen“. Das ist bewusst nicht so gebaut: die Rekursion aus `Drawable::calcPhysicsXformTreads/Wheels` ist eine Abbildung je Bild mit Faktoren je Bild (Dämpfung 0,9, steigende Nase halbiert, Räder folgen zur Hälfte, Lenkung um ein Zehntel, dazu Klemmen und der Bodenstoß), keine diskretisierte Differentialgleichung; mit halber Schrittweite gerechnet schwingt sie anders aus. Sie läuft deshalb bei jeder Rate einmal je Originalbild, Geschwindigkeit und Beschleunigung sind Differenzen über ein Originalbild (die Höchstgeschwindigkeit des Locomotors – je Tick der Welt – wird dafür auf das Originalbild umgerechnet), und der Zufall des Bodenstoßes hängt an der Bildnummer statt am Tick. Gemessen (`ObjectTests.TimeScale.cs`): Ausschwingen auf einen Hang 1,2667 s bei 30 und 60 Hz, 1,2833 s bei 120 Hz (ein Tick Versatz beim Erscheinen), Ruhelage auf fünf Nachkommastellen gleich. Die Pose wird weiterhin nicht interpoliert (Phase 29).
+
+**Bewusst in Ticks geblieben:** die Türuhr der Produktionsgebäude und `ConstructionComplete` (`StructureConditionTracker`: Stempel und Katalogdauern sind beide Ticks der Welt), die Mindesthaltezeit der Lenkzustände (`AnimationSteeringUpdate.MinTransitionTicks`), die Drehrichtung aus der Kursänderung eines Ticks gegen `Locomotor.TurnRatePerTick`, `ACTIVELY_BEING_CONSTRUCTED` (Bauarbeit gegenüber der vorigen Aufnahme) und die Teleport-Schwelle der Interpolation (`SnapDistance`, Weg zwischen zwei Aufnahmen).
+
+**Zeitmaß-Test** (`tests/CnCNew.Presentation.Tests/ObjectTests.TimeScale.cs`, je bei 30, 60 und 120 Hz auf der synthetischen Fixture der Rate, Toleranz ein Originalbild): Mündungsfeuer nach einem Schuss, `FIRING_A` (genau 1/30 s bei jeder Rate), Heilsymbol nach der letzten Heilung (3,0333 / 3,0167 / 3,0083 s), Skriptblitz (vier Blitze, Ende des letzten 1,6667 s nach der Anforderung, ein Blitz 0,1667 s), Ausschwingen des Fahrwerks.
+
+**Nicht belegt:** ob Mündungsfeuer, Blitz und Federung bei 60 Hz richtig *aussehen*. Gemessen sind Dauern, gesehen hat es kein Mensch (Sichtprüfliste: `docs/TICKRATE-MIGRATION.md` §14.7).

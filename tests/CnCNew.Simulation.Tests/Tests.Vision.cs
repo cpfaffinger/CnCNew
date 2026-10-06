@@ -110,7 +110,7 @@ static partial class Tests
 
     private static void VisionSettle(SimulationWorld world)
     {
-        for (var tick = 0; tick < SimulationWorld.VisionIntervalTicks; tick++) world.Step();
+        for (var tick = 0; tick < world.VisionInterval; tick++) world.Step();
     }
 
     private static Entity VisionAt(SimulationWorld world, string template, int x, int y)

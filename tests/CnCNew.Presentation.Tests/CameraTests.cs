@@ -130,7 +130,7 @@ internal static class CameraTests
     {
         var camera = new RtsCamera(Settings, Flat(), Viewport);
         var start = camera.Pivot;
-        var delta = camera.KeyboardScrollDelta(up: false, down: false, left: false, right: true, dtSeconds: 1f / 30f);
+        var delta = camera.KeyboardScrollDelta(up: false, down: false, left: false, right: true, dtSeconds: CnCNew.Tests.TestTime.FrameSecondsF);
         Assert(Vector2.Distance(delta, new Vector2(1.6f * 100 * 2, 0)) < 1e-3f, "one frame of right key = HorizontalScrollSpeedFactor * SCROLL_AMT * factor");
         camera.ScrollBy(delta);
         var moved = camera.Pivot - start;
@@ -139,21 +139,21 @@ internal static class CameraTests
         Near(0, moved.Y, 1e-3, "right scroll keeps y");
         Assert(camera.LastScrollAmount == delta, "scroll amount remembered");
         start = camera.Pivot;
-        camera.ScrollBy(camera.KeyboardScrollDelta(true, false, false, false, 1f / 30f));
+        camera.ScrollBy(camera.KeyboardScrollDelta(true, false, false, false, CnCNew.Tests.TestTime.FrameSecondsF));
         Assert(camera.Pivot.Y > start.Y && MathF.Abs(camera.Pivot.X - start.X) < 1e-3f, "up key scrolls north at yaw 0");
         camera.SetAngle(MathF.PI / 2);
         start = camera.Pivot;
-        camera.ScrollBy(camera.KeyboardScrollDelta(false, false, false, true, 1f / 30f));
+        camera.ScrollBy(camera.KeyboardScrollDelta(false, false, false, true, CnCNew.Tests.TestTime.FrameSecondsF));
         Assert(camera.Pivot.Y > start.Y + 10 && MathF.Abs(camera.Pivot.X - start.X) < 1e-2f, "right scroll follows the rotated view");
         // The input layer's amount (CameraIntent.Scroll: y forward, factors applied, per second) moves the camera exactly like the reference formula for the same key and time.
         var byKey = new RtsCamera(Settings, Flat(), Viewport);
         var byIntent = new RtsCamera(Settings, Flat(), Viewport);
         var origin = byIntent.Pivot;
-        byKey.ScrollBy(byKey.KeyboardScrollDelta(true, false, false, true, 1f / 30f));
-        byIntent.ScrollByIntent(new Vector2(1.6f * 2.0f, 2.0f * 2.0f) / 30f);
+        byKey.ScrollBy(byKey.KeyboardScrollDelta(true, false, false, true, CnCNew.Tests.TestTime.FrameSecondsF));
+        byIntent.ScrollByIntent(new Vector2(1.6f * 2.0f, 2.0f * 2.0f) / CnCNew.Tests.TestTime.FramesPerSecond);
         Assert(Vector2.Distance(byKey.Pivot, byIntent.Pivot) < 1e-2f && Vector2.Distance(byIntent.Pivot, origin) > 5f, $"an input-layer scroll of one frame equals one frame of the up and right keys ({byKey.Pivot} vs {byIntent.Pivot})");
-        Assert(camera.EdgeScrollDelta(new Vector2(1, 400), 1f / 30f).X < 0 && camera.EdgeScrollDelta(new Vector2(500, 400), 1f / 30f) == Vector2.Zero, "edge scrolling");
-        Assert(Vector2.Distance(camera.RightMouseScrollDelta(new Vector2(100, 100), new Vector2(110, 90), 1f / 30f), new Vector2(16, -20)) < 1e-3f, "right mouse drag");
+        Assert(camera.EdgeScrollDelta(new Vector2(1, 400), CnCNew.Tests.TestTime.FrameSecondsF).X < 0 && camera.EdgeScrollDelta(new Vector2(500, 400), CnCNew.Tests.TestTime.FrameSecondsF) == Vector2.Zero, "edge scrolling");
+        Assert(Vector2.Distance(camera.RightMouseScrollDelta(new Vector2(100, 100), new Vector2(110, 90), CnCNew.Tests.TestTime.FrameSecondsF), new Vector2(16, -20)) < 1e-3f, "right mouse drag");
         Assert(Vector2.Distance(camera.KeyboardScrollDelta(false, false, true, false, 0.1f), new Vector2(-960, 0)) < 1e-2f, "speed scales with elapsed frames");
     }
 
@@ -192,16 +192,16 @@ internal static class CameraTests
         Assert(camera.GroundLevel == 0, "west half on the ground");
         camera.CenterOn(new Vector2(1500, 1000));
         var zoom = camera.Zoom;
-        camera.Update(1f / 30f, isScrolling: false);
+        camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, isScrolling: false);
         var desired = (62.5f + 310f) / 232f;
         Near(zoom + (desired - zoom) * 0.3f, camera.Zoom, 1e-4, "one frame moves 30 % towards the desired zoom");
-        for (var i = 0; i < 120; i++) camera.Update(1f / 30f, false);
+        for (var i = 0; i < 120; i++) camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, false);
         Near(desired, camera.Zoom, 1e-3, "settles on the plateau height");
         Near(62.5f + 310f, camera.Eye.Z, 0.05, "camera height above the plateau");
         camera.CenterOn(new Vector2(600, 1000));
         camera.ScrollBy(new Vector2(200, 0));
         var fast = camera.Zoom;
-        camera.Update(1f / 30f, isScrolling: true);
+        camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, isScrolling: true);
         Assert(camera.Zoom == fast, "no height change while scrolling fast within the limits");
         Near(camera.HeightAroundPivot(), terrain.HeightAt(camera.Pivot.X, camera.Pivot.Y), 70, "height around pivot samples the neighbourhood");
     }
@@ -210,17 +210,17 @@ internal static class CameraTests
     {
         var camera = new RtsCamera(Settings, Flat(), Viewport);
         camera.Shake(camera.Pivot + new Vector2(75, 0), 2f, 0f);
-        camera.Update(1f / 30f, false);
+        camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, false);
         Assert(Vector2.Distance(camera.ShakeOffset, new Vector2(1, 0)) < 1e-5f, "intensity 2 at half range = 1 along the angle");
-        camera.Update(1f / 30f, false);
+        camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, false);
         Assert(Vector2.Distance(camera.ShakeOffset, new Vector2(-0.75f, 0)) < 1e-5f, "damped by 0.75 and reversed");
-        for (var i = 0; i < 40; i++) camera.Update(1f / 30f, false);
+        for (var i = 0; i < 40; i++) camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, false);
         Assert(camera.ShakeOffset == Vector2.Zero, "shake dies out");
         camera.Shake(camera.Pivot + new Vector2(500, 0), 5f, 0f);
-        camera.Update(1f / 30f, false);
+        camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, false);
         Assert(camera.ShakeOffset == Vector2.Zero, "beyond MaxShakeRange nothing happens");
         camera.Shake(camera.Pivot, 11f, 0f);
-        camera.Update(1f / 30f, false);
+        camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, false);
         Assert(camera.ShakeOffset == new Vector2(3, 0), "above MaxShakeIntensity the reference resets to 3");
         var eye = camera.Eye;
         camera.AddShakeOffset(new Vector2(0, 5));

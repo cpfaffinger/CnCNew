@@ -166,7 +166,7 @@ internal static class ShellTransitionTests
             $"the only image the flash groups ask for and the retail data lacks is the button gradient (the original draws nothing for it, too): [{string.Join(",", shell.CurrentScreen.Transitions.MissingImages)}]");
         TestHarness.Assert(sounds.Contains("GUIBoarderFadeIn") && sounds.Contains("GUIButtonsFadeIn"), $"the entry plays its sounds ({string.Join(",", sounds.Distinct())})");
         TestHarness.Assert(Dump(shell) == restingMain, "after the entry the menu draws exactly what the transition-free menu draws");
-        Console.WriteLine($"  main menu entry: {frames} frames ({frames / 30.0:F2} s); first visible frames: " + string.Join(", ", firstVisible.OrderBy(pair => pair.Value).Select(pair => $"{pair.Key[(pair.Key.IndexOf(':') + 1)..]} {pair.Value}")));
+        Console.WriteLine($"  main menu entry: {frames} frames ({frames * CnCNew.Tests.TestTime.FrameSeconds:F2} s); first visible frames: " + string.Join(", ", firstVisible.OrderBy(pair => pair.Value).Select(pair => $"{pair.Key[(pair.Key.IndexOf(':') + 1)..]} {pair.Value}")));
     }
 
     private static void InputDuringTransitions(GameData data)
