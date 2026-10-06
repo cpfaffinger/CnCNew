@@ -68,7 +68,7 @@ static partial class Tests
         Check.That(SimulationRate.Original.Time.SecondsToTicks(1m) == 30 && SimulationRate.Original.Time.SecondsToTicks(0.01m) == 1 && SimulationRate.Original.Time.SecondsToTicks(0m) == 0, "Seconds to ticks round up.");
         Check.That(SimulationRate.Original.Time.PerSecondToPerTick(30m) == Fixed.One && SimulationRate.Original.Time.PerSecondToPerTick(15m) == Fixed.FromDecimal(0.5m), "Velocity per tick.");
         Check.That(SimulationRate.Original.Time.PerSecondSquaredToPerTickSquared(900m) == Fixed.One, "Acceleration per tick squared.");
-        Check.That(SimulationTiming.DegreesToRadians(180m).Raw == 205887 && SimulationTiming.DegreesToRadians(0m) == Fixed.Zero && SimulationTiming.DegreesToRadians(-90m).Raw == -102944, "Degrees to radians uses pi to 28 digits, rounded to nearest.");
+        Check.That(SimulationTiming.DegreesToRadians(180m) == FixedTrig.Pi && SimulationTiming.DegreesToRadians(0m) == Fixed.Zero && SimulationTiming.DegreesToRadians(-90m) == -FixedTrig.HalfPi, "Degrees to radians uses pi to 28 digits, rounded to nearest.");
         Check.That(SimulationRate.Original.Time.DegreesPerSecondToRadiansPerTick(180m * 30m).Raw == 205887, "Angular velocity per tick.");
         Check.That(SimulationTiming.RatioToFixed(1.25m) == Fixed.FromDecimal(1.25m), "Percent ratio.");
     }

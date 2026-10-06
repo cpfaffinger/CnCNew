@@ -34,7 +34,7 @@ const string Usage = """
                                                            record the synthetic stress scenario as a replay with checkpoints
       replay-run <replay.bin>                              run a replay, verifying its checkpoints
       hash <replay.bin>                                    run a replay and print final hash and hash-chain digest
-      reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--out replay.bin] [--diagnose]
+      reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--world-seed HEX] [--driver-seed HEX] [--record-only] [--out replay.bin] [--diagnose]
                                                            headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
       ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin] [--trace N [--trace-army]]
                                                            skirmish AIs on a real map: record, two fresh runs, snapshot continuation
@@ -334,6 +334,8 @@ static int ReferenceMatch(string directory, string[] args)
     var options = ReferenceMatchOptions.Standard;
     if (Arg(args, "--max-ticks") is { } maxTicks) options = options with { MaxTicks = long.Parse(maxTicks, CultureInfo.InvariantCulture) };
     if (Arg(args, "--min-ticks") is { } minTicks) options = options with { MinTicks = long.Parse(minTicks, CultureInfo.InvariantCulture) };
+    if (Arg(args, "--world-seed") is { } worldSeed) options = options with { WorldSeed = uint.Parse(worldSeed, NumberStyles.HexNumber, CultureInfo.InvariantCulture) };
+    if (Arg(args, "--driver-seed") is { } driverSeed) options = options with { DriverSeed = uint.Parse(driverSeed, NumberStyles.HexNumber, CultureInfo.InvariantCulture) };
     var watch = Stopwatch.StartNew();
     var (_, catalog, fingerprint) = CompileShipped(directory);
     var factions = ReferenceMatchScenario.Participants(catalog, out var excluded);
@@ -366,6 +368,8 @@ static int ReferenceMatch(string directory, string[] args)
     Console.WriteLine(scenario.Winner is null
         ? $"No winner within {recorded.Header.EndTick} ticks."
         : $"Winner: player {scenario.Winner.Value.Value} ({scenario.WinnerFaction}) at tick {scenario.VictoryTick} ({CnCNew.SimTool.ToolRate.Minutes(scenario.VictoryTick):F1} game minutes); replay length {recorded.Header.EndTick} ticks.");
+    // --record-only: the course of the match under these seeds, without the replay checks (a survey over seeds).
+    if (args.Contains("--record-only")) return 0;
 
     var checkpointRun = ReplayRunner.Run(recorded, catalog, fingerprint, new ReplayRunOptions { RecordCheckpointInterval = options.CheckpointInterval });
     var replay = recorded with { Checkpoints = checkpointRun.Checkpoints };
