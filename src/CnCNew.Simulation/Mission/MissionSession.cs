@@ -15,6 +15,11 @@ namespace CnCNew.Simulation.Mission;
 /// <param name="WorldSeed">Seed of the logic random stream (script timers draw from it).</param>
 /// <param name="MaxTicks">Hard stop for headless runs; 0 means no limit (a live mission ends with its script outcome).</param>
 /// <param name="MissionAttempts">How many times the player has started this mission (the campaign progress knows; <c>MISSION_ATTEMPTS</c> conditions compare against it).</param>
+/// <param name="MaxTicks">Hard limit of a headless run in ticks of the catalog's rate (0: none) - a run budget, not game time; stored in the mission snapshot as it is.</param>
+/// <param name="PresentationLatencyTicks">
+/// How long a speech, sound, movie or camera move counts as playing (<see cref="ScriptEngineOptions"/>), in <b>logic frames of the original</b> (1/30 s) at every tick rate; the
+/// script engine scales it where it uses it. The name and the snapshot field (<c>presentationLatencyTicks</c>, the option value as given) are kept.
+/// </param>
 /// <param name="CombatIntervalTicks">
 /// 0 switches the units' own target acquisition off for this mission (<see cref="SimulationWorld.SelfAcquisition"/>; scripted tests that want nothing to shoot by itself); any other value
 /// leaves it on. The number is no longer an interval: since the simulation acquires targets itself, each unit's <c>MoodAttackCheckRate</c> decides how often it looks. The name and the

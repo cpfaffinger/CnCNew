@@ -30,12 +30,17 @@ public sealed record SkirmishSlot(MatchParticipant Participant, bool IsHuman = f
 public sealed class SkirmishMatchSession
 {
     public const string FixtureId = "skirmish-match";
-    private const long VictoryCheckInterval = 15;
+    /// <summary>Own rhythm of the victory check, in logic frames of the original (twice a second).</summary>
+    private const long VictoryCheckIntervalFrames = 15;
 
     private readonly SkirmishMatchOptions _options;
     private readonly List<SimCommand> _commands = [];
     private readonly Dictionary<int, ulong> _humanSequence = [];
     private readonly ReplayHeader _header;
+    // The rule values of the options are logic frames of the original; these are the same values in ticks of this session's world, resolved once.
+    private readonly long _victoryCheckInterval;
+    private readonly long _graceTicks;
+    private readonly long _sciencePointInterval;
     private ulong _systemSequence;
     private long _endTick;
 
@@ -45,6 +50,9 @@ public sealed class SkirmishMatchSession
         _header = header;
         World = world;
         _endTick = options.MaxTicks;
+        _victoryCheckInterval = world.Time.OriginalFrames(VictoryCheckIntervalFrames);
+        _graceTicks = world.Time.OriginalFrames(options.GraceTicks);
+        _sciencePointInterval = world.Time.OriginalFrames(options.SciencePointInterval);
     }
 
     public SimulationWorld World { get; }
@@ -117,11 +125,11 @@ public sealed class SkirmishMatchSession
         observer?.PhaseEnded(TickPhase.SkirmishAi);
         var result = World.Step();
         observer?.PhaseStarted(TickPhase.SkirmishVictory);
-        if (VictoryTick < 0 && tick > 0 && tick % VictoryCheckInterval == 0 && World.TryGetWinner() is { } winner)
+        if (VictoryTick < 0 && tick > 0 && tick % _victoryCheckInterval == 0 && World.TryGetWinner() is { } winner)
         {
             Winner = winner;
             VictoryTick = tick;
-            _endTick = Math.Min(_options.MaxTicks, tick + 1 + _options.GraceTicks);
+            _endTick = Math.Min(_options.MaxTicks, tick + TickOrder.Next + _graceTicks);
         }
         observer?.PhaseEnded(TickPhase.SkirmishVictory);
         return result;
@@ -182,7 +190,7 @@ public sealed class SkirmishMatchSession
 
     private void GrantSciencePoints(long tick)
     {
-        if (_options.SciencePointInterval <= 0 || tick == 0 || tick % _options.SciencePointInterval != 0) return;
+        if (_sciencePointInterval <= 0 || tick == 0 || tick % _sciencePointInterval != 0) return;
         foreach (var player in Players)
             if (!World.IsPlayerDefeated(player.Id)) System(sequence => new GiveSciencePointsCommand(PlayerId.System, sequence, tick, player.Id, 1));
     }

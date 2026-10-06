@@ -459,7 +459,7 @@ static partial class Tests
         Check.That(engine.FlagValue("bossDead"), "A killed named object counts as destroyed. " + string.Join(";", engine.ExplainScript("Dead").Select(e => e.Label + "=" + e.Result)) + " named " + string.Join(",", engine.NamedObjects.Select(n => n.Key)) + " ents " + string.Join(",", world.Entities.Select(e => e.Template.Name + (e.EffectivelyDead ? "(dead)" : ""))) + " tick " + world.Tick);
         Check.That(engine.Outcome == MissionOutcome.Victory && engine.OutcomeTick >= 0, "VICTORY sets the outcome once every object of the opponent is gone.");
         Check.That(!session.IsOver, "The mission runs on for the end-game delay after a victory.");
-        Run(session, ScriptEngine.EndGameDelayTicks + 5);
+        Run(session, ScriptEngine.EndGameDelayFrames + 5);
         Check.That(engine.IsEnded && session.IsOver, "The end-game delay ends the mission.");
     }
 

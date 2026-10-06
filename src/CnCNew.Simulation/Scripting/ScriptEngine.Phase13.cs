@@ -61,7 +61,7 @@ public sealed partial class ScriptEngine
                 return true;
             // doLocalDefeat: the local player's defeat window and CampaignManager::SetVictorious(false) — a defeat of the mission.
             case "LOCALDEFEAT":
-                End(MissionOutcome.Defeat, EndGameDelayTicks);
+                End(MissionOutcome.Defeat, EndGameDelay);
                 return true;
             // doMoveUnitTowardsNearest: aiMoveToObject towards the closest object of the type inside the area, measured from the unit.
             case "UNIT_MOVE_TOWARDS_NEAREST_OBJECT_TYPE":
@@ -317,11 +317,15 @@ public sealed partial class ScriptEngine
         foreach (var member in members) { _captureOrders[member.Id.Value] = target.Id.Value; MoveTo(member, target.X, target.Y); }
     }
 
+    private const long CaptureResendFrames = 30;
+
     /// <summary>Walks the capture orders: a member that reaches its unmanned target takes it over (the object leaves the unmanned set and joins the member's side).</summary>
     private void UpdateCaptureOrders(long tick)
     {
         if (_captureOrders.Count == 0) return;
         var reach = Fixed.FromInt(25);
+        // Own rhythm: a member that stopped is sent on once per second (on the global grid, not staggered).
+        var resend = tick % _world.Time.OriginalFrames(CaptureResendFrames) == 0;
         foreach (var (memberId, targetId) in _captureOrders.ToArray())
         {
             var member = _world.FindEntity(new EntityId(memberId));
@@ -338,7 +342,7 @@ public sealed partial class ScriptEngine
                 if (_world.TransferOwnership(target.Id, member.Owner)) { _unmanned.Remove(targetId); target.Captured = true; }
                 foreach (var key in _captureOrders.Where(pair => pair.Value == targetId).Select(pair => pair.Key).ToArray()) _captureOrders.Remove(key);
             }
-            else if (!Marching(member) && tick % 30 == 0) MoveTo(member, target.X, target.Y);
+            else if (resend && !Marching(member)) MoveTo(member, target.X, target.Y);
         }
     }
 

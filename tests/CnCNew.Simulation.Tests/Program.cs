@@ -68,6 +68,13 @@ run.Test("Tick rate N–Z: auto heal without a delay pulses once per frame of th
 run.Test("Tick rate N–Z: the enemy-near scan keeps its frame boundary", Tests.TickRateNzEnemyNearScanKeepsItsFrameBoundary);
 run.Test("Tick rate N–Z: the slow-death variance is drawn in frames of the original", Tests.TickRateNzSlowDeathVarianceIsDrawnInOriginalFrames);
 run.Test("Tick rate N–Z: catalog defaults are frames of the original", Tests.TickRateNzCatalogDefaultsAreOriginalFrames);
+run.Test("Tick rate (scripts): the end-game delay is 120 frames of the original, QUICKVICTORY one step at every rate", Tests.TickRateScriptEndGameDelay);
+run.Test("Tick rate (scripts): the presentation latency is frames of the original, forwarded arguments are untouched", Tests.TickRateScriptPresentationLatency);
+run.Test("Tick rate (scenarios): the mission probe settles and waits in frames of the original", Tests.TickRateMissionProbeWaitsInGameTime);
+run.Test("Tick rate (skirmish): victory check, grace period and science points are frames of the original", Tests.TickRateSkirmishSessionRules);
+run.Test("Tick rate (skirmish): the AI thinks on the same frames of the original at every rate", Tests.TickRateSkirmishAiRhythm);
+run.Test("Tick rate (scenarios): income, production, order and victory rhythm of the reference match are frames of the original", Tests.TickRateReferenceMatchGeneratorRhythm);
+run.Test("Tick rate (scenarios): the stress schedule counts steps and is the same at every rate", Tests.TickRateStressScheduleCountsSteps);
 run.Test("Replay equality, divergence detection and continuation", Tests.ReplayRuns);
 run.Test("Stress scenario returns to baseline (short run)", Tests.ShortStress);
 run.Test("Definition insertion order does not change the simulation", Tests.DefinitionOrderIndependence);

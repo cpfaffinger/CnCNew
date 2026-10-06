@@ -17,7 +17,8 @@ public sealed partial class ScriptEngine
     private const string TeamMode = "team:";
     private const string AreaMode = "area:";
     private const string PositionMode = "position:";
-    private const long RetargetInterval = 30;
+    /// <summary>Own rhythm: hunts, attacks and area orders look at their target again once per second, staggered by entity id. In logic frames of the original.</summary>
+    private const long RetargetIntervalFrames = 30;
     private static readonly Fixed ArrivalDistanceSquared = Fixed.FromInt(40 * 40);
 
     /// <summary><c>ScriptEngine::executeActions</c> / <c>ScriptActions::executeAction</c> for one action; see <see cref="ScriptCoverage"/> for what each type does.</summary>
@@ -117,9 +118,10 @@ public sealed partial class ScriptEngine
                 break;
 
             // ---- outcome
-            case "VICTORY": End(MissionOutcome.Victory, EndGameDelayTicks); break;
-            case "DEFEAT": End(MissionOutcome.Defeat, EndGameDelayTicks); break;
-            case "QUICKVICTORY": End(MissionOutcome.Victory, 1); break;
+            case "VICTORY": End(MissionOutcome.Victory, EndGameDelay); break;
+            case "DEFEAT": End(MissionOutcome.Defeat, EndGameDelay); break;
+            // ScriptEngine::startQuickEndGameTimer (m_endGameTimer = 1): "in the next update", an order and not a time.
+            case "QUICKVICTORY": End(MissionOutcome.Victory, TickOrder.Next); break;
 
             // ---- players
             case "PLAYER_SET_MONEY":
@@ -392,7 +394,14 @@ public sealed partial class ScriptEngine
         Output(outcome == MissionOutcome.Victory ? "VICTORY" : "DEFEAT");
     }
 
-    /// <summary>Hands a presentation action to the client as a <see cref="ScriptOutput"/>; speech/sound/movie/camera actions also count as playing for the configured latency.</summary>
+    /// <summary>
+    /// Hands a presentation action to the client as a <see cref="ScriptOutput"/>; speech/sound/movie/camera actions also count as playing for the configured latency.
+    /// <para>
+    /// Units of what leaves the simulation here: the arguments are the map's own parameters as text, untouched - a frame count among them (<c>CAMERA_FADE_*</c>,
+    /// <c>CAMERA_BW_MODE_*</c>: frames to rise, hold and fall) is in logic frames of the original (1/30 s) at every tick rate, seconds are seconds; nothing is scaled with the rate.
+    /// Only <see cref="ScriptOutput.Tick"/> is a simulation tick of the world's rate.
+    /// </para>
+    /// </summary>
     private void Forward(MapScriptAction action)
     {
         _forwardedActions++;
@@ -416,7 +425,7 @@ public sealed partial class ScriptEngine
             "MOVE_CAMERA_TO" or "MOVE_CAMERA_ALONG_WAYPOINT_PATH" or "ROTATE_CAMERA" or "RESET_CAMERA" or "MOVE_CAMERA_TO_SELECTION" or "CAMERA_MOVE_HOME" => "<camera>",
             _ => null,
         };
-        if (key is not null) _pendingPresentation[key] = _tick + _options.PresentationLatencyTicks;
+        if (key is not null) _pendingPresentation[key] = _tick + _world.Time.OriginalFrames(_options.PresentationLatencyTicks);
     }
 
     // ------------------------------------------------------------------------------------------------ spawning
@@ -582,7 +591,7 @@ public sealed partial class ScriptEngine
 
     /// <summary>
     /// Advances every standing order (waypoint paths, hunts, attacks, guard positions). A path is followed waypoint by waypoint and looped when the path's last
-    /// link returns to its first waypoint; hunts, attacks and area orders move toward the current target every <see cref="RetargetInterval"/> ticks and let
+    /// link returns to its first waypoint; hunts, attacks and area orders move toward the current target every <see cref="RetargetIntervalFrames"/> frames of the original and let
     /// the combat driver of the session open fire in range (<c>MAP-SCRIPTS.md</c> §8: the simulation has no attack-move AI state).
     /// </summary>
     private void UpdateFollowers()
@@ -591,6 +600,9 @@ public sealed partial class ScriptEngine
         // A copy to walk (orders end while it runs), kept between ticks; the update is not entered a second time while it runs.
         _followerScratch.Clear();
         foreach (var value in _followers.Values) _followerScratch.Add(value);
+        // Period and stagger of the retargeting, both scaled: an entity retargets on the frame of the original it always did (at 30 Hz: tick % 30 == id % 30).
+        var retargetInterval = _world.Time.OriginalFrames(RetargetIntervalFrames);
+        var ticksPerFrame = _world.Time.TicksPerOriginalFrame;
         foreach (var follower in _followerScratch)
         {
             var entity = _world.FindEntity(new EntityId(follower.Entity));
@@ -625,7 +637,7 @@ public sealed partial class ScriptEngine
             }
             // aiAttackObject: the named victim is the unit's order, whatever the unit would pick by itself; the shot goes out as soon as a weapon reaches it.
             if (mode.StartsWith(NamedMode, StringComparison.Ordinal) && NamedEntity(ModeArgument(mode, NamedMode.Length)) is { EffectivelyDead: false } ordered && FireAtOrdered(entity, ordered)) continue;
-            if (_tick % RetargetInterval != follower.Entity % RetargetInterval) continue;
+            if (_tick % retargetInterval != follower.Entity % RetargetIntervalFrames * ticksPerFrame) continue;
             if (mode.StartsWith(PositionMode, StringComparison.Ordinal))
             {
                 if (WaypointOrDiagnose(ModeArgument(mode, PositionMode.Length)) is { } spot)

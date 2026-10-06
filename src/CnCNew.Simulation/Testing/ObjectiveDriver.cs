@@ -26,7 +26,10 @@ internal sealed partial class ObjectiveDriver
     private List<string>? _trace;
     private List<Leaf>? _defense;
 
-    /// <summary>One world intervention. <paramref name="Edge"/> leaves matter only at the instant their script evaluates (entering an area), so they are held back until the script is live.</summary>
+    /// <summary>
+    /// One world intervention. <paramref name="Edge"/> leaves matter only at the instant their script evaluates (entering an area), so they are held back until the script is live.
+    /// <paramref name="cooldown"/> is game time between two applications, in logic frames of the original (1/30 s); <see cref="Round"/> scales it to the world's rate.
+    /// </summary>
     internal sealed class Leaf(string key, string label, int maxApplications, int cooldown, Func<int, bool> apply, bool edge = false)
     {
         public string Key { get; } = key;
@@ -305,6 +308,7 @@ internal sealed partial class ObjectiveDriver
         var allowHarm = _allowHarm = _idleRounds >= IdleRoundsBeforeHarm && !feasible.Any(plan => plan.Leaves.Any(leaf => !leaf.Harm));
         var chosen = feasible.Count > 0 && feasible.Any(plan => plan.Leaves.Any(leaf => !leaf.Harm && !leaf.Deferred)) ? feasible : plans.OrderBy(plan => plan.Cost).Take(1).Concat(feasible).ToList();
         var tick = _world.Tick;
+        var time = _world.Time;
         var before = Interventions;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         _objectivesFresh = false;
@@ -315,7 +319,7 @@ internal sealed partial class ObjectiveDriver
                 if (_commandsOnly && leaf.Kind == LeafKind.World) { _declined.Add(leaf.Label); continue; }
                 var count = _applications.GetValueOrDefault(leaf.Key);
                 if (count >= leaf.MaxApplications) continue;
-                if (_lastApplied.TryGetValue(leaf.Key, out var last) && tick - last < leaf.Cooldown) continue;
+                if (_lastApplied.TryGetValue(leaf.Key, out var last) && tick - last < time.OriginalFrames(leaf.Cooldown)) continue;
                 if (!leaf.Apply(count)) continue;
                 _applications[leaf.Key] = count + 1;
                 _lastApplied[leaf.Key] = tick;
@@ -328,7 +332,7 @@ internal sealed partial class ObjectiveDriver
         if (_victory && !_commandsOnly)
             foreach (var leaf in _defense ??= BuildDefense())
             {
-                if (_lastApplied.TryGetValue(leaf.Key, out var lastDefence) && tick - lastDefence < leaf.Cooldown) continue;
+                if (_lastApplied.TryGetValue(leaf.Key, out var lastDefence) && tick - lastDefence < time.OriginalFrames(leaf.Cooldown)) continue;
                 if (!leaf.Apply(0)) continue;
                 _lastApplied[leaf.Key] = tick;
                 var times = _applications[leaf.Key] = _applications.GetValueOrDefault(leaf.Key) + 1;
