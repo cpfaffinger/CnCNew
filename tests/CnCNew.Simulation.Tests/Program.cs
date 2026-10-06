@@ -24,6 +24,9 @@ using CnCNew.Simulation.World;
 
 var run = new Runner(args.SkipWhile(value => value != "--only").Skip(1).FirstOrDefault());
 run.Test("Fixed-point arithmetic, rounding and limits", Tests.FixedPoint);
+run.Test("Fixed point: products, quotients and roots equal the wide formulas at 16, 24, 12 and 32 fraction bits", Tests.FixedMathMatchesWideArithmeticAtEveryResolution);
+run.Test("Fixed point: at 16 fraction bits the angle functions return the bits they returned before phase 22", Tests.FixedTrigReproducesTheSixteenBitResults);
+run.Test("Fixed point: the precision of the angle functions follows the resolution", Tests.FixedTrigPrecisionFollowsTheResolution);
 run.Test("Tick rate, duration and unit conversions", Tests.Timing);
 run.Test("Reference float conversion vs exact ticks (documented deviation)", Tests.FloatDeviation);
 run.Test("Golden RNG sequences (independent transcription)", Tests.GoldenRandom);

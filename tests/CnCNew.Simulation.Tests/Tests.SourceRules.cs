@@ -175,7 +175,6 @@ static partial class Tests
         new("Time/SimulationRate.cs", RuleRateLiteral, "public const int OriginalFramesPerSecond = 30;", "the one named 30 of the simulation: the logic frame rate of the original"),
         new("Time/SimulationTiming.cs", RuleRateLiteral, "public const long MillisecondsPerSecond = 1000;", "milliseconds in a second, not a rate"),
         new("Modules/BuiltIn/DockMachine.cs", RuleRateLiteral, "private const long ClearanceTimeoutFrames = 30L * SimulationRate.OriginalFramesPerSecond;", "30 seconds times the frames in a second: a constant in frames"),
-        new("Numerics/FixedTrig.cs", RuleRateLiteral, "inner = Fixed.One - x2 * inner / Fixed.FromInt(30);", "a term of the sine series, no time"),
         // -- tick-named values that are numbers
         new("Time/SimulationRate.cs", RuleTickNamedNumber, "public const int OriginalFramesPerSecond = 30;", "the definition of the original's frame rate"),
         new("Mission/MissionSession.cs", RuleTickNamedNumber, "int CombatIntervalTicks = 3,", "a switch since phase 15 (0: scripted fire off), never a duration; the name is the key of the mission state"),
