@@ -906,6 +906,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     private void InvalidatePath()
     {
+        // A new order during the last frame of a move: the object still covers that frame's step, but it has not arrived.
+        _frameArriving = false;
         _pathValid = false;
         _pathComplete = false;
         _pathIndex = 0;
@@ -1044,6 +1046,19 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             MoveWinged(world, locomotor);
             return;
         }
+        if (_stride == 0) ResolveBlockerTiming(world.Time);
+        if (_frameTicksLeft > 0)
+        {
+            // Between two decisions the object only covers the next share of the step its last decision made.
+            if (world.Tick == _frameDue)
+            {
+                AdvanceFrame(world, locomotor);
+                return;
+            }
+            // The object did not move in the tick the share was due in (disabled, stopped, another state of a derived AI): the rest of that step is void.
+            _frameTicksLeft = 0;
+            _frameArriving = false;
+        }
         if (world.Navigation is not { } navigation)
         {
             MoveStraight(world, locomotor);
@@ -1060,16 +1075,24 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
 
-        var arrivalRadius = Fixed.Max(locomotor.CloseEnoughDist, locomotor.Speed);
+        // Everything from here on is one decision of a logic frame of the original, in that frame's units (docs/RATE-INVARIANCE-GROUND.md): above 30 Hz the object decides once per
+        // frame and covers the step in shares, at 30 Hz the frame is the tick and these are the locomotor's own constants.
+        FrameConstants(locomotor, out var topSpeed, out var acceleration, out var braking, out var turnRate, out var minSpeed);
+        var arrivalRadius = Fixed.Max(locomotor.CloseEnoughDist, topSpeed);
         while (true)
         {
             var waypoint = _path[_pathIndex];
             var last = _pathIndex == _path.Count - 1;
-            var reach = last ? arrivalRadius : locomotor.Speed;
+            var reach = last ? arrivalRadius : topSpeed;
             var toX = waypoint.X - Entity.X;
             var toY = waypoint.Y - Entity.Y;
             if (!SquaredReach.Of(reach).Contains(toX * toX + toY * toY)) break;
             if (!last) { _pathIndex++; continue; }
+            if (_stride > 1)
+            {
+                BeginArrival(world, locomotor, waypoint.X - Entity.X, waypoint.Y - Entity.Y);
+                return;
+            }
             Entity.X = waypoint.X;
             Entity.Y = waypoint.Y;
             if (!air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
@@ -1087,39 +1110,45 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var distance = Fixed.Sqrt(dx * dx + dy * dy);
         var desired = FixedTrig.Atan2(dy, dx);
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
-        var turnRate = locomotor.TurnRatePerTick;
+        var heading = Entity.Angle;
         Entity.Angle = turnRate > Fixed.Zero && difference.Abs() > turnRate
             ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turnRate : turnRate))
             : desired;
 
-        var brakingDistance = locomotor.Braking > Fixed.Zero ? Entity.Speed * Entity.Speed / (locomotor.Braking * Fixed.FromInt(2)) : Fixed.Zero;
+        var speed = FrameSpeed();
+        var brakingDistance = locomotor.Braking > Fixed.Zero ? speed * speed / (braking * Fixed.FromInt(2)) : Fixed.Zero;
         var remaining = distance;
         if (distance <= brakingDistance && _pathIndex < _path.Count - 1) remaining += TailLength();
-        var goalSpeed = remaining <= brakingDistance ? locomotor.MinSpeed : CappedSpeed(locomotor);
+        var goalSpeed = remaining <= brakingDistance ? minSpeed : CappedFrameSpeed(topSpeed);
         if (FixedTrig.AngleDifference(Entity.Angle, desired).Abs() > MisalignedAngle)
         {
-            goalSpeed = Fixed.Min(goalSpeed, locomotor.MinSpeed);
+            goalSpeed = Fixed.Min(goalSpeed, minSpeed);
             // Inside the turning circle a moving object would orbit the waypoint: stop and turn on the spot instead.
-            if (turnRate > Fixed.Zero && distance < locomotor.Speed / turnRate * Fixed.FromInt(2)) goalSpeed = Fixed.Zero;
+            if (turnRate > Fixed.Zero && distance < topSpeed / turnRate * Fixed.FromInt(2)) goalSpeed = Fixed.Zero;
         }
-        Entity.Speed = Entity.Speed < goalSpeed
-            ? Fixed.Min(goalSpeed, Entity.Speed + locomotor.Acceleration)
-            : Fixed.Max(goalSpeed, Entity.Speed - locomotor.Braking);
+        speed = speed < goalSpeed
+            ? Fixed.Min(goalSpeed, speed + acceleration)
+            : Fixed.Max(goalSpeed, speed - braking);
+        SetFrameSpeed(speed);
         // Standing units on the way (a dozer at work, a halted group) are unknown to the static path: plan once around them instead of rubbing along them while the local avoidance
         // below shoves the step aside (docs/DEMO-FINDINGS.md #12). At most once per second; a plan that no longer reaches the goal is dropped and the old path kept.
-        if (_blockerReplanInterval == 0) ResolveBlockerTiming(world.Time);
-        if (!air && world.Tick - _blockerReplanTick >= _blockerReplanInterval && Entity.Speed > Fixed.Zero)
+        if (!air && world.Tick - _blockerReplanTick >= _blockerReplanInterval && speed > Fixed.Zero)
         {
             // Look-ahead: the travel of about 25 logic frames of the original (a walking infantry sees 17 units, a fast vehicle 60).
-            var ahead = world.StationaryBlockersAhead(Entity, FixedTrig.Cos(Entity.Angle) * Entity.Speed * _blockerLookAhead, FixedTrig.Sin(Entity.Angle) * Entity.Speed * _blockerLookAhead);
+            var ahead = world.StationaryBlockersAhead(Entity, FixedTrig.Cos(Entity.Angle) * speed * BlockerLookAhead, FixedTrig.Sin(Entity.Angle) * speed * BlockerLookAhead);
             if (ahead.Count > 0) ReplanAround(navigation, locomotor, ahead, world.Tick);
         }
 
         // phase 10 (docs/SIMULATION-CORE.md, CnCNew.Simulation/World/SimulationWorld.Collision.cs): bounded local avoidance
         // against another unit's footprint, then the crush/topple collision check — both own-file, additive world services.
         var (stepX, stepY) = air
-            ? (FixedTrig.Cos(Entity.Angle) * Entity.Speed, FixedTrig.Sin(Entity.Angle) * Entity.Speed)
-            : world.AvoidLocalBlockers(Entity, FixedTrig.Cos(Entity.Angle) * Entity.Speed, FixedTrig.Sin(Entity.Angle) * Entity.Speed);
+            ? (FixedTrig.Cos(Entity.Angle) * speed, FixedTrig.Sin(Entity.Angle) * speed)
+            : world.AvoidLocalBlockers(Entity, FixedTrig.Cos(Entity.Angle) * speed, FixedTrig.Sin(Entity.Angle) * speed);
+        if (_stride > 1)
+        {
+            BeginFrame(world, locomotor, stepX, stepY, heading);
+            return;
+        }
         Entity.X += stepX;
         Entity.Y += stepY;
         if (!air)
@@ -1187,20 +1216,160 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>Own rhythm: a replan around standing units at most once per 30 logic frames of the original (one second).</summary>
     private const long BlockerReplanFrames = SimulationRate.OriginalFramesPerSecond;
 
-    /// <summary>Own value: the look-ahead for standing units is the travel of 25 logic frames of the original (the speed is per tick).</summary>
-    private const long BlockerLookAheadFrames = 25;
+    /// <summary>
+    /// Own value: the look-ahead for standing units is 25 times the travel of one logic frame of the original. A factor on a speed per logic frame, not a duration: no time
+    /// service converts it.
+    /// </summary>
+    private static readonly Fixed BlockerLookAhead = Fixed.FromInt(25);
 
     /// <summary>"Never replanned": further back than any replan interval. A sentinel (also the snapshot's default), not a time.</summary>
     private long _blockerReplanTick = -1000;
 
-    // Both in ticks of the world's rate, resolved once on the first move (a module is created and restored without a world); derived, not state.
+    // In ticks of the world's rate, resolved once on the first move (a module is created and restored without a world); derived, not state.
     private long _blockerReplanInterval;
-    private Fixed _blockerLookAhead;
+
+    /// <summary>Ticks per logic frame of the original (1, 2 or 4), resolved with the interval above; 0 until the first move.</summary>
+    private int _stride;
 
     private void ResolveBlockerTiming(SimulationTime time)
     {
         _blockerReplanInterval = time.OriginalFrames(BlockerReplanFrames);
-        _blockerLookAhead = Fixed.FromInt(time.OriginalFrames(BlockerLookAheadFrames));
+        _stride = time.TicksPerOriginalFrame;
+    }
+
+    // The per-frame constants of the locomotor the last decision above 30 Hz moved with (LocomotorFrames); derived, not state.
+    private LocomotorInfo? _frameLocomotor;
+    private LocomotorFrame? _frameConstants;
+
+    private void FrameConstants(LocomotorInfo locomotor, out Fixed topSpeed, out Fixed acceleration, out Fixed braking, out Fixed turnRate, out Fixed minSpeed)
+    {
+        if (_stride == 1)
+        {
+            topSpeed = locomotor.Speed;
+            acceleration = locomotor.Acceleration;
+            braking = locomotor.Braking;
+            turnRate = locomotor.TurnRatePerTick;
+            minSpeed = locomotor.MinSpeed;
+            return;
+        }
+        if (!ReferenceEquals(_frameLocomotor, locomotor))
+        {
+            _frameConstants = LocomotorFrames.Of(locomotor, _stride);
+            _frameLocomotor = locomotor;
+        }
+        var frame = _frameConstants!;
+        topSpeed = frame.Speed;
+        acceleration = frame.Acceleration;
+        braking = frame.Braking;
+        turnRate = frame.TurnRate;
+        minSpeed = frame.MinSpeed;
+    }
+
+    // State above 30 Hz only (at 30 Hz a decision is a whole step and none of this is ever set or written).
+    // The speed of the last decision in units per logic frame; Entity.Speed (per tick) is this value divided by the stride.
+    private Fixed _frameSpeed;
+    // The step of the last decision while it is being covered: the ticks still to come, the tick the next share is due in, the displacement of the whole frame, the heading at its end.
+    private int _frameTicksLeft;
+    private long _frameDue;
+    private Fixed _frameStepX;
+    private Fixed _frameStepY;
+    private Fixed _frameAngle;
+    // The step being covered is the last one of the move: with its last share the object has arrived.
+    private bool _frameArriving;
+
+    /// <summary>
+    /// The speed the object moves with, per logic frame of the original. Above 30 Hz the module keeps it itself, because the 30 Hz value does not survive a division by the stride; an
+    /// object stopped or slowed from outside (<see cref="Entity.Speed"/> no longer the published share of it) starts from what it was set to.
+    /// </summary>
+    private Fixed FrameSpeed()
+    {
+        if (_stride == 1) return Entity.Speed;
+        if (Entity.Speed == Fixed.Zero) return Fixed.Zero;
+        return Entity.Speed.Raw == _frameSpeed.Raw / _stride ? _frameSpeed : Entity.Speed * _stride;
+    }
+
+    /// <summary>
+    /// The speed of the object in units per logic frame of the original, as the movement computes with it (a read access for measurements: above 30 Hz <see cref="Entity.Speed"/> is
+    /// this value divided by the ticks per frame and has lost its last bits). <paramref name="ticksPerOriginalFrame"/> is the world's <c>Time.TicksPerOriginalFrame</c>.
+    /// </summary>
+    public Fixed SpeedPerOriginalFrame(int ticksPerOriginalFrame) => _stride == 0 ? Entity.Speed * ticksPerOriginalFrame : FrameSpeed();
+
+    private void SetFrameSpeed(Fixed speed)
+    {
+        if (_stride == 1)
+        {
+            Entity.Speed = speed;
+            return;
+        }
+        _frameSpeed = speed;
+        Entity.Speed = Fixed.FromRaw(speed.Raw / _stride);
+    }
+
+    private Fixed CappedFrameSpeed(Fixed topSpeed) => _speedCap > Fixed.Zero ? Fixed.Min(topSpeed, _speedCap * _stride) : topSpeed;
+
+    /// <summary>
+    /// Above 30 Hz a decision of <see cref="Move"/>/<see cref="MoveStraight"/> is the step of one logic frame of the original; the object covers it in equal shares, one per tick, and
+    /// decides again when it is used up. (<paramref name="stepX"/>, <paramref name="stepY"/>) is the displacement of the frame, <paramref name="heading"/> the angle before the
+    /// decision turned the object. After the last share position and angle are what the single 30 Hz step leaves: share i of n is the difference of the raw step's parts i/n and
+    /// (i-1)/n, so the shares add up to the step exactly. <see cref="Entity.Speed"/> is the speed of the frame from its first share on.
+    /// </summary>
+    private void BeginFrame(IWorldServices world, LocomotorInfo locomotor, Fixed stepX, Fixed stepY, Fixed heading)
+    {
+        _frameStepX = stepX;
+        _frameStepY = stepY;
+        _frameAngle = Entity.Angle;
+        Entity.Angle = heading;
+        _frameTicksLeft = _stride;
+        AdvanceFrame(world, locomotor);
+    }
+
+    /// <summary>
+    /// The arrival above 30 Hz. At 30 Hz the step that finds the object within its arrival radius puts it on the target and ends the move; that step is a logic frame of the
+    /// original like every other, so here the object covers the rest of the way (<paramref name="dx"/>, <paramref name="dy"/>) in that frame's shares and the move ends, with
+    /// <c>MoveArrived</c>, in the tick of the last share: the state after the frame is the state after the 30 Hz step, and an order given on the arrival starts in the same frame.
+    /// </summary>
+    private void BeginArrival(IWorldServices world, LocomotorInfo locomotor, Fixed dx, Fixed dy)
+    {
+        _frameStepX = dx;
+        _frameStepY = dy;
+        _frameAngle = Entity.Angle;
+        _frameTicksLeft = _stride;
+        _frameArriving = true;
+        AdvanceFrame(world, locomotor);
+    }
+
+    private void AdvanceFrame(IWorldServices world, LocomotorInfo locomotor)
+    {
+        var left = _frameTicksLeft;
+        _frameTicksLeft = left - 1;
+        _frameDue = world.Tick + TickOrder.Next;
+        long shares = _stride;
+        var covered = shares - left;
+        var stepX = Fixed.FromRaw(_frameStepX.Raw * (covered + 1) / shares - _frameStepX.Raw * covered / shares);
+        var stepY = Fixed.FromRaw(_frameStepY.Raw * (covered + 1) / shares - _frameStepY.Raw * covered / shares);
+        if (left == 1) Entity.Angle = _frameAngle;
+        else
+        {
+            var turn = FixedTrig.AngleDifference(Entity.Angle, _frameAngle);
+            if (turn != Fixed.Zero) Entity.Angle = FixedTrig.Normalize(Entity.Angle + Fixed.FromRaw(turn.Raw / left));
+        }
+        Entity.X += stepX;
+        Entity.Y += stepY;
+        var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
+        if (world.Navigation is not null && !air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+        if (_frameArriving)
+        {
+            if (left > 1) return;
+            // The end of the move, in the order of the 30 Hz arrival (which tests no collision in its step either).
+            var complete = world.Navigation is null || _pathComplete;
+            Entity.HasMoveTarget = false;
+            Entity.Speed = Fixed.Zero;
+            _frameSpeed = Fixed.Zero;
+            InvalidatePath();
+            if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
+            return;
+        }
+        if (world.Navigation is null || !air) world.ResolveFootprintCollisions(Entity, stepX, stepY);
     }
 
     private void ReplanAround(NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)
@@ -1249,9 +1418,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var dy = Entity.MoveTargetY - Entity.Y;
         var distSq = dx * dx + dy * dy;
         // "Close enough" is at least one tick's travel at full speed, so a fast unit cannot perpetually overshoot and reverse.
-        var closeEnough = Fixed.Max(locomotor.CloseEnoughDist, locomotor.Speed);
+        FrameConstants(locomotor, out var topSpeed, out var acceleration, out var braking, out _, out var minSpeed);
+        var closeEnough = Fixed.Max(locomotor.CloseEnoughDist, topSpeed);
         if (SquaredReach.Of(closeEnough).Contains(distSq))
         {
+            if (_stride > 1)
+            {
+                BeginArrival(world, locomotor, dx, dy);
+                return;
+            }
             Entity.X = Entity.MoveTargetX;
             Entity.Y = Entity.MoveTargetY;
             Entity.HasMoveTarget = false;
@@ -1261,14 +1436,21 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         var dist = Fixed.Sqrt(distSq);
         // calcSlowDownDist equivalent: v^2 = 2*a*d, so begin braking once the remaining distance fits the stopping distance at the current speed.
-        var brakingDist = locomotor.Braking > Fixed.Zero ? Entity.Speed * Entity.Speed / (locomotor.Braking * Fixed.FromInt(2)) : Fixed.Zero;
-        var goalSpeed = dist <= brakingDist ? locomotor.MinSpeed : CappedSpeed(locomotor);
-        Entity.Speed = Entity.Speed < goalSpeed
-            ? Fixed.Min(goalSpeed, Entity.Speed + locomotor.Acceleration)
-            : Fixed.Max(goalSpeed, Entity.Speed - locomotor.Braking);
-        var step = Fixed.Min(Entity.Speed, dist);
+        var speed = FrameSpeed();
+        var brakingDist = locomotor.Braking > Fixed.Zero ? speed * speed / (braking * Fixed.FromInt(2)) : Fixed.Zero;
+        var goalSpeed = dist <= brakingDist ? minSpeed : CappedFrameSpeed(topSpeed);
+        speed = speed < goalSpeed
+            ? Fixed.Min(goalSpeed, speed + acceleration)
+            : Fixed.Max(goalSpeed, speed - braking);
+        SetFrameSpeed(speed);
+        var step = Fixed.Min(speed, dist);
         var stepX = dx * step / dist;
         var stepY = dy * step / dist;
+        if (_stride > 1)
+        {
+            BeginFrame(world, locomotor, stepX, stepY, Entity.Angle);
+            return;
+        }
         Entity.X += stepX;
         Entity.Y += stepY;
         // phase 10: no terrain here (fixture mode), so no local avoidance, but the crush/topple check still applies.
@@ -1306,6 +1488,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             writer.Fixed("exitY", _exitY);
         }
         if (_blockerReplanTick > -1000) writer.Int("blockerReplanTick", _blockerReplanTick);
+        if (_frameSpeed != Fixed.Zero) writer.Fixed("frameSpeed", _frameSpeed);
+        if (_frameTicksLeft > 0)
+        {
+            writer.Int("frameTicksLeft", _frameTicksLeft);
+            writer.Int("frameDue", _frameDue);
+            writer.Fixed("frameStepX", _frameStepX);
+            writer.Fixed("frameStepY", _frameStepY);
+            writer.Fixed("frameAngle", _frameAngle);
+            if (_frameArriving) writer.Bool("frameArriving", true);
+        }
         if (_pathValid)
         {
             writer.Bool("pathValid", true);
@@ -1344,6 +1536,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _exitX = reader.Has("exitX") ? reader.Fixed("exitX") : Fixed.Zero;
         _exitY = reader.Has("exitY") ? reader.Fixed("exitY") : Fixed.Zero;
         _blockerReplanTick = reader.Has("blockerReplanTick") ? reader.Int("blockerReplanTick") : -1000;
+        _frameSpeed = reader.Has("frameSpeed") ? reader.Fixed("frameSpeed") : Fixed.Zero;
+        _frameTicksLeft = reader.Has("frameTicksLeft") ? checked((int)reader.Int("frameTicksLeft")) : 0;
+        _frameDue = reader.Has("frameDue") ? reader.Int("frameDue") : 0;
+        _frameStepX = reader.Has("frameStepX") ? reader.Fixed("frameStepX") : Fixed.Zero;
+        _frameStepY = reader.Has("frameStepY") ? reader.Fixed("frameStepY") : Fixed.Zero;
+        _frameAngle = reader.Has("frameAngle") ? reader.Fixed("frameAngle") : Fixed.Zero;
         InvalidatePath();
         if (reader.Has("pathValid"))
         {
@@ -1353,6 +1551,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _pathObstacles = reader.UInt("pathObstacles");
             foreach (var item in reader.Array("path")) _path.Add(new PathPoint(item.Fixed("x"), item.Fixed("y")));
         }
+        _frameArriving = reader.Has("frameArriving") && reader.Bool("frameArriving");
         _dock = reader.Bool("docking") ? DockMachine.Load(reader) : null;
     }
 }
