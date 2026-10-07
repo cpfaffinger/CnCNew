@@ -1,6 +1,6 @@
 # Determinismus über Rechnergrenzen (Phase 18)
 
-Stand: 6. Oktober 2026, Commit `b432fb7`; §2a (die Matrix mit dem Manifest der Phase 22, Q39.24) am Stand `d7fca91`. Dieses Dokument beschreibt, **wie** geprüft wird, dass zwei Rechner dieselbe Welt rechnen, und **was** davon gemessen ist. Die Einzelbefunde D1–D9 mit Test,
+Stand: 6. Oktober 2026, Commit `b432fb7`; §2a (die Matrix mit dem Manifest der Phase 22, Q39.24) am Stand `d7fca91`, §2b (Wiederholung am Ausgangsstand der Phase 23) am Stand `20ffce9`. Dieses Dokument beschreibt, **wie** geprüft wird, dass zwei Rechner dieselbe Welt rechnen, und **was** davon gemessen ist. Die Einzelbefunde D1–D9 mit Test,
 Korrektur und Vorher/Nachher-Werten stehen in `docs/DETERMINISM-FINDINGS.md`; die Messlatte selbst (Referenzmanifest, Eingangsmanifest) in `docs/SIMULATION-CORE.md` §37.
 
 ## 1. Was verglichen wird
@@ -72,6 +72,32 @@ Zusätzlich deterministisch gelaufen, ohne Teil des Manifests zu sein: zwölf L�
 
 Neue Regel zu §5: **die Skala von `Fixed` steht an einer Stelle.** `Tests.FixedScaleSourceRules` verbietet sie als Zahl oder Verschiebung in allen Projekten und ihre Verwendung außerhalb der Simulation
 (Ausnahme: `CnCNew.Presentation.FixedConvert`). Formate, die Rohwerte tragen, wechseln mit der Auflösung ihre Version; ein alter Stand wird abgelehnt, nie umgedeutet.
+
+## 2b. Die Matrix am Ausgangsstand der Phase 23 (gemessen am 7. Oktober 2026, Stand `20ffce9`)
+
+§2a lief am Stand `d7fca91`, also **vor** dem Merge mit Phase 21 und **vor** der Reichweiten-Reparatur (`b274df5`, `SquaredReach`). Beide waren als ergebnisgleich angekündigt; die Zeilen dieses Rechners wurden deshalb am gemergten
+Stand `20ffce9` wiederholt, bevor Phase 23 etwas ändert. Verfahren wie in §2a: je Zeile `input-manifest check` und `reference-manifest check` gegen die eingecheckten Dateien aus einer Kopie des `bin`-Verzeichnisses;
+„identisch“ heißt Exitcode 0 bei beiden und 50 (bzw. 9) Zeilen `OK`. Die Läufe liefen nicht ruhig (andere Läufe nebenher); die Laufzeit steht nur zur Einordnung dabei.
+
+| Zeile | Wie | Eingänge | Rechnung (Satz) | Laufzeit | Ergebnis |
+|---|---|---|---|---|---|
+| Release, Lauf 1 | `dotnet CnCNew.SimTool.dll …`, `--jobs 6` | identisch | 50/50 (full) | 404 s | **identisch** |
+| Release, Lauf 2 | derselbe Aufruf noch einmal | identisch | 50/50 (full) | 450 s | **identisch** |
+| Debug-Build | `tools/CnCNew.SimTool/bin/Debug`, `--jobs 3` | identisch | 9/9 (**quick**) | 1.035 s | **identisch** (der volle Satz wurde im Debug-Build wie bisher nicht gefahren) |
+| Tiered Compilation aus | `DOTNET_TieredCompilation=0` | identisch | 50/50 (full) | 648 s | **identisch** |
+| Tiered PGO aus | `DOTNET_TieredPGO=0` | identisch | 50/50 (full) | 628 s | **identisch** |
+| ReadyToRun aus | `DOTNET_ReadyToRun=0` | identisch | 50/50 (full) | 604 s | **identisch** |
+| Hardware-Intrinsics aus | `DOTNET_EnableHWIntrinsic=0` | identisch | 50/50 (full) | 741 s | **identisch** |
+| AVX2 aus | `DOTNET_EnableAVX2=0` | identisch | 50/50 (full) | nicht notiert | **identisch** |
+| Server-GC | `DOTNET_gcServer=1`, `--jobs 5` | identisch | 50/50 (full) | 760 s | **identisch** |
+| Kultur `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identisch | 50/50 (full) | 726 s | **identisch** |
+| Kultur `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identisch | 50/50 (full) | 587 s | **identisch** |
+| Kultur `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identisch | 50/50 (full) | 489 s | **identisch** |
+| **Linux** auf demselben Rechner | WSL2 (Ubuntu, Kernel 6.6.87.2), `dotnet publish -r linux-x64 --self-contained`, derselbe Inhalt über `/mnt/c`, `--jobs 4` | identisch | 50/50 (full) | nicht notiert | **identisch** |
+| andere .NET-Patchversion | – | – | – | – | **offen** wie in §2 |
+| **zweiter physischer Rechner, andere CPU** | Anleitung in §4 | – | – | – | **offen** wie in §2; nachzuholen vor Phase 26 |
+
+Alle 13 Zeilen dieses Rechners sind am gemergten Stand identisch; kein Referenzwert hat sich geändert. Was §3 als nicht belegt nennt, bleibt nicht belegt.
 
 ## 3. Was daraus folgt und was nicht
 
