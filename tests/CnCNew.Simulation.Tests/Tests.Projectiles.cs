@@ -264,52 +264,54 @@ static partial class Tests
     }
 
     /// <summary>
-    /// Straight shell, hand-computed: 200 units at WeaponSpeed 300/s = 10 per tick. Flat control points (heights 0) make the Bézier length exactly the
-    /// chord, 200, so the path has ceil(200 / 10) = 20 points; the shell spawns at the end of the fire tick F, sits on point 0..19 in ticks F+1..F+20
-    /// and detonates in tick F+21 at the aim point (200, 0, 0), where the damage, the WeaponImpact event and the detonation effect appear.
+    /// Straight shell, hand-computed: 200 units at WeaponSpeed 300/s = 10 per logic frame. Flat control points (heights 0) make the Bézier length exactly the
+    /// chord, 200, so the path has ceil(200 / 10) = 20 points; the shell spawns at the end of the fire tick F, sits on point 0..19 after the frames F+1..F+20
+    /// and detonates in the first tick of frame F+21 at the aim point (200, 0, 0), where the damage, the WeaponImpact event and the detonation effect appear.
+    /// The steps are logic frames of the original (<c>CsRun(world, 1)</c>: one tick at 30 Hz), so the same numbers hold at 60 and 120 Hz.
     /// </summary>
     public static void ProjectileStraightShellFlightTime()
     {
         var world = ProjectileWorld(out _, out var feeder);
         var fire = FireAtDummy(world, feeder, "ShellLauncher", 200, out var dummy);
-        var launched = world.Step().Events.Single(value => value.Kind == SimEventKind.ProjectileLaunched);
+        var launched = CsRun(world, 1).Single(value => value.Kind == SimEventKind.ProjectileLaunched);
         Check.That(launched.HasPosition && launched.X == Fixed.FromInt(200) && launched.Y == Fixed.Zero, "The launch event carries the aim point.");
-        Check.That(world.Step().Events.All(value => value.Kind != SimEventKind.WeaponImpact), "Nothing lands in the first flight tick.");
+        Check.That(CsRun(world, 1).All(value => value.Kind != SimEventKind.WeaponImpact), "Nothing lands in the first flight frame.");
         var shell = world.Entities.Single(value => value.Template.Name == "TestShell");
         var dumb = shell.Modules.OfType<DumbProjectileBehavior>().Single();
         Check.That(dumb.Segments == 20, $"ceil(200 / 10) = 20 path points (got {dumb.Segments}).");
-        Check.That(shell.X == Fixed.Zero, "Tick F+1 puts the shell on the first point, the launch point.");
-        while (world.Tick < fire + 21) Check.That(world.Step().Events.All(value => value.Kind != SimEventKind.WeaponImpact), $"No impact before tick F+21 (tick {world.Tick - 1}).");
-        Check.That(shell.X == Fixed.FromInt(200) && dummy.Body!.Health == Fixed.FromInt(1000), "Tick F+20 reaches the last point without damage yet.");
+        Check.That(shell.X == Fixed.Zero, "Frame F+1 puts the shell on the first point, the launch point.");
+        while (world.Tick < fire + world.Frames(21)) Check.That(world.Step().Events.All(value => value.Kind != SimEventKind.WeaponImpact), $"No impact before frame F+21 (tick {world.Tick - 1}).");
+        Check.That(shell.X == Fixed.FromInt(200) && dummy.Body!.Health == Fixed.FromInt(1000), "Frame F+20 reaches the last point without damage yet.");
         var impact = world.Step();
-        Check.That(impact.Tick == fire + 21, "The detonation update is tick F+21.");
+        Check.That(impact.Tick == fire + world.Frames(21), "The detonation update is the first tick of frame F+21.");
         var hit = impact.Events.Single(value => value.Kind == SimEventKind.WeaponImpact);
         Check.That(hit.HasPosition && hit.X == Fixed.FromInt(200) && hit.Entity == shell.Id && hit.Text == "ShellGun", "The impact is reported at the aim point by the shell.");
         var fx = impact.Events.Single(value => value.Kind == SimEventKind.FxRequested && value.Text == "FX_Boom");
-        Check.That(fx.HasPosition && fx.X == Fixed.FromInt(200) && fx.Tick == fire + 21, "ProjectileDetonationFX is requested at the impact point and tick.");
+        Check.That(fx.HasPosition && fx.X == Fixed.FromInt(200) && fx.Tick == fire + world.Frames(21), "ProjectileDetonationFX is requested at the impact point and tick.");
         Check.That(dummy.Body!.Health == Fixed.FromInt(950), "The radius damage hits the dummy at the aim point.");
         Check.That(!world.Entities.Any(value => value.Template.Name == "TestShell"), "The shell is destroyed after detonating.");
     }
 
     /// <summary>
     /// Ballistic arc: heights 30/30 at 25 %/75 % over 120 units. The reference length (BezierSegment::getApproximateLength, tolerance 1, recomputed
-    /// independently in binary64: 131.43) gives ceil(131.43 / 10) = 14 path points, so the shell lands in tick F+15; the path peaks at t = 1/2 with
-    /// 3 · 1/4 · 1/2 · 30 · 2 = 22.5 and point 5 (t = 5/13) lies at x = 44.515, z = 21.302.
+    /// independently in binary64: 131.43) gives ceil(131.43 / 10) = 14 path points, so the shell lands in frame F+15; the path peaks at t = 1/2 with
+    /// 3 · 1/4 · 1/2 · 30 · 2 = 22.5 and point 5 (t = 5/13) lies at x = 44.515, z = 21.302. Written in logic frames of the original: the shell is on point 5 when
+    /// frame F+6 is over, at every tick rate.
     /// </summary>
     public static void ProjectileBallisticArc()
     {
         var world = ProjectileWorld(out _, out var feeder);
         var fire = FireAtDummy(world, feeder, "ArcLauncher", 120, out var dummy);
-        world.Step();
+        CsRun(world, 1);
         var shell = world.Entities.Single(value => value.Template.Name == "ArcShell");
         var dumb = shell.Modules.OfType<DumbProjectileBehavior>().Single();
         Check.That(dumb.Segments == 14, $"The arc has 14 path points (got {dumb.Segments}).");
         var peak = Fixed.Zero;
         long impactTick = -1;
-        while (world.Tick < fire + 30 && impactTick < 0)
+        while (world.Tick < fire + world.Frames(30) && impactTick < 0)
         {
             var result = world.Step();
-            if (result.Tick == fire + 6)
+            if (world.Tick == fire + world.Frames(7))
             {
                 Check.That((shell.X - Fixed.FromDecimal(44.515m)).Abs() < Fixed.FromDecimal(0.01m) && (shell.Z - Fixed.FromDecimal(21.302m)).Abs() < Fixed.FromDecimal(0.01m),
                     $"Point 5 of the arc is (44.515, 21.302), got ({shell.X}, {shell.Z}).");
@@ -317,58 +319,59 @@ static partial class Tests
             if (shell.Z > peak) peak = shell.Z;
             if (result.Events.Any(value => value.Kind == SimEventKind.WeaponImpact)) impactTick = result.Tick;
         }
-        Check.That(impactTick == fire + 15, $"The arc lands in tick F+15 (got F+{impactTick - fire}).");
+        Check.That(impactTick == fire + world.Frames(15), $"The arc lands in frame F+15 (got tick F+{impactTick - fire}).");
         Check.That(peak > Fixed.FromInt(21) && peak <= Fixed.FromDecimal(22.5m), $"The arc stays below its analytic peak of 22.5 (got {peak}).");
         Check.That(dummy.Body!.Health == Fixed.FromInt(950), "The shell lands on the dummy.");
     }
 
     /// <summary>
-    /// Missile, hand-computed: ignition at once, InitialVelocity 0, acceleration 9000/s² (10 per tick²) up to 300/s (10 per tick), no lock distance.
-    /// Tick F+1 ignites and flies to x = 10; F+2 (attack without turning) to 20; from F+3 it steers at the dummy; at the start of F+10 it is 10 away,
-    /// no more than one step, so it lands exactly on the dummy and detonates in tick F+10; tick F+13 (KillSelfDelay 3) removes it.
+    /// Missile, hand-computed: ignition at once, InitialVelocity 0, acceleration 9000/s² (10 per frame²) up to 300/s (10 per frame), no lock distance.
+    /// Frame F+1 ignites and flies to x = 10; F+2 (attack without turning) to 20; from F+3 it steers at the dummy; at the start of F+10 it is 10 away,
+    /// no more than one step, so it lands exactly on the dummy and detonates in the first tick of frame F+10; frame F+13 (KillSelfDelay 3) removes it.
+    /// Written in logic frames of the original, so the same numbers hold at 60 and 120 Hz.
     /// </summary>
     public static void ProjectileMissileFlightTime()
     {
         var world = ProjectileWorld(out _, out var feeder);
         var fire = FireAtDummy(world, feeder, "MissileLauncher", 100, out var dummy);
-        world.Step();
+        CsRun(world, 1);
         var missile = world.Entities.Single(value => value.Template.Name == "FastMissile");
-        var ignition = world.Step();
-        Check.That(missile.X == Fixed.FromInt(10), $"Tick F+1 ignites and moves one full step (x = {missile.X}).");
-        Check.That(ignition.Events.Any(value => value.Kind == SimEventKind.FxRequested && value.Text == "FX_Ignite"), "IgnitionFX is requested at ignition.");
+        var ignition = CsRun(world, 1);
+        Check.That(missile.X == Fixed.FromInt(10), $"Frame F+1 ignites and moves one full step (x = {missile.X}).");
+        Check.That(ignition.Any(value => value.Kind == SimEventKind.FxRequested && value.Text == "FX_Ignite"), "IgnitionFX is requested at ignition.");
         long impactTick = -1;
-        while (world.Tick <= fire + 20 && impactTick < 0)
+        while (world.Tick <= fire + world.Frames(20) && impactTick < 0)
         {
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.WeaponImpact)) impactTick = result.Tick;
         }
-        Check.That(impactTick == fire + 10, $"The missile detonates in tick F+10 (got F+{impactTick - fire}).");
+        Check.That(impactTick == fire + world.Frames(10), $"The missile detonates in frame F+10 (got tick F+{impactTick - fire}).");
         Check.That(missile.X == Fixed.FromInt(100) && dummy.Body!.Health == Fixed.FromInt(940), "It detonates on the dummy.");
-        for (var tick = 0; tick < 2; tick++) world.Step();
+        while (world.Tick < fire + world.Frames(13)) world.Step();
         Check.That(world.Entities.Any(value => value.Template.Name == "FastMissile"), "The missile waits KillSelfDelay before it removes itself.");
         world.Step();
-        Check.That(!world.Entities.Any(value => value.Template.Name == "FastMissile"), "Tick F+13, KillSelfDelay (3) after the detonation, removes the missile.");
+        Check.That(!world.Entities.Any(value => value.Template.Name == "FastMissile"), "Frame F+13, KillSelfDelay (3) after the detonation, removes the missile.");
     }
 
     /// <summary>
-    /// Missile with ignition delay and acceleration: IgnitionDelay 100 ms = 3 ticks, InitialVelocity 60/s = 2 per tick, acceleration 900/s² = 1 per tick².
+    /// Missile with ignition delay and acceleration: IgnitionDelay 100 ms = 3 frames, InitialVelocity 60/s = 2 per frame, acceleration 900/s² = 1 per frame².
     /// Coast: x = 2, 4 (F+1, F+2); ignition at F+3 (speed 3, x = 7); then speed 4..10: x = 11, 16, 22, 29, 37, 46, 56, 66, 76, 86, 96 (F+4..F+14);
-    /// at F+15 the dummy (x = 100) is 4 away and the missile lands.
+    /// at F+15 the dummy (x = 100) is 4 away and the missile lands. Written in logic frames of the original, so the same table holds at 60 and 120 Hz.
     /// </summary>
     public static void ProjectileMissileAcceleration()
     {
         var world = ProjectileWorld(out _, out var feeder);
         var fire = FireAtDummy(world, feeder, "SlowMissileLauncher", 100, out _);
-        world.Step();
+        CsRun(world, 1);
         var missile = world.Entities.Single(value => value.Template.Name == "SlowMissile");
         int[] expected = [2, 4, 7, 11, 16, 22, 29, 37, 46, 56, 66, 76, 86, 96];
         foreach (var x in expected)
         {
-            world.Step();
-            Check.That(missile.X == Fixed.FromInt(x), $"Tick F+{world.Tick - 1 - fire}: expected x = {x}, got {missile.X}.");
+            CsRun(world, 1);
+            Check.That(missile.X == Fixed.FromInt(x), $"Frame F+{world.InFrames(world.Tick - 1 - fire)}: expected x = {x}, got {missile.X}.");
         }
         var landing = world.Step();
-        Check.That(landing.Tick == fire + 15 && landing.Events.Any(value => value.Kind == SimEventKind.WeaponImpact), "The missile lands in tick F+15.");
+        Check.That(landing.Tick == fire + world.Frames(15) && landing.Events.Any(value => value.Kind == SimEventKind.WeaponImpact), "The missile lands in frame F+15.");
     }
 
     /// <summary>A weapon without a projectile: 150 units at 600/s (20 per tick) land ceil(7.5) = 8 ticks later; within one tick's travel the hit is immediate.</summary>

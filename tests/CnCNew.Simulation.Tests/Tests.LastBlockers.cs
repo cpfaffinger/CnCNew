@@ -712,9 +712,9 @@ static partial class Tests
         homing.SetTargetPosition(world, Fixed.Zero, Fixed.Zero, Fixed.Zero);
         Check.That(!homing.TargetReceived, "The zero point is refused like the reference refuses it.");
         homing.SetTargetPosition(world, Fixed.FromInt(100), Fixed.FromInt(-40), Fixed.Zero);
-        world.Step();
-        // CourseCorrectionScalar 0.8: one step goes 20 % of the way.
-        Check.That((bomb.X - Fixed.FromInt(20)).Abs() < Fixed.FromDecimal(0.01m) && (bomb.Y + Fixed.FromInt(8)).Abs() < Fixed.FromDecimal(0.01m), $"One tick moves a fifth of the way ({bomb.X}, {bomb.Y}).");
+        CsRun(world, 1);
+        // CourseCorrectionScalar 0.8: one logic frame of the original goes 20 % of the way.
+        Check.That((bomb.X - Fixed.FromInt(20)).Abs() < Fixed.FromDecimal(0.01m) && (bomb.Y + Fixed.FromInt(8)).Abs() < Fixed.FromDecimal(0.01m), $"One frame moves a fifth of the way ({bomb.X}, {bomb.Y}).");
         LbSnapshotContinues(world, fixture, "smart bomb", 30);
         CsRun(world, 60);
         Check.That((bomb.X - Fixed.FromInt(100)).Abs() < Fixed.FromDecimal(0.05m) && (bomb.Y + Fixed.FromInt(40)).Abs() < Fixed.FromDecimal(0.05m), $"The bomb converges on the target ({bomb.X}, {bomb.Y}).");
