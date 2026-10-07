@@ -431,7 +431,7 @@ public sealed class ReferenceMatchScenario
             }
             if (nearest is null) continue;
             var range = world.MaxWeaponRange(unit);
-            if (best <= range * range)
+            if (SquaredReach.Of(range).Contains(best))
             {
                 if (world.ChooseWeapon(unit, nearest, FireOrigin.Ai).CanFire)
                 {

@@ -274,7 +274,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         if (data.ScoutRange != 0 && master.HasMoveTarget)
         {
             var half = Fixed.FromInt(data.GuardMaxRange) / Fixed.FromInt(2);
-            if (SlaveSupport.BoundingDistanceSquared2D(master, master.MoveTargetX, master.MoveTargetY) > half * half)
+            if (!SquaredReach.Of(half).Contains(SlaveSupport.BoundingDistanceSquared2D(master, master.MoveTargetX, master.MoveTargetY)))
             {
                 EndRepair(world);
                 DoScoutLogic(world, master, ai);
@@ -302,7 +302,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
                 EndRepair(world);
                 DoGuardLogic(world, ai, pinnedX, pinnedY);
             }
-            else if (SlaveSupport.CenterDistanceSquared3D(Entity, master) > stray * stray)
+            else if (!SquaredReach.Of(stray).Contains(SlaveSupport.CenterDistanceSquared3D(Entity, master)))
             {
                 EndRepair(world);
                 DoGuardLogic(world, ai, pinnedX, pinnedY);
@@ -317,12 +317,13 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         if (master.LastFireTick < 0 || world.Tick - master.LastFireTick > world.Time.OriginalFrames(RecentFireFrames) || SimulationWorld.WeaponIndexIn(master, master.CurrentWeaponSlot) < 0) return null;
         var range = world.Weapons[SimulationWorld.WeaponIndexIn(master, master.CurrentWeaponSlot)].RangeWith(world.Templates.GlobalWeaponBonus, master.WeaponBonusConditions);
         Entity? best = null;
-        var bestDistance = range * range;
+        var limit = SquaredReach.Of(range);
+        var bestDistance = Fixed.Zero;
         foreach (var candidate in world.Entities)
         {
             if (candidate.EffectivelyDead || candidate.DestroyRequested || candidate.Body is null || !world.AreEnemies(master.Owner, candidate.Owner)) continue;
             var distance = SlaveSupport.CenterDistanceSquared2D(master, candidate);
-            if (distance > bestDistance || (best is not null && distance == bestDistance && candidate.Id.Value > best.Id.Value)) continue;
+            if (!limit.Contains(distance) || (best is not null && (distance > bestDistance || (distance == bestDistance && candidate.Id.Value > best.Id.Value)))) continue;
             best = candidate;
             bestDistance = distance;
         }
@@ -342,7 +343,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         }
         ai.OrderMove(world, x, y, false);
         var bonus = Fixed.FromInt(data.DistToTargetToGrantRangeBonus);
-        if (distance < bonus * bonus)
+        if (SquaredReach.Of(bonus).ContainsStrictly(distance))
         {
             master.WeaponBonusConditions |= 1u << DroneSpottingBit;
             world.MarkDirty(master);
@@ -367,7 +368,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
     private (Fixed X, Fixed Y) ClampedGoal(Entity master, Fixed goalX, Fixed goalY, Fixed goalZ, int range, Fixed distanceSquared)
     {
         var limit = Fixed.FromInt(range);
-        if (distanceSquared <= limit * limit) return (goalX, goalY);
+        if (SquaredReach.Of(limit).Contains(distanceSquared)) return (goalX, goalY);
         var dx = goalX - master.X;
         var dy = goalY - master.Y;
         var dz = goalZ - master.Z;
@@ -588,7 +589,7 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
 
         var radius = Fixed.FromInt(data.MustCatchUpRadius);
         var distance = SlaveSupport.CenterDistanceSquared3D(Entity, master);
-        if (distance > radius * radius)
+        if (!SquaredReach.Of(radius).Contains(distance))
         {
             if (master.HasMoveTarget)
             {
@@ -596,12 +597,12 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
                 var cells = Fixed.FromInt(5 * TerrainMap.CellSize);
                 var dx = Entity.MoveTargetX - master.MoveTargetX;
                 var dy = Entity.MoveTargetY - master.MoveTargetY;
-                if (!Entity.HasMoveTarget || dx * dx + dy * dy > cells * cells) ai.OrderMove(world, master.MoveTargetX, master.MoveTargetY, false);
+                if (!Entity.HasMoveTarget || !SquaredReach.Of(cells).Contains(dx * dx + dy * dy)) ai.OrderMove(world, master.MoveTargetX, master.MoveTargetY, false);
             }
             else ai.OrderMove(world, master.X, master.Y, false);
 
             var crisis = radius * Fixed.FromInt(3);
-            if (distance > crisis * crisis)
+            if (!SquaredReach.Of(crisis).Contains(distance))
             {
                 _crisisTimer++;
                 if (_crisisTimer > data.CatchUpCrisisBailTime)

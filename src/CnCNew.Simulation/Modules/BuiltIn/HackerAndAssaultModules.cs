@@ -313,12 +313,13 @@ public sealed class AssaultTransportAIUpdate(AssaultTransportData data) : AIUpda
         if (weapon.DamageType != DeployDamage) return;
         var range = weapon.RangeWith(world.Templates.GlobalWeaponBonus, Entity.WeaponBonusConditions);
         Entity? nearest = null;
-        var best = range * range;
+        var limit = SquaredReach.Of(range);
+        var best = Fixed.Zero;
         foreach (var candidate in world.Entities)
         {
             if (candidate.EffectivelyDead || candidate.DestroyRequested || candidate.Body is null || !world.AreEnemies(Entity.Owner, candidate.Owner)) continue;
             var distance = SlaveSupport.CenterDistanceSquared2D(Entity, candidate);
-            if (distance > best || (nearest is not null && distance == best && candidate.Id.Value > nearest.Id.Value)) continue;
+            if (!limit.Contains(distance) || (nearest is not null && (distance > best || (distance == best && candidate.Id.Value > nearest.Id.Value)))) continue;
             nearest = candidate;
             best = distance;
         }

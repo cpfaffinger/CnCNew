@@ -516,7 +516,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
         Advance(world);
         var dx = _finalX - Entity.X;
         var dy = _finalY - Entity.Y;
-        if (dx * dx + dy * dy <= PathExtraDistance * PathExtraDistance)
+        if (SquaredReach.Of(PathExtraDistance).Contains(dx * dx + dy * dy))
         {
             world.RequestDestroy(Entity.Id);
             return SimulationTiming.SleepNone;
@@ -577,7 +577,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
         var cos = FixedTrig.Cos(Entity.Angle);
         var sin = FixedTrig.Sin(Entity.Angle);
         var half = (data.YSize / Fixed.FromInt(2)).Floor();
-        var limit = data.DamageRadius * data.DamageRadius;
+        var limit = SquaredReach.Of(data.DamageRadius);
         var points = 0;
         for (var y = Fixed.FromInt(-half); y < Fixed.FromInt(half) && points < 64; y += data.LinearSpacing, points++)
         {
@@ -589,7 +589,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
             {
                 var dx = obj.X - px;
                 var dy = obj.Y - py;
-                if (!obj.DestroyRequested && dx * dx + dy * dy <= limit) hits.Add(obj);
+                if (!obj.DestroyRequested && limit.Contains(dx * dx + dy * dy)) hits.Add(obj);
             }
             hits.Sort(static (a, b) => a.Id.Value.CompareTo(b.Id.Value));
             foreach (var obj in hits)
@@ -1004,7 +1004,7 @@ public sealed class WeaponBonusUpdate(WeaponBonusUpdateData data) : SimModule, I
 
     private void Pulse(IWorldServices world)
     {
-        var limit = data.Range * data.Range;
+        var limit = SquaredReach.Of(data.Range);
         var near = new List<Entity>();
         foreach (var other in world.Entities)
         {
@@ -1012,7 +1012,7 @@ public sealed class WeaponBonusUpdate(WeaponBonusUpdateData data) : SimModule, I
             if (other.Owner != Entity.Owner && world.RelationshipOf(Entity.Owner, other.Owner) != Relationship.Allies) continue;
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
-            if (dx * dx + dy * dy <= limit) near.Add(other);
+            if (limit.Contains(dx * dx + dy * dy)) near.Add(other);
         }
         near.Sort(static (a, b) => a.Id.Value.CompareTo(b.Id.Value));
         foreach (var other in near)

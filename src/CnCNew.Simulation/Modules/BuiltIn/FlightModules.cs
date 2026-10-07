@@ -846,7 +846,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         var inbound = _previousDistance2 > distance2;
         _previousDistance2 = distance2;
         var allowed = inbound ? run.DeliveryDistance + run.PreOpenDistance : run.DeliveryDistance;
-        return allowed * allowed > distance2;
+        return SquaredReach.Of(allowed).ContainsStrictly(distance2);
     }
 
     /// <summary>The dive logic that runs whatever the state (<c>DeliverPayloadAIUpdate::update</c>): from the dive start the plane strafes, until it is inside the dive end distance.</summary>
@@ -857,7 +857,7 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
         var dy = _targetY - Entity.Y;
         if (_dive == Dive.Pre)
         {
-            if (dx * dx + dy * dy <= run.DiveStartDistance * run.DiveStartDistance) _dive = Dive.Diving;
+            if (SquaredReach.Of(run.DiveStartDistance).Contains(dx * dx + dy * dy)) _dive = Dive.Diving;
             return;
         }
         var dz = FlightModules.GroundOrDefault(world, _targetX, _targetY, Fixed.Zero) - Entity.Z;
@@ -1323,13 +1323,13 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     {
         var seconds = Fixed.FromInt(data.TotalFiringTicks) / world.Time.TicksPerSecondFixed;
         var amount = seconds * data.DamagePerSecond / Fixed.FromInt(data.TotalDamagePulses);
-        var limit = radius * radius;
+        var limit = SquaredReach.Of(radius);
         foreach (var entity in world.Entities.OrderBy(value => value.Id.Value).ToArray())
         {
             if (entity.EffectivelyDead || entity.DestroyRequested || entity.Body is null) continue;
             var dx = entity.X - _current.X;
             var dy = entity.Y - _current.Y;
-            if (dx * dx + dy * dy > limit) continue;
+            if (!limit.Contains(dx * dx + dy * dy)) continue;
             world.Damage(entity.Id, new DamageInfo(Entity.Id, amount, data.DamageType, data.DeathType, false));
         }
         if (data.RemnantObject.Length > 0 && world.Templates.TryGet(data.RemnantObject, out var remnant))

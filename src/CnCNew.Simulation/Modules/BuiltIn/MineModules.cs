@@ -98,7 +98,7 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
         _scanCountdown = world.Time.CountdownReload(data.ScanTicks);
 
         var shallDetonate = false;
-        var limit = data.TriggerRange * data.TriggerRange;
+        var limit = SquaredReach.Of(data.TriggerRange);
         // An object more than one unit beyond the range on one axis is outside the circle whatever the other axis says: its squared distance is at least
         // (range + 1)^2 = range^2 + 2 range + 1, and the rounding of the two products (half a raw unit each) cannot bring that down to the limit. Those
         // objects - nearly all of the world - are passed over before the 128-bit products; the test of the circle itself is unchanged.
@@ -111,7 +111,7 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
             if (boxed && (dx > reach || dy > reach || -dx > reach || -dy > reach)) continue;
-            if (!other.DestroyRequested && dx * dx + dy * dy <= limit) inRange.Add(other);
+            if (!other.DestroyRequested && limit.Contains(dx * dx + dy * dy)) inRange.Add(other);
         }
         inRange.Sort(static (a, b) => a.Id.Value.CompareTo(b.Id.Value));
         foreach (var other in inRange)
@@ -306,7 +306,7 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
             var dx = other.X - _detonators[index].X;
             var dy = other.Y - _detonators[index].Y;
             var dz = other.Z - _detonators[index].Z;
-            if (dx * dx + dy * dy + dz * dz <= data.RepeatDetonateMoveThreshold * data.RepeatDetonateMoveThreshold) return;
+            if (SquaredReach.Of(data.RepeatDetonateMoveThreshold).Contains(dx * dx + dy * dy + dz * dz)) return;
             _detonators[index] = (other.Id, other.X, other.Y, other.Z);
         }
         else _detonators.Add((other.Id, other.X, other.Y, other.Z));

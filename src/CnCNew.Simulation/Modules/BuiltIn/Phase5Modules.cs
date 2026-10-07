@@ -296,7 +296,7 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
         if (data.AffectsWholePlayer) return true;
         var dx = candidate.X - Entity.X;
         var dy = candidate.Y - Entity.Y;
-        return dx * dx + dy * dy <= data.Radius * data.Radius;
+        return SquaredReach.Of(data.Radius).Contains(dx * dx + dy * dy);
     }
 
     public override void Describe(IStateWriter writer)
@@ -865,7 +865,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var reach = target.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
         var dx = target.X - Entity.X;
         var dy = target.Y - Entity.Y;
-        if (dx * dx + dy * dy > reach * reach)
+        if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy))
         {
             if (Entity.HasMoveTarget) { _approaching = true; return; }
             // The approach ended (blocked or as close as the grid allows) without getting within reach: give up.
@@ -1000,13 +1000,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             var slack = Fixed.FromInt(2 * TerrainMap.CellSize);
             var gx = goal.X - Entity.MoveTargetX;
             var gy = goal.Y - Entity.MoveTargetY;
-            if (gx * gx + gy * gy > slack * slack) StartInternalMove(goal.X, goal.Y);
+            if (!SquaredReach.Of(slack).Contains(gx * gx + gy * gy)) StartInternalMove(goal.X, goal.Y);
             return;
         }
         var reach = goal.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
         var dx = goal.X - Entity.X;
         var dy = goal.Y - Entity.Y;
-        var near = dx * dx + dy * dy <= reach * reach;
+        var near = SquaredReach.Of(reach).Contains(dx * dx + dy * dy);
         if (near)
             foreach (var module in Entity.Modules)
             {
@@ -1033,7 +1033,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var reach = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
         var dx = container.X - Entity.X;
         var dy = container.Y - Entity.Y;
-        if (dx * dx + dy * dy > reach * reach) return;
+        if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy)) return;
         world.TryEnterContainer(Entity, container);
     }
 
@@ -1068,7 +1068,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             var reach = last ? arrivalRadius : locomotor.Speed;
             var toX = waypoint.X - Entity.X;
             var toY = waypoint.Y - Entity.Y;
-            if (toX * toX + toY * toY > reach * reach) break;
+            if (!SquaredReach.Of(reach).Contains(toX * toX + toY * toY)) break;
             if (!last) { _pathIndex++; continue; }
             Entity.X = waypoint.X;
             Entity.Y = waypoint.Y;
@@ -1250,7 +1250,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var distSq = dx * dx + dy * dy;
         // "Close enough" is at least one tick's travel at full speed, so a fast unit cannot perpetually overshoot and reverse.
         var closeEnough = Fixed.Max(locomotor.CloseEnoughDist, locomotor.Speed);
-        if (distSq <= closeEnough * closeEnough)
+        if (SquaredReach.Of(closeEnough).Contains(distSq))
         {
             Entity.X = Entity.MoveTargetX;
             Entity.Y = Entity.MoveTargetY;

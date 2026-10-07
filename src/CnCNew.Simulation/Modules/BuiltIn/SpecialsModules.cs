@@ -231,7 +231,7 @@ public sealed class GrantStealthBehavior(GrantStealthData data) : SimModule, IUp
             if (world.RelationshipOf(Entity.Owner, candidate.Owner) != Relationship.Allies) continue;
             var dx = candidate.X - Entity.X;
             var dy = candidate.Y - Entity.Y;
-            if (dx * dx + dy * dy > _radius * _radius) continue;
+            if (!SquaredReach.Of(_radius).Contains(dx * dx + dy * dy)) continue;
             if (!data.KindOf.Any(candidate.Template.IsKindOf)) continue;
             foreach (var module in candidate.Modules)
                 if (module is StealthUpdate stealth) stealth.ReceiveGrant(world, true, 0);
@@ -359,7 +359,7 @@ public sealed class ProjectileStreamUpdate : SimModule, IUpdateModule
                 var dx = owner.X - projectile.X;
                 var dy = owner.Y - projectile.Y;
                 var reach = owner.Template.GeometryMajorRadius * Fixed.FromDecimal(1.5m);
-                if (dx * dx + dy * dy <= reach * reach) z = Fixed.Max(z, owner.Z + owner.Template.GeometryHeight + Fixed.FromDecimal(0.5m));
+                if (SquaredReach.Of(reach).Contains(dx * dx + dy * dy)) z = Fixed.Max(z, owner.Z + owner.Template.GeometryHeight + Fixed.FromDecimal(0.5m));
             }
             yield return (projectile.X, projectile.Y, z);
         }

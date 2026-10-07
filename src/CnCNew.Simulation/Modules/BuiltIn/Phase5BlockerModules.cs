@@ -484,7 +484,7 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
             if (HasAnyKind(candidate.Template, data.ExtraForbiddenKindOf)) continue;
             var dx = candidate.X - Entity.X;
             var dy = candidate.Y - Entity.Y;
-            if (dx * dx + dy * dy > range * range) continue;
+            if (!SquaredReach.Of(range).Contains(dx * dx + dy * dy)) continue;
             if (terrain is not null && !terrain.HasHeightLineOfSight(Entity.X, Entity.Y, EyeHeight(Entity), candidate.X, candidate.Y, EyeHeight(candidate))) continue;
             foreach (var module in candidate.Modules)
             {

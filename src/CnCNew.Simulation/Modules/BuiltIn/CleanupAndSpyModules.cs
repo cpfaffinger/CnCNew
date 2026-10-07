@@ -187,14 +187,15 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
         var cy = area ? _posY : Entity.Y;
         var radius = area ? data.ScanRange + _moveRange : data.ScanRange;
         Entity? best = null;
-        var bestDistance = radius * radius;
+        var limit = SquaredReach.Of(radius);
+        var bestDistance = Fixed.Zero;
         foreach (var candidate in world.Entities)
         {
             if (candidate.DestroyRequested || candidate.Id == Entity.Id || !candidate.Template.IsKindOf("CLEANUP_HAZARD")) continue;
             var dx = candidate.X - cx;
             var dy = candidate.Y - cy;
             var distance = dx * dx + dy * dy;
-            if (distance > bestDistance || (best is not null && distance == bestDistance && candidate.Id.Value > best.Id.Value)) continue;
+            if (!limit.Contains(distance) || (best is not null && (distance > bestDistance || (distance == bestDistance && candidate.Id.Value > best.Id.Value)))) continue;
             best = candidate;
             bestDistance = distance;
         }

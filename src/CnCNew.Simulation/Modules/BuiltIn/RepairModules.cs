@@ -135,14 +135,14 @@ internal sealed class AutoFindHealingUpdate(AutoFindHealingData data) : SimModul
     {
         Entity? best = null;
         var bestDistance = Fixed.Zero;
-        var rangeSquared = data.ScanRange * data.ScanRange;
+        var rangeSquared = SquaredReach.Of(data.ScanRange);
         foreach (var candidate in world.Entities)
         {
             if (!candidate.Template.IsKindOf("HEAL_PAD")) continue;
             var dx = candidate.X - Entity.X;
             var dy = candidate.Y - Entity.Y;
             var distance = dx * dx + dy * dy;
-            if (distance > rangeSquared) continue;
+            if (!rangeSquared.Contains(distance)) continue;
             if (best is null || distance < bestDistance || (distance == bestDistance && candidate.Id.Value < best.Id.Value))
             {
                 best = candidate;

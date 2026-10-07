@@ -56,13 +56,13 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void ProcessRequestAssistance(Entity source, WeaponInfo weapon, Entity victim)
     {
-        var rangeSquared = weapon.RequestAssistRange * weapon.RequestAssistRange;
+        var rangeSquared = SquaredReach.Of(weapon.RequestAssistRange);
         foreach (var candidate in _entities.Values)
         {
             if (candidate == source || candidate.Owner != source.Owner || candidate.DestroyRequested || candidate.EffectivelyDead || candidate.Template.Index != source.Template.Index) continue;
             var dx = candidate.X - source.X;
             var dy = candidate.Y - source.Y;
-            if (dx * dx + dy * dy > rangeSquared) continue;
+            if (!rangeSquared.Contains(dx * dx + dy * dy)) continue;
             foreach (var module in candidate.ModuleArray)
                 if (module is AssistedTargetingUpdate assist && assist.IsFreeToAssist(this))
                 {

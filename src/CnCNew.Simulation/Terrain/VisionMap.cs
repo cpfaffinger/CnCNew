@@ -423,7 +423,7 @@ public sealed class VisionMap
         var maxX = Math.Min(CellsX - 1, CellOf(x + radius));
         if (minY <= maxY) Written(slot, minY, maxY);
         var (centreX, centreY, reach) = (Coarse(x.Raw), Coarse(y.Raw), Coarse(radius.Raw));
-        var limit = checked(reach * reach);
+        var limit = SquaredRadius(reach);
         for (var cy = minY; cy <= maxY; cy++)
         {
             var dy = (long)cy * CoarseCell + CoarseHalfCell - centreY;
@@ -442,7 +442,9 @@ public sealed class VisionMap
     /// no longer fits a machine word. The tests therefore run at this many fraction bits, whatever the resolution of <see cref="Fixed"/>: centre and radius
     /// are cut to it (toward negative infinity) and the cell centres, whole units, are exact in it. A cell is ten units across, so the cut (below
     /// 1/65,000 of a unit) decides nothing that could be seen, and it keeps the test at the cost of one machine multiplication per cell. The squares then
-    /// fit for every radius up to 46,000 units; a larger one throws (the arithmetic is checked) instead of wrapping.
+    /// fit for every radius up to 46,000 units; the square of a larger one (a script may reveal with any radius) is taken as "larger than every squared
+    /// distance" (<see cref="SquaredRadius"/>), which is what it is for every cell within 32,768 units of the centre. The differences stay checked: a
+    /// centre further than that from a cell of the map throws instead of wrapping.
     /// </summary>
     private const int CircleTestBits = 16;
     private const int CircleTestShift = Fixed.FractionBits - CircleTestBits;
@@ -450,6 +452,15 @@ public sealed class VisionMap
     private const long CoarseHalfCell = CoarseCell / 2;
 
     private static long Coarse(long raw) => raw >> CircleTestShift;
+
+    /// <summary>3,037,000,499² is the largest square below 2^63.</summary>
+    private const long LargestSquarableReach = 3037000499;
+
+    /// <summary>
+    /// reach² for the comparisons with squared differences, or <see cref="long.MaxValue"/> where it does not fit: every sum of two squares that does fit
+    /// is then within it, as it is within the true square.
+    /// </summary>
+    private static long SquaredRadius(long reach) => reach > LargestSquarableReach ? long.MaxValue : reach * reach;
 
     /// <summary>
     /// Every cell whose centre lies within <paramref name="radius"/> of the point is visible and explored for the slot: at once, or, inside a
@@ -519,7 +530,7 @@ public sealed class VisionMap
         var rowMinX = _revealMinX[slot];
         var rowMaxX = _revealMaxX[slot];
         var (centreX, centreY, reach) = (Coarse(circle.X), Coarse(circle.Y), Coarse(circle.Radius));
-        var limit = checked(reach * reach);
+        var limit = SquaredRadius(reach);
         // The column in range whose centre is nearest to the point: if it is outside the circle in a row, every column of that row is.
         var nearest = Math.Clamp(circle.CentreColumn, minX, maxX);
         var nearestDx = (long)nearest * cellRaw + half - centreX;
@@ -604,7 +615,7 @@ public sealed class VisionMap
         var minX = Math.Max(0, CellOf(x - radius));
         var maxX = Math.Min(CellsX - 1, CellOf(x + radius));
         var (centreX, centreY, reach) = (Coarse(x.Raw), Coarse(y.Raw), Coarse(radius.Raw));
-        var limit = checked(reach * reach);
+        var limit = SquaredRadius(reach);
         long tested = 0, written = 0;
         for (var cy = minY; cy <= maxY; cy++)
         {

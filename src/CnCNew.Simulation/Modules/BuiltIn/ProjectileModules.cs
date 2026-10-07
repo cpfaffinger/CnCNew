@@ -585,7 +585,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             var lockDistance = _tracking ? data.LockDistance : data.LockDistance / Fixed.FromInt(2);
             var dx = _goal.X - Entity.X;
             var dy = _goal.Y - Entity.Y;
-            if (dx * dx + dy * dy < lockDistance * lockDistance)
+            if (SquaredReach.Of(lockDistance).ContainsStrictly(dx * dx + dy * dy))
             {
                 if (!_tracking) _goal = _originalTarget;
                 SwitchTo(world, MissileState.Kill);
@@ -875,7 +875,7 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
         // candidate at all, in which case it was never skipped. So the result does not depend on the order the candidates come in, and a candidate that
         // has two of the listed kinds and comes twice changes nothing the second time.
         var picks = default(ScanPicks);
-        var scanSquared = data.ScanRange * data.ScanRange;
+        var scanSquared = SquaredReach.Of(data.ScanRange);
         foreach (var kind in data.PrimaryTargetTypes) ScanCandidates(world, weapon, world.EntitiesOfKind(kind), scanSquared, ref picks);
         foreach (var kind in data.SecondaryTargetTypes) ScanCandidates(world, weapon, world.EntitiesOfKind(kind), scanSquared, ref picks);
         var pick = picks.InRange0 ?? picks.InRange1;
@@ -893,7 +893,7 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
         public Fixed InDistance0, InDistance1, OutDistance0, OutDistance1;
     }
 
-    private void ScanCandidates(IWorldServices world, WeaponInfo weapon, EntityList candidates, Fixed scanSquared, ref ScanPicks picks)
+    private void ScanCandidates(IWorldServices world, WeaponInfo weapon, EntityList candidates, SquaredReach scanSquared, ref ScanPicks picks)
     {
         foreach (var other in candidates.AsSpan())
         {
@@ -902,7 +902,7 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
             if (targetClass == ClassNone) continue;
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
-            if (dx * dx + dy * dy > scanSquared) continue;
+            if (!scanSquared.Contains(dx * dx + dy * dy)) continue;
             if (!world.IsSignificantlyAboveTerrain(other) && !weapon.AntiGround) continue;
             if (world.RelationshipOf(Entity.Owner, other.Owner) != Relationship.Enemies) continue;
             if (other.HasStatus(StealthedBit) && !other.HasStatus(DetectedBit)) continue;

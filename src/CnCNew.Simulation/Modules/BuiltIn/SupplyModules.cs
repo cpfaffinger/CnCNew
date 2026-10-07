@@ -184,7 +184,8 @@ internal sealed class SupplyMachine
         var dx = goal.X - self.X;
         var dy = goal.Y - self.Y;
         var gap = Fixed.Sqrt(dx * dx + dy * dy) - goal.Template.GeometryMajorRadius - self.Template.GeometryMajorRadius;
-        if (gap > Fixed.Zero && gap * gap >= Fixed.FromInt(RegroupNearSquared)) ai.OrderMove(world, goal.X, goal.Y, false);
+        // gap² >= 15²: the square of the gap holds the constant.
+        if (gap > Fixed.Zero && SquaredReach.Of(gap).Contains(Fixed.FromInt(RegroupNearSquared))) ai.OrderMove(world, goal.X, goal.Y, false);
         return DockStatus.Continue;
     }
 
@@ -358,13 +359,13 @@ internal static class SupplyNetwork
         var self = truck.Entity;
         if (truck.PreferredDock.IsValid && world.FindEntity(truck.PreferredDock) is { } preferred && Cost(self, truck, world, preferred, true) is not null) return preferred;
         Entity? best = null;
-        var limit = truck.WarehouseScanDistance * truck.WarehouseScanDistance;
+        var limit = SquaredReach.Of(truck.WarehouseScanDistance);
         var bestCost = Fixed.MaxValue;
         // Only an object with a dock module has a cost (Cost asks DockOf first), so the objects with one are all the candidates there are; the pick is the
         // minimum of (cost, id) and does not depend on their order.
         foreach (var candidate in world.EntitiesWithModule<IDockModule>().AsSpan())
         {
-            if (Cost(self, truck, world, candidate, true) is not { } cost || cost >= limit) continue;
+            if (Cost(self, truck, world, candidate, true) is not { } cost || !limit.ContainsStrictly(cost)) continue;
             if (best is null || cost < bestCost || (cost == bestCost && candidate.Id.Value < best.Id.Value))
             {
                 best = candidate;

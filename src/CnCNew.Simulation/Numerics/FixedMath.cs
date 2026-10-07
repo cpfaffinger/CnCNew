@@ -132,6 +132,57 @@ public static class FixedMath
         }
     }
 
+    // ------------------------------------------------------------------------------------- squares and products for comparisons
+
+    /// <summary>
+    /// The square <see cref="Multiply"/> gives for (raw, raw) where that fits a machine word; where it does not, <see cref="long.MaxValue"/> and
+    /// <paramref name="beyond"/>. It never throws: a square that only feeds a comparison with a representable value needs no more than "larger than all of them".
+    /// </summary>
+    public static long SquareSaturated(long raw, int fractionBits, out bool beyond)
+    {
+        var magnitude = Magnitude(raw);
+        var high = Math.BigMul(magnitude, magnitude, out var low);
+        var rounded = unchecked(low + (1UL << (fractionBits - 1)));
+        if (rounded < low) high++;
+        // (high * 2^64 + rounded) / scale reaches 2^63 exactly when high reaches 2^(fractionBits - 1).
+        beyond = high >> (fractionBits - 1) != 0;
+        return beyond ? long.MaxValue : (long)((high << (64 - fractionBits)) | (rounded >> fractionBits));
+    }
+
+    /// <summary>(raw² + scale / 2) / scale as the whole 128-bit number: the square of any raw value, rounded as <see cref="Multiply"/> rounds.</summary>
+    public static UInt128 SquareWide(long raw, int fractionBits)
+    {
+        var magnitude = Magnitude(raw);
+        var high = Math.BigMul(magnitude, magnitude, out var low);
+        var rounded = unchecked(low + (1UL << (fractionBits - 1)));
+        if (rounded < low) high++;
+        return new UInt128(high, rounded) >> fractionBits;
+    }
+
+    /// <summary>
+    /// <see cref="Divide"/>(<see cref="Multiply"/>(a, b), c) – both roundings as they are – for every a and b, also where the product alone leaves the range
+    /// (a ratio of two large values, <c>health * newMaximum / oldMaximum</c>). Throws only when the quotient does.
+    /// </summary>
+    public static long MultiplyDivide(long a, long b, long c, int fractionBits)
+    {
+        var high = Math.BigMul(Magnitude(a), Magnitude(b), out var low);
+        var rounded = unchecked(low + (1UL << (fractionBits - 1)));
+        if (rounded < low) high++;
+        var negativeProduct = (a ^ b) < 0;
+        if (high >> (fractionBits - 1) == 0)
+        {
+            var product = (long)((high << (64 - fractionBits)) | (rounded >> fractionBits));
+            return Divide(negativeProduct ? -product : product, c, fractionBits);
+        }
+        if (c == 0) throw new DivideByZeroException();
+        // The product is below 2^(126 - fractionBits), so product * scale is below 2^126: the quotient formula of Divide in 128 bits.
+        var wide = new UInt128(high, rounded) >> fractionBits;
+        var divisor = (UInt128)Magnitude(c);
+        var quotient = ((wide << fractionBits) + (divisor >> 1)) / divisor;
+        if (quotient > ulong.MaxValue) throw new OverflowException("Fixed-point result out of range.");
+        return Signed((ulong)quotient, negativeProduct != (c < 0));
+    }
+
     // ------------------------------------------------------------------------------------------------------------- angles
 
     private static long Rounded(long valueQ61, int shift) => (valueQ61 + (1L << (shift - 1))) >> shift;

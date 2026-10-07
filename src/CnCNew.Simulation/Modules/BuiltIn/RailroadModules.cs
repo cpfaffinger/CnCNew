@@ -489,7 +489,7 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
             var dx = other.X - hitchX;
             var dy = other.Y - hitchY;
             var distance = dx * dx + dy * dy;
-            if (distance > reach * reach || distance > bestDistance || (distance == bestDistance && best is not null && other.Id.Value > best.Entity.Id.Value)) continue;
+            if (!SquaredReach.Of(reach).Contains(distance) || distance > bestDistance || (distance == bestDistance && best is not null && other.Id.Value > best.Entity.Id.Value)) continue;
             best = candidate;
             bestDistance = distance;
         }
@@ -586,7 +586,7 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         if (!template.Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase))
         {
             var limit = template.BoundingCircleRadius + otherRadius;
-            return dx * dx + dy * dy <= limit * limit;
+            return SquaredReach.Of(limit).Contains(dx * dx + dy * dy);
         }
         var cos = FixedTrig.Cos(Entity.Angle);
         var sin = FixedTrig.Sin(Entity.Angle);

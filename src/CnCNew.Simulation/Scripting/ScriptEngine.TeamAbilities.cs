@@ -362,9 +362,9 @@ public sealed partial class ScriptEngine
             _buttonHuntNext[id] = _tick + Math.Max(data.ScanTicks, _world.Time.TicksPerSecond);
             if (Marching(hunter) || _busyThisTick.Contains(id)) continue;
             var range = data.ScanRange <= Fixed.Zero ? Fixed.FromInt(9999) : data.ScanRange;
-            var limit = range * range;
+            var limit = SquaredReach.Of(range);
             var candidates = _world.Entities
-                .Where(candidate => CountsAsObject(candidate) && !candidate.Owner.IsSystem && !IsHiddenByStealth(candidate) && _world.AreEnemies(hunter, candidate) && Distance2(candidate, hunter.X, hunter.Y) <= limit)
+                .Where(candidate => CountsAsObject(candidate) && !candidate.Owner.IsSystem && !IsHiddenByStealth(candidate) && _world.AreEnemies(hunter, candidate) && limit.Contains(Distance2(candidate, hunter.X, hunter.Y)))
                 .OrderBy(candidate => Distance2(candidate, hunter.X, hunter.Y)).ThenBy(candidate => candidate.Id.Value).Take(8);
             foreach (var target in candidates)
                 if (UseCommandButtonAbility(hunter, ability, SpecialPowerTargetKind.Object, target.Id, Fixed.Zero, Fixed.Zero)) break;

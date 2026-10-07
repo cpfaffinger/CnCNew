@@ -163,7 +163,8 @@ public sealed class NavigationGrid
     /// </summary>
     private readonly struct Footprint
     {
-        private readonly Fixed _x, _y, _cos, _sin, _halfLength, _halfWidth, _radiusSquared;
+        private readonly Fixed _x, _y, _cos, _sin, _halfLength, _halfWidth;
+        private readonly SquaredReach _radiusSquared;
         private readonly bool _box;
         private readonly int _ownX, _ownY;
 
@@ -183,7 +184,7 @@ public sealed class NavigationGrid
             _sin = FixedTrig.Sin(angle);
             _halfLength = major + Inflate;
             _halfWidth = minor + Inflate;
-            _radiusSquared = _halfLength * _halfLength;
+            _radiusSquared = SquaredReach.Of(_halfLength);
             _ownX = TerrainMap.CellOf(x);
             _ownY = TerrainMap.CellOf(y);
         }
@@ -198,7 +199,7 @@ public sealed class NavigationGrid
             if (cx == _ownX && cy == _ownY) return true;
             var dx = TerrainMap.CellCenter(cx) - _x;
             var dy = TerrainMap.CellCenter(cy) - _y;
-            if (!_box) return dx * dx + dy * dy <= _radiusSquared;
+            if (!_box) return _radiusSquared.Contains(dx * dx + dy * dy);
             var along = dx * _cos + dy * _sin;
             var across = dy * _cos - dx * _sin;
             return along.Abs() <= _halfLength && across.Abs() <= _halfWidth;
@@ -303,14 +304,14 @@ public sealed class NavigationGrid
             var centreX = TerrainMap.CellOf(x);
             var centreY = TerrainMap.CellOf(y);
             var reach = TerrainMap.CellOf(radius) + 1;
-            var radiusSquared = radius * radius;
+            var radiusSquared = SquaredReach.Of(radius);
             for (var cy = centreY - reach; cy <= centreY + reach; cy++)
                 for (var cx = centreX - reach; cx <= centreX + reach; cx++)
                 {
                     if (!Terrain.IsInside(cx, cy) || Math.Abs(cx - startX) <= 1 && Math.Abs(cy - startY) <= 1 || Math.Abs(cx - goalX) <= 1 && Math.Abs(cy - goalY) <= 1) continue;
                     var ddx = TerrainMap.CellCenter(cx) - x;
                     var ddy = TerrainMap.CellCenter(cy) - y;
-                    if (ddx * ddx + ddy * ddy > radiusSquared) continue;
+                    if (!radiusSquared.Contains(ddx * ddx + ddy * ddy)) continue;
                     var index = cy * _cellsX + cx;
                     if ((_state[index] & TemporaryBit) != 0) continue;
                     Mark(index, TemporaryBit);
