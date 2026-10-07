@@ -28,6 +28,18 @@ public static class ProjectileFrameGrid
     private const int AuthoredDecimals = 4;
 
     /// <summary>
+    /// An acceleration per tick² as the acceleration per logic frame² of the original: times the ticks per frame, twice (exact; the catalog value itself is rounded once per rate).
+    /// 30 Hz: the argument.
+    /// </summary>
+    public static Fixed PerTickSquaredToPerOriginalFrameSquared(this SimulationTime time, Fixed perTickSquared)
+    {
+        var factor = time.TicksPerOriginalFrame;
+        if (factor == 1) return perTickSquared;
+        var perTickAndFrame = perTickSquared * factor;
+        return perTickAndFrame * factor;
+    }
+
+    /// <summary>
     /// The share of a frame's step that sub-step <paramref name="subStep"/> (0 … ticks per frame − 1) flies: the step divided by the ticks per frame, and in the last sub-step what is
     /// left, so that the shares of one frame add up to the step exactly. 30 Hz: the step.
     /// </summary>

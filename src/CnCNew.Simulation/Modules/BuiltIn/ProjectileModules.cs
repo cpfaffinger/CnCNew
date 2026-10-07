@@ -497,7 +497,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         var perFrame = time.TicksPerOriginalFrame;
         var initial = data.InitialVelocity * perFrame;
         _maxSpeed = locomotor is null ? initial : time.PerTickToPerOriginalFrame(locomotor.Speed);
-        _acceleration = locomotor is null ? Fixed.Zero : locomotor.Acceleration * (perFrame * perFrame);
+        _acceleration = locomotor is null ? Fixed.Zero : time.PerTickSquaredToPerOriginalFrameSquared(locomotor.Acceleration);
         if (data.UseWeaponSpeed || _maxSpeed <= Fixed.Zero)
         {
             // UseWeaponSpeed: m_maxAccel = weaponSpeed, setMaxSpeed(weaponSpeed) — the reference takes the speed per frame as the acceleration per frame², so the missile is at full
