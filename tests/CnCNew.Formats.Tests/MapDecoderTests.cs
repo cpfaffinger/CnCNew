@@ -8,6 +8,7 @@ internal static class MapDecoderTests
     public static void Run()
     {
         DecodesFullSyntheticMap();
+        DecodesScriptLibrary();
         DerivesCliffFlagsBeforeVersion7();
         ReadsVersion7ShortCliffStride();
         ReportsUnparsedChunks();
@@ -66,6 +67,34 @@ internal static class MapDecoderTests
         Assert(script.FalseActions.IsEmpty, "no false actions on this script");
         var group = list.Groups[0];
         Assert(group is { Name: "Group1", IsActive: true, IsSubroutine: true } && group.Scripts.Single().Name == "InGroup", "script group");
+    }
+
+    /// <summary>The export format of the script dialog (.scb): script lists, the players they belong to and those players' teams as top-level chunks.</summary>
+    private static void DecodesScriptLibrary()
+    {
+        var b = new MapBuilder();
+        b.Chunk("PlayerScriptsList", 1, PlayerScripts(b));
+        b.Chunk("ScriptsPlayers", 2, [..I(1), ..I(1), ..A("SkirmishAmerica"), ..b.Dict(("playerName", "SkirmishAmerica"))]);
+        b.Chunk("ScriptTeams", 1, [..b.Dict(("teamName", "Attack"), ("teamOwner", "SkirmishAmerica")), ..b.Dict(("teamName", "Defend"), ("teamOwner", "SkirmishAmerica"))]);
+        b.Chunk("ObjectsList", 3, []);
+        using var stream = new MemoryStream(b.Build());
+        var library = SageMapDecoder.DecodeScriptLibrary(stream);
+        Assert(library.Container == "CkMp", "library container");
+        Assert(library.Players.Single() is { Name: "SkirmishAmerica" } player && player.Properties.GetText("playerName") == "SkirmishAmerica", "library player with dict");
+        Assert(library.Teams.Select(team => team.GetText("teamName")).SequenceEqual(["Attack", "Defend"]), "library teams in file order");
+        Assert(library.ScriptLists.Single().Scripts.Single().Name == "DoIt" && library.ScriptLists[0].Groups.Single().Name == "Group1", "library scripts");
+        Assert(library.SkippedChunks.Single() is { Path: "ObjectsList", Bytes: 0 }, "other chunks of a library are reported, not dropped");
+
+        // Version 1 of ScriptsPlayers has no dict flag: names only.
+        var old = new MapBuilder();
+        old.Chunk("ScriptsPlayers", 1, [..I(2), ..A(""), ..A("PlyrCivilian")]);
+        using var oldStream = new MemoryStream(old.Build());
+        var names = SageMapDecoder.DecodeScriptLibrary(oldStream);
+        Assert(names.Players.Select(value => value.Name).SequenceEqual(["", "PlyrCivilian"]) && names.Players.All(value => value.Properties.Items.IsEmpty) && names.ScriptLists.IsEmpty, "version 1 player names");
+
+        var broken = new MapBuilder();
+        broken.Chunk("ScriptsPlayers", 2, [..I(0), ..I(1)]);
+        Throws(() => { using var s = new MemoryStream(broken.Build()); SageMapDecoder.DecodeScriptLibrary(s); }, "truncated player list");
     }
 
     private static byte[] PlayerScripts(MapBuilder b)
