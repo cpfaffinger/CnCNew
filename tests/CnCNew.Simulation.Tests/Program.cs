@@ -457,6 +457,10 @@ if (contentDirectory is not null) run.Test("Real data: turrets of the Crusader, 
 if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turret on a Battlemaster it chases; retail turrets scan while idle", () => Tests.RealTurretAttackAndScan(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail AutoAcquire flags; a Crusader and a Battlemaster fight without orders", () => Tests.RealAcquisition(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
+// Phase 23: the rate-equivalence suite, one test per group ("--only RateEquivalence" runs all, "--only \"RateEquivalence: weapons\"" one); 30, 60 and 120 Hz whatever --tick-rate says.
+if (contentDirectory is not null)
+    foreach (var rateGroup in RateCases.Groups)
+        run.Test($"RateEquivalence: {rateGroup}", () => Tests.RateEquivalenceGroup(contentDirectory, rateGroup));
 return run.Finish();
 
 /// <param name="only">With <c>--only TEXT</c>, just the tests whose name contains TEXT run (a development aid; the full run takes no argument).</param>
