@@ -220,7 +220,7 @@ static partial class Tests
         var held = tank.TurretOf(0)!.Value.Angle;
         Check.That(held.Abs() > Degrees(20m), "The turret is well away from its natural angle when the order comes.");
         feeder.SetMoveTarget(1, tank.Id.Value, 200, 100);
-        for (var i = 0; i < 1 + world.Frames(15); i++)
+        for (var i = 0; i < world.Frames(1 + 15); i++)
         {
             world.Step();
             Check.That(tank.TurretOf(0)!.Value.Angle == held && !tank.TurretOf(0)!.Value.Rotating, $"Hold tick {i}: the angle stays for the recentre time.");
@@ -247,7 +247,7 @@ static partial class Tests
         Check.That(Encoding.UTF8.GetString(WorldSnapshot.Write(world)).Contains("\"persistent\""), "The attack is part of the snapshot.");
 
         feeder.Kill(fragile);
-        for (var i = 0; i < 1 + world.Frames(15); i++)
+        for (var i = 0; i < world.Frames(1 + 15); i++)
         {
             world.Step();
             Check.That(Near(tank.TurretOf(0)!.Value.Angle, Degrees(90m), 1m) && !tank.TurretOf(0)!.Value.Rotating, $"The victim is dead; hold tick {i}.");

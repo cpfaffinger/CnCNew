@@ -440,7 +440,8 @@ public sealed partial class SimulationWorld
             }
         }
 
-        var holding = state.HoldUntil > 0 && tick <= state.HoldUntil;
+        // "Until and including HoldUntil" is one step more than the hold time: that step is a logic frame of the original, as at 30 Hz, not a tick.
+        var holding = state.HoldUntil > 0 && tick < state.HoldUntil + _turretFrameTicks;
         if (victim is not null && (state.Persistent || holding)) AimStep(entity, info, state, victim, tick);
         else if (holding) state.Rotating = false;
         else if (state.Scanning) ScanStep(entity, info, state, tick);

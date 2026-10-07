@@ -58,4 +58,51 @@ static partial class Tests
             }
         }
     }
+
+    /// <summary>Per tick the turret angle of a lone <c>ScanTank</c> (it glances around at random while idle) over <paramref name="frames"/> logic frames after its first frame.</summary>
+    private static List<Fixed> IdleScanAngles(SimulationRate rate, int factor, int frames)
+    {
+        var (world, feeder, _) = RatedWorld(rate, TurretAttackFiles());
+        feeder.Spawn(1, "ScanTank", owner: 1, x: 0, y: 0);
+        for (var i = 0; i < factor; i++) world.Step();
+        var scanner = Slotted(world, "ScanTank");
+        var angles = new List<Fixed>();
+        for (var step = 0; step < frames * factor; step++)
+        {
+            world.Step();
+            angles.Add(scanner.TurretOf(0)!.Value.Angle);
+        }
+
+        return angles;
+    }
+
+    /// <summary>The lengths of the runs of ticks in which the turret stood still away from rest (the holds at the scan angles).</summary>
+    private static List<int> HoldRuns(List<Fixed> angles)
+    {
+        var runs = new List<int>();
+        var length = 1;
+        for (var index = 1; index < angles.Count; index++)
+        {
+            if (angles[index] == angles[index - 1]) { length++; continue; }
+            if (angles[index - 1] != Fixed.Zero && length > 1) runs.Add(length);
+            length = 1;
+        }
+
+        return runs;
+    }
+
+    /// <summary>
+    /// "Hold until and including <c>HoldUntil</c>" is the recentre time plus one step. That step is a logic frame of the original at every rate: a turret that reached its scan angle
+    /// stands there RecenterTime + 1 frames (16 at 30 Hz), counted from the end of the frame it arrived in to the start of the frame it leaves in.
+    /// </summary>
+    public static void RateInvarianceTurretHoldsOneFrameMoreThanTheRecentreTime()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var runs = HoldRuns(IdleScanAngles(rate, factor, 1_500));
+            // The turret is at the angle from the last tick of its arrival frame on: factor - 1 ticks of that frame are not part of the run.
+            Check.That(runs.Count >= 8 && runs.All(run => run + factor - 1 == 16 * factor),
+                $"{rate}: every hold lasts 15 logic frames and one frame more ({string.Join(",", runs.Distinct())} ticks, expected {16 * factor - (factor - 1)}).");
+        }
+    }
 }
