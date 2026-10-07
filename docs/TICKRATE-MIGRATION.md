@@ -1469,3 +1469,36 @@ Zielfahrer, Audit und Erreichbarkeit liefen zuletzt vor der Reichweiten-Reparatu
 | 16 KI-Läufe (Teil von `reference-manifest check --set full`, 50 von 50 Läufen identisch) | **12 entschieden**, 4 Patts (Armored Fury America/China und ChinaTank/AirForce, Bitter Winter America/China und ChinaTank/AirForce) | ja (Manifest unverändert) |
 
 Laufzeit je Karte: Zielfahrer 13 bis 134 s (`MD_CHI04`), Audit 9 bis 57 s (`MD_USA01`), vier Prozesse nebeneinander. Kein Referenzwert hat sich geändert; die Reparatur ist damit auch über die Kampagnenwerkzeuge als ergebnisgleich belegt.
+
+### 15.2 Die Ausfälle der Simulationstests bei 120 Hz, einzeln eingeordnet
+
+Probelauf am Stand `20ffce9` (Release, `--tick-rate N --content-dir .local/phase2-import-a`, 429 Tests): bei 60 Hz **6** Fehlschläge (die sechs aus §14.9.2), bei 120 Hz **14** (§14.9.2 nannte 13 ohne Realdaten). Jeder der 14 ist gelesen und, wo es ging, durch Einzelläufe bei allen drei Raten vermessen. Klassen: **T** – nur die Erwartung des Tests zählt Ticks, die Simulation verhält sich in Spielzeit gleich; **S** – die Simulation hängt an der Schrittweite (Stelle in §5); **C** – chaotischer Ausgang eines ganzen Matchs. Ein Fall der Festkomma-Auflösung ist nicht darunter.
+
+| Nr. | Test | Klasse | Ursache | §5 | 30 / 60 / 120 Hz (gemessen) | Verbleib |
+|---|---|---|---|---|---|---|
+| 1 | Phase 5: StealthDetectorUpdate marks and expires DETECTED | T | `Tests.Phase5.cs` läuft wörtlich 3 Ticks; getarnt wird ein Tick (erstes Update nach dem Erscheinen) plus ein Bild (`AtLeastOneFrame(StealthDelay 0)`) später | – (der eine Tick: §5.3 `Register`) | getarnt nach 2 / 3 / 5 Schritten = 0,067 / 0,050 / 0,042 s | Erwartung in Bildern (`1 + Frames(2)`) |
+| 2 | Phase 5: reference match scenario, replay v2 factions, determinism | C | `MaxTicks = 60_000` ist ein Tickbudget (2.000 / 1.000 / 500 s); die Matchdauer ist chaotisch (Tabelle unten) | – | Radius 398: Alpha nach 340 s / Alpha nach 106,5 s / Beta nach 530 s | auf 30 Hz festlegen (der Radius 398 wurde für 30 Hz gewählt) |
+| 3 | Construction: snapshot mid-construction and mid-sale, replay round trip | T | `EndTick` 400 und Befehlsticks 0–70 des Replays sind rohe Ticks; der Verkauf (180 Bilder) passt bei 120 Hz nicht hinein | – (§5.3 `_saleDurationTicks` für den einen Tick) | Kaserne weg 180 / 360 / 720 Ticks nach dem Befehl = 6,0 s; bei Welttick 220 / 400 / 760 | Befehlsticks und Ende über `Frames(…)` |
+| 4 | Staged capture: the building flashes while the flag goes up | S | `SpecialAbilityStaging.cs`, `StepCaptureFlash`: `_flashPhase += (1 − prep/Preparation) / 3` je Tick | §5.2 | 4 / 9 / 19 Blitze in 2 s | Simulation: Phase je Originalbild |
+| 5 | Projectiles: straight shell flight time, impact event and detonation effect | T | erwartet 20 Bahnpunkte; `_segments = ceil(length / Tempo je Tick)` | Rest: §5.2 `DumbProjectileBehavior` | 20 / 40 / 80 Abschnitte = 0,667 s; Aufschlag 0,700 / 0,683 / 0,675 s | auf 30 Hz festlegen (von Hand je Bild gerechnet) |
+| 6 | Projectiles: ballistic arc path points and flight time | T | erwartet 14 Punkte, Literale `F+6`, `F+15` | Rest: §5.2 `CalcFlightPath` (Flugdauer in ganzen Ticks) | 14 / 27 / 53 Abschnitte = 0,467 / 0,450 / 0,442 s; Aufschlag 0,500 / 0,467 / 0,450 s; Scheitel 22,37 / 22,5 / 22,5 | auf 30 Hz festlegen; der Rest ist Sache der Suite |
+| 7 | Projectiles: missile flight time (instant acceleration) | T | erwartet x = 10 nach einem Tick; `_speed = min(max, _speed + _acceleration)` je Tick | Rest: §5.2 `MissileAIUpdate.Move` | x nach einem Bild 10 / 7,5 / 6,25; Aufschlag 0,333 / 0,350 / 0,350 s | auf 30 Hz festlegen |
+| 8 | Projectiles: missile ignition delay and acceleration | T | Tabelle von x je Tick | Rest: §5.2 `MissileAIUpdate.Move` | x nach Bild 10: 56 / 50 / 47,19; Aufschlag 0,500 / 0,500 / 0,517 s | auf 30 Hz festlegen; der Rückstand im Flug (bis 8,8 Einheiten) ist echt und Sache der Suite |
+| 9 | Chinook: helicopter slow death falls, crashes and leaves a hull | T | erwartet `death + 1 + Frames(74)`; der Euler-Fall skaliert nicht so | Rest: §5.2 `HelicopterSlowDeathBehavior.Update` | 75 / 149 / 298 Ticks = 2,500 / 2,483 / 2,483 s (erwartet 297) | Erwartung als Bereich in Bildern |
+| 10 | Collision: ToppleUpdate push, kill, stump and mid-fall snapshot continuation | S | `ToppleAndFallModules.cs`: `_angularAcceleration = speed * InitialAccelPercent` nimmt ein Tempo je Tick als Beschleunigung je Tick²; der Fall dauert 3–5 Updates gleich welcher Rate | §5.1 `InitialAccelPercent`, §5.2 `ToppleUpdate.Update`, `ResolveFootprintCollisions` | Fall 3 / 4 / 5 Ticks = 0,100 / 0,067 / 0,042 s; Stoß bei Schritt 4 / 7 / 13 | Simulation: Beschleunigung mit 30/Rate skalieren |
+| 11 | Turrets: template model, defaults and strict parsing | T | `(TurnRate − PiFraction(1, 30)).Abs() <= Epsilon` ist eine Konstante je Tick bei 30 Hz – ein Ratenliteral, **kein** Rohwert des Formats (§14.9.2 beschreibt die Zeile noch in der Fassung vor Phase 22) | – | roh 1.756.906 / 878.453 / 439.226; mal Rate gibt π rad/s bei jeder Rate | `PiFraction(1, TicksPerSecond)` |
+| 12 | Turrets: they turn at their rate toward the victim and the shot waits | S (klein) | `SimulationWorld.Turrets.cs`, `IsAligned`: feste 0,035 rad gegen 1,5° Schritt – nach 59 Schritten (88,5°) gilt der Turm schon als ausgerichtet | §5.2 `IsAligned`, §5.3 `StepTurrets`, §5.4 `_turretWaits` | Schuss im Schritt 16 / 31 / 60 = 0,533 / 0,517 / 0,500 s; `TurretWaits` 15 / 30 / 59 | Simulation (Freigabe am Raster) oder Toleranz ein Bild |
+| 13 | Turrets: hold, recentre, rest and a victim that dies | S | wie 12 (`TicksUntilShot == Frames(15)`, gemessen 59) | wie 12 | wie 12 | wie 12 |
+| 14 | Turret attack: a dead or departing victim ends it, a dead attacker leaves nothing | S | wie 12 (dieselbe Erwartung, derselbe Panzer; nicht einzeln vermessen, aus 12/13 geschlossen) | wie 12 | – | wie 12 |
+
+Zu Nr. 2, Budget 2.000 s bei jeder Rate – ein Radiusschritt verschiebt den Ausgang so stark wie ein Ratenwechsel, auch bei 30 Hz:
+
+| Radius der Arena | 30 Hz | 60 Hz | 120 Hz |
+|---|---|---|---|
+| 396 | Beta, 169,5 s | Beta, 751,5 s | kein Sieger |
+| 397 | Beta, 431,5 s | Beta, 125,5 s | Alpha, 241,5 s |
+| 398 | Alpha, 340 s | Alpha, 106,5 s | Beta, 530 s |
+| 399 | Beta, 135 s | kein Sieger | Alpha, 342 s |
+| 400 | kein Sieger | Beta, 1.180 s | Beta, 947,5 s |
+
+Daraus: 9 der 14 sind Testerwartungen, 4 sind echte Kopplungen, die alle schon in §5 stehen (kein neuer Fund), 1 ist chaotisch. **Drei Tests bestehen bei 60 Hz nur zufällig** (Nr. 1 und Nr. 3 ohne jede Reserve, Nr. 10 mit einem Tick) und werden unabhängig von 120 Hz umgestellt. Nicht bestimmt: die erste abweichende Befehlszeile in Nr. 2 („keine einzelne Ursache“ stützt sich auf die Streuung der Tabelle); die Anteile der drei Kopplungen in Nr. 10; der Turmwinkel im Schussmoment in Nr. 12–14 (88,5° sind aus 59 × 1,5° gerechnet).
