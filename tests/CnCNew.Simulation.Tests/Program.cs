@@ -374,6 +374,7 @@ run.Test("Collision: StructureToppleUpdate delayed collapse and reduced crushing
 run.Test("Collision: HeightDieUpdate threshold, delay, structures and ground floor", Tests.CollisionHeightDie);
 run.Test("Rate invariance (physics): a toppling object falls frame by frame of the original", Tests.RateInvarianceToppleFall);
 run.Test("Rate invariance (physics): a toppling structure accelerates, decays and crushes once per frame of the original", Tests.RateInvarianceStructureTopple);
+run.Test("Rate invariance (physics): a train accelerates, brakes, waits, crushes and shoves once per frame of the original", Tests.RateInvarianceTrain);
 run.Test("Collision: bounded local avoidance around another unit's footprint", Tests.CollisionLocalAvoidance);
 run.Test("Collision: a mover plans around a row of standing units instead of rubbing along it", Tests.CollisionReplansAroundStandingUnits);
 run.Test("Last nine modules: every module of the catalog is implemented", Tests.LastBlockerModulesAreImplemented);

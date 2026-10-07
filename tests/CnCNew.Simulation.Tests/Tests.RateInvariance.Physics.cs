@@ -3,6 +3,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
+using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -132,5 +133,76 @@ static partial class Tests
                 Check.That(other.Done == reference.Done, "The " + building + " is done in the same frame at " + rate + ": " + other.Done + " instead of " + reference.Done + ".");
                 SameSeries(reference.Series, other.Series, building + " angle and crushing at " + rate);
             });
+    }
+
+    /// <summary>A world on the fixture and the terrain of the structure tests (the track RailA … RailD with a station, a looping track, the wave's path) at <paramref name="rate"/>.</summary>
+    private static (SimulationWorld World, SyntheticFixture Fixture, CnCNew.Simulation.Terrain.TerrainMap Terrain) RatedStructuresWorld(SimulationRate rate, bool lake = false)
+    {
+        var fixture = new SyntheticFixture(rate, files: StructuresFiles());
+        var terrain = StructuresTerrain(lake);
+        return (new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, StructuresPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain), fixture, terrain);
+    }
+
+    private static void RequestSpawn(SimulationWorld world, SyntheticFixture fixture, string template, int owner, int x, int y)
+    {
+        Check.That(fixture.Templates.TryGet(template, out var info) && info.IsInstantiable, template + " is instantiable.");
+        world.RequestSpawn(info.Index, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero);
+    }
+
+    /// <summary>
+    /// <c>RailroadBehavior</c>: the conductor's recursion (push, acceleration factor, braking factor, friction), the wait at the station, the crush damage
+    /// "speed · 10" and the shove by a quarter of the overlap happen once per frame of the original; the train moves every tick. Positions of the locomotive
+    /// and its carriages, the conductor's state, the position and health of a vehicle it grinds along and every death are those of 30 Hz at each frame boundary.
+    /// </summary>
+    public static void RateInvarianceTrain()
+    {
+        AtThreeRates(rate =>
+        {
+            var (world, fixture, terrain) = RatedStructuresWorld(rate);
+            RequestSpawn(world, fixture, "SwHeavy", 2, 95, 104);
+            RequestSpawn(world, fixture, "SwTrooper", 2, 300, 100);
+            RequestSpawn(world, fixture, "SwLoco", 0, 50, 100);
+            Entity[] Of(string name) => world.Entities.Where(entity => entity.Template.Name == name).OrderBy(entity => entity.Id.Value).ToArray();
+            var waited = 0;
+            var topSpeed = Fixed.Zero;
+            var series = FrameSeries(world, 900, () =>
+            {
+                long mixed = 0;
+                foreach (var name in new[] { "SwLoco", "SwCar", "SwHeavy", "SwTrooper" })
+                    foreach (var entity in Of(name))
+                        // A carriage that waits in the wings or has left the end of the line is out of the world (it collides with nothing); where it is kept
+                        // meanwhile depends on how often it was pulled, not on the game.
+                        if (entity.Modules.OfType<RailroadBehavior>().FirstOrDefault() is not ({ IsWaitingInWings: true } or { IsEndOfLine: true }))
+                            mixed = unchecked(mixed * 1_000_003 + entity.X.Raw * 31 + entity.Y.Raw * 7 + (entity.Body?.Health.Raw ?? 0) + (entity.EffectivelyDead ? 1 : 0));
+                if (Of("SwLoco").FirstOrDefault() is { } loco)
+                {
+                    var rail = loco.Modules.OfType<RailroadBehavior>().Single();
+                    mixed = unchecked(mixed * 31 + (long)rail.Conductor);
+                    if (rail.Conductor == RailroadBehavior.ConductorStates.WaitAtStation) waited++;
+                    topSpeed = Fixed.Max(topSpeed, rail.Speed * world.Time.TicksPerOriginalFrame);
+                }
+                return mixed;
+            }, item => item.Kind is SimEventKind.EntityDied or SimEventKind.EntityDamaged or SimEventKind.EntityDestroyed);
+            return (Series: series, Waited: waited, TopSpeed: topSpeed);
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Waited is > 25 and < 40 && reference.TopSpeed > Fixed.FromInt(2), "Setup: the train reached its speed and waited at the station at 30 Hz (" + reference.Waited + " frames, top speed " + reference.TopSpeed + ").");
+            Check.That(other.Waited == reference.Waited, "The train waits as many frames at the station at " + rate + ": " + other.Waited + " instead of " + reference.Waited + ".");
+            Check.That((other.TopSpeed - reference.TopSpeed).Abs() <= Fixed.FromRaw(4), "The top speed per frame of the original is that of 30 Hz at " + rate + ".");
+            SameSeries(reference.Series, other.Series, "Train, carriages, victims and events at " + rate);
+        });
+
+        // A save taken inside a frame of the train (only above 30 Hz there is such a tick) carries the phase of the frame and runs on identically.
+        foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, fixture, terrain) = RatedStructuresWorld(rate);
+            RequestSpawn(world, fixture, "SwHeavy", 2, 95, 104);
+            RequestSpawn(world, fixture, "SwLoco", 0, 50, 100);
+            for (var tick = 0; tick < world.Frames(40) + 1; tick++) world.Step();
+            var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, terrain);
+            Check.That(restored.StateHash == world.StateHash, "A train saved inside a frame restores to the same state (" + rate.TicksPerSecond + " Hz).");
+            for (var tick = 0; tick < world.Frames(300); tick++)
+                Check.That(world.Step().StateHash == restored.Step().StateHash, "The restored train runs on identically at " + rate.TicksPerSecond + " Hz, step " + tick + ".");
+        }
     }
 }

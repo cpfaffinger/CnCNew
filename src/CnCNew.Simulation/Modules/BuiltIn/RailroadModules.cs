@@ -21,7 +21,7 @@ internal static class RailroadModules
 
 /// <summary>
 /// <c>RailroadBehaviorModuleData</c> (<c>RailroadGuideAIUpdate.h</c>): whether this object is the locomotive, the carriages it hauls, its speed limit and its acceleration, braking and friction
-/// factors (all per tick: the reference applies them once per frame without conversion), the time it waits at a station and the speed thresholds of its collision response. The
+/// factors (all per logic frame of the original: the reference applies them once per frame without conversion, and so does <see cref="RailroadBehavior"/> at every rate), the time it waits at a station and the speed thresholds of its collision response. The
 /// sounds, the crash template name and the path prefix (which the reference stores and never reads) are typed but have no consumer. Defaults are the constructor's (<c>SpeedMax 4</c>,
 /// <c>Acceleration 1.01</c>, <c>Braking 0.99</c>, <c>Friction 0.97</c>, 150 frames at a station).
 /// </summary>
@@ -30,7 +30,8 @@ public sealed record RailroadData(bool IsLocomotive, ImmutableArray<string> Carr
 {
     public static RailroadData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Bool(configuration, "IsLocomotive", false), ModuleConfigReader.AccumulatedNames(configuration, "CarriageTemplateName"),
-        // Speeds per logic frame of the original (INI::parseReal): scaled to per tick. The factors per frame that follow (Acceleration, Braking, Friction) are not: phase 23.
+        // Speeds per logic frame of the original (INI::parseReal): scaled to per tick. The factors per frame that follow (Acceleration, Braking, Friction) are not:
+        // the behavior applies them once per frame of the original and reads the three speeds back per frame.
         configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "RunningGarrisonSpeedMax", Fixed.One)), configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "KillSpeedMin", Fixed.One)),
         configuration.Time.PerOriginalFrameToPerTick(ModuleConfigReader.Real(configuration, "SpeedMax", Fixed.FromInt(4))), ModuleConfigReader.Real(configuration, "Acceleration", Fixed.FromDecimal(1.01m)),
         ModuleConfigReader.Real(configuration, "Braking", Fixed.FromDecimal(0.99m)), ModuleConfigReader.Real(configuration, "Friction", Fixed.FromDecimal(0.97m)),
@@ -57,8 +58,14 @@ public sealed record RailroadData(bool IsLocomotive, ImmutableArray<string> Carr
 /// </summary>
 public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModule, IProducerReceiver
 {
-    /// <summary><c>FRAMES_UNPULLED_LONG_ENOUGH_TO_UNHITCH (2)</c> (RailroadGuideAIUpdate.cpp): updates without a pull from the carriage ahead. Order, not time (the pull arrives within the same step or not at all), so it is not scaled with the rate.</summary>
-    private const long FramesUnpulledLongEnoughToUnhitch = 2 * TickOrder.Next;
+    /// <summary>
+    /// <c>FRAMES_UNPULLED_LONG_ENOUGH_TO_UNHITCH (2)</c> (RailroadGuideAIUpdate.cpp): updates of the original without a pull from the carriage ahead; with more than
+    /// that many behind it a carriage leads itself. The counter counts this module's updates (one per tick), so the bound is the last tick of the frame after
+    /// those two (<see cref="UnpulledLongEnough"/>): the carriage's first frame as a lead ends where it ends at 30 Hz.
+    /// </summary>
+    private const long FramesUnpulledLongEnoughToUnhitch = 2;
+
+    private static long UnpulledLongEnough(SimulationTime time) => time.OriginalFrames(FramesUnpulledLongEnoughToUnhitch + 1) - TickOrder.Next;
     private static readonly Fixed PushStart = Fixed.FromDecimal(0.02m);
     private static readonly int UnderConstructionBit = ObjectStatusBits.UnderConstruction;
     private static readonly int CrushDamage = NameTables.DamageType.TryIndexOf("CRUSH", out var crush) ? crush : throw new InvalidOperationException("CRUSH is not a damage type.");
@@ -145,6 +152,13 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     private bool _inTunnel;
     private bool _held;
     private ConductorStates _state = data.IsLocomotive ? ConductorStates.Accelerate : ConductorStates.Coast;
+    // The train runs the original's recursion once per logic frame of the original, in its units: every speed of the state (PullInfo.Speed) is a distance per
+    // FRAME at every rate, the conductor acts and the friction applies with the first tick of the lead carriage's own frame, the track distance covers the
+    // frame's step tick by tick, and the collision response (damage, shove) comes with the frame's last tick. A pulled carriage is told by its puller whether
+    // the lead is inside a frame. Both fields are at rest (unwritten) at 30 Hz.
+    private FramePhase _framePhase;
+    private bool _pulledInsideFrame;
+    private int _ticksPerOriginalFrame = (int)TickOrder.Next; // of the world, for Speed; not state
 
     public override string ModuleName => "RailroadBehavior";
     public RailroadData Data => data;
@@ -157,7 +171,8 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     public bool IsEndOfLine => _endOfLine;
     public bool IsLeadCarriage => _isLead;
     public bool HasEverBeenHitched => _hasEverBeenHitched;
-    public Fixed Speed => _pull.Speed;
+    /// <summary>The speed along the track in distance per tick (the unit of <c>Entity.Speed</c>).</summary>
+    public Fixed Speed => _ticksPerOriginalFrame == TickOrder.Next ? _pull.Speed : _pull.Speed / Fixed.FromInt(_ticksPerOriginalFrame);
     public Fixed TrackLength => _track?.Length ?? Fixed.Zero;
     public bool IsOnLoopingTrack => _track?.IsLooping ?? false;
 
@@ -172,7 +187,9 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     /// <summary>The locomotive this object belongs to (itself when it is one); invalid for a carriage nobody has hitched.</summary>
     private EntityId TrainId => data.IsLocomotive ? Entity.Id : _conductor;
 
-    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
+    // The first update comes one logic frame of the original after the object appeared (the original's first update), so the train's frames end on the same
+    // game times at every rate.
+    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
 
     private static RailroadBehavior? RailroadOf(IWorldServices world, EntityId id)
         => id.IsValid && world.FindEntity(id) is { DestroyRequested: false } entity ? entity.ModuleArray.OfType<RailroadBehavior>().FirstOrDefault() : null;
@@ -181,6 +198,8 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
 
     public long Update(IWorldServices world)
     {
+        var time = world.Time;
+        _ticksPerOriginalFrame = time.TicksPerOriginalFrame;
         if (!_trackDataLoaded && data.IsLocomotive)
         {
             _track ??= LoadTrack(world);
@@ -194,13 +213,21 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         }
         if (_track is null) return SimulationTiming.SleepNone;
 
-        if (data.IsLocomotive) RunConductor(world);
+        // The tick's number inside the lead carriage's frame of the original (a locomotive always leads); 30 Hz: every tick is a whole frame.
+        var subTick = 0;
+        if (data.IsLocomotive)
+        {
+            subTick = _framePhase.Next(time);
+            if (subTick == TickOrder.Next) RunConductor(world);
+        }
 
-        if (_wantsToBeLead > FramesUnpulledLongEnoughToUnhitch) _isLead = true;
+        if (_wantsToBeLead > UnpulledLongEnough(time)) _isLead = true;
+        var frameEnds = !_pulledInsideFrame;
         if (_isLead)
         {
-            if (_state == ConductorStates.Coast) _conductorPull.Speed *= data.Friction;
-            _conductorPull.TrackDistance += _conductorPull.Speed;
+            if (!data.IsLocomotive) subTick = _framePhase.Next(time);
+            if (subTick == TickOrder.Next && _state == ConductorStates.Coast) _conductorPull.Speed *= data.Friction;
+            _conductorPull.TrackDistance += time.FrameShare(_conductorPull.Speed, subTick);
             if (_track.IsLooping)
             {
                 while (_conductorPull.TrackDistance > _track.Length) _conductorPull.TrackDistance -= _track.Length;
@@ -208,17 +235,21 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
             }
             (_conductorPull.HitchX, _conductorPull.HitchY, _conductorPull.HitchZ) = FindPosition(world, _conductorPull.TrackDistance, setState: false);
             UpdatePosition(world, _conductorPull, _pull);
+            frameEnds = _framePhase.AtBoundary;
+            _pulledInsideFrame = false;
             var trailer = RailroadOf(world, _trailer);
-            if (trailer is not null) trailer.GetPulled(world, _pull);
+            if (trailer is not null) trailer.GetPulled(world, _pull, !frameEnds);
             else
             {
                 _trailer = EntityId.Invalid;
-                if (_endOfLine) world.RequestDestroy(Entity.Id);
+                // A train leaves the end of the line one carriage per frame of the original, the last one first.
+                if (_endOfLine && frameEnds) world.RequestDestroy(Entity.Id);
             }
         }
-        else if (_wantsToBeLead <= FramesUnpulledLongEnoughToUnhitch) _wantsToBeLead++;
+        else if (_wantsToBeLead <= UnpulledLongEnough(time)) _wantsToBeLead++;
 
-        Collide(world);
+        // onCollide once per frame of the original, with the train where the frame leaves it: the damage and the shove are amounts per frame.
+        if (frameEnds) Collide(world);
         return SimulationTiming.SleepNone;
     }
 
@@ -232,7 +263,8 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
                 if (_conductorPull.Speed.Abs() < Fixed.FromDecimal(0.1m))
                 {
                     _conductorPull.Speed = Fixed.Zero;
-                    _waitAtStationTimer = data.WaitAtStationTicks;
+                    // Counted down once per frame of the original, so it is kept in frames.
+                    _waitAtStationTimer = world.Time.ToOriginalFrames(data.WaitAtStationTicks);
                     _state = ConductorStates.WaitAtStation;
                     if (_disembark)
                     {
@@ -252,8 +284,9 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
             case ConductorStates.Accelerate:
                 _conductorPull.Speed += PushStart * _conductorPull.Direction;
                 _conductorPull.Speed *= data.Acceleration;
-                if (_conductorPull.Speed > data.SpeedMax) _conductorPull.Speed = data.SpeedMax;
-                else if (_conductorPull.Speed < -data.SpeedMax) _conductorPull.Speed = -data.SpeedMax;
+                var speedMax = world.Time.PerTickToPerOriginalFrame(data.SpeedMax);
+                if (_conductorPull.Speed > speedMax) _conductorPull.Speed = speedMax;
+                else if (_conductorPull.Speed < -speedMax) _conductorPull.Speed = -speedMax;
                 break;
         }
     }
@@ -266,19 +299,20 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     }
 
     /// <summary><c>RailroadBehavior::getPulled</c>: this carriage obeys its puller, positions itself and passes its own pull on.</summary>
-    private void GetPulled(IWorldServices world, PullInfo puller)
+    private void GetPulled(IWorldServices world, PullInfo puller, bool insideFrame)
     {
         EnsureHitched(world);
         _wantsToBeLead = 0;
+        _pulledInsideFrame = insideFrame;
         if (_track is null) return;
         _conductorPull.CopyFrom(puller);
         UpdatePosition(world, puller, _pull);
         var trailer = RailroadOf(world, _trailer);
-        if (trailer is not null) trailer.GetPulled(world, _pull);
+        if (trailer is not null) trailer.GetPulled(world, _pull, insideFrame);
         else
         {
             _trailer = EntityId.Invalid;
-            if (_endOfLine) world.RequestDestroy(Entity.Id);
+            if (_endOfLine && !insideFrame) world.RequestDestroy(Entity.Id);
         }
     }
 
@@ -558,9 +592,10 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
                 other.Z += dz / distance * overlap;
                 world.MarkDirty(other);
             }
-            if (_state == ConductorStates.WaitAtStation || (_state == ConductorStates.Coast && _pull.Speed < data.RunningGarrisonSpeedMax) || !data.IsLocomotive) continue;
+            // The speeds of the state are distances per frame of the original; so are the thresholds read back from the catalog and the damage "speed · 10".
+            if (_state == ConductorStates.WaitAtStation || (_state == ConductorStates.Coast && _pull.Speed < world.Time.PerTickToPerOriginalFrame(data.RunningGarrisonSpeedMax)) || !data.IsLocomotive) continue;
             if (other.EffectivelyDead) continue;
-            if (_pull.Speed >= data.KillSpeedMin) world.Kill(other.Id);
+            if (_pull.Speed >= world.Time.PerTickToPerOriginalFrame(data.KillSpeedMin)) world.Kill(other.Id);
             else world.Damage(other.Id, new DamageInfo(Entity.Id, _pull.Speed * 10, CrushDamage, DeathTypes.Crushed, false));
         }
     }
@@ -617,6 +652,8 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         writer.Int("conductorState", (int)_state);
         _pull.Describe(writer, "pull");
         _conductorPull.Describe(writer, "conductorPull");
+        _framePhase.Describe(writer, "framePhase");
+        if (_pulledInsideFrame) writer.Bool("pulledInsideFrame", true);
         if (_carriages.Count == 0) return;
         writer.BeginArray("carriages");
         foreach (var id in _carriages)
@@ -650,6 +687,8 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         _state = (ConductorStates)state;
         _pull.Load(reader.Object("pull"));
         _conductorPull.Load(reader.Object("conductorPull"));
+        _framePhase.Load(reader, "framePhase");
+        _pulledInsideFrame = reader.Has("pulledInsideFrame") && reader.Bool("pulledInsideFrame");
         _carriages = reader.Has("carriages") ? [..reader.Array("carriages").Select(item => new EntityId(checked((uint)item.UInt("id"))))] : [];
         // m_trackDataLoaded and m_track are not saved: the locomotive reloads the track and hands it down the saved chain.
         _track = null;
