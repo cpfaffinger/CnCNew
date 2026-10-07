@@ -4,6 +4,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -239,11 +240,14 @@ public sealed partial class SimulationWorld
     {
         if (!site.HasStatus(ObjectStatusBits.UnderConstruction)) return true;
         var total = Math.Max(site.Template.BuildTicks, _minimumBuildTicks);
-        site.ConstructionWork++;
+        var before = Math.Min(site.ConstructionWork, total);
+        // The first step of work stands for a whole logic frame of the original (at 30 Hz it is one): the structure is complete BuildTime less one frame after the
+        // work began, at every rate, not BuildTime less one tick. Every later step is one tick of work.
+        site.ConstructionWork += checked((int)(site.ConstructionWork == 0 ? Time.TicksPerOriginalFrame : TickOrder.Next));
         var work = Math.Min(site.ConstructionWork, total);
         if (site.Body is IConstructionBody body)
         {
-            var delta = Fixed.FromRaw(ConstructionHealthTarget(site, work, total) - ConstructionHealthTarget(site, work - 1, total));
+            var delta = Fixed.FromRaw(ConstructionHealthTarget(site, work, total) - ConstructionHealthTarget(site, before, total));
             if (delta > Fixed.Zero) body.ChangeHealthForConstruction(this, delta);
         }
         MarkDirty(site);
