@@ -1,5 +1,6 @@
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
@@ -364,6 +365,97 @@ static partial class Tests
             Check.That(reference.Gone && reference.Series.Count > 3 * 150, "Setup: the scaffold rose, built across, was reversed, torn down and sank at 30 Hz (" + reference.Series.Count / 3 + " frames).");
             SameSeries(reference.Series, other.Series, "Scaffold position and motion at " + rate);
             Check.That(other.OnTheWay, "While it rises every tick lifts the scaffold at " + rate + ".");
+        });
+    }
+
+    /// <summary>
+    /// <c>RailedTransportDockUpdate</c> (the ferry's dock): a docker is pulled in until it is within 6 units, a rider is pushed out until it is within 3 units
+    /// of the exit. Both move every tick; whether they have arrived is asked once per frame of the original, so the passenger is inside and the rider is free
+    /// in the same frame as at 30 Hz, and they are where they are at 30 Hz at every frame boundary (within the rounding of the share per tick).
+    /// The dock is internal to the simulation, so its action is called the way the docker's machine calls it.
+    /// </summary>
+    public static void RateInvarianceFerryDock()
+    {
+        AtThreeRates(rate =>
+        {
+            var terrain = FerryTerrain();
+            var fixture = new SyntheticFixture(rate, files: LastBlockerFiles());
+            System.Collections.Immutable.ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha"), new(new PlayerId(2), "Beta")];
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+            var feeder = new Feeder(world);
+            var ferry = CsSpawn(world, feeder, "LbFerry", 1, 390, 110);
+            var ai = ferry.Modules.OfType<RailedTransportAIUpdate>().Single();
+            for (var tick = 0; tick < world.Frames(80) && (ai.InTransit || tick < 2); tick++) world.Step();
+            Check.That(!ai.InTransit && ai.DockIsOpen, "Setup: the ferry lies at the end of its path with its dock open.");
+            // Let it come to rest: the pull is aimed at the ferry.
+            var rest = ferry.X - Fixed.One;
+            for (var tick = 0; tick < world.Frames(200) && (rest != ferry.X || tick % world.Frames(10) != 0); tick++)
+            {
+                if (tick % world.Frames(10) == 0) rest = ferry.X;
+                world.Step();
+            }
+            Check.That(rest == ferry.X && !ferry.HasMoveTarget, "Setup: the ferry has come to rest.");
+            // The passenger appears at the same place relative to the ferry at every rate (where the ferry stops is the business of its drive).
+            Check.That(fixture.Templates.TryGet("LbPassenger", out var passengerTemplate), "Setup: the passenger template exists.");
+            var passengerId = world.RequestSpawn(passengerTemplate.Index, new PlayerId(1), ferry.X - Fixed.FromInt(37), ferry.Y + Fixed.FromInt(11), Fixed.Zero, Fixed.Zero);
+            world.Step();
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            var passenger = world.FindEntity(passengerId) ?? throw new InvalidOperationException("No passenger.");
+            var dock = ferry.Modules.Single(module => module.ModuleName == "RailedTransportDockUpdate");
+            dock.GetType().GetMethod("Action")!.Invoke(dock, [world, passenger]);
+            Check.That(ai.DockIsLoadingOrUnloading, "Setup: the dock pulls the passenger in.");
+            // The dock acts in the very tick of the request, and so does the exit order: a frame of the pull or push is the perFrame ticks from there (at 30 Hz
+            // the one tick).
+            var perFrame = world.Time.TicksPerOriginalFrame;
+            var places = new List<long>();
+            var (inside, free, frame) = (-1, -1, 0);
+            var (insideTick, freeTick, ticks) = (-1, -1, 0);
+            for (; frame < 100 && inside < 0; frame++)
+            {
+                for (var tick = 0; tick < perFrame; tick++)
+                {
+                    world.Step();
+                    ticks++;
+                    if (insideTick < 0 && passenger.ContainedBy == ferry.Id) insideTick = ticks;
+                }
+                if (passenger.ContainedBy == ferry.Id) inside = frame;
+                else
+                {
+                    places.Add((passenger.X - ferry.X).Raw);
+                    places.Add((passenger.Y - ferry.Y).Raw);
+                }
+            }
+            Check.That(inside >= 0, "Setup: the passenger got inside (" + rate.TicksPerSecond + " Hz).");
+            Check.That(feeder.ExitContainer(1, passenger.Id.Value).Accepted, "Setup: the exit order is accepted.");
+            ticks = 0;
+            for (frame = 0; frame < 100 && free < 0; frame++)
+            {
+                for (var tick = 0; tick < perFrame; tick++)
+                {
+                    world.Step();
+                    ticks++;
+                    if (freeTick < 0 && !passenger.ContainedBy.IsValid && !ai.DockIsLoadingOrUnloading) freeTick = ticks;
+                }
+                if (!passenger.ContainedBy.IsValid && !ai.DockIsLoadingOrUnloading) free = frame;
+                else if (!passenger.ContainedBy.IsValid)
+                {
+                    places.Add((passenger.X - ferry.X).Raw);
+                    places.Add((passenger.Y - ferry.Y).Raw);
+                }
+            }
+            return (Places: places, Inside: inside, Free: free, InsideFrames: insideTick * 30 / rate.TicksPerSecond, FreeFrames: freeTick * 30 / rate.TicksPerSecond, Whole: insideTick % perFrame == 0 && freeTick % perFrame == 0);
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Inside > 10 && reference.Free > 10, "Setup: pull-in and push-out take a while at 30 Hz (" + reference.Inside + " and " + reference.Free + " frames).");
+            Check.That(other.Inside == reference.Inside, "The passenger is inside in the same frame at " + rate + ": " + other.Inside + " instead of " + reference.Inside + ".");
+            Check.That(other.Whole && other.InsideFrames == reference.InsideFrames && other.FreeFrames == reference.FreeFrames,
+                "Arrival comes with the last tick of the same frame at " + rate + ": inside after " + other.InsideFrames + " frames, free after " + other.FreeFrames + " (30 Hz: " + reference.InsideFrames + " and " + reference.FreeFrames + ").");
+            Check.That(other.Free == reference.Free, "The rider is free in the same frame at " + rate + ": " + other.Free + " instead of " + reference.Free + ".");
+            Check.That(other.Places.Count == reference.Places.Count, "As many frames on the way at " + rate + ".");
+            var tolerance = Fixed.FromDecimal(0.001m).Raw;
+            for (var index = 0; index < reference.Places.Count; index++)
+                Check.That(Math.Abs(reference.Places[index] - other.Places[index]) <= tolerance,
+                    "Place of the passenger at " + rate + ", value " + index + ": " + Fixed.FromRaw(other.Places[index]) + " instead of " + Fixed.FromRaw(reference.Places[index]) + ".");
         });
     }
 
