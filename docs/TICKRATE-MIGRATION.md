@@ -1452,3 +1452,20 @@ Was der Probelauf **nicht** sagt: dass sich die Simulation bei 60 Hz richtig ver
 #### 14.9.5 Beweis bei 30 Hz
 
 `SimTool input-manifest check` identisch und `reference-manifest check --set quick` (9 Läufe identisch) nach jedem Commit, der `src` oder die Werkzeuge berührt; `--set full` am Ende: 50 Läufe identisch (21 min 35 s bei drei Läufen nebeneinander auf einem belasteten Rechner). Simulationstests: 402 von 402 (Debug), 416 von 416 mit `--content-dir`, `-c Release -- --long` 403 von 403. `Game.Tests` (Release, `--content-dir`): 137 Tests bestanden, 0 fehlgeschlagen; `Presentation.Tests` mit `--content-dir`: alle bestanden; die übrigen Testprogramme: Archives, Content, Data (auch mit `--content-dir`), IO, Images, Formats, Import, W3D, Ui und Audio bestanden. Die Golden-Dateien unter `tests/**/baselines` sind unverändert (`git status` leer für diese Pfade). `scripts/audit-scenarios.ps1`: drei von drei Szenen bestanden, mit `-TickRate 60` ebenfalls drei von drei. `IniTool compat-check`: 751 Einträge, unverändert. Sauberer Solution-Build: 0 Warnungen, 0 Fehler (mit gelöschtem `bin`/`obj` von `CnCNew.Client.Stride`); `tools/CnCNew.UiRenderTool`: 0 Warnungen.
+
+## 15. Phase 23: Invarianz gegenüber der Tickrate
+
+Protokoll der Phase 23 (`docs/HANDOFF-PHASE23.md`), Ausgangsstand `20ffce9` (7. Oktober 2026). Dieser Abschnitt wird je Schritt fortgeschrieben; was er als gemessen nennt, stammt aus Einzelprotokollen dieses Tages.
+
+### 15.1 Ausgangsstand: Kampagne und KI-Läufe nach der Reichweiten-Reparatur
+
+Zielfahrer, Audit und Erreichbarkeit liefen zuletzt vor der Reichweiten-Reparatur der Phase 22 (`b274df5`, `SquaredReach`); die Reparatur war als ergebnisgleich angekündigt und nur über das Manifest belegt. Wiederholt am Stand `20ffce9`, 30 Hz, Release, je Karte ein eigener Prozess (`--map "/NAME.map"`), gezählt aus den 24 Einzelprotokollen:
+
+| Lauf | Ergebnis | wie zuletzt gemessen? |
+|---|---|---|
+| `CampaignTool drive` (60.000 Ticks) | Sieg über das eigene Skript **24 von 24**, Niederlage **24 von 24** | ja |
+| `CampaignTool audit --ticks 900` | 24 von 24 deterministisch im zweiten Lauf, 24 von 24 identisch nach Speichern/Laden, 0 Treffer auf fehlende Typen; Ausschalt-Endproben Sieg **13 von 24**, Niederlage **15 von 24** | ja |
+| `CampaignTool reachability` | Sieg sauber 24, eingeschränkt 0, blockiert 0; Niederlage sauber 24 | ja |
+| 16 KI-Läufe (Teil von `reference-manifest check --set full`, 50 von 50 Läufen identisch) | **12 entschieden**, 4 Patts (Armored Fury America/China und ChinaTank/AirForce, Bitter Winter America/China und ChinaTank/AirForce) | ja (Manifest unverändert) |
+
+Laufzeit je Karte: Zielfahrer 13 bis 134 s (`MD_CHI04`), Audit 9 bis 57 s (`MD_USA01`), vier Prozesse nebeneinander. Kein Referenzwert hat sich geändert; die Reparatur ist damit auch über die Kampagnenwerkzeuge als ergebnisgleich belegt.
