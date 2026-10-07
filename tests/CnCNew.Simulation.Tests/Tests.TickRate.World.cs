@@ -272,7 +272,10 @@ static partial class Tests
                 else if (angles[index] != Fixed.Zero && angles[index - 1] == Fixed.Zero && restSince >= 0) gaps.Add(index - restSince);
             }
 
-            Check.That(gaps.Count >= 8 && gaps.All(gap => gap % factor == 0 && gap >= 30 * factor && gap <= 60 * factor) && gaps.Distinct().Count() > 1,
+            // Phase 23: the turret walks the step of a logic frame in equal parts, one per tick. It is back at rest in the last tick of its frame and leaves in the first tick
+            // of one, so the ticks at rest are a whole number of frames less the ticks the last step still took (none at 30 Hz).
+            var walked = factor - 1;
+            Check.That(gaps.Count >= 8 && gaps.All(gap => (gap + walked) % factor == 0 && gap + walked >= 30 * factor && gap + walked <= 60 * factor) && gaps.Distinct().Count() > 1,
                 $"{rate}: the turret waits a random whole number of logic frames between 30 and 60 before each glance: {string.Join(",", gaps)} ticks.");
         }
     }

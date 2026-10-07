@@ -176,6 +176,7 @@ public sealed partial class SimulationWorld : IWorldServices
         _turretReloadHoldCapTicks = Time.OriginalFrames(TurretReloadHoldCapFrames);
         _turretSweepEnableTicks = Time.OriginalFrames(TurretSweepEnableFrames);
         _turretLoseInterestTicks = Time.OriginalFrames(TurretLoseInterestFrames);
+        _turretFrameTicks = Time.TicksPerOriginalFrame;
         VisionInterval = Time.OriginalFrames(VisionIntervalFrames);
         _saleDurationTicks = Time.OriginalFrames(SaleDurationFrames) - TickOrder.Next;
         _minimumBuildTicks = Time.OriginalFrames(1);

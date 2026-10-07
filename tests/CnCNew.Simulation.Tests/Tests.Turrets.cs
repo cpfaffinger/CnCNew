@@ -301,7 +301,8 @@ static partial class Tests
         feeder.FireWeapon(1, tank.Id.Value, target);
         world.Step();
         var first = tank.TurretOf(0)!.Value;
-        Check.That(first.Angle == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m) && first.Rotating, $"The first tick turns the turret by its rate ({first.Angle.Raw} raw), TURRET_ROTATE is on.");
+        // Above 30 Hz the first tick takes an equal share of the 30 Hz step: the rate per tick up to the rounding of the share (exact at 30 Hz).
+        Check.That((first.Angle - TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m)).Abs() <= (TestRate.IsOriginal ? Fixed.Zero : Fixed.Epsilon) && first.Rotating,$"The first tick turns the turret by its rate ({first.Angle.Raw} raw), TURRET_ROTATE is on.");
         var shotAfter = 1 + TicksUntilShot(world, feeder, tank.Id.Value, target);
         Check.That(shotAfter == world.Frames(15), $"The shot waits until the turret has turned 90 degrees at 6 degrees per tick: {shotAfter} ticks after the order.");
         var pointing = tank.TurretOf(0)!.Value;
