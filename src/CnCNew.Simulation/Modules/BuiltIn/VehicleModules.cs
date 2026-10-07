@@ -149,7 +149,9 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
     /// </summary>
     public bool HasLanded(IWorldServices world) => _groundCheckTick != 0 && !_inFirstDeath && !world.IsSignificantlyAboveTerrain(Entity);
 
-    public override void OnSpawn(IWorldServices world) => _nextWake = data.EmptyHulkDelayTicks > 0 ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+    // The first look at the hulk comes one logic frame of the original after the bus appeared (the original's first update), the later ones every 15 frames
+    // from there, at the same game times at every rate. (A death that falls on such a tick is taken up by that very update, at 30 Hz and above.)
+    public override void OnSpawn(IWorldServices world) => _nextWake = data.EmptyHulkDelayTicks > 0 ? world.Tick + world.Time.TicksPerOriginalFrame : SimulationTiming.SleepForever;
 
     public override void OnDie(IWorldServices world, in DamageInfo info)
     {
