@@ -334,6 +334,7 @@ run.Test("Rate invariance, flight: winged flight and circling are the same track
 run.Test("Rate invariance, flight: a shot-down jet falls the same fall at 30, 60 and 120 Hz", Tests.RateFlightJetSlowDeathFallIsTheSame);
 run.Test("Rate invariance, flight: a parachute opens, sinks, steers and lands the same at 30, 60 and 120 Hz", Tests.RateFlightParachuteIsTheSame);
 run.Test("Rate invariance, flight: a countermeasure flare slows down and sinks the same at 30, 60 and 120 Hz", Tests.RateFlightFlaresAreTheSame);
+run.Test("Rate invariance, flight: the uplink beam drives its waypoint path the same at 30, 60 and 120 Hz", Tests.RateFlightUplinkBeamPathIsTheSame);
 run.Test("Air: an airfield uses the injected model bones (hangar, parking, runway), refuses a mismatching table and survives snapshots", Tests.AirAirfieldUsesTheModelBones);
 run.Test("Air: a carrier's deployment creates the gunship at the map edge on a map with terrain", Tests.AirSpectreDeployedByCarrier);
 run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);

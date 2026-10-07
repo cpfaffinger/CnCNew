@@ -1158,6 +1158,10 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     private long _scorches;
     private long _nextScorch;
     private long _nextLaunchFx;
+    // The rest of the driven beam's step of the running logic frame of the original: ticks left and the share per tick (nothing at 30 Hz).
+    private int _driveLeft;
+    private Fixed _driveX;
+    private Fixed _driveY;
 
     public override string ModuleName => "ParticleUplinkCannonUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -1234,6 +1238,7 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         _beam = Beam.None;
         _pulses = 0;
         _scorches = 0;
+        _driveLeft = 0;
         SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
@@ -1310,6 +1315,7 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         _beam = Beam.None;
         _path = null;
         _pathIndex = 0;
+        _driveLeft = 0;
     }
 
     /// <summary><c>LaserUpdate::getCurrentLaserRadius</c>: the beam object's template radius times the width scalar (growing after birth, shrinking after the decay began).</summary>
@@ -1347,14 +1353,37 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
                 _current = _current with { X = Entity.X + length * FixedTrig.Cos(-angle), Y = Entity.Y + length * FixedTrig.Sin(-angle) };
             }
         }
+        else if (_driveLeft > 0)
+        {
+            // the rest of the step of the running logic frame of the original
+            _driveLeft--;
+            _current = _current with { X = _current.X + _driveX, Y = _current.Y + _driveY };
+        }
         else
         {
+            // The drive is the 30 Hz step, decided once per logic frame of the original: the beam covers the travel of a frame, at most the rest of the way to its destination, and
+            // heads for the next waypoint from the following frame on. A beam that switched when the rest is one tick of travel would lose less of a frame at every waypoint.
             var dx = _destination.X - _current.X;
             var dy = _destination.Y - _current.Y;
             var distance = Fixed.Sqrt(dx * dx + dy * dy);
-            var speed = Fixed.Min(_path is null ? data.ManualDrivingSpeed : data.ManualFastDrivingSpeed, distance);
+            var speed = Fixed.Min(FlightFrames.PerFrame(world.Time, _path is null ? data.ManualDrivingSpeed : data.ManualFastDrivingSpeed), distance);
             if (_path is not null && distance <= speed && _pathIndex + 1 < _path.Count) _destination = _path[++_pathIndex];
-            if (distance > Fixed.Zero) _current = _current with { X = _current.X + dx * speed / distance, Y = _current.Y + dy * speed / distance };
+            if (distance > Fixed.Zero)
+            {
+                var stepX = dx * speed / distance;
+                var stepY = dy * speed / distance;
+                var ticks = world.Time.TicksPerOriginalFrame;
+                if (ticks > 1)
+                {
+                    // flown in equal shares per tick; the first tick takes what the division leaves, so the shares add up to the step
+                    _driveLeft = checked((int)(ticks - TickOrder.Next));
+                    _driveX = Fixed.FromRaw(stepX.Raw / ticks);
+                    _driveY = Fixed.FromRaw(stepY.Raw / ticks);
+                    stepX -= _driveX * (long)_driveLeft;
+                    stepY -= _driveY * (long)_driveLeft;
+                }
+                _current = _current with { X = _current.X + stepX, Y = _current.Y + stepY };
+            }
         }
         _current = _current with { Z = world.GroundHeightAt(_current.X, _current.Y) };
     }
@@ -1411,6 +1440,12 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         writer.Int("scorches", _scorches);
         writer.Int("nextScorch", _nextScorch);
         writer.Int("nextLaunchFx", _nextLaunchFx);
+        if (_driveLeft > 0)
+        {
+            writer.Int("driveLeft", _driveLeft);
+            writer.Fixed("driveX", _driveX);
+            writer.Fixed("driveY", _driveY);
+        }
     }
 
     public override void Load(IStateReader reader)
@@ -1446,5 +1481,11 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         _scorches = reader.Int("scorches");
         _nextScorch = reader.Int("nextScorch");
         _nextLaunchFx = reader.Int("nextLaunchFx");
+        if (reader.Has("driveLeft"))
+        {
+            _driveLeft = checked((int)reader.Int("driveLeft"));
+            _driveX = reader.Fixed("driveX");
+            _driveY = reader.Fixed("driveY");
+        }
     }
 }

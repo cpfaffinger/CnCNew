@@ -278,4 +278,44 @@ static partial class Tests
         SameTracks("flares: the first flare, 25 frames", tracks, 0.01m, 0.0001m);
         FlightVerdict();
     }
+
+    /// <summary>
+    /// <c>ParticleUplinkCannonUpdate.MoveBeam</c>, driven along waypoints (a scripted use): the beam drives 20 units per frame from waypoint to waypoint; the last step to a waypoint is
+    /// as short as the rest of the way and the next step heads for the next waypoint. That is the 30 Hz step; a beam that switches when the rest is one tick of travel loses less at every corner.
+    /// </summary>
+    public static void RateFlightUplinkBeamPathIsTheSame()
+    {
+        var tracks = new List<FlightPose>[FlightRates.Length];
+        var corner = new long[FlightRates.Length];
+        var end = new long[FlightRates.Length];
+        Point3[] path = [new(Fixed.FromInt(300), Fixed.FromInt(200), Fixed.Zero), new(Fixed.FromInt(367), Fixed.FromInt(200), Fixed.Zero), new(Fixed.FromInt(367), Fixed.FromInt(293), Fixed.Zero), new(Fixed.FromInt(300), Fixed.FromInt(293), Fixed.Zero)];
+        for (var index = 0; index < FlightRates.Length; index++)
+        {
+            var (world, feeder) = FlightRateWorld(FlightRates[index], ScriptFiles());
+            feeder.Spawn(2, "BetaCannon", owner: 2, x: 100, y: 200);
+            world.Step();
+            var module = Only(world, "BetaCannon").Modules.OfType<ParticleUplinkCannonUpdate>().Single();
+            Check.That(world.SpecialPowers.TryGet("UplinkPower", out var power), "The power exists.");
+            module.PrepareScriptedPath(world, path);
+            module.Initiate(world, power!.Index, new CnCNew.Simulation.Commands.SpecialPowerTarget(CnCNew.Simulation.Commands.SpecialPowerTargetKind.Location, EntityId.Invalid, path[0].X, path[0].Y));
+            var start = world.Tick;
+            (corner[index], end[index]) = (-1, -1);
+            tracks[index] = [];
+            for (var frame = 0; frame < 60 && module.InUse; frame++)
+            {
+                for (var tick = 0; tick < world.Time.TicksPerOriginalFrame && module.InUse; tick++)
+                {
+                    world.Step();
+                    var now = FrameQuarters(world, world.Tick - start);
+                    if (corner[index] < 0 && module.BeamPosition.X == path[1].X && module.BeamPosition.Y == path[1].Y) corner[index] = now;
+                    if (end[index] < 0 && module.BeamPosition.X == path[3].X && module.BeamPosition.Y == path[3].Y) end[index] = now;
+                }
+                if (module.InUse) tracks[index].Add(new FlightPose(module.BeamPosition.X, module.BeamPosition.Y, Fixed.Zero, Fixed.Zero));
+            }
+        }
+        SameFrames("uplink beam on a path: stands on the second waypoint", corner);
+        SameFrames("uplink beam on a path: stands on the last waypoint", end);
+        SameTracks("uplink beam on a path: the drive", tracks, 0.01m, 0.0001m);
+        FlightVerdict();
+    }
 }
