@@ -65,7 +65,7 @@ run.Test("Tick rate, modules A–M: BaseRegenerateUpdate bursts every three fram
 run.Test("Tick rate, modules A–M: lifetimes are drawn in frames of the original; a 0 ms deposit rhythm is one frame", Tests.TickRateModulesAmLifetimeAndDeposit);
 run.Test("Tick rate, modules A–M: the hacker's countdowns keep their period in frames of the original", Tests.TickRateModulesAmHackerCountdown);
 run.Test("Tick rate, modules A–M: the avalanche's dormant check and slide length are frames of the original", Tests.TickRateModulesAmTensileFormation);
-run.Test("Tick rate, world: a sale takes 180 logic frames less one step at 30, 60 and 120 Hz", Tests.TickRateWorldSaleTakesTheSameGameTime);
+run.Test("Tick rate, world: a sale takes 180 logic frames less one frame at 30, 60 and 120 Hz", Tests.TickRateWorldSaleTakesTheSameGameTime);
 run.Test("Tick rate, world: the shroud is refreshed every three logic frames, phase 0", Tests.TickRateWorldVisionKeepsItsRhythm);
 run.Test("Tick rate, world: weapon delays under a bonus are rounded in logic frames", Tests.TickRateWorldWeaponDelaysAreRoundedOnTheOriginalGrid);
 run.Test("Tick rate, world: a weapon that spins up keeps its shot times", Tests.TickRateWorldSpinUpKeepsItsShotTimes);

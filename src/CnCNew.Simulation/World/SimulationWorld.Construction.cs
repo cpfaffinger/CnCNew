@@ -17,11 +17,12 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// <c>BuildAssistant.cpp</c>: <c>FRAMES_TO_ALLOW_SCAFFOLD</c> (<c>LOGICFRAMES_PER_SECOND * 1.5f</c>, 45 frames in which the scaffold stands) plus the 135 frames in which
     /// <c>BuildAssistant::update</c> takes <c>100 / TOTAL_FRAMES_TO_SELL_OBJECT</c> (<c>LOGICFRAMES_PER_SECOND * 3.0f</c> = 90) percent per frame off the construction percent until
-    /// it reaches -50 %: 180 logic frames of the original from the sell order to the refund. The refund falls in the step before that time is over (<see cref="BeginSale"/>).
+    /// it reaches -50 %: 180 logic frames of the original from the sell order to the refund. The refund falls in the logic frame before that time is over (<see cref="BeginSale"/>):
+    /// the frame of the order counts as the first of the 180, at every rate.
     /// </summary>
     private const long SaleDurationFrames = 45 + 135;
 
-    /// <summary><see cref="SaleDurationFrames"/> in ticks of this world, less the one step by which the refund comes early; resolved once when the world is created.</summary>
+    /// <summary><see cref="SaleDurationFrames"/> in ticks of this world, less the one logic frame of the original by which the refund comes early; resolved once when the world is created.</summary>
     private readonly long _saleDurationTicks;
 
     /// <summary>A structure whose <c>BuildTime</c> is zero still takes one logic frame of the original to build, in ticks of this world.</summary>
