@@ -99,7 +99,8 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     public override void OnSpawn(IWorldServices world)
     {
         if (data.InnateStealth) Entity.Status |= 1UL << CanStealthBit;
-        _nextWake = Math.Min(world.Tick + SimulationTiming.SleepNone, SimulationTiming.SleepForever);
+        // The first update comes one logic frame of the original after the object appeared (at 30 Hz the next tick), so the stealth delay starts at the same game time at every rate.
+        _nextWake = Math.Min(world.Tick + world.Time.TicksPerOriginalFrame, SimulationTiming.SleepForever);
     }
 
     private long _framesGranted;

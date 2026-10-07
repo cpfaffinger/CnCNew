@@ -59,7 +59,8 @@ internal sealed class FireWeaponUpdate(FireWeaponUpdateData data) : SimModule, I
             _clip = ClipCapacity(weapon);
         }
         _initialDelayTick = world.Tick + data.InitialDelayTicks;
-        _nextWake = world.Tick + SimulationTiming.SleepNone;
+        // The first update comes one logic frame of the original after the object appeared (at 30 Hz the next tick): the first shot of a field is an event, not a step of motion.
+        _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
     }
 
     public long Update(IWorldServices world)
