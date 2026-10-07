@@ -108,7 +108,11 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
 
 // ======================================================================================== HelicopterSlowDeathBehavior
 
-/// <summary><c>HelicopterSlowDeathBehaviorModuleData</c> in simulation units (per tick, radians, ticks); the particle, bone and sound fields are presentation.</summary>
+/// <summary>
+/// <c>HelicopterSlowDeathBehaviorModuleData</c> in the units of the original's logic frame at every tick rate (radians and world units per frame, unrounded frames; the blade delays
+/// still unrounded ticks): the spiral is integrated in steps of one frame of the original (<see cref="HelicopterSlowDeathBehavior"/>), and with the very numbers of the 30 Hz catalog
+/// every sum and comparison of that step comes out the same at 60 and 120 Hz. The particle, bone and sound fields are presentation.
+/// </summary>
 public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrbitTurnRate, Fixed SpiralOrbitForwardSpeed, Fixed SpiralOrbitForwardSpeedDamping,
     Fixed MinSelfSpin, Fixed MaxSelfSpin, Fixed SelfSpinUpdateDelay, Fixed SelfSpinUpdateAmount, Fixed FallHowFast, Fixed MinBladeFlyOffDelay, Fixed MaxBladeFlyOffDelay,
     string OclEjectPilot, string FxBlade, string OclBlade, string FxHitGround, string OclHitGround, string FxFinalBlowUp, string OclFinalBlowUp,
@@ -118,7 +122,9 @@ public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrb
     {
         Fixed Real(string name, Fixed fallback) => ModuleConfigReader.Real(configuration, name, fallback);
         Fixed Radians(string name) => SimulationTiming.DegreesToRadians(Real(name, Fixed.Zero).ToDecimal());
-        var ticksPerSecond = configuration.Time.TicksPerSecondFixed;
+        // Per logic frame of the original, whatever the rate of the catalog (at 30 Hz the catalog's own time service).
+        var original = SimulationRate.Original.Time;
+        var ticksPerSecond = original.TicksPerSecondFixed;
         return new HelicopterSlowDeathData(
             SlowDeathData.Parse(configuration),
             Radians("SpiralOrbitTurnRate") / ticksPerSecond,
@@ -126,11 +132,11 @@ public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrb
             Real("SpiralOrbitForwardSpeedDamping", Fixed.One),
             Radians("MinSelfSpin") / ticksPerSecond,
             Radians("MaxSelfSpin") / ticksPerSecond,
-            FixedTicks(configuration, "SelfSpinUpdateDelay"),
+            FixedTicks(configuration, original, "SelfSpinUpdateDelay"),
             Radians("SelfSpinUpdateAmount"),
             Real("FallHowFast", Fixed.Zero),
-            FixedTicks(configuration, "MinBladeFlyOffDelay"),
-            FixedTicks(configuration, "MaxBladeFlyOffDelay"),
+            FixedTicks(configuration, configuration.Time, "MinBladeFlyOffDelay"),
+            FixedTicks(configuration, configuration.Time, "MaxBladeFlyOffDelay"),
             ModuleConfigReader.Text(configuration, "OCLEjectPilot"),
             ModuleConfigReader.Text(configuration, "FXBlade"),
             ModuleConfigReader.Text(configuration, "OCLBlade"),
@@ -138,14 +144,14 @@ public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrb
             ModuleConfigReader.Text(configuration, "OCLHitGround"),
             ModuleConfigReader.Text(configuration, "FXFinalBlowUp"),
             ModuleConfigReader.Text(configuration, "OCLFinalBlowUp"),
-            FixedTicks(configuration, "DelayFromGroundToFinalDeath"),
+            FixedTicks(configuration, original, "DelayFromGroundToFinalDeath"),
             ModuleConfigReader.Text(configuration, "FinalRubbleObject"));
     }
 
-    /// <summary><c>INI::parseDurationReal</c>: milliseconds to unrounded ticks.</summary>
-    private static Fixed FixedTicks(RatedModuleConfiguration configuration, string name)
-        => ModuleConfigReader.Find(configuration, name)?.Value.Value is Data.Definitions.GameTime time
-            ? configuration.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero;
+    /// <summary><c>INI::parseDurationReal</c>: milliseconds to unrounded ticks of <paramref name="time"/> (the original's: unrounded logic frames).</summary>
+    private static Fixed FixedTicks(RatedModuleConfiguration configuration, SimulationTime time, string name)
+        => ModuleConfigReader.Find(configuration, name)?.Value.Value is Data.Definitions.GameTime duration
+            ? time.DurationMillisecondsToFixedTicks(duration.Milliseconds) : Fixed.Zero;
 }
 
 /// <summary>
@@ -170,7 +176,10 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     private long _lastSelfSpinUpdate;
     private Fixed _bladeFlyOff;
     private long _hitGroundTick;
+    /// <summary>The speed of the fall per logic frame of the original, negative.</summary>
     private Fixed _fallSpeed;
+    /// <summary>The step of the running frame of the spiral, flown in shares per tick; empty at 30 Hz.</summary>
+    private FlightFrameStep _spiral;
 
     public override string ModuleName => "HelicopterSlowDeathBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -198,6 +207,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         _lastSelfSpinUpdate = 0;
         _hitGroundTick = 0;
         _fallSpeed = Fixed.Zero;
+        _spiral.Cancel();
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 
@@ -209,51 +219,11 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
             world.RequestDestroy(Entity.Id);
             return SimulationTiming.SleepForever;
         }
-        if (_hitGroundTick == 0)
-        {
-            Entity.Angle = FixedTrig.Normalize(Entity.Angle + _selfSpin);
-            if (data.SelfSpinUpdateDelay > Fixed.Zero && Fixed.FromInt(world.Tick - _lastSelfSpinUpdate) > data.SelfSpinUpdateDelay)
-            {
-                var change = world.Time.PerSecondToPerTick(data.SelfSpinUpdateAmount);
-                if (_selfSpinTowardsMax)
-                {
-                    _selfSpin += change;
-                    if (_selfSpin > data.MaxSelfSpin) { _selfSpin = data.MaxSelfSpin; _selfSpinTowardsMax = false; }
-                }
-                else
-                {
-                    _selfSpin -= change;
-                    if (_selfSpin < data.MinSelfSpin) { _selfSpin = data.MinSelfSpin; _selfSpinTowardsMax = true; }
-                }
-                _lastSelfSpinUpdate = world.Tick;
-            }
-            Entity.X += FixedTrig.Cos(_forwardAngle) * _forwardSpeed;
-            Entity.Y += FixedTrig.Sin(_forwardAngle) * _forwardSpeed;
-            _forwardAngle = FixedTrig.Normalize(_forwardAngle + data.SpiralOrbitTurnRate);
-            _forwardSpeed *= data.SpiralOrbitForwardSpeedDamping;
-            if (_bladeFlyOff > Fixed.Zero)
-            {
-                _bladeFlyOff -= Fixed.One;
-                if (_bladeFlyOff <= Fixed.Zero)
-                {
-                    if (data.FxBlade.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.FxBlade, 0, Entity.X, Entity.Y, Entity.Z);
-                    if (data.OclBlade.Length > 0) world.CreateFromList(Entity, data.OclBlade, EntityId.Invalid, false);
-                    if (data.OclEjectPilot.Length > 0 && Entity.VeterancyLevel > 0) world.CreateFromList(Entity, data.OclEjectPilot, EntityId.Invalid, false);
-                }
-            }
-            _fallSpeed += world.Templates.GravityPerTickSquared * data.FallHowFast;
-            Entity.Z += _fallSpeed;
-            var ground = world.GroundHeightAt(Entity.X, Entity.Y);
-            if (Entity.Z <= ground + Fixed.One)
-            {
-                Entity.Z = Fixed.Max(Entity.Z, ground);
-                _hitGroundTick = world.Tick;
-                if (data.FxHitGround.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.FxHitGround, 0, Entity.X, Entity.Y, Entity.Z);
-                if (data.OclHitGround.Length > 0) world.CreateFromList(Entity, data.OclHitGround, EntityId.Invalid, false);
-            }
-            world.MarkDirty(Entity);
-        }
-        if (_hitGroundTick != 0 && Fixed.FromInt(world.Tick - _hitGroundTick) > data.DelayFromGroundToFinalDeath)
+        if (_hitGroundTick == 0) Spiral(world);
+        // The wait on the ground is compared once per logic frame of the original, counted from the impact (the delay is in unrounded frames: compared every tick it would end
+        // on a tick between two frames).
+        if (_hitGroundTick != 0 && world.Time.IsOriginalFrameBoundary(world.Tick - _hitGroundTick)
+            && Fixed.FromInt(world.Time.ToOriginalFrames(world.Tick - _hitGroundTick)) > data.DelayFromGroundToFinalDeath)
         {
             if (data.FxFinalBlowUp.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.FxFinalBlowUp, 0, Entity.X, Entity.Y, Entity.Z);
             if (data.OclFinalBlowUp.Length > 0) world.CreateFromList(Entity, data.OclFinalBlowUp, EntityId.Invalid, false);
@@ -262,6 +232,68 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
             return SimulationTiming.SleepForever;
         }
         return SimulationTiming.SleepNone;
+    }
+
+    /// <summary>
+    /// The spiral down is the 30 Hz step, decided once per logic frame of the original and flown in shares per tick: the self spin of a frame, the orbit's travel and turn of a frame,
+    /// the damping of the orbit speed (a factor per frame, applied once per frame) and the fall. Spin, orbit speed and the speed of the fall are values per frame, the data are the
+    /// numbers of the 30 Hz catalog (<see cref="HelicopterSlowDeathData"/>): the step is the same arithmetic at every rate. The self spin changes when a frame begins.
+    /// </summary>
+    private void Spiral(IWorldServices world)
+    {
+        if (_spiral.Continue(Entity))
+        {
+            BladeCountdown(world);
+            world.MarkDirty(Entity);
+            return;
+        }
+        var spin = _selfSpin;
+        Entity.Angle = FixedTrig.Normalize(Entity.Angle + spin);
+        if (data.SelfSpinUpdateDelay > Fixed.Zero && Fixed.FromInt(world.Time.ToOriginalFrames(world.Tick - _lastSelfSpinUpdate)) > data.SelfSpinUpdateDelay)
+        {
+            var change = SimulationRate.Original.Time.PerSecondToPerTick(data.SelfSpinUpdateAmount);
+            if (_selfSpinTowardsMax)
+            {
+                _selfSpin += change;
+                if (_selfSpin > data.MaxSelfSpin) { _selfSpin = data.MaxSelfSpin; _selfSpinTowardsMax = false; }
+            }
+            else
+            {
+                _selfSpin -= change;
+                if (_selfSpin < data.MinSelfSpin) { _selfSpin = data.MinSelfSpin; _selfSpinTowardsMax = true; }
+            }
+            _lastSelfSpinUpdate = world.Tick;
+        }
+        var stepX = FixedTrig.Cos(_forwardAngle) * _forwardSpeed;
+        var stepY = FixedTrig.Sin(_forwardAngle) * _forwardSpeed;
+        Entity.X += stepX;
+        Entity.Y += stepY;
+        _forwardAngle = FixedTrig.Normalize(_forwardAngle + data.SpiralOrbitTurnRate);
+        _forwardSpeed *= data.SpiralOrbitForwardSpeedDamping;
+        BladeCountdown(world);
+        _fallSpeed += FlightFrames.GravityPerFrameSquared(world.Templates) * data.FallHowFast;
+        Entity.Z += _fallSpeed;
+        var ground = world.GroundHeightAt(Entity.X, Entity.Y);
+        if (Entity.Z <= ground + Fixed.One)
+        {
+            Entity.Z = Fixed.Max(Entity.Z, ground);
+            _hitGroundTick = world.Tick;
+            if (data.FxHitGround.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.FxHitGround, 0, Entity.X, Entity.Y, Entity.Z);
+            if (data.OclHitGround.Length > 0) world.CreateFromList(Entity, data.OclHitGround, EntityId.Invalid, false);
+        }
+        // The frame that reaches the ground puts the wreck there at once, as the 30 Hz step does; every other frame is flown in shares.
+        else _spiral.Begin(world.Time, Entity, stepX, stepY, _fallSpeed, spin);
+        world.MarkDirty(Entity);
+    }
+
+    private void BladeCountdown(IWorldServices world)
+    {
+        if (_bladeFlyOff <= Fixed.Zero) return;
+        _bladeFlyOff -= Fixed.One;
+        if (_bladeFlyOff > Fixed.Zero) return;
+        if (data.FxBlade.Length > 0) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, data.FxBlade, 0, Entity.X, Entity.Y, Entity.Z);
+        if (data.OclBlade.Length > 0) world.CreateFromList(Entity, data.OclBlade, EntityId.Invalid, false);
+        if (data.OclEjectPilot.Length > 0 && Entity.VeterancyLevel > 0) world.CreateFromList(Entity, data.OclEjectPilot, EntityId.Invalid, false);
     }
 
     private void SpawnRubble(IWorldServices world)
@@ -287,6 +319,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         writer.Fixed("bladeFlyOff", _bladeFlyOff);
         writer.Int("hitGroundTick", _hitGroundTick);
         writer.Fixed("fallSpeed", _fallSpeed);
+        _spiral.Describe(writer, "spiralStep");
     }
 
     public override void Load(IStateReader reader)
@@ -302,6 +335,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         _bladeFlyOff = reader.Fixed("bladeFlyOff");
         _hitGroundTick = reader.Int("hitGroundTick");
         _fallSpeed = reader.Fixed("fallSpeed");
+        _spiral.Load(reader, "spiralStep");
     }
 }
 

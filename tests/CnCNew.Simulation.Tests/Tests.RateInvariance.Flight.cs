@@ -318,4 +318,96 @@ static partial class Tests
         SameTracks("uplink beam on a path: the drive", tracks, 0.01m, 0.0001m);
         FlightVerdict();
     }
+
+    /// <summary>The transport fixture plus a helicopter whose death spirals: orbit 150 units per second damped by 0.98 per frame, self spin between 360 and 720 degrees per second
+    /// (changed by 40: no multiple of it is the range, so that the turn-around does not hang on the last bit of a sum), a blade that flies off.</summary>
+    private static IReadOnlyDictionary<string, string> SpiralFiles() => new Dictionary<string, string>(TransportFiles())
+    {
+        ["Data/INI/Object/RateFlightSpiral.ini"] = """
+        Object Spinner
+          KindOf = VEHICLE AIRCRAFT
+          Body = ActiveBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+          Behavior = HelicopterSlowDeathBehavior Death01
+            DestructionDelay = 99999999
+            SpiralOrbitTurnRate = 140.0
+            SpiralOrbitForwardSpeed = 150.0
+            SpiralOrbitForwardSpeedDamping = 0.98
+            MinSelfSpin = 360.0
+            MaxSelfSpin = 720.0
+            SelfSpinUpdateDelay = 150
+            SelfSpinUpdateAmount = 40.0
+            FallHowFast = 30%
+            MinBladeFlyOffDelay = 610
+            MaxBladeFlyOffDelay = 1490
+            FXBlade = FX_Other
+            FXHitGround = FX_Test
+            DelayFromGroundToFinalDeath = 500
+            FinalRubbleObject = RotorHulk
+          End
+        End
+        """,
+    };
+
+    /// <summary>
+    /// <c>HelicopterSlowDeathBehavior</c>: the wreck spins, spirals on a damped orbit, loses its blade and falls. The damping is a factor per logic frame of the original and the orbit, the
+    /// spin and the fall are the 30 Hz step; the blade's countdown and the wait on the ground count frames.
+    /// </summary>
+    public static void RateFlightHelicopterSlowDeathIsTheSame()
+    {
+        var tracks = new List<FlightPose>[FlightRates.Length];
+        var blade = new long[FlightRates.Length];
+        var ground = new long[FlightRates.Length];
+        var gone = new long[FlightRates.Length];
+        var drift = new Fixed[FlightRates.Length];
+        var spin = new Fixed[FlightRates.Length];
+        var lowest = new Fixed[FlightRates.Length];
+        for (var index = 0; index < FlightRates.Length; index++)
+        {
+            var (world, feeder) = FlightRateWorld(FlightRates[index], SpiralFiles(), terrain: false);
+            feeder.Spawn(1, "Spinner", x: 500, y: 500, z: 100);
+            world.Step();
+            // Longer than SelfSpinUpdateDelay: the first change of the self spin is due "since tick 0" at every rate.
+            StepFrames(world, 30);
+            var wreck = Only(world, "Spinner");
+            feeder.Kill(wreck.Id.Value);
+            world.Step();
+            var start = world.Tick;
+            (blade[index], ground[index], gone[index]) = (-1, -1, -1);
+            var at = index;
+            var heading = wreck.Angle;
+            var turned = Fixed.Zero;
+            var low = wreck.Z;
+            var last = (wreck.X, wreck.Y);
+            tracks[index] = FrameTrack(world, wreck, 400, result =>
+            {
+                var now = FrameQuarters(world, result.Tick - start);
+                if (blade[at] < 0 && result.Events.Any(value => value.Kind == SimEventKind.FxRequested && value.Text == "FX_Other")) blade[at] = now;
+                if (ground[at] < 0 && result.Events.Any(value => value.Kind == SimEventKind.FxRequested && value.Text == "FX_Test")) ground[at] = now;
+                if (world.FindEntity(wreck.Id) != wreck)
+                {
+                    if (gone[at] < 0) gone[at] = now;
+                    return;
+                }
+                turned += FixedTrig.AngleDifference(heading, wreck.Angle).Abs();
+                heading = wreck.Angle;
+                low = Fixed.Min(low, wreck.Z);
+                last = (wreck.X, wreck.Y);
+            });
+            var (dx, dy) = (last.X - Fixed.FromInt(500), last.Y - Fixed.FromInt(500));
+            drift[index] = Fixed.Sqrt(dx * dx + dy * dy);
+            spin[index] = turned;
+            lowest[index] = low;
+        }
+        Console.WriteLine($"       helicopter slow death: the blade flies off: after {InFrames(blade[0])} / {InFrames(blade[1])} / {InFrames(blade[2])} frames (not compared yet: its countdown is the next cause)");
+        SameFrames("helicopter slow death: the wreck hits the ground", ground);
+        SameFrames("helicopter slow death: the wreck is gone", gone);
+        SameValues("helicopter slow death: distance of the wreck from where it was shot", drift, 0.01m);
+        SameValues("helicopter slow death: lowest height", lowest, 0.01m);
+        SameValues("helicopter slow death: sum of its turns (radians)", spin, 0.01m);
+        SameTracks("helicopter slow death: the spiral", tracks, 0.01m, 0.001m);
+        FlightVerdict();
+    }
 }
