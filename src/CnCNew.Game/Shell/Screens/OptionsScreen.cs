@@ -6,7 +6,7 @@ namespace CnCNew.Game.Shell.Screens;
 
 /// <summary>
 /// <c>OptionsMenu.wnd</c>. Wires the controls that have a matching <see cref="GameSettings"/> field: resolution, the
-/// three volume sliders, and scroll speed. The remaining gadgets (gamma, detail/anti-aliasing, alternate mouse,
+/// three volume sliders, scroll speed and the alternate mouse setup. The remaining gadgets (gamma, detail/anti-aliasing,
 /// double-click attack-move, retaliation, the whole <c>NetworkParent</c> group, the advanced display sub-panel) have no
 /// counterpart in <see cref="GameSettings"/> yet; they stay visible (so the screen looks authentic and every callback
 /// name is still exercised) but are inert placeholders, listed in <c>docs/GAME-SHELL.md</c>. Display mode, aspect
@@ -61,6 +61,7 @@ public sealed class OptionsScreen : ShellScreen
         SetSlider("SliderMusicVolume", _working.Audio.Music);
         SetSlider("SliderSFXVolume", _working.Audio.Effects);
         SetSlider("SliderVoiceVolume", _working.Audio.Voice);
+        W("CheckAlternateMouse").SetChecked(_working.Controls.AlternateMouse);
     }
 
     private void SetSlider(string name, float fraction)
@@ -82,6 +83,9 @@ public sealed class OptionsScreen : ShellScreen
             case UiEventKind.ButtonSelected when e.Source == "OptionsMenu.wnd:ButtonAccept": Accept(); break;
             case UiEventKind.ButtonSelected when e.Source == "OptionsMenu.wnd:ButtonBack": Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.CloseTop(); break;
             case UiEventKind.ButtonSelected when e.Source == "OptionsMenu.wnd:ButtonDefaults": Defaults(); break;
+            case UiEventKind.ButtonSelected when e.Source == "OptionsMenu.wnd:CheckAlternateMouse":
+                _working = _working with { Controls = _working.Controls with { AlternateMouse = e.Value != 0 } };
+                break;
             case UiEventKind.ComboSelected when e.Source == "OptionsMenu.wnd:ComboBoxResolution":
                 if (e.Value >= 0 && e.Value < _resolutionEntries.Length)
                 {

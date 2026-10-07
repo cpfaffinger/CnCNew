@@ -166,7 +166,21 @@ Das Original schneidet einen Strahl mit der gerenderten Geometrie (`W3DView::pic
 
 ### Mausschemata
 
-| | `LeftClickCommands` (Retail-Standard, `m_useAlternateMouse = FALSE`) | `RightClickCommands` („alternative Maus“) |
+**Vorgabe seit 7. Oktober 2026: `RightClickCommands`** (links wählen, rechts befehlen) – Entscheidung des Projektinhabers, abweichend vom Original, das mit
+`m_useAlternateMouse = FALSE` ausgeliefert wird (`OptionPreferences::getAlternateMouseModeEnabled`). Das Schema des Originals bleibt wählbar:
+
+* Einstellung `controls.alternateMouse` (`ControlSettings.AlternateMouse`, Vorgabe `true`) in `settings.json`; eine ältere Datei ohne den Schlüssel lädt mit dem
+  sichtbaren Hinweis `controls.alternateMouse:missing` und der Vorgabe.
+* Optionsbildschirm: das Kästchen `OptionsMenu.wnd:CheckAlternateMouse` ist jetzt verdrahtet (angehakt = rechts befehlen); „Accept“ speichert, das nächste
+  gestartete Spiel benutzt die Wahl.
+* Befehlszeile des Clients: `--mouse classic` (Original: links wählen und befehlen) bzw. `--mouse alternate`; übersteuert die Einstellung für diesen Lauf.
+* Im Code: `GameInputSettings.Scheme` (Vorgabe ebenfalls `RightClickCommands`), aus den Einstellungen über `MatchController.MapMouseScheme`.
+
+Unabhängig vom Schema: der Linksklick schließt Platzierung und Zielmodi (Angriffsbewegung, Bewachen, Knopf mit Ziel) ab, der Rechtsklick bricht sie ab, rechtes
+Ziehen scrollt, die Minimap befiehlt mit rechts. Die `--input-script`-Prüfungen (`scripts/check-dozer-build.ps1`, `check-build-hotkeys.ps1`) benutzen nur solche
+schemaunabhängigen Klicks (Auswahl, Befehlsknopf, Platzierung) und laufen mit beiden Schemata. **Nicht von einem Menschen abgenommen.**
+
+| | `LeftClickCommands` (Retail-Standard, `m_useAlternateMouse = FALSE`; `--mouse classic`) | `RightClickCommands` („alternative Maus“, Vorgabe) |
 |---|---|---|
 | Linksklick auf Objekt | Befehl, wenn der Kontext einen gültigen Befehl ergibt und Shift nicht gedrückt ist (`contextCommandForNewSelection`), sonst Auswahl | Auswahl |
 | Linksklick auf Boden | Kontextbefehl (Bewegen, Sammelpunkt, Wegpunkt …) | alles abwählen |

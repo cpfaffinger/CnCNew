@@ -41,6 +41,7 @@ static class InputTests
         run.Test("Input: command bar slots, availability reasons, queue and multi-select", CommandBarStates);
         run.Test("Input: camera intent from keys, edges, drag, wheel and metas", CameraIntents);
         run.Test("Input: acceptance sequence through the event pipeline is replayable", AcceptanceSequence);
+        run.Test("Input: the alternate mouse setup is the default, the original's setup stays selectable", MouseSchemes);
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null) run.Test("Input real data: CommandMap, command buttons and command bars of shipped objects", () => RealData(contentDirectory));
         return run.Finish();
@@ -1265,6 +1266,40 @@ static class InputTests
     }
 
     // ============================================================================================ acceptance
+
+    private static void MouseSchemes()
+    {
+        Assert(new GameInputSettings().Scheme == MouseScheme.RightClickCommands, "the default: left selects, right orders");
+        foreach (var scheme in new MouseScheme?[] { null, MouseScheme.RightClickCommands, MouseScheme.LeftClickCommands })
+        {
+            var arena = new Arena(money: 500);
+            arena.Spawn("Ranger", Me, 40, 40);
+            arena.Step(2);
+            var world = arena.World;
+            var view = new TopDownView();
+            var input = new GameInputController(Me, arena.Sink, HotkeyMap.Parse(CommandMapText).WithEngineDefaults(), CommandButtonCatalog.Build(Fixture.Graph),
+                _ => null, scheme is { } chosen ? new GameInputSettings(chosen) : null);
+            var ranger = arena.Find("Ranger", Me, 40, 40);
+            long time = 10_000;
+            void Click(MouseButton button, Vector2 at)
+            {
+                input.Process(new MouseMoveEvent(time += 16, at), world, view);
+                input.Process(new MouseButtonEvent(time += 16, button, true, at), world, view);
+                input.Process(new MouseButtonEvent(time += 50, button, false, at), world, view);
+                time += 1000;
+            }
+            var alternate = scheme != MouseScheme.LeftClickCommands;
+            Click(MouseButton.Left, Screen(40, 40));
+            Assert(input.Selection.Selected.SequenceEqual([ranger.Id]), $"{scheme}: a left click on the ranger selects it");
+            Click(MouseButton.Right, Screen(100, 20));
+            Assert(arena.Sink.Issued.Count == (alternate ? 1 : 0), $"{scheme}: a right click on the ground orders only in the alternate setup ({arena.Sink.Issued.Count})");
+            Assert(input.Selection.Selected.IsEmpty == !alternate, $"{scheme}: a right click deselects only in the original's setup");
+            if (!alternate) Click(MouseButton.Left, Screen(40, 40));
+            Click(MouseButton.Left, Screen(120, 100));
+            Assert(arena.Sink.Issued.Count == 1 && arena.Sink.Issued[0] is SetMoveTargetCommand, $"{scheme}: a left click on the ground orders only in the original's setup ({arena.Sink.Issued.Count})");
+            Assert(input.Selection.Selected.IsEmpty == alternate, $"{scheme}: a left click on empty ground deselects in the alternate setup");
+        }
+    }
 
     private static void AcceptanceSequence()
     {

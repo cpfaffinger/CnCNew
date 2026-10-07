@@ -199,10 +199,11 @@ unabhängig vom gewählten `MouseScheme` (Minimap-Konventionen sind im Original 
 
 ## 7. Auswahlmodus und Kontextbefehle
 
-`GameInputController.Settings.Scheme` bleibt der C3-Standard `MouseScheme.LeftClickCommands`: ein Linksklick auf freiem, begehbarem
-Boden löst (ohne Ziel unter dem Cursor) einen Bewegungsbefehl aus, ein Rechtsklick storniert einen Modus oder leert die Auswahl.
-`HudTests.cs` benutzt konsequent Linksklicks für Bewegung/Angriffsbewegung (ein häufiger Stolperstein beim Schreiben eigener
-Skripte gegen diese Schicht).
+`GameInputController.Settings.Scheme` kommt aus `GameSettings.Controls.AlternateMouse` (`MatchController.MapMouseScheme`); Vorgabe ist seit dem
+7. Oktober 2026 `MouseScheme.RightClickCommands` (links wählen, rechts befehlen; `docs/PRESENTATION-INPUT.md` §6): ein Rechtsklick auf freiem, begehbarem
+Boden löst einen Bewegungsbefehl aus, ein Linksklick auf leeren Boden leert die Auswahl, ein Rechtsklick storniert einen offenen Modus. Mit
+`AlternateMouse = false` (Client: `--mouse classic`) gilt das Schema des Originals. `HudTests.cs` prüft beide: die Bewegungs-/Angriffsbewegungsfälle laufen
+im Schema des Originals (dort ausdrücklich gesetzt), ein eigener Fall prüft die Vorgabe.
 
 ## 8. Bildschirmraum-Overlay (`HudOverlay`)
 

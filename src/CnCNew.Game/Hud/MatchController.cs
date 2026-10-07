@@ -108,7 +108,7 @@ public sealed class MatchController
         var hotkeys = HotkeyMap.FromGraph(match.Data.Graph).WithEngineDefaults();
         Input = new GameInputController(match.Human, match.Commands, hotkeys, buttons,
             label => _assets.Text.TryGet(label, out var resolved) ? resolved : null,
-            new GameInputSettings(Camera: MapCameraSettings(settings), Commands: new CommandSettings(PlacementViewAngle: template => match.Data.Visuals.TryGet(template, out var visual) ? visual.PlacementViewAngle : 0f)));
+            new GameInputSettings(MapMouseScheme(settings), Camera: MapCameraSettings(settings), Commands: new CommandSettings(PlacementViewAngle: template => match.Data.Visuals.TryGet(template, out var visual) ? visual.PlacementViewAngle : 0f)));
         Input.UiRequest += OnInputUiRequest;
 
         match.BeforeTick = world => Input.Tick(world);
@@ -416,6 +416,9 @@ public sealed class MatchController
     /// <c>OptionsMenu.cpp</c> stores <c>m_keyboardScrollFactor = sliderPosition / 100</c>, which scales key and screen-edge scrolling only
     /// (<c>LookAtXlat.cpp</c>; right-drag scrolling does not depend on it). The rotate slider has no retail counterpart: 0.5 keeps the engine
     /// default, the ends halve/double it (docs/GAME-HUD.md).</summary>
+    public static MouseScheme MapMouseScheme(GameSettings settings)
+        => settings.Controls.AlternateMouse ? MouseScheme.RightClickCommands : MouseScheme.LeftClickCommands;
+
     public static CameraSettings MapCameraSettings(GameSettings settings)
     {
         var defaults = new CameraSettings();

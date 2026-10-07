@@ -10,12 +10,12 @@ public enum MouseScheme
 {
     /// <summary>The retail default (<c>GlobalData::m_useAlternateMouse = FALSE</c>): the left button selects and orders, the right button deselects and cancels.</summary>
     LeftClickCommands,
-    /// <summary>The "alternate mouse" option: the left button selects, the right button orders and cancels.</summary>
+    /// <summary>The "alternate mouse" option, and this client's default: the left button selects, the right button orders and cancels.</summary>
     RightClickCommands,
 }
 
 public sealed record GameInputSettings(
-    MouseScheme Scheme = MouseScheme.LeftClickCommands,
+    MouseScheme Scheme = MouseScheme.RightClickCommands,
     InputSettings? Input = null,
     SelectionSettings? Selection = null,
     CameraSettings? Camera = null,
