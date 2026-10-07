@@ -179,7 +179,7 @@ public static class StructureConditions
 /// <para>
 /// <b>Production doors.</b> The reference opens a door only when the finished unit is ready to leave, creates the unit when the door is fully open (<c>ProductionUpdate::update</c>:
 /// <c>door->m_doorWaitOpenFrame != 0</c>), keeps the door open for <c>DoorWaitOpenTime</c> after the last unit and then closes it for <c>DoorCloseTime</c>. The simulation creates the unit the
-/// moment the queue entry is done and has no door, so the door is run on the simulation's clock instead: it starts opening <c>DoorOpeningTime</c> before the head entry completes (the
+/// moment the queue entry is done and has no door, so the door is run on the simulation's clock instead: it starts opening <c>DoorOpeningTime</c> (and one tick) before the head entry completes (the
 /// remaining ticks of the entry are known), is fully open when the unit appears, and from then on follows <c>updateDoors</c> exactly (same transitions, same strict comparisons, same pop to
 /// waiting-open of a door that is still closing when the next unit is ready, same hold-open). Opened this early the whole cycle is shifted by <c>DoorOpeningTime</c> against the reference,
 /// which is the price of seeing the unit leave through an open door.
@@ -281,7 +281,9 @@ public sealed class StructureConditionTracker
         }
 
         // The head entry is about to be handed to the exit: ProductionUpdate::update then reserves a door, opens it and starts the construction-complete phase.
-        var lead = doorCount > 0 ? data.DoorOpeningTicks : 0;
+        // The door is waiting open in the tick after its opening time has passed (the strict comparison of updateDoors), so it starts one tick more than DoorOpeningTime
+        // before the entry completes: the unit appears behind a door that already shows DOOR_n_WAITING_OPEN, not in the last tick of DOOR_n_OPENING.
+        var lead = doorCount > 0 ? data.DoorOpeningTicks + 1 : 0;
         if (!entity.HasStatus(ObjectStatusBits.UnderConstruction) && production.TryGetHead(out var head) && head.RemainingTicks <= Math.Max(lead, 1))
         {
             var produced = world.Templates[head.TemplateIndex];

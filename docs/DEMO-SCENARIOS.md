@@ -1,6 +1,6 @@
 # Gestellte Demos zum Auditieren
 
-Stand: 4. Oktober 2026. Drei kleine Szenen auf einer echten Karte (Alpine Assault, Ursprung = erste Startposition), die je **ein** Verhalten isolieren. Dieselbe Definition
+Stand: 7. Oktober 2026. Drei kleine Verhaltensszenen und zwölf Fabrikausfahrten (eigener Abschnitt unten) auf einer echten Karte (Alpine Assault, Ursprung = erste Startposition), die je **ein** Verhalten isolieren. Dieselbe Definition
 (`CnCNew.Game/Live/DemoScenarios.cs`) läuft im Client und headless; `LiveScenario` (`CnCNew.Game/Live/LiveScenario.cs`) setzt genau die genannten Objekte (keine Basen, keine Wirtschaft),
 deckt die Karte für beide Seiten auf und gibt Befehle über dasselbe `StandingOrders`-Buch wie ein Spieler. Die Szenen sind **Prüfstände**: ein fehlgeschlagener Check ist ein Befund
 über den Stand der Simulation/Darstellung, kein Fehler des Werkzeugs. Alle drei bestehen seit den Fixes vom 4. Oktober 2026; die Sichtprüfung durch einen Menschen steht aus.
@@ -22,6 +22,7 @@ die Simulation herausgibt, beim Einlesen um; im Rauchtest des Clients ist ein ge
 ## Ausführen
 
 ```powershell
+.\scripts\demo-scenario.ps1                              # OHNE Namen: listet die Szenen und startet nichts (bis 7. Oktober 2026 startete das stillschweigend tank-duel)
 .\scripts\demo-scenario.ps1 -Scenario tank-duel          # Fenster, Skirmish-HUD (Befehle des Spielers sind möglich)
 .\scripts\demo-capture-building.ps1                      # optischer Test im Fenster, je Szene ein Skript
 .\scripts\demo-tank-duel.ps1
@@ -43,3 +44,82 @@ ihre Objekte setzt, ihre Befehle ausführt und zweimal denselben Zustandshash li
 - `capture-building`: gestufte Fähigkeit nach `SpecialAbilityUpdate.cpp` (Anlaufen, `UNPACKING` UnpackTime, `RAISING_FLAG` PreparationTime, Übernahme, `PACKING` PackTime).
 - `tank-duel`: kein Schuss mit mehr als 5° Turmfehler; der Turm hat sich vor dem ersten Schuss gedreht (Turmzustand und Feuerfreigabe in der Simulation, `TurretAI`); in jedem Abtastwert (einer je Originalbild) zwischen Befehl und Tod des Opfers (auch in den Nachladelücken) bleibt der Turm innerhalb 5°; nach dem Tod hält der Turm genau `RecenterTime` (Spielzeit aus den Daten) und dreht dann zurück; die abseits stehende Sentry-Drohne dreht im Leerlauf zufällig umher (Winkelbereich, Haltezeit, Ruheintervall) und gezeichneter Turm sowie `TURRET_ROTATE` folgen dem simulierten Winkel.
 - `jet-strafe`: kein Stillstand in der Luft über 10 Originalbilder (eine Drittelsekunde; Mindestgeschwindigkeit und Kreisen des Flügel-Locomotors).
+
+## Fabrikausfahrten (`exit-<fraktion>-<gebäude>`, 7. Oktober 2026)
+
+Frage des Projektinhabers: fahren frisch gebaute Einheiten aus ihrer Fabrik heraus, oder „clippen“ sie hinaus? Zwölf Szenen (`CnCNew.Game/Live/FactoryExits.cs`) stellen je Fraktion
+(`america`, `china`, `gla`) die Kommandozentrale (baut Planierraupen bzw. Arbeiter), die Kaserne (Ranger, Rotgardist, Rebell) und die Waffenfabrik bzw. den Waffenhändler (Crusader,
+Battlemaster, Scorpion) einzeln nahe an die Kamera (`exit-america-warfactory` …) oder alle drei in ein Bild (`exit-america-all`, dazu ein Bauarbeiter, Kraftwerk und Versorgungslager –
+dieselbe Szene benutzt der Bautasten-Test). Jedes Gebäude bekommt ab Bild 30 drei Bauaufträge nacheinander. Alle Gebäude stehen im Standardwinkel: die Ausfahrt zeigt nach Osten, im Bild
+nach rechts.
+
+```powershell
+.\scripts\demo-factory-exits.ps1                                    # Fenster: America, alle drei Gebäude; druckt, worauf zu achten ist
+.\scripts\demo-factory-exits.ps1 -Faction China -Building warfactory
+.\scripts\demo-factory-exits.ps1 -Faction GLA -Building barracks -TickRate 60
+.\scripts\audit-scenarios.ps1 -Scenario exits [-Faction America]    # dieselben neun Einzelszenen ohne Fenster, mit Zahlen
+.\scripts\capture-scenarios.ps1 -Scenario exit-america-warfactory   # Bildfolge (900 Originalbilder, alle 15 eines)
+```
+
+### Maßstab: das Original
+
+Quellen: `ProductionUpdate.cpp` (`ProductionUpdate::update`, `updateDoors`), `DefaultProductionExitUpdate.cpp` und `QueueProductionExitUpdate.cpp` (`exitObjectViaDoor`,
+`getNaturalRallyPoint`), `SupplyCenterProductionExitUpdate.cpp`, `AIStates.cpp` (`AIFollowPathState` für `aiFollowExitProductionPath`).
+
+1. Ist der Bauauftrag fertig, reserviert `ProductionUpdate::update` ein Tor. Hat das Gebäude Toranimationen (`NumDoorAnimations > 0`), beginnt das Tor zu öffnen
+   (`DOOR_1_OPENING` für `DoorOpeningTime`); die Einheit wird **erst erzeugt, wenn das Tor ganz offen ist** (`m_doorWaitOpenFrame != 0`, `DOOR_1_WAITING_OPEN`). Das Tor bleibt
+   `DoorWaitOpenTime` nach der letzten Einheit offen und schließt dann über `DoorCloseTime` (`DOOR_1_CLOSING`).
+2. `exitObjectViaDoor` setzt die Einheit auf den ins Gebäude gedrehten `UnitCreatePoint` – das ist **im Gebäude** (Kaserne: die Gebäudemitte) –, mit der Ausrichtung des Gebäudes.
+3. Die Einheit bekommt einen Ausfahrtsweg (`aiFollowExitProductionPath`): zuerst `NaturalRallyPoint`, um zwei Wegfindungszellen (20 Einheiten) in seiner eigenen Richtung nach außen
+   geschoben (`getNaturalRallyPoint(…, offset = TRUE)`; der Punkt liegt laut Kommentar der Daten immer auf der Gebäudekante), danach – falls gesetzt – der Sammelpunkt des Spielers.
+   Die eigene Fabrik ist auf diesem Weg kein Hindernis (`ignoreObstacle`).
+4. `QueueProductionExitUpdate` (chinesische Kaserne) lässt nach jeder Einheit `ExitDelay` (300 ms) verstreichen, damit die paarweise gebauten Rotgardisten nacheinander herauskommen.
+
+| Gebäude | Ausfahrtsmodul | `UnitCreatePoint` → `NaturalRallyPoint` (Gebäudekoordinaten) | Halbe Kantenlängen | Tor: auf / offen / zu (Bilder) |
+| --- | --- | --- | --- | --- |
+| `AmericaCommandCenter` | Default | (−18, 35) → (60, 35) | 60 × 70 | 45 / 90 / 45 |
+| `AmericaBarracks` | Default | (0, 0) → (55, 0) | 55 × 45 | kein Tor |
+| `AmericaWarFactory` | Default | (−10, −30) → (53, −30) | 53 × 60 | 98 / 90 / 120 |
+| `ChinaCommandCenter` | Default | (−18, 40) → (60, 40) | 60 × 63 | 90 / 90 / 90 |
+| `ChinaBarracks` | Queue (`ExitDelay` 300 ms) | (0, −25) → (36, −25) | 36 × 44 | kein Tor |
+| `ChinaWarFactory` | Default | (0, −27) → (57, −27) | 57 × 61 | 120 / 60 / 150 |
+| `GLACommandCenter` | Default | (25, 0) → (65, 0) | 65 × 65 | kein Tor |
+| `GLABarracks` | Default | (0, 0) → (42, 0) | 42 × 52 | kein Tor |
+| `GLAArmsDealer` | Default | (−20, −15) → (40, −15) | 40 × 62 | 60 / 90 / 60 |
+
+### Was der Audit misst und prüft (`tools/CnCNew.PresentationTool/FactoryExitAudit.cs`)
+
+Je Originalbild, in Gebäudekoordinaten (x zur Ausfahrtsseite): Erscheinungsbild und -ort jeder gebauten Einheit, ihr Weg in den ersten drei Sekunden (alle 15 Bilder), das erste Bild
+außerhalb des Gebäudekastens und die Stelle dort, der Ruheort, ob sie in jedem Bild gezeichnet wird, und die Zeitleiste der Torzustände des Gebäudes. Prüfungen: (a) Erscheinen am
+`UnitCreatePoint` (±1,5); (b) bei Gebäuden mit Tor: das Tor zeigt `DOOR_1_WAITING_OPEN`, wenn die Einheit erscheint, und nach der letzten Einheit folgen `DOOR_1_CLOSING` und „zu“;
+(c) die Einheit verlässt den Kasten über die Ausfahrtsseite (x ≥ halbe Länge, höchstens 20 neben der Linie des `NaturalRallyPoint`); (d) sie ruht höchstens 30 vom Ende des
+Ausfahrtswegs; (e) sie wird in jedem Bild gezeichnet; (f) je Auftrag erscheint eine Einheit.
+
+### Befund (gemessen 7. Oktober 2026, 30 Hz; **nicht von einem Menschen gesehen**)
+
+| Prüfung | Ergebnis über alle neun Gebäude (27 Einheiten) |
+| --- | --- |
+| (a) Erscheinungsort | 27 von 27 genau am `UnitCreatePoint`, im Gebäude – wie im Original |
+| (b) Tor | bei allen fünf Gebäuden mit Tor: offen (`WAITING_OPEN`), wenn die Einheit erscheint; schließt nach der letzten (z. B. `AmericaWarFactory`: öffnet ab Bild 231, offen ab 330, Einheit in Bild 330, schließt ab 1020, zu ab 1141). Vor dieser Sitzung war das Tor beim Erscheinen der **ersten** Einheit ein Bild lang noch `OPENING` (behoben in `StructureConditionTracker`: Vorlauf `DoorOpeningTime` + 1 Tick) |
+| (c) Ausfahrt | **0 von 27**: keine Einheit bewegt sich. Sie bleibt am `UnitCreatePoint` im Gebäude stehen; drei nacheinander gebaute Einheiten stehen auf demselben Punkt ineinander |
+| (d) Haltepunkt | entfällt (keine Ausfahrt): Abstand zum Ende des Ausfahrtswegs 54 bis 96 Einheiten |
+| (e) gezeichnet | 27 von 27 in jedem Bild (die Einheit ist also im Gebäudemodell sichtbar bzw. von ihm verdeckt) |
+| (f) Stückzahl | 27 von 27 Aufträgen liefern **eine** Einheit – auch die chinesische Kaserne, die im Original je Auftrag **zwei** Rotgardisten baut (`QuantityModifier = ChinaInfantryRedguard 2`, in der Simulation typisiert, aber nicht angewendet; nur gemeldet) |
+
+Das ist, was der Projektinhaber als „clippt gerade hinaus“ sieht: die Raupe steht nach dem Bau **in** der Kommandozentrale und fährt erst auf einen Befehl hin – dann quer durch das
+Gebäude. Die Abweichung liegt in der **Simulation** (`ProductionUpdate.Update` erzeugt die Einheit am `UnitCreatePoint` und gibt ihr keinen Weg; nur ein vom Spieler gesetzter
+Sammelpunkt bewegt sie), nicht in der Darstellung. Zwei weitere Abweichungen der Simulation, nur gemeldet: die Einheit entsteht, sobald der Auftrag fertig ist, nicht erst nach
+`DoorOpeningTime` (die Darstellung öffnet das Tor dafür entsprechend früher, der ganze Torzyklus liegt um `DoorOpeningTime` vor dem Original); und die Stückzahl der Rotgardisten.
+
+Weil der Hauptzweig mitten in einer Messphase liegt, in der die Simulation bei 30 Hz bytegleich bleiben muss (`baselines/reference-manifest.json`), steht die Korrektur der
+Ausfahrt in einem **eigenen, letzten Commit** des Zweigs (`docs/SIMULATION-CORE.md`, Abschnitt „Fabrikausfahrt“); solange er nicht gemergt ist, ist `audit-scenarios.ps1 -Scenario exits`
+in Prüfung (c)/(d) **rot** – das ist der Befund, kein Werkzeugfehler.
+
+### Checkliste für den Menschen (`scripts/demo-factory-exits.ps1`)
+
+1. Die Einheit erscheint im Gebäude, nicht davor und nicht auf dem Dach.
+2. Gebäude mit Tor (beide Kommandozentralen außer GLA, alle drei Fabriken): das Tor ist ganz offen, wenn die Einheit erscheint, und schließt danach wieder.
+3. Die Einheit fährt/geht von selbst durch die Torseite (rechts im Bild) hinaus und hält kurz vor dem Gebäude.
+4. Die zweite und dritte Einheit stellen sich neben die erste, nicht in sie hinein.
+5. Sitzt das Modell der Einheit während der Ausfahrt sichtbar richtig im Tor (Höhe, Richtung), oder ragt es durch Wand oder Dach?
+6. Mit gesetztem Sammelpunkt (Gebäude wählen, Rechtsklick auf den Boden): erst hinaus, dann zum Sammelpunkt.

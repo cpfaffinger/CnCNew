@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Rendert die gestellten Demos (capture-building, tank-duel, jet-strafe) ohne Fenster als Bildfolge und legt eine HTML-Uebersicht an.
+  Rendert die gestellten Demos (capture-building, tank-duel, jet-strafe; einzeln auch jede andere Szene, z. B. exit-america-warfactory) ohne Fenster als Bildfolge und legt eine HTML-Uebersicht an.
 
 .DESCRIPTION
   Fuer jede Szene laeuft der Stride-Client im Rauchtestmodus (ein Bild = ein Originalbild von 1/30 s Spielzeit, bei jeder Simulationsrate; bei 30 Hz ist das ein Tick)
@@ -14,7 +14,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('all', 'capture-building', 'tank-duel', 'jet-strafe')]
+    # all = die drei Verhaltensszenen; sonst der Name einer Szene (auch exit-<fraktion>-<gebaeude>|all).
     [string]$Scenario = 'all',
     [string]$ContentDir,
     [string]$OutDir,
@@ -50,6 +50,10 @@ if (-not $NoBuild) {
 }
 
 $names = if ($Scenario -eq 'all') { $plan.Keys } else { @($Scenario) }
+foreach ($name in $names) {
+    # Eine Szene ohne eigenen Eintrag (die Fabrikausfahrten): 900 Originalbilder, alle 15 ein Bild.
+    if (-not $plan.Contains($name)) { $plan[$name] = @(900, 15, 'Fabrikausfahrt: die Einheit erscheint im Gebaeude, das Tor ist dabei offen, sie faehrt durch die Torseite (rechts) hinaus und haelt davor.') }
+}
 $html = New-Object System.Text.StringBuilder
 [void]$html.AppendLine('<!doctype html><meta charset="utf-8"><title>cncnew scenarios</title><style>body{font-family:sans-serif;background:#222;color:#ddd}img{width:420px;margin:2px}h2{margin-top:2em}</style>')
 foreach ($name in $names) {
