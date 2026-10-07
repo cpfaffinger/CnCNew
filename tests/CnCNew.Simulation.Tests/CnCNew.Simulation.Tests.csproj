@@ -7,6 +7,7 @@
     <Compile Include="../../tools/CnCNew.SimTool/ManifestDocument.cs" Link="Linked/ManifestDocument.cs" />
     <Compile Include="../../tools/CnCNew.SimTool/CanonicalObjectHasher.cs" Link="Linked/CanonicalObjectHasher.cs" />
     <Compile Include="../../tools/CnCNew.SimTool/PerfSummary.cs" Link="Linked/PerfSummary.cs" />
+    <Compile Include="../../tools/CnCNew.SimTool/RateDistribution.cs" Link="Linked/RateDistribution.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
