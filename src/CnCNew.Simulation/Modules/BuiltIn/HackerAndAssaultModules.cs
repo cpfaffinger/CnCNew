@@ -96,14 +96,15 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
 
     /// <summary>
     /// <c>m_framesRemaining = getUnpackTime() * variation</c> (<c>HackInternetAIUpdate.cpp</c>, <c>UnpackingState::onEnter</c>/<c>PackingState::onEnter</c>): varied and floored in
-    /// logic frames of the original, then turned into the reload of the per-tick countdown (every phase lasts its frames plus one, like the reference's
-    /// "if (m_framesRemaining &gt; 0) m_framesRemaining--; else …").
+    /// logic frames of the original, then scaled. Both phases that use it are started from outside the update (an order), and the update of the same tick
+    /// already counts: the phase lasts exactly its frames (the reference's "if (m_framesRemaining &gt; 0) m_framesRemaining--; else …" with a counter that was
+    /// set before the update of the frame). A counter that the update itself reloads lasts its frames plus one (<see cref="CashDelay"/>).
     /// </summary>
     private long Varied(IWorldServices world, long ticks)
     {
         var variation = world.LogicRandom.Range(Fixed.One - data.VariationFactor, Fixed.One + data.VariationFactor);
         var frames = (Fixed.FromInt(world.Time.ToOriginalFrames(ticks)) * variation).Floor();
-        return world.Time.CountdownReload(world.Time.OriginalFrames(frames));
+        return world.Time.OriginalFrames(frames);
     }
 
     private long CashDelay(IWorldServices world) => world.Time.CountdownReload(Entity.ContainedBy.IsValid ? data.CashDelayFastTicks : data.CashDelayTicks);
@@ -120,7 +121,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
             if (_state == HackState.Hacking)
             {
                 _state = HackState.Packing;
-                _remaining = Entity.ContainedBy.IsValid ? world.Time.CountdownReload(0) : Varied(world, data.PackTicks);
+                _remaining = Entity.ContainedBy.IsValid ? 0 : Varied(world, data.PackTicks);
             }
             world.WakeAt(Entity, this, world.Tick);
             world.MarkDirty(Entity);
