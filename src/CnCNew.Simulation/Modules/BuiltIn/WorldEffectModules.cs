@@ -606,7 +606,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
                 if (behind >= Fixed.Zero || obj.HasStatus(WetBit)) continue;
                 obj.Status |= 1UL << WetBit;
                 world.MarkDirty(obj);
-                if (obj.ModuleArray.OfType<ToppleUpdate>().FirstOrDefault() is { IsAbleToBeToppled: true } topple) topple.ApplyTopplingForce(world, obj.X - px, obj.Y - py, data.ToppleForce);
+                if (obj.ModuleArray.OfType<ToppleUpdate>().FirstOrDefault() is { IsAbleToBeToppled: true } topple) topple.ApplyTopplingSpeed(world, obj.X - px, obj.Y - py, data.ToppleForce);
                 var amount = world.AdjustDamageByArmor(obj, WaterDamage, data.DamageAmount);
                 world.Damage(obj.Id, new DamageInfo(Entity.Id, amount, WaterDamage, FloodedDeath, false));
             }

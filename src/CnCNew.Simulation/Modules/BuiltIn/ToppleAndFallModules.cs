@@ -83,6 +83,10 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     private Fixed _angularAcceleration;
     private Fixed _angularAccumulation;
     private EntityId _stumpId = EntityId.Invalid;
+    // The fall is the recursion of the original, once per frame of the original and in its units (radians per frame, per frame²); above 30 Hz the angle
+    // covers the step of a frame tick by tick. Both fields are at rest (zero, unwritten) between two frames, which is always at 30 Hz.
+    private FramePhase _framePhase;
+    private Fixed _frameStep;
 
     public override string ModuleName => "ToppleUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -103,9 +107,22 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     /// </summary>
     public bool HasToppled => _state == State.Falling || (_state == State.Down && !data.KillWhenStartToppled);
 
-    /// <summary><c>Object::topple</c> / <c>ToppleUpdate::applyTopplingForce</c>: <paramref name="directionX"/>/<paramref name="directionY"/> point from the pusher to this object; <paramref name="speed"/> is the pusher's speed.</summary>
+    /// <summary>
+    /// The entry of the callers that pass a speed per tick (<c>SimulationWorld.Collision.cs</c>, <c>TryTopple</c>: <c>Entity.Speed</c>).
+    /// </summary>
     public void ApplyTopplingForce(IWorldServices world, Fixed directionX, Fixed directionY, Fixed speed)
+        // PHASE 23 MERGE: the one conversion from a speed per tick. Remove the factor (and let every caller use ApplyTopplingSpeed) once TryTopple passes
+        // the pusher's speed per frame of the original; until then a caller that already passes a value per frame must call ApplyTopplingSpeed.
+        => ApplyTopplingSpeed(world, directionX, directionY, world.Time.PerTickToPerOriginalFrame(speed));
+
+    /// <summary>
+    /// <c>Object::topple</c> / <c>ToppleUpdate::applyTopplingForce</c>: <paramref name="directionX"/>/<paramref name="directionY"/> point from the pusher to this object;
+    /// <paramref name="speedPerOriginalFrame"/> is the pusher's speed in distance per logic frame of the original (the unit of the reference and of the data:
+    /// <c>ToppleForce</c>, <c>ToppleSpeed</c>), whatever the rate of the world.
+    /// </summary>
+    public void ApplyTopplingSpeed(IWorldServices world, Fixed directionX, Fixed directionY, Fixed speedPerOriginalFrame)
     {
+        var speed = speedPerOriginalFrame;
         if (!IsAbleToBeToppled || Entity.EffectivelyDead) return;
         if (data.KillWhenStartToppled)
         {
@@ -120,6 +137,8 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         _angularVelocity = speed * data.InitialVelocityPercent;
         _angularAcceleration = speed * data.InitialAccelPercent;
         _angularAccumulation = Fixed.Zero;
+        _framePhase.Reset();
+        _frameStep = Fixed.Zero;
         _state = State.Falling;
         if (data.StumpName.Length != 0) SpawnStump(world);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
@@ -151,13 +170,19 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     public long Update(IWorldServices world)
     {
         if (_state != State.Falling) return SimulationTiming.SleepForever;
-        var current = _angularVelocity;
-        if (_angularAccumulation + current > AngularLimit) current = AngularLimit - _angularAccumulation;
-        _angularAccumulation += current;
+        // The step of this frame of the original is decided by its first tick, covered by all of its ticks, and concluded (bounce or acceleration) by its last.
+        var subTick = _framePhase.Next(world.Time);
+        if (subTick == TickOrder.Next)
+        {
+            _frameStep = _angularVelocity;
+            if (_angularAccumulation + _frameStep > AngularLimit) _frameStep = AngularLimit - _angularAccumulation;
+        }
+        _angularAccumulation += world.Time.FrameShare(_frameStep, subTick);
+        if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
         if (_angularAccumulation >= AngularLimit && _angularVelocity > Fixed.Zero)
         {
             _angularVelocity = -(_angularVelocity * data.BounceVelocityPercent);
-            if (_angularVelocity.Abs() < world.Time.PerOriginalFrameToPerTick(VelocityBounceLimitPerFrame))
+            if (_angularVelocity.Abs() < VelocityBounceLimitPerFrame)
             {
                 _angularVelocity = Fixed.Zero;
                 _state = State.Down;
@@ -183,6 +208,9 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         writer.Fixed("angularAcceleration", _angularAcceleration);
         writer.Fixed("angularAccumulation", _angularAccumulation);
         writer.UInt("stump", _stumpId.Value);
+        if (_framePhase.AtBoundary) return;
+        _framePhase.Describe(writer, "framePhase");
+        writer.Fixed("frameStep", _frameStep);
     }
 
     public override void Load(IStateReader reader)
@@ -194,6 +222,8 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         _angularAcceleration = reader.Fixed("angularAcceleration");
         _angularAccumulation = reader.Fixed("angularAccumulation");
         _stumpId = new EntityId(checked((uint)reader.UInt("stump")));
+        _framePhase.Load(reader, "framePhase");
+        _frameStep = reader.Has("frameStep") ? reader.Fixed("frameStep") : Fixed.Zero;
     }
 }
 
