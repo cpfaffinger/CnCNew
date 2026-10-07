@@ -48,7 +48,7 @@ public struct FlightFrameStep
     {
         var ticks = time.TicksPerOriginalFrame;
         if (ticks == 1) return;
-        _left = ticks - 1;
+        _left = checked((int)(ticks - TickOrder.Next)); // the first of the frame's ticks is the one that decided
         _x = Fixed.FromRaw(dx.Raw / ticks);
         _y = Fixed.FromRaw(dy.Raw / ticks);
         _z = Fixed.FromRaw(dz.Raw / ticks);
