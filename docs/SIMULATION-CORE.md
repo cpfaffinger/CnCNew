@@ -1928,6 +1928,200 @@ Der Startwert des Referenzmatchs wurde in einem eigenen Commit gewechselt (`41c3
 - `Tests.FixedScaleSourceRules`: die Skala steht einmal – kein `65536`/`16777216`/`<< 16`/`<< 24` in irgendeinem Projekt (33 benannte Ausnahmen), außerhalb der Simulation nur
   `CnCNew.Presentation.FixedConvert`, kein Rohwert als Zahl.
 
+## 39. Phase 23 (7. Oktober 2026): Raten-Äquivalenz-Suite
+
+Die Suite belegt, ob das Spiel bei 60 und 120 Hz *dasselbe Spiel* ist wie bei 30 Hz – nicht über Hashes (die können nicht übereinstimmen), sondern über gemessene Spielgrößen in Sekunden und
+Welteinheiten. Sie misst; sie entscheidet nicht, was richtig ist. Ihr erster Lauf **soll** breit fehlschlagen: die Liste der Fehlschläge ist der Arbeitsvorrat für Schritt 3 der Phase
+(`docs/HANDOFF-PHASE23.md`). Dieser Abschnitt legt die Suite und ihre Toleranzen fest; die Toleranztabelle (§39.2) stand, bevor die Suite zum ersten Mal vollständig lief, und wird nie an ein
+Ergebnis angepasst.
+
+### 39.1 Aufbau
+
+- **Szenen und Messungen** liegen in `src/CnCNew.Simulation/Testing/RateEquivalence/` (Namensraum `CnCNew.Simulation.Testing`), damit Test und Werkzeug dieselben Fälle fahren. Der Ordner
+  unterliegt `SourceRules` wie die übrige Simulation: kein Fließkomma, keine Wandzeit, keine nackten Tickzahlen (Budgets in ganzen Sekunden über `RateScene.Seconds`, Laufzeiten über
+  `Time.WholeSecondsToTicks`), kein `x * x` auf Reichweiten. **Jeder Messwert ist eine ganze Zahl.**
+- **Typen:** `RateQuantityKind` (sechs Arten, §39.2), `RateQuantity(Name, Kind, Units, Present)`, `RateCase(Id, Group, Measure)`, `RateScene` (Rate, Katalog der Rate, flache Karte, zwei
+  verfeindete Spieler, die die ganze Karte sehen; die Welt entsteht beim ersten Zugriff), `RateQuantities`/`RateMeasure` (Helfer), `RateTolerance.Within(kind, reference30, value)`,
+  `RateCases.Group(catalogs, name)`/`RateCases.All(catalogs)` (feste Fälle und Generatoren), `RateRunner` (führt einen Fall bei drei Raten aus, bildet die Tabelle und die TSV-Datei).
+- **Einheiten:** Zeiten in 1/120 s (`Ticks · 120 / Rate`, bei 30, 60 und 120 Hz ganzzahlig), Strecken, Winkel und Mengen als Rohwert von `Fixed`, Anzahlen als Zahl.
+- **Zeitkonvention:** eine Zeit ist „der Tick, in dem es geschah, weniger der Tick, in dem der Befehl ausgeführt wurde“. Ein Befehl, der vor einem Schritt eingereicht wird, wird in diesem
+  Schritt ausgeführt; was im selben Schritt geschieht, hat die Zeit 0 – bei jeder Rate. (`RateScene.StepUntil` und `RateCases.Elapsed` halten das an einer Stelle.) Eine Messung beginnt mit
+  `RateScene.Align` an einer Bildgrenze des Originals (`world.Time.IsOriginalFrameBoundary`) und nach dem Schritt, der die Objekte erzeugt hat; jedes `Spawn` dauert ein Bild des Originals,
+  damit vor der Messung bei jeder Rate dieselbe Spielzeit vergangen ist. Die Suite fügt selbst keinen Versatz unter einem Bild hinzu.
+- **Längen von Wegen** werden einmal je Bild des Originals abgetastet (dieselben Sehnen bei jeder Rate); Gesundheit wird für „Bilder mit Heilung“ einmal je Bild verglichen.
+- **Raten:** die Suite nennt ihre Raten selbst (`RateCatalogs.Rates`: 30, 60, 120 Hz). Sie beachtet weder `--tick-rate` noch `TestRate.Default` und setzt nie `SimulationTime.Probe`.
+- **Katalog:** der echte Definitionsgraph wird einmal je Prozess kompiliert (`Tests.RateCatalogsOf`, `SimTool` `CompileGraph`), die drei Kataloge entstehen beim ersten Zugriff. Test und
+  Werkzeug bauen **ohne Modellgeometrie** (Park- und Startbahnpunkte der Flugfelder aus der Vorlagengeometrie), damit beide dieselben Zahlen drucken; `rate-compare` sagt das in seiner
+  ersten Zeile. Fälle entstehen aus dem 30-Hz-Katalog und werden in den anderen über den Vorlagen- bzw. Waffennamen wiedergefunden; was eine Szene aus Daten ableitet (Abstand, Fahrstrecke),
+  nimmt sie aus dem 30-Hz-Katalog (`RateScene.Reference`), damit die Szene bei jeder Rate dieselbe ist.
+- **Karte:** `FlatMap.Build` (derselbe Code wie bisher `SyntheticMaps.Build` der Tests, das jetzt dorthin delegiert; die Bytes der bestehenden Karten sind unverändert). Standard 400 × 400
+  Zellen (4.000 Einheiten), Flugfälle 600 × 600.
+- **Selbsterwerb aus:** Einheiten wählen in den Szenen keine Opfer selbst (`SimulationWorld.SelfAcquisition = false`), außer in der KI-Gruppe.
+- **Staging ohne Befehl:** wo es keinen Spielerbefehl gibt, ruft die Szene die Stelle auf, die der Befehl aufrufen würde, und sagt es im Quelltext: `SimulationWorld.FireWeaponAt` (Geschosse),
+  `JetAIUpdate.OrderLand` (Heimkehr eines Flugzeugs), `HackInternetAIUpdate.StartHacking`, `SimulationWorld.CompleteUpgrade`/`GrantScience`/`SetVeterancy`, `ISpecialPowerModule.SetReadyFrame`
+  (Übernahme ohne Wartezeit), die Flags der Waffensätze (`HasPlayerUpgradeWeapon`, `CrateWeaponLevel`). Schaden, Tötung und neutrale Objekte kommen über Systembefehle.
+- **Zwei Lesezugriffe sind neu** (keine Felder, kein Zustand): `ToppleUpdate.IsDown` und `ToppleUpdate.ToppleAngle`.
+
+### 39.2 Toleranzen (vor dem ersten Lauf festgelegt; Bezug ist immer der 30-Hz-Wert, 60 **und** 120 Hz müssen innerhalb liegen)
+
+| Art (`RateQuantityKind`) | Was | Zulässige Abweichung vom 30-Hz-Wert | Begründung |
+|---|---|---|---|
+| `ExactTime` | Dauern, die aus den Daten kommen und auf dem 30-Hz-Raster liegen: Schussabstand, Nachladen, `PreAttackDelay`, Bau-, Produktions- und Upgradezeit, Verkauf, Abklingzeiten, Lebensdauern, Skriptzeitgeber, `EndGameDelay` | **exakt gleich** | Phase 20 hat diese Zeiten auf das Raster des Originals gelegt (`docs/TICKRATE-MIGRATION.md` §2); jede Abweichung ist ein Ein-Tick-Versatz oder ein Zähler N + 1 |
+| `Count` | Anzahl von Schüssen, Pulsen, Ereignissen, Blitzen in fester Spielzeit | **exakt gleich** | Ereignisse im Raster fallen bei jeder Rate gleich oft |
+| `MovementEventTime` | Zeitpunkte, die aus Bewegung oder Integration folgen: Ankunft, Zeit bis zur Höchstgeschwindigkeit, Zeit für 90°/180°, Flugzeit, Aufschlag, Landung, Dauer eines Umsturzes, erster Schuss nach einem Turmschwenk | **\|Δ\| ≤ 1 Bild des Originals** (4/120 s) | feiner als ein Bild löst das Original nicht auf; ein Schritt mehr oder weniger an einer Schwelle ist höchstens ein Bild |
+| `Distance` | Strecken und Endlagen in Welteinheiten | **\|Δ\| ≤ 0,5 %** des 30-Hz-Werts, mindestens **0,5 Einheiten** | 0,5 % ist unter jeder im Spiel sichtbaren Größe; der Boden (ein Zwanzigstel einer Wegsuchzelle von 10 Einheiten) gilt für Größen nahe null wie den Ankunftsfehler |
+| `Angle` | Winkel in Radiant | **\|Δ\| ≤ 0,5 %** des 30-Hz-Werts, mindestens **0,01 rad** | wie `Distance`; 0,01 rad sind 0,57° |
+| `RateOver60s` | Mengen über feste Spielzeit: Schaden und Heilung je 60 s, Einkommen je 5 Minuten, Erstattung | **\|Δ\| ≤ 1 %** des 30-Hz-Werts | ein Puls mehr oder weniger an der Fenstergrenze bei über 100 Pulsen; darüber ist es ein Ratenfehler |
+| – | eine Größe, die bei einer Rate vorhanden ist und bei einer anderen fehlt (das Ereignis trat im Budget nicht ein) | **Fehlschlag** | |
+| – | eine Ausnahme bei einer Rate | **Fehlschlag** aller Größen dieser Rate, eigene Zeile `(exception)` | |
+
+Eine Größe, die bei **allen drei** Raten fehlt, ist weder bestanden noch ein Unterschied zwischen den Raten: sie steht als `unmeasured` in der Tabelle und wird gezählt, aber nicht als
+Fehlschlag gewertet. Die Zahlen stehen als Konstanten in `RateTolerance` (`OneOriginalFrameUnits`, `HalfPercentDivisor`, `OnePercentDivisor`, `DistanceFloorRaw`, `AngleFloorRaw`).
+
+### 39.3 Gruppen
+
+| Gruppe | Fälle | Was gemessen wird |
+|---|---|---|
+| `locomotion` | einer je verschiedenem Locomotor der Retail-Daten (nach den 30-Hz-Werten von `LocomotorInfo` zusammengefasst, das erste Objekt nach Namen steht für jeden) | Geradeausfahrt: Höchstgeschwindigkeit, Zeit und Strecke bis dahin, Bremsweg und -zeit, Ankunftszeit, Ankunftsfehler, Weglänge; Zeit für 90° und 180°; ein Quadratkurs (Zeit, Weglänge, Endfehler); der beschädigte Zustand (`SpeedDamaged` …) auf derselben Geraden |
+| `flight` | Raptor, Aurora, MiG und Comanche vom Flugfeld; Comanche und Chinook frei; der Fallschirmabwurf der Kommandozentrale; der Raptor-Angriff der Szenen-Audits | Produktion, Rollen zum Parkplatz, Start, Reiseflug, Kehre, Landung, Rollen; Steigen, Flug und Halt der Hubschrauber; Flugzeug, Abwurf und Landung der Fallschirmjäger; erster und letzter Schuss, Heimkehr und Nachladen |
+| `weapons` | einer je verschiedener Waffe, die ein Objekt in einem Standard-, Veteranen-, Upgrade- oder Kistensatz trägt (nach Zeiten, Schaden, Reichweite, Tempo und Geschoss zusammengefasst) | Befehl bis erster Schuss (bei Türmen als Bewegungsereignis), Schussabstand, Magazin, Nachladen, zweites Nachladen, Zeit des 20. Schusses (Feuerstufen), Schüsse und Schaden in 60 s auf ein Standardziel, erster Schaden nach dem ersten Schuss, wirksame Reichweite (Bisektion über die Frage, mit der ein Feuerbefehl geprüft wird) |
+| `projectiles` | einer je verschiedenem Geschoss einer Waffe (Geschossobjekt, Tempo, Streuung, Reichweite), nach Modul: `DumbProjectileBehavior`, `MissileAIUpdate`, `NeutronMissileUpdate`, andere | Flugzeit, Aufschlagpunkt, Scheitelhöhe und Weglänge auf einen Bodenpunkt; Flugzeit und Treffer auf ein stehendes und auf ein querfahrendes Ziel; mittlere Streuung über 40 Schüsse |
+| `turrets` | einer je verschiedenem Turm eines Bodenobjekts (Drehrate, Rückstellzeit, Scan- und Schwenkwerte) | Schwenk um 90° und 180° bis zum ersten Schuss, Turmwinkel beim Schuss, Halten und Rückkehr in die Ruhelage, Leerlauf-Scan (erster und dritter Blick, Blicke in 120 s, größter Winkel) |
+| `overtime` | einer je verschiedenem Feldobjekt (Gift, Strahlung, Feuer), Gift direkt, einer je verschiedenem `FlammableUpdate`, 18 Heil- und Reparaturfälle | Lebensdauer des Felds, Schadenspulse, Schaden und Tod von Panzer und Soldat; Brenndauer und Brandschaden; erste und zweite Heilung, Zeit bis zur vollen Gesundheit, Bilder mit Heilung, Heilung in 60 s (Selbstheilung, Basisregeneration, Sanitäter, Hospital, Reparaturbucht, Dozer, Reparaturdock, Kaserne, Tunnel, Truppentransporter) |
+| `economy` | 4 Baustellen, 7 Produktionen, 5 Upgrades, 3 Verkäufe, 3 Sammler, 3 Einkommensquellen | Baubeginn und Bauzeit; Produktionszeit, zweite Einheit, Verlassen der Fabrik; Upgradezeit; Verkauf und Erstattung; erste Lieferung, Umlauf, Lieferungen und Einkommen in 5 Minuten; Takt von Schwarzmarkt, Ölturm und Hacker |
+| `timed` | einer je Spezialkraft (Aufladen), je verschiedenem `LifetimeUpdate`/`DeletionUpdate`, je verschiedenem Satz `SlowDeathBehavior`, je verschiedenem `ToppleUpdate`, `StructureToppleUpdate`, `StructureCollapseUpdate`, `StealthUpdate`, `StealthDetectorUpdate`; dazu Hubschrauber-Absturz, Battle Bus, Minen, Sicht, Aufdeckung, gestufte Übernahme, Lawine, EMP, Feuersturm, Zug | Aufladezeit; Lebensdauer; Tötung bis Entfernung; Absturz; Umsturz (Dauer und Winkel), Einsturz; Minenschaden; Tarnung, Enttarnung, Aufdeckung; Sichtradius; Blitze und Dauer der Übernahme; Rutschweg der Lawine; EMP-Dauer; Anfahren, Bremsen und Halt des Zugs |
+| `scripts` | 5 Fälle mit synthetischen Kartenskripten auf dem echten Katalog | Zeitgeber in Sekunden und in Bildern (fest und zufällig), Zähler je Auswertung, Auswertungsverzögerung, Sequenzwartezeiten und -wege, `EndGameDelay` (`VICTORY`, `DEFEAT`, `QUICKVICTORY`) |
+| `ai` | 3 Paarungen der `SkirmishAi` auf einer flachen Karte, 8 Spielminuten | erster Befehl, erster Bauauftrag, erstes Gebäude, erste Kaserne, erster Angriffsbefehl; Befehle in der ersten Minute, in drei und in acht Minuten; Bau- und Produktionsaufträge; Geld nach acht Minuten |
+
+Die Zahl der Fälle je Gruppe, die Zusammenfassungen der Generatoren und was sie nicht stellen konnten, druckt `SimTool rate-compare <content> --list`; der Stand des ersten Laufs steht in §39.6.
+
+### 39.4 Ausführen
+
+```powershell
+# Suite (Release, mit Realdaten); ohne --content-dir sind die Tests nicht registriert
+dotnet build -c Release tests/CnCNew.Simulation.Tests
+dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/phase2-import-a --only RateEquivalence --rate-report <datei außerhalb des Repos>
+dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/phase2-import-a --only "RateEquivalence: weapons"
+
+# Einzelfälle
+dotnet build -c Release tools/CnCNew.SimTool
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/phase2-import-a --list
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/phase2-import-a --group turrets [--tsv <datei>]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/phase2-import-a "locomotion/Nuke_ChinaTankBattleMaster"
+```
+
+Je Gruppe ein Test `RateEquivalence: <gruppe>`. Ein Gruppentest fängt Ausnahmen je Fall und je Rate (eigene Zeile), sammelt **alle** Größen, druckt die Tabelle
+(`case | quantity | kind | 30 Hz | 60 Hz | 120 Hz | d60 | d120 | result`; Zeiten in Sekunden, Strecken in Welteinheiten), die Laufzeit der Gruppe und wirft dann genau einmal:
+„n of m quantities in k cases outside tolerance“. Der Test schreibt nichts ins Repo; `--rate-report <datei>` (oder die Umgebungsvariable `CNCNEW_RATE_REPORT`) schreibt die ganze Tabelle als
+TSV mit den ganzzahligen Einheiten, der zulässigen Abweichung und dem Urteil an einen Ort außerhalb des Repos (ein Pfad im Repo wird abgelehnt). `rate-compare <case-id>` nimmt die genaue
+Kennung oder einen Teil davon; `--tick-rate` wird ignoriert. Zwei Läufe liefern eine bytegleiche Datei (§39.6).
+
+### 39.5 Nicht abgedeckt
+
+Was ein Generator oder ein fester Fall nicht stellen kann, steht als `not covered` in der Ausgabe von `--list` und des Gruppentests. Die Liste:
+
+- **Fortbewegung:** Locomotoren, die erst ein Upgrade oder ein anderer Locomotor-Satz als `SET_NORMAL` gibt; Hänge, Wasser und Klippen (die Karte ist flach); Ausweichen um stehende Einheiten,
+  Kollision und Formationen (ganze Gruppenfahrten sind Sache des Verteilungsvergleichs, Schritt 4).
+- **Flug:** Park- und Startbahnpunkte aus den Modellknochen (die Welt des Clients); die übrigen `JetAIUpdate`-Objekte der Generäle (nicht je Objekt geprüft). **Der Fallschirmabwurf der
+  Spezialkraft lässt sich nicht messen:** die fünf Fallschirme sterben bei jeder Rate im Schritt ihrer Entstehung, die Soldaten stehen am Kartenrand (ein Befund, kein Ratenunterschied; §39.6).
+  Ein Flugzeug hat keinen Spielerbefehl „zurück zur Basis“ (`MoveAndEnterCommand` verlangt einen Container); die Landung wird über `JetAIUpdate.OrderLand` ausgelöst.
+- **Waffen:** Waffen nur in Sätzen, die die Suite nicht einschalten kann (Autobombe, Entführung, Minenräumen, Rider), und Waffen, die kein Objekt in einem Satz trägt (von Modulen,
+  Erzeugungslisten und Spezialkräften gefeuert); Boni von Kampfplänen und von Upgrades, die den Satz nicht wechseln; die wirksame Reichweite von Waffen, die nur Flugzeuge tragen; Waffen, die
+  nur Geschosse, Minen oder Fallschirme treffen (erscheinen `unmeasured`).
+- **Geschosse:** Startpunkte an Waffenknochen und die Eigenbewegung des Trägers; jedes Geschoss startet aus der Mitte eines stehenden Panzers.
+- **Türme:** zweite und gekoppelte Türme, Neigung (Flugabwehr), Türme auf Flugzeugen.
+- **Schaden und Heilung:** Heilung in einem besetzten Zivilgebäude (`GarrisonContain`), Selbstheilung, die erst ein Upgrade oder ein Rang startet, Feuer, das von Objekt zu Objekt springt.
+- **Wirtschaft:** die Bauzeit jedes einzelnen Objekts (Katalogdauern, mit einer Umrechnung gelesen), mehrere Dozer an einer Baustelle, Strommangel, Abwurfzone, Kopfgeld, die Ränge des
+  Hackers über fünf Minuten hinaus. **Ein Upgrade ist bei jeder Rate im Tick des Kaufs fertig** – die Simulation führt keine Upgradezeit (ein Befund, kein Ratenunterschied).
+- **Zeitmodule:** die Abläufe der Superwaffen nach dem Auslösen (Scud-Sturm, Partikelkanone, A-10, Bombenteppich, Artillerie, Spectre, Flugblätter, Streuminen), Kampfpläne, Brückengerüst,
+  Kontrollpunkt, Wellenleiter, die Lenkung der MOAB; Aufladen nach einer Benutzung und geteilte Zeitgeber nach der ersten Benutzung; Tarnung von Flugzeugen, Minen und Besatzungen.
+- **Skripte:** die 109 Bedingungs- und 344 Aktionstypen einzeln, Team-Warteschlangen, Verstärkung mit Transport, die Skripte der Kampagnenkarten (Schritt 4 vergleicht die je Karte).
+- **KI:** Ausgang und Länge ganzer Matches, Heer und Wirtschaft später im Match, mehr als zwei Spieler, echte Karten (Schritt 4).
+- **Nicht geprüft:** dass jede Zeile der Liste in `docs/TICKRATE-MIGRATION.md` §5 von einem Fall erfasst wird – die Zuordnung in §39.6 nennt, was gefunden wurde und was nicht gestellt ist.
+
+### 39.6 Erster vollständiger Lauf (7. Oktober 2026, Release, Realdaten `.local/phase2-import-a`)
+
+Gemessen am Stand dieses Abschnitts; nichts an der Simulation ist dafür geändert (`input-manifest check` identisch, `reference-manifest check --set quick` 9 Läufe identisch, alle 414
+Simulationstests ohne Realdaten grün einschließlich `SourceRules`). Zwei Läufe hintereinander liefern eine bytegleiche TSV-Datei. Nach dem allerersten Lauf wurde eine Messung der Suite
+berichtigt (Lebensdauern und Feld-Lebensdauern lasen „gilt als tot“ statt „aus der Welt entfernt“ und zeigten für Objekte ohne Körper 0 s bei jeder Rate – ein falsches „bestanden“); die
+Toleranzen sind unberührt, die Zahlen unten sind die des berichtigten Laufs (erster Lauf: 639 statt 643 Fehlschläge).
+
+| Gruppe | Fälle | Größen | außerhalb bei 60 Hz | bei 120 Hz | Größen mit Fehlschlag | Fälle mit Fehlschlag | bei jeder Rate ungemessen | Laufzeit |
+|---|---|---|---|---|---|---|---|---|
+| `locomotion` | 54 | 837 | 152 | 211 | 217 | 52 | 50 | 10,7 s |
+| `flight` | 8 | 74 | 21 | 21 | 23 | 7 | 5 | 1,8 s |
+| `weapons` | 194 | 1.474 | 43 | 57 | 57 | 27 | 43 | 51,6 s |
+| `projectiles` | 91 | 743 | 54 | 103 | 106 | 53 | 16 | 4,7 s |
+| `turrets` | 31 | 216 | 28 | 36 | 40 | 23 | 4 | 2,4 s |
+| `overtime` | 45 | 418 | 80 | 84 | 85 | 32 | 55 | 9,2 s |
+| `economy` | 25 | 81 | 22 | 25 | 26 | 18 | 0 | 3,8 s |
+| `timed` | 221 | 383 | 53 | 56 | 56 | 33 | 36 | 7,7 s |
+| `scripts` | 5 | 15 | 4 | 5 | 5 | 3 | 0 | 0,7 s |
+| `ai` | 3 | 66 | 22 | 27 | 28 | 3 | 0 | 53,7 s |
+| **Summe** | **677** | **4.307** | **479** | **625** | **643** | **251** | **209** | **rund 2,5 min** |
+
+Zusammenfassungen der Generatoren: 442 Objekte fahren auf einen Bewegungsbefehl mit einem Locomotor ohne Flügel, 54 verschiedene Locomotoren; 363 Waffenvorlagen, davon 194 verschiedene in
+einem einschaltbaren Waffensatz; 91 verschiedene Geschosse; 31 verschiedene Türme; 845 brennbare Objekte, aber nur 4 verschiedene `FlammableUpdate`.
+
+**Die Fehlschläge nach wahrscheinlicher Ursache** (Werte: 30 / 60 / 120 Hz; Zuordnung zu `docs/TICKRATE-MIGRATION.md` §5, wo es eine Zeile gibt). „Wahrscheinlich“ heißt: aus dem Muster
+der Zahlen und dem Quelltext geschlossen, nicht durch eine Korrektur belegt.
+
+| # | Ursache | §5 | Beispiel | Umfang |
+|---|---|---|---|---|
+| 1 | Euler-Schritt der Bodenbewegung, Bremsweg und Ankunftsradius in Tick-Einheiten | 5.2 `AIUpdateInterface.Move`, `LocomotorInfo.CloseEnoughDist`, `Entity.Speed` | Chinook, 1.500 Einheiten geradeaus: Strecke bis Höchsttempo 195,0 / 191,25 / 189,375; Bremsweg 110,0 / 111,25 / 111,875; Ankunft 11,7000 / 11,7833 / 11,8417 s; Quadratkurs 21,1333 / 21,4667 / 21,7083 s | `locomotion`: 52 von 54 Fällen (Strecke bis Höchsttempo 30/33 Fälle bei 60/120 Hz, Bremsweg 19/23, Bremszeit 11/30, Ankunft 23/36, Kurs 41/47, beschädigt 17/32); dazu Sammler-Umlauf (`economy`, 3 Fälle: 27,4000 / 27,4167 / 27,5667 s), Sequenzweg (`scripts`), Reparatur und Einsteigen (`overtime`) |
+| 2 | Flügelflug und Flugfeld: Rollen, Start, Kreisbahn, Landung | 5.2 `JetAIUpdate` (`TaxiAlongPath`, `TakeOff`, `Land`), `CircleStep`, `MoveWinged` | Raptor: Start 4,8333 / 4,7667 / 4,7250 s; Aurora: Ankunft 23,1000 / 23,5667 / 23,8083 s; Raptor-Angriff: erster Schuss 18,6333 / 18,7167 / 18,7083 s, geparkt und nachgeladen 60,8000 / 60,8500 / 61,1750 s | `flight`: 7 von 8 Fällen |
+| 3 | Geschosse: Flugdauer in ganzen Ticks, Nachführung und Ankunftsschwelle je Tick | 5.2 `DumbProjectileBehavior`, `MissileAIUpdate`; 5.6 `FlightTicks` | Battlemaster-Granate auf einen Bodenpunkt: 0,3000 / 0,2667 / 0,2500 s; Aurora-Bombe auf ein querfahrendes Ziel: Ablage 12,583 / 12,287 / 11,895 | `projectiles`: 53 von 91 Fällen (Flugzeit 3 Fälle bei 60 Hz, 12 bei 120 Hz; Ablage bei fahrendem Ziel 19/35; Weglänge 12/15); `weapons` „erster Schaden nach dem ersten Schuss“ 9 Fälle, nur bei 120 Hz |
+| 4 | Neutronenrakete: Dämpfung und Schub je Bild | 5.1 `NeutronMissileData`, 5.2 `NeutronMissileUpdate` | Flugzeit 8,0667 / 6,5667 / 5,8083 s (−19 %, −28 %); Ablage bei fahrendem Ziel 119,25 / 88,62 / 73,06 | 2 Fälle (`NeutronMissileWeapon`, `SupW_NeutronMissileWeapon`) |
+| 5 | Turm: Feuerfreigabe gegen einen festen Winkel | 5.2 `IsAligned` (0,035 rad), `AimStep` | Fire Base, 90°: Turmwinkel beim ersten Schuss 1,57080 / 1,55334 / 1,54462 rad (der Schuss fällt bis zu 0,026 rad vor dem Ziel); die Schwenk**zeit** liegt bei allen 31 Türmen innerhalb eines Bilds | `turrets`: Winkel 10/15 Fälle (90°) und 7/7 (180°); Rückkehr 2 Fälle; dritter Leerlauf-Blick 1/4 von 8 |
+| 6 | Ein Tick statt ein Bild: erstes Update einen Tick nach dem Erscheinen, Zähler N + 1 | 5.3 `Register`, `RunUpdates`, `ProcessSpawns`, `StepTurrets`, `StealthUpdate.MarkDetected` | Giftfeld: erster Schaden 0,0333 / 0,0167 / 0,0083 s; Tarnung nach dem Entstehen 2,0333 / 2,0167 / 2,0083 s; erster Leerlauf-Blick 0,6333 / 0,6167 / 0,6083 s; Enttarnung endet 0,5000 / 0,4833 / 0,4750 s; Lawine bemerkt den Schaden 0,9667 / 0,9500 / 0,9417 s | `overtime` Felder: 42 Größen (erster Schaden) und 17 (Tod eines Opfers); `timed`: Tarnung 9 von 14, Enttarnung 8 von 17, Lawine 1; `turrets`: 8 von 8 |
+| 7 | Dauer „N Bilder weniger ein Tick“ | 5.3 `_saleDurationTicks` (Verkauf, wie vorhergesagt), `HackInternetAIUpdate`, `BaseRegenerateUpdate.OnDamage`; **neu:** Produktion, Bau, Selbstheilung | Verkauf 5,9667 / 5,9833 / 5,9917 s; Ranger aus der Kaserne 4,9667 / 4,9833 / 4,9917 s; Kraftwerk gebaut 15,2333 / 15,2500 / 15,2500 s; Hacker zahlt 8,1000 / 8,1167 / 8,1250 s; Basisregeneration beginnt 2,9667 / 2,9833 / 2,9917 s; Mine heilt sich 14,9333 / 14,9500 / 14,9583 s | Verkauf 3 von 3, Produktion 7 von 7 (und die 4 Flugfeld-Produktionen), Bau 2/4 von 4, Hacker 1, Heilbeginn 7 von 11 |
+| 8 | Schusszahl von Dauerfeuerwaffen: ein Schuss mehr in 60 s | 5.3 `StepFiringTrackers`/`PreAttackDone` (N + 1), 5.4 `AutoFire` | Gattling-Panzer 440 / 441 / 441 Schüsse; Toxin-Laster 899 / 900 / 900; letzter Schuss 59,6000 / 59,7333 / 59,7333 s | `weapons`: 16/18 Fälle (einschließlich der beiden Befunde unten: Nachladen 0 und Feuerwand) |
+| 9 | Zähler je Auswertung der Skripte | 5.4 `ScriptEngine.Update` (W6), Timerwerte | Zähler nach 10 s: 300 / 600 / 1.200; „Zähler erreicht 150“ nach 4,9667 / 2,4833 / 1,2417 s | 1 Fall, 2 Größen; Sequenzwartezeit 90 Bilder 3,0333 / 3,0167 / 3,0083 s (5.4 `ProcessSequences`); `QUICKVICTORY` ein Schritt (Ordnung, als Dauer gemessen) |
+| 10 | Blitzphase der gestuften Übernahme | 5.2 `SpecialAbilityUpdate.StepCaptureFlash` | Blitze 49 / 99 / 199; erster Blitz 12,6000 / 11,7833 / 11,2000 s | 3 von 3 Fällen (Ranger, Rotgardist, Rebell) |
+| 11 | Umstürzen: Winkelbeschleunigung und Kippkraft | 5.1 `ToppleUpdateData.InitialAccelPercent`, 5.2 `ToppleUpdate.Update`, `TryTopple` | Baum: Fall 1,2000 / 0,8000 / 0,5667 s; Mauer 0,2667 / 0,2167 / 0,1667 s (der Endwinkel ist gleich) | 4 von 5 gemessenen `ToppleUpdate` |
+| 12 | Hubschrauber-Absturz: Dämpfung und Spirale je Bild | 5.1 `HelicopterSlowDeathData`, 5.2/5.3 `HelicopterSlowDeathBehavior` | Comanche: letzte Lage 26,524 / 20,950 / 24,518 Einheiten vom Abschussort, Drehung 18,117 / 17,174 / 17,061 rad (die Dauer ist gleich: 6,6000 / 6,6000 / 6,5833 s) | 3 von 3 |
+| 13 | Zug: Faktoren je Bild | 5.1 `RailroadData`, `RailroadBehavior` | Höchsttempo erreicht nach 2,4333 / 1,1000 / 1,0000 s; steht am Bahnhof nach 19,8000 / 16,1833 / 14,7417 s, bei 2.703 / 2.618 / 2.578 (Bahnhof bei 2.500) | 1 Fall, 4 Größen |
+| 14 | Heilung in kleineren Scheiben | 5.6 `RepairDockUpdate`, `HealContain`, 5.2 `TunnelContain.Update`; AutoHeal | Reparaturdock: Bilder mit Heilung 150 / 151 / 151; Tunnel 75 / 76 / 76; Lautsprecherturm 750 / 751 / 751 | 5 Fälle bei 60 Hz, 4 bei 120 Hz (die geheilte Menge in 60 s ist gleich) |
+| 15 | KI: Zahl der Befehle | 5.4 `SkirmishAi` (`Think`, die Welt hat sich zwischen zwei Denkschritten feiner bewegt) | USA gegen China: Befehle in drei Minuten 274 / 297 / 300, in acht 696 / 659 / 691, Produktionsaufträge 65 / 61 / 63, Geld 0 / 675 / 600; **erster Befehl und erster Bauauftrag sind bei allen sechs Spielern exakt gleich**, die erste Kaserne innerhalb eines Bilds bei 60 Hz (36,5000 / 36,5333 / 36,5417 s) | 3 von 3 Fällen, 28 Größen |
+
+**Fehlschläge ohne Zeile in §5 (neue Befunde):**
+
+- **Ein Nachladen von 0 ist ein Tick, kein Bild:** Schlachtschiff-Geschütze (`BattleshipDemoGun`, `BattleshipUSSBenderGun`): Nachladen 0,0333 / 0,0167 / 0,0083 s, Schüsse in 60 s 110 / 112 / 112,
+  Schaden +1,9 %. 2 Fälle.
+- **Feuerwand des Dragon Tanks:** 838 / 899 / 899 Schüsse in 60 s (30 Hz verliert rund 7 %), Schaden 14.605,5 / 14.250,5 / 14.253,0; auch die Upgrade-Fassung. 2 Fälle. Ursache nicht untersucht.
+- **Produktion und Bau dauern N Bilder weniger einen Tick** (Zeile 7): dieselbe Form wie der Verkauf, aber nicht in §5 geführt.
+- **Aufladen ab der Entstehung** bei sechs Objekten mit einer Superwaffe (`Lazr_LaserCannon`, `SupW_CruiseMissile`, zwei Neutronenraketen, Partikelkanone, Scud-Sturm):
+  120,0000 / 120,0167 / 120,0083 s – der Bereitschaftstick liegt bei 60 Hz zwei, bei 120 Hz einen Tick hinter dem Raster. Die übrigen 62 Kräfte sind exakt gleich.
+- **Drei Locomotoren mit 2 bzw. 1 Einheit je Sekunde bei 30 Hz haben bei 60 Hz die Hälfte und bei 120 Hz ein Viertel** (`AirF_AmericaCrateParachute`, `CINE_U04_AmericaParachute`,
+  `HorizontalArrow`: 2,000 / 1,000 / 0,500): eine Geschwindigkeit je Tick, die nicht mit der Rate skaliert.
+- **Kampfrad und Mob:** `Boss_VehicleCombatBikeTerrorist` erreicht sein Höchsttempo nach 2,0333 / 4,6667 / 1,3250 s und fährt 1.447 / 1.458 / 1.440 Einheiten für 1.440; der Mob-Nexus fährt den
+  Quadratkurs mit 400,06 / 404,46 / 430,00 Einheiten. Nicht monoton in der Rate; nicht untersucht.
+- **Streuschüsse, die nie einschlagen:** `ArtilleryPlatformGun` 8 / 8 / 7 von 40, `BattleshipUSSBenderGun` 21 / 20 / 20 (bei jeder Rate schlägt nur ein Teil der 40 im selben Schritt gestarteten
+  Geschosse ein; die Zahl hängt an der Rate).
+- **Einzelfälle:** Streumine entfernt nach 4,8000 / 4,7000 / 4,6667 s; Helix, tiefste Höhe vor dem Entfernen 0,000 / 0,798 / 0,935; `CINE_BShipWeaponDetonationObject` endet bei 30 Hz in
+  300 s nicht, bei 60 und 120 Hz nach 0,0667 s; Patriot gegen Luftziele bei 120 Hz +1,2 % Schaden in 60 s; `AirF_AmericaCrateParachute` nach der Tötung entfernt nach
+  3,0000 / 2,9833 / 2,9750 s.
+
+**Befunde, die kein Ratenunterschied sind** (bei jeder Rate gleich, beim Stellen der Szenen aufgefallen): der Fallschirmabwurf der Spezialkraft verliert alle fünf Fallschirme im Schritt
+ihrer Entstehung; ein Upgrade ist im Tick des Kaufs fertig; der Battle Bus stirbt bei `KillCommand` sofort (kein zweites Leben, kein Wurf messbar) und erreicht sein Ziel auf einer geraden
+Fahrt bei keiner Rate mit `MoveArrived`; ein Flugzeug hat keinen Spielerbefehl für die Heimkehr; die Lawine rutscht auf der flachen Karte nicht (Rutschweg 0, die Rekursion aus §5.1 ist damit
+**nicht** geprüft); der Truppentransporter heilt seine Insassen nicht.
+
+**Bestanden, obwohl §5 einen Unterschied nennt:**
+
+- §5.1 `EmpUpdate` (`_scale`): Lähmung nach 0,3000 s und bis 30,3000 s bei jeder Rate – wie dort vermerkt keine Spielwirkung.
+- §5.1/§5.2 `StructureToppleUpdate` (Zerfall, Quetsch-Schüsse je Tick): das eine verschiedene Retail-Objekt (`GLAVictoryStatue_Topple`) liegt nach 4,3333 / 4,3000 / 4,3000 s, mit einem
+  Treffer und einem Toten unter acht Umstehenden bei jeder Rate. Die verdoppelten Quetsch-Schüsse zeigen sich an diesem Aufbau nicht.
+- §5.2 `StructureCollapseUpdate`: Einsturz 2,4667 / 2,4833 / 2,4917 s (`AsianBank`), bei jedem verschiedenen Einsturz innerhalb eines Bilds.
+- §5.2 Turmschwenk (`AimStep`, `RecenterStep`): die Zeit bis zum ersten Schuss liegt bei allen 31 Türmen innerhalb eines Bilds; nur der Winkel beim Schuss fällt heraus (Zeile 5).
+- §5.2 Hubschrauber-Absturz: Dauer und halbe Höhe innerhalb eines Bilds (nur Lage und Drehung fallen heraus, Zeile 12).
+- §5.3 `FirestormDynamicGeometryInfoUpdate` und §5.6 `DynamicShroudClearingRangeUpdate`: Feuersturm, Spionagesatellit und Radarwagen-Ping in jeder Größe gleich.
+- §5.4 `PointDefenseLaserUpdate`, `FireWeaponWhenDamagedBehavior`, `MinefieldBehavior`: nicht gestellt bzw. (Mine) Schaden gleich, erster Schaden bei 60 Hz innerhalb eines Bilds.
+- §5.6 `WeaponInfo.WeaponSpeed`, Quantisierung der Katalogwerte: Schussabstand und Magazindauer sind bei allen Waffen exakt gleich, das Nachladen bei allen außer den beiden mit
+  Nachladezeit 0, die Zeit des 20. Schusses (Feuerstufen) bei 117 von 121, „Befehl bis erster Schuss“ bei allen; die wirksame Reichweite bei allen Bodenträgern.
+- Skripte: Zeitgeber in Sekunden und in Bildern, fest und zufällig, die Auswertungsverzögerung und `EndGameDelay` sind exakt gleich.
+
+**Nicht geprüft:** ob jede der 95 Zeilen aus §5 von einem Fall getroffen wird; die Ursachen sind zugeordnet, nicht durch Korrektur belegt; kein Fall ist von einem Menschen angesehen.
 ## 40. Verteilungsvergleich zwischen Raten (Phase 23, 7. Oktober 2026): `ai-survey` und `rate-distribution`
 
 Ein ganzes Match ist chaotisch (§38.3, `docs/FIXED-POINT-Q39-24.md` §7.2): eine Rundung im ersten Gefecht reicht für einen anderen Sieger. Zwei Tickraten lassen sich deshalb nicht Lauf für Lauf

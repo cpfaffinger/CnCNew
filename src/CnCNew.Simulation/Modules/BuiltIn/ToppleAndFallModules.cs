@@ -91,6 +91,12 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     /// <summary><c>ToppleUpdate::isAbleToBeToppled</c>.</summary>
     public bool IsAbleToBeToppled => _state == State.Upright;
 
+    /// <summary>The fall has ended: the object lies (<c>TOPPLE_DOWN</c>). Read by the rate-equivalence suite.</summary>
+    public bool IsDown => _state == State.Down;
+
+    /// <summary>How far the object has fallen: 0 upright, close to a quarter turn when it lies (<c>m_angularAccumulation</c>). Read by the rate-equivalence suite.</summary>
+    public Fixed ToppleAngle => _angularAccumulation;
+
     /// <summary>
     /// The object was pushed over (falling or down): <c>applyTopplingForce</c> sets <c>MODELCONDITION_TOPPLED</c> when the fall starts and never clears it. An object with
     /// <c>KillWhenStartToppling</c> dies before that line, so it never shows it. Read by the presentation.

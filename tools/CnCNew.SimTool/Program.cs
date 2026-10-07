@@ -57,6 +57,9 @@ const string Usage = """
       range-audit <content-dir> [--frames N] [--distance UNITS]
                                                            every retail object with a weapon is ordered to fire at a tank and at a soldier; lists every run that
                                                            threw and the weapons whose data lie beyond the square limit of the fixed-point numbers
+      rate-compare <content-dir> (--list | --group G | <case-id>) [--tsv FILE]
+                                                           cases of the rate-equivalence suite (docs/SIMULATION-CORE.md §39): a small scene with retail objects at 30, 60 and
+                                                           120 Hz, its game quantities in seconds and world units side by side with the tolerance verdict; ignores --tick-rate
       perf-compare <old.json> <new.json> [--threshold-percent N] [--min-us N] [--all] [--allow-different-hash] [--out FILE]
                                                            two --json summaries metric by metric; marks changes beyond the threshold (default 10 %); a report, never a failing test (docs/PERF-GAME-LAYER.md)
       ai-survey <content-dir> --out <tsv> [--seeds N] [--first-seed N] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
@@ -120,6 +123,7 @@ try
         "range-audit" when args.Length >= 2 => CnCNew.SimTool.RangeAudit.Run(args, CompileShipped),
         "ai-survey" => CnCNew.SimTool.AiSurvey.Run(args),
         "rate-distribution" => CnCNew.SimTool.Survey.RateDistribution.Run(args),
+        "rate-compare" when args.Length >= 2 => CnCNew.SimTool.RateCompare.Run(args, CompileGraph),
         _ => Fail(Usage),
     };
 }
@@ -291,6 +295,12 @@ static int AuditModules(string? directory)
         Console.WriteLine($"  {name,-36} {count,6} {objects[name].Count,8}  {status}");
     }
     return 0;
+}
+
+static CompiledDefinitionGraph CompileGraph(string directory)
+{
+    var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
+    return DefinitionCompiler.Compile(new ContentSource(ContentFileSystem.Open(directory)), ModuleRegistry.Default, options);
 }
 
 static (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, string Fingerprint) CompileShipped(string directory)
