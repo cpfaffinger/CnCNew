@@ -133,6 +133,10 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
     private long _penaltyDeathTick;
     private long _destructionTick;
     private Fixed _verticalSpeed;
+    // The throw is one step of the original per logic frame of the original (height += speed, then speed += gravity), in its units: the vertical speed is
+    // a distance per FRAME at every rate, the height covers the frame's step tick by tick, gravity and the landing conclude the frame on its last tick.
+    // At rest (unwritten) between two frames, which is always at 30 Hz.
+    private FramePhase _framePhase;
 
     private static readonly int PenaltyDamageType = DamageTypes.Penalty;
     private static readonly int Extra4DeathType = NameTables.DeathType.TryIndexOf("EXTRA_4", out var index) ? index : DeathTypes.Normal;
@@ -178,7 +182,8 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
         var mass = Entity.ModuleArray.OfType<PhysicsBehavior>().FirstOrDefault()?.Data.Mass ?? Fixed.One;
-        _verticalSpeed = mass > Fixed.Zero ? data.ThrowForce / mass : Fixed.Zero;
+        _verticalSpeed = mass > Fixed.Zero ? world.Time.PerTickToPerOriginalFrame(data.ThrowForce) / mass : Fixed.Zero;
+        _framePhase.Reset();
         if (data.PercentDamageToPassengers > Fixed.Zero && Entity.Container is { } contain)
             foreach (var riderId in contain.Contained.ToArray())
                 if (world.FindEntity(riderId) is { Body: { } body } rider)
@@ -190,12 +195,13 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
     {
         if (_inFirstDeath)
         {
-            Entity.Z += _verticalSpeed;
-            _verticalSpeed += world.Templates.GravityPerTickSquared;
+            Entity.Z += world.Time.FrameShare(_verticalSpeed, _framePhase.Next(world.Time));
+            var frameEnds = _framePhase.AtBoundary;
+            if (frameEnds) _verticalSpeed += world.Time.PerTickSquaredToPerOriginalFrameSquared(world.Templates.GravityPerTickSquared);
             var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
             if (Entity.Z < ground) Entity.Z = ground;
             world.MarkDirty(Entity);
-            if (world.Tick > _groundCheckTick && Entity.Z <= ground)
+            if (frameEnds && world.Tick > _groundCheckTick && Entity.Z <= ground)
             {
                 _inFirstDeath = false;
                 Effects(world, data.FxHitGround, data.OclHitGround);
@@ -242,6 +248,7 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
         writer.Int("penaltyDeathTick", _penaltyDeathTick);
         writer.Int("destructionTick", _destructionTick);
         writer.Fixed("verticalSpeed", _verticalSpeed);
+        _framePhase.Describe(writer, "framePhase");
     }
 
     public override void Load(IStateReader reader)
@@ -254,6 +261,7 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
         _penaltyDeathTick = reader.Int("penaltyDeathTick");
         _destructionTick = reader.Int("destructionTick");
         _verticalSpeed = reader.Fixed("verticalSpeed");
+        _framePhase.Load(reader, "framePhase");
     }
 }
 

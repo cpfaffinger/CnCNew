@@ -198,6 +198,58 @@ static partial class Tests
         });
     }
 
+    /// <summary>
+    /// <c>BattleBusSlowDeathBehavior</c>: the first death (the second life of the <c>UndeadBody</c>) throws the bus; height += speed and speed += gravity once
+    /// per frame of the original, the height moves every tick. Height at every frame boundary, apex and the frame of the landing are those of 30 Hz.
+    /// </summary>
+    public static void RateInvarianceBattleBusThrow()
+    {
+        AtThreeRates(rate =>
+        {
+            var (map, fixture, terrain) = MissionMap([Scr.Script("Idle", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NO_OP")], oneShot: true)],
+                objects: [Placed("AlphaBus", 300m, 200m, "teamA", "Bus")], rate: rate);
+            var session = CnCNew.Simulation.Mission.MissionSession.Start(CnCNew.Simulation.Mission.MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+            var world = session.World;
+            Check.That(world.Time.Rate == rate, "Setup: the mission runs at " + rate.TicksPerSecond + " Hz.");
+            for (var tick = 0; tick < world.Frames(3); tick++) session.Step();
+            var bus = NamedIn(session, "Bus")!;
+            var behavior = bus.Modules.OfType<BattleBusSlowDeathBehavior>().Single();
+            // A lethal hit that is not unresistable: the second life begins and the bus is thrown.
+            world.Damage(bus.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(500), DamageTypes.Explosion, DeathTypes.Normal, false));
+            Check.That(!bus.EffectivelyDead && bus.Body is UndeadBody { IsSecondLife: true }, "Setup: the second life began.");
+            var heights = new List<long>();
+            var perFrame = world.Time.TicksPerOriginalFrame;
+            var (apex, landed, rising) = (Fixed.Zero, -1, true);
+            for (var frame = 0; frame < 120; frame++)
+            {
+                var before = bus.Z;
+                for (var tick = 0; tick < (frame == 0 ? 1 : perFrame); tick++)
+                {
+                    session.Step();
+                    // On the way up every tick lifts the bus.
+                    if (frame is > 0 and < 5 && bus.Z <= before && tick < perFrame - 1) rising = false;
+                }
+                heights.Add(bus.Z.Raw);
+                apex = Fixed.Max(apex, bus.Z);
+                if (landed < 0 && frame > 0 && behavior.HasLanded(world)) landed = frame;
+            }
+            return (Heights: heights, Apex: apex, Landed: landed, Rising: rising);
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Apex > Fixed.FromInt(10) && reference.Landed > 12, "Setup: the bus is thrown and lands at 30 Hz (apex " + reference.Apex + ", landed in frame " + reference.Landed + ").");
+            Check.That(other.Landed == reference.Landed, "The bus lands in the same frame at " + rate + ": " + other.Landed + " instead of " + reference.Landed + ".");
+            // The throw and the gravity come from the catalog of the rate (per tick, per tick²) and are read back per frame: the last bits of the two values
+            // differ between the rates, the heights by less than a thousandth of a unit.
+            var tolerance = Fixed.FromDecimal(0.001m).Raw;
+            Check.That((other.Apex - reference.Apex).Abs().Raw <= tolerance, "The apex of the throw is the same at " + rate + ": " + other.Apex + " instead of " + reference.Apex + ".");
+            Check.That(reference.Heights.Count == other.Heights.Count, "As many frames at " + rate + ".");
+            for (var frame = 0; frame < reference.Heights.Count; frame++)
+                Check.That(Math.Abs(reference.Heights[frame] - other.Heights[frame]) <= tolerance,
+                    "Height of the thrown bus at " + rate + ", frame " + frame + ": " + Fixed.FromRaw(other.Heights[frame]) + " instead of " + Fixed.FromRaw(reference.Heights[frame]) + ".");
+            Check.That(other.Rising, "On the way up every tick lifts the bus at " + rate + ".");
+        });
+    }
+
     /// <summary>A world on the fixture and the terrain of the structure tests (the track RailA … RailD with a station, a looping track, the wave's path) at <paramref name="rate"/>.</summary>
     private static (SimulationWorld World, SyntheticFixture Fixture, CnCNew.Simulation.Terrain.TerrainMap Terrain) RatedStructuresWorld(SimulationRate rate, bool lake = false)
     {
