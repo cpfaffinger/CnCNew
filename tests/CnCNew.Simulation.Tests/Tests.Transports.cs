@@ -376,7 +376,8 @@ static partial class Tests
     /// <summary>
     /// HelicopterSlowDeathBehavior, hand-computed: gravity -64/s² is -4660 raw per tick², half of it (FallHowFast 50 %) -2330 raw; after n updates the fall
     /// is 2330 · n(n+1)/2 raw, which first reaches the 99 units down to one unit above the ground at n = 75. DelayFromGroundToFinalDeath 300 ms is
-    /// 9 ticks; the tenth tick after the impact blows it up, leaves the RotorHulk and removes the Chinook.
+    /// 9 frames; the tenth frame after the impact blows it up, leaves the RotorHulk and removes the Chinook. The fall is stepped once per original frame at
+    /// every tick rate (the first step one tick after the death), so both expectations are written in frames.
     /// </summary>
     public static void HelicopterSlowDeathFall()
     {
@@ -403,7 +404,7 @@ static partial class Tests
             world.Step();
             if (world.FindEntity(chinook.Id) is null) gone = world.Tick - 1;
         }
-        Check.That(gone == hit + 1 + world.Frames(9), $"The final blow-up is the tenth tick after the impact (got {gone - hit}).");
+        Check.That(gone == hit + world.Frames(10), $"The final blow-up is the tenth frame after the impact (got {world.InFrames(gone - hit)} frames, {gone - hit} ticks).");
         Check.That(world.Entities.Any(value => value.Template.Name == "RotorHulk"), "The rubble hull remains.");
     }
 
