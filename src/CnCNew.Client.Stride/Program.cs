@@ -22,9 +22,16 @@ var contentDirectory = GetArgument(args, "--content-dir");
 var modelPath = GetArgument(args, "--model-path");
 var capturePath = GetArgument(args, "--capture");
 var matchMap = GetArgument(args, "--match");
+// --list-scenarios: the staged scenes --scenario accepts, one per line (name, title), and nothing else; scripts/demo-scenario.ps1 shows this when it is called without a name.
+if (args.Contains("--list-scenarios", StringComparer.OrdinalIgnoreCase))
+{
+    foreach (var entry in CnCNew.Game.Live.DemoScenarios.All) Console.WriteLine($"{entry.Name,-26} {entry.Title}");
+    return;
+}
 var scenarioName = GetArgument(args, "--scenario");
 var scenario = scenarioName is null ? null : CnCNew.Game.Live.DemoScenarios.Find(scenarioName)
     ?? throw new ArgumentException($"Unknown scenario '{scenarioName}'. Known: {string.Join(", ", CnCNew.Game.Live.DemoScenarios.All.Select(value => value.Name))}.");
+if (scenario is not null) Console.WriteLine($"scenario {scenario.Name}: {scenario.Title}. {scenario.Description}");
 if (scenario is not null) matchMap = scenario.Map;
 var missionMap = GetArgument(args, "--mission");
 // --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §17); fixed time steps only.
