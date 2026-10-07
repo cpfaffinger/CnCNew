@@ -367,6 +367,7 @@ run.Test("Rate invariance, projectiles: a ballistic arc flies the 30 Hz path", T
 run.Test("Rate invariance, projectiles: a snapshot inside a frame continues identically", Tests.RateProjectilesSnapshotInsideAFrame);
 run.Test("Rate invariance, projectiles: missiles fly the 30 Hz flight", Tests.RateProjectilesMissilesFlyTheThirtyHertzFlight);
 run.Test("Rate invariance, projectiles: a missile without fuel falls the same way", Tests.RateProjectilesMissileWithoutFuelFallsTheSameWay);
+run.Test("Rate invariance, projectiles: the neutron missile flies the 30 Hz flight", Tests.RateProjectilesNeutronMissileFliesTheThirtyHertzFlight);
 run.Test("Tunnels: shared network, capacity, entry rules and exit through another tunnel", Tests.TunnelSharedNetwork);
 run.Test("Tunnels: healing, hand-over on death and cave-in", Tests.TunnelHealingAndCaveIn);
 run.Test("Tunnels: selling the last tunnel lets the riders out", Tests.TunnelSaleEvacuates);

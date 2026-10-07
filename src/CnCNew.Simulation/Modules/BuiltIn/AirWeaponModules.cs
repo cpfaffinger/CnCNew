@@ -485,6 +485,12 @@ public sealed record NeutronMissileData(Fixed DistanceBeforeTurning, Fixed MaxTu
 /// start height instead (<c>t</c> the elapsed share). An armed missile that reaches the ground dies (<c>detonate</c> → <c>kill</c>, so the die modules — <c>HeightDieUpdate</c>,
 /// <c>NeutronMissileSlowDeathBehavior</c> — run). The turn is computed without arc functions: the heading rotates toward the goal in the plane of both vectors by the turn limit
 /// (or snaps when the angle is smaller). Not modeled: the jitter of the model, the exhaust particle system, the delivery decal, collisions with objects.
+/// <para>
+/// The flight runs on the frame grid of the original, on the missile's own phase (docs/RATE-INVARIANCE-PROJECTILES.md): <c>RelativeSpeed</c> and <c>ForwardDamping</c> are a thrust
+/// and a damping share per logic frame, applied together in one step, so the velocity is a velocity per frame and changes once per frame exactly as at 30 Hz — as do the turn (the
+/// limit of one frame), the special climb, the distance before turning, the intermediate point and the ground. The launch is decided one frame after the shot, every further step a
+/// frame later; the velocity of a frame is flown in equal shares over its ticks. At 30 Hz a frame is a tick and nothing differs.
+/// </para>
 /// </summary>
 public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, IUpdateModule, IProjectileModule
 {
@@ -504,6 +510,8 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
     private long _launchTick;
     private Fixed _heightAtLaunch;
     private bool _leftGround;
+    // The ticks of the current frame already flown (0: this tick decides the frame's velocity). Always 0 at 30 Hz (and then not written).
+    private int _subStep;
 
     public override string ModuleName => "NeutronMissileUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -519,12 +527,25 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
         _target = new Point3(launch.X, launch.Y, launch.Z);
         _intermediate = _target with { Z = _target.Z + data.TargetFromDirectlyAbove };
         _state = MissileState.Launch;
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        _subStep = 0;
+        // The launch is decided one logic frame after the shot (the next tick at 30 Hz).
+        world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
     }
 
     public long Update(IWorldServices world)
     {
         if (_state is MissileState.PreLaunch or MissileState.Dead) return SimulationTiming.SleepForever;
+        var time = world.Time;
+        if (_subStep != 0)
+        {
+            // Between two frames: one more share of the frame's velocity.
+            Entity.X += time.FrameShare(_velocity.X, _subStep);
+            Entity.Y += time.FrameShare(_velocity.Y, _subStep);
+            Entity.Z += time.FrameShare(_velocity.Z, _subStep);
+            _subStep = time.NextSubStep(_subStep);
+            world.MarkDirty(Entity);
+            return SimulationTiming.SleepNone;
+        }
         if (!_reachedIntermediate)
         {
             var sphere = Entity.Template.BoundingSphereRadius;
@@ -562,7 +583,16 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
             Detonate(world);
             return SimulationTiming.SleepForever;
         }
-        return _state == MissileState.Dead ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
+        if (_state == MissileState.Dead) return SimulationTiming.SleepForever;
+        if (time.TicksPerOriginalFrame != 1)
+        {
+            // Everything above judged the whole step of this frame, as at 30 Hz; the missile itself flies the first share of it now and the rest on the next ticks.
+            Entity.X = before.X + time.FrameShare(_velocity.X, 0);
+            Entity.Y = before.Y + time.FrameShare(_velocity.Y, 0);
+            Entity.Z = before.Z + time.FrameShare(_velocity.Z, 0);
+            _subStep = time.NextSubStep(0);
+        }
+        return SimulationTiming.SleepNone;
     }
 
     /// <summary><c>doLaunch</c>; false when the launcher is gone (the missile removes itself).</summary>
@@ -596,7 +626,7 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
     {
         var speed = data.RelativeSpeed;
         if (data.TargetFromDirectlyAbove != Fixed.Zero && _reachedIntermediate) speed *= Fixed.One / Fixed.FromInt(2);
-        if (_noTurnLeft <= Fixed.Zero) _direction = TurnToward(_reachedIntermediate ? _target : _intermediate);
+        if (_noTurnLeft <= Fixed.Zero) _direction = TurnToward(_reachedIntermediate ? _target : _intermediate, data.MaxTurnPerTick * world.Time.TicksPerOriginalFrame);
         _velocity = new Point3(
             _velocity.X + speed * _direction.X - data.ForwardDamping * _velocity.X,
             _velocity.Y + speed * _direction.Y - data.ForwardDamping * _velocity.Y,
@@ -618,8 +648,8 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
         Entity.Angle = FixedTrig.Atan2(_direction.Y, _direction.X);
     }
 
-    /// <summary><c>calcTransform</c>: the heading turned toward <paramref name="goal"/> by at most the turn limit, in the plane of the two directions.</summary>
-    private Point3 TurnToward(Point3 goal)
+    /// <summary><c>calcTransform</c>: the heading turned toward <paramref name="goal"/> by at most the turn limit of one logic frame, in the plane of the two directions.</summary>
+    private Point3 TurnToward(Point3 goal, Fixed limit)
     {
         var to = new Point3(goal.X - Entity.X, goal.Y - Entity.Y, goal.Z - Entity.Z);
         var length = AirWeaponModules.Length(to.X, to.Y, to.Z);
@@ -627,12 +657,12 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
         to = new Point3(to.X / length, to.Y / length, to.Z / length);
         var dot = Fixed.Min(Fixed.One, Fixed.Max(-Fixed.One, _direction.X * to.X + _direction.Y * to.Y + _direction.Z * to.Z));
         // The angle between the vectors is below the limit exactly when the dot product is above the limit's cosine (a limit of a half turn or more always snaps).
-        if (data.MaxTurnPerTick >= FixedTrig.Pi || dot >= FixedTrig.Cos(data.MaxTurnPerTick)) return to;
+        if (limit >= FixedTrig.Pi || dot >= FixedTrig.Cos(limit)) return to;
         var side = new Point3(to.X - _direction.X * dot, to.Y - _direction.Y * dot, to.Z - _direction.Z * dot);
         var sideLength = AirWeaponModules.Length(side.X, side.Y, side.Z);
         if (sideLength <= Fixed.Zero) return to;
-        var cos = FixedTrig.Cos(data.MaxTurnPerTick);
-        var sin = FixedTrig.Sin(data.MaxTurnPerTick);
+        var cos = FixedTrig.Cos(limit);
+        var sin = FixedTrig.Sin(limit);
         var turned = new Point3(_direction.X * cos + side.X / sideLength * sin, _direction.Y * cos + side.Y / sideLength * sin, _direction.Z * cos + side.Z / sideLength * sin);
         var turnedLength = AirWeaponModules.Length(turned.X, turned.Y, turned.Z);
         return turnedLength <= Fixed.Zero ? to : new Point3(turned.X / turnedLength, turned.Y / turnedLength, turned.Z / turnedLength);
@@ -661,6 +691,7 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
         writer.Int("launchTick", _launchTick);
         writer.Fixed("heightAtLaunch", _heightAtLaunch);
         writer.Bool("leftGround", _leftGround);
+        if (_subStep != 0) writer.Int("subStep", _subStep);
     }
 
     public override void Load(IStateReader reader)
@@ -681,6 +712,7 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
         _launchTick = reader.Int("launchTick");
         _heightAtLaunch = reader.Fixed("heightAtLaunch");
         _leftGround = reader.Bool("leftGround");
+        _subStep = reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;
     }
 }
 

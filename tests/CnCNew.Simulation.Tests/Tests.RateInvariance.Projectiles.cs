@@ -270,4 +270,38 @@ static partial class Tests
         Check.That(flight.ImpactFrame is > 6 and < 30, $"The missile runs dry and lands on the ground (frame F+{flight.ImpactFrame}).");
         Check.That(flight.DummyHealth == Fixed.FromInt(1000), "It lands short of the dummy.");
     }
+
+    /// <summary>
+    /// §5.1/§5.2 <c>NeutronMissileUpdate</c>: thrust per frame and damping share per frame are one step, taken once per logic frame; the missile of Tests.AirWeapons.cs is in the
+    /// same place after every frame at 30, 60 and 120 Hz, bit for bit, until <c>HeightDieUpdate</c> ends the dive (that module looks every tick and may see the height inside a
+    /// frame: the death may come up to one frame early). Before, the recursion ran per tick with the per-frame numbers and the missile arrived much earlier at a higher rate.
+    /// </summary>
+    public static void RateProjectilesNeutronMissileFliesTheThirtyHertzFlight()
+    {
+        List<(Fixed X, Fixed Y, Fixed Z)>? reference = null;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var fixture = new SyntheticFixture(rate, files: AirWeaponFixtureFiles);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 13, AirPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, string.Empty), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "AirSilo", owner: 1, x: 200, y: 200);
+            feeder.Spawn(2, "AirDummy", owner: 2, x: 600, y: 200);
+            world.Step();
+            Check.That(feeder.FireWeapon(1, Get(world, "AirSilo").Id.Value, Get(world, "AirDummy").Id.Value).Accepted, $"{rate}: the silo launches.");
+            var frames = new List<(Fixed X, Fixed Y, Fixed Z)>();
+            Entity? missile = null;
+            for (var step = 1; step <= world.Frames(400); step++)
+            {
+                world.Step();
+                missile ??= world.Entities.FirstOrDefault(value => value.Template.Name == "AirNeutronMissile");
+                if (missile is null) continue;
+                if (missile.EffectivelyDead) break;
+                if (step % factor == 0) frames.Add((missile.X, missile.Y, missile.Z));
+            }
+            reference ??= frames;
+            Check.That(reference.Count > 60 && frames.Count <= reference.Count && frames.Count >= reference.Count - 1, $"{rate}: the missile dives for {reference.Count} frames, at most one less (measured {frames.Count}).");
+            for (var frame = 0; frame < frames.Count; frame++)
+                Check.That(frames[frame] == reference[frame], $"{rate}: after frame {frame} the missile is at {Show(reference[frame])} as at 30 Hz (measured {Show(frames[frame])}).");
+        }
+    }
 }
