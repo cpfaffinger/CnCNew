@@ -401,7 +401,7 @@ static partial class Tests
             spin[index] = turned;
             lowest[index] = low;
         }
-        Console.WriteLine($"       helicopter slow death: the blade flies off: after {InFrames(blade[0])} / {InFrames(blade[1])} / {InFrames(blade[2])} frames (not compared yet: its countdown is the next cause)");
+        SameFrames("helicopter slow death: the blade flies off", blade);
         SameFrames("helicopter slow death: the wreck hits the ground", ground);
         SameFrames("helicopter slow death: the wreck is gone", gone);
         SameValues("helicopter slow death: distance of the wreck from where it was shot", drift, 0.01m);

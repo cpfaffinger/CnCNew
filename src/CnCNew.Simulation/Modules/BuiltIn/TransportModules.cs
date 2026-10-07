@@ -109,8 +109,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
 // ======================================================================================== HelicopterSlowDeathBehavior
 
 /// <summary>
-/// <c>HelicopterSlowDeathBehaviorModuleData</c> in the units of the original's logic frame at every tick rate (radians and world units per frame, unrounded frames; the blade delays
-/// still unrounded ticks): the spiral is integrated in steps of one frame of the original (<see cref="HelicopterSlowDeathBehavior"/>), and with the very numbers of the 30 Hz catalog
+/// <c>HelicopterSlowDeathBehaviorModuleData</c> in the units of the original's logic frame at every tick rate (radians and world units per frame, unrounded frames): the spiral is integrated in steps of one frame of the original (<see cref="HelicopterSlowDeathBehavior"/>), and with the very numbers of the 30 Hz catalog
 /// every sum and comparison of that step comes out the same at 60 and 120 Hz. The particle, bone and sound fields are presentation.
 /// </summary>
 public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrbitTurnRate, Fixed SpiralOrbitForwardSpeed, Fixed SpiralOrbitForwardSpeedDamping,
@@ -135,8 +134,8 @@ public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrb
             FixedTicks(configuration, original, "SelfSpinUpdateDelay"),
             Radians("SelfSpinUpdateAmount"),
             Real("FallHowFast", Fixed.Zero),
-            FixedTicks(configuration, configuration.Time, "MinBladeFlyOffDelay"),
-            FixedTicks(configuration, configuration.Time, "MaxBladeFlyOffDelay"),
+            FixedTicks(configuration, original, "MinBladeFlyOffDelay"),
+            FixedTicks(configuration, original, "MaxBladeFlyOffDelay"),
             ModuleConfigReader.Text(configuration, "OCLEjectPilot"),
             ModuleConfigReader.Text(configuration, "FXBlade"),
             ModuleConfigReader.Text(configuration, "OCLBlade"),
@@ -243,7 +242,6 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     {
         if (_spiral.Continue(Entity))
         {
-            BladeCountdown(world);
             world.MarkDirty(Entity);
             return;
         }
@@ -286,6 +284,10 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         world.MarkDirty(Entity);
     }
 
+    /// <summary>
+    /// The blade's countdown, one step per logic frame of the original: the delay is drawn over the unrounded frames of the data (the same range and so the same draw at every tick
+    /// rate) and counted down by one per frame, as the reference counts it down once per update.
+    /// </summary>
     private void BladeCountdown(IWorldServices world)
     {
         if (_bladeFlyOff <= Fixed.Zero) return;
