@@ -67,13 +67,40 @@ Modifikatoren (`KeyModifiers`) ergeben sich aus gehaltenen Modifikatortasten; li
 * **Control-Bar-Hotkeys** (`HotKey.cpp`): Das Zeichen nach dem ersten `&` im übersetzten `TextLabel`, kleingeschrieben; ausgelöst beim
   Loslassen ohne Modifikator; eine schon vergebene Taste wird für spätere Slots ignoriert (`addHotKey`); ein sichtbarer, aber gesperrter
   Knopf wird nicht ausgelöst (`HotkeyActivation.Disabled`). Die Übersetzung liefert der Aufrufer als `Func<string, string?>`, damit keine
-  Abhängigkeit zur UI entsteht. **Abweichung:** Hat das Drücken derselben Taste schon ein Meta ausgelöst (z. B. `S` = STOP), wird der
-  Control-Bar-Hotkey beim Loslassen unterdrückt; das Original würde beide auslösen und doppelte Befehle erzeugen.
+  Abhängigkeit zur UI entsteht. Ein Meta auf dem **Tastendruck** nimmt dem Knopf die Taste nicht weg (§3a). **Abweichung:** Hat der Druck
+  die Auswahl schon gestoppt (`S` = STOP) und trägt ein **Stop-Knopf** dieselbe Taste, wird er beim Loslassen nicht noch einmal gedrückt; das
+  Original gibt den Stoppbefehl zweimal.
 * **Engine-Aktionen** (`MetaAction.CameraScrollUp` … `Guard`, Settings-Namen `ENGINE_*`): Das Original liest die Pfeiltasten roh
   (`LookAtXlat.cpp`); `WithEngineDefaults` bindet sie deshalb als `Source = Engine`. Angriffsbewegung und Wachen sind im Original
   Control-Bar-Knöpfe (`&A`, `&G` im Label) und bleiben standardmäßig ungebunden, lassen sich aber für die Optionen frei belegen.
 * **Einstellungen:** `ToSettings` liefert für jede Aktion `MODIFIKATOREN TASTE ÜBERGANG` (z. B. `CTRL KEY_1 DOWN`) oder `UNBOUND`, kanonisch
   sortiert; `ApplySettings` meldet unbekannte Aktionen und unlesbare Werte als `Issues` und lässt die Bindung dann unverändert.
+
+### 3a. Bautasten: Tasten, die auch ein Meta sind (7. Oktober 2026, gemessen; nicht von einem Menschen abgenommen)
+
+Frage des Projektinhabers: funktionieren die Tasten im Baumenü? Gemessen mit echten Daten für America, China und GLA (Bauarbeiter, Kommandozentrale, Kaserne, Waffenfabrik;
+`Game.Tests` → `HotkeyTests`, je Knopf ein echter Tastendruck über `MatchController.Process`) und im echten Client (`scripts/check-build-hotkeys.ps1`, Tastenereignisse über
+`--input-script`):
+
+* Die Kette selbst war in Ordnung: das `&` im englischen CSF-Text wird gelesen (`CommandButtonCatalog.HotkeyOf`), `StrideInputTranslator` reicht Tasten weiter, das HUD gibt sie an
+  `GameInputController.OnKey`, der Knopf wird beim Loslassen gedrückt. Verschachtelte Seiten gibt es in den Befehlssätzen des Spiels nicht (ein Satz hat höchstens 14 Plätze).
+* **Nicht funktioniert haben** alle Knöpfe, deren Taste `CommandMap.ini` zugleich ohne Modifikator auf dem Tastendruck an ein Meta bindet. Das sind in den Retaildaten sieben
+  Buchstaben: `E` (`SELECT_MATCHING_UNITS`), `F` (`TOGGLE_FAST_FORWARD_REPLAY`), `H` (`VIEW_COMMAND_CENTER`), `Q` (`SELECT_ALL`), `S` (`STOP`), `W` (`SELECT_ALL_AIRCRAFT`),
+  `X` (`SCATTER`). Betroffen in den geprüften Sätzen: `S` – Scorpion, Saboteur, Sentry Drone, Listening Outpost (und die Spionagesatellit-Kraft); `F` – Flugplatz (America, China);
+  `E` – ECM-Panzer, Battle Bus. Vor der Korrektur: America 10 von 11, China 13 von 14, GLA 16 von 18 freigeschalteten Bau-/Produktionstasten der ersten Szene; danach, mit Kraftwerk
+  und Versorgungslager in der Szene, 16 von 16, 18 von 18 und 19 von 19.
+* Ursache: eine eigene Abweichung („ein Meta beim Drücken unterdrückt die Knopftaste“, gedacht gegen den doppelten Stoppbefehl). Das Original unterdrückt nichts:
+  `MetaEventTranslator::translateGameMessage` (`MetaEvent.cpp`, Priorität 20) verwirft nur die rohe Tastennachricht, deren Taste **und Übergang** ein Eintrag trifft – bei einem
+  `DOWN`-Eintrag also den Druck –, und `HotKeyTranslator::translateGameMessage` (`HotKey.cpp`, Priorität 25) arbeitet auf `MSG_RAW_KEY_UP`. Beides geschieht: `S` stoppt und
+  drückt dann den Knopf. So ist es jetzt auch hier; nur ein Meta auf dem **Loslassen** derselben Taste verhindert den Knopf.
+* Gesperrte Knöpfe (fehlende Voraussetzung, kein Geld) reagieren wie im Original nicht auf ihre Taste. Die Texte kommen aus der englischen CSF; eine andere Sprache hätte andere
+  Buchstaben (nicht geprüft, es gibt nur die englische Tabelle im Bestand).
+
+```powershell
+.\scripts\check-build-hotkeys.ps1                 # echter Client, drei Fraktionen, je vier Einheiten per Taste und zwei Gebäude (eines platziert)
+dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --content-dir .local/phase2-import-a --only HotkeyTests   # jede Taste, mit Tabelle
+.\scripts\demo-factory-exits.ps1 -Faction America   # zum Selbstprobieren: Bauarbeiter wählen, R / B / F ...; Fabrik wählen, C / S ...
+```
 
 ## 4. Kamera-Eingabe
 

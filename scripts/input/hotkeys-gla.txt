@@ -1,0 +1,28 @@
+# Hot keys of the command bar in the real client (docs/PRESENTATION-INPUT.md section 3a, scripts/check-build-hotkeys.ps1), scene exit-gla-all.
+# Every key is the letter after the '&' of the button's label. S, F and E are also bound to a meta action on the key-down by CommandMap.ini (Stop, fast forward,
+# select matching units); the hot key acts on the key-up all the same, as in the original. Buildings are selected first and the builder last, so the script reads
+# the same in both mouse setups (a left click selects, nothing is ordered with the right button).
+40   look template:GLAArmsDealer
+45   click left template:GLAArmsDealer
+60   key down S   # Scorpion (S is also STOP)
+62   key up S
+70   key down T   # Technical
+72   key up T
+80   look template:GLABarracks
+85   click left template:GLABarracks
+100  key down S   # Saboteur (S is also STOP)
+102  key up S
+110  look template:GLACommandCenter
+115  click left template:GLACommandCenter
+130  key down K   # Worker
+132  key up K
+140  look own:DOZER
+145  click left own:DOZER
+160  key down N   # Tunnel Network
+162  key up N
+170  move ground:+0,+60 from own:DOZER
+175  click right ground:+0,+60 from own:DOZER   # the right button cancels the placement in both mouse setups
+190  key down B   # Barracks
+192  key up B
+200  move placement from own:DOZER
+220  click left placement from own:DOZER

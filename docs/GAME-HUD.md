@@ -493,7 +493,7 @@ Format: eine Zeile je Schritt, `#` beginnt einen Kommentar, `FRAME VERB ARGUMENT
 | `move ZIEL` | Zeiger auf das Ziel |
 | `down [left\|right\|middle] [ZIEL]`, `up […]` | Taste drücken/loslassen (ohne Ziel an der aktuellen Zeigerposition) |
 | `click [left\|right\|middle] ZIEL` | Bewegen und Drücken in diesem Frame, Loslassen zwei Frames später auf demselben Pixel |
-| `key down\|up KEYCODE` | Taste (`KeyCode`-Name) |
+| `key down\|up KEYCODE` | Taste (`KeyCode`-Name, z. B. `S`, `LeftControl`); die Knopftaste der Befehlsleiste wirkt beim `up` (Beispiele: `scripts/input/hotkeys-*.txt`) |
 | `look ZIEL` | Kamera auf das Ziel zentrieren (Testhilfe, keine Eingabe) |
 
 Ziele werden im Frame ihrer Verwendung aufgelöst: `screen:X,Y`; `own:KINDOF[#N]` und `template:NAME[#N]` (das N-te eigene lebende Objekt nach Id, an seinem Auswahl-Mittelpunkt);
@@ -508,7 +508,9 @@ sitesCompleted=…`). Ein Ziel, das sich nicht auflösen lässt, wird gemeldet u
 
 Regressionsprüfung: `scripts/check-dozer-build.ps1 [-Quick] [-NoBuild]` (Skripte unter `scripts/input/`) fährt den Release-Client fünfmal, jeweils zeitbegrenzt, und prüft die Summenzeile:
 Mission `GC_ChemGeneral` und Gefecht `Alpine Assault` je in 1280x720 und 1920x1080 (Gebäude platziert und fertig gebaut) sowie Klicks während der Eröffnungssequenz der Mission (müssen
-verworfen werden, die Sperre muss enden). Gemessen 4. Oktober 2026: 5 von 5 bestanden.
+verworfen werden, die Sperre muss enden). Gemessen 4. Oktober 2026: 5 von 5 bestanden; 7. Oktober 2026 mit der neuen Mausvorgabe erneut 5 von 5 (das Skript benutzt nur Klicks,
+die in beiden Mausbelegungen dasselbe bedeuten). `scripts/check-build-hotkeys.ps1 [-Faction …] [-Mouse classic]` prüft auf demselben Weg die Bautasten in den Szenen
+`exit-<fraktion>-all` (`docs/PRESENTATION-INPUT.md` §3a).
 
 ### 17.2 Befund: „im Mission-Demo kann ich keine Gebäude mit dem Dozer bauen“
 

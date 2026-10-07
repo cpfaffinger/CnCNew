@@ -759,6 +759,19 @@ static class InputTests
         input.Process(new KeyEvent(32, KeyCode.A, false), arena.World, view);
         input.Process(new KeyEvent(33, KeyCode.LeftControl, false), arena.World, view);
         Assert(input.Commands.Mode == CommandModeKind.None, "a control-bar hotkey needs the key without modifiers");
+
+        // A key CommandMap.ini binds to a meta on the key-down is still the hot key of another button on the key-up (MetaEventTranslator destroys only the message whose
+        // transition matches): with &S in a construct label, S starts the placement although STOP fired on the press. That is how the Scorpion, the Sentry Drone, the
+        // Listening Outpost and the Saboteur are built by key in the retail data.
+        arena.Spawn("Dozer", Me, 60, 70);
+        arena.Step(2);
+        var builder = new GameInputController(Me, arena.Sink, HotkeyMap.Parse(CommandMapText), buttons, label => label == "CONTROLBAR:ConstructPlant" ? "Con&struct Plant" : null);
+        builder.Selection.Replace([arena.Find("Dozer", Me, 60, 70).Id]);
+        Assert(!HotkeyMap.Parse(CommandMapText).Resolve(new KeyBinding(KeyCode.S, KeyModifiers.None), HotkeyContexts.Game).IsEmpty, "S is bound to a meta action on the key-down");
+        builder.Process(new KeyEvent(40, KeyCode.S, true), arena.World, view);
+        Assert(builder.Commands.Mode == CommandModeKind.None, "the press alone starts nothing");
+        builder.Process(new KeyEvent(41, KeyCode.S, false), arena.World, view);
+        Assert(builder.Commands is { Mode: CommandModeKind.Placement, PendingButton.Object: "Plant" }, $"the release presses the construct button with &S ({builder.Commands.Mode})");
     }
 
     // ============================================================================================ picking and selection

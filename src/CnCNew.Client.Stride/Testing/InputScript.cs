@@ -323,10 +323,12 @@ internal sealed class InputScript
             var barTop = hud.WindowRect("ControlBar.wnd:ControlBarParent")?.Y ?? int.MaxValue;
             var ground = SimulationQueries.GroundOf(origin);
             var reasons = new List<string>();
+            // The building is placed with the angle the placement shows (the template's PlacementViewAngle until the player drags a direction), not with angle 0.
+            var angle = commands.Ghost?.Angle ?? 0f;
             foreach (var offset in PlacementOffsets)
             {
                 var candidate = ground + offset;
-                var issue = SimulationQueries.CheckPlacement(game.World, game.Human, origin, button.Object, SimulationQueries.ToFixed(candidate.X), SimulationQueries.ToFixed(candidate.Y), SimulationQueries.ToFixed(0f));
+                var issue = SimulationQueries.CheckPlacement(game.World, game.Human, origin, button.Object, SimulationQueries.ToFixed(candidate.X), SimulationQueries.ToFixed(candidate.Y), SimulationQueries.ToFixed(angle));
                 var point = new Vector3(candidate.X, candidate.Y, game.Heights.HeightAt(candidate.X, candidate.Y));
                 if (issue == PlacementIssue.None && game.Camera.TryWorldToScreen(point, out var at) && at.X >= 0 && at.Y >= 0 && at.X < game.Camera.ViewportSize.X && at.Y < barTop)
                 {
