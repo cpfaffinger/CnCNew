@@ -24,7 +24,7 @@ internal static class MissionHudTests
             Console.WriteLine("SKIP MissionHudTests (pass --content-dir <dir> to run against real data)");
             return 0;
         }
-        var data = GameData.Load(args[index + 1]);
+        var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         var viewport = new Vector2(1280, 720);
 
         harness.Run("A real mission runs behind the HUD: frames, control bar, orders through the session, selection reaches the scripts", () =>

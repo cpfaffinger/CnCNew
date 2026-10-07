@@ -27,7 +27,7 @@ internal static class HudTests
             return 0;
         }
 
-        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step}"));
+        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step}"), rate: CnCNew.Tests.TestRate.Default);
 
         harness.Run("Select dozer, construct a structure, queue a unit, move and attack-move", () => ScriptedSession(data));
         harness.Run("Replay of the human player's commands is internally deterministic", () => ReplayMatches(data));
@@ -40,7 +40,8 @@ internal static class HudTests
         harness.Run("A command button shows its description as a pointer tooltip after the delay, and the icons carry no hot key or cost text", () => CommandButtonTooltip(data));
         harness.Run("Command button description: missing prerequisites and sciences are listed after 'Requires:', too little money and owned upgrades are said, as populateBuildTooltipLayout does", () => CommandButtonRequirements(data));
         harness.Run("The money and the power window describe themselves; the power text carries production and consumption", () => MoneyAndPowerTooltips(data));
-        harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
+        // The hash of baselines/hud-drawlist-1280x720.sha256 is defined at 30 Hz (the HUD of a running match): this test names that rate.
+        harness.Run("Golden draw list hash", () => GoldenDrawListHash(GoldenRate.Data(data, contentDir)));
         harness.Run("Message list: refused orders, finished buildings and upgrades, attacks and defeats print the original's labels at the message position and fade; what has no line is counted", () => MessageList(data));
         harness.Run("Message list through the real click path: a refused building spot prints 'You can't build here'", () => MessageListFromARefusedPlacement(data));
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));

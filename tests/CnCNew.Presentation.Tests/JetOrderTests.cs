@@ -127,7 +127,7 @@ internal static class JetOrderTests
 
         public Rig(SimulationRate? rate = null)
         {
-            Fixture = new SyntheticFixture(rate ?? SimulationRate.Original, files: Files);
+            Fixture = new SyntheticFixture(rate ?? CnCNew.Tests.TestRate.Default, files: Files);
             var players = ImmutableArray.Create(new PlayerConfiguration(Me, "Me"), new PlayerConfiguration(Enemy, "Enemy"));
             World = new SimulationWorld(new WorldConfiguration(new WorldId(1), Fixture.Templates.Rate, 7, players, SyntheticFixture.FixtureId, Fixture.Fingerprint), Fixture.Templates);
             _sink = new InputTests.WorldSink(World, []);
@@ -236,7 +236,7 @@ internal static class JetOrderTests
             TestHarness.Assert(count <= CnCNew.Data.OriginalFrame.PerSecond, $"at {rate} no more commands go out than original frames pass ({count:F2} per second)");
     }
 
-    private static readonly Fixed SimulationTimingMin = CnCNew.Simulation.Time.SimulationRate.Original.Time.PerSecondToPerTick(60m) - Fixed.FromRaw(16);
+    private static readonly Fixed SimulationTimingMin = CnCNew.Tests.TestRate.Default.Time.PerSecondToPerTick(60m) - Fixed.FromRaw(16);
 
     private static void MissileFighterEndsItsAttack()
     {

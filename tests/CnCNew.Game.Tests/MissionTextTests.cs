@@ -45,7 +45,7 @@ internal static class MissionTextTests
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null)
         {
-            var data = GameData.Load(contentDirectory, modelGeometry: false);
+            var data = GameData.Load(contentDirectory, modelGeometry: false, rate: CnCNew.Tests.TestRate.Default);
             harness.Run("Real data: the typed InGameUI values and fonts reach the mission text style", () => RealStyle(data));
             harness.Run("Real data: the MD_USA01 opening types its caption in Courier New through the real HUD", () => RealCaption(data));
             harness.Run("Real data: the MD_CHI02 reinforcement countdown stands at the named timer position", () => RealCountdown(data));

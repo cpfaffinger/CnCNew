@@ -1,5 +1,8 @@
 using CnCNew.Presentation.Tests;
 
+// "--tick-rate 30|60|120" (or CNCNEW_TEST_TICK_RATE) builds the default test worlds at that rate: a probe, see docs/RATE-SWITCH-OUTER-TESTS.md.
+CnCNew.Tests.TestRateOption.Announce("The time-scale tests name their rates themselves.");
+
 // Each test class exposes `static int Run(string[] args)` returning its failure count.
 // Register one class per line.
 Func<string[], int>[] suites =

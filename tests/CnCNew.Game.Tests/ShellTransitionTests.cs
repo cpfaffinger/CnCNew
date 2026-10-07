@@ -44,7 +44,7 @@ internal static class ShellTransitionTests
             Console.WriteLine("SKIP ShellTransitionTests (pass --content-dir <dir> to run against real data)");
             return 0;
         }
-        var data = GameData.Load(contentDir);
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
         harness.Run("The main menu fades in from black, flashes its logo and buttons in, and ends in the transition-free state", () => MainMenuEntry(data));
         harness.Run("Hidden buttons take no input and navigation is refused while a transition runs", () => InputDuringTransitions(data));
         harness.Run("Submenus switch through their groups and end in the transition-free state", () => Submenus(data));

@@ -366,7 +366,7 @@ internal static partial class UnitConditionTests
         """,
     };
 
-    private static SyntheticFixture Fixture() => new(SimulationRate.Original, files: Files());
+    private static SyntheticFixture Fixture() => new(CnCNew.Tests.TestRate.Default, files: Files());
 
     /// <summary>A 20 x 20 cell map, optionally with a ramp, a lake over the first 100 x 100 units (level 5, the ground is at 0) and one cliff cell.</summary>
     private static TerrainMap Terrain(Func<int, int, byte>? height = null, bool lake = false, (int X, int Y)? cliff = null)
@@ -770,7 +770,7 @@ internal static partial class UnitConditionTests
             """,
         };
         // a steep slope toward +x: 4 height bytes (2.5 units) per 10 units
-        var rig = new Rig(new SyntheticFixture(SimulationRate.Original, files: files), Terrain((x, _) => (byte)Math.Min(255, 4 * (21 - x))));
+        var rig = new Rig(new SyntheticFixture(CnCNew.Tests.TestRate.Default, files: files), Terrain((x, _) => (byte)Math.Min(255, 4 * (21 - x))));
         var rock = rig.Spawn("UnitRock", 0, 100, 100, z: 0);
         var entity = rig.Get(rock);
         var freefall = 0;
@@ -814,7 +814,7 @@ internal static partial class UnitConditionTests
             Graph = DefinitionCompiler.Compile(new RealSource(Content), ModuleRegistry.Default,
                 DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude });
             Catalog = ObjectVisualCatalog.Build(Graph);
-            Templates = TemplateCatalog.Build(Graph, ModuleBindingTable.Default, SimulationRate.Original);
+            Templates = TemplateCatalog.Build(Graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default);
             Fingerprint = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(Graph).Item1;
         }
 
@@ -959,7 +959,7 @@ internal static partial class UnitConditionTests
         public Rig(Retail retail, TerrainMap? terrain = null)
         {
             Catalog = retail.Catalog;
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, Players, "presentation-real", retail.Fingerprint, terrain?.Fingerprint ?? ""), retail.Templates, terrain);
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 1, Players, "presentation-real", retail.Fingerprint, terrain?.Fingerprint ?? ""), retail.Templates, terrain);
             Projector = new FrameProjector(Catalog);
         }
     }

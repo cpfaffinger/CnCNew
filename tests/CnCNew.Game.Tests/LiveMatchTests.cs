@@ -20,7 +20,7 @@ internal static class LiveMatchTests
         }
 
         var watch = Stopwatch.StartNew();
-        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step} ({watch.Elapsed.TotalSeconds:F1} s)"));
+        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step} ({watch.Elapsed.TotalSeconds:F1} s)"), rate: CnCNew.Tests.TestRate.Default);
         harness.Run("GameData loads", () =>
         {
             TestHarness.Assert(data.Factions.Length >= 2, "at least two playable factions");

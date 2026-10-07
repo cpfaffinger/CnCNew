@@ -79,7 +79,7 @@ internal static class MissionEffectsTests
             Console.WriteLine("SKIP MissionEffectsTests real-data (pass --content-dir <dir> to run against real data)");
             return harness.Failures;
         }
-        var data = GameData.Load(args[index + 1]);
+        var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("MD_USA01 headless: freeze, shake, grey-scale, border, volumes, flashes and the removed buttons all reach their consumers", () => RealIntro(data));
         harness.Run("A removed command-bar button is gone from the bar of a selected object, and comes back when the script adds it", () => RealCommandBar(data));
         harness.Run("Sciences a script hides or disables are hidden or restricted PurchaseScience buttons; an unselectable object leaves the selection", () => RealScienceAndSelection(data));

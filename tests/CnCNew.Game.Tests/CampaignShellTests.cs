@@ -50,7 +50,7 @@ internal static class CampaignShellTests
 
     private static void RealCampaignFlow(string contentDir)
     {
-        var data = GameData.Load(contentDir);
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
         var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
         TestHarness.Assert(shell.Campaigns is not null, "the campaign catalog loaded from real content");
         var usa = shell.Campaigns!.Find("USA") ?? throw new InvalidOperationException("USA campaign missing from real content");
@@ -129,7 +129,7 @@ internal static class CampaignShellTests
 
     private static (MissionContext Context, CampaignDefinition Campaign) SyntheticCampaign()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original);
+        var fixture = new SyntheticFixture(CnCNew.Tests.TestRate.Default);
         var maps = new Dictionary<string, MapData>(StringComparer.OrdinalIgnoreCase)
         {
             ["Maps/One/One.map"] = SyntheticMap(WinAndLose),
@@ -157,7 +157,7 @@ internal static class CampaignShellTests
     {
         var contentDir = ContentDir(args);
         if (contentDir is null) { Console.WriteLine("  SKIP: needs real content for the result screen's WND layouts (pass --content-dir <dir>)"); return; }
-        var data = GameData.Load(contentDir);
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
         var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
 
         var (context, campaign) = SyntheticCampaign();
@@ -218,7 +218,7 @@ internal static class CampaignShellTests
     {
         var contentDir = ContentDir(args);
         if (contentDir is null) { Console.WriteLine("  SKIP: needs real content (pass --content-dir <dir>)"); return; }
-        var data = GameData.Load(contentDir);
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
         var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
         var usa = shell.Campaigns!.Find("USA") ?? throw new InvalidOperationException("USA campaign missing from real content");
 

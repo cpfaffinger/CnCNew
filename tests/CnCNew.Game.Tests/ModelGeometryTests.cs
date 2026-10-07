@@ -18,7 +18,7 @@ internal static class ModelGeometryTests
             return 0;
         }
 
-        var data = GameData.Load(args[index + 1]);
+        var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Model geometry: all nine retail airfields have their bones, in the catalog and in the world fingerprint", () =>
         {
             var geometry = data.Templates.Geometry;

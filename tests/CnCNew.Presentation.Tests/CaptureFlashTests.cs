@@ -147,7 +147,7 @@ internal static class CaptureFlashTests
 
     private static (SimulationWorld World, FrameProjector Projector, EntityId Capturer, EntityId Station) Stage(bool withSettings, SimulationRate? rate = null)
     {
-        var fixture = new SyntheticFixture(rate ?? SimulationRate.Original, files: Files());
+        var fixture = new SyntheticFixture(rate ?? CnCNew.Tests.TestRate.Default, files: Files());
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), fixture.Templates.Rate, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, ""), fixture.Templates);
         ulong sequence = 0;
         world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, "FlashCapturer", new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(50), Fixed.Zero, Fixed.Zero));

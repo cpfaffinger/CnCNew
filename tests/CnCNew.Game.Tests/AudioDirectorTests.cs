@@ -38,7 +38,7 @@ file sealed class FakeView : IAudioGameView
     public long Tick { get; set; }
 
     /// <summary>The rate the fake world's ticks count at (the original's unless a test names another).</summary>
-    public CnCNew.Simulation.Time.SimulationRate Rate { get; init; } = CnCNew.Simulation.Time.SimulationRate.Original;
+    public CnCNew.Simulation.Time.SimulationRate Rate { get; init; } = CnCNew.Tests.TestRate.Default;
     public CnCNew.Presentation.GameClock Clock => new(Tick, Rate.TicksPerSecond, 0);
     public bool LowPower { get; set; }
     public Dictionary<(int, int), Relationship> Relations { get; } = [];
@@ -87,7 +87,7 @@ internal static class AudioDirectorTests
             return harness.Failures;
         }
         var watch = Stopwatch.StartNew();
-        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step} ({watch.Elapsed.TotalSeconds:F1} s)"));
+        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step} ({watch.Elapsed.TotalSeconds:F1} s)"), rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Director drives a real match: deterministic, audible, bounded, WAV dump", () => RealDataRun(data));
         harness.Run("Wiring on real data: the capture-building scenario ticks at the barracks, the Ranger answers, the world hash is untouched", () => RealCaptureScenario(data));
         return harness.Failures;
@@ -513,7 +513,7 @@ internal static class AudioDirectorTests
         world.Poses[ranger.Value] = new FxEntityPose(new Vector3(90, 40, 3), 0f, "Ranger", new PlayerId(1), 0, 5f);
 
         var cues = new List<SoundCue>();
-        new SoundCueDeriver(fx, CnCNew.Tests.TestTime.Original).Derive(Flash(building, ranger), world, cues);
+        new SoundCueDeriver(fx, CnCNew.Tests.TestRate.Time).Derive(Flash(building, ranger), world, cues);
         TestHarness.Assert(cues.Count == 1, "one cue per flash");
         var cue = cues[0];
         TestHarness.Assert(cue.EventName == "CaptureTick", $"the cue is the event MiscAudio names for DefectorTimerTickSound (was {cue.EventName})");
@@ -529,11 +529,11 @@ internal static class AudioDirectorTests
 
         // A building that is gone gives no cue; a data set without the hook gives a cue the director reports as unknown.
         cues.Clear();
-        new SoundCueDeriver(fx, CnCNew.Tests.TestTime.Original).Derive(Flash(new EntityId(99), ranger), world, cues);
+        new SoundCueDeriver(fx, CnCNew.Tests.TestRate.Time).Derive(Flash(new EntityId(99), ranger), world, cues);
         TestHarness.Assert(cues.Count == 0, "no pose, no cue");
         var without = new Dictionary<string, string>(DirectorFixture, StringComparer.OrdinalIgnoreCase) { ["Data/INI/MiscAudio.ini"] = "MiscAudio\n  GUIClickSound = UiClick\nEnd\n" };
         var bare = FxCatalog.Build(DefinitionCompiler.Compile(new MemorySource(without)));
-        new SoundCueDeriver(bare, CnCNew.Tests.TestTime.Original).Derive(Flash(building, ranger), world, cues);
+        new SoundCueDeriver(bare, CnCNew.Tests.TestRate.Time).Derive(Flash(building, ranger), world, cues);
         TestHarness.Assert(cues.Count == 1 && cues[0].EventName == SoundCueDeriver.CaptureTickHook, "a missing hook is not silent: the cue carries the hook's own name");
         director.Submit([..cues], new FakeView());
         TestHarness.Assert(director.Stats.UnresolvedEvents.GetValueOrDefault(SoundCueDeriver.CaptureTickHook) == 1, "and the director reports it as an unknown event");

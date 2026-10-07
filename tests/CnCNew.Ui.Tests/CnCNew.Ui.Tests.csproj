@@ -3,6 +3,10 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The tick-rate option of the test programs (no reference to the simulation; this program has no world to build). -->
+    <Compile Include="../Shared/TestRateOption.cs" Link="Shared/TestRateOption.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Ui/CnCNew.Ui.csproj" />
     <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
     <ProjectReference Include="../../src/CnCNew.Data/CnCNew.Data.csproj" />

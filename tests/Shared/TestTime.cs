@@ -40,3 +40,25 @@ internal static class TestTime
     /// <summary>The presentation clock a fake view reports for a tick counted at the original's rate.</summary>
     public static CnCNew.Presentation.GameClock ClockAt(long tick) => new(tick, SimulationRate.Original.TicksPerSecond, 0);
 }
+
+/// <summary>
+/// The rate the default test worlds, catalogs and game data of a test program are built at: the original's 30 Hz unless the program is started with
+/// <c>--tick-rate N</c> or <c>CNCNEW_TEST_TICK_RATE=N</c> (<see cref="TestRateOption"/>). Tests that are about a particular rate (the time-scale tests,
+/// the savegame's rate check) and tests that compare values recorded at 30 Hz (golden hashes) name their rate themselves and do not use this.
+/// </summary>
+internal static class TestRate
+{
+    public static SimulationRate Default { get; } = SimulationRate.FromTicksPerSecond(TestRateOption.TicksPerSecond);
+
+    /// <summary>The time service of <see cref="Default"/>, for the fixtures that have no world (an FX sweep, a cue filter).</summary>
+    public static SimulationTime Time => Default.Time;
+
+    /// <summary>True when the default test worlds run at the original's rate; raw 30 Hz values (golden hashes, recorded tick numbers) hold only then.</summary>
+    public static bool IsOriginal => TestRateOption.IsOriginal;
+
+    /// <summary>Ticks of <see cref="Default"/> in one original frame: the number of world steps a display frame of 1/30 s takes (1, 2 or 4).</summary>
+    public static int TicksPerFrame => Default.TicksPerSecond / OriginalFrame.PerSecond;
+
+    /// <summary>Original frames (1/30 s of game time each) in ticks of <see cref="Default"/>, where no world is at hand.</summary>
+    public static long Frames(long originalFrames) => Default.Time.OriginalFrames(originalFrames);
+}
