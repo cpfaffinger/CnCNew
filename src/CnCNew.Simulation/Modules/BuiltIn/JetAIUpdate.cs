@@ -115,6 +115,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private Fixed _glideHeight;
     private Fixed _glideLength;
     private ParkingInfo _leg;
+    /// <summary>The step the states decided for the running logic frame of the original, flown in shares per tick; empty at 30 Hz, where a frame is a tick.</summary>
+    private FlightFrameStep _frame;
 
     public override string ModuleName => "JetAIUpdate";
 
@@ -261,7 +263,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         var taxi = ActiveLocomotor;
         var target = _path[_pathIndex];
         var last = _pathIndex == _path.Count - 1;
-        var speed = taxi?.Speed ?? world.Time.PerOriginalFrameToPerTick(FallbackTaxiSpeedPerFrame);
+        // Travel and turn of one logic frame of the original (the 30 Hz step; Update flies it in shares per tick).
+        var speed = taxi is null ? FallbackTaxiSpeedPerFrame : FlightFrames.PerFrame(world.Time, taxi.Speed);
         var dx = target.X - Entity.X;
         var dy = target.Y - Entity.Y;
         var distance = Fixed.Sqrt(dx * dx + dy * dy);
@@ -277,11 +280,11 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         }
         var desired = FixedTrig.Atan2(dy, dx);
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
-        var turn = taxi?.TurnRatePerTick ?? Fixed.Zero;
+        var turn = FlightFrames.PerFrame(world.Time, taxi?.TurnRatePerTick ?? Fixed.Zero);
         Entity.Angle = turn > Fixed.Zero && difference.Abs() > turn ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turn : turn)) : desired;
         var aligned = FixedTrig.AngleDifference(Entity.Angle, desired).Abs() <= Misaligned;
         var step = aligned ? Fixed.Min(speed, distance) : Fixed.Zero;
-        Entity.Speed = step;
+        Entity.Speed = FlightFrames.PerTick(world.Time, step);
         Entity.X += FixedTrig.Cos(Entity.Angle) * step;
         Entity.Y += FixedTrig.Sin(Entity.Angle) * step;
         Entity.Z = SurfaceHere(world);
@@ -289,12 +292,12 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         return false;
     }
 
-    /// <summary>Turns in place at the current locomotor's turn rate; true when the heading equals <paramref name="orientation"/> (within the reference's 0.001 rad).</summary>
-    private bool TurnTo(Fixed orientation)
+    /// <summary>Turns in place by the current locomotor's turn of one logic frame of the original; true when the heading equals <paramref name="orientation"/> (within the reference's 0.001 rad).</summary>
+    private bool TurnTo(SimulationTime time, Fixed orientation)
     {
         var difference = FixedTrig.AngleDifference(Entity.Angle, orientation);
         if (difference.Abs() <= ParkedOrientationTolerance) return true;
-        var turn = ActiveLocomotor?.TurnRatePerTick ?? Fixed.Zero;
+        var turn = FlightFrames.PerFrame(time, ActiveLocomotor?.TurnRatePerTick ?? Fixed.Zero);
         Entity.Angle = turn > Fixed.Zero && difference.Abs() > turn ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turn : turn)) : orientation;
         return FixedTrig.AngleDifference(Entity.Angle, orientation).Abs() <= ParkedOrientationTolerance;
     }
@@ -387,7 +390,16 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return SimulationTiming.SleepNone;
         }
         UpdateAttackLocomotor(world);
+        // The airfield states are the reference's state machine, which steps once per logic frame: a state change costs a frame, and what a state moves (taxi, turn, take-off run,
+        // landing) is the 30 Hz step, decided once per frame and flown in shares per tick. Between two decisions only the rest of the decided frame is flown.
+        if (_frame.Continue(Entity))
+        {
+            if (_phase == JetPhase.CirclingDeadAirfield) DamageWhileCircling(world);
+            world.MarkDirty(Entity);
+            return FlyOn(world, false, default);
+        }
         var parking = ParkingOf(world);
+        var before = (Entity.X, Entity.Y, Entity.Z, Entity.Angle);
 
         switch (_phase)
         {
@@ -439,16 +451,33 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
                 break;
         }
 
+        var step = (Entity.X - before.X, Entity.Y - before.Y, Entity.Z - before.Z, FixedTrig.AngleDifference(before.Angle, Entity.Angle));
+        // An aircraft that stands parked with nothing to do takes no frame: it looks at every tick, so the take-off starts in the tick the order is given.
+        return FlyOn(world, !(_phase == JetPhase.None && !_allowAir), step);
+    }
+
+    /// <summary>
+    /// What runs every tick after the states: the height control, the circling and the move order of the flight. With <paramref name="decided"/> the states have just applied the step of a
+    /// whole logic frame of the original (<paramref name="step"/>); it is spread over the frame's ticks last, so that everything before sees the object where the 30 Hz step puts it.
+    /// </summary>
+    private long FlyOn(IWorldServices world, bool decided, (Fixed X, Fixed Y, Fixed Z, Fixed Turn) step)
+    {
         var flying = _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield or JetPhase.CirclingDeadAirfield;
         if (_allowAir && flying) ControlHeight(world);
         // A fighter cannot stop in the air: with no destination (and while it waits for the runway) it circles.
         var circles = ShouldCircle(_phase);
         var moves = _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield;
-        // A frame of winged flight is flown to its end by whichever of the two steers; when neither does any more (the landing begins, the aircraft is on the ground) the rest is dropped.
-        if (WingedStepRunning && !circles && !(moves && Entity.HasMoveTarget && ActiveLocomotor is { } wings && FliesWithWings(wings))) CancelWingedStep();
+        // A frame of winged flight is flown to its end by whichever of the two steers. When neither does in this tick, the aircraft still flies the rest of the frame (its order ended in the
+        // middle of it) unless a state has taken the movement over (the landing began, the aircraft is on the ground): then the rest is dropped.
+        if (WingedStepRunning && !circles && !(moves && Entity.HasMoveTarget && ActiveLocomotor is { } wings && FliesWithWings(wings)))
+        {
+            if (_allowAir && (moves || _phase is JetPhase.AwaitLanding or JetPhase.CirclingDeadAirfield)) ContinueWingedStep();
+            else CancelWingedStep();
+        }
         if (circles) CircleStep(world);
         else _circling = false;
         if (moves) base.Update(world);
+        if (decided) _frame.Begin(world.Time, Entity, step.X, step.Y, step.Z, step.Turn);
         return SimulationTiming.SleepNone;
     }
 
@@ -551,19 +580,20 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         if (parking is null) { Enter(JetPhase.TakingOff); return; }
         var now = world.Tick;
         // AIFaceState towards the runway end.
-        var facing = TurnTo(FixedTrig.Atan2(_leg.RunwayEnd.Y - Entity.Y, _leg.RunwayEnd.X - Entity.X));
+        var facing = TurnTo(world.Time, FixedTrig.Atan2(_leg.RunwayEnd.Y - Entity.Y, _leg.RunwayEnd.X - Entity.X));
         world.MarkDirty(Entity);
         if (FindWaiter(world, parking)) return;
         if (!_resetTimer)
         {
             // everyone else is ready: the countdown (re)starts.
             _whenTick = now + data.TakeoffPauseTicks;
+            // Order, not time: after the next step of the states, or after the jet that was waited for had its step. The states step once per logic frame of the original.
             if (!_waitedFor.IsValid)
             {
                 _waitedFor = Entity.Id;
-                _transferTick = now + TickOrder.Next;
+                _transferTick = now + world.Time.OriginalFrames(TickOrder.Next);
             }
-            else _transferTick = now + 2 * TickOrder.Next;   // order, not time: after the jet that was waited for had its step
+            else _transferTick = now + world.Time.OriginalFrames(2 * TickOrder.Next);
             _resetTimer = true;
         }
         if (now >= _transferTick) parking.TransferRunwayToNext(world, Entity.Id);
@@ -621,14 +651,16 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         if (helicopter)
         {
             var rise = _path[0];
-            var climb = Fixed.Max(flight.SpeedLimitZ, flight.Speed / Fixed.FromInt(4));
+            var climb = FlightFrames.PerFrame(world.Time, Fixed.Max(flight.SpeedLimitZ, flight.Speed / Fixed.FromInt(4)));
             Entity.Z = Fixed.Min(Entity.Z + climb, rise.Z);
             world.MarkDirty(Entity);
             if (Entity.Z >= rise.Z) FinishTakeoff(world, parking);
             return;
         }
         parking.TransferRunwayToNext(world, Entity.Id);
-        var step = Fixed.Max(flight.Speed, Fixed.One);
+        // The run in units of one logic frame of the original: speed and acceleration of a frame, the point is reached within one frame of travel.
+        var topSpeed = FlightFrames.PerFrame(world.Time, flight.Speed);
+        var step = Fixed.Max(topSpeed, Fixed.One);
         var target = _path[_pathIndex];
         var toTarget = AirModules.Distance2D(Entity.X, Entity.Y, target.X, target.Y);
         if (toTarget <= step)
@@ -644,9 +676,10 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             target = _path[_pathIndex];
         }
         Entity.Angle = FixedTrig.Atan2(target.Y - Entity.Y, target.X - Entity.X);
-        Entity.Speed = Fixed.Min(flight.Speed, Entity.Speed + flight.Acceleration);
-        Entity.X += FixedTrig.Cos(Entity.Angle) * Entity.Speed;
-        Entity.Y += FixedTrig.Sin(Entity.Angle) * Entity.Speed;
+        var speed = Fixed.Min(topSpeed, FlightFrames.PerFrame(world.Time, Entity.Speed) + FlightFrames.PerFrameSquared(world.Time, flight.Acceleration));
+        Entity.Speed = FlightFrames.PerTick(world.Time, speed);
+        Entity.X += FixedTrig.Cos(Entity.Angle) * speed;
+        Entity.Y += FixedTrig.Sin(Entity.Angle) * speed;
         // Lift of the reference: m_maxLift · ratio², ratio the covered share of the runway. Here the height is that share squared of the approach height.
         var ratio = Fixed.One;
         if (_pathIndex == 0 && _leg.RunwayTakeoffDistance > Fixed.Zero)
@@ -745,13 +778,17 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _checkAirfieldTick = world.Tick + world.Time.TicksPerSecond;
     }
 
+    /// <summary>The damage of an aircraft that circles its dead airfield: a share per second, taken every tick.</summary>
+    private void DamageWhileCircling(IWorldServices world)
+    {
+        if (data.OutOfAmmoDamageRatePerSecond <= Fixed.Zero || Entity.Body is not { } body) return;
+        var amount = world.Time.PerSecondToPerTick(data.OutOfAmmoDamageRatePerSecond * body.MaxHealth);
+        world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, amount, DamageTypes.Unresistable, DeathTypes.Normal, false));
+    }
+
     private void CircleDeadAirfield(IWorldServices world)
     {
-        if (data.OutOfAmmoDamageRatePerSecond > Fixed.Zero && Entity.Body is { } body)
-        {
-            var amount = world.Time.PerSecondToPerTick(data.OutOfAmmoDamageRatePerSecond * body.MaxHealth);
-            world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, amount, DamageTypes.Unresistable, DeathTypes.Normal, false));
-        }
+        DamageWhileCircling(world);
         if (world.Tick < _checkAirfieldTick) return;
         _checkAirfieldTick = world.Tick + world.Time.TicksPerSecond;
         var parking = FindSuitableAirfield(world);
@@ -793,11 +830,11 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             var toSpot = AirModules.Distance2D(Entity.X, Entity.Y, spot.X, spot.Y);
             if (toSpot > Fixed.Zero)
             {
-                var move = Fixed.Min(toSpot, Fixed.Max(flight.MinSpeed, world.Time.PerOriginalFrameToPerTick(MinHelicopterApproachSpeedPerFrame)));
+                var move = Fixed.Min(toSpot, Fixed.Max(FlightFrames.PerFrame(world.Time, flight.MinSpeed), MinHelicopterApproachSpeedPerFrame));
                 Entity.X += (spot.X - Entity.X) * move / toSpot;
                 Entity.Y += (spot.Y - Entity.Y) * move / toSpot;
             }
-            var descend = Fixed.Max(flight.SpeedLimitZ, flight.Speed / Fixed.FromInt(4));
+            var descend = FlightFrames.PerFrame(world.Time, Fixed.Max(flight.SpeedLimitZ, flight.Speed / Fixed.FromInt(4)));
             Entity.Z = Fixed.Max(spot.Z, Entity.Z - descend);
             Entity.Speed = Fixed.Zero;
             world.MarkDirty(Entity);
@@ -813,13 +850,17 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return;
         }
         var target = _path[_pathIndex];
-        var minSpeed = Fixed.Max(flight.MinSpeed, world.Time.PerOriginalFrameToPerTick(MinLandingSpeedPerFrame));
+        // Speeds and their change in units of one logic frame of the original (the 30 Hz step).
+        var minSpeed = Fixed.Max(FlightFrames.PerFrame(world.Time, flight.MinSpeed), MinLandingSpeedPerFrame);
+        var acceleration = FlightFrames.PerFrameSquared(world.Time, flight.Acceleration);
+        var speed = FlightFrames.PerFrame(world.Time, Entity.Speed);
         // loco->setMaxSpeed(loco->getMinSpeed()): the landing is flown at the minimum speed.
-        Entity.Speed = Entity.Speed > minSpeed
-            ? Fixed.Max(minSpeed, Entity.Speed - Fixed.Max(flight.Braking, flight.Acceleration))
-            : Fixed.Min(minSpeed, Entity.Speed + flight.Acceleration);
+        speed = speed > minSpeed
+            ? Fixed.Max(minSpeed, speed - Fixed.Max(FlightFrames.PerFrameSquared(world.Time, flight.Braking), acceleration))
+            : Fixed.Min(minSpeed, speed + acceleration);
+        Entity.Speed = FlightFrames.PerTick(world.Time, speed);
         var distance = AirModules.Distance2D(Entity.X, Entity.Y, target.X, target.Y);
-        var step = Fixed.Min(Entity.Speed, distance);
+        var step = Fixed.Min(speed, distance);
         if (distance > Fixed.Zero)
         {
             Entity.Angle = FixedTrig.Atan2(target.Y - Entity.Y, target.X - Entity.X);
@@ -865,7 +906,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         }
         if (!parking.ReserveSpace(world, Entity, data.ParkingOffset, out var info)) { Enter(JetPhase.None); return; }
         _leg = info;
-        if (!TurnTo(info.ParkingOrientation))
+        if (!TurnTo(world.Time, info.ParkingOrientation))
         {
             world.MarkDirty(Entity);
             return;
@@ -982,6 +1023,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         writer.Fixed("glideHeight", _glideHeight);
         writer.Fixed("glideLength", _glideLength);
         DescribeFlight(writer);
+        _frame.Describe(writer, "frameStep");
         writer.BeginObject("leg");
         WritePoint(writer, "parking", _leg.ParkingSpace);
         WritePoint(writer, "prep", _leg.RunwayPrep);
@@ -1056,6 +1098,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _glideHeight = reader.Fixed("glideHeight");
         _glideLength = reader.Fixed("glideLength");
         LoadFlight(reader);
+        _frame.Load(reader, "frameStep");
         var leg = reader.Object("leg");
         _leg = new ParkingInfo(ReadPoint(leg, "parking"), ReadPoint(leg, "prep"), leg.Fixed("orientation"), ReadPoint(leg, "start"), ReadPoint(leg, "end"), ReadPoint(leg, "approach"),
             ReadPoint(leg, "exit"), ReadPoint(leg, "hangar"), leg.Fixed("hangarOrientation"), leg.Fixed("takeoffDistance"));
