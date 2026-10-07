@@ -61,7 +61,7 @@ public sealed partial class ScriptEngine
                 return true;
             // doLocalDefeat: the local player's defeat window and CampaignManager::SetVictorious(false) — a defeat of the mission.
             case "LOCALDEFEAT":
-                End(MissionOutcome.Defeat, EndGameDelay);
+                End(MissionOutcome.Defeat, EndGameDelayFrames);
                 return true;
             // doMoveUnitTowardsNearest: aiMoveToObject towards the closest object of the type inside the area, measured from the unit.
             case "UNIT_MOVE_TOWARDS_NEAREST_OBJECT_TYPE":

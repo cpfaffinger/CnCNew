@@ -567,7 +567,7 @@ public sealed class MissionPresentationDirector
             if (_messages is { IsEmpty: false } messages) commands.AddRange(MissionTextOverlay.Messages(messages, style, options, measure, width, height));
             if (_militaryCaption is { } caption) commands.AddRange(MissionTextOverlay.MilitaryCaption(caption, style, options, measure, width, height));
             if (timers)
-                commands.AddRange(MissionTextOverlay.NamedTimers(_counters.Select(pair => (pair.Value.Label, pair.Value.IsTimer, CounterForDisplay(pair.Key, pair.Value.IsTimer))), FrameClock, style, options, measure, width, height));
+                commands.AddRange(MissionTextOverlay.NamedTimers(_counters.Select(pair => (pair.Value.Label, pair.Value.IsTimer, CounterForDisplay(pair.Key))), FrameClock, style, options, measure, width, height));
             return;
         }
         if (_cinematic is { } cinematic) commands.AddRange(MissionTextOverlay.Cinematic(cinematic, style, options, measure, width, height));
@@ -582,12 +582,8 @@ public sealed class MissionPresentationDirector
         }
     }
 
-    // A timer of the script VM counts ticks of the world; the display counts original frames (InGameUI::postDraw divides by LOGICFRAMES_PER_SECOND). A counter is a plain number.
-    private long CounterForDisplay(string name, bool isTimer)
-    {
-        var value = _session.Engine.CounterValue(name);
-        return isTimer ? GameClock.OriginalFrameOf(value, Time.TicksPerOriginalFrame) : value;
-    }
+    // A timer of the script VM counts original frames at every tick rate, and so does the display (InGameUI::postDraw divides by LOGICFRAMES_PER_SECOND). A counter is a plain number.
+    private long CounterForDisplay(string name) => _session.Engine.CounterValue(name);
 
     private (bool White, byte Alpha)? FadeAlpha()
     {

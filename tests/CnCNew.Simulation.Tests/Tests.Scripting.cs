@@ -381,7 +381,7 @@ static partial class Tests
         var engine = session.Engine;
         Run(session, 1);
         Check.That(engine.CounterValue("c") == 7 && engine.FlagValue("f"), "Set, increment and decrement leave the counter at 7; the flag is set.");
-        Check.That(engine.CounterIsTimer("t") && engine.CounterValue("t") == session.Frames(60), $"A 2 s timer holds 60 frames right after it was set (got {engine.CounterValue("t")}).");
+        Check.That(engine.CounterIsTimer("t") && engine.CounterValue("t") == 60, $"A 2 s timer holds 60 frames of the original right after it was set, at every tick rate (got {engine.CounterValue("t")}).");
         Check.That(!engine.IsScriptActive("Start"), "A one-shot script deactivates itself after it fired.");
         Run(session, session.Frames(58));
         Check.That(engine.CounterValue("done") == 0, "The timer has not expired after 59 ticks.");
@@ -484,7 +484,7 @@ static partial class Tests
                 Scr.Do("CALL_SUBROUTINE", Scr.Script("Nope")), Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("u"), Scr.Type("NoSuchObject"), Scr.Team("teamA"), Scr.Waypoint("Spawn"))], oneShot: true),
             Scr.Script("Sighted", [Scr.And(new MapCondition(9999, "NOT_A_REAL_CONDITION", []))], [Scr.Do("SET_FLAG", Scr.Flag("seen"), Scr.Bool(true))]),
         ]);
-        Run(session, 3); // three script updates: the count below is per evaluation
+        Run(session, session.Frames(3)); // three script updates (one per frame of the original): the count below is per evaluation
         var engine = session.Engine;
         Check.That(engine.MissingActionHits.GetValueOrDefault("NOT_A_REAL_ACTION") == 1, "An unimplemented action is counted, not skipped silently.");
         Check.That(engine.MissingConditionHits.GetValueOrDefault("NOT_A_REAL_CONDITION") == 3 && !engine.FlagValue("seen"), "An unimplemented condition is counted on every evaluation and evaluates to false.");

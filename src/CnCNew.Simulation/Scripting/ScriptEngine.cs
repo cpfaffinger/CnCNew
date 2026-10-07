@@ -61,7 +61,8 @@ public sealed class ScriptTeam(int id, string prototype, PlayerId owner)
 
 /// <summary>
 /// The deterministic World Builder script VM (<c>ScriptEngine::update</c>, <c>ScriptEngine.cpp</c>). One engine runs the scripts of one map against one
-/// <see cref="SimulationWorld"/>: call <see cref="Update"/> once per tick <em>before</em> <see cref="SimulationWorld.Step"/>. It holds counters, flags,
+/// <see cref="SimulationWorld"/>: call <see cref="Update"/> once per tick <em>before</em> <see cref="SimulationWorld.Step"/>; the engine itself runs on the ticks that begin a
+/// logic frame of the original (its clock is the frame, whatever the tick rate of the world - see <see cref="Update"/>). It holds counters, flags,
 /// script/group activation and evaluation schedules, named objects, teams, object-type lists, waypoint followers and the mission outcome — all of it saved by
 /// <see cref="Describe"/>/<see cref="Load"/> and covered by <see cref="StateHash"/>.
 /// <para>
@@ -74,11 +75,11 @@ public sealed partial class ScriptEngine
 {
     /// <summary>
     /// <c>FRAMES_TO_SHOW_WIN_LOSE_MESSAGE</c> (<c>ScriptEngine.cpp</c>, <c>ScriptEngine::startEndGameTimer</c>): how long scripts keep running after a victory or defeat before the
-    /// game ends, in logic frames of the original (4 s). The countdown itself runs in ticks: <see cref="EndGameDelay"/>.
+    /// game ends, in logic frames of the original (4 s). The countdown runs in updates of the engine, one per frame of the original.
     /// </summary>
     public const int EndGameDelayFrames = 120;
 
-    /// <summary><see cref="EndGameDelayFrames"/> in ticks of this engine's world.</summary>
+    /// <summary><see cref="EndGameDelayFrames"/> in ticks of this engine's world: how many world ticks pass between the outcome and <see cref="IsEnded"/>.</summary>
     public long EndGameDelay => _world.Time.OriginalFrames(EndGameDelayFrames);
 
     /// <summary><c>ATTACK_PRIORITY_DEFAULT</c> (<c>ScriptEngine.cpp</c>).</summary>
@@ -89,6 +90,10 @@ public sealed partial class ScriptEngine
     private const string LocalPlayerName = "<Local Player>";
     private const string ThisTeamName = "<This Team>";
 
+    /// <summary>
+    /// A counter or countdown timer (<c>ScriptEngine::m_counters</c>). A timer's value is in <b>logic frames of the original</b> (1/30 s) at every tick rate, as the map
+    /// states it and compares it (<c>COUNTER</c> against a literal, <c>INCREMENT_COUNTER</c> on a timer): the engine counts it down once per update, and it updates once per frame.
+    /// </summary>
     private sealed class Counter
     {
         public long Value;
@@ -169,6 +174,8 @@ public sealed partial class ScriptEngine
     private int _nextTeamId = 1;
     private long _endTimer = -1;
     private long _tick;
+    // Calls of Update since the last frame began while the world is frozen (BeginsFrame); 0 whenever the world runs, and always at 30 Hz.
+    private long _frozenPhase;
     private int _currentList;
     private ScriptTeam? _callingTeam;
     private int _depth;
@@ -254,6 +261,7 @@ public sealed partial class ScriptEngine
     /// <summary>Unresolvable references met at runtime (unknown player/team/waypoint/area/template, malformed parameter lists, recursion limit); never empty by accident.</summary>
     public IReadOnlyDictionary<string, long> Diagnostics => _diagnostics;
 
+    /// <summary>The value of a counter; for a countdown timer (<see cref="CounterIsTimer"/>) the remaining logic frames of the original (1/30 s) at every tick rate, -1 once it has run out.</summary>
     public long CounterValue(string name) => _counters.TryGetValue(name, out var counter) ? counter.Value : 0;
     public bool CounterIsTimer(string name) => _counters.TryGetValue(name, out var counter) && counter.IsTimer;
     public bool FlagValue(string name) => _flags.GetValueOrDefault(name);
@@ -352,11 +360,20 @@ public sealed partial class ScriptEngine
 
     // ------------------------------------------------------------------------------------------------ update
 
-    /// <summary><c>ScriptEngine::update</c>: countdown timers, then every side's scripts in list order, then the followers. Call once per tick before the world step.</summary>
+    /// <summary>
+    /// <c>ScriptEngine::update</c>: countdown timers, then every side's scripts in list order, then the followers. Call once per tick before the world step.
+    /// <para>
+    /// The reference runs this once per logic frame (<c>GameLogic::update</c>), and maps are written against that: timers and frame counts are compared with literals, scripts
+    /// count their own evaluations, edge conditions remember the previous evaluation. None of that can be rescaled to another step, so the engine keeps the frame of the
+    /// original as its clock: it does its work on the ticks that begin one (every tick at 30 Hz, every second at 60 Hz, every fourth at 120 Hz) and nothing on the ticks
+    /// between. What the world does between two updates reaches the engine through <see cref="Observe"/>, which the session calls after every world step.
+    /// </para>
+    /// </summary>
     public void Update(long tick)
     {
         _tick = tick;
         _busyThisTick.Clear();
+        if (!BeginsFrame(tick)) return;
         if (_endTimer > 0)
         {
             _endTimer--;
@@ -399,6 +416,18 @@ public sealed partial class ScriptEngine
         }
         else UpdateTailObserved(observer, tick);
         _pruneBelow = _world.Ids.NextEntity;
+    }
+
+    /// <summary>
+    /// Whether this call of <see cref="Update"/> begins a logic frame of the original. While the world runs that is a question of its tick. Under <c>FREEZE_TIME</c> the tick stands
+    /// still and the host goes on calling at the tick rate (<see cref="CnCNew.Simulation.Mission.MissionSession.Step"/>), so the engine counts those calls itself: script timers
+    /// keep their length in game time while the world is frozen. The freeze begins and ends in an update, hence on a frame; at 30 Hz the phase is always 0.
+    /// </summary>
+    private bool BeginsFrame(long tick)
+    {
+        if (!TimeFrozen) return _world.Time.IsOriginalFrameBoundary(tick);
+        _frozenPhase = (_frozenPhase + TickOrder.Next) % _world.Time.TicksPerOriginalFrame;
+        return _frozenPhase == 0;
     }
 
     /// <summary>The same calls in the same order as the tail of <see cref="Update"/>, each reported to the observer.</summary>
@@ -796,6 +825,7 @@ public sealed partial class ScriptEngine
         writer.Int("endTimer", _endTimer);
         writer.Bool("ended", IsEnded);
         if (TimeFrozen) writer.Bool("timeFrozen", true);
+        if (_frozenPhase != 0) writer.Int("frozenPhase", _frozenPhase);
         writer.Int("nextTeamId", _nextTeamId);
         writer.UInt("pruneBelow", _pruneBelow);
         writer.Int("executedScripts", _executedScripts);
@@ -1034,6 +1064,7 @@ public sealed partial class ScriptEngine
         _endTimer = reader.Int("endTimer");
         IsEnded = reader.Bool("ended");
         TimeFrozen = reader.Has("timeFrozen") && reader.Bool("timeFrozen");
+        _frozenPhase = reader.Has("frozenPhase") ? reader.Int("frozenPhase") : 0;
         _nextTeamId = checked((int)reader.Int("nextTeamId"));
         _pruneBelow = checked((uint)reader.UInt("pruneBelow"));
         _executedScripts = reader.Int("executedScripts");

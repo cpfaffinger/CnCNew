@@ -64,10 +64,10 @@ public sealed partial class ScriptEngine
             case "SET_RANDOM_TIMER":
                 if (Has(type, p, type == "SET_RANDOM_TIMER" ? 3 : 2))
                 {
-                    // The map states logic frames of the original; a random timer is drawn in frames, so that its value stays on the 30 Hz grid at every rate.
+                    // The map states logic frames of the original, and a timer counts them (one per update of the engine) at every rate.
                     var frames = type == "SET_RANDOM_TIMER" ? _world.LogicRandom.Range(Int(p, 1), Int(p, 2)) : Int(p, 1);
                     var timer = CounterFor(Str(p, 0));
-                    timer.Value = _world.Time.OriginalFrames(frames);
+                    timer.Value = frames;
                     timer.IsTimer = true;
                 }
                 break;
@@ -118,9 +118,9 @@ public sealed partial class ScriptEngine
                 break;
 
             // ---- outcome
-            case "VICTORY": End(MissionOutcome.Victory, EndGameDelay); break;
-            case "DEFEAT": End(MissionOutcome.Defeat, EndGameDelay); break;
-            // ScriptEngine::startQuickEndGameTimer (m_endGameTimer = 1): "in the next update", an order and not a time.
+            case "VICTORY": End(MissionOutcome.Victory, EndGameDelayFrames); break;
+            case "DEFEAT": End(MissionOutcome.Defeat, EndGameDelayFrames); break;
+            // ScriptEngine::startQuickEndGameTimer (m_endGameTimer = 1): "in the next update" of the engine, an order and not a time.
             case "QUICKVICTORY": End(MissionOutcome.Victory, TickOrder.Next); break;
 
             // ---- players
@@ -369,9 +369,9 @@ public sealed partial class ScriptEngine
     private long SecondsToFrames(Fixed seconds)
     {
         // REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value * 1000)): seconds times the logic rate of the original, rounded up to whole
-        // frames of the original, then scaled to ticks (the grid rule of SimulationTime).
+        // frames of the original. Timers count frames; a caller that needs ticks of the world scales the result.
         var frames = seconds * SimulationRate.OriginalFramesPerSecond;
-        return _world.Time.OriginalFrames(frames.Ceiling());
+        return frames.Ceiling();
     }
 
     private void SetScriptActive(string name, bool active)
@@ -381,7 +381,9 @@ public sealed partial class ScriptEngine
         if (_program.FindScript(name) is { } script) _scriptActive[script.Index] = active;
     }
 
-    private void End(MissionOutcome outcome, long delay)
+    /// <param name="outcome">Victory or defeat.</param>
+    /// <param name="updates">How many updates of the engine (frames of the original) later the mission ends.</param>
+    private void End(MissionOutcome outcome, long updates)
     {
         Outcome = outcome;
         TimeFrozen = false;
@@ -390,7 +392,7 @@ public sealed partial class ScriptEngine
             OutcomeTick = _tick;
             OutcomeScript = _runningScript;
         }
-        _endTimer = delay;
+        _endTimer = updates;
         Output(outcome == MissionOutcome.Victory ? "VICTORY" : "DEFEAT");
     }
 
