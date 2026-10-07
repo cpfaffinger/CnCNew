@@ -317,6 +317,57 @@ static partial class Tests
     }
 
     /// <summary>
+    /// <c>BridgeScaffoldBehavior</c>: the speed follows the way left once per frame of the original (a geometric approach over the last quarter), the
+    /// scaffold moves every tick. Its position at every frame boundary and the frames in which it changes its motion are those of 30 Hz, through the rise,
+    /// the building across, a reversal in mid-motion, the tearing down and the sinking.
+    /// </summary>
+    public static void RateInvarianceBridgeScaffold()
+    {
+        AtThreeRates(rate =>
+        {
+            var (world, fixture, terrain) = RatedStructuresWorld(rate);
+            RequestSpawn(world, fixture, "SwScaffold", 0, 100, 100);
+            world.Step();
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            var scaffold = world.Entities.Single(entity => entity.Template.Name == "SwScaffold");
+            var module = scaffold.Modules.OfType<BridgeScaffoldBehavior>().Single();
+            module.SetPositions((Fixed.FromInt(100), Fixed.FromInt(100), Fixed.Zero), (Fixed.FromInt(100), Fixed.FromInt(100), Fixed.FromInt(30)), (Fixed.FromInt(160), Fixed.FromInt(100), Fixed.FromInt(30)));
+            // 4 and 3 units per frame of the original; the module takes its speeds per tick.
+            module.SetSpeeds(world.PerFrame(Fixed.FromInt(4)), world.PerFrame(Fixed.FromInt(3)));
+            module.SetMotion(world, BridgeScaffoldBehavior.Motion.Rise);
+            var series = new List<long>();
+            var perFrame = world.Time.TicksPerOriginalFrame;
+            var onTheWay = true;
+            for (var frame = 0; frame < 400 && world.FindEntity(scaffold.Id) is not null; frame++)
+            {
+                var before = scaffold.Z;
+                for (var tick = 0; tick < (frame == 0 ? 1 : perFrame); tick++)
+                {
+                    // The reversal comes from outside (a script) between two ticks: before the tick that is the same game time at every rate.
+                    if (frame == 120 && tick == perFrame - 1) module.ReverseMotion(world);
+                    world.Step();
+                    // While it rises at full speed every tick lifts it.
+                    if (frame is > 0 and < 5 && tick < perFrame - 1 && scaffold.Z <= before) onTheWay = false;
+                    if (frame == 20 && tick == 0 && perFrame > 1)
+                    {
+                        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, terrain);
+                        Check.That(restored.StateHash == world.StateHash, "A scaffold saved inside a frame of its motion round-trips (" + rate.TicksPerSecond + " Hz).");
+                    }
+                }
+                series.Add(scaffold.X.Raw);
+                series.Add(scaffold.Z.Raw);
+                series.Add((long)module.CurrentMotion);
+            }
+            return (Series: series, Gone: world.FindEntity(scaffold.Id) is null, OnTheWay: onTheWay);
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Gone && reference.Series.Count > 3 * 150, "Setup: the scaffold rose, built across, was reversed, torn down and sank at 30 Hz (" + reference.Series.Count / 3 + " frames).");
+            SameSeries(reference.Series, other.Series, "Scaffold position and motion at " + rate);
+            Check.That(other.OnTheWay, "While it rises every tick lifts the scaffold at " + rate + ".");
+        });
+    }
+
+    /// <summary>
     /// <c>RailroadBehavior</c>: the conductor's recursion (push, acceleration factor, braking factor, friction), the wait at the station, the crush damage
     /// "speed · 10" and the shove by a quarter of the overlap happen once per frame of the original; the train moves every tick. Positions of the locomotive
     /// and its carriages, the conductor's state, the position and health of a vehicle it grinds along and every death are those of 30 Hz at each frame boundary.
