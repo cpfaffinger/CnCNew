@@ -1422,7 +1422,14 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
     /// <param name="time">The time service of the world: a build time of zero still takes one logic frame of the original, not one tick.</param>
-    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks) => _queue.Add(new ProductionEntry(templateIndex, cost, time.AtLeastOneFrame(totalTicks)));
+    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks)
+    {
+        var ticks = time.AtLeastOneFrame(totalTicks);
+        // The entry that starts an empty queue is worked on in the step of its order, and that step stands for a whole logic frame of the original: the unit is done
+        // BuildTime less one frame after the order (not less one tick). An entry that waits behind another starts one step after its predecessor left and takes the full time.
+        if (_queue.Count == 0) ticks -= time.TicksPerOriginalFrame - TickOrder.Next;
+        _queue.Add(new ProductionEntry(templateIndex, cost, ticks));
+    }
 
     public bool HasSlot(int slot) => slot >= 0 && slot < _queue.Count;
 
