@@ -290,6 +290,8 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     private Fixed _lastCrushedDistance;
     private Fixed _buildingHeight;
     private bool _gridSweepWarned;
+    // The ticks taken of the current frame of the fall (the fall is the original's recursion, once per frame; the angle covers the frame's step tick by tick).
+    private FramePhase _framePhase;
 
     public override string ModuleName => "StructureToppleUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -298,7 +300,10 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     public bool IsToppled => _state == State.Done;
 
     /// <summary>How far the building has fallen: 0 upright, a quarter turn flat.</summary>
-    public Fixed Angle => Fixed.FromRaw(_angleFine >> FineBits);
+    public Fixed Angle => Fixed.Min(RawAngle, FixedTrig.HalfPi);
+
+    /// <summary>The accumulated angle as the recursion holds it: inside the last frame of the fall it may be past the quarter turn the frame ends at.</summary>
+    private Fixed RawAngle => Fixed.FromRaw(_angleFine >> FineBits);
 
     public override void OnSpawn(IWorldServices world)
     {
@@ -321,7 +326,8 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
         _directionX = FixedTrig.Cos(angle);
         _directionY = FixedTrig.Sin(angle);
         _state = State.WaitingForToppleStart;
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        // Without a delay the fall starts with the first update, which the original runs one frame after the death.
+        world.WakeAt(Entity, this, world.Tick + (delay == 0 ? world.Time.TicksPerOriginalFrame : SimulationTiming.SleepNone));
     }
 
     public long Update(IWorldServices world)
@@ -334,13 +340,14 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
                     _state = State.Toppling;
                     _structuralIntegrity = data.StructuralIntegrity;
                     _angleFine = StartAngleFine; // the reference's literal starting value 0.001 (StructureToppleUpdate ctor): a tiny nudge so sin(angle) below is not permanently zero.
+                    _framePhase.Reset();
                 }
                 return SimulationTiming.SleepNone;
             case State.Toppling:
                 StepToppling(world);
                 return SimulationTiming.SleepNone;
             case State.WaitingForDone:
-                if (world.Tick >= _doneAtTick) { _state = State.Done; return SimulationTiming.SleepForever; }
+                if (world.Tick > _doneAtTick) { _state = State.Done; return SimulationTiming.SleepForever; }
                 return SimulationTiming.SleepNone;
             default:
                 return SimulationTiming.SleepForever;
@@ -349,17 +356,26 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
 
     private void StepToppling(IWorldServices world)
     {
-        // TOPPLE_ACCELERATION_FACTOR * sin(angle) * (1 - integrity): the exact product of the three raw values, cut to the fine resolution (toward negative
-        // infinity; at 16 fraction bits nothing is cut, the product has exactly the fine bits).
-        var product = (Int128)world.Time.PerOriginalFrameSquaredToPerTickSquared(AccelFactorPerFrameSquared).Raw * FixedTrig.Sin(Angle).Raw * (Fixed.One - _structuralIntegrity).Raw;
-        _velocityFine = checked(_velocityFine + (long)(product >> ProductExcessBits));
-        if (_structuralIntegrity > Fixed.Zero)
+        // One step of the original per frame of the original, in its units (radians per frame, per frame²): the first tick of a frame accelerates and lets
+        // the structure decay, every tick turns the building by its share of the frame's velocity, the last tick crushes and ends the fall.
+        var ticks = world.Time.TicksPerOriginalFrame;
+        var subTick = _framePhase.Next(world.Time);
+        if (subTick == TickOrder.Next)
         {
-            _structuralIntegrity *= data.StructuralDecay;
-            if (_structuralIntegrity < Fixed.Zero) _structuralIntegrity = Fixed.Zero;
+            // TOPPLE_ACCELERATION_FACTOR * sin(angle) * (1 - integrity): the exact product of the three raw values, cut to the fine resolution (toward negative
+            // infinity; at 16 fraction bits nothing is cut, the product has exactly the fine bits).
+            var product = (Int128)AccelFactorPerFrameSquared.Raw * FixedTrig.Sin(RawAngle).Raw * (Fixed.One - _structuralIntegrity).Raw;
+            _velocityFine = checked(_velocityFine + (long)(product >> ProductExcessBits));
+            if (_structuralIntegrity > Fixed.Zero)
+            {
+                _structuralIntegrity *= data.StructuralDecay;
+                if (_structuralIntegrity < Fixed.Zero) _structuralIntegrity = Fixed.Zero;
+            }
         }
-        _angleFine += _velocityFine;
-        ApplyCrushingDamage(world, FixedTrig.HalfPi - Angle);
+        // floor(v * k / n) - floor(v * (k - 1) / n): the shares of one frame add up to the velocity exactly. At 30 Hz the whole velocity.
+        _angleFine += ticks == TickOrder.Next ? _velocityFine : checked(_velocityFine * subTick) / ticks - checked(_velocityFine * (subTick - TickOrder.Next)) / ticks;
+        if (!_framePhase.AtBoundary) return;
+        ApplyCrushingDamage(world, FixedTrig.HalfPi - RawAngle);
         var flat = FixedTrig.HalfPi.Raw << FineBits;
         if (_angleFine >= flat)
         {
@@ -367,7 +383,8 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
             _angleFine = flat;
             ApplyCrushingDamage(world, Fixed.Zero);
             _state = State.WaitingForDone;
-            _doneAtTick = world.Tick;
+            // Done comes with the update one frame of the original later: the first one after this tick at 30 Hz.
+            _doneAtTick = world.Tick + world.Time.TicksPerOriginalFrame - TickOrder.Next;
         }
     }
 
@@ -400,12 +417,13 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
         writer.Fixed("directionY", _directionY);
         // The Fixed part under the names the state always had; the extra bits only once there are any (a standing building's state is unchanged).
         writer.Fixed("velocity", Fixed.FromRaw(_velocityFine >> FineBits));
-        writer.Fixed("accumulatedAngle", Angle);
+        writer.Fixed("accumulatedAngle", RawAngle);
         if ((_velocityFine & FineMask) != 0) writer.Int("velocityFine", _velocityFine & FineMask);
         if ((_angleFine & FineMask) != 0) writer.Int("angleFine", _angleFine & FineMask);
         writer.Fixed("structuralIntegrity", _structuralIntegrity);
         writer.Fixed("lastCrushedDistance", _lastCrushedDistance);
         writer.Bool("gridSweepWarned", _gridSweepWarned);
+        _framePhase.Describe(writer, "framePhase");
     }
 
     public override void Load(IStateReader reader)
@@ -421,6 +439,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
         _structuralIntegrity = reader.Fixed("structuralIntegrity");
         _lastCrushedDistance = reader.Fixed("lastCrushedDistance");
         _gridSweepWarned = reader.Bool("gridSweepWarned");
+        _framePhase.Load(reader, "framePhase");
         _buildingHeight = ToppleAndFallModules.MaxHeightAbovePosition(Entity.Template);
     }
 }

@@ -77,4 +77,60 @@ static partial class Tests
             Check.That(other.Monotone, "Inside its first frame the angle advances with every tick at " + rate + ".");
         });
     }
+
+    /// <summary>
+    /// Runs a world (standing at a frame boundary) for <paramref name="frames"/> frames of the original and returns, per frame, what <paramref name="sample"/> reads at the frame boundary
+    /// followed by every chosen event of the frame (kind, entity, value) mixed into one number – the same list at every rate when the game is the same.
+    /// </summary>
+    private static List<long> FrameSeries(SimulationWorld world, int frames, Func<long> sample, Func<SimEvent, bool>? events = null)
+    {
+        var series = new List<long>();
+        var perFrame = world.Time.TicksPerOriginalFrame;
+        for (var frame = 0; frame < frames; frame++)
+        {
+            long mixed = 17;
+            // The step of tick t at 30 Hz is the step of tick t · perFrame above it: the first frame is the one step of the aligned tick the series starts
+            // at, every later one the perFrame steps that end on the next multiple.
+            for (var tick = 0; tick < (frame == 0 ? 1 : perFrame); tick++)
+                foreach (var item in world.Step().Events)
+                    if (events is not null && events(item)) mixed = unchecked(mixed * 31 + (long)item.Kind * 1_000_003 + item.Entity.Value * 7919 + item.Value);
+            series.Add(sample());
+            if (events is not null) series.Add(mixed);
+        }
+        return series;
+    }
+
+    /// <summary>
+    /// <c>StructureToppleUpdate</c>: acceleration and structural decay once per frame of the original, the angle every tick, the crushing shots with the frame's
+    /// last tick, done one frame after the building lies flat. Angle, shots (and what they damage) and the frame it is done in are those of 30 Hz.
+    /// </summary>
+    public static void RateInvarianceStructureTopple()
+    {
+        foreach (var building in new[] { "Building", "StiffTower" })
+            AtThreeRates(rate =>
+            {
+                var (world, feeder, _) = RatedWorld(rate, CollisionFiles(), CollisionTerrain());
+                feeder.Spawn(1, building, x: 0, y: 0);
+                // Bystanders on both sides: the shots of the falling edge hurt whoever stands there.
+                for (var index = 0; index < 8; index++) feeder.Spawn(2, "Blocker", x: index < 4 ? 30 : -30, y: (index % 4 - 2) * 15);
+                world.Step();
+                while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+                feeder.Damage(1, 1000);
+                var topple = world.FindEntity(new EntityId(1))!.Modules.OfType<StructureToppleUpdate>().Single();
+                var done = -1;
+                var frame = 0;
+                var series = FrameSeries(world, 300, () =>
+                {
+                    frame++;
+                    if (done < 0 && topple.IsToppled) done = frame;
+                    return topple.Angle.Raw;
+                }, item => item.Kind is SimEventKind.EntityDamaged or SimEventKind.EntityDied or SimEventKind.WeaponFired or SimEventKind.WeaponFireRequested);
+                return (Series: series, Done: done);
+            }, (reference, other, rate) =>
+            {
+                Check.That(reference.Done > 20, "Setup: the " + building + " falls and is done at 30 Hz (frame " + reference.Done + ").");
+                Check.That(other.Done == reference.Done, "The " + building + " is done in the same frame at " + rate + ": " + other.Done + " instead of " + reference.Done + ".");
+                SameSeries(reference.Series, other.Series, building + " angle and crushing at " + rate);
+            });
+    }
 }
