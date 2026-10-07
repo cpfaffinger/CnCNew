@@ -330,6 +330,8 @@ run.Test("Wings: turning is limited by the turn rate and a destination behind is
 run.Test("Wings: a jet circles its destination at CirclingRadius (clockwise, counter-clockwise, smallest)", Tests.WingCirclesItsDestination);
 run.Test("Wings: the circle survives snapshots and a new order leaves it", Tests.WingCircleSurvivesSnapshots);
 run.Test("Wings: the full airfield lifecycle with a winged locomotor", Tests.WingJetFlightLifecycle);
+run.Test("Rate invariance, flight: winged flight and circling are the same track at 30, 60 and 120 Hz", Tests.RateFlightWingedTrackIsTheSame);
+run.Test("Rate invariance, flight: a shot-down jet falls the same fall at 30, 60 and 120 Hz", Tests.RateFlightJetSlowDeathFallIsTheSame);
 run.Test("Air: an airfield uses the injected model bones (hangar, parking, runway), refuses a mismatching table and survives snapshots", Tests.AirAirfieldUsesTheModelBones);
 run.Test("Air: a carrier's deployment creates the gunship at the map edge on a map with terrain", Tests.AirSpectreDeployedByCarrier);
 run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);

@@ -99,7 +99,10 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
     private long _destructionTick;
     private long _deathTick;
     private long _groundTick;
+    /// <summary>The speed of the fall per logic frame of the original, negative.</summary>
     private Fixed _fallSpeed;
+    /// <summary>The step of the running frame of the fall, flown in shares per tick; empty at 30 Hz.</summary>
+    private FlightFrameStep _fall;
 
     public override string ModuleName => "JetSlowDeathBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -134,6 +137,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
         _fallSpeed = Fixed.Zero;
         Entity.HasMoveTarget = false;
         Effects(world, data.FxInitialDeath, data.OclInitialDeath);
+        _fall.Cancel();
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 
@@ -143,17 +147,24 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
         if (world.Tick >= _destructionTick) world.RequestDestroy(Entity.Id);
         if (_groundTick == 0)
         {
-            Entity.X += FixedTrig.Cos(Entity.Angle) * Entity.Speed;
-            Entity.Y += FixedTrig.Sin(Entity.Angle) * Entity.Speed;
-            _fallSpeed += world.Templates.GravityPerTickSquared * data.FallHowFast;
-            Entity.Z += _fallSpeed;
-            var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
-            if (Entity.Z <= ground)
+            // The fall is the 30 Hz step (the speed of the fall grows once per logic frame of the original and is a value per frame), flown in shares per tick.
+            if (!_fall.Continue(Entity))
             {
-                Entity.Z = ground;
-                Entity.Speed = Fixed.Zero;
-                _groundTick = world.Tick;
-                Effects(world, data.FxHitGround, data.OclHitGround);
+                var stepX = FixedTrig.Cos(Entity.Angle) * FlightFrames.PerFrame(world.Time, Entity.Speed);
+                var stepY = FixedTrig.Sin(Entity.Angle) * FlightFrames.PerFrame(world.Time, Entity.Speed);
+                Entity.X += stepX;
+                Entity.Y += stepY;
+                _fallSpeed += FlightFrames.GravityPerFrameSquared(world.Templates) * data.FallHowFast;
+                Entity.Z += _fallSpeed;
+                var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
+                if (Entity.Z <= ground)
+                {
+                    Entity.Z = ground;
+                    Entity.Speed = Fixed.Zero;
+                    _groundTick = world.Tick;
+                    Effects(world, data.FxHitGround, data.OclHitGround);
+                }
+                else _fall.Begin(world.Time, Entity, stepX, stepY, _fallSpeed, Fixed.Zero);
             }
             world.MarkDirty(Entity);
             if (_deathTick != 0 && world.Tick - _deathTick >= data.DelaySecondaryTicks)
@@ -185,6 +196,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
         writer.Int("deathTick", _deathTick);
         writer.Int("groundTick", _groundTick);
         writer.Fixed("fallSpeed", _fallSpeed);
+        _fall.Describe(writer, "fallStep");
     }
 
     public override void Load(IStateReader reader)
@@ -195,6 +207,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
         _deathTick = reader.Int("deathTick");
         _groundTick = reader.Int("groundTick");
         _fallSpeed = reader.Fixed("fallSpeed");
+        _fall.Load(reader, "fallStep");
     }
 }
 

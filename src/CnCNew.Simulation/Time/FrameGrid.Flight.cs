@@ -18,6 +18,12 @@ public static class FlightFrames
     /// <summary>A value per tick² (acceleration, gravity) as a value per logic frame² of the original.</summary>
     public static Fixed PerFrameSquared(SimulationTime time, Fixed perTickSquared) => perTickSquared * ((long)time.TicksPerOriginalFrame * time.TicksPerOriginalFrame);
 
+    /// <summary>
+    /// The gravity per logic frame² of the original, negative (downward): <see cref="Templates.TemplateCatalog.GravityPerTickSquared"/> of the original's rate, computed from the definition
+    /// value itself and therefore the same number at every rate (at 30 Hz the very expression the catalog evaluates).
+    /// </summary>
+    public static Fixed GravityPerFrameSquared(Templates.TemplateCatalog templates) => SimulationRate.Original.Time.PerSecondSquaredToPerTickSquared(templates.Gravity);
+
     /// <summary>The share of one tick of a value per logic frame of the original (a speed per frame as the speed per tick other code reads; cut off toward zero on the raw value).</summary>
     public static Fixed PerTick(SimulationTime time, Fixed perFrame) => Fixed.FromRaw(perFrame.Raw / time.TicksPerOriginalFrame);
 }
