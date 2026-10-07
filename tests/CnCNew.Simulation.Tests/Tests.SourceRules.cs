@@ -194,8 +194,6 @@ static partial class Tests
         new("Modules/BuiltIn/MatchModules.cs", RuleOneTickMinimum, "world.Tick + Math.Max(world.BaseRegenDelayTicks, SimulationTiming.SleepNone)", "a wake-up must lie in the future; with a delay of 0 this is one tick, not one frame (list for phase 23)"),
         new("Modules/BuiltIn/MineModules.cs", RuleOneTickMinimum, "return Math.Max(_nextDeathCheck - now, SimulationTiming.SleepNone);", "a difference of absolute ticks"),
         new("Modules/BuiltIn/Phase5BlockerModules.cs", RuleOneTickMinimum, "return Math.Max(soonest - now, SimulationTiming.SleepNone);", "a difference of absolute ticks"),
-        new("Modules/BuiltIn/Phase5BlockerModules.cs", RuleOneTickMinimum, "return Math.Max(data.UpdateRateTicks, SimulationTiming.SleepNone);", "deliberately one tick: a detection holds UpdateRateTicks + TickOrder.Next, a floor of one frame would open a gap of a tick at DetectionRate 0"),
-        new("Modules/BuiltIn/Phase5Modules.cs", RuleOneTickMinimum, "var until = world.Tick + Math.Max(ticks, SimulationTiming.SleepNone);", "MarkDetected: the caller builds the value from a rate plus TickOrder.Next; the floor guards a caller passing 0"),
         new("Modules/BuiltIn/WorldEffectModules.cs", RuleOneTickMinimum, "return Math.Max(soonest - now, SimulationTiming.SleepNone);", "a difference of absolute ticks"),
         new("Modules/BuiltIn/SpecialAbilityStaging.cs", RuleOneTickMinimum, "var denominator = Math.Max(1, data.PreparationTicks);", "guards a division by zero, no duration"),
         new("Testing/StressScenario.cs", RuleOneTickMinimum, "var remaining = (int)Math.Max(1, _options.Ticks - tick - world.Time.OriginalFrames(DrainReserveFrames));", "a number of steps used as a modulus, at least 1"),

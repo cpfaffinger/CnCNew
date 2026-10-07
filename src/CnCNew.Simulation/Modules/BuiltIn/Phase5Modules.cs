@@ -131,7 +131,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     /// <summary><c>StealthUpdate::markAsDetected</c>: extends (never shortens) how long <c>DETECTED</c> stays set. Called by <c>StealthDetectorUpdate</c>.</summary>
     public void MarkDetected(IWorldServices world, long ticks)
     {
-        var until = world.Tick + Math.Max(ticks, SimulationTiming.SleepNone);
+        var until = world.Tick + world.Time.AtLeastOneFrame(ticks);
         if (until > _detectedUntilTick) _detectedUntilTick = until;
         Entity.Status |= 1UL << DetectedBit;
         // Called from the detector's update, not this entity's: the change needs its own mark (finding D8).

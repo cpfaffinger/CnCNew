@@ -489,11 +489,13 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
             foreach (var module in candidate.Modules)
             {
                 if (module is not StealthUpdate stealth) continue;
-                stealth.MarkDetected(world, data.UpdateRateTicks + TickOrder.Next);
+                // markAsDetected(m_updateRate + 1): the extra step is one logic frame of the original, so the mark outlasts the next scan by the same game time at every rate.
+                stealth.MarkDetected(world, data.UpdateRateTicks + world.Time.TicksPerOriginalFrame);
                 break;
             }
         }
-        return Math.Max(data.UpdateRateTicks, SimulationTiming.SleepNone);
+        // A DetectionRate of 0 scans once per logic frame of the original; the mark above holds one frame longer, so no gap opens.
+        return world.Time.AtLeastOneFrame(data.UpdateRateTicks);
     }
 
     private static bool HasAnyKind(ObjectTemplate template, ImmutableArray<string> kinds)
