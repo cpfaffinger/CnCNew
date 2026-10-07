@@ -81,7 +81,7 @@ Modifikatoren (`KeyModifiers`) ergeben sich aus gehaltenen Modifikatortasten; li
 
 | Eingabe | Wirkung | Wert/Quelle |
 |---|---|---|
-| Pfeiltasten (Engine-Bindung, Modifikator muss exakt passen: Strg+Pfeil wählt Einheiten) | `Scroll`, pro Sekunde Richtung × Horizontal-/Vertikalfaktor × Tastaturfaktor | `GameData.ini`: 1,6 / 2,0 / 2,0 |
+| Pfeiltasten (Engine-Bindung, Modifikator muss exakt passen: Strg+Pfeil wählt Einheiten) | `Scroll`, pro Sekunde Richtung × Horizontal-/Vertikalfaktor × Scroll-Option | `GameData.ini`: 1,6 / 2,0; Option 0,5 (siehe §4a) |
 | Cursor im 3-px-Randstreifen (abschaltbar, nicht während Tastaturscroll) | wie Tasten | `edgeScrollSize = 3` (`LookAtXlat.cpp`) |
 | Rechts ziehen | Scroll proportional zum Abstand vom Anker, auf halbe Bildschirmgröße begrenzt | `LookAtXlat.cpp`, `RightMouseAlwaysScrolls` |
 | Mittel ziehen | Drehung 0,01 rad pro Pixel | `LookAtXlat.cpp` |
@@ -92,6 +92,35 @@ Modifikatoren (`KeyModifiers`) ergeben sich aus gehaltenen Modifikatortasten; li
 
 `Scroll` ist kamerarelativ und dimensionslos (1 = Grundgeschwindigkeit der Kamera für eine Sekunde); die Umrechnung in Meter übernimmt der
 Kamerabesitzer (C1).
+
+### 4a. Scrollgeschwindigkeit (7. Oktober 2026, gemessen; nicht von einem Menschen abgenommen)
+
+Quelle: `LookAtXlat.cpp`, `LookAtTranslator::translateGameMessage`, Zweig `MSG_FRAME_TICK`; `W3DView.cpp`, `W3DView::scrollBy`; `GlobalData.cpp`,
+`GlobalData::parseGameDataDefinition`; `OptionsMenu.cpp`, `OptionPreferences::getScrollFactor` und `saveOptions`.
+
+* Tasten (`SCROLL_KEY`) und Bildrand (`SCROLL_SCREENEDGE`) benutzen im Original dieselbe Formel: je Client-Bild (30 je Sekunde)
+  `Faktor × SCROLL_AMT (100) × m_keyboardScrollFactor`, Faktor = `HorizontalScrollSpeedFactor` 1,6 bzw. `VerticalScrollSpeedFactor` 2,0.
+* `m_keyboardScrollFactor` ist **nicht** der Wert `KeyboardScrollSpeedFactor = 2.0` aus `GameData.ini`: direkt nach dem Einlesen überschreibt
+  `parseGameDataDefinition` ihn mit der Option des Spielers (`getScrollFactor`: Reglerstellung 0–100 geteilt durch 100, ohne gespeicherte Einstellung
+  `m_keyboardDefaultScrollFactor` = 0,5). Der Regler der Optionen schreibt denselben Wert (`val / 100`).
+* `scrollBy` nimmt eine Scroll-Einheit als `250 / Breite × 2 × tan(FOV/2)` Welteinheiten auf der Bildebene (bei 1280 Pixeln Breite 0,1822); in y kommt das
+  Seitenverhältnis dazu, und nur der Anteil `sin(Neigung)` liegt am Boden.
+
+Bis zu dieser Korrektur rechnete `CameraSettings` mit dem `GameData.ini`-Wert 2,0 statt mit der Option 0,5 – Rand und Tasten scrollten **viermal** so schnell wie
+das Original; der Regler skalierte zudem Horizontal-/Vertikalfaktor *und* Tastaturfaktor (quadratisch). Jetzt ist `CameraSettings.KeyboardScrollSpeedFactor`
+die Option selbst (`ControlSettings.ScrollSpeed`, Vorgabe 0,5; Regler ganz links = 0 = kein Tasten-/Randscroll wie im Original, ganz rechts = 1,0).
+
+| Weg (1280 × 720, Vorgabezoom, Regler in Mittelstellung) | vorher | jetzt | Original |
+|---|---|---|---|
+| Bildrand/Tasten seitwärts, Welteinheiten je Sekunde | 1.748,6 | 437,2 | 437,2 (2.400 Scroll-Einheiten) |
+| Bildrand/Tasten vorwärts | 2.365,6 | 591,4 | 591,4 (3.000 Scroll-Einheiten) |
+| Rechtsziehen, 100 Pixel seitwärts | 136,6 | 136,6 | 874,3 (`1,6 × Pixelabstand` je Bild, kein Bezug zur halben Bildbreite) |
+| Rechtsziehen, Höchstwert seitwärts (halbe Bildbreite) | 874,3 | 874,3 | 5.595,5 |
+
+Der Scroll läuft auf Wandzeit (`CameraIntent.Scroll` × `dt`), nicht auf der Tickrate; der Test `Camera.edge, key and right-drag scroll speed …` misst eine
+Sekunde mit 30 und mit 144 Bildern. Im Original hängt die Geschwindigkeit von der Auflösung ab (bei 800 Pixeln Breite 699,5 statt 437,2 seitwärts) – das ist
+übernommen. **Offene Abweichung (nur gemeldet):** das Rechtsziehen ist bei uns auf den Tastenwert bei voller Auslenkung begrenzt und damit bei 1280 Pixeln
+6,4-mal langsamer als im Original.
 
 ## 5. Auswahl
 

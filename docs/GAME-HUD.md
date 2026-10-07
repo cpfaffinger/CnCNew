@@ -264,11 +264,10 @@ Bauknopf mit „Requires: …“) und `hudletterbox-WxH.png` (dieselben Zeilen u
 
 ## 9. Kameraeinstellungen
 
-`GameSettings.Controls` (Schieberegler `0..1`) wird auf `CnCNew.Presentation.Input.CameraSettings` abgebildet, indem die
-Werkseinstellungen mit `0.5 + Reglerwert` skaliert werden (`MapCameraSettings`): bei `0.5` (Vorgabe) bleiben die
-Engine-Vorgabewerte unverändert, an den Reglerenden werden sie halbiert bzw. verdoppelt. Es gibt keine Originaltabelle für diese
-Zuordnung, da das Original einen eigenen, nichtlinearen internen Geschwindigkeitswert aus dem Regler ableitet, den diese Schicht
-nicht nachbildet; die Zuordnung ist eine bewusste, dokumentierte Näherung.
+`GameSettings.Controls` (Schieberegler `0..1`) wird auf `CnCNew.Presentation.Input.CameraSettings` abgebildet (`MatchController.MapCameraSettings`).
+Der Scrollregler ist der Wert des Originals selbst: `KeyboardScrollSpeedFactor` = Reglerwert (`OptionsMenu.cpp`: `m_keyboardScrollFactor = Position / 100`,
+Vorgabe 0,5; er wirkt nur auf Tasten- und Randscroll, `docs/PRESENTATION-INPUT.md` §4a). Der Drehregler hat kein Gegenstück im Original: bei `0.5` gilt
+der Engine-Wert, an den Enden wird er halbiert bzw. verdoppelt (bewusste, dokumentierte Näherung).
 
 ## 10. Spielergebnis und Statistik (`MatchResult.cs`)
 

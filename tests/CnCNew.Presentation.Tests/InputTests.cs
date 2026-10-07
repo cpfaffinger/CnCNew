@@ -1230,13 +1230,13 @@ static class InputTests
         Assert(camera.Update(state, hotkeys, viewport, CnCNew.Tests.TestTime.FrameSecondsF).IsIdle, "a centred cursor and no keys: idle");
         state.Apply(new KeyEvent(1, KeyCode.Up, true));
         var up = camera.Update(state, hotkeys, viewport, 1f);
-        Assert(up.Scroll == new Vector2(0, 2.0f * 2.0f), "the up arrow scrolls forward: vertical factor 2.0 x keyboard factor 2.0 per second");
+        Assert(up.Scroll == new Vector2(0, 2.0f * 0.5f), "the up arrow scrolls forward: vertical factor 2.0 x scroll option 0.5 per second");
         state.Apply(new KeyEvent(2, KeyCode.LeftControl, true));
         Assert(camera.Update(state, hotkeys, viewport, 1f).Scroll == Vector2.Zero, "Ctrl+Up is not a scroll (it selects the next worker)");
         state.Apply(new KeyEvent(3, KeyCode.LeftControl, false));
         state.Apply(new KeyEvent(4, KeyCode.Up, false));
         state.Apply(new MouseMoveEvent(5, new Vector2(1, 300)));
-        Assert(camera.Update(state, hotkeys, viewport, 1f).Scroll == new Vector2(-1.6f * 2.0f, 0), "the cursor within 3 px of the left edge scrolls left");
+        Assert(camera.Update(state, hotkeys, viewport, 1f).Scroll == new Vector2(-1.6f * 0.5f, 0), "the cursor within 3 px of the left edge scrolls left: horizontal factor 1.6 x scroll option 0.5");
         state.Apply(new MouseMoveEvent(6, new Vector2(3, 300)));
         Assert(camera.Update(state, hotkeys, viewport, 1f).Scroll == Vector2.Zero, "3 px from the edge is outside the band");
         var noEdge = new CameraInputController(new CameraSettings(EdgeScrollEnabled: false));

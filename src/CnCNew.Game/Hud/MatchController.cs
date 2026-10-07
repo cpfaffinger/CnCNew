@@ -412,20 +412,18 @@ public sealed class MatchController
         _ => UiScaleMode.Anchor,
     };
 
-    /// <summary>Maps the options-screen 0..1 scroll/rotate sliders onto the input layer's camera tuning: 0.5 (the default) keeps the
-    /// engine defaults, the ends halve/double them. There is no retail table for this since the original slider drives an entirely
-    /// different (non-linear) internal speed constant; this is a reasonable, documented approximation (see docs/GAME-HUD.md).</summary>
-    private static CameraSettings MapCameraSettings(GameSettings settings)
+    /// <summary>Maps the options-screen 0..1 sliders onto the input layer's camera tuning. The scroll slider is the original's own value:
+    /// <c>OptionsMenu.cpp</c> stores <c>m_keyboardScrollFactor = sliderPosition / 100</c>, which scales key and screen-edge scrolling only
+    /// (<c>LookAtXlat.cpp</c>; right-drag scrolling does not depend on it). The rotate slider has no retail counterpart: 0.5 keeps the engine
+    /// default, the ends halve/double it (docs/GAME-HUD.md).</summary>
+    public static CameraSettings MapCameraSettings(GameSettings settings)
     {
         var defaults = new CameraSettings();
-        var scrollFactor = 0.5f + settings.Controls.ScrollSpeed;
         var rotateFactor = 0.5f + settings.Controls.CameraRotateSpeed;
         return defaults with
         {
             EdgeScrollEnabled = settings.Controls.EdgeScrolling,
-            HorizontalScrollSpeedFactor = defaults.HorizontalScrollSpeedFactor * scrollFactor,
-            VerticalScrollSpeedFactor = defaults.VerticalScrollSpeedFactor * scrollFactor,
-            KeyboardScrollSpeedFactor = defaults.KeyboardScrollSpeedFactor * scrollFactor,
+            KeyboardScrollSpeedFactor = settings.Controls.ScrollSpeed,
             KeyboardRotateRadiansPerFrame = defaults.KeyboardRotateRadiansPerFrame * rotateFactor,
         };
     }
