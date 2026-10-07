@@ -357,4 +357,30 @@ static partial class Tests
                 Check.That(Run(5 * factor + 1 + offset).SequenceEqual(frames), $"{rate}: a snapshot taken {offset} ticks into a frame continues identically.");
         }
     }
+
+    /// <summary>
+    /// §5.1 <c>EmpUpdate</c>: the scale of the pulse closes a twentieth of the gap to its target per logic frame (state and presentation only). After every frame it is the scale of
+    /// 30 Hz, bit for bit; before, it closed a twentieth per tick and grew in half and a quarter of the time.
+    /// </summary>
+    public static void RateProjectilesEmpScaleGrowsPerFrame()
+    {
+        List<Fixed>? reference = null;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var fixture = new SyntheticFixture(rate, files: AirWeaponFixtureFiles);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 13, AirPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, string.Empty), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "AirEmpPulse", owner: 1, x: 100, y: 100);
+            var scales = new List<Fixed>();
+            for (var step = 1; step <= 26 * factor; step++)
+            {
+                world.Step();
+                if (step % factor != 0) continue;
+                var pulse = world.Entities.FirstOrDefault(value => value.Template.Name == "AirEmpPulse" && !value.EffectivelyDead);
+                if (pulse is not null) scales.Add(pulse.Modules.OfType<EmpUpdate>().Single().Scale);
+            }
+            reference ??= scales;
+            Check.That(scales.Count > 20 && scales.SequenceEqual(reference), $"{rate}: the scale after every frame is the scale of 30 Hz ({scales.Count} frames, last {scales[^1]} against {reference[^1]}).");
+        }
+    }
 }

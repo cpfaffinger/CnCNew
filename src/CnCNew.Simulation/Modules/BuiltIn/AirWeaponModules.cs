@@ -160,7 +160,10 @@ public sealed class EmpUpdate(EmpData data) : SimModule, IUpdateModule
 
     public long Update(IWorldServices world)
     {
-        _scale += (_targetScale - _scale) * Fixed.FromDecimal(0.05m);
+        // "m_currentScale += (m_targetScale - m_currentScale) * 0.05f" is a share per logic frame of the original: taken on the pulse's frame ticks only (counted back from the
+        // tick it dies in, which lies whole frames after its creation), so the scale after every frame is the scale of 30 Hz. Every tick at 30 Hz.
+        var ticksPerFrame = world.Time.TicksPerOriginalFrame;
+        if (ticksPerFrame == 1 || (_dieTick - world.Tick) % ticksPerFrame == 0) _scale += (_targetScale - _scale) * Fixed.FromDecimal(0.05m);
         if (!_fired && world.Tick >= _playTick)
         {
             _fired = true;
