@@ -370,12 +370,19 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
                 continue;
             }
             var locomotor = entity.Template.Locomotor;
-            var braking = locomotor?.Braking ?? Fixed.Zero;
-            var speed = Fixed.Sqrt(flare.VelocityX * flare.VelocityX + flare.VelocityY * flare.VelocityY);
-            var scale = speed <= braking || speed == Fixed.Zero ? Fixed.Zero : (speed - braking) / speed;
-            var velocityX = flare.VelocityX * scale;
-            var velocityY = flare.VelocityY * scale;
-            _flares[index] = flare with { VelocityX = velocityX, VelocityY = velocityY };
+            var velocityX = flare.VelocityX;
+            var velocityY = flare.VelocityY;
+            // The braking is the 30 Hz step: it takes the braking of a whole logic frame of the original off the speed once per frame, counted from the flare's first move
+            // (the tick after it was launched); in between the flare keeps its speed and moves every tick.
+            if (world.Time.IsOriginalFrameBoundary(now - flare.AddedTick - TickOrder.Next))
+            {
+                var braking = FlightFrames.PerFrame(world.Time, locomotor?.Braking ?? Fixed.Zero);
+                var speed = Fixed.Sqrt(velocityX * velocityX + velocityY * velocityY);
+                var scale = speed <= braking || speed == Fixed.Zero ? Fixed.Zero : (speed - braking) / speed;
+                velocityX *= scale;
+                velocityY *= scale;
+                _flares[index] = flare with { VelocityX = velocityX, VelocityY = velocityY };
+            }
             entity.X += velocityX;
             entity.Y += velocityY;
             var ground = FlightModules.GroundOrDefault(world, entity.X, entity.Y, Fixed.Zero);

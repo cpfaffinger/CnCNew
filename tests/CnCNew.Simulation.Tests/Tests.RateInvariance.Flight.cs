@@ -239,4 +239,43 @@ static partial class Tests
         }
         FlightVerdict();
     }
+
+    /// <summary>
+    /// <c>CountermeasuresBehavior.MoveFlares</c>: a flare leaves the plane at twice the plane's speed, loses speed at its locomotor's braking and sinks at its <c>SpeedLimitZ</c>. The braking
+    /// acts once per logic frame of the original; the flare moves every tick. Compared from where the flare appeared (when it appears depends on the missile it answers).
+    /// </summary>
+    public static void RateFlightFlaresAreTheSame()
+    {
+        var tracks = new List<FlightPose>[FlightRates.Length];
+        var launched = new long[FlightRates.Length];
+        var travel = new Fixed[FlightRates.Length];
+        for (var index = 0; index < FlightRates.Length; index++)
+        {
+            var (world, feeder) = FlightRateWorld(FlightRates[index], ScriptFiles());
+            feeder.Spawn(1, "AlphaPlane", owner: 1, x: 300, y: 500, z: 60);
+            // Out of the launcher's range at first: the plane is at full speed when the missile comes.
+            feeder.Spawn(2, "BetaLauncher", owner: 2, x: 1300, y: 540);
+            world.Step();
+            var plane = Only(world, "AlphaPlane");
+            world.CompleteUpgrade(plane.Owner, null, "Upgrade_AlphaFlares");
+            Check.That(feeder.SetMoveTarget(1, plane.Id.Value, 2500, 500).Accepted, "The move order is accepted.");
+            var start = world.Tick;
+            Entity? flare = null;
+            for (var tick = 0; tick < world.Frames(600) && flare is null; tick++)
+            {
+                world.Step();
+                flare = world.Entities.Where(entity => entity.Template.Name == "AlphaFlare").OrderBy(entity => entity.Id.Value).FirstOrDefault();
+            }
+            Check.That(flare is not null, $"{FlightRates[index]}: a missile was fired at the plane and a volley of flares left it.");
+            launched[index] = FrameQuarters(world, world.Tick - start);
+            var origin = (flare!.X, flare.Y);
+            tracks[index] = FrameTrack(world, flare, 25).Select(pose => pose with { X = pose.X - origin.X, Y = pose.Y - origin.Y, Angle = Fixed.Zero }).ToList();
+            var last = tracks[index][^1];
+            travel[index] = Fixed.Sqrt(last.X * last.X + last.Y * last.Y);
+        }
+        Console.WriteLine($"       flares: the first volley leaves after {InFrames(launched[0])} / {InFrames(launched[1])} / {InFrames(launched[2])} frames (not compared: the missile decides)");
+        SameValues("flares: travel of the first flare in 25 frames", travel, 0.01m);
+        SameTracks("flares: the first flare, 25 frames", tracks, 0.01m, 0.0001m);
+        FlightVerdict();
+    }
 }
