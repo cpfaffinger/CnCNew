@@ -135,6 +135,69 @@ static partial class Tests
             });
     }
 
+    /// <summary>
+    /// <c>TensileFormationUpdate</c> (the avalanche) on a slope that ends in a plain: inertia, friction and the pull of the links once per frame of the original, the rocks move
+    /// every tick. Every rock is where it is at 30 Hz at each frame boundary of the slide, the neighbours start sliding in the same frame, the last frame in
+    /// which the hurt rock drops (what the presentation shows as FREEFALL) is the same, and the slide ends after 300 frames.
+    /// </summary>
+    public static void RateInvarianceAvalanche()
+    {
+        AtThreeRates(rate =>
+        {
+            var terrain = CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(60, 40, 1, height: (x, _) => Math.Max(x - 26, 0)), "slope");
+            var (world, feeder, fixture) = RatedWorld(rate, SlaveFiles(), terrain);
+            feeder.Spawn(1, "SvRock", x: 300, y: 200);
+            feeder.Spawn(1, "SvRock", x: 310, y: 200);
+            feeder.Spawn(1, "SvRock", x: 320, y: 215);
+            for (var tick = 0; tick < world.Frames(100); tick++) world.Step();
+            var rocks = world.Entities.Where(value => value.Template.Name == "SvRock").OrderBy(value => value.Id.Value).ToArray();
+            var modules = rocks.Select(rock => ModuleOf<TensileFormationUpdate>(rock)).ToArray();
+            var start = rocks[0].X;
+            feeder.Damage(rocks[0].Id.Value, 60);
+            // The step in which the hurt rock notices is the first tick of the first frame of its slide.
+            var perFrame = world.Time.TicksPerOriginalFrame;
+            for (var tick = 0; tick < world.Frames(40) && !modules[0].Enabled; tick++) world.Step();
+            Check.That(modules[0].Enabled && modules[0].Life == 1, "Setup: the hurt rock started to slide.");
+            var between = true;
+            for (var tick = 1; tick < perFrame; tick++) world.Step();
+            var series = new List<long>();
+            var lastDrop = -1;
+            var joined = new int[rocks.Length];
+            for (var frame = 2; frame <= 340; frame++)
+            {
+                var (beforeX, beforeZ) = (rocks[0].X, rocks.Select(rock => rock.Z).ToArray());
+                for (var tick = 1; tick <= perFrame; tick++)
+                {
+                    world.Step();
+                    // Inside a frame the rock is on the way from where the frame began to where it ends (it slides towards smaller x).
+                    if (tick < perFrame && frame is > 5 and < 100 && rocks[0].X >= beforeX) between = false;
+                    if (frame == 50 && tick == 1 && perFrame > 1)
+                    {
+                        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, terrain);
+                        Check.That(restored.StateHash == world.StateHash, "A formation saved inside a frame of its slide round-trips (" + rate.TicksPerSecond + " Hz).");
+                    }
+                }
+                for (var index = 0; index < rocks.Length; index++)
+                {
+                    series.Add(rocks[index].X.Raw);
+                    series.Add(rocks[index].Y.Raw);
+                    series.Add(rocks[index].Z.Raw);
+                    if (index == 0 && rocks[index].Z < beforeZ[index]) lastDrop = frame;
+                    if (joined[index] == 0 && modules[index].Enabled) joined[index] = frame;
+                }
+            }
+            return (Series: series, Slid: start - rocks[0].X, LastDrop: lastDrop, Joined: string.Join(",", joined), Life: world.Time.ToOriginalFrames(modules[0].Life - 1), Between: between);
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Slid > Fixed.FromInt(3) && reference.LastDrop > 20, "Setup: the hurt rock slid downhill at 30 Hz (" + reference.Slid + ", last drop in frame " + reference.LastDrop + ").");
+            Check.That(other.Joined == reference.Joined, "The neighbours start sliding in the same frames at " + rate + ": " + other.Joined + " instead of " + reference.Joined + ".");
+            Check.That(other.LastDrop == reference.LastDrop, "The last frame in which the hurt rock drops is the same at " + rate + ": " + other.LastDrop + " instead of " + reference.LastDrop + ".");
+            Check.That(other.Life == reference.Life && reference.Life == 300, "The slide lasts 300 frames at " + rate + " (" + other.Life + ").");
+            SameSeries(reference.Series, other.Series, "Rocks of the avalanche at " + rate);
+            Check.That(other.Between, "Inside a frame the rock is between the two frame boundaries at " + rate + ".");
+        });
+    }
+
     /// <summary>A world on the fixture and the terrain of the structure tests (the track RailA … RailD with a station, a looping track, the wave's path) at <paramref name="rate"/>.</summary>
     private static (SimulationWorld World, SyntheticFixture Fixture, CnCNew.Simulation.Terrain.TerrainMap Terrain) RatedStructuresWorld(SimulationRate rate, bool lake = false)
     {

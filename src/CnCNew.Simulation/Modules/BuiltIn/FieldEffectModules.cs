@@ -294,6 +294,13 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
     private Fixed _inertiaX;
     private Fixed _inertiaY;
     private Fixed _lowestSlide = Fixed.FromInt(255);
+    // The slide is the original's recursion, once per logic frame of the original: the first tick of a frame of the slide decides where the frame ends
+    // (inertia, friction, the pull of the links), every tick moves the rock towards that place, the last tick puts it there. Inside a frame the rock's place
+    // for its neighbours is where the frame ends. At rest (unwritten) between two frames, which is always at 30 Hz.
+    private bool _insideFrame;
+    private Fixed _frameEndX;
+    private Fixed _frameEndY;
+    private Fixed _frameEndZ;
 
     public override string ModuleName => "TensileFormationUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -319,33 +326,62 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
             if (!hurt) return world.Time.OriginalFrames(DormantCheckFrames);
             _enabled = true;
         }
-        // _life counts updates, one per tick: lifetime, period and phase are frames of the original and scale together.
+        // _life counts updates, one per tick: the lifetime is frames of the original; the tick's number inside the frame of the slide follows from it.
         if (++_life > world.Time.OriginalFrames(LifetimeFrames)) return SimulationTiming.SleepForever;
-        if (_life % world.Time.OriginalFrames(PropagatePeriodFrames) == world.Time.OriginalFrames(PropagatePhaseFrames)) PropagateDislodgement(world);
-
-        // Apply physics: flow down the slope with friction.
-        var (nx, ny, nz) = GroundNormal(world, Entity.X, Entity.Y);
-        var scale = BaseSlope + (Fixed.One - nz);
-        _inertiaX = (_inertiaX + nx * scale) * Friction;
-        _inertiaY = (_inertiaY + ny * scale) * Friction;
-        var x = Entity.X + _inertiaX;
-        var y = Entity.Y + _inertiaY;
-        var z = world.GroundHeightAt(x, y);
-
-        // Apply tensors: pulled towards the place each neighbour holds this rock at.
-        foreach (var (id, dx, dy, _) in _links)
+        var ticks = world.Time.TicksPerOriginalFrame;
+        var subTick = ticks == TickOrder.Next ? ticks : (_life - 1) % ticks + 1;
+        if (subTick == TickOrder.Next)
         {
-            if (world.FindEntity(id) is not { } other) continue;
-            x = x * NewShare + (other.X - dx) * LinkShare;
-            y = y * NewShare + (other.Y - dy) * LinkShare;
-            z = Fixed.Min(_lowestSlide, world.GroundHeightAt(x, y));
+            // The frame of the slide that starts now (m_life of the original): period and phase of passing the dislodgement on are frames.
+            var frame = ticks == TickOrder.Next ? _life : (_life - 1) / ticks + 1;
+            if (frame % PropagatePeriodFrames == PropagatePhaseFrames) PropagateDislodgement(world, ticks);
+
+            // Apply physics: flow down the slope with friction.
+            var (nx, ny, nz) = GroundNormal(world, Entity.X, Entity.Y);
+            var scale = BaseSlope + (Fixed.One - nz);
+            _inertiaX = (_inertiaX + nx * scale) * Friction;
+            _inertiaY = (_inertiaY + ny * scale) * Friction;
+            var x = Entity.X + _inertiaX;
+            var y = Entity.Y + _inertiaY;
+            var z = world.GroundHeightAt(x, y);
+
+            // Apply tensors: pulled towards the place each neighbour holds this rock at.
+            foreach (var (id, dx, dy, _) in _links)
+            {
+                if (world.FindEntity(id) is not { } other) continue;
+                var (otherX, otherY, _) = ticks == TickOrder.Next ? (other.X, other.Y, other.Z) : PlaceOf(other);
+                x = x * NewShare + (otherX - dx) * LinkShare;
+                y = y * NewShare + (otherY - dy) * LinkShare;
+                z = Fixed.Min(_lowestSlide, world.GroundHeightAt(x, y));
+            }
+            _lowestSlide = z;
+            (_frameEndX, _frameEndY, _frameEndZ) = (x, y, z);
         }
-        _lowestSlide = z;
-        Entity.X = x;
-        Entity.Y = y;
-        Entity.Z = z;
+        if (subTick == ticks)
+        {
+            Entity.X = _frameEndX;
+            Entity.Y = _frameEndY;
+            Entity.Z = _frameEndZ;
+            _insideFrame = false;
+        }
+        else
+        {
+            // An equal share of what is left for each tick left: a straight line to the place the frame ends at.
+            var left = ticks - subTick + 1;
+            Entity.X += Fixed.FromRaw((_frameEndX - Entity.X).Raw / left);
+            Entity.Y += Fixed.FromRaw((_frameEndY - Entity.Y).Raw / left);
+            Entity.Z += Fixed.FromRaw((_frameEndZ - Entity.Z).Raw / left);
+            _insideFrame = true;
+        }
         return SimulationTiming.SleepNone;
     }
+
+    /// <summary>
+    /// Where a rock is for the recursion of its neighbours: the place its current frame of the slide ends at once it has started that frame (at 30 Hz a
+    /// rock that has had its update of the tick has moved), otherwise where it is.
+    /// </summary>
+    private static (Fixed X, Fixed Y, Fixed Z) PlaceOf(Entity other)
+        => TensileOf(other) is { _insideFrame: true } tensile ? (tensile._frameEndX, tensile._frameEndY, tensile._frameEndZ) : (other.X, other.Y, other.Z);
 
     /// <summary>The links of <c>initLinks</c>: each formation member closer than every earlier candidate within reach is pushed in front of the others (four are kept).</summary>
     private void InitLinks(IWorldServices world)
@@ -370,14 +406,15 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
     private static TensileFormationUpdate? TensileOf(Entity entity) => entity.ModuleArray.OfType<TensileFormationUpdate>().FirstOrDefault();
 
     /// <summary><c>propagateDislodgement</c>: the formation members within 100 units and the links are told the formation is on the move.</summary>
-    private void PropagateDislodgement(IWorldServices world)
+    private void PropagateDislodgement(IWorldServices world, int ticksPerOriginalFrame)
     {
         foreach (var other in world.Entities)
         {
             if (other.Id == Entity.Id || TensileOf(other) is not { } tensile) continue;
-            var dx = other.X - Entity.X;
-            var dy = other.Y - Entity.Y;
-            var dz = other.Z - Entity.Z;
+            var (otherX, otherY, otherZ) = ticksPerOriginalFrame == TickOrder.Next || !tensile._insideFrame ? (other.X, other.Y, other.Z) : (tensile._frameEndX, tensile._frameEndY, tensile._frameEndZ);
+            var dx = otherX - Entity.X;
+            var dy = otherY - Entity.Y;
+            var dz = otherZ - Entity.Z;
             var reach = DislodgeReach + Entity.Template.BoundingSphereRadius + other.Template.BoundingSphereRadius;
             if (SquaredReach.Of(reach).Contains(dx * dx + dy * dy + dz * dz)) tensile.Dislodge();
         }
@@ -404,6 +441,12 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
         writer.Fixed("inertiaX", _inertiaX);
         writer.Fixed("inertiaY", _inertiaY);
         writer.Fixed("lowestSlide", _lowestSlide);
+        if (_insideFrame)
+        {
+            writer.Fixed("frameEndX", _frameEndX);
+            writer.Fixed("frameEndY", _frameEndY);
+            writer.Fixed("frameEndZ", _frameEndZ);
+        }
         writer.BeginArray("links");
         foreach (var (id, dx, dy, dz) in _links)
         {
@@ -427,6 +470,8 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
         _inertiaX = reader.Fixed("inertiaX");
         _inertiaY = reader.Fixed("inertiaY");
         _lowestSlide = reader.Fixed("lowestSlide");
+        _insideFrame = reader.Has("frameEndX");
+        (_frameEndX, _frameEndY, _frameEndZ) = _insideFrame ? (reader.Fixed("frameEndX"), reader.Fixed("frameEndY"), reader.Fixed("frameEndZ")) : (Fixed.Zero, Fixed.Zero, Fixed.Zero);
         _links.Clear();
         foreach (var entry in reader.Array("links")) _links.Add((new EntityId(checked((uint)entry.UInt("id"))), entry.Fixed("dx"), entry.Fixed("dy"), entry.Fixed("dz")));
     }
