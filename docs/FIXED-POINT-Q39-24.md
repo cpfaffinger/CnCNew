@@ -6,8 +6,8 @@ Stand: 6. Oktober 2026, Zweig der Phase 22, Umstellung in Commit `d7fca91`. Auft
 `Fixed` ist ein `long` mit jetzt **24 Nachkommabits** (Auflösung 2⁻²⁴ ≈ 6 · 10⁻⁸, Bereich ± 5,5 · 10¹¹) statt 16 (2⁻¹⁶ ≈ 1,5 · 10⁻⁵, ± 1,4 · 10¹⁴). Die Umstellung ändert jeden Hash, jeden Snapshot und jedes Replay und
 geschah deshalb allein: erst eine Vorarbeit, die kein Ergebnis ändert, dann ein Commit mit einer Ursache.
 
-**Zwei Befunde, die eine Entscheidung brauchen, stehen in §5 und §6:** (1) das Quadrat einiger Reichweiten aus den Daten (1.000.000) verlässt den neuen Bereich und wirft – in keinem der gemessenen Läufe, aber
-auf einem von einem Spieler erreichbaren Weg; es ist berichtet und **nicht** umgangen. (2) Das Referenzmatch ist ein Zermürbungskrieg, dessen Ende von den Produktionswürfen abhängt; sein Startwert wurde in
+**Zwei Befunde stehen in §5 und §6:** (1) das Quadrat einiger Reichweiten aus den Daten (1.000.000) verlässt den neuen Bereich und warf – in keinem der gemessenen Läufe, aber
+auf von einem Spieler erreichbaren Wegen. Die Umstellung hat das berichtet und nicht umgangen; **es ist seither behoben (§5a, Nachtrag vom 7. Oktober 2026), ohne einen Referenzwert zu ändern.** (2) Das Referenzmatch ist ein Zermürbungskrieg, dessen Ende von den Produktionswürfen abhängt; sein Startwert wurde in
 einem eigenen Commit gewechselt.
 
 ## 1. Commits
@@ -136,7 +136,7 @@ gehasht, dieselben Posen); die Schranke des Fahrwerk-Tests (§9).
 
 Die Endhashes und Ketten aller 50 Läufe stehen in `baselines/reference-manifest.json`; die Tabelle in Anhang B stellt alt und neu nebeneinander.
 
-## 5. Befund: Werte, deren Quadrat den Bereich verlässt (berichtet, nicht umgangen)
+## 5. Befund: Werte, deren Quadrat den Bereich verlässt (Stand der Umstellung; behoben in §5a)
 
 Der Bereich schrumpft um den Faktor 256 auf ± 5,5 · 10¹¹. Die Wurzel der größten Zahl ist **741.455**: ein größerer Wert darf nicht quadriert werden, sein Quadrat wirft `OverflowException` (bei 16 Bit lag die
 Grenze bei 11,9 Millionen). `SimTool rate-audit <content>` listet seit der Vorarbeit jeden Katalogwert über dieser Grenze:
@@ -178,6 +178,175 @@ kein bester Wert“ ausgenommen):
 
 Nicht vom Messfühler erfasst: die Rohwertrechnungen außerhalb der Operatoren (Sicht, Topple, Bau – in §2.2 auf `checked` bzw. 128 Bit gestellt) und Wege, die kein Lauf betritt. `StructureToppleUpdate` hält Winkel
 und Winkelgeschwindigkeit mit 56 Nachkommabits; ein Viertelkreis ist dort 1,1 · 10¹⁷, Abstand zum Rand des `long` Faktor 81.
+
+## 5a. Behebung (Nachtrag, 7. Oktober 2026): Vergleiche über `SquaredReach`
+
+Der Befund aus §5 ist behoben, ergebnisneutral: jeder Vergleich, der vorher rechnen konnte, gibt dieselbe Antwort; nur Wege, die vorher warfen, rechnen jetzt. Kein Referenzwert hat sich geändert
+(`reference-manifest check --set full` und `input-manifest check` identisch, §5a.7). Der Katalogwert bleibt, was die Daten sagen – nichts wird beim Laden gekappt, kein `if (range > …)` steht an einer Aufrufstelle.
+
+### 5a.1 Was der Befund in §5 unterschätzt und was er überschätzt hat
+
+Systematisch gesucht (alle Produkte zweier `Fixed`-Werte der Simulation, mit einem Wegwerf-Werkzeug auf dem Syntaxbaum des Compilers typgenau aufgezählt: 857 Produkte, davon 413 eines Werts mit sich selbst;
+dazu `CnCNew.Game`, `CnCNew.Presentation` und die Werkzeuge):
+
+- **Mehr Stellen als die zwei genannten.** Rund 95 Stellen quadrierten eine Reichweite, einen Radius oder eine Grenze für einen Vergleich (jetzt 91 Zeilen mit `SquaredReach` in 38 Dateien). Die Reichweite einer Waffe läuft über `RangeWith`/`MaxWeaponRange`
+  außer in `WithinWeaponRange` auch in die Zielerfassung (`AcquireRadius` → `FindMoodTarget`), die Angriffsabsicht der Türme (`KeepsAttackIntent`), `AssaultTransportAIUpdate.DetectDeployShot` (Waffen mit `DamageType = DEPLOY`, wie die des
+  Trägers), `SlavedUpdate` (`MasterTarget`), die beiden Treiber (`ReferenceMatchScenario`, `ObjectiveDriver`) und – **außerhalb der Simulation** – in `SimulationQueries.InRange`, die Frage
+  des Mauszeigers „ist das Ziel in Reichweite der Auswahl“ (`CommandModeController.Hover`, `StandingOrders`).
+- **Der Weg, den ein Spieler wirklich erreicht, war der Mauszeiger:** ein ausgewählter Scud-Sturm (Reichweite 999.999) und der Zeiger über einem Feind – `InRange` warf. Die Simulation selbst quadriert die
+  Reichweite des Scud-Sturms auf keinem Befehlsweg (`AutoChooseSources = PRIMARY NONE`: `ChooseWeapon` wählt die Waffe für keine Befehlsquelle, bevor die Reichweite geprüft wird; gefeuert wird über
+  `OCLSpecialPower`). Der Flugzeugträger (`AircraftCarrierOrderLaunch`, 1.000.000) und die drei Filmsoldaten warfen in der Simulation schon beim Feuerbefehl, die Soldaten auch ohne Befehl, sobald ein Feind neben ihnen stand.
+- **Die Verkleidung des Bombenlasters ist heute nicht erreichbar.** Für `SPECIAL_DISGUISE_AS_VEHICLE` gibt es keinen Handler (`SpecialAbilityUpdate.Handles` kennt nur die Übernahme-Fähigkeiten); der Befehl wird mit
+  `SpecialPowerHandlerMissing` abgelehnt, bevor `StartAbilityRange` gelesen wird. Die Aussage in §5, das sei ein gewöhnlicher Spielerbefehl, der werfe, stimmte für den Befehl, nicht für das Werfen. Der Weg selbst
+  (`IsWithinStartRange` → `WithinSpheres`) warf mit einer Fähigkeit, die einen Handler hat (synthetischer Test), und ist behoben. Die sechs Objekte sind fünf Bombenlaster und `GC_Slth_GLAVehicleBattleBus`.
+- **Ein Produkt, das §5 als ungefährlich führte, läuft über:** `ActiveBody.AdjustMaxHealth` bildet für `PRESERVE_RATIO` `Health * newMax / oldMax`. Ab einer Gesundheit von 741.455 (62 Retail-Objekte) verlässt das
+  Produkt den Bereich, sobald ein Bonus das Maximum ändert (Veteranenstufe, Kampfplan, `MaxHealthUpgrade`). Für die zehn Objekte mit 99.999.999 warf das schon bei 16 Bit (10¹⁶), für Werte bis 11,9 Millionen ist
+  es eine Regression der Phase 22.
+- **Sichtkreise:** seit der Vorarbeit der Phase 22 (§2.2) wirft der Kreistest der `VisionMap` für einen Radius über 46.340 Einheiten (vorher wickelte er still). `ShroudClearingRange` reicht in den Daten bis 1.000; ein Skript kann aber
+  mit jedem Radius aufdecken.
+
+### 5a.2 Entwurf
+
+`src/CnCNew.Simulation/Numerics/SquaredReach.cs`, ein Werttyp für „das Quadrat einer Reichweite, nur zum Vergleichen“:
+
+| Aufruf | Bedeutung |
+|---|---|
+| `SquaredReach.Of(reach)` | das Quadrat, wie `Fixed` es bildet (Betrag², zur nächsten Zahl gerundet, Halbwerte weg von null) – in 128 Bit |
+| `.Contains(d²)` | `d² <= reach²` |
+| `.ContainsStrictly(d²)` | `d² < reach²` |
+| `SquaredReach.OfSquare(q)` | ein Wert, der schon ein Quadrat ist (bestes Abstandsquadrat einer Suche, „kein Radius“ = `MaxValue`) |
+| `SquaredReach.ContainsStrictly(reach, d², margin)` | `d² + margin < reach²`, Summe und Quadrat exakt (die Mindestreichweite: `distSqr < minAttackRangeSqr - 0.5`) |
+| `SquaredReach.Compare(a, b)` | Vorzeichen von `a² - b²` für zwei Längen, deren Quadrate verglichen wurden |
+| `Fixed.MultiplyDivide(a, b, c)` | `a * b / c` mit beiden Rundungen der zwei Operatoren, das Produkt in 128 Bit |
+
+**Warum 128 Bit und nicht „über der Grenze = immer innerhalb“ an der Aufrufstelle:** der Typ speichert das gerundete Quadrat als Maschinenwort, oder – wo es das Wort verlässt – die größte Zahl und ein Merkbit.
+`Contains` ist dann ein einziger Vergleich zweier Maschinenworte (`d.Raw <= raw`): liegt das wahre Quadrat jenseits der größten Zahl, ist jedes darstellbare Abstandsquadrat kleiner, und der Vergleich mit der
+größten Zahl sagt genau das. Nur `ContainsStrictly` braucht das Merkbit (für `d² = MaxValue`, das als Markierung „noch nichts gefunden“ vorkommt). Das ist keine Sättigung eines Ergebnisses: das gesättigte Wort
+verlässt den Typ nie, es gibt keinen Weg, es als Zahl zu lesen. Die Bildung (`FixedMath.SquareSaturated`) ist dieselbe 64×64-Multiplikation mit derselben Rundung wie `FixedMath.Multiply`, ohne dessen Ausnahme:
+der schnelle Weg kostet, was `reach * reach` kostete.
+
+**Beweis der Ergebnisneutralität.** (a) Aus der Konstruktion: `Multiply(r, r)` liefert `(|r|² + 2²³) >> 24`, wenn das unter 2⁶³ liegt, sonst wirft es; `SquareSaturated` liefert denselben Ausdruck unter derselben
+Bedingung (`high >> 23 == 0`), sonst `long.MaxValue`. Für jedes `r`, für das der alte Ausdruck rechnete, ist das gespeicherte Wort also der alte Wert, und `Contains`/`ContainsStrictly` sind die alten Vergleiche
+`<=`/`<` auf denselben zwei Worten. (b) Gemessen gegen ein unabhängiges Orakel (`Tests.SquaredReachGivesTheExactComparison`, `BigInteger`): 5.328.044 Vergleiche – jeder Rohwert in ±60.000 Schritten um die alte
+Überlaufgrenze (größter quadrierbarer Rohwert 12.439.554.047.901 = 741.455,2 Einheiten; einen Schritt darüber wirft das Produkt und `IsBeyondRange` kippt), die Sentinels der Daten und des Codes mit ihren
+Nachbarn (999.999, 1.000.000, 10.000.000, 99.999.999, die Ränder des Bereichs), 300.000 Werte jeder Größenordnung; je Reichweite die Abstände um das exakte Quadrat (±2 Rohschritte), 0, ±1, die Ränder,
+Zufallswerte. 3.885.182 davon zusätzlich gegen `d <= reach * reach` und `d < reach * reach`, wo das Produkt rechnet. Dazu 400.000 Vergleiche mit Marge (gegen `BigInteger` und gegen den ersetzten Ausdruck
+`d >= reach * reach - margin`) und 784.051 Quotienten von Produkten (`MultiplyDivide` gegen die Formel mit beiden Rundungen, 485.249 davon auch gegen `a * b / c`, 241.176 mit einem Produkt, das nur 128 Bit halten).
+(c) Am ganzen Programm: das volle Manifest und das Eingangsmanifest sind identisch.
+
+**Suchen mit laufendem Bestwert** (`var best = range * range; … if (distance > best) continue; best = distance;`) trennen jetzt Grenze und Bestwert: `var limit = SquaredReach.Of(range)`, der Bestwert gilt erst, wenn
+ein Kandidat gefunden ist. Für jeden Kandidaten ist die Bedingung dieselbe wie vorher (der alte Bestwert war nie größer als die Grenze).
+
+**Sichtkreise** rechnen weiter in Maschinenworten bei 16 Nachkommabits (§2.2); `VisionMap.SquaredRadius` liefert für einen Radius, dessen Quadrat das Wort verlässt (über 46.340 Einheiten), die größte Zahl. Exakt für
+jede Zelle, die höchstens 32.768 Einheiten vom Mittelpunkt liegt (dann passt die Summe zweier Differenzquadrate); die Differenzen bleiben `checked`.
+
+### 5a.3 Audit: welches Feld wird wo quadriert
+
+Größte Werte aus `SimTool rate-audit <content> --ranges` (neu: der größte Betrag jedes der 251 Festkommafelder des Retail-Katalogs; mit `--ranges-above N` gekürzt). „Quadriert in“ aus der Aufzählung der Produkte.
+
+| Feld | größter Retailwert | quadriert in | Überlauf bei Q39.24 möglich? | jetzt |
+|---|---:|---|---|---|
+| `WeaponInfo.AttackRange` (× Reichweitenbonus: `RangeWith`, `MaxWeaponRange`) | 1.000.000 (8 Waffen über der Grenze, auf 11 Objekten) | `WithinWeaponRange`, `KeepsAttackIntent`, `AcquireRadius` → `FindMoodTarget`, `DetectDeployShot`, `MasterTarget`, beide Treiber, `SimulationQueries.InRange` (Präsentation) | **ja** | `SquaredReach` |
+| `WeaponInfo.MinimumAttackRange` | 200 | `WithinWeaponRange` (`min² − 0,5`) | nein (Daten) | `SquaredReach.ContainsStrictly` mit Marge |
+| `WeaponInfo.PrimaryRadius` / `SecondaryRadius` (× Radiusbonus) | 300 / 200 | `DealDamageCore`, `AirWeaponModules.WithinSphere3D` | nein (Daten) | `SquaredReach` |
+| `WeaponInfo.RequestAssistRange` | 200 | `ProcessRequestAssistance` | nein | `SquaredReach` |
+| `SpecialAbilityUpdateData.StartAbilityRange` | 1.000.000 (6 Objekte) | `SpecialAbilityUpdate.WithinSpheres` | **ja** (heute vor der Prüfung abgelehnt, §5a.1) | `SquaredReach` |
+| `SpecialAbilityUpdateData.AbilityAbortRange` | 10.000.000 (= „nie“, 86 Objekte) | `WithinSpheres`, nur wenn unter 10.000.000 | ja für Werte zwischen 741.455 und 10⁷ | `SquaredReach` |
+| `BodyData.MaxHealth` / `InitialHealth` | 99.999.999 (62 Objekte über der Grenze) | nie quadriert; `Health * newMax / oldMax` in `AdjustMaxHealth` | **ja** (Produkt) | `Fixed.MultiplyDivide` |
+| `WeaponInfo.WeaponSpeed` / `MinWeaponSpeed` | 999.999 („sofort“) | nicht quadriert (Vergleiche, Quotienten, `ratio * (Speed − MinSpeed)`) | nein in Vergleichen; siehe §5a.6 | – |
+| `WeaponInfo.PrimaryDamage` | 999.999 | nicht quadriert (× Bonus, × Rüstung) | nein | – |
+| `ObjectTemplate.VisionRange` | 99.999 (`ChinaArtilleryCannon`) | `SightedObjects`, `EnemyInSight`, `AcquireRadius` (× Stimmungsfaktor), `StealthDetectorUpdate` (wenn `DetectionRange` fehlt) | nein (10¹⁰, Abstand Faktor 55) | `SquaredReach` |
+| `ObjectTemplate.ShroudClearingRange` | 1.000 | `VisionMap` | nein | `VisionMap.SquaredRadius` |
+| `ObjectTemplate.GeometryMajorRadius` / `MinorRadius` / `GeometryHeight` | 1.117 / 846 / 460 | `BoundingCircleRadius`/`BoundingSphereRadius` (Diagonale, unter der Wurzel); als Summe von Radien in Kollision, Zerquetschen, Andocken | nein | Diagonale: einfaches Produkt (benannte Ausnahme); Vergleiche: `SquaredReach` |
+| Suchradien der Module (`ScanRange`, `ScanDistance`, `DetectionRange`, `TriggerRange`, `Radius`, `Range`, `RubOffRadius`, `BlastRadius`, `OuterRadius`, `DamageRadius`, `LockDistance`, `DiveStartDistance`, `DeliveryDistance`, `CloseEnoughDist` …) | höchstens 3.000 (`DeliverPayloadData.DeliveryDistance`), sonst höchstens 700 | je ein Vergleich im Modul | nein | `SquaredReach` |
+| Ganzzahlfelder als Reichweite (`SlavedUpdate`: `GuardMaxRange`, `AttackRange`, `DistToTargetToGrantRangeBonus`; `MustCatchUpRadius`) | nicht im Festkomma-Audit | `SlaveModules` | – | `SquaredReach` |
+| Radien aus Karten (Skriptparameter: Aufdecken, `RECRUIT_TEAM`, Spezialkraft-Radius, Sichtweite) | nicht im Katalog | `VisionMap`, `ScriptEngine.Powers`, `ScriptEngine.Extended` | je nach Karte | `SquaredReach` / `SquaredRadius` |
+| Konstanten der KI und der Treiber (`DefenseRadius`, `EngageRadius`, `BoardingReach`, „überall“ = 100.000) | 100.000 | `SkirmishAi` | nein (10¹⁰) | `SquaredReach` |
+
+Über der Grenze liegen im Retail-Katalog unverändert 639 Werte in 8 Feldern (Tabelle in §5). Kein weiteres Feld liegt über 100.000.
+
+### 5a.4 Tests
+
+| Test | Was | Auf dem Stand vor der Behebung (`e1687c8`) |
+|---|---|---|
+| `Tests.SquaredReachGivesTheExactComparison`, `Tests.MultiplyDivideEqualsTheTwoOperatorsWithoutTheirOverflow` | Orakel (§5a.2) | – (der Typ existiert dort nicht) |
+| `Tests.WeaponsWithAnEverywhereRangeFire` | synthetisch: Waffen mit `AttackRange` 999.999 und 1.000.000 feuern auf Befehl und von selbst; eine Mindestreichweite von 800.000; ein Schadensradius von 1.000.000 | **wirft** `OverflowException` in `WithinWeaponRange` (beim Einreichen des Feuerbefehls) |
+| `Tests.AbilityWithAnEverywhereStartRangeBeginsWhereTheUnitStands` | synthetisch: eine Fähigkeit mit Handler, `StartAbilityRange` 1.000.000, `AbilityAbortRange` 2.000.000 und einem Zielobjekt 600 Einheiten entfernt läuft durch ihre Stufen, die Einheit bewegt sich nicht | **wirft** in `SpecialAbilityUpdate.WithinSpheres` |
+| `Tests.HealthRatioOfTheLargestBodiesSurvivesANewMaximum` | ein Körper mit 99.999.999 bekommt ein neues Maximum (`PRESERVE_RATIO`) | **wirft** in `ActiveBody.AdjustMaxHealth` |
+| `Tests.VisionCircleWithAHugeRadiusCoversTheMap` | Radien 46.000, 46.341, 99.999, 1.000.000 decken die Karte auf (schneller Weg, Referenzweg, `ExploreCircle`) | **wirft** in `VisionMap.Trace` |
+| `Tests.RealSentinelRanges` (`--content-dir`) | die elf Retail-Objekte mit einer der acht Waffen: Feuerbefehl auf Panzer und Soldat, 150 Bilder ohne Befehl; die sechs Objekte mit `StartAbilityRange` 1.000.000: die Fähigkeit auf ein Fahrzeug | **7 Schritte werfen:** Träger (Feuerbefehl), `CINE_AmericaInfantryRanger`, `CINE_AmericanInfantryPathfinder`, `CINE_GLAInfantryJarmenKell` (je Feuerbefehl und Stehen neben einem Feind) |
+| `SentinelRangeTests` (Präsentation; mit `--content-dir` alle elf Retail-Objekte) | `SimulationQueries.InRange` für eine Reichweite von 999.999 | **wirft** (synthetisch und beim ersten Retail-Objekt) |
+| `Tests.SquaredReachSourceRules` | Quelltextregel (§5a.5) | – |
+
+Auf dem alten Stand wurden die Verhaltenstests unverändert in eine Kopie des Baums gelegt und ausgeführt; sie benutzen nur die öffentliche Oberfläche der Welt.
+
+**Welche der 14 genannten Retail-Fälle wirklich durch ihre Prüfung liefen:**
+
+| Fall | getrieben? |
+|---|---|
+| `AircraftCarrierOrderLaunch` (`AmericaAircraftCarrier`) | ja: Feuerbefehl angenommen, je ein Schuss auf Panzer und Soldat; warf vorher |
+| `CINE_RangerAdvancedCombatRifle` | ja: feuert auf Befehl und von selbst; warf vorher |
+| `CINE_USAPathfinderSniperRifle` | ja: ein Schuss (der Befehl auf den Panzer wird als ungültiges Ziel abgelehnt, die Prüfung läuft davor); warf vorher |
+| `CINE_GLAJarmenKellRifle` | ja: Feuerbefehl und Stehen neben einem Feind warfen vorher und laufen jetzt durch; gefeuert wird nicht (der Befehl wird mit `NoWeapon` abgelehnt, `AutoChooseSources = NONE`) |
+| `ScudStormWeapon`, `Chem_`, `Demo_`, `GC_Chem_ScudStormWeapon` (sieben Gebäude) | in der Simulation **nicht**: kein Befehlsweg quadriert ihre Reichweite (§5a.1), vorher wie nachher keine Ausnahme. **Ja** über `SimulationQueries.InRange` (Präsentationstest mit Retaildaten, alle sieben Gebäude); das warf vorher |
+| `StartAbilityRange` 1.000.000 (fünf Bombenlaster, `GC_Slth_GLAVehicleBattleBus`) | **nein:** der Befehl wird mit `SpecialPowerHandlerMissing` abgelehnt, die Verkleidung ist nicht simuliert. Der Test hält genau diese Ablehnung fest und prüft die Stufen, sobald der Befehl angenommen wird |
+
+`SimTool range-audit <content>` (neu) als Suchlauf darüber hinaus: jedes der 526 instanziierbaren Retail-Objekte mit einer Waffe steht 250 Einheiten vor einem Panzer und vor einem Soldaten, bekommt einen
+Feuerbefehl und läuft 150 Bilder: 1.052 Läufe, **0 Ausnahmen**; 68 Objekte feuerten (447 Schüsse). Der Lauf hat kein Gelände und gibt keine Spezialkräfte; dass 458 Objekte dabei nicht feuern, ist kein Befund
+und keine Abdeckung ihrer Schusswege.
+
+### 5a.5 Was vor Rückfällen schützt
+
+- **Quelltextregel `Tests.SquaredReachSourceRules`** (vierter lexikalischer Regelsatz): in `src/CnCNew.Simulation` wird kein Wert mit sich selbst multipliziert (`x * x`, `(a + b) * (a + b)`), außer sein letzter
+  Bezeichner endet auf x, y oder z (eine Koordinatenkomponente: `dx * dx`, `v.X * v.X`). 21 benannte Ausnahmen mit Grund: Längen, die höchstens ein Abstand sind (3), Geometrie der Schablonen (3),
+  Geschwindigkeiten je Tick und Brüche zwischen 0 und 1 (10), Ganzzahlen (5). Die Regel liest Namen, nicht Typen – ein Quadrat als `a * b` geht durch; sie ist ein Stolperdraht wie die anderen.
+  Außerhalb der Simulation wäre sie zu laut (dort wird in `float` gerechnet, `radius * radius` ist dort gewöhnlich); die typgenaue Aufzählung fand dort ein einziges `Fixed`-Quadrat (`SimulationQueries.InRange`).
+- **Die Tests aus §5a.4**, darunter zwei mit Retaildaten, die die Liste der Waffen und Objekte über der Grenze festhalten: ein neuer Wert über der Grenze in diesen Feldern lässt sie scheitern.
+- **`SimTool rate-audit --ranges`** und **`SimTool range-audit`** für jede neue Datenquelle.
+
+### 5a.6 Nur berichtet, nicht geändert
+
+- **Abstandsquadrate selbst** (`dx * dx + dy * dy`, 110-mal `dx`/`dy`) sind einfache Produkte geblieben: zwei Positionen, die auf einer Achse mehr als 741.455 oder auf zwei Achsen mehr als rund 524.000 Einheiten
+  auseinanderliegen, werfen. Karten sind wenige tausend Einheiten groß. **Aber: ein Befehl mit Zielkoordinaten wird beim Einreichen nicht gegen die Karte geprüft** (`SetMoveTargetCommand` und andere tragen
+  Rohkoordinaten) – ein Bewegungsziel in 600.000 Einheiten Entfernung lässt die Bewegung der Einheit werfen (bei 16 Bit ab 8,4 Millionen). Für Mehrspieler ist das eine Frage der Befehlsprüfung (Phasen 27/28),
+  kein Vergleich, den ein Helfer neutral beantworten könnte.
+- **Gespeichert und gehasht** wird genau ein Quadrat: `DeliverPayloadAIUpdate._previousDistance2` (das Abstandsquadrat zum Ziel im vorigen Tick, im Snapshot als `previousDistance2`). Es ist ein Abstandsquadrat
+  zweier Positionen (voriger Punkt), kein Quadrat eines Katalogwerts; unverändert.
+- **`DeliverPayloadAIUpdate.MinTurnRadius`** liefert 999.999, wenn der Locomotor keine Drehrate hat, und `ConsiderNewApproach` setzt damit ein Bewegungsziel in 2,2 Millionen Einheiten Entfernung – danach wirft die
+  Bewegung (voriger Punkt). Ob ein Retail-Lieferflugzeug ohne Drehrate existiert, ist nicht geprüft; kein gemessener Lauf betritt den Weg. Das Ziel ist gespeicherter Zustand und wurde nicht angefasst.
+- **Geschosse mit `WeaponSpeed` 999.999** (52 Waffen): nicht quadriert; ein `MissileAIUpdate` mit `UseWeaponSpeed` bekäme diese Geschwindigkeit je Tick. `range-audit` feuerte, was es zum Feuern brachte, ohne
+  Ausnahme; die Abdeckung dieser Waffen ist damit nicht belegt.
+- **`VisionMap`:** ein Kreis, dessen Mittelpunkt weiter als 32.768 Einheiten von einer Zelle der Karte liegt, wirft weiterhin (geprüfte Differenzen), statt wie vor Phase 22 still zu wickeln.
+
+### 5a.7 Prüfung
+
+Commits: `b274df5` (Behebung), `7e93401` (Tests und Quelltextregel), `2bd08d2` (Werkzeuge). Gemessen am Quelltextstand von `b274df5` (die beiden folgenden Commits ändern keinen Produktcode der Simulation):
+
+| Prüfung | Ergebnis |
+|---|---|
+| `SimTool input-manifest check` | identisch |
+| `SimTool reference-manifest check --set quick` | 9 Läufe identisch (zweimal: vor und nach den letzten Kommentaränderungen) |
+| `SimTool reference-manifest check --set full` | **50 Läufe identisch** |
+| Simulationstests (Debug) ohne und mit `--content-dir` | bestanden (414 bzw. 429 Tests; das Referenzmatch im Test weiter FactionGLA bei Tick 17.805) |
+| Simulationstests `-c Release -- --long` | bestanden |
+| `CnCNew.Game.Tests` (Release, `--content-dir`) | bestanden |
+| `CnCNew.Presentation.Tests` (ohne und mit `--content-dir`) | bestanden |
+| Sauberer Build `dotnet build CnCNew.slnx` (`bin`/`obj` von `CnCNew.Client.Stride` gelöscht) | 0 Warnungen, 0 Fehler |
+| `SimTool range-audit` | 1.052 Läufe, 0 Ausnahmen |
+
+Nicht wiederholt: die Determinismus-Matrix (§8.1), `CampaignTool audit`/`drive`, die Szenen-Audits, `tools/CnCNew.UiRenderTool` – das volle Manifest (27 Missionsläufe eingeschlossen) ist identisch, weitere Läufe gab es dafür nicht.
+
+**Leistung, Rücken an Rücken** (`SimTool perf <content> --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 12000`, alter Stand `e1687c8` und neuer Stand abwechselnd, je dreimal, ohne eigene Läufe
+daneben; ein anderer Prüflauf arbeitete auf demselben Rechner). Mittel je Tick in Mikrosekunden ohne die ersten 300 Ticks; in allen sechs Läufen Endhash `F78F071AF5EC8A6E`, Kette `D9975439375F5DF7`:
+
+| | Lauf 1 | Lauf 2 | Lauf 3 |
+|---|---:|---:|---:|
+| vorher: ganzer Tick | 2.088,3 | 2.115,6 | 2.070,3 |
+| nachher: ganzer Tick | 2.089,7 | 2.080,9 | 2.071,7 |
+| vorher: Phase „Updates“ (Zielerfassung, Waffenreichweite, Bewegung) | 807,5 | 832,2 | 805,0 |
+| nachher: Phase „Updates“ | 821,7 | 814,4 | 811,2 |
+
+Die Unterschiede liegen in der Streuung der Läufe desselben Programms (vorher 2.070 bis 2.116); ein Anstieg ist nicht messbar. Die absoluten Zahlen sind höher als in §8.2, weil der Rechner nicht ruhig war.
 
 ## 6. Befund: das Referenzmatch und das Dreiermatch der Tests sind metastabil
 
@@ -397,7 +566,8 @@ Katalogbau und zur Laufzeit; es bleibt kein Fall zu benennen. Nicht gezählt ble
 
 ## 12. Was nicht belegt ist
 
-- Die Überlaufwege aus §5 (Reichweiten von 10⁶, quadriert) sind nicht behoben und von keinem Lauf betreten.
+- Die Überlaufwege aus §5 sind behoben (§5a). Offen bleibt, was dort unter „nur berichtet“ steht: Abstände zwischen Positionen, die weiter als rund 524.000 Einheiten auseinanderliegen
+  (ein Befehl mit beliebigen Zielkoordinaten wird nicht geprüft), und zwei Stellvertreterwerte im Code.
 - Ein zweiter physischer Rechner, eine andere CPU, eine andere .NET-Version (wie in `docs/DETERMINISM.md`).
 - Ob die neuen KI-Ausgänge und das längere Referenzmatch die Balance verschieben; die Erhebung über 36 Startwerte schließt eine Verschiebung der Dauer um rund zehn Prozent nicht aus.
 - Jede Darstellung: kein Mensch hat diesen Stand gesehen oder gespielt.
@@ -407,7 +577,8 @@ Katalogbau und zur Laufzeit; es bleibt kein Fall zu benennen. Nicht gezählt ble
 
 - **Die Simulation ist nicht `checked`.** Nur `Fixed` wirft. Wer auf `.Raw` rechnet, schreibt `checked(…)` oder rechnet in 128 Bit; ein Quadrat zweier Rohwerte passt bei 24 Bit schon für 180 Einheiten nicht mehr
   in ein `long`.
-- **Kein Wert über 741.455 wird quadriert.** `SimTool rate-audit <content>` listet, was in den Daten darüber liegt; Sentinels im Code („überall“ = 100.000) haben quadriert nur noch den Faktor 55 Abstand.
+- **Eine Reichweite, ein Radius oder eine Grenze wird nie mit `*` quadriert**, sondern über `SquaredReach` verglichen (§5a); die Quelltextregel `Tests.SquaredReachSourceRules` hält das fest. Das Quadrat eines
+  Werts über 741.455 passt nicht. `SimTool rate-audit <content> --ranges` listet den größten Wert jedes Felds; Sentinels im Code („überall“ = 100.000) haben quadriert nur den Faktor 55 Abstand.
 - **`Fixed.ToDecimal()` ist über 65.536 Einheiten nicht mehr exakt** (24 Binärstellen brauchen 24 Dezimalstellen, ein `decimal` hat 28 bis 29 gültige); die Rundung liegt weit unter einem halben Rohschritt,
   `FromDecimal(ToDecimal(x))` gibt weiter `x`.
 - **Szenarien mit gleich starken Seiten sind kein Maßstab für „nur Rundung“.** Ihr Ende ist eine Kippentscheidung; der Vergleich braucht eine Erhebung über Startwerte oder Größen, die vor dem Kippen liegen

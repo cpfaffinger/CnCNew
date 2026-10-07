@@ -1883,12 +1883,16 @@ Das vollständige Protokoll (Vorarbeit, Vergleich aller Ergebnisgrößen, Überl
   (Taylor bis x¹³/x¹²). Konstanten mit 61 Nachkommabits, auf die Auflösung gerundet. Gemessener größter Fehler bei 24 Bit: `Sin` 1,0 · 10⁻⁷, `Cos` 1,2 · 10⁻⁷, `Atan2` 2,7 · 10⁻⁷ rad (bei 16 Bit:
   2,6 · 10⁻⁵, 2,4 · 10⁻⁵, 5,9 · 10⁻⁵). Die frühere Angabe im Quelltext („`Atan2` unter 10⁻³ rad“) war eine Schranke, kein Messwert.
 - `FixedTrig.PiFraction(zähler, nenner)` für Winkelkonstanten (π/6 der Bewegung).
-- **Kein Wert über 741.455 wird quadriert** (die Wurzel der größten Zahl). Die Daten enthalten solche Werte (Reichweiten 999.999 und 1.000.000, „sofort“-Geschwindigkeiten 999.999, Gesundheit 99.999.999,
-  `AbilityAbortRange` 10.000.000); zwei davon werden in Reichweitenprüfungen quadriert und werfen dann – **offener Befund**, `docs/FIXED-POINT-Q39-24.md` §5. `SimTool rate-audit <content>` listet sie.
+- **Das Quadrat eines Werts über 741.455 passt nicht** (die Wurzel der größten Zahl). Die Daten enthalten solche Werte (Reichweiten 999.999 und 1.000.000, „sofort“-Geschwindigkeiten 999.999, Gesundheit 99.999.999,
+  `AbilityAbortRange` 10.000.000). Eine Reichweite, ein Radius oder eine Grenze wird deshalb nie mit `*` quadriert, sondern über **`SquaredReach`** (`Numerics/SquaredReach.cs`) mit einem Abstandsquadrat verglichen:
+  `SquaredReach.Of(reach).Contains(d²)` ist `d² <= reach * reach`, `ContainsStrictly` ist `<`, mit dem Quadrat in 128 Bit – bitgleich zum alten Ausdruck, wo der rechnen konnte, und „immer innerhalb“, wo das
+  Quadrat den Bereich verlässt. `Fixed.MultiplyDivide(a, b, c)` ist `a * b / c` mit beiden Rundungen für ein Produkt, das allein den Bereich verließe (Gesundheitsverhältnis). Der Katalogwert bleibt, was die
+  Daten sagen; nichts wird beim Laden gekappt. Der Befund der Phase 22 ist damit behoben, kein Referenzwert hat sich geändert (`docs/FIXED-POINT-Q39-24.md` §5a). Regel: `Tests.SquaredReachSourceRules`
+  (kein `x * x` in der Simulation außer Koordinatenkomponenten und 21 benannten Ausnahmen); Werkzeuge: `SimTool rate-audit <content> --ranges`, `SimTool range-audit <content>`.
 - **Die Simulation ist nicht insgesamt `checked`**, nur die Operatoren von `Fixed`. Rohwertrechnungen stehen in `checked(…)` oder rechnen in 128 Bit (`VisionMap`, `StructureToppleUpdate`,
   `ConstructionHealthTarget`).
-- **Sichtkreise** (`VisionMap`): der Test „Zellmitte im Kreis“ ist bei 16 Nachkommabits definiert (Mittelpunkt und Radius darauf gekürzt), gleich welche Auflösung `Fixed` hat; Radien bis 46.000 Einheiten,
-  darüber wirft er.
+- **Sichtkreise** (`VisionMap`): der Test „Zellmitte im Kreis“ ist bei 16 Nachkommabits definiert (Mittelpunkt und Radius darauf gekürzt), gleich welche Auflösung `Fixed` hat. Das Quadrat eines Radius über
+  46.340 Einheiten gilt als „größer als jedes Abstandsquadrat“ (`SquaredRadius`), was es für jede Zelle im Umkreis von 32.768 Einheiten ist; die Differenzen bleiben geprüft.
 - **Leerlauf-Scan der Türme:** der Bruchteil eines Zugs sind die niedrigsten 16 Bit des Hashs als führende Binärstellen, weitere Stellen aus den Bits darüber.
 
 ### 38.2 Formate
@@ -1917,6 +1921,9 @@ Der Startwert des Referenzmatchs wurde in einem eigenen Commit gewechselt (`41c3
   Ereignisse nach Art; Missionen: Ausgang, Tick und Name des Endskripts, Skriptzähler) – und auf Wunsch der Befehlsstrom als Text mit Mengen in ganzen Einheiten. Zwei Stände, die sich unterscheiden
   **sollen** (Auflösung, Tickrate), werden damit verglichen: Größe für Größe und über die erste abweichende Befehlszeile.
 - `SimTool reference-match … [--world-seed HEX] [--driver-seed HEX] [--record-only]`: der Verlauf des Referenzmatchs unter anderen Startwerten.
-- `SimTool rate-audit <content> [--tick-rate N]`: läuft auch bei 30 Hz und listet den Wertebereich des Katalogs (größter Betrag, jeder Wert über der Wurzel der größten Zahl).
+- `SimTool rate-audit <content> [--tick-rate N] [--ranges [--ranges-above N]]`: läuft auch bei 30 Hz und listet den Wertebereich des Katalogs (größter Betrag, jeder Wert über der Wurzel der größten Zahl;
+  mit `--ranges` den größten Betrag jedes Festkommafelds).
+- `SimTool range-audit <content> [--frames N] [--distance N]`: jedes Retail-Objekt mit einer Waffe bekommt einen Feuerbefehl auf einen Panzer und einen Soldaten; listet jeden Lauf, der wirft, und die Waffen
+  mit Werten über der Quadratgrenze.
 - `Tests.FixedScaleSourceRules`: die Skala steht einmal – kein `65536`/`16777216`/`<< 16`/`<< 24` in irgendeinem Projekt (33 benannte Ausnahmen), außerhalb der Simulation nur
   `CnCNew.Presentation.FixedConvert`, kein Rohwert als Zahl.
