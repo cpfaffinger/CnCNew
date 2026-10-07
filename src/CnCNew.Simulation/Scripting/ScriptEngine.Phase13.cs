@@ -793,7 +793,8 @@ public sealed partial class ScriptEngine
             _transportStatus[entity.Id.Value] = (frame, count);
             return false;
         }
-        if (status.Frame == frame - TickOrder.Next && status.Count > 0 && count == 0) return true;   // order: what the previous tick saw
+        // m_frameNumber == frameNum - 1: what the previous frame of the original saw - the engine looks once per frame, so the look before this one is that many ticks back.
+        if (status.Frame == frame - _world.Time.TicksPerOriginalFrame && status.Count > 0 && count == 0) return true;
         _transportStatus[entity.Id.Value] = (frame, count);
         return false;
     }
