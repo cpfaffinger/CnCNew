@@ -92,6 +92,16 @@ internal static class ReferenceManifest
         ["FactionChina", "FactionGLA"], ["FactionAmerica", "FactionChina"], ["FactionGLA", "FactionAmerica"], ["FactionChinaTankGeneral", "FactionAmericaAirForceGeneral"],
     ];
 
+    /// <summary>The two-player AI runs of the manifest (every map with every pairing): id, map and factions. <c>ai-survey</c> plays the same table over seeds.</summary>
+    internal static IEnumerable<(string Id, string Map, string[] Factions)> AiPairingRuns()
+    {
+        foreach (var (name, map) in AiMaps)
+            foreach (var pairing in AiPairings)
+                yield return ($"{name}_{string.Join("-", pairing.Select(Short))}", map, pairing);
+    }
+
+    private static string Short(string faction) => faction.StartsWith("Faction", StringComparison.Ordinal) ? faction["Faction".Length..] : faction;
+
     /// <summary>The four two-player runs of the quick set: the shortest decided ones, on three maps, every base faction at least twice.</summary>
     private static readonly string[] QuickAiRuns = ["AlpineAssault_GLA-America", "BitterWinter_GLA-America", "DeathValley_America-China", "DeathValley_China-GLA"];
 
@@ -331,10 +341,8 @@ internal static class ReferenceManifest
         ManifestObject AiParameters(string map, string[] factions, long maxTicks) => new ManifestObject()
             .Add("map", Require(content, map)).Add("factions", string.Join(",", factions)).Add("players", factions.Length).Add("maxTicks", maxTicks).Add("graceTicks", skirmish.GraceTicks)
             .Add("worldSeed", Hex(skirmish.WorldSeed)).Add("aiSeed", Hex(skirmish.AiSeed)).Add("startMoney", skirmish.StartMoney).Add("sciencePointInterval", skirmish.SciencePointInterval).Add("tickRate", rate);
-        foreach (var (name, map) in AiMaps)
-            foreach (var pairing in AiPairings)
+        foreach (var (id, map, pairing) in AiPairingRuns())
             {
-                var id = $"{name}_{string.Join("-", pairing.Select(Short))}";
                 plan.Add(Single(id, QuickAiRuns.Contains(id), "ai-match", AiParameters(map, pairing, AiMatchTicks), AiMatchTicks / 500, true,
                     (context, verify) => AiMatchJob(context!, map, pairing, skirmish with { MaxTicks = AiMatchTicks }, verify),
                     context => ResultQuantities.AiMatch(context!, map, pairing, skirmish with { MaxTicks = AiMatchTicks }, Participants)));
@@ -396,8 +404,6 @@ internal static class ReferenceManifest
 
         static RunSpec Single(string id, bool quick, string kind, ManifestObject parameters, long weight, bool needsContent, Func<SimContext?, VerifyMode, JobResult> work, Func<SimContext?, ManifestObject> details)
             => new(id, quick, kind, parameters, [new RunJob(id, weight, needsContent, work, details)], results => results[0].Values);
-
-        static string Short(string faction) => faction.StartsWith("Faction", StringComparison.Ordinal) ? faction["Faction".Length..] : faction;
 
         static string Require(ContentFileSystem content, string path) => content.Exists(path) ? content.GetEntry(path).VirtualPath : throw new FileNotFoundException($"The reference map {path} is not in the content.");
     }
@@ -552,7 +558,7 @@ internal static class ReferenceManifest
         return verifier.Result(values);
     }
 
-    private static ImmutableArray<MatchParticipant> Participants(SimContext context, IReadOnlyList<string> factions)
+    internal static ImmutableArray<MatchParticipant> Participants(SimContext context, IReadOnlyList<string> factions)
     {
         var everyone = ReferenceMatchScenario.Participants(context.Catalog, out _);
         return [..factions.Select(name => everyone.FirstOrDefault(value => value.Faction.Name.Equals(name, StringComparison.Ordinal)) ?? throw new ArgumentException($"Unknown or unplayable faction {name}."))];

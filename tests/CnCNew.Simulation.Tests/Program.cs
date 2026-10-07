@@ -433,6 +433,10 @@ run.Test("Baseline manifests: a check reports the first differing field with bot
 run.Test("Baseline manifests: the content hash of an object graph ignores storage order", Tests.CanonicalObjectHashIgnoresStorageOrder);
 run.Test("Perf summary: canonical JSON round trip, whole nanoseconds, strict validation", Tests.PerfSummaryRoundTrip);
 run.Test("Perf compare: regressions beyond the threshold are marked, other parameters or another hash are refused", Tests.PerfCompareMarksRegressionsAndRefusesOtherRuns);
+run.Test("Rate survey: normal tail and quantile against known values and the integral of the density", Tests.RateSurveyNormalDistribution);
+run.Test("Rate survey: ln Gamma, incomplete beta and Student's t against closed forms", Tests.RateSurveyBetaAndStudent);
+run.Test("Rate survey: exact 2 x c test counted by hand, two proportions, Welch's test, power", Tests.RateSurveyExactTestAndTwoSampleTests);
+run.Test("Rate survey: file round trip, refusal of mismatched pairing and seed sets, verdicts of the report", Tests.RateSurveyFilesAndReport);
 run.Test("Determinism D4: script state, diagnoses and forwarded arguments do not depend on the culture", Tests.ScriptStateIsCultureIndependent);
 run.Test("Determinism D7: the waypoint order is total", Tests.WaypointOrderIsTotal);
 run.Test("Determinism D3: a running world and a restored one enumerate their entities in id order", Tests.EntityEnumerationIsOrderedById);

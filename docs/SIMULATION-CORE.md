@@ -1927,3 +1927,115 @@ Der Startwert des Referenzmatchs wurde in einem eigenen Commit gewechselt (`41c3
   mit Werten über der Quadratgrenze.
 - `Tests.FixedScaleSourceRules`: die Skala steht einmal – kein `65536`/`16777216`/`<< 16`/`<< 24` in irgendeinem Projekt (33 benannte Ausnahmen), außerhalb der Simulation nur
   `CnCNew.Presentation.FixedConvert`, kein Rohwert als Zahl.
+
+## 40. Verteilungsvergleich zwischen Raten (Phase 23, 7. Oktober 2026): `ai-survey` und `rate-distribution`
+
+Ein ganzes Match ist chaotisch (§38.3, `docs/FIXED-POINT-Q39-24.md` §7.2): eine Rundung im ersten Gefecht reicht für einen anderen Sieger. Zwei Tickraten lassen sich deshalb nicht Lauf für Lauf
+vergleichen, sondern nur als **Verteilungen** über viele Startwerte (`docs/HANDOFF-PHASE23.md` Punkt 4). Dieser Abschnitt beschreibt das Werkzeug dafür. Es ist reiner Werkzeugcode
+(`tools/CnCNew.SimTool/AiSurvey.cs`, `RateDistribution.cs`); an der Simulation und an `baselines/` ändert es nichts. **Die Erhebung selbst (640 Matches) ist hier nicht enthalten** – der Abschnitt legt
+die Methode und die Grenzen fest, bevor Zahlen vorliegen.
+
+### 40.1 Befehle
+
+```powershell
+dotnet build -c Release tools/CnCNew.SimTool
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey .local/phase2-import-a --out <30.tsv> --tick-rate 30 [--seeds 20] [--first-seed 1] [--minutes 25] [--pairings all|<id>,<id>] [--jobs N]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey .local/phase2-import-a --out <60.tsv> --tick-rate 60
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-distribution <30.tsv> <60.tsv> [--out <bericht.md>]
+```
+
+- **`ai-survey`** spielt jede der 16 KI-Paarungen des Referenzmanifests (§37.2; die Tabelle kommt aus `ReferenceManifest.AiPairingRuns()`, dieselbe Quelle wie das Manifest) einmal je Startwert, **nur als
+  Aufzeichnung** (keine Wiedergabe, keine Snapshot-Fortsetzung). Der Startwert wirkt genau wie bei `ai-match --seed N`: `AiSeed = N`, `WorldSeed = N ^ 0xC0FFEE06`. Das Budget ist **Spielzeit**:
+  `MaxTicks = Minuten × 60 × Rate` (25 Minuten = 45.000 Ticks bei 30 Hz = das Budget des Manifests, 90.000 Ticks bei 60 Hz). `--jobs` arbeitet wie `reference-manifest check`: jeder Arbeiter baut eigene
+  Kataloge für die Rate, nichts der Simulation wird zwischen Threads geteilt, alle Arbeiter müssen denselben Welt-Fingerabdruck erreichen.
+- **Ausgabedatei** (TSV, LF, eine Kopfzeile, sortiert nach Paarung und Startwert, keine Zeitstempel, keine Wandzeit – zwei gleiche Aufrufe liefern dieselben Bytes, unabhängig von `--jobs`):
+  `pairing`, `map`, `factionA`, `factionB`, `seed`, `tickRate`, `outcome` (`winner`/`stalemate`, wie die Sitzung es meldet; `failed`, wenn ein Match eine Ausnahme wirft – dann Exitcode 1),
+  `winnerFaction`, `winnerSlot` (1 = erstgenannte Fraktion, 2 = zweite, 0 = keiner), `endTick` (Tick des Siegs, ohne Sieger der Tick des Abbruchs), `endGameMilliseconds`
+  (`endTick × 1000 / tickRate`, ganzzahlig), `recordedTicks` (gespielte Ticks einschließlich der Nachlaufzeit nach dem Sieg; der Zustand von `finalHash`), `commands` (Zahl der aufgezeichneten Befehle),
+  `finalHash` (Zustandshash der Welt am Ende der Aufzeichnung), `firstBarracksTickA/B` (erster Tick, nach dem die Seite ein fertiges Gebäude der Art `FS_BARRACKS` besitzt, −1 = nie),
+  `firstAttackTickA/B` (erster Tick, nach dem `SkirmishAiStats.Waves` der Seite über 0 liegt – die erste Angriffswelle der KI, −1 = nie). Die vier Meilensteine werden nach jedem Tick nur gelesen.
+  Der Fortschritt geht nach stderr, jede fertige Zeile mit ihrer Laufzeit (ein abgebrochener Lauf hinterlässt seine fertigen Matches im Protokoll).
+- **`rate-distribution`** liest zwei Erhebungen (Referenz, Kandidat), **lehnt sie ab**, wenn sich die Mengen aus Paarung und Startwert, die Karten oder die Fraktionen unterscheiden oder eine Datei ein
+  fehlgeschlagenes Match enthält, und druckt einen Bericht (Markdown) mit Statistik, Grenze und Urteil je Prüfung. Exitcode 0: keine Prüfung gescheitert; 1: mindestens eine gescheitert; 2: Eingabefehler.
+  Eine **nicht prüfbare** Zeile (siehe e) ist weder bestanden noch gescheitert; der Bericht zählt sie getrennt, und sie macht den Exitcode nicht zu 1.
+
+### 40.2 Die Grenzen (vorab festgelegt, nicht an Daten angepasst)
+
+Jede Familie von Prüfungen ist zweiseitig auf dem Niveau α = 0,05. Innerhalb einer Familie mit k Prüfungen gilt Bonferroni (α/k je Prüfung), weil es unter beliebiger Abhängigkeit hält. Mit n Matches je Rate,
+x entschiedenen bzw. gewonnenen Matches und den Indizes 30/60 für Referenz und Kandidat:
+
+| | Größe | Prüfung | Grenze |
+|---|---|---|---|
+| a | Anteil entschiedener Matches, alle Paarungen zusammen | Zwei-Anteile-z-Test mit gepoolter Varianz: p̂ = (x₃₀ + x₆₀)/(n₃₀ + n₆₀), SE = √(p̂(1 − p̂)(1/n₃₀ + 1/n₆₀)), z = (p₆₀ − p₃₀)/SE | bestanden, wenn \|z\| ≤ 1,960 = Φ⁻¹(0,975) |
+| b | Siegquote **je Fraktion** (Siege der Fraktion / Matches, an denen sie teilnimmt) | derselbe z-Test je Fraktion, Bonferroni über die k = 5 Fraktionen | bestanden, wenn jedes \|z\| ≤ Φ⁻¹(1 − 0,05/(2·5)) = 2,5758 |
+| c | Dauer entschiedener Matches in Spielminuten, **geschichtet nach Paarung** | über die m Paarungen mit mindestens zwei entschiedenen Matches bei beiden Raten: dᵢ = x̄₆₀,ᵢ − x̄₃₀,ᵢ, vᵢ = s²₃₀,ᵢ/n₃₀,ᵢ + s²₆₀,ᵢ/n₆₀,ᵢ, D = Σdᵢ/m, SE = √(Σvᵢ)/m | bestanden, wenn \|D\| ≤ 1,960 · SE |
+| d | Siegerverteilung je Paarung (A siegt / B siegt / unentschieden) | exakter Test der 2 × 3-Tafel nach Fisher, Freeman und Halton: Summe der Wahrscheinlichkeiten aller Tafeln mit denselben Randsummen, die höchstens so wahrscheinlich sind wie die beobachtete (vollständige Aufzählung); Bonferroni über 16 Paarungen | bestanden, wenn p ≥ 0,05/16 = 0,003125 |
+| e | Dauer entschiedener Matches je Paarung | Welch-Test: t = (x̄₆₀ − x̄₃₀)/√(v₃₀ + v₆₀) mit v = s²/n, Freiheitsgrade ν = (v₃₀ + v₆₀)²/(v₃₀²/(n₃₀ − 1) + v₆₀²/(n₆₀ − 1)), zweiseitiges p = I_{ν/(ν + t²)}(ν/2, 1/2); Bonferroni über 16 Paarungen | bestanden, wenn p ≥ 0,003125; mit weniger als zwei entschiedenen Matches bei einer Rate **nicht prüfbar** |
+
+Begründungen und Einzelheiten:
+
+- **Warum b je Fraktion:** „erstgenannte“ und „zweitgenannte“ Seite bedeuten über Paarungen hinweg nichts. Grundfraktionen kommen in 8 Paarungen vor (160 Matches je Rate), die beiden Generäle in 4 (80).
+  Die Prüfungen zweier Fraktionen, die gegeneinander spielen, sind abhängig (der Sieg der einen ist die Niederlage der anderen); Bonferroni braucht keine Unabhängigkeit.
+- **Warum c geschichtet:** die Paarungen haben sehr verschiedene Dauern (im Manifest liegen die Siege zwischen Tick 7.815 und 42.840, also zwischen gut 4 und knapp 24 Spielminuten); ein Welch-Test auf den zusammengeworfenen Stichproben würde die Streuung zwischen Paarungen als Rauschen
+  zählen und eine Verschiebung des Anteils entschiedener Matches je Paarung als Dauerunterschied missdeuten. Der Bericht druckt zusätzlich das Verhältnis der gepoolten Mittelwerte, nur zur Orientierung.
+- **Familiengröße:** der Bericht teilt durch die Zahl der Paarungen bzw. Fraktionen **in der Datei** – bei der vollen Erhebung 16 und 5. Bei e zählen alle Paarungen, auch die nicht prüfbaren (die Zahl
+  hängt damit nicht vom Ergebnis ab). Ein Teil-Lauf (`--pairings`) hat entsprechend eine schwächere Korrektur; maßgeblich ist nur die volle Erhebung.
+- **Ohne Varianz:** enden alle Matches beider Erhebungen gleich, ist die Differenz 0 und z = 0 (bestanden); zwei Stichproben ohne Streuung bestehen e bei gleichen Mittelwerten und scheitern sonst.
+- **Numerik** (`SurveyStatistics`, `double`, invariante Kultur): Φ über die Reihe Φ(x) = ½ + φ(x)·Σ x^(2k+1)/(1·3·…·(2k+1)) unter 3 und den Kettenbruch Q(x) = φ(x)/(x + 1/(x + 2/(x + …))) darüber; das
+  Quantil durch Bisektion (keine Tabelle); ln Γ über die Stirling-Reihe nach Verschieben des Arguments über 15; die regularisierte unvollständige Betafunktion über ihren Kettenbruch (modifiziertes
+  Lentz-Verfahren) auf der schnell konvergierenden Seite; die Tafeln von d über Logarithmen der Fakultäten.
+
+**Was ein Scheitern bedeutet.** Wären beide Raten gleich verteilt, schlüge jede der fünf Familien mit höchstens 5 % Wahrscheinlichkeit falsch an; erwartet werden höchstens 0,05 falsche Zeilen unter den 5
+von b, 0,05 unter den 16 von d und 0,05 unter den 16 von e. Über den ganzen Bericht sind das höchstens 0,25 erwartete Fehlalarme und höchstens 25 % Wahrscheinlichkeit für mindestens einen (22,6 % bei
+unabhängigen Familien) – die Familien sind **nicht** gegeneinander korrigiert. Eine einzelne gescheiterte Zeile ist deshalb ein schwaches Indiz, eine gescheiterte Familie mit gleicher Richtung in einer
+anderen ein starkes. Der exakte Test d ist diskret und strenger als sein Niveau: bei 20 Matches je Rate und wahrer Siegquote 0,5 verwirft er je Paarung mit Wahrscheinlichkeit 0,0011 statt 0,0031.
+
+### 40.3 Was der Vergleich sehen kann: kleinste nachweisbare Unterschiede (Trennschärfe 80 %)
+
+Berechnet (`rate-distribution` druckt die Tabelle zu jeder Erhebung; die Werte hier gelten für den Plan 16 Paarungen × 20 Startwerte = 320 Matches je Rate):
+
+| Prüfung | n je Rate | Niveau | Ausgangswert | kleinste nachweisbare Änderung |
+|---|---|---|---|---|
+| a Anteil entschieden | 320 | 0,05 | 0,50 (größte Streuung) | ±0,110 (11 Prozentpunkte) |
+| b Siegquote einer Grundfraktion | 160 | 0,01 | 0,50 | ±0,187 |
+| b Siegquote eines Generals | 80 | 0,01 | 0,50 | ±0,259 |
+| c Dauer, geschichtet | 16 × 20 entschieden | 0,05 | – | 2,802 · SE; bei gleicher Standardabweichung σ in allen Paarungen 0,221 σ |
+| d Siegerverteilung einer Paarung | 20 | 0,003125 | 0,00 → | 0,52 |
+| | | | 0,10 → | 0,69 |
+| | | | 0,25 → | 0,86 |
+| | | | 0,50 → | **nicht erreichbar** (auch 0,50 → 1,00 wird nur mit 75 % gefunden) |
+| e Dauer einer Paarung | 20 / 10 / 5 entschieden | 0,003125 | – | 1,27 σ / 1,91 σ / 3,20 σ |
+
+- a und b: Normalnäherung des z-Tests, nach der Änderung δ aufgelöst (Bisektion): Φ((δ − z_{1−α/2}·SE₀)/SE₁) ≥ 0,8 mit SE₀ unter der Nullhypothese (gepoolt) und SE₁ unter der Alternative.
+- d: **exakte** Trennschärfe durch Aufzählung aller 21 × 21 Ausgangspaare zweier Binomialverteilungen (zwei Kategorien; eine dritte verteilt die Zählungen nur weiter), Suche in Schritten von 0,005; nach
+  unten gelten dieselben Werte spiegelbildlich (1,00 → 0,48 usw.).
+- e: (t_{1−α/2; 2n−2} + t_{0,8; 2n−2}) · √(2/n) in Standardabweichungen der Matchdauer innerhalb der Paarung (übliche Näherung der nichtzentralen Verteilung); der Bericht rechnet sie mit der gepoolten
+  Standardabweichung der Referenz in Minuten um. c: (1,960 + 0,842) · SE mit dem SE der Daten.
+
+**Ehrliche Lesart:** Zusammengefasst sieht der Vergleich eine Verschiebung des Anteils entschiedener Matches ab rund 11 Prozentpunkten und der Siegquote einer Grundfraktion ab rund 19. **Je Paarung sieht er
+bei 20 Startwerten nur grobe Umschläge** (eine fast sichere Seite wird zur Münze oder umgekehrt) und Dauerunterschiede über einer Standardabweichung. Ein bestandener Vergleich heißt „kein Unterschied
+mindestens dieser Größe gefunden“, nicht „die Raten sind gleich“.
+
+### 40.4 Grenzen der Methode
+
+- Startwerte sind nur der Nummer nach gepaart: derselbe Startwert ist bei zwei Raten nicht dasselbe Match. Die Prüfungen behandeln beide Erhebungen als unabhängige Stichproben.
+- Unentschiedene Matches haben keine Dauer. Rutschen lange Matches über das Budget, zeigt sich das in a und d, nicht in c und e; die Dauerprüfungen sind dann zugunsten kürzerer Matches verzerrt.
+- Die Matches einer Paarung teilen Karte und Eröffnung (der erste Kasernenbau fällt über Startwerte fast auf denselben Tick); die Streuung zwischen Startwerten stammt aus dem Gefecht. Die Erhebung misst
+  die Verteilung über **diese** Startwerte und die vier Karten, nicht „das Spiel“.
+- Die Tabelle hat nur fünf Fraktionen und vier Karten; eine Abweichung, die nur andere Fraktionen oder große Karten trifft, bleibt unsichtbar. Balance wird nicht bewertet, nur der Unterschied zwischen
+  zwei Raten.
+- Die Meilenstein-Spalten (Kaserne, erste Angriffswelle) werden erhoben, aber von `rate-distribution` **nicht geprüft**; sie dienen der Ursachensuche, wenn eine Prüfung scheitert.
+- Der Kampagnenteil von Punkt 4 des Auftrags (Zielfahrer: Sieg/Niederlage je Karte, Zeitpunkt des Endskripts) ist nicht Teil dieser Werkzeuge.
+
+### 40.5 Tests und gemessene Stichprobe
+
+`tests/CnCNew.Simulation.Tests` bindet `RateDistribution.cs` als Quelltext ein (`Tests.RateSurvey.cs`, vier Tests, `-- --only "Rate survey"`): Normalverteilung gegen bekannte Werte und gegen das
+Simpson-Integral der Dichte; ln Γ, Betafunktion und t-Verteilung gegen geschlossene Formen (I_x(1,b), I_x(a,1), I_x(2,3) = 6x² − 8x³ + 3x⁴, I_x(½,½) = (2/π)·asin √x; t mit 1, 2 und 4 Freiheitsgraden);
+der exakte Test gegen von Hand ausgezählte Tafeln (2 × 3 mit Wahrscheinlichkeiten 1/6, 1/3, 1/3, 1/6; Fisher 2 × 2 mit Gleichstand 7462/C(24,12)); Welch von Hand; Rundlauf der Datei, Ablehnung
+abweichender Mengen (fehlender Startwert, andere Startwerte, andere Karte, gemischte Rate, doppelte Zeile, fehlgeschlagenes Match) und die Urteile eines Berichts auf zwei kleinen synthetischen Erhebungen.
+
+Stichprobe am 7. Oktober 2026 (Release, 2 Paarungen × 2 Startwerte, **keine Erhebung**): zwei Aufrufe mit verschiedenem `--jobs` liefern bei 30 Hz und bei 60 Hz jeweils bytegleiche Dateien;
+`AlpineAssault_China-GLA` mit Startwert 1 endet in der Erhebung wie bei `ai-match … --max-ticks 45000 --seed 1` (Sieger FactionGLA bei Tick 9.930, 1.794 Befehle, 10.231 Ticks, Endhash `BDC0218A0BA5EE96`).
+Laufzeit eines Matches über das volle Budget (ein Arbeiter, `ArmoredFury_America-China`, Patt): 13,2 s bei 30 Hz und 24,5 s bei 60 Hz; entschiedene Matches
+(`DeathValley_America-China`, Startwerte 2 und 3): 6,0 s und 3,5 s bei 30 Hz (15.076 und 10.261 Ticks), 14,3 s und 7,1 s bei 60 Hz (49.351 und 27.571 Ticks). Dazu kommt einmal je Arbeiter der Katalogbau
+(rund 12 bis 16 s, unter einer prozessweiten Sperre nacheinander). Nicht ruhig gemessen, nur zur Planung.
