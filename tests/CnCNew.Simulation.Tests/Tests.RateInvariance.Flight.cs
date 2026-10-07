@@ -98,12 +98,17 @@ static partial class Tests
         }
     }
 
-    /// <summary>Something happens in the same logic frame of the original at the three rates.</summary>
-    private static void SameFrames(string what, long[] frames)
+    /// <summary>Ticks as quarters of a logic frame of the original (1/120 s): the one unit in which a time is a whole number at 30, 60 and 120 Hz.</summary>
+    private static long FrameQuarters(SimulationWorld world, long ticks) => ticks * (SimulationRate.Hz120.TicksPerSecond / world.Time.TicksPerSecond);
+
+    private static string InFrames(long quarters) => quarters < 0 ? "never" : (quarters / 4m).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Something happens at the same game time at the three rates, to the tick (<paramref name="quarters"/> from <see cref="FrameQuarters"/>).</summary>
+    private static void SameFrames(string what, long[] quarters)
     {
-        Console.WriteLine($"       {what}: frame {frames[0]} / {frames[1]} / {frames[2]}");
-        if (frames[0] < 0) FlightFailures.Add($"{what}: it never happened at 30 Hz");
-        else if (frames[1] != frames[0] || frames[2] != frames[0]) FlightFailures.Add($"{what}: frame {frames[0]} at 30 Hz, {frames[1]} at 60 Hz, {frames[2]} at 120 Hz");
+        Console.WriteLine($"       {what}: after {InFrames(quarters[0])} / {InFrames(quarters[1])} / {InFrames(quarters[2])} frames");
+        if (quarters[0] < 0) FlightFailures.Add($"{what}: it never happened at 30 Hz");
+        else if (quarters[1] != quarters[0] || quarters[2] != quarters[0]) FlightFailures.Add($"{what}: after {InFrames(quarters[0])} frames at 30 Hz, {InFrames(quarters[1])} at 60 Hz, {InFrames(quarters[2])} at 120 Hz");
     }
 
     /// <summary>A measured value is the same at the three rates within <paramref name="tolerance"/>.</summary>
@@ -137,7 +142,7 @@ static partial class Tests
             var last = (jet.X, jet.Y);
             tracks[index] = FrameTrack(world, jet, 900, result =>
             {
-                frame = world.Time.ToOriginalFrames(result.Tick - start);
+                frame = FrameQuarters(world, result.Tick - start);
                 if (arrived < 0 && result.Events.Any(value => value.Kind == SimEventKind.MoveArrived && value.Entity == jet.Id)) arrived = frame;
                 // Every tick the jet covers the same share of the frame's travel: its speed per tick.
                 var (dx, dy) = (jet.X - last.X, jet.Y - last.Y);
@@ -180,13 +185,58 @@ static partial class Tests
             var at = index;
             tracks[index] = FrameTrack(world, plane, 400, result =>
             {
-                if (ground[at] < 0 && plane.Z == Fixed.Zero) ground[at] = world.Time.ToOriginalFrames(result.Tick - start);
-                if (gone[at] < 0 && world.FindEntity(plane.Id) != plane) gone[at] = world.Time.ToOriginalFrames(result.Tick - start);
+                if (ground[at] < 0 && plane.Z == Fixed.Zero) ground[at] = FrameQuarters(world, result.Tick - start);
+                if (gone[at] < 0 && world.FindEntity(plane.Id) != plane) gone[at] = FrameQuarters(world, result.Tick - start);
             }).Select(pose => pose with { X = pose.X - origin.X, Y = pose.Y - origin.Y }).ToList();
         }
         SameFrames("jet slow death, the wreck hits the ground", ground);
         SameFrames("jet slow death, the wreck is gone", gone);
         SameTracks("jet slow death, the fall", tracks, 0.01m, 0.0001m);
+        FlightVerdict();
+    }
+
+    /// <summary>
+    /// <c>ParachuteContain</c>: a parachute released at height 100 falls freely until it has dropped its open distance (10), then sinks at its locomotor's <c>SpeedLimitZ</c> (one unit per
+    /// frame) and, with a landing spot (<c>ParachuteDirectly</c>), steers there at the locomotor's speed (two units per frame); on the ground the rider gets off. Once straight down, once steered.
+    /// </summary>
+    public static void RateFlightParachuteIsTheSame()
+    {
+        foreach (var steered in new[] { false, true })
+        {
+            var name = steered ? "parachute, steered to a spot" : "parachute, straight down";
+            var tracks = new List<FlightPose>[FlightRates.Length];
+            var opened = new long[FlightRates.Length];
+            var landed = new long[FlightRates.Length];
+            var miss = new Fixed[FlightRates.Length];
+            for (var index = 0; index < FlightRates.Length; index++)
+            {
+                var (world, feeder) = FlightRateWorld(FlightRates[index], ScriptFiles());
+                feeder.Spawn(1, "AlphaChute", owner: 1, x: 500, y: 500, z: 100);
+                feeder.Spawn(1, "AlphaTrooper", owner: 1, x: 500, y: 500);
+                world.Step();
+                var chute = Only(world, "AlphaChute");
+                var trooper = Only(world, "AlphaTrooper");
+                var module = chute.Modules.OfType<ParachuteContain>().Single();
+                module.Add(world, trooper);
+                if (steered) module.SetOverrideDestination(Fixed.FromInt(560), Fixed.FromInt(580));
+                var start = world.Tick;
+                (opened[index], landed[index]) = (-1, -1);
+                var at = index;
+                tracks[index] = FrameTrack(world, chute, 300, result =>
+                {
+                    var frame = FrameQuarters(world, result.Tick - start);
+                    if (opened[at] < 0 && module.Opened) opened[at] = frame;
+                    if (landed[at] < 0 && result.Events.Any(value => value.Kind == SimEventKind.EntityUncontained && value.Entity == trooper.Id)) landed[at] = frame;
+                });
+                var (dx, dy) = (trooper.X - Fixed.FromInt(steered ? 560 : 500), trooper.Y - Fixed.FromInt(steered ? 580 : 500));
+                miss[index] = Fixed.Sqrt(dx * dx + dy * dy);
+                Check.That(!trooper.EffectivelyDead, $"{FlightRates[index]}: the rider survives the landing.");
+            }
+            SameFrames($"{name}: it opens", opened);
+            SameFrames($"{name}: the rider is on the ground", landed);
+            SameValues($"{name}: distance of the rider from the spot", miss, 0.01m);
+            SameTracks($"{name}: the descent", tracks, 0.01m, 0.0001m);
+        }
         FlightVerdict();
     }
 }

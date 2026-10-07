@@ -482,7 +482,10 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
     private bool _started;
     private bool _opened;
     private Fixed _startZ;
+    /// <summary>The speed of the free fall and then of the sinking, per logic frame of the original, negative.</summary>
     private Fixed _fallSpeed;
+    /// <summary>The step of the running frame of the descent, flown in shares per tick; empty at 30 Hz.</summary>
+    private FlightFrameStep _descent;
     private bool _hasOverride;
     private Fixed _overrideX;
     private Fixed _overrideY;
@@ -528,6 +531,13 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             return SimulationTiming.SleepForever;
         }
 
+        // The descent is the 30 Hz step, decided once per logic frame of the original (the speed of the fall and of the sinking is a value per frame, the landing spot is reached within
+        // one frame of travel) and flown in shares per tick; between two decisions only the rest of the frame is flown.
+        if (_descent.Continue(Entity))
+        {
+            world.MarkDirty(Entity);
+            return Carry(world, rider);
+        }
         var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
         if (!_started)
         {
@@ -536,14 +546,15 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             if (_startZ - ground < Fixed.FromInt(2) * data.OpenDistance) _startZ = ground + Fixed.FromInt(2) * data.OpenDistance;
         }
         var locomotor = Entity.Template.Locomotor;
+        var before = (Entity.X, Entity.Y, Entity.Z);
         if (!_opened)
         {
-            _fallSpeed += world.Templates.GravityPerTickSquared;
+            _fallSpeed += FlightFrames.GravityPerFrameSquared(world.Templates);
             Entity.Z += _fallSpeed;
             if ((_startZ - Entity.Z).Abs() >= data.OpenDistance)
             {
                 _opened = true;
-                _fallSpeed = -(locomotor?.SpeedLimitZ ?? Fixed.Zero);
+                _fallSpeed = -FlightFrames.PerFrame(world.Time, locomotor?.SpeedLimitZ ?? Fixed.Zero);
             }
         }
         else
@@ -551,14 +562,15 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             Entity.Z += _fallSpeed;
             if (_hasOverride && locomotor is not null)
             {
+                var speed = FlightFrames.PerFrame(world.Time, locomotor.Speed);
                 var dx = _overrideX - Entity.X;
                 var dy = _overrideY - Entity.Y;
                 var distance = Fixed.Sqrt(dx * dx + dy * dy);
-                if (distance <= locomotor.Speed) { Entity.X = _overrideX; Entity.Y = _overrideY; }
+                if (distance <= speed) { Entity.X = _overrideX; Entity.Y = _overrideY; }
                 else if (distance > Fixed.Zero)
                 {
-                    Entity.X += dx * locomotor.Speed / distance;
-                    Entity.Y += dy * locomotor.Speed / distance;
+                    Entity.X += dx * speed / distance;
+                    Entity.Y += dy * speed / distance;
                 }
             }
         }
@@ -570,6 +582,13 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             Land(world, rider);
             return SimulationTiming.SleepForever;
         }
+        _descent.Begin(world.Time, Entity, Entity.X - before.X, Entity.Y - before.Y, Entity.Z - before.Z, Fixed.Zero);
+        return Carry(world, rider);
+    }
+
+    /// <summary>The rider hangs under the chute, every tick.</summary>
+    private long Carry(IWorldServices world, Entity rider)
+    {
         rider.X = Entity.X;
         rider.Y = Entity.Y;
         rider.Z = Entity.Z;
@@ -621,6 +640,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
         writer.Bool("opened", _opened);
         writer.Fixed("startZ", _startZ);
         writer.Fixed("fallSpeed", _fallSpeed);
+        _descent.Describe(writer, "descentStep");
         if (_hasOverride)
         {
             writer.Bool("override", true);
@@ -636,6 +656,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
         _opened = reader.Bool("opened");
         _startZ = reader.Fixed("startZ");
         _fallSpeed = reader.Fixed("fallSpeed");
+        _descent.Load(reader, "descentStep");
         _hasOverride = reader.Has("override");
         _overrideX = _hasOverride ? reader.Fixed("overrideX") : Fixed.Zero;
         _overrideY = _hasOverride ? reader.Fixed("overrideY") : Fixed.Zero;
