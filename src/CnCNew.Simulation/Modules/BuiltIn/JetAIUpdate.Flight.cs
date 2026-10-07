@@ -38,9 +38,16 @@ public sealed partial class JetAIUpdate
     /// <c>Locomotor::maintainCurrentPositionWings</c>: the aircraft flies toward the point of a circle of <c>CirclingRadius</c> around its center that lies (π − π/8) around from the bearing from the aircraft to the
     /// center (a negative radius mirrors that, so positive circles clockwise and negative counter-clockwise; 0 is <c>calcMinTurnRadius</c>: the smallest circle at <c>MinSpeed</c>), at the locomotor's minimum
     /// speed. The center is the point the last move order ended at, else the position where the aircraft started to circle. Measured: the track settles on a circle of about 0.93 · radius.
+    /// The settled circle depends on the length of the sides of the polygon the aircraft flies, so the aim point is taken once per logic frame of the original (the 30 Hz step) and the
+    /// frame's step is flown in equal shares per tick (<see cref="AIUpdateInterface.SteerWinged"/>).
     /// </summary>
     private void CircleStep(IWorldServices world)
     {
+        if (ContinueWingedStep())
+        {
+            world.MarkDirty(Entity);
+            return;
+        }
         var locomotor = ActiveLocomotor!;
         if (!_circling)
         {
@@ -60,12 +67,13 @@ public sealed partial class JetAIUpdate
         var dy = _circleY - Entity.Y;
         var bearing = dx.Abs() + dy.Abs() < Epsilon ? Entity.Angle : FixedTrig.Atan2(dy, dx);
         var angle = bearing + aim;
-        SteerWinged(locomotor, _circleX + FixedTrig.Cos(angle) * radius, _circleY + FixedTrig.Sin(angle) * radius, locomotor.MinSpeed);
+        SteerWinged(world.Time, locomotor, _circleX + FixedTrig.Cos(angle) * radius, _circleY + FixedTrig.Sin(angle) * radius, locomotor.MinSpeed);
         world.MarkDirty(Entity);
     }
 
     private void DescribeFlight(IStateWriter writer)
     {
+        DescribeWingStep(writer);
         if (!_circling) return;
         writer.Bool("circling", true);
         writer.Fixed("circleX", _circleX);
@@ -74,6 +82,7 @@ public sealed partial class JetAIUpdate
 
     private void LoadFlight(IStateReader reader)
     {
+        LoadWingStep(reader);
         _circling = reader.Has("circling") && reader.Bool("circling");
         _circleX = _circling ? reader.Fixed("circleX") : Fixed.Zero;
         _circleY = _circling ? reader.Fixed("circleY") : Fixed.Zero;

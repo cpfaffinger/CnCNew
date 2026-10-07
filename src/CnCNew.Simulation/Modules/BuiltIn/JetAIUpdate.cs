@@ -442,9 +442,13 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         var flying = _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield or JetPhase.CirclingDeadAirfield;
         if (_allowAir && flying) ControlHeight(world);
         // A fighter cannot stop in the air: with no destination (and while it waits for the runway) it circles.
-        if (ShouldCircle(_phase)) CircleStep(world);
+        var circles = ShouldCircle(_phase);
+        var moves = _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield;
+        // A frame of winged flight is flown to its end by whichever of the two steers; when neither does any more (the landing begins, the aircraft is on the ground) the rest is dropped.
+        if (WingedStepRunning && !circles && !(moves && Entity.HasMoveTarget && ActiveLocomotor is { } wings && FliesWithWings(wings))) CancelWingedStep();
+        if (circles) CircleStep(world);
         else _circling = false;
-        if (_phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield) base.Update(world);
+        if (moves) base.Update(world);
         return SimulationTiming.SleepNone;
     }
 
