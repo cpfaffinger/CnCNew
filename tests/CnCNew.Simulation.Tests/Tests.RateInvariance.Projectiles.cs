@@ -304,4 +304,57 @@ static partial class Tests
                 Check.That(frames[frame] == reference[frame], $"{rate}: after frame {frame} the missile is at {Show(reference[frame])} as at 30 Hz (measured {Show(frames[frame])}).");
         }
     }
+
+    private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) RateLastBlockerWorld(SimulationRate rate)
+    {
+        var fixture = new SyntheticFixture(rate, files: LastBlockerFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        return (world, new Feeder(world), fixture);
+    }
+
+    private static Entity RateBombInTheAir(SimulationWorld world, SyntheticFixture fixture, string template, int height)
+    {
+        var id = world.RequestSpawn(fixture.Templates.TryGet(template, out var found) ? found.Index : throw new InvalidOperationException(template), new PlayerId(1), Fixed.Zero, Fixed.Zero, Fixed.FromInt(height), Fixed.Zero);
+        world.Step();
+        while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+        return world.FindEntity(id)!;
+    }
+
+    /// <summary>
+    /// §5.1 <c>SmartBombHomingData.CourseCorrectionScalar</c>: the mix "target · (1 − s) + position · s" is taken once per logic frame. With s = 0.8 the bomb is a fifth of the way
+    /// after the first frame at every rate (before, a fifth per tick: 20 / 36 / 59.04 of 100 units) and in the same place after every frame, bit for bit; a snapshot inside a frame
+    /// continues identically.
+    /// </summary>
+    public static void RateProjectilesSmartBombMixesOncePerFrame()
+    {
+        List<(Fixed X, Fixed Y)>? reference = null;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            List<(Fixed X, Fixed Y)> Run(int snapshotAt)
+            {
+                var (world, _, fixture) = RateLastBlockerWorld(rate);
+                var bomb = RateBombInTheAir(world, fixture, "LbSmartBomb", 300);
+                bomb.Modules.OfType<SmartBombTargetHomingUpdate>().Single().SetTargetPosition(world, Fixed.FromInt(100), Fixed.FromInt(-40), Fixed.Zero);
+                var frames = new List<(Fixed X, Fixed Y)>();
+                for (var step = 1; step <= 30 * factor; step++)
+                {
+                    if (step == snapshotAt)
+                    {
+                        var id = bomb.Id;
+                        world = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+                        bomb = world.FindEntity(id)!;
+                    }
+                    world.Step();
+                    if (step % factor == 0) frames.Add((bomb.X, bomb.Y));
+                }
+                return frames;
+            }
+            var frames = Run(-1);
+            reference ??= frames;
+            Check.That((frames[0].X - Fixed.FromInt(20)).Abs() < Fixed.FromDecimal(0.001m) && (frames[0].Y + Fixed.FromInt(8)).Abs() < Fixed.FromDecimal(0.001m), $"{rate}: the first frame moves a fifth of the way ({frames[0].X}, {frames[0].Y}).");
+            Check.That(frames.SequenceEqual(reference), $"{rate}: the bomb is where 30 Hz has it after every frame.");
+            for (var offset = 0; offset < factor; offset++)
+                Check.That(Run(5 * factor + 1 + offset).SequenceEqual(frames), $"{rate}: a snapshot taken {offset} ticks into a frame continues identically.");
+        }
+    }
 }

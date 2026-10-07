@@ -214,6 +214,10 @@ public sealed record SmartBombHomingData(Fixed CourseCorrectionScalar) : ModuleD
 /// it spends well above the terrain it moves its x and y to <c>target · (1 − s) + position · s</c> with <c>s</c> the course-correction scalar clamped to [0, 1] (the height is left to the
 /// fall), so a falling bomb drifts onto its target and lands on it. A bomb that was never told a target (or told the point (0, 0, 0), which the reference refuses too) does nothing.
 /// The module updates every tick for the bomb's whole life, as the reference does.
+/// <para>
+/// The scalar is a mixing factor per logic frame of the original: the mix is taken once per frame, from where the bomb is then, and the way it moves the bomb is flown in equal
+/// shares over the ticks of that frame, so the bomb is where 30 Hz has it when the frame is over (docs/RATE-INVARIANCE-PROJECTILES.md). At 30 Hz a frame is a tick.
+/// </para>
 /// </summary>
 public sealed class SmartBombTargetHomingUpdate(SmartBombHomingData data) : SimModule, IUpdateModule
 {
@@ -222,6 +226,10 @@ public sealed class SmartBombTargetHomingUpdate(SmartBombHomingData data) : SimM
     private Fixed _targetX;
     private Fixed _targetY;
     private Fixed _targetZ;
+    // The way the mix of the current frame moves the bomb and the ticks of it already flown (0: this tick takes a mix). Always 0 at 30 Hz (and then not written).
+    private Fixed _frameStepX;
+    private Fixed _frameStepY;
+    private int _subStep;
 
     public override string ModuleName => "SmartBombTargetHomingUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -245,11 +253,33 @@ public sealed class SmartBombTargetHomingUpdate(SmartBombHomingData data) : SimM
 
     public long Update(IWorldServices world)
     {
+        var time = world.Time;
+        if (_subStep != 0)
+        {
+            Entity.X += time.FrameShare(_frameStepX, _subStep);
+            Entity.Y += time.FrameShare(_frameStepY, _subStep);
+            _subStep = time.NextSubStep(_subStep);
+            world.MarkDirty(Entity);
+            return SimulationTiming.SleepNone;
+        }
         if (!_targetReceived || !world.IsSignificantlyAboveTerrain(Entity)) return SimulationTiming.SleepNone;
         var status = Fixed.Max(Fixed.Zero, Fixed.Min(Fixed.One, data.CourseCorrectionScalar));
         var target = Fixed.One - status;
-        Entity.X = _targetX * target + Entity.X * status;
-        Entity.Y = _targetY * target + Entity.Y * status;
+        var x = _targetX * target + Entity.X * status;
+        var y = _targetY * target + Entity.Y * status;
+        if (time.TicksPerOriginalFrame == 1)
+        {
+            Entity.X = x;
+            Entity.Y = y;
+        }
+        else
+        {
+            _frameStepX = x - Entity.X;
+            _frameStepY = y - Entity.Y;
+            Entity.X += time.FrameShare(_frameStepX, 0);
+            Entity.Y += time.FrameShare(_frameStepY, 0);
+            _subStep = time.NextSubStep(0);
+        }
         world.MarkDirty(Entity);
         return SimulationTiming.SleepNone;
     }
@@ -262,6 +292,10 @@ public sealed class SmartBombTargetHomingUpdate(SmartBombHomingData data) : SimM
         writer.Fixed("targetX", _targetX);
         writer.Fixed("targetY", _targetY);
         writer.Fixed("targetZ", _targetZ);
+        if (_subStep == 0) return;
+        writer.Int("subStep", _subStep);
+        writer.Fixed("frameStepX", _frameStepX);
+        writer.Fixed("frameStepY", _frameStepY);
     }
 
     public override void Load(IStateReader reader)
@@ -272,6 +306,9 @@ public sealed class SmartBombTargetHomingUpdate(SmartBombHomingData data) : SimM
         _targetX = reader.Fixed("targetX");
         _targetY = reader.Fixed("targetY");
         _targetZ = reader.Fixed("targetZ");
+        _subStep = reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;
+        _frameStepX = _subStep != 0 ? reader.Fixed("frameStepX") : Fixed.Zero;
+        _frameStepY = _subStep != 0 ? reader.Fixed("frameStepY") : Fixed.Zero;
     }
 }
 
