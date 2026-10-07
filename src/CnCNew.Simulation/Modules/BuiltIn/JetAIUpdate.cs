@@ -111,6 +111,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private bool _useReturnLocomotor;
     private long _attackExpireTick;
     private long _checkAirfieldTick;
+    /// <summary>The climb speed of the height control, per logic frame of the original.</summary>
     private Fixed _verticalSpeed;
     private Fixed _glideHeight;
     private Fixed _glideLength;
@@ -451,19 +452,18 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
                 break;
         }
 
+        if (_allowAir && _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield or JetPhase.CirclingDeadAirfield) ControlHeight(world);
         var step = (Entity.X - before.X, Entity.Y - before.Y, Entity.Z - before.Z, FixedTrig.AngleDifference(before.Angle, Entity.Angle));
         // An aircraft that stands parked with nothing to do takes no frame: it looks at every tick, so the take-off starts in the tick the order is given.
         return FlyOn(world, !(_phase == JetPhase.None && !_allowAir), step);
     }
 
     /// <summary>
-    /// What runs every tick after the states: the height control, the circling and the move order of the flight. With <paramref name="decided"/> the states have just applied the step of a
+    /// What runs every tick after the states: the circling and the move order of the flight. With <paramref name="decided"/> the states have just applied the step of a
     /// whole logic frame of the original (<paramref name="step"/>); it is spread over the frame's ticks last, so that everything before sees the object where the 30 Hz step puts it.
     /// </summary>
     private long FlyOn(IWorldServices world, bool decided, (Fixed X, Fixed Y, Fixed Z, Fixed Turn) step)
     {
-        var flying = _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield or JetPhase.CirclingDeadAirfield;
-        if (_allowAir && flying) ControlHeight(world);
         // A fighter cannot stop in the air: with no destination (and while it waits for the runway) it circles.
         var circles = ShouldCircle(_phase);
         var moves = _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield;
@@ -954,26 +954,32 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
 
     /// <summary>
     /// Kinematic stand-in for the physics locomotor's height control: an aircraft that may fly climbs to <c>ground + PreferredHeight</c> with the locomotor's lift net of gravity (limited to a
-    /// half of its speed) and sinks at the larger of <c>SpeedLimitZ</c> and a quarter of its speed.
+    /// half of its speed) and sinks at the larger of <c>SpeedLimitZ</c> and a quarter of its speed. One step of a logic frame of the original: it is called when the states decide
+    /// and its change of height is flown in shares per tick with the rest of the frame's step.
     /// </summary>
     private void ControlHeight(IWorldServices world)
     {
         var locomotor = ActiveLocomotor;
         if (locomotor is null || locomotor.PreferredHeight <= Fixed.Zero) return;
         var target = GroundHere(world) + locomotor.PreferredHeight;
+        var time = world.Time;
         if (Entity.Z < target)
         {
-            var gravity = -world.Templates.GravityPerTickSquared;
-            var net = locomotor.Lift > gravity ? locomotor.Lift - gravity : locomotor.Lift;
-            if (net <= Fixed.Zero) net = Fixed.Max(locomotor.Speed / Fixed.FromInt(8), Epsilon);
-            _verticalSpeed = Fixed.Min(_verticalSpeed + net, Fixed.Max(locomotor.Speed / Fixed.FromInt(2), net));
+            // Everything per logic frame of the original, the climb speed included (_verticalSpeed): "an eighth of the speed" is used as an acceleration and "half the speed" as
+            // the cap of the climb speed, which only means the same climb at every rate when the speed is the travel of a frame.
+            var gravity = -FlightFrames.PerFrameSquared(time, world.Templates.GravityPerTickSquared);
+            var lift = FlightFrames.PerFrameSquared(time, locomotor.Lift);
+            var speed = FlightFrames.PerFrame(time, locomotor.Speed);
+            var net = lift > gravity ? lift - gravity : lift;
+            if (net <= Fixed.Zero) net = Fixed.Max(speed / Fixed.FromInt(8), Epsilon);
+            _verticalSpeed = Fixed.Min(_verticalSpeed + net, Fixed.Max(speed / Fixed.FromInt(2), net));
             Entity.Z = Fixed.Min(Entity.Z + _verticalSpeed, target);
             if (Entity.Z == target) _verticalSpeed = Fixed.Zero;
         }
         else if (Entity.Z > target)
         {
             _verticalSpeed = Fixed.Zero;
-            Entity.Z = Fixed.Max(target, Entity.Z - Fixed.Max(locomotor.SpeedLimitZ, locomotor.Speed / Fixed.FromInt(4)));
+            Entity.Z = Fixed.Max(target, Entity.Z - FlightFrames.PerFrame(time, Fixed.Max(locomotor.SpeedLimitZ, locomotor.Speed / Fixed.FromInt(4))));
         }
         else return;
         world.MarkDirty(Entity);
