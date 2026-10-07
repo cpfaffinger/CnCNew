@@ -158,11 +158,10 @@ internal static class PerfCommand
             Console.WriteLine();
             Console.WriteLine($"Replay without AI and without observer: {run.TicksExecuted} ticks, {run.SubmittedCommands} commands in {watch.Elapsed.TotalSeconds:F2} s = {watch.Elapsed.TotalSeconds / run.TicksExecuted * 1e6:F1} us/tick, {replayTicksPerSecond:F0} ticks/s; "
                               + $"{(GC.GetAllocatedBytesForCurrentThread() - replayAllocated) / Math.Max(1, run.TicksExecuted)} bytes/tick, GC gen0/1/2 {replayGcAfter.Gen0 - replayGc.Gen0}/{replayGcAfter.Gen1 - replayGc.Gen1}/{replayGcAfter.Gen2 - replayGc.Gen2}.");
-            Console.WriteLine($"  catch-up speed: {replayTicksPerSecond / 30:F1}x real time at 30 Hz, {replayTicksPerSecond / 60:F1}x at 60 Hz (ticks per second / tick rate; a 60 Hz game also has twice the ticks per game minute).");
+            Console.WriteLine($"  catch-up speed: {replayTicksPerSecond / RunRate:F1}x real time at {ToolRate.Current} (replayed ticks per second / the tick rate of this run).");
             Console.WriteLine($"  replay final hash {run.FinalHash:X16} == observed live run: {same}.");
             summary["replay_us"] = (watch.Elapsed.TotalSeconds / run.TicksExecuted * 1e6).ToString("F1", Invariant);
-            summary["catchup30"] = (replayTicksPerSecond.Value / 30).ToString("F1", Invariant);
-            summary["catchup60"] = (replayTicksPerSecond.Value / 60).ToString("F1", Invariant);
+            summary["catchup"] = (replayTicksPerSecond.Value / RunRate).ToString("F1", Invariant);
             json.Add("replay", new ManifestObject().Add("perTickNs", PerfSummary.Nanoseconds(watch.Elapsed.TotalSeconds / run.TicksExecuted * 1e6)).Add("ticksPerSecond", (long)Math.Round(replayTicksPerSecond.Value))
                 .Add("bytesPerTickMean", (GC.GetAllocatedBytesForCurrentThread() - replayAllocated) / Math.Max(1, run.TicksExecuted))
                 .Add("gen0", replayGcAfter.Gen0 - replayGc.Gen0).Add("gen1", replayGcAfter.Gen1 - replayGc.Gen1).Add("gen2", replayGcAfter.Gen2 - replayGc.Gen2).Add("hashEqualsLive", same));
@@ -478,12 +477,16 @@ internal static class PerfCommand
         var mean = Distribution.Of(recorder.Total).Mean;
         var basis = replayTicksPerSecond is { } rate ? 1e6 / rate : mean;
         Console.WriteLine();
-        Console.WriteLine($"Extrapolation to 60 Hz (same cost per tick assumed): live step {mean:F1} us x 60 = {mean * 60 / 1e4:F1} % of one core (30 Hz: {mean * 30 / 1e4:F1} %); "
-                          + $"catch-up {1e6 / (basis * 60):F1}x real time at 60 Hz ({(replayTicksPerSecond is null ? "from the live step including the session's own parts; run with --replay for the figure without AI" : "from the replay without AI")}).");
-        summary["core60_percent"] = (mean * 60 / 1e4).ToString("F1", Invariant);
-        summary["core30_percent"] = (mean * 30 / 1e4).ToString("F1", Invariant);
-        if (!summary.ContainsKey("catchup60")) summary["catchup60_live"] = (1e6 / (basis * 60)).ToString("F1", Invariant);
+        // Measured at the rate of this run, not extrapolated to another one: a run at another rate does other work per tick.
+        Console.WriteLine($"Real time at {ToolRate.Current}: live step {mean:F1} us x {RunRate} ticks per second = {mean * RunRate / 1e4:F1} % of one core; "
+                          + $"catch-up {1e6 / (basis * RunRate):F1}x real time ({(replayTicksPerSecond is null ? "from the live step including the session's own parts; run with --replay for the figure without AI" : "from the replay without AI")}).");
+        summary["tick_rate"] = RunRate.ToString(Invariant);
+        summary["core_percent"] = (mean * RunRate / 1e4).ToString("F1", Invariant);
+        if (!summary.ContainsKey("catchup")) summary["catchup_live"] = (1e6 / (basis * RunRate)).ToString("F1", Invariant);
     }
+
+    /// <summary>Ticks per second of this run (<c>--tick-rate</c>): what the real-time figures (catch-up, share of a core) are measured against.</summary>
+    private static long RunRate => ToolRate.Current.TicksPerSecond;
 
     private static void PrintSummary(SortedDictionary<string, string> summary)
     {

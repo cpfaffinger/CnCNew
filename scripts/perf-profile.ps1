@@ -6,8 +6,9 @@
   Baut SimTool (Release), kopiert die Binaerdateien in das Ausgabeverzeichnis (damit ein spaeterer Build die laufende Messung nicht stoert) und startet
   nacheinander, nie parallel:
     - Gefechte mit `SimTool perf ... --replay`: kleine Karte mit 2 Spielern, mittlere Karte mit 2 und 4 Spielern, grosse Karte mit 2, 4 und 8 Spielern,
-      je -Ticks Ticks (Standard 54.000 = 30 Spielminuten bei 30 Hz);
-    - zwei grosse Missionen mit `SimTool perf-mission` (MD_USA05, MD_GLA05), je 3.000 und 9.000 Ticks.
+      je -Ticks Ticks (Standard: 30 Spielminuten bei der Rate des Laufs, also 54.000 Ticks bei 30 Hz und 108.000 bei 60 Hz);
+    - zwei grosse Missionen mit `SimTool perf-mission` (MD_USA05, MD_GLA05), je 100 und 300 Spielsekunden (3.000 und 9.000 Ticks bei 30 Hz).
+  Alle Echtzeit-Groessen (Aufholtempo, Kernanteil) gelten fuer die Rate des Laufs (-TickRate); es wird nicht auf eine andere Rate hochgerechnet.
   Je Lauf entstehen <name>.txt (volle Ausgabe), <name>.csv (eine Zeile je 300 Ticks) und <name>.json (maschinenlesbare Zusammenfassung fuer
   `SimTool perf-compare` bzw. scripts/perf-compare.ps1); am Ende summary.md (Tabelle aus den `summary:`-Zeilen).
   Die Ausgaben liegen ausserhalb des Repos unter -OutDir (Standard: %TEMP%\cncnew-perf).
@@ -18,15 +19,18 @@
 .EXAMPLE
   .\scripts\perf-profile.ps1
   .\scripts\perf-profile.ps1 -Ticks 6000 -Only 'large-*'
+  .\scripts\perf-profile.ps1 -TickRate 60 -Only 'large-8p'
   .\scripts\perf-profile.ps1 -Only 'mission-*' -MissionTicks 3000
   .\scripts\perf-profile.ps1 -Label 'b432fb7 vor der Aenderung' -OutDir $env:TEMP\perf-alt
 #>
 [CmdletBinding()]
 param(
-    # Ticks je Gefecht.
-    [int]$Ticks = 54000,
-    # Ticks je Missionslauf (jede Mission laeuft einmal je Wert).
-    [string[]]$MissionTicks = @('3000', '9000'),
+    # Simulationsrate der Laeufe (30, 60 oder 120); wird als --tick-rate an SimTool gereicht.
+    [ValidateSet(30, 60, 120)][int]$TickRate = 30,
+    # Ticks je Gefecht (Ticks der Rate des Laufs). Ohne Angabe 30 Spielminuten.
+    [int]$Ticks = 0,
+    # Ticks je Missionslauf (jede Mission laeuft einmal je Wert; Ticks der Rate des Laufs). Ohne Angabe 100 und 300 Spielsekunden.
+    [string[]]$MissionTicks = @(),
     # Nur Laeufe, deren Name auf eines der Muster passt (Platzhalter erlaubt), z. B. 'small-*', 'large-8p', 'mission-*'.
     [string[]]$Only = @('*'),
     [string]$ContentDir,
@@ -41,6 +45,8 @@ param(
 $ErrorActionPreference = 'Stop'
 # `pwsh -File` reicht "a,b" als ein Argument durch: Listen deshalb hier selbst an Kommas trennen.
 $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+if ($Ticks -le 0) { $Ticks = 30 * 60 * $TickRate }
+if ($MissionTicks.Count -eq 0) { $MissionTicks = @("$(100 * $TickRate)", "$(300 * $TickRate)") }
 $missionTickCounts = @($MissionTicks | ForEach-Object { $_ -split ',' } | Where-Object { $_.Trim() } | ForEach-Object { [int]$_ })
 $repo = Split-Path -Parent $PSScriptRoot
 if (-not $ContentDir) { $ContentDir = Join-Path $repo '.local\phase2-import-a' }
@@ -100,10 +106,10 @@ foreach ($run in $runs) {
     $json = Join-Path $OutDir "$($run.Name).json"
     # Eine alte Zusammenfassung darf nicht als Ergebnis dieses Laufs liegen bleiben, wenn er scheitert.
     if (Test-Path -LiteralPath $json) { Remove-Item -LiteralPath $json -Force }
-    $arguments = @($run.Command, "`"$ContentDir`"", '--map', "`"$($run.Map)`"", '--ticks', $run.Ticks, '--csv', "`"$csv`"", '--json', "`"$json`"", '--label', "`"$($Label -replace '"', "'")`"")
+    $arguments = @($run.Command, "`"$ContentDir`"", '--map', "`"$($run.Map)`"", '--ticks', $run.Ticks, '--tick-rate', $TickRate, '--csv', "`"$csv`"", '--json', "`"$json`"", '--label', "`"$($Label -replace '"', "'")`"")
     if ($run.Command -eq 'perf') { $arguments += @('--players', $run.Players, '--replay') }
     $load = Get-CpuLoad
-    Write-Host "== $($run.Name): $($run.Command) $($run.Map), $($run.Ticks) Ticks (CPU-Auslastung vorher $load %)" -ForegroundColor Cyan
+    Write-Host "== $($run.Name): $($run.Command) $($run.Map), $($run.Ticks) Ticks bei $TickRate Hz (CPU-Auslastung vorher $load %)" -ForegroundColor Cyan
     $started = Get-Date
     $process = Start-Process -FilePath $exe -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError $errorLog
     $status = 'ok'
@@ -134,21 +140,20 @@ function Field($row, [string]$key) { if ($row.Values.ContainsKey($key)) { $row.V
 $lines = @()
 $lines += '# Leistungsprofil'
 $lines += ''
-$lines += "Erzeugt von ``scripts/perf-profile.ps1`` am $(Get-Date -Format 'yyyy-MM-dd HH:mm'); Stand $(git -C $repo rev-parse --short HEAD). Zeiten in Mikrosekunden je Tick, wenn nicht anders angegeben."
+$lines += "Erzeugt von ``scripts/perf-profile.ps1`` am $(Get-Date -Format 'yyyy-MM-dd HH:mm'); Stand $(git -C $repo rev-parse --short HEAD). Simulationsrate $TickRate Hz; Zeiten in Mikrosekunden je Tick, wenn nicht anders angegeben. Aufholtempo und Kernanteil gelten fuer diese Rate."
 $hardware = Get-Content -LiteralPath (Join-Path $OutDir "$($runs[0].Name).txt") -ErrorAction Ignore | Where-Object { $_ -cmatch '^Hardware: ' } | Select-Object -First 1
 if ($hardware) { $lines += ''; $lines += $hardware }
 $lines += ''
-$lines += '| Lauf | Karte | Zellen | Spieler | Ticks | Status | Mittel | Median | 95 % | 99 % | Max | Welt | KI / Skripte | Bytes je Tick | GC 0/1/2 | Objekte min/max/Ende | Wiedergabe us | Aufholen 30 Hz | Aufholen 60 Hz | Kernanteil 60 Hz | Snapshot Bytes | Schreiben ms | Lesen ms | Endhash | inkrementell = voll | Last vorher | Dauer s |'
-$lines += '|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|'
+$lines += '| Lauf | Karte | Zellen | Spieler | Ticks | Status | Mittel | Median | 95 % | 99 % | Max | Welt | KI / Skripte | Bytes je Tick | GC 0/1/2 | Objekte min/max/Ende | Wiedergabe us | Aufholen | Kernanteil | Snapshot Bytes | Schreiben ms | Lesen ms | Endhash | inkrementell = voll | Last vorher | Dauer s |'
+$lines += '|---|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---|---|---:|---:|'
 foreach ($row in $rows) {
     $session = if ($row.Run.Command -eq 'perf') { Field $row 'ai_mean_us' } else { Field $row 'scripts_mean_us' }
-    $catchup60 = if ($row.Values.ContainsKey('catchup60')) { "$($row.Values['catchup60'])x" } elseif ($row.Values.ContainsKey('catchup60_live')) { "$($row.Values['catchup60_live'])x (live)" } else { '-' }
-    $catchup30 = if ($row.Values.ContainsKey('catchup30')) { "$($row.Values['catchup30'])x" } else { '-' }
+    $catchup = if ($row.Values.ContainsKey('catchup')) { "$($row.Values['catchup'])x" } elseif ($row.Values.ContainsKey('catchup_live')) { "$($row.Values['catchup_live'])x (live)" } else { '-' }
     $cells = @(
         $row.Run.Name, ([IO.Path]::GetFileNameWithoutExtension($row.Run.Map)), (Field $row 'cells'), (Field $row 'players'), (Field $row 'ticks'), $row.Status,
         (Field $row 'mean_us'), (Field $row 'p50_us'), (Field $row 'p95_us'), (Field $row 'p99_us'), (Field $row 'max_us'), (Field $row 'world_mean_us'), $session,
         (Field $row 'alloc_bytes_per_tick'), (Field $row 'gc'), "$(Field $row 'objects_min')/$(Field $row 'objects_max')/$(Field $row 'objects_end')",
-        (Field $row 'replay_us'), $catchup30, $catchup60, "$(Field $row 'core60_percent') %", (Field $row 'snapshot_bytes'), (Field $row 'snapshot_write_ms'), (Field $row 'snapshot_restore_ms'),
+        (Field $row 'replay_us'), $catchup, "$(Field $row 'core_percent') %", (Field $row 'snapshot_bytes'), (Field $row 'snapshot_write_ms'), (Field $row 'snapshot_restore_ms'),
         "``$(Field $row 'hash')``", (Field $row 'incremental_equals_full'), "$($row.Load) %", $row.Seconds)
     $lines += '| ' + ($cells -join ' | ') + ' |'
 }
