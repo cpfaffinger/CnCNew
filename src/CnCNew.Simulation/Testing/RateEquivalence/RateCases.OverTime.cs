@@ -135,7 +135,7 @@ public static partial class RateCases
         {
             var result = scene.Step();
             field ??= scene.Find(fieldName, start);
-            if (field is not null && gone < 0 && !scene.Alive(field)) gone = step;
+            if (field is not null && gone < 0 && scene.Gone(field)) gone = step;
             foreach (var log in logs) log.Read(result, Elapsed(step));
         }
         quantities.Exact("field lifetime", Elapsed(gone));

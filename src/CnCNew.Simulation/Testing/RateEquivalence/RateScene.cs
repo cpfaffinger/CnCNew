@@ -247,6 +247,9 @@ public sealed class RateScene
 
     public bool Alive(Entity entity) => !entity.EffectivelyDead && !entity.DestroyRequested && World.FindEntity(entity.Id) == entity;
 
+    /// <summary>The object has left the world (an object without a body counts as dead from the start, but exists until it is removed).</summary>
+    public bool Gone(Entity entity) => World.FindEntity(entity.Id) != entity;
+
     /// <summary>The first object with this template that appeared at or after <paramref name="sinceTick"/> (lowest id), or null.</summary>
     public Entity? Find(string template, long sinceTick = 0)
     {

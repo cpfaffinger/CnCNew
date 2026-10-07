@@ -154,7 +154,7 @@ public static partial class RateCases
         var gone = scene.StepUntil(() =>
         {
             thing ??= scene.Find(name, start);
-            return thing is not null && !scene.Alive(thing);
+            return thing is not null && scene.Gone(thing);
         }, RateScene.Seconds(300));
         quantities.Exact("creation to end", gone);
         return quantities.Done();
@@ -166,7 +166,7 @@ public static partial class RateCases
         var thing = scene.Spawn(name, 1, 2000, 2000);
         scene.StepFrames(RateScene.Seconds(1));
         scene.Align();
-        if (!scene.Alive(thing)) return quantities.Exact("kill to removal", -1).Done();
+        if (scene.Gone(thing)) return quantities.Exact("kill to removal", -1).Done();
         scene.Kill(thing);
         var gone = scene.StepUntil(() => scene.World.FindEntity(thing.Id) != thing, RateScene.Seconds(300));
         quantities.Exact("kill to removal", gone);
@@ -319,7 +319,7 @@ public static partial class RateCases
         {
             log.Read(scene.Step(), Elapsed(step));
             if (disabled < 0 && tank.EmpDisabledUntil > scene.World.Tick) disabled = step;
-            if (mineGone < 0 && !scene.Alive(mine)) mineGone = step;
+            if (mineGone < 0 && scene.Gone(mine)) mineGone = step;
         }
         quantities.Event("order to first damage", log.Steps.Count > 0 ? log.Steps[0] : -1);
         quantities.Count("damage events", log.Steps.Count);
@@ -444,7 +444,7 @@ public static partial class RateCases
             var reach = 0;
             while (reach < 150 && world.IsPositionVisibleTo(scene.One, Fixed.FromInt(2000 + (reach + 1) * 10), Fixed.FromInt(2000))) reach++;
             widest = Math.Max(widest, reach);
-            if (ping is not null && !scene.Alive(ping)) gone = step;
+            if (ping is not null && scene.Gone(ping)) gone = step;
         }
         quantities.Exact("creation to the centre seen", Elapsed(centre));
         quantities.Distance("widest radius seen (in steps of ten units)", Fixed.FromInt(widest * 10));
@@ -536,7 +536,7 @@ public static partial class RateCases
                 hit = step;
                 until = tank.EmpDisabledUntil - start;
             }
-            if (gone < 0 && pulse is not null && !scene.Alive(pulse)) gone = step;
+            if (gone < 0 && pulse is not null && scene.Gone(pulse)) gone = step;
         }
         quantities.Exact("creation to the tank disabled", Elapsed(hit));
         quantities.Exact("creation to the end of the disabling", hit >= 0 ? until : -1);
