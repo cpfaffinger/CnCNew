@@ -73,11 +73,14 @@ public static partial class RateCases
             {
                 if (aiming.Alive(source) && aiming.Alive(victim)) aiming.Fire(source, victim, slot);
                 foreach (var item in aiming.Step().Events)
-                    if (item.Kind == SimEventKind.WeaponFired && item.Entity == source.Id && firstShot < 0)
-                    {
-                        firstShot = step - 1;
-                        angleAtShot = source.TurretOf(0)?.Angle ?? Fixed.Zero;
-                    }
+                    if (item.Kind == SimEventKind.WeaponFired && item.Entity == source.Id && firstShot < 0) firstShot = step - 1;
+            }
+            // The angle is read at the end of the frame of the original the shot fell in: the state the rates are compared at. (Read after the tick of the shot it was the
+            // angle after one tick's share of the turret's step - at 30 Hz the whole step, above it a part of it - which measured the reading, not the turret.)
+            if (firstShot >= 0)
+            {
+                aiming.Align();
+                angleAtShot = source.TurretOf(0)?.Angle ?? Fixed.Zero;
             }
             quantities.Event(label + ": order to first shot", firstShot);
             quantities.Angle(label + ": turret angle at the first shot", angleAtShot, firstShot >= 0);
