@@ -362,6 +362,9 @@ run.Test("Projectiles: point-defense laser shoots a missile down", Tests.Project
 run.Test("Projectiles: snapshot mid-flight and two-run determinism", Tests.ProjectileSnapshotAndDeterminism);
 run.Test("Rate invariance, projectiles: a delayed hit counts its frames against the 30 Hz speed", Tests.RateProjectilesDelayedHitCountsAgainstTheOriginalFrameSpeed);
 run.Test("Rate invariance, projectiles: the speed per frame is the 30 Hz catalog value", Tests.RateProjectilesFrameSpeedIsTheThirtyHertzValue);
+run.Test("Rate invariance, projectiles: a straight shell flies the 30 Hz path", Tests.RateProjectilesStraightShellFliesTheThirtyHertzPath);
+run.Test("Rate invariance, projectiles: a ballistic arc flies the 30 Hz path", Tests.RateProjectilesBallisticArcFliesTheThirtyHertzPath);
+run.Test("Rate invariance, projectiles: a snapshot inside a frame continues identically", Tests.RateProjectilesSnapshotInsideAFrame);
 run.Test("Tunnels: shared network, capacity, entry rules and exit through another tunnel", Tests.TunnelSharedNetwork);
 run.Test("Tunnels: healing, hand-over on death and cave-in", Tests.TunnelHealingAndCaveIn);
 run.Test("Tunnels: selling the last tunnel lets the riders out", Tests.TunnelSaleEvacuates);

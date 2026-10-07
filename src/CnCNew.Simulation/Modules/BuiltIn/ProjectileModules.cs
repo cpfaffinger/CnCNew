@@ -71,6 +71,12 @@ public sealed record DumbProjectileData(long MaxLifespanTicks, bool TumbleRandom
 /// the update after the last point (or once <c>MaxLifespan</c> is over) detonates it. <c>FlightPathAdjustDistPerSecond</c> drags the end point
 /// after a moving victim and recomputes the curve with the same point count.
 /// <para>
+/// The path is defined on the frame grid of the original (docs/RATE-INVARIANCE-PROJECTILES.md): the speed is the speed per logic frame, so the path has one point per frame of
+/// flight at every tick rate; the first point is taken one frame after the launch, every further one a frame later, and the detonation comes one frame after the last point. Within a
+/// frame the shell flies the way to that frame's point in equal shares and reaches it with the frame's last tick. Impact time and point are those of 30 Hz; at 30 Hz a frame is a
+/// tick and nothing differs.
+/// </para>
+/// <para>
 /// Fixed-point choices: the path points are evaluated from the Bernstein form at <c>t = i / (n - 1)</c> (the reference steps a binary32 forward
 /// difference iterator, whose accumulated error is not reproducible); the first and last point are exact. <c>n = 1</c> — undefined behavior in the
 /// reference (<c>BezFwdIterator</c> leaves the point at the origin and the orientation reads past the end) — flies straight to the end point.
@@ -94,13 +100,15 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
     private int _segments;
     private Fixed _speed;
     private int _step;
+    // Ticks flown since the path point of this frame: 0 on the tick that takes a point. Always 0 at 30 Hz (and then not written).
+    private int _subStep;
     private bool _detonated;
 
     public override string ModuleName => "DumbProjectileBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public EntityId Launcher => _launcher;
 
-    /// <summary>The number of path points (<c>m_flightPathSegments</c>); detonation is one update after the last point.</summary>
+    /// <summary>The number of path points (<c>m_flightPathSegments</c>), one per logic frame of the original; detonation is one frame after the last point.</summary>
     public int Segments => _segments;
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
@@ -115,14 +123,16 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         var weapon = world.Weapons[_weapon];
         var victim = _victim.IsValid ? world.FindEntity(_victim) : null;
         var aim = victim is null ? new Point3(launch.X, launch.Y, launch.Z) : Center(victim);
-        _speed = weapon.WeaponSpeed;
+        // Per logic frame of the original at every rate: the path gets one point per frame of flight.
+        _speed = ProjectileModules.FrameSpeed(world.Time, weapon.WeaponSpeed);
         if (weapon.ScaleWeaponSpeed && weapon.AttackRange > weapon.MinimumAttackRange)
         {
             var dx = aim.X - Entity.X;
             var dy = aim.Y - Entity.Y;
             var range = Fixed.Sqrt(dx * dx + dy * dy);
             var ratio = (range - weapon.MinimumAttackRange) / (weapon.AttackRange - weapon.MinimumAttackRange);
-            _speed = ratio * (weapon.WeaponSpeed - weapon.MinWeaponSpeed) + weapon.MinWeaponSpeed;
+            var slowest = ProjectileModules.FrameSpeed(world.Time, weapon.MinWeaponSpeed);
+            _speed = ratio * (_speed - slowest) + slowest;
         }
         // TumbleRandomly draws three logic numbers for the physics spin rates (presentation, but the draws keep the stream aligned).
         if (data.TumbleRandomly && Entity.Modules.Any(module => module is PhysicsBehavior))
@@ -138,7 +148,9 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
             return;
         }
         _step = 0;
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        _subStep = 0;
+        // The first point is taken one logic frame after the launch (the next tick at 30 Hz); it is the launch point itself.
+        world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
     }
 
     private static Point3 Center(Entity entity) => new(entity.X, entity.Y, entity.Z + entity.Template.CenterZDelta);
@@ -236,6 +248,7 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
     public long Update(IWorldServices world)
     {
         if (_detonated) return SimulationTiming.SleepForever;
+        if (_subStep != 0) return FlyTowardNextPoint(world);
         if (_lifespanTick != 0 && world.Tick >= _lifespanTick) { Detonate(world); return SimulationTiming.SleepForever; }
         if (_step >= _segments) { Detonate(world); return SimulationTiming.SleepForever; }
         if (_victim.IsValid && data.FlightPathAdjustPerTick > Fixed.Zero && world.FindEntity(_victim) is { DestroyRequested: false } victim)
@@ -248,7 +261,7 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
             if (movedSquared > AdjustEpsilonSquared)
             {
                 var moved = Fixed.Sqrt(movedSquared);
-                var step = Fixed.Min(moved, data.FlightPathAdjustPerTick);
+                var step = Fixed.Min(moved, data.FlightPathAdjustPerTick * world.Time.TicksPerOriginalFrame);
                 _end = new Point3(_end.X + dx * step / moved, _end.Y + dy * step / moved, _end.Z + dz * step / moved);
                 if (!CalcFlightPath(world, false)) { Detonate(world); return SimulationTiming.SleepForever; }
             }
@@ -256,11 +269,44 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         var point = PathPoint(_step);
         var previous = _step > 0 ? PathPoint(_step - 1) : _start;
         if (point.X != previous.X || point.Y != previous.Y) Entity.Angle = FixedTrig.Atan2(point.Y - previous.Y, point.X - previous.X);
-        Entity.X = point.X;
-        Entity.Y = point.Y;
-        Entity.Z = point.Z;
+        var ticks = world.Time.TicksPerOriginalFrame;
+        if (ticks == 1)
+        {
+            Entity.X = point.X;
+            Entity.Y = point.Y;
+            Entity.Z = point.Z;
+        }
+        else FlyToward(point, ticks);
         _step++;
+        _subStep = world.Time.NextSubStep(0);
         return SimulationTiming.SleepNone;
+    }
+
+    /// <summary>
+    /// Between two frames of the original: one more share of the way to the point of this frame (<c>_step - 1</c>), which the shell reaches with the last tick of the frame — the
+    /// state at the frame boundary is the one of 30 Hz. The heading stays that of the frame. Never runs at 30 Hz.
+    /// </summary>
+    private long FlyTowardNextPoint(IWorldServices world)
+    {
+        FlyToward(PathPoint(_step - 1), world.Time.TicksPerOriginalFrame - _subStep);
+        _subStep = world.Time.NextSubStep(_subStep);
+        return SimulationTiming.SleepNone;
+    }
+
+    /// <summary>Flies one of <paramref name="sharesLeft"/> equal shares of the way that is left to <paramref name="point"/>; the last share lands on it exactly.</summary>
+    private void FlyToward(Point3 point, int sharesLeft)
+    {
+        if (sharesLeft <= 1)
+        {
+            Entity.X = point.X;
+            Entity.Y = point.Y;
+            Entity.Z = point.Z;
+            return;
+        }
+        var left = Fixed.FromInt(sharesLeft);
+        Entity.X += (point.X - Entity.X) / left;
+        Entity.Y += (point.Y - Entity.Y) / left;
+        Entity.Z += (point.Z - Entity.Z) / left;
     }
 
     /// <summary><c>DumbProjectileBehavior::detonate</c>: once only; the weapon detonates, then the shell dies (<c>DetonateCallsKill</c>) or is destroyed.</summary>
@@ -292,6 +338,7 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         writer.Int("segments", _segments);
         writer.Fixed("speed", _speed);
         writer.Int("step", _step);
+        if (_subStep != 0) writer.Int("subStep", _subStep);
         writer.Bool("detonated", _detonated);
     }
 
@@ -310,6 +357,7 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         _segments = checked((int)reader.Int("segments"));
         _speed = reader.Fixed("speed");
         _step = checked((int)reader.Int("step"));
+        _subStep = reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;
         _detonated = reader.Bool("detonated");
     }
 

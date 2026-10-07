@@ -90,4 +90,119 @@ static partial class Tests
             Check.That(sum == whole / Fixed.FromInt(7), $"{rate}: the shares of one frame add up to the step exactly.");
         }
     }
+
+    /// <summary>One flight on the frame grid: where the projectile is after each logic frame since the shot (null once it is gone), after each tick, and the frame of the impact event.</summary>
+    private sealed record RateFlight(List<(Fixed X, Fixed Y, Fixed Z)?> Frames, List<(Fixed X, Fixed Y, Fixed Z)?> Ticks, long ImpactFrame, Fixed DummyHealth);
+
+    /// <summary>
+    /// Fires <paramref name="launcher"/> at a dummy <paramref name="distance"/> away and follows the projectile. The shot is given in tick F; "after frame j" is the state after the
+    /// tick F + j of 30 Hz, which is the state after the last tick of that frame at a higher rate. The impact has to fall on the first tick of a frame.
+    /// </summary>
+    private static RateFlight FlyAtDummy(SimulationRate rate, int factor, string launcher, string projectile, int distance, int budgetFrames)
+    {
+        var (world, feeder, _) = RateProjectileWorld(rate);
+        var fire = FireAtDummy(world, feeder, launcher, distance, out var dummy);
+        var frames = new List<(Fixed X, Fixed Y, Fixed Z)?>();
+        var ticks = new List<(Fixed X, Fixed Y, Fixed Z)?>();
+        long impact = -1;
+        for (var step = 1; step <= (budgetFrames + 1) * factor; step++)
+        {
+            var result = world.Step();
+            if (impact < 0 && result.Events.Any(value => value.Kind == SimEventKind.WeaponImpact))
+            {
+                Check.That((result.Tick - fire) % factor == 0, $"{rate}: {projectile} lands on the first tick of a logic frame (tick F+{result.Tick - fire}).");
+                impact = (result.Tick - fire) / factor;
+            }
+            var entity = world.Entities.FirstOrDefault(value => value.Template.Name == projectile);
+            (Fixed X, Fixed Y, Fixed Z)? where = entity is null ? null : (entity.X, entity.Y, entity.Z);
+            ticks.Add(where);
+            if (step % factor == 0) frames.Add(where);
+        }
+        return new RateFlight(frames, ticks, impact, dummy.Body!.Health);
+    }
+
+    /// <summary>The flight of <paramref name="launcher"/>'s projectile is the 30 Hz flight at every rate: the same place after every logic frame, bit for bit, the same impact frame, the same damage.</summary>
+    private static RateFlight SameFlightAtEveryRate(string launcher, string projectile, int distance, int budgetFrames, long expectedImpactFrame)
+    {
+        RateFlight? reference = null;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var flight = FlyAtDummy(rate, factor, launcher, projectile, distance, budgetFrames);
+            reference ??= flight;
+            Check.That(flight.ImpactFrame == expectedImpactFrame, $"{rate}: {projectile} lands in logic frame F+{expectedImpactFrame} (measured F+{flight.ImpactFrame}).");
+            Check.That(flight.DummyHealth == reference.DummyHealth, $"{rate}: {projectile} deals the damage of 30 Hz.");
+            Check.That(flight.Frames.Count == reference.Frames.Count, $"{rate}: {projectile} was followed for the same number of frames.");
+            for (var frame = 0; frame < reference.Frames.Count; frame++)
+                Check.That(flight.Frames[frame] == reference.Frames[frame],
+                    $"{rate}: after logic frame {frame} {projectile} is at {Show(reference.Frames[frame])} as at 30 Hz (measured {Show(flight.Frames[frame])}).");
+            // Inside a frame the projectile lies on the chord between the two frame states, as many shares along as ticks have passed.
+            for (var tick = 0; tick < flight.Ticks.Count; tick++)
+            {
+                var frame = tick / factor;
+                var share = tick % factor + 1;
+                if (frame == 0 || share == factor || flight.Ticks[tick] is not { } at || flight.Frames[frame - 1] is not { } from || flight.Frames[frame] is not { } to) continue;
+                var x = from.X + (to.X - from.X) * share / Fixed.FromInt(factor);
+                var z = from.Z + (to.Z - from.Z) * share / Fixed.FromInt(factor);
+                Check.That((at.X - x).Abs().Raw <= 8 && (at.Z - z).Abs().Raw <= 8, $"{rate}: tick {tick} of {projectile} lies {share}/{factor} along the chord of its frame (x {at.X} against {x}, z {at.Z} against {z}).");
+            }
+        }
+        return reference!;
+    }
+
+    private static string Show((Fixed X, Fixed Y, Fixed Z)? point) => point is { } value ? $"({value.X}, {value.Y}, {value.Z})" : "gone";
+
+    /// <summary>
+    /// §5.2 <c>DumbProjectileBehavior</c>: the straight shell of the hand-computed 30 Hz test (200 units at 10 per frame: twenty path points, on point 0 in frame F+1, on the last
+    /// in F+20, detonation in F+21) flies the same path at 60 and 120 Hz. Before, the path had one point per tick: 20 / 40 / 80 points of 10 / 5 / 2.5 units and the detonation one
+    /// tick after the last, 0.700 / 0.683 / 0.675 s after the shot.
+    /// </summary>
+    public static void RateProjectilesStraightShellFliesTheThirtyHertzPath()
+    {
+        var flight = SameFlightAtEveryRate("ShellLauncher", "TestShell", 200, 24, 21);
+        Check.That(flight.Frames[1] == (Fixed.Zero, Fixed.Zero, Fixed.Zero) && flight.Frames[20] is { } last && last.X == Fixed.FromInt(200), "The shell is on point 0 after frame 1 and on the last point after frame 20.");
+        Check.That(flight.Frames[21] is null, "The shell is gone with the detonation.");
+    }
+
+    /// <summary>§5.2 <c>DumbProjectileBehavior</c>: the ballistic arc (14 path points, landing in F+15) is the same arc at every rate; before it had 14 / 27 / 53 points and landed after 0.467 / 0.450 / 0.442 s of flight.</summary>
+    public static void RateProjectilesBallisticArcFliesTheThirtyHertzPath()
+    {
+        var flight = SameFlightAtEveryRate("ArcLauncher", "ArcShell", 120, 18, 15);
+        var peak = flight.Ticks.Max(value => value?.Z ?? Fixed.Zero);
+        Check.That(peak > Fixed.FromInt(22) && peak <= Fixed.FromDecimal(22.5m), $"The arc peaks below 22.5 (measured {peak}).");
+    }
+
+    /// <summary>A projectile restored inside a frame flies on identically (the share of the frame already flown is state).</summary>
+    public static void RateProjectilesSnapshotInsideAFrame()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            List<ulong> Run(int snapshotAt)
+            {
+                var (world, feeder, fixture) = RateProjectileWorld(rate);
+                feeder.Spawn(1, "ShellLauncher", x: 0, y: 0);
+                feeder.Spawn(1, "ArcLauncher", x: 0, y: 20);
+                feeder.Spawn(1, "MissileLauncher", x: 0, y: 40);
+                feeder.Spawn(1, "SlowMissileLauncher", x: 0, y: 60);
+                feeder.Spawn(2, "Dummy", x: 250, y: 30);
+                world.Step();
+                var dummy = Get(world, "Dummy").Id.Value;
+                foreach (var name in new[] { "ShellLauncher", "ArcLauncher", "MissileLauncher", "SlowMissileLauncher" })
+                    feeder.FireWeapon(1, Get(world, name).Id.Value, dummy);
+                var hashes = new List<ulong>();
+                for (var step = 0; step < world.Frames(45); step++)
+                {
+                    if (step == snapshotAt)
+                    {
+                        Check.That(world.Entities.Count(value => value.Template.IsKindOf("PROJECTILE")) == 4, $"{rate}: four projectiles are in flight at the snapshot.");
+                        world = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+                    }
+                    hashes.Add(world.Step().StateHash);
+                }
+                return hashes;
+            }
+            var plain = Run(-1);
+            for (var offset = 0; offset < factor; offset++)
+                Check.That(plain.SequenceEqual(Run(4 * factor + offset)), $"{rate}: a snapshot taken {offset} ticks into a frame continues identically.");
+        }
+    }
 }
