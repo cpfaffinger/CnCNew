@@ -44,7 +44,7 @@ internal static class PerfCommand
         public static Common Parse(string[] args) => new(
             args[1],
             Arg(args, "--map") ?? throw new ArgumentException("--map <virtual-map-path> is required.\n" + Usage),
-            long.Parse(Arg(args, "--ticks") ?? "18000", Invariant),
+            ToolRate.Budget(args, "--ticks", 18000),
             Arg(args, "--csv"),
             int.Parse(Arg(args, "--top") ?? "15", Invariant),
             Math.Max(1, int.Parse(Arg(args, "--sample") ?? "300", Invariant)),

@@ -44,7 +44,8 @@ const string Usage = """
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
                                                 and a savegame from mission to mission
-    Every command that runs a mission takes --tick-rate N (30, 60 or 120; default 30); tick budgets stay ticks of that rate.
+    Every command that runs a mission takes --tick-rate N (30, 60 or 120; default 30). --ticks N is a raw tick count of that rate; --seconds S or
+    --minutes M state the budget as game time instead; the default budgets are game time (drive 2000 s, audit 60 s, playthrough 30 s).
     """;
 
 if (args.Length < 2)
@@ -187,7 +188,7 @@ static int ScriptDump(ContentFileSystem content, CampaignCatalog campaigns, stri
 
 static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
 {
-    var ticks = long.Parse(Arg(args, "--ticks") ?? "60000", CultureInfo.InvariantCulture);
+    var ticks = CnCNew.CampaignTool.ToolRate.Budget(args, "--ticks", 60000);
     var filterCampaign = Arg(args, "--campaign");
     var filterMap = Arg(args, "--map");
     var watch = Arg(args, "--watch");
@@ -283,7 +284,7 @@ static (MissionContext Context, TemplateCatalog Catalog, string Fingerprint) Com
 
 static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
 {
-    var ticks = long.Parse(Arg(args, "--ticks") ?? "1800", CultureInfo.InvariantCulture);
+    var ticks = CnCNew.CampaignTool.ToolRate.Budget(args, "--ticks", 1800);
     var filterCampaign = Arg(args, "--campaign");
     var filterMap = Arg(args, "--map");
     var probes = !args.Contains("--no-probes");
@@ -386,7 +387,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
 static int Playthrough(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
 {
     var name = Arg(args, "--campaign") ?? throw new ArgumentException("--campaign <name> is required.");
-    var ticks = long.Parse(Arg(args, "--ticks") ?? "900", CultureInfo.InvariantCulture);
+    var ticks = CnCNew.CampaignTool.ToolRate.Budget(args, "--ticks", 900);
     var humanSideName = Arg(args, "--human-side") ?? string.Empty;
     var campaign = campaigns.Find(name) ?? throw new ArgumentException($"Unknown campaign {name}.");
     var (context, _, _) = Compile(content);

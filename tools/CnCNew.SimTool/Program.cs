@@ -69,7 +69,8 @@ const string Usage = """
                                                            two surveys of the same pairings and seeds at two rates, compared as distributions against limits fixed in
                                                            advance (docs/SIMULATION-CORE.md §40); exit code 0 all tests passed, 1 a test failed, 2 input error
     Every command that creates a world takes --tick-rate N (30, 60 or 120; default 30): the catalog is built for that rate and the world runs at it.
-    Tick budgets (--ticks, --max-ticks) stay ticks of that rate. The manifest commands always run at the recorded 30 Hz.
+    A budget given as --ticks/--max-ticks is a raw tick count of that rate; --seconds S or --minutes M state it as game time instead, and the
+    default budgets are game time (the same at every rate). The stress test counts steps (--ticks only). The manifest commands always run at the recorded 30 Hz.
     reference-match, ai-match and mission-run take --time-probe: counters of the time service over the first run (per-tick amounts that round to
     zero at run time, the one-frame minimum engaging, durations off the grid), by place in the source. Diagnostics, not state.
     """;
@@ -141,7 +142,7 @@ catch (Exception exception)
 static int UnitAudit(string directory, string[] args)
 {
     var mapPath = Arg(args, "--map") ?? throw new ArgumentException("--map <virtual-map-path> is required.");
-    var options = SkirmishMatchOptions.Standard with { MaxTicks = long.Parse(Arg(args, "--max-ticks") ?? "9000", CultureInfo.InvariantCulture) };
+    var options = SkirmishMatchOptions.Standard with { MaxTicks = CnCNew.SimTool.ToolRate.Budget(args, "--max-ticks", 9000) };
     if (Arg(args, "--seed") is { } seed) options = options with { AiSeed = uint.Parse(seed, CultureInfo.InvariantCulture), WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) ^ 0xC0FFEE06 };
     var (_, catalog, fingerprint) = CompileShipped(directory);
     var content = ContentFileSystem.Open(directory);
@@ -356,7 +357,7 @@ static int AuditCoverage(string directory, string[] args)
 static int ReferenceMatch(string directory, string[] args)
 {
     var options = ReferenceMatchOptions.Standard;
-    if (Arg(args, "--max-ticks") is { } maxTicks) options = options with { MaxTicks = long.Parse(maxTicks, CultureInfo.InvariantCulture) };
+    options = options with { MaxTicks = CnCNew.SimTool.ToolRate.Budget(args, "--max-ticks", options.MaxTicks) };
     if (Arg(args, "--min-ticks") is { } minTicks) options = options with { MinTicks = long.Parse(minTicks, CultureInfo.InvariantCulture) };
     if (Arg(args, "--world-seed") is { } worldSeed) options = options with { WorldSeed = uint.Parse(worldSeed, NumberStyles.HexNumber, CultureInfo.InvariantCulture) };
     if (Arg(args, "--driver-seed") is { } driverSeed) options = options with { DriverSeed = uint.Parse(driverSeed, NumberStyles.HexNumber, CultureInfo.InvariantCulture) };
@@ -430,7 +431,7 @@ static int AiMatch(string directory, string[] args)
 {
     var mapPath = Arg(args, "--map") ?? throw new ArgumentException("--map <virtual-map-path> is required.");
     var options = SkirmishMatchOptions.Standard;
-    if (Arg(args, "--max-ticks") is { } maxTicks) options = options with { MaxTicks = long.Parse(maxTicks, CultureInfo.InvariantCulture) };
+    options = options with { MaxTicks = CnCNew.SimTool.ToolRate.Budget(args, "--max-ticks", options.MaxTicks) };
     if (Arg(args, "--seed") is { } seed) options = options with { AiSeed = uint.Parse(seed, CultureInfo.InvariantCulture), WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) ^ 0xC0FFEE06 };
     var watch = Stopwatch.StartNew();
     var (_, catalog, fingerprint) = CompileShipped(directory);
@@ -552,7 +553,7 @@ static int AiMatch(string directory, string[] args)
 /// </summary>
 static int SkirmishSweep(string directory, string[] args)
 {
-    var maxTicks = long.Parse(Arg(args, "--max-ticks") ?? "3000", CultureInfo.InvariantCulture);
+    var maxTicks = CnCNew.SimTool.ToolRate.Budget(args, "--max-ticks", 3000);
     var watch = Stopwatch.StartNew();
     var (_, catalog, fingerprint) = CompileShipped(directory);
     var content = ContentFileSystem.Open(directory);
@@ -647,7 +648,7 @@ static ulong Chain(ulong[] hashes)
 static int MissionRun(string directory, string[] args)
 {
     var mapPath = Arg(args, "--map") ?? throw new ArgumentException("--map <virtual-map-path> is required.");
-    var ticks = long.Parse(Arg(args, "--ticks") ?? "9000", CultureInfo.InvariantCulture);
+    var ticks = CnCNew.SimTool.ToolRate.Budget(args, "--ticks", 9000);
     var options = MissionOptions.Standard with { Difficulty = Enum.Parse<ScriptDifficulty>(Arg(args, "--difficulty") ?? "Normal", true), MaxTicks = 0 };
     if (Arg(args, "--seed") is { } seed) options = options with { WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) };
     var (_, catalog, fingerprint) = CompileShipped(directory);
