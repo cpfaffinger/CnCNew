@@ -34,6 +34,8 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     private Fixed _velocityX;
     private Fixed _velocityY;
     private Fixed _velocityZ;
+    // The ticks of the current frame of the original already fallen (0: this tick takes the frame's step). Always 0 at 30 Hz (and then not written).
+    private int _subStep;
 
     public override string ModuleName => "PhysicsBehavior";
     public PhysicsData Data => data;
@@ -42,20 +44,39 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     /// <summary>The object is in free fall.</summary>
     public bool Falling => _falling;
 
-    /// <summary>Lets the object go: it keeps (<paramref name="velocityX"/>, <paramref name="velocityY"/>) per tick horizontally and accelerates downwards.</summary>
+    /// <summary>
+    /// Lets the object go: it keeps (<paramref name="velocityX"/>, <paramref name="velocityY"/>) per logic frame of the original horizontally and accelerates downwards. The fall is
+    /// stepped once per frame, on the object's own phase (the first step one frame after the release), exactly as at 30 Hz: gravity per frame² is added to the velocity per frame,
+    /// the landing is judged on the whole step. The step of a frame is fallen in equal shares over its ticks (docs/RATE-INVARIANCE-PROJECTILES.md).
+    /// </summary>
     public void StartFall(IWorldServices world, Fixed velocityX, Fixed velocityY)
     {
         _falling = true;
         _velocityX = velocityX;
         _velocityY = velocityY;
         _velocityZ = Fixed.Zero;
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        _subStep = 0;
+        world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
     }
 
     public long Update(IWorldServices world)
     {
         if (!_falling) return SimulationTiming.SleepForever;
-        _velocityZ += world.Templates.GravityPerTickSquared;
+        var time = world.Time;
+        if (_subStep != 0)
+        {
+            // Between two frames: one more share of the frame's step.
+            Entity.X += time.FrameShare(_velocityX, _subStep);
+            Entity.Y += time.FrameShare(_velocityY, _subStep);
+            Entity.Z += time.FrameShare(_velocityZ, _subStep);
+            _subStep = time.NextSubStep(_subStep);
+            world.MarkDirty(Entity);
+            return SimulationTiming.SleepNone;
+        }
+        _velocityZ += ProjectileModules.GravityPerFrameSquared(world);
+        var beforeX = Entity.X;
+        var beforeY = Entity.Y;
+        var beforeZ = Entity.Z;
         Entity.X += _velocityX;
         Entity.Y += _velocityY;
         Entity.Z += _velocityZ;
@@ -67,6 +88,14 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
             world.MarkDirty(Entity);
             if (data.KillWhenRestingOnGround) world.Kill(Entity.Id);
             return SimulationTiming.SleepForever;
+        }
+        if (time.TicksPerOriginalFrame != 1)
+        {
+            // The landing was judged on the whole step of this frame, as at 30 Hz; the object itself falls the first share of it now and the rest on the next ticks.
+            Entity.X = beforeX + time.FrameShare(_velocityX, 0);
+            Entity.Y = beforeY + time.FrameShare(_velocityY, 0);
+            Entity.Z = beforeZ + time.FrameShare(_velocityZ, 0);
+            _subStep = time.NextSubStep(0);
         }
         world.MarkDirty(Entity);
         return SimulationTiming.SleepNone;
@@ -80,6 +109,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         writer.Fixed("velocityX", _velocityX);
         writer.Fixed("velocityY", _velocityY);
         writer.Fixed("velocityZ", _velocityZ);
+        if (_subStep != 0) writer.Int("subStep", _subStep);
     }
 
     public override void Load(IStateReader reader)
@@ -89,6 +119,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _velocityX = _falling ? reader.Fixed("velocityX") : Fixed.Zero;
         _velocityY = _falling ? reader.Fixed("velocityY") : Fixed.Zero;
         _velocityZ = _falling ? reader.Fixed("velocityZ") : Fixed.Zero;
+        _subStep = _falling && reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;
     }
 }
 

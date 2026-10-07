@@ -383,4 +383,39 @@ static partial class Tests
             Check.That(scales.Count > 20 && scales.SequenceEqual(reference), $"{rate}: the scale after every frame is the scale of 30 Hz ({scales.Count} frames, last {scales[^1]} against {reference[^1]}).");
         }
     }
+
+    /// <summary>
+    /// §5.2 <c>PhysicsBehavior.Update</c>: a free fall is stepped once per logic frame — gravity per frame² onto the velocity per frame, the landing judged on the whole step — and
+    /// flown in shares. From 300 units up with 3 units per frame sideways the object is in the same place after every frame, bit for bit, and lands in the same frame at 30, 60 and
+    /// 120 Hz (before: Euler per tick with gravity per tick², landing fractions of a frame apart).
+    /// </summary>
+    public static void RateProjectilesFreeFallStepsPerFrame()
+    {
+        List<(Fixed X, Fixed Y, Fixed Z)?>? reference = null;
+        long referenceLanding = -1;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, _, fixture) = RateLastBlockerWorld(rate);
+            var bomb = RateBombInTheAir(world, fixture, "LbDumbBomb", 300);
+            var physics = bomb.Modules.OfType<PhysicsBehavior>().Single();
+            physics.StartFall(world, Fixed.FromInt(3), Fixed.Zero);
+            var frames = new List<(Fixed X, Fixed Y, Fixed Z)?>();
+            long landing = -1;
+            for (var step = 1; step <= 200 * factor && landing < 0; step++)
+            {
+                world.Step();
+                if (!physics.Falling)
+                {
+                    Check.That((step - 1) % factor == 0, $"{rate}: the landing falls on the first tick of a frame (step {step}).");
+                    landing = (step - 1) / factor;
+                }
+                else if (step % factor == 0) frames.Add((bomb.X, bomb.Y, bomb.Z));
+            }
+            reference ??= frames;
+            if (referenceLanding < 0) referenceLanding = landing;
+            Check.That(landing == referenceLanding && landing > 20, $"{rate}: the object lands in frame {referenceLanding} after its release (measured {landing}).");
+            Check.That(frames.SequenceEqual(reference), $"{rate}: the falling object is where 30 Hz has it after every frame.");
+            Check.That(bomb.Z == Fixed.Zero && bomb.X == Fixed.FromInt(3) * landing, $"{rate}: it rests on the ground, {landing} sideways steps out ({bomb.X}).");
+        }
+    }
 }
