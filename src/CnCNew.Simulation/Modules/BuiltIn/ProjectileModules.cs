@@ -26,6 +26,13 @@ internal static class ProjectileModules
         new ModuleBinding<PointDefenseLaserData>("PointDefenseLaserUpdate", ModuleOwnerKind.Object, (configuration, _) => PointDefenseLaserData.Parse(configuration), data => new PointDefenseLaserUpdate(data)),
     ];
 
+    /// <summary>
+    /// A weapon speed per tick as the speed per logic frame of the original, the unit the reference flies in and the 30 Hz catalog holds; the "instant" sentinel
+    /// (<see cref="WeaponInfo.InstantSpeed"/>) is a value per frame already and stays itself. 30 Hz: the argument.
+    /// </summary>
+    internal static Fixed FrameSpeed(SimulationTime time, Fixed speed)
+        => time.TicksPerOriginalFrame == 1 || speed == WeaponInfo.InstantSpeed ? speed : time.PerTickToPerOriginalFrame(speed);
+
     /// <summary>The shared end of both projectiles: detonate (radius damage, effect, creation list), then kill with <c>DEATH_DETONATED</c> or destroy.</summary>
     internal static void KillDetonated(IWorldServices world, Entity projectile)
     {
