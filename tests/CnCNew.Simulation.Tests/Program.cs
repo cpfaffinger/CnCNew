@@ -377,6 +377,7 @@ run.Test("Rate invariance (physics): a toppling structure accelerates, decays an
 run.Test("Rate invariance (physics): a train accelerates, brakes, waits, crushes and shoves once per frame of the original", Tests.RateInvarianceTrain);
 run.Test("Rate invariance (physics): the avalanche slides once per frame of the original", Tests.RateInvarianceAvalanche);
 run.Test("Rate invariance (physics): a battle bus is thrown and lands frame by frame of the original", Tests.RateInvarianceBattleBusThrow);
+run.Test("Rate invariance (physics): a collapsing structure sinks frame by frame of the original", Tests.RateInvarianceStructureCollapse);
 run.Test("Collision: bounded local avoidance around another unit's footprint", Tests.CollisionLocalAvoidance);
 run.Test("Collision: a mover plans around a row of standing units instead of rubbing along it", Tests.CollisionReplansAroundStandingUnits);
 run.Test("Last nine modules: every module of the catalog is implemented", Tests.LastBlockerModulesAreImplemented);

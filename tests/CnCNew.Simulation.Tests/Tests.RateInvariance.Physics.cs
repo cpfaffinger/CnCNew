@@ -265,6 +265,58 @@ static partial class Tests
     }
 
     /// <summary>
+    /// <c>StructureCollapseUpdate</c>: height -= velocity and velocity -= gravity once per frame of the original, the visual height moves every tick. The
+    /// height at every frame boundary (within the last bits of the catalog's gravity), the frames of the bursts and of the end are those of 30 Hz.
+    /// </summary>
+    public static void RateInvarianceStructureCollapse()
+    {
+        AtThreeRates(rate =>
+        {
+            var (world, fixture, _) = RatedStructuresWorld(rate);
+            RequestSpawn(world, fixture, "SwBuilding", 0, 300, 200);
+            world.Step();
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            var building = world.Entities.Single(entity => entity.Template.Name == "SwBuilding");
+            var collapse = building.Modules.OfType<StructureCollapseUpdate>().Single();
+            world.Kill(building.Id);
+            var (done, frame, sinking) = (-1, 0, true);
+            var previous = Fixed.Zero;
+            var heights = new List<long>();
+            var events = FrameSeries(world, 200, () =>
+            {
+                heights.Add(collapse.VisualHeight.Raw);
+                if (done < 0 && collapse.IsCollapsed) done = frame;
+                frame++;
+                return 0;
+            }, item => item.Kind is SimEventKind.FxRequested or SimEventKind.EntitySpawned);
+            // A second run, tick by tick: once the building sinks, every tick lowers it.
+            var (again, againFixture, _) = RatedStructuresWorld(rate);
+            RequestSpawn(again, againFixture, "SwBuilding", 0, 300, 200);
+            again.Step();
+            var other = again.Entities.Single(entity => entity.Template.Name == "SwBuilding");
+            var sinks = other.Modules.OfType<StructureCollapseUpdate>().Single();
+            again.Kill(other.Id);
+            for (var tick = 0; tick < again.Frames(200) && !sinks.IsCollapsed; tick++)
+            {
+                again.Step();
+                if (previous < Fixed.FromInt(-1) && sinks.VisualHeight >= previous) sinking = false;
+                previous = sinks.VisualHeight;
+            }
+            return (Heights: heights, Events: events, Done: done, Sinking: sinking);
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Done > 15, "Setup: the building collapses at 30 Hz (done in frame " + reference.Done + ").");
+            Check.That(other.Done == reference.Done, "The collapse ends in the same frame at " + rate + ": " + other.Done + " instead of " + reference.Done + ".");
+            SameSeries(reference.Events, other.Events, "Effects and debris of the collapse at " + rate);
+            var tolerance = Fixed.FromDecimal(0.001m).Raw;
+            for (var frame = 0; frame < reference.Heights.Count; frame++)
+                Check.That(Math.Abs(reference.Heights[frame] - other.Heights[frame]) <= tolerance,
+                    "Visual height at " + rate + ", frame " + frame + ": " + Fixed.FromRaw(other.Heights[frame]) + " instead of " + Fixed.FromRaw(reference.Heights[frame]) + ".");
+            Check.That(other.Sinking, "Once it sinks, every tick lowers the building at " + rate + ".");
+        });
+    }
+
+    /// <summary>
     /// <c>RailroadBehavior</c>: the conductor's recursion (push, acceleration factor, braking factor, friction), the wait at the station, the crush damage
     /// "speed · 10" and the shove by a quarter of the overlap happen once per frame of the original; the train moves every tick. Positions of the locomotive
     /// and its carriages, the conductor's state, the position and health of a vehicle it grinds along and every death are those of 30 Hz at each frame boundary.

@@ -127,6 +127,10 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
     private long _burstTick;
     private Fixed _velocity;
     private Fixed _height;
+    // The sinking is one step of the original per logic frame of the original (height -= velocity, then velocity -= gravity), in its units: the velocity is
+    // a distance per FRAME at every rate, the height covers the frame's step tick by tick, gravity, burst and the end conclude the frame on its last tick.
+    // At rest (unwritten) between two frames, which is always at 30 Hz.
+    private FramePhase _framePhase;
 
     public override string ModuleName => "StructureCollapseUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -148,16 +152,26 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
     {
         if (_state == State.Standing) return SimulationTiming.SleepForever;
         var now = world.Tick;
+        var startsNow = false;
         if (_state == State.WaitingForCollapseStart && now >= _collapseTick)
         {
             _state = State.Collapsing;
             DoPhase(world, 2, Entity.X, Entity.Y, Entity.Z);
             _burstTick = now + world.Time.DrawFrames(world.LogicRandom, data.MinBurstDelay, data.MaxBurstDelay);
+            _framePhase.Reset();
+            startsNow = true;
         }
         if (_state == State.Collapsing)
         {
-            _height -= _velocity;
-            _velocity -= world.Templates.GravityPerTickSquared * (Fixed.One - data.Damping);
+            // The original takes its first step in the update that starts the collapse: that tick ends a frame of the collapse (nothing has moved in it, the
+            // velocity is still zero), and every later frame ends a whole frame of the original after it.
+            if (startsNow) _height -= _velocity;
+            else
+            {
+                _height -= world.Time.FrameShare(_velocity, _framePhase.Next(world.Time));
+                if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
+            }
+            _velocity -= world.Time.PerTickSquaredToPerOriginalFrameSquared(world.Templates.GravityPerTickSquared) * (Fixed.One - data.Damping);
             if (now >= _burstTick)
             {
                 // GameLogicRandomValue(1, BigBurstFrequency) == 1: a big burst, otherwise the smaller delay effect.
@@ -200,6 +214,7 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
         writer.Int("burstTick", _burstTick);
         writer.Fixed("velocity", _velocity);
         writer.Fixed("height", _height);
+        _framePhase.Describe(writer, "framePhase");
     }
 
     public override void Load(IStateReader reader)
@@ -213,6 +228,7 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
         _burstTick = reader.Int("burstTick");
         _velocity = reader.Fixed("velocity");
         _height = reader.Fixed("height");
+        _framePhase.Load(reader, "framePhase");
     }
 }
 
