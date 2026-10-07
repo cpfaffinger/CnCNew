@@ -59,6 +59,12 @@ const string Usage = """
                                                            threw and the weapons whose data lie beyond the square limit of the fixed-point numbers
       perf-compare <old.json> <new.json> [--threshold-percent N] [--min-us N] [--all] [--allow-different-hash] [--out FILE]
                                                            two --json summaries metric by metric; marks changes beyond the threshold (default 10 %); a report, never a failing test (docs/PERF-GAME-LAYER.md)
+      ai-survey <content-dir> --out <tsv> [--seeds N] [--first-seed N] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
+                                                           every AI pairing of the reference manifest once per seed (default 20 from 1), record only, budget in game
+                                                           minutes (default 25); one line per match: outcome, end tick, game time, commands, final hash
+      rate-distribution <tsv-reference> <tsv-candidate> [--out <report.md>]
+                                                           two surveys of the same pairings and seeds at two rates, compared as distributions against limits fixed in
+                                                           advance (docs/SIMULATION-CORE.md §40); exit code 0 all tests passed, 1 a test failed, 2 input error
     Every command that creates a world takes --tick-rate N (30, 60 or 120; default 30): the catalog is built for that rate and the world runs at it.
     Tick budgets (--ticks, --max-ticks) stay ticks of that rate. The manifest commands always run at the recorded 30 Hz.
     reference-match, ai-match and mission-run take --time-probe: counters of the time service over the first run (per-tick amounts that round to
@@ -112,6 +118,8 @@ try
         "catalog-cost" when args.Length >= 2 => CnCNew.SimTool.CatalogCost.Run(args),
         "rate-audit" when args.Length >= 2 => CnCNew.SimTool.RateAudit.Run(args),
         "range-audit" when args.Length >= 2 => CnCNew.SimTool.RangeAudit.Run(args, CompileShipped),
+        "ai-survey" => CnCNew.SimTool.AiSurvey.Run(args),
+        "rate-distribution" => CnCNew.SimTool.Survey.RateDistribution.Run(args),
         _ => Fail(Usage),
     };
 }

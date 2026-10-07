@@ -45,7 +45,8 @@ internal sealed class SimContext
     public ModelGeometry Geometry { get; }
 
     /// <summary>Compiles under a process-wide gate: the loaders of the client layer are not known to be safe to run side by side.</summary>
-    public static SimContext Load(string directory)
+    /// <param name="rate">The rate the catalog is built for; the manifests' rate when absent (<c>ai-survey</c> passes its own).</param>
+    public static SimContext Load(string directory, CnCNew.Simulation.Time.SimulationRate? rate = null)
     {
         lock (CompileGate)
         {
@@ -53,7 +54,7 @@ internal sealed class SimContext
             var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
             var graph = DefinitionCompiler.Compile(new ContentDefinitionSource(content), ModuleRegistry.Default, options);
             var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
-            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, ToolRate.Manifest, geometry);
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate ?? ToolRate.Manifest, geometry);
             var (sha256, length) = DefinitionSnapshotWriter.ComputeFingerprint(graph);
             return new SimContext(content, catalog, catalog.Rate.Combine(geometry.Combine(sha256)), sha256, length, graph.Audit.Definitions, geometry);
         }
