@@ -211,7 +211,10 @@ public static partial class RateCases
         var bus = scene.Spawn(name, 1, 2000, 2000);
         scene.StepFrames(RateScene.Seconds(1));
         scene.Align();
-        scene.Kill(bus);
+        // A lethal hit that can be resisted: the first death of the bus (its UndeadBody starts the second life and the bus is thrown). KillCommand deals
+        // unresistable damage, which ends the bus on its first life at every rate and leaves nothing to measure.
+        var lethal = (bus.Body?.MaxHealth ?? Fixed.One) * 10;
+        scene.Order(0, (_, sequence, now) => new DamageCommand(PlayerId.System, sequence, now, bus.Id, lethal, DamageTypes.Explosion, DeathTypes.Normal));
         long up = -1, down = -1;
         var apex = Fixed.Zero;
         var steps = scene.Time.WholeSecondsToTicks(30);
