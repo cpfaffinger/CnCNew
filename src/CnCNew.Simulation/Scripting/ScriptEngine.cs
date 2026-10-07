@@ -373,7 +373,12 @@ public sealed partial class ScriptEngine
     {
         _tick = tick;
         _busyThisTick.Clear();
-        if (!BeginsFrame(tick)) return;
+        if (!BeginsFrame(tick))
+        {
+            // The one thing that cannot wait for the frame: an object that appears and vanishes between two updates still has existed (didUnitExist).
+            NoteNamedObjectsThatExist();
+            return;
+        }
         if (_endTimer > 0)
         {
             _endTimer--;
@@ -773,25 +778,31 @@ public sealed partial class ScriptEngine
     /// <summary>Forgets team members that no longer exist; only ids allocated before the previous update count, as those have been through a world step and are registered if they exist at all.</summary>
     private void PruneTeams()
     {
-        // TheScriptEngine->didUnitExist: a name counts as having existed once its object was alive in the world. A requested spawn registers at the end of the
-        // tick, so the first sweep after that records it; an object that dies and vanishes later is then "destroyed", one that was never created is not.
-        if (_namedPending.Count > 0)
-        {
-            _nameScratch.Clear();
-            foreach (var name in _namedPending)
-                if (_world.FindEntity(new EntityId(_named[name])) is not null) _nameScratch.Add(name);
-            foreach (var name in _nameScratch)
-            {
-                _everNamed.Add(name);
-                _namedPending.Remove(name);
-            }
-        }
+        NoteNamedObjectsThatExist();
         _memberIsGone ??= IsGone;
         foreach (var team in _teams.Values) team.Members.RemoveAll(_memberIsGone);
         PruneGone(_lastDamage);
         PruneGone(_lastEntered);
         PruneGone(_prioritySetOf);
         PruneGone(_completedPath);
+    }
+
+    /// <summary>
+    /// <c>TheScriptEngine->didUnitExist</c>: a name counts as having existed once its object was alive in the world. A requested spawn registers at the end of the
+    /// tick, so the first look after that records it; an object that dies and vanishes later is then "destroyed", one that was never created is not. Looked at on
+    /// every tick, also on those between two frames of the original: what the world shows there may be gone by the next update.
+    /// </summary>
+    private void NoteNamedObjectsThatExist()
+    {
+        if (_namedPending.Count == 0) return;
+        _nameScratch.Clear();
+        foreach (var name in _namedPending)
+            if (_world.FindEntity(new EntityId(_named[name])) is not null) _nameScratch.Add(name);
+        foreach (var name in _nameScratch)
+        {
+            _everNamed.Add(name);
+            _namedPending.Remove(name);
+        }
     }
 
     /// <summary>An id allocated before the previous update whose object is not in the world (any more).</summary>

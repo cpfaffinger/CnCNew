@@ -88,6 +88,8 @@ run.Test("Tick rate (script clock): a sequential script waits its frame count", 
 run.Test("Tick rate (script clock): under FREEZE_TIME the engine keeps the frame although the tick stands still", Tests.TickRateScriptClockFrozenTimeKeepsTheFrame);
 run.Test("Tick rate (script clock): a snapshot taken between two frames continues identically", Tests.TickRateScriptClockSnapshotBetweenFrames);
 run.Test("Tick rate (script clock): UNIT_EMPTIED looks one frame of the original back", Tests.TickRateScriptClockUnitEmptiedLooksOneFrameBack);
+run.Test("Tick rate (script clock): an area edge and a death between two frames are seen by the next update", Tests.TickRateScriptClockSeesWhatHappenedBetweenFrames);
+run.Test("Tick rate (script clock): a named object that lived between two frames has existed", Tests.TickRateScriptClockRemembersAnObjectThatLivedBetweenFrames);
 run.Test("Tick rate (scenarios): the mission probe settles and waits in frames of the original", Tests.TickRateMissionProbeWaitsInGameTime);
 run.Test("Tick rate (skirmish): victory check, grace period and science points are frames of the original", Tests.TickRateSkirmishSessionRules);
 run.Test("Tick rate (skirmish): the AI thinks on the same frames of the original at every rate", Tests.TickRateSkirmishAiRhythm);
