@@ -92,7 +92,9 @@ public static partial class RateCases
             var held = aiming.StepUntil(() => source.TurretOf(0) is { } reading && (reading.Angle - angleAtShot).Abs() > TurretAtRest, RateScene.Seconds(60));
             var rested = aiming.StepUntil(() => source.TurretOf(0) is { Rotating: false } reading && FixedTrig.AngleDifference(reading.Angle, turretInfo.NaturalAngle).Abs() <= TurretAtRest, RateScene.Seconds(120));
             quantities.Event("return: victim gone to turret leaving its aim", held);
-            quantities.Event("return: leaving the aim to rest", held >= 0 ? rested : -1);
+            // From the step the turret left its aim in to the step it came to rest in: the second count starts at an observation, not at an order, so the step
+            // StepUntil leaves out for the order's own tick belongs to the duration.
+            quantities.Event("return: leaving the aim to rest", held >= 0 && rested >= 0 ? rested + 1 : -1);
         }
 
         // (3) the idle scan: nobody around for two minutes
