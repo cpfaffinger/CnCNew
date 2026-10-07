@@ -33,6 +33,9 @@ internal static class ProjectileModules
     internal static Fixed FrameSpeed(SimulationTime time, Fixed speed)
         => time.TicksPerOriginalFrame == 1 || speed == WeaponInfo.InstantSpeed ? speed : time.PerTickToPerOriginalFrame(speed);
 
+    /// <summary>Gravity per logic frame² of the original: the value the 30 Hz catalog computes (<see cref="TemplateCatalog.GravityPerTickSquared"/> at 30 Hz), at every rate.</summary>
+    internal static Fixed GravityPerFrameSquared(IWorldServices world) => SimulationRate.Original.Time.PerSecondSquaredToPerTickSquared(world.Templates.Gravity);
+
     /// <summary>The shared end of both projectiles: detonate (radius damage, effect, creation list), then kill with <c>DEATH_DETONATED</c> or destroy.</summary>
     internal static void KillDetonated(IWorldServices world, Entity projectile)
     {
@@ -425,6 +428,12 @@ public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks,
 /// an unarmed one reaching the ground is destroyed; below height 0 it is destroyed (<c>newPos.z &lt; 0</c>). A missile marked by a plane's <c>CountermeasuresBehavior</c> gives up its victim for the closest flare after the decoy delay and then does no damage. Not modeled:
 /// jamming, preferred-height cruise flight, bridge layers. All vectors are <see cref="Fixed"/>; directions are normalised with the
 /// fixed-point square root.
+/// <para>
+/// The state machine runs on the frame grid of the original, on the missile's own phase (docs/RATE-INVARIANCE-PROJECTILES.md): speed, top speed and acceleration are kept per logic
+/// frame (and per frame²) at every tick rate; the first step is decided one frame after the launch and every further one a frame later, from the same state as at 30 Hz — speed,
+/// heading, distance flown, lock, arrival ("no more than one frame of flight away"), fuel and ground are judged once per frame. The step a frame decides is flown in equal shares
+/// over the ticks of that frame; an arrival or a hit on the ground ends the flight in the tick that decides it, as at 30 Hz. At 30 Hz a frame is a tick and nothing differs.
+/// </para>
 /// </summary>
 public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule, IProjectileModule
 {
@@ -453,6 +462,9 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     private Fixed _verticalSpeed;
     private long _decoyTick;
     private bool _noDamage;
+    // The step of the current frame and the ticks of it already flown (0: this tick decides a step). Always 0 at 30 Hz (and then not written).
+    private Point3 _frameStep;
+    private int _subStep;
 
     public override string ModuleName => "MissileAIUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -479,16 +491,22 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         _conditions = launch.Conditions;
         var weapon = world.Weapons[_weapon];
         var locomotor = Entity.Template.Locomotor;
-        var initial = data.InitialVelocity;
-        _maxSpeed = locomotor?.Speed ?? initial;
-        _acceleration = locomotor?.Acceleration ?? Fixed.Zero;
+        // Everything the missile flies with is per logic frame of the original (the unit of the reference and of the 30 Hz catalog), whatever the tick rate: a speed per tick times
+        // the ticks per frame, an acceleration per tick² times their square. At 30 Hz the factors are 1.
+        var time = world.Time;
+        var perFrame = time.TicksPerOriginalFrame;
+        var initial = data.InitialVelocity * perFrame;
+        _maxSpeed = locomotor is null ? initial : time.PerTickToPerOriginalFrame(locomotor.Speed);
+        _acceleration = locomotor is null ? Fixed.Zero : locomotor.Acceleration * (perFrame * perFrame);
         if (data.UseWeaponSpeed || _maxSpeed <= Fixed.Zero)
         {
-            // UseWeaponSpeed: m_maxAccel = weaponSpeed, setMaxSpeed(weaponSpeed). A missile without any speed (no locomotor, no initial velocity)
-            // would hang in the air forever here; it flies at the weapon speed instead (documented stand-in).
-            if (data.UseWeaponSpeed) initial = weapon.WeaponSpeed;
-            _maxSpeed = weapon.WeaponSpeed;
-            _acceleration = weapon.WeaponSpeed;
+            // UseWeaponSpeed: m_maxAccel = weaponSpeed, setMaxSpeed(weaponSpeed) — the reference takes the speed per frame as the acceleration per frame², so the missile is at full
+            // speed after one frame. A missile without any speed (no locomotor, no initial velocity) would hang in the air forever here; it flies at the weapon speed instead
+            // (documented stand-in).
+            var weaponSpeed = ProjectileModules.FrameSpeed(time, weapon.WeaponSpeed);
+            if (data.UseWeaponSpeed) initial = weaponSpeed;
+            _maxSpeed = weaponSpeed;
+            _acceleration = weaponSpeed;
         }
 
         var dz = launch.Z - Entity.Z;
@@ -515,7 +533,9 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             _victim = EntityId.Invalid;
         }
         _previous = new Point3(Entity.X, Entity.Y, Entity.Z);
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        _subStep = 0;
+        // The first step is decided one logic frame after the launch (the next tick at 30 Hz).
+        world.WakeAt(Entity, this, world.Tick + time.OriginalFrames(SimulationTiming.SleepNone));
     }
 
     private void SwitchTo(IWorldServices world, MissileState state)
@@ -528,6 +548,11 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     public long Update(IWorldServices world)
     {
         if (_state == MissileState.PreLaunch || _state == MissileState.Dead) return SimulationTiming.SleepForever;
+        if (_subStep != 0)
+        {
+            FlyShare(world);
+            return SimulationTiming.SleepNone;
+        }
         var position = new Point3(Entity.X, Entity.Y, Entity.Z);
         if (_noTurnDistanceLeft > Fixed.Zero && _state >= MissileState.Ignition)
         {
@@ -692,7 +717,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         if (!fueled && _armed)
         {
             // Coasting after the fuel is gone: gravity takes over (PhysicsBehavior), no thrust and no turning.
-            _verticalSpeed += world.Templates.GravityPerTickSquared;
+            _verticalSpeed += ProjectileModules.GravityPerFrameSquared(world);
             next = next with { Z = next.Z + _verticalSpeed };
         }
         var ground = world.GroundHeightAt(next.X, next.Y);
@@ -707,7 +732,30 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
                 return;
             }
         }
-        Place(world, next);
+        Fly(world, position, next);
+    }
+
+    /// <summary>The step of this frame: taken at once at 30 Hz, otherwise flown in equal shares over the ticks of the frame, with the heading of the whole step.</summary>
+    private void Fly(IWorldServices world, Point3 from, Point3 to)
+    {
+        if (world.Time.TicksPerOriginalFrame == 1)
+        {
+            Place(world, to);
+            return;
+        }
+        if (to.X != from.X || to.Y != from.Y) Entity.Angle = FixedTrig.Atan2(to.Y - from.Y, to.X - from.X);
+        _frameStep = new Point3(to.X - from.X, to.Y - from.Y, to.Z - from.Z);
+        FlyShare(world);
+    }
+
+    private void FlyShare(IWorldServices world)
+    {
+        var time = world.Time;
+        Entity.X += time.FrameShare(_frameStep.X, _subStep);
+        Entity.Y += time.FrameShare(_frameStep.Y, _subStep);
+        Entity.Z += time.FrameShare(_frameStep.Z, _subStep);
+        _subStep = time.NextSubStep(_subStep);
+        world.MarkDirty(Entity);
     }
 
     private void Place(IWorldServices world, Point3 point)
@@ -772,6 +820,11 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         writer.Fixed("verticalSpeed", _verticalSpeed);
         if (_decoyTick != 0) writer.Int("decoyTick", _decoyTick);
         if (_noDamage) writer.Bool("noDamage", true);
+        if (_subStep != 0)
+        {
+            writer.Int("subStep", _subStep);
+            DumbProjectileBehavior.WritePoint(writer, "frameStep", _frameStep);
+        }
     }
 
     public override void Load(IStateReader reader)
@@ -800,6 +853,8 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         _verticalSpeed = reader.Fixed("verticalSpeed");
         _decoyTick = reader.Has("decoyTick") ? reader.Int("decoyTick") : 0;
         _noDamage = reader.Has("noDamage") && reader.Bool("noDamage");
+        _subStep = reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;
+        _frameStep = _subStep != 0 ? DumbProjectileBehavior.ReadPoint(reader, "frameStep") : default;
     }
 }
 

@@ -25,6 +25,42 @@ static partial class Tests
           WeaponSpeed = 100
           DelayBetweenShots = 0
         End
+        Weapon FuelMissileGun
+          PrimaryDamage = 60
+          PrimaryDamageRadius = 5.0
+          AttackRange = 400.0
+          ProjectileObject = FuelMissile
+          DelayBetweenShots = 0
+        End
+        Object FuelMissile
+          KindOf = PROJECTILE SMALL_MISSILE
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Locomotor = SET_NORMAL SlowMissileLoco
+          Behavior = MissileAIUpdate Missile01
+            TryToFollowTarget = Yes
+            FuelLifetime = 200
+            IgnitionDelay = 100
+            InitialVelocity = 60
+            DistanceToTravelBeforeTurning = 10
+            DistanceToTargetForLock = 30
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object FuelMissileLauncher
+          KindOf = VEHICLE SELECTABLE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FuelMissileGun
+          End
+        End
         Object ThirdRifleman
           KindOf = INFANTRY SELECTABLE
           Body = ActiveBody Body01
@@ -122,25 +158,27 @@ static partial class Tests
     }
 
     /// <summary>The flight of <paramref name="launcher"/>'s projectile is the 30 Hz flight at every rate: the same place after every logic frame, bit for bit, the same impact frame, the same damage.</summary>
-    private static RateFlight SameFlightAtEveryRate(string launcher, string projectile, int distance, int budgetFrames, long expectedImpactFrame)
+    private static RateFlight SameFlightAtEveryRate(string launcher, string projectile, int distance, int budgetFrames, long? expectedImpactFrame)
     {
         RateFlight? reference = null;
         foreach (var (rate, factor) in WorldRates)
         {
             var flight = FlyAtDummy(rate, factor, launcher, projectile, distance, budgetFrames);
             reference ??= flight;
-            Check.That(flight.ImpactFrame == expectedImpactFrame, $"{rate}: {projectile} lands in logic frame F+{expectedImpactFrame} (measured F+{flight.ImpactFrame}).");
+            var expected = expectedImpactFrame ?? reference.ImpactFrame;
+            Check.That(flight.ImpactFrame == expected && expected > 0, $"{rate}: {projectile} lands in logic frame F+{expected} (measured F+{flight.ImpactFrame}).");
             Check.That(flight.DummyHealth == reference.DummyHealth, $"{rate}: {projectile} deals the damage of 30 Hz.");
             Check.That(flight.Frames.Count == reference.Frames.Count, $"{rate}: {projectile} was followed for the same number of frames.");
             for (var frame = 0; frame < reference.Frames.Count; frame++)
                 Check.That(flight.Frames[frame] == reference.Frames[frame],
                     $"{rate}: after logic frame {frame} {projectile} is at {Show(reference.Frames[frame])} as at 30 Hz (measured {Show(flight.Frames[frame])}).");
-            // Inside a frame the projectile lies on the chord between the two frame states, as many shares along as ticks have passed.
+            // Inside a frame the projectile lies on the chord between the two frame states, as many shares along as ticks have passed. The frame of the impact is left out:
+            // an arrival or a hit on the ground puts the projectile there in the tick that decides it, as at 30 Hz.
             for (var tick = 0; tick < flight.Ticks.Count; tick++)
             {
                 var frame = tick / factor;
                 var share = tick % factor + 1;
-                if (frame == 0 || share == factor || flight.Ticks[tick] is not { } at || flight.Frames[frame - 1] is not { } from || flight.Frames[frame] is not { } to) continue;
+                if (frame == 0 || frame == flight.ImpactFrame || share == factor || flight.Ticks[tick] is not { } at || flight.Frames[frame - 1] is not { } from || flight.Frames[frame] is not { } to) continue;
                 var x = from.X + (to.X - from.X) * share / Fixed.FromInt(factor);
                 var z = from.Z + (to.Z - from.Z) * share / Fixed.FromInt(factor);
                 Check.That((at.X - x).Abs().Raw <= 8 && (at.Z - z).Abs().Raw <= 8, $"{rate}: tick {tick} of {projectile} lies {share}/{factor} along the chord of its frame (x {at.X} against {x}, z {at.Z} against {z}).");
@@ -204,5 +242,32 @@ static partial class Tests
             for (var offset = 0; offset < factor; offset++)
                 Check.That(plain.SequenceEqual(Run(4 * factor + offset)), $"{rate}: a snapshot taken {offset} ticks into a frame continues identically.");
         }
+    }
+
+    /// <summary>
+    /// §5.2 <c>MissileAIUpdate</c>: the two hand-computed missiles of Tests.Projectiles.cs fly the 30 Hz flight at every rate. With an acceleration of one top speed per frame the
+    /// missile is 10 units out after its first frame (before: 10 / 7.5 / 6.25, because speed and acceleration were stepped per tick) and lands in F+10; with an ignition delay of
+    /// three frames and one unit per frame² it follows the table 2, 4, 7, 11 … 96 (before, after frame 10: 56 / 50 / 47.19) and lands in F+15. The kill-self wait ends in the same frame.
+    /// </summary>
+    public static void RateProjectilesMissilesFlyTheThirtyHertzFlight()
+    {
+        var fast = SameFlightAtEveryRate("MissileLauncher", "FastMissile", 100, 16, 10);
+        Check.That(fast.Frames[1] is { } first && first.X == Fixed.FromInt(10), "After its first frame the missile is one full step out.");
+        Check.That(fast.Frames[12] is not null && fast.Frames[13] is null, "KillSelfDelay (3 frames) after the detonation removes the missile, in F+13.");
+        var slow = SameFlightAtEveryRate("SlowMissileLauncher", "SlowMissile", 100, 18, 15);
+        int[] expected = [2, 4, 7, 11, 16, 22, 29, 37, 46, 56, 66, 76, 86, 96];
+        for (var frame = 0; frame < expected.Length; frame++)
+            Check.That(slow.Frames[frame + 1] is { } at && at.X == Fixed.FromInt(expected[frame]), $"After frame {frame + 1} the slow missile is at x = {expected[frame]}.");
+    }
+
+    /// <summary>
+    /// §5.2 <c>MissileAIUpdate</c>: fuel, the distance before turning and the fall without fuel are judged per frame. The missile coasts three frames, burns six, and then falls
+    /// under gravity per frame² until it meets the ground short of the dummy — the same frames and the same place at every rate.
+    /// </summary>
+    public static void RateProjectilesMissileWithoutFuelFallsTheSameWay()
+    {
+        var flight = SameFlightAtEveryRate("FuelMissileLauncher", "FuelMissile", 300, 40, null);
+        Check.That(flight.ImpactFrame is > 6 and < 30, $"The missile runs dry and lands on the ground (frame F+{flight.ImpactFrame}).");
+        Check.That(flight.DummyHealth == Fixed.FromInt(1000), "It lands short of the dummy.");
     }
 }
