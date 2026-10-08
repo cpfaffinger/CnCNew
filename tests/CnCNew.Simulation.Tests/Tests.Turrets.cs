@@ -258,7 +258,7 @@ static partial class Tests
         var set = tank!.Turrets!;
         var main = set[0]!;
         Check.That(set[1] is null && !set.Linked, "A Turret block gives the template its main turret.");
-        Check.That(main.TurnRate == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m) && (main.TurnRate - FixedTrig.PiFraction(1, 30)).Abs() <= Fixed.Epsilon, $"TurretTurnRate is degrees per second: 180 are 6 degrees per tick ({main.TurnRate.Raw} raw).");
+        Check.That(main.TurnRate == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m) && (main.TurnRate - FixedTrig.PiFraction(1, TestRate.Default.TicksPerSecond)).Abs() <= Fixed.Epsilon, $"TurretTurnRate is degrees per second: 180 are pi radians per second, 6 degrees per logic frame ({main.TurnRate.Raw} raw).");
         Check.That(main.RecenterTicks == TestRate.Frames(15) && main.Controls(WeaponSlot.Primary) && !main.Controls(WeaponSlot.Secondary) && main.Gates && !main.AllowsPitch, "RecenterTime is 500 ms (15 ticks); ControlledWeaponSlots names the slot.");
         catalog.TryGet("BareTurretTank", out var bare);
         var bareTurret = bare!.Turrets![0]!;
