@@ -179,6 +179,11 @@ public sealed partial class SimulationWorld
         if (reader.Has("crateArmorLevel")) entity.CrateArmorLevel = checked((int)reader.Int("crateArmorLevel"));
         if (entity.CrateWeaponLevel is < 0 or > 2 || entity.CrateArmorLevel is < 0 or > 2) throw new InvalidDataException("Crate upgrade level out of range.");
         if (reader.Has("aheadX")) entity.SetAhead(reader.Int("aheadTick"), reader.Fixed("aheadX"), reader.Fixed("aheadY"), reader.Fixed("aheadZ"));
+        if (reader.Has("aheadAngle"))
+        {
+            if (!reader.Has("aheadX")) entity.SetAhead(reader.Int("aheadAngleTick"), Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            entity.SetAheadAngle(reader.Fixed("aheadAngle"));
+        }
         if (reader.Has("visionSpied"))
         {
             entity.VisionSpiedBy = [];

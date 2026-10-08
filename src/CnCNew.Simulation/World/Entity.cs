@@ -67,6 +67,7 @@ public sealed class Entity
         AheadY = y;
         AheadZ = z;
         AheadTick = tick;
+        HasAheadAngle = false;
     }
 
     /// <summary>The mover's side of <see cref="AheadX"/>: covers one more share of the frame's step. The shares of a frame add up to its step, so the rest ends at zero.</summary>
@@ -87,9 +88,31 @@ public sealed class Entity
     /// </summary>
     internal void CompleteFrame(long tick)
     {
+        Angle = FrameEndAngle(tick);
+        HasAheadAngle = false;
         (X, Y, Z) = FrameEnd(tick);
         AheadX = AheadY = AheadZ = Fixed.Zero;
     }
+
+    /// <summary>
+    /// The heading the object has at the end of the frame it is covering, while it turns toward it in shares (the heading's counterpart of <see cref="AheadX"/>, with the same
+    /// staleness rule through <see cref="AheadTick"/>). Never set at 30 Hz, described only while set.
+    /// </summary>
+    public Fixed AheadAngle { get; private set; }
+    public bool HasAheadAngle { get; private set; }
+
+    /// <summary>The heading at the end of the frame the object has begun: what an observer deciding in tick <paramref name="tick"/> reads (see <see cref="FrameEnd"/>). 30 Hz: the heading.</summary>
+    public Fixed FrameEndAngle(long tick) => HasAheadAngle && AheadTick + TickOrder.Next >= tick ? AheadAngle : Angle;
+
+    /// <summary>The mover's side of <see cref="AheadAngle"/>: the heading its decided frame ends with; the mover touches <see cref="AheadTick"/> with every share (<see cref="CoverShare"/>).</summary>
+    internal void SetAheadAngle(Fixed angle)
+    {
+        AheadAngle = angle;
+        HasAheadAngle = true;
+    }
+
+    /// <summary>The mover's side of <see cref="AheadAngle"/>: the frame's turn is covered (or dropped).</summary>
+    internal void ClearAheadAngle() => HasAheadAngle = false;
 
     /// <summary>Heading in radians.</summary>
     public Fixed Angle { get; internal set; }
@@ -304,6 +327,11 @@ public sealed class Entity
             writer.Fixed("aheadY", AheadY);
             writer.Fixed("aheadZ", AheadZ);
             writer.Int("aheadTick", AheadTick);
+        }
+        if (HasAheadAngle)
+        {
+            writer.Fixed("aheadAngle", AheadAngle);
+            writer.Int("aheadAngleTick", AheadTick);
         }
         // Written only for an object somebody spied through, so every other object keeps its serialized form (and hash).
         if (VisionSpiedBy is { Count: > 0 })
