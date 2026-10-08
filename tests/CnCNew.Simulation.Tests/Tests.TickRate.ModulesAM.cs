@@ -194,10 +194,10 @@ static partial class Tests
             }
             else
             {
-                // The order to hack arrives between two steps and the first countdown starts in the update of that very tick, so its reload (which is
-                // sized for a countdown started inside an update) ends up to factor − 1 ticks later: a constant offset below one frame of the original.
+                // The order to hack arrives between two steps and the first countdown starts in the update of that very tick; since phase 23 a phase started by
+                // an order lasts exactly its frames, so the first payout falls on the 30 Hz frame (it used to come up to factor − 1 ticks later).
                 var offset = payouts[0] - thirty[0] * factor;
-                Check.That(offset >= 0 && offset < factor, $"{rate}: the first payout is {offset} ticks off the 30 Hz frame.");
+                Check.That(offset == 0, $"{rate}: the first payout is {offset} ticks off the 30 Hz frame.");
                 RequireScaled(thirty, payouts.Select(value => value - offset).ToList(), factor, "HackInternetAIUpdate payouts");
             }
         }

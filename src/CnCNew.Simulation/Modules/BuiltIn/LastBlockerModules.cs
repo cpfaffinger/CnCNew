@@ -347,7 +347,7 @@ public sealed class SupplyWarehouseCripplingBehavior(WarehouseCripplingData data
         // "we got hit, time to get up for work after a quick snooze"
         _suppressedUntil = world.Tick + data.SuppressTicks;
         _nextHealing = _suppressedUntil;
-        world.WakeAt(Entity, this, world.Tick + Math.Max(data.SuppressTicks, SimulationTiming.SleepNone));
+        world.WakeAt(Entity, this, world.Tick + world.Time.AtLeastOneFrame(data.SuppressTicks));
         world.MarkDirty(Entity);
     }
 

@@ -168,10 +168,10 @@ public sealed class StructureCollapseUpdate(StructureCollapseData data) : SimMod
             if (startsNow) _height -= _velocity;
             else
             {
-                _height -= world.Time.FrameShare(_velocity, _framePhase.Next(world.Time));
+                _height -= world.Time.FrameSlice(_velocity, _framePhase.Next(world.Time));
                 if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
             }
-            _velocity -= world.Time.PerTickSquaredToPerOriginalFrameSquared(world.Templates.GravityPerTickSquared) * (Fixed.One - data.Damping);
+            _velocity -= world.Time.PerTickSquaredAsPerOriginalFrameSquared(world.Templates.GravityPerTickSquared) * (Fixed.One - data.Damping);
             if (now >= _burstTick)
             {
                 // GameLogicRandomValue(1, BigBurstFrequency) == 1: a big burst, otherwise the smaller delay effect.

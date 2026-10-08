@@ -99,7 +99,8 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     public override void OnSpawn(IWorldServices world)
     {
         if (data.InnateStealth) Entity.Status |= 1UL << CanStealthBit;
-        _nextWake = Math.Min(world.Tick + SimulationTiming.SleepNone, SimulationTiming.SleepForever);
+        // The first update comes one logic frame of the original after the object appeared (at 30 Hz the next tick), so the stealth delay starts at the same game time at every rate.
+        _nextWake = Math.Min(world.Tick + world.Time.TicksPerOriginalFrame, SimulationTiming.SleepForever);
     }
 
     private long _framesGranted;
@@ -130,7 +131,7 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     /// <summary><c>StealthUpdate::markAsDetected</c>: extends (never shortens) how long <c>DETECTED</c> stays set. Called by <c>StealthDetectorUpdate</c>.</summary>
     public void MarkDetected(IWorldServices world, long ticks)
     {
-        var until = world.Tick + Math.Max(ticks, SimulationTiming.SleepNone);
+        var until = world.Tick + world.Time.AtLeastOneFrame(ticks);
         if (until > _detectedUntilTick) _detectedUntilTick = until;
         Entity.Status |= 1UL << DetectedBit;
         // Called from the detector's update, not this entity's: the change needs its own mark (finding D8).
@@ -1421,7 +1422,14 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
     /// <param name="time">The time service of the world: a build time of zero still takes one logic frame of the original, not one tick.</param>
-    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks) => _queue.Add(new ProductionEntry(templateIndex, cost, time.AtLeastOneFrame(totalTicks)));
+    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks)
+    {
+        var ticks = time.AtLeastOneFrame(totalTicks);
+        // The entry that starts an empty queue is worked on in the step of its order, and that step stands for a whole logic frame of the original: the unit is done
+        // BuildTime less one frame after the order (not less one tick). An entry that waits behind another starts one step after its predecessor left and takes the full time.
+        if (_queue.Count == 0) ticks -= time.TicksPerOriginalFrame - TickOrder.Next;
+        _queue.Add(new ProductionEntry(templateIndex, cost, ticks));
+    }
 
     public bool HasSlot(int slot) => slot >= 0 && slot < _queue.Count;
 

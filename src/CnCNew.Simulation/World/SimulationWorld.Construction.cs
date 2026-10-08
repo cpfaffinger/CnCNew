@@ -4,6 +4,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -17,11 +18,12 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// <c>BuildAssistant.cpp</c>: <c>FRAMES_TO_ALLOW_SCAFFOLD</c> (<c>LOGICFRAMES_PER_SECOND * 1.5f</c>, 45 frames in which the scaffold stands) plus the 135 frames in which
     /// <c>BuildAssistant::update</c> takes <c>100 / TOTAL_FRAMES_TO_SELL_OBJECT</c> (<c>LOGICFRAMES_PER_SECOND * 3.0f</c> = 90) percent per frame off the construction percent until
-    /// it reaches -50 %: 180 logic frames of the original from the sell order to the refund. The refund falls in the step before that time is over (<see cref="BeginSale"/>).
+    /// it reaches -50 %: 180 logic frames of the original from the sell order to the refund. The refund falls in the logic frame before that time is over (<see cref="BeginSale"/>):
+    /// the frame of the order counts as the first of the 180, at every rate.
     /// </summary>
     private const long SaleDurationFrames = 45 + 135;
 
-    /// <summary><see cref="SaleDurationFrames"/> in ticks of this world, less the one step by which the refund comes early; resolved once when the world is created.</summary>
+    /// <summary><see cref="SaleDurationFrames"/> in ticks of this world, less the one logic frame of the original by which the refund comes early; resolved once when the world is created.</summary>
     private readonly long _saleDurationTicks;
 
     /// <summary>A structure whose <c>BuildTime</c> is zero still takes one logic frame of the original to build, in ticks of this world.</summary>
@@ -238,11 +240,14 @@ public sealed partial class SimulationWorld
     {
         if (!site.HasStatus(ObjectStatusBits.UnderConstruction)) return true;
         var total = Math.Max(site.Template.BuildTicks, _minimumBuildTicks);
-        site.ConstructionWork++;
+        var before = Math.Min(site.ConstructionWork, total);
+        // The first step of work stands for a whole logic frame of the original (at 30 Hz it is one): the structure is complete BuildTime less one frame after the
+        // work began, at every rate, not BuildTime less one tick. Every later step is one tick of work.
+        site.ConstructionWork += checked((int)(site.ConstructionWork == 0 ? Time.TicksPerOriginalFrame : TickOrder.Next));
         var work = Math.Min(site.ConstructionWork, total);
         if (site.Body is IConstructionBody body)
         {
-            var delta = Fixed.FromRaw(ConstructionHealthTarget(site, work, total) - ConstructionHealthTarget(site, work - 1, total));
+            var delta = Fixed.FromRaw(ConstructionHealthTarget(site, work, total) - ConstructionHealthTarget(site, before, total));
             if (delta > Fixed.Zero) body.ChangeHealthForConstruction(this, delta);
         }
         MarkDirty(site);

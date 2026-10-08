@@ -113,7 +113,7 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     public void ApplyTopplingForce(IWorldServices world, Fixed directionX, Fixed directionY, Fixed speed)
         // PHASE 23 MERGE: the one conversion from a speed per tick. Remove the factor (and let every caller use ApplyTopplingSpeed) once TryTopple passes
         // the pusher's speed per frame of the original; until then a caller that already passes a value per frame must call ApplyTopplingSpeed.
-        => ApplyTopplingSpeed(world, directionX, directionY, world.Time.PerTickToPerOriginalFrame(speed));
+        => ApplyTopplingSpeed(world, directionX, directionY, world.Time.PerTickAsPerOriginalFrame(speed));
 
     /// <summary>
     /// <c>Object::topple</c> / <c>ToppleUpdate::applyTopplingForce</c>: <paramref name="directionX"/>/<paramref name="directionY"/> point from the pusher to this object;
@@ -177,7 +177,7 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
             _frameStep = _angularVelocity;
             if (_angularAccumulation + _frameStep > AngularLimit) _frameStep = AngularLimit - _angularAccumulation;
         }
-        _angularAccumulation += world.Time.FrameShare(_frameStep, subTick);
+        _angularAccumulation += world.Time.FrameSlice(_frameStep, subTick);
         if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
         if (_angularAccumulation >= AngularLimit && _angularVelocity > Fixed.Zero)
         {
@@ -477,7 +477,8 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
 
     public override string ModuleName => "HeightDieUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
-    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
+    // The first look comes one logic frame of the original after the object appeared (at 30 Hz the next tick): an object that is created below its height dies at the same game time at every rate.
+    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
 
     public long Update(IWorldServices world)
     {

@@ -56,7 +56,7 @@ public sealed class BaseRegenerateUpdate : SimModule, IUpdateModule, IDamageModu
     public void OnDamage(IWorldServices world, in DamageInfo info, Fixed actualDamageDealt)
     {
         if (world.BaseRegenHealthPercentPerSecond > Fixed.Zero && info.DamageType != DamageTypes.Healing)
-            world.WakeAt(Entity, this, world.Tick + Math.Max(world.BaseRegenDelayTicks, SimulationTiming.SleepNone));
+            world.WakeAt(Entity, this, world.Tick + world.Time.AtLeastOneFrame(world.BaseRegenDelayTicks));
         else
             world.WakeAt(Entity, this, SimulationTiming.SleepForever);
     }

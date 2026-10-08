@@ -401,6 +401,9 @@ public static partial class RateCases
             marked = now;
         }
         quantities.Count("changes of the detected mark in 30 s", flickers);
+        // The loop above starts one step after the detector's scan, which is a frame of the original at 30 Hz and a tick above it: without this the detector would be
+        // removed one frame after its last scan at 30 Hz and one tick after it at 60 and 120 Hz (MeasureStealth aligns before its kill for the same reason).
+        scene.Align();
         if (scene.Alive(detector)) scene.Kill(detector);
         var lost = !sneak.HasStatus(DetectedBit) ? 0 : scene.StepUntil(() => !sneak.HasStatus(DetectedBit), RateScene.Seconds(30));
         quantities.Exact("detector gone to hidden again", lost);

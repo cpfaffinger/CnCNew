@@ -933,8 +933,9 @@ static partial class Tests
         var ally = world.FindEntity(new EntityId(2))!;
         var enemy = world.FindEntity(new EntityId(3))!;
         Check.That(enemy.HasStatus(ObjectStatusBits.Index("CAN_STEALTH")), "InnateStealth grants CAN_STEALTH at spawn.");
-        for (var i = 0; i < 3; i++) world.Step();
-        Check.That(enemy.HasStatus(stealthedBit) && ally.HasStatus(stealthedBit), "InnateStealth cloaks both within a few ticks (StealthDelay 0).");
+        // StealthDelay 0: one frame of the original until the first update, one more as the floor of the delay - game time, so counted in frames.
+        for (var i = 0; i < world.Frames(3); i++) world.Step();
+        Check.That(enemy.HasStatus(stealthedBit) && ally.HasStatus(stealthedBit), "InnateStealth cloaks both within a few frames (StealthDelay 0).");
 
         for (var i = 0; i < world.Frames(20); i++) world.Step(); // DetectionRate = 500ms = 15 ticks, plus the random initial phasing (1..15).
         Check.That(enemy.HasStatus(detectedBit), "The enemy stealthed unit is DETECTED once the detector's periodic scan reaches it.");

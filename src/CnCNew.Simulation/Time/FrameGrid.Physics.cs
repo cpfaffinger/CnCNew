@@ -19,7 +19,7 @@ public static class FramePhysics
     /// The share of the tick <paramref name="subTick"/> (1 … ticks per frame) of a step of one frame: <c>floor(step · k / n) − floor(step · (k − 1) / n)</c>
     /// on the raw value, so the shares of one frame add up to exactly <paramref name="frameStep"/>. 30 Hz: the step itself.
     /// </summary>
-    public static Fixed FrameShare(this SimulationTime time, Fixed frameStep, int subTick)
+    public static Fixed FrameSlice(this SimulationTime time, Fixed frameStep, int subTick)
     {
         var ticks = time.TicksPerOriginalFrame;
         if (ticks == TickOrder.Next) return frameStep;
@@ -31,7 +31,7 @@ public static class FramePhysics
 
     /// <summary>
     /// The part of a step of one frame that the ticks 1 … <paramref name="subTick"/> have covered: <c>floor(step · k / n)</c>, the sum of their
-    /// <see cref="FrameShare"/>. 30 Hz: the step itself.
+    /// <see cref="FrameSlice"/>. 30 Hz: the step itself.
     /// </summary>
     public static Fixed FramePart(this SimulationTime time, Fixed frameStep, int subTick)
     {
@@ -40,11 +40,11 @@ public static class FramePhysics
     }
 
     /// <summary>A catalog value per tick (a speed the catalog scaled to the rate) back in units per frame of the original. 30 Hz: the value, untouched.</summary>
-    public static Fixed PerTickToPerOriginalFrame(this SimulationTime time, Fixed valuePerTick)
+    public static Fixed PerTickAsPerOriginalFrame(this SimulationTime time, Fixed valuePerTick)
         => time.TicksPerOriginalFrame == TickOrder.Next ? valuePerTick : valuePerTick * time.TicksPerOriginalFrame;
 
     /// <summary>A catalog value per tick² (gravity) back in units per frame² of the original. 30 Hz: the value, untouched.</summary>
-    public static Fixed PerTickSquaredToPerOriginalFrameSquared(this SimulationTime time, Fixed valuePerTickSquared)
+    public static Fixed PerTickSquaredAsPerOriginalFrameSquared(this SimulationTime time, Fixed valuePerTickSquared)
         => time.TicksPerOriginalFrame == TickOrder.Next ? valuePerTickSquared : valuePerTickSquared * ((long)time.TicksPerOriginalFrame * time.TicksPerOriginalFrame);
 }
 

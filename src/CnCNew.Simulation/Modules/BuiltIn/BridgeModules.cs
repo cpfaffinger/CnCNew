@@ -350,7 +350,7 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
             _ => (_lateralSpeed, _build, _riseTo),
         };
         // The speeds of the state are distances per tick; the step is the original's, a distance per frame.
-        var top = world.Time.PerTickToPerOriginalFrame(topPerTick);
+        var top = world.Time.PerTickAsPerOriginalFrame(topPerTick);
         // "adjust speed so it's slower at the end of motion": a quarter of the whole way is the ramp.
         var (sx, sy, sz) = (end.X - start.X, end.Y - start.Y, end.Z - start.Z);
         var totalDistance = Fixed.Sqrt(sx * sx + sy * sy + sz * sz) * Fixed.FromDecimal(0.25m);

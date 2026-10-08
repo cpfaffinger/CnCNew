@@ -392,12 +392,12 @@ static partial class Tests
         world.Upgrades.TryGet("Upgrade_Granted", out var granted);
         world.Upgrades.TryGet("Upgrade_Marker", out var marker);
 
-        // GrantUpgradeCreate is onBuildComplete: nothing in the spawn tick, done at the first update.
+        // GrantUpgradeCreate is onBuildComplete: nothing in the spawn tick, done at the first update, one frame of the original after the spawn.
         feeder.Spawn(1, "Granter");
         world.Step();
         var granter = world.FindEntity(new EntityId(IdOf(world, "Granter")))!;
         Check.That(!world.PlayerUpgrades(new PlayerId(1)).Has(granted.Index) && !granter.CompletedUpgrades.Has(marker.Index), "GrantUpgradeCreate does nothing in the spawn tick.");
-        world.Step();
+        for (var step = 0; step < world.Frames(1); step++) world.Step();
         Check.That(world.PlayerUpgrades(new PlayerId(1)).Has(granted.Index) && granter.CompletedUpgrades.Has(marker.Index), "The player-scoped upgrade goes to the owner, the object-scoped one to the object.");
 
         // GrantScienceUpgrade: only a grantable science is granted.
@@ -435,8 +435,8 @@ static partial class Tests
         feeder.Spawn(1, "SharedFresh");
         world.Step();
         var fresh = IdOf(world, "SharedFresh");
-        Check.That(Rejected(feeder.UseSpecialPower(1, fresh, "SPECIAL_Shared"), CommandRejection.SpecialPowerNotReady), "SpecialPowerCreate runs one tick after the spawn, not in it.");
-        world.Step();
+        Check.That(Rejected(feeder.UseSpecialPower(1, fresh, "SPECIAL_Shared"), CommandRejection.SpecialPowerNotReady), "SpecialPowerCreate runs one frame of the original after the spawn, not in it.");
+        for (var step = 0; step < world.Frames(1); step++) world.Step();
         Check.That(feeder.UseSpecialPower(1, fresh, "SPECIAL_Shared").Accepted, "onSpecialPowerCreation makes the shared power ready at once.");
         world.Step();
         Check.That(Rejected(feeder.UseSpecialPower(1, plain, "SPECIAL_Shared"), CommandRejection.SpecialPowerNotReady), "Using the power on one carrier restarts the timer of every carrier of that player.");

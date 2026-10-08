@@ -219,7 +219,8 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
     private bool _draining;
     private bool _ignoreDamage;
     private EntityId _producer = EntityId.Invalid;
-    private readonly List<(EntityId Id, Fixed X, Fixed Y, Fixed Z)> _detonators = [];
+    // Phase: the tick within a logic frame of the original (0 at 30 Hz) in which the unit first touched the mine; see OnCollide.
+    private readonly List<(EntityId Id, Fixed X, Fixed Y, Fixed Z, long Phase)> _detonators = [];
 
     public override string ModuleName => "MinefieldBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -301,15 +302,19 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
         if ((data.DetonatedByMask & (1u << (int)relationship)) == 0) return;
 
         var index = _detonators.FindIndex(entry => entry.Id == other.Id);
+        var phase = world.Tick % world.Time.TicksPerOriginalFrame;
         if (index >= 0)
         {
+            // The reference compares the distance moved once per logic frame. Looking at it every tick would find the threshold crossed after a shorter way (a
+            // multiple of the smaller step) and set the virtual mines off faster, so the unit is looked at again only in whole frames after its first touch.
+            if (phase != _detonators[index].Phase) return;
             var dx = other.X - _detonators[index].X;
             var dy = other.Y - _detonators[index].Y;
             var dz = other.Z - _detonators[index].Z;
             if (SquaredReach.Of(data.RepeatDetonateMoveThreshold).Contains(dx * dx + dy * dy + dz * dz)) return;
-            _detonators[index] = (other.Id, other.X, other.Y, other.Z);
+            _detonators[index] = (other.Id, other.X, other.Y, other.Z, phase);
         }
-        else _detonators.Add((other.Id, other.X, other.Y, other.Z));
+        else _detonators.Add((other.Id, other.X, other.Y, other.Z, phase));
 
         var (px, py) = ClipToFootprint(other.X, other.Y);
         DetonateOnce(world, px, py, other.Z);
@@ -372,13 +377,15 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
         if (_producer.IsValid) writer.UInt("producer", _producer.Value);
         if (_detonators.Count == 0) return;
         writer.BeginArray("detonators");
-        foreach (var (id, x, y, z) in _detonators)
+        foreach (var (id, x, y, z, phase) in _detonators)
         {
             writer.BeginObject(null);
             writer.UInt("id", id.Value);
             writer.Fixed("x", x);
             writer.Fixed("y", y);
             writer.Fixed("z", z);
+            // Always 0 at 30 Hz: written only when set, so 30 Hz snapshots and hashes keep their form.
+            if (phase != 0) writer.Int("phase", phase);
             writer.EndObject();
         }
         writer.EndArray();
@@ -394,6 +401,7 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
         _producer = reader.Has("producer") ? new EntityId(checked((uint)reader.UInt("producer"))) : EntityId.Invalid;
         _detonators.Clear();
         if (!reader.Has("detonators")) return;
-        foreach (var item in reader.Array("detonators")) _detonators.Add((new EntityId(checked((uint)item.UInt("id"))), item.Fixed("x"), item.Fixed("y"), item.Fixed("z")));
+        foreach (var item in reader.Array("detonators"))
+            _detonators.Add((new EntityId(checked((uint)item.UInt("id"))), item.Fixed("x"), item.Fixed("y"), item.Fixed("z"), item.Has("phase") ? item.Int("phase") : 0));
     }
 }

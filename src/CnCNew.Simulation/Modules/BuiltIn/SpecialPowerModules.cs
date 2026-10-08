@@ -368,7 +368,7 @@ public sealed class CashHackSpecialPower(CashHackData data) : SpecialPowerModule
 
 /// <summary>
 /// Base of the create modules whose work is the reference's <c>onBuildComplete</c>: it runs once, after every module of the object has been
-/// constructed and the object exists in the world (one tick after the spawn), and never for an object that is still <c>UNDER_CONSTRUCTION</c>
+/// constructed and the object exists in the world (one logic frame of the original after the spawn), and never for an object that is still <c>UNDER_CONSTRUCTION</c>
 /// (the simulation has no construction, so such an object never completes). The reference calls <c>onBuildComplete</c> for pre-placed,
 /// produced and script-created objects alike; here every spawned, completed object gets it.
 /// </summary>
@@ -379,7 +379,7 @@ public abstract class BuildCompleteModule : SimModule, IUpdateModule
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
     public override void OnSpawn(IWorldServices world)
-        => _nextWake = Entity.HasStatus(ObjectStatusBits.UnderConstruction) ? SimulationTiming.SleepForever : world.Tick + SimulationTiming.SleepNone;
+        => _nextWake = Entity.HasStatus(ObjectStatusBits.UnderConstruction) ? SimulationTiming.SleepForever : world.Tick + world.Time.TicksPerOriginalFrame;
 
     public long Update(IWorldServices world)
     {

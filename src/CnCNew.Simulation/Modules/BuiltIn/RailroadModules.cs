@@ -227,7 +227,7 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         {
             if (!data.IsLocomotive) subTick = _framePhase.Next(time);
             if (subTick == TickOrder.Next && _state == ConductorStates.Coast) _conductorPull.Speed *= data.Friction;
-            _conductorPull.TrackDistance += time.FrameShare(_conductorPull.Speed, subTick);
+            _conductorPull.TrackDistance += time.FrameSlice(_conductorPull.Speed, subTick);
             if (_track.IsLooping)
             {
                 while (_conductorPull.TrackDistance > _track.Length) _conductorPull.TrackDistance -= _track.Length;
@@ -284,7 +284,7 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
             case ConductorStates.Accelerate:
                 _conductorPull.Speed += PushStart * _conductorPull.Direction;
                 _conductorPull.Speed *= data.Acceleration;
-                var speedMax = world.Time.PerTickToPerOriginalFrame(data.SpeedMax);
+                var speedMax = world.Time.PerTickAsPerOriginalFrame(data.SpeedMax);
                 if (_conductorPull.Speed > speedMax) _conductorPull.Speed = speedMax;
                 else if (_conductorPull.Speed < -speedMax) _conductorPull.Speed = -speedMax;
                 break;
@@ -593,9 +593,9 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
                 world.MarkDirty(other);
             }
             // The speeds of the state are distances per frame of the original; so are the thresholds read back from the catalog and the damage "speed · 10".
-            if (_state == ConductorStates.WaitAtStation || (_state == ConductorStates.Coast && _pull.Speed < world.Time.PerTickToPerOriginalFrame(data.RunningGarrisonSpeedMax)) || !data.IsLocomotive) continue;
+            if (_state == ConductorStates.WaitAtStation || (_state == ConductorStates.Coast && _pull.Speed < world.Time.PerTickAsPerOriginalFrame(data.RunningGarrisonSpeedMax)) || !data.IsLocomotive) continue;
             if (other.EffectivelyDead) continue;
-            if (_pull.Speed >= world.Time.PerTickToPerOriginalFrame(data.KillSpeedMin)) world.Kill(other.Id);
+            if (_pull.Speed >= world.Time.PerTickAsPerOriginalFrame(data.KillSpeedMin)) world.Kill(other.Id);
             else world.Damage(other.Id, new DamageInfo(Entity.Id, _pull.Speed * 10, CrushDamage, DeathTypes.Crushed, false));
         }
     }

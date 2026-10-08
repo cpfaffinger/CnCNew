@@ -6,6 +6,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Testing;
@@ -235,9 +236,12 @@ public static partial class RateCases
             if (!scene.Time.IsOriginalFrameBoundary(scene.World.Tick)) continue;
             if (body.Health > previous)
             {
+                // The comparison runs after the last step of a frame of the original; the time of "a frame with healing" is the first step of that frame, as it is
+                // at 30 Hz, where both are the same step. (Taking the last step added one tick at 60 Hz and three at 120 Hz to a heal that came on the grid.)
+                var frameStart = step - (scene.Time.TicksPerOriginalFrame - TickOrder.Next);
                 risingFrames++;
-                if (risingFrames == 1) first = step;
-                if (risingFrames == 2) second = step;
+                if (risingFrames == 1) first = frameStart;
+                if (risingFrames == 2) second = frameStart;
             }
             previous = body.Health;
         }

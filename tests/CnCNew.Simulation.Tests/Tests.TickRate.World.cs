@@ -71,7 +71,7 @@ static partial class Tests
         """,
     };
 
-    /// <summary>Class A (<c>BuildAssistant</c>): 180 logic frames from the sell order to the refund, less the one step by which the refund comes early – 179, 359 and 719 ticks.</summary>
+    /// <summary>Class A (<c>BuildAssistant</c>): 180 logic frames from the sell order to the refund, less the one frame by which the refund comes early – 179, 358 and 716 ticks (the same 5.9667 s at every rate).</summary>
     public static void TickRateWorldSaleTakesTheSameGameTime()
     {
         foreach (var (rate, factor) in WorldRates)
@@ -90,7 +90,7 @@ static partial class Tests
                 if (result.Events.Any(value => value.Kind == SimEventKind.StructureSold && value.Entity == plant.Id)) sold = world.Tick - start;
             }
 
-            Check.That(sold == 180 * factor - 1, $"{rate}: the refund arrives {180 * factor - 1} ticks after the order (measured {sold}).");
+            Check.That(sold == 179 * factor, $"{rate}: the refund arrives {179 * factor} ticks after the order (measured {sold}).");
         }
     }
 

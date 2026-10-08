@@ -182,7 +182,7 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
         var mass = Entity.ModuleArray.OfType<PhysicsBehavior>().FirstOrDefault()?.Data.Mass ?? Fixed.One;
-        _verticalSpeed = mass > Fixed.Zero ? world.Time.PerTickToPerOriginalFrame(data.ThrowForce) / mass : Fixed.Zero;
+        _verticalSpeed = mass > Fixed.Zero ? world.Time.PerTickAsPerOriginalFrame(data.ThrowForce) / mass : Fixed.Zero;
         _framePhase.Reset();
         if (data.PercentDamageToPassengers > Fixed.Zero && Entity.Container is { } contain)
             foreach (var riderId in contain.Contained.ToArray())
@@ -195,9 +195,9 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
     {
         if (_inFirstDeath)
         {
-            Entity.Z += world.Time.FrameShare(_verticalSpeed, _framePhase.Next(world.Time));
+            Entity.Z += world.Time.FrameSlice(_verticalSpeed, _framePhase.Next(world.Time));
             var frameEnds = _framePhase.AtBoundary;
-            if (frameEnds) _verticalSpeed += world.Time.PerTickSquaredToPerOriginalFrameSquared(world.Templates.GravityPerTickSquared);
+            if (frameEnds) _verticalSpeed += world.Time.PerTickSquaredAsPerOriginalFrameSquared(world.Templates.GravityPerTickSquared);
             var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
             if (Entity.Z < ground) Entity.Z = ground;
             world.MarkDirty(Entity);
