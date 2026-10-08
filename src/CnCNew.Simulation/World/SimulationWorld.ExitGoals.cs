@@ -89,9 +89,11 @@ public sealed partial class SimulationWorld
             if (other.Id == unit.Id || other.Owner != unit.Owner || other.HasMoveTarget || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid) continue;
             if (AppearsAfterClaim(other)) continue;
             var limit = radius + CircleRadius(other);
-            var ox = other.X - exitX;
-            var oy = other.Y - exitY;
-            if (FurtherThan(other.X, exitX, limit) || FurtherThan(other.Y, exitY, limit) || !SquaredReach.Of(limit).Contains(ox * ox + oy * oy)) continue;
+            // Where it stands once the logic frame of the original it is in is over (a unit whose move has ended covers the rest of its last step above 30 Hz; at 30 Hz its position).
+            var (standsX, standsY, _) = other.FrameEnd(_tick);
+            var ox = standsX - exitX;
+            var oy = standsY - exitY;
+            if (FurtherThan(standsX, exitX, limit) || FurtherThan(standsY, exitY, limit) || !SquaredReach.Of(limit).Contains(ox * ox + oy * oy)) continue;
             if (AiOf(other) is not { IsIdle: true } ai) continue;
             var (asideX, asideY) = FindFreeGoal(other, doorX, doorY, exitX, exitY, true);
             if (asideX != exitX || asideY != exitY) ai.OrderMove(this, asideX, asideY, false);
@@ -143,8 +145,11 @@ public sealed partial class SimulationWorld
         {
             if (other.Id == mover.Id || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid) continue;
             if (AppearsAfterClaim(other)) continue;
-            var otherX = other.HasMoveTarget ? other.MoveTargetX : other.X;
-            var otherY = other.HasMoveTarget ? other.MoveTargetY : other.Y;
+            // A standing unit counts where it stands once its logic frame of the original is over: above 30 Hz a move ends with the first tick of its last frame and the unit
+            // covers the rest of the step afterwards (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md). At 30 Hz that is its position.
+            var (standsX, standsY, _) = other.FrameEnd(_tick);
+            var otherX = other.HasMoveTarget ? other.MoveTargetX : standsX;
+            var otherY = other.HasMoveTarget ? other.MoveTargetY : standsY;
             var limit = radius + CircleRadius(other);
             if (FurtherThan(otherX, x, limit) || FurtherThan(otherY, y, limit)) continue;
             var ox = otherX - x;

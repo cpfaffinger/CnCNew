@@ -427,6 +427,12 @@ static partial class Tests
             return world.Entities.Where(value => value.Template.Name == "Grunt").OrderBy(value => value.Id.Value).Last();
         }
         bool Settled() => world.Entities.Where(value => value.Template.Name == "Grunt").All(value => !value.HasMoveTarget);
+        // Above 30 Hz a move ends with the first tick of its last logic frame and the unit covers the rest of that frame's step afterwards
+        // (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md): where it stands is read once that frame is over, as every observer of the simulation reads it.
+        void FinishFrame()
+        {
+            for (var tick = TickOrder.Next; tick < world.Frames(1) && world.Entities.Any(value => value.Template.Name == "Grunt" && value.IsInsideFrameStep); tick++) world.Step();
+        }
 
         var first = Produce(1);
         Check.That(Near(first, 70, 100, 0) && InsideBox(first), $"It appears at UnitCreatePoint, inside the factory ({first.X}, {first.Y}).");
@@ -437,6 +443,7 @@ static partial class Tests
             if (crossedAtY == Fixed.MinValue && !InsideBox(first)) crossedAtY = first.Y;
             return !first.HasMoveTarget;
         });
+        FinishFrame();
         Check.That(crossedAtY != Fixed.MinValue && (crossedAtY - Fixed.FromInt(100)).Abs() <= Fixed.FromInt(2), $"It leaves the box on the exit side, on the line of NaturalRallyPoint (y {crossedAtY}).");
         Check.That(!first.HasMoveTarget && Near(first, 120, 100, 0), $"It stops on the exit point ({first.X}, {first.Y}).");
 
@@ -446,8 +453,10 @@ static partial class Tests
             $"The first unit is asked to make room beside the exit point ({first.MoveTargetX}, {first.MoveTargetY}).");
         Check.That(second.HasMoveTarget && second.MoveTargetX == Fixed.FromInt(120) && second.MoveTargetY == Fixed.FromInt(100), "The second unit heads for the exit point.");
         Check.That(StepUntil(world, 300, Settled) < 300, "Both settle.");
+        FinishFrame();
         var third = Produce(3);
         Check.That(StepUntil(world, 300, Settled) < 300, "All three settle.");
+        FinishFrame();
         var grunts = new[] { first, second, third };
         Check.That(grunts.All(value => !InsideBox(value)), "All three units stand outside the factory.");
         Check.That(Near(third, 120, 100, 0), $"The last unit stands on the exit point ({third.X}, {third.Y}).");
