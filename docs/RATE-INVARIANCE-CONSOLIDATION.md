@@ -209,7 +209,7 @@ das Muster von `LocomotorFrames` (Tabelle neben dem Katalogtyp mit der 30-Hz-Umr
 
 | Lauf | Ergebnis |
 |---|---|
-| `input-manifest check` | identisch, nach jedem der 15 Commits, die die Simulation ändern, und am Ende |
+| `input-manifest check` | identisch, nach jedem der 14 Commits, die die Simulation ändern (`f0770fe` zusammen mit `f8ce7c4` geprüft), und am Ende |
 | `reference-manifest check --set quick --jobs 3` | 9 Läufe identisch, nach jedem dieser Commits (jeweils mit frisch gebautem `SimTool`; die drei reinen Mess- und Werkzeug-Commits `43443f5`, `f55c16d`, `d5ce353`/`551f11a` ohne eigenen Lauf) |
 | `reference-manifest check --set full --jobs 4` | **50 Läufe identisch**, am Stand `305da79` (letzter Commit an der Simulation: `f05af4f`) |
 | `dotnet build CnCNew.slnx` | 0 Warnungen, 0 Fehler (inkrementell, `bin`/`obj` von `CnCNew.Client.Stride` nicht gelöscht) |
