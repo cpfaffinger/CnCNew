@@ -597,7 +597,12 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
         if (Entity.Template.Locomotor is null) return SimulationTiming.SleepNone;
 
         var radius = Fixed.FromInt(data.MustCatchUpRadius);
-        var distance = SlaveSupport.CenterDistanceSquared3D(Entity, master);
+        // The member and its nexus where the logic frame of the original each has begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the nexus had its turn
+        // before its members and stands, for the 30 Hz member, after its whole step of this tick. At 30 Hz these are the positions.
+        var (ownX, ownY, ownZ) = Entity.FrameEnd(world.Tick);
+        var (masterX, masterY, masterZ) = master.FrameEnd(world.Tick);
+        var (apartX, apartY, apartZ) = (masterX - ownX, masterY - ownY, masterZ - ownZ);
+        var distance = apartX * apartX + apartY * apartY + apartZ * apartZ;
         if (!SquaredReach.Of(radius).Contains(distance))
         {
             if (master.HasMoveTarget)
@@ -608,7 +613,7 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
                 var dy = Entity.MoveTargetY - master.MoveTargetY;
                 if (!Entity.HasMoveTarget || !SquaredReach.Of(cells).Contains(dx * dx + dy * dy)) ai.OrderMove(world, master.MoveTargetX, master.MoveTargetY, false);
             }
-            else ai.OrderMove(world, master.X, master.Y, false);
+            else ai.OrderMove(world, masterX, masterY, false);
 
             var crisis = radius * Fixed.FromInt(3);
             if (!SquaredReach.Of(crisis).Contains(distance))
@@ -619,7 +624,7 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
                     world.Kill(Entity.Id);
                     return SimulationTiming.SleepNone;
                 }
-                if (_crisisTimer > data.CatchUpCrisisBailTime / 3) ai.OrderMove(world, master.X, master.Y, false);
+                if (_crisisTimer > data.CatchUpCrisisBailTime / 3) ai.OrderMove(world, masterX, masterY, false);
             }
         }
         else if (Entity.HasMoveTarget)
