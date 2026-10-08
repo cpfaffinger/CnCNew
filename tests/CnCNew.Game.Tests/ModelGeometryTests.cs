@@ -41,7 +41,7 @@ internal static class ModelGeometryTests
             }
 
             var graphFingerprint = DefinitionSnapshotWriter.ComputeFingerprint(data.Graph).Sha256;
-            TestHarness.Assert(data.Fingerprint != graphFingerprint && data.Fingerprint == geometry.Combine(graphFingerprint), "the world fingerprint folds the table in");
+            TestHarness.Assert(data.Fingerprint != graphFingerprint && data.Fingerprint == data.Rate.Combine(geometry.Combine(graphFingerprint)), "the world fingerprint folds the table in (and the tick rate, when it is not the original's)");
         });
 
         harness.Run("Model geometry: the American airfield's bones are the model's, read twice give the same table", () =>

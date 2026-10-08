@@ -722,19 +722,20 @@ internal static class AudioDirectorTests
         // EVA_SET_ENABLED_DISABLED (Eva::setEvaEnabled): a disabled announcer says nothing, the flags raised meanwhile are lost, and it speaks again once enabled.
         using (var director = NewDirector(catalog, fx))
         {
-            var view = new FakeView { Tick = 10 };
+            // The fake view's ticks are numbered in original frames: Eva looks once per original frame.
+            var view = new FakeView { Tick = CnCNew.Tests.TestRate.Frames(10) };
             director.EvaEnabled = false;
             director.NotifyInsufficientFunds();
             director.Tick(view, CnCNew.Tests.TestTime.FrameSeconds);
-            view.Tick = 11;
+            view.Tick = CnCNew.Tests.TestRate.Frames(11);
             director.Tick(view, CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(director.Stats.EvaPlayed == 0, "Eva stays silent while disabled");
             director.EvaEnabled = true;
-            view.Tick = 12;
+            view.Tick = CnCNew.Tests.TestRate.Frames(12);
             director.Tick(view, CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(director.Stats.EvaPlayed == 0, "the announcement raised while disabled was lost");
             director.NotifyInsufficientFunds();
-            view.Tick = 13;
+            view.Tick = CnCNew.Tests.TestRate.Frames(13);
             director.Tick(view, CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(director.Stats.EvaPlayed == 1, "enabled again, Eva announces");
         }

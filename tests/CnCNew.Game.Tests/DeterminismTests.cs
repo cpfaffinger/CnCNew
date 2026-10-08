@@ -215,7 +215,7 @@ internal static class DeterminismTests
                 var geometry = ModelGeometryLoader.Load(graph, ObjectVisualCatalog.Build(graph), content);
                 var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default, geometry);
                 var definitions = DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256;
-                var fingerprint = geometry.Combine(definitions);
+                var fingerprint = templates.Rate.Combine(geometry.Combine(definitions)); // as GameData.Load builds it: the tick rate is part of the world fingerprint
                 using var stream = content.OpenRead("Maps/GC_ChemGeneral/GC_ChemGeneral.map");
                 var map = SageMapDecoder.Decode(stream);
                 var terrain = TerrainMap.Build(map, "Maps/GC_ChemGeneral/GC_ChemGeneral.map");

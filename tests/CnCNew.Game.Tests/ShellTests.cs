@@ -105,7 +105,8 @@ internal static class ShellTests
         TestHarness.Assert(shell.BuildDrawList().Commands.Length == 0, "the shell draws nothing while the host owns the match");
 
         // Run a short, real skirmish to completion (host stands in for LiveMatch here) and show the results.
-        var setup = startMatch!.Setup with { Options = startMatch.Setup.Options with { MaxTicks = 600 } };
+        // Twenty seconds of game time (600 ticks at 30 Hz): the score screen below is hashed, and its numbers are those of the game time played.
+        var setup = startMatch!.Setup with { Options = startMatch.Setup.Options with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(20) } };
         var live = LiveMatch.Create(data, setup, new Vector2(NavWidth, NavHeight));
         var stats = new MatchStatistics();
         while (!live.Session.IsOver) stats.Record(live.Session.Step());

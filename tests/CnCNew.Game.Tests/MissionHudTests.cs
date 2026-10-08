@@ -161,7 +161,7 @@ internal static class MissionHudTests
             var frames = 0;
             for (; frames < 1500 && (director.InputLocked || director.CameraMoveActive); frames++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(!director.InputLocked && !director.Letterbox, $"the script enables the input and closes the letterbox again (tick {live.Tick})");
-            TestHarness.Assert(live.Tick is > 600 and < 1200, $"the cinematic takes its scripted time, about 25 seconds (ended at tick {live.Tick})");
+            TestHarness.Assert(live.Tick > CnCNew.Tests.TestTime.Ticks(live.World, 20) && live.Tick < CnCNew.Tests.TestTime.Ticks(live.World, 40), $"the cinematic takes its scripted time, about 25 seconds (ended at tick {live.Tick})");
             var hud = controller.BuildDrawList(1280, 720);
             TestHarness.Assert(hud.Commands.Any(command => command is CnCNew.Ui.Runtime.UiCustomDraw { Callback: "Viewport3D" }), "the control bar is back");
             TestHarness.Assert(Vector2.Distance(live.Camera.Pivot, SimulationQueries.GroundOf(dozer)) < 600f, $"the camera ends at the player's base (camera {live.Camera.Pivot}, dozer {SimulationQueries.GroundOf(dozer)})");

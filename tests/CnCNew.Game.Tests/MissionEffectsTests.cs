@@ -100,6 +100,12 @@ internal static class MissionEffectsTests
         director.AfterStep();
     }
 
+    /// <summary>One original frame of the mission: the screen filters and texts advance once per original frame, whatever the tick rate.</summary>
+    private static void StepFrame(MissionSession session, MissionPresentationDirector director)
+    {
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(session.World, 1); tick++) StepOnce(session, director);
+    }
+
     private static MapScript OnFlag(string name, string flag, params MapScriptAction[] actions)
         => new(name, string.Empty, string.Empty, string.Empty, true, true, true, true, true, false, 0, [new MapOrCondition([If("FLAG", Named(MapScriptParameterType.Flag, flag), Bool(true))])], [..actions], []);
 
@@ -229,11 +235,12 @@ internal static class MissionEffectsTests
         TestHarness.Assert(session.Engine.TimeFrozen, "the script froze time");
         var frozenAt = session.World.Tick;
         var steps = 1;
-        for (; steps < 200 && !session.Engine.FlagValue("thawed"); steps++) StepOnce(session, director);
+        for (; steps < CnCNew.Tests.TestTime.Frames(session.World, 200) && !session.Engine.FlagValue("thawed"); steps++) StepOnce(session, director);
         TestHarness.Assert(session.Engine.FlagValue("thawed"), $"CAMERA_MOVEMENT_FINISHED came from the director's clock although the world tick stood still (after {steps} steps)");
-        TestHarness.Assert(steps is >= 30 and <= 36, $"a one second camera move takes its 30 steps ({steps})");
+        TestHarness.Assert(steps >= CnCNew.Tests.TestTime.Frames(session.World, 30) && steps <= CnCNew.Tests.TestTime.Frames(session.World, 36), $"a one second camera move takes one second of steps ({steps})");
+        // Two ticks, not a time: the step that freezes and the step that thaws.
         TestHarness.Assert(session.World.Tick <= frozenAt + 2, $"the world stood still meanwhile (frozen at {frozenAt}, now {session.World.Tick})");
-        TestHarness.Assert(director.Clock >= frozenAt + 30, $"the presentation clock went on ({director.Clock})");
+        TestHarness.Assert(director.Clock >= frozenAt + CnCNew.Tests.TestTime.Frames(session.World, 30), $"the presentation clock went on ({director.Clock})");
         var counts = director.Counts().ToDictionary(count => count.Action);
         TestHarness.Assert(counts["FREEZE_TIME"] is { Emitted: 1, Forwarded: 0, Displayed: 0, State: MissionOutputState.HandledElsewhere } && counts["FREEZE_TIME"].HandledElsewhere == 1 && counts["FREEZE_TIME"].NotDisplayed == 0,
             $"FREEZE_TIME is counted as handled by the simulation, not as missing ({counts["FREEZE_TIME"]})");
@@ -314,14 +321,14 @@ internal static class MissionEffectsTests
         camera.CenterOn(new Vector2(500, 500));
 
         // Not read by a renderer yet: forwarded, never displayed.
-        StepOnce(session, director);
+        StepFrame(session, director);
         var headless = director.Counts().ToDictionary(count => count.Action)["CAMERA_BW_MODE_BEGIN"];
         TestHarness.Assert(headless is { Emitted: 1, Forwarded: 1, Displayed: 0 }, $"until a renderer asks for the filters the grey-scale is not displayed ({headless})");
 
         var levels = new List<float> { director.PostEffects.BlackWhite };
         for (var step = 0; step < 11; step++)
         {
-            StepOnce(session, director);
+            StepFrame(session, director);
             levels.Add(director.PostEffects.BlackWhite);
         }
         TestHarness.Assert(Math.Abs(levels[0] - 0.1f) < 1e-4f && Math.Abs(levels[4] - 0.5f) < 1e-4f && levels[9] == 1f && levels[11] == 1f, $"the grey-scale ramps in over its 10 frames, then holds ({string.Join(", ", levels.Select(value => value.ToString("F1")))})");
@@ -331,7 +338,7 @@ internal static class MissionEffectsTests
         var down = new List<float>();
         for (var step = 0; step < 12; step++)
         {
-            StepOnce(session, director);
+            StepFrame(session, director);
             down.Add(director.PostEffects.BlackWhite);
         }
         TestHarness.Assert(down[0] < 1f && down[4] < 0.6f && down[^1] == 0f && !director.PostEffects.Any, $"CAMERA_BW_MODE_END ramps it out and turns the filter off ({string.Join(", ", down.Select(value => value.ToString("F1")))})");
@@ -343,7 +350,7 @@ internal static class MissionEffectsTests
         var cutAt = -1;
         for (var step = 0; step < 26; step++)
         {
-            StepOnce(session, director);
+            StepFrame(session, director);
             var effects = director.PostEffects;
             blur.Add(effects.MotionBlurCount);
             factors.Add(effects.MotionBlurZoomFactor);
@@ -360,10 +367,10 @@ internal static class MissionEffectsTests
         // A blur ends a grey-scale (one view filter at a time).
         var mixed = Start([begin, jump], [target]);
         var mixedDirector = new MissionPresentationDirector(mixed);
-        StepOnce(mixed, mixedDirector);
+        StepFrame(mixed, mixedDirector);
         TestHarness.Assert(mixedDirector.PostEffects.BlackWhite > 0f, "the grey-scale is on");
         mixed.Engine.SignalUiInteraction("jump");
-        StepOnce(mixed, mixedDirector);
+        StepFrame(mixed, mixedDirector);
         TestHarness.Assert(mixedDirector.PostEffects is { BlackWhite: 0f, MotionBlurCount: > 0 }, "the blur replaced it");
     }
 

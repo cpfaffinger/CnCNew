@@ -61,7 +61,17 @@ internal static class MissionTextTests
 
     private static InGameUiSettings Settings => TextFixtures.Style.Settings;
 
+    /// <summary>
+    /// One original frame of the mission (one tick at 30 Hz, two at 60 Hz): every count of this file is a frame count of the original's texts, which the
+    /// director advances once per original frame.
+    /// </summary>
     private static void Step(MissionPresentationDirector director, CnCNew.Simulation.Mission.MissionSession session)
+    {
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(session.World, 1); tick++) StepTick(director, session);
+    }
+
+    /// <summary>Exactly one tick: the step in which a script runs, where an expectation is about that step and not about a time.</summary>
+    private static void StepTick(MissionPresentationDirector director, CnCNew.Simulation.Mission.MissionSession session)
     {
         director.BeforeStep();
         session.Step();
@@ -148,7 +158,7 @@ internal static class MissionTextTests
         var end = new MapScript("End", string.Empty, string.Empty, string.Empty, true, true, true, true, true, false, 0,
             [new MapOrCondition([If("FLAG", Named(MapScriptParameterType.Flag, "end"), Bool(true))])], [Do("CAMERA_LETTERBOX_END")], []);
         var (session, director) = Synthetic([begin, end]);
-        Step(director, session);
+        StepTick(director, session); // the fade runs on the presentation clock from the tick the script ran in
         TestHarness.Assert(director.Letterbox && director.LetterboxFadeLevel == 0f, $"the letterbox begins at fade level 0 ({director.LetterboxFadeLevel})");
         TestHarness.Assert(!director.BuildOverlayCommands(800, 600).OfType<UiFillRect>().Any(), "so nothing is drawn in its first step");
         for (var step = 0; step < 15; step++) Step(director, session);
@@ -167,7 +177,7 @@ internal static class MissionTextTests
         TestHarness.Assert(director.LetterboxFadeLevel == 1f, "the level stays at 1");
 
         session.Engine.SignalUiInteraction("end");
-        Step(director, session);
+        StepTick(director, session);
         for (var step = 0; step < 15; step++) Step(director, session);
         var closing = director.BuildOverlayCommands(800, 600).OfType<UiFillRect>().ToArray();
         TestHarness.Assert(!director.Letterbox && closing is [{ Rect: { Y: 0, Height: 75 }, Color.A: 127 }], $"ended: the top bar alone fades out ({closing.Length} bars, level {director.LetterboxFadeLevel})");
@@ -353,9 +363,9 @@ internal static class MissionTextTests
 
         // The ready countdown flashes between its color and the flash color every 15 frames (odd periods: flash color).
         for (var step = 2; step <= 16; step++) Step(director, session);
-        TestHarness.Assert(director.Clock == 16 && Texts(director)[1].Color == new WndColor(0, 255, 255, 255) && Texts(director)[0].Color == new WndColor(255, 255, 0, 255), "at frame 16 (second flash period) the ready timer shows the flash color, the others do not");
+        TestHarness.Assert(director.FrameClock == 16 && Texts(director)[1].Color == new WndColor(0, 255, 255, 255) && Texts(director)[0].Color == new WndColor(255, 255, 0, 255), "at frame 16 (second flash period) the ready timer shows the flash color, the others do not");
         for (var step = 17; step <= 31; step++) Step(director, session);
-        TestHarness.Assert(director.Clock == 31 && Texts(director)[1].Color == new WndColor(255, 255, 0, 255), "at frame 31 it is back to its own color");
+        TestHarness.Assert(director.FrameClock == 31 && Texts(director)[1].Color == new WndColor(255, 255, 0, 255), "at frame 31 it is back to its own color");
 
         var hide = Script("Hide", If("CONDITION_TRUE"), [Do("HIDE_COUNTER", Named(MapScriptParameterType.Counter, "C_Score")), Do("DISABLE_COUNTDOWN_TIMER_DISPLAY")]);
         var (hidingSession, hiding) = Synthetic([script, hide]);
@@ -578,7 +588,7 @@ internal static class MissionTextTests
         for (var frame = 0; frame < 30; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(director.Messages!.IsEmpty && controller.Hud.Messages.WithoutLine.ContainsKey("upgrade granted, not ordered"), "the radar the command center comes with is no 'Upgrade Complete' line (nobody ordered it)");
         // A line of the scripts' DISPLAY_TEXT stands in the same list: the HUD's line is the next, one font height below.
-        director.Messages.Add("a line of the scripts", director.Clock);
+        director.Messages.Add("a line of the scripts", director.FrameClock); // the list counts original frames, as the director's own DISPLAY_TEXT does
         controller.Hud.Messages.Message("GUI:CantBuildThere");
         var font = controller.Hud.TextStyle.Font(InGameUiFontRole.Message, new UiViewport(1280, 720), controller.Hud.ScaleOptions);
         var list = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(text => text.Text == "You can't build here").ToArray();
