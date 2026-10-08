@@ -136,6 +136,7 @@ static partial class Tests
     private static readonly (string File, string Constant, string Reason)[] FramesConstantExceptions =
     [
         ("Modules/BuiltIn/CleanupAndSpyModules.cs", "RescanWaitMaxFrames", "upper bound of a draw in frames (GameLogicRandomValue(0, 3)); the drawn value is scaled with OriginalFrames on the next line"),
+        ("Modules/BuiltIn/Phase5Modules.cs", "GoalSpotCheckFrames", "a modulus of the world's frame number (Time.FramesIn), which counts frames of the original at every rate"),
         ("Modules/BuiltIn/ProjectileModules.cs", "RescanMaxFrames", "upper bound of a draw in frames; the drawn value is scaled with OriginalFrames"),
         ("Skirmish/SkirmishAi.cs", "SupplyLookRetryFrames", "passed to Backoff(key, frames), which scales"),
         ("Skirmish/SkirmishAi.cs", "TunnelEvacuationRetryFrames", "passed to Backoff(key, frames), which scales"),

@@ -1079,6 +1079,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
+        // Close to a goal somebody else has taken: head for the nearest free place instead (SimulationWorld.GoalSpots.cs, the reference's adjustDestination).
+        if (!air && GoalSpotCheckDue(world) && world.TryFreeGoalSpot(Entity, out var freeX, out var freeY))
+        {
+            Entity.MoveTargetX = freeX;
+            Entity.MoveTargetY = freeY;
+            InvalidatePath();
+        }
         if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum)) PlanPath(navigation, locomotor, air);
         if (_path.Count == 0)
         {
@@ -1253,6 +1260,26 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         Entity.X += stepX;
         Entity.Y += stepY;
         if (time.TicksPerOriginalFrame > 1) _wingStep.Begin(time, Entity, stepX, stepY, Fixed.Zero, FixedTrig.AngleDifference(heading, Entity.Angle));
+    }
+
+    /// <summary>Own rhythm: a unit close to its goal asks every 15 logic frames of the original (half a second) whether the goal is still free.</summary>
+    private const long GoalSpotCheckFrames = 15;
+
+    /// <summary>Own value: "close to its goal" is six path cells, a little more than the widest ground unit's bounding circle plus the look-ahead of a walking infantryman.</summary>
+    private static readonly Fixed GoalSpotLook = Fixed.FromInt(6 * TerrainMap.CellSize);
+
+    /// <summary>
+    /// Whether this decision asks <see cref="IWorldServices.TryFreeGoalSpot"/>: only a plain move (no dock, no construction, no container or goal object to walk into, no way
+    /// back), only within <see cref="GoalSpotLook"/> of the target, and only every <see cref="GoalSpotCheckFrames"/> frames. The rhythm needs no state: it is the world's frame
+    /// number, staggered by the object's id, so it falls on the same frame of the original at every rate.
+    /// </summary>
+    private bool GoalSpotCheckDue(IWorldServices world)
+    {
+        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending) return false;
+        if ((world.Time.FramesIn(world.Tick) + Entity.Id.Value) % GoalSpotCheckFrames != 0) return false;
+        var dx = Entity.MoveTargetX - Entity.X;
+        var dy = Entity.MoveTargetY - Entity.Y;
+        return SquaredReach.Of(GoalSpotLook).Contains(dx * dx + dy * dy);
     }
 
     /// <summary>Own rhythm: a replan around standing units at most once per 30 logic frames of the original (one second).</summary>

@@ -274,6 +274,13 @@ public interface IWorldServices
     IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAhead(Entity mover, Fixed dx, Fixed dy);
 
     /// <summary>
+    /// <c>Pathfinder::adjustDestination</c>: when the place <paramref name="mover"/> is heading for (<see cref="Entity.MoveTargetX"/>) is taken — a unit of a side that is not
+    /// its enemy stands there, or one with a lower id is heading there — the nearest free place on a square spiral of path cells around it; false when the goal is free, the
+    /// mover flies or closes in on a victim, or no free place lies within 400 cells.
+    /// </summary>
+    bool TryFreeGoalSpot(Entity mover, out Fixed x, out Fixed y);
+
+    /// <summary>
     /// <c>SquishCollide.cpp onCollide</c> / <c>ToppleUpdate.cpp onCollide</c>: after <paramref name="mover"/>'s position
     /// changed this tick by (<paramref name="stepX"/>, <paramref name="stepY"/>) — the exact displacement just applied, used
     /// to tell a closing mover from a receding one without rebuilding velocity from <c>Angle</c>/<c>Speed</c> — checks every

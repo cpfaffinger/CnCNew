@@ -102,6 +102,8 @@ public sealed class SkirmishAi
     private const int PlacementChecksPerThink = 400;
     private static readonly Fixed DefenseRadius = Fixed.FromInt(450);
     private static readonly Fixed EngageRadius = Fixed.FromInt(260);
+    /// <summary>How far from the rally point a unit at rest still counts as gathered: the reach of the world's search for a free place around a taken goal (ten cells) plus one.</summary>
+    private static readonly Fixed GatherRadius = Fixed.FromInt(11 * TerrainMap.CellSize);
     private static readonly Fixed RepairBelow = Fixed.FromDecimal(0.7m);
     private static readonly Fixed TunnelHealBelow = Fixed.FromDecimal(0.5m);
     private static readonly Fixed TunnelReach = Fixed.FromInt(600);
@@ -1153,11 +1155,16 @@ public sealed class SkirmishAi
         {
             if (_boarding.TryGetValue(unit.Id.Value, out var boardingUntil) && boardingUntil > _tick) continue;
             // Defence takes everybody; an attack only the wave, the others wait at the rally point.
+            // Gathering at the rally point, as opposed to marching on an attack goal or a threat.
+            var gathering = threat is null && (!_attacking || !_wave.Contains(unit.Id.Value));
             var destination = threat is null && _attacking && !_wave.Contains(unit.Id.Value) ? _rally ?? armyGoal : armyGoal;
             // An attack-move: the unit engages what it meets on the way by itself (the world's target acquisition) and marches on afterwards.
             var (x, y) = destination;
             var marching = unit.HasMoveTarget || _world.IsAttackMoving(unit);
             if (DistanceSquared(unit.X, unit.Y, x, y) < Fixed.FromInt(1600)) continue;
+            // Gathering: a unit that came to rest where the crowd around the rally point left room (SimulationWorld.TryFreeGoalSpot places it up to ten cells away) has
+            // arrived; sending it to the point again would only walk it there and back.
+            if (gathering && !marching && SquaredReach.Of(GatherRadius).Contains(DistanceSquared(unit.X, unit.Y, x, y))) continue;
             if (_orders.TryGetValue(unit.Id.Value, out var order))
             {
                 var same = DistanceSquared(order.X, order.Y, x, y) < Fixed.FromInt(900);
