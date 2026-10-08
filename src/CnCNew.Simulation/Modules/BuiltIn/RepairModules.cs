@@ -118,7 +118,8 @@ internal sealed class AutoFindHealingUpdate(AutoFindHealingData data) : SimModul
     public override string ModuleName => "AutoFindHealingUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
-    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
+    // The scan counts the object's logic frames of the original and gives an order: its first update is the object's first frame, one frame after it appeared (the next tick at 30 Hz).
+    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
 
     public long Update(IWorldServices world)
     {
