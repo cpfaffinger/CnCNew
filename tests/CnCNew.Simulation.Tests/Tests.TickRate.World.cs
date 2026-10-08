@@ -249,7 +249,10 @@ static partial class Tests
             for (var i = 0; i < 300 * factor && lost < 0; i++)
             {
                 world.Step();
-                if (outOfRange < 0 && DistanceBetween(tank, runner) > 150m) outOfRange = i;
+                // The turret decides once per logic frame and reads the runner where the frame it has begun ends (the position at 30 Hz): so does the measurement.
+                var (runnerX, runnerY, _) = runner.FrameEnd(world.Tick - 1);
+                var (apartX, apartY) = (runnerX - tank.X, runnerY - tank.Y);
+                if (outOfRange < 0 && apartX * apartX + apartY * apartY > Fixed.FromInt(150 * 150)) outOfRange = i;
                 if (!world.AttackTargetOf(tank).IsValid) lost = i;
             }
 
