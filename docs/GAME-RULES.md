@@ -177,9 +177,9 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   `CannotProduce` (kein `ProductionUpdate`-Modul), `QueueFull` (`MaxQueueEntries` erreicht) und `InsufficientFunds`.
   `CancelProductionCommand` entfernt einen Platz und erstattet die Kosten vollständig.
 - `ProductionUpdate::update()`: nur der Kopf der Warteschlange zählt pro Tick einen Tick weniger `RemainingTicks`
-  (`BuildTime` in Sekunden, aufgerundet auf ganze Ticks); bei Erreichen von 0 entsteht die Einheit an der Position des
-  Produzenten (`RequestSpawn`, keine Ausgangs-/Türgeometrie) im Besitz von dessen Spieler, und der nächste
-  Warteschlangenplatz beginnt neu.
+  (`BuildTime` in Sekunden, aufgerundet auf ganze Ticks); bei Erreichen von 0 entsteht die Einheit am `UnitCreatePoint` des
+  Ausfahrtsmoduls im Besitz des Spielers des Produzenten, bekommt seit 8. Oktober 2026 ihren Ausfahrtsweg
+  (`docs/SIMULATION-CORE.md` §42), und der nächste Warteschlangenplatz beginnt neu.
 - **Bewusste Vereinfachung:** kein Energie-Verlangsamungsfaktor (`ProductionUpdate::calcTimeToBuild`), keine
   Kollisionsprüfung (Bauplatzprüfung und Sammelpunkt gibt es seit Phase 6 für Gebäude, §11), `QuantityModifier` und die Türanimationsfelder sind typisiert, aber
   ungenutzt (siehe Modulkatalog-Kommentar).
