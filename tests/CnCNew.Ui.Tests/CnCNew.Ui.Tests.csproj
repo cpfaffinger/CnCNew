@@ -5,6 +5,7 @@
   <ItemGroup>
     <!-- The tick-rate option of the test programs (no reference to the simulation; this program has no world to build). -->
     <Compile Include="../Shared/TestRateOption.cs" Link="Shared/TestRateOption.cs" />
+    <Compile Include="../../src/CnCNew.Game/Data/ProductRate.cs" Link="Shared/ProductRate.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Ui/CnCNew.Ui.csproj" />

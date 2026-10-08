@@ -44,7 +44,7 @@ const string Usage = """
       playthrough <content-dir> --campaign NAME [--ticks N]
                                                 plays a whole campaign headless: starts each mission, forces its victory ending, carries the progress
                                                 and a savegame from mission to mission
-    Every command that runs a mission takes --tick-rate N (30, 60 or 120; default 30). --ticks N is a raw tick count of that rate; --seconds S or
+    Every command that runs a mission takes --tick-rate N (30, 60 or 120; default: the product rate). --ticks N is a raw tick count of that rate; --seconds S or
     --minutes M state the budget as game time instead; the default budgets are game time (drive 2000 s, audit 60 s, playthrough 30 s).
     """;
 

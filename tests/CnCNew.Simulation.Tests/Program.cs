@@ -23,7 +23,7 @@ using CnCNew.Simulation.Timers;
 using CnCNew.Simulation.World;
 
 var run = new Runner(args.SkipWhile(value => value != "--only").Skip(1).FirstOrDefault());
-if (!TestRate.IsOriginal) Console.WriteLine($"Default test worlds run at {TestRate.Default.TicksPerSecond} Hz ({TestRate.Option}/{TestRate.Variable}): a probe, the reference is 30 Hz.");
+if (TestRate.Default != TestRate.Product) Console.WriteLine($"Default test worlds run at {TestRate.Default.TicksPerSecond} Hz ({TestRate.Option}/{TestRate.Variable}); the default rate is {TestRate.Product.TicksPerSecond} Hz.");
 run.Test("Fixed-point arithmetic, rounding and limits", Tests.FixedPoint);
 run.Test("Fixed point: products, quotients and roots equal the wide formulas at 16, 24, 12 and 32 fraction bits", Tests.FixedMathMatchesWideArithmeticAtEveryResolution);
 run.Test("Fixed point: at 16 fraction bits the angle functions return the bits they returned before phase 22", Tests.FixedTrigReproducesTheSixteenBitResults);

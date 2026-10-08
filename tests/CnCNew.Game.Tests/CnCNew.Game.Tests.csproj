@@ -6,6 +6,7 @@
     <!-- Time helpers of the tests (one original frame of wall time, one tick of a world): no test writes a rate of its own. -->
     <Compile Include="../Shared/TestTime.cs" Link="Shared/TestTime.cs" />
     <Compile Include="../Shared/TestRateOption.cs" Link="Shared/TestRateOption.cs" />
+    <Compile Include="../../src/CnCNew.Game/Data/ProductRate.cs" Link="Shared/ProductRate.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Game/CnCNew.Game.csproj" />

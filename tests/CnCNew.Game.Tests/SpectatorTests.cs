@@ -43,7 +43,7 @@ internal static class SpectatorTests
             return harness.Failures;
         }
 
-        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step}"));
+        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step}"), rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Two runs of the same match give the same panels, cameras and report, and the panels have data", () => PanelsAreDeterministic(data));
         harness.Run("Nothing the spectator does reaches the simulation: the match is the headless match of the same seed", () => SpectatorWritesNothing(data));
         harness.Run("The fog switch shows everything, then one player's view, then the other's", () => FogSwitch(data));

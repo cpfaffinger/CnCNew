@@ -4,8 +4,9 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// The rate the default test worlds and catalogs are built at. It is the original's 30 Hz unless the program is started with <c>--tick-rate N</c> or the
-/// environment variable <c>CNCNEW_TEST_TICK_RATE=N</c> (30, 60 or 120): an opt-in probe for phase 23 that shows which expectations really count ticks.
+/// The rate the default test worlds and catalogs are built at. It is the product's default rate (<c>CnCNew.ProductRate</c>, the one definition, linked in as
+/// source because this project does not reference the game layer) unless the program is started with <c>--tick-rate N</c> or the environment variable
+/// <c>CNCNEW_TEST_TICK_RATE=N</c> (30, 60 or 120); the program is green at each of the three.
 /// The value is read from the process itself, because static fixtures of <c>Tests</c> may be built before the first statement of the program runs.
 /// Tests that are about a particular rate (Tests.TickRate*.cs, the unit conversions in Tests.Basics.cs) name that rate and do not use this.
 /// </summary>
@@ -13,6 +14,9 @@ static class TestRate
 {
     public const string Option = "--tick-rate";
     public const string Variable = "CNCNEW_TEST_TICK_RATE";
+
+    /// <summary>The rate of a run that names none: the product's default.</summary>
+    public static SimulationRate Product { get; } = SimulationRate.FromTicksPerSecond(CnCNew.ProductRate.TicksPerSecond);
 
     public static SimulationRate Default { get; } = Select();
 
@@ -33,7 +37,7 @@ static class TestRate
         var arguments = Environment.GetCommandLineArgs();
         var index = Array.IndexOf(arguments, Option);
         var text = index >= 0 && index + 1 < arguments.Length ? arguments[index + 1] : Environment.GetEnvironmentVariable(Variable);
-        if (string.IsNullOrEmpty(text)) return SimulationRate.Original;
+        if (string.IsNullOrEmpty(text)) return Product;
         if (!int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var ticksPerSecond))
             throw new ArgumentException($"{Option}/{Variable} needs a whole number, got '{text}'.");
         return SimulationRate.FromTicksPerSecond(ticksPerSecond);

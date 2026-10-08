@@ -26,7 +26,7 @@ internal static class HotkeyTests
             return 0;
         }
 
-        var data = GameData.Load(args[index + 1]);
+        var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         foreach (var faction in FactoryExits.Factions)
             harness.Run($"Hot keys of the {faction} builder, command centre, barracks and war factory: every enabled button answers the key of its label", () => Faction(data, faction));
         return harness.Failures;
