@@ -1,4 +1,7 @@
 using CnCNew.Simulation.Events;
+using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -181,6 +184,46 @@ static partial class Tests
             var gaps = shots.Zip(shots.Skip(1), (a, b) => b - a).ToArray();
             Check.That(gaps.Length >= 10 && gaps.Select((gap, index) => gap == (index % 2 == 0 ? 9 : 1) * factor).All(same => same),
                 $"{rate}: the gaps between shots are 9 and 1 logic frames in turn: {string.Join(",", gaps)} ticks.");
+        }
+    }
+
+    /// <summary>A capturer and an enemy station of the staged-capture fixture at <paramref name="rate"/>, the capture power ready (as <c>StagedWorld</c> builds them at the default rate).</summary>
+    private static (SimulationWorld World, Feeder Feeder, SpecialAbilityUpdate Ability) RatedCapture(SimulationRate rate, int factor, string capturer, int stationX, int stationY, bool upgrade)
+    {
+        var (world, feeder, _) = RatedWorld(rate, StagedCaptureFiles());
+        feeder.Spawn(1, capturer, owner: 1, x: 100, y: 50);
+        feeder.Spawn(2, "PlainStation", owner: 2, x: stationX, y: stationY);
+        feeder.SetRelationship(1, 2, Relationship.Enemies);
+        for (var i = 0; i < factor; i++) world.Step();
+        if (upgrade) world.CompleteUpgrade(new PlayerId(1), null, "Upgrade_StagedCapture");
+        for (var i = 0; i < 40 * factor; i++) world.Step();
+        return (world, feeder, world.FindEntity(new EntityId(1))!.Modules.OfType<SpecialAbilityUpdate>().Single());
+    }
+
+    /// <summary>
+    /// <c>DoCaptureFX</c>: the flash phase is a recursion per logic frame (its step grows with the fraction of the preparation that is over). At every rate the building flashes
+    /// four times while the flag goes up for 60 frames, in the same frames of the preparation. (Stepped per tick the phase ran twice and four times as fast: 4 / 9 / 19 flashes.)
+    /// </summary>
+    public static void RateInvarianceCaptureFlashesInTheSameFrames()
+    {
+        long[]? reference = null;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, ability) = RatedCapture(rate, factor, "StagedCapturer", 200, 50, upgrade: true);
+            Check.That(feeder.Capture(1, 1, 2).Accepted, $"{rate}: the capture is accepted.");
+            long start = -1;
+            var flashes = new List<long>();
+            for (var index = 0; index < 600 * factor; index++)
+            {
+                var result = world.Step();
+                if (start < 0 && ability.Stage == AbilityStage.Preparing) start = result.Tick;
+                flashes.AddRange(result.Events.Where(value => value.Kind == SimEventKind.CaptureFlash).Select(_ => result.Tick - start));
+            }
+
+            Check.That(start >= 0 && flashes.Count == 4 && flashes.All(tick => tick % factor == 0), $"{rate}: four flashes, each in the first tick of a logic frame of the preparation: {string.Join(",", flashes)} ticks after it began.");
+            var frames = flashes.Select(tick => tick / factor).ToArray();
+            reference ??= frames;
+            Check.That(frames.SequenceEqual(reference), $"{rate}: the flashes fall in the same frames of the preparation as at 30 Hz: {string.Join(",", frames)} against {string.Join(",", reference)}.");
         }
     }
 

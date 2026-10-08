@@ -362,12 +362,19 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     }
 
     /// <summary>
-    /// The <c>DoCaptureFX</c> part of <c>continuePreparation</c>: the flash phase grows every tick by a third of the fraction of the preparation that is over, so it grows faster
-    /// and faster; each time its integer part goes from odd to even the target flashes (and ticks). The simulation only reports the moment (<see cref="SimEventKind.CaptureFlash"/>);
-    /// colour and sound are the presentation's. The reference never resets the phase; here every capture starts it at zero (it is part of the run's state).
+    /// The <c>DoCaptureFX</c> part of <c>continuePreparation</c>: the flash phase grows every logic frame of the original by a third of the fraction of the preparation that is over,
+    /// so it grows faster and faster; each time its integer part goes from odd to even the target flashes (and ticks). The simulation only reports the moment
+    /// (<see cref="SimEventKind.CaptureFlash"/>); colour and sound are the presentation's. The reference never resets the phase; here every capture starts it at zero (it is part of
+    /// the run's state).
+    /// <para>
+    /// The phase is a recursion per frame (its increment grows from frame to frame), so above 30 Hz it is stepped on the ticks that complete a frame of the preparation - the
+    /// counter is a whole number of frames then, and both the fraction and the number of steps are those of 30 Hz. Stepped every tick the phase ran twice (four times) as fast.
+    /// </para>
     /// </summary>
     private void StepCaptureFlash(IWorldServices world, Entity target)
     {
+        var frame = world.Time.TicksPerOriginalFrame;
+        if (frame != 1 && _prepFrames % frame != 0) return;
         var wasOdd = (_flashPhase.Floor() & 1) != 0;
         var denominator = Math.Max(1, data.PreparationTicks);
         _flashPhase += (Fixed.One - Fixed.FromInt(_prepFrames) / Fixed.FromInt(denominator)) / Fixed.FromInt(3);
