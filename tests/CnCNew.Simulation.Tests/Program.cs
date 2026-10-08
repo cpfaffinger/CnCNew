@@ -79,8 +79,17 @@ run.Test("Tick rate N–Z: auto heal without a delay pulses once per frame of th
 run.Test("Tick rate N–Z: the enemy-near scan keeps its frame boundary", Tests.TickRateNzEnemyNearScanKeepsItsFrameBoundary);
 run.Test("Tick rate N–Z: the slow-death variance is drawn in frames of the original", Tests.TickRateNzSlowDeathVarianceIsDrawnInOriginalFrames);
 run.Test("Tick rate N–Z: catalog defaults are frames of the original", Tests.TickRateNzCatalogDefaultsAreOriginalFrames);
-run.Test("Tick rate (scripts): the end-game delay is 120 frames of the original, QUICKVICTORY one step at every rate", Tests.TickRateScriptEndGameDelay);
+run.Test("Tick rate (scripts): the end-game delay is 120 frames of the original, QUICKVICTORY one engine update at every rate", Tests.TickRateScriptEndGameDelay);
 run.Test("Tick rate (scripts): the presentation latency is frames of the original, forwarded arguments are untouched", Tests.TickRateScriptPresentationLatency);
+run.Test("Tick rate (script clock): a counter raised per evaluation reaches N on the same frame at every rate", Tests.TickRateScriptClockCountsEvaluationsPerFrame);
+run.Test("Tick rate (script clock): a frame timer and a seconds timer hold frames and run out together", Tests.TickRateScriptClockTimersCountFrames);
+run.Test("Tick rate (script clock): a timer compared with a frame literal and arithmetic on it mean frames", Tests.TickRateScriptClockComparesTimersWithFrameLiterals);
+run.Test("Tick rate (script clock): a sequential script waits its frame count", Tests.TickRateScriptClockSequentialWait);
+run.Test("Tick rate (script clock): under FREEZE_TIME the engine keeps the frame although the tick stands still", Tests.TickRateScriptClockFrozenTimeKeepsTheFrame);
+run.Test("Tick rate (script clock): a snapshot taken between two frames continues identically", Tests.TickRateScriptClockSnapshotBetweenFrames);
+run.Test("Tick rate (script clock): UNIT_EMPTIED looks one frame of the original back", Tests.TickRateScriptClockUnitEmptiedLooksOneFrameBack);
+run.Test("Tick rate (script clock): an area edge and a death between two frames are seen by the next update", Tests.TickRateScriptClockSeesWhatHappenedBetweenFrames);
+run.Test("Tick rate (script clock): a named object that lived between two frames has existed", Tests.TickRateScriptClockRemembersAnObjectThatLivedBetweenFrames);
 run.Test("Tick rate (scenarios): the mission probe settles and waits in frames of the original", Tests.TickRateMissionProbeWaitsInGameTime);
 run.Test("Tick rate (skirmish): victory check, grace period and science points are frames of the original", Tests.TickRateSkirmishSessionRules);
 run.Test("Tick rate (skirmish): the AI thinks on the same frames of the original at every rate", Tests.TickRateSkirmishAiRhythm);

@@ -215,7 +215,7 @@ public sealed partial class ScriptEngine
                 _recordedActions++;
                 return true;
             case "SCRIPTING_OVERRIDE_HULK_LIFETIME":
-                if (Has(type, p, 1)) _hulkLifetimeOverrideTicks = Real(p, 0).IsNegative ? -1 : SecondsToFrames(Real(p, 0));
+                if (Has(type, p, 1)) _hulkLifetimeOverrideTicks = Real(p, 0).IsNegative ? -1 : _world.Time.OriginalFrames(SecondsToFrames(Real(p, 0)));
                 _recordedActions++;
                 return true;
             default:

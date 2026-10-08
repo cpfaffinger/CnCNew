@@ -61,7 +61,7 @@ public sealed partial class ScriptEngine
                 return true;
             // doLocalDefeat: the local player's defeat window and CampaignManager::SetVictorious(false) — a defeat of the mission.
             case "LOCALDEFEAT":
-                End(MissionOutcome.Defeat, EndGameDelay);
+                End(MissionOutcome.Defeat, EndGameDelayFrames);
                 return true;
             // doMoveUnitTowardsNearest: aiMoveToObject towards the closest object of the type inside the area, measured from the unit.
             case "UNIT_MOVE_TOWARDS_NEAREST_OBJECT_TYPE":
@@ -793,7 +793,8 @@ public sealed partial class ScriptEngine
             _transportStatus[entity.Id.Value] = (frame, count);
             return false;
         }
-        if (status.Frame == frame - TickOrder.Next && status.Count > 0 && count == 0) return true;   // order: what the previous tick saw
+        // m_frameNumber == frameNum - 1: what the previous frame of the original saw - the engine looks once per frame, so the look before this one is that many ticks back.
+        if (status.Frame == frame - _world.Time.TicksPerOriginalFrame && status.Count > 0 && count == 0) return true;
         _transportStatus[entity.Id.Value] = (frame, count);
         return false;
     }

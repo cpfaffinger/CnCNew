@@ -45,10 +45,10 @@ static partial class Tests
             var steps = StepsFromOutcomeToEnd(victory, 1_000);
             Check.That(steps == ScriptEngine.EndGameDelayFrames * factor, $"{rate}: the mission ends {ScriptEngine.EndGameDelayFrames} frames of the original after VICTORY (got {steps} ticks).");
 
-            // QUICKVICTORY is order ("the next update"), not time: one step at every rate.
+            // QUICKVICTORY is order ("the next update" of the script engine), not time; the engine updates once per frame of the original.
             var quick = RatedMission(rate, [Scr.Script("Win", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("QUICKVICTORY")], oneShot: true)]);
             var quickSteps = StepsFromOutcomeToEnd(quick, 100);
-            Check.That(quickSteps == TickOrder.Next, $"{rate}: QUICKVICTORY ends the mission in the next update at every rate (got {quickSteps}).");
+            Check.That(quickSteps == factor, $"{rate}: QUICKVICTORY ends the mission in the next update of the engine, one frame of the original later (got {quickSteps} ticks).");
         }
     }
 

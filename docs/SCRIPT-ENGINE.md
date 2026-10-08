@@ -42,8 +42,8 @@ Bis Phase 16 stand dazwischen `DriveCombat(tick)`, der Gefechtstreiber der Sitzu
 
 `ScriptEngine.Update` endet seit Phase 11 mit `UpdateFollowers` → `ProcessTeamEvents` (§5b) → `ProcessSequences` (§5a) → `ProcessTeamBuilds`; die Menge „Objekte, die in diesem Tick einen
 Befehl bekamen“ (`_busyThisTick`) wird zu Beginn geleert, weil ein Befehl erst im Weltschritt wirkt, die Sequenzlogik das Objekt des Originals aber sofort als beschäftigt behandeln muss.
-Der Kern folgt `ScriptEngine::update`: Endspiel-Zeitgeber (`VICTORY`/`DEFEAT` starten 120 Ticks
-`FRAMES_TO_SHOW_WIN_LOSE_MESSAGE`, danach läuft keine Skriptauswertung mehr, `QUICKVICTORY` 1 Tick); Zähler mit `isCountdownTimer`
+Der Kern folgt `ScriptEngine::update`: Endspiel-Zeitgeber (`VICTORY`/`DEFEAT` starten 120 Updates
+`FRAMES_TO_SHOW_WIN_LOSE_MESSAGE`, danach läuft keine Skriptauswertung mehr, `QUICKVICTORY` 1 Update; ein Update ist ein Bild des Originals, siehe unten); Zähler mit `isCountdownTimer`
 zählen bis −1 herunter; dann je Spieler-Skriptliste die Top-Level-Skripte, danach die aktiven, nicht als Unterprogramm markierten
 Gruppen, jeweils ohne Unterprogramme. `ExecuteScript` beachtet `IsActive`, Schwierigkeitsflags, `DelayEvaluationSeconds`
 (nächster Auswertungszeitpunkt), wertet den ODER-von-UND-Baum mit Kurzschluss aus und führt Wahr- bzw. Falsch-Aktionen aus;
@@ -53,15 +53,52 @@ instanziierbare Prototypen haben Vorrang vor Singletons); `<This Team>`, `<This 
 `CALL_SUBROUTINE` ruft Gruppen (nur aktive Unterprogramm-Gruppen) und Einzelskripte (nur Unterprogramme), Rekursionstiefe 32
 (Überschreitung wird als Diagnose gezählt).
 
-**Bildzähler und Tickrate (Phase 20, `docs/TICKRATE-MIGRATION.md` §1 Fall (f), §8).** Die Tickrate ist ein Wert der Welt; die VM rechnet über `_world.Time`. *Skaliert* wird jeder Wert, der in der
-Simulation zu einem Tick-Countdown wird: die Bildzahlen der Karte (`SET_TIMER`, `SET_RANDOM_TIMER` – der Zufall wird in Bildern gezogen, dann skaliert –, die `*_FOR_FRAMECOUNT`-Aktionen,
-`teamInitialIdleFrames`), Sekundenwerte (`SET_MILLISECOND_TIMER` und Verwandte, `DelayEvaluationSeconds`: auf ganze Bilder des Originals aufgerundet, dann mal Rate/30), der Endspiel-Zeitgeber
-(`EndGameDelayFrames` = 120 Bilder; `QUICKVICTORY` bleibt ein Update, das ist Reihenfolge), der erste Auswertungstick verzögerter Skripte (`NameHash % 61` Bilder), die Präsentationslatenz
-(`PresentationLatencyTicks`, trotz des Namens in Bildern) und die eigenen Rhythmen (Neuziel alle 30 Bilder, Übernahme-Wiederholung, Versorgungsscan). Die „Ticks“ in diesem Abschnitt sind Werte bei
-30 Hz. *Nicht skaliert* wird, was die Simulation als Text verlässt: die `Arguments` eines `ScriptOutput` sind die Parameter der Karte, eine Bildzahl darunter (`CAMERA_FADE_*`,
-`CAMERA_BW_MODE_*`) ist bei jeder Rate eine Zahl von Bildern des Originals (1/30 s); `ScriptOutput.Tick` ist ein Tick der Welt. Der Wert eines Timers (`CounterValue`) ist Zustand in **Ticks**.
-Offen für Phase 23: die VM wertet jedes aktive Skript in **jedem Tick** aus und zählt Timer je Tick – ein Skript, das je Auswertung einen Zähler erhöht oder einen Timer gegen ein Bildliteral
-vergleicht, läuft bei 60 Hz anders (`docs/TICKRATE-MIGRATION.md` §5.4).
+**Bildzähler und Tickrate (Phase 20, geändert in Phase 23; `docs/TICKRATE-MIGRATION.md` §1 Fall (f), §8, §15.3).** Die Tickrate ist ein Wert der Welt; die VM rechnet über `_world.Time`. Seit
+Phase 23 ist die Uhr der VM das Bild des Originals (nächster Abschnitt). Was die VM **je Update herunterzählt**, steht deshalb in Bildern und wird nicht skaliert: Timer (`SET_TIMER`,
+`SET_RANDOM_TIMER`; `SET_MILLISECOND_TIMER` und Verwandte: Sekunden auf ganze Bilder des Originals aufgerundet), die Wartezeit der `*_FOR_FRAMECOUNT`-Aktionen und der Endspiel-Zeitgeber
+(`EndGameDelayFrames` = 120 Updates; `QUICKVICTORY` das nächste Update). *Skaliert* wird weiter, was die VM mit dem **Tick der Welt** vergleicht oder der Welt als Dauer übergibt:
+`DelayEvaluationSeconds` und der erste Auswertungstick verzögerter Skripte (`NameHash % 61` Bilder), `teamInitialIdleFrames`, die Präsentationslatenz (`PresentationLatencyTicks`, trotz des Namens in
+Bildern), die eigenen Rhythmen (Neuziel alle 30 Bilder, Übernahme-Wiederholung, Versorgungsscan), `SCRIPTING_OVERRIDE_HULK_LIFETIME` und der Countdown einer Spezialkraft. Alle diese Werte liegen auf
+dem Raster der Bilder, die VM trifft sie also genau. *Nicht skaliert* wird, was die Simulation als Text verlässt: die `Arguments` eines `ScriptOutput` sind die Parameter der Karte, eine Bildzahl
+darunter (`CAMERA_FADE_*`, `CAMERA_BW_MODE_*`) ist bei jeder Rate eine Zahl von Bildern des Originals (1/30 s); `ScriptOutput.Tick` ist ein Tick der Welt. Der Wert eines Timers (`CounterValue`) ist
+bei jeder Rate eine Zahl von **Bildern des Originals**.
+
+### Die Uhr der VM ist das Originalbild (Phase 23)
+
+Das Original ruft `ScriptEngine::update` genau einmal je Logikbild (`GameLogic.cpp`, `GameLogic::update`: `TheScriptEngine->UPDATE()` vor den Objekten), und die Karten sind dagegen geschrieben: sie
+vergleichen laufende Timer mit Bildzahlen (`COUNTER`), rechnen auf Timern (`INCREMENT_COUNTER`), zählen ihre eigenen Auswertungen und fragen Flanken „seit der vorigen Auswertung“ ab. Nichts davon lässt
+sich auf eine andere Schrittweite umrechnen. Die VM benutzt deshalb den **Ausweg „Originalraster“** (`docs/HANDOFF-PHASE23.md`, Liste in `docs/SIMULATION-CORE.md` §41): `ScriptEngine.Update(tick)` wird
+weiter in jedem Tick aufgerufen, arbeitet aber nur auf den Ticks, die ein Bild des Originals beginnen (`Time.IsOriginalFrameBoundary`: jeder Tick bei 30 Hz, jeder zweite bei 60 Hz, jeder vierte bei
+120 Hz). Bei 30 Hz ändert sich dadurch nichts.
+
+**Der Befund, der das ausgelöst hat** (`MD_USA02`, Zielfahrer bei 30 und 60 Hz): `Global Timers` setzt den Timer `Convoy Trucks` mit `SET_TIMER` auf 16.000 Bilder, `Truck01 Deploy` wartet auf
+`COUNTER(Convoy Trucks < 15000)`. Bei 30 Hz sind das 1.001 Bilder (33,4 s). Mit einem Timer in Ticks stand der Wert bei 60 Hz auf 32.000 und fiel erst nach 17.001 Ticks (283,4 s) unter das Bildliteral
+15.000: der erste Lastwagen erschien bei 326,5 s statt 76,5 s, das Siegskript `END_Final_` lief bei 340,57 s statt 90,60 s, das Niederlagenskript bei 529,52 s statt 412,03 s.
+
+| Was | läuft | Warum |
+|---|---|---|
+| alles in `ScriptEngine.Update`: Endspiel-Zeitgeber, Ablauf der Präsentationslatenz, `PruneTeams`, Timer, alle Skripte, `UpdateFollowers`, `UpdateButtonHunts`, `ProcessTeamEvents`, `ProcessSequences`, `ProcessTeamBuilds`, `UpdateTeamQueues`, `UpdatePhase13` (Übernahme, wartende Bauaufträge, Sprengfallen, Brückenzustände) | einmal je Originalbild | ein Update des Originals; Zähler, Flanken („zweimal hintereinander untätig“, „ein Update lang“, „Befehl in diesem Update erteilt“) und „ein Befehl je Update“ behalten so ihre Bedeutung in Spielzeit |
+| `ScriptEngine.Observe` (Ereignisse der Welt: Schaden, Tod eines Teammitglieds, Betreten eines Gebäudes, neue Einheit, Spezialkraft, Upgrade) | in jedem Tick nach dem Weltschritt | nichts, was zwischen zwei Updates geschieht, geht verloren; die VM liest die gesammelten Tabellen beim nächsten Update |
+| „hat dieses benannte Objekt je existiert“ (`NoteNamedObjectsThatExist`, `didUnitExist`) | in jedem Tick | ein Objekt, das zwischen zwei Updates erscheint und wieder verschwindet, gilt sonst als nie erzeugt |
+| die Auskünfte der VM an die Welt (Angriffsprioritäten, Stimmung: `AcquisitionAdvisor`), Bewegung, Befehlsannahme, Zielerwerb | in jedem Tick (Welt) | für sie ist der Ausweg nicht zulässig; die Befehle der VM werden wie jeder andere Befehl im Weltschritt des Ticks angenommen, in dem sie erteilt wurden |
+| `_tick`, `_busyThisTick` leeren | in jedem Tick | reine Buchführung des Aufrufs; ein Zustand, der zwischen zwei Bildern gespeichert wird, setzt identisch fort |
+
+- **`FREEZE_TIME`.** Die Welt steht, ihr Tick bleibt stehen, der Host ruft `MissionSession.Step` weiter im Takt der Rate. Die VM zählt diese Aufrufe selbst (`BeginsFrame`, Zustand `frozenPhase`, nur
+  geschrieben, wenn ungleich 0 – bei 30 Hz nie) und bleibt so auch im Stillstand auf dem Bild: ein Timer von 30 Bildern dauert eingefroren bei jeder Rate eine Sekunde an Schritten.
+- **`UNIT_EMPTIED`** vergleicht mit dem **vorigen Bild** (`ScriptConditions::evaluateUnitHasEmptied`: `m_frameNumber == frameNum - 1`), also mit dem Tick `Rate/30` zurück.
+- **Flanken** (`NAMED_/TEAM_ENTERED/EXITED_AREA*`, `PLAYER_LOST_OBJECT_TYPE`, Brückenzustand): verglichen wird mit der vorigen Auswertung, und die liegt bei jeder Rate auf demselben Spielzeitpunkt.
+  Betritt und verlässt eine Einheit ein Gebiet zwischen zwei Bildern, sieht das die VM bei 60/120 Hz so wenig wie bei 30 Hz, wo es diese Zwischenlagen gar nicht gibt.
+- **Standbefehle der VM** (`UpdateFollowers`: Ankunft am Wegpunkt, Neuausgabe des Marschbefehls, der Schuss eines Angriffsbefehls über `FireAtOrdered`) laufen mit der VM je Bild. Das ist der
+  Befehlstakt der Skripte, nicht die Bewegung oder der Zielerwerb der Einheiten: die Zahl der Befehle je Spielzeit ist bei jeder Rate die von 30 Hz, eine Ankunft wird höchstens `Rate/30 − 1` Ticks
+  später bemerkt.
+- **Zustand und Formate.** Bei 30 Hz ändert sich kein Byte, es gibt keine Versionserhöhung (`MissionSnapshot` 3). Bei 60/120 Hz haben drei Felder des Skriptzustands eine neue **Bedeutung** ohne
+  neues Format: `counters[].value` eines Timers, `sequences[].queue[].wait` und `endTimer` zählen Bilder statt Ticks. Gespeicherte Stände dieser Raten gibt es nicht (Golden-Werte entstehen erst mit
+  der Umstellung auf 60 Hz); ein Stand, der mit einem älteren Build bei 60/120 Hz geschrieben wurde, würde seine Timer doppelt bzw. vierfach so schnell ablaufen sehen.
+- **Verbraucher außerhalb der Simulation:** einzig `MissionPresentationDirector.CounterForDisplay` liest den Wert eines Timers; es rechnet nicht mehr um. `EndGameDelay` (Ticks der Welt bis `IsEnded`)
+  bleibt als Eigenschaft für Hosts.
+- **Tests** (`Tests.TickRate.ScriptClock.cs`, `Tests.TickRate.ScriptEvents.cs`, je bei 30, 60 und 120 Hz in einem Lauf): Zähler je Auswertung, Bild- und Sekundentimer, Timer gegen Bildliteral
+  (das Muster von `MD_USA02`), Sequenzwartezeit, `FREEZE_TIME`, Speichern zwischen zwei Bildern (auch eingefroren), `UNIT_EMPTIED`, Gebietsflanke und Tod zwischen zwei Bildern, ein benanntes Objekt,
+  das nur zwischen zwei Bildern lebte. Messung über alle 24 Kampagnenkarten: `docs/TICKRATE-MIGRATION.md` §15.3.
 
 `Observe` nimmt die Ereignisse des Ticks entgegen: `EntityDamaged` → letzter Angreifer eines Objekts (Besitzer, Typ; Grundlage der
 `*_ATTACKED_BY_*`-Bedingungen, nie zurückgesetzt wie `getLastDamageInfo`), `EntityContained` → letzter Spieler, der ein Gebäude betrat.
@@ -164,10 +201,10 @@ Befehlsliste führen (422 Skripte auf 21 der 24 Karten benutzen `TEAM_EXECUTE_SE
 
 - Ein **Läufer** (`SequenceRunner`) gehört einem Team oder einem Objekt und hat eine Warteschlange von Skripten (`SequenceItem`: Skript, Wiederholungen, Befehlszeiger, Wartezeit, „halten“). Ein
   weiterer Aufruf für dasselbe Team/Objekt hängt hinten an. `TEAM_EXECUTE_SEQUENTIAL_SCRIPT` stoppt das Team zuerst (`groupIdle`).
-- Jeden Tick: ist die Gruppe **untätig** (kein Bewegungsziel, kein stehender Folgeauftrag, in diesem Tick kein Befehl erteilt) und keine Wartezeit offen (`FramesToWait < 1`), oder ist die
+- Jedes Update (ein Bild des Originals, §2): ist die Gruppe **untätig** (kein Bewegungsziel, kein stehender Folgeauftrag, in diesem Update kein Befehl erteilt) und keine Wartezeit offen (`FramesToWait < 1`), oder ist die
   Wartezeit genau 0, läuft **eine** Aktion der Wahr-Liste des Skripts (die Bedingungen des Skripts werden nie ausgewertet). Bleibt die Gruppe danach untätig, läuft derselbe Läufer im
-  selben Tick weiter (bis 256 Schritte); ein Befehl (Bewegung, Folgeauftrag, Eintritt) macht sie beschäftigt, eine `*_FOR_FRAMECOUNT`-Aktion setzt die Wartezeit, die dann tickweise
-  herabzählt.
+  selben Update weiter (bis 256 Schritte); ein Befehl (Bewegung, Folgeauftrag, Eintritt) macht sie beschäftigt, eine `*_FOR_FRAMECOUNT`-Aktion setzt die Wartezeit in Bildern, die dann je
+  Update herabzählt (N Bilder halten die Sequenz N + 1 Updates).
 - Ende des Skripts: `Loops != 0` hängt eine frische Kopie hinten an (`-1` = ewig; `…_LOOPING(n)` heißt n Läufe, intern n−1 Wiederholungen); danach fällt das Skript aus der Warteschlange.
   Ein Team ohne lebende Mitglieder oder ein totes/zerstörtes Objekt beendet den Läufer samt aller dahinter wartenden Skripte (`cleanupSequentialScript(…, TRUE)`).
 - `TEAM_WAIT_FOR_NOT_CONTAINED_ALL/PARTIAL` und `SKIRMISH_WAIT_FOR_COMMANDBUTTON_AVAILABLE_ALL/PARTIAL` behandelt der Läufer selbst (Haltemarke statt Aktion); außerhalb eines Sequenzskripts
@@ -187,8 +224,8 @@ sechsten Welle hängt an `teamOnUnitDestroyedScript`).
   also „schon bei der ersten Verlustmeldung“, wie im Original).
 - **Einheit zerstört:** je `EntityDied` eines Mitglieds, ausgeführt am Anfang des nächsten Updates (die Warteschlange wird gespeichert).
 - **Zerstört:** wenn die Zahl lebender Mitglieder sich ändert und die Schwelle erreicht ist; läuft einmal (`threshold = −1` danach).
-- **Gegner gesichtet/Lage klar:** je Tick, ob irgendein lebendes Mitglied einen Feind im eigenen `VisionRange` hat; der Wechsel löst das Skript aus (nur solange mindestens ein Mitglied lebt).
-- **Untätig:** zweimal hintereinander untätig (`isIdle && wasIdle`) löst es aus, bei jedem weiteren Tick wieder.
+- **Gegner gesichtet/Lage klar:** je Update (ein Bild des Originals), ob irgendein lebendes Mitglied einen Feind im eigenen `VisionRange` hat; der Wechsel löst das Skript aus (nur solange mindestens ein Mitglied lebt).
+- **Untätig:** zweimal hintereinander untätig (`isIdle && wasIdle`) löst es aus, bei jedem weiteren Update wieder.
 - Zustand je Team (`eventsCreateHandled`, `eventsCurUnits`, `eventsThreshold`, `eventsSeeEnemy`, `eventsWasIdle`) wird nur für Prototypen mit mindestens einem Ereignisskript geschrieben.
 
 ## 5c. Die `SKIRMISH_*`-Familie: Entscheidung (Phase 11)
@@ -527,8 +564,8 @@ Der Director benutzt den Tick weiter als Uhr, nimmt aber nicht mehr an, dass er 
 | `DISPLAY_CINEMATIC_TEXT` | Sekunden | Ablauf in Originalbildern (`(long)seconds * OriginalFrame.PerSecond`) |
 | Platzhalter für Sprache, Ton, Film (3 s), Radarereignis (8 s) | eigene Dauern | Konstanten in Originalbildern, in Ticks der Welt verglichen |
 | Letterbox-Blende (`LETTER_BOX_FADE_TIME` 1000 ms) | Wandzeit im Original | `LetterboxFadeFrames = OriginalFrame.PerSecond` Originalbilder der **Präsentationsuhr** (siehe unten) |
-| benannte Zähler | Timerwert der VM in Ticks | `CounterForDisplay` rechnet in Originalbilder |
-| `PresentationLatencyTicks` | Originalbilder (Einheit der Option) | `LiveMission.ClientPresentationLatencyFrames = 60 * OriginalFrame.PerSecond`; die VM skaliert |
+| benannte Zähler | Timerwert der VM in Originalbildern (seit Phase 23, §2) | `CounterForDisplay` reicht den Wert durch |
+| `PresentationLatencyTicks` | Originalbilder (Einheit der Option) | `LiveMission.ClientPresentationLatencyFrames = 60 * OriginalFrame.PerSecond`; die VM skaliert (Vergleich mit dem Tick der Welt) |
 
 **Abweichung vom Auftrag (bewusst):** der Auftrag der Phase 21 nennt die Letterbox-Blende „als Wandzeit wie im Original“. Sie bleibt auf der Präsentationsuhr: so steht sie mit einem pausierten Spiel, bleibt in Tests und Aufnahmen reproduzierbar und bei 30 Hz bildgleich; in Sekunden dauert sie bei jeder Rate gleich lang (gemessen 1,0333 / 1,0167 / 1,0083 s bei 30 / 60 / 120 Hz bis zur vollen Deckung). Wer sie an die Wandzeit hängen will, ändert `LetterboxFadeLevel` – und damit die Aufnahmen der Missionsintros.
 

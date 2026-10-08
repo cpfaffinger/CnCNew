@@ -112,14 +112,14 @@ public sealed partial class ScriptEngine
         runner.Queue.Add(new SequenceItem { ScriptIndex = script.Index, Loops = loops });
     }
 
-    /// <summary><c>setSequentialTimer</c>: the first runner of the team/object waits that many ticks before its next instruction.</summary>
-    /// <param name="frames">The wait in logic frames of the original, as the map states it (<c>*_FOR_FRAMECOUNT</c>); the countdown runs in ticks.</param>
+    /// <summary><c>setSequentialTimer</c>: the first runner of the team/object waits that many frames before its next instruction.</summary>
+    /// <param name="frames">The wait in logic frames of the original, as the map states it (<c>*_FOR_FRAMECOUNT</c>); the countdown runs once per update of the engine, which is once per frame.</param>
     private void SetSequenceTimer(int teamId, uint objectId, int frames)
     {
         foreach (var runner in _sequences)
             if ((objectId != 0 && runner.ObjectId == objectId) || (teamId != 0 && runner.TeamId == teamId))
             {
-                if (runner.Queue.Count > 0) runner.Queue[0].FramesToWait = _world.Time.OriginalFrames(frames);
+                if (runner.Queue.Count > 0) runner.Queue[0].FramesToWait = frames;
                 return;
             }
     }
