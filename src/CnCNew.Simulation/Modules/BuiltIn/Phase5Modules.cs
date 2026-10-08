@@ -848,7 +848,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         EndExitPath();
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
-        _frameSpeed = Fixed.Zero;
+        ClearFrameSpeed();
         InvalidatePath();
         _dock = new DockMachine(dock.Id);
         if (_dock.Enter(world, this) != DockStatus.Continue) EndDock(world);
@@ -994,7 +994,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (!Entity.HasMoveTarget) return;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
-        _frameSpeed = Fixed.Zero;
+        ClearFrameSpeed();
         // A stopped object does not cover the rest of the frame's step it was on.
         _frameTicksLeft = 0;
         InvalidatePath();
@@ -1051,7 +1051,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     {
         _paralyzedUntil = Math.Max(_paralyzedUntil, tick);
         Entity.Speed = Fixed.Zero;
-        _frameSpeed = Fixed.Zero;
+        ClearFrameSpeed();
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
         world.MarkDirty(Entity);
     }
@@ -1062,7 +1062,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         {
             // DISABLED_EMP (EMPUpdate): the object cannot act until the disable runs out; its orders stay.
             Entity.Speed = Fixed.Zero;
-            _frameSpeed = Fixed.Zero;
+            ClearFrameSpeed();
             return SimulationTiming.SleepNone;
         }
         if (world.Tick < _paralyzedUntil) return SimulationTiming.SleepNone;
@@ -1248,7 +1248,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             // Blocked: no cell next to the object can be entered. The order ends without an arrival.
             Entity.HasMoveTarget = false;
             Entity.Speed = Fixed.Zero;
-            _frameSpeed = Fixed.Zero;
+            ClearFrameSpeed();
             InvalidatePath();
             return;
         }
@@ -1277,7 +1277,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             var complete = _pathComplete;
             Entity.HasMoveTarget = false;
             Entity.Speed = Fixed.Zero;
-            _frameSpeed = Fixed.Zero;
+            ClearFrameSpeed();
             InvalidatePath();
             if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
             return;
@@ -1583,7 +1583,17 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (_stride == 1) return Entity.Speed;
         // A frame speed below one raw step per tick publishes a speed per tick of zero and is still the speed the 30 Hz step goes on with (a braking object passes through
         // such a value); the module clears _frameSpeed wherever it stops the object itself, so a published zero with a larger frame speed means "stopped from outside".
+        // What the object itself carries comes first: an object with two AI modules (the Chinook of the air force general) moves with one speed that both of them raise in turn,
+        // as they do with Entity.Speed at 30 Hz.
+        if (Entity.Speed.Raw == Entity.SpeedPerFrame.Raw / _stride) return Entity.SpeedPerFrame;
         return Entity.Speed.Raw == _frameSpeed.Raw / _stride ? _frameSpeed : Entity.Speed * _stride;
+    }
+
+    /// <summary>The module stops the object itself: no speed of a frame is left, neither its own nor the one the object carries.</summary>
+    private void ClearFrameSpeed()
+    {
+        _frameSpeed = Fixed.Zero;
+        if (Entity.SpeedPerFrame != Fixed.Zero) Entity.SpeedPerFrame = Fixed.Zero;
     }
 
     /// <summary>
@@ -1600,6 +1610,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         _frameSpeed = speed;
+        Entity.SpeedPerFrame = speed;
         Entity.Speed = Fixed.FromRaw(speed.Raw / _stride);
     }
 
@@ -1640,7 +1651,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         // The end of the move, in the order of the 30 Hz arrival (which tests no collision in its step either).
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
-        _frameSpeed = Fixed.Zero;
+        ClearFrameSpeed();
         InvalidatePath();
         _frameArriving = true;
         if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
@@ -1778,7 +1789,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             Entity.Y = Entity.MoveTargetY;
             Entity.HasMoveTarget = false;
             Entity.Speed = Fixed.Zero;
-            _frameSpeed = Fixed.Zero;
+            ClearFrameSpeed();
             world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
             return;
         }

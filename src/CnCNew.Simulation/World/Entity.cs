@@ -138,6 +138,12 @@ public sealed class Entity
     /// <summary>Current forward speed (dist/tick); moves along <see cref="Angle"/>. 0 unless the object has an active move order.</summary>
     public Fixed Speed { get; internal set; }
 
+    /// <summary>
+    /// Above 30 Hz only: the speed per logic frame of the original that <see cref="Speed"/> (per tick) is the share of, as the mover that set it computed it (the division by the ticks
+    /// per frame loses its last bits). Two AI modules of one object hand their speed to each other through it. Never set at 30 Hz, described only when set.
+    /// </summary>
+    internal Fixed SpeedPerFrame { get; set; }
+
     public bool HasMoveTarget { get; internal set; }
     public Fixed MoveTargetX { get; internal set; }
     public Fixed MoveTargetY { get; internal set; }
@@ -335,6 +341,7 @@ public sealed class Entity
             writer.Int("aheadTick", AheadTick);
         }
         if (DestroyNotBefore != 0) writer.Int("destroyNotBefore", DestroyNotBefore);
+        if (SpeedPerFrame != Fixed.Zero) writer.Fixed("speedPerFrame", SpeedPerFrame);
         if (HasAheadAngle)
         {
             writer.Fixed("aheadAngle", AheadAngle);
