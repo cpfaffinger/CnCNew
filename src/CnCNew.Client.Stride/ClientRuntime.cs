@@ -95,6 +95,29 @@ internal sealed class ClientRuntime : IDisposable
         return runtime;
     }
 
+    /// <summary>A skirmish between computer players that the viewer only watches (<c>--spectate</c>, docs/SPECTATOR-MODE.md): the observer HUD replaces the player's.</summary>
+    public static ClientRuntime ForSpectator(global::Stride.Engine.Game game, GameData data, LiveMatch match, ClientAudioOptions audio, CnCNew.Game.Spectator.SpectatorOptions options)
+    {
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio);
+        var running = runtime.Start(match, null);
+        // The player's HUD stays behind the scenes (sound, input script, camera scrolling); it gets no input of its own and is never drawn.
+        running.Spectator = new CnCNew.Game.Spectator.SpectatorController(match, running.Hud, options, runtime._ui.TextMeasure);
+        runtime._running = running;
+        return runtime;
+    }
+
+    private readonly SpectatorFrameCost _spectatorCost = new();
+
+    /// <summary>The CPU time of one frame (update and draw), counted for the spectator's report at the zoom the frame was drawn with.</summary>
+    public void NoteFrameCost(double updateMilliseconds, double drawMilliseconds)
+    {
+        if (_running?.Spectator is { } spectator) _spectatorCost.Note(spectator.IsFarZoom, updateMilliseconds, drawMilliseconds, _running.Host.ObjectStats, _running.Host.Match);
+    }
+
+    /// <summary>The spectator's report for the console (what the match did, the simulated cameras, the panels, the frame cost at near and far zoom); empty without a spectator.</summary>
+    public IReadOnlyList<string> FinishSpectator()
+        => _running?.Spectator is { } spectator ? [..spectator.Report(), .._spectatorCost.Report()] : [];
+
     /// <summary>A staged demonstration (<c>--scenario</c>), with the skirmish HUD.</summary>
     public static ClientRuntime ForScenario(global::Stride.Engine.Game game, GameData data, LiveScenario scenario, ClientAudioOptions audio)
     {
@@ -213,6 +236,7 @@ internal sealed class ClientRuntime : IDisposable
             running.Step(events, seconds, width, height, gameTime, _game.GraphicsContext.CommandList, fixedSeconds);
             _script?.Observe();
             ApplyPendingSelection();
+            if (running.Spectator is { QuitRequested: true }) ExitRequested = true;
             if (_clockMs >= _nextDots)
             {
                 _nextDots = _clockMs + 250;
@@ -349,7 +373,7 @@ internal sealed class ClientRuntime : IDisposable
         if (list is not null)
             foreach (var command in list.Commands) _ui.Execute(command);
         // The cursor lies on top of everything: the shell and the in-game menu show the arrow, a running game its context cursor.
-        if (_pointer is { } pointer) _cursor.Draw(_ui, _running?.Hud.Cursor ?? CursorState.Arrow, pointer, _clockMs);
+        if (_pointer is { } pointer) _cursor.Draw(_ui, _running is { Spectator: null } playing ? playing.Hud.Cursor : CursorState.Arrow, pointer, _clockMs);
         _ui.End();
     }
 
@@ -383,6 +407,9 @@ internal sealed class ClientRuntime : IDisposable
         public MissionController? Mission { get; } = mission;
         public StartMissionOutput? Start { get; } = start;
 
+        /// <summary>Set for a match nobody plays: the spectator takes the input and draws the HUD instead of <see cref="Match"/>.</summary>
+        public CnCNew.Game.Spectator.SpectatorController? Spectator { get; set; }
+
         /// <summary>The per-player counts the score screen shows, fed by every simulated tick of a skirmish match.</summary>
         public MatchStatistics Statistics { get; } = new();
         public MatchController Hud => Match ?? Mission!.Hud;
@@ -392,12 +419,18 @@ internal sealed class ClientRuntime : IDisposable
         {
             foreach (var inputEvent in events)
             {
-                if (Mission is { } missionController) missionController.Process(inputEvent);
+                if (Spectator is { } spectator) spectator.Process(inputEvent);
+                else if (Mission is { } missionController) missionController.Process(inputEvent);
                 else Match!.Process(inputEvent);
             }
             Host.Update(gameTime, commandList, width, height, fixedSeconds, elapsed =>
             {
-                if (Mission is { } missionController) missionController.Update(elapsed);
+                if (Spectator is { } spectator)
+                {
+                    Host.Match.Advance(elapsed);
+                    spectator.Update(elapsed);
+                }
+                else if (Mission is { } missionController) missionController.Update(elapsed);
                 else
                 {
                     Host.Match.Advance(elapsed);
@@ -415,7 +448,8 @@ internal sealed class ClientRuntime : IDisposable
             return true;
         }
 
-        public CnCNew.Ui.Runtime.UiDrawList BuildDrawList(int width, int height) => Mission is { } controller ? controller.BuildDrawList(width, height) : Match!.BuildDrawList(width, height);
+        public CnCNew.Ui.Runtime.UiDrawList BuildDrawList(int width, int height)
+            => Spectator is { } spectator ? spectator.BuildDrawList(width, height) : Mission is { } controller ? controller.BuildDrawList(width, height) : Match!.BuildDrawList(width, height);
 
         public void Dispose() => Host.Dispose();
     }

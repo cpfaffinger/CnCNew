@@ -54,7 +54,16 @@ var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
     HumanSide = GetArgument(args, "--human-side") ?? string.Empty,
     Scenario = scenario,
     SelectOwn = args.Contains("--select-own", StringComparer.OrdinalIgnoreCase),
+    // --spectate: nobody plays; --faction and --opponent are both computer players and the observer HUD replaces the player's (docs/SPECTATOR-MODE.md).
+    Spectate = args.Contains("--spectate", StringComparer.OrdinalIgnoreCase),
+    SpectatorMaxZoom = GetArgument(args, "--spectator-max-zoom") is { } maxZoom ? float.Parse(maxZoom, System.Globalization.CultureInfo.InvariantCulture) : null,
+    SpectatorSpeed = GetArgument(args, "--spectator-speed") is { } speed ? double.Parse(speed, System.Globalization.CultureInfo.InvariantCulture) : 1,
 };
+if (liveOptions is { Spectate: true } && (matchMap is null || scenario is not null))
+{
+    throw new ArgumentException("--spectate requires --match.");
+}
+
 if (matchMap is not null && missionMap is not null)
 {
     throw new ArgumentException("--match and --mission exclude each other.");
@@ -140,6 +149,15 @@ internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<st
 
     /// <summary>A staged demonstration instead of a skirmish (--scenario NAME; the map is the scenario's).</summary>
     public CnCNew.Game.Live.DemoScenario? Scenario { get; init; }
+
+    /// <summary>Nobody plays the skirmish (--spectate): every slot is a computer player, the viewer watches with the observer HUD.</summary>
+    public bool Spectate { get; init; }
+
+    /// <summary>The spectator's zoom-out limit as a height above ground (--spectator-max-zoom); null: the height from which the whole map is on screen.</summary>
+    public float? SpectatorMaxZoom { get; init; }
+
+    /// <summary>The game speed a spectated match starts with (--spectator-speed; 1 is real time).</summary>
+    public double SpectatorSpeed { get; init; } = 1;
 }
 
 internal sealed class CnCNewGame(
@@ -322,9 +340,16 @@ internal sealed class CnCNewGame(
             Window.Title = $"CnCNew — {scenario.Name}: {scenario.Title}";
             return;
         }
-        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed, AutoPlay = options.AutoPlay };
+        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed, AutoPlay = options.AutoPlay, Spectator = options.Spectate };
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
         ApplyCamera(match.Camera, options);
+        if (options.Spectate)
+        {
+            _runtime = ClientRuntime.ForSpectator(this, data, match, audioOptions, new CnCNew.Game.Spectator.SpectatorOptions(options.SpectatorMaxZoom, options.SpectatorSpeed, options.Seed));
+            Console.WriteLine($"spectator: seed {options.Seed}, map {mapPath}, {options.Faction} against {string.Join(", ", options.Opponents)}");
+            Window.Title = $"CnCNew — spectator — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)} — seed {options.Seed}";
+            return;
+        }
         _runtime = ClientRuntime.ForMatch(this, data, match, audioOptions);
         if (options.SelectOwn) _runtime.SelectOwn();
         Window.Title = $"CnCNew — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)}";
@@ -352,6 +377,7 @@ internal sealed class CnCNewGame(
             foreach (var line in _runtime.FinishAudio()) Console.WriteLine(line);
             foreach (var line in _runtime.FinishMission(missionJournalLines)) Console.WriteLine(line);
             foreach (var line in _runtime.FinishInputScript()) Console.WriteLine(line);
+            foreach (var line in _runtime.FinishSpectator()) Console.WriteLine(line);
             UnresolvedInputSteps = _runtime.UnresolvedInputSteps;
         }
         _runtime?.Dispose();
@@ -361,14 +387,24 @@ internal sealed class CnCNewGame(
         base.UnloadContent();
     }
 
+    private readonly System.Diagnostics.Stopwatch _costWatch = new();
+    private double _updateMilliseconds;
+
     protected override void Update(GameTime gameTime)
+    {
+        _costWatch.Restart();
+        UpdateFrame(gameTime);
+        _updateMilliseconds = _costWatch.Elapsed.TotalMilliseconds;
+    }
+
+    private void UpdateFrame(GameTime gameTime)
     {
         base.Update(gameTime);
         if (_runtime is not null)
         {
             var back = GraphicsDevice.Presenter.BackBuffer;
             _runtime.Update(gameTime, Input, back.Width, back.Height, smokeTest ? SmokeStepSeconds : null);
-            if (_runtime.Game is { } game) Window.Title = $"CnCNew — {game.HumanFaction}";
+            if (_runtime.Game is { } game && liveOptions is not { Spectate: true }) Window.Title = $"CnCNew — {game.HumanFaction}";
             if (_runtime.PendingResolution is { } resolution)
             {
                 GraphicsDeviceManager.PreferredBackBufferWidth = resolution.Width;
@@ -396,8 +432,10 @@ internal sealed class CnCNewGame(
 
     protected override void Draw(GameTime gameTime)
     {
+        _costWatch.Restart();
         base.Draw(gameTime);
         _runtime?.Draw(GraphicsContext, GraphicsDevice);
+        _runtime?.NoteFrameCost(_updateMilliseconds, _costWatch.Elapsed.TotalMilliseconds);
         // --filmstrip DIR --every N: a PNG every N rendered frames (frame-00030.png ...), so a staged demo can be judged as a sequence without a window.
         if (filmstripDirectory is not null && filmstripEvery > 0 && _renderedFrames > 0 && _renderedFrames % filmstripEvery == 0 && _lastFilmFrame != _renderedFrames)
         {
