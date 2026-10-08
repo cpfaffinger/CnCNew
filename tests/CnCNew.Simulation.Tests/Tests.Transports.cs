@@ -325,7 +325,8 @@ static partial class Tests
         feeder.Spawn(1, "Depot", x: 0, y: 0);
         feeder.Spawn(0, "Stockpile", owner: 0, x: 300, y: 0);
         feeder.Spawn(1, "Rotorcraft", x: 0, y: 0);
-        world.Step();
+        // The Chinook's first logic frame begins one frame after it appeared (one tick at 30 Hz).
+        for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
         var chinook = Get(world, "Rotorcraft");
         for (var tick = 0; tick < world.Frames(19); tick++) world.Step();
         Check.That(chinook.Z == Fixed.FromInt(95), $"Climbing at 5 per tick (got {chinook.Z}).");
@@ -388,7 +389,8 @@ static partial class Tests
     {
         var world = TransportWorld(out _, out var feeder);
         feeder.Spawn(1, "Rotorcraft", x: 0, y: 0);
-        world.Step();
+        // The Chinook's first logic frame begins one frame after it appeared (one tick at 30 Hz).
+        for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
         var chinook = Get(world, "Rotorcraft");
         for (var tick = 0; tick < world.Frames(20); tick++) world.Step();
         Check.That(chinook.Z == Fixed.FromInt(100), "Setup: the Chinook flies at 100.");
