@@ -1598,3 +1598,293 @@ Bei 30 Hz hat sich in beiden Runden nichts geändert: das volle Referenzmanifest
 Nach Runde 2 außerhalb der Toleranz, je Gruppe (60 / 120 Hz): `ai` 24 / 23 (bis zum Beginn des ersten Gefechts bei 117,9 s sind alle Positionen zwischen 30 und 60 Hz bitgleich; danach liest der nächste Leser noch nicht die Bildende-Sicht – die Blickrichtung eines Schützen, der mitten im Bild anhält), `projectiles` 4 / 4 (Streusalven, nicht zurückverfolgt), `turrets` 4 / 0 (Wachdrohne, `DeployStyleAIUpdate`), `flight` 0 / 3 (Ankunftsschwellen des Flügelflugs bei 120 Hz), `locomotion` 2 / 2 (Mob-Mitglieder lesen ihren Nexus an der Momentanposition), `timed` 1 / 1 (`CINE_BShipWeaponDetonationObject` endet bei 30 Hz nie – ein Fehler bei 30 Hz); `weapons`, `overtime`, `economy`, `scripts` 0 / 0.
 
 **Entscheidung.** Der Auftrag der Phase enthielt ein Abbruchkriterium: bestehen Suite oder Verteilungsvergleich nach zwei Messrunden je Gruppe nicht, bleibt der Standard bei 30 Hz. Nach Runde 2 bestand der Vergleich, die Suite nicht vollständig. Der Projektinhaber hat das Kriterium am 8. Oktober 2026 **aufgehoben**: das Ziel der Phase – die Suite besteht bei 30, 60 und 120 Hz, danach ist 60 Hz der Standard – ist zu erreichen, und alles, was auf dem Weg dorthin liegt, wird behoben. Das schließt Korrekturen ein, die das Verhalten bei 30 Hz ändern, wo die Ursache ein Fehler bei 30 Hz ist; sie bleiben je eine Ursache in einem eigenen Commit mit neu geschriebenem Manifest (`docs/MULTIPLAYER-PLAN.md` §6 Regeln 2 und 3). Unverändert gilt: keine Toleranz und keine Testgrenze wird an ein Ergebnis angepasst.
+
+### 15.5 Die Umstellung des Standards: Inventar
+
+Stand 8. Oktober 2026, Ausgang `203806e`. Gesucht ist in `src/`, `tools/`, `tests/` und `scripts/` nach `Hz30`, `SimulationRate.Original`, `DefaultSessionRate`, `ToolRate`, `TestRate`, `TickRate = 30`, `--tick-rate`, `tickRate` und nach Tickbudgets, die Spielzeit bei 30 Hz meinen. Die Tabelle nennt jede Stelle, die die **Standardrate** benennt oder unterstellt – nicht die Stellen, die das Originalbild meinen (`SimulationRate.Original` als Raster in der Simulation, `OriginalFrame.PerSecond` außerhalb) und nicht die Tests, die ihre Raten selbst nennen (Drei-Raten-Tests). „Vorbereitung“ heißt: in einem Commit vor der Umstellung so geändert, dass sich bei 30 Hz nichts ändert; „folgt“ heißt: die Stelle leitet ihren Wert ab und wird im Umstellungs-Commit nicht angefasst.
+
+**Regel nach der Vorbereitung.** Die Standardrate ist an genau einer Stelle definiert: `src/CnCNew.Game/Data/ProductRate.cs` (`ProductRate.TicksPerSecond`). Die Simulation kennt keinen Standard – wer eine Welt erzeugt, nennt die Rate. Die Spielschicht macht daraus `GameData.DefaultSessionRate`; Client und Werkzeuge nehmen diesen Wert; die Testprojekte, die die Spielschicht nicht referenzieren dürfen (`Simulation.Tests`, `Presentation.Tests`, `Ui.Tests`), binden die Datei `ProductRate.cs` als Quelltext ein (`<Compile Include="../../src/CnCNew.Game/Data/ProductRate.cs" Link="…" />`), `Game.Tests` ebenso (für `tests/Shared/TestRateOption.cs`, das die Spielschicht nicht kennt). Was bei einer Rate aufgezeichnet ist (Referenz- und Eingangsmanifest, Speicherstände, Replays), trägt seine Rate in der Datei und folgt dem Standard nicht.
+
+| Stelle | Was es ist | Bei der Umstellung |
+|---|---|---|
+| `src/CnCNew.Game/Data/ProductRate.cs`, `ProductRate.TicksPerSecond` | **die eine Definition** der Standardrate (neu; `internal const int`) | **die eine geänderte Zeile:** 30 → 60 |
+| `src/CnCNew.Game/Data/GameData.cs`, `DefaultSessionRate` | Standard einer Sitzung, deren Host keine Rate nennt (`GameData.Load(…, rate: null)`); vorher `=> SimulationRate.Original` | Vorbereitung: aus `ProductRate`; folgt |
+| `src/CnCNew.Client.Stride/Program.cs` (`--tick-rate`), `Game/Shell/GameShell.cs` (`CreateLoading(…, rate)`) | Rate des Clients ohne Option: `GameData.DefaultSessionRate` | folgt |
+| `src/CnCNew.Client.Stride/Program.cs` (`--match`), `Game/Shell/Screens/SkirmishScreens.cs`, `tools/CnCNew.UiRenderTool/HudFeedbackScenes.cs` | starteten ein Gefecht mit `SkirmishMatchOptions.Standard`, dessen `MaxTicks` 108.000 **Ticks** sind: eine Stunde bei 30 Hz, bei 60 Hz wäre das Gefecht nach 30 Minuten beendet worden | Vorbereitung: `SkirmishMatchOptions.StandardAt(rate)` (eine Stunde Spielzeit bei jeder Rate); folgt |
+| `src/CnCNew.Simulation/Testing/SkirmishMatchScenario.cs`, `ReferenceMatchScenario.cs` | `Standard` mit Tickbudgets (108.000 bzw. 216.000), die Spielzeit bei 30 Hz meinen | Vorbereitung: zusätzlich `StandardAt(SimulationRate)`; `Standard` bleibt für Aufrufer mit eigenem Budget |
+| `src/CnCNew.Simulation/Testing/StressScenario.cs`, `StressOptions.Standard` | 216.000 **Schritte**, Abbau 6.000 Schritte, Kontrollpunkte alle 1.000 | bleibt (Entscheidung unten) |
+| `src/CnCNew.Simulation/Mission/MissionSession.cs`, `MissionOptions.Standard` | `MaxTicks` 0 (kein Budget), `PresentationLatencyTicks` 0 (Bilder), `CombatIntervalTicks` 3 (Schalter) | nichts zu tun |
+| `src/CnCNew.Simulation/Skirmish/Original/ScriptedSkirmishSession.cs`, `ScriptedSkirmishOptions.Standard` | `MaxTicks` 108.000 Ticks; einziger Aufrufer außerhalb der Tests ist `SimTool original-ai`, das das Budget über `ToolRate.Budget` in Spielzeit umrechnet | nichts zu tun |
+| `src/CnCNew.Simulation/Time/SimulationRate.cs`, `Combine`; `tools/CnCNew.SimTool/InputManifest.cs`, `RateAtOriginal` | bei 30 Hz bleibt der Fingerabdruck ohne Ratenanteil, damit alles bei 30 Hz Aufgezeichnete seine Identität behält; bei 60 und 120 Hz geht die Rate ein | bleibt: das ist die Identität der 30-Hz-Stände, kein Standard. Folge: der Welt-Fingerabdruck des Standards ist nach der Umstellung ein anderer (Eingangsmanifest §15.6) |
+| `tools/CnCNew.SimTool/ToolRate.cs`, `Current` (vorher `= SimulationRate.Hz30`) | Rate eines Werkzeuglaufs ohne `--tick-rate` | Vorbereitung: `GameData.DefaultSessionRate`; folgt |
+| `tools/CnCNew.SimTool/ToolRate.cs`, `Manifest` (vorher `=> SimulationRate.Hz30`) und der Satz „The manifest commands always run at the recorded 30 Hz“ (`Program.cs`, §9 dieses Dokuments) | die Manifestbefehle liefen mit einer Konstante des Werkzeugs und lehnten jede andere `--tick-rate` ab | Vorbereitung: entfällt. `check` läuft mit der Rate und in dem Schema, die **die Datei** nennt (`ToolRate.UseRecorded`), und lehnt eine abweichende `--tick-rate` ab; `write`, `show`, `results`, `list` nehmen `--tick-rate` oder den Standard |
+| `tools/CnCNew.SimTool/ReferenceManifest.cs`, `AiMatchTicks` 45.000, `EightPlayerTicks` 9.000, `EightPlayerQuickTicks` 3.000, `SweepTicks` 3.000, `MissionTicks` 3.000, `ReferenceMatchOptions.Standard.MaxTicks` 216.000 | Tickbudgets der Manifestläufe, die Spielzeit bei 30 Hz meinen | Vorbereitung: als Originalbilder (`…Frames`), je Lauf mit `rate.Time.OriginalFrames(n)` in Ticks; folgt |
+| `tools/CnCNew.SimTool/ReferenceManifest.cs`, `InputManifest.cs`, `Schema` | Dateiform der Manifeste | Vorbereitung: Schema 2 (Entscheidung unten); `check` liest Schema 1 weiter |
+| `tools/CnCNew.SimTool/Program.cs`, Standardbudgets (`ToolRate.Budget(args, …, Originalbilder)`) für `reference-match`, `ai-match`, `skirmish-sweep`, `mission-run`, `unit-audit`, `perf`, `original-ai`; `ai-survey`/`ai-census` (`--minutes`) | Spielzeit, schon vor diesem Paket | nichts zu tun |
+| `tools/CnCNew.SimTool/Program.cs`, `stress --ticks` | Schritte | bleibt |
+| `tools/CnCNew.CampaignTool/ToolRate.cs`, `Current` (vorher `= SimulationRate.Hz30`); Standardbudgets `drive` 2.000 s, `audit` 60 s, `playthrough` 30 s | Rate ohne Option; Budgets schon Spielzeit | Vorbereitung: `GameData.DefaultSessionRate`; folgt |
+| `tools/CnCNew.PresentationTool/ScenarioAudit.cs`, `SyncPerfCommand.cs` (`--tick-rate`) | ohne Option `GameData.DefaultSessionRate` | folgt |
+| `tools/CnCNew.PresentationTool/SyncPerfCommand.cs`, `--ticks` (Standard „18000“) | Tickbudget, das zehn Minuten bei 30 Hz meint | Vorbereitung: ohne `--ticks` 18.000 Originalbilder in Ticks der Rate; folgt |
+| `tools/CnCNew.PresentationTool/FxAuditCommand.cs` | nennt `SimulationRate.Original` selbst (Effekte laufen auf dem Originalbild) | bleibt bei 30 Hz, mit diesem Grund (`docs/RATE-SWITCH-OUTER-TESTS.md` §7.6) |
+| `tools/CnCNew.UiRenderTool/Program.cs` (`--tick-rate`) | ohne Option `GameData.DefaultSessionRate`; die Ausgabe ist ratenunabhängig | folgt |
+| `tools/CnCNew.MapTool`, `IniTool`, `AssetTool`, `ImageTool`, `W3dTool` | bauen keine Welt und keinen Katalog je Rate | nichts zu tun |
+| `tools/CnCNew.SimTool/RateAudit.cs`, `CatalogCost.cs`, `RateCompare.cs` | vergleichen Raten und nennen sie selbst (30 als Bezug) | bleibt |
+| `tests/CnCNew.Simulation.Tests/TestTime.cs`, `TestRate.Default` (vorher ohne Option `SimulationRate.Original`) | Rate der Standard-Testwelten | Vorbereitung: ohne Option `TestRate.Product` aus `ProductRate`; folgt |
+| `tests/Shared/TestRateOption.cs`, `TicksPerSecond` (vorher ohne Option 30), `tests/Shared/TestTime.cs`, `TestRate.Default` | dasselbe für `Presentation.Tests`, `Game.Tests`, `Ui.Tests` | Vorbereitung: `DefaultTicksPerSecond` aus `ProductRate`; folgt |
+| erste Ausgabezeile der Testprogramme („… a probe, the reference is 30 Hz“) | erschien bei jeder Rate außer 30 Hz | Vorbereitung: erscheint, wenn die Rate des Laufs nicht der Standard ist, und nennt den Standard |
+| `tests/CnCNew.Game.Tests/HotkeyTests.cs`, `SpectatorTests.cs` | luden `GameData` ohne Rate und liefen deshalb bei jeder `--tick-rate` mit dem Standard | Vorbereitung: `rate: TestRate.Default` |
+| `tests/CnCNew.Simulation.Tests/Tests.State.cs` (Referenzmatch mit Realdaten), `tests/CnCNew.Game.Tests/DeterminismTests.cs` (D3, D4) | `ReferenceMatchOptions.Standard`: 216.000 Ticks sind 2 h / 1 h / 30 min | Vorbereitung: `StandardAt(rate)`, zwei Stunden Spielzeit bei jeder Rate |
+| `tests/CnCNew.Game.Tests/SourceRuleTests.cs`, benannte Ausnahme für `GameData.cs` | „die eine Stelle außerhalb der Simulation, die eine Rate nennt“ | Vorbereitung: die Ausnahme gilt jetzt `ProductRate.cs`; der Text der Ausnahme nennt keine Zahl und passt vor und nach der Umstellung |
+| Tests mit `SimulationRate.Hz30`/`Original` als genannter Rate (`Tests.TickRate*.cs`, `Tests.RateInvariance*.cs`, `Tests.Basics.cs`, `TimeScaleTests`, `CampaignTests` „Savegame: the header carries the tick rate“, Ablehnungstexte in `Tests.State.cs`) | nennen ihre Rate selbst | bleibt |
+| `scripts/audit-scenarios.ps1`, `capture-scenarios.ps1`, `capture-text.ps1`, `capture-world.ps1`, `check-build-hotkeys.ps1`, `check-dozer-build.ps1`, `check-spectator.ps1`, `demo.ps1`, `demo-factory-exits.ps1`, `demo-spectator.ps1` (`-TickRate`, 0 bzw. nicht gesetzt = Standard des Clients/Werkzeugs) | reichen `--tick-rate` nur durch, wenn sie gesetzt ist | folgt |
+| `scripts/perf-profile.ps1`, `-TickRate 30`, `$Ticks = 30 * 60 * $TickRate`, `100 * $TickRate`, `300 * $TickRate` | einzige Zahl einer Rate in einem Skript | Vorbereitung: `-TickRate 0` = Standard des Werkzeugs; Budgets als `--minutes 30` und `--seconds 100`/`300`; die Zusammenfassung liest die Rate aus der `summary:`-Zeile des Werkzeugs (`tick_rate`); folgt |
+| `scripts/perf-compare.ps1`, `audit-vulnerable.ps1`, `demo-*.ps1` (reichen `@args` weiter) | keine Rate | nichts zu tun |
+
+**Nach der Vorbereitung nennt außerhalb der Tests, die ihre Raten prüfen, nichts mehr „30 Hz“ als Standard.** Kontrolle: `grep -rnE "Hz30|SimulationRate\.Original" tools src/CnCNew.Game src/CnCNew.Client.Stride scripts` findet nur noch `fx-audit`, die Ratenvergleiche (`RateAudit`, `CatalogCost`) und in `InputManifest.cs` die Schema-1-Regel und `RateAtOriginal`.
+
+#### 15.5.1 Manifeste: Rate und Schema stehen in der Datei
+
+- **Rate.** `reference-manifest check` und `input-manifest check` lesen die Datei zuerst und laufen mit `simulation.tickRate` der Datei. Dieselbe Binärdatei prüft damit heute das 30-Hz-Manifest und nach der Umstellung das 60-Hz-Manifest. `--tick-rate N` darf die Rate der Datei wiederholen; nennt sie eine andere, bricht der Befehl ab („… records 30 Hz; --tick-rate 60 is refused. A manifest is checked at the rate it was written at.“). `write`, `show`, `results` und `list` laufen mit `--tick-rate N`, ohne Option mit dem Standard; die Kopfzeile der Ausgabe und die Schlusszeile nennen die Rate.
+- **Schema 2 des Referenzmanifests** (`write`): die Parameter jedes Laufs nennen neben jedem Tickbudget die Spielzeit (`maxTicks` und `maxGameSeconds`, bei Missionen und beim Stresstest `ticks` und `gameSeconds`), und Werte, die Originalbilder sind, heißen so (`graceOriginalFrames`, `incomeIntervalOriginalFrames`, `sciencePointIntervalOriginalFrames` statt `graceTicks`, `incomeInterval`, `sciencePointInterval` – bei 30 Hz war der alte Name richtig, bei 60 Hz hätte `graceTicks: 300` fünf statt zehn Sekunden behauptet). Der Stresstest trägt zusätzlich `budgetCounts: "steps"`. `tickRate` steht wie bisher im Kopf und in jedem Lauf. **Die Ergebnisfelder sind in beiden Schemata dieselben.**
+- **Schema 2 des Eingangsmanifests** (`write`): zusätzlich `simulation.tickRate`. Schema 1 hatte keinen solchen Eintrag und ist nach seiner Definition bei 30 Hz geschrieben.
+- **Schema 1 wird weiter geprüft, in seiner eigenen Form.** `check` baut die Parameter so, wie das Schema der Datei sie schreibt; die eingecheckten 30-Hz-Dateien bleiben Byte für Byte, was sie sind, und brauchen vor der Umstellung **kein** Neuschreiben. Ein unbekanntes Schema und ein Referenzmanifest ohne `simulation.tickRate` werden mit Meldung abgelehnt. Der Schema-1-Pfad ist nach dem Schreiben der 60-Hz-Manifeste (Schema 2) nicht mehr nötig und kann dann entfallen.
+
+#### 15.5.2 Budgets der Manifestläufe
+
+| Lauf | Budget (Spielzeit) | Ticks bei 30 Hz | Ticks bei 60 Hz | Sicherungspunkt |
+|---|---|---:|---:|---|
+| `reference-match` | bis 2 h (`ReferenceMatchOptions.StandardAt`); endet 300 Bilder nach dem Sieg | 216.000 | 432.000 | halbe Länge des Replays |
+| 16 KI-Läufe (4 Karten × 4 Paarungen) | 25 min | 45.000 | 90.000 | halbe Länge |
+| `ai8_*` (3 Karten) | 5 min | 9.000 | 18.000 | halbe Länge |
+| `ai8_TwilightFlame_short` | 100 s | 3.000 | 6.000 | halbe Länge |
+| `skirmish-sweep` (je Karte) | 100 s, Nachlauf höchstens ein Viertel davon | 3.000 | 6.000 | – |
+| 27 Missionsläufe | 100 s | 3.000 | 6.000 | Speichern bei halber Länge |
+| `stress` | **216.000 Schritte** | 216.000 (2 h) | 216.000 (1 h) | halbe Länge |
+
+Bei 30 Hz ist jede Zahl die frühere; `reference-manifest check` der eingecheckten Datei ist identisch (§15.6). Die Sicherungspunkte leiten sich aus der Lauflänge ab und brauchten keine Änderung. Nach `docs/TICKRATE-MIGRATION.md` §8.1 geprüft: `MaxTicks`, `MinTicks` (0) und `CheckpointInterval` der Optionen sind Ticks – skaliert wird nur `MaxTicks`; `CheckpointInterval` (1.000 Ticks) bleibt eine Tickzahl (bei 60 Hz doppelt so viele Kontrollpunkte je Spielzeit im Replay, kein Einfluss auf den Lauf); `GraceTicks`, `IncomeInterval`, `SciencePointInterval` sind Originalbilder und werden von den Sitzungen selbst umgerechnet.
+
+**Entscheidung Stresstest.** Zur Wahl standen: (a) 216.000 Schritte behalten – bei 60 Hz ist das eine Stunde Spielzeit; (b) 432.000 Schritte – zwei Stunden Spielzeit bei 60 Hz, doppelte Laufzeit; (c) den Zeitplan des Tests in Spielzeit ausdrücken – halbe Last je Schritt bei 60 Hz. Gewählt ist **(a)**. Der Zweck des Tests ist die Last je Simulationsschritt (je Tick ein Abgang und ein Ersatz, Funken jeden zweiten, Rauch jeden dritten Tick, §8.3) und die Stabilität über eine feste Zahl von Schritten; beides bleibt bei (a) genau erhalten, (c) würde etwas anderes messen, und (b) verdoppelt nur die Dauer, ohne die Last je Schritt zu ändern. Die Aussage des Handoffs „Stresstest 216.000 Ticks ≙ 2 h“ gilt damit bei 60 Hz nicht mehr: das Manifest nennt 216.000 Schritte und `gameSeconds` 3.600. Bei 60 Hz ist der Lauf ein anderer als bei 30 Hz (die Lebensdauern der Fixture sind Millisekunden und dauern doppelt so viele Schritte), also mit neuem Endhash.
+
+#### 15.5.3 Formate
+
+| Format (Version) | Gespeicherte Tick- oder Dauerfelder | Lesart | Befund |
+|---|---|---|---|
+| Replay-Kopf (12) | `tickRate`, `endTick`, `checkpointInterval`; `Tick` jedes Befehls, `SetTimerCommand.DelayTicks`/`RepeatTicks` | Ticks der Rate im Kopf | Zustand zur gespeicherten Rate. Die Welt entsteht mit der Rate des Kopfs; ein Katalog einer anderen Rate wird abgelehnt („The replay was recorded at 30 Hz; the catalog was built for 60 Hz.“) |
+| `WorldSnapshot` (10) | `tickRate`, `tick`, alle Weckzeiten, Zeitgeber und Werte je Tick im Zustand | Ticks der gespeicherten Rate | Zustand zur gespeicherten Rate; Ablehnung „The snapshot was written at 30 Hz; the catalog was built for 60 Hz.“ |
+| `MissionSnapshot` (3) | `tickRate`; `maxTicks` | Tickbudget der gespeicherten Rate (0 = keines) | Zustand zur gespeicherten Rate – der Stand läuft mit seiner Rate weiter, das Budget meint dieselbe Stelle |
+| | `presentationLatencyTicks` | Originalbilder (der Wert der Option, wie er übergeben wurde; `ScriptEngine.Forward` rechnet um) | ratenunabhängig; der Name ist irreführend, die Bytes sind richtig |
+| | `combatIntervalTicks` | Schalter (0 oder nicht 0) | keine Zeit |
+| | Zähler und Timer der VM | Originalbilder seit Phase 23 (§15.3) | ratenunabhängig |
+| `ScriptedSkirmishSession`-Stand | `tickRate`, `maxTicks`, `graceFrames`, `sciencePointIntervalFrames` | Ticks der gespeicherten Rate bzw. Originalbilder | wie oben |
+| `SaveGame` (3) | `tickRate`, `tick`; eingebetteter `MissionSnapshot` | Ticks der gespeicherten Rate; Listen zeigen Spielzeit | ein Stand einer anderen Rate als der der Sitzung wird abgelehnt („This savegame was written at 30 Hz; this session runs at 60 Hz. It cannot be loaded.“) |
+
+**Kein gespeichertes Feld ist ein Standard, der nach der Umstellung falsch gelesen würde; kein Byte ändert sich, keine Version wird erhöht.** Folge der Umstellung für Bestände: ein bei 30 Hz geschriebener Spielstand lädt in einer Sitzung mit 30 Hz (Client `--tick-rate 30`) und läuft dort mit 30 Hz weiter; der Client ohne Option (60 Hz) lehnt ihn mit der vorhandenen Meldung ab. Die Shell bietet keine Wahl der Rate und lädt einen Stand nicht mit dessen Rate nach – wer alte Stände weiterspielen will, startet den Client mit der Rate des Stands. Das ist nach `docs/MULTIPLAYER-PLAN.md` §6 Regel 7 zulässig (keine Migrationspflicht vor der ersten Veröffentlichung) und als Grenze benannt.
+
+Tests mit einer bei 30 Hz geschriebenen Fixture, unabhängig von der Standardrate: `Tests.TickRateStatesWrittenAtThirtyOutliveTheDefault` (neu, `Simulation.Tests`: Replay, `WorldSnapshot` und `MissionSnapshot` bei 30 Hz geschrieben, mit 30-Hz-Katalog fortgesetzt bis zum gespeicherten Budget, von Katalogen mit 60 und 120 Hz und der Standardrate mit Meldung abgelehnt) und `CampaignTests` „Savegame: the header carries the tick rate …“ (vorhanden: ein 30-Hz-Stand lädt in eine 30-Hz-Sitzung und wird von einer 60-Hz-Sitzung abgelehnt, und umgekehrt).
+
+### 15.6 Die Umstellung: was sich ändert, Probewerte bei 60 Hz, Golden-Werte
+
+Stand 8. Oktober 2026. Die Vorbereitung sind fünf Commits (`0cb2ddf`, `d1402fe`, `632d189`, `80db1df`, `c112b17`), die Umstellung ist `809ef04`. Alles in diesem Abschnitt ist auf einem Rechner gemessen, mit mehreren Läufen nebeneinander (Laufzeiten sind keine Leistungsangaben); gemessen ist der Quellstand des Umstellungs-Commits (der Arbeitsbaum, aus dem die Binärdateien stammen, ist Byte für Byte der Commit). **Nichts davon hat ein Mensch gesehen oder gehört.** Die eingecheckten Manifeste unter `baselines/` sind in diesem Paket nicht verändert; die 60-Hz-Manifeste schreibt der Projektinhaber in einem eigenen Commit.
+
+#### 15.6.1 Was der Umstellungs-Commit ändert
+
+Eine Zeile: `ProductRate.TicksPerSecond` 30 → 60 (`src/CnCNew.Game/Data/ProductRate.cs`). Daraus folgt ohne weitere Änderung: `GameData.DefaultSessionRate`, der Client ohne `--tick-rate` (Rauchtest: „session: simulation rate 60 Hz“), `SimTool`, `CampaignTool`, `PresentationTool`, `UiRenderTool` ohne `--tick-rate`, die Standardwelten aller Testprogramme und über die Werkzeuge alle Skripte. Der Welt-Fingerabdruck einer Standardsitzung ist ein anderer (die Rate geht bei 60 Hz in den Fingerabdruck ein, §15.5).
+
+**Vorbereitung, je Commit geprüft** (`SimTool` Release gebaut, `input-manifest check` und `reference-manifest check --set quick --jobs 3` gegen die eingecheckten Dateien):
+
+| Commit | Inhalt | Eingangsmanifest | Referenzmanifest (Schnellsatz, 9 Läufe) |
+|---|---|---|---|
+| `0cb2ddf` | eine Definition der Standardrate (`ProductRate`), Tests und `CampaignTool` leiten ab | identisch | identisch |
+| `d1402fe` | Manifestbefehle mit der Rate und dem Schema der Datei, Budgets als Spielzeit, Schema 2 | identisch (30 Hz, Schema 1) | identisch (30 Hz, Schema 1) |
+| `632d189` | Standardgefecht eine Stunde Spielzeit bei jeder Rate (`SkirmishMatchOptions.StandardAt`) | identisch | identisch |
+| `80db1df` | Tests: Referenzmatch-Budget als Spielzeit, bei 30 Hz geschriebene Stände | nur Testcode, nicht eigens geprüft | nur Testcode, nicht eigens geprüft |
+| `c112b17` | `sync-perf` und `perf-profile.ps1`: Budgets als Spielzeit, keine Rate im Skript | – | **voller Satz am Ende der Vorbereitung: Eingangsmanifest identisch, Referenzmanifest 50 von 50 Läufen identisch (30 Hz, Schema 1)** |
+
+Am Ende der Vorbereitung (Standard noch 30 Hz) dazu: `Simulation.Tests` ohne Optionen 513 von 513, `Game.Tests --only SourceRuleTests,TimeScaleTests,CampaignTests` bestanden.
+
+**Nur der Standard hat sich bewegt** (Binärdatei *nach* der Umstellung, Standard 60 Hz, gegen die eingecheckten 30-Hz-Dateien):
+
+| Befehl | Ergebnis |
+|---|---|
+| `input-manifest check <content> baselines/input-manifest.json` | „Input manifest (30 Hz, schema 1): identical.“ |
+| `reference-manifest check <content> baselines/reference-manifest.json --set full --jobs 5` (ohne `--tick-rate`; die Rate kommt aus der Datei) | „Reference manifest (full, 30 Hz, schema 1): 50 runs identical.“ |
+| dasselbe mit `--set quick --tick-rate 30` | „Reference manifest (quick, 30 Hz, schema 1): 9 runs identical.“ |
+| dasselbe mit `--tick-rate 60` | abgelehnt: „… records 30 Hz; --tick-rate 60 is refused. A manifest is checked at the rate it was written at.“ |
+
+**Braucht die 30-Hz-Datei vor der Umstellung ein Neuschreiben? Nein.** `check` prüft sie in ihrem Schema 1 unverändert. Zusätzlicher Beleg, dass Schema 2 kein Ergebnis berührt: mit derselben Binärdatei ist ein 30-Hz-Manifest in Schema 2 in das Scratch-Verzeichnis geschrieben (`reference-manifest write … --set full --tick-rate 30`); gegen die eingecheckte Datei verglichen sind Kopf, Liste der Läufe, `kind` und `set` gleich, **die `results` aller 50 Läufe gleich**, jeder Parameter aus Schema 1 steht mit demselben Wert unter seinem Schema-2-Namen, und hinzugekommen sind genau `maxGameSeconds`, `gameSeconds` und `budgetCounts`. Das Eingangsmanifest in Schema 2 bei 30 Hz unterscheidet sich von der eingecheckten Datei in genau zwei Stellen: `schema` 2 und `simulation.tickRate` 30 (`diff`). Wer die 30-Hz-Dateien trotzdem vor der Umstellung in Schema 2 haben will, schreibt sie mit `reference-manifest write … --tick-rate 30` und `input-manifest write … --tick-rate 30`; nötig ist es nicht.
+
+#### 15.6.2 Testprogramme mit angewandter Umstellung
+
+Release-Build, Realdaten `.local/phase2-import-a`; gezählt sind Testzeilen aus den Einzelprotokollen (bestanden / fehlgeschlagen). „ohne Option“ ist jetzt 60 Hz.
+
+| Programm | ohne Option (60 Hz) | `--tick-rate 30` | `--tick-rate 120` |
+|---|---|---|---|
+| `Archives.Tests`, `Content.Tests`, `IO.Tests`, `Images.Tests`, `Formats.Tests`, `Import.Tests` | bestanden | bestanden | bestanden |
+| `Data.Tests` ohne und mit `--content-dir` | bestanden | bestanden | bestanden |
+| `W3D.Tests --content-dir`, `Audio.Tests --content-dir` | bestanden | bestanden | bestanden |
+| `Simulation.Tests` | 513 / 0 | 513 / 0 | 513 / 0 |
+| `Simulation.Tests --content-dir` | 542 / 0 | 542 / 0 | 542 / 0 |
+| `Simulation.Tests -c Release -- --long` | 514 / 0 | 514 / 0 | 514 / 0 |
+| `Ui.Tests` ohne und mit `--content-dir` (fünf Suiten) | bestanden | bestanden | bestanden |
+| `Presentation.Tests` | 155 / 0 | 155 / 0 | 155 / 0 |
+| `Presentation.Tests --content-dir` | 172 / 0 | 172 / 0 | 172 / 0 |
+| `Game.Tests` (Release) `--content-dir` | 162 / 0 | 162 / 0 | 162 / 0 |
+
+Die neun Programme der ersten drei Zeilen bauen keine Welt; sie kennen `--tick-rate` nicht und übergehen die Option (die Läufe „30“ und „120“ sind dort derselbe Lauf). Die Raten-Äquivalenz-Suite in `Simulation.Tests --content-dir` meldet in allen zehn Gruppen 0 Größen außerhalb der Toleranz bei 60 und bei 120 Hz. Das Referenzmatch der Simulationstests (Katalog ohne Modellgeometrie, Budget jetzt zwei Stunden Spielzeit) endet bei jeder Rate mit Sieger: FactionGLA bei Tick 14.130 / 29.130 / 49.560 (7:51 / 8:06 / 6:53 min) – bei 120 Hz war dieser Test mit dem Tickbudget rot (`docs/RATE-SWITCH-OUTER-TESTS.md` §7.4).
+
+**Kein Test schlägt fehl, weil ein Golden-Wert bei 30 Hz aufgezeichnet wäre.** Die eingecheckten Golden-Dateien (`tests/CnCNew.Game.Tests/baselines/screens.txt` mit 54 Hashes, `hud-drawlist-1280x720.sha256`) und die Golden-Konstanten im Testcode (`DrawListGolden`, Knochentabelle D1, Dreieckszahl der Straßen) bestehen unverändert bei allen drei Raten. Es gibt deshalb **keinen** Commit „Golden-Werte bei 60 Hz“.
+
+Sauberer Build mit der Umstellung: `dotnet build CnCNew.slnx` mit gelöschtem `bin`/`obj` von `CnCNew.Client.Stride` 0 Warnungen, 0 Fehler; `dotnet build tools/CnCNew.UiRenderTool` 0 Warnungen, 0 Fehler.
+
+#### 15.6.3 Probe-Manifest bei 60 Hz (nur im Scratch-Verzeichnis)
+
+`reference-manifest write <content> <scratch>\reference-manifest-60.json --set full --jobs 5` (818 s, kein Lauf mit falschem Wiederholungsmerker) und `input-manifest write <content> <scratch>\input-manifest-60.json`; danach `check` gegen die Probedateien: Eingangsmanifest „(60 Hz, schema 2): identical“, Referenzmanifest **zweimal 50 von 50 Läufen identisch** (Schlusszeile beider Läufe: „Reference manifest (full, 60 Hz, schema 2): 50 runs identical.“; dazu der Schnellsatz und das Eingangsmanifest mit einer aus dem Umstellungs-Commit gebauten Binärdatei: 9 von 9 identisch, identisch). Kopf der Probedatei: `tickRate` 60, `schema` 2, Versionen unverändert (`commandTableVersion` 15, `replayFormatVersion` 12, `worldSnapshotVersion` 10, `missionSnapshotVersion` 3).
+
+| Lauf | 30 Hz (eingecheckt) | 60 Hz (Probe) |
+|---|---|---|
+| `reference-match` | Sieger FactionGLA, Tick 14.130 (7:51,0 min), Endhash `5BF9BB7CED6D7A35`, Kette `56149C0105E992D7`, Replay 14.431 Ticks | Sieger FactionGLA, Tick 29.130 (8:05,5 min), Endhash `50A37479CA9367CF`, Kette `A02EF82C24AFCE0C`, Replay 29.731 Ticks |
+| `stress` (216.000 Schritte) | Endhash `56882F763EABEF67`, Kette `754FA4DCB9A41DF7` | Endhash `9EE9F730D124C3BD`, Kette `F338463BE66D99C0` |
+| 16 KI-Läufe | 14 entschieden | 14 entschieden |
+| 4 Acht-Spieler-Läufe | alle Patt am Budget | alle Patt am Budget |
+| `skirmish-sweep` | 64 gestartet und beendet, 0 fehlgeschlagen, 0 mit Sieger, 64 am Budget; 75 Karten ohne, 11 mit einer Startposition; `493C72CF9D2AE2E9…` | dieselben Zähler; `E21219D7804BB22B…` |
+| 27 Missionsläufe (100 s) | alle ohne Ausgang im Budget | alle ohne Ausgang im Budget; alle drei Wiederholungsmerker wahr auf 27 von 27 |
+
+Die 16 KI-Läufe und die Acht-Spieler-Läufe (Sieger, Spielzeit des Siegs min:s, Siegtick):
+
+| Lauf | 30 Hz: Ausgang, Spielzeit | 60 Hz: Ausgang, Spielzeit | Endhash 60 Hz |
+|---|---|---|---|
+| `AlpineAssault_America-China` | Patt | Patt | `58A6A55F05EADD4F` |
+| `AlpineAssault_China-GLA` | China 4:46.5 (Tick 8595) | China 4:46.5 (Tick 17190) | `2ED97C970A583EFC` |
+| `AlpineAssault_ChinaTankGeneral-AmericaAirForceGeneral` | ChinaTankGeneral 10:10.0 (Tick 18300) | ChinaTankGeneral 9:32.0 (Tick 34320) | `047D1B00C7441E77` |
+| `AlpineAssault_GLA-America` | America 5:22.0 (Tick 9660) | America 5:22.0 (Tick 19320) | `C897120A7DAC6A30` |
+| `ArmoredFury_America-China` | America 20:35.0 (Tick 37050) | Patt | `C2D04A71C519EC23` |
+| `ArmoredFury_China-GLA` | Patt | China 21:54.5 (Tick 78870) | `BE1D51852D99DD51` |
+| `ArmoredFury_ChinaTankGeneral-AmericaAirForceGeneral` | ChinaTankGeneral 6:02.0 (Tick 10860) | ChinaTankGeneral 6:02.0 (Tick 21720) | `64ACBBC886C95BE7` |
+| `ArmoredFury_GLA-America` | America 20:06.0 (Tick 36180) | America 14:10.0 (Tick 51000) | `25CC536DD88592E3` |
+| `BitterWinter_America-China` | China 12:13.5 (Tick 22005) | America 11:33.5 (Tick 41610) | `F79B173AAE20CA02` |
+| `BitterWinter_China-GLA` | China 4:39.5 (Tick 8385) | China 4:39.5 (Tick 16770) | `D6BF8631997D9F8F` |
+| `BitterWinter_ChinaTankGeneral-AmericaAirForceGeneral` | ChinaTankGeneral 16:45.0 (Tick 30150) | ChinaTankGeneral 12:34.5 (Tick 45270) | `64E866CABEC459EE` |
+| `BitterWinter_GLA-America` | America 4:51.0 (Tick 8730) | America 4:51.0 (Tick 17460) | `090185887CFBA7B8` |
+| `DeathValley_America-China` | America 4:50.0 (Tick 8700) | America 4:50.0 (Tick 17400) | `4137ABC50FED8435` |
+| `DeathValley_China-GLA` | China 7:11.0 (Tick 12930) | China 7:11.0 (Tick 25860) | `41EE8526DBCCC99C` |
+| `DeathValley_ChinaTankGeneral-AmericaAirForceGeneral` | ChinaTankGeneral 12:42.0 (Tick 22860) | ChinaTankGeneral 8:41.0 (Tick 31260) | `024ECBF625F3AFA1` |
+| `DeathValley_GLA-America` | America 5:51.0 (Tick 10530) | America 5:51.5 (Tick 21090) | `D2E97F00A86D8109` |
+| `ai8_FortressAvalanche` | Patt | Patt | `480A8CD2BFBC7EC6` |
+| `ai8_IronDragon` | Patt | Patt | `BADAAA6219710424` |
+| `ai8_TwilightFlame` | Patt | Patt | `3CD82FBEF25B2E25` |
+| `ai8_TwilightFlame_short` | Patt | Patt | `B5BBA63A4540130D` |
+
+Die 27 Missionsläufe enden bei beiden Raten nach 100 s Spielzeit ohne Ausgang (kein Endskript im Budget; `outcomeScript` leer bei beiden Raten). Ausgeführte Skripte und Aktionen sind auf 27 von 27 Läufen gleich, die Schusszahl auf 26 von 27 (`MD_GLA05`: 643 gegen 640).
+
+| Mission | 30 Hz: Ausgang, Ende, ausgeführte Skripte/Aktionen, Schüsse | 60 Hz: Ausgang, Ende, ausgeführte Skripte/Aktionen, Schüsse | Endhash 60 Hz | gleich nach Speichern/Laden |
+|---|---|---|---|---|
+| `GC_AirGeneral_AmericaLaserGeneral` | none, Tick 3000 (1:40.0), 58/588, 0 | none, Tick 6000 (1:40.0), 58/588, 0 | `18E38A8D23C8F813` | ja |
+| `GC_AirGeneral_ChinaInfantryGeneral` | none, Tick 3000 (1:40.0), 58/588, 0 | none, Tick 6000 (1:40.0), 58/588, 0 | `1392094860086813` | ja |
+| `GC_AirGeneral_GLAStealthGeneral` | none, Tick 3000 (1:40.0), 58/588, 0 | none, Tick 6000 (1:40.0), 58/588, 0 | `C9B00717D81E7E8F` | ja |
+| `GC_ChemGeneral_AmericaAirForceGeneral` | none, Tick 3000 (1:40.0), 83/783, 0 | none, Tick 6000 (1:40.0), 83/783, 0 | `4CAD90734E13F02A` | ja |
+| `GC_ChemGeneral_ChinaTankGeneral` | none, Tick 3000 (1:40.0), 83/783, 0 | none, Tick 6000 (1:40.0), 83/783, 0 | `68388B1EA399E017` | ja |
+| `GC_ChinaBoss_AmericaAirForceGeneral` | none, Tick 3000 (1:40.0), 12092/12720, 0 | none, Tick 6000 (1:40.0), 12092/12720, 0 | `555C096C0E6D724A` | ja |
+| `GC_ChinaBoss_AmericaLaserGeneral` | none, Tick 3000 (1:40.0), 12092/12720, 0 | none, Tick 6000 (1:40.0), 12092/12720, 0 | `EC07A3B90506FE40` | ja |
+| `GC_ChinaBoss_AmericaSuperWeaponGeneral` | none, Tick 3000 (1:40.0), 12092/12720, 0 | none, Tick 6000 (1:40.0), 12092/12720, 0 | `154593BB1A1B269F` | ja |
+| `GC_ChinaBoss_ChinaInfantryGeneral` | none, Tick 3000 (1:40.0), 12092/12720, 0 | none, Tick 6000 (1:40.0), 12092/12720, 0 | `EE8AFCB3B10A37A2` | ja |
+| `GC_ChinaBoss_ChinaNukeGeneral` | none, Tick 3000 (1:40.0), 12092/12720, 0 | none, Tick 6000 (1:40.0), 12092/12720, 0 | `C1CDBE60D4670542` | ja |
+| `GC_ChinaBoss_ChinaTankGeneral` | none, Tick 3000 (1:40.0), 12092/12720, 0 | none, Tick 6000 (1:40.0), 12092/12720, 0 | `507C1049CCB05E1A` | ja |
+| `GC_ChinaBoss_GLADemolitionGeneral` | none, Tick 3000 (1:40.0), 12092/12720, 0 | none, Tick 6000 (1:40.0), 12092/12720, 0 | `1B3F8D6817B186A3` | ja |
+| `GC_ChinaBoss_GLAStealthGeneral` | none, Tick 3000 (1:40.0), 12092/12720, 0 | none, Tick 6000 (1:40.0), 12092/12720, 0 | `0004F5E35205A146` | ja |
+| `GC_ChinaBoss_GLAToxinGeneral` | none, Tick 3000 (1:40.0), 12092/12720, 0 | none, Tick 6000 (1:40.0), 12092/12720, 0 | `9154939ADA5177C9` | ja |
+| `GC_LaserGeneral_ChinaNukeGeneral` | none, Tick 3000 (1:40.0), 123/582, 0 | none, Tick 6000 (1:40.0), 123/582, 0 | `134C5C65640E2FAB` | ja |
+| `GC_SuperWeaponsGeneral_GLADemolitionGeneral` | none, Tick 3000 (1:40.0), 97/593, 0 | none, Tick 6000 (1:40.0), 97/593, 0 | `620A01483ABDE0AF` | ja |
+| `GC_TankGeneral_AmericaSuperWeaponGeneral` | none, Tick 3000 (1:40.0), 3035/550, 0 | none, Tick 6000 (1:40.0), 3035/550, 0 | `680039C27D4F14DC` | ja |
+| `GC_TankGeneral_GLAToxinGeneral` | none, Tick 3000 (1:40.0), 3035/550, 0 | none, Tick 6000 (1:40.0), 3035/550, 0 | `04D2BC1EA433815A` | ja |
+| `MD_CHI01` | none, Tick 3000 (1:40.0), 65/3357, 0 | none, Tick 6000 (1:40.0), 65/3357, 0 | `4CF02E68E0400F5A` | ja |
+| `MD_CHI05` | none, Tick 3000 (1:40.0), 151/487, 2926 | none, Tick 6000 (1:40.0), 151/487, 2926 | `2A2C8136A280E89B` | ja |
+| `MD_GLA01` | none, Tick 3000 (1:40.0), 133/275, 1231 | none, Tick 6000 (1:40.0), 133/275, 1231 | `CCE1AB28809422B7` | ja |
+| `MD_GLA03` | none, Tick 3000 (1:40.0), 101/485, 0 | none, Tick 6000 (1:40.0), 101/485, 0 | `CFA0CD3B1304A2FD` | ja |
+| `MD_GLA05` | none, Tick 3000 (1:40.0), 100/381, 643 | none, Tick 6000 (1:40.0), 100/381, 640 | `9138F6E3D49214A1` | ja |
+| `MD_USA01` | none, Tick 3000 (1:40.0), 107/225, 127 | none, Tick 6000 (1:40.0), 107/225, 127 | `CADD74730A3FA0A7` | ja |
+| `MD_USA02` | none, Tick 3000 (1:40.0), 79/196, 63 | none, Tick 6000 (1:40.0), 79/196, 63 | `F0B92F6C1127B52E` | ja |
+| `MD_USA05` | none, Tick 3000 (1:40.0), 109/394, 0 | none, Tick 6000 (1:40.0), 109/394, 0 | `4DC86DD2F74A5706` | ja |
+| `Training01` | none, Tick 3000 (1:40.0), 46/48, 181 | none, Tick 6000 (1:40.0), 46/48, 181 | `08ECC3A089265ADA` | ja |
+
+**Vergleich der Ergebnisgrößen** (`reference-manifest results <content> --out <datei> --set full`, einmal ohne Option und einmal mit `--tick-rate 30`; Dateien `results-30.json` und `results-60.json` im Scratch-Verzeichnis, je 50 Läufe, keiner fehlgeschlagen; derselbe Vergleich über die beiden Manifeste gibt dieselbe Tabelle). Von 49 Läufen mit einem Ausgangsfeld haben **46 denselben Ausgang** und **40 denselben Ausgang zur selben Spielzeit innerhalb eines Originalbilds**:
+
+- gleich bis auf ein Originalbild: `stress`, alle 27 Missionsläufe, alle 4 Acht-Spieler-Läufe und 8 der 16 KI-Läufe (dieselbe Spielzeit des Siegs bzw. beide Patt);
+- derselbe Sieger zu anderer Spielzeit (6): `reference-match` (+14,5 s), `DeathValley_GLA-America` (+0,5 s), `AlpineAssault_ChinaTankGeneral-AmericaAirForceGeneral` (−38 s), `DeathValley_ChinaTankGeneral-AmericaAirForceGeneral` (−241 s), `BitterWinter_ChinaTankGeneral-AmericaAirForceGeneral` (−250,5 s), `ArmoredFury_GLA-America` (−356 s);
+- anderer Ausgang (3): `ArmoredFury_America-China` (America nach 20:35 gegen Patt), `ArmoredFury_China-GLA` (Patt gegen China nach 21:54,5), `BitterWinter_America-China` (China nach 12:13,5 gegen America nach 11:33,5 – ein Siegerwechsel).
+
+Weitere Ergebnisgrößen aus `results`: im `skirmish-sweep` haben nach 100 s **alle 64 Karten** bei beiden Raten dieselbe Objektzahl und je Spieler denselben Besitz und Kontostand; in den 27 Missionsläufen sind weitergereichte Aktionen, Objektzahl und Besitz/Geld je Spieler auf 27 von 27 gleich, die Ereigniszählung je Art auf 17 von 27; von den 20 KI-Läufen haben 8 dieselbe Befehlszahl und denselben Endstand je Spieler (die 8, die auch zur selben Spielzeit enden). Der Stresstest ist bei 60 Hz nach Bauart ein anderer Lauf (914.394 gegen 914.403 Befehle, Höchststand 15.775 gegen 15.797 Objekte); das Referenzmatch hat 26.626 gegen 28.930 Befehle und 13.589 gegen 14.040 Schüsse des Szenarios.
+
+Die neun abweichenden Läufe sind **nicht bis zur ersten abweichenden Größe verfolgt**. Sie sind die langen Gefechte (das kürzeste abweichende endet nach 5:51 min); nach `docs/RATE-SWITCH-OUTER-TESTS.md` §7.3 weicht ein Gefecht der Original-KI ab Bild 10.532 (351 s) in der Wahl zweier Zielplätze ab, und der Verteilungsvergleich über 320 Gefechte je Rate (§15.4) liegt innerhalb seiner vorab festgelegten Grenzen. Ob die Häufung kürzerer Siegzeiten von ChinaTankGeneral gegen AirForce bei 60 Hz (drei von vier Karten) Zufall ist, ist hier nicht entschieden; **Balance ist nicht bewertet**.
+
+#### 15.6.4 Kampagne, Szenen und Client bei 60 Hz (Standardrate, keine `--tick-rate`)
+
+- **`CampaignTool drive`**, 24 Karten, je ein Prozess, vier nebeneinander, Standardbudget 2.000 s (120.000 Ticks): **Sieg 24 von 24, Niederlage 24 von 24** auf dem eigenen Endskript (gezählt aus den 24 Einzelprotokollen).
+
+| Karte | Sieg: Endskript @ Tick | Spielzeit | Niederlage: Endskript @ Tick | Spielzeit |
+|---|---|---:|---|---:|
+| GC_AirGeneral | `END_Final_GLA` @ 540 | 0:09 | `Lose_END_Final_GLA` @ 300 | 0:05 |
+| GC_ChemGeneral | `END_Final_USA` @ 540 | 0:09 | `Lose_END_Final_USA` @ 300 | 0:05 |
+| GC_ChinaBoss | `End the mission` @ 720 | 0:12 | `Lose_END_Final_USA` @ 4862 | 1:21 |
+| GC_LaserGeneral | `END_Final_USA` @ 480 | 0:08 | `Lose_END_Final_USA` @ 300 | 0:05 |
+| GC_NukeGeneral | `END_Final_USA` @ 480 | 0:08 | `Lose_END_Final_USA` @ 300 | 0:05 |
+| GC_Stealth | `END_Final_USA` @ 480 | 0:08 | `Lose_END_Final_USA` @ 300 | 0:05 |
+| GC_SuperWeaponsGeneral | `END_Final_USA` @ 480 | 0:08 | `Lose_END_Final_USA` @ 300 | 0:05 |
+| GC_TankGeneral | `END_Final_USA` @ 480 | 0:08 | `Lose_END_Final_USA` @ 300 | 0:05 |
+| MD_CHI01 | `END_Final_` @ 602 | 0:10 | `Lose_END_Final_` @ 482 | 0:08 |
+| MD_CHI02 | `END_Final_` @ 602 | 0:10 | `Lose_END_Final_` @ 602 | 0:10 |
+| MD_CHI03 | `Cheer1Done` @ 3444 | 0:57 | `Lose_END_Final_` @ 8942 | 2:29 |
+| MD_CHI04 | `END_Final_` @ 96516 | 26:48 | `Lose_END_Final_` @ 546 | 0:09 |
+| MD_CHI05 | `CINE_ENDVictory` @ 5324 | 1:28 | `Lose_END_Final_` @ 482 | 0:08 |
+| MD_GLA01 | `Cheer1Done` @ 1052 | 0:17 | `Lose_END_Final_` @ 482 | 0:08 |
+| MD_GLA02 | `END_Final_` @ 480 | 0:08 | `Lose_END_Final_` @ 1144 | 0:19 |
+| MD_GLA03 | `CINE_ENDVictory` @ 8066 | 2:14 | `Lose_END_Final_` @ 484 | 0:08 |
+| MD_GLA04 | `CINE_END` @ 2044 | 0:34 | `Lose_END_Final_` @ 482 | 0:08 |
+| MD_GLA05 | `CINE_END04END` @ 2788 | 0:46 | `Lose_END_Final_` @ 2072 | 0:34 |
+| MD_USA01 | `END_Final_USA` @ 1570 | 0:26 | `Lose_END_Final_USA` @ 422 | 0:07 |
+| MD_USA02 | `END_Final_` @ 5436 | 1:30 | `Lose_END_Final_` @ 25202 | 7:00 |
+| MD_USA03 | `CINE_AVVictory` @ 3018 | 0:50 | `Lose_END_Final_` @ 482 | 0:08 |
+| MD_USA04 | `END_Final_USA` @ 606 | 0:10 | `Lose_END_Final_USA` @ 1234 | 0:20 |
+| MD_USA05 | `END_Fade 04` @ 2886 | 0:48 | `Lose_END_Final_` @ 2560 | 0:42 |
+| Training01 | `Player Wins` @ 840 | 0:14 | `Player Loses` @ 5310 | 1:28 |
+
+- **`CampaignTool audit`** (Standardbudget 60 s = 3.600 Ticks), je Karte ein Prozess: 24 von 24 identisch im zweiten Lauf, 24 von 24 identisch nach Speichern/Laden, 0 Treffer auf fehlende Aktions- und Bedingungstypen; Ausschalt-Endproben **Sieg 13 von 24, Niederlage 15 von 24** (wie bei 30 Hz).
+- **`CampaignTool reachability`**: Sieg sauber 24, Niederlage sauber 24.
+- **`scripts/audit-scenarios.ps1`** (3 Szenen) und **`-Scenario exits`** (9 Szenen): alle zwölf „RESULT: all checks passed“, zweimal gelaufen, die zwölf Ausgabedateien beider Läufe bytegleich.
+- **`scripts/check-spectator.ps1`**: PASS (Gefecht endet bei Tick 17.101 = 285 s mit Sieger Spieler 1). **`scripts/check-dozer-build.ps1`**: 5 von 5 PASS. **`scripts/check-build-hotkeys.ps1`**: 3 von 3 PASS.
+- **Client-Rauchtest** `--smoke-test --match "Maps/Alpine Assault/Alpine Assault.map" --autoplay --frames 600`: Exitcode 0, „session: simulation rate 60 Hz“, 600 gezeichnete Originalbilder, der Mischer rendert 20,00 s. Der Welttick wird im Gefechtsmodus nicht ausgegeben; im Missionsmodus (`--mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --frames 600`) meldet der Client „600 frames, world tick 1200 at 60 Hz, session steps 1200“.
+
+#### 15.6.5 Golden-Werte und Prüfsummen: was an der Rate hängt, wo es steht, womit es neu entsteht
+
+Eingecheckte Dateien mit Golden-Werten, die an der Standardrate hängen, sind genau zwei – und beide schreibt der Projektinhaber:
+
+| Datei | Hängt an der Rate | Neu erzeugen mit |
+|---|---|---|
+| `baselines/reference-manifest.json` | ja (jeder Lauf) | `dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest write .local/phase2-import-a baselines/reference-manifest.json --set full --jobs 5` (ohne `--tick-rate`: Standardrate) |
+| `baselines/input-manifest.json` | ja (Welt-Fingerabdruck und Katalog-Hashes; Karten und Definitionen nicht) | `… -- input-manifest write .local/phase2-import-a baselines/input-manifest.json` |
+| `baselines/compatibility.json` | nein (INI-Kompatibilität) | – |
+| `tests/CnCNew.Game.Tests/baselines/screens.txt`, `hud-drawlist-1280x720.sha256` | nein, bei 30, 60 und 120 Hz gemessen | – |
+
+Prüfsummen, die nur in Dokumenttabellen stehen (kein Test liest sie) und bei 60 Hz andere sind; hier die Werte der Standardrate, je zweimal erzeugt und bytegleich:
+
+| Wert | Steht in | Befehl | Wert bei 60 Hz (SHA-256 der ganzen Ausgabe, erste 16 Stellen) |
+|---|---|---|---|
+| `scenario-audit capture-building` | `docs/TICKRATE-MIGRATION.md` §14.2 (Vergleichstabelle der Phase 21, 30 Hz: `BC7DD2A2F453D2EC…`) | `pwsh scripts/audit-scenarios.ps1` (schreibt `<OutDir>\<szene>.txt`) | `B2557B4A970F7512` |
+| `scenario-audit tank-duel` | §14.2 (30 Hz damals: `8FD85E76B599D514…`) | wie oben | `25BC3C786F8C3837` |
+| `scenario-audit jet-strafe` | §14.2 (30 Hz damals: `67DE0DFB83346317…`) | wie oben | `163DB77C14A0A257` |
+| neun `exit-<fraktion>-<gebäude>` | – (bisher nicht tabelliert) | `pwsh scripts/audit-scenarios.ps1 -Scenario exits` | america: `C5CC32D01893815B` (barracks), `DA3F60F789A09001` (commandcenter), `B338020853A0437F` (warfactory); china: `A45494EBAEEC4085`, `5D9A45FF9EA02CF5`, `0A935EA49EA0379B`; gla: `4BB751EE1C437CBB`, `E92AFB4EACE5C9B5`, `17604EE390E972A4` |
+| `sync-perf --digest` | `docs/PERF-GAME-LAYER.md` (Vorher/Nachher-Vergleich, kein fester Wert) | `dotnet run -c Release --project tools/CnCNew.PresentationTool -- sync-perf .local/phase2-import-a --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --hud --digest` (Standardbudget jetzt zehn Minuten Spielzeit: 36.000 Ticks) | `EE731E8D792C759A…`, kein Sieger im Budget |
+| Manifest von `scripts/capture-world.ps1` (19 Szenen), Filmstreifen von `scripts/capture-scenarios.ps1` (77 Bilder) | temporäre Manifeste der Skripte (beschrieben in `docs/CLIENT-OBJECTS.md`, `docs/DEMO-SCENARIOS.md`), nicht eingecheckt | die beiden Skripte ohne `-TickRate` | **nicht neu erzeugt** (Straßenbefund `docs/RATE-SWITCH-OUTER-TESTS.md` §7.7 vorher zu entscheiden) |
+| `fx-audit` | `docs/PRESENTATION-FX.md` (Prüfsumme des Ausführungsdurchlaufs) | nennt `SimulationRate.Original` selbst | bleibt bei 30 Hz |
+
+Die Dateinamen der Audit-Ausgaben enthalten den Pfad des Inhaltsverzeichnisses nicht, die Ausgaben selbst nennen in der Kopfzeile die Rate; die Prüfsummen gelten für die Aufrufe oben mit `-ContentDir` auf den geprüften Bestand. Die Dokumenttabellen selbst sind in diesem Paket nicht ersetzt.
+
+#### 15.6.6 Nicht gemacht, nicht belegt
+
+- Die neun Manifestläufe, deren Ausgang oder Siegzeit zwischen 30 und 60 Hz abweicht, sind nicht bis zur ersten abweichenden Befehlszeile verfolgt (`reference-manifest results --commands` ist nicht gelaufen).
+- `capture-world.ps1`, `capture-scenarios.ps1`, `capture-text.ps1` und das `UiRenderTool` sind mit der Umstellung nicht gelaufen (das `UiRenderTool` ist nur gebaut); die Demo-Skripte sind nicht gestartet.
+- `perf-profile.ps1` ist nach dem Umbau nur auf Syntax geprüft (Parser ohne Fehler), kein Messlauf; es gibt keine Leistungsmessung in diesem Paket.
+- `Game.Tests` ohne `--content-dir`, der Debug-Build von `Game.Tests` und `--determinism-full` sind nicht gelaufen. Die Determinismus-Matrix (andere Laufzeitschalter, Linux) ist bei 60 Hz nicht wiederholt.
+- Der Nur-Befehle-Agent (`drive --commands-only`) ist bei 60 Hz nicht gelaufen.
+- Ein 30-Hz-Spielstand in einem Client der Standardrate wird abgelehnt (§15.5.3); eine Shell-Funktion, die einen Stand mit dessen Rate lädt, gibt es nicht.
+- Die Obergrenze eines Standardgefechts von einer Stunde Spielzeit (`SkirmishMatchOptions.Standard.MaxTicks`) gilt auch für ein Gefecht eines Menschen im Client; ob das gewollt ist, ist keine Frage der Rate und hier nicht entschieden.
+- Kein Bild, kein Ton und kein Spielablauf bei 60 Hz ist von einem Menschen geprüft.
