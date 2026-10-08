@@ -648,7 +648,10 @@ static partial class Tests
             var worst = 0m;
             var shots = 0;
             var stopped = false;
-            for (var tick = 0; tick < world.Frames(1200); tick++)
+            // One round of the loop is one logic frame of the original: the orders are given where a frame begins and the aim is measured where it ends - there the hull and
+            // the turret stand where the 30 Hz step puts them (in between the hull has turned a share of its step, the turret aims at the frame's end).
+            var ticksPerFrame = (int)world.Frames(1);
+            for (var frame = 0; frame < 1200; frame++)
             {
                 // The presentation's attack loop: chase until in reach, stop there, fire whenever the weapon is ready.
                 var distance = DistanceBetween(crusader, victim);
@@ -658,9 +661,9 @@ static partial class Tests
                     feeder.Pursue(1, crusader.Id.Value, victim.Id.Value, (int)crusader.X.Floor(), (int)crusader.Y.Floor());
                 }
 
-                if (stopped && tick % 2 == 0 && world.IsAnyWeaponReady(crusader) && !crusader.HasMoveTarget) feeder.FireWeapon(1, crusader.Id.Value, victim.Id.Value);
-                shots += world.Step().Events.Count(value => value.Kind == SimEventKind.WeaponFired && value.Entity == crusader.Id);
-                if (tick >= world.Frames(60) && !victim.EffectivelyDead) worst = Math.Max(worst, AimError(crusader, victim));
+                if (stopped && frame % 2 == 0 && world.IsAnyWeaponReady(crusader) && !crusader.HasMoveTarget) feeder.FireWeapon(1, crusader.Id.Value, victim.Id.Value);
+                for (var tick = 0; tick < ticksPerFrame; tick++) shots += world.Step().Events.Count(value => value.Kind == SimEventKind.WeaponFired && value.Entity == crusader.Id);
+                if (frame >= 60 && !victim.EffectivelyDead) worst = Math.Max(worst, AimError(crusader, victim));
                 if (victim.EffectivelyDead) break;
             }
 
@@ -668,7 +671,7 @@ static partial class Tests
         }
 
         var chase = Chase();
-        Console.WriteLine($"       chase: Crusader against Battlemaster - worst aim error from tick 60 {chase.Worst:F2} degrees, {chase.Shots} shots, {chase.Waits} orders waited");
+        Console.WriteLine($"       chase: Crusader against Battlemaster - worst aim error from frame 60 {chase.Worst:F2} degrees, {chase.Shots} shots, {chase.Waits} orders waited");
         Check.That(chase.Worst <= 2.6m && chase.Shots >= 2, $"The Crusader kept its turret on the Battlemaster while it drove, stopped, reloaded and fired ({chase.Worst:F2} degrees worst, {chase.Shots} shots).");
         Check.That(chase.Hash == Chase().Hash, "The retail chase is deterministic.");
     }
