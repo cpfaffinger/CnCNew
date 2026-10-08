@@ -372,6 +372,8 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private void PutIntoContainer(Entity actor, Entity container, PlayerId player)
     {
+        // Above 30 Hz an object that enters in the tick of its move's decision is inside with the position after its whole step, as at 30 Hz.
+        if (_firstFrameTicks != TickOrder.Next && (actor.IsInsideFrameStep || actor.HasAheadAngle)) AiOf(actor)?.SettleFrame(_tick);
         container.Container!.Add(this, actor);
         actor.ContainedBy = container.Id; // Add() also does this; kept here too so every entry path is consistent.
         MarkDirty(actor);
@@ -1412,6 +1414,13 @@ public sealed partial class SimulationWorld : IWorldServices
 
     public void OnEntityDied(Entity entity, in DamageInfo info)
     {
+        // Above 30 Hz an object that is killed inside the step of its logic frame dies where that step ends: the 30 Hz object has taken its whole step when a hit of the
+        // phases after the updates kills it (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 4, for every death). Nothing is inside a step at 30 Hz.
+        if (_firstFrameTicks != TickOrder.Next && (entity.IsInsideFrameStep || entity.HasAheadAngle))
+        {
+            if (AiOf(entity) is { } mover) mover.SettleFrame(_tick);
+            else entity.CompleteFrame(_tick);
+        }
         Emit(SimEventKind.EntityDied, entity.Id, info.Source, string.Empty, info.DeathType);
         ScoreTheKill(entity, info);
         // Object::onDie starts with checkAndDetonateBoobyTrap(NULL): an object that dies while booby trapped sets its trap off.
@@ -1447,6 +1456,8 @@ public sealed partial class SimulationWorld : IWorldServices
         if (entity is null || entity.DestroyRequested) return;
         entity.DestroyRequested = true;
         entity.Status |= 1UL << ObjectStatusBits.Destroyed;
+        // Requested after this tick's destroy phase (a delayed hit, the spawn phase): removed "in the next tick" at 30 Hz - one logic frame of the original later above it.
+        if (_firstFrameTicks != TickOrder.Next && _destroyPhaseOf == _tick) entity.DestroyNotBefore = _tick + _firstFrameTicks;
         MarkDirty(entity);
         _destroyQueue.Add(entity);
         Emit(SimEventKind.EntityDestroyed, id, EntityId.Invalid, entity.Template.Name, 0);
@@ -1481,14 +1492,27 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private static readonly Comparison<Entity> ById = static (a, b) => a.Id.Value.CompareTo(b.Id.Value);
 
+    // The tick whose destroy phase has run (not state: a snapshot lies between two ticks).
+    private long _destroyPhaseOf = -1;
+
     private void ProcessDestroys()
     {
-        if (_destroyQueue.Count == 0) return;
+        if (_destroyQueue.Count == 0)
+        {
+            _destroyPhaseOf = _tick;
+            return;
+        }
         _destroyQueue.Sort(ById);
+        List<Entity>? held = null;
         // OnRemove hooks may request further destroys (spawner slaves); those append to the queue and are processed in the same pass.
         for (var queued = 0; queued < _destroyQueue.Count; queued++)
         {
             var entity = _destroyQueue[queued];
+            if (entity.DestroyNotBefore > _tick)
+            {
+                (held ??= []).Add(entity);
+                continue;
+            }
             foreach (var module in entity.ModuleArray) module.OnRemove(this);
             foreach (var node in entity.Updates) _updates.Remove(node);
             if (entity.Timers is { Count: > 0 } timers)
@@ -1511,6 +1535,8 @@ public sealed partial class SimulationWorld : IWorldServices
             _destroyedTotal++;
         }
         _destroyQueue.Clear();
+        if (held is not null) _destroyQueue.AddRange(held);
+        _destroyPhaseOf = _tick;
         // A fixed point of the tick at which no loop over the entities is in flight.
         _entities.Compact();
     }

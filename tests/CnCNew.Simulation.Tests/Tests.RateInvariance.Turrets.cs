@@ -336,7 +336,7 @@ static partial class Tests
             foreach (var (rate, factor) in WorldRates)
             {
                 var (world, feeder, _) = RatedWorld(rate, AcquisitionFiles(), seed: seed);
-                // Spawned in the last tick of frame 0, the soldier is first stepped in the first tick of frame 1 at every rate; its first look is two frames later.
+                // Spawned in the last tick of frame 0 of the world, the soldier counts its own logic frames from that tick; its first look is two frames after its first frame.
                 for (var i = 0; i < factor - 1; i++) world.Step();
                 feeder.Spawn(1, "AcqSoldier", owner: 1, x: 0, y: 0);
                 world.Step();
@@ -351,7 +351,7 @@ static partial class Tests
                     if (ShotsOf(result, soldier) > 0) firstShot = result.Tick;
                 }
 
-                Check.That(firstShot > 0 && firstShot % factor == 0, $"seed {seed}, {rate}: the second look falls on the first tick of a logic frame (first shot at tick {firstShot}).");
+                Check.That(firstShot > 0 && (firstShot - soldier.SpawnTick) % factor == 0, $"seed {seed}, {rate}: the second look falls on the first tick of a logic frame of the unit (first shot at tick {firstShot}, appeared in tick {soldier.SpawnTick}).");
                 var frame = firstShot / factor;
                 if (reference < 0) reference = frame;
                 Check.That(frame == reference && frame is >= 7 and <= 15, $"seed {seed}, {rate}: the shift is the one of 30 Hz (first shot in frame {frame}, 30 Hz frame {reference}).");
