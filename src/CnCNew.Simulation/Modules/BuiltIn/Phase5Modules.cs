@@ -891,6 +891,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         var body = target.Body!;
+        if (world.Time.TicksPerOriginalFrame != TickOrder.Next)
+        {
+            // Above 30 Hz the repair heals the slice of a logic frame of the original, once per frame of the builder (the escape "Originalraster" for a heal slice,
+            // docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md §3): a hit in the first tick of a frame meets the health the 30 Hz step leaves - with a share per tick it met only
+            // one share of that frame's repair, and a threshold of the body (the fear roll at a quarter of the health) was crossed in different frames.
+            if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return;
+            var slice = body.MaxHealth * data.RepairRatePerSecond / Fixed.FromInt(SimulationRate.OriginalFramesPerSecond);
+            world.Damage(target.Id, new DamageInfo(Entity.Id, slice, DamageTypes.Healing, DeathTypes.None, false));
+            return;
+        }
         var amount = world.Time.PerSecondToPerTick(body.MaxHealth * data.RepairRatePerSecond);
         world.Damage(target.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
     }
