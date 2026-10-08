@@ -487,7 +487,9 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             else CancelWingedStep();
         }
         if (circles) CircleStep(world);
-        else _circling = false;
+        // Forgotten where a frame is decided only: an order that ends in this frame's decision names the point to circle (OnWingedArrival), and the ticks that fly the rest of
+        // that frame must not drop it before the next decision circles it.
+        else if (decided) _circling = false;
         if (moves) base.Update(world);
         if (decided) _frame.Begin(world.Time, Entity, step.X, step.Y, step.Z, step.Turn);
         return SimulationTiming.SleepNone;
