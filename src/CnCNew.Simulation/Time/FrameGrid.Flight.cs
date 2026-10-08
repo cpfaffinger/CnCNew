@@ -42,6 +42,9 @@ public struct FlightFrameStep
     private Fixed _y;
     private Fixed _z;
     private Fixed _angle;
+    // The heading the decision left: the last share sets it, so that the heading after the frame is the 30 Hz heading to the bit (shares added one by one may end on the other
+    // representation of a half turn).
+    private Fixed _endAngle;
 
     /// <summary>Ticks of the decided frame that are still to be flown (0: the next tick decides).</summary>
     public readonly int TicksLeft => _left;
@@ -59,6 +62,7 @@ public struct FlightFrameStep
         _y = Fixed.FromRaw(dy.Raw / ticks);
         _z = Fixed.FromRaw(dz.Raw / ticks);
         _angle = Fixed.FromRaw(turn.Raw / ticks);
+        _endAngle = entity.Angle;
         entity.X -= _x * (long)_left;
         entity.Y -= _y * (long)_left;
         entity.Z -= _z * (long)_left;
@@ -73,7 +77,7 @@ public struct FlightFrameStep
         entity.X += _x;
         entity.Y += _y;
         entity.Z += _z;
-        if (_angle != Fixed.Zero) entity.Angle = FixedTrig.Normalize(entity.Angle + _angle);
+        if (_angle != Fixed.Zero) entity.Angle = _left == 0 ? _endAngle : FixedTrig.Normalize(entity.Angle + _angle);
         return true;
     }
 
@@ -90,6 +94,7 @@ public struct FlightFrameStep
         writer.Fixed("y", _y);
         writer.Fixed("z", _z);
         writer.Fixed("angle", _angle);
+        if (_angle != Fixed.Zero) writer.Fixed("endAngle", _endAngle);
         writer.EndObject();
     }
 
@@ -103,5 +108,6 @@ public struct FlightFrameStep
         _y = step.Fixed("y");
         _z = step.Fixed("z");
         _angle = step.Fixed("angle");
+        _endAngle = step.Has("endAngle") ? step.Fixed("endAngle") : Fixed.Zero;
     }
 }
