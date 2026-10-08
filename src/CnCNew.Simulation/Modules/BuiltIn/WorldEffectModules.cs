@@ -839,7 +839,8 @@ public sealed class FirestormDynamicGeometryInfoUpdate(FirestormData data) : Sim
                 if (_startDelay > 0) return SimulationTiming.SleepNone;
                 _started = true;
             }
-            var ratio = data.TransitionTime == 0 ? Fixed.One : Fixed.FromInt(_timeActive) / Fixed.FromInt(data.TransitionTime);
+            // The way back starts below zero above 30 Hz (see the reversal): the geometry rests on its end value until the counter is back at zero.
+            var ratio = data.TransitionTime == 0 ? Fixed.One : Fixed.FromInt(Math.Max(_timeActive, 0)) / Fixed.FromInt(data.TransitionTime);
             _current = (_from.Height + ratio * (_to.Height - _from.Height), _from.Major + ratio * (_to.Major - _from.Major), _from.Minor + ratio * (_to.Minor - _from.Minor));
             _timeActive++;
             if (_timeActive > data.TransitionTime)
@@ -847,7 +848,9 @@ public sealed class FirestormDynamicGeometryInfoUpdate(FirestormData data) : Sim
                 if (_reverse)
                 {
                     _switched = true;
-                    _timeActive = 0;
+                    // The way out starts in the update that ends the delay and takes TransitionTime; the way back starts with the next update, which is one logic
+                    // frame of the original later, and so takes TransitionTime plus one frame (not plus one tick). 0 at 30 Hz.
+                    _timeActive = TickOrder.Next - world.Time.TicksPerOriginalFrame;
                     _reverse = false;
                     _from = (data.FinalHeight, data.FinalMajor, data.FinalMinor);
                     _to = (data.InitialHeight, data.InitialMajor, data.InitialMinor);
