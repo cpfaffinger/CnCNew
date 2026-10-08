@@ -134,6 +134,9 @@ public sealed partial class SimulationWorld
                 continue;
             }
 
+            // A unit decides in the ticks its logic frames of the original begin with (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md §2); it reads everything it looks at where
+            // that frame ends, so the ticks in between have nothing to decide that the 30 Hz step decides. At 30 Hz every tick begins a frame.
+            if (_firstFrameTicks != TickOrder.Next && (tick - entity.SpawnTick) % _firstFrameTicks != 0) continue;
             var before = AcquisitionStamp.Of(entity.Acquisition);
             StepAcquirer(entity, ai, tick);
             if (entity.Acquisition is { IsDefault: true }) entity.Acquisition = null;
@@ -382,7 +385,13 @@ public sealed partial class SimulationWorld
         var limit = SquaredReach.Of(radius);
         var turretOnly = mode == AcquireMode.Turret;
         var buildings = computer || (ai.AutoAcquire & AutoAcquire.AttackBuildings) != 0;
-        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue };
+        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue, OwnX = entity.X, OwnY = entity.Y };
+        // Above 30 Hz the look measures from where the unit's begun frame ends to where each candidate's ends (rule 3 of the frame convention).
+        if (_firstFrameTicks != TickOrder.Next)
+        {
+            search.FrameEnd = true;
+            (search.OwnX, search.OwnY, _) = entity.FrameEnd(_tick);
+        }
 
         if (RelationshipOverride is not null)
         {
@@ -414,13 +423,22 @@ public sealed partial class SimulationWorld
         public Fixed BestDistance;
         public int BestEffective;
         public int BestPriority;
+        public Fixed OwnX;
+        public Fixed OwnY;
+        public bool FrameEnd;
     }
 
     private void ConsiderMoodTarget(Entity entity, Entity candidate, ref MoodSearch search)
     {
         if (candidate.Owner == entity.Owner || candidate.Owner.IsSystem) return;
-        var dx = candidate.X - entity.X;
-        var dy = candidate.Y - entity.Y;
+        var dx = candidate.X - search.OwnX;
+        var dy = candidate.Y - search.OwnY;
+        if (search.FrameEnd && candidate.IsInsideFrameStep)
+        {
+            var (x, y, _) = candidate.FrameEnd(_tick);
+            dx = x - search.OwnX;
+            dy = y - search.OwnY;
+        }
         var distance = dx * dx + dy * dy;
         if (!search.Limit.Contains(distance)) return;
         if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT") || candidate.Template.IsKindOf("MINE")) return;

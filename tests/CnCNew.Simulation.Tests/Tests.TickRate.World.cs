@@ -303,8 +303,9 @@ static partial class Tests
                 if (ShotsOf(result, soldier) > 0) firstShot = result.Tick;
             }
 
-            // The unit exists from tick 1 on; its first step notes the idle state and schedules the look two logic frames later.
-            Check.That(firstShot == 1 + 2 * factor, $"{rate}: the idle soldier looks two logic frames after it became idle and fires at once (first shot at tick {firstShot}, expected {1 + 2 * factor}).");
+            // The unit appears in tick 0; its first logic frame begins one frame later, notes the idle state and schedules the look two logic frames after that: three frames
+            // after the appearance at every rate (tick 3 at 30 Hz).
+            Check.That(firstShot == 3 * factor, $"{rate}: the idle soldier looks two logic frames after it became idle and fires at once (first shot at tick {firstShot}, expected {3 * factor}).");
         }
     }
 }
