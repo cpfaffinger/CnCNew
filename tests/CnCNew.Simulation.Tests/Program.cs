@@ -85,6 +85,8 @@ run.Test("Tick rate, world: an idle unit's first look falls two logic frames aft
 run.Test("Rate invariance, ground: a course with and without terrain, damaged, and short hops end every logic frame where 30 Hz does", Tests.GroundRateInvarianceCourse);
 run.Test("Rate invariance, ground: the detour around standing units is the 30 Hz detour", Tests.GroundRateInvarianceStandingUnits);
 run.Test("Rate invariance, consolidation: movers that meet are where the 30 Hz movers are", Tests.RateConsolidationMoversThatMeetAreTheSame);
+run.Test("Rate invariance, exits: produced units leave their factory, make room and reach the rally point as at 30 Hz", Tests.RateExitsAreTheSame);
+run.Test("Rate invariance, exits: a snapshot while a unit waits for its place continues like the live world", Tests.RateExitsSnapshotWhileWaitingForThePlace);
 run.Test("Rate invariance, ground: a snapshot inside a logic frame continues like the live world", Tests.GroundRateInvarianceSnapshotInsideAFrame);
 run.Test("Rate invariance, ground: an order inside a logic frame keeps the step continuous and cancels a pending arrival", Tests.GroundRateInvarianceOrderInsideAFrame);
 run.Test("Rate invariance, ground: crush and topple are sampled once per logic frame", Tests.GroundRateInvarianceCollisionsPerFrame);
