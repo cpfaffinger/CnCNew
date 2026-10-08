@@ -328,7 +328,7 @@ public sealed partial class SimulationWorld
         var emptied = clip == 0;
         // A RETURN_TO_BASE weapon that ran dry waits for the airfield reload (JetAIUpdate refills the clip and sets the ready tick then).
         var ready = emptied
-            ? weapon.ReloadsAtBase ? SimulationTiming.SleepForever : _tick + weapon.ClipReloadWith(Time, bonuses, conditions)
+            ? weapon.ReloadsAtBase ? SimulationTiming.SleepForever : _tick + ClipReloadOf(weapon, bonuses, conditions)
             : _tick + weapon.DelayBetweenShotsWith(Time, bonuses, conditions);
         StoreSlot(source, slot, clip, ready);
         if (source.WeaponSlots is { } state)
@@ -343,6 +343,17 @@ public sealed partial class SimulationWorld
         NoteShotFired(source, weapon, slot, victim);
         MarkDirty(source);
         return weapon;
+    }
+
+    /// <summary>
+    /// The wait after the last round of a clip. A clip without a reload time (<c>ClipReloadTime = 0</c>) is full at once, and the weapon fires again in the next logic frame of the
+    /// original (the reference's weapon is asked once per frame). At 30 Hz that is the next tick of an order stream and the wait stays 0, as it always was; above 30 Hz the next tick
+    /// is inside the same frame, so the wait is one frame - a wait of 0 let the weapon fire twice and four times per frame there.
+    /// </summary>
+    private long ClipReloadOf(WeaponInfo weapon, WeaponBonusTable bonuses, uint conditions)
+    {
+        var reload = weapon.ClipReloadWith(Time, bonuses, conditions);
+        return reload == 0 && _turretFrameTicks != 1 ? _turretFrameTicks : reload;
     }
 
     // ------------------------------------------------------------------------------------------------------ module services

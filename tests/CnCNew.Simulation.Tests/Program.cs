@@ -78,6 +78,7 @@ run.Test("Rate invariance, turrets: a hold lasts the recentre time and one logic
 run.Test("Rate invariance, turrets: the idle scan is at the 30 Hz angle at the end of every logic frame", Tests.RateInvarianceTurretIdleScanIsTheSameAtEveryFrame);
 run.Test("Rate invariance, firing: a silent weapon spins down at the same game time", Tests.RateInvarianceFiringTrackerDeadlinesTakeAFrame);
 run.Test("Rate invariance, firing: a stale wind-up is forgotten after the same logic frame", Tests.RateInvarianceStaleWindUpIsForgottenAfterTheSameFrame);
+run.Test("Rate invariance, firing: a clip without a reload time fires again in the next logic frame", Tests.RateInvarianceClipWithoutReloadTimeFiresOncePerFrame);
 // Tick rate, stage 2, modules N–Z (Tests.TickRate.ModulesNZ.cs).
 run.Test("Tick rate N–Z: a detector's stagger is drawn in frames of the original", Tests.TickRateNzDetectorStaggerIsDrawnInOriginalFrames);
 run.Test("Tick rate N–Z: poison without an interval hurts once per frame of the original", Tests.TickRateNzPoisonWithoutIntervalHurtsOncePerOriginalFrame);

@@ -130,6 +130,60 @@ static partial class Tests
             }
     }
 
+    private static IReadOnlyDictionary<string, string> RateInvarianceFiles() => new Dictionary<string, string>(RatedWorldFiles())
+    {
+        ["Data/INI/Object/RateInvarianceTurretsFixture.ini"] = """
+        Weapon NoReloadClipGun
+          PrimaryDamage = 1
+          AttackRange = 150.0
+          DamageType = EXPLOSION
+          ClipSize = 2
+          DelayBetweenShots = 300
+        End
+        Object NoReloadTank
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY NoReloadClipGun
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        """,
+    };
+
+    /// <summary>
+    /// A clip without a reload time is full at once and the weapon fires again in the next logic frame: with an order every tick the gaps between the shots of a two-round clip are
+    /// 9 frames (the shot delay) and 1 frame, at every rate. (With a wait of 0 ticks the second gap was one tick: two and four shots per frame at 60 and 120 Hz.)
+    /// </summary>
+    public static void RateInvarianceClipWithoutReloadTimeFiresOncePerFrame()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, RateInvarianceFiles());
+            feeder.Spawn(1, "NoReloadTank", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "TurretTarget", owner: 2, x: 100, y: 0);
+            for (var i = 0; i < factor; i++) world.Step();
+            var tank = Slotted(world, "NoReloadTank");
+            var victim = IdOf(world, "TurretTarget");
+            var shots = new List<long>();
+            for (var i = 0; i < 60 * factor; i++)
+            {
+                feeder.FireWeapon(1, tank.Id.Value, victim);
+                var result = world.Step();
+                if (result.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id)) shots.Add(result.Tick);
+            }
+
+            var gaps = shots.Zip(shots.Skip(1), (a, b) => b - a).ToArray();
+            Check.That(gaps.Length >= 10 && gaps.Select((gap, index) => gap == (index % 2 == 0 ? 9 : 1) * factor).All(same => same),
+                $"{rate}: the gaps between shots are 9 and 1 logic frames in turn: {string.Join(",", gaps)} ticks.");
+        }
+    }
+
     /// <summary>Per tick the turret angle of a lone <c>ScanTank</c> (it glances around at random while idle) over <paramref name="frames"/> logic frames after its first frame.</summary>
     private static List<Fixed> IdleScanAngles(SimulationRate rate, int factor, int frames)
     {
