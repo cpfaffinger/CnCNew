@@ -1372,7 +1372,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
             return;
         }
-        if (world.Navigation is null || !air) world.ResolveFootprintCollisions(Entity, stepX, stepY);
+        // Crush, topple and collide modules are tested where the 30 Hz step tests them: once per logic frame, at the end of the frame's step and with its whole displacement.
+        if (left == 1 && (world.Navigation is null || !air)) world.ResolveFootprintCollisions(Entity, _frameStepX, _frameStepY);
     }
 
     private void ReplanAround(NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)

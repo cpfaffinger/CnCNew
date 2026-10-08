@@ -342,7 +342,10 @@ public sealed partial class SimulationWorld
         foreach (var module in other.ModuleArray)
         {
             if (module is not ToppleUpdate { IsAbleToBeToppled: true } topple) continue;
-            topple.ApplyTopplingForce(this, other.X - mover.X, other.Y - mover.Y, mover.Speed);
+            // The force is the pusher's speed per logic frame of the original (Entity.Speed is per tick: half the push at 60 Hz).
+            var stride = Time.TicksPerOriginalFrame;
+            var speed = stride == 1 ? mover.Speed : AiOf(mover) is { } ai ? ai.SpeedPerOriginalFrame(stride) : mover.Speed * stride;
+            topple.ApplyTopplingForce(this, other.X - mover.X, other.Y - mover.Y, speed);
             return;
         }
     }
