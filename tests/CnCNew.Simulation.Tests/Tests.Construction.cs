@@ -261,12 +261,13 @@ static partial class Tests
         {
             var before = site.ConstructionWork;
             var result = world.Step();
-            if (site.ConstructionWork == before + 1) work++;
+            if (site.ConstructionWork > before) work++;
             Check.That(site.Body.Health >= previous, "Health only rises while building.");
             previous = site.Body.Health;
             if (result.Events.Any(value => value.Kind == SimEventKind.ConstructionCompleted && value.Entity == site.Id)) completedAt = tick;
         }
-        Check.That(completedAt >= 0 && work == world.Frames(60), $"BuildTime 2 s means 60 ticks of builder work (measured {work}).");
+        // The first step of work stands for a whole frame of the original, every later one for a tick: 59 frames after the first step the structure stands.
+        Check.That(completedAt >= 0 && work == world.Frames(59) + 1 && site.ConstructionWork == world.Frames(60), $"BuildTime 2 s means 60 frames of builder work, the first step counting a whole frame (measured {work} steps).");
         Check.That(!IsSite(site) && site.Body!.Health == site.Body.MaxHealth, "The finished structure has exactly its maximum health.");
         Check.That(world.EnergyProductionOf(new PlayerId(1)) == 5, "Energy production starts on completion.");
         StepUntil(world, 5, () => false);
@@ -315,7 +316,7 @@ static partial class Tests
             }
             if (result.Events.Any(value => value.Kind == SimEventKind.StructureSold && value.Entity == plant.Id && value.Value == Fixed.FromInt(50).Raw)) sold = world.Tick - start;
         }
-        Check.That(sold == world.Frames(180) - 1, $"The refund arrives 179 ticks after the order (measured {sold}).");
+        Check.That(sold == world.Frames(179), $"The refund arrives 179 frames after the order (measured {sold} ticks).");
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(1050), "SellPercentage 50 % of BuildCost 100 is paid out.");
         world.Step();
         Check.That(world.FindEntity(plant.Id) is null && world.EnergyProductionOf(new PlayerId(1)) == 0, "The sold structure is removed and stops producing energy.");
@@ -513,23 +514,25 @@ static partial class Tests
         Check.That(!IsSite(ConstructionFind(world, "Tower")) && world.Entities.All(value => value.Template.Name != "Barracks"), "The construction finished and the sale completed.");
         Check.That(world.MoneyOf(new PlayerId(1)) == restored.MoneyOf(new PlayerId(1)), "Money agrees.");
 
-        // Replay: the same scripted commands run through the replay runner reproduce the live run tick by tick.
+        // Replay: the same scripted commands run through the replay runner reproduce the live run tick by tick. The command times and the length of the replay are
+        // game time (the sale alone takes 179 frames of the original), so they are written in frames and scaled to the ticks of the rate the tests run at.
         var players = TwoPlayers;
+        static long At(long frames) => TestRate.Frames(frames);
         var commands = ImmutableArray.Create<SimCommand>(
-            new SpawnCommand(new PlayerId(1), 1, 0, "Dozer", new PlayerId(1), Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero),
-            new SpawnCommand(new PlayerId(1), 2, 0, "Barracks", new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(100), Fixed.Zero, Fixed.Zero),
-            new GiveMoneyCommand(PlayerId.System, 1, 0, new PlayerId(1), Fixed.FromInt(500)),
-            new ConstructCommand(new PlayerId(1), 3, 2, new EntityId(1), "Plant", Fixed.FromInt(60), Fixed.Zero, Fixed.Zero),
-            new SetRallyPointCommand(new PlayerId(1), 4, 3, new EntityId(2), Fixed.FromInt(120), Fixed.FromInt(100)),
-            new QueueProductionCommand(new PlayerId(1), 5, 3, new EntityId(2), "Grunt"),
-            new ConstructCommand(new PlayerId(1), 6, 5, new EntityId(1), "Plant", Fixed.FromInt(60), Fixed.FromInt(40), Fixed.Zero),
-            new CancelConstructCommand(new PlayerId(1), 7, 20, new EntityId(4)),
-            new ResumeConstructCommand(new PlayerId(1), 8, 25, new EntityId(1), new EntityId(3)),
-            new SellCommand(new PlayerId(1), 9, 40, new EntityId(2)),
-            new RepairCommand(new PlayerId(1), 10, 60, new EntityId(1), new EntityId(3)),
-            new ResumeConstructCommand(new PlayerId(1), 11, 70, new EntityId(1), new EntityId(4)));
+            new SpawnCommand(new PlayerId(1), 1, At(0), "Dozer", new PlayerId(1), Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero),
+            new SpawnCommand(new PlayerId(1), 2, At(0), "Barracks", new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(100), Fixed.Zero, Fixed.Zero),
+            new GiveMoneyCommand(PlayerId.System, 1, At(0), new PlayerId(1), Fixed.FromInt(500)),
+            new ConstructCommand(new PlayerId(1), 3, At(2), new EntityId(1), "Plant", Fixed.FromInt(60), Fixed.Zero, Fixed.Zero),
+            new SetRallyPointCommand(new PlayerId(1), 4, At(3), new EntityId(2), Fixed.FromInt(120), Fixed.FromInt(100)),
+            new QueueProductionCommand(new PlayerId(1), 5, At(3), new EntityId(2), "Grunt"),
+            new ConstructCommand(new PlayerId(1), 6, At(5), new EntityId(1), "Plant", Fixed.FromInt(60), Fixed.FromInt(40), Fixed.Zero),
+            new CancelConstructCommand(new PlayerId(1), 7, At(20), new EntityId(4)),
+            new ResumeConstructCommand(new PlayerId(1), 8, At(25), new EntityId(1), new EntityId(3)),
+            new SellCommand(new PlayerId(1), 9, At(40), new EntityId(2)),
+            new RepairCommand(new PlayerId(1), 10, At(60), new EntityId(1), new EntityId(3)),
+            new ResumeConstructCommand(new PlayerId(1), 11, At(70), new EntityId(1), new EntityId(4)));
         commands = [..commands.OrderBy(value => value.Tick).ThenBy(value => value.Player.Value).ThenBy(value => value.Sequence)];
-        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, TestRate.Default.TicksPerSecond, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), players, 400, 50);
+        var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, TestRate.Default.TicksPerSecond, fixture.Fingerprint, SyntheticFixture.FixtureId, 1, new WorldId(1), players, At(400), TestRate.Frames(50));
         var probe = ReplayRunner.Run(new ReplayFile(header, commands, []), fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
         var file = ReplayFormat.Read(ReplayFormat.Write(new ReplayFile(header, commands, probe.Checkpoints)));
         Check.That(file.Commands.SequenceEqual(commands), "All six construction commands survive the replay file.");

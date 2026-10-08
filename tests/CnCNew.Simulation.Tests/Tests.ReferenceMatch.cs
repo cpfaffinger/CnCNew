@@ -155,7 +155,9 @@ static partial class Tests
     /// <summary>Scenario participants, stand-in bases, and the match itself: a deterministic replay whose runs, snapshot continuation and file round trip all agree.</summary>
     public static void ReferenceMatch()
     {
-        var fixture = new SyntheticFixture(TestRate.Default, files: ReferenceMatchFiles());
+        // Always at the original's 30 Hz, whatever rate the other tests run at (docs/TICKRATE-MIGRATION.md §15.2 no. 2): the outcome of a whole match is chaotic - the
+        // arena radius below was chosen for 30 Hz, and one unit of radius moves the outcome as far as a change of rate does - and MaxTicks is a tick budget.
+        var fixture = new SyntheticFixture(CnCNew.Simulation.Time.SimulationRate.Original, files: ReferenceMatchFiles());
         var catalog = fixture.Templates;
         var participants = ReferenceMatchScenario.Participants(catalog, out var excluded);
         Check.That(participants.Select(value => value.Faction.Name).SequenceEqual(["FactionAlpha", "FactionBeta", "FactionGamma"]),
