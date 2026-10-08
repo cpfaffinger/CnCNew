@@ -383,6 +383,7 @@ run.Test("Rate invariance, flight: a jet takes off from, flies around and lands 
 run.Test("Rate invariance, flight: the step of a frame in flight survives a snapshot at 60 and 120 Hz and is absent at 30 Hz", Tests.RateFlightFrameStepsSurviveSnapshots);
 run.Test("Rate invariance, flight round 3: a jet sortie (production, taxi, take-off, flight, turn, attack, return, landing, taxi, reload) is the 30 Hz state bit for bit after every frame at 60 and 120 Hz", Tests.RateFlightJetSortieIsBitIdentical);
 run.Test("Rate invariance, flight round 3: a helicopter (pad, climb, flight, turn, return, landing) is the 30 Hz state bit for bit after every frame at 60 and 120 Hz", Tests.RateFlightHelicopterIsBitIdentical);
+run.Test("Rate invariance, flight round 3: an observer reads a jet, a helicopter, a Chinook, a parachute and its rider, falling aircraft, the Spectre and a flare where their frame ends at 60 and 120 Hz", Tests.RateFlightObserversReadTheFrameEnd);
 run.Test("Rate invariance, round 3: a deploying unit under a fire order in every tick unpacks, aims, fires, packs and drives in the 30 Hz state bit for bit after every frame at 60 and 120 Hz", Tests.RateDeployStyleIsBitIdentical);
 run.Test("Air: an airfield uses the injected model bones (hangar, parking, runway), refuses a mismatching table and survives snapshots", Tests.AirAirfieldUsesTheModelBones);
 run.Test("Air: a carrier's deployment creates the gunship at the map edge on a map with terrain", Tests.AirSpectreDeployedByCarrier);
