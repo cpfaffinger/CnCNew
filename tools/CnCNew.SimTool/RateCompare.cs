@@ -151,6 +151,24 @@ internal static class RateCompare
             var session = CnCNew.Simulation.Skirmish.SkirmishMatchSession.Start(options, context.Catalog, context.Fingerprint, terrain, map.Objects,
                 [..ReferenceManifest.Participants(context, factions).Select(participant => new CnCNew.Simulation.Skirmish.SkirmishSlot(participant))]);
             ends.Add(() => $"{rate.TicksPerSecond} Hz: over {session.IsOver}, winner {(session.Winner is { } winner ? session.Players.First(player => player.Id == winner).Faction : "none")} at tick {session.VictoryTick.ToString(CultureInfo.InvariantCulture)} (frame {(session.VictoryTick < 0 ? -1 : session.VictoryTick / rate.TicksPerOriginalFrame).ToString(CultureInfo.InvariantCulture)}), world tick {session.World.Tick.ToString(CultureInfo.InvariantCulture)}");
+            // --commands N: what the players ordered in the last N logic frames before the comparison stopped (the AI's own state is outside the world and not compared).
+            if (Value(args, "--commands") is { } span)
+                ends.Add(() =>
+                {
+                    var stride = rate.TicksPerOriginalFrame;
+                    var from = session.World.Tick / stride - long.Parse(span, CultureInfo.InvariantCulture);
+                    var culture = CultureInfo.CurrentCulture;
+                    CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+                    try
+                    {
+                        return string.Join(Environment.NewLine, session.ToReplay().Commands.Where(command => command.Tick / stride >= from)
+                            .Select(command => $"{rate.TicksPerSecond} Hz frame {command.Tick / stride} tick {command.Tick % stride + 1}/{stride}: {command}"));
+                    }
+                    finally
+                    {
+                        CultureInfo.CurrentCulture = culture;
+                    }
+                });
             return new RateCompareFields.Match(session.World, () => session.IsOver, session.Step);
         }
         var result = RateCompareFields.Run(args, Of(rates[0]), Of(rates[1]), rates[0], rates[1], int.Parse(Value(args, "--context") ?? "6", CultureInfo.InvariantCulture));

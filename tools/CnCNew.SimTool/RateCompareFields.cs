@@ -169,6 +169,8 @@ internal static class RateCompareFields
                 var had = last.TryGetValue((side, id), out var before);
                 if (!had)
                 {
+                    // Where the object's own frames lie in the frames of the world: the tick it appeared in.
+                    if (entity is not null) Console.WriteLine($"{rate.TicksPerSecond} Hz object {id} {entity.Template.Name}: appeared in tick {entity.SpawnTick.ToString(CultureInfo.InvariantCulture)} (tick {(entity.SpawnTick % rate.TicksPerOriginalFrame + 1).ToString(CultureInfo.InvariantCulture)}/{rate.TicksPerOriginalFrame} of frame {(entity.SpawnTick / rate.TicksPerOriginalFrame).ToString(CultureInfo.InvariantCulture)})");
                     last[(side, id)] = now;
                     continue;
                 }
