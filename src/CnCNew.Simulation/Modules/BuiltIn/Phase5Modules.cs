@@ -2015,13 +2015,23 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
                 : _hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: _hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
                 : default(SpawnExtras?);
-            var (x, y, z, angle) = exit is null ? (Entity.X, Entity.Y, Entity.Z, Entity.Angle) : exit.ClaimExit(world, world.Templates[head.TemplateIndex]);
+            var (x, y, z, angle) = exit is null ? OwnPlace(world) : exit.ClaimExit(world, world.Templates[head.TemplateIndex]);
             if (extras is { } value) world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle, value);
             else world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle);
             world.Emit(SimEventKind.ProductionCompleted, Entity.Id, EntityId.Invalid, string.Empty, head.TemplateIndex);
         }
         else _queue[0] = head with { RemainingTicks = remaining };
         return _queue.Count == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
+    }
+
+    /// <summary>
+    /// A producer without an exit puts the unit where it is itself. One that moves (a worker) has, above 30 Hz, covered only a share of its frame's step when this module looks at
+    /// it: the unit appears where the producer's frame ends, which is where the 30 Hz step has put it (the 30 Hz position itself at 30 Hz).
+    /// </summary>
+    private (Fixed X, Fixed Y, Fixed Z, Fixed Angle) OwnPlace(IWorldServices world)
+    {
+        var (x, y, z) = Entity.FrameEnd(world.Tick);
+        return (x, y, z, Entity.FrameEndAngle(world.Tick));
     }
 
     public override void Describe(IStateWriter writer)
