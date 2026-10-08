@@ -6,9 +6,12 @@
   Baut SimTool (Release), kopiert die Binaerdateien in das Ausgabeverzeichnis (damit ein spaeterer Build die laufende Messung nicht stoert) und startet
   nacheinander, nie parallel:
     - Gefechte mit `SimTool perf ... --replay`: kleine Karte mit 2 Spielern, mittlere Karte mit 2 und 4 Spielern, grosse Karte mit 2, 4 und 8 Spielern,
-      je -Ticks Ticks (Standard: 30 Spielminuten bei der Rate des Laufs, also 54.000 Ticks bei 30 Hz und 108.000 bei 60 Hz);
-    - zwei grosse Missionen mit `SimTool perf-mission` (MD_USA05, MD_GLA05), je 100 und 300 Spielsekunden (3.000 und 9.000 Ticks bei 30 Hz).
-  Alle Echtzeit-Groessen (Aufholtempo, Kernanteil) gelten fuer die Rate des Laufs (-TickRate); es wird nicht auf eine andere Rate hochgerechnet.
+      je 30 Spielminuten (als `--minutes 30` an das Werkzeug gereicht: 54.000 Ticks bei 30 Hz, 108.000 bei 60 Hz) oder -Ticks Ticks;
+    - zwei grosse Missionen mit `SimTool perf-mission` (MD_USA05, MD_GLA05), je 100 und 300 Spielsekunden (`--seconds`; die Laufnamen
+      `mission-<Karte>-3000` und `-9000` nennen diese Spielzeit in Originalbildern von 1/30 s, bei jeder Rate dieselben Namen).
+  Die Rate nennt das Skript nicht selbst: ohne -TickRate laeuft SimTool mit seinem Standard (der Produktrate, `GameData.DefaultSessionRate`), und die
+  Zusammenfassung liest die Rate aus der `summary:`-Zeile des Werkzeugs. Ein Vergleich zweier Staende braucht dieselbe Rate auf beiden Seiten.
+  Alle Echtzeit-Groessen (Aufholtempo, Kernanteil) gelten fuer die Rate des Laufs; es wird nicht auf eine andere Rate hochgerechnet.
   Je Lauf entstehen <name>.txt (volle Ausgabe), <name>.csv (eine Zeile je 300 Ticks) und <name>.json (maschinenlesbare Zusammenfassung fuer
   `SimTool perf-compare` bzw. scripts/perf-compare.ps1); am Ende summary.md (Tabelle aus den `summary:`-Zeilen).
   Die Ausgaben liegen ausserhalb des Repos unter -OutDir (Standard: %TEMP%\cncnew-perf).
@@ -21,12 +24,13 @@
   .\scripts\perf-profile.ps1 -Ticks 6000 -Only 'large-*'
   .\scripts\perf-profile.ps1 -TickRate 60 -Only 'large-8p'
   .\scripts\perf-profile.ps1 -Only 'mission-*' -MissionTicks 3000
+  .\scripts\perf-profile.ps1 -TickRate 30 -Label 'Vergleich bei 30 Hz'
   .\scripts\perf-profile.ps1 -Label 'b432fb7 vor der Aenderung' -OutDir $env:TEMP\perf-alt
 #>
 [CmdletBinding()]
 param(
-    # Simulationsrate der Laeufe (30, 60 oder 120); wird als --tick-rate an SimTool gereicht.
-    [ValidateSet(30, 60, 120)][int]$TickRate = 30,
+    # Simulationsrate der Laeufe (30, 60 oder 120; wird als --tick-rate an SimTool gereicht); 0 = Standard des Werkzeugs (die Produktrate).
+    [ValidateSet(0, 30, 60, 120)][int]$TickRate = 0,
     # Ticks je Gefecht (Ticks der Rate des Laufs). Ohne Angabe 30 Spielminuten.
     [int]$Ticks = 0,
     # Ticks je Missionslauf (jede Mission laeuft einmal je Wert; Ticks der Rate des Laufs). Ohne Angabe 100 und 300 Spielsekunden.
@@ -45,9 +49,15 @@ param(
 $ErrorActionPreference = 'Stop'
 # `pwsh -File` reicht "a,b" als ein Argument durch: Listen deshalb hier selbst an Kommas trennen.
 $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-if ($Ticks -le 0) { $Ticks = 30 * 60 * $TickRate }
-if ($MissionTicks.Count -eq 0) { $MissionTicks = @("$(100 * $TickRate)", "$(300 * $TickRate)") }
-$missionTickCounts = @($MissionTicks | ForEach-Object { $_ -split ',' } | Where-Object { $_.Trim() } | ForEach-Object { [int]$_ })
+# Budgets ohne Angabe sind Spielzeit; das Werkzeug rechnet sie mit seiner Rate in Ticks um (--minutes/--seconds). Eine Angabe in Ticks geht als --ticks durch.
+$matchBudget = if ($Ticks -gt 0) { @('--ticks', "$Ticks") } else { @('--minutes', '30') }
+$missionBudgets = if ($MissionTicks.Count -eq 0) {
+    @(@{ Suffix = '3000'; Budget = @('--seconds', '100') }, @{ Suffix = '9000'; Budget = @('--seconds', '300') })
+}
+else {
+    @($MissionTicks | ForEach-Object { $_ -split ',' } | Where-Object { $_.Trim() } | ForEach-Object { @{ Suffix = "$([int]$_)"; Budget = @('--ticks', "$([int]$_)") } })
+}
+$rateArgs = if ($TickRate -gt 0) { @('--tick-rate', "$TickRate") } else { @() }
 $repo = Split-Path -Parent $PSScriptRoot
 if (-not $ContentDir) { $ContentDir = Join-Path $repo '.local\phase2-import-a' }
 if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Inhaltsverzeichnis nicht gefunden: $ContentDir" }
@@ -63,16 +73,16 @@ $medium = 'Maps/Tournament Tundra/Tournament Tundra.map' # 4 Startpositionen
 $large = 'Maps/Twilight Flame/Twilight Flame.map'        # 8 Startpositionen
 
 $runs = @(
-    @{ Name = 'small-2p';  Command = 'perf'; Map = $small;  Players = 2; Ticks = $Ticks }
-    @{ Name = 'medium-2p'; Command = 'perf'; Map = $medium; Players = 2; Ticks = $Ticks }
-    @{ Name = 'medium-4p'; Command = 'perf'; Map = $medium; Players = 4; Ticks = $Ticks }
-    @{ Name = 'large-2p';  Command = 'perf'; Map = $large;  Players = 2; Ticks = $Ticks }
-    @{ Name = 'large-4p';  Command = 'perf'; Map = $large;  Players = 4; Ticks = $Ticks }
-    @{ Name = 'large-8p';  Command = 'perf'; Map = $large;  Players = 8; Ticks = $Ticks }
+    @{ Name = 'small-2p';  Command = 'perf'; Map = $small;  Players = 2; Budget = $matchBudget }
+    @{ Name = 'medium-2p'; Command = 'perf'; Map = $medium; Players = 2; Budget = $matchBudget }
+    @{ Name = 'medium-4p'; Command = 'perf'; Map = $medium; Players = 4; Budget = $matchBudget }
+    @{ Name = 'large-2p';  Command = 'perf'; Map = $large;  Players = 2; Budget = $matchBudget }
+    @{ Name = 'large-4p';  Command = 'perf'; Map = $large;  Players = 4; Budget = $matchBudget }
+    @{ Name = 'large-8p';  Command = 'perf'; Map = $large;  Players = 8; Budget = $matchBudget }
 )
 foreach ($mission in 'MD_USA05', 'MD_GLA05') {
-    foreach ($count in $missionTickCounts) {
-        $runs += @{ Name = "mission-$mission-$count"; Command = 'perf-mission'; Map = "Maps/$mission/$mission.map"; Players = 0; Ticks = $count }
+    foreach ($budget in $missionBudgets) {
+        $runs += @{ Name = "mission-$mission-$($budget.Suffix)"; Command = 'perf-mission'; Map = "Maps/$mission/$mission.map"; Players = 0; Budget = $budget.Budget }
     }
 }
 $runs = @($runs | Where-Object { $name = $_.Name; @($Only | Where-Object { $name -like $_ }).Count -gt 0 })
@@ -106,10 +116,10 @@ foreach ($run in $runs) {
     $json = Join-Path $OutDir "$($run.Name).json"
     # Eine alte Zusammenfassung darf nicht als Ergebnis dieses Laufs liegen bleiben, wenn er scheitert.
     if (Test-Path -LiteralPath $json) { Remove-Item -LiteralPath $json -Force }
-    $arguments = @($run.Command, "`"$ContentDir`"", '--map', "`"$($run.Map)`"", '--ticks', $run.Ticks, '--tick-rate', $TickRate, '--csv', "`"$csv`"", '--json', "`"$json`"", '--label', "`"$($Label -replace '"', "'")`"")
+    $arguments = @($run.Command, "`"$ContentDir`"", '--map', "`"$($run.Map)`"") + $run.Budget + $rateArgs + @('--csv', "`"$csv`"", '--json', "`"$json`"", '--label', "`"$($Label -replace '"', "'")`"")
     if ($run.Command -eq 'perf') { $arguments += @('--players', $run.Players, '--replay') }
     $load = Get-CpuLoad
-    Write-Host "== $($run.Name): $($run.Command) $($run.Map), $($run.Ticks) Ticks bei $TickRate Hz (CPU-Auslastung vorher $load %)" -ForegroundColor Cyan
+    Write-Host "== $($run.Name): $($run.Command) $($run.Map), $($run.Budget -join ' ') bei $(if ($TickRate -gt 0) { "$TickRate Hz" } else { 'der Standardrate des Werkzeugs' }) (CPU-Auslastung vorher $load %)" -ForegroundColor Cyan
     $started = Get-Date
     $process = Start-Process -FilePath $exe -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError $errorLog
     $status = 'ok'
@@ -137,10 +147,13 @@ foreach ($run in $runs) {
 
 function Field($row, [string]$key) { if ($row.Values.ContainsKey($key)) { $row.Values[$key] } else { '-' } }
 
+# Die Rate der Laeufe steht in den summary-Zeilen des Werkzeugs (tick_rate); das Skript nennt keine eigene.
+$measuredRates = @($rows | Where-Object { $_.Values.ContainsKey('tick_rate') } | ForEach-Object { $_.Values['tick_rate'] } | Sort-Object -Unique)
+$rateText = if ($measuredRates.Count -eq 1) { "$($measuredRates[0]) Hz" } elseif ($measuredRates.Count -eq 0) { 'unbekannt (kein Lauf hat eine summary-Zeile geschrieben)' } else { "uneinheitlich ($($measuredRates -join ', ') Hz)" }
 $lines = @()
 $lines += '# Leistungsprofil'
 $lines += ''
-$lines += "Erzeugt von ``scripts/perf-profile.ps1`` am $(Get-Date -Format 'yyyy-MM-dd HH:mm'); Stand $(git -C $repo rev-parse --short HEAD). Simulationsrate $TickRate Hz; Zeiten in Mikrosekunden je Tick, wenn nicht anders angegeben. Aufholtempo und Kernanteil gelten fuer diese Rate."
+$lines += "Erzeugt von ``scripts/perf-profile.ps1`` am $(Get-Date -Format 'yyyy-MM-dd HH:mm'); Stand $(git -C $repo rev-parse --short HEAD). Simulationsrate $rateText; Zeiten in Mikrosekunden je Tick, wenn nicht anders angegeben. Aufholtempo und Kernanteil gelten fuer diese Rate."
 $hardware = Get-Content -LiteralPath (Join-Path $OutDir "$($runs[0].Name).txt") -ErrorAction Ignore | Where-Object { $_ -cmatch '^Hardware: ' } | Select-Object -First 1
 if ($hardware) { $lines += ''; $lines += $hardware }
 $lines += ''
