@@ -142,6 +142,8 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
         _ => 0,
     };
 
+    // One transition per update: a state whose time is zero is left by the next update, and the next update of the original is one logic frame later
+    // (ZeroIsNextFrame; at 30 Hz the deadlines keep their value).
     private void SetStatus(IWorldServices world, TransitionStatus next)
     {
         if (_status == next) return;
@@ -149,17 +151,17 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
         {
             case TransitionStatus.Idle:
                 _currentPlan = BattlePlanKind.None;
-                _nextReadyTick = world.Tick + data.TransitionIdleTicks;
+                _nextReadyTick = world.Tick + world.Time.ZeroIsNextFrame(data.TransitionIdleTicks);
                 break;
             case TransitionStatus.Unpacking:
-                _nextReadyTick = world.Tick + AnimationTicks(_currentPlan);
+                _nextReadyTick = world.Tick + world.Time.ZeroIsNextFrame(AnimationTicks(_currentPlan));
                 break;
             case TransitionStatus.Active:
                 SetBattlePlan(world, _currentPlan);
                 break;
             case TransitionStatus.Packing:
                 SetBattlePlan(world, BattlePlanKind.None);
-                _nextReadyTick = world.Tick + AnimationTicks(_currentPlan);
+                _nextReadyTick = world.Tick + world.Time.ZeroIsNextFrame(AnimationTicks(_currentPlan));
                 break;
         }
         _status = next;
