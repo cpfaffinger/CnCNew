@@ -784,7 +784,8 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
         _ = data.Base.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.SinkDelayVarianceTicks);
         var destruction = data.Base.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.DestructionDelayVarianceTicks);
         _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        // The explosion starts with the update after the death: one logic frame of the original later (the next tick at 30 Hz), not one tick.
+        world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
     }
 
     public long Update(IWorldServices world)
