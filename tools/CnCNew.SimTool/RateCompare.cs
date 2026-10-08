@@ -99,8 +99,8 @@ internal static class RateCompare
             Console.WriteLine(frame < 0 ? $"The worlds are equal at the end of each of {limit} frames." : $"First difference after frame {frame} ({(frame / 30m).ToString("0.0000", CultureInfo.InvariantCulture)} s of game time).");
             return frame < 0 ? 0 : 1;
         }
-        var first = RateCases.SkirmishAiCommandStream(catalogs, rates[0], factions[0], factions[1]);
-        var second = RateCases.SkirmishAiCommandStream(catalogs, rates[1], factions[0], factions[1]);
+        var first = Texts(RateCases.SkirmishAiCommandStream(catalogs, rates[0], factions[0], factions[1]));
+        var second = Texts(RateCases.SkirmishAiCommandStream(catalogs, rates[1], factions[0], factions[1]));
         if (Value(args, "--dump") is { } dump)
         {
             Directory.CreateDirectory(dump);
@@ -127,6 +127,21 @@ internal static class RateCompare
         return 1;
 
         static string Seconds(long units) => (units / 120m).ToString("0.0000", CultureInfo.InvariantCulture);
+
+        // A command as text without its tick (the tick depends on the rate), written with the invariant culture.
+        static List<(long Units, string Text)> Texts(IReadOnlyList<(long Units, CnCNew.Simulation.Commands.SimCommand Command)> stream)
+        {
+            var culture = CultureInfo.CurrentCulture;
+            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+            try
+            {
+                return [..stream.Select(item => (item.Units, (item.Command.ToString() ?? string.Empty).Replace($"Tick = {item.Command.Tick.ToString(CultureInfo.InvariantCulture)}, ", string.Empty, StringComparison.Ordinal)))];
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = culture;
+            }
+        }
         static string Line((long Units, string Text) command) => $"{Seconds(command.Units)} s {command.Text}";
     }
 

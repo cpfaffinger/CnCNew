@@ -206,22 +206,16 @@ public static partial class RateCases
 
     /// <summary>
     /// The command stream of one skirmish of the group <c>ai</c> at <paramref name="rate"/>, for a comparison between rates: every command of the two computer players with
-    /// its game time in 1/120 s and a text that does not depend on the rate (the command without its tick). A diagnosis, not a measurement: <c>SimTool rate-compare
-    /// --ai-diff</c> prints where two rates part.
+    /// its game time in 1/120 s (the caller prints it without its tick). A diagnosis, not a measurement: <c>SimTool rate-compare --ai-diff</c> prints where two rates part.
     /// </summary>
-    public static IReadOnlyList<(long Units, string Text)> SkirmishAiCommandStream(RateCatalogs catalogs, SimulationRate rate, string firstFaction, string secondFaction)
+    public static IReadOnlyList<(long Units, SimCommand Command)> SkirmishAiCommandStream(RateCatalogs catalogs, SimulationRate rate, string firstFaction, string secondFaction)
     {
         var scene = new RateScene(catalogs, rate);
         var session = StartSkirmishAi(scene, firstFaction, secondFaction);
         while (!session.IsOver) session.Step();
-        var stream = new List<(long Units, string Text)>();
+        var stream = new List<(long Units, SimCommand Command)>();
         foreach (var command in session.ToReplay().Commands)
-        {
-            if (command.Player.IsSystem) continue;
-            var text = command.ToString() ?? string.Empty;
-            var tick = $"Tick = {command.Tick.ToString(CultureInfo.InvariantCulture)}, ";
-            stream.Add((scene.Units(command.Tick), text.Replace(tick, string.Empty, StringComparison.Ordinal)));
-        }
+            if (!command.Player.IsSystem) stream.Add((scene.Units(command.Tick), command));
         return stream;
     }
 
