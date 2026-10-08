@@ -103,7 +103,7 @@ internal static class ScriptLibraryReport
             Console.WriteLine($"    {name}: {N(count)} {ScriptCoverage.ConditionSupport(name)}");
         Console.WriteLine("  actions by type (uses, support):");
         foreach (var (name, count) in actionTypes.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal))
-            Console.WriteLine($"    {name}: {N(count)} {ScriptCoverage.ActionSupport(name)}");
+            Console.WriteLine($"    {name}: {N(count)} {ScriptCoverage.ActionSupport(name)}{(ScriptCoverage.SkirmishAiActions.Contains(name) ? " (Executed for a player of the original skirmish AI)" : string.Empty)}");
 
         Console.WriteLine("  coverage of the script engine:");
         foreach (var support in new[] { ScriptSupport.Executed, ScriptSupport.Forwarded, ScriptSupport.Recorded, ScriptSupport.Missing })
@@ -116,6 +116,9 @@ internal static class ScriptLibraryReport
             var types = conditionTypes.Where(pair => ScriptCoverage.ConditionSupport(pair.Key) == support).ToArray();
             Console.WriteLine($"    conditions {support}: {types.Length} types, {N(types.Sum(pair => (long)pair.Value))} uses");
         }
+        var withAi = actionTypes.Where(pair => ScriptCoverage.ActionSupportWithSkirmishAi(pair.Key) == ScriptSupport.Executed).ToArray();
+        Console.WriteLine($"    actions Executed in a session of the original skirmish AI: {withAi.Length} types, {N(withAi.Sum(pair => (long)pair.Value))} uses; " +
+                          $"Missing there: {actionTypes.Count(pair => ScriptCoverage.ActionSupportWithSkirmishAi(pair.Key) == ScriptSupport.Missing)} types");
         var gaps = actionTypes.Where(pair => ScriptCoverage.ActionSupport(pair.Key) is ScriptSupport.Missing or ScriptSupport.Recorded or ScriptSupport.Forwarded)
             .OrderBy(pair => ScriptCoverage.ActionSupport(pair.Key)).ThenByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal).ToArray();
         Console.WriteLine($"  action types the engine does not execute: {gaps.Length}");
