@@ -367,6 +367,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
 
     private void BeginTakeoff()
     {
+        // A parked aircraft with nothing to do looks once per logic frame; an order cuts that frame short (there is nothing of it to fly), so the take-off starts in the tick the order is given.
+        if (_phase == JetPhase.None) _frame.Cancel();
         StopInternalMove();
         Enter(JetPhase.AwaitTakeoff);
     }
@@ -387,6 +389,10 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     public override long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
+        // The first frame of a new aircraft begins one logic frame of the original after it appeared (at 30 Hz that is the next tick): its frames are those of whatever created it
+        // in the first tick of its own frame, and its state after every frame is the 30 Hz state (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7).
+        var stride = world.Time.TicksPerOriginalFrame;
+        if (stride > 1 && world.Tick < Entity.SpawnTick + stride) return SimulationTiming.SleepNone;
         if (Entity.EmpDisabledUntil > world.Tick || (Entity.ScriptDisableMask & Entity.ScriptHeld) != 0)
         {
             SetFlightFrameSpeed(world.Time, Fixed.Zero);
@@ -459,8 +465,9 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         var step = world.Time.TicksPerOriginalFrame > 1
             ? (Entity.X - before.X, Entity.Y - before.Y, Entity.Z - before.Z, FixedTrig.AngleDifference(before.Angle, Entity.Angle))
             : default;
-        // An aircraft that stands parked with nothing to do takes no frame: it looks at every tick, so the take-off starts in the tick the order is given.
-        return FlyOn(world, !(_phase == JetPhase.None && !_allowAir), step);
+        // Every decision takes a frame, the look of a parked aircraft with nothing to do included (what it starts by itself - a stored order, the take-off of a healed
+        // helicopter - starts a frame after the state before it, as at 30 Hz); an order to a parked aircraft ends that frame (BeginTakeoff).
+        return FlyOn(world, true, step);
     }
 
     /// <summary>

@@ -135,8 +135,8 @@ static partial class Tests
         {
             var (world, feeder) = FlightRateWorld(FlightRates[index], WingFixtureFiles, terrain: false);
             feeder.Spawn(1, "WingJet", owner: 1, x: 500, y: 500);
-            world.Step();
-            StepFrames(world, 20);
+            // A new aircraft begins its first frame one frame after it appeared (the step that creates it and twenty frames; the same 21 ticks at 30 Hz).
+            StepFrames(world, 21);
             var jet = Only(world, "WingJet");
             Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 1500, 600).Accepted, "The move order is accepted.");
             long arrived = -1;
@@ -680,8 +680,7 @@ static partial class Tests
             {
                 var (world, feeder) = FlightRateWorld(rate, WingFixtureFiles, terrain: false);
                 feeder.Spawn(1, "WingJet", owner: 1, x: 500, y: 500);
-                world.Step();
-                StepFrames(world, 20);
+                StepFrames(world, 21);
                 feeder.SetMoveTarget(1, Only(world, "WingJet").Id.Value, 1500, 600);
                 StepFrames(world, 10);
                 return world;
