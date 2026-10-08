@@ -41,6 +41,7 @@ static class InputTests
         run.Test("Input: command bar slots, availability reasons, queue and multi-select", CommandBarStates);
         run.Test("Input: camera intent from keys, edges, drag, wheel and metas", CameraIntents);
         run.Test("Input: acceptance sequence through the event pipeline is replayable", AcceptanceSequence);
+        run.Test("Input: the alternate mouse setup is the default, the original's setup stays selectable", MouseSchemes);
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null) run.Test("Input real data: CommandMap, command buttons and command bars of shipped objects", () => RealData(contentDirectory));
         return run.Finish();
@@ -758,6 +759,19 @@ static class InputTests
         input.Process(new KeyEvent(32, KeyCode.A, false), arena.World, view);
         input.Process(new KeyEvent(33, KeyCode.LeftControl, false), arena.World, view);
         Assert(input.Commands.Mode == CommandModeKind.None, "a control-bar hotkey needs the key without modifiers");
+
+        // A key CommandMap.ini binds to a meta on the key-down is still the hot key of another button on the key-up (MetaEventTranslator destroys only the message whose
+        // transition matches): with &S in a construct label, S starts the placement although STOP fired on the press. That is how the Scorpion, the Sentry Drone, the
+        // Listening Outpost and the Saboteur are built by key in the retail data.
+        arena.Spawn("Dozer", Me, 60, 70);
+        arena.Step(2);
+        var builder = new GameInputController(Me, arena.Sink, HotkeyMap.Parse(CommandMapText), buttons, label => label == "CONTROLBAR:ConstructPlant" ? "Con&struct Plant" : null);
+        builder.Selection.Replace([arena.Find("Dozer", Me, 60, 70).Id]);
+        Assert(!HotkeyMap.Parse(CommandMapText).Resolve(new KeyBinding(KeyCode.S, KeyModifiers.None), HotkeyContexts.Game).IsEmpty, "S is bound to a meta action on the key-down");
+        builder.Process(new KeyEvent(40, KeyCode.S, true), arena.World, view);
+        Assert(builder.Commands.Mode == CommandModeKind.None, "the press alone starts nothing");
+        builder.Process(new KeyEvent(41, KeyCode.S, false), arena.World, view);
+        Assert(builder.Commands is { Mode: CommandModeKind.Placement, PendingButton.Object: "Plant" }, $"the release presses the construct button with &S ({builder.Commands.Mode})");
     }
 
     // ============================================================================================ picking and selection
@@ -1230,13 +1244,13 @@ static class InputTests
         Assert(camera.Update(state, hotkeys, viewport, CnCNew.Tests.TestTime.FrameSecondsF).IsIdle, "a centred cursor and no keys: idle");
         state.Apply(new KeyEvent(1, KeyCode.Up, true));
         var up = camera.Update(state, hotkeys, viewport, 1f);
-        Assert(up.Scroll == new Vector2(0, 2.0f * 2.0f), "the up arrow scrolls forward: vertical factor 2.0 x keyboard factor 2.0 per second");
+        Assert(up.Scroll == new Vector2(0, 2.0f * 0.5f), "the up arrow scrolls forward: vertical factor 2.0 x scroll option 0.5 per second");
         state.Apply(new KeyEvent(2, KeyCode.LeftControl, true));
         Assert(camera.Update(state, hotkeys, viewport, 1f).Scroll == Vector2.Zero, "Ctrl+Up is not a scroll (it selects the next worker)");
         state.Apply(new KeyEvent(3, KeyCode.LeftControl, false));
         state.Apply(new KeyEvent(4, KeyCode.Up, false));
         state.Apply(new MouseMoveEvent(5, new Vector2(1, 300)));
-        Assert(camera.Update(state, hotkeys, viewport, 1f).Scroll == new Vector2(-1.6f * 2.0f, 0), "the cursor within 3 px of the left edge scrolls left");
+        Assert(camera.Update(state, hotkeys, viewport, 1f).Scroll == new Vector2(-1.6f * 0.5f, 0), "the cursor within 3 px of the left edge scrolls left: horizontal factor 1.6 x scroll option 0.5");
         state.Apply(new MouseMoveEvent(6, new Vector2(3, 300)));
         Assert(camera.Update(state, hotkeys, viewport, 1f).Scroll == Vector2.Zero, "3 px from the edge is outside the band");
         var noEdge = new CameraInputController(new CameraSettings(EdgeScrollEnabled: false));
@@ -1265,6 +1279,40 @@ static class InputTests
     }
 
     // ============================================================================================ acceptance
+
+    private static void MouseSchemes()
+    {
+        Assert(new GameInputSettings().Scheme == MouseScheme.RightClickCommands, "the default: left selects, right orders");
+        foreach (var scheme in new MouseScheme?[] { null, MouseScheme.RightClickCommands, MouseScheme.LeftClickCommands })
+        {
+            var arena = new Arena(money: 500);
+            arena.Spawn("Ranger", Me, 40, 40);
+            arena.Step(2);
+            var world = arena.World;
+            var view = new TopDownView();
+            var input = new GameInputController(Me, arena.Sink, HotkeyMap.Parse(CommandMapText).WithEngineDefaults(), CommandButtonCatalog.Build(Fixture.Graph),
+                _ => null, scheme is { } chosen ? new GameInputSettings(chosen) : null);
+            var ranger = arena.Find("Ranger", Me, 40, 40);
+            long time = 10_000;
+            void Click(MouseButton button, Vector2 at)
+            {
+                input.Process(new MouseMoveEvent(time += 16, at), world, view);
+                input.Process(new MouseButtonEvent(time += 16, button, true, at), world, view);
+                input.Process(new MouseButtonEvent(time += 50, button, false, at), world, view);
+                time += 1000;
+            }
+            var alternate = scheme != MouseScheme.LeftClickCommands;
+            Click(MouseButton.Left, Screen(40, 40));
+            Assert(input.Selection.Selected.SequenceEqual([ranger.Id]), $"{scheme}: a left click on the ranger selects it");
+            Click(MouseButton.Right, Screen(100, 20));
+            Assert(arena.Sink.Issued.Count == (alternate ? 1 : 0), $"{scheme}: a right click on the ground orders only in the alternate setup ({arena.Sink.Issued.Count})");
+            Assert(input.Selection.Selected.IsEmpty == !alternate, $"{scheme}: a right click deselects only in the original's setup");
+            if (!alternate) Click(MouseButton.Left, Screen(40, 40));
+            Click(MouseButton.Left, Screen(120, 100));
+            Assert(arena.Sink.Issued.Count == 1 && arena.Sink.Issued[0] is SetMoveTargetCommand, $"{scheme}: a left click on the ground orders only in the original's setup ({arena.Sink.Issued.Count})");
+            Assert(input.Selection.Selected.IsEmpty == alternate, $"{scheme}: a left click on empty ground deselects in the alternate setup");
+        }
+    }
 
     private static void AcceptanceSequence()
     {

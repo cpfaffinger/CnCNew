@@ -35,7 +35,9 @@ public sealed record DisplaySettings(DisplayMode Mode, int Width, int Height, bo
 public sealed record AudioSettings(float Master, float Music, float Effects, float Voice, float Ambient);
 
 /// <summary>Scroll and rotate speeds are slider positions from 0 to 1 (the original options slider runs 0..100).</summary>
-public sealed record ControlSettings(float ScrollSpeed, float CameraRotateSpeed, bool EdgeScrolling);
+/// <param name="AlternateMouse">The original's "alternate mouse setup" (<c>GlobalData::m_useAlternateMouse</c>): the left button only selects, the right
+/// button orders. The original ships with it off; this client ships with it on (owner's decision, docs/PRESENTATION-INPUT.md section 2a).</param>
+public sealed record ControlSettings(float ScrollSpeed, float CameraRotateSpeed, bool EdgeScrolling, bool AlternateMouse = true);
 
 /// <param name="UiTextScalePercent">100, 125 or 150.</param>
 public sealed record AccessibilitySettings(bool HighContrastUi, int UiTextScalePercent, bool ColorBlindSafeTeamColors);
@@ -87,7 +89,7 @@ public sealed record GameSettings(
     public static GameSettings Default { get; } = new(
         new DisplaySettings(DisplayMode.Windowed, 1280, 720, VSync: true, UiScaleMode.Uniform, AspectHandling.ExpandHorizontal),
         new AudioSettings(Master: 1f, Music: 0.55f, Effects: 0.8f, Voice: 0.7f, Ambient: 0.8f),
-        new ControlSettings(ScrollSpeed: 0.5f, CameraRotateSpeed: 0.5f, EdgeScrolling: true),
+        new ControlSettings(ScrollSpeed: 0.5f, CameraRotateSpeed: 0.5f, EdgeScrolling: true, AlternateMouse: true),
         new AccessibilitySettings(HighContrastUi: false, UiTextScalePercent: 100, ColorBlindSafeTeamColors: false),
         new GeneralSettings("English", ShowFps: false, PauseOnFocusLoss: true, AiDifficulty.Medium),
         new SkirmishMemory(null, [], 10000));

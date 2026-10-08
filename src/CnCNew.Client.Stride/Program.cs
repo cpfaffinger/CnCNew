@@ -22,9 +22,16 @@ var contentDirectory = GetArgument(args, "--content-dir");
 var modelPath = GetArgument(args, "--model-path");
 var capturePath = GetArgument(args, "--capture");
 var matchMap = GetArgument(args, "--match");
+// --list-scenarios: the staged scenes --scenario accepts, one per line (name, title), and nothing else; scripts/demo-scenario.ps1 shows this when it is called without a name.
+if (args.Contains("--list-scenarios", StringComparer.OrdinalIgnoreCase))
+{
+    foreach (var entry in CnCNew.Game.Live.DemoScenarios.All) Console.WriteLine($"{entry.Name,-26} {entry.Title}");
+    return;
+}
 var scenarioName = GetArgument(args, "--scenario");
 var scenario = scenarioName is null ? null : CnCNew.Game.Live.DemoScenarios.Find(scenarioName)
     ?? throw new ArgumentException($"Unknown scenario '{scenarioName}'. Known: {string.Join(", ", CnCNew.Game.Live.DemoScenarios.All.Select(value => value.Name))}.");
+if (scenario is not null) Console.WriteLine($"scenario {scenario.Name}: {scenario.Title}. {scenario.Description}");
 if (scenario is not null) matchMap = scenario.Map;
 var missionMap = GetArgument(args, "--mission");
 // --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §17); fixed time steps only.
@@ -34,6 +41,14 @@ var inputScriptPath = GetArgument(args, "--input-script");
 var tickRate = GetArgument(args, "--tick-rate") is { } rateText
     ? CnCNew.Simulation.Time.SimulationRate.FromTicksPerSecond(int.Parse(rateText, System.Globalization.CultureInfo.InvariantCulture))
     : GameData.DefaultSessionRate;
+// --mouse classic|alternate: the mouse setup of this run (alternate, the default: left selects, right orders; classic: the original's default, left selects and orders).
+bool? alternateMouse = GetArgument(args, "--mouse")?.ToLowerInvariant() switch
+{
+    null => null,
+    "alternate" => true,
+    "classic" => false,
+    var other => throw new ArgumentException($"--mouse takes 'alternate' or 'classic', not '{other}'."),
+};
 // --audio-capture DIR renders the mixer into DIR/audio.wav instead of a device; a smoke test never opens a device (it renders and discards unless a capture is asked for).
 var audioOptions = new CnCNew.Client.Stride.Audio.ClientAudioOptions(smokeTest, GetArgument(args, "--audio-capture"), args.Contains("--mute", StringComparer.OrdinalIgnoreCase));
 var shellMode = args.Contains("--shell", StringComparer.OrdinalIgnoreCase) || (contentDirectory is not null && modelPath is null && matchMap is null && missionMap is null);
@@ -106,7 +121,7 @@ if (contentDirectory is not null)
 using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),
     audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30"), GetArgument(args, "--cursor-at"), GetArgument(args, "--waypoints"),
     inputScriptPath is null ? null : CnCNew.Client.Stride.Testing.InputScript.Load(inputScriptPath), int.Parse(GetArgument(args, "--mission-journal") ?? "0"),
-    !args.Contains("--no-transitions", StringComparer.OrdinalIgnoreCase), tickRate))
+    !args.Contains("--no-transitions", StringComparer.OrdinalIgnoreCase), tickRate, alternateMouse))
 {
     game.Run();
     if (game.UnresolvedInputSteps > 0) Environment.ExitCode = 3;
@@ -177,7 +192,8 @@ internal sealed class CnCNewGame(
     CnCNew.Client.Stride.Testing.InputScript? inputScript = null,
     int missionJournalLines = 0,
     bool animateShell = true,
-    CnCNew.Simulation.Time.SimulationRate? tickRate = null) : Game
+    CnCNew.Simulation.Time.SimulationRate? tickRate = null,
+    bool? alternateMouse = null) : Game
 {
     /// <summary>
     /// The fixed step of a smoke test: every rendered frame advances the game by one original frame (1/30 s), whatever the tick rate - one tick at 30 Hz, two at 60 Hz.
@@ -242,7 +258,7 @@ internal sealed class CnCNewGame(
         {
             var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate);
             var back = GraphicsDevice.Presenter.BackBuffer;
-            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell);
+            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse);
             Window.Title = "CnCNew";
             ApplyStaging();
             return;
@@ -321,7 +337,7 @@ internal sealed class CnCNewGame(
             var text = data.LoadText("English");
             var mission = LiveMission.Create(data, run, new System.Numerics.Vector2(viewport.Width, viewport.Height), label => text.TryGet(label, out var resolved) ? resolved : label);
             ApplyCamera(mission.Camera, options);
-            _runtime = ClientRuntime.ForMission(this, data, mission, audioOptions);
+            _runtime = ClientRuntime.ForMission(this, data, mission, audioOptions, alternateMouse);
             Window.Title = $"CnCNew — mission {mapPath} — {mission.HumanFaction}";
             return;
         }
@@ -335,7 +351,7 @@ internal sealed class CnCNewGame(
             staged.Camera.SetHeightAboveGround(options.Height is { } heightText ? float.Parse(heightText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraHeight);
             staged.Camera.SettleZoom();
             ApplyCamera(staged.Camera, options with { Angle = null, Pitch = null, Height = null });
-            _runtime = ClientRuntime.ForScenario(this, data, staged, audioOptions);
+            _runtime = ClientRuntime.ForScenario(this, data, staged, audioOptions, alternateMouse);
             if (options.SelectOwn) _runtime.SelectOwn();
             Window.Title = $"CnCNew — {scenario.Name}: {scenario.Title}";
             return;
@@ -350,7 +366,7 @@ internal sealed class CnCNewGame(
             Window.Title = $"CnCNew — spectator — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)} — seed {options.Seed}";
             return;
         }
-        _runtime = ClientRuntime.ForMatch(this, data, match, audioOptions);
+        _runtime = ClientRuntime.ForMatch(this, data, match, audioOptions, alternateMouse);
         if (options.SelectOwn) _runtime.SelectOwn();
         Window.Title = $"CnCNew — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)}";
     }

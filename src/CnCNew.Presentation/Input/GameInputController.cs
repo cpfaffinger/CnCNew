@@ -10,12 +10,12 @@ public enum MouseScheme
 {
     /// <summary>The retail default (<c>GlobalData::m_useAlternateMouse = FALSE</c>): the left button selects and orders, the right button deselects and cancels.</summary>
     LeftClickCommands,
-    /// <summary>The "alternate mouse" option: the left button selects, the right button orders and cancels.</summary>
+    /// <summary>The "alternate mouse" option, and this client's default: the left button selects, the right button orders and cancels.</summary>
     RightClickCommands,
 }
 
 public sealed record GameInputSettings(
-    MouseScheme Scheme = MouseScheme.LeftClickCommands,
+    MouseScheme Scheme = MouseScheme.RightClickCommands,
     InputSettings? Input = null,
     SelectionSettings? Selection = null,
     CameraSettings? Camera = null,
@@ -29,8 +29,8 @@ public sealed record GameInputSettings(
 public sealed class GameInputController
 {
     private readonly Dictionary<KeyCode, KeyModifiers> _keyDownModifiers = [];
-    private readonly HashSet<KeyCode> _metaConsumed = [];
     private readonly HashSet<KeyModifiers> _modifierCombos = [];
+    private readonly HashSet<KeyCode> _stoppedOnPress = [];
 
     public GameInputController(PlayerId localPlayer, ICommandSink sink, HotkeyMap hotkeys, CommandButtonCatalog? buttons = null,
         Func<string, string?>? text = null, GameInputSettings? settings = null)
@@ -79,7 +79,7 @@ public sealed class GameInputController
                 Commands.ReleaseModifiers();
                 Camera.OnFocusLost();
                 _keyDownModifiers.Clear();
-                _metaConsumed.Clear();
+                _stoppedOnPress.Clear();
                 _modifierCombos.Clear();
                 break;
         }
@@ -163,16 +163,26 @@ public sealed class GameInputController
         if (key.IsDown)
         {
             _keyDownModifiers[key.Key] = modifiers;
-            if (Fire(new KeyBinding(key.Key, modifiers, KeyTransition.Down), world, view)) _metaConsumed.Add(key.Key);
-            else _metaConsumed.Remove(key.Key);
+            if (Fire(new KeyBinding(key.Key, modifiers, KeyTransition.Down), world, view) && Hotkeys.Resolve(new KeyBinding(key.Key, modifiers, KeyTransition.Down), HotkeyContexts.Game).Contains(MetaAction.Stop))
+                _stoppedOnPress.Add(key.Key);
+            else _stoppedOnPress.Remove(key.Key);
             return;
         }
         var downModifiers = _keyDownModifiers.Remove(key.Key, out var recorded) ? recorded : modifiers;
-        var consumed = Fire(new KeyBinding(key.Key, downModifiers, KeyTransition.Up), world, view) | _metaConsumed.Remove(key.Key);
-        // HotKeyTranslator acts on the key-up without modifiers. A key whose press already fired a meta is skipped, so S does not stop twice
-        // (the original lets both the STOP meta and a Stop button hotkey fire).
+        var consumed = Fire(new KeyBinding(key.Key, downModifiers, KeyTransition.Up), world, view);
+        var stopped = _stoppedOnPress.Remove(key.Key);
+        // HotKeyTranslator acts on the key-up without modifiers, and MetaEventTranslator (which runs before it) destroys only the raw key message whose key AND transition a
+        // CommandMap entry matches. A meta bound to the key-down therefore does not take the key-up away from the hot key: with a factory selected S (the STOP meta) still
+        // presses the button whose label has &S (the Scorpion, the Sentry Drone, the Listening Outpost, the Saboteur), F builds the airfield, E the ECM tank. Only a meta on
+        // the key-up does. One deviation is kept: when the press already stopped the selection, a Stop button on the same key is not pressed again (the original issues the
+        // stop twice).
         if (!consumed && modifiers == KeyModifiers.None && KeyNames.CharacterOf(key.Key) is { } character && CommandBar is { } bar)
-            bar.ActivateHotkey(world, bar.Build(world, Selection), character, Commands, out _);
+        {
+            var buttons = bar.Build(world, Selection);
+            var lower = char.ToLowerInvariant(character);
+            if (stopped && buttons.Slots.FirstOrDefault(button => button?.Hotkey == lower) is { Button.Kind: GuiCommandKind.Stop }) return;
+            bar.ActivateHotkey(world, buttons, character, Commands, out _);
+        }
     }
 
     private bool Fire(KeyBinding binding, SimulationWorld world, IViewProjection view)

@@ -27,7 +27,7 @@ internal static class ScenarioAudit
         var name = Option("--name");
         if (name is null)
         {
-            foreach (var entry in DemoScenarios.All) Console.WriteLine($"{entry.Name,-18} {entry.Title}");
+            foreach (var entry in DemoScenarios.All) Console.WriteLine($"{entry.Name,-26} {entry.Title}");
             return 0;
         }
 
@@ -57,6 +57,7 @@ internal static class ScenarioAudit
         Console.WriteLine();
 
         var shotsAt = new List<(long Tick, string Shooter, string Victim, float Bearing, float Turret, bool HasTurret)>();
+        var exits = FactoryExitAudit.Create(data, live);
         // A scene starts one tick after its objects were placed; above 30 Hz that is in the middle of an original frame. Step single ticks to the next frame
         // boundary first, so every sample is taken exactly where an original frame ends (nothing to do at 30 Hz).
         while (!live.Clock.IsOriginalFrameBoundary && !live.IsOver) live.Advance(1.0 / live.World.Time.TicksPerSecond + 1e-9);
@@ -67,6 +68,7 @@ internal static class ScenarioAudit
             var frame = live.Frame;
             var sample = Capture(live, frame);
             history.Add(sample);
+            exits?.Sample(frame);
             for (var i = eventsBefore; i < events.Count; i++) NoteEvent(live, events[i], frame, log, shotsAt);
             if (live.Clock.OriginalFrames % every == 0) PrintSample(live, sample);
             if (Option("--debug-fire") is { } pair && live.Clock.OriginalFrames % every == 0 && pair.Split(',') is [var shooterTag, var victimTag]
@@ -88,7 +90,7 @@ internal static class ScenarioAudit
             "tank-duel" => CheckTankDuel(shotsAt, history, events, live),
             "capture-building" => CheckCapture(history, events, live, SelectionFlashSettings.FromDefinitions(data.Graph)),
             "jet-strafe" => CheckJet(history, events, live),
-            _ => [],
+            _ => exits?.Check() ?? [],
         };
         Console.WriteLine(failures.Count == 0 ? "RESULT: all checks passed" : $"RESULT: {failures.Count} check(s) failed");
         foreach (var failure in failures) Console.WriteLine("  FAIL " + failure);

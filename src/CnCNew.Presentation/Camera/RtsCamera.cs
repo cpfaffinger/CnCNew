@@ -45,7 +45,7 @@ public sealed class RtsCamera : IViewProjection
         SetViewportSize(viewportSize);
         Pitch = DegreesToRadians(settings.PitchDegrees);
         HeightAboveGround = settings.MaxHeightAboveGround;
-        ScrollFactor = settings.KeyboardScrollFactor;
+        ScrollFactor = Input.CameraSettings.DefaultScrollOption;
         InitializeForMap(terrain.BoundaryMax(0) * 0.5f);
     }
 
@@ -84,7 +84,8 @@ public sealed class RtsCamera : IViewProjection
     /// <summary><c>m_zoom</c>: scale of the camera offset.</summary>
     public float Zoom { get; private set; }
 
-    /// <summary>The user's scroll speed option (<c>m_keyboardScrollFactor</c>); starts at <c>KeyboardScrollSpeedFactor</c> of GameData.ini.</summary>
+    /// <summary>The user's scroll speed option (<c>m_keyboardScrollFactor</c>); starts at the option default 0.5, not at <c>KeyboardScrollSpeedFactor</c> of
+    /// GameData.ini, which the original overwrites with the option when it loads (<c>GlobalData::parseGameDataDefinition</c>).</summary>
     public float ScrollFactor { get; set; }
 
     /// <summary>Last scroll delta (<c>m_scrollAmount</c>), used to decide whether the zoom follows the terrain while scrolling.</summary>

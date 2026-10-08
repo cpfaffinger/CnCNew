@@ -31,6 +31,7 @@ internal static class HudTests
 
         harness.Run("Select dozer, construct a structure, queue a unit, move and attack-move", () => ScriptedSession(data));
         harness.Run("Replay of the human player's commands is internally deterministic", () => ReplayMatches(data));
+        harness.Run("Mouse setups: by default the left button selects and the right button orders; with AlternateMouse off the left button orders as in the original; the scroll slider is the original's factor", () => MouseSetups(data));
         harness.Run("HUD draw lists at several resolutions contain the expected buttons", () => ResolutionSweep(data));
         harness.Run("Minimap click moves the camera", () => MinimapClickMovesCamera(data));
         harness.Run("Box selection selects the start units", () => BoxSelectionSelects(data));
@@ -149,7 +150,7 @@ internal static class HudTests
         controller.Process(new KeyEvent(time += 16, KeyCode.LeftAlt, true));
         TestHarness.Assert(controller.Cursor.Kind == CursorKind.Waypoint, "Alt switches to the waypoint cursor without a mouse move");
         var stations = new[] { Ground(-10, -60), Ground(-90, -70), Ground(-170, -90) };
-        foreach (var station in stations) Click(controller, ref time, MouseButton.Left, station);
+        foreach (var station in stations) Click(controller, ref time, MouseButton.Right, station);
         Advance(match, controller, 1);
         var path = controller.Overlay.WaypointPaths.Single();
         TestHarness.Assert(path.Unit == dozer.Id && path.Points.Length == 4, $"the path has the unit and three stations ({path.Points.Length} points)");
@@ -169,8 +170,8 @@ internal static class HudTests
         Advance(match, controller, 1);
         TestHarness.Assert(controller.Overlay.WaypointPaths.IsEmpty && controller.Cursor.Kind == CursorKind.Move, "Alt released: the path is hidden and the cursor is the move cursor again");
 
-        // A plain move order: a move hint at the clicked point, fading.
-        Click(controller, ref time, MouseButton.Left, open);
+        // A plain move order (the right button in the default mouse setup): a move hint at the clicked point, fading.
+        Click(controller, ref time, MouseButton.Right, open);
         Advance(match, controller, 1);
         TestHarness.Assert(controller.Overlay.OrderHints is [{ Kind: OrderHintKind.Move } hint] && Vector2.Distance(hint.Screen, open) < 2.5f && hint.Age < 0.1f, "a move hint at the destination");
         Advance(match, controller, 20);
@@ -249,12 +250,52 @@ internal static class HudTests
 
     // ------------------------------------------------------------------------------------------------------------ setup helpers
 
-    private static (LiveMatch Match, MatchController Controller) NewMatch(GameData data, Vector2 viewport)
+    /// <summary>
+    /// <see cref="ControlSettings.AlternateMouse"/> reaches the input layer: the default (on) moves the selected dozer with the right button and deselects with a left click on open
+    /// ground; switched off, the left button orders and the right button deselects (the original's default). The scroll slider maps onto the original's scroll factor unchanged.
+    /// </summary>
+    private static void MouseSetups(GameData data)
+    {
+        TestHarness.Assert(GameSettings.Default.Controls.AlternateMouse && MatchController.MapMouseScheme(GameSettings.Default) == MouseScheme.RightClickCommands, "the default is the alternate setup");
+        var camera = MatchController.MapCameraSettings(GameSettings.Default);
+        TestHarness.Assert(camera is { KeyboardScrollSpeedFactor: 0.5f, HorizontalScrollSpeedFactor: 1.6f, VerticalScrollSpeedFactor: 2.0f }, "the default scroll slider is the original's factor 0.5; the speed factors are GameData's");
+        var fast = MatchController.MapCameraSettings(GameSettings.Default with { Controls = GameSettings.Default.Controls with { ScrollSpeed = 1f } });
+        TestHarness.Assert(fast is { KeyboardScrollSpeedFactor: 1f, HorizontalScrollSpeedFactor: 1.6f }, "the slider at its end doubles key and edge scrolling and nothing else");
+
+        foreach (var alternate in new[] { true, false })
+        {
+            var settings = GameSettings.Default with { Controls = GameSettings.Default.Controls with { AlternateMouse = alternate } };
+            var (match, controller) = NewMatch(data, new Vector2(1280, 720), settings);
+            TestHarness.Assert(controller.Input.Settings.Scheme == (alternate ? MouseScheme.RightClickCommands : MouseScheme.LeftClickCommands), "the setting chooses the scheme");
+            long time = 10_000;
+            Advance(match, controller, 1);
+            var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+            var start = SimulationQueries.GroundOf(dozer);
+            var target = Screen(match, new Vector3(start.X + 80, start.Y, 0f));
+            var (order, other) = alternate ? (MouseButton.Right, MouseButton.Left) : (MouseButton.Left, MouseButton.Right);
+            var moves = 0;
+            match.CommandIssued += (command, _) => { if (command is Simulation.Commands.SetMoveTargetCommand) moves++; };
+
+            Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+            Advance(match, controller, 1);
+            TestHarness.Assert(controller.Input.Selection.Contains(dozer.Id), $"alternate {alternate}: the left button selects the dozer");
+            Click(controller, ref time, other, target);
+            Advance(match, controller, 1);
+            TestHarness.Assert(moves == 0 && controller.Input.Selection.Selected.IsEmpty, $"alternate {alternate}: the {other} button on open ground orders nothing and deselects ({moves} moves)");
+            Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+            Advance(match, controller, 1);
+            Click(controller, ref time, order, target);
+            Advance(match, controller, 60);
+            TestHarness.Assert(moves == 1 && Vector2.Distance(SimulationQueries.GroundOf(dozer), start) > 1f, $"alternate {alternate}: the {order} button on open ground moves the dozer ({moves} moves)");
+        }
+    }
+
+    private static (LiveMatch Match, MatchController Controller) NewMatch(GameData data, Vector2 viewport, GameSettings? settings = null)
     {
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard);
         var match = LiveMatch.Create(data, setup, viewport);
-        var controller = new MatchController(match, GameSettings.Default);
+        var controller = new MatchController(match, settings ?? GameSettings.Default);
         return (match, controller);
     }
 
@@ -381,9 +422,9 @@ internal static class HudTests
 
                 var startGround = SimulationQueries.GroundOf(unit);
                 var moveTarget = startGround + new Vector2(150, 0);
-                Click(controller, ref time, MouseButton.Left, Screen(match, new Vector3(moveTarget.X, moveTarget.Y, 0f)));
+                Click(controller, ref time, MouseButton.Right, Screen(match, new Vector3(moveTarget.X, moveTarget.Y, 0f)));
                 Advance(match, controller, 30);
-                TestHarness.Assert(Vector2.Distance(SimulationQueries.GroundOf(unit), startGround) > 1f, "the left-click move order actually moved the unit");
+                TestHarness.Assert(Vector2.Distance(SimulationQueries.GroundOf(unit), startGround) > 1f, "the right-click move order actually moved the unit");
                 Refresh(controller);
 
                 var attackMoveSlot = FindSlot(controller.CommandBar, button => button.Kind == GuiCommandKind.AttackMove);
@@ -448,10 +489,10 @@ internal static class HudTests
         Advance(match, controller, 1);
         var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
         var startGround = SimulationQueries.GroundOf(dozer);
-        // The default mouse scheme is left-click-commands: a plain left click on open, reachable ground orders a move; right click cancels/deselects.
+        // The default mouse setup is the alternate one: the left button selects, a right click on open, reachable ground orders a move.
         Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
         Advance(match, controller, 1);
-        Click(controller, ref time, MouseButton.Left, Screen(match, new Vector3(startGround.X + 80, startGround.Y, 0f)));
+        Click(controller, ref time, MouseButton.Right, Screen(match, new Vector3(startGround.X + 80, startGround.Y, 0f)));
         Advance(match, controller, 90);
         TestHarness.Assert(Vector2.Distance(SimulationQueries.GroundOf(dozer), startGround) > 1f, "the human player's move order was actually carried out");
 

@@ -1,0 +1,28 @@
+# Hot keys of the command bar in the real client (docs/PRESENTATION-INPUT.md section 3a, scripts/check-build-hotkeys.ps1), scene exit-china-all.
+# Every key is the letter after the '&' of the button's label. S, F and E are also bound to a meta action on the key-down by CommandMap.ini (Stop, fast forward,
+# select matching units); the hot key acts on the key-up all the same, as in the original. Buildings are selected first and the builder last, so the script reads
+# the same in both mouse setups (a left click selects, nothing is ordered with the right button).
+40   look template:ChinaWarFactory
+45   click left template:ChinaWarFactory
+60   key down S   # Listening Outpost (S is also STOP)
+62   key up S
+70   key down B   # Battlemaster
+72   key up B
+80   look template:ChinaBarracks
+85   click left template:ChinaBarracks
+100  key down G   # Red Guard
+102  key up G
+110  look template:ChinaCommandCenter
+115  click left template:ChinaCommandCenter
+130  key down D   # Dozer
+132  key up D
+140  look own:DOZER
+145  click left own:DOZER
+160  key down F   # Airfield (F is also fast forward)
+162  key up F
+170  move ground:+0,+60 from own:DOZER
+175  click right ground:+0,+60 from own:DOZER   # the right button cancels the placement in both mouse setups
+190  key down R   # Power Plant
+192  key up R
+200  move placement from own:DOZER
+220  click left placement from own:DOZER

@@ -120,9 +120,11 @@ Karteneinträgen/-dateien insgesamt) – jede hat einen auflösbaren Anzeigename
 `SettingsChangedOutput`/`ApplyResolutionOutput`. „Cancel“ verwirft die Arbeitskopie, „Defaults“ setzt nur
 Anzeige/Audio/Steuerung auf `GameSettings.Default` zurück (Sprache und Skirmish-Erinnerung bleiben unverändert).
 Verdrahtet: Auflösung (`ComboBoxResolution`, gegen `Resolutions.Standard` plus die aktuelle Auflösung, falls sie nicht
-in der Standardliste steht), die drei Lautstärkeregler, die Scrollgeschwindigkeit. **Nicht verdrahtet** (kein
+in der Standardliste steht), die drei Lautstärkeregler, die Scrollgeschwindigkeit (der Reglerwert ist der Faktor des
+Originals, `docs/PRESENTATION-INPUT.md` §4a) und – seit 7. Oktober 2026 – die alternative Maus (`CheckAlternateMouse` ↔
+`ControlSettings.AlternateMouse`, Vorgabe angehakt, `docs/PRESENTATION-INPUT.md` §6). **Nicht verdrahtet** (kein
 passendes `GameSettings`-Feld, aber sichtbar und interaktiv, damit der Screen authentisch aussieht): Gamma, Detail-
-/Antialiasing-Auswahl, alternative Maus, Doppelklick-Angriffsbewegung, Vergeltung, die gesamte `NetworkParent`-Gruppe,
+/Antialiasing-Auswahl, Doppelklick-Angriffsbewegung, Vergeltung, die gesamte `NetworkParent`-Gruppe,
 das versteckte „erweiterte Anzeigeoptionen“-Panel. Anzeigemodus (Fenster/Vollbild), Sprache, Seitenverhältnis und
 Barrierefreiheits-Textskalierung haben in der ausgelieferten Datei kein eigenes Gadget und sind von diesem Screen aus
 nicht erreichbar (Anfrage: ein zukünftiges Revision bräuchte entweder eine eigene WND-Sektion oder die

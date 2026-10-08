@@ -564,14 +564,24 @@ internal static class ShellTests
         tree.Post(UiEventKind.SliderDone, slider, value: slider.Slider!.Maximum);
         tree.Dispatch();
 
+        // The alternate mouse setup (left selects, right orders) is this client's default: the box is checked, a click on it switches to the original's setup.
+        var alternate = tree.FindByName("OptionsMenu.wnd:CheckAlternateMouse")!;
+        TestHarness.Assert(shell.Settings.Controls.AlternateMouse && alternate.IsSelected, "the alternate mouse box is checked by default");
+        Click(shell, "OptionsMenu.wnd:CheckAlternateMouse");
+        TestHarness.Assert(!alternate.IsSelected && shell.Settings.Controls.AlternateMouse, "the click unchecks the box; nothing is applied before Accept");
+
         Click(shell, "OptionsMenu.wnd:ButtonAccept");
         TestHarness.Assert(shell.CurrentScreen is MainMenuScreen, "accept closes the options screen");
         var applied = shell.Settings;
         TestHarness.Assert(applied.Audio.Music > 0.99f, "the music slider change was applied");
+        TestHarness.Assert(!applied.Controls.AlternateMouse, "the original's mouse setup was applied");
 
         var reloaded = GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight));
         TestHarness.Assert(reloaded.Settings.Display.Width == applied.Display.Width && reloaded.Settings.Display.Height == applied.Display.Height, "resolution persisted across a fresh shell");
         TestHarness.Assert(Math.Abs(reloaded.Settings.Audio.Music - applied.Audio.Music) < 0.01f, "music volume persisted across a fresh shell");
+        TestHarness.Assert(!reloaded.Settings.Controls.AlternateMouse, "the mouse setup persisted across a fresh shell");
+        Click(reloaded, "MainMenu.wnd:ButtonOptions");
+        TestHarness.Assert(!reloaded.CurrentScreen.Tree.FindByName("OptionsMenu.wnd:CheckAlternateMouse")!.IsSelected, "and the box shows it");
 
         Directory.Delete(directory, recursive: true);
     }

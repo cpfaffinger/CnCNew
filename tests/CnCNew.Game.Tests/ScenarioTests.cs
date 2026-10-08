@@ -55,6 +55,10 @@ internal static class ScenarioTests
                     case "capture-building":
                         TestHarness.Assert(facts.GetValueOrDefault(nameof(SimEventKind.StructureCaptured)) == 1, "the barracks is captured");
                         break;
+                    default:
+                        if (FactoryExits.SitesOf(scenario) is { IsEmpty: false } sites)
+                            TestHarness.Assert(facts.GetValueOrDefault(nameof(SimEventKind.ProductionCompleted)) >= sites.Length, $"every building of the scene finishes a unit ({facts.GetValueOrDefault(nameof(SimEventKind.ProductionCompleted))} for {sites.Length})");
+                        break;
                 }
             });
         }

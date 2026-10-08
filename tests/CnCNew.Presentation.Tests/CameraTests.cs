@@ -22,6 +22,7 @@ internal static class CameraTests
         t.Run("frustum culling of chunks", Culling);
         t.Run("map bounds constraints", Constraints);
         t.Run("scrolling directions and speeds", Scrolling);
+        t.Run("edge, key and right-drag scroll speed in world units per second", ScrollSpeedInWorldUnits);
         t.Run("rotation, pitch and zoom limits", RotationPitchZoom);
         t.Run("zoom follows the terrain height", TerrainFollowing);
         t.Run("camera shake spring", Shake);
@@ -131,11 +132,11 @@ internal static class CameraTests
         var camera = new RtsCamera(Settings, Flat(), Viewport);
         var start = camera.Pivot;
         var delta = camera.KeyboardScrollDelta(up: false, down: false, left: false, right: true, dtSeconds: CnCNew.Tests.TestTime.FrameSecondsF);
-        Assert(Vector2.Distance(delta, new Vector2(1.6f * 100 * 2, 0)) < 1e-3f, "one frame of right key = HorizontalScrollSpeedFactor * SCROLL_AMT * factor");
+        Assert(Vector2.Distance(delta, new Vector2(1.6f * 100 * 0.5f, 0)) < 1e-3f, "one frame of right key = HorizontalScrollSpeedFactor * SCROLL_AMT * factor");
         camera.ScrollBy(delta);
         var moved = camera.Pivot - start;
-        // 320 * 250 / 1024 * 2 * tan(25 deg) world units along the camera's right axis.
-        Near(320 * 250 / 1024f * 2 * MathF.Tan(25 * MathF.PI / 180), moved.X, 1e-2, "right scroll distance");
+        // 80 * 250 / 1024 * 2 * tan(25 deg) world units along the camera's right axis.
+        Near(80 * 250 / 1024f * 2 * MathF.Tan(25 * MathF.PI / 180), moved.X, 1e-2, "right scroll distance");
         Near(0, moved.Y, 1e-3, "right scroll keeps y");
         Assert(camera.LastScrollAmount == delta, "scroll amount remembered");
         start = camera.Pivot;
@@ -144,17 +145,61 @@ internal static class CameraTests
         camera.SetAngle(MathF.PI / 2);
         start = camera.Pivot;
         camera.ScrollBy(camera.KeyboardScrollDelta(false, false, false, true, CnCNew.Tests.TestTime.FrameSecondsF));
-        Assert(camera.Pivot.Y > start.Y + 10 && MathF.Abs(camera.Pivot.X - start.X) < 1e-2f, "right scroll follows the rotated view");
+        Assert(camera.Pivot.Y > start.Y + 2.5f && MathF.Abs(camera.Pivot.X - start.X) < 1e-2f, "right scroll follows the rotated view");
         // The input layer's amount (CameraIntent.Scroll: y forward, factors applied, per second) moves the camera exactly like the reference formula for the same key and time.
         var byKey = new RtsCamera(Settings, Flat(), Viewport);
         var byIntent = new RtsCamera(Settings, Flat(), Viewport);
         var origin = byIntent.Pivot;
         byKey.ScrollBy(byKey.KeyboardScrollDelta(true, false, false, true, CnCNew.Tests.TestTime.FrameSecondsF));
-        byIntent.ScrollByIntent(new Vector2(1.6f * 2.0f, 2.0f * 2.0f) / CnCNew.Tests.TestTime.FramesPerSecond);
-        Assert(Vector2.Distance(byKey.Pivot, byIntent.Pivot) < 1e-2f && Vector2.Distance(byIntent.Pivot, origin) > 5f, $"an input-layer scroll of one frame equals one frame of the up and right keys ({byKey.Pivot} vs {byIntent.Pivot})");
+        byIntent.ScrollByIntent(new Vector2(1.6f * 0.5f, 2.0f * 0.5f) / CnCNew.Tests.TestTime.FramesPerSecond);
+        Assert(Vector2.Distance(byKey.Pivot, byIntent.Pivot) < 1e-2f && Vector2.Distance(byIntent.Pivot, origin) > 1.25f, $"an input-layer scroll of one frame equals one frame of the up and right keys ({byKey.Pivot} vs {byIntent.Pivot})");
         Assert(camera.EdgeScrollDelta(new Vector2(1, 400), CnCNew.Tests.TestTime.FrameSecondsF).X < 0 && camera.EdgeScrollDelta(new Vector2(500, 400), CnCNew.Tests.TestTime.FrameSecondsF) == Vector2.Zero, "edge scrolling");
         Assert(Vector2.Distance(camera.RightMouseScrollDelta(new Vector2(100, 100), new Vector2(110, 90), CnCNew.Tests.TestTime.FrameSecondsF), new Vector2(16, -20)) < 1e-3f, "right mouse drag");
-        Assert(Vector2.Distance(camera.KeyboardScrollDelta(false, false, true, false, 0.1f), new Vector2(-960, 0)) < 1e-2f, "speed scales with elapsed frames");
+        Assert(Vector2.Distance(camera.KeyboardScrollDelta(false, false, true, false, 0.1f), new Vector2(-240, 0)) < 1e-2f, "speed scales with elapsed frames");
+    }
+
+    /// <summary>
+    /// The whole path of the client (CameraInputController -> CameraIntent -> RtsCamera.ScrollByIntent) over one second of wall time, against the original's
+    /// numbers: LookAtTranslator adds speedFactor * SCROLL_AMT (100) * m_keyboardScrollFactor (0.5, the option default) per client frame at 30 frames per
+    /// second, and W3DView::scrollBy turns a unit into 250 / width * 2 * tan(fov / 2) world units on the view plane.
+    /// </summary>
+    private static void ScrollSpeedInWorldUnits()
+    {
+        var viewport = new Vector2(1280, 720);
+        var hotkeys = CnCNew.Presentation.Input.HotkeyMap.Parse("").WithEngineDefaults();
+        var perUnit = 250f / 1280f * 2 * MathF.Tan(25 * MathF.PI / 180);
+
+        float Travel(Action<CnCNew.Presentation.Input.InputState> arrange, int axis, int framesPerSecond)
+        {
+            var camera = new RtsCamera(Settings, Flat(400), viewport);
+            camera.CenterOn(new Vector2(2000, 2000));
+            var start = camera.Pivot;
+            var input = new CnCNew.Presentation.Input.CameraInputController();
+            var state = new CnCNew.Presentation.Input.InputState();
+            state.Apply(new CnCNew.Presentation.Input.MouseMoveEvent(0, viewport / 2));
+            arrange(state);
+            for (var frame = 0; frame < framesPerSecond; frame++)
+                camera.ScrollByIntent(input.Update(state, hotkeys, viewport, 1f / framesPerSecond).Scroll);
+            var moved = camera.Pivot - start;
+            return MathF.Abs(axis == 0 ? moved.X : moved.Y);
+        }
+
+        var edgeRight = Travel(s => s.Apply(new CnCNew.Presentation.Input.MouseMoveEvent(1, new Vector2(1279, 360))), 0, 30);
+        Near(1.6f * 100 * 0.5f * 30 * perUnit, edgeRight, 0.5, "screen edge, horizontal: 2400 scroll units = 437.2 world units per second at 1280 pixels width");
+        Near(437.16, edgeRight, 0.5, "screen edge, horizontal, the number");
+        var edgeUp = Travel(s => s.Apply(new CnCNew.Presentation.Input.MouseMoveEvent(1, new Vector2(640, 0))), 1, 30);
+        // 3000 scroll units along the view's up axis: scrollBy takes y times the aspect ratio over the height, which is the same world size per unit as x
+        // times width / height; sin(pitch 37.5 deg) of it lies on the ground.
+        Near(2.0f * 100 * 0.5f * 30 * perUnit * (1280f / 720f) * MathF.Sin(37.5f * MathF.PI / 180), edgeUp, 0.5, "screen edge, forward: 591.4 world units per second");
+        var keyRight = Travel(s => s.Apply(new CnCNew.Presentation.Input.KeyEvent(1, CnCNew.Presentation.Input.KeyCode.Right, true)), 0, 30);
+        Near(edgeRight, keyRight, 1e-2, "the arrow keys scroll exactly as fast as the screen edge (SCROLL_KEY and SCROLL_SCREENEDGE share the formula)");
+        Near(edgeRight, Travel(s => s.Apply(new CnCNew.Presentation.Input.MouseMoveEvent(1, new Vector2(1279, 360))), 0, 144), 0.5, "the speed is per second of wall time, not per rendered frame");
+        var drag = Travel(s =>
+        {
+            s.Apply(new CnCNew.Presentation.Input.MouseButtonEvent(1, CnCNew.Presentation.Input.MouseButton.Right, true, viewport / 2));
+            s.Apply(new CnCNew.Presentation.Input.MouseMoveEvent(2, viewport / 2 + new Vector2(100, 0)));
+        }, 0, 30);
+        Near(1.6f * (100f / 640f) * 100 * 30 * perUnit, drag, 0.5, "right drag of 100 pixels: 136.6 world units per second (the original: 1.6 * 100 px * 30 = 874.3)");
     }
 
     private static void RotationPitchZoom()

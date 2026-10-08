@@ -199,10 +199,11 @@ unabhängig vom gewählten `MouseScheme` (Minimap-Konventionen sind im Original 
 
 ## 7. Auswahlmodus und Kontextbefehle
 
-`GameInputController.Settings.Scheme` bleibt der C3-Standard `MouseScheme.LeftClickCommands`: ein Linksklick auf freiem, begehbarem
-Boden löst (ohne Ziel unter dem Cursor) einen Bewegungsbefehl aus, ein Rechtsklick storniert einen Modus oder leert die Auswahl.
-`HudTests.cs` benutzt konsequent Linksklicks für Bewegung/Angriffsbewegung (ein häufiger Stolperstein beim Schreiben eigener
-Skripte gegen diese Schicht).
+`GameInputController.Settings.Scheme` kommt aus `GameSettings.Controls.AlternateMouse` (`MatchController.MapMouseScheme`); Vorgabe ist seit dem
+7. Oktober 2026 `MouseScheme.RightClickCommands` (links wählen, rechts befehlen; `docs/PRESENTATION-INPUT.md` §6): ein Rechtsklick auf freiem, begehbarem
+Boden löst einen Bewegungsbefehl aus, ein Linksklick auf leeren Boden leert die Auswahl, ein Rechtsklick storniert einen offenen Modus. Mit
+`AlternateMouse = false` (Client: `--mouse classic`) gilt das Schema des Originals. `HudTests.cs` prüft beide: die Bewegungs-/Angriffsbewegungsfälle laufen
+im Schema des Originals (dort ausdrücklich gesetzt), ein eigener Fall prüft die Vorgabe.
 
 ## 8. Bildschirmraum-Overlay (`HudOverlay`)
 
@@ -264,11 +265,10 @@ Bauknopf mit „Requires: …“) und `hudletterbox-WxH.png` (dieselben Zeilen u
 
 ## 9. Kameraeinstellungen
 
-`GameSettings.Controls` (Schieberegler `0..1`) wird auf `CnCNew.Presentation.Input.CameraSettings` abgebildet, indem die
-Werkseinstellungen mit `0.5 + Reglerwert` skaliert werden (`MapCameraSettings`): bei `0.5` (Vorgabe) bleiben die
-Engine-Vorgabewerte unverändert, an den Reglerenden werden sie halbiert bzw. verdoppelt. Es gibt keine Originaltabelle für diese
-Zuordnung, da das Original einen eigenen, nichtlinearen internen Geschwindigkeitswert aus dem Regler ableitet, den diese Schicht
-nicht nachbildet; die Zuordnung ist eine bewusste, dokumentierte Näherung.
+`GameSettings.Controls` (Schieberegler `0..1`) wird auf `CnCNew.Presentation.Input.CameraSettings` abgebildet (`MatchController.MapCameraSettings`).
+Der Scrollregler ist der Wert des Originals selbst: `KeyboardScrollSpeedFactor` = Reglerwert (`OptionsMenu.cpp`: `m_keyboardScrollFactor = Position / 100`,
+Vorgabe 0,5; er wirkt nur auf Tasten- und Randscroll, `docs/PRESENTATION-INPUT.md` §4a). Der Drehregler hat kein Gegenstück im Original: bei `0.5` gilt
+der Engine-Wert, an den Enden wird er halbiert bzw. verdoppelt (bewusste, dokumentierte Näherung).
 
 ## 10. Spielergebnis und Statistik (`MatchResult.cs`)
 
@@ -493,7 +493,7 @@ Format: eine Zeile je Schritt, `#` beginnt einen Kommentar, `FRAME VERB ARGUMENT
 | `move ZIEL` | Zeiger auf das Ziel |
 | `down [left\|right\|middle] [ZIEL]`, `up […]` | Taste drücken/loslassen (ohne Ziel an der aktuellen Zeigerposition) |
 | `click [left\|right\|middle] ZIEL` | Bewegen und Drücken in diesem Frame, Loslassen zwei Frames später auf demselben Pixel |
-| `key down\|up KEYCODE` | Taste (`KeyCode`-Name) |
+| `key down\|up KEYCODE` | Taste (`KeyCode`-Name, z. B. `S`, `LeftControl`); die Knopftaste der Befehlsleiste wirkt beim `up` (Beispiele: `scripts/input/hotkeys-*.txt`) |
 | `look ZIEL` | Kamera auf das Ziel zentrieren (Testhilfe, keine Eingabe) |
 
 Ziele werden im Frame ihrer Verwendung aufgelöst: `screen:X,Y`; `own:KINDOF[#N]` und `template:NAME[#N]` (das N-te eigene lebende Objekt nach Id, an seinem Auswahl-Mittelpunkt);
@@ -508,7 +508,9 @@ sitesCompleted=…`). Ein Ziel, das sich nicht auflösen lässt, wird gemeldet u
 
 Regressionsprüfung: `scripts/check-dozer-build.ps1 [-Quick] [-NoBuild]` (Skripte unter `scripts/input/`) fährt den Release-Client fünfmal, jeweils zeitbegrenzt, und prüft die Summenzeile:
 Mission `GC_ChemGeneral` und Gefecht `Alpine Assault` je in 1280x720 und 1920x1080 (Gebäude platziert und fertig gebaut) sowie Klicks während der Eröffnungssequenz der Mission (müssen
-verworfen werden, die Sperre muss enden). Gemessen 4. Oktober 2026: 5 von 5 bestanden.
+verworfen werden, die Sperre muss enden). Gemessen 4. Oktober 2026: 5 von 5 bestanden; 7. Oktober 2026 mit der neuen Mausvorgabe erneut 5 von 5 (das Skript benutzt nur Klicks,
+die in beiden Mausbelegungen dasselbe bedeuten). `scripts/check-build-hotkeys.ps1 [-Faction …] [-Mouse classic]` prüft auf demselben Weg die Bautasten in den Szenen
+`exit-<fraktion>-all` (`docs/PRESENTATION-INPUT.md` §3a).
 
 ### 17.2 Befund: „im Mission-Demo kann ich keine Gebäude mit dem Dozer bauen“
 

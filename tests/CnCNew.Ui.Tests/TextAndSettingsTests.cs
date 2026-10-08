@@ -458,7 +458,7 @@ public static class TextAndSettingsTests
             string[] wanted =
             [
                 "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
-                "controls.cameraRotateSpeed:missing", "general.defaultAiDifficulty:invalid-type", "skirmish.lastFactions:invalid-type",
+                "controls.cameraRotateSpeed:missing", "controls.alternateMouse:missing", "general.defaultAiDifficulty:invalid-type", "skirmish.lastFactions:invalid-type",
                 "audio.ambient:clamped",
             ];
             Assert(found.SequenceEqual(wanted), $"Binding issues: {string.Join(", ", found)}.");

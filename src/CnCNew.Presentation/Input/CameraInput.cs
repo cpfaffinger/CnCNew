@@ -5,23 +5,32 @@ namespace CnCNew.Presentation.Input;
 
 /// <summary>
 /// Camera input tuning. Defaults follow <c>LookAtXlat.cpp</c> and the retail <c>GameData.ini</c>: a 3 pixel edge band (<c>edgeScrollSize</c>),
-/// <c>HorizontalScrollSpeedFactor = 1.6</c>, <c>VerticalScrollSpeedFactor = 2.0</c>, <c>KeyboardScrollSpeedFactor = 2.0</c>,
+/// <c>HorizontalScrollSpeedFactor = 1.6</c>, <c>VerticalScrollSpeedFactor = 2.0</c>,
 /// <c>KeyboardCameraRotateSpeed = 0.1</c> rad per logic frame, 0.01 rad per pixel of middle-button drag, 10 height units per wheel detent
 /// (<c>ZoomHeightPerSecond</c>) and a 5 pixel middle-click limit for the reset click.
+/// <para><see cref="KeyboardScrollSpeedFactor"/> is the original's <c>m_keyboardScrollFactor</c> as the game actually runs with it: the
+/// <c>KeyboardScrollSpeedFactor = 2.0</c> of GameData.ini never takes effect, because <c>GlobalData::parseGameDataDefinition</c> overwrites it right after
+/// parsing with <c>OptionPreferences::getScrollFactor</c> - the scroll speed slider (0..100) divided by 100, and
+/// <c>m_keyboardDefaultScrollFactor = 0.5</c> when the player never touched it. Keys and the screen edge then scroll by
+/// <c>speedFactor * SCROLL_AMT * m_keyboardScrollFactor</c> per client frame (<c>LookAtTranslator</c>, <c>MSG_FRAME_TICK</c>).</para>
 /// </summary>
 public sealed record CameraSettings(
     bool EdgeScrollEnabled = true,
     float EdgeScrollMarginPixels = 3f,
     float HorizontalScrollSpeedFactor = 1.6f,
     float VerticalScrollSpeedFactor = 2.0f,
-    float KeyboardScrollSpeedFactor = 2.0f,
+    float KeyboardScrollSpeedFactor = CameraSettings.DefaultScrollOption,
     bool RightDragScrolls = true,
     float KeyboardRotateRadiansPerFrame = 0.1f,
     float DragRotateRadiansPerPixel = 0.01f,
     float ZoomPerWheelNotch = 10f,
     float KeyboardZoomPerFrame = 10f,
     float MiddleClickResetPixels = 5f,
-    float FramesPerSecond = OriginalFrame.PerSecond);
+    float FramesPerSecond = OriginalFrame.PerSecond)
+{
+    /// <summary><c>m_keyboardDefaultScrollFactor</c> (GlobalData.cpp): the scroll speed option of a player who never moved the slider.</summary>
+    public const float DefaultScrollOption = 0.5f;
+}
 
 /// <summary>
 /// What the camera should do this frame, as plain data for the camera owner. <see cref="Scroll"/> is camera-relative (x right, y forward) and

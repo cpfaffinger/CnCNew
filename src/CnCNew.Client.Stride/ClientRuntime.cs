@@ -35,6 +35,9 @@ internal sealed class ClientRuntime : IDisposable
     private readonly StrideInputTranslator _input = new();
     private readonly GameShell? _shell;
     private GameSettings _settings;
+    // --mouse classic|alternate: overrides the mouse setup of the settings for every game this run starts (null: the settings decide).
+    private bool? _alternateMouse;
+    private GameSettings GameplaySettings => _alternateMouse is { } alternate ? _settings with { Controls = _settings.Controls with { AlternateMouse = alternate } } : _settings;
     private RunningGame? _running;
     private long _clockMs;
     private double _nextDots;
@@ -78,19 +81,19 @@ internal sealed class ClientRuntime : IDisposable
     public void StageWaypoints((float X, float Y)[] offsets) => _stagedWaypoints = offsets;
 
     /// <summary>The shell (main menu and everything behind it); it starts matches and missions itself.</summary>
-    public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio, bool animateTransitions = true)
+    public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio, bool animateTransitions = true, bool? alternateMouse = null)
     {
         // animateTransitions: the menu animates like the original (Data/INI/WindowTransitions.ini, docs/GAME-SHELL.md section 11); --no-transitions switches to hard cuts.
         var runtime = new ClientRuntime(game, data, GameSettings.Default,
-            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions), audio);
+            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions), audio) { _alternateMouse = alternateMouse };
         runtime._audio.Game.EnterShell();
         return runtime;
     }
 
     /// <summary>A skirmish match started from the command line, with its HUD.</summary>
-    public static ClientRuntime ForMatch(global::Stride.Engine.Game game, GameData data, LiveMatch match, ClientAudioOptions audio)
+    public static ClientRuntime ForMatch(global::Stride.Engine.Game game, GameData data, LiveMatch match, ClientAudioOptions audio, bool? alternateMouse = null)
     {
-        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio);
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio) { _alternateMouse = alternateMouse };
         runtime._running = runtime.Start(match, null);
         return runtime;
     }
@@ -119,17 +122,17 @@ internal sealed class ClientRuntime : IDisposable
         => _running?.Spectator is { } spectator ? [..spectator.Report(), .._spectatorCost.Report()] : [];
 
     /// <summary>A staged demonstration (<c>--scenario</c>), with the skirmish HUD.</summary>
-    public static ClientRuntime ForScenario(global::Stride.Engine.Game game, GameData data, LiveScenario scenario, ClientAudioOptions audio)
+    public static ClientRuntime ForScenario(global::Stride.Engine.Game game, GameData data, LiveScenario scenario, ClientAudioOptions audio, bool? alternateMouse = null)
     {
-        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio);
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio) { _alternateMouse = alternateMouse };
         runtime._running = runtime.Start(scenario, null);
         return runtime;
     }
 
     /// <summary>A campaign mission started from the command line, with its HUD.</summary>
-    public static ClientRuntime ForMission(global::Stride.Engine.Game game, GameData data, LiveMission mission, ClientAudioOptions audio)
+    public static ClientRuntime ForMission(global::Stride.Engine.Game game, GameData data, LiveMission mission, ClientAudioOptions audio, bool? alternateMouse = null)
     {
-        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio);
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio) { _alternateMouse = alternateMouse };
         runtime._running = runtime.Start(mission, null);
         return runtime;
     }
@@ -318,8 +321,8 @@ internal sealed class ClientRuntime : IDisposable
         var host = new LiveMatchHost(_game, _data, game);
         var running = game switch
         {
-            LiveMission live => new RunningGame(host, null, new MissionController(live, _settings, "English", _ui.TextMeasure), mission),
-            _ => new RunningGame(host, new MatchController(game, _settings, "English", _ui.TextMeasure), null, null),
+            LiveMission live => new RunningGame(host, null, new MissionController(live, GameplaySettings, "English", _ui.TextMeasure), mission),
+            _ => new RunningGame(host, new MatchController(game, GameplaySettings, "English", _ui.TextMeasure), null, null),
         };
         running.Attach();
         _audio.Game.Attach(game, running.Hud);

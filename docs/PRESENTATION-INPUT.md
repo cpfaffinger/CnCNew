@@ -67,13 +67,40 @@ Modifikatoren (`KeyModifiers`) ergeben sich aus gehaltenen Modifikatortasten; li
 * **Control-Bar-Hotkeys** (`HotKey.cpp`): Das Zeichen nach dem ersten `&` im übersetzten `TextLabel`, kleingeschrieben; ausgelöst beim
   Loslassen ohne Modifikator; eine schon vergebene Taste wird für spätere Slots ignoriert (`addHotKey`); ein sichtbarer, aber gesperrter
   Knopf wird nicht ausgelöst (`HotkeyActivation.Disabled`). Die Übersetzung liefert der Aufrufer als `Func<string, string?>`, damit keine
-  Abhängigkeit zur UI entsteht. **Abweichung:** Hat das Drücken derselben Taste schon ein Meta ausgelöst (z. B. `S` = STOP), wird der
-  Control-Bar-Hotkey beim Loslassen unterdrückt; das Original würde beide auslösen und doppelte Befehle erzeugen.
+  Abhängigkeit zur UI entsteht. Ein Meta auf dem **Tastendruck** nimmt dem Knopf die Taste nicht weg (§3a). **Abweichung:** Hat der Druck
+  die Auswahl schon gestoppt (`S` = STOP) und trägt ein **Stop-Knopf** dieselbe Taste, wird er beim Loslassen nicht noch einmal gedrückt; das
+  Original gibt den Stoppbefehl zweimal.
 * **Engine-Aktionen** (`MetaAction.CameraScrollUp` … `Guard`, Settings-Namen `ENGINE_*`): Das Original liest die Pfeiltasten roh
   (`LookAtXlat.cpp`); `WithEngineDefaults` bindet sie deshalb als `Source = Engine`. Angriffsbewegung und Wachen sind im Original
   Control-Bar-Knöpfe (`&A`, `&G` im Label) und bleiben standardmäßig ungebunden, lassen sich aber für die Optionen frei belegen.
 * **Einstellungen:** `ToSettings` liefert für jede Aktion `MODIFIKATOREN TASTE ÜBERGANG` (z. B. `CTRL KEY_1 DOWN`) oder `UNBOUND`, kanonisch
   sortiert; `ApplySettings` meldet unbekannte Aktionen und unlesbare Werte als `Issues` und lässt die Bindung dann unverändert.
+
+### 3a. Bautasten: Tasten, die auch ein Meta sind (7. Oktober 2026, gemessen; nicht von einem Menschen abgenommen)
+
+Frage des Projektinhabers: funktionieren die Tasten im Baumenü? Gemessen mit echten Daten für America, China und GLA (Bauarbeiter, Kommandozentrale, Kaserne, Waffenfabrik;
+`Game.Tests` → `HotkeyTests`, je Knopf ein echter Tastendruck über `MatchController.Process`) und im echten Client (`scripts/check-build-hotkeys.ps1`, Tastenereignisse über
+`--input-script`):
+
+* Die Kette selbst war in Ordnung: das `&` im englischen CSF-Text wird gelesen (`CommandButtonCatalog.HotkeyOf`), `StrideInputTranslator` reicht Tasten weiter, das HUD gibt sie an
+  `GameInputController.OnKey`, der Knopf wird beim Loslassen gedrückt. Verschachtelte Seiten gibt es in den Befehlssätzen des Spiels nicht (ein Satz hat höchstens 14 Plätze).
+* **Nicht funktioniert haben** alle Knöpfe, deren Taste `CommandMap.ini` zugleich ohne Modifikator auf dem Tastendruck an ein Meta bindet. Das sind in den Retaildaten sieben
+  Buchstaben: `E` (`SELECT_MATCHING_UNITS`), `F` (`TOGGLE_FAST_FORWARD_REPLAY`), `H` (`VIEW_COMMAND_CENTER`), `Q` (`SELECT_ALL`), `S` (`STOP`), `W` (`SELECT_ALL_AIRCRAFT`),
+  `X` (`SCATTER`). Betroffen in den geprüften Sätzen: `S` – Scorpion, Saboteur, Sentry Drone, Listening Outpost (und die Spionagesatellit-Kraft); `F` – Flugplatz (America, China);
+  `E` – ECM-Panzer, Battle Bus. Vor der Korrektur: America 10 von 11, China 13 von 14, GLA 16 von 18 freigeschalteten Bau-/Produktionstasten der ersten Szene; danach, mit Kraftwerk
+  und Versorgungslager in der Szene, 16 von 16, 18 von 18 und 19 von 19.
+* Ursache: eine eigene Abweichung („ein Meta beim Drücken unterdrückt die Knopftaste“, gedacht gegen den doppelten Stoppbefehl). Das Original unterdrückt nichts:
+  `MetaEventTranslator::translateGameMessage` (`MetaEvent.cpp`, Priorität 20) verwirft nur die rohe Tastennachricht, deren Taste **und Übergang** ein Eintrag trifft – bei einem
+  `DOWN`-Eintrag also den Druck –, und `HotKeyTranslator::translateGameMessage` (`HotKey.cpp`, Priorität 25) arbeitet auf `MSG_RAW_KEY_UP`. Beides geschieht: `S` stoppt und
+  drückt dann den Knopf. So ist es jetzt auch hier; nur ein Meta auf dem **Loslassen** derselben Taste verhindert den Knopf.
+* Gesperrte Knöpfe (fehlende Voraussetzung, kein Geld) reagieren wie im Original nicht auf ihre Taste. Die Texte kommen aus der englischen CSF; eine andere Sprache hätte andere
+  Buchstaben (nicht geprüft, es gibt nur die englische Tabelle im Bestand).
+
+```powershell
+.\scripts\check-build-hotkeys.ps1                 # echter Client, drei Fraktionen, je vier Einheiten per Taste und zwei Gebäude (eines platziert)
+dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --content-dir .local/phase2-import-a --only HotkeyTests   # jede Taste, mit Tabelle
+.\scripts\demo-factory-exits.ps1 -Faction America   # zum Selbstprobieren: Bauarbeiter wählen, R / B / F ...; Fabrik wählen, C / S ...
+```
 
 ## 4. Kamera-Eingabe
 
@@ -81,7 +108,7 @@ Modifikatoren (`KeyModifiers`) ergeben sich aus gehaltenen Modifikatortasten; li
 
 | Eingabe | Wirkung | Wert/Quelle |
 |---|---|---|
-| Pfeiltasten (Engine-Bindung, Modifikator muss exakt passen: Strg+Pfeil wählt Einheiten) | `Scroll`, pro Sekunde Richtung × Horizontal-/Vertikalfaktor × Tastaturfaktor | `GameData.ini`: 1,6 / 2,0 / 2,0 |
+| Pfeiltasten (Engine-Bindung, Modifikator muss exakt passen: Strg+Pfeil wählt Einheiten) | `Scroll`, pro Sekunde Richtung × Horizontal-/Vertikalfaktor × Scroll-Option | `GameData.ini`: 1,6 / 2,0; Option 0,5 (siehe §4a) |
 | Cursor im 3-px-Randstreifen (abschaltbar, nicht während Tastaturscroll) | wie Tasten | `edgeScrollSize = 3` (`LookAtXlat.cpp`) |
 | Rechts ziehen | Scroll proportional zum Abstand vom Anker, auf halbe Bildschirmgröße begrenzt | `LookAtXlat.cpp`, `RightMouseAlwaysScrolls` |
 | Mittel ziehen | Drehung 0,01 rad pro Pixel | `LookAtXlat.cpp` |
@@ -92,6 +119,35 @@ Modifikatoren (`KeyModifiers`) ergeben sich aus gehaltenen Modifikatortasten; li
 
 `Scroll` ist kamerarelativ und dimensionslos (1 = Grundgeschwindigkeit der Kamera für eine Sekunde); die Umrechnung in Meter übernimmt der
 Kamerabesitzer (C1).
+
+### 4a. Scrollgeschwindigkeit (7. Oktober 2026, gemessen; nicht von einem Menschen abgenommen)
+
+Quelle: `LookAtXlat.cpp`, `LookAtTranslator::translateGameMessage`, Zweig `MSG_FRAME_TICK`; `W3DView.cpp`, `W3DView::scrollBy`; `GlobalData.cpp`,
+`GlobalData::parseGameDataDefinition`; `OptionsMenu.cpp`, `OptionPreferences::getScrollFactor` und `saveOptions`.
+
+* Tasten (`SCROLL_KEY`) und Bildrand (`SCROLL_SCREENEDGE`) benutzen im Original dieselbe Formel: je Client-Bild (30 je Sekunde)
+  `Faktor × SCROLL_AMT (100) × m_keyboardScrollFactor`, Faktor = `HorizontalScrollSpeedFactor` 1,6 bzw. `VerticalScrollSpeedFactor` 2,0.
+* `m_keyboardScrollFactor` ist **nicht** der Wert `KeyboardScrollSpeedFactor = 2.0` aus `GameData.ini`: direkt nach dem Einlesen überschreibt
+  `parseGameDataDefinition` ihn mit der Option des Spielers (`getScrollFactor`: Reglerstellung 0–100 geteilt durch 100, ohne gespeicherte Einstellung
+  `m_keyboardDefaultScrollFactor` = 0,5). Der Regler der Optionen schreibt denselben Wert (`val / 100`).
+* `scrollBy` nimmt eine Scroll-Einheit als `250 / Breite × 2 × tan(FOV/2)` Welteinheiten auf der Bildebene (bei 1280 Pixeln Breite 0,1822); in y kommt das
+  Seitenverhältnis dazu, und nur der Anteil `sin(Neigung)` liegt am Boden.
+
+Bis zu dieser Korrektur rechnete `CameraSettings` mit dem `GameData.ini`-Wert 2,0 statt mit der Option 0,5 – Rand und Tasten scrollten **viermal** so schnell wie
+das Original; der Regler skalierte zudem Horizontal-/Vertikalfaktor *und* Tastaturfaktor (quadratisch). Jetzt ist `CameraSettings.KeyboardScrollSpeedFactor`
+die Option selbst (`ControlSettings.ScrollSpeed`, Vorgabe 0,5; Regler ganz links = 0 = kein Tasten-/Randscroll wie im Original, ganz rechts = 1,0).
+
+| Weg (1280 × 720, Vorgabezoom, Regler in Mittelstellung) | vorher | jetzt | Original |
+|---|---|---|---|
+| Bildrand/Tasten seitwärts, Welteinheiten je Sekunde | 1.748,6 | 437,2 | 437,2 (2.400 Scroll-Einheiten) |
+| Bildrand/Tasten vorwärts | 2.365,6 | 591,4 | 591,4 (3.000 Scroll-Einheiten) |
+| Rechtsziehen, 100 Pixel seitwärts | 136,6 | 136,6 | 874,3 (`1,6 × Pixelabstand` je Bild, kein Bezug zur halben Bildbreite) |
+| Rechtsziehen, Höchstwert seitwärts (halbe Bildbreite) | 874,3 | 874,3 | 5.595,5 |
+
+Der Scroll läuft auf Wandzeit (`CameraIntent.Scroll` × `dt`), nicht auf der Tickrate; der Test `Camera.edge, key and right-drag scroll speed …` misst eine
+Sekunde mit 30 und mit 144 Bildern. Im Original hängt die Geschwindigkeit von der Auflösung ab (bei 800 Pixeln Breite 699,5 statt 437,2 seitwärts) – das ist
+übernommen. **Offene Abweichung (nur gemeldet):** das Rechtsziehen ist bei uns auf den Tastenwert bei voller Auslenkung begrenzt und damit bei 1280 Pixeln
+6,4-mal langsamer als im Original.
 
 ## 5. Auswahl
 
@@ -137,7 +193,21 @@ Das Original schneidet einen Strahl mit der gerenderten Geometrie (`W3DView::pic
 
 ### Mausschemata
 
-| | `LeftClickCommands` (Retail-Standard, `m_useAlternateMouse = FALSE`) | `RightClickCommands` („alternative Maus“) |
+**Vorgabe seit 7. Oktober 2026: `RightClickCommands`** (links wählen, rechts befehlen) – Entscheidung des Projektinhabers, abweichend vom Original, das mit
+`m_useAlternateMouse = FALSE` ausgeliefert wird (`OptionPreferences::getAlternateMouseModeEnabled`). Das Schema des Originals bleibt wählbar:
+
+* Einstellung `controls.alternateMouse` (`ControlSettings.AlternateMouse`, Vorgabe `true`) in `settings.json`; eine ältere Datei ohne den Schlüssel lädt mit dem
+  sichtbaren Hinweis `controls.alternateMouse:missing` und der Vorgabe.
+* Optionsbildschirm: das Kästchen `OptionsMenu.wnd:CheckAlternateMouse` ist jetzt verdrahtet (angehakt = rechts befehlen); „Accept“ speichert, das nächste
+  gestartete Spiel benutzt die Wahl.
+* Befehlszeile des Clients: `--mouse classic` (Original: links wählen und befehlen) bzw. `--mouse alternate`; übersteuert die Einstellung für diesen Lauf.
+* Im Code: `GameInputSettings.Scheme` (Vorgabe ebenfalls `RightClickCommands`), aus den Einstellungen über `MatchController.MapMouseScheme`.
+
+Unabhängig vom Schema: der Linksklick schließt Platzierung und Zielmodi (Angriffsbewegung, Bewachen, Knopf mit Ziel) ab, der Rechtsklick bricht sie ab, rechtes
+Ziehen scrollt, die Minimap befiehlt mit rechts. Die `--input-script`-Prüfungen (`scripts/check-dozer-build.ps1`, `check-build-hotkeys.ps1`) benutzen nur solche
+schemaunabhängigen Klicks (Auswahl, Befehlsknopf, Platzierung) und laufen mit beiden Schemata. **Nicht von einem Menschen abgenommen.**
+
+| | `LeftClickCommands` (Retail-Standard, `m_useAlternateMouse = FALSE`; `--mouse classic`) | `RightClickCommands` („alternative Maus“, Vorgabe) |
 |---|---|---|
 | Linksklick auf Objekt | Befehl, wenn der Kontext einen gültigen Befehl ergibt und Shift nicht gedrückt ist (`contextCommandForNewSelection`), sonst Auswahl | Auswahl |
 | Linksklick auf Boden | Kontextbefehl (Bewegen, Sammelpunkt, Wegpunkt …) | alles abwählen |
