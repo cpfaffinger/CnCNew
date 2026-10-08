@@ -354,11 +354,15 @@ static partial class Tests
         Check.That(deposits.Count == 3 && deposits[0] == 200 && deposits[2] == 260, $"Two boxes pay 200, with Supply Lines 260 (got {string.Join(", ", deposits)}).");
 
         var grunt = new PlayerId(1);
+        // The orders below follow the third deposit by whole logic frames (one step each at 30 Hz), so that they meet the supply machine in the same state at every rate.
+        while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
         feeder.Spawn(1, "Grunt", x: 0, y: 0);
-        world.Step();
+        for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
         var passenger = world.Entities.Single(value => value.Template.Name == "Grunt");
         Check.That(feeder.EnterContainer(1, passenger.Id.Value, chinook.Id.Value).Accepted, "A grunt boards the Chinook.");
-        world.Step();
+        // Boarding is the arrival of a move: it takes the logic frame of the order (one tick at 30 Hz).
+        for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
+        Check.That(passenger.ContainedBy == chinook.Id, "The grunt is aboard one logic frame after the order.");
         Check.That(feeder.Evacuate(1, chinook.Id.Value).Accepted, "Evacuation is ordered in the air.");
         long landedAt = -1;
         for (var tick = 0; tick < world.Frames(200) && passenger.ContainedBy.IsValid; tick++)
