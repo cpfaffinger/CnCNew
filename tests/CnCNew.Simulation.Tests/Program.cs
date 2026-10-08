@@ -360,6 +360,17 @@ run.Test("Projectiles: delayed hit without a projectile object", Tests.Projectil
 run.Test("Projectiles: scatter radius", Tests.ProjectileScatter);
 run.Test("Projectiles: point-defense laser shoots a missile down", Tests.ProjectilePointDefenseLaser);
 run.Test("Projectiles: snapshot mid-flight and two-run determinism", Tests.ProjectileSnapshotAndDeterminism);
+run.Test("Rate invariance, projectiles: a delayed hit counts its frames against the 30 Hz speed", Tests.RateProjectilesDelayedHitCountsAgainstTheOriginalFrameSpeed);
+run.Test("Rate invariance, projectiles: the speed per frame is the 30 Hz catalog value", Tests.RateProjectilesFrameSpeedIsTheThirtyHertzValue);
+run.Test("Rate invariance, projectiles: a straight shell flies the 30 Hz path", Tests.RateProjectilesStraightShellFliesTheThirtyHertzPath);
+run.Test("Rate invariance, projectiles: a ballistic arc flies the 30 Hz path", Tests.RateProjectilesBallisticArcFliesTheThirtyHertzPath);
+run.Test("Rate invariance, projectiles: a snapshot inside a frame continues identically", Tests.RateProjectilesSnapshotInsideAFrame);
+run.Test("Rate invariance, projectiles: missiles fly the 30 Hz flight", Tests.RateProjectilesMissilesFlyTheThirtyHertzFlight);
+run.Test("Rate invariance, projectiles: a missile without fuel falls the same way", Tests.RateProjectilesMissileWithoutFuelFallsTheSameWay);
+run.Test("Rate invariance, projectiles: the neutron missile flies the 30 Hz flight", Tests.RateProjectilesNeutronMissileFliesTheThirtyHertzFlight);
+run.Test("Rate invariance, projectiles: a smart bomb mixes its course once per frame", Tests.RateProjectilesSmartBombMixesOncePerFrame);
+run.Test("Rate invariance, projectiles: the scale of an EMP pulse grows per frame", Tests.RateProjectilesEmpScaleGrowsPerFrame);
+run.Test("Rate invariance, projectiles: a free fall is stepped per frame", Tests.RateProjectilesFreeFallStepsPerFrame);
 run.Test("Tunnels: shared network, capacity, entry rules and exit through another tunnel", Tests.TunnelSharedNetwork);
 run.Test("Tunnels: healing, hand-over on death and cave-in", Tests.TunnelHealingAndCaveIn);
 run.Test("Tunnels: selling the last tunnel lets the riders out", Tests.TunnelSaleEvacuates);

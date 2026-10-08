@@ -122,8 +122,10 @@ public sealed partial class SimulationWorld
     /// computed exactly on the raw fixed-point values (the distance itself is the floored fixed-point square root). A speed of 0 or less —
     /// three shipped weapons without damage, where the reference divides by zero — hits at once.
     /// <para>
-    /// The reference counts in its logic frames, so the count is taken in logic frames of the original — against the way of one frame, which is the speed per tick times the ticks
-    /// per frame — and only then scaled to ticks: "at once" stays "closer than one frame of flight" and the delay stays on the original's grid at every tick rate.
+    /// The reference counts in its logic frames, so the count is taken in logic frames of the original — against the way of one frame — and only then scaled to ticks: "at once"
+    /// stays "closer than one frame of flight" and the delay stays on the original's grid at every tick rate. The way of one frame is the speed per frame of the 30 Hz catalog
+    /// (<see cref="CnCNew.Simulation.Time.ProjectileFrameGrid.PerTickToPerOriginalFrame"/>), not the speed per tick times the ticks per frame: that product is rounded differently in its last bits and
+    /// moved the count by a whole frame where the distance is a multiple of the speed.
     /// </para>
     /// </summary>
     internal long FlightTicks(Entity source, Fixed x, Fixed y, Fixed z, Fixed speed)
@@ -133,7 +135,7 @@ public sealed partial class SimulationWorld
         var dy = y - source.Y;
         var dz = z - source.Z;
         var distance = Fixed.Sqrt(dx * dx + dy * dy + dz * dz);
-        var perFrame = checked(speed.Raw * Time.TicksPerOriginalFrame);
+        var perFrame = Modules.BuiltIn.ProjectileModules.FrameSpeed(Time, speed).Raw;
         if (distance.Raw < perFrame) return 0;
         return Time.OriginalFrames((distance.Raw + perFrame - 1) / perFrame);
     }
