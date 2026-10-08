@@ -112,6 +112,23 @@ static partial class Tests
             MaxQueueEntries = 2
           End
         End
+        Object ExitDozer
+          KindOf = SELECTABLE VEHICLE DOZER
+          VisionRange = 100.0
+          ShroudClearingRange = 100.0
+          Locomotor = SET_NORMAL GroundLoco
+          BuildCost = 20
+          BuildTime = 1
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = DozerAIUpdate AI01
+            RepairHealthPercentPerSecond = 10%
+          End
+        End
         Object ExitBarracks
           KindOf = SELECTABLE STRUCTURE
           BuildCost = 100
@@ -453,6 +470,51 @@ static partial class Tests
         for (var tick = 0; tick < rallied.Frames(120); tick++)
             Check.That(rallied.Step().StateHash == restored.Step().StateHash, "The exit is hash-identical after a restore at step " + tick + ".");
         Check.That(!walker.HasMoveTarget && Near(walker, 170, 100, 2), $"It goes on to the rally point and arrives ({walker.X}, {walker.Y}).");
+    }
+
+    /// <summary>
+    /// The exit path is one order (<c>AI_FOLLOW_EXIT_PRODUCTION_PATH</c>): an order given while the unit drives out replaces it, second leg included. A dozer built with a rally
+    /// point set and told to build while it is still inside its factory builds - it does not walk off to the rally point when it stops at the site - and a unit told to move
+    /// elsewhere stays where it was sent.
+    /// </summary>
+    public static void ConstructionExitPathYieldsToAnOrder()
+    {
+        static bool Near(Entity unit, int x, int y, int tolerance) => (unit.X - Fixed.FromInt(x)).Abs() <= Fixed.FromInt(tolerance) && (unit.Y - Fixed.FromInt(y)).Abs() <= Fixed.FromInt(tolerance);
+
+        Entity Produce(SimulationWorld world, Feeder feeder, string unit)
+        {
+            feeder.Spawn(1, "ExitBarracks", x: 70, y: 100);
+            world.Step();
+            var producer = ConstructionFind(world, "ExitBarracks").Id.Value;
+            Check.That(feeder.SetRallyPoint(1, producer, 170, 100).Accepted, "The owner sets a rally point.");
+            Check.That(feeder.QueueProduction(1, producer, unit).Accepted, $"The factory takes the order for {unit}.");
+            Check.That(StepUntil(world, 100, () => world.Entities.Any(value => value.Template.Name == unit)) < 100, $"{unit} is produced.");
+            for (var tick = TickOrder.Next; tick < world.Frames(1); tick++) world.Step();
+            var built = ConstructionFind(world, unit);
+            Check.That(built.HasMoveTarget && Near(built, 70, 100, 0), "It is on its exit path and still at UnitCreatePoint.");
+            return built;
+        }
+
+        var (world, feeder, _, _) = ConstructionSetup(withTerrain: true);
+        var dozer = Produce(world, feeder, "ExitDozer");
+        // The ground it may build on is known once the shroud has been refreshed with the dozer on the map (every third logic frame).
+        StepUntil(world, 6, () => false);
+        Check.That(dozer.HasMoveTarget && Near(dozer, 70, 100, 28), $"It is still inside the factory, driving out ({dozer.X}, {dozer.Y}).");
+        var order = feeder.Construct(1, dozer.Id.Value, "Plant", 70, 160);
+        Check.That(order.Accepted, $"The dozer is told to build while it drives out ({order.Reason}).");
+        world.Step();
+        var site = ConstructionFind(world, "Plant");
+        Check.That(StepUntil(world, 900, () => !IsSite(site)) < 900, $"The dozer builds the structure instead of leaving for the rally point (dozer at {dozer.X}, {dozer.Y}, work {site.ConstructionWork}).");
+        StepUntil(world, 90, () => false);
+        Check.That(!dozer.HasMoveTarget && !Near(dozer, 170, 100, 20), $"Afterwards it stays at the site and does not walk to the rally point ({dozer.X}, {dozer.Y}).");
+
+        var (moved, moveFeeder, _, _) = ConstructionSetup(withTerrain: true);
+        var grunt = Produce(moved, moveFeeder, "Grunt");
+        StepUntil(moved, 10, () => false);
+        Check.That(moveFeeder.SetMoveTarget(1, grunt.Id.Value, 70, 170).Accepted, "A unit on its exit path takes a move order.");
+        Check.That(StepUntil(moved, 600, () => !grunt.HasMoveTarget) < 600, "It arrives.");
+        StepUntil(moved, 90, () => false);
+        Check.That(!grunt.HasMoveTarget && Near(grunt, 70, 170, 2), $"It stays where it was sent ({grunt.X}, {grunt.Y}).");
     }
 
     public static void ConstructionRepair()

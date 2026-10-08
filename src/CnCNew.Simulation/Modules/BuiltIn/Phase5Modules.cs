@@ -682,8 +682,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _exitAfterEvacuate = false;
         _returning = false;
         _lastCommandFromPlayer = fromPlayer;
-        _exitRallyPending = false;
-        _viaPending = false;
+        EndExitPath();
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
@@ -715,6 +714,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _exitRallyPending = hasRally;
         _exitRallyX = rallyX;
         _exitRallyY = rallyY;
+    }
+
+    /// <summary>
+    /// The exit path is one order (<c>AI_FOLLOW_EXIT_PRODUCTION_PATH</c>): whatever replaces or stops its move - another move, a dock, a builder task, an attack the world
+    /// drives, a stop - ends it, door point and second leg included. Only the arrival at the end of the first leg goes on to the rally point.
+    /// </summary>
+    private void EndExitPath()
+    {
+        _exitRallyPending = false;
+        _viaPending = false;
     }
 
     /// <summary>The order of <see cref="OrderExitProduction"/> still stands and the unit has not been through the door yet; gives the door point.</summary>
@@ -823,6 +832,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _goal = EntityId.Invalid;
         _evacuatePending = false;
         _lastCommandFromPlayer = fromPlayer;
+        EndExitPath();
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
         _frameSpeed = Fixed.Zero;
@@ -941,6 +951,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     internal bool StartInternalMove(Fixed x, Fixed y)
     {
         if (Entity.Template.Locomotor is null) return false;
+        EndExitPath();
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
@@ -950,6 +961,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     internal void StopInternalMove()
     {
+        EndExitPath();
         if (!Entity.HasMoveTarget) return;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
