@@ -124,9 +124,10 @@ static partial class Tests
         var steps = new List<Fixed>();
         for (var i = 1; i < history.Count; i++)
             if (history[i] > history[i - 1]) steps.Add(history[i] - history[i - 1]);
-        Check.That(steps.Count >= world.Frames(8) && steps.Count <= world.Frames(10), $"Nine repair ticks (300 ms), got {steps.Count}.");
-        Check.That(steps.Take(steps.Count - 1).Distinct().Count() == 1, "Every repair tick adds the same amount.");
-        Check.That(steps[0] == (Fixed.FromInt(60) / Fixed.FromInt(world.Frames(9))), "The step is the missing health divided by the frames for a full heal.");
+        // The dock heals once per logic frame of the original at every rate (phase 23): nine steps of 60 / 9, not nine frames' worth of smaller steps.
+        Check.That(steps.Count is >= 8 and <= 10, $"Nine repair steps (300 ms are nine frames of the original), got {steps.Count}.");
+        Check.That(steps.Take(steps.Count - 1).Distinct().Count() == 1, "Every repair step adds the same amount.");
+        Check.That(steps[0] == (Fixed.FromInt(60) / Fixed.FromInt(9)), "The step is the missing health divided by the frames of the original for a full heal.");
 
         for (var i = 0; i < world.Frames(20); i++) world.Step();
         Check.That(!truck.HasMoveTarget && truck.Body.Health == truck.Body.MaxHealth, "The docking is over and the truck is idle.");
