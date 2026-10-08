@@ -600,7 +600,9 @@ public sealed class PilotFindVehicleUpdate(PilotFindVehicleData data) : SimModul
     public override string ModuleName => "PilotFindVehicleUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
-    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
+    // The first look is the pilot's first update, one logic frame of the original after it appeared (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7; the next tick at
+    // 30 Hz): one tick after it, every later look lay in the last tick of a frame above 30 Hz and read the vehicles a share of their step early.
+    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
 
     public long Update(IWorldServices world)
     {
@@ -619,8 +621,11 @@ public sealed class PilotFindVehicleUpdate(PilotFindVehicleData data) : SimModul
         foreach (var other in world.Entities)
         {
             if (other.Id == Entity.Id || other.Owner != Entity.Owner || other.EffectivelyDead || other.DestroyRequested || !other.Template.IsKindOf("VEHICLE")) continue;
-            var dx = other.X - Entity.X;
-            var dy = other.Y - Entity.Y;
+            // Both where the frame they have begun ends (rule 3); 30 Hz: their positions.
+            var (otherX, otherY, _) = other.FrameEnd(world.Tick);
+            var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
+            var dx = otherX - ownX;
+            var dy = otherY - ownY;
             var distance = dx * dx + dy * dy;
             if (!limit.Contains(distance)) continue;
             if (best is not null && (distance > bestDistance || (distance == bestDistance && other.Id.Value > best.Id.Value))) continue;

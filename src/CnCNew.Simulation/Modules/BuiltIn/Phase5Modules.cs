@@ -761,7 +761,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public virtual void OrderEnter(IWorldServices world, Entity container, bool fromPlayer)
     {
         if (Entity.Template.Locomotor is null) return;
-        OrderMove(world, container.X, container.Y, fromPlayer);
+        var (containerX, containerY, _) = container.FrameEnd(world.Tick);
+        OrderMove(world, containerX, containerY, fromPlayer);
         _enterTarget = container.Id;
     }
 
@@ -785,7 +786,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public void OrderApproachGoal(IWorldServices world, Entity goal, bool fromPlayer)
     {
         if (Entity.Template.Locomotor is null) return;
-        OrderMove(world, goal.X, goal.Y, fromPlayer);
+        // The goal is where the frame it has begun ends (rule 3 of docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3); 30 Hz: its position.
+        var (goalX, goalY, _) = goal.FrameEnd(world.Tick);
+        OrderMove(world, goalX, goalY, fromPlayer);
         _goal = goal.Id;
     }
 
@@ -1144,12 +1147,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         if (Entity.HasMoveTarget)
         {
-            // Re-aimed where the 30 Hz step re-aims: after a whole logic frame's step, not inside it.
-            if (_frameTicksLeft > 0) return;
+            // Re-aimed where the 30 Hz step re-aims: once per logic frame, in the tick that decided the frame's step and after that decision, with the goal where the frame
+            // it has begun ends (a goal that has its turn later in the tick is read after its previous step, as at 30 Hz). With the last share instead, the goal had
+            // always made its whole step.
+            if (_frameTicksLeft != Math.Max(_stride, 1) - 1) return;
             var slack = Fixed.FromInt(2 * TerrainMap.CellSize);
-            var gx = goal.X - Entity.MoveTargetX;
-            var gy = goal.Y - Entity.MoveTargetY;
-            if (!SquaredReach.Of(slack).Contains(gx * gx + gy * gy)) StartInternalMove(goal.X, goal.Y);
+            var (aimX, aimY, _) = goal.FrameEnd(world.Tick);
+            var gx = aimX - Entity.MoveTargetX;
+            var gy = aimY - Entity.MoveTargetY;
+            if (!SquaredReach.Of(slack).Contains(gx * gx + gy * gy)) StartInternalMove(aimX, aimY);
             return;
         }
         var reach = goal.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
