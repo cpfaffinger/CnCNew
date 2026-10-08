@@ -36,6 +36,8 @@ static partial class Tests
             }
 
             runs.Add((rate, factor, shot, angles));
+            // The counter of held-back orders (part of the hash) counts logic frames of waiting: half a second of orders every tick is 15 at every rate.
+            Check.That(world.TurretWaits == 15, $"{rate}: the orders waited 15 logic frames for the turret ({world.TurretWaits} counted).");
         }
 
         var reference = runs[0];

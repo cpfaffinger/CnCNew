@@ -1092,7 +1092,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (fire.Origin != FireOrigin.Script) NoteOrderedAttack(source, fireTarget);
                 // The turret of the slot turns to the victim first and the weapon waits until it points there (TurretAI). The order stays accepted — the attack goes on and the next
                 // order of the stream fires — so this is neither a rejection (no "cannot do" cue) nor a shot. A script's one-off command button fires its single shot regardless.
-                if (!AimTurretsAt(source, choice.Slot, fireTarget, fire.Origin != FireOrigin.Script ? TurretAimOrder.Attack : TurretAimOrder.Shot) && fire.Origin != FireOrigin.Script) { _turretWaits++; break; }
+                if (!AimTurretsAt(source, choice.Slot, fireTarget, fire.Origin != FireOrigin.Script ? TurretAimOrder.Attack : TurretAimOrder.Shot) && fire.Origin != FireOrigin.Script) { NoteTurretWait(); break; }
                 // The weapon winds up first (PreAttackDelay); like the turret wait this is neither a rejection nor a shot. A script's one-off command fires at once.
                 if (fire.Origin != FireOrigin.Script && !PreAttackDone(source, _templates.Weapons[ActiveWeaponSet(source)!.Weapons[choice.Slot]], choice.Slot, fireTarget)) break;
                 // A command button's weapon slot pins the slot until its clip empties (Object::doCommandButton: setWeaponLock(LOCKED_TEMPORARILY) before the attack).

@@ -505,7 +505,7 @@ public sealed partial class SimulationWorld
         if (choice.Rejection != 0 || (turretOnly && !IsOnAimingTurret(source, choice.Slot)) || !GateAllowsFire(source, victim)) return;
         if (!AimTurretsAt(source, choice.Slot, victim, TurretAimOrder.Attack))
         {
-            _turretWaits++;
+            NoteTurretWait();
             return;
         }
 

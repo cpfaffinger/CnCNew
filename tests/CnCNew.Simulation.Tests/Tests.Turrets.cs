@@ -306,7 +306,7 @@ static partial class Tests
         var shotAfter = 1 + TicksUntilShot(world, feeder, tank.Id.Value, target);
         Check.That(shotAfter == world.Frames(15), $"The shot waits until the turret has turned 90 degrees at 6 degrees per tick: {shotAfter} ticks after the order.");
         var pointing = tank.TurretOf(0)!.Value;
-        Check.That(Near(pointing.Angle, Degrees(90m), 1m) && !pointing.Rotating && world.TurretWaits == world.Frames(15), $"It points at the victim when the shot goes out ({pointing.Angle.Raw} raw; {world.TurretWaits} orders waited).");
+        Check.That(Near(pointing.Angle, Degrees(90m), 1m) && !pointing.Rotating && world.TurretWaits == 15, $"It points at the victim when the shot goes out ({pointing.Angle.Raw} raw; {world.TurretWaits} orders waited).");
         Check.That(world.RejectionCounts.Sum() == 0, "Waiting for the turret is not a rejection (no 'cannot do' cue): nothing was rejected.");
 
         // A tank whose body already faces the victim does not wait at all: the turret angle is relative to the heading.

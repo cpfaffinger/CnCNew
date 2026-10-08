@@ -57,8 +57,17 @@ public sealed partial class SimulationWorld
 
     private long _turretWaits;
 
-    /// <summary>How many fire orders were held back because a turret did not yet point at its victim (statistics; part of the hash once nonzero).</summary>
+    /// <summary>
+    /// How long fire orders were held back because a turret did not yet point at its victim, in logic frames of the original: one per order (or own fire attempt) that waited in a
+    /// tick a frame begins with, so a unit that waits half a second counts 15 at every tick rate (statistics; part of the hash once nonzero). At 30 Hz every held order counts.
+    /// </summary>
     public long TurretWaits => _turretWaits;
+
+    /// <summary>A fire order or the unit's own fire attempt waits for the turret in this tick.</summary>
+    private void NoteTurretWait()
+    {
+        if (_turretFrameTicks == 1 || Time.IsOriginalFrameBoundary(_tick)) _turretWaits++;
+    }
 
     private void InitializeTurrets(Entity entity)
     {

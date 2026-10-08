@@ -408,7 +408,7 @@ public sealed partial class SimulationWorld
         UpdateWeaponSet(source);
         var choice = ChooseWeapon(source, victim, FireOrigin.Ai);
         if (!choice.CanFire || !GateAllowsFire(source, victim)) return false;
-        if (!AimTurretsAt(source, choice.Slot, victim)) { _turretWaits++; return false; }
+        if (!AimTurretsAt(source, choice.Slot, victim)) { NoteTurretWait(); return false; }
         var weapon = ConsumeShot(source, choice.Slot, victim.Id);
         var damage = FireWeaponAt(source, weapon, victim, victim.X, victim.Y, victim.Z);
         Emit(SimEventKind.WeaponFired, source.Id, victim.Id, weapon.Name, damage.Raw, source.Owner);
