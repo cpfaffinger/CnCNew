@@ -41,7 +41,7 @@ public enum ArmyComposition : byte
 public sealed partial class SkirmishAi
 {
     /// <summary>The composition a computer player uses when its options name none.</summary>
-    public const ArmyComposition DefaultComposition = ArmyComposition.Uniform;
+    public const ArmyComposition DefaultComposition = ArmyComposition.ExchangeValue;
 
     /// <summary>How long a sighting of an enemy object counts toward the enemy's force (3 min).</summary>
     private const long SightingMemoryFrames = 5400;
