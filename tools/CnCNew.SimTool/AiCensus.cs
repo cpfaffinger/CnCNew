@@ -26,7 +26,7 @@ internal static class AiCensus
         Usage: CnCNew.SimTool ai-census <content-dir> --out <tsv> [--orbits <txt>] [--seeds N] [--first-seed N] [--tick-rate 30|60|120] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
           plays every AI-vs-AI pairing of the reference manifest once per seed (default 5 seeds from 1, 25 game minutes) and writes one line per observed quantity:
           pairing, seed, slot, faction, section, key, value. Sections: match, built (first completion tick per structure), produced (producer|unit), army (outcome of every
-          look of the army production, producer|outcome), rejections, money (every 50 s), damage (attacker|victim kind), lost (unit), circling (orbit|shuffle per unit type).
+          look of the army production, producer|outcome), rejections, money (every 50 s), damage (attacker|victim kind), lost (unit), circling (orbit|shuffle per unit type and place: rally, goal-near, goal-far, no-order).
           --orbits writes one line per circling episode with the unit's state and its neighbours.
         """;
 
@@ -139,7 +139,7 @@ internal static class AiCensus
         var known = new Dictionary<uint, (CnCNew.Simulation.Templates.ObjectTemplate Template, int Owner)>();
         var launcherOf = new Dictionary<uint, uint>();
         var damage = new Dictionary<(int Slot, string Key), decimal>();
-        var detector = new OrbitDetector(world, session, factions, id, seed);
+        var detector = new OrbitDetector(world, session, factions, id, seed) { Watch = uint.Parse(ManifestCommands.Option(args, "--watch") ?? "0", CultureInfo.InvariantCulture) };
         var moneyEvery = world.Time.OriginalFrames(MoneySampleFrames);
 
         (CnCNew.Simulation.Templates.ObjectTemplate Template, int Owner)? Identify(EntityId entityId)
@@ -229,6 +229,8 @@ internal sealed class OrbitDetector
     public const double MaxDisplacement = 20;
     public const double MinTurns = 2;
     private const double NeighbourRadius = 30;
+    /// <summary>"Close to its goal" and "at the rally point" for the place of an episode: 40 units.</summary>
+    private const double GoalNear = 40;
     private const int MaxEpisodesPerMatch = 40;
 
     private sealed class Track
@@ -272,10 +274,15 @@ internal sealed class OrbitDetector
 
     private static double Number(CnCNew.Simulation.Numerics.Fixed value) => (double)value.ToDecimal();
 
+    /// <summary><c>--watch &lt;entity id&gt;</c>: this unit's position, heading, speed and move target every ten frames, to the error stream (one match only makes sense).</summary>
+    public uint Watch { get; init; }
+
     public void AfterTick()
     {
         if (_world.Tick % _frameTicks != 0) return;
         _frame++;
+        if (Watch != 0 && _frame % 10 == 0 && _world.FindEntity(new CnCNew.Simulation.Ids.EntityId(Watch)) is { } watched)
+            Console.Error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"watch {_world.Tick}: {watched.Template.Name} at {Number(watched.X):F1},{Number(watched.Y):F1} angle {Number(watched.Angle):F2} speed {Number(watched.Speed):F2} moving {watched.HasMoveTarget} target {Number(watched.MoveTargetX):F1},{Number(watched.MoveTargetY):F1} attack-move {_world.IsAttackMoving(watched)} contained {watched.ContainedBy.Value}"));
         var judge = _frame % 30 == 0;
         for (var slot = 0; slot < _session.Players.Length; slot++)
         {
@@ -338,7 +345,22 @@ internal sealed class OrbitDetector
         if (track.InEpisode) return;
         track.InEpisode = true;
         var kind = turns >= MinTurns ? "orbit" : "shuffle";
-        Counts[(slot, kind + "|" + entity.Template.Name)] = Counts.GetValueOrDefault((slot, kind + "|" + entity.Template.Name)) + 1;
+        // Where it happens: at the AI's rally point, close to the unit's own goal elsewhere, on the way to a far goal, or without a move order (a dock's own motion).
+        var where = "no-order";
+        if (entity.HasMoveTarget)
+        {
+            var toGoalX = Number(entity.MoveTargetX) - track.X[last];
+            var toGoalY = Number(entity.MoveTargetY) - track.Y[last];
+            where = toGoalX * toGoalX + toGoalY * toGoalY > GoalNear * GoalNear ? "goal-far" : "goal-near";
+            if (where == "goal-near" && _session.Ais[slot]?.RallyPoint is { } gather)
+            {
+                var toRallyX = Number(gather.X) - track.X[last];
+                var toRallyY = Number(gather.Y) - track.Y[last];
+                if (toRallyX * toRallyX + toRallyY * toRallyY <= GoalNear * GoalNear) where = "rally";
+            }
+        }
+        var countKey = kind + "|" + entity.Template.Name + "|" + where;
+        Counts[(slot, countKey)] = Counts.GetValueOrDefault((slot, countKey)) + 1;
         if (Episodes.Count >= MaxEpisodesPerMatch) return;
 
         var text = new StringBuilder();
