@@ -103,8 +103,11 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         Riders.Add(candidate.Id);
         candidate.ContainedBy = Entity.Id;
         candidate.HasMoveTarget = false;
-        candidate.X = Entity.X;
-        candidate.Y = Entity.Y;
+        // Where the container's begun frame ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): a container that has had its turn in this tick has made its whole step
+        // at 30 Hz. 30 Hz: its position.
+        var (x, y, _) = Entity.FrameEnd(world.Tick);
+        candidate.X = x;
+        candidate.Y = y;
     }
 
     public virtual void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
@@ -113,7 +116,7 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         world.MarkDirty(candidate);
         Riders.Remove(candidate.Id);
         candidate.ContainedBy = EntityId.Invalid;
-        if (positionAtContainer) { candidate.X = Entity.X; candidate.Y = Entity.Y; }
+        if (positionAtContainer) (candidate.X, candidate.Y, _) = Entity.FrameEnd(world.Tick);
     }
 
     public virtual void OnDie(IWorldServices world, in DamageInfo info)
