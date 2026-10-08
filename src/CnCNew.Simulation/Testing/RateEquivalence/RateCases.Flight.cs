@@ -98,6 +98,8 @@ public static partial class RateCases
         quantities.Distance("flight path length", track.Length(), arrived >= 0);
         if (arrived < 0) return quantities.Done();
 
+        // The next measurement begins on a frame of the original like the first one: the arrival was seen after one tick, which is a whole frame at 30 Hz and a quarter of one at 120 Hz.
+        scene.Align();
         var heading = aircraft.Angle;
         scene.Move(aircraft, 3000, 3000);
         var reversed = scene.StepUntil(() => FixedTrig.AngleDifference(heading, aircraft.Angle).Abs() >= FixedTrig.Pi - TurnMargin * 5, RateScene.Seconds(60));
@@ -106,6 +108,7 @@ public static partial class RateCases
         quantities.Event("reversed heading to arrival", back);
 
         // No command of a player sends an aircraft home (MoveAndEnterCommand needs a container, an airfield is none): the order the AI itself gives.
+        scene.Align();
         ai.OrderLand(scene.World, airfield, true);
         var down = scene.StepUntil(() => !ai.AllowAirLoco, RateScene.Seconds(240));
         quantities.Event("landing: order to touchdown", down);

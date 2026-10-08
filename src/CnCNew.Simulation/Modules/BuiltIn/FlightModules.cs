@@ -99,7 +99,10 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
     private long _destructionTick;
     private long _deathTick;
     private long _groundTick;
+    /// <summary>The speed of the fall per logic frame of the original, negative.</summary>
     private Fixed _fallSpeed;
+    /// <summary>The step of the running frame of the fall, flown in shares per tick; empty at 30 Hz.</summary>
+    private FlightFrameStep _fall;
 
     public override string ModuleName => "JetSlowDeathBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -134,6 +137,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
         _fallSpeed = Fixed.Zero;
         Entity.HasMoveTarget = false;
         Effects(world, data.FxInitialDeath, data.OclInitialDeath);
+        _fall.Cancel();
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 
@@ -143,17 +147,24 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
         if (world.Tick >= _destructionTick) world.RequestDestroy(Entity.Id);
         if (_groundTick == 0)
         {
-            Entity.X += FixedTrig.Cos(Entity.Angle) * Entity.Speed;
-            Entity.Y += FixedTrig.Sin(Entity.Angle) * Entity.Speed;
-            _fallSpeed += world.Templates.GravityPerTickSquared * data.FallHowFast;
-            Entity.Z += _fallSpeed;
-            var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
-            if (Entity.Z <= ground)
+            // The fall is the 30 Hz step (the speed of the fall grows once per logic frame of the original and is a value per frame), flown in shares per tick.
+            if (!_fall.Continue(Entity))
             {
-                Entity.Z = ground;
-                Entity.Speed = Fixed.Zero;
-                _groundTick = world.Tick;
-                Effects(world, data.FxHitGround, data.OclHitGround);
+                var stepX = FixedTrig.Cos(Entity.Angle) * FlightFrames.PerFrame(world.Time, Entity.Speed);
+                var stepY = FixedTrig.Sin(Entity.Angle) * FlightFrames.PerFrame(world.Time, Entity.Speed);
+                Entity.X += stepX;
+                Entity.Y += stepY;
+                _fallSpeed += FlightFrames.GravityPerFrameSquared(world.Templates) * data.FallHowFast;
+                Entity.Z += _fallSpeed;
+                var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
+                if (Entity.Z <= ground)
+                {
+                    Entity.Z = ground;
+                    Entity.Speed = Fixed.Zero;
+                    _groundTick = world.Tick;
+                    Effects(world, data.FxHitGround, data.OclHitGround);
+                }
+                else _fall.Begin(world.Time, Entity, stepX, stepY, _fallSpeed, Fixed.Zero);
             }
             world.MarkDirty(Entity);
             if (_deathTick != 0 && world.Tick - _deathTick >= data.DelaySecondaryTicks)
@@ -185,6 +196,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
         writer.Int("deathTick", _deathTick);
         writer.Int("groundTick", _groundTick);
         writer.Fixed("fallSpeed", _fallSpeed);
+        _fall.Describe(writer, "fallStep");
     }
 
     public override void Load(IStateReader reader)
@@ -195,6 +207,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
         _deathTick = reader.Int("deathTick");
         _groundTick = reader.Int("groundTick");
         _fallSpeed = reader.Fixed("fallSpeed");
+        _fall.Load(reader, "fallStep");
     }
 }
 
@@ -357,12 +370,19 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
                 continue;
             }
             var locomotor = entity.Template.Locomotor;
-            var braking = locomotor?.Braking ?? Fixed.Zero;
-            var speed = Fixed.Sqrt(flare.VelocityX * flare.VelocityX + flare.VelocityY * flare.VelocityY);
-            var scale = speed <= braking || speed == Fixed.Zero ? Fixed.Zero : (speed - braking) / speed;
-            var velocityX = flare.VelocityX * scale;
-            var velocityY = flare.VelocityY * scale;
-            _flares[index] = flare with { VelocityX = velocityX, VelocityY = velocityY };
+            var velocityX = flare.VelocityX;
+            var velocityY = flare.VelocityY;
+            // The braking is the 30 Hz step: it takes the braking of a whole logic frame of the original off the speed once per frame, counted from the flare's first move
+            // (the tick after it was launched); in between the flare keeps its speed and moves every tick.
+            if (world.Time.IsOriginalFrameBoundary(now - flare.AddedTick - TickOrder.Next))
+            {
+                var braking = FlightFrames.PerFrame(world.Time, locomotor?.Braking ?? Fixed.Zero);
+                var speed = Fixed.Sqrt(velocityX * velocityX + velocityY * velocityY);
+                var scale = speed <= braking || speed == Fixed.Zero ? Fixed.Zero : (speed - braking) / speed;
+                velocityX *= scale;
+                velocityY *= scale;
+                _flares[index] = flare with { VelocityX = velocityX, VelocityY = velocityY };
+            }
             entity.X += velocityX;
             entity.Y += velocityY;
             var ground = FlightModules.GroundOrDefault(world, entity.X, entity.Y, Fixed.Zero);
@@ -469,7 +489,10 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
     private bool _started;
     private bool _opened;
     private Fixed _startZ;
+    /// <summary>The speed of the free fall and then of the sinking, per logic frame of the original, negative.</summary>
     private Fixed _fallSpeed;
+    /// <summary>The step of the running frame of the descent, flown in shares per tick; empty at 30 Hz.</summary>
+    private FlightFrameStep _descent;
     private bool _hasOverride;
     private Fixed _overrideX;
     private Fixed _overrideY;
@@ -515,6 +538,13 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             return SimulationTiming.SleepForever;
         }
 
+        // The descent is the 30 Hz step, decided once per logic frame of the original (the speed of the fall and of the sinking is a value per frame, the landing spot is reached within
+        // one frame of travel) and flown in shares per tick; between two decisions only the rest of the frame is flown.
+        if (_descent.Continue(Entity))
+        {
+            world.MarkDirty(Entity);
+            return Carry(world, rider);
+        }
         var ground = FlightModules.GroundOrDefault(world, Entity.X, Entity.Y, Fixed.Zero);
         if (!_started)
         {
@@ -523,14 +553,15 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             if (_startZ - ground < Fixed.FromInt(2) * data.OpenDistance) _startZ = ground + Fixed.FromInt(2) * data.OpenDistance;
         }
         var locomotor = Entity.Template.Locomotor;
+        var before = (Entity.X, Entity.Y, Entity.Z);
         if (!_opened)
         {
-            _fallSpeed += world.Templates.GravityPerTickSquared;
+            _fallSpeed += FlightFrames.GravityPerFrameSquared(world.Templates);
             Entity.Z += _fallSpeed;
             if ((_startZ - Entity.Z).Abs() >= data.OpenDistance)
             {
                 _opened = true;
-                _fallSpeed = -(locomotor?.SpeedLimitZ ?? Fixed.Zero);
+                _fallSpeed = -FlightFrames.PerFrame(world.Time, locomotor?.SpeedLimitZ ?? Fixed.Zero);
             }
         }
         else
@@ -538,14 +569,15 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             Entity.Z += _fallSpeed;
             if (_hasOverride && locomotor is not null)
             {
+                var speed = FlightFrames.PerFrame(world.Time, locomotor.Speed);
                 var dx = _overrideX - Entity.X;
                 var dy = _overrideY - Entity.Y;
                 var distance = Fixed.Sqrt(dx * dx + dy * dy);
-                if (distance <= locomotor.Speed) { Entity.X = _overrideX; Entity.Y = _overrideY; }
+                if (distance <= speed) { Entity.X = _overrideX; Entity.Y = _overrideY; }
                 else if (distance > Fixed.Zero)
                 {
-                    Entity.X += dx * locomotor.Speed / distance;
-                    Entity.Y += dy * locomotor.Speed / distance;
+                    Entity.X += dx * speed / distance;
+                    Entity.Y += dy * speed / distance;
                 }
             }
         }
@@ -557,6 +589,13 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             Land(world, rider);
             return SimulationTiming.SleepForever;
         }
+        _descent.Begin(world.Time, Entity, Entity.X - before.X, Entity.Y - before.Y, Entity.Z - before.Z, Fixed.Zero);
+        return Carry(world, rider);
+    }
+
+    /// <summary>The rider hangs under the chute, every tick.</summary>
+    private long Carry(IWorldServices world, Entity rider)
+    {
         rider.X = Entity.X;
         rider.Y = Entity.Y;
         rider.Z = Entity.Z;
@@ -608,6 +647,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
         writer.Bool("opened", _opened);
         writer.Fixed("startZ", _startZ);
         writer.Fixed("fallSpeed", _fallSpeed);
+        _descent.Describe(writer, "descentStep");
         if (_hasOverride)
         {
             writer.Bool("override", true);
@@ -623,6 +663,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
         _opened = reader.Bool("opened");
         _startZ = reader.Fixed("startZ");
         _fallSpeed = reader.Fixed("fallSpeed");
+        _descent.Load(reader, "descentStep");
         _hasOverride = reader.Has("override");
         _overrideX = _hasOverride ? reader.Fixed("overrideX") : Fixed.Zero;
         _overrideY = _hasOverride ? reader.Fixed("overrideY") : Fixed.Zero;
@@ -1117,6 +1158,10 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
     private long _scorches;
     private long _nextScorch;
     private long _nextLaunchFx;
+    // The rest of the driven beam's step of the running logic frame of the original: ticks left and the share per tick (nothing at 30 Hz).
+    private int _driveLeft;
+    private Fixed _driveX;
+    private Fixed _driveY;
 
     public override string ModuleName => "ParticleUplinkCannonUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -1193,6 +1238,7 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         _beam = Beam.None;
         _pulses = 0;
         _scorches = 0;
+        _driveLeft = 0;
         SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
@@ -1269,6 +1315,7 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         _beam = Beam.None;
         _path = null;
         _pathIndex = 0;
+        _driveLeft = 0;
     }
 
     /// <summary><c>LaserUpdate::getCurrentLaserRadius</c>: the beam object's template radius times the width scalar (growing after birth, shrinking after the decay began).</summary>
@@ -1306,14 +1353,37 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
                 _current = _current with { X = Entity.X + length * FixedTrig.Cos(-angle), Y = Entity.Y + length * FixedTrig.Sin(-angle) };
             }
         }
+        else if (_driveLeft > 0)
+        {
+            // the rest of the step of the running logic frame of the original
+            _driveLeft--;
+            _current = _current with { X = _current.X + _driveX, Y = _current.Y + _driveY };
+        }
         else
         {
+            // The drive is the 30 Hz step, decided once per logic frame of the original: the beam covers the travel of a frame, at most the rest of the way to its destination, and
+            // heads for the next waypoint from the following frame on. A beam that switched when the rest is one tick of travel would lose less of a frame at every waypoint.
             var dx = _destination.X - _current.X;
             var dy = _destination.Y - _current.Y;
             var distance = Fixed.Sqrt(dx * dx + dy * dy);
-            var speed = Fixed.Min(_path is null ? data.ManualDrivingSpeed : data.ManualFastDrivingSpeed, distance);
+            var speed = Fixed.Min(FlightFrames.PerFrame(world.Time, _path is null ? data.ManualDrivingSpeed : data.ManualFastDrivingSpeed), distance);
             if (_path is not null && distance <= speed && _pathIndex + 1 < _path.Count) _destination = _path[++_pathIndex];
-            if (distance > Fixed.Zero) _current = _current with { X = _current.X + dx * speed / distance, Y = _current.Y + dy * speed / distance };
+            if (distance > Fixed.Zero)
+            {
+                var stepX = dx * speed / distance;
+                var stepY = dy * speed / distance;
+                var ticks = world.Time.TicksPerOriginalFrame;
+                if (ticks > 1)
+                {
+                    // flown in equal shares per tick; the first tick takes what the division leaves, so the shares add up to the step
+                    _driveLeft = checked((int)(ticks - TickOrder.Next));
+                    _driveX = Fixed.FromRaw(stepX.Raw / ticks);
+                    _driveY = Fixed.FromRaw(stepY.Raw / ticks);
+                    stepX -= _driveX * (long)_driveLeft;
+                    stepY -= _driveY * (long)_driveLeft;
+                }
+                _current = _current with { X = _current.X + stepX, Y = _current.Y + stepY };
+            }
         }
         _current = _current with { Z = world.GroundHeightAt(_current.X, _current.Y) };
     }
@@ -1370,6 +1440,12 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         writer.Int("scorches", _scorches);
         writer.Int("nextScorch", _nextScorch);
         writer.Int("nextLaunchFx", _nextLaunchFx);
+        if (_driveLeft > 0)
+        {
+            writer.Int("driveLeft", _driveLeft);
+            writer.Fixed("driveX", _driveX);
+            writer.Fixed("driveY", _driveY);
+        }
     }
 
     public override void Load(IStateReader reader)
@@ -1405,5 +1481,11 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         _scorches = reader.Int("scorches");
         _nextScorch = reader.Int("nextScorch");
         _nextLaunchFx = reader.Int("nextLaunchFx");
+        if (reader.Has("driveLeft"))
+        {
+            _driveLeft = checked((int)reader.Int("driveLeft"));
+            _driveX = reader.Fixed("driveX");
+            _driveY = reader.Fixed("driveY");
+        }
     }
 }
