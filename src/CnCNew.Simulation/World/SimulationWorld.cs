@@ -1633,7 +1633,26 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             MarkDirty(entity);
         }
+        if (_firstFrameTicks > TickOrder.Next) DeferSpawnPhaseOrders(entity);
         return entity;
+    }
+
+    /// <summary>
+    /// An order given to an object while it is created (its rally point, a delivery) wakes its module "now", and the module runs in the next update phase: at 30 Hz the next
+    /// tick, which is the object's first logic frame of the original. Above 30 Hz that frame begins one frame after the tick the object appeared in
+    /// (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): a motion ordered in the spawn phase starts there, in phase with the frame of whoever created the object, and not
+    /// one tick after the appearance. Modules that asked for a later tick themselves are not touched. Never called at 30 Hz.
+    /// </summary>
+    private void DeferSpawnPhaseOrders(Entity entity)
+    {
+        if (entity.DestroyRequested || !entity.Registered) return;
+        foreach (var node in entity.Updates)
+        {
+            var update = node.Update;
+            if (update.NextWake != _tick) continue;
+            update.NextWake = _tick + _firstFrameTicks;
+            if (node.HeapIndex >= 0) _updates.Update(node); else _updates.Push(node);
+        }
     }
 
     private void AttachModules(Entity entity, ObjectTemplate template)
