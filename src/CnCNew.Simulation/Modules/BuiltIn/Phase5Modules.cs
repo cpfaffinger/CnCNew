@@ -708,6 +708,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public EntityId GoalObject => _goal;
 
     /// <summary>
+    /// <c>AIUpdateInterface::getIgnoredObstacleID</c>: the one object this unit's steps and detours do not treat as an obstacle, because the order ends inside it — the goal
+    /// object of an approach, or the container of an enter order (<c>AIEnterState::onEnter</c>, AIStates.cpp: "tell the pathfinder to ignore the enterable object").
+    /// </summary>
+    internal EntityId IgnoredObstacle => _goal.IsValid ? _goal : _enterTarget;
+
+    /// <summary>
     /// The approach half of <c>aiEnter</c>/<c>aiHijack</c>-style orders that end in a collision instead of a container entry: moves to <paramref name="goal"/> (following
     /// it when it moves) and, once the footprints overlap or the move ends within reach, lets this object's <see cref="ICollideModule"/>s act on it. An immobile object
     /// ignores the order. Replaced by any later order.
@@ -1043,7 +1049,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             StopInternalMove();
             return;
         }
-        if (Entity.HasMoveTarget) return;
+        if (Entity.HasMoveTarget)
+        {
+            // OpenContain::onCollide: an object whose enter target is this container is taken in as soon as the two touch; it does not have to reach the container's centre
+            // (which another boarder, or a rider that found no room and stands there, may keep it from). Tested where the 30 Hz step tests it: after a whole logic frame's step.
+            // A structure keeps the old rule (the walk ends at its wall): its bounding circle reaches far beyond a box-shaped footprint, and nothing stands inside it.
+            if (_frameTicksLeft > 0 || container.Template.IsKindOf("STRUCTURE")) return;
+            var touch = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius;
+            var tx = container.X - Entity.X;
+            var ty = container.Y - Entity.Y;
+            if (!SquaredReach.Of(touch).Contains(tx * tx + ty * ty)) return;
+            StopInternalMove();
+        }
         _enterTarget = EntityId.Invalid;
         // The approach may end short (a partial path): only an object that actually reached the container gets in.
         var reach = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
