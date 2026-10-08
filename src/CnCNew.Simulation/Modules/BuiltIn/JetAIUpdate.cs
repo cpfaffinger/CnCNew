@@ -499,6 +499,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             var winged = WingedStepRest;
             var ground = GroundStepRest(world.Tick);
             _frame.Publish(world.Time, world.Tick, Entity, winged.X + ground.X, winged.Y + ground.Y);
+            // And the heading its turn of this frame ends with: a missile leaves a turning fighter with the heading of the 30 Hz step.
+            if (WingedStepTurnsTo(out var heading)) Entity.SetAheadAngle(heading);
         }
         return SimulationTiming.SleepNone;
     }

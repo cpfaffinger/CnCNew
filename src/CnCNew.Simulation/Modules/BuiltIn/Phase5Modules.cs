@@ -1394,6 +1394,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>What is left of the decided frame of winged flight (for the publication of the aircraft's frame end, <see cref="FlightFrameStep.Publish"/>).</summary>
     protected (Fixed X, Fixed Y) WingedStepRest => _wingStep.RestXY;
 
+    /// <summary>The heading the decided frame of winged flight ends with, while the aircraft still turns toward it (for <see cref="Entity.FrameEndAngle"/>).</summary>
+    protected bool WingedStepTurnsTo(out Fixed endAngle) => _wingStep.TurnsTo(out endAngle);
+
     /// <summary>
     /// What is left of the step of ground or helicopter movement the object is covering in shares (<see cref="AdvanceFrame"/>), after this tick's share; zero when no share was
     /// covered in <paramref name="tick"/>. Read by a derived AI that publishes the frame end of an object with a second step (height) of its own.
