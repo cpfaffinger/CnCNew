@@ -331,12 +331,11 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
         // _life counts updates, one per tick: the lifetime is frames of the original; the tick's number inside the frame of the slide follows from it.
         if (++_life > world.Time.OriginalFrames(LifetimeFrames)) return SimulationTiming.SleepForever;
         var ticks = world.Time.TicksPerOriginalFrame;
-        var subTick = ticks == TickOrder.Next ? ticks : (_life - 1) % ticks + 1;
+        var subTick = ticks == TickOrder.Next ? ticks : (_life - TickOrder.Next) % ticks + TickOrder.Next;
         if (subTick == TickOrder.Next)
         {
-            // The frame of the slide that starts now (m_life of the original): period and phase of passing the dislodgement on are frames.
-            var frame = ticks == TickOrder.Next ? _life : (_life - 1) / ticks + 1;
-            if (frame % PropagatePeriodFrames == PropagatePhaseFrames) PropagateDislodgement(world, ticks);
+            // Passing the dislodgement on: period and phase are frames of the slide (m_life of the original); it comes with the first tick of that frame.
+            if (_life % world.Time.OriginalFrames(PropagatePeriodFrames) == world.Time.OriginalFrames(PropagatePhaseFrames) - (ticks - TickOrder.Next)) PropagateDislodgement(world, ticks);
 
             // Apply physics: flow down the slope with friction.
             var (nx, ny, nz) = GroundNormal(world, Entity.X, Entity.Y);
@@ -369,7 +368,7 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
         else
         {
             // An equal share of what is left for each tick left: a straight line to the place the frame ends at.
-            var left = ticks - subTick + 1;
+            var left = ticks - subTick + TickOrder.Next;
             Entity.X += Fixed.FromRaw((_frameEndX - Entity.X).Raw / left);
             Entity.Y += Fixed.FromRaw((_frameEndY - Entity.Y).Raw / left);
             Entity.Z += Fixed.FromRaw((_frameEndZ - Entity.Z).Raw / left);

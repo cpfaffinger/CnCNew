@@ -311,7 +311,7 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
         if (subTick < ticks)
         {
             // An equal share of what is left for each tick left: a straight line to the place the frame ends at.
-            var left = ticks - subTick + 1;
+            var left = ticks - subTick + TickOrder.Next;
             Entity.X += Fixed.FromRaw((_frameEnd.X - Entity.X).Raw / left);
             Entity.Y += Fixed.FromRaw((_frameEnd.Y - Entity.Y).Raw / left);
             Entity.Z += Fixed.FromRaw((_frameEnd.Z - Entity.Z).Raw / left);

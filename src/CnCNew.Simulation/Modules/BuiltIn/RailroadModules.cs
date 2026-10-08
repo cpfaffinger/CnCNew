@@ -63,9 +63,9 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     /// that many behind it a carriage leads itself. The counter counts this module's updates (one per tick), so the bound is the last tick of the frame after
     /// those two (<see cref="UnpulledLongEnough"/>): the carriage's first frame as a lead ends where it ends at 30 Hz.
     /// </summary>
-    private const long FramesUnpulledLongEnoughToUnhitch = 2;
+    private const long UnpulledLongEnoughToUnhitchFrames = 2;
 
-    private static long UnpulledLongEnough(SimulationTime time) => time.OriginalFrames(FramesUnpulledLongEnoughToUnhitch + 1) - TickOrder.Next;
+    private static long UnpulledLongEnough(SimulationTime time) => time.OriginalFrames(UnpulledLongEnoughToUnhitchFrames + 1) - TickOrder.Next;
     private static readonly Fixed PushStart = Fixed.FromDecimal(0.02m);
     private static readonly int UnderConstructionBit = ObjectStatusBits.UnderConstruction;
     private static readonly int CrushDamage = NameTables.DamageType.TryIndexOf("CRUSH", out var crush) ? crush : throw new InvalidOperationException("CRUSH is not a damage type.");

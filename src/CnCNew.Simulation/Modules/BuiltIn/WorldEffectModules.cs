@@ -281,7 +281,7 @@ public sealed class DynamicShroudClearingRangeUpdate(DynamicShroudData data) : S
         // of the frame so that the shares add up to exactly that amount: at every frame boundary the range is the range of 30 Hz. The countdown starts on
         // the frame grid and falls every tick, so the tick's number inside its frame follows from it. 30 Hz: one tick, the whole amount.
         var ticks = world.Time.TicksPerOriginalFrame;
-        var subTick = ticks == TickOrder.Next ? ticks : (int)((ticks - _stateCountdown % ticks) % ticks) + 1;
+        var subTick = ticks == TickOrder.Next ? ticks : (int)((ticks - _stateCountdown % ticks) % ticks + TickOrder.Next);
         switch (_phase)
         {
             case Phase.Growing:
