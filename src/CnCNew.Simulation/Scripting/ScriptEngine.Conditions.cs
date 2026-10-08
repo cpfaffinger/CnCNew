@@ -343,7 +343,7 @@ public sealed partial class ScriptEngine
 
     private ScriptArea? AreaOrDiagnose(string name)
     {
-        var area = _program.FindArea(name);
+        var area = FindAreaQualified(name);
         if (area is null) Diagnose(UnknownMessage(_unknownAreaMessages, "trigger area", name));
         return area;
     }

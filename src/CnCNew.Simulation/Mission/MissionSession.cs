@@ -40,6 +40,12 @@ public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty,
     int MissionAttempts = 1, string HumanSideName = "", string HumanFaction = "")
 {
     public static MissionOptions Standard { get; } = new(0xC0FFEE09, ScriptDifficulty.Normal);
+
+    /// <summary>
+    /// The original skirmish AI of the session (<see cref="ScriptEngineOptions.Ai"/>); <see langword="null"/> for a mission. Not part of <see cref="MissionSnapshot"/>: a session with it is
+    /// saved by its owner (<c>ScriptedSkirmishSession</c>), which knows how to build the setup again.
+    /// </summary>
+    public ScriptAiSetup? Ai { get; init; }
 }
 
 /// <summary>Combat counters of the mission: weapons fired (every <c>WeaponFired</c> event of the world, whoever chose the victim) and fire orders the world rejected.</summary>
@@ -78,7 +84,7 @@ public sealed class MissionSession
             var fallbackName = program.Players.FirstOrDefault(player => player.Id == localPlayer)?.Name ?? localPlayer.ToString();
             Notes = [..Notes, $"requested human side '{options.HumanSideName}' is not a human side of this map; falling back to '{fallbackName}'"];
         }
-        Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, localPlayer, options.PresentationLatencyTicks, options.MissionAttempts), Issue);
+        Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, localPlayer, options.PresentationLatencyTicks, options.MissionAttempts) { Ai = options.Ai }, Issue);
         world.AcquisitionAdvisor = Engine;
         world.SelfAcquisition = options.CombatIntervalTicks != 0;
     }

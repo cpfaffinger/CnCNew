@@ -359,7 +359,7 @@ public sealed partial class ScriptEngine
                     TryExecutePowerAction(action);
                     return;
                 }
-                if (TryExecuteExtendedAction(action)) break;
+                if (TryExecuteExtendedAction(action) || TryExecuteAiAction(action)) break;
                 _missingActions[type] = _missingActions.GetValueOrDefault(type) + 1;
                 return;
         }
@@ -746,7 +746,7 @@ public sealed partial class ScriptEngine
 
     private (Fixed X, Fixed Y)? AreaCentre(string name)
     {
-        if (_program.FindArea(name) is not { Points.Length: > 0 } area) { Diagnose($"unknown trigger area '{name}'"); return null; }
+        if (FindAreaQualified(name) is not { Points.Length: > 0 } area) { Diagnose($"unknown trigger area '{name}'"); return null; }
         long x = 0, y = 0;
         foreach (var (px, py) in area.Points) { x += px; y += py; }
         return (Fixed.FromInt(x / area.Points.Length), Fixed.FromInt(y / area.Points.Length));

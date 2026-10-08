@@ -24,6 +24,9 @@ public enum MissionOutcome { None = 0, Victory = 1, Defeat = 2 }
 public sealed record ScriptEngineOptions(ScriptDifficulty Difficulty, PlayerId LocalPlayer, int PresentationLatencyTicks = 0, int MissionAttempts = 1)
 {
     public static ScriptEngineOptions Default { get; } = new(ScriptDifficulty.Normal, new PlayerId(1));
+
+    /// <summary>The original skirmish AI and the players it runs (<see cref="ScriptEngine.HasAiPlayers"/>); <see langword="null"/> for a mission.</summary>
+    public ScriptAiSetup? Ai { get; init; }
 }
 
 /// <summary>A presentation effect a script asked for (speech, movie, camera, text ...); the client executes it, the simulation only records that it happened.</summary>
@@ -217,6 +220,7 @@ public sealed partial class ScriptEngine
         }
         foreach (var prototype in program.Teams)
             if (prototype.IsSingleton || prototype.MaxInstances < 2) CreateTeam(prototype.Name, runStartActions: false);
+        InitializeAi();
     }
 
     public ScriptProgram Program => _program;
@@ -385,6 +389,7 @@ public sealed partial class ScriptEngine
                     if (!_program.Units[index].IsSubroutine) ExecuteScript(_program.Units[index]);
             }
         }
+        UpdateAiPlayers();
         _uiInteractions.Clear();
         observer?.SectionEnded(ScriptSection.Scripts);
         if (observer is null)
@@ -439,13 +444,7 @@ public sealed partial class ScriptEngine
     private void ExecuteScriptBody(ScriptUnit unit, MapScript script)
     {
         if (!_scriptActive[unit.Index]) return;
-        var allowed = _options.Difficulty switch
-        {
-            ScriptDifficulty.Easy => script.Easy,
-            ScriptDifficulty.Hard => script.Hard,
-            _ => script.Normal,
-        };
-        if (!allowed) return;
+        if (!AllowedOn(script, DifficultyOfList(unit.ListIndex))) return;
         if (_tick < _nextEvaluation[unit.Index]) return;
         if (script.DelayEvaluationSeconds > 0) _nextEvaluation[unit.Index] = _tick + _world.Time.WholeSecondsToTicks((long)script.DelayEvaluationSeconds);
 
@@ -661,7 +660,8 @@ public sealed partial class ScriptEngine
 
     private ScriptPlayer? ResolvePlayer(string name)
     {
-        if (name == ThisPlayerName) return _currentList < _program.Players.Length ? _program.Players[_currentList] : null;
+        if (name == ThisPlayerName) return CurrentScriptPlayer();
+        if (_ai.Count > 0 && name == ThisPlayerEnemyName) return SkirmishEnemy();
         if (name == LocalPlayerName) return PlayerById(_options.LocalPlayer);
         var player = _program.FindPlayer(name);
         if (player is null) Diagnose(UnknownMessage(_unknownPlayerMessages, "player", name));
@@ -1010,6 +1010,7 @@ public sealed partial class ScriptEngine
         }
         writer.EndArray();
         DescribeExtended(writer);
+        DescribeAi(writer);
         writer.BeginArray("diagnostics");
         foreach (var (name, count) in _diagnostics)
         {
@@ -1115,6 +1116,7 @@ public sealed partial class ScriptEngine
         _missingActions.Clear();
         foreach (var item in reader.Array("missingActions")) _missingActions[item.Text("name")] = item.Int("count");
         LoadExtended(reader);
+        LoadAi(reader);
         _diagnostics.Clear();
         foreach (var item in reader.Array("diagnostics")) _diagnostics[item.Text("name")] = item.Int("count");
         _outputs.Clear();

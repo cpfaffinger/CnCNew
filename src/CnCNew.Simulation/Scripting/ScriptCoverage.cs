@@ -122,6 +122,17 @@ public static class ScriptCoverage
         "PLAYER_SET_RANKLEVEL", "PLAYER_ADD_RANKLEVEL", "SCRIPTING_OVERRIDE_HULK_LIFETIME", "NAMED_SET_STOPPING_DISTANCE", "NAMED_SET_REPULSOR", "SET_BASE_CONSTRUCTION_SPEED", "PLAYER_SELECT_SKILLSET",
         "NAMED_SET_ATTITUDE", "TEAM_SET_REPULSOR", "SET_STOPPING_DISTANCE", "CHOOSE_VICTIM_ALWAYS_USES_NORMAL", "SET_CAVE_INDEX", "PLAYER_ADD_SKILLPOINTS");
 
+    /// <summary>
+    /// Actions that belong to the original skirmish AI (<c>AISkirmishPlayer</c>: its build list, base radius and side data): executed for a player that AI runs
+    /// (<see cref="ScriptEngine.HasAiPlayers"/>), missing - and counted - anywhere else. No campaign map uses them.
+    /// </summary>
+    public static readonly ImmutableHashSet<string> SkirmishAiActions = ImmutableHashSet.Create(StringComparer.Ordinal,
+        "SKIRMISH_BUILD_BUILDING", "SKIRMISH_BUILD_BASE_DEFENSE_FRONT", "SKIRMISH_BUILD_BASE_DEFENSE_FLANK", "SKIRMISH_BUILD_STRUCTURE_FRONT", "SKIRMISH_BUILD_STRUCTURE_FLANK",
+        "AI_PLAYER_BUILD_TYPE_NEAREST_TEAM");
+
+    /// <summary>The support of an action type in a session with the original skirmish AI.</summary>
+    public static ScriptSupport ActionSupportWithSkirmishAi(string typeName) => SkirmishAiActions.Contains(typeName) ? ScriptSupport.Executed : ActionSupport(typeName);
+
     public static ScriptSupport ActionSupport(string typeName)
         => ExecutedActions.Contains(typeName) ? ScriptSupport.Executed : ForwardedActions.Contains(typeName) ? ScriptSupport.Forwarded
             : RecordedActions.Contains(typeName) ? ScriptSupport.Recorded : ScriptSupport.Missing;

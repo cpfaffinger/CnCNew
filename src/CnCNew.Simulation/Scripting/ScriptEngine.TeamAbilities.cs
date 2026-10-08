@@ -399,7 +399,7 @@ public sealed partial class ScriptEngine
     /// <summary><c>doMoveTeamTowardsNearest</c>: the nearest object of the type (or of any type of a list) inside the trigger area, measured from the team's centre; every member moves to it.</summary>
     private void MoveTowardsNearest(ScriptTeam team, string typeParameter, string areaName)
     {
-        if (_program.FindArea(areaName) is not { } area) { Diagnose($"unknown trigger area '{areaName}'"); return; }
+        if (FindAreaQualified(areaName) is not { } area) { Diagnose($"unknown trigger area '{areaName}'"); return; }
         var members = LiveMembers(team).Where(member => member.Template.Locomotor is not null).ToArray();
         if (members.Length == 0) return;
         long sumX = 0, sumY = 0;

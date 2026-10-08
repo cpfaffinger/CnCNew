@@ -43,7 +43,7 @@ public sealed partial class ScriptEngine
                 return true;
             case "SKIRMISH_NAMED_AREA_EXIST":
                 // evaluateSkirmishNamedAreaExists: the named trigger area exists on the map.
-                result = Has(type, p, 2) && _program.FindArea(Str(p, 1)) is not null;
+                result = Has(type, p, 2) && FindAreaQualified(Str(p, 1)) is not null;
                 return true;
             case "SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER":
                 result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } victim && ResolvePlayer(Str(p, 1)) is { } attacker && _attackedBy.Contains((victim.Id.Value, attacker.Id.Value));
@@ -220,7 +220,11 @@ public sealed partial class ScriptEngine
                     if (team.Members.Contains(item.Entity.Value) && _program.FindTeam(team.Prototype) is { OnUnitDestroyedScript.Length: > 0 } dying) _pendingTeamScripts.Add((team.Id, dying.OnUnitDestroyedScript));
                 break;
             case CnCNew.Simulation.Events.SimEventKind.EntitySpawned:
-                if (_world.FindEntity(item.Entity) is { } produced) JoinProducedUnit(produced);
+                if (_world.FindEntity(item.Entity) is { } produced)
+                {
+                    JoinProducedUnit(produced);
+                    AiObserveSpawn(produced);
+                }
                 break;
             case CnCNew.Simulation.Events.SimEventKind.SpecialPowerUsed:
                 // SpecialPowerModule::triggerSpecialPower -> notifyOfTriggeredSpecialPower(owner, power, source).

@@ -350,6 +350,11 @@ run.Test("Capture: snapshots in every stage continue identically, idle objects s
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
 run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);
+run.Test("Original skirmish AI: AIData is read strictly", Tests.OriginalAiDataIsReadStrictly);
+run.Test("Original skirmish AI: the script library is attached to the slots like the reference does", Tests.OriginalAiScriptLibraryIsAttachedLikeTheReference);
+run.Test("Original skirmish AI: base, teams, difficulty per player, determinism and save/restore", Tests.OriginalAiPlaysASkirmishFromItsScripts);
+run.Test("Original skirmish AI: rebuilding and base defences", Tests.OriginalAiRebuildsAndDefends);
+run.Test("Original skirmish AI: the seed decides, the tick rate does not", Tests.OriginalAiSeedsAndRates);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Skirmish: a live session refuses to be saved (explicit, loud guard)", Tests.SkirmishSessionRefusesToSave);
 run.Test("Projectiles: straight shell flight time, impact event and detonation effect", Tests.ProjectileStraightShellFlightTime);
@@ -460,6 +465,7 @@ if (contentDirectory is not null) run.Test("Real data: Ranger, Red Guard, Rebel 
 if (contentDirectory is not null) run.Test("Real data: turrets of the Crusader, the Battlemaster, the sweeping guns and the linked battleships", () => Tests.RealTurrets(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turret on a Battlemaster it chases; retail turrets scan while idle", () => Tests.RealTurretAttackAndScan(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail AutoAcquire flags; a Crusader and a Battlemaster fight without orders", () => Tests.RealAcquisition(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: the original skirmish AI with the shipped script library on Alpine Assault", () => Tests.RealOriginalSkirmishAi(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
 // Phase 23: the rate-equivalence suite, one test per group ("--only RateEquivalence" runs all, "--only \"RateEquivalence: weapons\"" one); 30, 60 and 120 Hz whatever --tick-rate says.
 if (contentDirectory is not null)

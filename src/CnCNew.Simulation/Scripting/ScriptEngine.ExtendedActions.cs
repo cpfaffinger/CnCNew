@@ -348,6 +348,7 @@ public sealed partial class ScriptEngine
         if ((prototype.IsSingleton || prototype.MaxInstances < 2) && LiveMembers(team).Any(CountsAsObject)) { Diagnose($"BUILD_TEAM '{teamName}': singleton team already exists"); return; }
         if (_teamBuilds.Any(order => order.TeamId == team.Id)) { Diagnose($"BUILD_TEAM '{teamName}': build already running"); return; }
         team.Created = false;
+        AiResetTeamForRebuild(team);
         foreach (var unit in prototype.Units)
         {
             if (!_world.Templates.TryGet(unit.Type, out var template)) { Diagnose($"unknown object type '{unit.Type}'"); continue; }
