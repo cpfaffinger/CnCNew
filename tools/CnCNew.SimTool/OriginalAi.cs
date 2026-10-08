@@ -260,6 +260,17 @@ internal static class OriginalAi
             var list = engine.AiBuildListOf(player);
             Console.WriteLine($"  player {index + 1} {factions[index]} ({Describe(session.Slots[index])}): {(world.IsPlayerDefeated(player) ? "defeated" : "alive")}, {own.Length} objects ({structures.Length} structures), " +
                               $"${(long)world.MoneyOf(player).Floor()}, build list {list.Count(entry => entry.ObjectId != 0)}/{list.Length} standing, enemy {(engine.AiEnemyOf(player) is { } enemy ? "player " + enemy.Value : "-")}");
+            // Where the teams are: name, members, centre, how many move, distance to the nearest enemy structure.
+            var enemyStructures = world.Entities.Where(entity => world.AreEnemies(player, entity.Owner) && !entity.EffectivelyDead && entity.Template.IsKindOf("STRUCTURE")).ToArray();
+            foreach (var team in engine.TeamInstances.Where(team => team.Owner == player && team.Members.Count > 0).OrderBy(team => team.Prototype, StringComparer.Ordinal))
+            {
+                var members = team.Members.Select(id => world.FindEntity(new CnCNew.Simulation.Ids.EntityId(id))).Where(entity => entity is { EffectivelyDead: false }).Select(entity => entity!).ToArray();
+                if (members.Length == 0 || members.All(member => member.Template.IsKindOf("STRUCTURE"))) continue;
+                var cx = (long)members.Average(member => (double)member.X.Floor());
+                var cy = (long)members.Average(member => (double)member.Y.Floor());
+                var nearest = enemyStructures.Length == 0 ? -1 : (long)enemyStructures.Min(structure => Math.Sqrt(Math.Pow((double)(structure.X.Floor() - cx), 2) + Math.Pow((double)(structure.Y.Floor() - cy), 2)));
+                Console.WriteLine($"    team {team.Prototype}{(team.Created ? "" : " (inactive)")}: {members.Length} at ({cx},{cy}), moving {members.Count(member => member.HasMoveTarget)}, attack-moving {members.Count(world.IsAttackMoving)}, nearest enemy structure {nearest}");
+            }
             var pending = engine.AiPendingBuilds(player);
             if (pending.Length > 0) Console.WriteLine($"    asked for and not standing: {string.Join("; ", pending)}");
             Console.WriteLine($"    {string.Join(", ", own.GroupBy(entity => entity.Template.Name).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => $"{group.Key} x{group.Count()}"))}");

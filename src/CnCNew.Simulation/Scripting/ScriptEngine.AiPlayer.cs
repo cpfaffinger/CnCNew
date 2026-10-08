@@ -95,6 +95,8 @@ public sealed partial class ScriptEngine
         public int Enemy = -1;
         public long EnemyCheckTick;
         public int SkillSet = AiNoSkillSet;
+        /// <summary>A dozer or gatherer is wanted and could not be paid: team units wait (the reference puts such an order at the head of the build queue as a priority build).</summary>
+        public bool HoldUnitOrders;
         public int FrontDefense;
         public int FlankDefense;
         // m_curFrontLeft/Right, m_curLeftFlankLeft/Right, m_curRightFlankLeft/Right defence angles.
@@ -133,6 +135,8 @@ public sealed partial class ScriptEngine
         }
         return result.ToImmutable();
     }
+
+    private bool AiHoldsUnitOrders(PlayerId player) => _ai.Count > 0 && AiOfPlayer(player) is { HoldUnitOrders: true };
 
     private void InitializeAi()
     {
@@ -598,9 +602,16 @@ public sealed partial class ScriptEngine
                 {
                     if (!_world.Templates.TryGet(name, out var template) || !template.IsKindOf(kind) || template.IsKindOf("STRUCTURE") || !template.IsInstantiable) continue;
                     if (!_world.CanQueueProductionTemplate(player, factory.Id, template.Name)) continue;
+                    if (_world.MoneyOf(player) < _world.ProductionCostOf(player, template))
+                    {
+                        // A priority order of the reference waits at the head of the queue; here the team orders wait until this one is paid.
+                        state.HoldUnitOrders = true;
+                        return false;
+                    }
                     var producer = factory.Id;
                     var unit = template.Name;
                     // The reference turns unit production on for this one order even when a script has switched it off.
+                    state.HoldUnitOrders = false;
                     return _issue(player, (sequence, tick) => new QueueProductionCommand(player, sequence, tick, producer, unit)).Accepted;
                 }
         return false;
@@ -679,6 +690,7 @@ public sealed partial class ScriptEngine
     private void DoTeamBuilding(AiPlayer state)
     {
         if (!_world.CanBuildUnits(state.Setup.Player)) return;
+        if (_tick >= state.TeamCheckTick) state.HoldUnitOrders = false;
         if (!state.ReadyTeam && _tick >= state.TeamReadyTick)
         {
             state.ReadyTeam = true;
@@ -712,7 +724,7 @@ public sealed partial class ScriptEngine
         candidates.RemoveAll(prototype => prototype.ProductionPriority != highest);
         var pick = candidates[_world.LogicRandom.Range(0, candidates.Count - 1)];
         if (pick.AutoReinforce) Diagnose("AI: automatic team reinforcement is not modelled");
-        BuildTeam(pick.Name);
+        BuildTeam(pick.Name, idleOnly: true);
         state.ReadyTeam = false;
         state.TeamReadyTick = _tick + ScaledTimer(data.TeamSeconds, _world.MoneyOf(state.Setup.Player), data, data.TeamsPoorRate, data.TeamsWealthyRate);
     }
@@ -1143,6 +1155,7 @@ public sealed partial class ScriptEngine
             writer.Int("enemy", state.Enemy);
             writer.Int("enemyCheckTick", state.EnemyCheckTick);
             writer.Int("skillSet", state.SkillSet);
+            writer.Bool("holdUnitOrders", state.HoldUnitOrders);
             writer.Int("frontDefense", state.FrontDefense);
             writer.Int("flankDefense", state.FlankDefense);
             writer.BeginArray("defenseAngles");
@@ -1215,6 +1228,7 @@ public sealed partial class ScriptEngine
             state.Enemy = checked((int)item.Int("enemy"));
             state.EnemyCheckTick = item.Int("enemyCheckTick");
             state.SkillSet = checked((int)item.Int("skillSet"));
+            state.HoldUnitOrders = item.Bool("holdUnitOrders");
             state.FrontDefense = checked((int)item.Int("frontDefense"));
             state.FlankDefense = checked((int)item.Int("flankDefense"));
             var index = 0;

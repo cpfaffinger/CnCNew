@@ -18,6 +18,36 @@ internal static class ScriptLibraryReport
 {
     private static readonly string[] Libraries = ["Data/Scripts/SkirmishScripts.scb", "Data/Scripts/MultiplayerScripts.scb"];
 
+    /// <summary><c>script-library &lt;content&gt; --show &lt;text&gt;</c>: the teams and scripts of the skirmish library whose name contains the text, written out.</summary>
+    public static int Show(string contentDirectory, string text)
+    {
+        var content = ContentFileSystem.Open(contentDirectory);
+        MapScriptLibrary library;
+        using (var stream = content.OpenRead(Libraries[0])) library = SageMapDecoder.DecodeScriptLibrary(stream);
+        string Par(MapScriptParameter p) => p.Type switch
+        {
+            MapScriptParameterType.Coord3D => $"({p.CoordX},{p.CoordY},{p.CoordZ})",
+            MapScriptParameterType.Real or MapScriptParameterType.Angle or MapScriptParameterType.Percent => p.Real.ToString(CultureInfo.InvariantCulture),
+            MapScriptParameterType.Int or MapScriptParameterType.Boolean or MapScriptParameterType.Comparison => p.Integer.ToString(CultureInfo.InvariantCulture),
+            _ => p.Text.Length > 0 ? $"'{p.Text}'" : p.Integer.ToString(CultureInfo.InvariantCulture),
+        };
+        foreach (var team in library.Teams.Where(team => (team.GetText("teamName") ?? string.Empty).Contains(text, StringComparison.OrdinalIgnoreCase)))
+            Console.WriteLine("team: " + string.Join(", ", team.Items.Where(item => item.Key is not ("teamDescription" or "exportWithScript") && !(item.Type == MapPropertyType.Ascii && item.Text.Length == 0)
+                    && !(item.Key.StartsWith("teamUnitM", StringComparison.Ordinal) && item.Integer == 0))
+                .Select(item => $"{item.Key}={(item.Type is MapPropertyType.Ascii or MapPropertyType.Unicode ? item.Text : item.Type == MapPropertyType.Real ? item.Real.ToString(CultureInfo.InvariantCulture) : item.Integer.ToString(CultureInfo.InvariantCulture))}")));
+        for (var index = 0; index < library.ScriptLists.Length; index++)
+            foreach (var (group, script) in library.ScriptLists[index].Scripts.Select(script => ("", script)).Concat(library.ScriptLists[index].Groups.SelectMany(group => group.Scripts.Select(script => (group.Name, script)))))
+            {
+                if (!script.Name.Contains(text, StringComparison.OrdinalIgnoreCase)) continue;
+                Console.WriteLine($"script '{script.Name}' (list {index}, group '{group}') active={script.IsActive} oneShot={script.IsOneShot} sub={script.IsSubroutine} delay={script.DelayEvaluationSeconds} " +
+                                  $"diff={(script.Easy ? "E" : "")}{(script.Normal ? "N" : "")}{(script.Hard ? "H" : "")}");
+                foreach (var or in script.OrConditions) Console.WriteLine("  IF " + string.Join(" AND ", or.AndConditions.Select(condition => $"{condition.TypeName}[{string.Join("; ", condition.Parameters.Select(Par))}]")));
+                foreach (var action in script.Actions) Console.WriteLine($"  DO {action.TypeName}[{string.Join("; ", action.Parameters.Select(Par))}]");
+                foreach (var action in script.FalseActions) Console.WriteLine($"  ELSE {action.TypeName}[{string.Join("; ", action.Parameters.Select(Par))}]");
+            }
+        return 0;
+    }
+
     public static int Run(string contentDirectory, bool verbose)
     {
         var content = ContentFileSystem.Open(contentDirectory);
@@ -167,6 +197,8 @@ internal static class ScriptLibraryReport
         var waypointMaps = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var pathMaps = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var perStartComplete = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var templateSides = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var templateCounts = new SortedDictionary<int, List<string>>();
         string[] perStart = ["InnerPerimeter", "OuterPerimeter", "CombatZone"];
         string[] perStartPaths = ["Center", "Flank", "Backdoor"];
         foreach (var path in content.EnumerateFiles().Where(path => path.EndsWith(".map", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal))
@@ -179,6 +211,16 @@ internal static class ScriptLibraryReport
             if (starts < 2) continue;
             maps++;
             var ownScripts = false;
+            var templates = 0;
+            for (var side = 1; side < map.Sides.Length; side++)
+            {
+                var faction = map.Sides[side].Properties.GetText("playerFaction") ?? string.Empty;
+                if (faction == "FactionCivilian") continue;
+                templates++;
+                templateSides[faction] = templateSides.GetValueOrDefault(faction) + 1;
+            }
+            if (!templateCounts.TryGetValue(templates, out var bucket)) templateCounts[templates] = bucket = [];
+            bucket.Add(path);
             for (var side = 0; side < map.Sides.Length && side < map.PlayerScripts.Length; side++)
             {
                 var has = map.PlayerScripts[side].Scripts.Length + map.PlayerScripts[side].Groups.Length > 0;
@@ -206,6 +248,10 @@ internal static class ScriptLibraryReport
                 if (Enumerable.Range(1, starts).All(n => pathNames.Contains(prefix + n.ToString(CultureInfo.InvariantCulture)))) perStartComplete["path " + prefix + "<n>"] = perStartComplete.GetValueOrDefault("path " + prefix + "<n>") + 1;
         }
         Console.WriteLine($"== skirmish maps (two or more start positions): {maps}; with scripts of a non-civilian side (the library is NOT attached there): {withOwnScripts}; civilian script lists: {civilianScripts}");
+        Console.WriteLine($"  skirmish template sides per map (a computer player needs the template side of its own side): {string.Join(", ", templateCounts.Select(pair => $"{pair.Value.Count} maps with {pair.Key}"))}");
+        foreach (var (count, list) in templateCounts.Where(pair => pair.Value.Count <= 12))
+            Console.WriteLine($"    {count} template sides: {string.Join(", ", list.Select(path => path[(path.LastIndexOf('/') + 1)..]))}");
+        Console.WriteLine($"  maps with a template side of each faction: {string.Join(", ", templateSides.Select(pair => $"{pair.Key}={pair.Value}"))}");
         Console.WriteLine($"  complete for every start position: {string.Join(", ", perStartComplete.Select(pair => $"{pair.Key}={pair.Value}"))}");
         Console.WriteLine("  trigger areas the libraries name (uses in the libraries, maps that have it):");
         foreach (var (name, uses) in areas) Console.WriteLine($"    {name}: {N(uses)} uses, {areaMaps.GetValueOrDefault(name)} maps");

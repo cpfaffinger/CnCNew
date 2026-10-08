@@ -75,6 +75,8 @@ if (args is ["script-library", var libraryDirectory, ..])
 {
     try
     {
+        var show = Array.IndexOf(args, "--show");
+        if (show >= 0 && show + 1 < args.Length) return CnCNew.MapTool.ScriptLibraryReport.Show(libraryDirectory, args[show + 1]);
         return CnCNew.MapTool.ScriptLibraryReport.Run(libraryDirectory, args.Contains("--verbose"));
     }
     catch (Exception exception)
@@ -87,7 +89,7 @@ if (args is ["script-library", var libraryDirectory, ..])
 if (args is not ["audit", var contentDirectory])
 {
     Console.Error.WriteLine("Usage:");
-    Console.Error.WriteLine("  CnCNew.MapTool script-library <content-directory> [--verbose]");
+    Console.Error.WriteLine("  CnCNew.MapTool script-library <content-directory> [--verbose | --show <text in a team or script name>]");
     Console.Error.WriteLine("  CnCNew.MapTool audit <content-directory>");
     Console.Error.WriteLine("  CnCNew.MapTool info <content-directory> <virtual-map-path>");
     return 2;

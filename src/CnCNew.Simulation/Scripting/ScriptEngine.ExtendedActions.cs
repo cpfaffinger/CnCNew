@@ -26,6 +26,8 @@ public sealed partial class ScriptEngine
         public int Queued;
         public int Joined;
         public bool FactoryMissing;
+        /// <summary>A team the skirmish AI chose itself (<c>priorityBuild</c> false in the reference): its units are only started at a factory that is doing nothing (<c>AIPlayer::queueUnits</c>).</summary>
+        public bool IdleOnly;
     }
 
     private readonly List<TeamBuildOrder> _teamBuilds = [];
@@ -337,7 +339,7 @@ public sealed partial class ScriptEngine
     /// once every minimum is met. Simplifications (docs/SCRIPT-ENGINE.md §8): any finished factory that can produce the unit serves (no build list), no rally gathering,
     /// no <c>executeActions</c> start script, no priority queue.
     /// </summary>
-    private void BuildTeam(string teamName)
+    private void BuildTeam(string teamName, bool idleOnly = false)
     {
         var prototype = _program.FindTeam(teamName);
         if (prototype is null) { Diagnose($"unknown team '{teamName}'"); return; }
@@ -354,7 +356,7 @@ public sealed partial class ScriptEngine
             if (!_world.Templates.TryGet(unit.Type, out var template)) { Diagnose($"unknown object type '{unit.Type}'"); continue; }
             if (!template.IsInstantiable) { Diagnose($"not instantiable '{unit.Type}'"); continue; }
             if (unit.MaxCount <= 0) continue;
-            _teamBuilds.Add(new TeamBuildOrder { TeamId = team.Id, Type = unit.Type, Min = Math.Min(unit.MinCount, unit.MaxCount), Total = unit.MaxCount });
+            _teamBuilds.Add(new TeamBuildOrder { TeamId = team.Id, Type = unit.Type, Min = Math.Min(unit.MinCount, unit.MaxCount), Total = unit.MaxCount, IdleOnly = idleOnly });
         }
         if (!_teamBuilds.Any(order => order.TeamId == team.Id)) Diagnose($"BUILD_TEAM '{teamName}': contains no buildable units");
         else { _teamQueue.RemoveAll(entry => entry.TeamId == team.Id); _teamQueue.Add(new TeamQueueEntry { TeamId = team.Id, Started = _tick }); }
@@ -368,6 +370,7 @@ public sealed partial class ScriptEngine
         {
             if (order.Queued >= order.Total || !_teams.TryGetValue(order.TeamId, out var team)) continue;
             var owner = team.Owner;
+            if (AiHoldsUnitOrders(owner)) continue;
             Entity? best = null;
             var bestBusy = true;
             foreach (var entity in PlayerEntities(owner))
@@ -380,6 +383,7 @@ public sealed partial class ScriptEngine
                 bestBusy = busy;
                 if (!busy) break;
             }
+            if (best is not null && bestBusy && order.IdleOnly) continue;
             if (best is null)
             {
                 if (!order.FactoryMissing) { order.FactoryMissing = true; Diagnose($"BUILD_TEAM: no factory for '{order.Type}'"); }
@@ -420,6 +424,7 @@ public sealed partial class ScriptEngine
             writer.Int("queued", order.Queued);
             writer.Int("joined", order.Joined);
             writer.Bool("factoryMissing", order.FactoryMissing);
+            if (order.IdleOnly) writer.Bool("idleOnly", true);
             writer.EndObject();
         }
         writer.EndArray();
@@ -434,6 +439,7 @@ public sealed partial class ScriptEngine
             {
                 TeamId = checked((int)item.Int("team")), Type = item.Text("type"), Min = checked((int)item.Int("min")), Total = checked((int)item.Int("total")),
                 Queued = checked((int)item.Int("queued")), Joined = checked((int)item.Int("joined")), FactoryMissing = item.Bool("factoryMissing"),
+                IdleOnly = item.Has("idleOnly") && item.Bool("idleOnly"),
             });
     }
 }
