@@ -381,6 +381,7 @@ run.Test("Rate invariance (physics): a collapsing structure sinks frame by frame
 run.Test("Rate invariance (physics): a bridge scaffold slows towards its target once per frame of the original", Tests.RateInvarianceBridgeScaffold);
 run.Test("Rate invariance (physics): the ferry dock decides arrival once per frame of the original", Tests.RateInvarianceFerryDock);
 run.Test("Rate invariance (physics): the flood wave wets and hurts once per frame of the original", Tests.RateInvarianceWaveGuide);
+run.Test("Rate invariance (physics): a dynamic shroud range grows and shrinks by the amount of the original per frame", Tests.RateInvarianceShroudRange);
 run.Test("Collision: bounded local avoidance around another unit's footprint", Tests.CollisionLocalAvoidance);
 run.Test("Collision: a mover plans around a row of standing units instead of rubbing along it", Tests.CollisionReplansAroundStandingUnits);
 run.Test("Last nine modules: every module of the catalog is implemented", Tests.LastBlockerModulesAreImplemented);

@@ -505,6 +505,34 @@ static partial class Tests
     }
 
     /// <summary>
+    /// <c>DynamicShroudClearingRangeUpdate</c>: the clearing range grows and shrinks by the original's amount per frame, spread over the ticks of the frame.
+    /// The range handed to the vision map is bit-equal to 30 Hz at every frame boundary of its timeline (grow 1 s, hold, shrink 1 s to the final range).
+    /// </summary>
+    public static void RateInvarianceShroudRange()
+    {
+        AtThreeRates(rate =>
+        {
+            var (world, fixture, _) = RatedStructuresWorld(rate);
+            RequestSpawn(world, fixture, "SwReveal", 1, 500, 300);
+            CnCNew.Simulation.Modules.BuiltIn.DynamicShroudClearingRangeUpdate? module = null;
+            var (widest, last) = (Fixed.Zero, Fixed.Zero);
+            var series = FrameSeries(world, 130, () =>
+            {
+                module ??= world.Entities.Single(entity => entity.Template.Name == "SwReveal").Modules.OfType<DynamicShroudClearingRangeUpdate>().Single();
+                if (!module.TryGetShroudRange(out var range)) return -1;
+                widest = Fixed.Max(widest, range);
+                last = range;
+                return range.Raw;
+            });
+            return (Series: series, Widest: widest, Last: last);
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Widest == Fixed.FromInt(100) && reference.Last == Fixed.FromInt(20), "Setup: the range grew to 100 and shrank to 20 at 30 Hz (" + reference.Widest + ", " + reference.Last + ").");
+            SameSeries(reference.Series, other.Series, "Shroud clearing range at " + rate);
+        });
+    }
+
+    /// <summary>
     /// <c>RailroadBehavior</c>: the conductor's recursion (push, acceleration factor, braking factor, friction), the wait at the station, the crush damage
     /// "speed · 10" and the shove by a quarter of the overlap happen once per frame of the original; the train moves every tick. Positions of the locomotive
     /// and its carriages, the conductor's state, the position and health of a vehicle it grinds along and every death are those of 30 Hz at each frame boundary.

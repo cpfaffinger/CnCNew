@@ -263,6 +263,9 @@ public sealed class DynamicShroudClearingRangeUpdate(DynamicShroudData data) : S
         _current = Fixed.Zero;
         _phase = Phase.NotStartedYet;
         _nextWake = world.Tick + SimulationTiming.SleepNone;
+        // The range is handed on with the last tick of a logic frame of the original, when it is the range of 30 Hz: the first time with the last tick of
+        // the first frame (at 30 Hz the first update), then every interval + 1 frames from there.
+        _changeIntervalCountdown = world.Time.TicksPerOriginalFrame - TickOrder.Next;
     }
 
     public long Update(IWorldServices world)
@@ -274,17 +277,22 @@ public sealed class DynamicShroudClearingRangeUpdate(DynamicShroudData data) : S
         else if (_stateCountdown <= SustainDeadline) _phase = Phase.Sustaining;
         else if (_stateCountdown <= GrowStartDeadline) _phase = Phase.Growing;
 
+        // The range grows and shrinks by the original's amount per logic frame of the original (the range over the duration in frames), spread over the ticks
+        // of the frame so that the shares add up to exactly that amount: at every frame boundary the range is the range of 30 Hz. The countdown starts on
+        // the frame grid and falls every tick, so the tick's number inside its frame follows from it. 30 Hz: one tick, the whole amount.
+        var ticks = world.Time.TicksPerOriginalFrame;
+        var subTick = ticks == TickOrder.Next ? ticks : (int)((ticks - _stateCountdown % ticks) % ticks) + 1;
         switch (_phase)
         {
             case Phase.Growing:
-                _current += world.Time.SharePerTick(_native, Fixed.FromInt(Math.Max(1, data.GrowTime)));
+                _current += world.Time.FrameShare(world.Time.SharePerTick(_native, Fixed.FromInt(Math.Max(1, world.Time.ToOriginalFrames(data.GrowTime)))), subTick);
                 if (_current >= _native) _phase = Phase.Sustaining;
                 break;
             case Phase.Sustaining:
                 _current = _native;
                 break;
             case Phase.Shrinking:
-                _current -= world.Time.SharePerTick(_native - data.FinalVision, Fixed.FromInt(Math.Max(1, data.ShrinkTime)));
+                _current -= world.Time.FrameShare(world.Time.SharePerTick(_native - data.FinalVision, Fixed.FromInt(Math.Max(1, world.Time.ToOriginalFrames(data.ShrinkTime)))), subTick);
                 break;
             case Phase.DoneForever:
                 _current = data.FinalVision;
