@@ -911,6 +911,25 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         InvalidatePath();
     }
 
+    /// <summary>
+    /// <see cref="StopInternalMove"/> for an observer that acts after the updates of the tick (the units' own target acquisition). At 30 Hz the object has taken the whole step
+    /// of this tick by then and its next step is a tick later. Above 30 Hz it is put where the frame it has begun ends first (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3,
+    /// rule 4), and whatever move it is given now starts with its next frame, not with the next tick. 30 Hz: <see cref="StopInternalMove"/>.
+    /// </summary>
+    internal void StopInternalMoveAtFrameEnd(IWorldServices world)
+    {
+        var ticks = world.Time.TicksPerOriginalFrame;
+        if (ticks > 1 && Entity.HasMoveTarget)
+        {
+            if (Entity.IsInsideFrameStep || Entity.HasAheadAngle) Entity.CompleteFrame(world.Tick);
+            _moveHoldUntil = world.Tick + ticks;
+        }
+        StopInternalMove();
+    }
+
+    // Above 30 Hz only: the tick before which the object takes no decision of a new frame (StopInternalMoveAtFrameEnd). Never set at 30 Hz.
+    private long _moveHoldUntil;
+
     private void InvalidatePath()
     {
         // A new order during the last frame of a move: the object still covers that frame's step, but it has not arrived.
@@ -1061,6 +1080,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         if (_stride == 0) ResolveBlockerTiming(world.Time);
+        if (world.Tick < _moveHoldUntil) return;
         if (_frameTicksLeft > 0)
         {
             // Between two decisions the object only covers the next share of the step its last decision made.
@@ -1541,6 +1561,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         if (_blockerReplanTick > -1000) writer.Int("blockerReplanTick", _blockerReplanTick);
         if (_frameSpeed != Fixed.Zero) writer.Fixed("frameSpeed", _frameSpeed);
+        if (_moveHoldUntil != 0) writer.Int("moveHoldUntil", _moveHoldUntil);
         if (_frameTicksLeft > 0)
         {
             writer.Int("frameTicksLeft", _frameTicksLeft);
@@ -1589,6 +1610,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _exitY = reader.Has("exitY") ? reader.Fixed("exitY") : Fixed.Zero;
         _blockerReplanTick = reader.Has("blockerReplanTick") ? reader.Int("blockerReplanTick") : -1000;
         _frameSpeed = reader.Has("frameSpeed") ? reader.Fixed("frameSpeed") : Fixed.Zero;
+        _moveHoldUntil = reader.Has("moveHoldUntil") ? reader.Int("moveHoldUntil") : 0;
         _frameTicksLeft = reader.Has("frameTicksLeft") ? checked((int)reader.Int("frameTicksLeft")) : 0;
         _frameDue = reader.Has("frameDue") ? reader.Int("frameDue") : 0;
         _frameStepX = reader.Has("frameStepX") ? reader.Fixed("frameStepX") : Fixed.Zero;

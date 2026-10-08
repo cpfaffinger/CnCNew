@@ -287,17 +287,16 @@ public sealed partial class SimulationWorld
         if (inRange)
         {
             // The unit stops where the 30 Hz unit stops: after the whole step of the frame in which it came into range (nothing to do at 30 Hz).
-            if (entity.IsInsideFrameStep && (state.Chasing || (state.AttackMove && !state.Halted && !aircraft))) entity.CompleteFrame(tick);
             if (state.Chasing)
             {
-                ai.StopInternalMove();
+                ai.StopInternalMoveAtFrameEnd(this);
                 state.Chasing = false;
                 state.ChaseTick = 0;
             }
 
             if (state.AttackMove && !state.Halted && !aircraft)
             {
-                ai.StopInternalMove();
+                ai.StopInternalMoveAtFrameEnd(this);
                 state.Halted = true;
             }
 
@@ -331,7 +330,7 @@ public sealed partial class SimulationWorld
     {
         EndPreAttack(entity);
         StopTurrets(entity);
-        if (state.Chasing) ai.StopInternalMove();
+        if (state.Chasing) ai.StopInternalMoveAtFrameEnd(this);
         state.ClearVictim();
     }
 
