@@ -48,8 +48,9 @@ public sealed record HealContainData(OpenContainData Base, int ContainMax, long 
 }
 
 /// <summary>
-/// <c>HealContain.cpp</c>: every tick each occupant is healed <c>MaxHealth / TimeForFullHeal</c>; once it has been inside for the whole
-/// duration it is set to full health and leaves the building. The reference lets the occupant walk out through the building's own exit
+/// <c>HealContain.cpp</c>: every logic frame of the original each occupant is healed <c>MaxHealth / TimeForFullHeal</c> (the duration in frames); once it
+/// has been inside for the whole duration it is set to full health and leaves the building. The frames are counted from the tick the occupant came in,
+/// so its health is that of 30 Hz at every frame boundary (30 Hz: every tick). The reference lets the occupant walk out through the building's own exit
 /// interface; without AI it is placed at the container (<c>Remove(positionAtContainer)</c>).
 /// </summary>
 public sealed class HealContain(HealContainData data) : ContainModuleBase(data.Base)
@@ -85,8 +86,10 @@ public sealed class HealContain(HealContainData data) : ContainModuleBase(data.B
             var rider = world.FindEntity(riderId);
             if (rider?.Body is null) continue;
             var since = _containedSinceTick.GetValueOrDefault(riderId.Value, world.Tick);
+            var ticks = world.Time.TicksPerOriginalFrame;
+            if (ticks != TickOrder.Next && (world.Tick - since) % ticks != 0) continue;
             var done = data.TimeForFullHealTicks <= 0 || world.Tick - since >= data.TimeForFullHealTicks;
-            var amount = done ? rider.Body.MaxHealth : world.Time.SharePerTick(rider.Body.MaxHealth, Fixed.FromInt(data.TimeForFullHealTicks));
+            var amount = done ? rider.Body.MaxHealth : world.Time.SharePerTick(rider.Body.MaxHealth, Fixed.FromInt(world.Time.ToOriginalFrames(data.TimeForFullHealTicks)));
             world.Damage(rider.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
             if (done) Remove(world, rider, true);
         }

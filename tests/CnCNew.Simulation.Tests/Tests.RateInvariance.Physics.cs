@@ -533,6 +533,87 @@ static partial class Tests
     }
 
     /// <summary>
+    /// Healing in slices (<c>HealContain</c>, <c>GarrisonContain</c>, <c>RepairDockUpdate</c>): the slice of the original (the amount over the duration in
+    /// frames) is given once per frame of the original. The health of the healed object is bit-equal to 30 Hz at every frame boundary, it is healed in as
+    /// many frames, and it is full (and leaves the healing building) in the same frame.
+    /// </summary>
+    public static void RateInvarianceHealingSlices()
+    {
+        foreach (var (files, building, patient) in new[] { (RetailModuleFiles(), "Barracks", "Rebel"), (Phase5Files(), "Bunker", "Rebel") })
+            AtThreeRates(rate =>
+            {
+                var (world, feeder, _) = RatedWorld(rate, files);
+                feeder.Spawn(1, building);
+                feeder.Spawn(1, patient, x: 3, y: 3);
+                world.Step();
+                var house = world.Entities.First(entity => entity.Template.Name == building);
+                var rebel = world.Entities.First(entity => entity.Template.Name == patient);
+                feeder.Damage(rebel.Id.Value, 30);
+                world.Step();
+                while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+                Check.That(world.TryEnterContainer(rebel, house), "Setup: the hurt " + patient + " enters the " + building + ".");
+                var (healed, before, full) = (0, rebel.Body!.Health, -1);
+                var frame = 0;
+                var series = FrameSeries(world, 30, () =>
+                {
+                    if (rebel.Body.Health > before) healed++;
+                    before = rebel.Body.Health;
+                    if (full < 0 && rebel.Body.Health == rebel.Body.MaxHealth) full = frame;
+                    frame++;
+                    return rebel.Body.Health.Raw * 2 + (rebel.ContainedBy.IsValid ? 1 : 0);
+                });
+                return (Series: series, Healed: healed, Full: full);
+            }, (reference, other, rate) =>
+            {
+                Check.That(reference.Full > 3 && reference.Healed > 3, "Setup: the " + building + " heals its occupant over several frames at 30 Hz (full in frame " + reference.Full + ", " + reference.Healed + " frames with healing).");
+                Check.That(other.Healed == reference.Healed && other.Full == reference.Full,
+                    building + " at " + rate + ": " + other.Healed + " frames with healing, full in frame " + other.Full + " (30 Hz: " + reference.Healed + ", " + reference.Full + ").");
+                SameSeries(reference.Series, other.Series, "Health of the occupant of the " + building + " at " + rate);
+            });
+
+        // The repair dock: its action is called the way a docked object's machine calls it, once per tick, until it says the docker is done.
+        AtThreeRates(rate =>
+        {
+            var (world, feeder, _) = RatedWorld(rate, RepairFiles());
+            feeder.Spawn(1, "RepairPad", x: 100);
+            feeder.Spawn(1, "Truck", x: 100, y: 60);
+            world.Step();
+            var pad = world.Entities.First(entity => entity.Template.Name == "RepairPad");
+            var truck = world.Entities.First(entity => entity.Template.Name == "Truck");
+            feeder.Damage(truck.Id.Value, 61);
+            world.Step();
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            var dock = pad.Modules.Single(module => module.ModuleName == "RepairDockUpdate");
+            var action = dock.GetType().GetMethod("Action")!;
+            var perFrame = world.Time.TicksPerOriginalFrame;
+            var series = new List<long>();
+            var (healed, done, docked) = (0, -1, true);
+            for (var frame = 0; frame < 30; frame++)
+            {
+                var before = truck.Body!.Health;
+                for (var tick = 0; tick < (frame == 0 ? 1 : perFrame); tick++)
+                {
+                    if (docked && !(bool)action.Invoke(dock, [world, truck])!)
+                    {
+                        docked = false;
+                        done = frame;
+                    }
+                    world.Step();
+                }
+                if (truck.Body.Health > before) healed++;
+                series.Add(truck.Body.Health.Raw);
+            }
+            return (Series: series, Healed: healed, Done: done);
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Healed == 9 && reference.Done == 9, "Setup: the dock heals in nine frames at 30 Hz and lets go in the tenth (" + reference.Healed + ", " + reference.Done + ").");
+            Check.That(other.Healed == reference.Healed && other.Done == reference.Done,
+                "Repair dock at " + rate + ": " + other.Healed + " frames with healing, done in frame " + other.Done + " (30 Hz: " + reference.Healed + ", " + reference.Done + ").");
+            SameSeries(reference.Series, other.Series, "Health of the docked truck at " + rate);
+        });
+    }
+
+    /// <summary>
     /// <c>RailroadBehavior</c>: the conductor's recursion (push, acceleration factor, braking factor, friction), the wait at the station, the crush damage
     /// "speed · 10" and the shove by a quarter of the overlap happen once per frame of the original; the train moves every tick. Positions of the locomotive
     /// and its carriages, the conductor's state, the position and health of a vehicle it grinds along and every death are those of 30 Hz at each frame boundary.

@@ -280,12 +280,18 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         return data.HealObjects ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
-    /// <summary><c>GarrisonContain::healSingleObject</c>: a sliver of <c>MaxHealth / TimeForFullHeal</c> per tick, or a hard snap to full once the occupant has been inside long enough.</summary>
+    /// <summary>
+    /// <c>GarrisonContain::healSingleObject</c>: a sliver of <c>MaxHealth / TimeForFullHeal</c> per logic frame of the original, or a hard snap to full once the
+    /// occupant has been inside long enough. The sliver is the original's (the duration in frames) and is given once per frame of the original, counted from the
+    /// tick the occupant came in: its health is that of 30 Hz at every frame boundary. 30 Hz: every tick.
+    /// </summary>
     private void HealOne(IWorldServices world, Entity rider)
     {
         var since = _containedSinceTick.GetValueOrDefault(rider.Id.Value, world.Tick);
+        var ticks = world.Time.TicksPerOriginalFrame;
+        if (ticks != TickOrder.Next && (world.Tick - since) % ticks != 0) return;
         var full = data.TimeForFullHealTicks > 0 && world.Tick - since >= data.TimeForFullHealTicks;
-        var amount = full || data.TimeForFullHealTicks <= 0 ? rider.Body!.MaxHealth : world.Time.SharePerTick(rider.Body!.MaxHealth, Fixed.FromInt(data.TimeForFullHealTicks));
+        var amount = full || data.TimeForFullHealTicks <= 0 ? rider.Body!.MaxHealth : world.Time.SharePerTick(rider.Body!.MaxHealth, Fixed.FromInt(world.Time.ToOriginalFrames(data.TimeForFullHealTicks)));
         world.Damage(rider.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
     }
 
