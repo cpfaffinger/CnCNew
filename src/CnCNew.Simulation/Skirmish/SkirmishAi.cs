@@ -936,31 +936,105 @@ public sealed class SkirmishAi
 
     // ------------------------------------------------------------------------------------------------------------ army
 
+    /// <summary>The army unit the AI has decided on and is saving for: which producer makes it and since when the decision stands.</summary>
+    private readonly record struct ArmyOrder(EntityId Producer, ObjectTemplate Unit, long Since);
+
+    private ArmyOrder? _armyOrder;
+
+    /// <summary>
+    /// How long an army order may wait for its price (60 s) before it gives way to something that can be paid at once. Own value: long enough for the income of one supply
+    /// center to pay a tank, short enough that an economy that has stopped still turns its last money into units.
+    /// </summary>
+    private const long ArmyOrderPatienceFrames = 1800;
+
+    /// <summary>
+    /// The rule "standing army order": the next army unit is drawn among everything the barracks and factories with room in their queue could make (prerequisites met, the
+    /// price not looked at), every unit type with the same chance, and the AI then saves for exactly that unit; nothing else is bought for the army until it is paid. Only an
+    /// order that has waited <see cref="ArmyOrderPatienceFrames"/> gives way to a draw among what the money covers now.
+    /// <para>
+    /// Before this rule every producer bought, in the order the structures were built, a random unit among those the money covered at that moment. The barracks stands first
+    /// and its infantry is the cheapest army unit, so the money never reached the price of a vehicle: over 80 matches the factories' looks ended 188,605 times with
+    /// "unaffordable" and 328 times with an order (docs/AI-OBSERVED-2026-10-08.md).
+    /// </para>
+    /// </summary>
     private void ProduceArmy()
     {
         var armyCount = _units.Count(value => (RoleOf(value.Template) & Role.Army) != 0);
         var spendable = armyCount < 4 ? _budget : _budget - _reserve;
-        foreach (var producer in _structures)
+        var served = new HashSet<uint>();
+        while (true)
         {
-            if ((RoleOf(producer.Template) & (Role.Barracks | Role.Factory)) == 0) continue;
-            var production = ProductionOf(producer);
-            if (production is null) continue;
-            if (!production.HasRoom) { Stats.CountArmyProduction(producer.Template, "queue-full"); continue; }
-            var candidates = ProducibleBy(producer.Template).Where(value => (RoleOf(value) & Role.Army) != 0 && value.BuildCost <= spendable && PrerequisitesMet(value)).ToList();
-            if (candidates.Count == 0)
+            if (_armyOrder is not { } order || !ArmyOrderStands(order, served))
             {
-                Stats.CountArmyProduction(producer.Template, ProducibleBy(producer.Template).Any(value => (RoleOf(value) & Role.Army) != 0 && PrerequisitesMet(value)) ? "unaffordable" : "no-candidate");
-                continue;
+                if (DrawArmyOrder(served, Fixed.MaxValue) is not { } drawn) break;
+                _armyOrder = order = drawn;
             }
-            if (candidates.Any(InFamily)) candidates = candidates.Where(InFamily).ToList();
-            var pick = candidates[_random.Range(0, candidates.Count - 1)];
+            var producer = _world.FindEntity(order.Producer)!;
+            if (order.Unit.BuildCost > spendable)
+            {
+                if (_tick - order.Since < _time.OriginalFrames(ArmyOrderPatienceFrames) || DrawArmyOrder(served, spendable) is not { } affordable)
+                {
+                    Stats.CountArmyProduction(producer.Template, "saving:" + order.Unit.Name);
+                    break;
+                }
+                Stats.CountArmyProduction(producer.Template, "gave-way:" + order.Unit.Name);
+                _armyOrder = order = affordable;
+                producer = _world.FindEntity(order.Producer)!;
+            }
+            var pick = order.Unit;
             var result = Send(sequence => new QueueProductionCommand(_player, sequence, _tick, producer.Id, pick.Name));
             Stats.CountArmyProduction(producer.Template, result.Accepted ? "queued:" + pick.Name : "rejected:" + result.Reason + ":" + pick.Name);
+            _armyOrder = null;
+            // One order per producer and think, as before; a refused producer is not asked again in this think.
+            served.Add(producer.Id.Value);
             if (!result.Accepted) continue;
             spendable -= pick.BuildCost;
             _budget -= pick.BuildCost;
             Stats.Productions++;
         }
+    }
+
+    /// <summary>The order can still be carried out: its producer stands, has room, was not served in this think, and the unit's prerequisites are still met.</summary>
+    private bool ArmyOrderStands(ArmyOrder order, HashSet<uint> served)
+    {
+        if (served.Contains(order.Producer.Value)) return false;
+        foreach (var producer in _structures)
+            if (producer.Id == order.Producer)
+                return ProductionOf(producer) is { HasRoom: true } && PrerequisitesMet(order.Unit);
+        return false;
+    }
+
+    /// <summary>
+    /// Draws the next army order: every unit type a barracks or factory with room offers (prerequisites met, at most <paramref name="limit"/> in price; own variants of the
+    /// faction only where a producer has any) with the same chance, made by the first producer that offers it. Null without a candidate; then nothing is drawn from the stream.
+    /// </summary>
+    private ArmyOrder? DrawArmyOrder(HashSet<uint> served, Fixed limit)
+    {
+        var units = new List<ObjectTemplate>();
+        var producers = new List<Entity>();
+        foreach (var producer in _structures)
+        {
+            if ((RoleOf(producer.Template) & (Role.Barracks | Role.Factory)) == 0 || served.Contains(producer.Id.Value)) continue;
+            var production = ProductionOf(producer);
+            if (production is null) continue;
+            if (!production.HasRoom) { Stats.CountArmyProduction(producer.Template, "queue-full"); continue; }
+            var candidates = ProducibleBy(producer.Template).Where(value => (RoleOf(value) & Role.Army) != 0 && value.BuildCost <= limit && PrerequisitesMet(value)).ToList();
+            if (candidates.Count == 0)
+            {
+                if (limit == Fixed.MaxValue) Stats.CountArmyProduction(producer.Template, "no-candidate");
+                continue;
+            }
+            if (candidates.Any(InFamily)) candidates = candidates.Where(InFamily).ToList();
+            foreach (var candidate in candidates)
+            {
+                if (units.Contains(candidate)) continue;
+                units.Add(candidate);
+                producers.Add(producer);
+            }
+        }
+        if (units.Count == 0) return null;
+        var index = _random.Range(0, units.Count - 1);
+        return new ArmyOrder(producers[index].Id, units[index], _tick);
     }
 
     private void SetRallyPoints()
