@@ -35,7 +35,8 @@ public abstract class LiveGame
     private readonly double _tickSeconds;
     private readonly long _maxTicksPerFrame;
 
-    private readonly FrameProjector _projector;
+    private FrameProjector _projector;
+    private readonly FrameProjectorOptions _projectorOptions;
     private readonly SimulationFxWorldView _fxView;
     private readonly List<SoundCue> _soundCues = [];
     private double _accumulator;
@@ -77,7 +78,9 @@ public abstract class LiveGame
         Minimap = MinimapImage.Build(TerrainModel, Heights, terrain, water, 256);
         Colors = TeamColors.Resolve(players, graph);
         var scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
-        _projector = new FrameProjector(data.Visuals, new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph) });
+        FogViewer = human;
+        _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph) };
+        _projector = new FrameProjector(data.Visuals, _projectorOptions);
         Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
         _fxView = new SimulationFxWorldView(world);
         Frame = RenderFrame.Empty;
@@ -103,6 +106,34 @@ public abstract class LiveGame
     public PlayerId Human { get; }
 
     public int HumanVisionSlot => World.VisionSlotOf(Human);
+
+    /// <summary>
+    /// Whose fog of war the presentation shows: <see cref="Human"/> in every game a player plays; a spectator may look through another player's eyes or, with
+    /// <see langword="null"/>, see everything (<see cref="ShowWorldAs"/>). Presentation only: the simulation's vision is not touched.
+    /// </summary>
+    public PlayerId? FogViewer { get; private set; }
+
+    /// <summary>
+    /// A spectator's switch of the view (docs/SPECTATOR-MODE.md): the objects, the remembered buildings and the fog are those of <paramref name="viewer"/>, or the whole
+    /// world without fog for <see langword="null"/>. What the previous view remembered (ghosts of buildings, explored scenery) is dropped with it.
+    /// </summary>
+    public void ShowWorldAs(PlayerId? viewer)
+    {
+        if (viewer == FogViewer) return;
+        FogViewer = viewer;
+        _projector = new FrameProjector(Data.Visuals, _projectorOptions with { Viewer = viewer }) { PhaseObserver = _phaseObserver };
+        _projector.Advance(World);
+        if (viewer is { } player) Fog.Update(World.Vision!, World.VisionSlotOf(player));
+        else
+        {
+            var clear = new FogCellState[Fog.CellsX * Fog.CellsY];
+            Array.Fill(clear, FogCellState.Visible);
+            Fog.SetStates(clear);
+        }
+        Fog.Snap();
+        Frame = _projector.Project(1f);
+    }
+
     public bool Paused { get; set; }
 
     /// <summary>Simulation speed factor: 1 is real time.</summary>
@@ -272,7 +303,7 @@ public abstract class LiveGame
         _soundCues.AddRange(Fx.DrainSoundCues());
         observer?.PhaseEnded(PresentationPhase.DrainSoundCues);
         observer?.PhaseStarted(PresentationPhase.FogUpdate);
-        if (World.Tick % World.VisionInterval == 0) Fog.Update(World.Vision!, HumanVisionSlot);
+        if (FogViewer is { } fogViewer && World.Tick % World.VisionInterval == 0) Fog.Update(World.Vision!, World.VisionSlotOf(fogViewer));
         observer?.PhaseEnded(PresentationPhase.FogUpdate);
     }
 }

@@ -22,6 +22,12 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
 
     /// <summary>The human slot is played by the computer player (demos, captures, profiling); the viewer stays player 1.</summary>
     public bool AutoPlay { get; init; }
+
+    /// <summary>
+    /// Nobody plays (docs/SPECTATOR-MODE.md): every slot is a computer player and the viewer only watches. Orders of the viewer end in
+    /// <see cref="CnCNew.Game.Spectator.SpectatorCommandSink"/> and never reach the session.
+    /// </summary>
+    public bool Spectator { get; init; }
 }
 
 /// <summary>
@@ -47,7 +53,10 @@ public sealed class LiveMatch : LiveGame
     public override ImmutableArray<PlayerConfiguration> Players => Session.Players;
 
     /// <summary>Command sink of the human player: everything the human changes goes through it, so <see cref="SkirmishMatchSession.ToReplay"/> reproduces the match.</summary>
-    protected override ICommandSink CreateCommandSink() => new SkirmishSessionCommandSink(Session, Human);
+    protected override ICommandSink CreateCommandSink() => Setup.Spectator ? SpectatorSink = new CnCNew.Game.Spectator.SpectatorCommandSink() : new SkirmishSessionCommandSink(Session, Human);
+
+    /// <summary>The refusing sink of a spectator's match once <see cref="LiveGame.Commands"/> was asked for; null in a match somebody plays.</summary>
+    public CnCNew.Game.Spectator.SpectatorCommandSink? SpectatorSink { get; private set; }
 
     protected override TickResult StepSimulation() => Session.Step();
 
@@ -60,7 +69,7 @@ public sealed class LiveMatch : LiveGame
         MatchParticipant Find(string name) => data.Factions.FirstOrDefault(value => value.Faction.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"Unknown or unplayable faction '{name}'.");
         var slots = ImmutableArray.CreateBuilder<SkirmishSlot>();
-        slots.Add(new SkirmishSlot(Find(setup.HumanFaction), IsHuman: !setup.AutoPlay));
+        slots.Add(new SkirmishSlot(Find(setup.HumanFaction), IsHuman: !setup.AutoPlay && !setup.Spectator));
         foreach (var opponent in setup.Opponents) slots.Add(new SkirmishSlot(Find(opponent)));
         var options = setup.Options;
         if (setup.Seed != 0) options = options with { AiSeed = unchecked((uint)setup.Seed), WorldSeed = unchecked((uint)setup.Seed) ^ 0xC0FFEE06 };

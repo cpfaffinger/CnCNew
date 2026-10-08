@@ -20,6 +20,7 @@ using CnCNew.Game.Tests;
     (nameof(SourceRuleTests), SourceRuleTests.Run),
     (nameof(ModelGeometryTests), ModelGeometryTests.Run),
     (nameof(DeterminismTests), DeterminismTests.Run),
+    (nameof(SpectatorTests), SpectatorTests.Run),
 ];
 
 // --suite is accepted as another spelling of --only.
