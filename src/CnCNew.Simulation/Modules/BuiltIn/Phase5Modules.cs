@@ -1271,13 +1271,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var targetX = Entity.MoveTargetX;
         var targetY = Entity.MoveTargetY;
         var distance = AirModules.Distance2D(Entity.X, Entity.Y, targetX, targetY);
-        var arrival = Fixed.Max(locomotor.CloseEnoughDist, FlightFrames.PerFrame(world.Time, locomotor.Speed));
+        // One decision of a logic frame of the original in that frame's units, with the constants and the speed the 30 Hz step computes with (FlightFrameConstants).
+        FlightFrameConstants(world.Time, locomotor, out var topSpeed, out _, out var braking, out var turnRate, out var minSpeed);
+        var speed = FrameSpeed();
+        var arrival = Fixed.Max(locomotor.CloseEnoughDist, topSpeed);
         var behind = distance > WingEpsilon && FixedTrig.AngleDifference(Entity.Angle, FixedTrig.Atan2(targetY - Entity.Y, targetX - Entity.X)).Abs() > FixedTrig.HalfPi;
-        var arrived = distance <= arrival || (behind && distance <= TurnRadius(locomotor, Fixed.Max(Entity.Speed, locomotor.MinSpeed)) * Fixed.FromInt(2));
+        var arrived = distance <= arrival || (behind && distance <= TurnRadius(turnRate, Fixed.Max(speed, minSpeed)) * Fixed.FromInt(2));
         var brakingDistance = Fixed.Zero;
-        if (locomotor.Braking > Fixed.Zero && Entity.Speed > locomotor.MinSpeed)
-            brakingDistance = (Entity.Speed * Entity.Speed - locomotor.MinSpeed * locomotor.MinSpeed) / (locomotor.Braking * Fixed.FromInt(2));
-        SteerWinged(world.Time, locomotor, targetX, targetY, distance <= brakingDistance ? locomotor.MinSpeed : CappedSpeed(locomotor));
+        if (locomotor.Braking > Fixed.Zero && speed > minSpeed)
+            brakingDistance = (speed * speed - minSpeed * minSpeed) / (braking * Fixed.FromInt(2));
+        SteerWinged(world.Time, locomotor, targetX, targetY, distance <= brakingDistance ? minSpeed : CappedFrameSpeed(topSpeed));
         if (!arrived) return;
         Entity.HasMoveTarget = false;
         InvalidatePath();
@@ -1288,8 +1291,48 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private static readonly Fixed WingEpsilon = Fixed.FromFraction(1, 64);
 
     /// <summary><c>Locomotor::calcMinTurnRadius</c>: the radius of the circle an aircraft flies at <paramref name="speed"/> with its turn rate (a huge radius when it cannot turn).</summary>
-    protected static Fixed TurnRadius(LocomotorInfo locomotor, Fixed speed)
-        => locomotor.TurnRatePerTick > Fixed.Zero ? speed / locomotor.TurnRatePerTick : Fixed.FromInt(1_000_000);
+    protected static Fixed TurnRadius(LocomotorInfo locomotor, Fixed speed) => TurnRadius(locomotor.TurnRatePerTick, speed);
+
+    /// <summary>The same with speed and turn rate in one unit of time (both per tick or both per logic frame of the original).</summary>
+    protected static Fixed TurnRadius(Fixed turnRate, Fixed speed) => turnRate > Fixed.Zero ? speed / turnRate : Fixed.FromInt(1_000_000);
+
+    /// <summary>
+    /// The constants of <paramref name="locomotor"/> per logic frame of the original for a decision of flight: at 30 Hz the locomotor's own values, above the 30 Hz conversion of the
+    /// same source numbers (<see cref="LocomotorFrames"/>), so that a decision computes with the bits the 30 Hz step computes with and no threshold falls differently at another rate.
+    /// </summary>
+    protected void FlightFrameConstants(SimulationTime time, LocomotorInfo locomotor, out Fixed topSpeed, out Fixed acceleration, out Fixed braking, out Fixed turnRate, out Fixed minSpeed)
+    {
+        if (_stride == 0) ResolveBlockerTiming(time);
+        FrameConstants(locomotor, out topSpeed, out acceleration, out braking, out turnRate, out minSpeed);
+    }
+
+    /// <summary>The vertical constants of <paramref name="locomotor"/> per logic frame of the original (<see cref="FlightFrameConstants"/>): the limit of its own descent and its lift.</summary>
+    protected void FlightVerticalConstants(SimulationTime time, LocomotorInfo locomotor, out Fixed speedLimitZ, out Fixed lift)
+    {
+        FlightFrameConstants(time, locomotor, out _, out _, out _, out _, out _);
+        if (_stride == 1)
+        {
+            speedLimitZ = locomotor.SpeedLimitZ;
+            lift = locomotor.Lift;
+            return;
+        }
+        speedLimitZ = _frameConstants!.SpeedLimitZ;
+        lift = _frameConstants.Lift;
+    }
+
+    /// <summary>The speed per logic frame of the original the object flies or rolls with (<see cref="FrameSpeed"/>).</summary>
+    protected Fixed FlightFrameSpeed(SimulationTime time)
+    {
+        if (_stride == 0) ResolveBlockerTiming(time);
+        return FrameSpeed();
+    }
+
+    /// <summary>Sets the speed per logic frame of the original; <see cref="Entity.Speed"/> becomes its share of a tick (<see cref="SetFrameSpeed"/>). Zero is "stopped by the module itself".</summary>
+    protected void SetFlightFrameSpeed(SimulationTime time, Fixed speed)
+    {
+        if (_stride == 0) ResolveBlockerTiming(time);
+        SetFrameSpeed(speed);
+    }
 
     /// <summary>The frame of winged flight that is being flown (<see cref="SteerWinged"/>); empty at 30 Hz. Kept by the one AI that flies with wings (<see cref="DescribeWingStep"/>).</summary>
     private FlightFrameStep _wingStep;
@@ -1303,6 +1346,21 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>The aircraft stopped flying with its wings (it lands, taxis or is gone): what is left of the decided frame is dropped.</summary>
     protected void CancelWingedStep() => _wingStep.Cancel();
 
+    /// <summary>What is left of the decided frame of winged flight (for the publication of the aircraft's frame end, <see cref="FlightFrameStep.Publish"/>).</summary>
+    protected (Fixed X, Fixed Y) WingedStepRest => _wingStep.RestXY;
+
+    /// <summary>
+    /// What is left of the step of ground or helicopter movement the object is covering in shares (<see cref="AdvanceFrame"/>), after this tick's share; zero when no share was
+    /// covered in <paramref name="tick"/>. Read by a derived AI that publishes the frame end of an object with a second step (height) of its own.
+    /// </summary>
+    protected (Fixed X, Fixed Y) GroundStepRest(long tick)
+    {
+        if (_frameTicksLeft <= 0 || _frameDue != tick + TickOrder.Next) return default;
+        long shares = _stride;
+        var covered = shares - _frameTicksLeft;
+        return (Fixed.FromRaw(_frameStepX.Raw - _frameStepX.Raw * covered / shares), Fixed.FromRaw(_frameStepY.Raw - _frameStepY.Raw * covered / shares));
+    }
+
     protected void DescribeWingStep(IStateWriter writer) => _wingStep.Describe(writer, "wingStep");
 
     protected void LoadWingStep(IStateReader reader) => _wingStep.Load(reader, "wingStep");
@@ -1312,10 +1370,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// turns an aircraft at its full turn rate whatever its speed: <c>MinTurnSpeed</c> is a wheeled-vehicle setting), the speed approaches <paramref name="goalSpeed"/> by the locomotor's acceleration or braking
     /// of a frame but never leaves the range from <see cref="LocomotorInfo.MinSpeed"/> up, and the aircraft advances along its new heading by the travel of a frame at that speed. This is the 30 Hz step; at a
     /// higher rate it is decided once per frame and flown in equal shares per tick (<see cref="FlightFrameStep"/>), because a polygon with shorter sides is another curve (another turning circle).
-    /// Speeds stay values per tick.
+    /// <paramref name="goalSpeed"/> is a speed per logic frame of the original, as are the constants of the step (<see cref="FlightFrameConstants"/>); the module keeps the
+    /// speed per frame itself (<see cref="FrameSpeed"/>), <see cref="Entity.Speed"/> is its share of a tick.
     /// </summary>
     protected void SteerWinged(SimulationTime time, LocomotorInfo locomotor, Fixed targetX, Fixed targetY, Fixed goalSpeed)
     {
+        FlightFrameConstants(time, locomotor, out _, out var acceleration, out var braking, out var turn, out var minSpeed);
         var dx = targetX - Entity.X;
         var dy = targetY - Entity.Y;
         var heading = Entity.Angle;
@@ -1323,17 +1383,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         {
             var desired = FixedTrig.Atan2(dy, dx);
             var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
-            var turn = FlightFrames.PerFrame(time, locomotor.TurnRatePerTick);
             Entity.Angle = turn > Fixed.Zero && difference.Abs() > turn ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turn : turn)) : desired;
         }
-        goalSpeed = Fixed.Max(goalSpeed, locomotor.MinSpeed);
-        var speed = Fixed.Max(Entity.Speed, locomotor.MinSpeed);
+        goalSpeed = Fixed.Max(goalSpeed, minSpeed);
+        var speed = Fixed.Max(FrameSpeed(), minSpeed);
         speed = speed < goalSpeed
-            ? Fixed.Min(goalSpeed, speed + FlightFrames.PerFrame(time, locomotor.Acceleration))
-            : Fixed.Max(goalSpeed, speed - FlightFrames.PerFrame(time, locomotor.Braking));
-        Entity.Speed = speed;
-        var stepX = FixedTrig.Cos(Entity.Angle) * FlightFrames.PerFrame(time, speed);
-        var stepY = FixedTrig.Sin(Entity.Angle) * FlightFrames.PerFrame(time, speed);
+            ? Fixed.Min(goalSpeed, speed + acceleration)
+            : Fixed.Max(goalSpeed, speed - braking);
+        SetFrameSpeed(speed);
+        var stepX = FixedTrig.Cos(Entity.Angle) * speed;
+        var stepY = FixedTrig.Sin(Entity.Angle) * speed;
         Entity.X += stepX;
         Entity.Y += stepY;
         if (time.TicksPerOriginalFrame > 1) _wingStep.Begin(time, Entity, stepX, stepY, Fixed.Zero, FixedTrig.AngleDifference(heading, Entity.Angle));

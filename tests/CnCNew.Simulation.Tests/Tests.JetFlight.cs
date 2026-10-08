@@ -133,7 +133,8 @@ static partial class Tests
     {
         var world = AirWorld(out fixture, out feeder, files: WingFixtureFiles);
         foreach (var (template, x, y) in jets) Check.That(feeder.Spawn(1, template, owner: 1, x: x, y: y).Accepted, $"{template} spawns.");
-        world.Step();
+        // The step that creates the aircraft and the rest of its frame: a new aircraft begins its first frame one logic frame after it appeared (one tick at 30 Hz).
+        for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
         return world;
     }
 

@@ -38,7 +38,7 @@ static partial class Tests
         new("Simulation/Modules/BuiltIn/WorldEffectModules.cs", RuleSelfProduct, "_current.Major * _current.Major", "the diagonal of the firestorm's current box (FinalMajor of the data: at most 90)"),
         // -- speeds per tick and fractions between 0 and 1
         new("Simulation/Modules/BuiltIn/Phase5Modules.cs", RuleSelfProduct, "var brakingDistance = locomotor.Braking > Fixed.Zero", "v² / 2a with the unit's current speed per tick"),
-        new("Simulation/Modules/BuiltIn/Phase5Modules.cs", RuleSelfProduct, "brakingDistance = (Entity.Speed * Entity.Speed - locomotor.MinSpeed * locomotor.MinSpeed)", "v² / 2a with speeds per tick"),
+        new("Simulation/Modules/BuiltIn/Phase5Modules.cs", RuleSelfProduct, "brakingDistance = (speed * speed - minSpeed * minSpeed)", "v² / 2a with speeds per logic frame of the original (per tick at 30 Hz)"),
         new("Simulation/Modules/BuiltIn/Phase5Modules.cs", RuleSelfProduct, "var brakingDist = locomotor.Braking > Fixed.Zero", "v² / 2a with the unit's current speed per tick"),
         new("Simulation/Modules/BuiltIn/ProjectileModules.cs", RuleSelfProduct, "var b0 = u * u * u;", "Bernstein polynomial of a fraction in [0, 1]"),
         new("Simulation/Modules/BuiltIn/ProjectileModules.cs", RuleSelfProduct, "var b1 = Fixed.FromInt(3) * u * u * t;", "Bernstein polynomial of a fraction in [0, 1]"),
