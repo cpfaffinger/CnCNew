@@ -48,6 +48,8 @@ public sealed class SkirmishAiStats
     /// <summary>Army draws by <see cref="ArmyComposition.ExchangeValue"/> that had a sighted enemy to weigh against, and those that fell back to the uniform draw.</summary>
     public int InformedDraws { get; internal set; }
     public int UninformedDraws { get; internal set; }
+    /// <summary>Objectives the army turned away from for a while because it had marched on them for too long without ending them.</summary>
+    public int ObjectivesGivenUp { get; internal set; }
     /// <summary>
     /// What every look of the army production at a barracks or a factory ended with, counted per producer template and outcome (key: template, a tab, the outcome):
     /// <c>queue-full</c>, <c>no-candidate</c> (nothing it offers is an army unit whose prerequisites are met), <c>unaffordable</c> (candidates exist, none is covered by the money
@@ -189,6 +191,19 @@ public sealed partial class SkirmishAi
     private readonly Dictionary<uint, long> _boarding = [];
     private (Fixed X, Fixed Y)? _armyGoal;
 
+    /// <summary>
+    /// How long the army keeps marching on one objective that is still there (2 min) before it puts it behind all the others. The army picks the objective nearest to
+    /// itself; one it cannot get at (behind a cliff, out of every weapon's reach from where the path ends) would otherwise hold it for ever, because standing in front of it
+    /// keeps it the nearest. Only a mission's agent has objectives; a skirmish match is not touched.
+    /// </summary>
+    private const long ObjectivePatienceFrames = 3600;
+
+    private (Fixed X, Fixed Y)? _objective;
+    private long _objectiveSince;
+    private readonly HashSet<(Fixed X, Fixed Y)> _givenUp = [];
+    // Diagnostics (DescribeState): the enemy the last think took for a threat to the base.
+    private string _threat = string.Empty;
+
     public SkirmishAi(SimulationWorld world, TemplateCatalog catalog, SkirmishAiOptions options, Func<SimCommand, SubmitResult> submit)
     {
         _world = world;
@@ -235,7 +250,7 @@ public sealed partial class SkirmishAi
 
     /// <summary>One line about the economy and the army, for diagnostics (observed state of the last think).</summary>
     public string DescribeState()
-        => $"carriers {CountAlive(Role.Carrier, false)}, builders {CountAlive(Role.Builder, false)}, supply centers {CountAlive(Role.SupplyCenter, false)}, power {CountAlive(Role.Power, false)}, barracks {CountAlive(Role.Barracks, false)}, factories {CountAlive(Role.Factory, false)}, defenses {CountAlive(Role.Defense, false)}, warehouses known {_warehouses.Count}, army {_units.Count(value => (RoleOf(value.Template) & Role.Army) != 0)}, threshold {_threshold}, attacking {_attacking}, known enemy structures {KnownEnemyStructures}";
+        => $"carriers {CountAlive(Role.Carrier, false)}, builders {CountAlive(Role.Builder, false)}, supply centers {CountAlive(Role.SupplyCenter, false)}, power {CountAlive(Role.Power, false)}, barracks {CountAlive(Role.Barracks, false)}, factories {CountAlive(Role.Factory, false)}, defenses {CountAlive(Role.Defense, false)}, warehouses known {_warehouses.Count}, army {_units.Count(value => (RoleOf(value.Template) & Role.Army) != 0)}, threshold {_threshold}, attacking {_attacking}, known enemy structures {KnownEnemyStructures}, wave {_wave.Count}, army goal {(_armyGoal is { } goal ? $"({goal.X.Floor()}, {goal.Y.Floor()})" : "none")}, rally {(_rally is { } rally ? $"({rally.X.Floor()}, {rally.Y.Floor()})" : "none")}, threat {(_threat.Length == 0 ? "none" : _threat)}";
 
     /// <summary>Roles of the given template, for diagnostics.</summary>
     public string DescribeRoles(ObjectTemplate template) => RoleOf(template).ToString();
@@ -1291,6 +1306,7 @@ public sealed partial class SkirmishAi
                 nearest = enemy;
             }
         }
+        _threat = nearest is null ? string.Empty : $"{nearest.Template.Name}#{nearest.Id.Value} at ({nearest.X.Floor()}, {nearest.Y.Floor()})";
         return nearest is null ? null : (nearest.X, nearest.Y);
     }
 
@@ -1306,11 +1322,32 @@ public sealed partial class SkirmishAi
         var best = Fixed.MaxValue;
         if (!Objectives.IsDefaultOrEmpty)
         {
-            var nearest = Objectives[0];
+            // The nearest objective the army has not given up (ObjectivePatienceFrames); once it has given up every one it starts over with the nearest of all.
+            (Fixed X, Fixed Y)? nearest = null;
             foreach (var objective in Objectives)
             {
+                if (_givenUp.Contains(objective)) continue;
                 var distance = DistanceSquared(objective.X, objective.Y, cx, cy);
                 if (distance < best) { best = distance; nearest = objective; }
+            }
+            if (nearest is null)
+            {
+                _givenUp.Clear();
+                foreach (var objective in Objectives)
+                {
+                    var distance = DistanceSquared(objective.X, objective.Y, cx, cy);
+                    if (distance < best) { best = distance; nearest = objective; }
+                }
+            }
+            if (_objective != nearest)
+            {
+                _objective = nearest;
+                _objectiveSince = _tick;
+            }
+            else if (nearest is { } stuck && Objectives.Length > 1 && _tick - _objectiveSince > _time.OriginalFrames(ObjectivePatienceFrames))
+            {
+                _givenUp.Add(stuck);
+                Stats.ObjectivesGivenUp++;
             }
             return nearest;
         }
