@@ -171,7 +171,7 @@ static partial class Tests
         var fast = stages.TakeWhile(value => value == ContinuousFireStage.Fast).Count();
         var slow = stages.Skip(fast).TakeWhile(value => value == ContinuousFireStage.Slow).Count();
         Check.That(world.InFrames(fast) is >= 30 and <= 36, "The fast stage outlasts the last shot by the coast time (30 ticks past the next possible shot): " + fast);
-        Check.That(slow == world.Frames(30) + 1, "The slow stage lasts a second: " + slow);
+        Check.That(slow == world.Frames(30 + 1), "The slow stage lasts a second and the logic frame its end is noticed in: " + slow);
         Check.That(stages.Skip(fast + slow).All(value => value == ContinuousFireStage.None) && tank.WeaponBonusConditions == 0, "Then no stage is left.");
 
         // After the cool-down the count starts over.
