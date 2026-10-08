@@ -11,7 +11,7 @@ public sealed partial class SimulationWorld
     /// Creates every object requested so far right now instead of at the end of the next step. The map loader and the script actions create objects
     /// synchronously in the reference (<c>TheThingFactory->newObject</c>), so a script that runs later in the same frame already sees them.
     /// </summary>
-    public void MaterializePendingSpawns() => ProcessSpawns();
+    public void MaterializePendingSpawns() => ProcessSpawns(endOfTick: false);
 
     /// <summary>Whether <paramref name="player"/> is configured in this world (the system authority, id 0, always is).</summary>
     public bool HasPlayer(PlayerId player) => _players.ContainsKey(player.Value);

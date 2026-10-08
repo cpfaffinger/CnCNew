@@ -154,7 +154,11 @@ public sealed partial class SimulationWorld : IWorldServices
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default);
 
-    private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
+    // Ticks per logic frame of the original: how long after the spawn phase that asked for it an object requested inside that phase appears (ProcessSpawns). 1 at 30 Hz.
+    private readonly long _firstFrameTicks;
+
+    // NotBefore: the first tick whose spawn phase may create the object (0: the next spawn phase). Only ever set above 30 Hz, see ProcessSpawns.
+    private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default, long NotBefore = 0);
 
     public SimulationWorld(WorldConfiguration configuration, TemplateCatalog templates, TerrainMap? terrain = null)
     {
@@ -179,6 +183,7 @@ public sealed partial class SimulationWorld : IWorldServices
         _turretFrameTicks = Time.TicksPerOriginalFrame;
         VisionInterval = Time.OriginalFrames(VisionIntervalFrames);
         _visionPhase = Time.TicksPerOriginalFrame - TickOrder.Next;
+        _firstFrameTicks = Time.TicksPerOriginalFrame;
         _saleDurationTicks = Time.OriginalFrames(SaleDurationFrames) - Time.TicksPerOriginalFrame;
         _minimumBuildTicks = Time.OriginalFrames(1);
         // Thing::isSignificantlyAboveTerrain: a height, not a rate - 3 x 3 logic frames of the original times the gravity per frame of the original squared (gravity per second² / 30²).
@@ -1508,14 +1513,27 @@ public sealed partial class SimulationWorld : IWorldServices
         _entities.Compact();
     }
 
-    private void ProcessSpawns()
+    /// <summary>
+    /// Creates the queued objects. <paramref name="endOfTick"/> is true for the spawn phase of <see cref="Step"/> (false when a script materializes its objects inside a tick).
+    /// </summary>
+    private void ProcessSpawns(bool endOfTick = true)
     {
         if (_spawnQueue.Count == 0) return;
-        // Damage applied while an entity is created (creation-list health transfer) can run die modules that queue further spawns;
-        // those stay in the queue for the next tick.
+        // Damage applied while an entity is created (creation-list health transfer) can run die modules that queue further spawns, and so can the OnSpawn of a module (the
+        // rider of a combat bike); those stay in the queue for the next tick.
         var batch = _spawnQueue.ToArray();
         _spawnQueue.Clear();
-        foreach (var pending in batch) SpawnEntity(pending);
+        var held = 0;
+        foreach (var pending in batch)
+        {
+            if (pending.NotBefore > _tick) _spawnQueue.Insert(held++, pending);
+            else SpawnEntity(pending);
+        }
+        // "The next tick" is the next logic frame of the original (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): above 30 Hz an object requested while the spawn phase
+        // creates another appears one frame after it, not one tick. At 30 Hz nothing is marked (and nothing new is written to a snapshot).
+        if (!endOfTick || _firstFrameTicks == TickOrder.Next) return;
+        for (var index = held; index < _spawnQueue.Count; index++)
+            if (_spawnQueue[index].NotBefore == 0) _spawnQueue[index] = _spawnQueue[index] with { NotBefore = _tick + _firstFrameTicks };
     }
 
     private Entity SpawnEntity(in PendingSpawn pending, EntityId builder = default)
@@ -2034,6 +2052,7 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Fixed("rallyX", setup.RallyX);
             writer.Fixed("rallyY", setup.RallyY);
             if (setup.Producer.IsValid) writer.UInt("producer", setup.Producer.Value);
+            if (pending.NotBefore != 0) writer.Int("notBefore", pending.NotBefore);
             if (setup.Launch is { } launch)
             {
                 writer.Int("launchWeapon", launch.Weapon);
