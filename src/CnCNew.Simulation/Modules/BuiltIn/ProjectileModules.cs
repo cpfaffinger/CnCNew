@@ -411,18 +411,51 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
 public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks, long IgnitionDelayTicks, Fixed InitialVelocity, Fixed DistanceToTravelBeforeTurning,
     Fixed LockDistance, string IgnitionFx, bool UseWeaponSpeed, bool DetonateOnNoFuel, bool DetonateCallsKill, long KillSelfDelayTicks) : ModuleData
 {
-    public static MissileData Parse(RatedModuleConfiguration configuration) => new(
-        ModuleConfigReader.Bool(configuration, "TryToFollowTarget", true),
-        ModuleConfigReader.Ticks(configuration, "FuelLifetime", 0),
-        ModuleConfigReader.Ticks(configuration, "IgnitionDelay", 0),
-        ModuleConfigReader.Real(configuration, "InitialVelocity", Fixed.Zero) / configuration.Time.TicksPerSecondFixed,
-        ModuleConfigReader.Real(configuration, "DistanceToTravelBeforeTurning", Fixed.Zero),
-        ModuleConfigReader.Real(configuration, "DistanceToTargetForLock", Fixed.FromInt(75)),
-        ModuleConfigReader.Text(configuration, "IgnitionFX"),
-        ModuleConfigReader.Bool(configuration, "UseWeaponSpeed", false),
-        ModuleConfigReader.Bool(configuration, "DetonateOnNoFuel", false),
-        ModuleConfigReader.Bool(configuration, "DetonateCallsKill", false),
-        ModuleConfigReader.Ticks(configuration, "KillSelfDelay", 3));
+    public static MissileData Parse(RatedModuleConfiguration configuration)
+    {
+        var velocity = ModuleConfigReader.Real(configuration, "InitialVelocity", Fixed.Zero);
+        var data = new MissileData(
+            ModuleConfigReader.Bool(configuration, "TryToFollowTarget", true),
+            ModuleConfigReader.Ticks(configuration, "FuelLifetime", 0),
+            ModuleConfigReader.Ticks(configuration, "IgnitionDelay", 0),
+            velocity / configuration.Time.TicksPerSecondFixed,
+            ModuleConfigReader.Real(configuration, "DistanceToTravelBeforeTurning", Fixed.Zero),
+            ModuleConfigReader.Real(configuration, "DistanceToTargetForLock", Fixed.FromInt(75)),
+            ModuleConfigReader.Text(configuration, "IgnitionFX"),
+            ModuleConfigReader.Bool(configuration, "UseWeaponSpeed", false),
+            ModuleConfigReader.Bool(configuration, "DetonateOnNoFuel", false),
+            ModuleConfigReader.Bool(configuration, "DetonateCallsKill", false),
+            ModuleConfigReader.Ticks(configuration, "KillSelfDelay", 3));
+        MissileFrames.Register(data, configuration.Time, velocity);
+        return data;
+    }
+}
+
+/// <summary>
+/// The initial velocity of a missile per logic frame of the original for the catalogs built above 30 Hz, as the 30 Hz catalog holds it. The per-tick value of a faster catalog is
+/// rounded once for that rate; times the ticks per frame it misses the 30 Hz value by the last bit, and a missile that starts a raw step slower flies beside the 30 Hz missile
+/// for its whole flight. Derived data keyed by the catalog's own <see cref="MissileData"/> instances, like <see cref="LocomotorFrames"/>: no field of a catalog type, no state, not
+/// hashed. Data no builder registered (hand-made in a test) gets its per-tick value scaled.
+/// </summary>
+public static class MissileFrames
+{
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MissileData, System.Runtime.CompilerServices.StrongBox<Fixed>> Known = new();
+
+    /// <summary>Called by <see cref="MissileData.Parse"/> with the source number in units per second. Nothing to do at 30 Hz.</summary>
+    public static void Register(MissileData data, SimulationTime timing, Fixed initialVelocityPerSecond)
+    {
+        if (timing.TicksPerOriginalFrame == 1) return;
+        // The same expression as MissileData.Parse, with the time service of the original's rate.
+        Known.AddOrUpdate(data, new System.Runtime.CompilerServices.StrongBox<Fixed>(initialVelocityPerSecond / SimulationRate.Original.Time.TicksPerSecondFixed));
+    }
+
+    /// <summary><see cref="MissileData.InitialVelocity"/> per logic frame of the original; at 30 Hz the value itself.</summary>
+    public static Fixed InitialVelocity(MissileData data, SimulationTime time)
+    {
+        var ticks = time.TicksPerOriginalFrame;
+        if (ticks == 1) return data.InitialVelocity;
+        return Known.TryGetValue(data, out var known) ? known.Value : data.InitialVelocity * ticks;
+    }
 }
 
 /// <summary>
@@ -513,7 +546,8 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         // the ticks per frame, an acceleration per tick² times their square. At 30 Hz the factors are 1.
         var time = world.Time;
         var perFrame = time.TicksPerOriginalFrame;
-        var initial = data.InitialVelocity * perFrame;
+        // The initial velocity as the 30 Hz catalog holds it (200 units per second: raw 111848107 per frame at 30 Hz, twice 55924053 at 60 Hz).
+        var initial = MissileFrames.InitialVelocity(data, time);
         _maxSpeed = locomotor is null ? initial : time.PerTickToPerOriginalFrame(locomotor.Speed);
         _acceleration = locomotor is null ? Fixed.Zero : time.PerTickSquaredToPerOriginalFrameSquared(locomotor.Acceleration);
         if (data.UseWeaponSpeed || _maxSpeed <= Fixed.Zero)
