@@ -305,7 +305,9 @@ public sealed class TensileFormationUpdate(TensileFormationData data) : SimModul
     /// </summary>
     public int Life => _life;
 
-    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
+    // The dormant checks come every 30 logic frames of the original from the first update on; that one comes a frame after the rock appeared (at 30 Hz the next
+    // tick), so the checks fall on the same game times at every rate.
+    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
 
     /// <summary>A neighbour (or a hit on this rock) tells the formation to start sliding; takes effect at the next dormant check.</summary>
     public void Dislodge() => _dislodged = true;

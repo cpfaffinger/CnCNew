@@ -119,13 +119,14 @@ public sealed class FireWeaponWhenDamagedBehavior(FireWeaponWhenDamagedData data
     public override void OnSpawn(IWorldServices world)
     {
         if (data.StartsActive) _mux.GiveSelfUpgrade(world, _ => { });
-        _nextWake = _mux.Executed && HasContinuous ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        // The continuous weapon first fires one logic frame of the original after the object appeared or the upgrade came (at 30 Hz the next tick).
+        _nextWake = _mux.Executed && HasContinuous ? world.Tick + world.Time.TicksPerOriginalFrame : SimulationTiming.SleepForever;
     }
 
     public void TryActivate(IWorldServices world, UpgradeMask keyMask)
     {
         if (!_mux.AttemptUpgrade(world, Entity, keyMask, _ => { })) return;
-        if (HasContinuous) world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        if (HasContinuous) world.WakeAt(Entity, this, world.Tick + world.Time.TicksPerOriginalFrame);
     }
 
     public void TryReset(IWorldServices world, UpgradeMask keyMask) => _mux.ResetUpgrade(keyMask);

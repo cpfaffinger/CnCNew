@@ -248,7 +248,9 @@ public sealed class LeafletDropBehavior(LeafletData data) : SimModule, IUpdateMo
     public override void OnSpawn(IWorldServices world)
     {
         _startTick = world.Tick + data.DelayTicks;
-        _nextWake = world.Tick + SimulationTiming.SleepNone;
+        // The first update comes one logic frame of the original after the bomb appeared (at 30 Hz the next tick): with the default Delay of one frame it then acts,
+        // as at 30 Hz; one tick after the creation the delay would not have run out above 30 Hz and the module would sleep for good.
+        _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
     }
 
     public long Update(IWorldServices world)
