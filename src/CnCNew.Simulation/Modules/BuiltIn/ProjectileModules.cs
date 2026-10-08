@@ -946,6 +946,8 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
 
     private long _nextScan;
     private long _nextShot;
+    /// <summary>Above 30 Hz only: the frame's deciding tick was a scan without a target, the shot delay rests for the frame.</summary>
+    private bool _quietFrame;
 
     // Which of the two target lists a template belongs to, by template index: 0 not looked at yet, 1 primary, 2 secondary, 3 neither. A template's kinds and
     // the module data never change, so this is a cache of a fixed answer - not state: it is not described and fills again after a restore.
@@ -974,16 +976,24 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
         if (_nextScan > 0)
         {
             _nextScan--;
-            FireWhenReady(world, weapon, decide);
+            if (decide) _quietFrame = false;
+            if (!_quietFrame) FireWhenReady(world, weapon, decide);
             return SimulationTiming.SleepNone;
         }
         if (!decide)
         {
-            if (_nextShot > 0) _nextShot--;
+            if (_nextShot > 0 && !_quietFrame) _nextShot--;
             return SimulationTiming.SleepNone;
         }
         _nextScan = world.Time.CountdownReload(data.ScanTicks);
-        if (ScanClosestTarget(world, weapon)) FireWhenReady(world, weapon, true);
+        // A scan that finds nothing does not count the shot delay down in its update (fireWhenReady is not reached): at 30 Hz that is a whole logic frame of the original
+        // without a count, so above 30 Hz the remaining ticks of this frame do not count either. Never set at 30 Hz.
+        if (ScanClosestTarget(world, weapon))
+        {
+            _quietFrame = false;
+            FireWhenReady(world, weapon, true);
+        }
+        else _quietFrame = world.Time.TicksPerOriginalFrame > TickOrder.Next;
         return SimulationTiming.SleepNone;
     }
 
@@ -1145,6 +1155,7 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
         writer.Bool("inRange", _inRange);
         writer.Int("nextScan", _nextScan);
         writer.Int("nextShot", _nextShot);
+        if (_quietFrame) writer.Bool("quietFrame", true);
     }
 
     public override void Load(IStateReader reader)
@@ -1154,5 +1165,6 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
         _inRange = reader.Bool("inRange");
         _nextScan = reader.Int("nextScan");
         _nextShot = reader.Int("nextShot");
+        _quietFrame = reader.Has("quietFrame") && reader.Bool("quietFrame");
     }
 }
