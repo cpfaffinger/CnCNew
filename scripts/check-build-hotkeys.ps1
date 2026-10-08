@@ -14,6 +14,7 @@
   .\scripts\check-build-hotkeys.ps1
   .\scripts\check-build-hotkeys.ps1 -Faction GLA -NoBuild
   .\scripts\check-build-hotkeys.ps1 -Mouse classic
+  .\scripts\check-build-hotkeys.ps1 -NoBuild -TickRate 60
 #>
 [CmdletBinding()]
 param(
@@ -22,6 +23,8 @@ param(
     [string]$Faction = 'all',
     [ValidateSet('', 'alternate', 'classic')]
     [string]$Mouse = '',
+    # Simulation rate (30, 60 or 120 Hz); 0 = the client's default. Frame numbers of the input scripts and --frames count original frames (1/30 s) at every rate.
+    [int]$TickRate = 0,
     [switch]$NoBuild,
     [int]$TimeoutSeconds = 300
 )
@@ -59,6 +62,7 @@ foreach ($name in $plan.Keys) {
     $out = Join-Path $work "$lower.txt"
     $all = @('--smoke-test', '--content-dir', $ContentDir, '--size', '1280x720', '--frames', '320', '--scenario', "exit-$lower-all", '--input-script', (Join-Path $repo "scripts\input\hotkeys-$lower.txt"))
     if ($Mouse) { $all += @('--mouse', $Mouse) }
+    if ($TickRate -gt 0) { $all += @('--tick-rate', "$TickRate") }
     $quoted = $all | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
     $process = Start-Process -FilePath $exe.FullName -ArgumentList $quoted -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError "$out.err"
     $problems = @()

@@ -21,6 +21,8 @@
 param(
     [string]$ContentDir,
     [string]$OutDir,
+    # Simulationsrate der beiden Client-Szenen (30, 60 oder 120 Hz); 0 = Standard des Clients. Das UiRenderTool baut keine Welt und kennt keine Rate.
+    [int]$TickRate = 0,
     [switch]$NoBuild
 )
 
@@ -69,6 +71,7 @@ foreach ($size in @('1280x720', '1920x1080')) {
         if (Test-Path -LiteralPath $png) { Remove-Item -LiteralPath $png }
         Write-Host "== $($scene[0]) $size" -ForegroundColor Cyan
         $clientArgs = @('--smoke-test', '--content-dir', $ContentDir, '--size', $size) + $scene[1] + @('--capture', $png)
+        if ($TickRate -gt 0) { $clientArgs += @('--tick-rate', "$TickRate") }
         dotnet run --project $client -c Release --no-build -- @clientArgs | Out-Null
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $png)) { throw "Szene '$($scene[0])' fehlgeschlagen (Exitcode $LASTEXITCODE)." }
     }
