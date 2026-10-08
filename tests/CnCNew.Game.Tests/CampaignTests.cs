@@ -177,7 +177,7 @@ internal static class CampaignTests
 
     private static (MissionContext Context, CampaignCatalog Catalog, CampaignDefinition Campaign, SyntheticFixture Fixture) SyntheticCampaign(SimulationRate? rate = null)
     {
-        var fixture = new SyntheticFixture(rate ?? SimulationRate.Original);
+        var fixture = new SyntheticFixture(rate ?? CnCNew.Tests.TestRate.Default);
         var maps = new Dictionary<string, MapData>(StringComparer.OrdinalIgnoreCase)
         {
             ["Maps/One/One.map"] = SyntheticMap(WinAndLose),

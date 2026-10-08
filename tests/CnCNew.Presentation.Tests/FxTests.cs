@@ -603,7 +603,7 @@ public static partial class FxTests
         static byte[] Simulate(ulong seed)
         {
             var catalog = Catalog();
-            var executor = new FxExecutor(catalog, CnCNew.Tests.TestTime.Original, seed);
+            var executor = new FxExecutor(catalog, CnCNew.Tests.TestRate.Time, seed);
             var view = new TestView();
             using var stream = new MemoryStream();
             using var writer = new BinaryWriter(stream);
@@ -645,7 +645,7 @@ public static partial class FxTests
     private static void ExecutorNuggets()
     {
         var catalog = Catalog();
-        var executor = new FxExecutor(catalog, CnCNew.Tests.TestTime.Original, 11, new ParticleBudget());
+        var executor = new FxExecutor(catalog, CnCNew.Tests.TestRate.Time, 11, new ParticleBudget());
         var view = new TestView();
         executor.ExecuteFxListAtPosition("FX_TestAll", new FxInvocation(Vector3.Zero) { Secondary = new Vector3(100f, 0f, 0f) }, view);
         Assert(executor.Particles.SystemCount == 3, "Count = 3 creates three systems");
@@ -681,7 +681,7 @@ public static partial class FxTests
     private static void ExecutorEvents()
     {
         var catalog = Catalog();
-        var executor = new FxExecutor(catalog, CnCNew.Tests.TestTime.Original, 5, new ParticleBudget());
+        var executor = new FxExecutor(catalog, CnCNew.Tests.TestRate.Time, 5, new ParticleBudget());
         var view = new TestView();
         var tick = 100L;
         SimEvent Event(SimEventKind kind, EntityId entity, EntityId other, string text, long value, PlayerId? player = null)
@@ -710,7 +710,7 @@ public static partial class FxTests
         Assert(executor.Counters["damagefx-throttled"] == 1, "throttle counted");
         Assert(executor.Counters["weapon-fx-without-muzzle"] == 1, "muzzle fallback counted");
 
-        tick += 31;
+        tick += CnCNew.Tests.TestRate.Frames(30) + 1; // one step past the ThrottleTime of 1000 ms
         executor.ExecuteEvents(
         [
             Event(SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestGun", 2 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw),
@@ -761,7 +761,7 @@ public static partial class FxTests
     private static void SoundCueRules()
     {
         var catalog = Catalog();
-        var deriver = new SoundCueDeriver(catalog, CnCNew.Tests.TestTime.Original);
+        var deriver = new SoundCueDeriver(catalog, CnCNew.Tests.TestRate.Time);
         var view = new TestView();
         var cues = new List<SoundCue>();
         SimEvent Event(long tick, SimEventKind kind, EntityId entity, EntityId other, string text, long value, PlayerId? player = null)
@@ -844,9 +844,9 @@ public static partial class FxTests
         Assert(report.IsClean, "the audit is clean");
 
         clock.Restart();
-        var sweep = FxAudit.ExecuteAll(catalog, CnCNew.Tests.TestTime.Original);
+        var sweep = FxAudit.ExecuteAll(catalog, CnCNew.Tests.TestRate.Time);
         var sweepMs = clock.ElapsedMilliseconds;
-        var again = FxAudit.ExecuteAll(catalog, CnCNew.Tests.TestTime.Original);
+        var again = FxAudit.ExecuteAll(catalog, CnCNew.Tests.TestRate.Time);
         Assert(sweep.Checksum == again.Checksum && sweep.Counters.SequenceEqual(again.Counters), "the sweep is deterministic");
         Assert(sweep.FxListsExecuted == catalog.FxLists.Count && sweep.ParticleSystemsSpawned == catalog.ParticleSystems.Count, "everything executed");
         Assert(sweep.PeakParticles > 0, "particles were produced");

@@ -83,7 +83,7 @@ internal static class SentinelRangeTests
         var content = ContentFileSystem.Open(directory);
         var graph = DefinitionCompiler.Compile(new ContentSource(content), ModuleRegistry.Default,
             DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude });
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var limit = Fixed.Sqrt(Fixed.MaxValue);
         var asked = new List<string>();
@@ -92,7 +92,7 @@ internal static class SentinelRangeTests
         {
             var far = template.WeaponSets.SelectMany(set => set.Weapons).Where(slot => slot >= 0).Select(slot => catalog.Weapons[slot]).Where(weapon => weapon.AttackRange > limit).ToArray();
             if (far.Length == 0) continue;
-            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, Players, "sentinel-range", fingerprint), catalog);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 7, Players, "sentinel-range", fingerprint), catalog);
             ulong sequence = 0;
             foreach (var (name, owner, x) in new[] { (template.Name, 1, 300), ("ChinaTankBattleMaster", 2, 700) })
                 Assert(world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, name, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(600), Fixed.Zero, Fixed.Zero)).Accepted, name + " spawns");
@@ -116,8 +116,8 @@ internal static class SentinelRangeTests
 
     private static void InRangeAnswersForAnEverywhereRange()
     {
-        var fixture = new SyntheticFixture(SimulationRate.Original, files: Files());
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, Players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var fixture = new SyntheticFixture(CnCNew.Tests.TestRate.Default, files: Files());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 7, Players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         ulong sequence = 0;
         void Spawn(string template, int owner, int x, int y)
             => Assert(world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, template, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(y), Fixed.Zero, Fixed.Zero)).Accepted, template + " spawns");

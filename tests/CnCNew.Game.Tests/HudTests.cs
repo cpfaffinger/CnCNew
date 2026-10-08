@@ -27,7 +27,7 @@ internal static class HudTests
             return 0;
         }
 
-        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step}"));
+        var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step}"), rate: CnCNew.Tests.TestRate.Default);
 
         harness.Run("Select dozer, construct a structure, queue a unit, move and attack-move", () => ScriptedSession(data));
         harness.Run("Replay of the human player's commands is internally deterministic", () => ReplayMatches(data));
@@ -40,7 +40,8 @@ internal static class HudTests
         harness.Run("A command button shows its description as a pointer tooltip after the delay, and the icons carry no hot key or cost text", () => CommandButtonTooltip(data));
         harness.Run("Command button description: missing prerequisites and sciences are listed after 'Requires:', too little money and owned upgrades are said, as populateBuildTooltipLayout does", () => CommandButtonRequirements(data));
         harness.Run("The money and the power window describe themselves; the power text carries production and consumption", () => MoneyAndPowerTooltips(data));
-        harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
+        // The hash of baselines/hud-drawlist-1280x720.sha256 is defined at 30 Hz (the HUD of a running match): this test names that rate.
+        harness.Run("Golden draw list hash", () => GoldenDrawListHash(GoldenRate.Data(data, contentDir)));
         harness.Run("Message list: refused orders, finished buildings and upgrades, attacks and defeats print the original's labels at the message position and fade; what has no line is counted", () => MessageList(data));
         harness.Run("Message list through the real click path: a refused building spot prints 'You can't build here'", () => MessageListFromARefusedPlacement(data));
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));
@@ -670,24 +671,24 @@ internal static class HudTests
 
         feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, dozer.Id, enemyCenter.Id, human, value: 100), match.World, human);
         feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, dozer.Id, enemyCenter.Id, human, value: 100), match.World, human);
-        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, center.Id, enemyCenter.Id, human, value: 100, tick: match.Tick + 200), match.World, human);
-        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, dozer.Id, dozer.Id, human, value: 100, tick: match.Tick + 400), match.World, human);
-        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, enemyCenter.Id, dozer.Id, enemyCenter.Owner, value: 100, tick: match.Tick + 400), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, center.Id, enemyCenter.Id, human, value: 100, tick: match.Tick + CnCNew.Tests.TestTime.Frames(match.World, 200)), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, dozer.Id, dozer.Id, human, value: 100, tick: match.Tick + CnCNew.Tests.TestTime.Frames(match.World, 400)), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, enemyCenter.Id, dozer.Id, enemyCenter.Owner, value: 100, tick: match.Tick + CnCNew.Tests.TestTime.Frames(match.World, 400)), match.World, human);
         var dozerNearCenter = Vector2.Distance(SimulationQueries.GroundOf(dozer), SimulationQueries.GroundOf(center)) <= 250f;
         var attacked = feed.Log.Lines.Skip(1).Select(line => line.Text).ToArray();
         TestHarness.Assert(attacked[0] == text.Get(dozer.Template.IsKindOf("HARVESTER") ? "RADAR:HarvesterUnderAttack" : "RADAR:UnitUnderAttack"), $"the attacked dozer prints its radar line once ({string.Join(" | ", attacked)})");
         TestHarness.Assert(attacked.Length == (dozerNearCenter ? 1 : 2) && (dozerNearCenter || attacked[1] == "Structure under attack"),
             $"a second attack within 250 units and ten seconds prints nothing, own damage and the enemy's losses neither (dozer near the center: {dozerNearCenter}; {string.Join(" | ", attacked)})");
-        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, center.Id, enemyCenter.Id, human, value: 100, tick: match.Tick + 700), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.EntityDamaged, center.Id, enemyCenter.Id, human, value: 100, tick: match.Tick + CnCNew.Tests.TestTime.Frames(match.World, 700)), match.World, human);
         TestHarness.Assert(feed.Log.Lines[^1].Text == "Structure under attack", "ten seconds later the same place reports again");
 
         // A defeated player (VictoryConditions::update) is named by its army; a mission HUD would stay silent.
-        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.PlayerDefeated, default, default, enemyCenter.Owner, tick: match.Tick + 700), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.PlayerDefeated, default, default, enemyCenter.Owner, tick: match.Tick + CnCNew.Tests.TestTime.Frames(match.World, 700)), match.World, human);
         var defeat = feed.Log.Lines[^1].Text;
         TestHarness.Assert(defeat.EndsWith(" has been Defeated", StringComparison.Ordinal) && !defeat.StartsWith("Faction", StringComparison.Ordinal) && !defeat.Contains("??", StringComparison.Ordinal), $"GUI:PlayerHasBeenDefeated with the army's name ({defeat})");
         var shown = feed.Shown;
         feed.AnnounceDefeats = false;
-        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.PlayerDefeated, default, default, enemyCenter.Owner, tick: match.Tick + 700), match.World, human);
+        feed.Observe(Event(CnCNew.Simulation.Events.SimEventKind.PlayerDefeated, default, default, enemyCenter.Owner, tick: match.Tick + CnCNew.Tests.TestTime.Frames(match.World, 700)), match.World, human);
         TestHarness.Assert(feed.Shown == shown, "no defeat line where the original runs no victory conditions");
 
         // An upgrade the data names (UPGRADE:UpgradeComplete), and one without a display name (counted, no line).

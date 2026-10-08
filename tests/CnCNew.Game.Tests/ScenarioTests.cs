@@ -19,7 +19,7 @@ internal static class ScenarioTests
             return 0;
         }
 
-        var data = GameData.Load(args[index + 1]);
+        var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         foreach (var scenario in DemoScenarios.All)
         {
             harness.Run($"Scenario {scenario.Name} places its objects, runs the orders and is deterministic", () =>

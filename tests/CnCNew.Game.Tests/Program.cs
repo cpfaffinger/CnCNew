@@ -1,5 +1,8 @@
 using CnCNew.Game.Tests;
 
+// "--tick-rate 30|60|120" (or CNCNEW_TEST_TICK_RATE) builds the default test worlds and game data at that rate: a probe, see docs/RATE-SWITCH-OUTER-TESTS.md.
+CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame rate, golden hashes) name theirs.");
+
 // Each suite exposes `static int Run(string[] args)` returning its failure count; one registration per line.
 // `--only <Suite>[,<Suite>...]` (or `--suite`) runs just those suites (the whole program takes many minutes on real data).
 (string Name, Func<string[], int> Run)[] suites =

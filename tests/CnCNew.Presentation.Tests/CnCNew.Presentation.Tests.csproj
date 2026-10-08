@@ -7,6 +7,7 @@
     <Compile Include="../CnCNew.Images.Tests/CursorFixtures.cs" Link="CursorFixtures.cs" />
     <!-- Time helpers of the tests (one original frame of wall time, one tick of a world): no test writes a rate of its own. -->
     <Compile Include="../Shared/TestTime.cs" Link="Shared/TestTime.cs" />
+    <Compile Include="../Shared/TestRateOption.cs" Link="Shared/TestRateOption.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Presentation/CnCNew.Presentation.csproj" />

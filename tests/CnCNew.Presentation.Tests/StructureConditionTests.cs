@@ -454,8 +454,8 @@ internal static class StructureConditionTests
 
         public Rig(TerrainMap? terrain = null)
         {
-            var fixture = new SyntheticFixture(SimulationRate.Original, files: Files());
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
+            var fixture = new SyntheticFixture(CnCNew.Tests.TestRate.Default, files: Files());
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain?.Fingerprint ?? ""), fixture.Templates, terrain);
         }
 
         public SimulationWorld World { get; }
@@ -727,9 +727,9 @@ internal static class StructureConditionTests
         var cannon = rig.Spawn("Cannon", 1, 100, 100);
         var module = cannon.Modules.OfType<ParticleUplinkCannonUpdate>().Single();
         var timeline = new List<(long Tick, ParticleUplinkCannonUpdate.UplinkStatus Status, ModelConditionSet Set)>();
-        void Sample(int ticks)
+        void Sample(int frames)
         {
-            for (var i = 0; i < ticks; i++)
+            for (var i = 0; i < TestTime.Frames(rig.World, frames); i++)
             {
                 rig.World.Step();
                 timeline.Add((rig.World.Tick, module.StatusAt(rig.World), ConditionDeriver.Derive(cannon, rig.World, null, default)));
@@ -859,10 +859,10 @@ internal static class StructureConditionTests
         var content = ContentFileSystem.Open(directory);
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default,
             DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude });
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East", "FactionAmerica"), new PlayerConfiguration(new PlayerId(2), "West", "FactionChina"));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 1, players, "presentation-structures", fingerprint), templates);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 1, players, "presentation-structures", fingerprint), templates);
         var tracker = new StructureConditionTracker();
         var sequence = 0UL;
         Entity Spawn(string template, int owner, int x, int y)
@@ -875,7 +875,9 @@ internal static class StructureConditionTests
         // The retail war factory: ProductionUpdate NumDoorAnimations = 1 with DoorOpeningTime 3250, DoorWaitOpenTime 3000, DoorCloseTime 4000, ConstructionCompleteDuration 1500 (milliseconds).
         var factory = Spawn("AmericaWarFactory", 1, 1000, 1000);
         var data = factory.Modules.OfType<ProductionUpdate>().Single().Data;
-        Check(data is { NumDoorAnimations: 1, DoorOpeningTicks: 98, DoorWaitOpenTicks: 90, DoorCloseTicks: 120, ConstructionCompleteTicks: 45 }, $"The war factory's door timing is typed from the INI ({data}).");
+        // The durations lie on the original's frame grid (98, 90, 120 and 45 frames) at every tick rate.
+        Check(data.NumDoorAnimations == 1 && data.DoorOpeningTicks == TestTime.Frames(world, 98) && data.DoorWaitOpenTicks == TestTime.Frames(world, 90) && data.DoorCloseTicks == TestTime.Frames(world, 120)
+              && data.ConstructionCompleteTicks == TestTime.Frames(world, 45), $"The war factory's door timing is typed from the INI ({data}).");
         world.Submit(new GiveMoneyCommand(PlayerId.System, ++sequence, world.Tick, new PlayerId(1), Fixed.FromInt(20000)));
         world.Step();
         Check(world.Submit(new QueueProductionCommand(new PlayerId(1), ++sequence, world.Tick, factory.Id, "AmericaTankCrusader")).Accepted, "The Crusader is queued at the war factory.");
@@ -998,9 +1000,9 @@ internal static class StructureConditionTests
         var hack = hacker.Modules.OfType<HackInternetAIUpdate>().Single();
         hack.StartHacking(world);
         var phases = new List<string>();
-        void RecordHacker(int ticks)
+        void RecordHacker(int frames)
         {
-            for (var i = 0; i < ticks; i++)
+            for (var i = 0; i < TestTime.Frames(world, frames); i++)
             {
                 world.Step();
                 var set = ConditionDeriver.Derive(hacker, world, null, default);
@@ -1044,7 +1046,7 @@ internal static class StructureConditionTests
     private static void RealSweep(CompiledDefinitionGraph graph, TemplateCatalog templates, string fingerprint, ImmutableArray<PlayerConfiguration> players)
     {
         var catalog = ObjectVisualCatalog.Build(graph);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 3, players, "presentation-structure-sweep", fingerprint), templates);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 3, players, "presentation-structure-sweep", fingerprint), templates);
         var instantiable = templates.Templates.Where(template => template.IsInstantiable).OrderBy(template => template.Name, StringComparer.Ordinal).ToArray();
         var sequence = 0UL;
         for (var index = 0; index < instantiable.Length; index++)

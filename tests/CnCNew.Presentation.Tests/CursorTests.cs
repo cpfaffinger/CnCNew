@@ -76,7 +76,7 @@ internal static class CursorTests
         End
         """;
 
-    private static readonly Lazy<SyntheticFixture> MouseFixture = new(() => new SyntheticFixture(SimulationRate.Original, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Mouse.ini"] = MouseIni }));
+    private static readonly Lazy<SyntheticFixture> MouseFixture = new(() => new SyntheticFixture(CnCNew.Tests.TestRate.Default, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Mouse.ini"] = MouseIni }));
 
     private static (byte, byte, byte) Colour(byte value) => (value, value, value);
 

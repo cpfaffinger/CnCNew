@@ -74,7 +74,7 @@ internal static class PlacementPreviewTests
         return t.Failures;
     }
 
-    private static ObjectVisualCatalog Catalog() => ObjectVisualCatalog.Build(new SyntheticFixture(SimulationRate.Original, files: Files()).Graph);
+    private static ObjectVisualCatalog Catalog() => ObjectVisualCatalog.Build(new SyntheticFixture(CnCNew.Tests.TestRate.Default, files: Files()).Graph);
 
     private static PlacementGhost Ghost(string template, bool valid = true, float angle = 0.5f, PlacementIssue reason = PlacementIssue.None)
         => new(template, new Vector3(120f, 80f, 7f), angle, valid, valid ? PlacementIssue.None : reason == PlacementIssue.None ? PlacementIssue.BlockedFootprint : reason, false);

@@ -147,7 +147,7 @@ internal static class CaptureFlashTests
 
     private static (SimulationWorld World, FrameProjector Projector, EntityId Capturer, EntityId Station) Stage(bool withSettings, SimulationRate? rate = null)
     {
-        var fixture = new SyntheticFixture(rate ?? SimulationRate.Original, files: Files());
+        var fixture = new SyntheticFixture(rate ?? CnCNew.Tests.TestRate.Default, files: Files());
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), fixture.Templates.Rate, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, ""), fixture.Templates);
         ulong sequence = 0;
         world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, "FlashCapturer", new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(50), Fixed.Zero, Fixed.Zero));
@@ -241,19 +241,20 @@ internal static class CaptureFlashTests
         var tracker = new SelectionFlashTracker();
         SimEvent Flash(long tick, EntityId other) => new(new EventId(1), tick, SimEventKind.CaptureFlash, station, other, PlayerId.System, string.Empty, 0);
         var peak = SelectionFlashTracker.Saturate(Red, 0.5f);
+        long F(long originalFrames) => TestTime.Frames(world, originalFrames); // the tick of an event in original frame n; TintAt and Prune take the original frame itself
 
-        tracker.Observe(Flash(10, capturer), world, colors, settings);
+        tracker.Observe(Flash(F(10), capturer), world, colors, settings);
         Assert(tracker.TintAt(station.Value, 9) == Vector3.Zero && tracker.TintAt(station.Value, 10) == peak && tracker.TintAt(station.Value, 13) == peak * 0.5f, "the first flash decays");
-        tracker.Observe(Flash(13, capturer), world, colors, settings);
+        tracker.Observe(Flash(F(13), capturer), world, colors, settings);
         Assert(tracker.TintAt(station.Value, 13) == peak && tracker.TintAt(station.Value, 15) == peak * 0.75f, "a flash during the decay restarts the envelope at the peak");
         Assert(tracker.TintAt(capturer.Value, 13) == Vector3.Zero, "the capturer itself does not flash");
 
-        tracker.Observe(Flash(40, new EntityId(999)), world, colors, settings);
+        tracker.Observe(Flash(F(40), new EntityId(999)), world, colors, settings);
         Assert(tracker.TintAt(station.Value, 40) == Vector3.Zero, "a flash whose capturer is gone has no colour and starts nothing");
-        tracker.Observe(new SimEvent(new EventId(2), 50, SimEventKind.EntityDied, station, capturer, PlayerId.System, string.Empty, 0), world, colors, settings);
+        tracker.Observe(new SimEvent(new EventId(2), F(50), SimEventKind.EntityDied, station, capturer, PlayerId.System, string.Empty, 0), world, colors, settings);
         Assert(tracker.TintAt(station.Value, 50) == Vector3.Zero, "other events start nothing");
 
-        tracker.Observe(Flash(60, capturer), world, colors, settings);
+        tracker.Observe(Flash(F(60), capturer), world, colors, settings);
         tracker.Prune(62, _ => true);
         Assert(tracker.TintAt(station.Value, 62) == peak * 0.75f, "pruning keeps a running flash");
         tracker.Prune(70, _ => true);

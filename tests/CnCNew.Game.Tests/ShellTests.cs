@@ -41,11 +41,12 @@ internal static class ShellTests
             return 0;
         }
 
-        var data = GameData.Load(contentDir);
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
         var baselines = LoadBaselines();
         var updating = System.Environment.GetEnvironmentVariable("CNCNEW_UPDATE_BASELINES") == "1";
 
-        harness.Run("Menu shell walks every screen and draws cleanly", () => WalkScreens(data, baselines, updating));
+        // The screen hashes of baselines/screens.txt are defined at 30 Hz (the score screen shows a played match): this walk names that rate.
+        harness.Run("Menu shell walks every screen and draws cleanly", () => WalkScreens(GoldenRate.Data(data, contentDir), baselines, updating));
         harness.Run("Options persist and reload", () => OptionsPersist(data));
         harness.Run("Boot loading screen reaches the main menu", () => BootFlow(contentDir));
         harness.Run("Main menu shows only what MainMenuInit leaves visible", () => MainMenuInitialState(data));
@@ -104,7 +105,8 @@ internal static class ShellTests
         TestHarness.Assert(shell.BuildDrawList().Commands.Length == 0, "the shell draws nothing while the host owns the match");
 
         // Run a short, real skirmish to completion (host stands in for LiveMatch here) and show the results.
-        var setup = startMatch!.Setup with { Options = startMatch.Setup.Options with { MaxTicks = 600 } };
+        // Twenty seconds of game time (600 ticks at 30 Hz): the score screen below is hashed, and its numbers are those of the game time played.
+        var setup = startMatch!.Setup with { Options = startMatch.Setup.Options with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(20) } };
         var live = LiveMatch.Create(data, setup, new Vector2(NavWidth, NavHeight));
         var stats = new MatchStatistics();
         while (!live.Session.IsOver) stats.Record(live.Session.Step());

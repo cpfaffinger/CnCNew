@@ -18,7 +18,7 @@ internal static class ModelGeometryTests
             return 0;
         }
 
-        var data = GameData.Load(args[index + 1]);
+        var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("Model geometry: all nine retail airfields have their bones, in the catalog and in the world fingerprint", () =>
         {
             var geometry = data.Templates.Geometry;
@@ -41,7 +41,7 @@ internal static class ModelGeometryTests
             }
 
             var graphFingerprint = DefinitionSnapshotWriter.ComputeFingerprint(data.Graph).Sha256;
-            TestHarness.Assert(data.Fingerprint != graphFingerprint && data.Fingerprint == geometry.Combine(graphFingerprint), "the world fingerprint folds the table in");
+            TestHarness.Assert(data.Fingerprint != graphFingerprint && data.Fingerprint == data.Rate.Combine(geometry.Combine(graphFingerprint)), "the world fingerprint folds the table in (and the tick rate, when it is not the original's)");
         });
 
         harness.Run("Model geometry: the American airfield's bones are the model's, read twice give the same table", () =>

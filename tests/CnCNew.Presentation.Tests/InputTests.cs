@@ -488,7 +488,7 @@ static class InputTests
         """,
     };
 
-    private static readonly Lazy<SyntheticFixture> SharedFixture = new(() => new SyntheticFixture(SimulationRate.Original, files: Files()));
+    private static readonly Lazy<SyntheticFixture> SharedFixture = new(() => new SyntheticFixture(CnCNew.Tests.TestRate.Default, files: Files()));
 
     internal static SyntheticFixture Fixture => SharedFixture.Value;
 
@@ -561,7 +561,7 @@ static class InputTests
         {
             Terrain = terrain ? FlatTerrain() : null;
             Players = [new PlayerConfiguration(Me, "Me"), new PlayerConfiguration(Enemy, "Enemy")];
-            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 7, Players, SyntheticFixture.FixtureId, Fixture.Fingerprint, Terrain?.Fingerprint ?? ""), Fixture.Templates, Terrain);
+            World = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 7, Players, SyntheticFixture.FixtureId, Fixture.Fingerprint, Terrain?.Fingerprint ?? ""), Fixture.Templates, Terrain);
             Sink = new WorldSink(World, Log);
             if (money > 0) System(sequence => new GiveMoneyCommand(PlayerId.System, sequence, World.Tick, Me, Fixed.FromInt(money)));
         }
@@ -594,7 +594,7 @@ static class InputTests
 
         public ReplayFile Replay(long endTick)
         {
-            var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, SimulationRate.OriginalFramesPerSecond, Fixture.Fingerprint, SyntheticFixture.FixtureId, 7,
+            var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, World.Time.TicksPerSecond, Fixture.Fingerprint, SyntheticFixture.FixtureId, 7,
                 new WorldId(1), Players, endTick, 0, Terrain?.Fingerprint ?? "");
             return new ReplayFile(header, [..Log.OrderBy(value => value.Tick).ThenBy(value => value.Player.Value).ThenBy(value => value.Sequence)], []);
         }
@@ -1008,7 +1008,7 @@ static class InputTests
         controller.IssueContext(world, view, Screen(120, 40));
         var shots = 0;
         var moves = 0;
-        for (var tick = 0; tick < 150 && world.FindEntity(target.Id) is { EffectivelyDead: false }; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(world, 150) && world.FindEntity(target.Id) is { EffectivelyDead: false }; tick++)
         {
             var before = arena.Sink.Issued.Count;
             controller.Update(world);
@@ -1032,7 +1032,7 @@ static class InputTests
         Assert(arena.Sink.Issued[^1] is AttackMoveCommand marchOrder && marchOrder.Unit == tank.Id, "the attack move is the simulation's AttackMoveCommand");
         var fired = false;
         var orderedShots = 0;
-        for (var tick = 0; tick < 120 && !fired; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(world, 120) && !fired; tick++)
         {
             var before = arena.Sink.Issued.Count;
             controller.Update(world);
@@ -1040,7 +1040,7 @@ static class InputTests
             arena.Step();
             fired = world.AcquiredVictimOf(tank) == other.Id;
         }
-        Assert(fired && orderedShots == 0, "an attack-moving unit engages an enemy that comes into range by itself: the simulation picks the victim, the client orders no shot");
+        Assert(fired && orderedShots == 0, $"an attack-moving unit engages an enemy that comes into range by itself: the simulation picks the victim, the client orders no shot (engaged {fired}, {orderedShots} ordered shots, tank at {tank.X.ToDecimal():F1}/{tank.Y.ToDecimal():F1}, tick {world.Tick})");
 
         selection.Replace([ranger.Id, tank.Id]);
         controller.OnMeta(world, MetaAction.BeginWaypoints);
@@ -1167,8 +1167,8 @@ static class InputTests
         selection.Replace([dozer.Id]);
         var dozerBar = bar.Build(world, selection);
         Assert(dozerBar.Context == CommandBarContext.Command && dozerBar.CommandSet == "DozerCommandSet" && dozerBar.Slots.Length == 14, "a single dozer shows its set in 14 slots");
-        Assert(dozerBar[1] is { Availability: ButtonAvailability.Available, Button.Name: "Command_ConstructPlant" } plantButton && plantButton.Cost == Fixed.FromInt(100) && plantButton.BuildTicks == 60,
-            "construct plant: available, cost 100, 2 s = 60 ticks");
+        Assert(dozerBar[1] is { Availability: ButtonAvailability.Available, Button.Name: "Command_ConstructPlant" } plantButton && plantButton.Cost == Fixed.FromInt(100) && plantButton.BuildTicks == CnCNew.Tests.TestTime.Ticks(world, 2),
+            "construct plant: available, cost 100, 2 s of build time");
         Assert(dozerBar[3] is { Availability: ButtonAvailability.Restricted, Reason: ButtonReason.MissingPrerequisite }, "construct tower: the plant is missing");
         Assert(dozerBar[4] is null && dozerBar[14] is { Button.Kind: GuiCommandKind.Stop }, "empty and stop slots");
 
@@ -1383,10 +1383,10 @@ static class InputTests
                && buttons.TryGetButton("Command_ConstructAmericaDozer", out var dozerButton) && dozerButton.SpecialPowerOption == 0,
             "the strategy center's three battle plan buttons carry OPTION_ONE/TWO/THREE as the command's option");
 
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, SimulationRate.Original);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(Me, "America", "FactionAmerica"), new PlayerConfiguration(Enemy, "China", "FactionChina"));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), SimulationRate.Original, 3, players, "input-real", fingerprint), catalog);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 3, players, "input-real", fingerprint), catalog);
         var system = 0UL;
         var names = new[] { "AmericaCommandCenter", "AmericaBarracks", "AmericaVehicleDozer", "AmericaTankCrusader" };
         for (var index = 0; index < names.Length; index++)

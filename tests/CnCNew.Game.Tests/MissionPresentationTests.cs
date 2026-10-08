@@ -75,7 +75,7 @@ internal static class MissionPresentationTests
         var teams = ImmutableArray.Create(new MapProperties([Text("teamName", "teamHero"), Text("teamOwner", "Hero"), new MapProperty("teamIsSingleton", MapPropertyType.Bool, 1, 0m, string.Empty)]));
         var map = new MapData("mission-presentation", new MapHeightField(width, width, border, [..Enumerable.Repeat(new MapBoundary(cells, cells), boundaries)], [..new byte[width * width]]), blend, MapProperties.Empty,
             sides, teams, [..objects ?? []], [], [], [new MapScriptList([], []), new MapScriptList([..scripts], [])], []);
-        var fixture = new SyntheticFixture(rate ?? SimulationRate.Original);
+        var fixture = new SyntheticFixture(rate ?? CnCNew.Tests.TestRate.Default);
         return (map, fixture, TerrainMap.Build(map, "mission-presentation"));
     }
 

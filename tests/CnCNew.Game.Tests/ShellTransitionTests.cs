@@ -44,7 +44,7 @@ internal static class ShellTransitionTests
             Console.WriteLine("SKIP ShellTransitionTests (pass --content-dir <dir> to run against real data)");
             return 0;
         }
-        var data = GameData.Load(contentDir);
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
         harness.Run("The main menu fades in from black, flashes its logo and buttons in, and ends in the transition-free state", () => MainMenuEntry(data));
         harness.Run("Hidden buttons take no input and navigation is refused while a transition runs", () => InputDuringTransitions(data));
         harness.Run("Submenus switch through their groups and end in the transition-free state", () => Submenus(data));
@@ -433,7 +433,7 @@ internal static class ShellTransitionTests
 
     private static void ScoreScreenCountsUp(GameData data)
     {
-        var setup = new MatchSetup("Maps/Alpine Assault/Alpine Assault.map", "FactionAmerica", ["FactionChina"], CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard with { MaxTicks = 600 });
+        var setup = new MatchSetup("Maps/Alpine Assault/Alpine Assault.map", "FactionAmerica", ["FactionChina"], CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(20) }); // twenty seconds of game time
         var live = LiveMatch.Create(data, setup, new Vector2(Width, Height));
         var stats = new MatchStatistics();
         while (!live.Session.IsOver) stats.Record(live.Session.Step());
