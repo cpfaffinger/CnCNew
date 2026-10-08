@@ -60,6 +60,7 @@ run.Test("Tick rate: a world refuses a catalog of another rate", Tests.TickRateW
 run.Test("Tick rate: snapshots at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateSnapshotsCarryTheirRate);
 run.Test("Tick rate: replays at 60 and 120 Hz run; 50 Hz, a catalog and a world of another rate are rejected", Tests.TickRateReplaysCarryTheirRate);
 run.Test("Tick rate: mission states at 60 and 120 Hz round-trip; 50 Hz and a catalog of another rate are rejected", Tests.TickRateMissionSnapshotsCarryTheirRate);
+run.Test("Tick rate: a replay, a world state and a mission state written at 30 Hz continue at 30 Hz with their stored tick values and are refused by a catalog of the default rate when that is another one", Tests.TickRateStatesWrittenAtThirtyOutliveTheDefault);
 // Phase 20, stage 2, modules A–M (keep this block together).
 run.Test("Tick rate, modules A–M: BaseRegenerateUpdate bursts every three frames of the original at 30, 60 and 120 Hz", Tests.TickRateModulesAmBaseRegenerate);
 run.Test("Tick rate, modules A–M: lifetimes are drawn in frames of the original; a 0 ms deposit rhythm is one frame", Tests.TickRateModulesAmLifetimeAndDeposit);

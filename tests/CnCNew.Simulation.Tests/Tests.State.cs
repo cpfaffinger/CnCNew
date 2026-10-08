@@ -434,7 +434,7 @@ static partial class Tests
         var participants = ReferenceMatchScenario.Participants(catalog, out _);
         Check.That(participants.Length >= 2, $"At least two retail factions can field a base and an armed unit ({participants.Length}).");
 
-        var scenario = new ReferenceMatchScenario(ReferenceMatchOptions.Standard);
+        var scenario = new ReferenceMatchScenario(ReferenceMatchOptions.StandardAt(catalog.Rate)); // two hours of game time at every rate
         var recorded = scenario.Record(catalog, fingerprint);
         Check.That(scenario.Winner is not null && scenario.VictoryTick > 0, $"The retail match ends with a winner (orders {scenario.Orders}, shots {scenario.Shots}, production {scenario.ProductionOrders}).");
         Check.That(scenario.ProductionOrders > 10 && scenario.Shots > 100, "The generator plays a real match.");
