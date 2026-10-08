@@ -477,8 +477,9 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
 
     public override string ModuleName => "HeightDieUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
-    // The first look comes one logic frame of the original after the object appeared (at 30 Hz the next tick): an object that is created below its height dies at the same game time at every rate.
-    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
+    // The module wakes with the next tick and counts its own frame from there (_framePhase): the first look comes with the last tick of that frame, one
+    // logic frame of the original after the object appeared, at every rate. Waking a whole frame later as well would shift the look by a second frame.
+    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
 
     public long Update(IWorldServices world)
     {
