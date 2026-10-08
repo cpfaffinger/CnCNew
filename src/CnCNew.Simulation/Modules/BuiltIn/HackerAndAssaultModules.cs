@@ -275,6 +275,15 @@ public sealed class AssaultTransportAIUpdate(AssaultTransportData data) : AIUpda
             return SimulationTiming.SleepForever;
         }
 
+        // The group is kept once per logic frame of the original of the transport (the reference's update), in the ticks its frames begin with, and reads the transport, its
+        // members and the target where the frame each has begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 3): kept every tick it noticed a shot of the
+        // tick before "in the next update" one tick later instead of one frame, and its troops left a share of a frame early. The movement below runs every tick.
+        if (!world.Time.BeginsFrameOf(Entity, world.Tick))
+        {
+            base.Update(world);
+            return SimulationTiming.SleepNone;
+        }
+
         // Dead members and members given orders outside this AI leave the group.
         for (var index = 0; index < _members.Count;)
         {
@@ -319,7 +328,7 @@ public sealed class AssaultTransportAIUpdate(AssaultTransportData data) : AIUpda
         foreach (var candidate in world.Entities)
         {
             if (candidate.EffectivelyDead || candidate.DestroyRequested || candidate.Body is null || !world.AreEnemies(Entity.Owner, candidate.Owner)) continue;
-            var distance = SlaveSupport.CenterDistanceSquared2D(Entity, candidate);
+            var distance = FrameEndDistanceSquared2D(world, Entity, candidate);
             if (!limit.Contains(distance) || (nearest is not null && (distance > best || (distance == best && candidate.Id.Value > nearest.Id.Value)))) continue;
             nearest = candidate;
             best = distance;
@@ -334,8 +343,18 @@ public sealed class AssaultTransportAIUpdate(AssaultTransportData data) : AIUpda
         BeginAssault(nearest);
     }
 
+    private static Fixed FrameEndDistanceSquared2D(IWorldServices world, Entity from, Entity to)
+    {
+        var (fromX, fromY, _) = from.FrameEnd(world.Tick);
+        var (toX, toY, _) = to.FrameEnd(world.Tick);
+        var dx = fromX - toX;
+        var dy = fromY - toY;
+        return dx * dx + dy * dy;
+    }
+
     private void DriveMembers(IWorldServices world, Entity target)
     {
+        var (targetX, targetY, _) = target.FrameEnd(world.Tick);
         for (var index = 0; index < _members.Count; index++)
         {
             var (id, healing, isNew) = _members[index];
@@ -347,7 +366,7 @@ public sealed class AssaultTransportAIUpdate(AssaultTransportData data) : AIUpda
                 Entity.Container!.Remove(world, member, true);
                 world.Emit(SimEventKind.EntityUncontained, member.Id, Entity.Id, string.Empty, 0);
                 _members[index] = (id, false, isNew);
-                ai.OrderMove(world, target.X, target.Y, false);
+                ai.OrderMove(world, targetX, targetY, false);
             }
             else if (contained)
             {
@@ -363,7 +382,7 @@ public sealed class AssaultTransportAIUpdate(AssaultTransportData data) : AIUpda
             else
             {
                 if (healing) _members[index] = (id, false, isNew);
-                if (!member.HasMoveTarget && SlaveSupport.CenterDistanceSquared2D(member, target) > Fixed.FromInt(4)) ai.OrderMove(world, target.X, target.Y, false);
+                if (!member.HasMoveTarget && FrameEndDistanceSquared2D(world, member, target) > Fixed.FromInt(4)) ai.OrderMove(world, targetX, targetY, false);
             }
         }
     }
