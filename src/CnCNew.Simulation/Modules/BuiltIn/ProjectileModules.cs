@@ -548,8 +548,11 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         var perFrame = time.TicksPerOriginalFrame;
         // The initial velocity as the 30 Hz catalog holds it (200 units per second: raw 111848107 per frame at 30 Hz, twice 55924053 at 60 Hz).
         var initial = MissileFrames.InitialVelocity(data, time);
-        _maxSpeed = locomotor is null ? initial : time.PerTickToPerOriginalFrame(locomotor.Speed);
-        _acceleration = locomotor is null ? Fixed.Zero : time.PerTickSquaredToPerOriginalFrameSquared(locomotor.Acceleration);
+        // Speed and acceleration of the locomotor as the 30 Hz catalog holds them (LocomotorFrames): rebuilt from the per-tick values of a faster catalog the acceleration of a
+        // stream projectile was two raw steps off (2.4 per frame²: raw 40265318 at 30 Hz, 40265320 from 60 Hz), and the stream flew a few raw steps beside the 30 Hz stream.
+        var frame = locomotor is null || perFrame == 1 ? null : LocomotorFrames.Of(locomotor, perFrame);
+        _maxSpeed = locomotor is null ? initial : frame?.Speed ?? locomotor.Speed;
+        _acceleration = locomotor is null ? Fixed.Zero : frame?.Acceleration ?? locomotor.Acceleration;
         if (data.UseWeaponSpeed || _maxSpeed <= Fixed.Zero)
         {
             // UseWeaponSpeed: m_maxAccel = weaponSpeed, setMaxSpeed(weaponSpeed) — the reference takes the speed per frame as the acceleration per frame², so the missile is at full
