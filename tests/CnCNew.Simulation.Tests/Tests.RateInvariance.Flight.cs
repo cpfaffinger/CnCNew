@@ -101,6 +101,9 @@ static partial class Tests
     /// <summary>Ticks as quarters of a logic frame of the original (1/120 s): the one unit in which a time is a whole number at 30, 60 and 120 Hz.</summary>
     private static long FrameQuarters(SimulationWorld world, long ticks) => ticks * (SimulationRate.Hz120.TicksPerSecond / world.Time.TicksPerSecond);
 
+    /// <summary>The whole logic frames of the original that have passed in <paramref name="ticks"/>, in the unit of <see cref="FrameQuarters"/>: for a position, which is reached with the last tick of a frame.</summary>
+    private static long InWholeFrames(SimulationWorld world, long ticks) => world.Time.ToOriginalFrames(ticks) * 4;
+
     private static string InFrames(long quarters) => quarters < 0 ? "never" : (quarters / 4m).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Something happens at the same game time at the three rates, to the tick (<paramref name="quarters"/> from <see cref="FrameQuarters"/>).</summary>
@@ -324,6 +327,33 @@ static partial class Tests
     private static IReadOnlyDictionary<string, string> SpiralFiles() => new Dictionary<string, string>(TransportFiles())
     {
         ["Data/INI/Object/RateFlightSpiral.ini"] = """
+        Locomotor OddRotorLoco
+          Surfaces = AIR
+          Speed = 140
+          Acceleration = 900
+          Braking = 900
+          TurnRate = 3600
+          PreferredHeight = 100
+        End
+        Object Lifter
+          KindOf = VEHICLE AIRCRAFT TRANSPORT HARVESTER
+          Locomotor = SET_NORMAL OddRotorLoco
+          Body = ActiveBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+          Behavior = ChinookAIUpdate AI01
+            MaxBoxes = 2
+            SupplyCenterActionDelay = 0
+            SupplyWarehouseActionDelay = 0
+            SupplyWarehouseScanDistance = 700
+          End
+          Behavior = TransportContain Transport01
+            Slots = 4
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
         Object Spinner
           KindOf = VEHICLE AIRCRAFT
           Body = ActiveBody Body01
@@ -471,6 +501,53 @@ static partial class Tests
             SameValues($"{name}: frames with healing", frames, 0m);
             SameValues($"{name}: health after five frames", afterFive, 0.0001m);
         }
+        FlightVerdict();
+    }
+
+    /// <summary>
+    /// <c>ChinookAIUpdate.Update</c>: a Chinook changes its height by one locomotor speed per frame (140 units per second here, 4.667 per frame, so that 100 units are no whole number of
+    /// steps): the climb after it appears, the landing on an evacuation order with a passenger, the passenger's exit and the climb back.
+    /// </summary>
+    public static void RateFlightChinookClimbIsTheSame()
+    {
+        var tracks = new List<FlightPose>[FlightRates.Length];
+        var up = new long[FlightRates.Length];
+        var down = new long[FlightRates.Length];
+        var exit = new long[FlightRates.Length];
+        var again = new long[FlightRates.Length];
+        for (var index = 0; index < FlightRates.Length; index++)
+        {
+            var (world, feeder) = FlightRateWorld(FlightRates[index], SpiralFiles(), terrain: false);
+            feeder.Spawn(1, "Lifter", x: 0, y: 0);
+            feeder.Spawn(1, "Grunt", x: 0, y: 0);
+            world.Step();
+            var chinook = Only(world, "Lifter");
+            var grunt = Only(world, "Grunt");
+            var start = world.Tick;
+            (up[index], down[index], exit[index], again[index]) = (-1, -1, -1, -1);
+            var at = index;
+            var top = Fixed.FromInt(100);
+            tracks[index] = FrameTrack(world, chinook, 40, result =>
+            {
+                if (up[at] < 0 && chinook.Z == top) up[at] = InWholeFrames(world, result.Tick - start);
+            });
+            Check.That(feeder.EnterContainer(1, grunt.Id.Value, chinook.Id.Value).Accepted, "A grunt boards the Chinook.");
+            StepFrames(world, 1);
+            Check.That(feeder.Evacuate(1, chinook.Id.Value).Accepted, "Evacuation is ordered in the air.");
+            start = world.Tick;
+            tracks[index].AddRange(FrameTrack(world, chinook, 80, result =>
+            {
+                // A height is reached when the frame's step has been flown (its last tick); what the Chinook does about it happens in the first tick of a frame.
+                if (down[at] < 0 && chinook.Z == Fixed.Zero) down[at] = InWholeFrames(world, result.Tick - start);
+                if (exit[at] < 0 && !grunt.ContainedBy.IsValid) exit[at] = FrameQuarters(world, result.Tick - start);
+                if (exit[at] >= 0 && again[at] < 0 && chinook.Z == top) again[at] = InWholeFrames(world, result.Tick - start);
+            }));
+        }
+        SameFrames("Chinook: at its height after it appeared", up);
+        SameFrames("Chinook: on the ground after the evacuation order", down);
+        SameFrames("Chinook: the passenger is out", exit);
+        SameFrames("Chinook: back at its height", again);
+        SameTracks("Chinook: climb, landing and climb", tracks, 0.01m, 0.0001m);
         FlightVerdict();
     }
 }

@@ -337,6 +337,7 @@ run.Test("Rate invariance, flight: a countermeasure flare slows down and sinks t
 run.Test("Rate invariance, flight: the uplink beam drives its waypoint path the same at 30, 60 and 120 Hz", Tests.RateFlightUplinkBeamPathIsTheSame);
 run.Test("Rate invariance, flight: a shot-down helicopter spins, spirals, loses its blade and falls the same at 30, 60 and 120 Hz", Tests.RateFlightHelicopterSlowDeathIsTheSame);
 run.Test("Rate invariance, flight: a tunnel heals its rider in the same frames at 30, 60 and 120 Hz", Tests.RateFlightTunnelHealingIsTheSame);
+run.Test("Rate invariance, flight: a Chinook climbs, lands to unload and climbs again the same at 30, 60 and 120 Hz", Tests.RateFlightChinookClimbIsTheSame);
 run.Test("Air: an airfield uses the injected model bones (hangar, parking, runway), refuses a mismatching table and survives snapshots", Tests.AirAirfieldUsesTheModelBones);
 run.Test("Air: a carrier's deployment creates the gunship at the map edge on a map with terrain", Tests.AirSpectreDeployedByCarrier);
 run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);

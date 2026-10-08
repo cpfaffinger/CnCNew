@@ -49,13 +49,15 @@ public sealed record ChinookData(SupplyCarrierData Carrier) : ModuleData
 /// <c>ChinookAIUpdate.cpp</c>: a <c>SupplyTruckAIUpdate</c> that flies. The supply brain is the supply truck's (<see cref="SupplyMachine"/>), with the
 /// Chinook's own dock delays and the <c>UpgradedSupplyBoost</c> once the player owns <c>Upgrade_AmericaSupplyLines</c>
 /// (<c>ChinookAIUpdate::getUpgradedSupplyBoost</c>). Flight: the Chinook keeps <c>PreferredHeight</c> above the ground while it flies and changes
-/// height by one locomotor speed per tick (the reference's <c>ChinookTakeoffOrLandingState</c> lets the locomotor lift it); passengers only leave a
+/// height by one locomotor speed per logic frame of the original (the reference's <c>ChinookTakeoffOrLandingState</c> lets the locomotor lift it); passengers only leave a
 /// landed Chinook (<c>getAiFreeToExit</c>), so an evacuation order lands it first and it takes off again when it moves on. The combat drop
 /// (rappelling), the airfield healing and the head-off-map state are not simulated.
 /// </summary>
 internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.Carrier)
 {
     private bool _landing;
+    /// <summary>The change of height of the running logic frame of the original, flown in shares per tick; empty at 30 Hz.</summary>
+    private FlightFrameStep _climb;
 
     public override string ModuleName => "ChinookAIUpdate";
     public override long UpgradedSupplyBoost(IWorldServices world) => BoostIfUpgraded(world, "Upgrade_AmericaSupplyLines");
@@ -81,13 +83,22 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         var sleep = base.Update(world);
         if (!EvacuatePending) _landing = false;
+        // The change of height is the 30 Hz step (one locomotor speed per logic frame of the original, at most the rest of the way), decided once per frame and flown in shares
+        // per tick: the Chinook is on the ground, and lets its passengers out, in the same frame at every rate.
+        if (_climb.Continue(Entity))
+        {
+            world.MarkDirty(Entity);
+            return SimulationTiming.SleepNone;
+        }
         var locomotor = Entity.Template.Locomotor;
         var ground = world.GroundHeightAt(Entity.X, Entity.Y);
         var target = _landing ? ground : ground + (locomotor?.PreferredHeight ?? Fixed.Zero);
-        var climb = locomotor?.Speed ?? Fixed.Zero;
+        var climb = FlightFrames.PerFrame(world.Time, locomotor?.Speed ?? Fixed.Zero);
         if (Entity.Z != target && climb > Fixed.Zero)
         {
+            var from = Entity.Z;
             Entity.Z = Entity.Z < target ? Fixed.Min(target, Entity.Z + climb) : Fixed.Max(target, Entity.Z - climb);
+            _climb.Begin(world.Time, Entity, Fixed.Zero, Fixed.Zero, Entity.Z - from, Fixed.Zero);
             world.MarkDirty(Entity);
         }
         return Entity.Z != target ? SimulationTiming.SleepNone : sleep;
@@ -97,12 +108,14 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     {
         base.Describe(writer);
         writer.Bool("landing", _landing);
+        _climb.Describe(writer, "climbStep");
     }
 
     public override void Load(IStateReader reader)
     {
         base.Load(reader);
         _landing = reader.Bool("landing");
+        _climb.Load(reader, "climbStep");
     }
 }
 
