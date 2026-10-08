@@ -1591,8 +1591,10 @@ public sealed partial class SimulationWorld : IWorldServices
             MarkDirty(entity);
         }
 
+        // DeliverPayloadNugget::create (ObjectCreationList.cpp) puts the payload into its transport with addToContain and does not ask the transport whether it would take it:
+        // the cargo plane of the paradrop carries parachutes although its AllowInsideKindOf does not name them.
         if (setup.Container.IsValid && FindEntity(setup.Container) is { Container: { } group } holder && !holder.DestroyRequested
-            && group.IsValidContainerFor(this, entity, true))
+            && (group.IsValidContainerFor(this, entity, true) || AiOf(holder) is Modules.BuiltIn.DeliverPayloadAIUpdate))
         {
             group.Add(this, entity);
             Emit(SimEventKind.EntityContained, entity.Id, holder.Id, string.Empty, 0, pending.Owner);

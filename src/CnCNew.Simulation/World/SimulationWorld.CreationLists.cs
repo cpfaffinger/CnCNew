@@ -164,14 +164,16 @@ public sealed partial class SimulationWorld
             foreach (var payloadTemplate in payloads)
             {
                 var creator = formation == 0 && carried == 0 ? source.Id : EntityId.Invalid;
-                var payload = RequestSpawn(payloadTemplate.Index, source.Owner, startX, startY, origin.Z, orient);
                 var holder = transport;
+                // The container (a parachute) is queued before what it carries: spawns appear in the order they were requested, and a rider whose container does not exist yet
+                // stays outside (the paradrop of the special power dropped nobody).
                 if (containerTemplate is not null)
                 {
                     var container = RequestSpawn(containerTemplate.Index, source.Owner, startX, startY, origin.Z, orient);
                     UpdateSetup(container, setup => setup with { Container = transport, SetCreator = true, Creator = creator });
                     holder = container;
                 }
+                var payload = RequestSpawn(payloadTemplate.Index, source.Owner, startX, startY, origin.Z, orient);
                 UpdateSetup(payload, setup => setup with { Container = holder, SetCreator = true, Creator = creator });
                 carried++;
             }
