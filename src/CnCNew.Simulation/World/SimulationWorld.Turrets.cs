@@ -461,7 +461,14 @@ public sealed partial class SimulationWorld
 
         // "Until and including HoldUntil" is one step more than the hold time: that step is a logic frame of the original, as at 30 Hz, not a tick.
         var holding = state.HoldUntil > 0 && tick < state.HoldUntil + _turretFrameTicks;
-        if (victim is not null && (state.Persistent || holding)) AimStep(entity, info, state, victim, tick);
+        if (victim is not null && (state.Persistent || holding))
+        {
+            var swingsPositive = state.PositiveSweep;
+            AimStep(entity, info, state, victim, tick);
+            // A sweeping turret that stands on its aim swings to the other side with every step, and a step is a logic frame of the original: a step that only swung the
+            // side takes its frame like one that turned the turret (above 30 Hz it swung with every tick, twice or four times per frame).
+            if (_turretFrameTicks != 1 && state.PositiveSweep != swingsPositive && state.Angle == before.Angle && state.Pitch == before.Pitch) OccupyFrame(state);
+        }
         else if (holding) state.Rotating = false;
         else if (state.Scanning) ScanStep(entity, info, state, tick);
         else
