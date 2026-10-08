@@ -261,7 +261,7 @@ internal static class JetOrderTests
         }
 
         TestHarness.Assert(emptiedAt > 0 && shots >= 2, $"the missiles were fired ({shots} shots, empty at {emptiedAt})");
-        TestHarness.Assert(clearedAt > 0 && clearedAt - emptiedAt <= 3, $"the attack order ended with the last missile (empty at {emptiedAt}, order gone at {clearedAt})");
+        TestHarness.Assert(clearedAt > 0 && clearedAt - emptiedAt <= CnCNew.Tests.TestTime.Frames(rig.World, 3), $"the attack order ended with the last missile (empty at {emptiedAt}, order gone at {clearedAt})");
         TestHarness.Assert(shotsAfterwards == 0, "nothing was fired afterwards");
         TestHarness.Assert(!ai.IsOutOfSpecialReloadAmmo(rig.World) || ai.Phase is JetAIUpdate.JetPhase.ReturnToDeadAirfield or JetAIUpdate.JetPhase.CirclingDeadAirfield, $"the jet went home (phase {ai.Phase})");
     }

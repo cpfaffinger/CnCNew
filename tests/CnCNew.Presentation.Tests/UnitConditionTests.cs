@@ -444,17 +444,17 @@ internal static partial class UnitConditionTests
         var gun = rig.Spawn("UnitGatling", 1, 100, 100);
         var plain = rig.Spawn("UnitPlainGunner", 1, 100, 120);
         var target = rig.Spawn("UnitTarget", 2, 150, 100);
-        Assert(rig.World.Weapons.TryGet("UnitGatlingGun", out var weapon) && weapon.ContinuousFireOneShots == 2 && weapon.ContinuousFireTwoShots == 4 && weapon.ContinuousFireCoastTicks == 30,
-            "ContinuousFireOne/Two/Coast are read from the weapon (1000 ms = 30 ticks)");
+        Assert(rig.World.Weapons.TryGet("UnitGatlingGun", out var weapon) && weapon.ContinuousFireOneShots == 2 && weapon.ContinuousFireTwoShots == 4 && weapon.ContinuousFireCoastTicks == CnCNew.Tests.TestTime.Ticks(rig.World, 1),
+            "ContinuousFireOne/Two/Coast are read from the weapon (1000 ms of coast time)");
         Assert(rig.World.Weapons.TryGet("UnitPlainGun", out var plainWeapon) && plainWeapon.ContinuousFireOneShots == int.MaxValue && plainWeapon.ContinuousFireCoastTicks == 0, "a weapon without the keys keeps INT_MAX / 0");
 
         var stages = new List<string>();
         var plainStages = new List<string>();
         var shots = 0;
-        for (var tick = 0; tick < 150; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 150); tick++)
         {
             var entity = rig.Get(gun);
-            if (tick < 24 && rig.World.Tick >= entity.WeaponReadyTick)
+            if (tick < CnCNew.Tests.TestTime.Frames(rig.World, 24) && rig.World.Tick >= entity.WeaponReadyTick)
             {
                 rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, gun, target));
                 rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, plain, target));
@@ -477,7 +477,7 @@ internal static partial class UnitConditionTests
         var target = rig.Spawn("UnitTarget", 2, 150, 100);
         var states = new List<string>();
         var flag = ModelConditions.PreAttack[0];
-        for (var tick = 0; tick < 40; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 40); tick++)
         {
             rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, gun, target));
             rig.Step();
@@ -499,7 +499,7 @@ internal static partial class UnitConditionTests
 
         // heading +x; the goal is due +y: a left turn (counter-clockwise, TURN_POSITIVE)
         rig.Send(sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, rig.World.Tick, bike, Fixed.FromInt(100), Fixed.FromInt(170)));
-        for (var tick = 0; tick < 80; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 80); tick++)
         {
             rig.Step();
             AddIfNew(states, Lean(rig.Bits(bike)));
@@ -510,7 +510,7 @@ internal static partial class UnitConditionTests
         states.Clear();
         var row = (int)rig.Get(bike).Y.Floor();
         rig.Send(sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, rig.World.Tick, bike, Fixed.FromInt(170), Fixed.FromInt(row)));
-        for (var tick = 0; tick < 80; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 80); tick++)
         {
             rig.Step();
             AddIfNew(states, Lean(rig.Bits(bike)));
@@ -520,7 +520,7 @@ internal static partial class UnitConditionTests
         // an object without the module never leans
         var hover = rig.Spawn("UnitHover", 1, 150, 150);
         rig.Send(sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, rig.World.Tick, hover, Fixed.FromInt(150), Fixed.FromInt(190)));
-        for (var tick = 0; tick < 40; tick++) rig.Step();
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 40); tick++) rig.Step();
         Assert(Lean(rig.Bits(hover)) == "straight", "without AnimationSteeringUpdate no turn animation is set");
     }
 
@@ -535,22 +535,23 @@ internal static partial class UnitConditionTests
         // The standing attack's fire order every tick: the turret rotates toward the victim, then the shot goes out and the turret holds, finally it turns back.
         var rotating = new List<bool>();
         long shotTick = -1;
-        for (var step = 1; step <= 200; step++)
+        int Frames(int originalFrames) => (int)CnCNew.Tests.TestTime.Frames(rig.World, originalFrames); // the windows below are game time: steps of the world per original frame
+        for (var step = 1; step <= Frames(200); step++)
         {
             var tick = rig.World.Tick;
             if (shotTick < 0) rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, tick, gunner, victim));
             // The attack goes on while the victim lives, whatever the order stream does; once it is dead the turret holds and turns back.
-            if (step == 40) rig.Send(sequence => new KillCommand(PlayerId.System, sequence, tick, victim));
+            if (step == Frames(40)) rig.Send(sequence => new KillCommand(PlayerId.System, sequence, tick, victim));
             rig.Step();
             if (shotTick < 0 && rig.Get(gunner).LastFireTick == tick) shotTick = tick;
             rotating.Add(rig.Bits(gunner).Contains(UnitFlags.TurretRotate));
         }
 
         Assert(shotTick >= 0, $"the weapon fired once the turret pointed at the victim (waits {rig.World.TurretWaits}, rejections {string.Join(",", rig.World.RejectionCounts)})");
-        Assert(rotating.Take(14).All(value => value), "TURRET_ROTATE while the turret turns toward the victim (14 full steps, the 15th arrives)");
-        Assert(rotating.Skip(16).Take(6).All(value => !value), "it stops when the turret has arrived and holds the aim");
-        Assert(rotating.Skip(22).Take(18).All(value => !value), "it keeps its aim at the living victim without any further order");
-        Assert(rotating.Skip(40).Any(value => value) && !rotating[^1], "once the victim is dead and the recentre time has passed it turns back (rotating again) and rests at the natural angle");
+        Assert(rotating.Take(Frames(15) - 1).All(value => value), "TURRET_ROTATE while the turret turns toward the victim (half a second for 90 degrees; the last step arrives)");
+        Assert(rotating.Skip(Frames(16)).Take(Frames(6)).All(value => !value), "it stops when the turret has arrived and holds the aim");
+        Assert(rotating.Skip(Frames(22)).Take(Frames(18)).All(value => !value), "it keeps its aim at the living victim without any further order");
+        Assert(rotating.Skip(Frames(40)).Any(value => value) && !rotating[^1], "once the victim is dead and the recentre time has passed it turns back (rotating again) and rests at the natural angle");
     }
 
     private static void JetBits()
@@ -563,7 +564,7 @@ internal static partial class UnitConditionTests
         var airfield = rig.World.Entities.Single(entity => entity.Template.Name == "UnitAirfield");
         rig.Send(sequence => new QueueProductionCommand(new PlayerId(1), sequence, rig.World.Tick, airfield.Id, "UnitJet"));
         var jet = default(Entity);
-        for (var tick = 0; tick < 800 && (jet is null || JetOf(jet).Phase != JetAIUpdate.JetPhase.None); tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 800) && (jet is null || JetOf(jet).Phase != JetAIUpdate.JetPhase.None); tick++)
         {
             rig.Step();
             jet ??= rig.World.Entities.FirstOrDefault(entity => entity.Template.Name == "UnitJet");
@@ -575,7 +576,7 @@ internal static partial class UnitConditionTests
         rig.Send(sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, rig.World.Tick, jet.Id, Fixed.FromInt(1200), Fixed.FromInt(500)));
         int afterburnerTicks = 0, exhaustWhileTaxiing = 0, exhaustInFlight = 0, afterburnerOutsideRunway = 0;
         var phasesWithBurner = new HashSet<JetAIUpdate.JetPhase>();
-        for (var tick = 0; tick < 1200 && !(JetOf(jet).Phase == JetAIUpdate.JetPhase.None && JetOf(jet).AllowAirLoco && !jet.HasMoveTarget); tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 1200) && !(JetOf(jet).Phase == JetAIUpdate.JetPhase.None && JetOf(jet).AllowAirLoco && !jet.HasMoveTarget); tick++)
         {
             rig.Step();
             var bits = rig.Bits(jet.Id);
@@ -622,7 +623,7 @@ internal static partial class UnitConditionTests
         Assert(!rig.Bits(chute).Contains(UnitFlags.Parachuting) && !rig.Bits(chute).Contains(UnitFlags.Freefall), "the folded chute has neither bit");
 
         var tick = 0;
-        for (; tick < 200 && !module.Opened; tick++) rig.Step();
+        for (; tick < CnCNew.Tests.TestTime.Frames(rig.World, 200) && !module.Opened; tick++) rig.Step();
         Assert(module.Opened && tick > 0, $"the chute opens after falling its open distance (tick {tick})");
         Assert(rig.Bits(chute).Contains(UnitFlags.Parachuting), "the opened chute shows PARACHUTING");
         Assert(RiderBits().Contains(UnitFlags.Parachuting) && !RiderBits().Contains(UnitFlags.Freefall), "the rider switches from FREEFALL to PARACHUTING");
@@ -637,7 +638,7 @@ internal static partial class UnitConditionTests
         entity.Modules.OfType<ToppleUpdate>().Single().ApplyTopplingForce(rig.World, Fixed.One, Fixed.Zero, Fixed.FromInt(10));
         rig.Step();
         Assert(rig.Bits(tree).Contains(UnitFlags.Toppled), "pushed over: TOPPLED");
-        for (var tick = 0; tick < 200; tick++) rig.Step();
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 200); tick++) rig.Step();
         Assert(rig.Bits(tree).Contains(UnitFlags.Toppled), "and it stays set after the fall ended");
     }
 
@@ -651,7 +652,7 @@ internal static partial class UnitConditionTests
         var inFlight = false;
         var seenInFlightWithBit = false;
         var landedTick = -1;
-        for (var tick = 0; tick < 200; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 200); tick++)
         {
             rig.Step();
             var bits = rig.Bits(bus);
@@ -675,7 +676,7 @@ internal static partial class UnitConditionTests
         rig.Step();
         Assert(rig.Bits(climber).Contains(UnitFlags.Climbing), "a moving object on a cliff cell shows CLIMBING");
         Assert(!rig.Bits(walker).Contains(UnitFlags.Climbing), "on open ground it does not");
-        for (var tick = 0; tick < 40; tick++) rig.Step();
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 40); tick++) rig.Step();
         Assert(!rig.Bits(climber).Contains(UnitFlags.Climbing), "left the cliff cell: not climbing any more");
 
         var hover = rig.Spawn("UnitHover", 1, 50, 50);
@@ -775,7 +776,7 @@ internal static partial class UnitConditionTests
         var entity = rig.Get(rock);
         var freefall = 0;
         var late = 0;
-        for (var tick = 0; tick < 320; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 320); tick++)
         {
             rig.Step();
             var bits = rig.Bits(rock);
@@ -848,9 +849,9 @@ internal static partial class UnitConditionTests
         Assert(retail.Templates.TryGet("ChinaTankGattling", out var template) && template.IsInstantiable, "the gattling tank binds");
         var stages = new List<string>();
         var selected = new HashSet<string>();
-        for (var tick = 0; tick < 400; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 400); tick++)
         {
-            if (tick < 90 && rig.World.Tick >= rig.Get(tank).ReadyTickOf(0)) rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, tank, target));
+            if (tick < CnCNew.Tests.TestTime.Frames(rig.World, 90) && rig.World.Tick >= rig.Get(tank).ReadyTickOf(0)) rig.Send(sequence => new FireWeaponCommand(new PlayerId(1), sequence, rig.World.Tick, tank, target));
             rig.Step();
             var bits = rig.Bits(tank);
             AddIfNew(stages, Stage(bits));
@@ -892,7 +893,7 @@ internal static partial class UnitConditionTests
         {
             var entity = driving.Get(lean);
             driving.Send(sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, driving.World.Tick, lean, entity.X + Fixed.FromInt(dx), entity.Y + Fixed.FromInt(dy)));
-            for (var tick = 0; tick < 90; tick++)
+            for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(driving.World, 90); tick++)
             {
                 driving.Step();
                 var bits = driving.Bits(lean);
@@ -926,7 +927,7 @@ internal static partial class UnitConditionTests
         var jet = rig.Spawn("AmericaJetRaptor", 1, 200, 200);
         Assert(!rig.Bits(jet).Contains(UnitFlags.JetExhaust), "a hovering jet without speed has no exhaust");
         rig.Send(sequence => new SetMoveTargetCommand(new PlayerId(1), sequence, rig.World.Tick, jet, Fixed.FromInt(900), Fixed.FromInt(200)));
-        for (var tick = 0; tick < 30; tick++) rig.Step();
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 30); tick++) rig.Step();
         var flying = rig.Bits(jet);
         Assert(flying.Contains(UnitFlags.JetExhaust) && !flying.Contains(UnitFlags.JetAfterburner), $"a flying jet shows the exhaust ({flying})");
         Assert(SelectedConditions(retail.Catalog["AmericaJetRaptor"], flying).Contains("JETEXHAUST"), "and a JETEXHAUST model state is selected");
@@ -939,7 +940,7 @@ internal static partial class UnitConditionTests
         var entity = buses.Get(bus);
         var landed = false;
         var selected = string.Empty;
-        for (var tick = 0; tick < 150 && !landed; tick++)
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(buses.World, 150) && !landed; tick++)
         {
             buses.Step();
             if (!buses.Bits(bus).Contains(UnitFlags.SecondLife)) continue;
@@ -949,7 +950,7 @@ internal static partial class UnitConditionTests
         }
         Assert(landed, "after its first death the thrown bus lands and gets SECOND_LIFE");
         Assert(selected.Contains("SECOND_LIFE"), $"and a SECOND_LIFE model state is selected ({selected})");
-        for (var tick = 0; tick < 150; tick++) buses.Step();
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(buses.World, 150); tick++) buses.Step();
         Assert(entity.EffectivelyDead && buses.Bits(bus).Contains(UnitFlags.SecondLife), "the empty hulk is destroyed later and keeps the bit");
     }
 

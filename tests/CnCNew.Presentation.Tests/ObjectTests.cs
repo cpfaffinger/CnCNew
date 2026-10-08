@@ -498,14 +498,15 @@ static partial class ObjectTests
         Submit(world, sequence => new FireWeaponCommand(new PlayerId(1), sequence, world.Tick, rover, target));
         world.Step();
         Check.That(Conditions() == ModelConditionSet.Parse("FIRING_A USING_WEAPON_A"), $"The firing tick shows FIRING_A ({Conditions()}).");
-        world.Step();
+        // FIRING_A is shown for one original frame; the step of the shot is a step, the rest are frames of game time.
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 1); i++) world.Step();
         Check.That(Conditions() == ModelConditionSet.Parse("BETWEEN_FIRING_SHOTS_A USING_WEAPON_A"), $"Then the shot delay ({Conditions()}).");
-        for (var i = 0; i < 12; i++) world.Step();
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 12); i++) world.Step();
         Submit(world, sequence => new FireWeaponCommand(new PlayerId(1), sequence, world.Tick, rover, target));
         world.Step();
-        world.Step();
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 1); i++) world.Step();
         Check.That(entity.WeaponClip == 0 && Conditions() == ModelConditionSet.Parse("RELOADING_A USING_WEAPON_A"), $"An empty clip reloads ({Conditions()}).");
-        for (var i = 0; i < 40; i++) world.Step();
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 40); i++) world.Step();
         Check.That(Conditions() == ModelConditionSet.Empty, "Ready again: no weapon bits.");
 
         Submit(world, sequence => new DamageCommand(PlayerId.System, sequence, world.Tick, rover, Fixed.FromInt(95), 0, 0));
@@ -743,7 +744,8 @@ static partial class ObjectTests
         var victim = Spawn(world, "Bunker", 2, 100, 170); // due north of the gunner: the turret has to turn +90 degrees from a body facing +X
         var tracker = new TurretTracker();
         var entity = world.FindEntity(gunner)!;
-        const float step = 6f * MathF.PI / 180f; // TurretTurnRate = 180 degrees per second, 30 ticks per second
+        var step = MathF.PI * (float)CnCNew.Tests.TestTime.TickSeconds(world); // TurretTurnRate = 180 degrees per second: 6 degrees per tick at 30 Hz
+        var quarterTurn = CnCNew.Tests.TestTime.Frames(world, 15); // 90 degrees at 180 degrees per second: half a second
         Check.That(tracker.Update(entity, 0) is { Angle: 0f, Pitch: 0f } && !tracker.IsRotating(gunner.Value), "A turret at rest sits at its natural angle.");
         Check.That(tracker.Update(entity, 1) is null, "A missing alternate turret reports nothing.");
         Check.That(tracker.Update(world.FindEntity(victim)!, 0) is null && catalog["Scout"].IsUnit, "An object without a turret has none.");
@@ -752,7 +754,7 @@ static partial class ObjectTests
         var orderTick = world.Tick;
         long shotTick = -1;
         var angles = new List<float>();
-        for (var i = 0; i < 40 && shotTick < 0; i++)
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 40) && shotTick < 0; i++)
         {
             Submit(world, sequence => new FireWeaponCommand(new PlayerId(1), sequence, world.Tick, gunner, victim));
             var result = world.Step();
@@ -760,22 +762,23 @@ static partial class ObjectTests
             if (result.Events.Any(simEvent => simEvent.Kind == SimEventKind.WeaponFired)) shotTick = result.Tick;
         }
 
-        Check.That(Math.Abs(angles[0] - step) < 1e-3f && tracker.IsRotating(gunner.Value) == (shotTick < 0), $"It turns by its rate per tick ({angles[0]} rad).");
-        Check.That(shotTick - orderTick == 15, $"The shot waits until the turret has turned 90 degrees at 6 degrees per tick: tick {shotTick - orderTick} after the order.");
-        Check.That(Math.Abs(angles[^1] - MathF.PI / 2) < 0.035f && world.TurretWaits == 15, $"It points at the victim when the shot goes out ({angles[^1]} rad, {world.TurretWaits} orders waited).");
+        Check.That(Math.Abs(angles[0] - step) < 1e-3f && tracker.IsRotating(gunner.Value) == (shotTick < 0), $"It turns by its rate per tick ({angles[0]} rad) and is still turning exactly until the shot (shot at tick {shotTick}, rotating {tracker.IsRotating(gunner.Value)}, {world.TurretWaits} orders waited).");
+        Check.That(shotTick - orderTick == quarterTurn, $"The shot waits until the turret has turned 90 degrees at 180 degrees per second: tick {shotTick - orderTick} after the order.");
+        Check.That(Math.Abs(angles[^1] - MathF.PI / 2) < 0.035f && world.TurretWaits == quarterTurn, $"It points at the victim when the shot goes out ({angles[^1]} rad, {world.TurretWaits} orders waited).");
 
         // No more orders: the attack goes on, so the turret keeps its aim while the victim lives; when the victim is dead it holds for the recentre time, then turns back at half speed.
         var held = 0;
-        for (var i = 0; i < 60; i++)
+        var holdTicks = CnCNew.Tests.TestTime.Frames(world, 60);
+        for (var i = 0; i < holdTicks; i++)
         {
             world.Step();
             if (Math.Abs(tracker.Update(entity, 0)!.Value.Angle - MathF.PI / 2) < 1e-3f) held++;
         }
 
-        Check.That(held >= 58, $"It holds the aim after the last shot ({held} of 60 ticks).");
+        Check.That(held >= holdTicks - 2, $"It holds the aim after the last shot ({held} of {holdTicks} ticks).");
         Submit(world, sequence => new KillCommand(PlayerId.System, sequence, world.Tick, victim));
         var angle = 0f;
-        for (var i = 0; i < 160; i++)
+        for (var i = 0; i < CnCNew.Tests.TestTime.Frames(world, 160); i++)
         {
             world.Step();
             angle = tracker.Update(entity, 0)!.Value.Angle;

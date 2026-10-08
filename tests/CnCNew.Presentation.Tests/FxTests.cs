@@ -710,7 +710,7 @@ public static partial class FxTests
         Assert(executor.Counters["damagefx-throttled"] == 1, "throttle counted");
         Assert(executor.Counters["weapon-fx-without-muzzle"] == 1, "muzzle fallback counted");
 
-        tick += 31;
+        tick += CnCNew.Tests.TestRate.Frames(30) + 1; // one step past the ThrottleTime of 1000 ms
         executor.ExecuteEvents(
         [
             Event(SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestGun", 2 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw),
