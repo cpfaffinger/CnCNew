@@ -197,7 +197,7 @@ static partial class Tests
         for (var i = 0; i < factor; i++) world.Step();
         if (upgrade) world.CompleteUpgrade(new PlayerId(1), null, "Upgrade_StagedCapture");
         for (var i = 0; i < 40 * factor; i++) world.Step();
-        return (world, feeder, world.FindEntity(new EntityId(1))!.Modules.OfType<SpecialAbilityUpdate>().Single());
+        return (world, feeder, world.FindEntity(new EntityId(1))!.Modules.OfType<SpecialAbilityUpdate>().First());
     }
 
     /// <summary>
@@ -224,6 +224,34 @@ static partial class Tests
             var frames = flashes.Select(tick => tick / factor).ToArray();
             reference ??= frames;
             Check.That(frames.SequenceEqual(reference), $"{rate}: the flashes fall in the same frames of the preparation as at 30 Hz: {string.Join(",", frames)} against {string.Join(",", reference)}.");
+        }
+    }
+
+    /// <summary>
+    /// <c>aiFaceObject</c> of an ability: "within one step of the target" is decided per logic frame against a frame of turn. The Black Lotus turns a quarter circle to her target
+    /// and starts to unpack in the same frame at every rate. (Decided per tick against a tick of turn she was done up to a frame early.)
+    /// </summary>
+    public static void RateInvarianceAbilityFacingEndsInTheSameFrame()
+    {
+        long reference = -1;
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, _) = RatedCapture(rate, factor, "StagedLotus", 100, 190, upgrade: false);
+            var lotus = world.FindEntity(new EntityId(1))!;
+            var abilities = lotus.Modules.OfType<SpecialAbilityUpdate>().ToArray();
+            Check.That(lotus.Angle == Fixed.Zero && feeder.Capture(1, 1, 2).Accepted, $"{rate}: the Lotus faces east and takes the order.");
+            long firstTurn = -1, unpacking = -1;
+            for (var index = 0; index < 400 * factor && unpacking < 0; index++)
+            {
+                var result = world.Step();
+                if (firstTurn < 0 && lotus.Angle != Fixed.Zero) firstTurn = result.Tick;
+                if (abilities.Any(ability => ability.Stage == AbilityStage.Unpacking)) unpacking = result.Tick;
+            }
+
+            var turning = unpacking - firstTurn;
+            Check.That(firstTurn >= 0 && unpacking > firstTurn && turning % factor == 0, $"{rate}: she turns for a whole number of logic frames before she unpacks ({turning} ticks).");
+            if (reference < 0) reference = turning;
+            Check.That(turning == reference * factor && Near(lotus.Angle, Degrees(90m)), $"{rate}: she faces her target after the same {reference} frames as at 30 Hz ({turning} ticks).");
         }
     }
 

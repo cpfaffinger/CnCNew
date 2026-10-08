@@ -103,6 +103,9 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     private int _approachOrders;
     private Fixed _flashPhase;
 
+    /// <summary>Ticks of the current logic frame of the original the unit has spent turning to its target (<see cref="TurnToward"/>); always 0 at 30 Hz, written only while nonzero.</summary>
+    private int _facePhase;
+
     public override string ModuleName => "SpecialAbilityUpdate";
     public override bool AcceptsTarget(SpecialPowerTargetKind kind) => true;
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -264,7 +267,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
             if (data.NeedToFaceTarget && !_facingComplete)
             {
                 _facingInitiated = true;
-                if (target is not null && !TurnToward(target)) return;
+                if (target is not null && !TurnToward(world, target)) return;
                 _facingComplete = true;
             }
             if (NeedToUnpack)
@@ -431,6 +434,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         _facingComplete = false;
         _approachOrders = 0;
         _flashPhase = Fixed.Zero;
+        _facePhase = 0;
     }
 
     // ------------------------------------------------------------------------------------------------------------ approach and facing
@@ -476,18 +480,30 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         ai.OrderMove(world, target.X, target.Y, false);
     }
 
-    /// <summary><c>aiFaceObject</c>: turns on the spot at the locomotor's turn rate; true when the unit faces the target.</summary>
-    private bool TurnToward(Entity target)
+    /// <summary>
+    /// <c>aiFaceObject</c>: turns on the spot at the locomotor's turn rate; true when the unit faces the target.
+    /// <para>
+    /// "Within one step of the target: face it and go on" is decided once per logic frame of the original against a frame of turn, as at 30 Hz, in the first tick of the frame
+    /// (<see cref="_facePhase"/> counts the ticks of the unit's own frame); in between the unit turns by its rate per tick. The facing therefore ends in the same frame at every
+    /// rate, where a snap-in against one tick of turn ended it up to a frame early.
+    /// </para>
+    /// </summary>
+    private bool TurnToward(IWorldServices world, Entity target)
     {
         var desired = FixedTrig.Atan2(target.Y - Entity.Y, target.X - Entity.X);
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
         var turnRate = Entity.Template.Locomotor?.TurnRatePerTick ?? Fixed.Zero;
-        if (turnRate <= Fixed.Zero || difference.Abs() <= turnRate)
+        var frame = world.Time.TicksPerOriginalFrame;
+        var decides = _facePhase == 0;
+        if (frame != 1) _facePhase = _facePhase + 1 == frame ? 0 : _facePhase + 1;
+        if (turnRate <= Fixed.Zero || (decides && difference.Abs() <= (frame == 1 ? turnRate : turnRate * frame)))
         {
             Entity.Angle = desired;
+            _facePhase = 0;
             return true;
         }
-        Entity.Angle = FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turnRate : turnRate));
+        // Inside a frame the step never passes the target (it cannot at 30 Hz: the frame's decision has just found the target further away than one step).
+        Entity.Angle = difference.Abs() <= turnRate ? desired : FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turnRate : turnRate));
         return false;
     }
 
@@ -508,6 +524,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         writer.Bool("abilityFacingDone", _facingComplete);
         writer.Int("abilityApproaches", _approachOrders);
         if (_flashPhase != Fixed.Zero) writer.Fixed("abilityFlash", _flashPhase);
+        if (_facePhase != 0) writer.Int("abilityFacePhase", _facePhase);
         writer.Int("nextWake", _nextWake);
     }
 
@@ -529,6 +546,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         _facingComplete = reader.Bool("abilityFacingDone");
         _approachOrders = checked((int)reader.Int("abilityApproaches"));
         _flashPhase = reader.Has("abilityFlash") ? reader.Fixed("abilityFlash") : Fixed.Zero;
+        _facePhase = reader.Has("abilityFacePhase") ? checked((int)reader.Int("abilityFacePhase")) : 0;
         _nextWake = reader.Int("nextWake");
     }
 }
