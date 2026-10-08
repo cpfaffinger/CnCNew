@@ -369,11 +369,14 @@ public sealed class HordeUpdate(HordeData data) : SimModule, IUpdateModule
     {
         var reach = data.Radius;
         var near = new List<Entity>();
+        // Everybody is counted where the logic frame of the original it has begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3); at 30 Hz that is the position.
+        var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
         foreach (var other in world.Entities)
         {
             if (!Counts(world, other)) continue;
-            var dx = other.X - Entity.X;
-            var dy = other.Y - Entity.Y;
+            var (otherX, otherY, _) = other.FrameEnd(world.Tick);
+            var dx = otherX - ownX;
+            var dy = otherY - ownY;
             var limit = reach + Entity.Template.BoundingCircleRadius + other.Template.BoundingCircleRadius;
             if (SquaredReach.Of(limit).Contains(dx * dx + dy * dy)) near.Add(other);
         }
@@ -389,8 +392,9 @@ public sealed class HordeUpdate(HordeData data) : SimModule, IUpdateModule
         foreach (var other in near)
         {
             if (!other.ModuleArray.OfType<HordeUpdate>().First().IsTrueHordeMember) continue;
-            var dx = other.X - Entity.X;
-            var dy = other.Y - Entity.Y;
+            var (otherX, otherY, _) = other.FrameEnd(world.Tick);
+            var dx = otherX - ownX;
+            var dy = otherY - ownY;
             if (!rubOff.Contains(dx * dx + dy * dy)) continue;
             _inHorde = true;
             break;
