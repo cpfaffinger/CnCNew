@@ -614,4 +614,166 @@ static partial class Tests
         }
         FlightVerdict();
     }
+
+    /// <summary>A parked jet of the airfield fixture, at the same game time at every rate and where a frame begins (the production ends on a tick of its own at every rate).</summary>
+    private static (SimulationWorld World, Feeder Feeder, Entity Jet, Entity Airfield) ParkedJet(SimulationRate rate)
+    {
+        var (world, feeder) = FlightRateWorld(rate, WingAirfieldFiles, terrain: false);
+        feeder.Spawn(1, "AirTestAirfield", owner: 1, x: 500, y: 500);
+        world.Step();
+        feeder.GiveMoney(1, 1000);
+        world.Step();
+        var airfield = Only(world, "AirTestAirfield");
+        Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, "The jet is queued.");
+        while (world.Tick < world.Frames(900)) world.Step();
+        var jet = Only(world, "AirTestJet");
+        var ai = JetOf(jet);
+        Check.That(ai.Phase == JetAIUpdate.JetPhase.None && !ai.AllowAirLoco, $"{rate}: the jet is parked 30 s after it was ordered.");
+        return (world, feeder, jet, airfield);
+    }
+
+    /// <summary>
+    /// <c>JetAIUpdate</c> at its airfield: a parked jet is sent away, taxis to the runway, pauses, takes off, climbs, flies, circles; after its idle time it goes home, approaches, lands, taxis to
+    /// its space, turns and reloads. Every change of state falls on the same game time and the jet is in the same place at the end of every frame.
+    /// </summary>
+    public static void RateFlightJetAirfieldLifecycleIsTheSame()
+    {
+        var tracks = new List<FlightPose>[FlightRates.Length];
+        var states = new string[FlightRates.Length];
+        for (var index = 0; index < FlightRates.Length; index++)
+        {
+            var (world, feeder, jet, airfield) = ParkedJet(FlightRates[index]);
+            var ai = JetOf(jet);
+            Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 1200, 500).Accepted, "The move order is accepted.");
+            var start = world.Tick;
+            var phase = ai.Phase;
+            var airborne = ai.AllowAirLoco;
+            var log = new List<string>();
+            void Watch(TickResult result)
+            {
+                if (ai.Phase == phase && ai.AllowAirLoco == airborne) return;
+                (phase, airborne) = (ai.Phase, ai.AllowAirLoco);
+                log.Add($"{phase}{(airborne ? "+" : "-")}@{InFrames(FrameQuarters(world, result.Tick - start))}");
+            }
+            // The jet of the fixture goes home by itself after ReturnToBaseIdleTime: the whole round trip follows from the one order.
+            tracks[index] = FrameTrack(world, jet, 700, Watch);
+            Check.That(log.Any(entry => entry.StartsWith("Landing", StringComparison.Ordinal)) && !ai.AllowAirLoco && ai.Phase == JetAIUpdate.JetPhase.None, $"{FlightRates[index]}: the jet flew, landed and is parked again ({string.Join(" ", log)}).");
+            _ = airfield;
+            states[index] = string.Join(" ", log);
+        }
+        Console.WriteLine($"       jet at its airfield, states (state, + airborne, @ frames after the first order): {states[0]}");
+        for (var index = 1; index < FlightRates.Length; index++)
+            if (states[index] != states[0]) FlightFailures.Add($"jet at its airfield: the states of {FlightRates[index]} are {states[index]}, at 30 Hz {states[0]}");
+        SameTracks("jet at its airfield: take-off, flight, landing, taxi", tracks, 0.1m, 0.002m);
+        FlightVerdict();
+    }
+
+    /// <summary>
+    /// The step of a frame that is being flown is state: a snapshot taken in the middle of a frame carries it (60 and 120 Hz) and the restored world continues hash-identically; at
+    /// 30 Hz a frame is a tick and no snapshot ever carries one. One scene per module that flies a decided frame in shares.
+    /// </summary>
+    public static void RateFlightFrameStepsSurviveSnapshots()
+    {
+        var scenes = new (string Key, Func<SimulationRate, SimulationWorld> Stage)[]
+        {
+            ("wingStep", rate =>
+            {
+                var (world, feeder) = FlightRateWorld(rate, WingFixtureFiles, terrain: false);
+                feeder.Spawn(1, "WingJet", owner: 1, x: 500, y: 500);
+                world.Step();
+                StepFrames(world, 20);
+                feeder.SetMoveTarget(1, Only(world, "WingJet").Id.Value, 1500, 600);
+                StepFrames(world, 10);
+                return world;
+            }),
+            ("frameStep", rate =>
+            {
+                var (world, feeder, jet, _) = ParkedJet(rate);
+                feeder.SetMoveTarget(1, jet.Id.Value, 1200, 500);
+                StepFrames(world, 40);
+                return world;
+            }),
+            ("spiralStep", rate =>
+            {
+                var (world, feeder) = FlightRateWorld(rate, SpiralFiles(), terrain: false);
+                feeder.Spawn(1, "Spinner", x: 500, y: 500, z: 100);
+                world.Step();
+                StepFrames(world, 30);
+                feeder.Kill(Only(world, "Spinner").Id.Value);
+                world.Step();
+                StepFrames(world, 10);
+                return world;
+            }),
+            ("fallStep", rate =>
+            {
+                var (world, feeder) = FlightRateWorld(rate, ScriptFiles());
+                feeder.Spawn(1, "AlphaPlane", owner: 1, x: 500, y: 500, z: 45);
+                world.Step();
+                feeder.SetMoveTarget(1, Only(world, "AlphaPlane").Id.Value, 2500, 500);
+                StepFrames(world, 60);
+                feeder.Kill(Only(world, "AlphaPlane").Id.Value);
+                world.Step();
+                StepFrames(world, 10);
+                return world;
+            }),
+            ("descentStep", rate =>
+            {
+                var (world, feeder) = FlightRateWorld(rate, ScriptFiles());
+                feeder.Spawn(1, "AlphaChute", owner: 1, x: 500, y: 500, z: 100);
+                feeder.Spawn(1, "AlphaTrooper", owner: 1, x: 500, y: 500);
+                world.Step();
+                var module = Only(world, "AlphaChute").Modules.OfType<ParachuteContain>().Single();
+                module.Add(world, Only(world, "AlphaTrooper"));
+                module.SetOverrideDestination(Fixed.FromInt(560), Fixed.FromInt(580));
+                StepFrames(world, 30);
+                return world;
+            }),
+            ("driveLeft", rate =>
+            {
+                var (world, feeder) = FlightRateWorld(rate, ScriptFiles());
+                feeder.Spawn(2, "BetaCannon", owner: 2, x: 100, y: 200);
+                world.Step();
+                var module = Only(world, "BetaCannon").Modules.OfType<ParticleUplinkCannonUpdate>().Single();
+                world.SpecialPowers.TryGet("UplinkPower", out var power);
+                module.PrepareScriptedPath(world, [new(Fixed.FromInt(300), Fixed.FromInt(200), Fixed.Zero), new(Fixed.FromInt(367), Fixed.FromInt(200), Fixed.Zero), new(Fixed.FromInt(367), Fixed.FromInt(293), Fixed.Zero)]);
+                module.Initiate(world, power!.Index, new CnCNew.Simulation.Commands.SpecialPowerTarget(CnCNew.Simulation.Commands.SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(300), Fixed.FromInt(200)));
+                StepFrames(world, 9);
+                return world;
+            }),
+            ("flightStep", rate =>
+            {
+                var (world, feeder) = FlightRateWorld(rate, AirWeaponFixtureFiles, terrain: false, computer: true);
+                feeder.Spawn(1, "AirGunship", owner: 1, x: 0, y: 0);
+                feeder.Spawn(2, "AirDummy", owner: 2, x: 455, y: 12);
+                StepFrames(world, 125);
+                while (!world.Time.IsOriginalFrameBoundary(world.Tick + 1)) world.Step();
+                feeder.UseSpecialPower(1, Only(world, "AirGunship").Id.Value, "AirGunshipPower", CnCNew.Simulation.Commands.SpecialPowerTargetKind.Location, x: 400, y: 0);
+                world.Step();
+                StepFrames(world, 43);
+                return world;
+            }),
+            ("climbStep", rate =>
+            {
+                var (world, feeder) = FlightRateWorld(rate, SpiralFiles(), terrain: false);
+                feeder.Spawn(1, "Lifter", x: 0, y: 0);
+                world.Step();
+                StepFrames(world, 5);
+                return world;
+            }),
+        };
+        foreach (var (key, stage) in scenes)
+            foreach (var rate in FlightRates)
+            {
+                var world = stage(rate);
+                // The scene ends where a frame begins for its object: one more tick decides the frame and flies its first share.
+                world.Step();
+                var bytes = CnCNew.Simulation.Snapshots.WorldSnapshot.Write(world);
+                var carries = System.Text.Encoding.UTF8.GetString(bytes).Contains($"\"{key}\"", StringComparison.Ordinal);
+                Check.That(carries == rate.TicksPerOriginalFrame > 1, $"{key} at {rate}: the snapshot in the middle of a frame {(carries ? "carries" : "does not carry")} the step.");
+                var restored = CnCNew.Simulation.Snapshots.WorldSnapshot.Restore(bytes, world.Templates, world.Configuration.DefinitionFingerprint, world.Terrain);
+                Check.That(restored.StateHash == world.StateHash, $"{key} at {rate}: the restored world has the hash of the original.");
+                for (var tick = 0; tick < world.Frames(12); tick++)
+                    Check.That(world.Step().StateHash == restored.Step().StateHash, $"{key} at {rate}: the restored world continues hash-identically (tick {tick} after the snapshot).");
+            }
+    }
 }
