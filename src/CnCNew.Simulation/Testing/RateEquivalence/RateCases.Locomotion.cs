@@ -116,7 +116,9 @@ public static partial class RateCases
             track.Record(unit);
             foreach (var item in result.Events)
                 if (item.Kind == SimEventKind.MoveArrived && item.Entity == unit.Id) track.Arrived = true;
-            if (unit.HasMoveTarget && scene.Alive(unit)) continue;
+            // The move is over when the object stands: above 30 Hz the order ends in the first tick of the move's last logic frame (the tick of the 30 Hz step) and the object
+            // covers the rest of that frame's step in the ticks after it. At 30 Hz nothing is ever inside a frame's step.
+            if ((unit.HasMoveTarget || unit.IsInsideFrameStep) && scene.Alive(unit)) continue;
             track.EndStep = before + step;
             break;
         }

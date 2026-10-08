@@ -660,7 +660,11 @@ public sealed partial class SkirmishAi
     /// <summary>Attempts (one per retry interval) a supply center may fail to find a spot beside its source before it is placed at the base instead.</summary>
     private const int SupplyPlacementPatience = 3;
 
-    /// <summary>An available builder: not on a construction task, and idle unless it is a worker that also gathers (then the gathering yields).</summary>
+    /// <summary>
+    /// An available builder: not on a construction task, and idle unless it is a worker that also gathers (then the gathering yields). A builder that is only driving out of the
+    /// factory that built it (or stepping aside for the next unit) is available too: nobody ordered that move and any order replaces it. The reference's computer player asks its
+    /// dozers whether a task is pending (<c>AIPlayer::findDozer</c>, <c>DozerAIInterface::isAnyTaskPending</c>), not whether they stand still.
+    /// </summary>
     private Entity? PickBuilder(HashSet<uint> used, Entity? near = null)
     {
         Entity? best = null;
@@ -668,7 +672,7 @@ public sealed partial class SkirmishAi
         foreach (var entity in _units)
         {
             if ((RoleOf(entity.Template) & Role.Builder) == 0 || used.Contains(entity.Id.Value) || AiOf(entity) is not { } ai || ai.IsBuilding) continue;
-            if (!ai.IsIdle && (RoleOf(entity.Template) & Role.Carrier) == 0) continue;
+            if (!ai.IsIdle && !ai.IsOnUnorderedMove && (RoleOf(entity.Template) & Role.Carrier) == 0) continue;
             var distance = near is null ? Fixed.Zero : DistanceSquared(entity.X, entity.Y, near.X, near.Y);
             if (best is null || distance < bestDistance) { best = entity; bestDistance = distance; }
         }

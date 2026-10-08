@@ -659,6 +659,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
+    /// <summary>
+    /// The object moves, but nobody ordered it to: it drives out of the factory that built it, goes on to the rally point, or makes room for the next unit. It is not idle
+    /// (<see cref="IsIdle"/>), yet free for its owner - any order replaces this move. Derived from the order state: the last move was not a command, and nothing else is going on.
+    /// </summary>
+    public bool IsOnUnorderedMove => Entity.HasMoveTarget && !_lastCommandFromPlayer && _dock is null && _task == BuilderTask.None && !_enterTarget.IsValid && !_goal.IsValid
+                                     && !_evacuatePending && !_returning;
+
     /// <summary>The <c>AutoAcquireEnemiesWhenIdle</c> bits of the module data.</summary>
     public AutoAcquire AutoAcquire => data.AutoAcquire;
 
@@ -682,11 +689,68 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _exitAfterEvacuate = false;
         _returning = false;
         _lastCommandFromPlayer = fromPlayer;
+        EndExitPath();
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
         InvalidatePath();
         world.WakeAt(Entity, this, world.Tick);
+        world.MarkDirty(Entity);
+    }
+
+    private bool _exitRallyPending;
+    private Fixed _exitRallyX;
+    private Fixed _exitRallyY;
+
+    // A point the path of the current move has to pass first (the door of the factory a unit leaves); gone once the object has been there or got another order.
+    private bool _viaPending;
+    private Fixed _viaX;
+    private Fixed _viaY;
+
+    /// <summary>
+    /// <c>aiFollowExitProductionPath</c> (<c>AI_FOLLOW_EXIT_PRODUCTION_PATH</c>) for a unit its factory just created: a move to the place in front of the factory whose path
+    /// first passes the door point, and, when the player set a rally point, a second move there once the first has ended. The path search leaves the footprint the unit
+    /// stands in by itself (the reference ignores the factory as an obstacle on this path). Any later order replaces the whole path.
+    /// </summary>
+    public void OrderExitProduction(IWorldServices world, Fixed doorX, Fixed doorY, Fixed exitX, Fixed exitY, bool hasRally, Fixed rallyX, Fixed rallyY)
+    {
+        OrderMove(world, exitX, exitY, false);
+        _viaPending = true;
+        _viaX = doorX;
+        _viaY = doorY;
+        _exitRallyPending = hasRally;
+        _exitRallyX = rallyX;
+        _exitRallyY = rallyY;
+    }
+
+    /// <summary>
+    /// The exit path is one order (<c>AI_FOLLOW_EXIT_PRODUCTION_PATH</c>): whatever replaces or stops its move - another move, a dock, a builder task, an attack the world
+    /// drives, a stop - ends it, door point and second leg included. Only the arrival at the end of the first leg goes on to the rally point.
+    /// </summary>
+    private void EndExitPath()
+    {
+        _exitRallyPending = false;
+        _viaPending = false;
+    }
+
+    /// <summary>The order of <see cref="OrderExitProduction"/> still stands and the unit has not been through the door yet; gives the door point.</summary>
+    internal bool TryGetExitOrder(out Fixed doorX, out Fixed doorY)
+    {
+        doorX = _viaX;
+        doorY = _viaY;
+        return _viaPending && Entity.HasMoveTarget;
+    }
+
+    /// <summary>
+    /// Above 30 Hz: the place in front of the factory the standing exit order ends at, chosen at the end of the logic frame of the original the unit appeared in
+    /// (<c>SimulationWorld.ProcessExitClaims</c>). The unit has not moved yet; its first step is planned to this goal.
+    /// </summary>
+    internal void RetargetExit(IWorldServices world, Fixed exitX, Fixed exitY)
+    {
+        if (Entity.MoveTargetX == exitX && Entity.MoveTargetY == exitY) return;
+        Entity.MoveTargetX = exitX;
+        Entity.MoveTargetY = exitY;
+        InvalidatePath();
         world.MarkDirty(Entity);
     }
 
@@ -781,6 +845,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _goal = EntityId.Invalid;
         _evacuatePending = false;
         _lastCommandFromPlayer = fromPlayer;
+        EndExitPath();
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
         _frameSpeed = Fixed.Zero;
@@ -866,9 +931,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private void UpdateTask(IWorldServices world)
     {
         var target = world.FindEntity(_taskTarget);
-        if (target is null || target.DestroyRequested || target.EffectivelyDead) { EndTask(world); return; }
-        if (_task == BuilderTask.Construct && (!target.HasStatus(ObjectStatusBits.UnderConstruction) || target.BuilderId != Entity.Id)) { EndTask(world); return; }
-        if (_task == BuilderTask.Repair && !IsRepairable(target)) { EndTask(world); return; }
+        // Whether the task is still worth doing is looked at once per logic frame of the original of the builder (every tick at 30 Hz): what happened to the target after the
+        // builder's turn in the first tick of a frame is seen with the next frame, as the 30 Hz builder sees it with its next step.
+        if (world.Time.BeginsFrameOf(Entity, world.Tick))
+        {
+            if (target is null || target.DestroyRequested || target.EffectivelyDead) { EndTask(world); return; }
+            if (_task == BuilderTask.Construct && (!target.HasStatus(ObjectStatusBits.UnderConstruction) || target.BuilderId != Entity.Id)) { EndTask(world); return; }
+            if (_task == BuilderTask.Repair && !IsRepairable(target)) { EndTask(world); return; }
+        }
+        else if (target is null) return;
         // Inside a logic frame's step (above 30 Hz) the builder is between two positions of the 30 Hz walk: it measures its reach again when the step is covered.
         if (_frameTicksLeft > 0 && Entity.HasMoveTarget) return;
 
@@ -891,6 +962,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         var body = target.Body!;
+        if (world.Time.TicksPerOriginalFrame != TickOrder.Next)
+        {
+            // Above 30 Hz the repair heals the slice of a logic frame of the original, once per frame of the builder (the escape "Originalraster" for a heal slice,
+            // docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md §3): a hit in the first tick of a frame meets the health the 30 Hz step leaves - with a share per tick it met only
+            // one share of that frame's repair, and a threshold of the body (the fear roll at a quarter of the health) was crossed in different frames.
+            if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return;
+            var slice = body.MaxHealth * data.RepairRatePerSecond / Fixed.FromInt(SimulationRate.OriginalFramesPerSecond);
+            world.Damage(target.Id, new DamageInfo(Entity.Id, slice, DamageTypes.Healing, DeathTypes.None, false));
+            return;
+        }
         var amount = world.Time.PerSecondToPerTick(body.MaxHealth * data.RepairRatePerSecond);
         world.Damage(target.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
     }
@@ -899,6 +980,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     internal bool StartInternalMove(Fixed x, Fixed y)
     {
         if (Entity.Template.Locomotor is null) return false;
+        EndExitPath();
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
@@ -908,6 +990,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     internal void StopInternalMove()
     {
+        EndExitPath();
         if (!Entity.HasMoveTarget) return;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
@@ -916,6 +999,25 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _frameTicksLeft = 0;
         InvalidatePath();
     }
+
+    /// <summary>
+    /// <see cref="StopInternalMove"/> for an observer that acts after the updates of the tick (the units' own target acquisition). At 30 Hz the object has taken the whole step
+    /// of this tick by then and its next step is a tick later. Above 30 Hz it is put where the frame it has begun ends first (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3,
+    /// rule 4), and whatever move it is given now starts with its next frame, not with the next tick. 30 Hz: <see cref="StopInternalMove"/>.
+    /// </summary>
+    internal void StopInternalMoveAtFrameEnd(IWorldServices world)
+    {
+        var ticks = world.Time.TicksPerOriginalFrame;
+        if (ticks > 1 && Entity.HasMoveTarget)
+        {
+            if (Entity.IsInsideFrameStep || Entity.HasAheadAngle) Entity.CompleteFrame(world.Tick);
+            _moveHoldUntil = world.Tick + ticks;
+        }
+        StopInternalMove();
+    }
+
+    // Above 30 Hz only: the tick before which the object takes no decision of a new frame (StopInternalMoveAtFrameEnd). Never set at 30 Hz.
+    private long _moveHoldUntil;
 
     private void InvalidatePath()
     {
@@ -979,11 +1081,24 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             }
             else Move(world, locomotor);
         }
+        else if (_frameTicksLeft > 0) Coast(world);
+        // Above 30 Hz the second leg is ordered with the last tick of the unit's logic frame of the original, where the 30 Hz step that ends the first leg orders it
+        // (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): an arrival ends there by itself, a first leg that ends in the first tick of a frame (no way out) waits for it.
+        if (_exitRallyPending && !Entity.HasMoveTarget && world.Time.BeginsFrameOf(Entity, world.Tick + TickOrder.Next))
+        {
+            // The first leg of the exit path is done (the unit is out of its factory): on to the rally point.
+            _exitRallyPending = false;
+            // exitObjectViaDoor adjusts the rally point for the unit (Pathfinder::adjustDestination): the units of a factory do not all end on the same spot.
+            var (rallyX, rallyY) = world.FindFreeGoal(Entity, Entity.X, Entity.Y, _exitRallyX, _exitRallyY);
+            OrderMove(world, rallyX, rallyY, false);
+        }
         if (_enterTarget.IsValid) UpdateEnter(world);
         if (_goal.IsValid) UpdateGoal(world);
         if (_evacuatePending && !Entity.HasMoveTarget && _dock is null && ReadyToUnload(world))
         {
             _evacuatePending = false;
+            // The passengers get out where the move ended: above 30 Hz the object is put there first (it is still covering the last step).
+            if (_frameTicksLeft > 0) SettleFrame(world.Tick);
             world.EvacuateContainer(Entity);
             if (_exitAfterEvacuate)
             {
@@ -998,7 +1113,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _returning = false;
             world.RequestDestroy(Entity.Id);
         }
-        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None || _evacuatePending || _returning || _goal.IsValid ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return _dock is not null || Entity.HasMoveTarget || _frameTicksLeft > 0 || _task != BuilderTask.None || _evacuatePending || _returning || _goal.IsValid || _exitRallyPending ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     /// <summary>
@@ -1026,9 +1141,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         var reach = goal.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
-        var dx = goal.X - Entity.X;
-        var dy = goal.Y - Entity.Y;
+        // Both where the frame they have begun ends (above 30 Hz the object is still covering the last step of its move); the collision acts on the object standing there.
+        var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
+        var (goalX, goalY, _) = goal.FrameEnd(world.Tick);
+        var dx = goalX - ownX;
+        var dy = goalY - ownY;
         var near = SquaredReach.Of(reach).Contains(dx * dx + dy * dy);
+        if (near && _frameTicksLeft > 0) SettleFrame(world.Tick);
         if (near)
             foreach (var module in Entity.Modules)
             {
@@ -1043,29 +1162,41 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private void UpdateEnter(IWorldServices world)
     {
         var container = world.FindEntity(_enterTarget);
+        // Whether the container is still there is looked at once per logic frame of the original of this object, like every other look at another object: a container that
+        // dies in the phases after the updates is found dead by the next 30 Hz step, not by the next tick of the same frame.
+        if (Entity.HasMoveTarget && _frameTicksLeft != Math.Max(_stride, 1) - 1) return;
         if (container is null || container.DestroyRequested || container.EffectivelyDead)
         {
             _enterTarget = EntityId.Invalid;
+            // The 30 Hz step has made its whole step before it finds the container gone: the object stops where the frame it has begun ends.
+            if (Entity.HasMoveTarget && _frameTicksLeft > 0) SettleFrame(world.Tick);
             StopInternalMove();
             return;
         }
         if (Entity.HasMoveTarget)
         {
             // OpenContain::onCollide: an object whose enter target is this container is taken in as soon as the two touch; it does not have to reach the container's centre
-            // (which another boarder, or a rider that found no room and stands there, may keep it from). Tested where the 30 Hz step tests it: after a whole logic frame's step.
-            // A structure keeps the old rule (the walk ends at its wall): its bounding circle reaches far beyond a box-shaped footprint, and nothing stands inside it.
-            if (_frameTicksLeft > 0 || container.Template.IsKindOf("STRUCTURE")) return;
+            // (which another boarder, or a rider that found no room and stands there, may keep it from). A structure keeps the old rule (the walk ends at its wall): its
+            // bounding circle reaches far beyond a box-shaped footprint, and nothing stands inside it.
+            // Decided where the 30 Hz step decides it (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md): in the tick that decided a
+            // logic frame's step, with both where that frame ends; the boarder is put there and goes in, in the first tick of the frame like a move that ends.
+            if (container.Template.IsKindOf("STRUCTURE") || _frameTicksLeft != Math.Max(_stride, 1) - 1) return;
             var touch = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius;
-            var tx = container.X - Entity.X;
-            var ty = container.Y - Entity.Y;
+            var (endX, endY, _) = Entity.FrameEnd(world.Tick);
+            var (insideX, insideY, _) = container.FrameEnd(world.Tick);
+            var tx = insideX - endX;
+            var ty = insideY - endY;
             if (!SquaredReach.Of(touch).Contains(tx * tx + ty * ty)) return;
+            if (_frameTicksLeft > 0) SettleFrame(world.Tick);
             StopInternalMove();
         }
         _enterTarget = EntityId.Invalid;
         // The approach may end short (a partial path): only an object that actually reached the container gets in.
         var reach = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
-        var dx = container.X - Entity.X;
-        var dy = container.Y - Entity.Y;
+        // Measured from where the last step of the move ends (above 30 Hz the object is still covering it).
+        var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
+        var dx = container.X - ownX;
+        var dy = container.Y - ownY;
         if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy)) return;
         world.TryEnterContainer(Entity, container);
     }
@@ -1078,6 +1209,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         if (_stride == 0) ResolveBlockerTiming(world.Time);
+        if (world.Tick < _moveHoldUntil) return;
         if (_frameTicksLeft > 0)
         {
             // Between two decisions the object only covers the next share of the step its last decision made.
@@ -1096,7 +1228,14 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
-        // Close to a goal somebody else has taken: head for the nearest free place instead (SimulationWorld.GoalSpots.cs, the reference's adjustDestination).
+        if (_viaPending)
+        {
+            // Through the door: from here on a new plan goes straight to the goal.
+            var viaX = _viaX - Entity.X;
+            var viaY = _viaY - Entity.Y;
+            if (air || SquaredReach.Of(Fixed.FromInt(TerrainMap.CellSize)).Contains(viaX * viaX + viaY * viaY)) _viaPending = false;
+        }
+        // Close to a goal somebody else has taken: head for the nearest free place instead (SimulationWorld.ExitGoals.cs, the reference's adjustDestination).
         if (!air && GoalSpotCheckDue(world) && world.TryFreeGoalSpot(Entity, out var freeX, out var freeY))
         {
             Entity.MoveTargetX = freeX;
@@ -1211,13 +1350,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var targetX = Entity.MoveTargetX;
         var targetY = Entity.MoveTargetY;
         var distance = AirModules.Distance2D(Entity.X, Entity.Y, targetX, targetY);
-        var arrival = Fixed.Max(locomotor.CloseEnoughDist, FlightFrames.PerFrame(world.Time, locomotor.Speed));
+        // One decision of a logic frame of the original in that frame's units, with the constants and the speed the 30 Hz step computes with (FlightFrameConstants).
+        FlightFrameConstants(world.Time, locomotor, out var topSpeed, out _, out var braking, out var turnRate, out var minSpeed);
+        var speed = FrameSpeed();
+        var arrival = Fixed.Max(locomotor.CloseEnoughDist, topSpeed);
         var behind = distance > WingEpsilon && FixedTrig.AngleDifference(Entity.Angle, FixedTrig.Atan2(targetY - Entity.Y, targetX - Entity.X)).Abs() > FixedTrig.HalfPi;
-        var arrived = distance <= arrival || (behind && distance <= TurnRadius(locomotor, Fixed.Max(Entity.Speed, locomotor.MinSpeed)) * Fixed.FromInt(2));
+        var arrived = distance <= arrival || (behind && distance <= TurnRadius(turnRate, Fixed.Max(speed, minSpeed)) * Fixed.FromInt(2));
         var brakingDistance = Fixed.Zero;
-        if (locomotor.Braking > Fixed.Zero && Entity.Speed > locomotor.MinSpeed)
-            brakingDistance = (Entity.Speed * Entity.Speed - locomotor.MinSpeed * locomotor.MinSpeed) / (locomotor.Braking * Fixed.FromInt(2));
-        SteerWinged(world.Time, locomotor, targetX, targetY, distance <= brakingDistance ? locomotor.MinSpeed : CappedSpeed(locomotor));
+        if (locomotor.Braking > Fixed.Zero && speed > minSpeed)
+            brakingDistance = (speed * speed - minSpeed * minSpeed) / (braking * Fixed.FromInt(2));
+        SteerWinged(world.Time, locomotor, targetX, targetY, distance <= brakingDistance ? minSpeed : CappedFrameSpeed(topSpeed));
         if (!arrived) return;
         Entity.HasMoveTarget = false;
         InvalidatePath();
@@ -1228,8 +1370,48 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private static readonly Fixed WingEpsilon = Fixed.FromFraction(1, 64);
 
     /// <summary><c>Locomotor::calcMinTurnRadius</c>: the radius of the circle an aircraft flies at <paramref name="speed"/> with its turn rate (a huge radius when it cannot turn).</summary>
-    protected static Fixed TurnRadius(LocomotorInfo locomotor, Fixed speed)
-        => locomotor.TurnRatePerTick > Fixed.Zero ? speed / locomotor.TurnRatePerTick : Fixed.FromInt(1_000_000);
+    protected static Fixed TurnRadius(LocomotorInfo locomotor, Fixed speed) => TurnRadius(locomotor.TurnRatePerTick, speed);
+
+    /// <summary>The same with speed and turn rate in one unit of time (both per tick or both per logic frame of the original).</summary>
+    protected static Fixed TurnRadius(Fixed turnRate, Fixed speed) => turnRate > Fixed.Zero ? speed / turnRate : Fixed.FromInt(1_000_000);
+
+    /// <summary>
+    /// The constants of <paramref name="locomotor"/> per logic frame of the original for a decision of flight: at 30 Hz the locomotor's own values, above the 30 Hz conversion of the
+    /// same source numbers (<see cref="LocomotorFrames"/>), so that a decision computes with the bits the 30 Hz step computes with and no threshold falls differently at another rate.
+    /// </summary>
+    protected void FlightFrameConstants(SimulationTime time, LocomotorInfo locomotor, out Fixed topSpeed, out Fixed acceleration, out Fixed braking, out Fixed turnRate, out Fixed minSpeed)
+    {
+        if (_stride == 0) ResolveBlockerTiming(time);
+        FrameConstants(locomotor, out topSpeed, out acceleration, out braking, out turnRate, out minSpeed);
+    }
+
+    /// <summary>The vertical constants of <paramref name="locomotor"/> per logic frame of the original (<see cref="FlightFrameConstants"/>): the limit of its own descent and its lift.</summary>
+    protected void FlightVerticalConstants(SimulationTime time, LocomotorInfo locomotor, out Fixed speedLimitZ, out Fixed lift)
+    {
+        FlightFrameConstants(time, locomotor, out _, out _, out _, out _, out _);
+        if (_stride == 1)
+        {
+            speedLimitZ = locomotor.SpeedLimitZ;
+            lift = locomotor.Lift;
+            return;
+        }
+        speedLimitZ = _frameConstants!.SpeedLimitZ;
+        lift = _frameConstants.Lift;
+    }
+
+    /// <summary>The speed per logic frame of the original the object flies or rolls with (<see cref="FrameSpeed"/>).</summary>
+    protected Fixed FlightFrameSpeed(SimulationTime time)
+    {
+        if (_stride == 0) ResolveBlockerTiming(time);
+        return FrameSpeed();
+    }
+
+    /// <summary>Sets the speed per logic frame of the original; <see cref="Entity.Speed"/> becomes its share of a tick (<see cref="SetFrameSpeed"/>). Zero is "stopped by the module itself".</summary>
+    protected void SetFlightFrameSpeed(SimulationTime time, Fixed speed)
+    {
+        if (_stride == 0) ResolveBlockerTiming(time);
+        SetFrameSpeed(speed);
+    }
 
     /// <summary>The frame of winged flight that is being flown (<see cref="SteerWinged"/>); empty at 30 Hz. Kept by the one AI that flies with wings (<see cref="DescribeWingStep"/>).</summary>
     private FlightFrameStep _wingStep;
@@ -1243,6 +1425,21 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>The aircraft stopped flying with its wings (it lands, taxis or is gone): what is left of the decided frame is dropped.</summary>
     protected void CancelWingedStep() => _wingStep.Cancel();
 
+    /// <summary>What is left of the decided frame of winged flight (for the publication of the aircraft's frame end, <see cref="FlightFrameStep.Publish"/>).</summary>
+    protected (Fixed X, Fixed Y) WingedStepRest => _wingStep.RestXY;
+
+    /// <summary>
+    /// What is left of the step of ground or helicopter movement the object is covering in shares (<see cref="AdvanceFrame"/>), after this tick's share; zero when no share was
+    /// covered in <paramref name="tick"/>. Read by a derived AI that publishes the frame end of an object with a second step (height) of its own.
+    /// </summary>
+    protected (Fixed X, Fixed Y) GroundStepRest(long tick)
+    {
+        if (_frameTicksLeft <= 0 || _frameDue != tick + TickOrder.Next) return default;
+        long shares = _stride;
+        var covered = shares - _frameTicksLeft;
+        return (Fixed.FromRaw(_frameStepX.Raw - _frameStepX.Raw * covered / shares), Fixed.FromRaw(_frameStepY.Raw - _frameStepY.Raw * covered / shares));
+    }
+
     protected void DescribeWingStep(IStateWriter writer) => _wingStep.Describe(writer, "wingStep");
 
     protected void LoadWingStep(IStateReader reader) => _wingStep.Load(reader, "wingStep");
@@ -1252,10 +1449,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// turns an aircraft at its full turn rate whatever its speed: <c>MinTurnSpeed</c> is a wheeled-vehicle setting), the speed approaches <paramref name="goalSpeed"/> by the locomotor's acceleration or braking
     /// of a frame but never leaves the range from <see cref="LocomotorInfo.MinSpeed"/> up, and the aircraft advances along its new heading by the travel of a frame at that speed. This is the 30 Hz step; at a
     /// higher rate it is decided once per frame and flown in equal shares per tick (<see cref="FlightFrameStep"/>), because a polygon with shorter sides is another curve (another turning circle).
-    /// Speeds stay values per tick.
+    /// <paramref name="goalSpeed"/> is a speed per logic frame of the original, as are the constants of the step (<see cref="FlightFrameConstants"/>); the module keeps the
+    /// speed per frame itself (<see cref="FrameSpeed"/>), <see cref="Entity.Speed"/> is its share of a tick.
     /// </summary>
     protected void SteerWinged(SimulationTime time, LocomotorInfo locomotor, Fixed targetX, Fixed targetY, Fixed goalSpeed)
     {
+        FlightFrameConstants(time, locomotor, out _, out var acceleration, out var braking, out var turn, out var minSpeed);
         var dx = targetX - Entity.X;
         var dy = targetY - Entity.Y;
         var heading = Entity.Angle;
@@ -1263,17 +1462,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         {
             var desired = FixedTrig.Atan2(dy, dx);
             var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
-            var turn = FlightFrames.PerFrame(time, locomotor.TurnRatePerTick);
             Entity.Angle = turn > Fixed.Zero && difference.Abs() > turn ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turn : turn)) : desired;
         }
-        goalSpeed = Fixed.Max(goalSpeed, locomotor.MinSpeed);
-        var speed = Fixed.Max(Entity.Speed, locomotor.MinSpeed);
+        goalSpeed = Fixed.Max(goalSpeed, minSpeed);
+        var speed = Fixed.Max(FrameSpeed(), minSpeed);
         speed = speed < goalSpeed
-            ? Fixed.Min(goalSpeed, speed + FlightFrames.PerFrame(time, locomotor.Acceleration))
-            : Fixed.Max(goalSpeed, speed - FlightFrames.PerFrame(time, locomotor.Braking));
-        Entity.Speed = speed;
-        var stepX = FixedTrig.Cos(Entity.Angle) * FlightFrames.PerFrame(time, speed);
-        var stepY = FixedTrig.Sin(Entity.Angle) * FlightFrames.PerFrame(time, speed);
+            ? Fixed.Min(goalSpeed, speed + acceleration)
+            : Fixed.Max(goalSpeed, speed - braking);
+        SetFrameSpeed(speed);
+        var stepX = FixedTrig.Cos(Entity.Angle) * speed;
+        var stepY = FixedTrig.Sin(Entity.Angle) * speed;
         Entity.X += stepX;
         Entity.Y += stepY;
         if (time.TicksPerOriginalFrame > 1) _wingStep.Begin(time, Entity, stepX, stepY, Fixed.Zero, FixedTrig.AngleDifference(heading, Entity.Angle));
@@ -1290,10 +1488,17 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// back), only within <see cref="GoalSpotLook"/> of the target, and only every <see cref="GoalSpotCheckFrames"/> frames. The rhythm needs no state: it is the world's frame
     /// number, staggered by the object's id, so it falls on the same frame of the original at every rate.
     /// </summary>
+    // Derived from the template's modules on first use, not state.
+    private bool? _follows;
+
     private bool GoalSpotCheckDue(IWorldServices world)
     {
-        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending) return false;
+        // Not on the way out of a factory either: the first leg ends at the place the exit path chose, and the rally point is adjusted when the second leg is ordered.
+        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending || _exitRallyPending || _viaPending) return false;
         if ((world.Time.FramesIn(world.Tick) + Entity.Id.Value) % GoalSpotCheckFrames != 0) return false;
+        // A slave or mob member is sent onto its master's place by its own module, again and again: it keeps the goal it is given.
+        _follows ??= Entity.Modules.Any(module => module is ISlavedModule);
+        if (_follows.Value) return false;
         var dx = Entity.MoveTargetX - Entity.X;
         var dy = Entity.MoveTargetY - Entity.Y;
         return SquaredReach.Of(GoalSpotLook).Contains(dx * dx + dy * dy);
@@ -1415,8 +1620,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     /// <summary>
     /// The arrival above 30 Hz. At 30 Hz the step that finds the object within its arrival radius puts it on the target and ends the move; that step is a logic frame of the
-    /// original like every other, so here the object covers the rest of the way (<paramref name="dx"/>, <paramref name="dy"/>) in that frame's shares and the move ends, with
-    /// <c>MoveArrived</c>, in the tick of the last share: the state after the frame is the state after the 30 Hz step, and an order given on the arrival starts in the same frame.
+    /// original like every other. Here the move ends, with <c>MoveArrived</c>, in the first tick of that frame - the tick of the 30 Hz step, in which every decision of a
+    /// frame falls (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 1): whoever looks at the object in this tick finds it without a move order, as at 30 Hz - and the object
+    /// covers the rest of the way (<paramref name="dx"/>, <paramref name="dy"/>) in that frame's shares (<see cref="Coast"/>); its position at the frame's end, which
+    /// observers read (<see cref="Entity.FrameEnd"/>), is the target.
     /// </summary>
     private void BeginArrival(IWorldServices world, LocomotorInfo locomotor, Fixed dx, Fixed dy)
     {
@@ -1425,7 +1632,41 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _frameAngle = Entity.Angle;
         _frameTicksLeft = _stride;
         _frameArriving = true;
+        var complete = world.Navigation is null || _pathComplete;
         AdvanceFrame(world, locomotor);
+        // The end of the move, in the order of the 30 Hz arrival (which tests no collision in its step either).
+        Entity.HasMoveTarget = false;
+        Entity.Speed = Fixed.Zero;
+        _frameSpeed = Fixed.Zero;
+        InvalidatePath();
+        _frameArriving = true;
+        if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
+    }
+
+    /// <summary>
+    /// Above 30 Hz: puts the object where the frame it has begun ends and leaves nothing of that frame's step to cover - for whoever takes the object out of the world in the
+    /// tick of its decision (it enters a container): at 30 Hz it has taken its whole step by then. Nothing to do at 30 Hz.
+    /// </summary>
+    internal void SettleFrame(long tick)
+    {
+        // Whatever the object does next is decided when the frame it was covering would have ended, not earlier.
+        if (_frameTicksLeft > 0 && _frameDue >= tick) _moveHoldUntil = _frameDue + _frameTicksLeft;
+        if (Entity.IsInsideFrameStep || Entity.HasAheadAngle) Entity.CompleteFrame(tick);
+        _frameTicksLeft = 0;
+        _frameArriving = false;
+    }
+
+    /// <summary>Above 30 Hz: the shares of the last step of a move that has ended (<see cref="BeginArrival"/>). A share that was not taken in its tick voids the rest.</summary>
+    private void Coast(IWorldServices world)
+    {
+        if (_stride == 0) ResolveBlockerTiming(world.Time);
+        if (world.Tick == _frameDue && ActiveLocomotor is { } locomotor)
+        {
+            AdvanceFrame(world, locomotor);
+            return;
+        }
+        _frameTicksLeft = 0;
+        _frameArriving = false;
     }
 
     private void AdvanceFrame(IWorldServices world, LocomotorInfo locomotor)
@@ -1446,18 +1687,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         // The rest of the frame's step stays readable on the object (Entity.FrameEnd): who decides its own frame later in this tick sees this one where its step ends, as at 30 Hz.
         if (covered == 0) Entity.SetAhead(world.Tick, _frameStepX, _frameStepY, Fixed.Zero);
         Entity.CoverShare(world.Tick, stepX, stepY, Fixed.Zero);
+        // So does the heading the frame ends with (Entity.FrameEndAngle).
+        if (Entity.Angle != _frameAngle) Entity.SetAheadAngle(_frameAngle);
+        else Entity.ClearAheadAngle();
         var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
         if (world.Navigation is not null && !air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
         if (_frameArriving)
         {
-            if (left > 1) return;
-            // The end of the move, in the order of the 30 Hz arrival (which tests no collision in its step either).
-            var complete = world.Navigation is null || _pathComplete;
-            Entity.HasMoveTarget = false;
-            Entity.Speed = Fixed.Zero;
-            _frameSpeed = Fixed.Zero;
-            InvalidatePath();
-            if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
+            // The last step of a move tests no collision, as the 30 Hz arrival does not.
+            if (left == 1) _frameArriving = false;
             return;
         }
         // Crush, topple and collide modules are tested where the 30 Hz step tests them: once per logic frame, at the end of the frame's step and with its whole displacement.
@@ -1486,6 +1724,20 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _path.Add(new PathPoint(Entity.MoveTargetX, Entity.MoveTargetY));
             _pathComplete = true;
             return;
+        }
+        if (_viaPending)
+        {
+            var toDoor = navigation.FindPath(Entity.X, Entity.Y, _viaX, _viaY, locomotor.Surfaces);
+            if (toDoor.Status == PathStatus.Found)
+            {
+                var onward = navigation.FindPath(_viaX, _viaY, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces);
+                _pathComplete = onward.Status == PathStatus.Found;
+                _path.AddRange(toDoor.Points);
+                _path.AddRange(onward.Points);
+                return;
+            }
+            // The door point cannot be reached (something was built in front of the door): straight to the goal.
+            _viaPending = false;
         }
         var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces);
         _pathComplete = result.Status == PathStatus.Found;
@@ -1582,6 +1834,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         if (_blockerReplanTick > -1000) writer.Int("blockerReplanTick", _blockerReplanTick);
         if (_frameSpeed != Fixed.Zero) writer.Fixed("frameSpeed", _frameSpeed);
+        if (_moveHoldUntil != 0) writer.Int("moveHoldUntil", _moveHoldUntil);
         if (_frameTicksLeft > 0)
         {
             writer.Int("frameTicksLeft", _frameTicksLeft);
@@ -1590,6 +1843,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             writer.Fixed("frameStepY", _frameStepY);
             writer.Fixed("frameAngle", _frameAngle);
             if (_frameArriving) writer.Bool("frameArriving", true);
+        }
+        if (_exitRallyPending)
+        {
+            writer.Fixed("exitRallyX", _exitRallyX);
+            writer.Fixed("exitRallyY", _exitRallyY);
+        }
+        if (_viaPending)
+        {
+            writer.Fixed("viaX", _viaX);
+            writer.Fixed("viaY", _viaY);
         }
         if (_pathValid)
         {
@@ -1630,11 +1893,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _exitY = reader.Has("exitY") ? reader.Fixed("exitY") : Fixed.Zero;
         _blockerReplanTick = reader.Has("blockerReplanTick") ? reader.Int("blockerReplanTick") : -1000;
         _frameSpeed = reader.Has("frameSpeed") ? reader.Fixed("frameSpeed") : Fixed.Zero;
+        _moveHoldUntil = reader.Has("moveHoldUntil") ? reader.Int("moveHoldUntil") : 0;
         _frameTicksLeft = reader.Has("frameTicksLeft") ? checked((int)reader.Int("frameTicksLeft")) : 0;
         _frameDue = reader.Has("frameDue") ? reader.Int("frameDue") : 0;
         _frameStepX = reader.Has("frameStepX") ? reader.Fixed("frameStepX") : Fixed.Zero;
         _frameStepY = reader.Has("frameStepY") ? reader.Fixed("frameStepY") : Fixed.Zero;
         _frameAngle = reader.Has("frameAngle") ? reader.Fixed("frameAngle") : Fixed.Zero;
+        _exitRallyPending = reader.Has("exitRallyX");
+        _exitRallyX = _exitRallyPending ? reader.Fixed("exitRallyX") : Fixed.Zero;
+        _exitRallyY = _exitRallyPending ? reader.Fixed("exitRallyY") : Fixed.Zero;
+        _viaPending = reader.Has("viaX");
+        _viaX = _viaPending ? reader.Fixed("viaX") : Fixed.Zero;
+        _viaY = _viaPending ? reader.Fixed("viaY") : Fixed.Zero;
         InvalidatePath();
         if (reader.Has("pathValid"))
         {
@@ -1652,7 +1922,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 // ============================================================================================= ProductionUpdate
 
 /// <summary>
-/// <c>ProductionUpdate.h</c>. <c>QuantityModifier</c> is typed but not applied: phase 5 spawns one unit per completed queue entry at the producer's own position (no exit-point geometry, no rally points — see docs/GAME-RULES.md).
+/// <c>ProductionUpdate.h</c>. <c>QuantityModifier</c> is typed but not applied: one unit per completed queue entry, created at the exit module's <c>UnitCreatePoint</c> and sent along its exit path (docs/SIMULATION-CORE.md §42).
 /// The door-animation timing fields (<c>NumDoorAnimations</c>, <c>DoorOpeningTime</c>, <c>DoorWaitOpenTime</c>, <c>DoorCloseTime</c>, <c>ConstructionCompleteDuration</c>; milliseconds in the INI, ticks here) change no
 /// simulation behaviour — nothing waits for a door — and are kept for the presentation only (docs/MODEL-CONDITIONS-BUILDINGS.md); the catalog carries them as Opaque, so they are read from the original text.
 /// </summary>
@@ -1690,7 +1960,7 @@ public readonly record struct ProductionQueueItem(int TemplateIndex, Fixed Cost,
 
 /// <summary>
 /// <c>ProductionUpdate::update()</c>: only the head-of-queue entry accumulates progress, one tick per call; when it reaches
-/// zero the unit spawns at the producer's own position and the next entry (if any) starts from a fresh tick count. The full
+/// zero the unit spawns at the exit's <c>UnitCreatePoint</c>, is sent along its exit path (<see cref="IProductionExit.TryGetExitPath"/>) and the next entry (if any) starts from a fresh tick count. The full
 /// cost is withdrawn at queue time (<c>SimulationWorld</c>'s <c>QueueProductionCommand</c> handler) and refunded in full on
 /// cancel, matching <c>Money::withdraw</c>/<c>deposit</c> semantics; there is no per-frame energy-ratio build-time penalty
 /// (a documented phase-5 simplification — <c>ProductionUpdate::calcTimeToBuild</c> in the reference).
@@ -1800,8 +2070,11 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         {
             _queue.RemoveAt(0);
             var forcesSupplyWanting = exit is { ForcesSupplyWanting: true };
+            // exitObjectViaDoor: the unit leaves over the exit point of its factory (NaturalRallyPoint) and goes on to the player's rally point, if one is set.
+            Fixed doorX = Fixed.Zero, doorY = Fixed.Zero, exitX = Fixed.Zero, exitY = Fixed.Zero;
+            var hasExit = !forcesSupplyWanting && exit is not null && exit.TryGetExitPath(out doorX, out doorY, out exitX, out exitY);
             var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
-                : _hasRally ? new SpawnExtras(Fixed.Zero, HasRally: true, RallyX: _rallyX, RallyY: _rallyY)
+                : _hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: _hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
                 : default(SpawnExtras?);
             var (x, y, z, angle) = exit is null ? (Entity.X, Entity.Y, Entity.Z, Entity.Angle) : exit.ClaimExit(world, world.Templates[head.TemplateIndex]);
             if (extras is { } value) world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle, value);

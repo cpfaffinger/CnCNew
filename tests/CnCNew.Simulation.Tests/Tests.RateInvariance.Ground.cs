@@ -103,7 +103,7 @@ static partial class Tests
                     if (!result.Events.Any(value => value.Kind == SimEventKind.MoveArrived && value.Entity == unit.Id)) continue;
                     arrived = true;
                     trace.ArrivalSteps.Add(step);
-                    Check.That(tick == stride - 1, $"{rate}: the move ends with the last tick of its logic frame (tick {tick} of {stride}).");
+                    Check.That(tick == 0, $"{rate}: the move ends with the first tick of its logic frame, the tick of the 30 Hz step (tick {tick} of {stride}).");
                 }
                 for (var tick = 0; tick < stride - 1; tick++)
                 {
@@ -132,7 +132,8 @@ static partial class Tests
             Check.That(trace.Frames.Count == reference.Frames.Count, $"{what}, {rate}: the course takes {reference.Frames.Count} logic frames (measured {trace.Frames.Count}).");
             var first = Enumerable.Range(0, Math.Min(trace.Frames.Count, reference.Frames.Count)).FirstOrDefault(index => trace.Frames[index] != reference.Frames[index], -1);
             Check.That(first < 0, $"{what}, {rate}: position, height, heading and order state after every logic frame are those of 30 Hz (first difference after frame {first + 1}).");
-            Check.That(trace.ArrivalSteps.SequenceEqual(reference.ArrivalSteps.Select(value => value * factor)),
+            // Step s of 30 Hz is the logic frame s - 1; the move ends in the first tick of that frame.
+            Check.That(trace.ArrivalSteps.SequenceEqual(reference.ArrivalSteps.Select(value => (value - 1) * factor + 1)),
                 $"{what}, {rate}: every arrival falls into the same logic frame ({string.Join(",", trace.ArrivalSteps)} against {string.Join(",", reference.ArrivalSteps)} at 30 Hz).");
             Check.That(trace.MidFrame.Count == 0, $"{what}, {rate}: between two frames the object is on the line between them ({string.Join("; ", trace.MidFrame.Take(3))}).");
         }
@@ -229,6 +230,8 @@ static partial class Tests
                 for (var tick = 0; tick < 3 * factor; tick++) arrivals += world.Step().Events.Count(value => value.Kind == SimEventKind.MoveArrived);
                 Check.That(unit.Angle > drift, $"{rate}: with its next frame it turns toward the new target.");
                 for (var tick = 0; tick < 2_000 * factor && unit.HasMoveTarget; tick++) arrivals += world.Step().Events.Count(value => value.Kind == SimEventKind.MoveArrived);
+                // The move ends in the first tick of its last frame; the object covers the rest of that frame's step in the ticks after it.
+                for (var tick = 1; tick < factor; tick++) arrivals += world.Step().Events.Count(value => value.Kind == SimEventKind.MoveArrived);
                 Check.That(arrivals == 1 && unit.X == Fixed.FromInt(100) && unit.Y == Fixed.FromInt(160), $"{rate}: one arrival, at the new target ({arrivals}).");
             }
 
@@ -241,16 +244,19 @@ static partial class Tests
                 arrivalTick = world.Tick - 1;
             }
             {
+                // The move ends in the first tick of its last frame, as the 30 Hz step ends it; an order in the tick after it finds an object that has arrived and is still
+                // covering that frame's step: it covers it to the end and sets off to the new target with its next frame.
                 var (world, feeder, unit) = Start();
                 while (world.Tick < arrivalTick) world.Step();
                 Check.That(unit.HasMoveTarget && unit.X < Fixed.FromInt(150), $"{rate}: one tick before the arrival the object is still on its way.");
+                var arrivals = world.Step().Events.Count(value => value.Kind == SimEventKind.MoveArrived);
+                Check.That(arrivals == 1 && !unit.HasMoveTarget && unit.X < Fixed.FromInt(150), $"{rate}: the move ends in the first tick of its last frame, a share of the step before the target.");
                 feeder.SetMoveTarget(1, unit.Id.Value, 100, 160);
-                var result = world.Step();
-                Check.That(!result.Events.Any(value => value.Kind == SimEventKind.MoveArrived) && unit.HasMoveTarget, $"{rate}: an order inside the last frame cancels the arrival.");
-                Check.That(unit.X == Fixed.FromInt(150) && (unit.Y - Fixed.FromInt(30)).Abs() < drift, $"{rate}: the object still covers that frame's step to the old target.");
-                var arrivals = 0;
+                for (var tick = 1; tick < factor; tick++) arrivals += world.Step().Events.Count(value => value.Kind == SimEventKind.MoveArrived);
+                Check.That(unit.HasMoveTarget && unit.X == Fixed.FromInt(150) && (unit.Y - Fixed.FromInt(30)).Abs() < drift, $"{rate}: the object still covers that frame's step to the old target.");
                 for (var tick = 0; tick < 2_000 * factor && unit.HasMoveTarget; tick++) arrivals += world.Step().Events.Count(value => value.Kind == SimEventKind.MoveArrived);
-                Check.That(arrivals == 1 && unit.X == Fixed.FromInt(100) && unit.Y == Fixed.FromInt(160), $"{rate}: one arrival, at the new target ({arrivals}).");
+                for (var tick = 1; tick < factor; tick++) arrivals += world.Step().Events.Count(value => value.Kind == SimEventKind.MoveArrived);
+                Check.That(arrivals == 2 && unit.X == Fixed.FromInt(100) && unit.Y == Fixed.FromInt(160), $"{rate}: a second arrival, at the new target ({arrivals}).");
             }
         }
     }

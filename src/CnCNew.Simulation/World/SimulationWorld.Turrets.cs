@@ -300,8 +300,10 @@ public sealed partial class SimulationWorld
         if (!CanPlayerSee(attacker.Owner, victim)) return false;
         if (state.Pursuing) { state.LoseInterestAt = 0; return true; }
         var range = MaxWeaponRange(attacker);
-        var dx = victim.X - attacker.X;
-        var dy = victim.Y - attacker.Y;
+        var (victimX, victimY, _) = victim.FrameEnd(_tick);
+        var (ownX, ownY, _) = attacker.FrameEnd(_tick);
+        var dx = victimX - ownX;
+        var dy = victimY - ownY;
         if (SquaredReach.Of(range).Contains(dx * dx + dy * dy)) { state.LoseInterestAt = 0; return true; }
         if (state.LoseInterestAt == 0) state.LoseInterestAt = tick + _turretLoseInterestTicks;
         return tick < state.LoseInterestAt;
@@ -352,8 +354,14 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary><c>getRelativeAngle2D(obj, enemyPosition)</c>: the bearing to the victim minus the body's heading, wrapped.</summary>
-    private static Fixed DesiredTurretAngle(Entity source, Entity victim)
-        => FixedTrig.Normalize(FixedTrig.Atan2(victim.Y - source.Y, victim.X - source.X) - source.Angle);
+    private Fixed DesiredTurretAngle(Entity source, Entity victim)
+    {
+        // Both objects where the logic frame of the original they have begun ends, and the body's heading there (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the
+        // turret turns once per frame toward what the 30 Hz turret sees after the step of that frame. At 30 Hz these are the positions and the heading.
+        var (victimX, victimY, _) = victim.FrameEnd(_tick);
+        var (ownX, ownY, _) = source.FrameEnd(_tick);
+        return FixedTrig.Normalize(FixedTrig.Atan2(victimY - ownY, victimX - ownX) - source.FrameEndAngle(_tick));
+    }
 
     /// <summary>
     /// The pitch <c>TurretAIAimTurretState::update</c> turns to: the turret's natural pitch when it cannot pitch; <c>FirePitch</c> when set; else the elevation to the victim from the top of the
@@ -364,9 +372,11 @@ public sealed partial class SimulationWorld
     {
         if (!info.AllowsPitch) return info.NaturalPitch;
         if (info.FirePitch > Fixed.Zero) return info.FirePitch;
-        var dx = victim.X - source.X;
-        var dy = victim.Y - source.Y;
-        var dz = victim.Z - source.Z - source.Template.GeometryHeight;
+        var (victimX, victimY, victimZ) = victim.FrameEnd(_tick);
+        var (ownX, ownY, ownZ) = source.FrameEnd(_tick);
+        var dx = victimX - ownX;
+        var dy = victimY - ownY;
+        var dz = victimZ - ownZ - source.Template.GeometryHeight;
         var horizontal = Fixed.Sqrt(dx * dx + dy * dy);
         var actual = FixedTrig.Atan2(dz, horizontal);
         var desired = Fixed.Max(actual, info.MinPitch);

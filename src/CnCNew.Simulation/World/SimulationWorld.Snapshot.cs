@@ -102,10 +102,13 @@ public sealed partial class SimulationWorld
                         : null,
                     pending.Has("creator"), pending.Has("creator") ? new EntityId(checked((uint)pending.UInt("creator"))) : EntityId.Invalid,
                     pending.Has("enslaver") ? new EntityId(checked((uint)pending.UInt("enslaver"))) : default,
-                    pending.Has("producer") ? new EntityId(checked((uint)pending.UInt("producer"))) : default),
+                    pending.Has("producer") ? new EntityId(checked((uint)pending.UInt("producer"))) : default,
+                    pending.Has("exitX"), pending.Has("exitX") ? pending.Fixed("doorX") : default, pending.Has("exitX") ? pending.Fixed("doorY") : default,
+                    pending.Has("exitX") ? pending.Fixed("exitX") : default, pending.Has("exitX") ? pending.Fixed("exitY") : default),
                 pending.Has("notBefore") ? pending.Int("notBefore") : 0));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
+        LoadExitClaims(state);
 
         foreach (var item in state.Array("entityList")) LoadEntity(item);
         foreach (var player in state.Array("players")) _players[checked((int)player.Int("id"))].EnergyProduction = checked((int)player.Int("energyProduction"));
@@ -179,6 +182,12 @@ public sealed partial class SimulationWorld
         if (reader.Has("crateArmorLevel")) entity.CrateArmorLevel = checked((int)reader.Int("crateArmorLevel"));
         if (entity.CrateWeaponLevel is < 0 or > 2 || entity.CrateArmorLevel is < 0 or > 2) throw new InvalidDataException("Crate upgrade level out of range.");
         if (reader.Has("aheadX")) entity.SetAhead(reader.Int("aheadTick"), reader.Fixed("aheadX"), reader.Fixed("aheadY"), reader.Fixed("aheadZ"));
+        if (reader.Has("destroyNotBefore")) entity.DestroyNotBefore = reader.Int("destroyNotBefore");
+        if (reader.Has("aheadAngle"))
+        {
+            if (!reader.Has("aheadX")) entity.SetAhead(reader.Int("aheadAngleTick"), Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            entity.SetAheadAngle(reader.Fixed("aheadAngle"));
+        }
         if (reader.Has("visionSpied"))
         {
             entity.VisionSpiedBy = [];

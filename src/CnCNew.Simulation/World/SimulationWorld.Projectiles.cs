@@ -39,8 +39,10 @@ public sealed partial class SimulationWorld
     {
         if (victim is not null) { x = victim.X; y = victim.Y; z = victim.Z; }
         var (sourceX, sourceY, sourceZ) = (source.X, source.Y, source.Z);
+        var sourceAngle = source.Angle;
         if (_firstFrameTicks != TickOrder.Next)
         {
+            sourceAngle = source.FrameEndAngle(_tick);
             // Above 30 Hz the shot goes from where the shooter's begun logic frame of the original ends to where the victim's ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3,
             // rule 3): the positions both have when the 30 Hz step fires, after their whole step of that frame.
             if (victim is not null) (x, y, z) = victim.FrameEnd(_tick);
@@ -76,7 +78,7 @@ public sealed partial class SimulationWorld
             var id = Ids.AllocateEntity();
             var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, conditions);
             // Weapon::positionProjectileForLaunch uses the launcher's weapon bone; without art the launch point is the launcher's geometry centre.
-            _spawnQueue.Add(new PendingSpawn(id, projectileIndex, source.Owner, sourceX, sourceY, sourceZ + source.Template.CenterZDelta, source.Angle,
+            _spawnQueue.Add(new PendingSpawn(id, projectileIndex, source.Owner, sourceX, sourceY, sourceZ + source.Template.CenterZDelta, sourceAngle,
                 default(SpawnSetup) with { Launch = launch }));
             EmitAt(SimEventKind.ProjectileLaunched, id, source.Id, weapon.Name, 0, destinationX, destinationY, destinationZ);
             return Fixed.Zero;

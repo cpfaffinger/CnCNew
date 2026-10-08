@@ -99,28 +99,32 @@ Quellen: `ProductionUpdate.cpp` (`ProductionUpdate::update`, `updateDoors`), `De
 Je Originalbild, in Gebäudekoordinaten (x zur Ausfahrtsseite): Erscheinungsbild und -ort jeder gebauten Einheit, ihr Weg in den ersten drei Sekunden (alle 15 Bilder), das erste Bild
 außerhalb des Gebäudekastens und die Stelle dort, der Ruheort, ob sie in jedem Bild gezeichnet wird, und die Zeitleiste der Torzustände des Gebäudes. Prüfungen: (a) Erscheinen am
 `UnitCreatePoint` (±1,5); (b) bei Gebäuden mit Tor: das Tor zeigt `DOOR_1_WAITING_OPEN`, wenn die Einheit erscheint, und nach der letzten Einheit folgen `DOOR_1_CLOSING` und „zu“;
-(c) die Einheit verlässt den Kasten über die Ausfahrtsseite (x ≥ halbe Länge, höchstens 20 neben der Linie des `NaturalRallyPoint`); (d) sie ruht höchstens 30 vom Ende des
-Ausfahrtswegs; (e) sie wird in jedem Bild gezeichnet; (f) je Auftrag erscheint eine Einheit.
+(c) die Einheit verlässt den Kasten über die Ausfahrtsseite (x ≥ halbe Länge, höchstens 20 neben der Linie des `NaturalRallyPoint`); (d) sie kommt zur Ruhe, außerhalb des
+Kastens, höchstens 130 vom Ende des Ausfahrtswegs (der Ausfahrtspunkt selbst oder ein Platz daneben), und keine zwei Einheiten eines Gebäudes ruhen ineinander (Abstand mindestens
+0,9 der Summe ihrer Begrenzungsradien); (e) sie wird in jedem Bild gezeichnet; (f) je Auftrag erscheint eine Einheit.
 
-### Befund (gemessen 7. Oktober 2026, 30 Hz; **nicht von einem Menschen gesehen**)
+### Befund und Korrektur (gemessen 8. Oktober 2026, 30 und 60 Hz; **nicht von einem Menschen gesehen**)
 
-| Prüfung | Ergebnis über alle neun Gebäude (27 Einheiten) |
-| --- | --- |
-| (a) Erscheinungsort | 27 von 27 genau am `UnitCreatePoint`, im Gebäude – wie im Original |
-| (b) Tor | bei allen fünf Gebäuden mit Tor: offen (`WAITING_OPEN`), wenn die Einheit erscheint; schließt nach der letzten (z. B. `AmericaWarFactory`: öffnet ab Bild 231, offen ab 330, Einheit in Bild 330, schließt ab 1020, zu ab 1141). Vor dieser Sitzung war das Tor beim Erscheinen der **ersten** Einheit ein Bild lang noch `OPENING` (behoben in `StructureConditionTracker`: Vorlauf `DoorOpeningTime` + 1 Tick) |
-| (c) Ausfahrt | **0 von 27**: keine Einheit bewegt sich. Sie bleibt am `UnitCreatePoint` im Gebäude stehen; drei nacheinander gebaute Einheiten stehen auf demselben Punkt ineinander |
-| (d) Haltepunkt | entfällt (keine Ausfahrt): Abstand zum Ende des Ausfahrtswegs 54 bis 96 Einheiten |
-| (e) gezeichnet | 27 von 27 in jedem Bild (die Einheit ist also im Gebäudemodell sichtbar bzw. von ihm verdeckt) |
-| (f) Stückzahl | 27 von 27 Aufträgen liefern **eine** Einheit – auch die chinesische Kaserne, die im Original je Auftrag **zwei** Rotgardisten baut (`QuantityModifier = ChinaInfantryRedguard 2`, in der Simulation typisiert, aber nicht angewendet; nur gemeldet) |
+| Prüfung | Vor der Korrektur der Simulation (27 Einheiten, neun Gebäude) | Mit dem Ausfahrtsweg (`docs/SIMULATION-CORE.md` §42) |
+| --- | --- | --- |
+| (a) Erscheinungsort | 27 von 27 genau am `UnitCreatePoint`, im Gebäude – wie im Original | unverändert |
+| (b) Tor | bei allen fünf Gebäuden mit Tor offen (`WAITING_OPEN`), wenn die Einheit erscheint; schließt nach der letzten (z. B. `AmericaWarFactory`: öffnet ab Bild 231, offen ab 330, Einheit in Bild 330, schließt ab 1020, zu ab 1141). Davor war das Tor beim Erscheinen der **ersten** Einheit ein Bild lang noch `OPENING` (behoben in `StructureConditionTracker`: Vorlauf `DoorOpeningTime` + 1 Tick) | unverändert |
+| (c) Ausfahrt | **0 von 27**: keine Einheit bewegt sich. Sie bleibt am `UnitCreatePoint` im Gebäude stehen | **27 von 27** verlassen den Kasten über die Torseite auf der Linie des `NaturalRallyPoint`; erstes Bild außerhalb: Kommandozentrale America +93, China +93 bis +94, GLA +52; Kaserne America +86, China +47 bis +48, GLA +66; Waffenfabrik America +64, China +69, Waffenhändler +46 Bilder nach dem Erscheinen – bei 30 und bei 60 Hz dieselben Zahlen |
+| (d) Haltepunkt | entfällt: Abstand zum Ende des Ausfahrtswegs 54 bis 96 Einheiten, drei Einheiten auf demselben Punkt ineinander | die zuletzt gebaute Einheit steht auf dem Ausfahrtspunkt (Abstand 0,0); die früheren haben Platz gemacht und stehen 19 bis 77 daneben, alle außerhalb des Kastens, keine zwei ineinander; jede kommt zur Ruhe (Ruheorte bei 60 Hz wie bei 30 Hz) |
+| (e) gezeichnet | 27 von 27 in jedem Bild | unverändert |
+| (f) Stückzahl | 27 Aufträge liefern je **eine** Einheit – auch die chinesische Kaserne, die im Original je Auftrag **zwei** Rotgardisten baut (`QuantityModifier = ChinaInfantryRedguard 2`, typisiert, nicht angewendet; nur gemeldet) | unverändert |
 
-Das ist, was der Projektinhaber als „clippt gerade hinaus“ sieht: die Raupe steht nach dem Bau **in** der Kommandozentrale und fährt erst auf einen Befehl hin – dann quer durch das
-Gebäude. Die Abweichung liegt in der **Simulation** (`ProductionUpdate.Update` erzeugt die Einheit am `UnitCreatePoint` und gibt ihr keinen Weg; nur ein vom Spieler gesetzter
-Sammelpunkt bewegt sie), nicht in der Darstellung. Zwei weitere Abweichungen der Simulation, nur gemeldet: die Einheit entsteht, sobald der Auftrag fertig ist, nicht erst nach
-`DoorOpeningTime` (die Darstellung öffnet das Tor dafür entsprechend früher, der ganze Torzyklus liegt um `DoorOpeningTime` vor dem Original); und die Stückzahl der Rotgardisten.
+Was der Projektinhaber als „clippt gerade hinaus“ sah, war also: die Raupe stand nach dem Bau **in** der Kommandozentrale und fuhr erst auf einen Befehl hin – dann quer durch das
+Gebäude. Die Abweichung lag in der **Simulation** (`ProductionUpdate.Update` gab der Einheit keinen Weg), nicht in der Darstellung. Seit dem Commit zu §42 fährt jede Einheit von
+selbst durch die Torseite hinaus, macht der nächsten Platz und fährt mit gesetztem Sammelpunkt von dort weiter. Abweichungen, die bleiben, nur gemeldet: die Einheit entsteht, sobald
+der Auftrag fertig ist, nicht erst nach `DoorOpeningTime` (die Darstellung öffnet das Tor dafür entsprechend früher, der ganze Torzyklus liegt um `DoorOpeningTime` vor dem Original);
+die Stückzahl der Rotgardisten; Laster des Versorgungslagers und `SpawnBehavior`-Erzeugungen benutzen den Ausfahrtsweg nicht.
 
-Weil der Hauptzweig mitten in einer Messphase liegt, in der die Simulation bei 30 Hz bytegleich bleiben muss (`baselines/reference-manifest.json`), steht die Korrektur der
-Ausfahrt in einem **eigenen, letzten Commit** des Zweigs (`docs/SIMULATION-CORE.md`, Abschnitt „Fabrikausfahrt“); solange er nicht gemergt ist, ist `audit-scenarios.ps1 -Scenario exits`
-in Prüfung (c)/(d) **rot** – das ist der Befund, kein Werkzeugfehler.
+Stand des Audits (8. Oktober 2026): vor dem Commit zu §42 sind alle zwölf Szenen rot (je Gebäude drei Fehlschläge, in den Gesamtszenen neun: (c)/(d) je Einheit); mit ihm bestehen
+`audit-scenarios.ps1 -Scenario exits` (neun Einzelszenen) und die drei Gesamtszenen `exit-<fraktion>-all` bei 30 Hz und mit `-TickRate 60`, ebenso die drei klassischen Szenen. Der
+Commit ändert die Simulation bei 30 Hz (neue Hashes in 23 von 50 Läufen des Referenzmanifests, Zahlen in §42.4); das Manifest wird in einem eigenen Commit neu geschrieben. In den
+Gesamtszenen weicht die Zeitleiste der Tore zwischen 30 und 60 Hz in zwei Einträgen um ein Bild ab (z. B. `AmericaCommandCenter`: `CLOSING` ab 271 gegen 270, zu ab 616 gegen 615) –
+Darstellung, nur gemeldet.
 
 ### Checkliste für den Menschen (`scripts/demo-factory-exits.ps1`)
 

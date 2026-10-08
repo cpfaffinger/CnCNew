@@ -90,6 +90,8 @@ run.Test("Rate invariance, ground: the detour around standing units is the 30 Hz
 run.Test("Goal spots: units sent to one point all arrive beside each other, the same at 30, 60 and 120 Hz", Tests.GoalSpotsForUnitsSentToOnePoint);
 run.Test("Boarding: infantry walks into its transport instead of around it, the same at 30, 60 and 120 Hz", Tests.BoardersWalkIntoTheirTransport);
 run.Test("Rate invariance, consolidation: movers that meet are where the 30 Hz movers are", Tests.RateConsolidationMoversThatMeetAreTheSame);
+run.Test("Rate invariance, exits: produced units leave their factory, make room and reach the rally point as at 30 Hz", Tests.RateExitsAreTheSame);
+run.Test("Rate invariance, exits: a snapshot while a unit waits for its place continues like the live world", Tests.RateExitsSnapshotWhileWaitingForThePlace);
 run.Test("Rate invariance, ground: a snapshot inside a logic frame continues like the live world", Tests.GroundRateInvarianceSnapshotInsideAFrame);
 run.Test("Rate invariance, ground: an order inside a logic frame keeps the step continuous and cancels a pending arrival", Tests.GroundRateInvarianceOrderInsideAFrame);
 run.Test("Rate invariance, ground: crush and topple are sampled once per logic frame", Tests.GroundRateInvarianceCollisionsPerFrame);
@@ -104,6 +106,7 @@ run.Test("Rate invariance, firing: a clip without a reload time fires again in t
 run.Test("Rate invariance, abilities: a capture flashes the building in the same frames of the preparation", Tests.RateInvarianceCaptureFlashesInTheSameFrames);
 run.Test("Rate invariance, abilities: facing the target ends in the same logic frame", Tests.RateInvarianceAbilityFacingEndsInTheSameFrame);
 run.Test("Rate invariance, acquisition: the random shift of the mood check is the same at every rate", Tests.RateInvarianceMoodCheckShiftIsTheSameAtEveryRate);
+run.Test("Rate invariance, observers: a fight of two groups is the 30 Hz fight at the end of every logic frame", Tests.RateInvarianceObserversAFightIsTheThirtyHertzFight);
 run.Test("Rate invariance, random draws: a repair drone on its way draws once per logic frame", Tests.RateInvarianceRepairDroneDrawsOncePerFrame);
 run.Test("Rate invariance, random draws: an idle wanderer draws once per logic frame", Tests.RateInvarianceIdleWandererDrawsOncePerFrame);
 run.Test("Rate invariance, modules: the stealth grant scans once per logic frame of its marker", Tests.RateInvarianceGrantStealthScansOncePerFrame);
@@ -242,6 +245,9 @@ run.Test("Construction: cancelling a site refunds it in full", Tests.Constructio
 run.Test("Construction: sale takes 179 ticks and pays SellPercentage", Tests.ConstructionSellTimingAndPayout);
 run.Test("Construction: selling a producer refunds its queue", Tests.ConstructionSellCancelsProduction);
 run.Test("Construction: produced units walk to the rally point", Tests.ConstructionRallyPoint);
+run.Test("Construction: produced units leave their factory through the door, make room for the next and go on to the rally point", Tests.ConstructionExitPath);
+run.Test("Construction: an order given on the exit path replaces it, second leg included", Tests.ConstructionExitPathYieldsToAnOrder);
+run.Test("Construction: driving out, going to the rally point and making room are unordered moves", Tests.ConstructionUnorderedMove);
 run.Test("Construction: dozers repair damaged structures", Tests.ConstructionRepair);
 run.Test("Construction: a second builder resumes an unfinished site", Tests.ConstructionResumeWithAnotherBuilder);
 run.Test("Construction: rejections for permission, prerequisites, funds and kind", Tests.ConstructionRejections);
@@ -386,6 +392,10 @@ run.Test("Rate invariance, flight: a Chinook climbs, lands to unload and climbs 
 run.Test("Rate invariance, flight: the Spectre gunship inserts, orbits, fires and departs the same at 30, 60 and 120 Hz", Tests.RateFlightSpectreGunshipIsTheSame);
 run.Test("Rate invariance, flight: a jet takes off from, flies around and lands at its airfield in the same states at 30, 60 and 120 Hz", Tests.RateFlightJetAirfieldLifecycleIsTheSame);
 run.Test("Rate invariance, flight: the step of a frame in flight survives a snapshot at 60 and 120 Hz and is absent at 30 Hz", Tests.RateFlightFrameStepsSurviveSnapshots);
+run.Test("Rate invariance, flight round 3: a jet sortie (production, taxi, take-off, flight, turn, attack, return, landing, taxi, reload) is the 30 Hz state bit for bit after every frame at 60 and 120 Hz", Tests.RateFlightJetSortieIsBitIdentical);
+run.Test("Rate invariance, flight round 3: a helicopter (pad, climb, flight, turn, return, landing) is the 30 Hz state bit for bit after every frame at 60 and 120 Hz", Tests.RateFlightHelicopterIsBitIdentical);
+run.Test("Rate invariance, flight round 3: an observer reads a jet, a helicopter, a Chinook, a parachute and its rider, falling aircraft, the Spectre and a flare where their frame ends at 60 and 120 Hz", Tests.RateFlightObserversReadTheFrameEnd);
+run.Test("Rate invariance, round 3: a deploying unit under a fire order in every tick unpacks, aims, fires, packs and drives in the 30 Hz state bit for bit after every frame at 60 and 120 Hz", Tests.RateDeployStyleIsBitIdentical);
 run.Test("Air: an airfield uses the injected model bones (hangar, parking, runway), refuses a mismatching table and survives snapshots", Tests.AirAirfieldUsesTheModelBones);
 run.Test("Air: a carrier's deployment creates the gunship at the map edge on a map with terrain", Tests.AirSpectreDeployedByCarrier);
 run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);
@@ -549,6 +559,7 @@ if (contentDirectory is not null) run.Test("Real data: retail AutoAcquire flags;
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI with the shipped script library on Alpine Assault", () => Tests.RealOriginalSkirmishAi(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: every retail DeployStyleAIUpdate object is ready to attack, fires and is packed after the same time at 30, 60 and 120 Hz", () => Tests.RealDeployStyleTimesAreTheSame(contentDirectory));
 // Phase 23: the rate-equivalence suite, one test per group ("--only RateEquivalence" runs all, "--only \"RateEquivalence: weapons\"" one); 30, 60 and 120 Hz whatever --tick-rate says.
 if (contentDirectory is not null)
     foreach (var rateGroup in RateCases.Groups)

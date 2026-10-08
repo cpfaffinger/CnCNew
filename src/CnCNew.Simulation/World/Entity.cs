@@ -67,6 +67,7 @@ public sealed class Entity
         AheadY = y;
         AheadZ = z;
         AheadTick = tick;
+        HasAheadAngle = false;
     }
 
     /// <summary>The mover's side of <see cref="AheadX"/>: covers one more share of the frame's step. The shares of a frame add up to its step, so the rest ends at zero.</summary>
@@ -87,9 +88,31 @@ public sealed class Entity
     /// </summary>
     internal void CompleteFrame(long tick)
     {
+        Angle = FrameEndAngle(tick);
+        HasAheadAngle = false;
         (X, Y, Z) = FrameEnd(tick);
         AheadX = AheadY = AheadZ = Fixed.Zero;
     }
+
+    /// <summary>
+    /// The heading the object has at the end of the frame it is covering, while it turns toward it in shares (the heading's counterpart of <see cref="AheadX"/>, with the same
+    /// staleness rule through <see cref="AheadTick"/>). Never set at 30 Hz, described only while set.
+    /// </summary>
+    public Fixed AheadAngle { get; private set; }
+    public bool HasAheadAngle { get; private set; }
+
+    /// <summary>The heading at the end of the frame the object has begun: what an observer deciding in tick <paramref name="tick"/> reads (see <see cref="FrameEnd"/>). 30 Hz: the heading.</summary>
+    public Fixed FrameEndAngle(long tick) => HasAheadAngle && AheadTick + TickOrder.Next >= tick ? AheadAngle : Angle;
+
+    /// <summary>The mover's side of <see cref="AheadAngle"/>: the heading its decided frame ends with; the mover touches <see cref="AheadTick"/> with every share (<see cref="CoverShare"/>).</summary>
+    internal void SetAheadAngle(Fixed angle)
+    {
+        AheadAngle = angle;
+        HasAheadAngle = true;
+    }
+
+    /// <summary>The mover's side of <see cref="AheadAngle"/>: the frame's turn is covered (or dropped).</summary>
+    internal void ClearAheadAngle() => HasAheadAngle = false;
 
     /// <summary>Heading in radians.</summary>
     public Fixed Angle { get; internal set; }
@@ -195,6 +218,12 @@ public sealed class Entity
     public bool SlowDeathStarted { get; internal set; }
 
     public bool DestroyRequested { get; internal set; }
+
+    /// <summary>
+    /// Above 30 Hz only: the first tick whose destroy phase may remove the object. An object whose removal is requested after the destroy phase of a tick is removed "in the
+    /// next tick" at 30 Hz, which is the next logic frame of the original (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md). Never set at 30 Hz, described only when set.
+    /// </summary>
+    internal long DestroyNotBefore { get; set; }
     public long SpawnTick { get; }
 
     /// <summary>Build ticks already invested while the object is <c>UNDER_CONSTRUCTION</c> (<c>Object::m_constructionPercent</c>, in ticks of its build time).</summary>
@@ -304,6 +333,12 @@ public sealed class Entity
             writer.Fixed("aheadY", AheadY);
             writer.Fixed("aheadZ", AheadZ);
             writer.Int("aheadTick", AheadTick);
+        }
+        if (DestroyNotBefore != 0) writer.Int("destroyNotBefore", DestroyNotBefore);
+        if (HasAheadAngle)
+        {
+            writer.Fixed("aheadAngle", AheadAngle);
+            writer.Int("aheadAngleTick", AheadTick);
         }
         // Written only for an object somebody spied through, so every other object keeps its serialized form (and hash).
         if (VisionSpiedBy is { Count: > 0 })

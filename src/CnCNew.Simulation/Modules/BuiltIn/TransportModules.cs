@@ -85,8 +85,11 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         if (!EvacuatePending) _landing = false;
         // The change of height is the 30 Hz step (one locomotor speed per logic frame of the original, at most the rest of the way), decided once per frame and flown in shares
         // per tick: the Chinook is on the ground, and lets its passengers out, in the same frame at every rate.
+        // Observers read the Chinook where the frame it has begun ends: the rest of its movement and of its change of height.
+        var moving = world.Time.TicksPerOriginalFrame > 1 ? GroundStepRest(world.Tick) : default;
         if (_climb.Continue(Entity))
         {
+            _climb.Publish(world.Time, world.Tick, Entity, moving.X, moving.Y);
             world.MarkDirty(Entity);
             return SimulationTiming.SleepNone;
         }
@@ -101,6 +104,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
             _climb.Begin(world.Time, Entity, Fixed.Zero, Fixed.Zero, Entity.Z - from, Fixed.Zero);
             world.MarkDirty(Entity);
         }
+        _climb.Publish(world.Time, world.Tick, Entity, moving.X, moving.Y);
         return Entity.Z != target ? SimulationTiming.SleepNone : sleep;
     }
 
@@ -220,6 +224,8 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         _hitGroundTick = 0;
         _fallSpeed = Fixed.Zero;
         _spiral.Cancel();
+        // The wreck falls from where it is: what its AI had left of a frame is dropped.
+        _spiral.Publish(world.Time, world.Tick, Entity);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 
@@ -255,6 +261,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     {
         if (_spiral.Continue(Entity))
         {
+            _spiral.Publish(world.Time, world.Tick, Entity);
             world.MarkDirty(Entity);
             return;
         }
@@ -294,6 +301,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         }
         // The frame that reaches the ground puts the wreck there at once, as the 30 Hz step does; every other frame is flown in shares.
         else _spiral.Begin(world.Time, Entity, stepX, stepY, _fallSpeed, spin);
+        _spiral.Publish(world.Time, world.Tick, Entity);
         world.MarkDirty(Entity);
     }
 

@@ -249,7 +249,10 @@ static partial class Tests
             for (var i = 0; i < 300 * factor && lost < 0; i++)
             {
                 world.Step();
-                if (outOfRange < 0 && DistanceBetween(tank, runner) > 150m) outOfRange = i;
+                // The turret decides once per logic frame and reads the runner where the frame it has begun ends (the position at 30 Hz): so does the measurement.
+                var (runnerX, runnerY, _) = runner.FrameEnd(world.Tick - 1);
+                var (apartX, apartY) = (runnerX - tank.X, runnerY - tank.Y);
+                if (outOfRange < 0 && apartX * apartX + apartY * apartY > Fixed.FromInt(150 * 150)) outOfRange = i;
                 if (!world.AttackTargetOf(tank).IsValid) lost = i;
             }
 
@@ -303,8 +306,9 @@ static partial class Tests
                 if (ShotsOf(result, soldier) > 0) firstShot = result.Tick;
             }
 
-            // The unit exists from tick 1 on; its first step notes the idle state and schedules the look two logic frames later.
-            Check.That(firstShot == 1 + 2 * factor, $"{rate}: the idle soldier looks two logic frames after it became idle and fires at once (first shot at tick {firstShot}, expected {1 + 2 * factor}).");
+            // The unit appears in tick 0; its first logic frame begins one frame later, notes the idle state and schedules the look two logic frames after that: three frames
+            // after the appearance at every rate (tick 3 at 30 Hz).
+            Check.That(firstShot == 3 * factor, $"{rate}: the idle soldier looks two logic frames after it became idle and fires at once (first shot at tick {firstShot}, expected {3 * factor}).");
         }
     }
 }

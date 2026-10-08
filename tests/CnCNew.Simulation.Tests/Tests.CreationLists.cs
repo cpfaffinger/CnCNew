@@ -215,7 +215,8 @@ static partial class Tests
 
         // ---- contain inside the source object
         Run("OCL_Inside");
-        world.Step();
+        // Destroyed in the spawn phase, removed by the next logic frame's destroy phase (the next tick at 30 Hz).
+        for (var i = 0; i < world.Frames(1); i++) world.Step();
         Check.That(!Created("Rebel").Any(), "A source without a container destroys the object created for it.");
         Clear();
         feeder.Spawn(1, "Bunker", owner: 1, x: 200, y: 200);
