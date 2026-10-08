@@ -69,6 +69,9 @@ public static partial class RateCases
         quantities.Exact("production time", built);
         if (aircraft is null) return quantities.Done();
         var ai = aircraft.Modules.OfType<JetAIUpdate>().Single();
+        // The aircraft was seen after the first tick of the frame it appeared in; its own first frame is the next one (at 30 Hz the next tick). The measurement begins there, on
+        // a frame of the original like every other one of this case - otherwise its first step is a whole frame at 30 Hz and a quarter of one at 120 Hz.
+        scene.Align();
         // A helicopter keeps no parking place: it leaves the pad and hovers; a jet rolls to its place and stands.
         var helicopter = !scene.Reference(aircraftName).Locomotor!.IsWings;
         var parked = scene.StepUntil(() => ai.Phase == JetAIUpdate.JetPhase.None && !aircraft.HasMoveTarget && (helicopter || !ai.AllowAirLoco), RateScene.Seconds(180));
@@ -102,7 +105,10 @@ public static partial class RateCases
         scene.Align();
         var heading = aircraft.Angle;
         scene.Move(aircraft, 3000, 3000);
-        var reversed = scene.StepUntil(() => FixedTrig.AngleDifference(heading, aircraft.Angle).Abs() >= FixedTrig.Pi - TurnMargin * 5, RateScene.Seconds(60));
+        // The heading is turned in shares of the frame's turn and has its 30 Hz value after the last tick of a frame: it is read there (and the time is that of the frame's first
+        // step, which is what StepUntil returns at 30 Hz). Read after every tick, the threshold is crossed up to a frame early, and the next time of this case - which begins here and
+        // ends with an arrival, an event of a frame's last tick - was up to two frames less two ticks longer than at 30 Hz without the aircraft flying differently.
+        var reversed = scene.StepUntilFrameEnd(() => FixedTrig.AngleDifference(heading, aircraft.Angle).Abs() >= FixedTrig.Pi - TurnMargin * 5, RateScene.Seconds(60));
         quantities.Event("turn back: order to reversed heading", reversed);
         var back = scene.StepUntil(() => !aircraft.HasMoveTarget && ai.Phase == JetAIUpdate.JetPhase.None, RateScene.Seconds(120));
         quantities.Event("reversed heading to arrival", back);
