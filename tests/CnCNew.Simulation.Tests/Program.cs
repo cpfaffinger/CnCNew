@@ -99,6 +99,7 @@ run.Test("Rate invariance, firing: a clip without a reload time fires again in t
 run.Test("Rate invariance, abilities: a capture flashes the building in the same frames of the preparation", Tests.RateInvarianceCaptureFlashesInTheSameFrames);
 run.Test("Rate invariance, abilities: facing the target ends in the same logic frame", Tests.RateInvarianceAbilityFacingEndsInTheSameFrame);
 run.Test("Rate invariance, acquisition: the random shift of the mood check is the same at every rate", Tests.RateInvarianceMoodCheckShiftIsTheSameAtEveryRate);
+run.Test("Rate invariance, observers: a fight of two groups is the 30 Hz fight at the end of every logic frame", Tests.RateInvarianceObserversAFightIsTheThirtyHertzFight);
 run.Test("Rate invariance, random draws: a repair drone on its way draws once per logic frame", Tests.RateInvarianceRepairDroneDrawsOncePerFrame);
 run.Test("Rate invariance, random draws: an idle wanderer draws once per logic frame", Tests.RateInvarianceIdleWandererDrawsOncePerFrame);
 run.Test("Rate invariance, modules: the stealth grant scans once per logic frame of its marker", Tests.RateInvarianceGrantStealthScansOncePerFrame);
