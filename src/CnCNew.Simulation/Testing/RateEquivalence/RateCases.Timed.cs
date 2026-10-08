@@ -303,7 +303,9 @@ public static partial class RateCases
         var started = scene.StepUntil(() => collapse.IsCollapsing || collapse.IsCollapsed, RateScene.Seconds(120));
         var done = scene.StepUntil(() => collapse.IsCollapsed || scene.World.FindEntity(building.Id) != building, RateScene.Seconds(240));
         quantities.Exact("kill to the start of the collapse", started);
-        quantities.Event("collapse: start to down", started >= 0 ? done : -1);
+        // StepUntil counts from the step that executes an order given just before it. No order precedes the second call: its first step is already one
+        // tick after the step in which the collapse was seen to start, so the ticks from that step to the end are its result and one.
+        quantities.Event("collapse: start to down", started >= 0 && done >= 0 ? done + Time.TickOrder.Next : -1);
         return quantities.Done();
     }
 
