@@ -483,4 +483,22 @@ static partial class Tests
             Check.That(draws == 100, $"{rate}: 100 logic frames of a drone on its way are 100 draws from the logic stream (got {draws}).");
         }
     }
+
+    /// <summary>
+    /// <c>WanderAIUpdate</c>: an idle wanderer draws its next point (two values of the logic stream) once per logic frame. One that cannot move stays idle and draws 200 values
+    /// in 100 frames at every rate (per tick it was 400 and 800).
+    /// </summary>
+    public static void RateInvarianceIdleWandererDrawsOncePerFrame()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, RateInvarianceSlaveFiles());
+            feeder.Spawn(1, "RiStuckWanderer", owner: 1, x: 100, y: 100);
+            for (var i = 0; i < 2 * factor; i++) world.Step();
+            var before = StreamState(world.LogicRandom);
+            for (var i = 0; i < 100 * factor; i++) world.Step();
+            var draws = DrawsSince(before, world.LogicRandom);
+            Check.That(draws == 200, $"{rate}: 100 logic frames of an idle wanderer are 200 draws from the logic stream (got {draws}).");
+        }
+    }
 }

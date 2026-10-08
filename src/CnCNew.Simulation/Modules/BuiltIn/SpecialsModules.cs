@@ -268,7 +268,9 @@ public sealed class WanderAIUpdate(AIUpdateData data) : AIUpdateInterface(data)
 
     public override long Update(IWorldServices world)
     {
-        if (IsIdle)
+        // The reference looks once per logic frame. Above 30 Hz the look - two draws and an order - happens in the tick a frame begins with: an object whose order fails
+        // stays idle and would otherwise draw twice and four times as often per game time, shifting every later draw of the world. The walk itself is stepped every tick.
+        if (IsIdle && (world.Time.TicksPerOriginalFrame == 1 || world.Time.IsOriginalFrameBoundary(world.Tick)))
         {
             var x = Entity.X + Fixed.FromInt(world.LogicRandom.Range(5, 50));
             var y = Entity.Y + Fixed.FromInt(world.LogicRandom.Range(5, 50));

@@ -83,6 +83,7 @@ run.Test("Rate invariance, abilities: a capture flashes the building in the same
 run.Test("Rate invariance, abilities: facing the target ends in the same logic frame", Tests.RateInvarianceAbilityFacingEndsInTheSameFrame);
 run.Test("Rate invariance, acquisition: the random shift of the mood check is the same at every rate", Tests.RateInvarianceMoodCheckShiftIsTheSameAtEveryRate);
 run.Test("Rate invariance, random draws: a repair drone on its way draws once per logic frame", Tests.RateInvarianceRepairDroneDrawsOncePerFrame);
+run.Test("Rate invariance, random draws: an idle wanderer draws once per logic frame", Tests.RateInvarianceIdleWandererDrawsOncePerFrame);
 // Tick rate, stage 2, modules N–Z (Tests.TickRate.ModulesNZ.cs).
 run.Test("Tick rate N–Z: a detector's stagger is drawn in frames of the original", Tests.TickRateNzDetectorStaggerIsDrawnInOriginalFrames);
 run.Test("Tick rate N–Z: poison without an interval hurts once per frame of the original", Tests.TickRateNzPoisonWithoutIntervalHurtsOncePerOriginalFrame);
