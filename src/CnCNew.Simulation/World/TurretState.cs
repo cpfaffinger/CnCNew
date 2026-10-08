@@ -75,6 +75,30 @@ internal sealed class TurretState
     /// <summary><c>TurretAI::m_positiveSweep</c>.</summary>
     public bool PositiveSweep = true;
 
+    /// <summary>
+    /// Ticks the turret still needs to finish the step of the current logic frame of the original (docs/RATE-INVARIANCE-TURRETS.md): the step is decided once per frame exactly as at
+    /// 30 Hz and the angle moves there in equal parts, one per tick. Always 0 at 30 Hz, where a frame is a tick; written to the snapshot only while nonzero.
+    /// </summary>
+    public int SubSteps;
+
+    /// <summary>The angle the current frame's step ends at; meaningful while <see cref="SubSteps"/> is nonzero.</summary>
+    public Fixed GoalAngle;
+
+    /// <summary>The pitch the current frame's step ends at; meaningful while <see cref="SubSteps"/> is nonzero.</summary>
+    public Fixed GoalPitch;
+
+    /// <summary>The angle the current frame's step began at (where the 30 Hz turret was one frame earlier); meaningful while <see cref="SubSteps"/> is nonzero.</summary>
+    public Fixed StartAngle;
+
+    /// <summary>The pitch the current frame's step began at; meaningful while <see cref="SubSteps"/> is nonzero.</summary>
+    public Fixed StartPitch;
+
+    /// <summary>The turret's turn rate per logic frame of the original (<see cref="TurretInfo.RatesPerOriginalFrame"/>). From the catalog, set when the object is created; not state.</summary>
+    public Fixed FrameTurnRate;
+
+    /// <summary>The turret's pitch rate per logic frame of the original. From the catalog; not state.</summary>
+    public Fixed FramePitchRate;
+
     public TurretState(TurretInfo info)
     {
         Angle = info.NaturalAngle;
@@ -84,7 +108,7 @@ internal sealed class TurretState
     /// <summary>At rest: at the natural angle and pitch, no order, nothing pending. Such a turret needs no stepping and writes nothing to the snapshot.</summary>
     public bool IsPristine(TurretInfo info)
         => Angle == info.NaturalAngle && Pitch == info.NaturalPitch && !Target.IsValid && HoldUntil == 0 && !Rotating && SweepUntil == 0 && PositiveSweep
-           && !Persistent && !Pursuing && LoseInterestAt == 0 && !Scanning && NextScan == 0;
+           && !Persistent && !Pursuing && LoseInterestAt == 0 && !Scanning && NextScan == 0 && SubSteps == 0;
 
     public void ResetToRest(TurretInfo info)
     {
@@ -123,6 +147,14 @@ internal sealed class TurretState
         if (Scanning) { writer.Bool("scanning", true); writer.Fixed("scanAngle", ScanAngle); }
         if (NextScan != 0) writer.Int("nextScan", NextScan);
         if (ScanDraws != 0) writer.Int("scanDraws", ScanDraws);
+        if (SubSteps != 0)
+        {
+            writer.Int("subSteps", SubSteps);
+            writer.Fixed("goalAngle", GoalAngle);
+            writer.Fixed("goalPitch", GoalPitch);
+            writer.Fixed("startAngle", StartAngle);
+            writer.Fixed("startPitch", StartPitch);
+        }
         writer.EndObject();
     }
 
@@ -143,6 +175,12 @@ internal sealed class TurretState
         ScanAngle = reader.Has("scanAngle") ? reader.Fixed("scanAngle") : Fixed.Zero;
         NextScan = reader.Has("nextScan") ? reader.Int("nextScan") : 0;
         ScanDraws = reader.Has("scanDraws") ? checked((int)reader.Int("scanDraws")) : 0;
+        SubSteps = reader.Has("subSteps") ? checked((int)reader.Int("subSteps")) : 0;
+        GoalAngle = reader.Has("goalAngle") ? reader.Fixed("goalAngle") : Fixed.Zero;
+        GoalPitch = reader.Has("goalPitch") ? reader.Fixed("goalPitch") : Fixed.Zero;
+        StartAngle = reader.Has("startAngle") ? reader.Fixed("startAngle") : Fixed.Zero;
+        StartPitch = reader.Has("startPitch") ? reader.Fixed("startPitch") : Fixed.Zero;
+        if (SubSteps < 0) throw new InvalidDataException("Negative turret sub-step counter in snapshot.");
         if (Slot is < 0 or >= WeaponSlot.Count) throw new InvalidDataException("Turret weapon slot out of range.");
         if (HoldUntil < 0 || SweepUntil < 0 || LoseInterestAt < 0 || NextScan < 0 || ScanDraws < 0) throw new InvalidDataException("Negative turret timer in snapshot.");
         if (Persistent && !Target.IsValid) throw new InvalidDataException("A persistent turret attack needs a victim.");
@@ -153,9 +191,9 @@ internal sealed class TurretState
 /// <summary>Every mutable field of a <see cref="TurretState"/>, compared before and after a step to learn whether the entity's serialized state changed (a struct: stepping must not allocate).</summary>
 internal readonly record struct TurretStamp(
     Fixed Angle, Fixed Pitch, bool Rotating, EntityId Target, long SweepUntil, bool PositiveSweep, long HoldUntil, bool Persistent, bool Pursuing, long LoseInterestAt,
-    bool Scanning, Fixed ScanAngle, long NextScan, int ScanDraws, int Slot)
+    bool Scanning, Fixed ScanAngle, long NextScan, int ScanDraws, int Slot, int SubSteps)
 {
     public static TurretStamp Of(TurretState state)
         => new(state.Angle, state.Pitch, state.Rotating, state.Target, state.SweepUntil, state.PositiveSweep, state.HoldUntil, state.Persistent, state.Pursuing, state.LoseInterestAt,
-            state.Scanning, state.ScanAngle, state.NextScan, state.ScanDraws, state.Slot);
+            state.Scanning, state.ScanAngle, state.NextScan, state.ScanDraws, state.Slot, state.SubSteps);
 }

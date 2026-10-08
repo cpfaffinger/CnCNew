@@ -175,7 +175,8 @@ public sealed partial class SimulationWorld
     {
         if (weapon.PreAttackDelayTicks == 0) return true;
         var state = source.Firing;
-        if (state is not null && state.PreSlot == slot && state.PreVictim == victim.Id && _tick <= state.PreFinish + Time.OriginalFrames(PreAttackStaleFrames)) return _tick >= state.PreFinish;
+        // "Until and including" the last tick of the grace is one step more than the grace; that step is a logic frame of the original at every rate (as in StepFiringTrackers).
+        if (state is not null && state.PreSlot == slot && state.PreVictim == victim.Id && _tick < state.PreFinish + Time.OriginalFrames(PreAttackStaleFrames) + _turretFrameTicks) return _tick >= state.PreFinish;
 
         // Weapon::getPreAttackDelay: "Look for a reason to return zero and have no delay."
         if (weapon.PreAttackType == WeaponPrefire.PerClip && weapon.ClipSize > 0 && source.ClipOf(slot) is var clip && clip != 0 && clip < weapon.ClipSize) return true;
@@ -243,7 +244,8 @@ public sealed partial class SimulationWorld
                 continue;
             }
 
-            if (tick <= state.CooldownFrame) continue;
+            // FiringTracker::update acts in the step after the deadline. That step is a logic frame of the original: coast + 1 frames after the next possible shot, not coast + 1 tick.
+            if (tick < state.CooldownFrame + _turretFrameTicks) continue;
             state.CooldownFrame = tick + Time.TicksPerSecond;
             CoolDown(entity, state);
             MarkDirty(entity);

@@ -73,11 +73,14 @@ public static partial class RateCases
             {
                 if (aiming.Alive(source) && aiming.Alive(victim)) aiming.Fire(source, victim, slot);
                 foreach (var item in aiming.Step().Events)
-                    if (item.Kind == SimEventKind.WeaponFired && item.Entity == source.Id && firstShot < 0)
-                    {
-                        firstShot = step - 1;
-                        angleAtShot = source.TurretOf(0)?.Angle ?? Fixed.Zero;
-                    }
+                    if (item.Kind == SimEventKind.WeaponFired && item.Entity == source.Id && firstShot < 0) firstShot = step - 1;
+            }
+            // The angle is read at the end of the frame of the original the shot fell in: the state the rates are compared at. (Read after the tick of the shot it was the
+            // angle after one tick's share of the turret's step - at 30 Hz the whole step, above it a part of it - which measured the reading, not the turret.)
+            if (firstShot >= 0)
+            {
+                aiming.Align();
+                angleAtShot = source.TurretOf(0)?.Angle ?? Fixed.Zero;
             }
             quantities.Event(label + ": order to first shot", firstShot);
             quantities.Angle(label + ": turret angle at the first shot", angleAtShot, firstShot >= 0);
@@ -89,7 +92,9 @@ public static partial class RateCases
             var held = aiming.StepUntil(() => source.TurretOf(0) is { } reading && (reading.Angle - angleAtShot).Abs() > TurretAtRest, RateScene.Seconds(60));
             var rested = aiming.StepUntil(() => source.TurretOf(0) is { Rotating: false } reading && FixedTrig.AngleDifference(reading.Angle, turretInfo.NaturalAngle).Abs() <= TurretAtRest, RateScene.Seconds(120));
             quantities.Event("return: victim gone to turret leaving its aim", held);
-            quantities.Event("return: leaving the aim to rest", held >= 0 ? rested : -1);
+            // From the step the turret left its aim in to the step it came to rest in: the second count starts at an observation, not at an order, so the step
+            // StepUntil leaves out for the order's own tick belongs to the duration.
+            quantities.Event("return: leaving the aim to rest", held >= 0 && rested >= 0 ? rested + 1 : -1);
         }
 
         // (3) the idle scan: nobody around for two minutes

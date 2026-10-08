@@ -52,6 +52,24 @@ public sealed record TurretInfo(
 
     /// <summary><c>TurretAI::getTurretSweepSpeedModifierForWeaponSlot</c>: the turn rate factor while sweeping (1 by default).</summary>
     public Fixed SweepSpeedOf(int slot) => SweepSpeed[slot];
+
+    // The rates per logic frame of the original of the turrets read for a catalog above 30 Hz, rounded exactly as the 30 Hz catalog rounds them. A turret decides its step once per
+    // frame with these (SimulationWorld.Turrets.cs), so its comparisons see the very numbers of 30 Hz; "rate per tick times ticks per frame" is off by the rounding of the per-tick
+    // value, which is enough to tip a turret that stands exactly one step from its goal. Kept beside the record instead of in it: a field would change the catalog's content, and a
+    // 30 Hz catalog has no use for it. Derived from the definitions alone, so every catalog of one definition graph holds the same values.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TurretInfo, OriginalFrameRates> OriginalRates = new();
+
+    private sealed record OriginalFrameRates(Fixed Turn, Fixed Pitch);
+
+    internal void SetOriginalFrameRates(Fixed turn, Fixed pitch) => OriginalRates.AddOrUpdate(this, new OriginalFrameRates(turn, pitch));
+
+    /// <summary>
+    /// <see cref="TurnRate"/> and <see cref="PitchRate"/> per logic frame of the original (radians per 1/30 s): the 30 Hz values themselves for a turret read from definitions, the
+    /// per-tick values times <paramref name="ticksPerOriginalFrame"/> for one built by hand. At 30 Hz the per-tick values.
+    /// </summary>
+    public (Fixed Turn, Fixed Pitch) RatesPerOriginalFrame(int ticksPerOriginalFrame)
+        => ticksPerOriginalFrame == 1 ? (TurnRate, PitchRate)
+            : OriginalRates.TryGetValue(this, out var rates) ? (rates.Turn, rates.Pitch) : (TurnRate * ticksPerOriginalFrame, PitchRate * ticksPerOriginalFrame);
 }
 
 /// <summary>The turrets of one object template (<c>AIUpdateInterface::m_turretAI[MAX_TURRETS]</c>): the main <c>Turret</c> and the <c>AltTurret</c>, and whether they are <c>TurretsLinked</c>.</summary>
@@ -167,14 +185,24 @@ public sealed class TurretSet
             ? maxInterval.Value.Value is GameTime maxTime ? timing.DurationMillisecondsToTicks(maxTime.Milliseconds) : throw Unexpected(maxInterval)
             : TurretInfo.NeverScanTicks;
 
-        return new TurretInfo(
+        Fixed Rate(string name, SimulationTime time)
+            => Find(name) is null ? time.PerOriginalFrameToPerTick(TurretInfo.DefaultRate) : time.DegreesPerSecondToRadiansPerTick(Number(name, 0m));
+
+        var turret = new TurretInfo(
             index,
-            Find("TurretTurnRate") is null ? timing.PerOriginalFrameToPerTick(TurretInfo.DefaultRate) : timing.DegreesPerSecondToRadiansPerTick(Number("TurretTurnRate", 0m)),
-            Find("TurretPitchRate") is null ? timing.PerOriginalFrameToPerTick(TurretInfo.DefaultRate) : timing.DegreesPerSecondToRadiansPerTick(Number("TurretPitchRate", 0m)),
+            Rate("TurretTurnRate", timing),
+            Rate("TurretPitchRate", timing),
             SimulationTiming.DegreesToRadians(Degrees("NaturalTurretAngle")), SimulationTiming.DegreesToRadians(Degrees("NaturalTurretPitch")),
             SimulationTiming.DegreesToRadians(Degrees("FirePitch")), SimulationTiming.DegreesToRadians(Degrees("MinPhysicalPitch")), SimulationTiming.DegreesToRadians(Degrees("GroundUnitPitch")),
             mask, recenter, Bool("AllowsPitch"), Bool("InitiallyDisabled"), Bool("FiresWhileTurning"), [..sweepAngle], [..sweepSpeed],
             SimulationTiming.DegreesToRadians(Degrees("MinIdleScanAngle")), SimulationTiming.DegreesToRadians(Degrees("MaxIdleScanAngle")), scanMinInterval, scanMaxInterval);
+        if (timing.TicksPerOriginalFrame != 1)
+        {
+            var original = SimulationRate.Original.Time;
+            turret.SetOriginalFrameRates(Rate("TurretTurnRate", original), Rate("TurretPitchRate", original));
+        }
+
+        return turret;
     }
 
     private static NameTable SlotNames => NameTablesPhase5.WeaponSlot;

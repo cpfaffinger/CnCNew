@@ -162,7 +162,8 @@ public sealed partial class SimulationWorld
             if (state.Ordered)
             {
                 // The command giver fires; the world only notices when its attack is over.
-                if (attackable && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) <= _orderedAttackGraceTicks) return;
+                // "No order for longer than the grace" is noticed in the step after the grace: a logic frame of the original at every rate, not a tick.
+                if (attackable && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) < _orderedAttackGraceTicks + _turretFrameTicks) return;
                 state.ClearVictim();
             }
             else
@@ -246,7 +247,8 @@ public sealed partial class SimulationWorld
     /// entity, tick) instead, so the same inputs give the same value, replays and snapshot continuations agree and no other user of the logic stream is shifted.
     /// <para>
     /// The value is drawn in logic frames of the original (half the check rate in frames, as the reference draws it) and only then scaled to ticks, so the shift stays on the
-    /// original's grid at every tick rate. The tick number that seeds the hash is the world's own: the draws of two rates are not the same sequence.
+    /// original's grid at every tick rate. The hash is seeded with the number of the logic frame the tick lies in, not with the tick: a unit that resets its mood check at the same
+    /// game time draws the same shift at every rate (at 30 Hz the frame is the tick).
     /// </para>
     /// </summary>
     private long MoodCheckOffset(Entity entity, long tick, long rate)
@@ -255,8 +257,8 @@ public sealed partial class SimulationWorld
         if (half <= 0) return 0;
         unchecked
         {
-            // tick + 1 keeps the hash input away from zero in the first tick: an offset of the hash, neither a time nor an order.
-            var z = (((ulong)Streams.Seed << 32) | entity.Id.Value) + 0x9E3779B97F4A7C15UL * (ulong)(tick + 1);
+            // frame + 1 keeps the hash input away from zero in the first frame: an offset of the hash, neither a time nor an order.
+            var z = (((ulong)Streams.Seed << 32) | entity.Id.Value) + 0x9E3779B97F4A7C15UL * (ulong)(Time.FramesIn(tick) + 1);
             z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
             z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
             z ^= z >> 31;
@@ -353,7 +355,7 @@ public sealed partial class SimulationWorld
         var earliest = long.MaxValue;
         for (var slot = 0; slot < WeaponSlot.Count; slot++)
             if (set.HasWeapon(slot)) earliest = Math.Min(earliest, EffectiveReadyTick(entity, slot, set));
-        return Math.Clamp(earliest, tick - _orderedAttackGraceTicks - TickOrder.Next, tick + _turretReloadHoldCapTicks);
+        return Math.Clamp(earliest, tick - _orderedAttackGraceTicks - _turretFrameTicks, tick + _turretReloadHoldCapTicks);
     }
 
     // ------------------------------------------------------------------------------------------------------ choosing the victim
@@ -505,7 +507,7 @@ public sealed partial class SimulationWorld
         if (choice.Rejection != 0 || (turretOnly && !IsOnAimingTurret(source, choice.Slot)) || !GateAllowsFire(source, victim)) return;
         if (!AimTurretsAt(source, choice.Slot, victim, TurretAimOrder.Attack))
         {
-            _turretWaits++;
+            NoteTurretWait();
             return;
         }
 

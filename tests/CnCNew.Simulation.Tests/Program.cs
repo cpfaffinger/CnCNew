@@ -88,6 +88,20 @@ run.Test("Rate invariance, ground: a snapshot inside a logic frame continues lik
 run.Test("Rate invariance, ground: an order inside a logic frame keeps the step continuous and cancels a pending arrival", Tests.GroundRateInvarianceOrderInsideAFrame);
 run.Test("Rate invariance, ground: crush and topple are sampled once per logic frame", Tests.GroundRateInvarianceCollisionsPerFrame);
 run.Test("Rate invariance, ground: a hauler's supply trips fall on the same logic frames", Tests.GroundRateInvarianceSupplyTrips);
+// Phase 23, package turrets (Tests.RateInvariance.Turrets.cs; keep this block together).
+run.Test("Rate invariance, turrets: a turret decides its step per logic frame and walks it in equal parts", Tests.RateInvarianceTurretStepsAreDecidedPerFrame);
+run.Test("Rate invariance, turrets: a hold lasts the recentre time and one logic frame", Tests.RateInvarianceTurretHoldsOneFrameMoreThanTheRecentreTime);
+run.Test("Rate invariance, turrets: the idle scan is at the 30 Hz angle at the end of every logic frame", Tests.RateInvarianceTurretIdleScanIsTheSameAtEveryFrame);
+run.Test("Rate invariance, firing: a silent weapon spins down at the same game time", Tests.RateInvarianceFiringTrackerDeadlinesTakeAFrame);
+run.Test("Rate invariance, firing: a stale wind-up is forgotten after the same logic frame", Tests.RateInvarianceStaleWindUpIsForgottenAfterTheSameFrame);
+run.Test("Rate invariance, firing: a clip without a reload time fires again in the next logic frame", Tests.RateInvarianceClipWithoutReloadTimeFiresOncePerFrame);
+run.Test("Rate invariance, abilities: a capture flashes the building in the same frames of the preparation", Tests.RateInvarianceCaptureFlashesInTheSameFrames);
+run.Test("Rate invariance, abilities: facing the target ends in the same logic frame", Tests.RateInvarianceAbilityFacingEndsInTheSameFrame);
+run.Test("Rate invariance, acquisition: the random shift of the mood check is the same at every rate", Tests.RateInvarianceMoodCheckShiftIsTheSameAtEveryRate);
+run.Test("Rate invariance, random draws: a repair drone on its way draws once per logic frame", Tests.RateInvarianceRepairDroneDrawsOncePerFrame);
+run.Test("Rate invariance, random draws: an idle wanderer draws once per logic frame", Tests.RateInvarianceIdleWandererDrawsOncePerFrame);
+run.Test("Rate invariance, modules: the stealth grant scans once per logic frame of its marker", Tests.RateInvarianceGrantStealthScansOncePerFrame);
+run.Test("Rate invariance, acquisition: an attack named by orders ends in the same logic frame", Tests.RateInvarianceOrderedAttackEndsInTheSameFrame);
 // Tick rate, stage 2, modules N–Z (Tests.TickRate.ModulesNZ.cs).
 run.Test("Tick rate N–Z: a detector's stagger is drawn in frames of the original", Tests.TickRateNzDetectorStaggerIsDrawnInOriginalFrames);
 run.Test("Tick rate N–Z: poison without an interval hurts once per frame of the original", Tests.TickRateNzPoisonWithoutIntervalHurtsOncePerOriginalFrame);

@@ -42,6 +42,13 @@ public sealed partial class SimulationWorld
     private readonly long _turretSweepEnableTicks;
     private readonly long _turretLoseInterestTicks;
 
+    /// <summary>
+    /// Ticks per logic frame of the original (1 at 30 Hz). A turret decides its step once per frame of the original exactly as at 30 Hz - how far, which way, whether it snaps to its
+    /// goal - and covers it in this many equal parts, one per tick (<see cref="TurretState.SubSteps"/>), so at the end of every frame its angle is the 30 Hz angle.
+    /// Resolved once when the world is created; not state.
+    /// </summary>
+    private readonly int _turretFrameTicks;
+
     /// <summary><c>friend_turnTowardsAngle(…, 0.5f, 0.0f)</c> of the recenter and idle-scan states.</summary>
     private static readonly Fixed TurretRecenterRateFactor = Fixed.FromDecimal(0.5m);
 
@@ -50,15 +57,28 @@ public sealed partial class SimulationWorld
 
     private long _turretWaits;
 
-    /// <summary>How many fire orders were held back because a turret did not yet point at its victim (statistics; part of the hash once nonzero).</summary>
+    /// <summary>
+    /// How long fire orders were held back because a turret did not yet point at its victim, in logic frames of the original: one per order (or own fire attempt) that waited in a
+    /// tick a frame begins with, so a unit that waits half a second counts 15 at every tick rate (statistics; part of the hash once nonzero). At 30 Hz every held order counts.
+    /// </summary>
     public long TurretWaits => _turretWaits;
+
+    /// <summary>A fire order or the unit's own fire attempt waits for the turret in this tick.</summary>
+    private void NoteTurretWait()
+    {
+        if (_turretFrameTicks == 1 || Time.IsOriginalFrameBoundary(_tick)) _turretWaits++;
+    }
 
     private void InitializeTurrets(Entity entity)
     {
         if (entity.Template.Turrets is not { } set) return;
         var states = new TurretState?[TurretSet.MaxTurrets];
         for (var index = 0; index < states.Length; index++)
-            if (set[index] is { } info) states[index] = new TurretState(info);
+            if (set[index] is { } info)
+            {
+                var (turn, pitch) = info.RatesPerOriginalFrame(_turretFrameTicks);
+                states[index] = new TurretState(info) { FrameTurnRate = turn, FramePitchRate = pitch };
+            }
         entity.Turrets = states;
     }
 
@@ -123,6 +143,7 @@ public sealed partial class SimulationWorld
             var pursuing = order == TurretAimOrder.Pursuit;
             var samePursuit = state.Persistent && state.Target == victim.Id && state.Pursuing;
             if (state.Persistent && state.Target == victim.Id && state.Slot == slot && (state.Pursuing || !pursuing)) return;
+            if (state.Target != victim.Id) AbandonFrameStep(state);
             state.Target = victim.Id;
             state.Slot = slot;
             state.Persistent = true;
@@ -140,6 +161,7 @@ public sealed partial class SimulationWorld
         if (state.Persistent && state.Target == victim.Id) return;
         var holdUntil = Math.Max(state.HoldUntil, _tick + Math.Max(info.RecenterTicks, _turretAimGraceTicks));
         if (!state.Persistent && state.Target == victim.Id && state.Slot == slot && state.HoldUntil == holdUntil) return;
+        if (state.Target != victim.Id) AbandonFrameStep(state);
         state.Target = victim.Id;
         state.Slot = slot;
         state.HoldUntil = holdUntil;
@@ -313,11 +335,20 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool IsAligned(Entity source, TurretInfo info, TurretState state, Entity victim, int slot)
     {
+        // A turret in the middle of a frame's step is between two angles of the 30 Hz turret, the one it had at the last frame and the one it has at the next. It points at the
+        // victim when both do: a turret that follows its victim fires in any tick, one that is still turning toward it is released when the step is done, as at 30 Hz.
+        if (state.SubSteps != 0)
+            return IsAlignedAt(source, info, state.StartAngle, state.StartPitch, victim, slot) && IsAlignedAt(source, info, state.GoalAngle, state.GoalPitch, victim, slot);
+        return IsAlignedAt(source, info, state.Angle, state.Pitch, victim, slot);
+    }
+
+    private bool IsAlignedAt(Entity source, TurretInfo info, Fixed angle, Fixed pitch, Entity victim, int slot)
+    {
         var desired = DesiredTurretAngle(source, victim);
-        var difference = FixedTrig.AngleDifference(state.Angle, desired).Abs();
+        var difference = FixedTrig.AngleDifference(angle, desired).Abs();
         var sweep = info.SweepOf(slot);
         if (sweep > Fixed.Zero ? difference >= sweep : difference > TurretAlignThreshold) return false;
-        return !info.AllowsPitch || info.PitchRate <= Fixed.Zero || (state.Pitch - DesiredTurretPitch(source, info, victim, slot)).Abs() <= TurretAlignThreshold;
+        return !info.AllowsPitch || info.PitchRate <= Fixed.Zero || (pitch - DesiredTurretPitch(source, info, victim, slot)).Abs() <= TurretAlignThreshold;
     }
 
     /// <summary><c>getRelativeAngle2D(obj, enemyPosition)</c>: the bearing to the victim minus the body's heading, wrapped.</summary>
@@ -392,6 +423,12 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool StepTurret(Entity entity, TurretInfo info, TurretState state, long tick)
     {
+        if (state.SubSteps != 0)
+        {
+            ContinueFrameStep(state);
+            return true;
+        }
+
         var before = TurretStamp.Of(state);
 
         Entity? victim = null;
@@ -412,7 +449,8 @@ public sealed partial class SimulationWorld
             }
         }
 
-        var holding = state.HoldUntil > 0 && tick <= state.HoldUntil;
+        // "Until and including HoldUntil" is one step more than the hold time: that step is a logic frame of the original, as at 30 Hz, not a tick.
+        var holding = state.HoldUntil > 0 && tick < state.HoldUntil + _turretFrameTicks;
         if (victim is not null && (state.Persistent || holding)) AimStep(entity, info, state, victim, tick);
         else if (holding) state.Rotating = false;
         else if (state.Scanning) ScanStep(entity, info, state, tick);
@@ -433,7 +471,63 @@ public sealed partial class SimulationWorld
             }
         }
 
+        if (_turretFrameTicks != 1) BeginFrameStep(state, before.Angle, before.Pitch);
         return TurretStamp.Of(state) != before;
+    }
+
+    /// <summary>
+    /// The step just decided moved the turret from (<paramref name="fromAngle"/>, <paramref name="fromPitch"/>) to its state's angle and pitch, which is where the 30 Hz turret is after
+    /// this frame. Above 30 Hz the turret takes the first of <see cref="_turretFrameTicks"/> equal parts now and the rest in the following ticks.
+    /// </summary>
+    private void BeginFrameStep(TurretState state, Fixed fromAngle, Fixed fromPitch)
+    {
+        if (state.Angle == fromAngle && state.Pitch == fromPitch) return;
+        state.GoalAngle = state.Angle;
+        state.GoalPitch = state.Pitch;
+        state.StartAngle = fromAngle;
+        state.StartPitch = fromPitch;
+        state.SubSteps = _turretFrameTicks;
+        state.Angle = fromAngle;
+        state.Pitch = fromPitch;
+        ContinueFrameStep(state);
+    }
+
+    /// <summary>One tick inside a frame's step: an equal share of what is left; the last tick lands exactly on the goal.</summary>
+    private static void ContinueFrameStep(TurretState state)
+    {
+        var left = state.SubSteps;
+        state.SubSteps = left - 1;
+        if (left <= 1)
+        {
+            state.Angle = state.GoalAngle;
+            state.Pitch = state.GoalPitch;
+            ClearFrameStep(state);
+            return;
+        }
+
+        var share = Fixed.FromInt(left);
+        state.Angle = FixedTrig.Normalize(state.Angle + FixedTrig.AngleDifference(state.Angle, state.GoalAngle) / share);
+        state.Pitch = FixedTrig.Normalize(state.Pitch + FixedTrig.AngleDifference(state.Pitch, state.GoalPitch) / share);
+    }
+
+    /// <summary>A step that does not move the turret but takes its logic frame all the same: the next decision is one frame later, as at 30 Hz. Never called at 30 Hz.</summary>
+    private void OccupyFrame(TurretState state)
+    {
+        state.GoalAngle = state.StartAngle = state.Angle;
+        state.GoalPitch = state.StartPitch = state.Pitch;
+        state.SubSteps = checked((int)(_turretFrameTicks - TickOrder.Next));
+    }
+
+    /// <summary>The turret got another victim in the middle of a frame's step: it turns to the new one from where it is, in the next tick (an order is never held back to a frame boundary).</summary>
+    private static void AbandonFrameStep(TurretState state) => ClearFrameStep(state);
+
+    private static void ClearFrameStep(TurretState state)
+    {
+        state.SubSteps = 0;
+        state.GoalAngle = Fixed.Zero;
+        state.GoalPitch = Fixed.Zero;
+        state.StartAngle = Fixed.Zero;
+        state.StartPitch = Fixed.Zero;
     }
 
     /// <summary><c>TurretAIAimTurretState::update</c>: turn toward the victim (offset by the sweep while it is on), then pitch.</summary>
@@ -441,7 +535,7 @@ public sealed partial class SimulationWorld
     {
         var relative = DesiredTurretAngle(entity, victim);
         var aim = relative;
-        var rate = info.TurnRate;
+        var rate = state.FrameTurnRate;
         var sweep = info.SweepOf(state.Slot);
         var sweeping = sweep > Fixed.Zero;
         if (sweeping && tick < state.SweepUntil)
@@ -453,14 +547,14 @@ public sealed partial class SimulationWorld
         TurnAngle(state, aim, rate);
         // friend_turnTowardsAngle's result: within REL_THRESH of the aim; a sweeping turret then swings to the other side.
         if (sweeping && FixedTrig.AngleDifference(state.Angle, aim).Abs() <= TurretAlignThreshold) state.PositiveSweep = !state.PositiveSweep;
-        if (info.AllowsPitch) TurnPitch(state, DesiredTurretPitch(entity, info, victim, state.Slot), info.PitchRate);
+        if (info.AllowsPitch) TurnPitch(state, DesiredTurretPitch(entity, info, victim, state.Slot), state.FramePitchRate);
     }
 
     /// <summary><c>TurretAIRecenterTurretState::update</c>: back to the natural angle and pitch at half speed. False once both are there.</summary>
     private static bool RecenterStep(TurretInfo info, TurretState state)
     {
-        TurnAngle(state, info.NaturalAngle, info.TurnRate * TurretRecenterRateFactor);
-        if (info.AllowsPitch) TurnPitch(state, info.NaturalPitch, info.PitchRate * TurretRecenterRateFactor);
+        TurnAngle(state, info.NaturalAngle, state.FrameTurnRate * TurretRecenterRateFactor);
+        if (info.AllowsPitch) TurnPitch(state, info.NaturalPitch, state.FramePitchRate * TurretRecenterRateFactor);
         return state.Angle != info.NaturalAngle || state.Pitch != info.NaturalPitch;
     }
 
@@ -474,7 +568,12 @@ public sealed partial class SimulationWorld
     {
         if (state.NextScan == 0)
         {
+            // At 30 Hz this step - the first one of a new turret, one tick after the object appeared - is the first logic frame of the turret's life, and the scan cannot start
+            // before the next one. Above 30 Hz the turret waits for that frame to begin, and the step that sets the timer takes a whole frame like every other step.
+            var age = tick - entity.SpawnTick;
+            if (age > 0 && age < _turretFrameTicks) return;
             ScheduleScan(entity, info, state, tick);
+            if (_turretFrameTicks != 1) OccupyFrame(state);
             return;
         }
 
@@ -496,11 +595,11 @@ public sealed partial class SimulationWorld
     private static void ScanStep(Entity entity, TurretInfo info, TurretState state, long tick)
     {
         if (entity.HasStatus(ObjectStatusBits.UnderConstruction)) return;
-        var angleReached = TurnAngle(state, info.NaturalAngle + state.ScanAngle, info.TurnRate * TurretRecenterRateFactor);
+        var angleReached = TurnAngle(state, info.NaturalAngle + state.ScanAngle, state.FrameTurnRate * TurretRecenterRateFactor);
         var pitchReached = true;
         if (info.AllowsPitch)
         {
-            TurnPitch(state, info.NaturalPitch, info.PitchRate * TurretRecenterRateFactor);
+            TurnPitch(state, info.NaturalPitch, state.FramePitchRate * TurretRecenterRateFactor);
             pitchReached = state.Pitch == info.NaturalPitch;
         }
 

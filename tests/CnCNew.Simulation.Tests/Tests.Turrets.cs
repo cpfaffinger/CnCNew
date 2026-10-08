@@ -258,7 +258,7 @@ static partial class Tests
         var set = tank!.Turrets!;
         var main = set[0]!;
         Check.That(set[1] is null && !set.Linked, "A Turret block gives the template its main turret.");
-        Check.That(main.TurnRate == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m) && (main.TurnRate - FixedTrig.PiFraction(1, 30)).Abs() <= Fixed.Epsilon, $"TurretTurnRate is degrees per second: 180 are 6 degrees per tick ({main.TurnRate.Raw} raw).");
+        Check.That(main.TurnRate == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m) && (main.TurnRate - FixedTrig.PiFraction(1, TestRate.Default.TicksPerSecond)).Abs() <= Fixed.Epsilon, $"TurretTurnRate is degrees per second: 180 are pi radians per second, 6 degrees per logic frame ({main.TurnRate.Raw} raw).");
         Check.That(main.RecenterTicks == TestRate.Frames(15) && main.Controls(WeaponSlot.Primary) && !main.Controls(WeaponSlot.Secondary) && main.Gates && !main.AllowsPitch, "RecenterTime is 500 ms (15 ticks); ControlledWeaponSlots names the slot.");
         catalog.TryGet("BareTurretTank", out var bare);
         var bareTurret = bare!.Turrets![0]!;
@@ -301,11 +301,12 @@ static partial class Tests
         feeder.FireWeapon(1, tank.Id.Value, target);
         world.Step();
         var first = tank.TurretOf(0)!.Value;
-        Check.That(first.Angle == TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m) && first.Rotating, $"The first tick turns the turret by its rate ({first.Angle.Raw} raw), TURRET_ROTATE is on.");
+        // Above 30 Hz the first tick takes an equal share of the 30 Hz step: the rate per tick up to the rounding of the share (exact at 30 Hz).
+        Check.That((first.Angle - TestRate.Default.Time.DegreesPerSecondToRadiansPerTick(180m)).Abs() <= (TestRate.IsOriginal ? Fixed.Zero : Fixed.Epsilon) && first.Rotating,$"The first tick turns the turret by its rate ({first.Angle.Raw} raw), TURRET_ROTATE is on.");
         var shotAfter = 1 + TicksUntilShot(world, feeder, tank.Id.Value, target);
         Check.That(shotAfter == world.Frames(15), $"The shot waits until the turret has turned 90 degrees at 6 degrees per tick: {shotAfter} ticks after the order.");
         var pointing = tank.TurretOf(0)!.Value;
-        Check.That(Near(pointing.Angle, Degrees(90m), 1m) && !pointing.Rotating && world.TurretWaits == world.Frames(15), $"It points at the victim when the shot goes out ({pointing.Angle.Raw} raw; {world.TurretWaits} orders waited).");
+        Check.That(Near(pointing.Angle, Degrees(90m), 1m) && !pointing.Rotating && world.TurretWaits == 15, $"It points at the victim when the shot goes out ({pointing.Angle.Raw} raw; {world.TurretWaits} orders waited).");
         Check.That(world.RejectionCounts.Sum() == 0, "Waiting for the turret is not a rejection (no 'cannot do' cue): nothing was rejected.");
 
         // A tank whose body already faces the victim does not wait at all: the turret angle is relative to the heading.
