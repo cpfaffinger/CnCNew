@@ -1582,3 +1582,19 @@ mit Realdaten. Ein UI-Signal (`SignalUiInteraction`) zwischen zwei Updates steht
 60/120 Hz bis zu einem Bild lang). Die drei Felder des Skriptzustands mit neuer Bedeutung bei 60/120 Hz (Timerwert, Sequenzwartezeit, `endTimer`: Bilder statt Ticks) haben keine neue
 Formatversion. Die Standbefehle der VM (`UpdateFollowers`, `FireAtOrdered`) laufen je Bild – ob das im Spiel bei 60 Hz anders aussieht als ein Befehl je Tick, hat niemand gesehen. Der
 2-s-Zwischenspeicher von `SUPPLY_SOURCE_SAFE` fehlt weiter. Kein Mensch hat eine Mission bei 60 oder 120 Hz gespielt.
+
+### 15.4 Messrunden, Stand nach zwei Runden und die Entscheidung des Projektinhabers vom 8. Oktober 2026
+
+Die Raten-Äquivalenz-Suite (`docs/SIMULATION-CORE.md` §39) und der Verteilungsvergleich (§40) wurden mit vorab festgelegten Toleranzen bzw. Testgrenzen gebaut; keine davon ist seither geändert worden. Größen außerhalb der Toleranz, von 4.307 (60 Hz / 120 Hz):
+
+| Stand | Commit | Suite | Verteilungsvergleich 30 gegen 60 Hz (320 Matches je Rate) |
+|---|---|---|---|
+| Ausgang (vor jeder Korrektur) | `91cb830` | 479 / 625 | 38 von 39 Tests bestanden; durchgefallen: Anteil entschiedener Matches 79,1 % → 70,0 %, z = −2,63 (Grenze 1,96) |
+| Runde 1: sieben Korrekturpakete (Geschosse, Skript-VM, Physikmodule, Zeitversatz, Bodenbewegung, Flug, Türme/Feuer) | `62fbb6a` | 63 / 64 | 39 von 39; Anteil entschiedener 79,1 % → 76,3 %, z = −0,85; Dauer D = −0,10 min (SE 0,37) |
+| Runde 2: Konsolidierung (eine Bildkonvention über alle Pakete, `docs/RATE-INVARIANCE-CONSOLIDATION.md`) | `3b44506` | 35 / 33 | 39 von 39; Anteil entschiedener 79,1 % → 76,6 %, z = −0,76; Dauer D = −0,11 min (SE 0,39) |
+
+Bei 30 Hz hat sich in beiden Runden nichts geändert: das volle Referenzmanifest ist am Stand `3b44506` identisch (50 von 50 Läufen), das Eingangsmanifest ebenso, und die 30-Hz-Erhebung über 320 Matches ist nach beiden Runden Byte für Byte dieselbe Datei wie vor den Korrekturen. Am Stand `3b44506` bestehen alle Testprogramme, die Simulationstests auch mit `--tick-rate 60` und `--tick-rate 120`; der Zielfahrer erreicht auf allen 24 Kampagnenkarten bei 30, 60 und 120 Hz Sieg und Niederlage über dasselbe Endskript zur selben Spielzeit (Abweichung 0,00 s), das Audit ist bei 30 und 60 Hz auf 24 von 24 Karten deterministisch und nach Speichern/Laden identisch (Endproben 13/24 und 15/24).
+
+Nach Runde 2 außerhalb der Toleranz, je Gruppe (60 / 120 Hz): `ai` 24 / 23 (bis zum Beginn des ersten Gefechts bei 117,9 s sind alle Positionen zwischen 30 und 60 Hz bitgleich; danach liest der nächste Leser noch nicht die Bildende-Sicht – die Blickrichtung eines Schützen, der mitten im Bild anhält), `projectiles` 4 / 4 (Streusalven, nicht zurückverfolgt), `turrets` 4 / 0 (Wachdrohne, `DeployStyleAIUpdate`), `flight` 0 / 3 (Ankunftsschwellen des Flügelflugs bei 120 Hz), `locomotion` 2 / 2 (Mob-Mitglieder lesen ihren Nexus an der Momentanposition), `timed` 1 / 1 (`CINE_BShipWeaponDetonationObject` endet bei 30 Hz nie – ein Fehler bei 30 Hz); `weapons`, `overtime`, `economy`, `scripts` 0 / 0.
+
+**Entscheidung.** Der Auftrag der Phase enthielt ein Abbruchkriterium: bestehen Suite oder Verteilungsvergleich nach zwei Messrunden je Gruppe nicht, bleibt der Standard bei 30 Hz. Nach Runde 2 bestand der Vergleich, die Suite nicht vollständig. Der Projektinhaber hat das Kriterium am 8. Oktober 2026 **aufgehoben**: das Ziel der Phase – die Suite besteht bei 30, 60 und 120 Hz, danach ist 60 Hz der Standard – ist zu erreichen, und alles, was auf dem Weg dorthin liegt, wird behoben. Das schließt Korrekturen ein, die das Verhalten bei 30 Hz ändern, wo die Ursache ein Fehler bei 30 Hz ist; sie bleiben je eine Ursache in einem eigenen Commit mit neu geschriebenem Manifest (`docs/MULTIPLAYER-PLAN.md` §6 Regeln 2 und 3). Unverändert gilt: keine Toleranz und keine Testgrenze wird an ein Ergebnis angepasst.
