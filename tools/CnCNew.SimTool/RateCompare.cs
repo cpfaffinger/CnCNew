@@ -91,6 +91,7 @@ internal static class RateCompare
             return 2;
         }
         var catalogs = new RateCatalogs(graph);
+        if (args.Contains("--fields")) return RateCompareFields.Run(args, pairing, catalogs, rates[0], rates[1], context);
         if (args.Contains("--state"))
         {
             // The first logic frame of the original after which the two worlds differ, and the objects that differ.
