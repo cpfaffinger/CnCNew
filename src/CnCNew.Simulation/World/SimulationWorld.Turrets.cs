@@ -380,7 +380,7 @@ public sealed partial class SimulationWorld
         var horizontal = Fixed.Sqrt(dx * dx + dy * dy);
         var actual = FixedTrig.Atan2(dz, horizontal);
         var desired = Fixed.Max(actual, info.MinPitch);
-        if (info.GroundUnitPitch > Fixed.Zero && (victim.Template.IsKindOf("IMMOBILE") || (victim.HasMoveTarget && !IsSignificantlyAboveTerrain(victim))))
+        if (info.GroundUnitPitch > Fixed.Zero && (victim.Template.IsKindOf("IMMOBILE") || (victim.HasMoveTarget && !IsSignificantlyAboveTerrainAtFrameEnd(victim))))
         {
             var weaponIndex = WeaponIndexIn(source, slot);
             var range = weaponIndex >= 0 ? _templates.Weapons[weaponIndex].RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions) : Fixed.One;

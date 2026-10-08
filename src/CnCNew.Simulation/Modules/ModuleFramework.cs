@@ -142,6 +142,12 @@ public interface IWorldServices
     bool IsSignificantlyAboveTerrain(Entity entity);
 
     /// <summary>
+    /// <see cref="IsSignificantlyAboveTerrain"/> for whoever looks at another object to decide something: above 30 Hz the object is read where the logic frame of the original it
+    /// has begun ends (<see cref="Entity.FrameEnd"/>, docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3). 30 Hz: the same answer.
+    /// </summary>
+    bool IsSignificantlyAboveTerrainAtFrameEnd(Entity entity);
+
+    /// <summary>
     /// <c>ObjectCreationList::create</c> with <paramref name="source"/> as primary object: queues the spawns the list describes and returns
     /// the first created entity (<see cref="EntityId.Invalid"/> when none). Emits <see cref="SimEventKind.CreationListRequested"/> for the
     /// request itself and <see cref="SimEventKind.CreationSkipped"/> for everything that is not simulated. With

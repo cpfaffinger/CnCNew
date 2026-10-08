@@ -108,7 +108,7 @@ public sealed partial class SimulationWorld
     private int VictimAntiMask(Entity victim)
     {
         var template = victim.Template;
-        return template.AirborneTargetAntiMask == template.GroundTargetAntiMask || !IsSignificantlyAboveTerrain(victim) ? template.GroundTargetAntiMask : template.AirborneTargetAntiMask;
+        return template.AirborneTargetAntiMask == template.GroundTargetAntiMask || !IsSignificantlyAboveTerrainAtFrameEnd(victim) ? template.GroundTargetAntiMask : template.AirborneTargetAntiMask;
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public sealed partial class SimulationWorld
         var template = victim.Template;
         if (template.IsKindOf("SHRUBBERY")) return weapon.DeathType == DeathTypes.Burned ? Fixed.One : Fixed.Zero;
         if (weapon.DamageType == DisarmDamageType) return template.IsKindOf("MINE") || template.IsKindOf("BOOBY_TRAP") || template.IsKindOf("DEMOTRAP") ? Fixed.One : Fixed.Zero;
-        if (weapon.DamageType == DeployDamageType && !IsSignificantlyAboveTerrain(victim)) return Fixed.One;
+        if (weapon.DamageType == DeployDamageType && !IsSignificantlyAboveTerrainAtFrameEnd(victim)) return Fixed.One;
         var amount = weapon.DamageWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions, weapon.PrimaryDamage);
         return ActiveArmor(victim).Adjust(weapon.DamageType, amount);
     }
