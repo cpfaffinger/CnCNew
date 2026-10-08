@@ -949,7 +949,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return SimulationTiming.SleepNone;
         }
         if (world.Tick < _paralyzedUntil) return SimulationTiming.SleepNone;
-        if (_dock is not null && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
+        // The dock machine is a state machine of the original's logic frame: its states change once per frame, so that "the update after the arrival" is a frame later at every
+        // rate. While the dock works on the object (ProcessDock) the machine runs every tick: the docks' actions are written per tick (a repair dock heals a share per tick), and
+        // the action delays of the carriers lie on the frame grid by themselves.
+        if (_dock is not null && (_dock.Active || world.Time.IsOriginalFrameBoundary(world.Tick)) && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
         if (_task != BuilderTask.None) UpdateTask(world);
         if (Entity.HasMoveTarget)
         {

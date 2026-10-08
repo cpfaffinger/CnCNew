@@ -280,7 +280,8 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
 
     public override long Update(IWorldServices world)
     {
-        if (!IsBuilding) _machine.Update(world, this);
+        // Like the dock machine (AIUpdateInterface.Update): one step of the supply machine per logic frame of the original.
+        if (!IsBuilding && world.Time.IsOriginalFrameBoundary(world.Tick)) _machine.Update(world, this);
         var baseSleep = base.Update(world);
         return _machine.Sleeps ? baseSleep : Math.Min(baseSleep, SimulationTiming.SleepNone);
     }
