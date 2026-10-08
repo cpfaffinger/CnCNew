@@ -1230,7 +1230,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
                 AdvanceFrame(world, locomotor);
                 return;
             }
-            // The object did not move in the tick the share was due in (disabled, stopped, another state of a derived AI): the rest of that step is void.
+            if (_frameDue == world.Tick + TickOrder.Next)
+            {
+                // The module runs a second time in this tick: an order of a module that had its turn after it woke it "now" (a transport calls a wounded soldier back). At
+                // 30 Hz the second run is a second whole step. In the tick that decided the frame the step is completed first and the new one decided from where it ends,
+                // as there; later in the frame the object goes on covering its step and decides when it is covered.
+                if (_frameTicksLeft != _stride - 1) return;
+                if (Entity.IsInsideFrameStep || Entity.HasAheadAngle) Entity.CompleteFrame(world.Tick);
+            }
+            // Else the object did not move in the tick the share was due in (disabled, stopped, another state of a derived AI): the rest of that step is void.
             _frameTicksLeft = 0;
             _frameArriving = false;
         }
