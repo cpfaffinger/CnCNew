@@ -108,12 +108,11 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     public bool HasToppled => _state == State.Falling || (_state == State.Down && !data.KillWhenStartToppled);
 
     /// <summary>
-    /// The entry of the callers that pass a speed per tick (<c>SimulationWorld.Collision.cs</c>, <c>TryTopple</c>: <c>Entity.Speed</c>).
+    /// The historical name of <see cref="ApplyTopplingSpeed"/>. Every caller passes the pusher's speed per logic frame of the original
+    /// (<c>SimulationWorld.Collision.cs</c>, <c>TryTopple</c>; the blast of the neutron missile): nothing is converted here.
     /// </summary>
-    public void ApplyTopplingForce(IWorldServices world, Fixed directionX, Fixed directionY, Fixed speed)
-        // PHASE 23 MERGE: the one conversion from a speed per tick. Remove the factor (and let every caller use ApplyTopplingSpeed) once TryTopple passes
-        // the pusher's speed per frame of the original; until then a caller that already passes a value per frame must call ApplyTopplingSpeed.
-        => ApplyTopplingSpeed(world, directionX, directionY, world.Time.PerTickAsPerOriginalFrame(speed));
+    public void ApplyTopplingForce(IWorldServices world, Fixed directionX, Fixed directionY, Fixed speedPerOriginalFrame)
+        => ApplyTopplingSpeed(world, directionX, directionY, speedPerOriginalFrame);
 
     /// <summary>
     /// <c>Object::topple</c> / <c>ToppleUpdate::applyTopplingForce</c>: <paramref name="directionX"/>/<paramref name="directionY"/> point from the pusher to this object;
