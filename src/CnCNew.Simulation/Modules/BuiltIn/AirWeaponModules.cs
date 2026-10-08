@@ -1015,6 +1015,8 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
     private long _orbitEscapeTick;
     private EntityId _gattling;
     private bool _gattlingPlaced;
+    /// <summary>The step of the running logic frame of the original of the ship's flight, flown in shares per tick; empty at 30 Hz.</summary>
+    private FlightFrameStep _flight;
 
     public override string ModuleName => "SpectreGunshipUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -1051,6 +1053,7 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         _positionToShoot = _initialTarget;
         _okToFireHowitzerCounter = 0;
         _status = GunshipStatus.Inserting;
+        _flight.Cancel();
         CleanUp(world);
         if (data.GattlingTemplate.Length > 0 && world.Templates.TryGet(data.GattlingTemplate, out var template) && template.IsInstantiable)
         {
@@ -1081,20 +1084,34 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         var gattling = world.FindEntity(_gattling);
         if (gattling is not null) FollowShip(world, gattling);
 
+        // The flight is the 30 Hz step, decided where a logic frame of the original begins (the howitzer's rhythm lies on the same frames) and flown in shares per tick; the
+        // aim point of the orbit, the switch to the orbit and the check of the departure belong to the decision and see the ship where the 30 Hz step puts it.
+        var decides = !_flight.Continue(Entity) && world.Time.IsOriginalFrameBoundary(world.Tick);
+        (Fixed X, Fixed Y, Fixed Turn) step = default;
         if (_status is GunshipStatus.Inserting or GunshipStatus.Orbiting)
         {
-            UpdateSatellite();
-            Fly(world, _status == GunshipStatus.Inserting ? Transit : Entity.Template.Locomotor, _satellite.X, _satellite.Y);
-            ConstrainOverride();
-            var distanceToTarget = AirModules.Distance2D(Entity.X, Entity.Y, _initialTarget.X, _initialTarget.Y);
-            if (_status == GunshipStatus.Inserting && distanceToTarget < data.GunshipOrbitRadius)
+            var locomotor = _status == GunshipStatus.Inserting ? Transit : Entity.Template.Locomotor;
+            if (decides)
             {
-                _status = GunshipStatus.Orbiting;
-                _orbitEscapeTick = world.Tick + data.OrbitTicks;
+                UpdateSatellite();
+                step = Fly(world, locomotor, _satellite.X, _satellite.Y);
+                ConstrainOverride();
+                var distanceToTarget = AirModules.Distance2D(Entity.X, Entity.Y, _initialTarget.X, _initialTarget.Y);
+                if (_status == GunshipStatus.Inserting && distanceToTarget < data.GunshipOrbitRadius)
+                {
+                    _status = GunshipStatus.Orbiting;
+                    _orbitEscapeTick = world.Tick + data.OrbitTicks;
+                }
             }
+            else HoldHeight(world, locomotor);
         }
         if (_status == GunshipStatus.Orbiting) Orbit(world, gattling);
-        else if (_status == GunshipStatus.Departing) Depart(world);
+        else if (_status == GunshipStatus.Departing)
+        {
+            if (decides) step = Depart(world);
+            else HoldHeight(world, Transit);
+        }
+        if (decides) _flight.Begin(world.Time, Entity, step.X, step.Y, Fixed.Zero, step.Turn);
         world.MarkDirty(Entity);
         return SimulationTiming.SleepNone;
     }
@@ -1139,18 +1156,34 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         _overrideTarget = _overrideTarget with { X = _initialTarget.X - dx / length * limit, Y = _initialTarget.Y - dy / length * limit };
     }
 
-    /// <summary>Kinematic flight: turn toward the point at the locomotor's turn rate, accelerate to its speed, hold the preferred height.</summary>
-    private void Fly(IWorldServices world, LocomotorInfo? locomotor, Fixed goalX, Fixed goalY)
+    /// <summary>
+    /// Kinematic flight, one step of a logic frame of the original: turn toward the point by the locomotor's turn of a frame, change the speed by its acceleration of a frame, advance
+    /// by the travel of a frame, hold the preferred height. Returns the step (travel and turn) for <see cref="FlightFrameStep.Begin"/>; the speed stays a value per tick.
+    /// </summary>
+    private (Fixed X, Fixed Y, Fixed Turn) Fly(IWorldServices world, LocomotorInfo? locomotor, Fixed goalX, Fixed goalY)
     {
-        if (locomotor is null) return;
+        if (locomotor is null) return default;
+        var time = world.Time;
+        var heading = Entity.Angle;
         var desired = FixedTrig.Atan2(goalY - Entity.Y, goalX - Entity.X);
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
-        var turn = locomotor.TurnRatePerTick;
+        var turn = FlightFrames.PerFrame(time, locomotor.TurnRatePerTick);
         Entity.Angle = turn > Fixed.Zero && difference.Abs() > turn ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turn : turn)) : desired;
-        Entity.Speed = Entity.Speed < locomotor.Speed ? Fixed.Min(locomotor.Speed, Entity.Speed + locomotor.Acceleration) : Fixed.Max(locomotor.Speed, Entity.Speed - locomotor.Braking);
-        Entity.X += FixedTrig.Cos(Entity.Angle) * Entity.Speed;
-        Entity.Y += FixedTrig.Sin(Entity.Angle) * Entity.Speed;
+        Entity.Speed = Entity.Speed < locomotor.Speed
+            ? Fixed.Min(locomotor.Speed, Entity.Speed + FlightFrames.PerFrame(time, locomotor.Acceleration))
+            : Fixed.Max(locomotor.Speed, Entity.Speed - FlightFrames.PerFrame(time, locomotor.Braking));
+        var stepX = FixedTrig.Cos(Entity.Angle) * FlightFrames.PerFrame(time, Entity.Speed);
+        var stepY = FixedTrig.Sin(Entity.Angle) * FlightFrames.PerFrame(time, Entity.Speed);
+        Entity.X += stepX;
+        Entity.Y += stepY;
         Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y) + locomotor.PreferredHeight;
+        return (stepX, stepY, FixedTrig.AngleDifference(heading, Entity.Angle));
+    }
+
+    /// <summary>Between two decisions the ship keeps its height over the ground it flies over.</summary>
+    private void HoldHeight(IWorldServices world, LocomotorInfo? locomotor)
+    {
+        if (locomotor is not null) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y) + locomotor.PreferredHeight;
     }
 
     private void Orbit(IWorldServices world, Entity? gattling)
@@ -1240,15 +1273,16 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
     private static void FireGattling(IWorldServices world, Entity gattling, Entity? victim, Fixed x, Fixed y, Fixed z) => world.FireCurrentWeaponAtPosition(gattling, x, y, z, victim);
 
     /// <summary>Straight ahead along the heading until the ship has left the map, then it is deleted (without a terrain: once it is far from the target).</summary>
-    private void Depart(IWorldServices world)
+    private (Fixed X, Fixed Y, Fixed Turn) Depart(IWorldServices world)
     {
-        Fly(world, Transit, Entity.X + FixedTrig.Cos(Entity.Angle) * Fixed.FromInt(99999), Entity.Y + FixedTrig.Sin(Entity.Angle) * Fixed.FromInt(99999));
+        var step = Fly(world, Transit, Entity.X + FixedTrig.Cos(Entity.Angle) * Fixed.FromInt(99999), Entity.Y + FixedTrig.Sin(Entity.Angle) * Fixed.FromInt(99999));
         var gone = world.Terrain is not null
             ? FlightModules.IsOffMap(world, Entity.X, Entity.Y)
             : AirModules.Distance2D(Entity.X, Entity.Y, _initialTarget.X, _initialTarget.Y) > data.GunshipOrbitRadius * 4;
-        if (!gone) return;
+        if (!gone) return step;
         world.RequestDestroy(Entity.Id);
         _status = GunshipStatus.Idle;
+        return step;
     }
 
     /// <summary><c>cleanUp</c>: the gattling is destroyed.</summary>
@@ -1276,6 +1310,7 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         writer.UInt("gattling", _gattling.Value);
         writer.Bool("gattlingPlaced", _gattlingPlaced);
         writer.UInt("victim", _currentVictim.Value);
+        _flight.Describe(writer, "flightStep");
     }
 
     public override void Load(IStateReader reader)
@@ -1295,5 +1330,6 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         _gattling = new EntityId(checked((uint)reader.UInt("gattling")));
         _gattlingPlaced = reader.Bool("gattlingPlaced");
         _currentVictim = new EntityId(checked((uint)reader.UInt("victim")));
+        _flight.Load(reader, "flightStep");
     }
 }

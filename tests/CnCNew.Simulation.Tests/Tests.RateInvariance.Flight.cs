@@ -550,4 +550,60 @@ static partial class Tests
         SameTracks("Chinook: climb, landing and climb", tracks, 0.01m, 0.0001m);
         FlightVerdict();
     }
+
+    /// <summary>
+    /// <c>SpectreGunshipUpdate</c>: the gunship inserts toward a circle around its target, orbits it for <c>OrbitTime</c>, strafes its gattling's aim point toward the enemy in the reticle and
+    /// fires its howitzer once the aim point has stayed on it longer than <c>HowitzerFollowLag</c>, then departs. Flight and strafing are the 30 Hz step on the frames of the original,
+    /// on which the howitzer's rhythm lies. The power is used one tick before a frame begins, so that the gunship's first update is a frame's first tick at every rate.
+    /// </summary>
+    public static void RateFlightSpectreGunshipIsTheSame()
+    {
+        var tracks = new List<FlightPose>[FlightRates.Length];
+        var orbit = new long[FlightRates.Length];
+        var depart = new long[FlightRates.Length];
+        var firstHowitzer = new long[FlightRates.Length];
+        var howitzers = new Fixed[FlightRates.Length];
+        var gattlings = new Fixed[FlightRates.Length];
+        for (var index = 0; index < FlightRates.Length; index++)
+        {
+            var (world, feeder) = FlightRateWorld(FlightRates[index], AirWeaponFixtureFiles, terrain: false);
+            feeder.Spawn(1, "AirGunship", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "AirDummy", owner: 2, x: 405, y: 5);
+            world.Step();
+            var ship = Only(world, "AirGunship");
+            var spectre = ship.Modules.OfType<SpectreGunshipUpdate>().Single();
+            StepFrames(world, 125); // the power recharges for 4 seconds after the gunship appeared
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick + 1)) world.Step();
+            Check.That(feeder.UseSpecialPower(1, ship.Id.Value, "AirGunshipPower", CnCNew.Simulation.Commands.SpecialPowerTargetKind.Location, x: 400, y: 0).Accepted, "The power is used on a location.");
+            world.Step();
+            var start = world.Tick;
+            (orbit[index], depart[index], firstHowitzer[index]) = (-1, -1, -1);
+            var (fired, shells) = (0, 0);
+            var at = index;
+            tracks[index] = FrameTrack(world, ship, 260, result =>
+            {
+                var now = FrameQuarters(world, result.Tick - start);
+                if (orbit[at] < 0 && spectre.Status == SpectreGunshipUpdate.GunshipStatus.Orbiting) orbit[at] = now;
+                if (depart[at] < 0 && spectre.Status == SpectreGunshipUpdate.GunshipStatus.Departing) depart[at] = now;
+                foreach (var value in result.Events)
+                {
+                    if (value.Kind != SimEventKind.WeaponFired) continue;
+                    if (value.Entity == ship.Id)
+                    {
+                        shells++;
+                        if (firstHowitzer[at] < 0) firstHowitzer[at] = now;
+                    }
+                    else if (value.Entity == spectre.Gattling) fired++;
+                }
+            });
+            howitzers[index] = Fixed.FromInt(shells);
+            gattlings[index] = Fixed.FromInt(fired);
+        }
+        SameFrames("Spectre gunship: it starts to orbit", orbit);
+        Console.WriteLine($"       Spectre gunship: first howitzer shell after {InFrames(firstHowitzer[0])} / {InFrames(firstHowitzer[1])} / {InFrames(firstHowitzer[2])} frames, {Units(howitzers[0])} / {Units(howitzers[1])} / {Units(howitzers[2])} shells (not compared yet: the strafing of the aim point is the next cause)");
+        SameFrames("Spectre gunship: it departs", depart);
+        SameValues("Spectre gunship: gattling shots", gattlings, 0m);
+        SameTracks("Spectre gunship: insertion, orbit and departure", tracks, 0.05m, 0.001m);
+        FlightVerdict();
+    }
 }
