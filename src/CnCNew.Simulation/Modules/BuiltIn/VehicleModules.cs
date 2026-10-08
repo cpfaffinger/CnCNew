@@ -211,11 +211,8 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
             }
             return SimulationTiming.SleepNone;
         }
-        if (_realDeath)
-        {
-            if (_activated && world.Tick >= _destructionTick) world.RequestDestroy(Entity.Id);
-            return SimulationTiming.SleepForever;
-        }
+        // "If a real death, we aren't allowed to do anything": SlowDeathBehavior::update.
+        if (_realDeath) return SlowDeathTimer.Update(world, Entity, _activated, _destructionTick);
         // Neither death is running: wake now and then to see whether the hulk is empty.
         if (Entity.Container is not { } passengers) return SimulationTiming.SleepForever;
         if (data.EmptyHulkDelayTicks == 0) return SimulationTiming.SleepForever;

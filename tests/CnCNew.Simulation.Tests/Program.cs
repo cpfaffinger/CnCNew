@@ -75,6 +75,9 @@ run.Test("Rate timing: an instant clip reload waits one frame", Tests.RateTiming
 run.Test("Rate timing: a regeneration delay of zero is one frame", Tests.RateTimingAZeroRegenerationDelayIsOneFrame);
 run.Test("Rate timing: a battle plan passes through a zero idle time in one frame", Tests.RateTimingBattlePlanPassesThroughIdleInOneFrame);
 run.Test("Rate timing: a firestorm's way out and back take the same game time", Tests.RateTimingFirestormTransitionTakesTheSameGameTime);
+run.Test("Lost wake: a lifetime and a slow death of one frame end two frames after creation", Tests.LostWakeALifetimeAndASlowDeathOfOneFrameEnd);
+run.Test("Lost wake: a slow death of one frame begun in the tick after creation ends", Tests.LostWakeASlowDeathOfOneFrameBegunOnTheFirstFrameEnds);
+run.Test("Lost wake: a battle bus killed in a tick it looks at its hulk in ends", Tests.LostWakeABattleBusKilledWhileItLooksAtItsHulkEnds);
 run.Test("Tick rate, world: the shroud is refreshed every three logic frames, phase 0", Tests.TickRateWorldVisionKeepsItsRhythm);
 run.Test("Tick rate, world: weapon delays under a bonus are rounded in logic frames", Tests.TickRateWorldWeaponDelaysAreRoundedOnTheOriginalGrid);
 run.Test("Tick rate, world: a weapon that spins up keeps its shot times", Tests.TickRateWorldSpinUpKeepsItsShotTimes);
@@ -541,6 +544,7 @@ if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turr
 if (contentDirectory is not null) run.Test("Real data: retail AutoAcquire flags; a Crusader and a Battlemaster fight without orders", () => Tests.RealAcquisition(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI with the shipped script library on Alpine Assault", () => Tests.RealOriginalSkirmishAi(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));
 // Phase 23: the rate-equivalence suite, one test per group ("--only RateEquivalence" runs all, "--only \"RateEquivalence: weapons\"" one); 30, 60 and 120 Hz whatever --tick-rate says.
 if (contentDirectory is not null)
     foreach (var rateGroup in RateCases.Groups)

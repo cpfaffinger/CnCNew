@@ -297,11 +297,7 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         world.WakeAt(Entity, this, _destructionTick);
     }
 
-    public long Update(IWorldServices world)
-    {
-        if (_activated && world.Tick >= _destructionTick) world.RequestDestroy(Entity.Id);
-        return SimulationTiming.SleepForever;
-    }
+    public long Update(IWorldServices world) => SlowDeathTimer.Update(world, Entity, _activated, _destructionTick);
 
     public override void Describe(IStateWriter writer)
     {
@@ -315,6 +311,25 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         _activated = reader.Bool("activated");
         _destructionTick = reader.Int("destructionTick");
         _nextWake = reader.Int("nextWake");
+    }
+}
+
+/// <summary>
+/// The destruction timer of <c>SlowDeathBehavior::update</c>, shared by the modules that run that update (<c>BattleBusSlowDeathBehavior::update</c> calls it for a real death).
+/// The original's update returns <c>UPDATE_SLEEP_NONE</c> from the beginning of the slow death to the destruction frame; only that frame is modeled here, so the module
+/// sleeps through the time before it - and the rest of the timer has to be the return value of an update that comes before it. Such an update happens: <c>WakeAt</c>
+/// (<c>GameLogic::friend_awakenUpdateModule</c>) drops a request for the next tick when the module is still due in the running one ("already awake"), because the update of
+/// this tick decides with its return value. A slow death of one frame that begins in a tick its module is due in used to answer "forever" there, and the dead object stayed
+/// in the world (docs/DEFECT-LOST-WAKE.md).
+/// </summary>
+internal static class SlowDeathTimer
+{
+    public static long Update(IWorldServices world, Entity entity, bool activated, long destructionTick)
+    {
+        if (!activated) return SimulationTiming.SleepForever;
+        if (world.Tick < destructionTick) return destructionTick - world.Tick;
+        world.RequestDestroy(entity.Id);
+        return SimulationTiming.SleepForever;
     }
 }
 
