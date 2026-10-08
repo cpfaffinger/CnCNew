@@ -152,6 +152,13 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
 
     public abstract long Update(IWorldServices world);
 
+    /// <summary>
+    /// Above 30 Hz only: the tick inside a logic frame of the original (1 .. ticks per frame - 1) in which a rider came in, where it is not the frame's first. A container
+    /// that gives its riders something once per frame of the original counts the frames from there (<see cref="TransportContain"/>'s regeneration). At 30 Hz it stays empty
+    /// and nothing of it is written.
+    /// </summary>
+    protected Dictionary<uint, int> EnterPhases { get; } = [];
+
     protected void DescribeContained(IStateWriter writer)
     {
         writer.Int("nextWake", _nextWake);
@@ -160,6 +167,7 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         {
             writer.BeginObject(null);
             writer.UInt("id", riderId.Value);
+            if (EnterPhases.TryGetValue(riderId.Value, out var phase)) writer.Int("phase", phase);
             writer.EndObject();
         }
         writer.EndArray();
@@ -170,7 +178,12 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     {
         _nextWake = reader.Int("nextWake");
         Riders.Clear();
-        foreach (var entry in reader.Array("contained")) Riders.Add(new EntityId(checked((uint)entry.UInt("id"))));
+        EnterPhases.Clear();
+        foreach (var entry in reader.Array("contained"))
+        {
+            Riders.Add(new EntityId(checked((uint)entry.UInt("id"))));
+            if (entry.Has("phase")) EnterPhases[checked((uint)entry.UInt("id"))] = checked((int)entry.Int("phase"));
+        }
         PassengersAllowedToFire = reader.Has("passengersFire") && reader.Bool("passengersFire");
     }
 }
@@ -373,6 +386,8 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     {
         base.Add(world, candidate);
         _usedSlots += candidate.Template.TransportSlotCount;
+        var phase = (int)(world.Tick - world.Time.OriginalFrames(world.Time.FramesIn(world.Tick)));
+        if (phase != 0) EnterPhases[candidate.Id.Value] = phase;
     }
 
     /// <summary>
@@ -403,6 +418,7 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     {
         base.Remove(world, candidate, positionAtContainer);
         _usedSlots -= candidate.Template.TransportSlotCount;
+        EnterPhases.Remove(candidate.Id.Value);
     }
 
     public override long Update(IWorldServices world)
@@ -413,9 +429,14 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
             {
                 var rider = world.FindEntity(riderId);
                 if (rider?.Body is null || rider.Body.Health >= rider.Body.MaxHealth) continue;
+                // The original's slice (the regeneration of one second over its 30 logic frames), once per logic frame of the original counted from the tick the rider
+                // came in - like GarrisonContain and the tunnel network: slices per tick are smaller numbers that do not add up to the slice of a frame, so the rider
+                // would be whole a tick earlier and be healed in one frame less. 30 Hz: every tick, the value it always had.
+                var phase = (int)(world.Tick - world.Time.OriginalFrames(world.Time.FramesIn(world.Tick)));
+                if (phase != EnterPhases.GetValueOrDefault(riderId.Value)) continue;
                 var perSecond = rider.Body.MaxHealth * data.HealthRegenPercentPerSecond / Fixed.FromInt(100);
-                var perTick = world.Time.PerSecondToPerTick(perSecond);
-                world.Damage(rider.Id, new DamageInfo(Entity.Id, perTick, DamageTypes.Healing, DeathTypes.None, false));
+                var perFrame = SimulationRate.Original.Time.PerSecondToPerTick(perSecond);
+                world.Damage(rider.Id, new DamageInfo(Entity.Id, perFrame, DamageTypes.Healing, DeathTypes.None, false));
             }
         return data.HealthRegenPercentPerSecond > Fixed.Zero ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }

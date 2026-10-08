@@ -17,8 +17,9 @@ namespace CnCNew.Simulation.Skirmish;
 /// <param name="HomeX">Centre of the base: the start position on the map.</param>
 /// <param name="Side">Side of the player's faction; only objects of this side are built or produced.</param>
 /// <param name="FamilyPrefix">Name prefix of the faction's own object variants (<c>AirF_America</c>); such variants are preferred over the shared ones of the side.</param>
+/// <param name="Composition">How the army's next unit is chosen; null for <see cref="SkirmishAi.DefaultComposition"/>.</param>
 /// <param name="HintPositions">Start positions of the other players; public map knowledge the AI may attack before it has seen anything.</param>
-public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions, int AttackThreshold = 0, int MaxAttackThreshold = 0, bool EconomyFirst = false);
+public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions, int AttackThreshold = 0, int MaxAttackThreshold = 0, bool EconomyFirst = false, ArmyComposition? Composition = null);
 
 /// <summary>Counters an AI keeps about itself; the match report and the tests read them.</summary>
 public sealed class SkirmishAiStats
@@ -44,6 +45,23 @@ public sealed class SkirmishAiStats
     public int TransportLoads { get; internal set; }
     public long AttackTicks { get; internal set; }
     public SortedDictionary<CommandRejection, int> RejectionsByReason { get; } = [];
+    /// <summary>Army draws by <see cref="ArmyComposition.ExchangeValue"/> that had a sighted enemy to weigh against, and those that fell back to the uniform draw.</summary>
+    public int InformedDraws { get; internal set; }
+    public int UninformedDraws { get; internal set; }
+    /// <summary>Objectives the army turned away from for a while because it had marched on them for too long without ending them.</summary>
+    public int ObjectivesGivenUp { get; internal set; }
+    /// <summary>
+    /// What every look of the army production at a barracks or a factory ended with, counted per producer template and outcome (key: template, a tab, the outcome):
+    /// <c>queue-full</c>, <c>no-candidate</c> (nothing it offers is an army unit whose prerequisites are met), <c>unaffordable</c> (candidates exist, none is covered by the money
+    /// left at that moment), <c>queued:&lt;unit&gt;</c> and <c>rejected:&lt;reason&gt;:&lt;unit&gt;</c>. Diagnostics only; nothing reads it back.
+    /// </summary>
+    public SortedDictionary<string, int> ArmyProduction { get; } = new(StringComparer.Ordinal);
+
+    internal void CountArmyProduction(ObjectTemplate producer, string outcome)
+    {
+        var key = producer.Name + "\t" + outcome;
+        ArmyProduction[key] = ArmyProduction.GetValueOrDefault(key) + 1;
+    }
 }
 
 /// <summary>
@@ -58,7 +76,7 @@ public sealed class SkirmishAiStats
 /// (<see cref="CommandCatalog"/>); see <c>SIMULATION-CORE.md</c> for the documented limits.
 /// </para>
 /// </summary>
-public sealed class SkirmishAi
+public sealed partial class SkirmishAi
 {
     // Own rhythms and deadlines of the AI, all in logic frames of the original (1/30 s) and scaled once per use through the world's time service, so the AI
     // observes, thinks and waits at the same moments of game time at every tick rate. ThinkIntervalFrames must stay a multiple of FireIntervalFrames.
@@ -90,6 +108,8 @@ public sealed class SkirmishAi
     private const int PlacementChecksPerThink = 400;
     private static readonly Fixed DefenseRadius = Fixed.FromInt(450);
     private static readonly Fixed EngageRadius = Fixed.FromInt(260);
+    /// <summary>How far from the rally point a unit at rest still counts as gathered: the reach of the world's search for a free place around a taken goal (ten cells) plus one.</summary>
+    private static readonly Fixed GatherRadius = Fixed.FromInt(11 * TerrainMap.CellSize);
     private static readonly Fixed RepairBelow = Fixed.FromDecimal(0.7m);
     private static readonly Fixed TunnelHealBelow = Fixed.FromDecimal(0.5m);
     private static readonly Fixed TunnelReach = Fixed.FromInt(600);
@@ -171,6 +191,19 @@ public sealed class SkirmishAi
     private readonly Dictionary<uint, long> _boarding = [];
     private (Fixed X, Fixed Y)? _armyGoal;
 
+    /// <summary>
+    /// How long the army keeps marching on one objective that is still there (2 min) before it puts it behind all the others. The army picks the objective nearest to
+    /// itself; one it cannot get at (behind a cliff, out of every weapon's reach from where the path ends) would otherwise hold it for ever, because standing in front of it
+    /// keeps it the nearest. Only a mission's agent has objectives; a skirmish match is not touched.
+    /// </summary>
+    private const long ObjectivePatienceFrames = 3600;
+
+    private (Fixed X, Fixed Y)? _objective;
+    private long _objectiveSince;
+    private readonly HashSet<(Fixed X, Fixed Y)> _givenUp = [];
+    // Diagnostics (DescribeState): the enemy the last think took for a threat to the base.
+    private string _threat = string.Empty;
+
     public SkirmishAi(SimulationWorld world, TemplateCatalog catalog, SkirmishAiOptions options, Func<SimCommand, SubmitResult> submit)
     {
         _world = world;
@@ -185,6 +218,7 @@ public sealed class SkirmishAi
         // The stagger between the players is drawn in frames of the original and then scaled like the intervals: at every rate the same players share a frame.
         _phase = _time.OriginalFrames(options.Player.Value % FireIntervalFrames);
         _side = options.Side;
+        _composition = options.Composition ?? DefaultComposition;
         if (options.AttackThreshold > 0) _threshold = options.AttackThreshold;
         if (options.MaxAttackThreshold > 0) _maxThreshold = Math.Max(options.MaxAttackThreshold, _threshold);
     }
@@ -216,7 +250,7 @@ public sealed class SkirmishAi
 
     /// <summary>One line about the economy and the army, for diagnostics (observed state of the last think).</summary>
     public string DescribeState()
-        => $"carriers {CountAlive(Role.Carrier, false)}, builders {CountAlive(Role.Builder, false)}, supply centers {CountAlive(Role.SupplyCenter, false)}, power {CountAlive(Role.Power, false)}, barracks {CountAlive(Role.Barracks, false)}, factories {CountAlive(Role.Factory, false)}, defenses {CountAlive(Role.Defense, false)}, warehouses known {_warehouses.Count}, army {_units.Count(value => (RoleOf(value.Template) & Role.Army) != 0)}, threshold {_threshold}, attacking {_attacking}, known enemy structures {KnownEnemyStructures}";
+        => $"carriers {CountAlive(Role.Carrier, false)}, builders {CountAlive(Role.Builder, false)}, supply centers {CountAlive(Role.SupplyCenter, false)}, power {CountAlive(Role.Power, false)}, barracks {CountAlive(Role.Barracks, false)}, factories {CountAlive(Role.Factory, false)}, defenses {CountAlive(Role.Defense, false)}, warehouses known {_warehouses.Count}, army {_units.Count(value => (RoleOf(value.Template) & Role.Army) != 0)}, threshold {_threshold}, attacking {_attacking}, known enemy structures {KnownEnemyStructures}, wave {_wave.Count}, army goal {(_armyGoal is { } goal ? $"({goal.X.Floor()}, {goal.Y.Floor()})" : "none")}, rally {(_rally is { } rally ? $"({rally.X.Floor()}, {rally.Y.Floor()})" : "none")}, threat {(_threat.Length == 0 ? "none" : _threat)}";
 
     /// <summary>Roles of the given template, for diagnostics.</summary>
     public string DescribeRoles(ObjectTemplate template) => RoleOf(template).ToString();
@@ -312,7 +346,9 @@ public sealed class SkirmishAi
             }
             seen.Add(entity.Id.Value);
             _enemies[entity.Id.Value] = new Remembered(entity.Id, entity.Template, entity.Owner, entity.X, entity.Y, _tick, entity.Template.IsKindOf("STRUCTURE"));
-            if (entity.Body is not null) _enemyTargets.Add(entity);
+            if (entity.Body is null) continue;
+            _enemyTargets.Add(entity);
+            if (_composition == ArmyComposition.ExchangeValue) RememberSighting(entity);
         }
         Forget(_enemies, seen);
         Forget(_warehouses, seen);
@@ -928,25 +964,105 @@ public sealed class SkirmishAi
 
     // ------------------------------------------------------------------------------------------------------------ army
 
+    /// <summary>The army unit the AI has decided on and is saving for: which producer makes it and since when the decision stands.</summary>
+    private readonly record struct ArmyOrder(EntityId Producer, ObjectTemplate Unit, long Since);
+
+    private ArmyOrder? _armyOrder;
+
+    /// <summary>
+    /// How long an army order may wait for its price (60 s) before it gives way to something that can be paid at once. Own value: long enough for the income of one supply
+    /// center to pay a tank, short enough that an economy that has stopped still turns its last money into units.
+    /// </summary>
+    private const long ArmyOrderPatienceFrames = 1800;
+
+    /// <summary>
+    /// The rule "standing army order": the next army unit is drawn among everything the barracks and factories with room in their queue could make (prerequisites met, the
+    /// price not looked at), every unit type with the same chance, and the AI then saves for exactly that unit; nothing else is bought for the army until it is paid. Only an
+    /// order that has waited <see cref="ArmyOrderPatienceFrames"/> gives way to a draw among what the money covers now.
+    /// <para>
+    /// Before this rule every producer bought, in the order the structures were built, a random unit among those the money covered at that moment. The barracks stands first
+    /// and its infantry is the cheapest army unit, so the money never reached the price of a vehicle: over 80 matches the factories' looks ended 188,605 times with
+    /// "unaffordable" and 328 times with an order (docs/AI-OBSERVED-2026-10-08.md).
+    /// </para>
+    /// </summary>
     private void ProduceArmy()
     {
         var armyCount = _units.Count(value => (RoleOf(value.Template) & Role.Army) != 0);
         var spendable = armyCount < 4 ? _budget : _budget - _reserve;
-        foreach (var producer in _structures)
+        var served = new HashSet<uint>();
+        while (true)
         {
-            if ((RoleOf(producer.Template) & (Role.Barracks | Role.Factory)) == 0) continue;
-            var production = ProductionOf(producer);
-            if (production is null || !production.HasRoom) continue;
-            var candidates = ProducibleBy(producer.Template).Where(value => (RoleOf(value) & Role.Army) != 0 && value.BuildCost <= spendable && PrerequisitesMet(value)).ToList();
-            if (candidates.Count == 0) continue;
-            if (candidates.Any(InFamily)) candidates = candidates.Where(InFamily).ToList();
-            var pick = candidates[_random.Range(0, candidates.Count - 1)];
+            if (_armyOrder is not { } order || !ArmyOrderStands(order, served))
+            {
+                if (DrawArmyOrder(served, Fixed.MaxValue) is not { } drawn) break;
+                _armyOrder = order = drawn;
+            }
+            var producer = _world.FindEntity(order.Producer)!;
+            if (order.Unit.BuildCost > spendable)
+            {
+                if (_tick - order.Since < _time.OriginalFrames(ArmyOrderPatienceFrames) || DrawArmyOrder(served, spendable) is not { } affordable)
+                {
+                    Stats.CountArmyProduction(producer.Template, "saving:" + order.Unit.Name);
+                    break;
+                }
+                Stats.CountArmyProduction(producer.Template, "gave-way:" + order.Unit.Name);
+                _armyOrder = order = affordable;
+                producer = _world.FindEntity(order.Producer)!;
+            }
+            var pick = order.Unit;
             var result = Send(sequence => new QueueProductionCommand(_player, sequence, _tick, producer.Id, pick.Name));
+            Stats.CountArmyProduction(producer.Template, result.Accepted ? "queued:" + pick.Name : "rejected:" + result.Reason + ":" + pick.Name);
+            _armyOrder = null;
+            // One order per producer and think, as before; a refused producer is not asked again in this think.
+            served.Add(producer.Id.Value);
             if (!result.Accepted) continue;
             spendable -= pick.BuildCost;
             _budget -= pick.BuildCost;
             Stats.Productions++;
         }
+    }
+
+    /// <summary>The order can still be carried out: its producer stands, has room, was not served in this think, and the unit's prerequisites are still met.</summary>
+    private bool ArmyOrderStands(ArmyOrder order, HashSet<uint> served)
+    {
+        if (served.Contains(order.Producer.Value)) return false;
+        foreach (var producer in _structures)
+            if (producer.Id == order.Producer)
+                return ProductionOf(producer) is { HasRoom: true } && PrerequisitesMet(order.Unit);
+        return false;
+    }
+
+    /// <summary>
+    /// Draws the next army order: every unit type a barracks or factory with room offers (prerequisites met, at most <paramref name="limit"/> in price; own variants of the
+    /// faction only where a producer has any) with the same chance, made by the first producer that offers it. Null without a candidate; then nothing is drawn from the stream.
+    /// </summary>
+    private ArmyOrder? DrawArmyOrder(HashSet<uint> served, Fixed limit)
+    {
+        var units = new List<ObjectTemplate>();
+        var producers = new List<Entity>();
+        foreach (var producer in _structures)
+        {
+            if ((RoleOf(producer.Template) & (Role.Barracks | Role.Factory)) == 0 || served.Contains(producer.Id.Value)) continue;
+            var production = ProductionOf(producer);
+            if (production is null) continue;
+            if (!production.HasRoom) { Stats.CountArmyProduction(producer.Template, "queue-full"); continue; }
+            var candidates = ProducibleBy(producer.Template).Where(value => (RoleOf(value) & Role.Army) != 0 && value.BuildCost <= limit && PrerequisitesMet(value)).ToList();
+            if (candidates.Count == 0)
+            {
+                if (limit == Fixed.MaxValue) Stats.CountArmyProduction(producer.Template, "no-candidate");
+                continue;
+            }
+            if (candidates.Any(InFamily)) candidates = candidates.Where(InFamily).ToList();
+            foreach (var candidate in candidates)
+            {
+                if (units.Contains(candidate)) continue;
+                units.Add(candidate);
+                producers.Add(producer);
+            }
+        }
+        if (units.Count == 0) return null;
+        var index = _composition == ArmyComposition.ExchangeValue ? DrawByExchangeValue(units) : _random.Range(0, units.Count - 1);
+        return new ArmyOrder(producers[index].Id, units[index], _tick);
     }
 
     private void SetRallyPoints()
@@ -1065,11 +1181,16 @@ public sealed class SkirmishAi
         {
             if (_boarding.TryGetValue(unit.Id.Value, out var boardingUntil) && boardingUntil > _tick) continue;
             // Defence takes everybody; an attack only the wave, the others wait at the rally point.
+            // Gathering at the rally point, as opposed to marching on an attack goal or a threat.
+            var gathering = threat is null && (!_attacking || !_wave.Contains(unit.Id.Value));
             var destination = threat is null && _attacking && !_wave.Contains(unit.Id.Value) ? _rally ?? armyGoal : armyGoal;
             // An attack-move: the unit engages what it meets on the way by itself (the world's target acquisition) and marches on afterwards.
             var (x, y) = destination;
             var marching = unit.HasMoveTarget || _world.IsAttackMoving(unit);
             if (DistanceSquared(unit.X, unit.Y, x, y) < Fixed.FromInt(1600)) continue;
+            // Gathering: a unit that came to rest where the crowd around the rally point left room (SimulationWorld.TryFreeGoalSpot places it up to ten cells away) has
+            // arrived; sending it to the point again would only walk it there and back.
+            if (gathering && !marching && SquaredReach.Of(GatherRadius).Contains(DistanceSquared(unit.X, unit.Y, x, y))) continue;
             if (_orders.TryGetValue(unit.Id.Value, out var order))
             {
                 var same = DistanceSquared(order.X, order.Y, x, y) < Fixed.FromInt(900);
@@ -1185,6 +1306,7 @@ public sealed class SkirmishAi
                 nearest = enemy;
             }
         }
+        _threat = nearest is null ? string.Empty : $"{nearest.Template.Name}#{nearest.Id.Value} at ({nearest.X.Floor()}, {nearest.Y.Floor()})";
         return nearest is null ? null : (nearest.X, nearest.Y);
     }
 
@@ -1200,11 +1322,32 @@ public sealed class SkirmishAi
         var best = Fixed.MaxValue;
         if (!Objectives.IsDefaultOrEmpty)
         {
-            var nearest = Objectives[0];
+            // The nearest objective the army has not given up (ObjectivePatienceFrames); once it has given up every one it starts over with the nearest of all.
+            (Fixed X, Fixed Y)? nearest = null;
             foreach (var objective in Objectives)
             {
+                if (_givenUp.Contains(objective)) continue;
                 var distance = DistanceSquared(objective.X, objective.Y, cx, cy);
                 if (distance < best) { best = distance; nearest = objective; }
+            }
+            if (nearest is null)
+            {
+                _givenUp.Clear();
+                foreach (var objective in Objectives)
+                {
+                    var distance = DistanceSquared(objective.X, objective.Y, cx, cy);
+                    if (distance < best) { best = distance; nearest = objective; }
+                }
+            }
+            if (_objective != nearest)
+            {
+                _objective = nearest;
+                _objectiveSince = _tick;
+            }
+            else if (nearest is { } stuck && Objectives.Length > 1 && _tick - _objectiveSince > _time.OriginalFrames(ObjectivePatienceFrames))
+            {
+                _givenUp.Add(stuck);
+                Stats.ObjectivesGivenUp++;
             }
             return nearest;
         }

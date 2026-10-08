@@ -48,7 +48,7 @@ public sealed partial class SimulationWorld
     private (Fixed Dx, Fixed Dy) AvoidLocalBlockersCore(Entity mover, Fixed dx, Fixed dy)
     {
         // The object an approach order aims at is never an obstacle (the reference's AI ignores its goal object when it steers), or a hijacker could never touch its car.
-        var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
+        var goal = AiOf(mover)?.IgnoredObstacle ?? EntityId.Invalid;
         if (!StepBlocked(mover, dx, dy, goal)) return (dx, dy);
         foreach (var angle in AvoidanceAngles)
         {
@@ -133,7 +133,7 @@ public sealed partial class SimulationWorld
     private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadCore(Entity mover, Fixed dx, Fixed dy)
     {
         if (_firstFrameTicks != TickOrder.Next) return StationaryBlockersAheadAtFrameEnd(mover, dx, dy);
-        var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
+        var goal = AiOf(mover)?.IgnoredObstacle ?? EntityId.Invalid;
         var moverRadius = CircleRadius(mover);
         // The step is the look-ahead; the line from the mover to its end is tested at four points. They and their bounding box depend on the mover only.
         Fixed minX = Fixed.MaxValue, maxX = Fixed.MinValue, minY = Fixed.MaxValue, maxY = Fixed.MinValue;
@@ -229,7 +229,7 @@ public sealed partial class SimulationWorld
 
     private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadAtFrameEnd(Entity mover, Fixed dx, Fixed dy)
     {
-        var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
+        var goal = AiOf(mover)?.IgnoredObstacle ?? EntityId.Invalid;
         var moverRadius = CircleRadius(mover);
         Fixed minX = Fixed.MaxValue, maxX = Fixed.MinValue, minY = Fixed.MaxValue, maxY = Fixed.MinValue;
         for (var sample = 1; sample <= 4; sample++)

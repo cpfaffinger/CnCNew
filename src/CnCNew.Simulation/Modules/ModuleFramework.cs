@@ -282,6 +282,13 @@ public interface IWorldServices
     (Fixed X, Fixed Y) FindFreeGoal(Entity mover, Fixed fromX, Fixed fromY, Fixed x, Fixed y);
 
     /// <summary>
+    /// The same search for a unit already on its way: when the place <paramref name="mover"/> is heading for (<see cref="Entity.MoveTargetX"/>) has been taken — a ground unit
+    /// of a side that is not its enemy stands there, or one with a lower id is heading there — the place <see cref="FindFreeGoal"/> gives from where the mover is now; false
+    /// when the goal is not taken, the mover flies or closes in on a victim, or no free place is found.
+    /// </summary>
+    bool TryFreeGoalSpot(Entity mover, out Fixed x, out Fixed y);
+
+    /// <summary>
     /// <c>SquishCollide.cpp onCollide</c> / <c>ToppleUpdate.cpp onCollide</c>: after <paramref name="mover"/>'s position
     /// changed this tick by (<paramref name="stepX"/>, <paramref name="stepY"/>) — the exact displacement just applied, used
     /// to tell a closing mover from a receding one without rebuilding velocity from <c>Angle</c>/<c>Speed</c> — checks every

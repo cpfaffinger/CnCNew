@@ -14,8 +14,9 @@ namespace CnCNew.Simulation.Skirmish;
 
 /// <param name="Participant">Faction, side and base building.</param>
 /// <param name="IsHuman">A human slot has no <see cref="SkirmishAi"/>; its commands come from <see cref="SkirmishMatchSession.Issue"/>.</param>
+/// <param name="Composition">How a computer slot chooses its army units; null for <see cref="SkirmishAi.DefaultComposition"/>.</param>
 /// <param name="Team">Alliance number (same non-zero team: allies; 0: everybody else is an enemy).</param>
-public sealed record SkirmishSlot(MatchParticipant Participant, bool IsHuman = false, int Team = 0);
+public sealed record SkirmishSlot(MatchParticipant Participant, bool IsHuman = false, int Team = 0, ArmyComposition? Composition = null);
 
 /// <summary>
 /// One running skirmish: the world, the map's warehouses, the faction start objects and one <see cref="SkirmishAi"/> per computer slot.
@@ -103,7 +104,7 @@ public sealed class SkirmishMatchSession
             for (var other = 0; other < slots.Length; other++)
                 if (other != index) hints.Add((starts[other].X, starts[other].Y));
             var aiOptions = new SkirmishAiOptions(players[index].Id, unchecked(options.AiSeed + (uint)index * 7919u), starts[index].X, starts[index].Y,
-                participants[index].Side, FamilyPrefix(participants[index].Faction), hints.ToImmutable());
+                participants[index].Side, FamilyPrefix(participants[index].Faction), hints.ToImmutable(), Composition: slots[index].Composition);
             ais.Add(new SkirmishAi(world, catalog, aiOptions, session.Submit));
         }
         session.Ais = ais.ToImmutable();

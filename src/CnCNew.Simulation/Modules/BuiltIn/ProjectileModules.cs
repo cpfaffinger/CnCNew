@@ -933,19 +933,34 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         var weapon = world.Weapons.TryGet(data.Weapon, out var info) ? info : throw new InvalidDataException($"PointDefenseLaserUpdate references the unknown weapon '{data.Weapon}'.");
+        // The laser looks and fires in the ticks its owner's logic frames of the original begin with, and reads the owner and every target where the frame each has begun
+        // ends (docs/RATE-INVARIANCE-CONSOLIDATION.md 1.3, rule 3): a look in every tick sees a projectile a share of a frame's step earlier than the 30 Hz step and shoots it
+        // down a frame early. The counters fall every tick and lie on the frame grid. 30 Hz: every tick, the positions.
+        var decide = world.Time.BeginsFrameOf(Entity, world.Tick);
         if (_nextScan > 0)
         {
             _nextScan--;
-            FireWhenReady(world, weapon);
+            FireWhenReady(world, weapon, decide);
+            return SimulationTiming.SleepNone;
+        }
+        if (!decide)
+        {
+            if (_nextShot > 0) _nextShot--;
             return SimulationTiming.SleepNone;
         }
         _nextScan = world.Time.CountdownReload(data.ScanTicks);
-        if (ScanClosestTarget(world, weapon)) FireWhenReady(world, weapon);
+        if (ScanClosestTarget(world, weapon)) FireWhenReady(world, weapon, true);
         return SimulationTiming.SleepNone;
     }
 
-    private void FireWhenReady(IWorldServices world, WeaponInfo weapon)
+    private void FireWhenReady(IWorldServices world, WeaponInfo weapon, bool decide)
     {
+        if (!decide)
+        {
+            if (_nextShot > 0) _nextShot--;
+            return;
+        }
+        _frameTick = world.Tick;
         var target = _target.IsValid ? world.FindEntity(_target) : null;
         if (target is { DestroyRequested: true }) target = null;
         if (target is not null)
@@ -990,16 +1005,22 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
         }
     }
 
+    // The tick of the look that is running: where "the frame an object has begun" is read. Not state.
+    private long _frameTick;
+
     private Fixed Distance2D(Entity other)
     {
-        var dx = other.X - Entity.X;
-        var dy = other.Y - Entity.Y;
+        var (otherX, otherY, _) = other.FrameEnd(_frameTick);
+        var (ownX, ownY, _) = Entity.FrameEnd(_frameTick);
+        var dx = otherX - ownX;
+        var dy = otherY - ownY;
         return Fixed.Sqrt(dx * dx + dy * dy);
     }
 
     /// <summary><c>scanClosestTarget</c>: primary in range, secondary in range, primary out of range, secondary out of range.</summary>
     private bool ScanClosestTarget(IWorldServices world, WeaponInfo weapon)
     {
+        _frameTick = world.Tick;
         // The candidates are the entities of the listed kinds (the world's kind lists) instead of every entity of the world. Each pick below is the minimum
         // of (distance, id) over its candidates - Closer breaks ties by id itself -, and an out-of-range pick is only used when its list has no in-range
         // candidate at all, in which case it was never skipped. So the result does not depend on the order the candidates come in, and a candidate that
@@ -1030,8 +1051,10 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
             if (other.DestroyRequested || other == Entity || other.ContainedBy.IsValid) continue;
             var targetClass = TargetClassOf(other.Template);
             if (targetClass == ClassNone) continue;
-            var dx = other.X - Entity.X;
-            var dy = other.Y - Entity.Y;
+            var (otherX, otherY, _) = other.FrameEnd(_frameTick);
+            var (ownX, ownY, _) = Entity.FrameEnd(_frameTick);
+            var dx = otherX - ownX;
+            var dy = otherY - ownY;
             if (!scanSquared.Contains(dx * dx + dy * dy)) continue;
             if (!world.IsSignificantlyAboveTerrain(other) && !weapon.AntiGround) continue;
             if (world.RelationshipOf(Entity.Owner, other.Owner) != Relationship.Enemies) continue;

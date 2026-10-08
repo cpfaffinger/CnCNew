@@ -87,6 +87,8 @@ run.Test("Tick rate, world: an idle unit's first look falls two logic frames aft
 // Phase 23, ground movement (Tests.RateInvariance.Ground.cs): the same state after every logic frame at 30, 60 and 120 Hz.
 run.Test("Rate invariance, ground: a course with and without terrain, damaged, and short hops end every logic frame where 30 Hz does", Tests.GroundRateInvarianceCourse);
 run.Test("Rate invariance, ground: the detour around standing units is the 30 Hz detour", Tests.GroundRateInvarianceStandingUnits);
+run.Test("Goal spots: units sent to one point all arrive beside each other, the same at 30, 60 and 120 Hz", Tests.GoalSpotsForUnitsSentToOnePoint);
+run.Test("Boarding: infantry walks into its transport instead of around it, the same at 30, 60 and 120 Hz", Tests.BoardersWalkIntoTheirTransport);
 run.Test("Rate invariance, consolidation: movers that meet are where the 30 Hz movers are", Tests.RateConsolidationMoversThatMeetAreTheSame);
 run.Test("Rate invariance, exits: produced units leave their factory, make room and reach the rally point as at 30 Hz", Tests.RateExitsAreTheSame);
 run.Test("Rate invariance, exits: a snapshot while a unit waits for its place continues like the live world", Tests.RateExitsSnapshotWhileWaitingForThePlace);
@@ -414,6 +416,8 @@ run.Test("Capture: snapshots in every stage continue identically, idle objects s
 run.Test("Skirmish: CommandCatalog build offers", Tests.CommandCatalogBuilds);
 run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot continuation", Tests.SkirmishAiPlaysAMatch);
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);
+run.Test("Skirmish: the AI saves for the army unit it drew, so the factory builds", Tests.SkirmishAiSavesForItsArmyOrder);
+run.Test("Skirmish: the composition rule builds what hurts the enemy the AI has seen", Tests.SkirmishAiComposesItsArmyAgainstWhatItSees);
 run.Test("Original skirmish AI: AIData is read strictly", Tests.OriginalAiDataIsReadStrictly);
 run.Test("Original skirmish AI: the script library is attached to the slots like the reference does", Tests.OriginalAiScriptLibraryIsAttachedLikeTheReference);
 run.Test("Original skirmish AI: base, teams, difficulty per player, determinism and save/restore", Tests.OriginalAiPlaysASkirmishFromItsScripts);

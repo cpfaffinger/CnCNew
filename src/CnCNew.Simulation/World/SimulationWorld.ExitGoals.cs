@@ -101,7 +101,54 @@ public sealed partial class SimulationWorld
         return FindFreeGoal(unit, unit.X, unit.Y, exitX, exitY, false);
     }
 
-    private (Fixed X, Fixed Y) FindFreeGoal(Entity mover, Fixed fromX, Fixed fromY, Fixed x, Fixed y, bool besideOnly)
+    /// <summary>Own value: the rows tried for a unit already on its way to a taken goal (83 places): an army gathers on one point, a factory's door sees a few units.</summary>
+    private const int GatherGoalRows = 12;
+
+    /// <inheritdoc cref="Modules.IWorldServices.TryFreeGoalSpot"/>
+    /// <remarks>
+    /// Observation C of docs/AI-OBSERVED-2026-10-08.md: units sent to one point walk circles around the first one that arrived, because the last waypoint lies inside its
+    /// bounding circle. The reference gives every moving unit a goal cell of its own (<c>AIInternalMoveToState::onEnter</c>, <c>Pathfinder::adjustDestination</c>,
+    /// <c>checkDestination</c>: "Don't usurp your allies goals", "Don't move to an occupied cell", then <c>updateGoal</c>). Here there is no reservation table: a standing unit
+    /// claims the place it stands on, a moving one the place it is heading for (<see cref="Entity.MoveTargetX"/>), and of several units heading for one place all but the
+    /// lowest id give way. The search itself is the one the exit path uses.
+    /// </remarks>
+    public bool TryFreeGoalSpot(Entity mover, out Fixed x, out Fixed y)
+    {
+        x = mover.MoveTargetX;
+        y = mover.MoveTargetY;
+        if (Navigation is null || mover.Template.Locomotor is not { } locomotor || (locomotor.Surfaces & CnCNew.Simulation.Templates.LocomotorSurfaces.Air) != 0) return false;
+        // A unit closing in on its victim aims at the victim; where it stops is the weapon's business.
+        if (mover.Acquisition is { Victim.IsValid: true }) return false;
+        var radius = CircleRadius(mover);
+        var taken = false;
+        foreach (var other in _mobiles)
+        {
+            if (other.Id == mover.Id || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid) continue;
+            // The mover's own goal is taken by whoever stands on it and, among those heading for it, by a lower id only: of several units sent to one point each but the
+            // lowest gives way once, to a place nobody is heading for (GoalIsFree counts everybody's goal), and stays with it.
+            if (other.HasMoveTarget && other.Id.Value > mover.Id.Value) continue;
+            var (standsX, standsY, _) = other.FrameEnd(_tick);
+            var otherX = other.HasMoveTarget ? other.MoveTargetX : standsX;
+            var otherY = other.HasMoveTarget ? other.MoveTargetY : standsY;
+            var limit = radius + CircleRadius(other);
+            if (FurtherThan(otherX, x, limit) || FurtherThan(otherY, y, limit)) continue;
+            var ox = otherX - x;
+            var oy = otherY - y;
+            if (!SquaredReach.Of(limit).ContainsStrictly(ox * ox + oy * oy)) continue;
+            // Units of an enemy never claim (a tank ordered onto enemy infantry drives on), nor does anything in the air.
+            if ((other.Template.Locomotor!.Surfaces & CnCNew.Simulation.Templates.LocomotorSurfaces.Air) != 0 || AreEnemies(mover, other)) continue;
+            taken = true;
+            break;
+        }
+        if (!taken) return false;
+        var (freeX, freeY) = FindFreeGoal(mover, mover.X, mover.Y, x, y, false, GatherGoalRows);
+        if (freeX == x && freeY == y) return false;
+        x = freeX;
+        y = freeY;
+        return true;
+    }
+
+    private (Fixed X, Fixed Y) FindFreeGoal(Entity mover, Fixed fromX, Fixed fromY, Fixed x, Fixed y, bool besideOnly, int rows = FreeGoalRows)
     {
         var dx = x - fromX;
         var dy = y - fromY;
@@ -112,7 +159,7 @@ public sealed partial class SimulationWorld
         dy /= length;
         var radius = CircleRadius(mover);
         var spacing = Fixed.Max(Fixed.FromInt(TerrainMap.CellSize), radius * Fixed.FromInt(2) + StandingBlockerMargin);
-        for (var row = 0; row < FreeGoalRows; row++)
+        for (var row = 0; row < rows; row++)
         {
             var rowX = x + dx * spacing * Fixed.FromInt(row);
             var rowY = y + dy * spacing * Fixed.FromInt(row);

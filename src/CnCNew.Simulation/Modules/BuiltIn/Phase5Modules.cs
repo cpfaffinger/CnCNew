@@ -772,6 +772,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public EntityId GoalObject => _goal;
 
     /// <summary>
+    /// <c>AIUpdateInterface::getIgnoredObstacleID</c>: the one object this unit's steps and detours do not treat as an obstacle, because the order ends inside it — the goal
+    /// object of an approach, or the container of an enter order (<c>AIEnterState::onEnter</c>, AIStates.cpp: "tell the pathfinder to ignore the enterable object").
+    /// </summary>
+    internal EntityId IgnoredObstacle => _goal.IsValid ? _goal : _enterTarget;
+
+    /// <summary>
     /// The approach half of <c>aiEnter</c>/<c>aiHijack</c>-style orders that end in a collision instead of a container entry: moves to <paramref name="goal"/> (following
     /// it when it moves) and, once the footprints overlap or the move ends within reach, lets this object's <see cref="ICollideModule"/>s act on it. An immobile object
     /// ignores the order. Replaced by any later order.
@@ -1156,13 +1162,34 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private void UpdateEnter(IWorldServices world)
     {
         var container = world.FindEntity(_enterTarget);
+        // Whether the container is still there is looked at once per logic frame of the original of this object, like every other look at another object: a container that
+        // dies in the phases after the updates is found dead by the next 30 Hz step, not by the next tick of the same frame.
+        if (Entity.HasMoveTarget && _frameTicksLeft != Math.Max(_stride, 1) - 1) return;
         if (container is null || container.DestroyRequested || container.EffectivelyDead)
         {
             _enterTarget = EntityId.Invalid;
+            // The 30 Hz step has made its whole step before it finds the container gone: the object stops where the frame it has begun ends.
+            if (Entity.HasMoveTarget && _frameTicksLeft > 0) SettleFrame(world.Tick);
             StopInternalMove();
             return;
         }
-        if (Entity.HasMoveTarget) return;
+        if (Entity.HasMoveTarget)
+        {
+            // OpenContain::onCollide: an object whose enter target is this container is taken in as soon as the two touch; it does not have to reach the container's centre
+            // (which another boarder, or a rider that found no room and stands there, may keep it from). A structure keeps the old rule (the walk ends at its wall): its
+            // bounding circle reaches far beyond a box-shaped footprint, and nothing stands inside it.
+            // Decided where the 30 Hz step decides it (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md): in the tick that decided a
+            // logic frame's step, with both where that frame ends; the boarder is put there and goes in, in the first tick of the frame like a move that ends.
+            if (container.Template.IsKindOf("STRUCTURE") || _frameTicksLeft != Math.Max(_stride, 1) - 1) return;
+            var touch = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius;
+            var (endX, endY, _) = Entity.FrameEnd(world.Tick);
+            var (insideX, insideY, _) = container.FrameEnd(world.Tick);
+            var tx = insideX - endX;
+            var ty = insideY - endY;
+            if (!SquaredReach.Of(touch).Contains(tx * tx + ty * ty)) return;
+            if (_frameTicksLeft > 0) SettleFrame(world.Tick);
+            StopInternalMove();
+        }
         _enterTarget = EntityId.Invalid;
         // The approach may end short (a partial path): only an object that actually reached the container gets in.
         var reach = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
@@ -1207,6 +1234,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             var viaX = _viaX - Entity.X;
             var viaY = _viaY - Entity.Y;
             if (air || SquaredReach.Of(Fixed.FromInt(TerrainMap.CellSize)).Contains(viaX * viaX + viaY * viaY)) _viaPending = false;
+        }
+        // Close to a goal somebody else has taken: head for the nearest free place instead (SimulationWorld.ExitGoals.cs, the reference's adjustDestination).
+        if (!air && GoalSpotCheckDue(world) && world.TryFreeGoalSpot(Entity, out var freeX, out var freeY))
+        {
+            Entity.MoveTargetX = freeX;
+            Entity.MoveTargetY = freeY;
+            InvalidatePath();
         }
         if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum)) PlanPath(navigation, locomotor, air);
         if (_path.Count == 0)
@@ -1441,6 +1475,33 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         Entity.X += stepX;
         Entity.Y += stepY;
         if (time.TicksPerOriginalFrame > 1) _wingStep.Begin(time, Entity, stepX, stepY, Fixed.Zero, FixedTrig.AngleDifference(heading, Entity.Angle));
+    }
+
+    /// <summary>Own rhythm: a unit close to its goal asks every 15 logic frames of the original (half a second) whether the goal is still free.</summary>
+    private const long GoalSpotCheckFrames = 15;
+
+    /// <summary>Own value: "close to its goal" is six path cells, a little more than the widest ground unit's bounding circle plus the look-ahead of a walking infantryman.</summary>
+    private static readonly Fixed GoalSpotLook = Fixed.FromInt(6 * TerrainMap.CellSize);
+
+    /// <summary>
+    /// Whether this decision asks <see cref="IWorldServices.TryFreeGoalSpot"/>: only a plain move (no dock, no construction, no container or goal object to walk into, no way
+    /// back), only within <see cref="GoalSpotLook"/> of the target, and only every <see cref="GoalSpotCheckFrames"/> frames. The rhythm needs no state: it is the world's frame
+    /// number, staggered by the object's id, so it falls on the same frame of the original at every rate.
+    /// </summary>
+    // Derived from the template's modules on first use, not state.
+    private bool? _follows;
+
+    private bool GoalSpotCheckDue(IWorldServices world)
+    {
+        // Not on the way out of a factory either: the first leg ends at the place the exit path chose, and the rally point is adjusted when the second leg is ordered.
+        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending || _exitRallyPending || _viaPending) return false;
+        if ((world.Time.FramesIn(world.Tick) + Entity.Id.Value) % GoalSpotCheckFrames != 0) return false;
+        // A slave or mob member is sent onto its master's place by its own module, again and again: it keeps the goal it is given.
+        _follows ??= Entity.Modules.Any(module => module is ISlavedModule);
+        if (_follows.Value) return false;
+        var dx = Entity.MoveTargetX - Entity.X;
+        var dy = Entity.MoveTargetY - Entity.Y;
+        return SquaredReach.Of(GoalSpotLook).Contains(dx * dx + dy * dy);
     }
 
     /// <summary>Own rhythm: a replan around standing units at most once per 30 logic frames of the original (one second).</summary>
