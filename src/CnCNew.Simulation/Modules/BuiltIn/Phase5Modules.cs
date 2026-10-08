@@ -861,6 +861,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (target is null || target.DestroyRequested || target.EffectivelyDead) { EndTask(world); return; }
         if (_task == BuilderTask.Construct && (!target.HasStatus(ObjectStatusBits.UnderConstruction) || target.BuilderId != Entity.Id)) { EndTask(world); return; }
         if (_task == BuilderTask.Repair && !IsRepairable(target)) { EndTask(world); return; }
+        // Inside a logic frame's step (above 30 Hz) the builder is between two positions of the 30 Hz walk: it measures its reach again when the step is covered.
+        if (_frameTicksLeft > 0 && Entity.HasMoveTarget) return;
 
         var reach = target.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
         var dx = target.X - Entity.X;
@@ -901,6 +903,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (!Entity.HasMoveTarget) return;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
+        // A stopped object does not cover the rest of the frame's step it was on.
+        _frameTicksLeft = 0;
         InvalidatePath();
     }
 
@@ -1002,6 +1006,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         if (Entity.HasMoveTarget)
         {
+            // Re-aimed where the 30 Hz step re-aims: after a whole logic frame's step, not inside it.
+            if (_frameTicksLeft > 0) return;
             var slack = Fixed.FromInt(2 * TerrainMap.CellSize);
             var gx = goal.X - Entity.MoveTargetX;
             var gy = goal.Y - Entity.MoveTargetY;
