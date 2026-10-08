@@ -1178,7 +1178,8 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         Entity.X += stepX;
         Entity.Y += stepY;
         Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y) + locomotor.PreferredHeight;
-        return (stepX, stepY, FixedTrig.AngleDifference(heading, Entity.Angle));
+        // At 30 Hz a frame is a tick: there is nothing to spread and the turn is not measured.
+        return (stepX, stepY, time.TicksPerOriginalFrame > 1 ? FixedTrig.AngleDifference(heading, Entity.Angle) : Fixed.Zero);
     }
 
     /// <summary>Between two decisions the ship keeps its height over the ground it flies over.</summary>

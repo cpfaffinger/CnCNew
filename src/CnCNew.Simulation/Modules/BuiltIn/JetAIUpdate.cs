@@ -453,7 +453,10 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         }
 
         if (_allowAir && _phase is JetPhase.None or JetPhase.ReturningForLanding or JetPhase.ReturnToDeadAirfield or JetPhase.CirclingDeadAirfield) ControlHeight(world);
-        var step = (Entity.X - before.X, Entity.Y - before.Y, Entity.Z - before.Z, FixedTrig.AngleDifference(before.Angle, Entity.Angle));
+        // At 30 Hz a frame is a tick: there is nothing to spread and the step is not measured.
+        var step = world.Time.TicksPerOriginalFrame > 1
+            ? (Entity.X - before.X, Entity.Y - before.Y, Entity.Z - before.Z, FixedTrig.AngleDifference(before.Angle, Entity.Angle))
+            : default;
         // An aircraft that stands parked with nothing to do takes no frame: it looks at every tick, so the take-off starts in the tick the order is given.
         return FlyOn(world, !(_phase == JetPhase.None && !_allowAir), step);
     }
