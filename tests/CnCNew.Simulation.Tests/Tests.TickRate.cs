@@ -293,4 +293,58 @@ static partial class Tests
             catch (SnapshotFormatException exception) { Check.That(exception.Message.Contains("Unsupported tick rate 50", StringComparison.Ordinal), "The unsupported rate is named: " + exception.Message); }
         }
     }
+
+    /// <summary>
+    /// The product's default rate is not part of any stored state (docs/TICKRATE-MIGRATION.md §15.5): a replay, a world snapshot and a mission snapshot written at 30 Hz
+    /// name 30 Hz, their tick values (end tick, checkpoint interval, the mission's <c>maxTicks</c>) are ticks of that rate, and they run on at 30 Hz with a 30 Hz catalog
+    /// whatever rate a new session would get. A catalog of any other rate - the default rate included, when it is not 30 Hz - refuses them with a message that names both rates;
+    /// nothing is reinterpreted. The fixtures here are written at 30 Hz by name, so the test says the same before and after the default changes.
+    /// </summary>
+    public static void TickRateStatesWrittenAtThirtyOutliveTheDefault()
+    {
+        var written = SimulationRate.Hz30;
+        var others = new[] { SimulationRate.Hz60, SimulationRate.Hz120 }.Append(TestRate.Product).Where(rate => rate != written).Distinct().ToArray();
+
+        // Replay: the header's tick values are ticks at the header's rate.
+        var (fixture, recorded, _) = ShortReplay(rate: written);
+        var replay = ReplayFormat.Read(ReplayFormat.Write(recorded));
+        Check.That(replay.Header.TickRate == 30 && replay.Header.EndTick == ShortOptions.Ticks && replay.Header.CheckpointInterval == ShortOptions.CheckpointInterval,
+            $"The 30 Hz replay keeps its rate and its tick values ({replay.Header.TickRate} Hz, end {replay.Header.EndTick}, checkpoints every {replay.Header.CheckpointInterval}).");
+        var straight = ReplayRunner.Run(replay, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
+        Check.That(straight.TicksExecuted == ShortOptions.Ticks && straight.VerifiedCheckpoints == replay.Checkpoints.Length, $"The 30 Hz replay runs its {ShortOptions.Ticks} ticks at 30 Hz and verifies every checkpoint.");
+
+        // World snapshot, taken half way: continues at 30 Hz to the same end.
+        var world = ReplayRunner.CreateWorld(replay.Header, fixture.Templates);
+        ReplayRunner.Run(replay, world, new ReplayRunOptions { StopTick = ShortOptions.Ticks / 2 });
+        var snapshot = WorldSnapshot.Write(world);
+        var restored = WorldSnapshot.Restore(snapshot, fixture.Templates, fixture.Fingerprint);
+        Check.That(restored.Rate == written && restored.Tick == ShortOptions.Ticks / 2, $"The 30 Hz world state restores at 30 Hz at its tick ({restored.Rate}, tick {restored.Tick}).");
+        Check.That(ReplayRunner.Run(replay, restored).FinalHash == straight.FinalHash, "The restored 30 Hz world continues to the hash of the uninterrupted 30 Hz run.");
+
+        // Mission snapshot: maxTicks is a tick budget of the stored rate, presentationLatencyTicks a frame count, combatIntervalTicks a switch - stored as given, read as given.
+        var scripts = new[] { Scr.Script("S", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_COUNTER", Scr.Counter("c"), Scr.Int(1))], oneShot: true) };
+        var (map, missionFixture, terrain) = MissionMap(scripts, rate: written);
+        var options = MissionOptions.Standard with { MaxTicks = 500, PresentationLatencyTicks = 7 };
+        var session = MissionSession.Start(options, missionFixture.Templates, missionFixture.Fingerprint, terrain, map);
+        Run(session, 200);
+        var missionBytes = MissionSnapshot.Write(session);
+        var missionText = Encoding.UTF8.GetString(missionBytes);
+        Check.That(missionText.Contains("\"tickRate\":30,", StringComparison.Ordinal) && missionText.Contains("\"maxTicks\":500,", StringComparison.Ordinal) && missionText.Contains("\"presentationLatencyTicks\":7,", StringComparison.Ordinal)
+            && missionText.Contains("\"combatIntervalTicks\":3,", StringComparison.Ordinal), "The 30 Hz mission state stores its rate and its tick options as they were given.");
+        var mission = MissionSnapshot.Restore(missionBytes, missionFixture.Templates, missionFixture.Fingerprint, terrain, map);
+        Check.That(mission.World.Rate == written && mission.Options.MaxTicks == 500 && mission.Options.PresentationLatencyTicks == 7 && mission.Options.CombatIntervalTicks == 3 && mission.StateHash() == session.StateHash(),
+            $"The 30 Hz mission state restores at 30 Hz with the stored options ({mission.World.Rate}, maxTicks {mission.Options.MaxTicks}).");
+        while (!session.IsOver) session.Step();
+        while (!mission.IsOver) mission.Step();
+        Check.That(mission.World.Tick == 500 && session.World.Tick == 500 && mission.StateHash() == session.StateHash(), $"Both end at the stored budget of 500 ticks of 30 Hz in the same state (tick {mission.World.Tick}).");
+
+        foreach (var other in others)
+        {
+            var catalog = new SyntheticFixture(other);
+            Check.Throws<ReplayRejectedException>(() => ReplayRunner.Run(replay, catalog.Templates, fixture.Fingerprint), $"recorded at 30 Hz; the catalog was built for {other}");
+            Check.Throws<SnapshotFormatException>(() => WorldSnapshot.Restore(snapshot, catalog.Templates, fixture.Fingerprint), $"written at 30 Hz; the catalog was built for {other}");
+            var (_, missionCatalog, _) = MissionMap(scripts, rate: other);
+            Check.Throws<SnapshotFormatException>(() => MissionSnapshot.Restore(missionBytes, missionCatalog.Templates, missionFixture.Fingerprint, terrain, map), $"written at 30 Hz; the catalog was built for {other}");
+        }
+    }
 }

@@ -49,7 +49,7 @@ internal static class SyncPerfCommand
         string? Option(string key) => Array.IndexOf(args, key) is var index and >= 0 && index + 1 < args.Length ? args[index + 1] : null;
         var contentDir = args[0];
         var mapPath = Option("--map") ?? throw new ArgumentException("--map <virtual-map-path> is required.\n" + Usage);
-        var ticks = long.Parse(Option("--ticks") ?? "18000", Invariant);
+        var ticksOption = Option("--ticks");
         var seed = int.Parse(Option("--seed") ?? "0", Invariant);
         var viewportText = (Option("--viewport") ?? "1280x720").Split('x');
         var viewport = new Vector2(int.Parse(viewportText[0], Invariant), int.Parse(viewportText[1], Invariant));
@@ -61,6 +61,8 @@ internal static class SyncPerfCommand
         Console.WriteLine("Hardware: " + hardware);
         var setup = Stopwatch.StartNew();
         var rate = Option("--tick-rate") is { } rateText ? SimulationRate.FromTicksPerSecond(int.Parse(rateText, Invariant)) : GameData.DefaultSessionRate;
+        // --ticks is a raw tick count of the rate; without it the budget is ten minutes of game time (18,000 logic frames of the original) at every rate.
+        var ticks = ticksOption is null ? rate.Time.OriginalFrames(18_000) : long.Parse(ticksOption, Invariant);
         var data = GameData.Load(contentDir, rate: rate);
         var wanted = Option("--factions")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var chosen = wanted is null

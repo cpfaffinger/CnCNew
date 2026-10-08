@@ -356,7 +356,7 @@ internal sealed class CnCNewGame(
             Window.Title = $"CnCNew — {scenario.Name}: {scenario.Title}";
             return;
         }
-        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.Standard) { Seed = options.Seed, AutoPlay = options.AutoPlay, Spectator = options.Spectate };
+        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.StandardAt(data.Rate)) { Seed = options.Seed, AutoPlay = options.AutoPlay, Spectator = options.Spectate };
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
         ApplyCamera(match.Camera, options);
         if (options.Spectate)

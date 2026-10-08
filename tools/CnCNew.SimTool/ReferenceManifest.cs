@@ -70,15 +70,25 @@ internal sealed record RunOutcome(ManifestObject? Entry, string? Error, long Tic
 internal static class ReferenceManifest
 {
     public const string Kind = "reference-manifest";
-    public const int Schema = 1;
+
+    /// <summary>
+    /// The schema <c>write</c> produces. Schema 2 states the game time next to every tick budget of a run's parameters (<c>maxGameSeconds</c>, <c>gameSeconds</c>) and names
+    /// the values that are logic frames of the original as such (<c>graceOriginalFrames</c> instead of <c>graceTicks</c>): with the rate no longer fixed at 30 Hz a
+    /// reader must not have to know which numbers scale. Results are the same fields in both schemas. A file of <see cref="FirstSchema"/> is still checked, in its
+    /// own form: <c>check</c> builds the parameters the way the file's schema spells them, so a recorded file stays byte for byte what it is.
+    /// </summary>
+    public const int Schema = 2;
+    public const int FirstSchema = 1;
     public const string QuickSet = "quick";
     public const string FullSet = "full";
 
-    private const long AiMatchTicks = 45_000;
-    private const long EightPlayerTicks = 9_000;
-    private const long EightPlayerQuickTicks = 3_000;
-    private const long SweepTicks = 3_000;
-    private const long MissionTicks = 3_000;
+    // The budgets of the runs are game time, written in logic frames of the original (1/30 s): a run at rate R gets Time.OriginalFrames(n) ticks, so every
+    // run covers the same game time at every rate and at 30 Hz every number is the tick count it always was.
+    private const long AiMatchFrames = 45_000;          // 25 min
+    private const long EightPlayerFrames = 9_000;       // 5 min
+    private const long EightPlayerQuickFrames = 3_000;  // 100 s
+    private const long SweepFrames = 3_000;             // 100 s per map
+    private const long MissionFrames = 3_000;           // 100 s
     private const int StressVerifyInterval = 1_000;
 
     private static readonly (string Name, string Path)[] AiMaps =
@@ -134,6 +144,8 @@ internal static class ReferenceManifest
                   events by kind; it reads no manifest and changes none. --commands also writes the command stream of every recorded
                   run as text (amounts in whole units): two resolutions or rates are compared by the first line that differs
           --set   quick: a few minutes; full (default): every run. --only picks runs by id, whatever their set.
+          rate    check runs at the rate the file records (simulation.tickRate) and refuses a --tick-rate that names another one;
+                  write, show, results and list run at --tick-rate N, without it at the default rate. Budgets are game time.
           --verify-incremental   in run 1 of every checked run, compare the incremental state hash with a full recomputation
                                  after every tick (the synthetic stress run: every 1,000 ticks)
           --explain-incremental  the same, and name the objects and fields that changed without being marked dirty
@@ -143,7 +155,7 @@ internal static class ReferenceManifest
     {
         if (args.Length >= 3 && args[1] == "list")
         {
-            var listed = Plan(ContentFileSystem.Open(args[2]), out var missing);
+            var listed = Plan(ContentFileSystem.Open(args[2]), Schema, out var missing);
             foreach (var spec in listed.OrderBy(spec => spec.Id, StringComparer.Ordinal))
                 Console.WriteLine($"{spec.Id,-58} {spec.Set,-5} {spec.Kind}");
             foreach (var pair in missing.Values) Console.WriteLine($"{pair.Key,-58} unavailable: {pair.Value.Display}");
@@ -158,7 +170,19 @@ internal static class ReferenceManifest
         var jobs = ManifestCommands.Jobs(args);
         var verify = args.Contains("--explain-incremental") ? VerifyMode.Explain : args.Contains("--verify-incremental") ? VerifyMode.Verify : VerifyMode.None;
         var path = show || results ? string.Empty : Path.GetFullPath(args[3]);
-        var plan = Plan(ContentFileSystem.Open(args[2]), out var unavailable);
+        // A check runs at the rate and in the schema the file records; everything else at the rate of this run of the tool, in the current schema.
+        var schema = Schema;
+        if (args[1] == "check")
+        {
+            var recorded = ManifestDocument.Read(File.ReadAllBytes(path));
+            if (!recorded.TryGet("schema", out var recordedSchema) || recordedSchema is not ManifestNumber { Value: >= FirstSchema and <= Schema } known)
+                return ManifestCommands.Fail($"{path}: schema {(recorded.TryGet("schema", out var given) ? given.Display : ManifestDifference.Missing)} is not one this tool checks ({FirstSchema} to {Schema}).");
+            if (!recorded.TryGet("simulation", out var recordedSimulation) || recordedSimulation is not ManifestObject simulationHeader || !simulationHeader.TryGet("tickRate", out var recordedRate) || recordedRate is not ManifestNumber rateNumber)
+                return ManifestCommands.Fail($"{path}: the manifest does not record its tick rate (simulation.tickRate).");
+            schema = (int)known.Value;
+            ToolRate.UseRecorded(rateNumber.Value, path);
+        }
+        var plan = Plan(ContentFileSystem.Open(args[2]), schema, out var unavailable);
         var selected = plan.Where(spec => set == FullSet || spec.Quick).ToList();
         if (ManifestCommands.Option(args, "--only") is { } only)
         {
@@ -172,7 +196,7 @@ internal static class ReferenceManifest
         if (verify != VerifyMode.None && args[1] == "write") return ManifestCommands.Fail("--verify-incremental and --explain-incremental are check options.");
 
         var watch = Stopwatch.StartNew();
-        Console.Error.WriteLine($"{selected.Count} runs ({selected.Sum(spec => spec.Jobs.Length)} jobs), {jobs} side by side{(verify != VerifyMode.None ? ", incremental hash verified" : string.Empty)}.");
+        Console.Error.WriteLine($"{selected.Count} runs ({selected.Sum(spec => spec.Jobs.Length)} jobs) at {ToolRate.Current}, {jobs} side by side{(verify != VerifyMode.None ? ", incremental hash verified" : string.Empty)}.");
         if (results && ManifestCommands.Option(args, "--commands") is { } commands) ResultQuantities.CommandsDirectory = Path.GetFullPath(commands);
         var outcomes = Execute(args[2], selected, jobs, verify, results);
         Console.Error.WriteLine($"Computed in {watch.Elapsed.TotalSeconds:F1} s.");
@@ -201,14 +225,14 @@ internal static class ReferenceManifest
             }
             return 0;
         }
-        return args[1] == "write" ? Write(path, selected, outcomes, unavailable) : Check(path, set, ManifestCommands.Option(args, "--only") is not null, selected, outcomes, unavailable, verify);
+        return args[1] == "write" ? Write(path, selected, outcomes, unavailable) : Check(path, schema, set, ManifestCommands.Option(args, "--only") is not null, selected, outcomes, unavailable, verify);
     }
 
     private static ManifestObject Header() => new ManifestObject()
         .Add("commandTableVersion", CommandTypes.Version)
         .Add("missionSnapshotVersion", MissionSnapshot.Version)
         .Add("replayFormatVersion", ReplayFormat.CurrentVersion)
-        .Add("tickRate", ToolRate.Manifest.TicksPerSecond)
+        .Add("tickRate", ToolRate.Current.TicksPerSecond)
         .Add("worldSnapshotVersion", WorldSnapshot.Version);
 
     private static int Write(string path, List<RunSpec> selected, Dictionary<string, RunOutcome> outcomes, ManifestObject unavailable)
@@ -237,13 +261,13 @@ internal static class ReferenceManifest
         }
         var root = new ManifestObject().Add("kind", Kind).Add("schema", Schema).Add("simulation", Header()).Add("unavailable", unavailable).Add("runs", runs);
         File.WriteAllBytes(path, ManifestDocument.WriteBytes(root));
-        Console.WriteLine($"Reference manifest written: {selected.Count} runs ({selected.Count(spec => spec.Quick)} in the quick set).");
+        Console.WriteLine($"Reference manifest written at {ToolRate.Current}: {selected.Count} runs ({selected.Count(spec => spec.Quick)} in the quick set).");
         // The manifest states what was measured. A false repeat flag is a defect of the simulation that the file makes visible; it is not hidden by refusing to write.
         if (notRepeating.Count > 0) Console.WriteLine($"WARNING: {notRepeating.Count} run(s) are recorded with a false repeat flag: {string.Join(", ", notRepeating)}.");
         return 0;
     }
 
-    private static int Check(string path, string set, bool only, List<RunSpec> selected, Dictionary<string, RunOutcome> outcomes, ManifestObject unavailable, VerifyMode verify)
+    private static int Check(string path, int schema, string set, bool only, List<RunSpec> selected, Dictionary<string, RunOutcome> outcomes, ManifestObject unavailable, VerifyMode verify)
     {
         var expected = ManifestDocument.Read(File.ReadAllBytes(path));
         var differing = 0;
@@ -254,7 +278,7 @@ internal static class ReferenceManifest
             Console.WriteLine($"{label}: DIFFERENT {difference}");
         }
         Compare("manifest kind", expected.TryGet("kind", out var kind) ? kind : ManifestDifference.Missing, Kind);
-        Compare("manifest schema", expected.TryGet("schema", out var schema) ? schema : ManifestDifference.Missing, Schema);
+        Compare("manifest schema", expected.TryGet("schema", out var recordedSchema) ? recordedSchema : ManifestDifference.Missing, schema);
         Compare("simulation", expected.TryGet("simulation", out var simulation) ? simulation : new ManifestObject(), Header());
         Compare("unavailable", expected.TryGet("unavailable", out var missing) ? missing : new ManifestObject(), unavailable);
         var expectedRuns = expected.TryGet("runs", out var node) && node is ManifestObject runs ? runs : new ManifestObject();
@@ -301,7 +325,8 @@ internal static class ReferenceManifest
         }
         if (verify != VerifyMode.None) Console.WriteLine($"Incremental hash: {ticksVerified} ticks verified, {mismatches} mismatch(es).");
         if (notRepeating.Count > 0) Console.WriteLine($"Note: {notRepeating.Count} run(s) carry a false repeat flag: {string.Join(", ", notRepeating)}.");
-        Console.WriteLine(differing == 0 ? $"Reference manifest ({(only ? "selected runs" : set)}): {selected.Count} runs identical." : $"Reference manifest ({(only ? "selected runs" : set)}): {differing} difference(s) in {selected.Count} runs.");
+        var what = $"Reference manifest ({(only ? "selected runs" : set)}, {ToolRate.Current}, schema {schema})";
+        Console.WriteLine(differing == 0 ? $"{what}: {selected.Count} runs identical." : $"{what}: {differing} difference(s) in {selected.Count} runs.");
         return differing == 0 ? 0 : 1;
     }
 
@@ -318,34 +343,58 @@ internal static class ReferenceManifest
 
     // ---------------------------------------------------------------------------------------------------------------- plan
 
-    /// <summary>The fixed list of runs. It reads the campaign list and the map names of the content, nothing else; ids and parameters do not depend on a run.</summary>
-    public static List<RunSpec> Plan(ContentFileSystem content, out ManifestObject unavailable)
+    /// <summary>
+    /// The fixed list of runs at the rate of this run of the tool (<see cref="ToolRate.Current"/>). It reads the campaign list and the map names of the content, nothing
+    /// else; ids and parameters do not depend on a run. <paramref name="schema"/> decides how the parameters are spelled (<see cref="Schema"/>), never what a run does.
+    /// </summary>
+    public static List<RunSpec> Plan(ContentFileSystem content, int schema, out ManifestObject unavailable)
     {
         var plan = new List<RunSpec>();
         unavailable = new ManifestObject();
-        var rate = (long)ToolRate.Manifest.TicksPerSecond;
+        var time = ToolRate.Current.Time;
+        var rate = (long)ToolRate.Current.TicksPerSecond;
+        var stated = schema >= 2;
+        // A tick budget of the run's rate; from schema 2 on with the game time it covers next to it.
+        ManifestObject Budget(ManifestObject parameters, string ticksName, string secondsName, long ticks)
+        {
+            parameters.Add(ticksName, ticks);
+            return stated ? parameters.Add(secondsName, ToolRate.GameSeconds(ticks)) : parameters;
+        }
+        // A rule value in logic frames of the original, the same number at every rate; schema 1 called these ticks, which they are at 30 Hz only.
+        string FrameValue(string firstName, string name) => stated ? name : firstName;
 
-        var reference = ReferenceMatchOptions.Standard;
-        plan.Add(Single("reference-match", true, "reference-match", new ManifestObject()
-            .Add("worldSeed", Hex(reference.WorldSeed)).Add("driverSeed", Hex(reference.DriverSeed)).Add("maxTicks", reference.MaxTicks).Add("graceTicks", reference.GraceTicks)
-            .Add("minTicks", reference.MinTicks).Add("arenaRadius", reference.ArenaRadius).Add("income", reference.Income).Add("incomeInterval", reference.IncomeInterval).Add("tickRate", rate),
+        // MaxTicks is a run budget in ticks (docs/TICKRATE-MIGRATION.md §8.1): the standard's 216,000 are two hours at 30 Hz and are scaled to the rate. MinTicks is 0.
+        var reference = ReferenceMatchOptions.StandardAt(ToolRate.Current);
+        plan.Add(Single("reference-match", true, "reference-match", Budget(new ManifestObject()
+            .Add("worldSeed", Hex(reference.WorldSeed)).Add("driverSeed", Hex(reference.DriverSeed)).Add(FrameValue("graceTicks", "graceOriginalFrames"), reference.GraceTicks)
+            .Add("minTicks", reference.MinTicks).Add("arenaRadius", reference.ArenaRadius).Add("income", reference.Income)
+            .Add(FrameValue("incomeInterval", "incomeIntervalOriginalFrames"), reference.IncomeInterval).Add("tickRate", rate), "maxTicks", "maxGameSeconds", reference.MaxTicks),
             60, true, (context, verify) => ReferenceMatchJob(context!, reference, verify), context => ResultQuantities.ReferenceMatch(context!, reference)));
 
+        // The stress test counts simulation steps by design (docs/TICKRATE-MIGRATION.md §8.3, §15.5): the same 216,000 steps with the same load per step at every
+        // rate. Its game time therefore depends on the rate (two hours at 30 Hz, one at 60 Hz), which schema 2 states.
         var stress = StressOptions.Standard;
-        plan.Add(Single("stress", true, "stress", new ManifestObject()
-            .Add("worldSeed", Hex(stress.WorldSeed)).Add("driverSeed", Hex(stress.DriverSeed)).Add("ticks", stress.Ticks).Add("targetPopulation", stress.TargetPopulation)
-            .Add("drainTicks", stress.DrainTicks).Add("fixture", "synthetic").Add("tickRate", rate),
-            120, false, (_, verify) => StressJob(stress, verify), _ => ResultQuantities.Stress(stress)));
+        var stressParameters = Budget(new ManifestObject()
+            .Add("worldSeed", Hex(stress.WorldSeed)).Add("driverSeed", Hex(stress.DriverSeed)).Add("targetPopulation", stress.TargetPopulation)
+            .Add("drainTicks", stress.DrainTicks).Add("fixture", "synthetic").Add("tickRate", rate), "ticks", "gameSeconds", stress.Ticks);
+        if (stated) stressParameters.Add("budgetCounts", "steps");
+        plan.Add(Single("stress", true, "stress", stressParameters, 120, false, (_, verify) => StressJob(stress, verify), _ => ResultQuantities.Stress(stress)));
 
         var skirmish = SkirmishMatchOptions.Standard;
-        ManifestObject AiParameters(string map, string[] factions, long maxTicks) => new ManifestObject()
-            .Add("map", Require(content, map)).Add("factions", string.Join(",", factions)).Add("players", factions.Length).Add("maxTicks", maxTicks).Add("graceTicks", skirmish.GraceTicks)
-            .Add("worldSeed", Hex(skirmish.WorldSeed)).Add("aiSeed", Hex(skirmish.AiSeed)).Add("startMoney", skirmish.StartMoney).Add("sciencePointInterval", skirmish.SciencePointInterval).Add("tickRate", rate);
+        var aiMatchTicks = time.OriginalFrames(AiMatchFrames);
+        var eightPlayerTicks = time.OriginalFrames(EightPlayerFrames);
+        var eightPlayerQuickTicks = time.OriginalFrames(EightPlayerQuickFrames);
+        var sweepTicks = time.OriginalFrames(SweepFrames);
+        var missionTicks = time.OriginalFrames(MissionFrames);
+        ManifestObject AiParameters(string map, string[] factions, long maxTicks) => Budget(new ManifestObject()
+            .Add("map", Require(content, map)).Add("factions", string.Join(",", factions)).Add("players", factions.Length).Add(FrameValue("graceTicks", "graceOriginalFrames"), skirmish.GraceTicks)
+            .Add("worldSeed", Hex(skirmish.WorldSeed)).Add("aiSeed", Hex(skirmish.AiSeed)).Add("startMoney", skirmish.StartMoney)
+            .Add(FrameValue("sciencePointInterval", "sciencePointIntervalOriginalFrames"), skirmish.SciencePointInterval).Add("tickRate", rate), "maxTicks", "maxGameSeconds", maxTicks);
         foreach (var (id, map, pairing) in AiPairingRuns())
             {
-                plan.Add(Single(id, QuickAiRuns.Contains(id), "ai-match", AiParameters(map, pairing, AiMatchTicks), AiMatchTicks / 500, true,
-                    (context, verify) => AiMatchJob(context!, map, pairing, skirmish with { MaxTicks = AiMatchTicks }, verify),
-                    context => ResultQuantities.AiMatch(context!, map, pairing, skirmish with { MaxTicks = AiMatchTicks }, Participants)));
+                plan.Add(Single(id, QuickAiRuns.Contains(id), "ai-match", AiParameters(map, pairing, aiMatchTicks), AiMatchFrames / 500, true,
+                    (context, verify) => AiMatchJob(context!, map, pairing, skirmish with { MaxTicks = aiMatchTicks }, verify),
+                    context => ResultQuantities.AiMatch(context!, map, pairing, skirmish with { MaxTicks = aiMatchTicks }, Participants)));
             }
         foreach (var id in QuickAiRuns)
             if (plan.All(spec => spec.Id != id)) throw new InvalidOperationException($"The quick set names the unknown run {id}.");
@@ -353,20 +402,20 @@ internal static class ReferenceManifest
         for (var index = 0; index < EightPlayerMaps.Length; index++)
         {
             var (name, map) = EightPlayerMaps[index];
-            plan.Add(Single($"ai8_{name}", false, "ai-match", AiParameters(map, EightPlayerFactions, EightPlayerTicks), EightPlayerTicks / 20, true,
-                (context, verify) => AiMatchJob(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerTicks }, verify),
-                context => ResultQuantities.AiMatch(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerTicks }, Participants)));
+            plan.Add(Single($"ai8_{name}", false, "ai-match", AiParameters(map, EightPlayerFactions, eightPlayerTicks), EightPlayerFrames / 20, true,
+                (context, verify) => AiMatchJob(context!, map, EightPlayerFactions, skirmish with { MaxTicks = eightPlayerTicks }, verify),
+                context => ResultQuantities.AiMatch(context!, map, EightPlayerFactions, skirmish with { MaxTicks = eightPlayerTicks }, Participants)));
             if (index == 0)
-                plan.Add(Single($"ai8_{name}_short", true, "ai-match", AiParameters(map, EightPlayerFactions, EightPlayerQuickTicks), EightPlayerQuickTicks / 20, true,
-                    (context, verify) => AiMatchJob(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerQuickTicks }, verify),
-                    context => ResultQuantities.AiMatch(context!, map, EightPlayerFactions, skirmish with { MaxTicks = EightPlayerQuickTicks }, Participants)));
+                plan.Add(Single($"ai8_{name}_short", true, "ai-match", AiParameters(map, EightPlayerFactions, eightPlayerQuickTicks), EightPlayerQuickFrames / 20, true,
+                    (context, verify) => AiMatchJob(context!, map, EightPlayerFactions, skirmish with { MaxTicks = eightPlayerQuickTicks }, verify),
+                    context => ResultQuantities.AiMatch(context!, map, EightPlayerFactions, skirmish with { MaxTicks = eightPlayerQuickTicks }, Participants)));
         }
 
-        var sweepOptions = skirmish with { MaxTicks = SweepTicks, GraceTicks = ToolRate.GraceWithinBudget(skirmish.GraceTicks, SweepTicks, ToolRate.Manifest) };
+        var sweepOptions = skirmish with { MaxTicks = sweepTicks, GraceTicks = ToolRate.GraceWithinBudget(skirmish.GraceTicks, sweepTicks, ToolRate.Current) };
         var paths = SimContext.MapPaths(content);
-        plan.Add(new RunSpec("skirmish-sweep", false, "skirmish-sweep", new ManifestObject()
-                .Add("maps", paths.Length).Add("factions", "the first two playable factions in catalog order").Add("maxTicks", SweepTicks).Add("graceTicks", sweepOptions.GraceTicks)
-                .Add("worldSeed", Hex(skirmish.WorldSeed)).Add("aiSeed", Hex(skirmish.AiSeed)).Add("tickRate", rate),
+        plan.Add(new RunSpec("skirmish-sweep", false, "skirmish-sweep", Budget(new ManifestObject()
+                .Add("maps", paths.Length).Add("factions", "the first two playable factions in catalog order").Add(FrameValue("graceTicks", "graceOriginalFrames"), sweepOptions.GraceTicks)
+                .Add("worldSeed", Hex(skirmish.WorldSeed)).Add("aiSeed", Hex(skirmish.AiSeed)).Add("tickRate", rate), "maxTicks", "maxGameSeconds", sweepTicks),
             [..paths.Select(path => new RunJob($"skirmish-sweep {path}", 4, true, (context, verify) => SweepMapJob(context!, path, sweepOptions, verify), context => ResultQuantities.SweepMap(context!, path, sweepOptions)))],
             results => CombineSweep(paths, results)));
 
@@ -391,11 +440,11 @@ internal static class ReferenceManifest
         }
         var standard = MissionOptions.Standard;
         foreach (var (id, mission) in missions)
-            plan.Add(Single(id, QuickMissions.Contains(id), "mission-run", new ManifestObject()
-                    .Add("map", mission.Map).Add("campaigns", string.Join(",", mission.Campaigns)).Add("ticks", MissionTicks).Add("difficulty", standard.Difficulty.ToString())
-                    .Add("worldSeed", Hex(standard.WorldSeed)).Add("challenge", mission.Challenge).Add("humanFaction", mission.Faction).Add("tickRate", rate),
-                12, true, (context, verify) => MissionJob(context!, mission.Map, mission.Challenge, mission.Faction, MissionTicks, verify),
-                context => ResultQuantities.Mission(context!, mission.Map, mission.Challenge, mission.Faction, MissionTicks)));
+            plan.Add(Single(id, QuickMissions.Contains(id), "mission-run", Budget(new ManifestObject()
+                    .Add("map", mission.Map).Add("campaigns", string.Join(",", mission.Campaigns)).Add("difficulty", standard.Difficulty.ToString())
+                    .Add("worldSeed", Hex(standard.WorldSeed)).Add("challenge", mission.Challenge).Add("humanFaction", mission.Faction).Add("tickRate", rate), "ticks", "gameSeconds", missionTicks),
+                12, true, (context, verify) => MissionJob(context!, mission.Map, mission.Challenge, mission.Faction, missionTicks, verify),
+                context => ResultQuantities.Mission(context!, mission.Map, mission.Challenge, mission.Faction, missionTicks)));
         foreach (var id in QuickMissions)
             if (plan.All(spec => spec.Id != id)) throw new InvalidOperationException($"The quick set names the unknown run {id}.");
 
@@ -549,7 +598,7 @@ internal static class ReferenceManifest
 
     private static JobResult StressJob(StressOptions options, VerifyMode verify)
     {
-        var fixture = new SyntheticFixture(ToolRate.Manifest);
+        var fixture = new SyntheticFixture(ToolRate.Current);
         var scenario = new StressScenario(options);
         var recorded = scenario.Record(fixture);
         var verifier = new IncrementalVerifier(verify, StressVerifyInterval);

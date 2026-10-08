@@ -57,11 +57,11 @@ public sealed class GameData
     public string MapFileHash(string mapPath) => Content.FileHash(mapPath);
 
     /// <summary>
-    /// The tick rate a session runs at when its host names none: the original's rate, until the product rate changes (phase 23). The one place outside the simulation that
+    /// The tick rate a session runs at when its host names none: the product rate (<see cref="ProductRate"/>, the one definition of it). The one place of the game layer that
     /// names a simulation rate; a host that wants another one passes it to <see cref="Load"/> (the client's <c>--tick-rate</c>), and everything else reads <see cref="Rate"/>
     /// or the world. Not to be confused with <see cref="CnCNew.Data.OriginalFrame"/>, the unit the original's client content is authored in.
     /// </summary>
-    public static SimulationRate DefaultSessionRate => SimulationRate.Original;
+    public static SimulationRate DefaultSessionRate { get; } = SimulationRate.FromTicksPerSecond(ProductRate.TicksPerSecond);
 
     /// <summary>The tick rate the catalogs were built for: every world of this data runs at it (a setting of the session, chosen at <see cref="Load"/>).</summary>
     public SimulationRate Rate => Templates.Rate;

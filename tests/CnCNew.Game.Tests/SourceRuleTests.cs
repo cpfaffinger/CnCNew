@@ -33,8 +33,8 @@ internal static class SourceRuleTests
     /// <summary>The named exceptions: file (path suffix), a text the line contains, and why the line is not a rate.</summary>
     private static readonly (string File, string Contains, string Reason)[] Exceptions =
     [
-        ("CnCNew.Game/Data/GameData.cs", "DefaultSessionRate => SimulationRate.Original",
-            "the one place outside the simulation that names a simulation rate: the default of a session whose host names none (the product rate; phase 23 changes it here)"),
+        ("CnCNew.Game/Data/ProductRate.cs", "public const int TicksPerSecond =",
+            "the one place outside the simulation that names a simulation rate: the product rate, the default of a session whose host names none (GameData.DefaultSessionRate)"),
         ("CnCNew.Game/Hud/HudOverlayRenderer.cs", "clockMilliseconds / 30 + icon.Entity.Value % CrossFrames",
             "30 milliseconds of wall time per picture of the repair cross: a duration, not a rate"),
         ("CnCNew.Client.Stride/Program.cs", "_renderedFrames / 60d",

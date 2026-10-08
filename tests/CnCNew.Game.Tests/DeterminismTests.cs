@@ -126,7 +126,7 @@ internal static class DeterminismTests
 
         harness.Run("D3: a world restored at every checkpoint runs like the continuous one (reference match, two AI matches)", () =>
         {
-            var reference = new ReferenceMatchScenario(ReferenceMatchOptions.Standard).Record(data.Templates, data.Fingerprint);
+            var reference = new ReferenceMatchScenario(ReferenceMatchOptions.StandardAt(data.Rate)).Record(data.Templates, data.Fingerprint);
             Report("reference match", RestoreAtEveryCheckpoint(reference, data.Templates, data.Fingerprint, null, 1_000, full ? 0 : TailTicks));
             foreach (var factions in new[] { "FactionChina,FactionGLA", "FactionAmerica,FactionChina" })
             {
@@ -158,7 +158,7 @@ internal static class DeterminismTests
                 TestHarness.Assert(plain.TickHashes.AsSpan().SequenceEqual(verified.TickHashes), $"{name}: verifying in every tick changes a tick hash");
             }
 
-            Verify("reference match", new ReferenceMatchScenario(ReferenceMatchOptions.Standard).Record(data.Templates, data.Fingerprint), null, 6_000);
+            Verify("reference match", new ReferenceMatchScenario(ReferenceMatchOptions.StandardAt(data.Rate)).Record(data.Templates, data.Fingerprint), null, 6_000);
             var (alpine, alpineTerrain) = LoadMap(data, AlpineAssault);
             var chosen = new[] { "FactionChina", "FactionGLA" }.Select(name => data.Factions.First(value => value.Faction.Name.Equals(name, StringComparison.OrdinalIgnoreCase))).ToImmutableArray();
             Verify("AI match Alpine Assault FactionChina,FactionGLA",

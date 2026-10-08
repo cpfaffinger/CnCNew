@@ -4,14 +4,15 @@ using CnCNew.Simulation.Time;
 namespace CnCNew.CampaignTool;
 
 /// <summary>
-/// The tick rate this run of the tool simulates at: <c>--tick-rate N</c> (30, 60 or 120; default 30). The catalog every mission world runs on is built
+/// The tick rate this run of the tool simulates at: <c>--tick-rate N</c> (30, 60 or 120); without the option the default of the game layer
+/// (<c>GameData.DefaultSessionRate</c>, the product rate). The catalog every mission world runs on is built
 /// for this rate. A budget given as <c>--ticks</c> is a raw tick count of that rate; <c>--seconds</c>/<c>--minutes</c> and the defaults are game time.
 /// </summary>
 internal static class ToolRate
 {
     public const string Option = "--tick-rate";
 
-    public static SimulationRate Current { get; private set; } = SimulationRate.Hz30;
+    public static SimulationRate Current { get; private set; } = CnCNew.Game.Data.GameData.DefaultSessionRate;
 
     public static void Read(string[] args)
     {

@@ -5,6 +5,7 @@ using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Skirmish;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Testing;
@@ -23,6 +24,12 @@ public sealed record SkirmishMatchOptions(uint WorldSeed, uint AiSeed, long MaxT
 {
     /// <summary>The standard match: a budget of 108,000 ticks (one hour of game time at 30 Hz), 10 s of grace, a science point every 90 s.</summary>
     public static SkirmishMatchOptions Standard { get; } = new(0xC0FFEE06, 0x5EED0006, 108_000, 300, 1_000, 10_000, 2_700);
+
+    /// <summary>
+    /// The standard match for a session at <paramref name="rate"/>: <see cref="Standard"/> with its budget as game time, one hour at every rate (the 108,000 are
+    /// ticks at 30 Hz). Who starts a match at a rate of its choice takes this; <see cref="Standard"/> itself stays a tick count for the callers that set their own budget.
+    /// </summary>
+    public static SkirmishMatchOptions StandardAt(SimulationRate rate) => Standard with { MaxTicks = rate.Time.OriginalFrames(Standard.MaxTicks) };
 }
 
 /// <summary>

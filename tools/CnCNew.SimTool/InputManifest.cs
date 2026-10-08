@@ -48,7 +48,7 @@ internal sealed class SimContext
     public CnCNew.Simulation.Skirmish.Original.AiData? AiData { get; private init; }
 
     /// <summary>Compiles under a process-wide gate: the loaders of the client layer are not known to be safe to run side by side.</summary>
-    /// <param name="rate">The rate the catalog is built for; the manifests' rate when absent (<c>ai-survey</c> passes its own).</param>
+    /// <param name="rate">The rate the catalog is built for; the rate of this run of the tool (<see cref="ToolRate.Current"/>) when absent (<c>ai-survey</c> passes its own).</param>
     public static SimContext Load(string directory, CnCNew.Simulation.Time.SimulationRate? rate = null)
     {
         lock (CompileGate)
@@ -57,7 +57,7 @@ internal sealed class SimContext
             var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
             var graph = DefinitionCompiler.Compile(new ContentDefinitionSource(content), ModuleRegistry.Default, options);
             var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
-            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate ?? ToolRate.Manifest, geometry);
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate ?? ToolRate.Current, geometry);
             var (sha256, length) = DefinitionSnapshotWriter.ComputeFingerprint(graph);
             return new SimContext(content, catalog, catalog.Rate.Combine(geometry.Combine(sha256)), sha256, length, graph.Audit.Definitions, geometry)
             {
@@ -94,26 +94,49 @@ internal sealed class SimContext
 internal static class InputManifest
 {
     public const string Kind = "input-manifest";
-    public const int Schema = 1;
+
+    /// <summary>
+    /// The schema <c>write</c> produces. Schema 2 records the rate the catalogs were built for (<c>simulation.tickRate</c>); a file of <see cref="FirstSchema"/> has no
+    /// such entry and was, by the definition of that schema, written at the original's 30 Hz. <c>check</c> builds the form of the file's schema at the file's rate.
+    /// </summary>
+    public const int Schema = 2;
+    public const int FirstSchema = 1;
     public const string CampaignFile = "Data/INI/Campaign.ini";
     public const string ChallengeFile = "Data/INI/ChallengeMode.ini";
 
     public static int Command(string[] args)
     {
-        if (args.Length < 4 || args[1] is not ("write" or "check")) return ManifestCommands.Fail("Usage: CnCNew.SimTool input-manifest write|check <content-dir> <file> [--jobs N]");
+        if (args.Length < 4 || args[1] is not ("write" or "check")) return ManifestCommands.Fail("Usage: CnCNew.SimTool input-manifest write|check <content-dir> <file> [--jobs N]\n  check runs at the rate the file records; write at --tick-rate N, without it at the default rate.");
         var jobs = ManifestCommands.Jobs(args);
-        var watch = Stopwatch.StartNew();
-        var actual = Build(args[2], jobs, Console.Error);
-        Console.Error.WriteLine($"Built the input manifest in {watch.Elapsed.TotalSeconds:F1} s.");
         var path = Path.GetFullPath(args[3]);
+        // A check runs at the rate and in the schema the file records; a write at the rate of this run of the tool, in the current schema.
+        var schema = Schema;
+        var expected = new ManifestObject();
+        if (args[1] == "check")
+        {
+            expected = ManifestDocument.Read(File.ReadAllBytes(path));
+            if (!expected.TryGet("schema", out var recordedSchema) || recordedSchema is not ManifestNumber { Value: >= FirstSchema and <= Schema } known)
+                return ManifestCommands.Fail($"{path}: schema {(expected.TryGet("schema", out var given) ? given.Display : ManifestDifference.Missing)} is not one this tool checks ({FirstSchema} to {Schema}).");
+            schema = (int)known.Value;
+            long recordedRate = SimulationRate.Original.TicksPerSecond;
+            if (schema >= 2)
+            {
+                if (!expected.TryGet("simulation", out var simulation) || simulation is not ManifestObject header || !header.TryGet("tickRate", out var rate) || rate is not ManifestNumber rateNumber)
+                    return ManifestCommands.Fail($"{path}: the manifest does not record its tick rate (simulation.tickRate).");
+                recordedRate = rateNumber.Value;
+            }
+            ToolRate.UseRecorded(recordedRate, path);
+        }
+        var watch = Stopwatch.StartNew();
+        var actual = Build(args[2], jobs, Console.Error, schema);
+        Console.Error.WriteLine($"Built the input manifest at {ToolRate.Current} in {watch.Elapsed.TotalSeconds:F1} s.");
         if (args[1] == "write")
         {
             File.WriteAllBytes(path, ManifestDocument.WriteBytes(actual));
-            Console.WriteLine($"Input manifest written: {actual.Object("maps").Values.Count} maps, {actual.Object("catalogs").Values.Count} catalog hashes, world fingerprint {actual.Text("worldFingerprint")[..16]}.");
+            Console.WriteLine($"Input manifest written at {ToolRate.Current}: {actual.Object("maps").Values.Count} maps, {actual.Object("catalogs").Values.Count} catalog hashes, world fingerprint {actual.Text("worldFingerprint")[..16]}.");
             return 0;
         }
 
-        var expected = ManifestDocument.Read(File.ReadAllBytes(path));
         var differing = 0;
         foreach (var section in Sections(expected, actual))
         {
@@ -130,7 +153,7 @@ internal static class InputManifest
             if (bad == 0) Console.WriteLine($"{section}: OK{(items.Length > 1 ? $" ({items.Length} entries)" : string.Empty)}");
             differing += bad;
         }
-        Console.WriteLine(differing == 0 ? "Input manifest: identical." : $"Input manifest: {differing} difference(s).");
+        Console.WriteLine(differing == 0 ? $"Input manifest ({ToolRate.Current}, schema {schema}): identical." : $"Input manifest ({ToolRate.Current}, schema {schema}): {differing} difference(s).");
         return differing == 0 ? 0 : 1;
 
         static string[] Sections(ManifestObject left, ManifestObject right) => [..left.Values.Keys.Union(right.Values.Keys).Order(StringComparer.Ordinal)];
@@ -151,15 +174,17 @@ internal static class InputManifest
         }
     }
 
-    public static ManifestObject Build(string directory, int jobs, TextWriter log)
+    public static ManifestObject Build(string directory, int jobs, TextWriter log, int schema = Schema)
     {
         var context = SimContext.Load(directory);
         var root = new ManifestObject()
             .Add("kind", Kind)
-            .Add("schema", Schema)
+            .Add("schema", schema)
             .Add("definitions", new ManifestObject().Add("sha256", context.DefinitionSha256.ToUpperInvariant()).Add("bytes", context.DefinitionBytes).Add("definitions", context.Definitions))
             .Add("modelGeometry", new ManifestObject().Add("sha256", context.Geometry.Fingerprint.ToUpperInvariant()).Add("airfields", context.Geometry.Airfields.Count))
             .Add("worldFingerprint", context.Fingerprint.ToUpperInvariant());
+
+        if (schema >= 2) root.Add("simulation", new ManifestObject().Add("tickRate", context.Catalog.Rate.TicksPerSecond));
 
         var catalog = context.Catalog;
         var catalogs = new ManifestObject();

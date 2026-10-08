@@ -136,7 +136,7 @@ internal static class ResultQuantities
 
     public static ManifestObject Stress(StressOptions options)
     {
-        var fixture = new SyntheticFixture(ToolRate.Manifest);
+        var fixture = new SyntheticFixture(ToolRate.Current);
         var scenario = new StressScenario(options);
         return Replayed(scenario.Record(fixture), fixture.Templates, null).Add("outcome", "none").Add("peakLivingObjects", scenario.PeakAlive);
     }

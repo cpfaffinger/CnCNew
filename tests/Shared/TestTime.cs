@@ -42,9 +42,9 @@ internal static class TestTime
 }
 
 /// <summary>
-/// The rate the default test worlds, catalogs and game data of a test program are built at: the original's 30 Hz unless the program is started with
+/// The rate the default test worlds, catalogs and game data of a test program are built at: the product's default rate unless the program is started with
 /// <c>--tick-rate N</c> or <c>CNCNEW_TEST_TICK_RATE=N</c> (<see cref="TestRateOption"/>). Tests that are about a particular rate (the time-scale tests,
-/// the savegame's rate check) and tests that compare values recorded at 30 Hz (golden hashes) name their rate themselves and do not use this.
+/// the savegame's rate check) name their rate themselves and do not use this; the golden hashes hold at every rate (docs/RATE-SWITCH-OUTER-TESTS.md §7.6).
 /// </summary>
 internal static class TestRate
 {

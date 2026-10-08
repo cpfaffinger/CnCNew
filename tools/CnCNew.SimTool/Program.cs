@@ -74,9 +74,9 @@ const string Usage = """
       rate-distribution <tsv-reference> <tsv-candidate> [--out <report.md>]
                                                            two surveys of the same pairings and seeds at two rates, compared as distributions against limits fixed in
                                                            advance (docs/SIMULATION-CORE.md §40); exit code 0 all tests passed, 1 a test failed, 2 input error
-    Every command that creates a world takes --tick-rate N (30, 60 or 120; default 30): the catalog is built for that rate and the world runs at it.
+    Every command that creates a world takes --tick-rate N (30, 60 or 120; default: the product rate): the catalog is built for that rate and the world runs at it.
     A budget given as --ticks/--max-ticks is a raw tick count of that rate; --seconds S or --minutes M state it as game time instead, and the
-    default budgets are game time (the same at every rate). The stress test counts steps (--ticks only). The manifest commands always run at the recorded 30 Hz.
+    default budgets are game time (the same at every rate). The stress test counts steps (--ticks only). A manifest is checked at the rate its file records.
     reference-match, ai-match and mission-run take --time-probe: counters of the time service over the first run (per-tick amounts that round to
     zero at run time, the one-frame minimum engaging, durations off the grid), by place in the source. Diagnostics, not state.
     """;
