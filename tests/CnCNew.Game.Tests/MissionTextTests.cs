@@ -177,7 +177,8 @@ internal static class MissionTextTests
         TestHarness.Assert(director.LetterboxFadeLevel == 1f, "the level stays at 1");
 
         session.Engine.SignalUiInteraction("end");
-        StepTick(director, session);
+        // The fade-out is measured from the tick the script ran in, and the script answers the signal in the VM's next update: the next tick at 30 Hz, up to a frame of ticks away otherwise.
+        for (var tick = 0; tick < CnCNew.Tests.TestRate.TicksPerFrame && director.Letterbox; tick++) StepTick(director, session);
         for (var step = 0; step < 15; step++) Step(director, session);
         var closing = director.BuildOverlayCommands(800, 600).OfType<UiFillRect>().ToArray();
         TestHarness.Assert(!director.Letterbox && closing is [{ Rect: { Y: 0, Height: 75 }, Color.A: 127 }], $"ended: the top bar alone fades out ({closing.Length} bars, level {director.LetterboxFadeLevel})");

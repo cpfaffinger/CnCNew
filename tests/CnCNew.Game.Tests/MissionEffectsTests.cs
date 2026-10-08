@@ -100,7 +100,10 @@ internal static class MissionEffectsTests
         director.AfterStep();
     }
 
-    /// <summary>One original frame of the mission: the screen filters and texts advance once per original frame, whatever the tick rate.</summary>
+    /// <summary>
+    /// One original frame of the mission: the screen filters and texts advance once per original frame, whatever the tick rate. It is also the step that holds exactly one
+    /// update of the script VM, so a signal given before it (<c>SignalUiInteraction</c>) has been answered after it.
+    /// </summary>
     private static void StepFrame(MissionSession session, MissionPresentationDirector director)
     {
         for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(session.World, 1); tick++) StepOnce(session, director);
@@ -144,10 +147,10 @@ internal static class MissionEffectsTests
         var director = new MissionPresentationDirector(session);
         var audio = new FakeAudio();
         director.AudioControl = audio;
-        StepOnce(session, director);
-        StepOnce(session, director);
+        StepFrame(session, director);
+        StepFrame(session, director);
         session.Engine.SignalUiInteraction("go");
-        StepOnce(session, director);
+        StepFrame(session, director);
 
         var expected = new[]
         {
@@ -185,10 +188,10 @@ internal static class MissionEffectsTests
             Do("ENABLE_SCORING"), Do("DISABLE_SCORING"), Do("PLAYER_EXCLUDE_FROM_SCORE_SCREEN", Named(MapScriptParameterType.Side, "Hero")), Do("DISABLE_SPECIAL_POWER_DISPLAY"));
         var session = Start([script], [Placed("Barrel", 50m, 50m, "Hero", "Hero1")]);
         var director = new MissionPresentationDirector(session);
-        StepOnce(session, director);
-        StepOnce(session, director);
+        StepFrame(session, director);
+        StepFrame(session, director);
         session.Engine.SignalUiInteraction("go");
-        StepOnce(session, director);
+        StepFrame(session, director);
 
         var counts = director.Counts().ToDictionary(count => count.Action);
         TestHarness.Assert(counts["NAMED_FLASH_WHITE"] is { Emitted: 1, Forwarded: 0, Displayed: 0 } && director.Problems.ContainsKey("NAMED_FLASH_WHITE: no object layer connected"), "without an object layer a flash is reported, not shown");
@@ -200,10 +203,10 @@ internal static class MissionEffectsTests
         var hud = new FakeHud();
         host.ObjectEffects = objects;
         host.Hud = hud;
-        StepOnce(again, host);
-        StepOnce(again, host);
+        StepFrame(again, host);
+        StepFrame(again, host);
         again.Engine.SignalUiInteraction("go");
-        StepOnce(again, host);
+        StepFrame(again, host);
 
         TestHarness.Assert(objects.Calls.SequenceEqual(["flash 1,1,1 5s", "flash house 3s", "color FF00FFFF"]), $"flash white, flash in the house colour and the custom colour (an ARGB integer) reach the object layer ({string.Join(" | ", objects.Calls)})");
         TestHarness.Assert(hud.Calls.SequenceEqual(["remove Command_A TypeA", "add Command_B TypeA 3", "science SCIENCE_X Hidden", "icons False", "selectable False", "power display False"]),
@@ -294,13 +297,13 @@ internal static class MissionEffectsTests
         var director = new MissionPresentationDirector(session);
         var camera = new RtsCamera(MinimalCameraSettings(), new TerrainHeightSampler(map.HeightField), new Vector2(1280, 720));
         TestHarness.Assert(camera.ActiveBoundary == 0, "the camera starts on border 0");
-        StepOnce(session, director);
+        StepFrame(session, director);
         session.Engine.SignalUiInteraction("go");
-        StepOnce(session, director);
+        StepFrame(session, director);
         director.ApplyCameraTo(camera, CnCNew.Tests.TestTime.FrameSeconds);
         TestHarness.Assert(camera.ActiveBoundary == 1, "MAP_SWITCH_BORDER(1) switched the camera's border");
         session.Engine.SignalUiInteraction("missing");
-        StepOnce(session, director);
+        StepFrame(session, director);
         director.ApplyCameraTo(camera, CnCNew.Tests.TestTime.FrameSeconds);
         var result = director.Counts().ToDictionary(count => count.Action)["MAP_SWITCH_BORDER"];
         TestHarness.Assert(camera.ActiveBoundary == 1 && result is { Emitted: 2, Forwarded: 1, Displayed: 1 } && director.Problems.ContainsKey("MAP_SWITCH_BORDER: the map has no border 7"), $"a border the map lacks is reported and leaves the camera where it was ({result})");
