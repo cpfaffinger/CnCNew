@@ -1389,8 +1389,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             var turn = FixedTrig.AngleDifference(Entity.Angle, _frameAngle);
             if (turn != Fixed.Zero) Entity.Angle = FixedTrig.Normalize(Entity.Angle + Fixed.FromRaw(turn.Raw / left));
         }
-        Entity.X += stepX;
-        Entity.Y += stepY;
+        // The rest of the frame's step stays readable on the object (Entity.FrameEnd): who decides its own frame later in this tick sees this one where its step ends, as at 30 Hz.
+        if (covered == 0) Entity.SetAhead(world.Tick, _frameStepX, _frameStepY, Fixed.Zero);
+        Entity.CoverShare(world.Tick, stepX, stepY, Fixed.Zero);
         var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
         if (world.Navigation is not null && !air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
         if (_frameArriving)
