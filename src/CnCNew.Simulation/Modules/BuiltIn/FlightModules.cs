@@ -533,6 +533,8 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
         var rider = Riders.Count > 0 ? world.FindEntity(Riders[0]) : null;
         if (rider is null)
         {
+            // The first look of the original comes one logic frame after the chute appeared (the next tick at 30 Hz); the descent itself starts with the next tick.
+            if (world.Tick < Entity.SpawnTick + world.Time.TicksPerOriginalFrame) return SimulationTiming.SleepNone;
             // "If we have lost our passenger for whatever reason, die early."
             world.Kill(Entity.Id);
             return SimulationTiming.SleepForever;
