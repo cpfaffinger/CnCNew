@@ -1421,6 +1421,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (AiOf(entity) is { } mover) mover.SettleFrame(_tick);
             else entity.CompleteFrame(_tick);
         }
+        if (_firstFrameTicks != TickOrder.Next && entity.Turrets is { } turrets) CompleteTurretFrames(entity, turrets);
         Emit(SimEventKind.EntityDied, entity.Id, info.Source, string.Empty, info.DeathType);
         ScoreTheKill(entity, info);
         // Object::onDie starts with checkAndDetonateBoobyTrap(NULL): an object that dies while booby trapped sets its trap off.

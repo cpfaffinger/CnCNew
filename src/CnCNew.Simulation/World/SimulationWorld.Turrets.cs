@@ -527,6 +527,23 @@ public sealed partial class SimulationWorld
         state.Pitch = FixedTrig.Normalize(state.Pitch + FixedTrig.AngleDifference(state.Pitch, state.GoalPitch) / share);
     }
 
+    /// <summary>
+    /// Above 30 Hz: the turrets of an object that dies inside their frame's step stand where that step ends, as the body does (<see cref="OnEntityDied"/>, rule 4 of
+    /// docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): the 30 Hz turret has taken its whole step when a hit of the phases after the turrets kills its object. A dead object's
+    /// turret is not stepped any more, so the share it had covered would stay.
+    /// </summary>
+    private void CompleteTurretFrames(Entity entity, TurretState?[] turrets)
+    {
+        foreach (var state in turrets)
+        {
+            if (state is null || state.SubSteps == 0) continue;
+            state.Angle = state.GoalAngle;
+            state.Pitch = state.GoalPitch;
+            ClearFrameStep(state);
+            MarkDirty(entity);
+        }
+    }
+
     /// <summary>A step that does not move the turret but takes its logic frame all the same: the next decision is one frame later, as at 30 Hz. Never called at 30 Hz.</summary>
     private void OccupyFrame(TurretState state)
     {
