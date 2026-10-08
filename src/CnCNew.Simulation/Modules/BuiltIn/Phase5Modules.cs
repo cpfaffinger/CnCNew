@@ -1705,7 +1705,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (Entity.Angle != _frameAngle) Entity.SetAheadAngle(_frameAngle);
         else Entity.ClearAheadAngle();
         var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
-        if (world.Navigation is not null && !air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+        if (world.Navigation is not null && !air)
+        {
+            Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            // The height the frame ends with is that of the ground where it ends: an observer reads it there, and an object put where its frame ends (Entity.CompleteFrame)
+            // stands on the ground of that place, as after the 30 Hz step, not on the height of the share it had covered.
+            Entity.SetAheadHeight(Entity.AheadX == Fixed.Zero && Entity.AheadY == Fixed.Zero ? Fixed.Zero : world.GroundHeightAt(Entity.X + Entity.AheadX, Entity.Y + Entity.AheadY) - Entity.Z);
+        }
         if (_frameArriving)
         {
             // The last step of a move tests no collision, as the 30 Hz arrival does not.
@@ -1727,12 +1733,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private void CollideWhereTheFrameEnds(IWorldServices world, bool air)
     {
         var (x, y, z, angle) = (Entity.X, Entity.Y, Entity.Z, Entity.Angle);
-        var (aheadX, aheadY) = (Entity.AheadX, Entity.AheadY);
+        var (aheadX, aheadY, aheadZ) = (Entity.AheadX, Entity.AheadY, Entity.AheadZ);
         var pending = _frameTicksLeft;
         var (dead, leaving) = (Entity.EffectivelyDead, Entity.DestroyRequested);
         Entity.X = x + aheadX;
         Entity.Y = y + aheadY;
-        if (world.Navigation is not null && !air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+        Entity.Z = z + aheadZ;
         Entity.Angle = _frameAngle;
         Entity.SetAhead(world.Tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
         world.ResolveFootprintCollisions(Entity, _frameStepX, _frameStepY);
@@ -1745,7 +1751,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         Entity.Y = y;
         Entity.Z = z;
         Entity.Angle = angle;
-        Entity.SetAhead(world.Tick, aheadX, aheadY, Fixed.Zero);
+        Entity.SetAhead(world.Tick, aheadX, aheadY, aheadZ);
         if (angle != _frameAngle) Entity.SetAheadAngle(_frameAngle);
     }
 

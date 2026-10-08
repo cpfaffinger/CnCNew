@@ -70,6 +70,9 @@ public sealed class Entity
         HasAheadAngle = false;
     }
 
+    /// <summary>The mover's side of <see cref="AheadZ"/> for a mover that follows the ground: the height its begun frame ends with, less its height now.</summary>
+    internal void SetAheadHeight(Fixed z) => AheadZ = z;
+
     /// <summary>The mover's side of <see cref="AheadX"/>: covers one more share of the frame's step. The shares of a frame add up to its step, so the rest ends at zero.</summary>
     internal void CoverShare(long tick, Fixed x, Fixed y, Fixed z)
     {
