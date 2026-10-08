@@ -94,7 +94,8 @@ internal sealed class SpawnBehavior(SpawnBehaviorData data) : SimModule, IUpdate
     public override void OnSpawn(IWorldServices world)
     {
         _oneShotCountdown = data.OneShot ? data.SpawnNumber : -1;
-        _nextWake = world.Tick + SimulationTiming.SleepNone;
+        // The first update creates the spawns: one logic frame of the original after the spawner appeared (the next tick at 30 Hz), so they appear at the same game time at every rate.
+        _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
     }
 
     public long Update(IWorldServices world)
