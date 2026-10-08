@@ -1052,6 +1052,7 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         _gattlingTarget = _initialTarget;
         _positionToShoot = _initialTarget;
         _okToFireHowitzerCounter = 0;
+        _strafeLeft = 0;
         _status = GunshipStatus.Inserting;
         _flight.Cancel();
         CleanUp(world);
@@ -1206,7 +1207,8 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
                 if (victim is not null) _positionToShoot = new Point3(victim.X, victim.Y, victim.Z);
             }
             _currentVictim = victim?.Id ?? EntityId.Invalid;
-            if (_okToFireHowitzerCounter > data.HowitzerFollowLagTicks && data.HowitzerWeapon.Length > 0 && world.Weapons.TryGet(data.HowitzerWeapon, out var howitzer))
+            // The counter counts logic frames of the original (Strafe), the lag of the data is a duration on the frame grid.
+            if (_okToFireHowitzerCounter > world.Time.ToOriginalFrames(data.HowitzerFollowLagTicks) && data.HowitzerWeapon.Length > 0 && world.Weapons.TryGet(data.HowitzerWeapon, out var howitzer))
             {
                 var offset = data.RandomOffsetForHowitzer;
                 var x = _gattlingTarget.X + world.LogicRandom.Range(-offset, offset);
@@ -1220,29 +1222,60 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
             var victim = world.FindEntity(_currentVictim);
             if (victim is not null && !victim.EffectivelyDead) FireGattling(world, gattling, victim, victim.X, victim.Y, victim.Z);
             else FireGattling(world, gattling, null, _gattlingTarget.X, _gattlingTarget.Y, _gattlingTarget.Z);
-            if (data.Strafes && world.Tick - gattling.LastFireTick <= world.Time.OriginalFrames(GattlingFiringWindowFrames) && gattling.LastFireTick >= 0) Strafe();
+            if (data.Strafes && world.Tick - gattling.LastFireTick <= world.Time.OriginalFrames(GattlingFiringWindowFrames) && gattling.LastFireTick >= 0) Strafe(world);
         }
     }
 
     private EntityId _currentVictim;
 
-    /// <summary>The gattling winds its aim toward where it should shoot, one <c>StrafingIncrement</c> at a time; staying on it counts toward the howitzer follow-up.</summary>
-    private void Strafe()
+    /// <summary>
+    /// The gattling winds its aim toward where it should shoot, one <c>StrafingIncrement</c> per logic frame of the original; staying on it counts toward the howitzer follow-up, one
+    /// per frame. The 30 Hz step, decided where a frame of the original begins (as the flight and the howitzer's rhythm): the aim point is on its goal when the rest is less than
+    /// the increment of a frame; an increment is wound in equal shares per tick.
+    /// </summary>
+    private void Strafe(IWorldServices world)
     {
+        var ticks = world.Time.TicksPerOriginalFrame;
+        if (!world.Time.IsOriginalFrameBoundary(world.Tick))
+        {
+            if (_strafeLeft == 0) return;
+            _strafeLeft--;
+            _gattlingTarget = new Point3(_gattlingTarget.X + _strafeShare.X, _gattlingTarget.Y + _strafeShare.Y, _gattlingTarget.Z + _strafeShare.Z);
+            return;
+        }
+        if (_strafeLeft > 0)
+        {
+            // the gattling paused in the middle of a frame: the increment that was decided is finished first
+            _gattlingTarget = new Point3(_gattlingTarget.X + _strafeShare.X * (long)_strafeLeft, _gattlingTarget.Y + _strafeShare.Y * (long)_strafeLeft, _gattlingTarget.Z + _strafeShare.Z * (long)_strafeLeft);
+            _strafeLeft = 0;
+        }
+        var increment = FlightFrames.PerFrame(world.Time, data.StrafingIncrement);
         var dx = _positionToShoot.X - _gattlingTarget.X;
         var dy = _positionToShoot.Y - _gattlingTarget.Y;
         var dz = _positionToShoot.Z - _gattlingTarget.Z;
         var distance = AirWeaponModules.Length(dx, dy, dz);
-        if (distance < data.StrafingIncrement)
+        if (distance < increment)
         {
             _gattlingTarget = _positionToShoot;
             _okToFireHowitzerCounter++;
             return;
         }
         _okToFireHowitzerCounter = 0;
-        var scale = data.StrafingIncrement / distance;
-        _gattlingTarget = new Point3(_gattlingTarget.X + dx * scale, _gattlingTarget.Y + dy * scale, _gattlingTarget.Z + dz * scale);
+        var scale = increment / distance;
+        var step = new Point3(dx * scale, dy * scale, dz * scale);
+        if (ticks > 1)
+        {
+            // the first tick takes what the division leaves, so the shares add up to the increment
+            _strafeLeft = checked((int)(ticks - TickOrder.Next));
+            _strafeShare = new Point3(Fixed.FromRaw(step.X.Raw / ticks), Fixed.FromRaw(step.Y.Raw / ticks), Fixed.FromRaw(step.Z.Raw / ticks));
+            step = new Point3(step.X - _strafeShare.X * (long)_strafeLeft, step.Y - _strafeShare.Y * (long)_strafeLeft, step.Z - _strafeShare.Z * (long)_strafeLeft);
+        }
+        _gattlingTarget = new Point3(_gattlingTarget.X + step.X, _gattlingTarget.Y + step.Y, _gattlingTarget.Z + step.Z);
     }
+
+    // The rest of the aim point's increment of the running logic frame of the original: ticks left and the share per tick (nothing at 30 Hz).
+    private int _strafeLeft;
+    private Point3 _strafeShare;
 
     /// <summary>The nearest valid enemy within <paramref name="radius"/> (the bounding sphere counts) of the point.</summary>
     private Entity? FindTarget(IWorldServices world, Fixed x, Fixed y, Fixed radius)
@@ -1311,6 +1344,11 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         writer.Bool("gattlingPlaced", _gattlingPlaced);
         writer.UInt("victim", _currentVictim.Value);
         _flight.Describe(writer, "flightStep");
+        if (_strafeLeft > 0)
+        {
+            writer.Int("strafeLeft", _strafeLeft);
+            DumbProjectileBehavior.WritePoint(writer, "strafeShare", _strafeShare);
+        }
     }
 
     public override void Load(IStateReader reader)
@@ -1331,5 +1369,7 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         _gattlingPlaced = reader.Bool("gattlingPlaced");
         _currentVictim = new EntityId(checked((uint)reader.UInt("victim")));
         _flight.Load(reader, "flightStep");
+        _strafeLeft = reader.Has("strafeLeft") ? checked((int)reader.Int("strafeLeft")) : 0;
+        _strafeShare = _strafeLeft > 0 ? DumbProjectileBehavior.ReadPoint(reader, "strafeShare") : default;
     }
 }

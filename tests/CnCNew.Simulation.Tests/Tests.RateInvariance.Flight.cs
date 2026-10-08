@@ -24,11 +24,12 @@ static partial class Tests
 
     private readonly record struct FlightPose(Fixed X, Fixed Y, Fixed Z, Fixed Angle);
 
-    private static (SimulationWorld World, Feeder Feeder) FlightRateWorld(SimulationRate rate, IReadOnlyDictionary<string, string> files, bool terrain = true, int cells = 300)
+    private static (SimulationWorld World, Feeder Feeder) FlightRateWorld(SimulationRate rate, IReadOnlyDictionary<string, string> files, bool terrain = true, int cells = 300, bool computer = false)
     {
         var fixture = new SyntheticFixture(rate, files: files);
         var map = terrain ? TerrainMap.Build(SyntheticMaps.Build(cells, cells, 1, (_, _) => 0), "flight-rate") : null;
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
+        System.Collections.Immutable.ImmutableArray<PlayerConfiguration> players = computer ? [new(new PlayerId(1), "Alpha", IsComputer: true), new(new PlayerId(2), "Beta")] : CombatPlayers;
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 9, players, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
         return (world, new Feeder(world));
     }
 
@@ -558,6 +559,10 @@ static partial class Tests
     /// </summary>
     public static void RateFlightSpectreGunshipIsTheSame()
     {
+        // A human's gunship aims where it was sent; a computer player's finds its victim in the whole attack area and winds the gattling's aim point there (56.3 units, 2.8 increments).
+        foreach (var computer in new[] { false, true })
+        {
+        var name = computer ? "Spectre gunship of a computer player" : "Spectre gunship";
         var tracks = new List<FlightPose>[FlightRates.Length];
         var orbit = new long[FlightRates.Length];
         var depart = new long[FlightRates.Length];
@@ -566,13 +571,14 @@ static partial class Tests
         var gattlings = new Fixed[FlightRates.Length];
         for (var index = 0; index < FlightRates.Length; index++)
         {
-            var (world, feeder) = FlightRateWorld(FlightRates[index], AirWeaponFixtureFiles, terrain: false);
+            var (world, feeder) = FlightRateWorld(FlightRates[index], AirWeaponFixtureFiles, terrain: false, computer: computer);
             feeder.Spawn(1, "AirGunship", owner: 1, x: 0, y: 0);
-            feeder.Spawn(2, "AirDummy", owner: 2, x: 405, y: 5);
-            world.Step();
+            feeder.Spawn(2, "AirDummy", owner: 2, x: computer ? 455 : 405, y: computer ? 12 : 5);
+            // Whole frames from tick 0 and then up to the last tick of a frame: the power is used at the same game time at every rate (the howitzer fires on ticks that are a
+            // multiple of its rate, counted from tick 0).
+            StepFrames(world, 125); // the power recharges for 4 seconds after the gunship appeared
             var ship = Only(world, "AirGunship");
             var spectre = ship.Modules.OfType<SpectreGunshipUpdate>().Single();
-            StepFrames(world, 125); // the power recharges for 4 seconds after the gunship appeared
             while (!world.Time.IsOriginalFrameBoundary(world.Tick + 1)) world.Step();
             Check.That(feeder.UseSpecialPower(1, ship.Id.Value, "AirGunshipPower", CnCNew.Simulation.Commands.SpecialPowerTargetKind.Location, x: 400, y: 0).Accepted, "The power is used on a location.");
             world.Step();
@@ -599,11 +605,13 @@ static partial class Tests
             howitzers[index] = Fixed.FromInt(shells);
             gattlings[index] = Fixed.FromInt(fired);
         }
-        SameFrames("Spectre gunship: it starts to orbit", orbit);
-        Console.WriteLine($"       Spectre gunship: first howitzer shell after {InFrames(firstHowitzer[0])} / {InFrames(firstHowitzer[1])} / {InFrames(firstHowitzer[2])} frames, {Units(howitzers[0])} / {Units(howitzers[1])} / {Units(howitzers[2])} shells (not compared yet: the strafing of the aim point is the next cause)");
-        SameFrames("Spectre gunship: it departs", depart);
-        SameValues("Spectre gunship: gattling shots", gattlings, 0m);
-        SameTracks("Spectre gunship: insertion, orbit and departure", tracks, 0.05m, 0.001m);
+        SameFrames($"{name}: it starts to orbit", orbit);
+        SameFrames($"{name}: first howitzer shell", firstHowitzer);
+        SameFrames($"{name}: it departs", depart);
+        SameValues($"{name}: howitzer shells", howitzers, 0m);
+        SameValues($"{name}: gattling shots", gattlings, 0m);
+        SameTracks($"{name}: insertion, orbit and departure", tracks, 0.05m, 0.001m);
+        }
         FlightVerdict();
     }
 }
