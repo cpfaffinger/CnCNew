@@ -241,6 +241,7 @@ run.Test("Construction: selling a producer refunds its queue", Tests.Constructio
 run.Test("Construction: produced units walk to the rally point", Tests.ConstructionRallyPoint);
 run.Test("Construction: produced units leave their factory through the door, make room for the next and go on to the rally point", Tests.ConstructionExitPath);
 run.Test("Construction: an order given on the exit path replaces it, second leg included", Tests.ConstructionExitPathYieldsToAnOrder);
+run.Test("Construction: driving out, going to the rally point and making room are unordered moves", Tests.ConstructionUnorderedMove);
 run.Test("Construction: dozers repair damaged structures", Tests.ConstructionRepair);
 run.Test("Construction: a second builder resumes an unfinished site", Tests.ConstructionResumeWithAnotherBuilder);
 run.Test("Construction: rejections for permission, prerequisites, funds and kind", Tests.ConstructionRejections);

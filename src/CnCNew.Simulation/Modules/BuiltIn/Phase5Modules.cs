@@ -659,6 +659,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
+    /// <summary>
+    /// The object moves, but nobody ordered it to: it drives out of the factory that built it, goes on to the rally point, or makes room for the next unit. It is not idle
+    /// (<see cref="IsIdle"/>), yet free for its owner - any order replaces this move. Derived from the order state: the last move was not a command, and nothing else is going on.
+    /// </summary>
+    public bool IsOnUnorderedMove => Entity.HasMoveTarget && !_lastCommandFromPlayer && _dock is null && _task == BuilderTask.None && !_enterTarget.IsValid && !_goal.IsValid
+                                     && !_evacuatePending && !_returning;
+
     /// <summary>The <c>AutoAcquireEnemiesWhenIdle</c> bits of the module data.</summary>
     public AutoAcquire AutoAcquire => data.AutoAcquire;
 

@@ -4,6 +4,7 @@ using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
@@ -515,6 +516,52 @@ static partial class Tests
         Check.That(StepUntil(moved, 600, () => !grunt.HasMoveTarget) < 600, "It arrives.");
         StepUntil(moved, 90, () => false);
         Check.That(!grunt.HasMoveTarget && Near(grunt, 70, 170, 2), $"It stays where it was sent ({grunt.X}, {grunt.Y}).");
+    }
+
+    /// <summary>
+    /// <c>AIUpdateInterface.IsOnUnorderedMove</c>, what the skirmish AI asks before it gives a builder work: a dozer that drives out of its factory, goes on to the rally point or
+    /// makes room for the next unit moves without an order and is free; one that was told to move, builds or stands is not "on an unordered move".
+    /// </summary>
+    public static void ConstructionUnorderedMove()
+    {
+        static AIUpdateInterface Ai(Entity unit) => unit.Modules.OfType<AIUpdateInterface>().First();
+
+        var (world, feeder, _, _) = ConstructionSetup(withTerrain: true);
+        feeder.Spawn(1, "ExitBarracks", x: 70, y: 100);
+        world.Step();
+        var factory = ConstructionFind(world, "ExitBarracks").Id.Value;
+        Entity Produce(int number)
+        {
+            Check.That(feeder.QueueProduction(1, factory, "ExitDozer").Accepted, "The factory takes the order.");
+            Check.That(StepUntil(world, 100, () => world.Entities.Count(value => value.Template.Name == "ExitDozer") == number) < 100, $"Dozer {number} is produced.");
+            for (var tick = TickOrder.Next; tick < world.Frames(1); tick++) world.Step();
+            return world.Entities.Where(value => value.Template.Name == "ExitDozer").OrderBy(value => value.Id.Value).Last();
+        }
+
+        var first = Produce(1);
+        Check.That(!Ai(first).IsIdle && Ai(first).IsOnUnorderedMove, "A dozer driving out of its factory is not idle, but nobody ordered the move.");
+        Check.That(StepUntil(world, 300, () => !first.HasMoveTarget) < 300, "It arrives at the exit point.");
+        Check.That(Ai(first).IsIdle && !Ai(first).IsOnUnorderedMove, "Standing there it is idle and on no move.");
+        var second = Produce(2);
+        Check.That(first.HasMoveTarget && Ai(first).IsOnUnorderedMove, "Making room for the next unit is an unordered move too.");
+        Check.That(feeder.SetMoveTarget(1, second.Id.Value, 70, 170).Accepted, "The second dozer is told to move while it drives out.");
+        world.Step();
+        Check.That(second.HasMoveTarget && !Ai(second).IsOnUnorderedMove, "A move its owner ordered is not an unordered move.");
+        StepUntil(world, 300, () => !first.HasMoveTarget && !second.HasMoveTarget);
+        Check.That(feeder.Construct(1, first.Id.Value, "Plant", 150, 160).Accepted, "The first dozer is told to build.");
+        StepUntil(world, 3, () => false);
+        Check.That(Ai(first).IsBuilding && !Ai(first).IsOnUnorderedMove, "The walk to a building site is part of the task, not an unordered move.");
+
+        var (rallied, rallyFeeder, _, _) = ConstructionSetup(withTerrain: true);
+        rallyFeeder.Spawn(1, "ExitBarracks", x: 70, y: 100);
+        rallied.Step();
+        var producer = ConstructionFind(rallied, "ExitBarracks").Id.Value;
+        rallyFeeder.SetRallyPoint(1, producer, 170, 100);
+        rallyFeeder.QueueProduction(1, producer, "ExitDozer");
+        StepUntil(rallied, 100, () => rallied.Entities.Any(value => value.Template.Name == "ExitDozer"));
+        var walker = ConstructionFind(rallied, "ExitDozer");
+        Check.That(StepUntil(rallied, 300, () => walker.HasMoveTarget && walker.MoveTargetX > Fixed.FromInt(150)) < 300, "It goes on to the rally point.");
+        Check.That(Ai(walker).IsOnUnorderedMove, "The second leg to the rally point is an unordered move.");
     }
 
     public static void ConstructionRepair()
