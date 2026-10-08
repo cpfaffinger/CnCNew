@@ -66,6 +66,21 @@ public sealed class RtsCamera : IViewProjection
     /// <summary><c>m_heightAboveGround</c>: the height above the terrain the zoom settles towards, clamped to [MinCameraHeight, MaxCameraHeight].</summary>
     public float HeightAboveGround { get; private set; }
 
+    /// <summary>
+    /// The highest <see cref="HeightAboveGround"/> this camera accepts: <c>MaxCameraHeight</c> of the game data for a player; a spectator's camera may be given a higher
+    /// limit (<see cref="SetMaxHeightAboveGround"/>) to see more of the map. The default zoom stays the player's.
+    /// </summary>
+    public float MaxHeightAboveGround => _maxHeightOverride ?? _settings.MaxHeightAboveGround;
+
+    /// <summary>Raises (or with <see langword="null"/> restores) the zoom-out limit; never below the player's limit. The current height is clamped to it.</summary>
+    public void SetMaxHeightAboveGround(float? height)
+    {
+        _maxHeightOverride = height is { } value ? Math.Max(value, _settings.MaxHeightAboveGround) : null;
+        SetHeightAboveGround(HeightAboveGround);
+    }
+
+    private float? _maxHeightOverride;
+
     /// <summary><c>m_zoom</c>: scale of the camera offset.</summary>
     public float Zoom { get; private set; }
 
@@ -162,7 +177,7 @@ public sealed class RtsCamera : IViewProjection
 
     public void SetHeightAboveGround(float height)
     {
-        HeightAboveGround = Math.Clamp(height, _settings.MinHeightAboveGround, _settings.MaxHeightAboveGround);
+        HeightAboveGround = Math.Clamp(height, _settings.MinHeightAboveGround, MaxHeightAboveGround);
         ClampToConstraints();
     }
 
@@ -272,7 +287,7 @@ public sealed class RtsCamera : IViewProjection
         var adjust = !isScrolling
             || LastScrollAmount.Length() < _settings.ScrollAmountCutoff
             || current < _settings.MinHeightAboveGround
-            || (_settings.EnforceMaxCameraHeight && current > _settings.MaxHeightAboveGround);
+            || (_settings.EnforceMaxCameraHeight && current > MaxHeightAboveGround);
         if (adjust)
         {
             var desired = DesiredZoom();
