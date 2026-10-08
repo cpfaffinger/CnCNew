@@ -4,17 +4,22 @@ using CnCNew.Simulation.Time;
 namespace CnCNew.SimTool;
 
 /// <summary>
-/// The tick rate this run of the tool simulates at: <c>--tick-rate N</c> (30, 60 or 120; default 30). Every command that creates a world builds its
-/// catalog for this rate. The manifest commands always run at <see cref="Manifest"/>, the rate the reference manifest records.
+/// The tick rate this run of the tool simulates at: <c>--tick-rate N</c> (30, 60 or 120); without the option the default of the game layer
+/// (<c>GameData.DefaultSessionRate</c>, the product rate). Every command that creates a world builds its catalog for this rate. A command that checks a
+/// manifest runs at the rate the file records (<see cref="UseRecorded"/>): the same binary checks a manifest of any supported rate, and an option that
+/// names another rate than the file is refused.
 /// </summary>
 internal static class ToolRate
 {
     public const string Option = "--tick-rate";
 
-    /// <summary>The rate of <c>baselines/reference-manifest.json</c> and <c>baselines/input-manifest.json</c> (their <c>tickRate</c> entry).</summary>
-    public static SimulationRate Manifest => SimulationRate.Hz30;
+    /// <summary>The rate of a run that names none.</summary>
+    public static SimulationRate Default => CnCNew.Game.Data.GameData.DefaultSessionRate;
 
-    public static SimulationRate Current { get; private set; } = SimulationRate.Hz30;
+    public static SimulationRate Current { get; private set; } = Default;
+
+    /// <summary>True when <c>--tick-rate</c> was given.</summary>
+    public static bool Given { get; private set; }
 
     public static void Read(string[] args)
     {
@@ -22,8 +27,19 @@ internal static class ToolRate
         if (index < 0) return;
         if (index + 1 >= args.Length) throw new ArgumentException($"{Option} needs a value: 30, 60 or 120.");
         Current = SimulationRate.FromTicksPerSecond(long.Parse(args[index + 1], CultureInfo.InvariantCulture));
-        if (args[0] is "reference-manifest" or "input-manifest" && Current != Manifest)
-            throw new ArgumentException($"The manifest commands run at the recorded rate of {Manifest}; {Option} {Current.TicksPerSecond} is refused.");
+        Given = true;
+    }
+
+    /// <summary>
+    /// Makes the rate a manifest file records the rate of this run. The file decides; <c>--tick-rate</c> may repeat its rate and is refused when it names another
+    /// one (a check at another rate than the recorded one compares nothing).
+    /// </summary>
+    public static void UseRecorded(long recordedTicksPerSecond, string file)
+    {
+        var recorded = SimulationRate.FromTicksPerSecond(recordedTicksPerSecond);
+        if (Given && Current != recorded)
+            throw new ArgumentException($"{file} records {recorded}; {Option} {Current.TicksPerSecond} is refused. A manifest is checked at the rate it was written at.");
+        Current = recorded;
     }
 
     /// <summary>
@@ -58,4 +74,7 @@ internal static class ToolRate
     private const long SecondsPerMinute = 60;
 
     public static double Minutes(long ticks, SimulationRate rate) => rate.Time.ToWholeSeconds(ticks) / 60.0;
+
+    /// <summary>Whole game seconds of a tick count at the current rate, for the parameters a manifest states next to its tick budgets.</summary>
+    public static long GameSeconds(long ticks) => Current.Time.ToWholeSeconds(ticks);
 }

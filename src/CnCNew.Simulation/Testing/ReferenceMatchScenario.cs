@@ -36,6 +36,12 @@ public sealed record ReferenceMatchOptions(uint WorldSeed, uint DriverSeed, long
     // fraction bits) or five (at 24) give no winner within 45,000 ticks, among them, at 24 bits, the seed 5EED0005 that was the standard until phase 22.
     // 5EED0007 ends with the same winner at both resolutions (docs/FIXED-POINT-Q39-24.md).
     public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0007, 216_000, 300, 0, 1_000, 1_500, 1_500, 300);
+
+    /// <summary>
+    /// The standard match for a catalog of <paramref name="rate"/>: <see cref="Standard"/> with its budget as game time, two hours at every rate (the 216,000 are
+    /// ticks at 30 Hz).
+    /// </summary>
+    public static ReferenceMatchOptions StandardAt(SimulationRate rate) => Standard with { MaxTicks = rate.Time.OriginalFrames(Standard.MaxTicks) };
 }
 
 /// <summary>
