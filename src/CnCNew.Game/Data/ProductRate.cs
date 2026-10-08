@@ -9,5 +9,5 @@ namespace CnCNew;
 /// </summary>
 internal static class ProductRate
 {
-    public const int TicksPerSecond = 30;
+    public const int TicksPerSecond = 60;
 }
