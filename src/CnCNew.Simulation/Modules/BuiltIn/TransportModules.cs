@@ -446,12 +446,16 @@ public sealed class HelixContain(HelixContainData data) : TransportContain(data.
 
 // ======================================================================================================== TunnelContain
 
-/// <summary><c>TunnelContainModuleData</c>: the die filter and <c>TimeForFullHeal</c> (<c>parseDurationReal</c>, unrounded ticks). The shared <c>OpenContain</c> fields are typed; the capacity is <c>MaxTunnelCapacity</c> of <c>GameData.ini</c>.</summary>
+/// <summary>
+/// <c>TunnelContainModuleData</c>: the die filter and <c>TimeForFullHeal</c> (<c>parseDurationReal</c>) in unrounded logic frames of the original at every tick rate (the number of the
+/// 30 Hz catalog: a rider is healed once per frame of the original, by the slice the 30 Hz division yields). The shared <c>OpenContain</c> fields are typed; the capacity is
+/// <c>MaxTunnelCapacity</c> of <c>GameData.ini</c>.
+/// </summary>
 public sealed record TunnelContainData(DieMuxData DieMux, Fixed TicksForFullHeal) : ModuleData
 {
     public static TunnelContainData Parse(RatedModuleConfiguration configuration) => new(
         DieMuxData.Parse(configuration),
-        ModuleConfigReader.Find(configuration, "TimeForFullHeal")?.Value.Value is Data.Definitions.GameTime time ? configuration.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero);
+        ModuleConfigReader.Find(configuration, "TimeForFullHeal")?.Value.Value is Data.Definitions.GameTime time ? SimulationRate.Original.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero);
 }
 
 /// <summary>
@@ -460,7 +464,7 @@ public sealed record TunnelContainData(DieMuxData DieMux, Fixed TicksForFullHeal
 /// construction — and unregisters when it dies (<c>onDie</c>, die filter applies), is removed (<c>onDelete</c>) or is sold (<c>onSelling</c>). When the
 /// last tunnel goes, everyone inside is destroyed (the cave-in, <c>onTunnelDestroyed</c>), except on a sale, which lets them out first; otherwise
 /// the riders that entered the dead tunnel are reassigned to the oldest remaining one. Each tunnel's update heals every rider like
-/// <c>healObject</c> — a sliver of <c>MaxHealth / TimeForFullHeal</c> per tick, full health once inside that long; with several tunnels the network
+/// <c>healObject</c> — a sliver of <c>MaxHealth / TimeForFullHeal</c> per logic frame of the original, full health once inside that long; with several tunnels the network
 /// is healed once per tunnel, exactly as in the reference. Leaving puts a rider at the tunnel and walks it to a random point
 /// <c>BoundingCircleRadius · [1, 1.5]</c> away (<c>scatterToNearbyPosition</c>, two logic draws).
 /// <para>
@@ -558,7 +562,11 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
             var rider = world.FindEntity(riderId);
             if (rider is null || rider.DestroyRequested || rider.EffectivelyDead) { tracker.RemoveRider(riderId); continue; }
             if (rider.Body is null) continue;
-            var inside = world.Tick - tracker.EnteredAt(riderId);
+            // One slice per logic frame of the original, counted from the tick the rider entered (Originalraster: the reference heals once per frame; slices per tick are
+            // smaller numbers that do not add up to the slice of a frame, and a rider that enters between two frames would be healed in one frame more).
+            var ticksInside = world.Tick - tracker.EnteredAt(riderId);
+            if (!world.Time.IsOriginalFrameBoundary(ticksInside)) continue;
+            var inside = world.Time.ToOriginalFrames(ticksInside);
             var amount = data.TicksForFullHeal <= Fixed.Zero || Fixed.FromInt(inside) >= data.TicksForFullHeal
                 ? rider.Body.MaxHealth
                 : world.Time.SharePerTick(rider.Body.MaxHealth, data.TicksForFullHeal);

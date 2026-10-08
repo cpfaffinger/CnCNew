@@ -410,4 +410,67 @@ static partial class Tests
         SameTracks("helicopter slow death: the spiral", tracks, 0.01m, 0.001m);
         FlightVerdict();
     }
+
+    /// <summary>
+    /// <c>TunnelContain.Update</c>: a rider is healed by <c>MaxHealth / TimeForFullHeal</c> once per logic frame of the original, counted from the tick it entered. A grunt hurt by 50 of 100
+    /// enters a tunnel that heals fully in 30 frames; once on a tick where a frame begins, once one tick later (which is a whole frame at 30 Hz and a part of one above).
+    /// </summary>
+    public static void RateFlightTunnelHealingIsTheSame()
+    {
+        foreach (var late in new[] { false, true })
+        {
+            var name = late ? "tunnel healing, entered one tick after a frame began" : "tunnel healing, entered where a frame begins";
+            var first = new long[FlightRates.Length];
+            var full = new long[FlightRates.Length];
+            var heals = new Fixed[FlightRates.Length];
+            var frames = new Fixed[FlightRates.Length];
+            var afterFive = new Fixed[FlightRates.Length];
+            for (var index = 0; index < FlightRates.Length; index++)
+            {
+                var (world, feeder) = FlightRateWorld(FlightRates[index], TransportFiles(), terrain: false);
+                feeder.Spawn(1, "Tunnel", x: 0, y: 0);
+                feeder.Spawn(1, "Grunt", x: 30, y: 0);
+                world.Step();
+                var grunt = Only(world, "Grunt");
+                var tunnel = Only(world, "Tunnel");
+                feeder.Damage(grunt.Id.Value, 50m);
+                StepFrames(world, 3);
+                // The world stands where a frame of the original begins (tick 1 + 3 frames is one for the grid of this scene only by the count of frames; what matters is the same game time).
+                if (late) world.Step();
+                Check.That(feeder.EnterContainer(1, grunt.Id.Value, tunnel.Id.Value).Accepted, "The grunt enters the tunnel.");
+                var start = world.Tick;
+                var body = grunt.Body!;
+                var health = body.Health;
+                var atFrame = body.Health;
+                (first[index], full[index]) = (-1, -1);
+                var (count, changed) = (0, 0);
+                for (var frame = 0; frame < 60; frame++)
+                {
+                    for (var tick = 0; tick < world.Time.TicksPerOriginalFrame; tick++)
+                    {
+                        var result = world.Step();
+                        var now = FrameQuarters(world, result.Tick - start);
+                        if (body.Health > health)
+                        {
+                            count++;
+                            if (first[index] < 0) first[index] = now;
+                            if (full[index] < 0 && body.Health == body.MaxHealth) full[index] = now;
+                        }
+                        health = body.Health;
+                    }
+                    if (body.Health > atFrame) changed++;
+                    atFrame = body.Health;
+                    if (frame == 4) afterFive[index] = body.Health;
+                }
+                heals[index] = Fixed.FromInt(count);
+                frames[index] = Fixed.FromInt(changed);
+            }
+            SameFrames($"{name}: first healing", first);
+            SameFrames($"{name}: full health", full);
+            SameValues($"{name}: number of healings", heals, 0m);
+            SameValues($"{name}: frames with healing", frames, 0m);
+            SameValues($"{name}: health after five frames", afterFive, 0.0001m);
+        }
+        FlightVerdict();
+    }
 }
