@@ -566,6 +566,8 @@ static partial class Tests
             if (result.Events.Any(value => value.Kind == SimEventKind.MoveArrived)) arrived = true;
         }
         Check.That(arrived, "The unit reaches its move target within a generous tick budget.");
+        // Above 30 Hz the move ends in the first tick of its last logic frame and the object covers the rest of that frame's step in the ticks after it.
+        for (var i = 1; i < world.Frames(1); i++) world.Step();
         Check.That(fighter.X == Fixed.FromInt(100) && fighter.Y == Fixed.Zero, "Position snaps exactly to the target on arrival.");
         Check.That(!fighter.HasMoveTarget && fighter.Speed == Fixed.Zero, "The move order clears and speed returns to zero.");
 

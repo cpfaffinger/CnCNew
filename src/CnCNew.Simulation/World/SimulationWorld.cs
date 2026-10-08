@@ -371,6 +371,8 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private void PutIntoContainer(Entity actor, Entity container, PlayerId player)
     {
+        // Above 30 Hz an object that enters in the tick of its move's decision is inside with the position after its whole step, as at 30 Hz.
+        if (_firstFrameTicks != TickOrder.Next && (actor.IsInsideFrameStep || actor.HasAheadAngle)) AiOf(actor)?.SettleFrame(_tick);
         container.Container!.Add(this, actor);
         actor.ContainedBy = container.Id; // Add() also does this; kept here too so every entry path is consistent.
         MarkDirty(actor);
