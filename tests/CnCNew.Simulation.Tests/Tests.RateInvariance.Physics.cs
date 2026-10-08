@@ -614,6 +614,36 @@ static partial class Tests
     }
 
     /// <summary>
+    /// <c>HeightDieUpdate</c>: the height is looked at once per frame of the original. An object below its target height dies with the last tick of the
+    /// same frame as at 30 Hz - at once (on a plateau above it), after its initial delay, and when a tall structure appears beside it.
+    /// </summary>
+    public static void RateInvarianceHeightDie()
+    {
+        AtThreeRates(rate =>
+        {
+            long DeathTick(string template, CnCNew.Simulation.Terrain.TerrainMap terrain, bool hider)
+            {
+                var (world, feeder, _) = RatedWorld(rate, CollisionFiles(), terrain);
+                feeder.Spawn(1, template, x: 0, y: 0);
+                for (var tick = 1; tick <= world.Frames(40); tick++)
+                {
+                    // The tall structure appears 20 frames later, between two ticks that are the same game time at every rate.
+                    if (hider && tick == world.Frames(20) + 1) feeder.Spawn(2, "TallHider", x: 1, y: 0);
+                    if (world.Step().Events.Any(value => value.Kind == SimEventKind.EntityDied && value.Entity.Value == 1)) return tick - 1;
+                }
+                return -1;
+            }
+            var ticks = new[] { DeathTick("GroundedFaller", CollisionTerrain(height: (_, _) => 40), false), DeathTick("DelayedFaller", CollisionTerrain(), false), DeathTick("Faller", CollisionTerrain(), true) };
+            return (Frames: ticks.Select(tick => tick < 0 ? -1 : tick * 30 / rate.TicksPerSecond).ToArray(), Whole: ticks.All(tick => tick % rate.TicksPerOriginalFrame == 0));
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Frames.All(frame => frame > 0), "Setup: the three objects die at 30 Hz (" + string.Join(", ", reference.Frames) + ").");
+            Check.That(other.Whole && other.Frames.SequenceEqual(reference.Frames),
+                "HeightDieUpdate kills with the last tick of the same frame at " + rate + ": frames " + string.Join(", ", other.Frames) + " (30 Hz: " + string.Join(", ", reference.Frames) + ").");
+        });
+    }
+
+    /// <summary>
     /// <c>RailroadBehavior</c>: the conductor's recursion (push, acceleration factor, braking factor, friction), the wait at the station, the crush damage
     /// "speed · 10" and the shove by a quarter of the overlap happen once per frame of the original; the train moves every tick. Positions of the locomotive
     /// and its carriages, the conductor's state, the position and health of a vehicle it grinds along and every death are those of 30 Hz at each frame boundary.

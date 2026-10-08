@@ -464,6 +464,8 @@ public sealed record HeightDieData(Fixed TargetHeightAboveTerrain, bool TargetHe
 /// <c>OnlyWhenMovingDown</c> is set and the object's Z did not just decrease. Not modelled: the bridge/tunnel layer height
 /// the reference adds on top of flat terrain (no pathfind layers exist here) and the attached-particle cleanup
 /// (<c>DestroyAttachedParticlesAtHeight</c>, pure presentation).
+/// <para>The height is looked at once per logic frame of the original, with the last tick of each frame counted from the module's first update: "moving
+/// down" compares with the height one frame of the original ago, and the object dies at the height it has at a frame boundary, as at 30 Hz.</para>
 /// </summary>
 public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModule
 {
@@ -471,6 +473,7 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
     private bool _hasDied;
     private long _earliestDeathTick = -1;
     private Fixed _lastZ = Fixed.FromInt(-1);
+    private FramePhase _framePhase; // at rest (unwritten) between two frames, which is always at 30 Hz
 
     public override string ModuleName => "HeightDieUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -479,6 +482,8 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
     public long Update(IWorldServices world)
     {
         if (_earliestDeathTick < 0) _earliestDeathTick = world.Tick + data.InitialDelayTicks;
+        _framePhase.Next(world.Time);
+        if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
         if (world.Tick < _earliestDeathTick) return SimulationTiming.SleepNone;
         if (Entity.ContainedBy.IsValid) { _lastZ = Entity.Z; return SimulationTiming.SleepNone; }
 
@@ -519,6 +524,7 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
         writer.Bool("hasDied", _hasDied);
         writer.Int("earliestDeathTick", _earliestDeathTick);
         writer.Fixed("lastZ", _lastZ);
+        _framePhase.Describe(writer, "framePhase");
     }
 
     public override void Load(IStateReader reader)
@@ -527,5 +533,6 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
         _hasDied = reader.Bool("hasDied");
         _earliestDeathTick = reader.Int("earliestDeathTick");
         _lastZ = reader.Fixed("lastZ");
+        _framePhase.Load(reader, "framePhase");
     }
 }
