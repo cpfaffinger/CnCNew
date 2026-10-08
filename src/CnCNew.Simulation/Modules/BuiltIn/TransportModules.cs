@@ -81,12 +81,17 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     public override long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
+        // A new Chinook begins its first logic frame of the original one frame after it appeared (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): at 30 Hz the next tick.
+        // Above 30 Hz a climb begun one tick after the appearance would end every frame of its flight in the first tick of a frame of whoever created it instead of the last.
+        var stride = world.Time.TicksPerOriginalFrame;
+        if (stride > 1 && world.Tick < Entity.SpawnTick + stride) return SimulationTiming.SleepNone;
         var sleep = base.Update(world);
         if (!EvacuatePending) _landing = false;
         // The change of height is the 30 Hz step (one locomotor speed per logic frame of the original, at most the rest of the way), decided once per frame and flown in shares
         // per tick: the Chinook is on the ground, and lets its passengers out, in the same frame at every rate.
         // Observers read the Chinook where the frame it has begun ends: the rest of its movement and of its change of height.
-        var moving = world.Time.TicksPerOriginalFrame > 1 ? GroundStepRest(world.Tick) : default;
+        // What is left of the movement is on the object when it moved in this tick (with the rest of another mover of the same object, should it have two AI modules).
+        var moving = stride == 1 ? default : Entity.AheadTick == world.Tick ? (X: Entity.AheadX, Y: Entity.AheadY) : GroundStepRest(world.Tick);
         if (_climb.Continue(Entity))
         {
             _climb.Publish(world.Time, world.Tick, Entity, moving.X, moving.Y);
@@ -94,7 +99,8 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
             return SimulationTiming.SleepNone;
         }
         var locomotor = Entity.Template.Locomotor;
-        var ground = world.GroundHeightAt(Entity.X, Entity.Y);
+        // The height is kept over the ground where the frame's movement ends: at 30 Hz the Chinook has made its whole step when it looks at the ground below it.
+        var ground = world.GroundHeightAt(Entity.X + moving.X, Entity.Y + moving.Y);
         var target = _landing ? ground : ground + (locomotor?.PreferredHeight ?? Fixed.Zero);
         var climb = FlightFrames.PerFrame(world.Time, locomotor?.Speed ?? Fixed.Zero);
         if (Entity.Z != target && climb > Fixed.Zero)
@@ -226,7 +232,8 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         _spiral.Cancel();
         // The wreck falls from where it is: what its AI had left of a frame is dropped.
         _spiral.Publish(world.Time, world.Tick, Entity);
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        // The first step of the spiral is the update after the death: one logic frame of the original later (the next tick at 30 Hz).
+        world.WakeAt(Entity, this, world.Tick + world.Time.TicksPerOriginalFrame);
     }
 
     public long Update(IWorldServices world)

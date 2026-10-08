@@ -97,20 +97,27 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
             _moveRange = Fixed.Zero;
             return SimulationTiming.SleepNone;
         }
+        // The module looks, orders and fires in the ticks its owner's logic frames of the original begin with, and reads the owner and its target where the frame each has begun
+        // ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 3; the form of PointDefenseLaserUpdate): deciding in every tick it found, lost and re-ordered its target
+        // on ticks inside a frame, and its rescan countdown left the frame grid. The countdown falls every tick. 30 Hz: every tick, the positions.
+        var decide = world.Time.BeginsFrameOf(Entity, world.Tick);
+        _frameTick = world.Tick;
         if (_nextScan > 0)
         {
             _nextScan--;
-            FireWhenReady(world, ai);
+            if (decide) FireWhenReady(world, ai);
             return SimulationTiming.SleepNone;
         }
+        if (!decide) return SimulationTiming.SleepNone;
         // CleanupHazardUpdate.cpp, update: m_nextScanFrames-- / m_nextScanFrames = data->m_scanFrames – a scan every ScanRate + 1 frames of the original.
         _nextScan = world.Time.CountdownReload(data.ScanTicks);
         if (ScanClosestTarget(world)) FireWhenReady(world, ai);
         else if (_moveRange != Fixed.Zero && ai is not null && ai.IsIdle)
         {
             // Nothing nearby: go back to where the area order was given, then end the mode.
-            var dx = _posX - Entity.X;
-            var dy = _posY - Entity.Y;
+            var (ownX, ownY, _) = Entity.FrameEnd(_frameTick);
+            var dx = _posX - ownX;
+            var dy = _posY - ownY;
             if (Fixed.Sqrt(dx * dx + dy * dy) < AreaDoneDistance) _moveRange = Fixed.Zero;
             else ai.OrderMove(world, _posX, _posY, false);
         }
@@ -151,12 +158,15 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
 
     private void Attack(IWorldServices world, AIUpdateInterface ai, Entity target, WeaponInfo weapon)
     {
-        var dx = target.X - Entity.X;
-        var dy = target.Y - Entity.Y;
+        var (targetX, targetY, _) = target.FrameEnd(_frameTick);
+        var (ownX, ownY, _) = Entity.FrameEnd(_frameTick);
+        var dx = targetX - ownX;
+        var dy = targetY - ownY;
         var distance = Fixed.Sqrt(dx * dx + dy * dy);
         if (distance <= weapon.AttackRange)
         {
-            if (Entity.HasMoveTarget) ai.StopInternalMove();
+            // In range where its frame ends: the unit stops there, as it does after the whole 30 Hz step.
+            if (Entity.HasMoveTarget) ai.StopInternalMoveAtFrameEnd(world);
             // CleanupHazardUpdate::update: "lock it just till the weapon is empty or the attack is done" before the attack order.
             world.SetWeaponLock(Entity, data.Slot, WeaponLockKind.Temporary);
             world.TryFireWeaponSlot(Entity, data.Slot, target);
@@ -164,17 +174,22 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
         }
         // Walk to three quarters of the range from the target along the line between them; re-plan only when the target moved away from the old stand-off point.
         var standOff = weapon.AttackRange * Fixed.FromDecimal(0.75m);
-        var gx = target.X - dx * standOff / distance;
-        var gy = target.Y - dy * standOff / distance;
+        var gx = targetX - dx * standOff / distance;
+        var gy = targetY - dy * standOff / distance;
         var slack = Fixed.FromInt(2 * Terrain.TerrainMap.CellSize);
         if (Entity.HasMoveTarget && (Entity.MoveTargetX - gx).Abs() <= slack && (Entity.MoveTargetY - gy).Abs() <= slack) return;
         ai.OrderMove(world, gx, gy, false);
     }
 
+    // The tick of the update that is running: where "the frame an object has begun" is read. Not state.
+    private long _frameTick;
+
     private Fixed DistanceTo(Entity target)
     {
-        var dx = target.X - Entity.X;
-        var dy = target.Y - Entity.Y;
+        var (targetX, targetY, _) = target.FrameEnd(_frameTick);
+        var (ownX, ownY, _) = Entity.FrameEnd(_frameTick);
+        var dx = targetX - ownX;
+        var dy = targetY - ownY;
         return Fixed.Sqrt(dx * dx + dy * dy);
     }
 
@@ -183,8 +198,9 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
     {
         _bestTarget = EntityId.Invalid;
         var area = _moveRange > Fixed.Zero;
-        var cx = area ? _posX : Entity.X;
-        var cy = area ? _posY : Entity.Y;
+        var (ownX, ownY, _) = Entity.FrameEnd(_frameTick);
+        var cx = area ? _posX : ownX;
+        var cy = area ? _posY : ownY;
         var radius = area ? data.ScanRange + _moveRange : data.ScanRange;
         Entity? best = null;
         var limit = SquaredReach.Of(radius);
@@ -192,8 +208,9 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
         foreach (var candidate in world.Entities)
         {
             if (candidate.DestroyRequested || candidate.Id == Entity.Id || !candidate.Template.IsKindOf("CLEANUP_HAZARD")) continue;
-            var dx = candidate.X - cx;
-            var dy = candidate.Y - cy;
+            var (candidateX, candidateY, _) = candidate.FrameEnd(_frameTick);
+            var dx = candidateX - cx;
+            var dy = candidateY - cy;
             var distance = dx * dx + dy * dy;
             if (!limit.Contains(distance) || (best is not null && (distance > bestDistance || (distance == bestDistance && candidate.Id.Value > best.Id.Value)))) continue;
             best = candidate;

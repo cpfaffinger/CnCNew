@@ -421,10 +421,27 @@ public sealed partial class SimulationWorld
 
     private bool FootprintsOverlap(Entity a, Entity b)
     {
+        if (_firstFrameTicks != TickOrder.Next) return FootprintsOverlapAtFrameEnd(a, b);
         var limit = CircleRadius(a) + CircleRadius(b);
         if (FurtherThan(a.X, b.X, limit) || FurtherThan(a.Y, b.Y, limit)) return false;
         var dx = a.X - b.X;
         var dy = a.Y - b.Y;
+        return SquaredReach.Of(limit).Contains(dx * dx + dy * dy);
+    }
+
+    /// <summary>
+    /// Above 30 Hz: the overlap test of a mover's collision check, which runs in the first tick of the mover's frame with the mover standing where that frame ends
+    /// (<c>AIUpdateInterface.CollideWhereTheFrameEnds</c>). The other object is read where the frame it has begun ends: one that has had its turn in this tick after its
+    /// whole step, one that has not after its previous one - what the 30 Hz step reads (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3).
+    /// </summary>
+    private bool FootprintsOverlapAtFrameEnd(Entity a, Entity b)
+    {
+        var limit = CircleRadius(a) + CircleRadius(b);
+        var (ax, ay, _) = a.FrameEnd(_tick);
+        var (bx, by, _) = b.FrameEnd(_tick);
+        if (FurtherThan(ax, bx, limit) || FurtherThan(ay, by, limit)) return false;
+        var dx = ax - bx;
+        var dy = ay - by;
         return SquaredReach.Of(limit).Contains(dx * dx + dy * dy);
     }
 
@@ -439,7 +456,9 @@ public sealed partial class SimulationWorld
             // The force is the pusher's speed per logic frame of the original (Entity.Speed is per tick: half the push at 60 Hz).
             var stride = Time.TicksPerOriginalFrame;
             var speed = stride == 1 ? mover.Speed : AiOf(mover) is { } ai ? ai.SpeedPerOriginalFrame(stride) : mover.Speed * stride;
-            topple.ApplyTopplingForce(this, other.X - mover.X, other.Y - mover.Y, speed);
+            // Above 30 Hz the test runs with the mover where its frame ends; the other object is read where its own begun frame ends (FootprintsOverlapAtFrameEnd).
+            var (otherX, otherY, _) = other.FrameEnd(_tick);
+            topple.ApplyTopplingForce(this, otherX - mover.X, otherY - mover.Y, speed);
             return;
         }
     }
@@ -460,13 +479,15 @@ public sealed partial class SimulationWorld
         if (!squishable) return;
         if (RelationshipOf(other.Owner, mover.Owner) == Relationship.Allies) return;
         var limit = CircleRadius(mover) + SquishVictimRadius;
-        var dx = other.X - mover.X;
-        var dy = other.Y - mover.Y;
+        // Above 30 Hz the victim is read where its own begun frame ends, like every object of this test (FootprintsOverlapAtFrameEnd); 30 Hz: its position.
+        var (otherX, otherY, _) = other.FrameEnd(_tick);
+        var dx = otherX - mover.X;
+        var dy = otherY - mover.Y;
         if (!SquaredReach.Of(limit).Contains(dx * dx + dy * dy)) return;
         // The position just before this tick's step: a victim this close is "approached" unless the mover was moving away
         // from it even a moment ago.
-        var beforeDx = other.X - (mover.X - stepX);
-        var beforeDy = other.Y - (mover.Y - stepY);
+        var beforeDx = otherX - (mover.X - stepX);
+        var beforeDy = otherY - (mover.Y - stepY);
         if (dx * dx + dy * dy >= beforeDx * beforeDx + beforeDy * beforeDy) return;
         Damage(other.Id, new DamageInfo(mover.Id, HugeDamage, CrushDamageType, DeathTypes.Crushed, false));
     }

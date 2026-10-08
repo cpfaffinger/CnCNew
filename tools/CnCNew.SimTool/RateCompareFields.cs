@@ -14,6 +14,7 @@ namespace CnCNew.SimTool;
 /// <c>rate-compare --ai-diff A,B --fields</c>: the first logic frame of the original after which any described field of any object differs between two rates of one skirmish of
 /// the group <c>ai</c>, and <c>--trace ID[,ID…] --trace-from F --trace-to G</c>: the fields of single objects tick by tick at both rates. A diagnosis, not a measurement.
 /// <para>
+/// <c>--slack N</c> lets fixed-point values up to N raw steps apart count as equal (to look behind a known rounding difference).
 /// Fields are compared in game units: an integer or a fixed-point value of the faster rate counts as equal when it is the slower rate's value times the ratio of the rates (a tick,
 /// a duration in ticks, a value per tick). Fields that exist only above 30 Hz (the bookkeeping of a frame's shares) are skipped unless <c>--strict</c> is given.
 /// </para>
@@ -53,6 +54,8 @@ internal static class RateCompareFields
         var last = new Dictionary<(int, uint), Dictionary<string, Field>>();
         // A difference counts once it has lasted this many frames: a state that one rate reaches a share of a frame earlier and the other catches up with is no divergence.
         var persist = int.Parse(Value(args, "--persist") ?? "3", CultureInfo.InvariantCulture);
+        // --slack N: fixed-point values up to N raw steps apart count as equal (a diagnosis of what parts beyond a known rounding difference; the default 0 is the measurement).
+        var slack = long.Parse(Value(args, "--slack") ?? "0", CultureInfo.InvariantCulture);
         var streaks = new Dictionary<string, (long Since, int Count)>(StringComparer.Ordinal);
         var randomParted = false;
         // --random-trace F: who draws from the logic random stream in frame F and the --random-frames (2) after it, at both rates (a phase of the tick, or a module's update).
@@ -121,7 +124,7 @@ internal static class RateCompareFields
                     if (building && (path.EndsWith(".health", StringComparison.Ordinal) || path.EndsWith(".previousHealth", StringComparison.Ordinal) || path == ".constructionWork")) continue;
                     var hasLeft = left.TryGetValue(path, out var x);
                     var hasRight = right.TryGetValue(path, out var y);
-                    if (hasLeft && hasRight && Same(x, y, ratio)) continue;
+                    if (hasLeft && hasRight && (Same(x, y, ratio) || (slack > 0 && x.Kind == 'f' && y.Kind == 'f' && Math.Abs(x.Number - y.Number) <= slack))) continue;
                     if (!hasLeft && !strict) continue;
                     found[$"{entity.Id.Value} {entity.Template.Name} owner {entity.Owner.Value} {path}"] = $"{rateA.TicksPerSecond} Hz {(hasLeft ? x.ToString() : "<absent>")} | {rateB.TicksPerSecond} Hz {(hasRight ? y.ToString() : "<absent>")}";
                 }
@@ -166,6 +169,8 @@ internal static class RateCompareFields
                 var had = last.TryGetValue((side, id), out var before);
                 if (!had)
                 {
+                    // Where the object's own frames lie in the frames of the world: the tick it appeared in.
+                    if (entity is not null) Console.WriteLine($"{rate.TicksPerSecond} Hz object {id} {entity.Template.Name}: appeared in tick {entity.SpawnTick.ToString(CultureInfo.InvariantCulture)} (tick {(entity.SpawnTick % rate.TicksPerOriginalFrame + 1).ToString(CultureInfo.InvariantCulture)}/{rate.TicksPerOriginalFrame} of frame {(entity.SpawnTick / rate.TicksPerOriginalFrame).ToString(CultureInfo.InvariantCulture)})");
                     last[(side, id)] = now;
                     continue;
                 }

@@ -551,6 +551,7 @@ if (contentDirectory is not null) run.Test("Real data: winged jets fly a square,
 if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: the retail reference match gives the same commands in the same frames at 30, 60 and 120 Hz", () => Tests.RealReferenceMatchAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: weapon sets, multi-weapon objects and the Gattling Tank's weapon choice", () => Tests.RealWeaponSlots(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: Ranger, Red Guard, Rebel and Black Lotus capture a barracks in the stages of their data", () => Tests.RealStagedCapture(contentDirectory));

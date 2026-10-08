@@ -761,7 +761,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public virtual void OrderEnter(IWorldServices world, Entity container, bool fromPlayer)
     {
         if (Entity.Template.Locomotor is null) return;
-        OrderMove(world, container.X, container.Y, fromPlayer);
+        var (containerX, containerY, _) = container.FrameEnd(world.Tick);
+        OrderMove(world, containerX, containerY, fromPlayer);
         _enterTarget = container.Id;
     }
 
@@ -785,7 +786,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public void OrderApproachGoal(IWorldServices world, Entity goal, bool fromPlayer)
     {
         if (Entity.Template.Locomotor is null) return;
-        OrderMove(world, goal.X, goal.Y, fromPlayer);
+        // The goal is where the frame it has begun ends (rule 3 of docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3); 30 Hz: its position.
+        var (goalX, goalY, _) = goal.FrameEnd(world.Tick);
+        OrderMove(world, goalX, goalY, fromPlayer);
         _goal = goal.Id;
     }
 
@@ -848,7 +851,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         EndExitPath();
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
-        _frameSpeed = Fixed.Zero;
+        ClearFrameSpeed();
         InvalidatePath();
         _dock = new DockMachine(dock.Id);
         if (_dock.Enter(world, this) != DockStatus.Continue) EndDock(world);
@@ -994,7 +997,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (!Entity.HasMoveTarget) return;
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
-        _frameSpeed = Fixed.Zero;
+        ClearFrameSpeed();
         // A stopped object does not cover the rest of the frame's step it was on.
         _frameTicksLeft = 0;
         InvalidatePath();
@@ -1014,6 +1017,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _moveHoldUntil = world.Tick + ticks;
         }
         StopInternalMove();
+    }
+
+    /// <summary>
+    /// A move given to a standing object by an observer that acts after the updates of the tick (the units' own target acquisition): at 30 Hz its first step is the next
+    /// tick's, one logic frame of the original later. Above 30 Hz a module that is awake every tick (a transport, a supply carrier) would take it in the next tick and
+    /// count its frames from there, a share of a frame ahead of everything in phase; the first decision waits for the object's next frame. An object that is covering a
+    /// frame's step decides when that is covered anyway. Nothing to do at 30 Hz.
+    /// </summary>
+    internal void BeginMoveWithNextFrame(IWorldServices world)
+    {
+        var ticks = world.Time.TicksPerOriginalFrame;
+        if (ticks > 1 && _frameTicksLeft == 0) _moveHoldUntil = Math.Max(_moveHoldUntil, world.Tick + ticks);
     }
 
     // Above 30 Hz only: the tick before which the object takes no decision of a new frame (StopInternalMoveAtFrameEnd). Never set at 30 Hz.
@@ -1051,7 +1066,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     {
         _paralyzedUntil = Math.Max(_paralyzedUntil, tick);
         Entity.Speed = Fixed.Zero;
-        _frameSpeed = Fixed.Zero;
+        ClearFrameSpeed();
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
         world.MarkDirty(Entity);
     }
@@ -1062,7 +1077,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         {
             // DISABLED_EMP (EMPUpdate): the object cannot act until the disable runs out; its orders stay.
             Entity.Speed = Fixed.Zero;
-            _frameSpeed = Fixed.Zero;
+            ClearFrameSpeed();
             return SimulationTiming.SleepNone;
         }
         if (world.Tick < _paralyzedUntil) return SimulationTiming.SleepNone;
@@ -1132,12 +1147,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         if (Entity.HasMoveTarget)
         {
-            // Re-aimed where the 30 Hz step re-aims: after a whole logic frame's step, not inside it.
-            if (_frameTicksLeft > 0) return;
+            // Re-aimed where the 30 Hz step re-aims: once per logic frame, in the tick that decided the frame's step and after that decision, with the goal where the frame
+            // it has begun ends (a goal that has its turn later in the tick is read after its previous step, as at 30 Hz). With the last share instead, the goal had
+            // always made its whole step.
+            if (_frameTicksLeft != Math.Max(_stride, 1) - 1) return;
             var slack = Fixed.FromInt(2 * TerrainMap.CellSize);
-            var gx = goal.X - Entity.MoveTargetX;
-            var gy = goal.Y - Entity.MoveTargetY;
-            if (!SquaredReach.Of(slack).Contains(gx * gx + gy * gy)) StartInternalMove(goal.X, goal.Y);
+            var (aimX, aimY, _) = goal.FrameEnd(world.Tick);
+            var gx = aimX - Entity.MoveTargetX;
+            var gy = aimY - Entity.MoveTargetY;
+            if (!SquaredReach.Of(slack).Contains(gx * gx + gy * gy)) StartInternalMove(aimX, aimY);
             return;
         }
         var reach = goal.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
@@ -1218,9 +1236,22 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
                 AdvanceFrame(world, locomotor);
                 return;
             }
-            // The object did not move in the tick the share was due in (disabled, stopped, another state of a derived AI): the rest of that step is void.
+            if (_frameDue == world.Tick + TickOrder.Next)
+            {
+                // The module runs a second time in this tick: an order of a module that had its turn after it woke it "now" (a transport calls a wounded soldier back). At
+                // 30 Hz the second run is a second whole step. In the tick that decided the frame the step is completed first and the new one decided from where it ends,
+                // as there; later in the frame the object goes on covering its step and decides when it is covered.
+                if (_frameTicksLeft != _stride - 1) return;
+                if (Entity.IsInsideFrameStep || Entity.HasAheadAngle) Entity.CompleteFrame(world.Tick);
+            }
+            // Else the object did not move in the tick the share was due in (disabled, stopped, another state of a derived AI): the rest of that step is void.
             _frameTicksLeft = 0;
             _frameArriving = false;
+        }
+        if (_stride > 1 && !_behindAnotherMover && Entity.AheadTick == world.Tick && (Entity.IsInsideFrameStep || Entity.HasAheadAngle))
+        {
+            DecideBehindAnotherMover(world, locomotor);
+            return;
         }
         if (world.Navigation is not { } navigation)
         {
@@ -1248,7 +1279,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             // Blocked: no cell next to the object can be entered. The order ends without an arrival.
             Entity.HasMoveTarget = false;
             Entity.Speed = Fixed.Zero;
-            _frameSpeed = Fixed.Zero;
+            ClearFrameSpeed();
             InvalidatePath();
             return;
         }
@@ -1277,7 +1308,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             var complete = _pathComplete;
             Entity.HasMoveTarget = false;
             Entity.Speed = Fixed.Zero;
-            _frameSpeed = Fixed.Zero;
+            ClearFrameSpeed();
             InvalidatePath();
             if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
             return;
@@ -1583,7 +1614,17 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (_stride == 1) return Entity.Speed;
         // A frame speed below one raw step per tick publishes a speed per tick of zero and is still the speed the 30 Hz step goes on with (a braking object passes through
         // such a value); the module clears _frameSpeed wherever it stops the object itself, so a published zero with a larger frame speed means "stopped from outside".
+        // What the object itself carries comes first: an object with two AI modules (the Chinook of the air force general) moves with one speed that both of them raise in turn,
+        // as they do with Entity.Speed at 30 Hz.
+        if (Entity.Speed.Raw == Entity.SpeedPerFrame.Raw / _stride) return Entity.SpeedPerFrame;
         return Entity.Speed.Raw == _frameSpeed.Raw / _stride ? _frameSpeed : Entity.Speed * _stride;
+    }
+
+    /// <summary>The module stops the object itself: no speed of a frame is left, neither its own nor the one the object carries.</summary>
+    private void ClearFrameSpeed()
+    {
+        _frameSpeed = Fixed.Zero;
+        if (Entity.SpeedPerFrame != Fixed.Zero) Entity.SpeedPerFrame = Fixed.Zero;
     }
 
     /// <summary>
@@ -1600,10 +1641,48 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         _frameSpeed = speed;
+        Entity.SpeedPerFrame = speed;
         Entity.Speed = Fixed.FromRaw(speed.Raw / _stride);
     }
 
     private Fixed CappedFrameSpeed(Fixed topSpeed) => _speedCap > Fixed.Zero ? Fixed.Min(topSpeed, _speedCap * _stride) : topSpeed;
+
+    // True while this module decides a frame behind another mover of the same object (DecideBehindAnotherMover). Not state.
+    private bool _behindAnotherMover;
+
+    /// <summary>
+    /// Above 30 Hz: the decision of a frame by the second AI module of an object (the Chinook of the air force general carries an AIUpdateInterface and a ChinookAIUpdate, and
+    /// both move it). At 30 Hz the second module decides from where the first one's whole step has put the object; here the first has covered only a share of its step by now.
+    /// The object is put where the first mover's frame ends while this module decides, and back afterwards; what both have left of the frame stays readable on the object
+    /// (<see cref="Entity.FrameEnd"/>). An object the decision takes out of the world stays where it is.
+    /// </summary>
+    private void DecideBehindAnotherMover(IWorldServices world, LocomotorInfo locomotor)
+    {
+        var (restX, restY, restZ) = (Entity.AheadX, Entity.AheadY, Entity.AheadZ);
+        var before = Entity.Angle;
+        var end = Entity.FrameEndAngle(world.Tick);
+        var (dead, leaving) = (Entity.EffectivelyDead, Entity.DestroyRequested);
+        Entity.X += restX;
+        Entity.Y += restY;
+        Entity.Angle = end;
+        Entity.SetAhead(world.Tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
+        _behindAnotherMover = true;
+        Move(world, locomotor);
+        _behindAnotherMover = false;
+        if (Entity.EffectivelyDead != dead || Entity.DestroyRequested != leaving || Entity.ContainedBy.IsValid) return;
+        // The heading this frame ends with: this module's when it has begun a step, else the first mover's.
+        var turnsTo = _frameTicksLeft > 0 ? _frameAngle : Entity.Angle;
+        Entity.X -= restX;
+        Entity.Y -= restY;
+        if (end != before) Entity.Angle = FixedTrig.Normalize(Entity.Angle - FixedTrig.AngleDifference(before, end));
+        Entity.SetAhead(world.Tick, Entity.AheadX + restX, Entity.AheadY + restY, Entity.AheadZ + restZ);
+        if (world.Navigation is not null && (locomotor.Surfaces & LocomotorSurfaces.Air) == 0)
+        {
+            Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            Entity.SetAheadHeight(world.GroundHeightAt(Entity.X + Entity.AheadX, Entity.Y + Entity.AheadY) - Entity.Z);
+        }
+        if (turnsTo != Entity.Angle) Entity.SetAheadAngle(turnsTo);
+    }
 
     /// <summary>
     /// Above 30 Hz a decision of <see cref="Move"/>/<see cref="MoveStraight"/> is the step of one logic frame of the original; the object covers it in equal shares, one per tick, and
@@ -1640,7 +1719,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         // The end of the move, in the order of the 30 Hz arrival (which tests no collision in its step either).
         Entity.HasMoveTarget = false;
         Entity.Speed = Fixed.Zero;
-        _frameSpeed = Fixed.Zero;
+        ClearFrameSpeed();
         InvalidatePath();
         _frameArriving = true;
         if (complete) world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
@@ -1694,15 +1773,54 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (Entity.Angle != _frameAngle) Entity.SetAheadAngle(_frameAngle);
         else Entity.ClearAheadAngle();
         var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
-        if (world.Navigation is not null && !air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+        if (world.Navigation is not null && !air)
+        {
+            Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            // The height the frame ends with is that of the ground where it ends: an observer reads it there, and an object put where its frame ends (Entity.CompleteFrame)
+            // stands on the ground of that place, as after the 30 Hz step, not on the height of the share it had covered.
+            Entity.SetAheadHeight(Entity.AheadX == Fixed.Zero && Entity.AheadY == Fixed.Zero ? Fixed.Zero : world.GroundHeightAt(Entity.X + Entity.AheadX, Entity.Y + Entity.AheadY) - Entity.Z);
+        }
         if (_frameArriving)
         {
             // The last step of a move tests no collision, as the 30 Hz arrival does not.
             if (left == 1) _frameArriving = false;
             return;
         }
-        // Crush, topple and collide modules are tested where the 30 Hz step tests them: once per logic frame, at the end of the frame's step and with its whole displacement.
-        if (left == 1 && (world.Navigation is null || !air)) world.ResolveFootprintCollisions(Entity, _frameStepX, _frameStepY);
+        // Crush, topple and collide modules are tested where the 30 Hz step tests them: once per logic frame, at the end of the frame's step and with its whole displacement -
+        // and in the tick of the 30 Hz step, the frame's first, in which every decision of a frame falls (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 4).
+        if (covered == 0 && (world.Navigation is null || !air)) CollideWhereTheFrameEnds(world, air);
+    }
+
+    /// <summary>
+    /// Above 30 Hz: the collision test of a frame's step, in the frame's first tick. The object stands where its frame ends while the test runs (what it meets reads it there
+    /// and is read where its own begun frame ends, <c>SimulationWorld.FootprintsOverlap</c>), as it does after the single 30 Hz step. An object the test takes out of the
+    /// world or out of its move (killed, contained, settled) stays there, as rule 4 has it; every other object goes back and covers the rest of its step. Tested with the
+    /// last share instead, a crate was collected and a soldier crushed up to a frame's last tick late: after everything else of that frame had decided, drawn its random
+    /// numbers and looked at them.
+    /// </summary>
+    private void CollideWhereTheFrameEnds(IWorldServices world, bool air)
+    {
+        var (x, y, z, angle) = (Entity.X, Entity.Y, Entity.Z, Entity.Angle);
+        var (aheadX, aheadY, aheadZ) = (Entity.AheadX, Entity.AheadY, Entity.AheadZ);
+        var pending = _frameTicksLeft;
+        var (dead, leaving) = (Entity.EffectivelyDead, Entity.DestroyRequested);
+        Entity.X = x + aheadX;
+        Entity.Y = y + aheadY;
+        Entity.Z = z + aheadZ;
+        Entity.Angle = _frameAngle;
+        Entity.SetAhead(world.Tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
+        world.ResolveFootprintCollisions(Entity, _frameStepX, _frameStepY);
+        if (_frameTicksLeft != pending || Entity.EffectivelyDead != dead || Entity.DestroyRequested != leaving || Entity.ContainedBy.IsValid || Entity.X != x + aheadX || Entity.Y != y + aheadY)
+        {
+            _frameTicksLeft = 0;
+            return;
+        }
+        Entity.X = x;
+        Entity.Y = y;
+        Entity.Z = z;
+        Entity.Angle = angle;
+        Entity.SetAhead(world.Tick, aheadX, aheadY, aheadZ);
+        if (angle != _frameAngle) Entity.SetAheadAngle(_frameAngle);
     }
 
     private void ReplanAround(NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)
@@ -1778,7 +1896,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             Entity.Y = Entity.MoveTargetY;
             Entity.HasMoveTarget = false;
             Entity.Speed = Fixed.Zero;
-            _frameSpeed = Fixed.Zero;
+            ClearFrameSpeed();
             world.Emit(SimEventKind.MoveArrived, Entity.Id, EntityId.Invalid, string.Empty, 0);
             return;
         }

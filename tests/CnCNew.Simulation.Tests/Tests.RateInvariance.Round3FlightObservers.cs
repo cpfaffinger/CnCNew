@@ -134,7 +134,7 @@ static partial class Tests
         {
             var (world, feeder) = FlightRateWorld(rate, SpiralFiles(), terrain: false);
             feeder.Spawn(1, "Lifter", x: 0, y: 0);
-            world.Step();
+            StepFrames(world, 1);
             var chinook = Only(world, "Lifter");
             return (world, () => chinook, frame =>
             {
@@ -179,7 +179,7 @@ static partial class Tests
             StepFrames(world, 30);
             var spinner = Only(world, "Spinner");
             feeder.Kill(spinner.Id.Value);
-            world.Step();
+            StepFrames(world, 1);
             return (world, () => spinner, null);
         }, 120, 0.001m);
 

@@ -345,6 +345,13 @@ public sealed partial class SimulationWorld
     /// <summary><c>Thing::isSignificantlyAboveTerrain</c>: higher than three frames of free fall above the terrain height (flat 0 without terrain).</summary>
     public bool IsSignificantlyAboveTerrain(Entity entity) => IsSignificantlyAbove(entity.Z, GroundHeightAt(entity.X, entity.Y));
 
+    public bool IsSignificantlyAboveTerrainAtFrameEnd(Entity entity)
+    {
+        if (_firstFrameTicks == TickOrder.Next) return IsSignificantlyAboveTerrain(entity);
+        var (x, y, z) = entity.FrameEnd(_tick);
+        return IsSignificantlyAbove(z, GroundHeightAt(x, y));
+    }
+
     /// <summary>The height of three logic frames of the original in free fall (<c>-(3*3) * m_gravity</c>); the same at every tick rate. Resolved once when the world is created.</summary>
     private readonly Fixed _significantHeight;
 

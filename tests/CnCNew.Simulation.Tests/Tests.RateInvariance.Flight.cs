@@ -404,7 +404,8 @@ static partial class Tests
             StepFrames(world, 30);
             var wreck = Only(world, "Spinner");
             feeder.Kill(wreck.Id.Value);
-            world.Step();
+            // The spiral's first step is one frame after the death (one tick at 30 Hz): the track starts there.
+            StepFrames(world, 1);
             var start = world.Tick;
             (blade[index], ground[index], gone[index]) = (-1, -1, -1);
             var at = index;
@@ -521,7 +522,8 @@ static partial class Tests
             var (world, feeder) = FlightRateWorld(FlightRates[index], SpiralFiles(), terrain: false);
             feeder.Spawn(1, "Lifter", x: 0, y: 0);
             feeder.Spawn(1, "Grunt", x: 0, y: 0);
-            world.Step();
+            // A new Chinook begins its first frame one frame after it appeared (one tick at 30 Hz): the track starts there.
+            StepFrames(world, 1);
             var chinook = Only(world, "Lifter");
             var grunt = Only(world, "Grunt");
             var start = world.Tick;
@@ -699,8 +701,7 @@ static partial class Tests
                 world.Step();
                 StepFrames(world, 30);
                 feeder.Kill(Only(world, "Spinner").Id.Value);
-                world.Step();
-                StepFrames(world, 10);
+                StepFrames(world, 11);
                 return world;
             }),
             ("fallStep", rate =>
@@ -755,8 +756,8 @@ static partial class Tests
             {
                 var (world, feeder) = FlightRateWorld(rate, SpiralFiles(), terrain: false);
                 feeder.Spawn(1, "Lifter", x: 0, y: 0);
-                world.Step();
-                StepFrames(world, 5);
+                // The Chinook's frames begin whole frames after the tick it appeared in.
+                StepFrames(world, 6);
                 return world;
             }),
         };

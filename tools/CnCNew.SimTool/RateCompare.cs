@@ -22,6 +22,7 @@ internal static class RateCompare
         var tsv = Value(args, "--tsv");
         var caseId = args.Length > 2 && !args[2].StartsWith("--", StringComparison.Ordinal) ? args[2] : null;
         if (Value(args, "--original-diff") is { } originals) return OriginalDiff(args, originals, directory);
+        if (Value(args, "--map-diff") is { } onMap) return MapDiff(args, onMap, directory);
         if (args.Contains("--reference-diff")) return ReferenceDiff(args, compile(directory));
         if (Value(args, "--ai-diff") is { } pairing) return AiDiff(args, pairing, compile(directory));
         if (!list && group is null && caseId is null)
@@ -125,6 +126,54 @@ internal static class RateCompare
             return new RateCompareFields.Match(session.World, () => session.IsOver, session.Step);
         }
         return RateCompareFields.Run(args, Of(rates[0]), Of(rates[1]), rates[0], rates[1], int.Parse(Value(args, "--context") ?? "6", CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
+    /// <c>--map-diff A,B --map PATH [--seed N] [--rates X,Y] [--frames N]</c> and the options of <c>--fields</c>: one match of two built-in AIs on a shipped map (exactly
+    /// <c>ai-match --map PATH --factions A,B [--seed N]</c>, the tool's catalogs with model geometry) at two rates side by side, every described field of every object after
+    /// every logic frame of the original. A diagnosis.
+    /// </summary>
+    private static int MapDiff(string[] args, string pairing, string directory)
+    {
+        var factions = pairing.Split(',');
+        var rates = (Value(args, "--rates") ?? "30,60").Split(',').Select(text => SimulationRate.FromTicksPerSecond(int.Parse(text, CultureInfo.InvariantCulture))).ToArray();
+        var mapPath = Value(args, "--map") ?? "Maps/Alpine Assault/Alpine Assault.map";
+        var frames = long.Parse(Value(args, "--frames") ?? "45000", CultureInfo.InvariantCulture);
+        var ends = new List<Func<string>>();
+        RateCompareFields.Match Of(SimulationRate rate)
+        {
+            var context = SimContext.Load(directory, rate);
+            using var stream = context.Content.OpenRead(mapPath);
+            var map = CnCNew.Formats.SageMapDecoder.Decode(stream);
+            var terrain = CnCNew.Simulation.Terrain.TerrainMap.Build(map, mapPath);
+            var options = CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard with { MaxTicks = rate.Time.OriginalFrames(frames) };
+            if (Value(args, "--seed") is { } seed) options = options with { AiSeed = uint.Parse(seed, CultureInfo.InvariantCulture), WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) ^ 0xC0FFEE06 };
+            var session = CnCNew.Simulation.Skirmish.SkirmishMatchSession.Start(options, context.Catalog, context.Fingerprint, terrain, map.Objects,
+                [..ReferenceManifest.Participants(context, factions).Select(participant => new CnCNew.Simulation.Skirmish.SkirmishSlot(participant))]);
+            ends.Add(() => $"{rate.TicksPerSecond} Hz: over {session.IsOver}, winner {(session.Winner is { } winner ? session.Players.First(player => player.Id == winner).Faction : "none")} at tick {session.VictoryTick.ToString(CultureInfo.InvariantCulture)} (frame {(session.VictoryTick < 0 ? -1 : session.VictoryTick / rate.TicksPerOriginalFrame).ToString(CultureInfo.InvariantCulture)}), world tick {session.World.Tick.ToString(CultureInfo.InvariantCulture)}");
+            // --commands N: what the players ordered in the last N logic frames before the comparison stopped (the AI's own state is outside the world and not compared).
+            if (Value(args, "--commands") is { } span)
+                ends.Add(() =>
+                {
+                    var stride = rate.TicksPerOriginalFrame;
+                    var from = session.World.Tick / stride - long.Parse(span, CultureInfo.InvariantCulture);
+                    var culture = CultureInfo.CurrentCulture;
+                    CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+                    try
+                    {
+                        return string.Join(Environment.NewLine, session.ToReplay().Commands.Where(command => command.Tick / stride >= from)
+                            .Select(command => $"{rate.TicksPerSecond} Hz frame {command.Tick / stride} tick {command.Tick % stride + 1}/{stride}: {command}"));
+                    }
+                    finally
+                    {
+                        CultureInfo.CurrentCulture = culture;
+                    }
+                });
+            return new RateCompareFields.Match(session.World, () => session.IsOver, session.Step);
+        }
+        var result = RateCompareFields.Run(args, Of(rates[0]), Of(rates[1]), rates[0], rates[1], int.Parse(Value(args, "--context") ?? "6", CultureInfo.InvariantCulture));
+        foreach (var end in ends) Console.WriteLine(end());
+        return result;
     }
 
     /// <summary>

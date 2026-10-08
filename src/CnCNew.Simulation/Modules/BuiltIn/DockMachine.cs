@@ -142,7 +142,7 @@ internal sealed class DockMachine(EntityId dockId)
                 return dock is null ? DockStatus.Failure : DockStatus.Success;
             case DockState.ProcessDock:
                 if (dock is null) return DockStatus.Failure;
-                _nextActionTick = world.Tick + ActionDelay(dock, ai);
+                _nextActionTick = world.Tick + ActionDelay(world, dock, ai);
                 return DockStatus.Continue;
             case DockState.MoveToRally:
                 return dock is null ? DockStatus.Failure : DockStatus.Success;
@@ -168,7 +168,7 @@ internal sealed class DockMachine(EntityId dockId)
             case DockState.ProcessDock:
                 if (dock is null) return DockStatus.Failure;
                 if (world.Tick < _nextActionTick) return DockStatus.Continue;
-                _nextActionTick = world.Tick + ActionDelay(dock, ai);
+                _nextActionTick = world.Tick + ActionDelay(world, dock, ai);
                 // "invoke the dock's action until it tells us it is done or the dock becomes closed" (AIDockProcessDockState::update)
                 return dock.IsOpen && dock.Action(world, ai.Entity) ? DockStatus.Continue : DockStatus.Success;
             default:
@@ -217,7 +217,16 @@ internal sealed class DockMachine(EntityId dockId)
         return DockStatus.Failure;
     }
 
-    private static long ActionDelay(IDockModule dock, AIUpdateInterface ai) => ai is ISupplyCarrier carrier ? carrier.ActionDelayFor(dock) : 0;
+    /// <summary>
+    /// The wait before the dock's next action. The supply docks act once per call and rely on the carrier's delay; a docker whose docking AI is not its supply module (an object
+    /// with two AI modules: the Chinook of the air force general) has none and is served "at the next update", which is one logic frame of the original later at every rate.
+    /// The other docks are called every tick and keep their own frame (a repair dock heals once per frame).
+    /// </summary>
+    private static long ActionDelay(IWorldServices world, IDockModule dock, AIUpdateInterface ai)
+    {
+        var delay = ai is ISupplyCarrier carrier ? carrier.ActionDelayFor(dock) : 0;
+        return dock is SupplyWarehouseDockUpdate or SupplyCenterDockUpdate ? world.Time.ZeroIsNextFrame(delay) : delay;
+    }
 
     public void Describe(IStateWriter writer)
     {

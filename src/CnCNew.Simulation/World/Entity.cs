@@ -70,6 +70,9 @@ public sealed class Entity
         HasAheadAngle = false;
     }
 
+    /// <summary>The mover's side of <see cref="AheadZ"/> for a mover that follows the ground: the height its begun frame ends with, less its height now.</summary>
+    internal void SetAheadHeight(Fixed z) => AheadZ = z;
+
     /// <summary>The mover's side of <see cref="AheadX"/>: covers one more share of the frame's step. The shares of a frame add up to its step, so the rest ends at zero.</summary>
     internal void CoverShare(long tick, Fixed x, Fixed y, Fixed z)
     {
@@ -137,6 +140,12 @@ public sealed class Entity
 
     /// <summary>Current forward speed (dist/tick); moves along <see cref="Angle"/>. 0 unless the object has an active move order.</summary>
     public Fixed Speed { get; internal set; }
+
+    /// <summary>
+    /// Above 30 Hz only: the speed per logic frame of the original that <see cref="Speed"/> (per tick) is the share of, as the mover that set it computed it (the division by the ticks
+    /// per frame loses its last bits). Two AI modules of one object hand their speed to each other through it. Never set at 30 Hz, described only when set.
+    /// </summary>
+    internal Fixed SpeedPerFrame { get; set; }
 
     public bool HasMoveTarget { get; internal set; }
     public Fixed MoveTargetX { get; internal set; }
@@ -335,6 +344,7 @@ public sealed class Entity
             writer.Int("aheadTick", AheadTick);
         }
         if (DestroyNotBefore != 0) writer.Int("destroyNotBefore", DestroyNotBefore);
+        if (SpeedPerFrame != Fixed.Zero) writer.Fixed("speedPerFrame", SpeedPerFrame);
         if (HasAheadAngle)
         {
             writer.Fixed("aheadAngle", AheadAngle);

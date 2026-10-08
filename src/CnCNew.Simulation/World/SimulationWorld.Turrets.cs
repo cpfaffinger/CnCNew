@@ -380,7 +380,7 @@ public sealed partial class SimulationWorld
         var horizontal = Fixed.Sqrt(dx * dx + dy * dy);
         var actual = FixedTrig.Atan2(dz, horizontal);
         var desired = Fixed.Max(actual, info.MinPitch);
-        if (info.GroundUnitPitch > Fixed.Zero && (victim.Template.IsKindOf("IMMOBILE") || (victim.HasMoveTarget && !IsSignificantlyAboveTerrain(victim))))
+        if (info.GroundUnitPitch > Fixed.Zero && (victim.Template.IsKindOf("IMMOBILE") || (victim.HasMoveTarget && !IsSignificantlyAboveTerrainAtFrameEnd(victim))))
         {
             var weaponIndex = WeaponIndexIn(source, slot);
             var range = weaponIndex >= 0 ? _templates.Weapons[weaponIndex].RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions) : Fixed.One;
@@ -461,7 +461,14 @@ public sealed partial class SimulationWorld
 
         // "Until and including HoldUntil" is one step more than the hold time: that step is a logic frame of the original, as at 30 Hz, not a tick.
         var holding = state.HoldUntil > 0 && tick < state.HoldUntil + _turretFrameTicks;
-        if (victim is not null && (state.Persistent || holding)) AimStep(entity, info, state, victim, tick);
+        if (victim is not null && (state.Persistent || holding))
+        {
+            var swingsPositive = state.PositiveSweep;
+            AimStep(entity, info, state, victim, tick);
+            // A sweeping turret that stands on its aim swings to the other side with every step, and a step is a logic frame of the original: a step that only swung the
+            // side takes its frame like one that turned the turret (above 30 Hz it swung with every tick, twice or four times per frame).
+            if (_turretFrameTicks != 1 && state.PositiveSweep != swingsPositive && state.Angle == before.Angle && state.Pitch == before.Pitch) OccupyFrame(state);
+        }
         else if (holding) state.Rotating = false;
         else if (state.Scanning) ScanStep(entity, info, state, tick);
         else
@@ -518,6 +525,23 @@ public sealed partial class SimulationWorld
         var share = Fixed.FromInt(left);
         state.Angle = FixedTrig.Normalize(state.Angle + FixedTrig.AngleDifference(state.Angle, state.GoalAngle) / share);
         state.Pitch = FixedTrig.Normalize(state.Pitch + FixedTrig.AngleDifference(state.Pitch, state.GoalPitch) / share);
+    }
+
+    /// <summary>
+    /// Above 30 Hz: the turrets of an object that dies inside their frame's step stand where that step ends, as the body does (<see cref="OnEntityDied"/>, rule 4 of
+    /// docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): the 30 Hz turret has taken its whole step when a hit of the phases after the turrets kills its object. A dead object's
+    /// turret is not stepped any more, so the share it had covered would stay.
+    /// </summary>
+    private void CompleteTurretFrames(Entity entity, TurretState?[] turrets)
+    {
+        foreach (var state in turrets)
+        {
+            if (state is null || state.SubSteps == 0) continue;
+            state.Angle = state.GoalAngle;
+            state.Pitch = state.GoalPitch;
+            ClearFrameStep(state);
+            MarkDirty(entity);
+        }
     }
 
     /// <summary>A step that does not move the turret but takes its logic frame all the same: the next decision is one frame later, as at 30 Hz. Never called at 30 Hz.</summary>
