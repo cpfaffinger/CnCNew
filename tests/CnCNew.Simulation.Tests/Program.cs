@@ -87,6 +87,7 @@ run.Test("Tick rate, world: an idle unit's first look falls two logic frames aft
 // Phase 23, ground movement (Tests.RateInvariance.Ground.cs): the same state after every logic frame at 30, 60 and 120 Hz.
 run.Test("Rate invariance, ground: a course with and without terrain, damaged, and short hops end every logic frame where 30 Hz does", Tests.GroundRateInvarianceCourse);
 run.Test("Rate invariance, ground: the detour around standing units is the 30 Hz detour", Tests.GroundRateInvarianceStandingUnits);
+run.Test("Goal spots: units sent to one point all arrive beside each other, the same at 30, 60 and 120 Hz", Tests.GoalSpotsForUnitsSentToOnePoint);
 run.Test("Rate invariance, consolidation: movers that meet are where the 30 Hz movers are", Tests.RateConsolidationMoversThatMeetAreTheSame);
 run.Test("Rate invariance, ground: a snapshot inside a logic frame continues like the live world", Tests.GroundRateInvarianceSnapshotInsideAFrame);
 run.Test("Rate invariance, ground: an order inside a logic frame keeps the step continuous and cancels a pending arrival", Tests.GroundRateInvarianceOrderInsideAFrame);
