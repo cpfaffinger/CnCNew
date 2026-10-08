@@ -321,4 +321,45 @@ static partial class Tests
             Check.That(different.Count == 0, $"{rate}: at the end of every logic frame the turret is where the 30 Hz turret is ({different.Count} of {Frames} frames differ, the first is frame {different.FirstOrDefault(-1)}).");
         }
     }
+
+    /// <summary>
+    /// The random shift of a unit's second look for a victim (<c>getNextMoodTarget</c>) is drawn from a hash of the world seed, the unit and the logic frame it is drawn in - not
+    /// the tick: a unit that looks at the same game time is shifted by the same number of frames at every rate, so its first shot at an enemy that appears later falls in the
+    /// same frame. Different seeds still give different shifts.
+    /// </summary>
+    public static void RateInvarianceMoodCheckShiftIsTheSameAtEveryRate()
+    {
+        var frames = new List<long>();
+        foreach (var seed in new uint[] { 1, 2, 3, 5, 8, 13, 21, 34 })
+        {
+            long reference = -1;
+            foreach (var (rate, factor) in WorldRates)
+            {
+                var (world, feeder, _) = RatedWorld(rate, AcquisitionFiles(), seed: seed);
+                // Spawned in the last tick of frame 0, the soldier is first stepped in the first tick of frame 1 at every rate; its first look is two frames later.
+                for (var i = 0; i < factor - 1; i++) world.Step();
+                feeder.Spawn(1, "AcqSoldier", owner: 1, x: 0, y: 0);
+                world.Step();
+                var soldier = Slotted(world, "AcqSoldier");
+                for (var i = 0; i < 4 * factor; i++) world.Step();
+                // The first look found nobody. The enemy appears now; the second look is one check rate (8 frames) and the random shift (-4 .. 4 frames) after the first.
+                feeder.Spawn(2, "AcqDummy", owner: 2, x: 60, y: 0);
+                long firstShot = -1;
+                for (var step = 0; step < 40 * factor && firstShot < 0; step++)
+                {
+                    var result = world.Step();
+                    if (ShotsOf(result, soldier) > 0) firstShot = result.Tick;
+                }
+
+                Check.That(firstShot > 0 && firstShot % factor == 0, $"seed {seed}, {rate}: the second look falls on the first tick of a logic frame (first shot at tick {firstShot}).");
+                var frame = firstShot / factor;
+                if (reference < 0) reference = frame;
+                Check.That(frame == reference && frame is >= 7 and <= 15, $"seed {seed}, {rate}: the shift is the one of 30 Hz (first shot in frame {frame}, 30 Hz frame {reference}).");
+            }
+
+            frames.Add(reference);
+        }
+
+        Check.That(frames.Distinct().Count() >= 3, $"The shift is random over the seeds: frames {string.Join(",", frames)}.");
+    }
 }

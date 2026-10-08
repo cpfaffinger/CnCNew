@@ -185,7 +185,6 @@ static partial class Tests
         new("World/SimulationWorld.cs", RuleTickNamedNumber, "private const int MaxUpdatesPerTick = 50_000_000;", "a storm limit per step, no time"),
         new("World/SimulationWorld.cs", RuleTickNamedNumber, "private const int MaxEventsPerTick = 20_000_000;", "a storm limit per step, no time"),
         // -- tick arithmetic with a number
-        new("World/SimulationWorld.Acquisition.cs", RuleTickArithmetic, "0x9E3779B97F4A7C15UL * (ulong)(tick + 1);", "offset of a hash input (no zero in the first tick), neither time nor order"),
         // -- lower bounds of one tick that are not durations
         new("Modules/BuiltIn/CleanupAndSpyModules.cs", RuleOneTickMinimum, "world.Tick + Math.Max(durationTicks, SimulationTiming.SleepNone)", "a wake-up must lie in the future; the duration is a sum of catalog durations on the grid and zero is handled before"),
         new("Modules/BuiltIn/CleanupAndSpyModules.cs", RuleOneTickMinimum, "Math.Max(Math.Min(Entity.ReadyTickOf(data.Slot) - world.Tick, reloadWait), SimulationTiming.SleepNone)", "a difference of absolute ticks: sleep until then, at least to the next step"),
