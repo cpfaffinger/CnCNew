@@ -383,7 +383,7 @@ static partial class Tests
     /// HelicopterSlowDeathBehavior, hand-computed: gravity -64/s² is -4660 raw per tick², half of it (FallHowFast 50 %) -2330 raw; after n updates the fall
     /// is 2330 · n(n+1)/2 raw, which first reaches the 99 units down to one unit above the ground at n = 75. DelayFromGroundToFinalDeath 300 ms is
     /// 9 frames; the tenth frame after the impact blows it up, leaves the RotorHulk and removes the Chinook. The fall is stepped once per original frame at
-    /// every tick rate (the first step one tick after the death), so both expectations are written in frames.
+    /// every tick rate (the first step one frame after the death), so both expectations are written in frames.
     /// </summary>
     public static void HelicopterSlowDeathFall()
     {
@@ -404,7 +404,7 @@ static partial class Tests
             var result = world.Step();
             if (result.Events.Any(value => value.Kind == SimEventKind.FxRequested && value.Text == "FX_Test" && value.HasPosition)) hit = result.Tick;
         }
-        Check.That(hit == death + 1 + world.Frames(74), $"It hits the ground 75 updates after the death (got {hit - death}).");
+        Check.That(hit == death + world.Frames(75), $"It hits the ground 75 updates after the death (got {hit - death}).");
         long gone = -1;
         for (var tick = 0; tick < world.Frames(30) && gone < 0; tick++)
         {

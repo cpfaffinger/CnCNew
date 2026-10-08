@@ -179,7 +179,7 @@ static partial class Tests
             StepFrames(world, 30);
             var spinner = Only(world, "Spinner");
             feeder.Kill(spinner.Id.Value);
-            world.Step();
+            StepFrames(world, 1);
             return (world, () => spinner, null);
         }, 120, 0.001m);
 

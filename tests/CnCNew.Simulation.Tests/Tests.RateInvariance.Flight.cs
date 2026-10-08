@@ -404,7 +404,8 @@ static partial class Tests
             StepFrames(world, 30);
             var wreck = Only(world, "Spinner");
             feeder.Kill(wreck.Id.Value);
-            world.Step();
+            // The spiral's first step is one frame after the death (one tick at 30 Hz): the track starts there.
+            StepFrames(world, 1);
             var start = world.Tick;
             (blade[index], ground[index], gone[index]) = (-1, -1, -1);
             var at = index;
@@ -700,8 +701,7 @@ static partial class Tests
                 world.Step();
                 StepFrames(world, 30);
                 feeder.Kill(Only(world, "Spinner").Id.Value);
-                world.Step();
-                StepFrames(world, 10);
+                StepFrames(world, 11);
                 return world;
             }),
             ("fallStep", rate =>

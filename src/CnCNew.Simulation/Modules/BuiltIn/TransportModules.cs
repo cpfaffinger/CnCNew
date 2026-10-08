@@ -230,7 +230,8 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
         _spiral.Cancel();
         // The wreck falls from where it is: what its AI had left of a frame is dropped.
         _spiral.Publish(world.Time, world.Tick, Entity);
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        // The first step of the spiral is the update after the death: one logic frame of the original later (the next tick at 30 Hz).
+        world.WakeAt(Entity, this, world.Tick + world.Time.TicksPerOriginalFrame);
     }
 
     public long Update(IWorldServices world)
