@@ -195,8 +195,11 @@ public sealed partial class SimulationWorld
             // A standing unit counts where it stands once its logic frame of the original is over: above 30 Hz a move ends with the first tick of its last frame and the unit
             // covers the rest of the step afterwards (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md). At 30 Hz that is its position.
             var (standsX, standsY, _) = other.FrameEnd(_tick);
-            var otherX = other.HasMoveTarget ? other.MoveTargetX : standsX;
-            var otherY = other.HasMoveTarget ? other.MoveTargetY : standsY;
+            // The unit whose claim is being decided has no order yet where the 30 Hz spawn phase decides it (the exit order follows the claim): whoever makes room for it
+            // sees it standing where it appeared, not heading for the exit point. Never the case at 30 Hz.
+            var heading = other.HasMoveTarget && !ReferenceEquals(other, _claiming);
+            var otherX = heading ? other.MoveTargetX : standsX;
+            var otherY = heading ? other.MoveTargetY : standsY;
             var limit = radius + CircleRadius(other);
             if (FurtherThan(otherX, x, limit) || FurtherThan(otherY, y, limit)) continue;
             var ox = otherX - x;
