@@ -1,6 +1,7 @@
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -34,11 +35,15 @@ public sealed partial class SimulationWorld
     {
         if (!sourceId.IsValid) return Fixed.Zero;
         var bonuses = _templates.GlobalWeaponBonus;
+        // Above 30 Hz everybody is hit where the logic frame of the original it has begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the 30 Hz blast finds
+        // an object that already had its turn in the tick after its whole step, not a share of the way there. Nobody is inside a frame's step at 30 Hz.
+        var frameEnd = _firstFrameTicks != TickOrder.Next;
         if (primaryVictim is not null)
         {
             x = primaryVictim.X;
             y = primaryVictim.Y;
             z = primaryVictim.Z;
+            if (frameEnd) (x, y, z) = primaryVictim.FrameEnd(_tick);
         }
 
         var primaryRadius = weapon.RadiusWith(bonuses, conditions, weapon.PrimaryRadius);
@@ -59,6 +64,13 @@ public sealed partial class SimulationWorld
                 var dx = candidate.X - x;
                 var dy = candidate.Y - y;
                 var dz = candidate.Z + candidate.Template.CenterZDelta - z;
+                if (frameEnd && candidate.IsInsideFrameStep)
+                {
+                    var (endX, endY, endZ) = candidate.FrameEnd(_tick);
+                    dx = endX - x;
+                    dy = endY - y;
+                    dz = endZ + candidate.Template.CenterZDelta - z;
+                }
                 var distanceSquared = dx * dx + dy * dy + dz * dz;
                 var sphere = candidate.Template.BoundingSphereRadius;
                 var shrunkSquared = Fixed.Zero;
