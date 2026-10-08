@@ -65,6 +65,9 @@ const string Usage = """
       ai-survey <content-dir> --out <tsv> [--seeds N] [--first-seed N] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
                                                            every AI pairing of the reference manifest once per seed (default 20 from 1), record only, budget in game
                                                            minutes (default 25); one line per match: outcome, end tick, game time, commands, final hash
+      ai-census <content-dir> --out <tsv> [--orbits <txt>] [--seeds N] [--first-seed N] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
+                                                           the same matches observed: what each AI built and produced (by producer), how every look of its army
+                                                           production ended, money, damage by attacker type and victim kind, losses, and units that walk in circles
       rate-distribution <tsv-reference> <tsv-candidate> [--out <report.md>]
                                                            two surveys of the same pairings and seeds at two rates, compared as distributions against limits fixed in
                                                            advance (docs/SIMULATION-CORE.md §40); exit code 0 all tests passed, 1 a test failed, 2 input error
@@ -124,6 +127,7 @@ try
         "rate-audit" when args.Length >= 2 => CnCNew.SimTool.RateAudit.Run(args),
         "range-audit" when args.Length >= 2 => CnCNew.SimTool.RangeAudit.Run(args, CompileShipped),
         "ai-survey" => CnCNew.SimTool.AiSurvey.Run(args),
+        "ai-census" => CnCNew.SimTool.AiCensus.Run(args),
         "ai-data" when args.Length >= 2 => CnCNew.SimTool.OriginalAi.Data(args, CompileGraph),
         "rate-distribution" => CnCNew.SimTool.Survey.RateDistribution.Run(args),
         "rate-compare" when args.Length >= 2 => CnCNew.SimTool.RateCompare.Run(args, CompileGraph),

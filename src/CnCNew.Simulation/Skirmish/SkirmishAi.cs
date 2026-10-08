@@ -44,6 +44,18 @@ public sealed class SkirmishAiStats
     public int TransportLoads { get; internal set; }
     public long AttackTicks { get; internal set; }
     public SortedDictionary<CommandRejection, int> RejectionsByReason { get; } = [];
+    /// <summary>
+    /// What every look of the army production at a barracks or a factory ended with, counted per producer template and outcome (key: template, a tab, the outcome):
+    /// <c>queue-full</c>, <c>no-candidate</c> (nothing it offers is an army unit whose prerequisites are met), <c>unaffordable</c> (candidates exist, none is covered by the money
+    /// left at that moment), <c>queued:&lt;unit&gt;</c> and <c>rejected:&lt;reason&gt;:&lt;unit&gt;</c>. Diagnostics only; nothing reads it back.
+    /// </summary>
+    public SortedDictionary<string, int> ArmyProduction { get; } = new(StringComparer.Ordinal);
+
+    internal void CountArmyProduction(ObjectTemplate producer, string outcome)
+    {
+        var key = producer.Name + "\t" + outcome;
+        ArmyProduction[key] = ArmyProduction.GetValueOrDefault(key) + 1;
+    }
 }
 
 /// <summary>
@@ -932,12 +944,18 @@ public sealed class SkirmishAi
         {
             if ((RoleOf(producer.Template) & (Role.Barracks | Role.Factory)) == 0) continue;
             var production = ProductionOf(producer);
-            if (production is null || !production.HasRoom) continue;
+            if (production is null) continue;
+            if (!production.HasRoom) { Stats.CountArmyProduction(producer.Template, "queue-full"); continue; }
             var candidates = ProducibleBy(producer.Template).Where(value => (RoleOf(value) & Role.Army) != 0 && value.BuildCost <= spendable && PrerequisitesMet(value)).ToList();
-            if (candidates.Count == 0) continue;
+            if (candidates.Count == 0)
+            {
+                Stats.CountArmyProduction(producer.Template, ProducibleBy(producer.Template).Any(value => (RoleOf(value) & Role.Army) != 0 && PrerequisitesMet(value)) ? "unaffordable" : "no-candidate");
+                continue;
+            }
             if (candidates.Any(InFamily)) candidates = candidates.Where(InFamily).ToList();
             var pick = candidates[_random.Range(0, candidates.Count - 1)];
             var result = Send(sequence => new QueueProductionCommand(_player, sequence, _tick, producer.Id, pick.Name));
+            Stats.CountArmyProduction(producer.Template, result.Accepted ? "queued:" + pick.Name : "rejected:" + result.Reason + ":" + pick.Name);
             if (!result.Accepted) continue;
             spendable -= pick.BuildCost;
             _budget -= pick.BuildCost;
