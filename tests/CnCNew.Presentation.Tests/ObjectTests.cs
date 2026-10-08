@@ -534,8 +534,10 @@ static partial class ObjectTests
         world.AdvanceConstruction(site);
         Check.That(ConditionDeriver.Derive(site, world, bunkerVisual, new ConditionContext(PreviousConstructionWork: 0))
                    == ModelConditionSet.Parse("PARTIALLY_CONSTRUCTED ACTIVELY_BEING_CONSTRUCTED"), "Work added since the last tick: actively being constructed.");
-        Check.That(ConditionDeriver.Derive(site, world, bunkerVisual, new ConditionContext(PreviousConstructionWork: 1)).Contains(ModelConditions.PartiallyConstructed)
-                   && !ConditionDeriver.Derive(site, world, bunkerVisual, new ConditionContext(PreviousConstructionWork: 1)).Contains(ModelConditions.ActivelyBeingConstructed),
+        // "No new work" is the work the site has now (1 at 30 Hz; above it the first work step counts a whole frame of the original, in ticks).
+        var worked = site.ConstructionWork;
+        Check.That(ConditionDeriver.Derive(site, world, bunkerVisual, new ConditionContext(PreviousConstructionWork: worked)).Contains(ModelConditions.PartiallyConstructed)
+                   && !ConditionDeriver.Derive(site, world, bunkerVisual, new ConditionContext(PreviousConstructionWork: worked)).Contains(ModelConditions.ActivelyBeingConstructed),
             "No new work: only partially constructed.");
         Check.That(StaticSelection(bunkerVisual, ModelConditionSet.Parse("PARTIALLY_CONSTRUCTED ACTIVELY_BEING_CONSTRUCTED")) == "bunker_build", "The construction model is selected.");
         world.SetStatus(bunker, 1UL << ObjectStatusBits.Sold, 1UL << ObjectStatusBits.UnderConstruction);
@@ -750,7 +752,9 @@ static partial class ObjectTests
         Check.That(tracker.Update(entity, 1) is null, "A missing alternate turret reports nothing.");
         Check.That(tracker.Update(world.FindEntity(victim)!, 0) is null && catalog["Scout"].IsUnit, "An object without a turret has none.");
 
-        // The fire order of a standing attack, once per tick: the turret turns, the weapon waits until it points at the victim.
+        // The fire order of a standing attack, once per tick: the turret turns, the weapon waits until it points at the victim. The orders begin with the gunner's first
+        // logic frame (the tick after its spawn at 30 Hz): a new turret does nothing before that.
+        CnCNew.Presentation.Tests.TestFrames.StepToFrameOf(world, gunner);
         var orderTick = world.Tick;
         long shotTick = -1;
         var angles = new List<float>();
@@ -764,7 +768,8 @@ static partial class ObjectTests
 
         Check.That(Math.Abs(angles[0] - step) < 1e-3f && tracker.IsRotating(gunner.Value) == (shotTick < 0), $"It turns by its rate per tick ({angles[0]} rad) and is still turning exactly until the shot (shot at tick {shotTick}, rotating {tracker.IsRotating(gunner.Value)}, {world.TurretWaits} orders waited).");
         Check.That(shotTick - orderTick == quarterTurn, $"The shot waits until the turret has turned 90 degrees at 180 degrees per second: tick {shotTick - orderTick} after the order.");
-        Check.That(Math.Abs(angles[^1] - MathF.PI / 2) < 0.035f && world.TurretWaits == quarterTurn, $"It points at the victim when the shot goes out ({angles[^1]} rad, {world.TurretWaits} orders waited).");
+        // TurretWaits counts logic frames of waiting (an order that is held back counts in the tick its frame begins with): fifteen at every rate.
+        Check.That(Math.Abs(angles[^1] - MathF.PI / 2) < 0.035f && world.TurretWaits == 15, $"It points at the victim when the shot goes out ({angles[^1]} rad, {world.TurretWaits} orders waited).");
 
         // No more orders: the attack goes on, so the turret keeps its aim while the victim lives; when the victim is dead it holds for the recentre time, then turns back at half speed.
         var held = 0;

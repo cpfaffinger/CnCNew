@@ -41,8 +41,8 @@ internal static class HudTests
         harness.Run("A command button shows its description as a pointer tooltip after the delay, and the icons carry no hot key or cost text", () => CommandButtonTooltip(data));
         harness.Run("Command button description: missing prerequisites and sciences are listed after 'Requires:', too little money and owned upgrades are said, as populateBuildTooltipLayout does", () => CommandButtonRequirements(data));
         harness.Run("The money and the power window describe themselves; the power text carries production and consumption", () => MoneyAndPowerTooltips(data));
-        // The hash of baselines/hud-drawlist-1280x720.sha256 is defined at 30 Hz (the HUD of a running match): this test names that rate.
-        harness.Run("Golden draw list hash", () => GoldenDrawListHash(GoldenRate.Data(data, contentDir)));
+        // The hash of baselines/hud-drawlist-1280x720.sha256 does not depend on the simulation rate (measured equal at 30, 60 and 120 Hz): the suite's data.
+        harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
         harness.Run("Message list: refused orders, finished buildings and upgrades, attacks and defeats print the original's labels at the message position and fade; what has no line is counted", () => MessageList(data));
         harness.Run("Message list through the real click path: a refused building spot prints 'You can't build here'", () => MessageListFromARefusedPlacement(data));
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));

@@ -99,6 +99,13 @@ public struct FlightFrameStep
     /// <summary>What is left of the frame, for the owner of a second step of the same object (<see cref="Publish"/>).</summary>
     public readonly (Fixed X, Fixed Y) RestXY => (_x * (long)_left, _y * (long)_left);
 
+    /// <summary>The heading the frame ends with while the object is still turning toward it in shares, for the owner of a second step of the same object; false when no turn is left.</summary>
+    public readonly bool TurnsTo(out Fixed endAngle)
+    {
+        endAngle = _endAngle;
+        return _left > 0 && _angle != Fixed.Zero;
+    }
+
     /// <summary>Drops what is left of the frame (the motion it belonged to was ended from outside).</summary>
     public void Cancel() => this = default;
 

@@ -557,6 +557,7 @@ if (contentDirectory is not null) run.Test("Real data: turrets of the Crusader, 
 if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turret on a Battlemaster it chases; retail turrets scan while idle", () => Tests.RealTurretAttackAndScan(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail AutoAcquire flags; a Crusader and a Battlemaster fight without orders", () => Tests.RealAcquisition(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI with the shipped script library on Alpine Assault", () => Tests.RealOriginalSkirmishAi(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: the original skirmish AI plays the same match at 30, 60 and 120 Hz", () => Tests.RealOriginalSkirmishAiAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: every retail DeployStyleAIUpdate object is ready to attack, fires and is packed after the same time at 30, 60 and 120 Hz", () => Tests.RealDeployStyleTimesAreTheSame(contentDirectory));

@@ -1428,6 +1428,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>What is left of the decided frame of winged flight (for the publication of the aircraft's frame end, <see cref="FlightFrameStep.Publish"/>).</summary>
     protected (Fixed X, Fixed Y) WingedStepRest => _wingStep.RestXY;
 
+    /// <summary>The heading the decided frame of winged flight ends with, while the aircraft still turns toward it (for <see cref="Entity.FrameEndAngle"/>).</summary>
+    protected bool WingedStepTurnsTo(out Fixed endAngle) => _wingStep.TurnsTo(out endAngle);
+
     /// <summary>
     /// What is left of the step of ground or helicopter movement the object is covering in shares (<see cref="AdvanceFrame"/>), after this tick's share; zero when no share was
     /// covered in <paramref name="tick"/>. Read by a derived AI that publishes the frame end of an object with a second step (height) of its own.
@@ -2076,13 +2079,23 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
                 : _hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: _hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
                 : default(SpawnExtras?);
-            var (x, y, z, angle) = exit is null ? (Entity.X, Entity.Y, Entity.Z, Entity.Angle) : exit.ClaimExit(world, world.Templates[head.TemplateIndex]);
+            var (x, y, z, angle) = exit is null ? OwnPlace(world) : exit.ClaimExit(world, world.Templates[head.TemplateIndex]);
             if (extras is { } value) world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle, value);
             else world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle);
             world.Emit(SimEventKind.ProductionCompleted, Entity.Id, EntityId.Invalid, string.Empty, head.TemplateIndex);
         }
         else _queue[0] = head with { RemainingTicks = remaining };
         return _queue.Count == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
+    }
+
+    /// <summary>
+    /// A producer without an exit puts the unit where it is itself. One that moves (a worker) has, above 30 Hz, covered only a share of its frame's step when this module looks at
+    /// it: the unit appears where the producer's frame ends, which is where the 30 Hz step has put it (the 30 Hz position itself at 30 Hz).
+    /// </summary>
+    private (Fixed X, Fixed Y, Fixed Z, Fixed Angle) OwnPlace(IWorldServices world)
+    {
+        var (x, y, z) = Entity.FrameEnd(world.Tick);
+        return (x, y, z, Entity.FrameEndAngle(world.Tick));
     }
 
     public override void Describe(IStateWriter writer)

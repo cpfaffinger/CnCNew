@@ -13,11 +13,14 @@
 .EXAMPLE
   .\scripts\check-dozer-build.ps1
   .\scripts\check-dozer-build.ps1 -Quick -NoBuild
+  .\scripts\check-dozer-build.ps1 -NoBuild -TickRate 60
 #>
 [CmdletBinding()]
 param(
     [string]$ContentDir,
     [switch]$Quick,
+    # Simulation rate (30, 60 or 120 Hz); 0 = the client's default. Frame numbers of the input scripts and --frames count original frames (1/30 s) at every rate.
+    [int]$TickRate = 0,
     [switch]$NoBuild,
     [int]$TimeoutSeconds = 420
 )
@@ -41,9 +44,10 @@ $work = Join-Path ([IO.Path]::GetTempPath()) ("cncnew-dozer-check-" + [Guid]::Ne
 New-Item -ItemType Directory -Force $work | Out-Null
 $failures = 0
 
-function Invoke-Replay([string]$Name, [string[]]$GameArgs, [string]$Size, [int]$Frames, [string]$Script, [hashtable]$Expect, [string[]]$ExpectLines) {
+function Invoke-Replay([string]$Name, [string[]]$GameArgs, [string]$Size, [int]$Frames, [string]$Script, [hashtable]$Expect, [string[]]$ExpectLines, [int[]]$LockedFrames = @()) {
     $out = Join-Path $work "$Name.txt"
     $all = @('--smoke-test', '--content-dir', $ContentDir, '--size', $Size, '--frames', "$Frames", '--input-script', (Join-Path $repo "scripts\input\$Script")) + $GameArgs
+    if ($TickRate -gt 0) { $all += @('--tick-rate', "$TickRate") }
     $quoted = $all | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
     $process = Start-Process -FilePath $exe.FullName -ArgumentList $quoted -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError "$out.err"
     $problems = @()
@@ -67,6 +71,17 @@ function Invoke-Replay([string]$Name, [string[]]$GameArgs, [string]$Size, [int]$
     foreach ($pattern in $ExpectLines) {
         if (-not ($lines | Where-Object { $_ -like $pattern })) { $problems += "no output line like '$pattern'" }
     }
+    if ($LockedFrames.Count -eq 2) {
+        # The client counts the input lock in simulation ticks and names its rate; the bounds are original frames (1/30 s), the same game time at every rate.
+        $rateLine = $lines | Where-Object { $_ -cmatch '^session: simulation rate (\d+) Hz' } | Select-Object -Last 1
+        $lockLine = $lines | Where-Object { $_ -cmatch '^mission presentation: input locked for (\d+) ticks' } | Select-Object -Last 1
+        if (-not $rateLine -or -not $lockLine) { $problems += 'no simulation rate or no input lock count in the output' }
+        else {
+            $null = $rateLine -cmatch 'rate (\d+) Hz'; $rate = [int]$Matches[1]
+            $null = $lockLine -cmatch 'for (\d+) ticks'; $locked = [long]$Matches[1] * 30 / $rate
+            if ($locked -lt $LockedFrames[0] -or $locked -gt $LockedFrames[1]) { $problems += "input locked for $locked original frames, expected $($LockedFrames[0]) to $($LockedFrames[1])" }
+        }
+    }
     if ($problems.Count -eq 0) { Write-Host "PASS $Name  ($summary)" }
     else {
         $script:failures++
@@ -79,7 +94,7 @@ $built = @{ unresolved = 0; commandsAccepted = '>=1'; commandsRejected = 0; site
 $mission = @('--mission', 'Maps/GC_ChemGeneral/GC_ChemGeneral.map')
 $match = @('--match', 'Maps/Alpine Assault/Alpine Assault.map')
 Invoke-Replay 'mission-1280x720' $mission '1280x720' 1400 'dozer-build.txt' $built @('mission presentation:*locked at exit False*')
-Invoke-Replay 'mission-intro-clicks' $mission '1280x720' 800 'clicks-during-intro.txt' @{ unresolved = 0; selectionChanges = 0; commandsAccepted = 0; sitesCreated = 0 } @('mission presentation: input locked for 7?? ticks, locked at exit False, letterbox at exit False*', 'input-script: at exit*command mode None*')
+Invoke-Replay 'mission-intro-clicks' $mission '1280x720' 800 'clicks-during-intro.txt' @{ unresolved = 0; selectionChanges = 0; commandsAccepted = 0; sitesCreated = 0 } @('mission presentation: input locked for * ticks, locked at exit False, letterbox at exit False*', 'input-script: at exit*command mode None*') @(700, 799)
 if (-not $Quick) {
     Invoke-Replay 'mission-1920x1080' $mission '1920x1080' 1400 'dozer-build.txt' $built @()
     Invoke-Replay 'match-1280x720' $match '1280x720' 1400 'dozer-build.txt' $built @()

@@ -265,7 +265,9 @@ internal abstract class DockUpdateBase(DockData data) : SimModule, IUpdateModule
             _dockerInside = false;
         }
         // DockUpdate::update: "if setDockCrippled has been called, I will never give enterance permission".
-        if (!_activeDocker.IsValid && !_crippled)
+        // The hand-over is one step of the reference's update, once per logic frame of the original, and the dockers' machines ask for clearance on the same grid
+        // (AIUpdateInterface.UpdateDock, SupplyTruckAIUpdate): a dock that hands over in every tick lets the next docker in a frame before the 30 Hz dock does.
+        if (!_activeDocker.IsValid && !_crippled && world.Time.IsOriginalFrameBoundary(world.Tick))
         {
             for (var slot = 0; slot < _owners.Length; slot++)
             {

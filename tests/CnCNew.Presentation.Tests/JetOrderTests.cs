@@ -166,6 +166,7 @@ internal static class JetOrderTests
         var farthestAfterPass = new List<float>();
         var shots = 0;
         var slowest = Fixed.MaxValue;
+        var slowestTick = -1L;
         var shotDistances = new List<float>();
         for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 2400); tick++)
         {
@@ -173,7 +174,8 @@ internal static class JetOrderTests
             rig.Tick();
             foreach (var command in rig.Issued.Skip(before).OfType<FireWeaponCommand>()) { shots++; shotDistances.Add(Distance(jet, target)); }
             var distance = Distance(jet, target);
-            slowest = Fixed.Min(slowest, jet.Speed);
+            // A new object begins its first logic frame one frame after it appeared (the tick after the spawn at 30 Hz); until then the fighter has no speed yet.
+            if (rig.World.Tick - jet.SpawnTick > TestFrames.TicksPerFrame(rig.World) && jet.Speed < slowest) (slowest, slowestTick) = (jet.Speed, rig.World.Tick);
             if (distance < 100f && !inside) { inside = true; passes++; farthestAfterPass.Add(0f); }
             else if (distance >= 100f) inside = false;
             if (farthestAfterPass.Count > 0) farthestAfterPass[^1] = Math.Max(farthestAfterPass[^1], distance);
@@ -184,7 +186,7 @@ internal static class JetOrderTests
         TestHarness.Assert(farthestAfterPass.Take(passes - 1).All(value => value >= 280f), $"after each overflight the jet flew out for about a weapon range before turning ({string.Join(", ", farthestAfterPass.Select(value => value.ToString("F0")))})");
         TestHarness.Assert(shots >= passes, $"the gun fired on the passes ({shots} shots)");
         TestHarness.Assert(shotDistances.All(value => value is >= 90f and <= 330f), $"every shot was inside the weapon's range band (measured after the tick's move) ({shotDistances.Min():F0}..{shotDistances.Max():F0})");
-        TestHarness.Assert(slowest >= SimulationTimingMin, $"the fighter never flew slower than its minimum speed ({slowest})");
+        TestHarness.Assert(slowest >= SimulationTimingMin, $"the fighter never flew slower than its minimum speed ({slowest} per tick after tick {slowestTick}, spawned in tick {jet.SpawnTick})");
         Console.WriteLine($"       jet passes: {passes} passes, {shots} shots, farthest out {string.Join(", ", farthestAfterPass.Select(value => value.ToString("F0")))}");
         TestHarness.Assert(rig.Orders.TryGet(jet.Id, out _), "the attack order stands while the target lives");
     }

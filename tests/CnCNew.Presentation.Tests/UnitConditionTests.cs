@@ -425,6 +425,14 @@ internal static partial class UnitConditionTests
 
         public Entity Get(EntityId id) => World.FindEntity(id)!;
 
+        /// <summary>Steps until the next step is the first tick of a logic frame of the object other than the one it appeared in (no step at 30 Hz), see <see cref="TestFrames.StepToFrameOf"/>.</summary>
+        public void StepToFrameOf(EntityId id)
+        {
+            var spawned = Get(id).SpawnTick;
+            var ticks = TestFrames.TicksPerFrame(World);
+            while (World.Tick - spawned < ticks || (World.Tick - spawned) % ticks != 0) Step();
+        }
+
         public ModelConditionSet Bits(EntityId id) => Projector.Project(1f).Drawables.Single(drawable => drawable.Entity == id).Conditions;
     }
 
@@ -533,6 +541,8 @@ internal static partial class UnitConditionTests
         Assert(!rig.Bits(gunner).Contains(UnitFlags.TurretRotate), "a turret at its natural angle rests");
 
         // The standing attack's fire order every tick: the turret rotates toward the victim, then the shot goes out and the turret holds, finally it turns back.
+        // The orders begin with the gunner's first logic frame (the tick after its spawn at 30 Hz): a new turret does nothing before that.
+        rig.StepToFrameOf(gunner);
         var rotating = new List<bool>();
         long shotTick = -1;
         int Frames(int originalFrames) => (int)CnCNew.Tests.TestTime.Frames(rig.World, originalFrames); // the windows below are game time: steps of the world per original frame
@@ -776,6 +786,8 @@ internal static partial class UnitConditionTests
         var entity = rig.Get(rock);
         var freefall = 0;
         var late = 0;
+        // m_life of the original counts logic frames; the module counts its updates, one per tick: a hundred frames in ticks of the world.
+        var hundred = CnCNew.Tests.TestTime.Frames(rig.World, 100);
         for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 320); tick++)
         {
             rig.Step();
@@ -784,9 +796,9 @@ internal static partial class UnitConditionTests
             if (bits.Contains(UnitFlags.Freefall))
             {
                 freefall++;
-                Assert(module.Life is > 0 and < 100, $"FREEFALL only while m_life < 100 (life {module.Life})");
+                Assert(module.Life > 0 && module.Life < hundred, $"FREEFALL only while m_life < 100 frames (life {module.Life} updates)");
             }
-            if (module.Life >= 100 && bits.Contains(UnitFlags.Freefall)) late++;
+            if (module.Life >= hundred && bits.Contains(UnitFlags.Freefall)) late++;
         }
         Assert(freefall > 0, "a rock sliding down a steep slope drops more than 0.2 per tick and shows FREEFALL");
         Assert(late == 0, "never after the first hundred updates");
@@ -869,7 +881,8 @@ internal static partial class UnitConditionTests
         // the rider gets off: the bike is scuttled and shows TOPPLED
         var rig = new Rig(retail);
         var bike = rig.Spawn("GLAVehicleCombatBike", 1, 100, 100);
-        for (var tick = 0; tick < 5; tick++) rig.Step();
+        // The rider is created a logic frame after the bike and mounts a frame after that: five frames of the original are enough at every rate (five ticks at 30 Hz).
+        for (var tick = 0; tick < CnCNew.Tests.TestTime.Frames(rig.World, 5); tick++) rig.Step();
         var module = rig.Get(bike).Modules.OfType<RiderChangeContain>().Single();
         Assert(!module.IsScuttled && !rig.Bits(bike).Contains(UnitFlags.Toppled), "a ridden bike stands");
         var rider = rig.World.Entities.First(entity => entity.ContainedBy == bike).Id;

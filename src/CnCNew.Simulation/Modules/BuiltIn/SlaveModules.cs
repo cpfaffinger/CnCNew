@@ -209,7 +209,9 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         _offsetX = Fixed.FromInt(data.GuardMaxRange) * FixedTrig.Cos(direction);
         _offsetY = Fixed.FromInt(data.GuardMaxRange) * FixedTrig.Sin(direction);
         Entity.Status |= 1UL << UnselectableBit;
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        // The first update gives the slave its first order: it falls one logic frame of the original after the enslaving (the next tick at 30 Hz), the first frame of an
+        // object that appears with its master's spawn.
+        world.WakeAt(Entity, this, world.Tick + world.Time.TicksPerOriginalFrame);
     }
 
     public void OnSlaverDie(IWorldServices world) => StopSlavedEffects();

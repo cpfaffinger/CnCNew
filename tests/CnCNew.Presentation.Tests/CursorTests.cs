@@ -181,7 +181,7 @@ internal static class CursorTests
         arena.Spawn("Dozer", Me, 60, 60);
         arena.Spawn("Barracks", Me, 150, 110);
         arena.Spawn("Ranger", Enemy, 120, 40);
-        arena.Step(2);
+        arena.StepFrames(2);
         var world = arena.World;
         var view = new InputTests.TopDownView();
         var labels = new Dictionary<string, string> { ["CONTROLBAR:AttackMove"] = "&Attack Move", ["CONTROLBAR:ConstructPlant"] = "Construct &Plant", ["CONTROLBAR:SetRallyPoint"] = "&Rally" };
@@ -317,7 +317,7 @@ internal static class CursorTests
         var arena = new InputTests.Arena();
         arena.Spawn("Tank", Me, 40, 60);
         arena.Spawn("Ranger", Me, 80, 80);
-        arena.Step(2);
+        arena.StepFrames(2);
         var world = arena.World;
         var view = new InputTests.TopDownView();
         var selection = new SelectionModel(Me);
@@ -386,7 +386,7 @@ internal static class CursorTests
         arena.Spawn("Ranger", Me, 40, 40);
         arena.Spawn("Barracks", Me, 150, 110);
         arena.Spawn("Ranger", Enemy, 60, 40);
-        arena.Step(2);
+        arena.StepFrames(2);
         var world = arena.World;
         var view = new InputTests.TopDownView();
         var selection = new SelectionModel(Me);

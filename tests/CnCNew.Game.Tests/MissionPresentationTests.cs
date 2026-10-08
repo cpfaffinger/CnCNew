@@ -160,15 +160,20 @@ internal static class MissionPresentationTests
 
         var heroId = session.Engine.NamedObjects.First(pair => pair.Key == "Hero1").Value;
         var bridge = new MissionUiBridge(session);
+        // The scripts answer in the VM's next update, and the VM updates once per original frame: one frame of steps holds exactly one update (one tick at 30 Hz).
+        void StepFrame()
+        {
+            for (var tick = 0; tick < CnCNew.Tests.TestRate.TicksPerFrame; tick++) session.Step();
+        }
 
         TestHarness.Assert(session.Engine.CounterValue("selected_count") == 0, "not selected yet");
         bridge.OnSelectionChanged([new EntityId(heroId)]);
-        session.Step();
+        StepFrame();
         TestHarness.Assert(session.Engine.CounterValue("selected_count") == 1, "selecting the named unit reached ScriptEngine.SelectNamed and satisfied NAMED_SELECTED");
 
         TestHarness.Assert(session.Engine.CounterValue("flag_count") == 0, "no UI interaction signalled yet");
         bridge.NotifyUiInteraction("ui_flag");
-        session.Step();
+        StepFrame();
         TestHarness.Assert(session.Engine.CounterValue("flag_count") == 1, "signalling the UI interaction reached ScriptEngine.SignalUiInteraction and satisfied the FLAG condition");
     }
 

@@ -104,7 +104,8 @@ foreach ($needed in @{ 'input-script summary' = $summary; 'spectator' = $match; 
 
 if ($problems.Count -eq 0) {
     # Das Gefecht lief, beide KI befahlen, vom Zuschauer kam nichts in der Simulation an.
-    Expect ((Number $match 'ticks') -ge 3000) 'das Gefecht ist keine 3000 Ticks weit gekommen'
+    # 100 Spielsekunden sind 3000 Originalbilder; die Tickzahl derselben Spielzeit haengt an der Simulationsrate.
+    Expect ((Number $match 'gameSeconds') -ge 100) 'das Gefecht ist keine 100 Spielsekunden (3000 Originalbilder) weit gekommen'
     Expect ((Number $commands 'player1') -gt 0 -and (Number $commands 'player2') -gt 0) 'nicht beide KI haben Befehle gegeben'
     Expect ((Number $commands 'viewerOrdersRecorded') -eq 0) 'ein Befehl des Zuschauers wurde aufgezeichnet'
     Expect ((Number $summary 'unresolved') -eq 0) 'das Eingabeskript hatte unaufgeloeste Ziele'

@@ -238,8 +238,10 @@ internal static class ScenarioAudit
             if (entity?.Template.Turrets?[0] is not { } info) { failures.Add($"{shooterTag} has no turret template"); continue; }
             var recenter = live.World.Time.ToOriginalFrames(info.RecenterTicks);
             // Two to three ticks of step order (the death is noticed in its tick or the next, a sample follows its step), in original frames rounded up: 2 and 3 at 30 Hz.
+            // The death itself is known only to its original frame, so the latest bound also carries the ticks of that frame the death may have come after its start
+            // (3 and 2 frames at 30 and 60 Hz as before, 2 instead of 1 at 120 Hz).
             var perFrame = live.World.Time.TicksPerOriginalFrame;
-            var (earliestOffset, latestOffset) = ((2 + perFrame - 1) / perFrame, (3 + perFrame - 1) / perFrame);
+            var (earliestOffset, latestOffset) = ((2 + perFrame - 1) / perFrame, (3 + 2 * (perFrame - 1)) / perFrame);
             var natural = ToFloat(info.NaturalAngle) * 180f / MathF.PI;
             // sample k carries the state after the step of tick k-1; the death is noticed in the step of tick `death` (or the next one) and starts the hold there
             var series = history.Where(sample => sample.Tick > death && sample.Units[shooterTag].TurretRelativeDegrees is not null).Select(sample => (sample.Tick, Angle: sample.Units[shooterTag].TurretRelativeDegrees!.Value)).ToArray();

@@ -1,6 +1,8 @@
+using System.Globalization;
 using CnCNew.Client.Stride.Ui;
 using CnCNew.Content;
 using CnCNew.Game.Data;
+using CnCNew.Simulation.Time;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
 using CnCNew.Ui.Wnd;
@@ -20,7 +22,12 @@ var backend = (GetArgument(args, "--font-backend") ?? "gdi").ToLowerInvariant() 
     "freetype" => UiFontBackend.FreeType,
     var other => throw new ArgumentException($"--font-backend must be gdi or freetype, got '{other}'."),
 };
-using var game = new CaptureGame(contentDirectory, outputDirectory, fontAudit, backend);
+// --tick-rate N: the simulation rate of the matches behind the HUD, score-screen and transition scenes (30, 60 or 120 Hz; the default is the game layer's). The scenes step
+// in original frames (1/30 s), so the pictures are meant to be the same at every rate.
+var rate = GetArgument(args, "--tick-rate") is { } rateText
+    ? SimulationRate.FromTicksPerSecond(int.Parse(rateText, CultureInfo.InvariantCulture))
+    : GameData.DefaultSessionRate;
+using var game = new CaptureGame(contentDirectory, outputDirectory, fontAudit, backend, rate);
 game.Run();
 return game.Failures == 0 ? 0 : 1;
 
@@ -37,7 +44,7 @@ static string? GetArgument(string[] arguments, string name)
 /// twice and diff the SHA-256 of every file to confirm the renderer is deterministic. Not part of any solution file and not
 /// referenced by the client — a standalone check, like the other <c>tools/*</c> programs.
 /// </summary>
-internal sealed class CaptureGame(string contentDirectory, string outputDirectory, bool fontAudit, UiFontBackend backend) : Game
+internal sealed class CaptureGame(string contentDirectory, string outputDirectory, bool fontAudit, UiFontBackend backend, SimulationRate rate) : Game
 {
     private static readonly (int Width, int Height)[] Sizes = [(800, 600), (1280, 720), (1920, 1080), (2560, 1080)];
 
@@ -62,7 +69,7 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
     {
         await base.LoadContent();
         Console.WriteLine($"Loading content from '{contentDirectory}' ...");
-        _data = GameData.Load(contentDirectory, step => Console.WriteLine($"  {step}"));
+        _data = GameData.Load(contentDirectory, step => Console.WriteLine($"  {step}"), rate: rate);
         _text = new LocalizedTextSource(_data.LoadText("English"));
         using (var reader = new StreamReader(_data.Content.OpenRead("Data/English/HeaderTemplate.ini")))
             _templates = WndHeaderTemplateTable.Parse(reader.ReadToEnd(), "Data/English/HeaderTemplate.ini");
