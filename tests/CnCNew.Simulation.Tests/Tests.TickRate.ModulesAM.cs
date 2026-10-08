@@ -223,8 +223,8 @@ static partial class Tests
             Check.That(!first.Enabled, $"{rate}: an undamaged formation sits still.");
             feeder.Damage(rocks[0].Id.Value, 60);
             while (!first.Enabled && world.Tick < 200 * factor) world.Step();
-            // The first update runs one tick (order) after the spawn at tick 0; from there the dormant check recurs every 30 frames of the original.
-            var enabled = world.Tick - 1 - TickOrder.Next;
+            // The first update runs one frame of the original after the spawn at tick 0; from there the dormant check recurs every 30 frames of the original.
+            var enabled = world.Tick - 1 - world.Time.TicksPerOriginalFrame;
             if (enabledThirty < 0)
             {
                 enabledThirty = enabled;

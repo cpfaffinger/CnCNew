@@ -263,6 +263,9 @@ public sealed class DynamicShroudClearingRangeUpdate(DynamicShroudData data) : S
         _current = Fixed.Zero;
         _phase = Phase.NotStartedYet;
         _nextWake = world.Tick + SimulationTiming.SleepNone;
+        // The range is handed on with the last tick of a logic frame of the original, when it is the range of 30 Hz: the first time with the last tick of
+        // the first frame (at 30 Hz the first update), then every interval + 1 frames from there.
+        _changeIntervalCountdown = world.Time.TicksPerOriginalFrame - TickOrder.Next;
     }
 
     public long Update(IWorldServices world)
@@ -274,17 +277,22 @@ public sealed class DynamicShroudClearingRangeUpdate(DynamicShroudData data) : S
         else if (_stateCountdown <= SustainDeadline) _phase = Phase.Sustaining;
         else if (_stateCountdown <= GrowStartDeadline) _phase = Phase.Growing;
 
+        // The range grows and shrinks by the original's amount per logic frame of the original (the range over the duration in frames), spread over the ticks
+        // of the frame so that the shares add up to exactly that amount: at every frame boundary the range is the range of 30 Hz. The countdown starts on
+        // the frame grid and falls every tick, so the tick's number inside its frame follows from it. 30 Hz: one tick, the whole amount.
+        var ticks = world.Time.TicksPerOriginalFrame;
+        var subTick = ticks == TickOrder.Next ? ticks : (int)((ticks - _stateCountdown % ticks) % ticks + TickOrder.Next);
         switch (_phase)
         {
             case Phase.Growing:
-                _current += world.Time.SharePerTick(_native, Fixed.FromInt(Math.Max(1, data.GrowTime)));
+                _current += world.Time.FrameShare(world.Time.SharePerTick(_native, Fixed.FromInt(Math.Max(1, world.Time.ToOriginalFrames(data.GrowTime)))), subTick);
                 if (_current >= _native) _phase = Phase.Sustaining;
                 break;
             case Phase.Sustaining:
                 _current = _native;
                 break;
             case Phase.Shrinking:
-                _current -= world.Time.SharePerTick(_native - data.FinalVision, Fixed.FromInt(Math.Max(1, data.ShrinkTime)));
+                _current -= world.Time.FrameShare(world.Time.SharePerTick(_native - data.FinalVision, Fixed.FromInt(Math.Max(1, world.Time.ToOriginalFrames(data.ShrinkTime)))), subTick);
                 break;
             case Phase.DoneForever:
                 _current = data.FinalVision;
@@ -474,6 +482,9 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
     private Fixed _finalX;
     private Fixed _finalY;
     private long _splashTick;
+    // The wave moves every tick; what its front wets and whether it has reached the end of its path is asked once per logic frame of the original, counted
+    // from the tick it starts to move (the original samples the front once per frame). At rest (unwritten) between two frames, which is always at 30 Hz.
+    private FramePhase _framePhase;
 
     public override string ModuleName => "WaveGuideUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -494,7 +505,9 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
         if (_disabled) return SimulationTiming.SleepNone;
         var now = world.Tick;
         if (_activeTick < 0) _activeTick = now;
-        if (now - _activeTick < data.WaveDelay) return SimulationTiming.SleepNone;
+        // The original takes its first step in the update in which the delay has passed. That step is a whole frame of the original, so above 30 Hz the wave
+        // sets off the ticks earlier that the frame needs and ends its first frame in that update (not possible without a delay).
+        if (now - _activeTick < data.WaveDelay - Math.Min(data.WaveDelay, world.Time.TicksPerOriginalFrame - TickOrder.Next)) return SimulationTiming.SleepNone;
         if (!_initialized)
         {
             if (!StartMoving(world))
@@ -503,6 +516,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
                 return SimulationTiming.SleepNone;
             }
             _initialized = true;
+            _framePhase.Reset();
         }
 
         // Every half second a random splash sound is rolled; the roll is state of the logic stream even though the sound is presentation.
@@ -514,6 +528,8 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
         }
 
         Advance(world);
+        _framePhase.Next(world.Time);
+        if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
         var dx = _finalX - Entity.X;
         var dy = _finalY - Entity.Y;
         if (SquaredReach.Of(PathExtraDistance).Contains(dx * dx + dy * dy))
@@ -606,7 +622,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
                 if (behind >= Fixed.Zero || obj.HasStatus(WetBit)) continue;
                 obj.Status |= 1UL << WetBit;
                 world.MarkDirty(obj);
-                if (obj.ModuleArray.OfType<ToppleUpdate>().FirstOrDefault() is { IsAbleToBeToppled: true } topple) topple.ApplyTopplingForce(world, obj.X - px, obj.Y - py, data.ToppleForce);
+                if (obj.ModuleArray.OfType<ToppleUpdate>().FirstOrDefault() is { IsAbleToBeToppled: true } topple) topple.ApplyTopplingSpeed(world, obj.X - px, obj.Y - py, data.ToppleForce);
                 var amount = world.AdjustDamageByArmor(obj, WaterDamage, data.DamageAmount);
                 world.Damage(obj.Id, new DamageInfo(Entity.Id, amount, WaterDamage, FloodedDeath, false));
             }
@@ -623,6 +639,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
         writer.Fixed("finalX", _finalX);
         writer.Fixed("finalY", _finalY);
         writer.Int("splashTick", _splashTick);
+        _framePhase.Describe(writer, "framePhase");
     }
 
     public override void Load(IStateReader reader)
@@ -635,6 +652,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
         _finalX = reader.Fixed("finalX");
         _finalY = reader.Fixed("finalY");
         _splashTick = reader.Int("splashTick");
+        _framePhase.Load(reader, "framePhase");
     }
 }
 

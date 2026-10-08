@@ -211,7 +211,10 @@ public static partial class RateCases
         var bus = scene.Spawn(name, 1, 2000, 2000);
         scene.StepFrames(RateScene.Seconds(1));
         scene.Align();
-        scene.Kill(bus);
+        // A lethal hit that can be resisted: the first death of the bus (its UndeadBody starts the second life and the bus is thrown). KillCommand deals
+        // unresistable damage, which ends the bus on its first life at every rate and leaves nothing to measure.
+        var lethal = (bus.Body?.MaxHealth ?? Fixed.One) * 10;
+        scene.Order(0, (_, sequence, now) => new DamageCommand(PlayerId.System, sequence, now, bus.Id, lethal, DamageTypes.Explosion, DeathTypes.Normal));
         long up = -1, down = -1;
         var apex = Fixed.Zero;
         var steps = scene.Time.WholeSecondsToTicks(30);
@@ -300,7 +303,9 @@ public static partial class RateCases
         var started = scene.StepUntil(() => collapse.IsCollapsing || collapse.IsCollapsed, RateScene.Seconds(120));
         var done = scene.StepUntil(() => collapse.IsCollapsed || scene.World.FindEntity(building.Id) != building, RateScene.Seconds(240));
         quantities.Exact("kill to the start of the collapse", started);
-        quantities.Event("collapse: start to down", started >= 0 ? done : -1);
+        // StepUntil counts from the step that executes an order given just before it. No order precedes the second call: its first step is already one
+        // tick after the step in which the collapse was seen to start, so the ticks from that step to the end are its result and one.
+        quantities.Event("collapse: start to down", started >= 0 && done >= 0 ? done + Time.TickOrder.Next : -1);
         return quantities.Done();
     }
 

@@ -304,6 +304,10 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
     private EntityId _unloading;
     private Fixed _pushPerTick;
     private int _unloadCount = UnloadAllRiders;
+    // The pull and the push move their object every tick, but whether it has arrived (within 6 and 3 units) is asked once per logic frame of the original,
+    // counted from the start of the pull or push: the arrival falls on the tick it falls on at 30 Hz. At rest (unwritten) between two frames.
+    private FramePhase _pullPhase;
+    private FramePhase _pushPhase;
 
     public override string ModuleName => "RailedTransportDockUpdate";
 
@@ -349,6 +353,7 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
         docker.Status |= 1UL << UnselectableBit;
         Hold(docker, true);
         _pullPerTick = world.Time.SharePerTick(magnitude, Fixed.FromInt(world.Time.AtLeastOneFrame(data.PullInsideTicks)));
+        _pullPhase.Reset();
         docker.Angle = FixedTrig.Atan2(dy, dx);
         world.MarkDirty(docker);
         world.MarkDirty(Entity);
@@ -402,6 +407,8 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
             docker.Y += dy / length * _pullPerTick;
         }
         world.MarkDirty(docker);
+        _pullPhase.Next(world.Time);
+        if (!_pullPhase.AtBoundary) return;
         var rx = Entity.X - docker.X;
         var ry = Entity.Y - docker.Y;
         if (rx * rx + ry * ry > PullArrivalSquared) return;
@@ -447,6 +454,8 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
         }
         unloader.Z = ez;
         world.MarkDirty(unloader);
+        _pushPhase.Next(world.Time);
+        if (!_pushPhase.AtBoundary) return;
         var rx = ex - unloader.X;
         var ry = ey - unloader.Y;
         if (rx * rx + ry * ry > PushArrivalSquared) return;
@@ -479,6 +488,7 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
         var dy = ey - unloader.Y;
         var dz = ez - unloader.Z;
         _pushPerTick = world.Time.SharePerTick(Fixed.Sqrt(dx * dx + dy * dy + dz * dz), Fixed.FromInt(world.Time.AtLeastOneFrame(data.PushOutsideTicks)));
+        _pushPhase.Reset();
         _unloading = unloader.Id;
         if (_unloadCount != UnloadAllRiders) _unloadCount--;
         world.MarkDirty(unloader);
@@ -490,11 +500,13 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
         {
             writer.UInt("docking", _docking.Value);
             writer.Fixed("pullPerTick", _pullPerTick);
+            _pullPhase.Describe(writer, "pullPhase");
         }
         if (_unloading.IsValid)
         {
             writer.UInt("unloading", _unloading.Value);
             writer.Fixed("pushPerTick", _pushPerTick);
+            _pushPhase.Describe(writer, "pushPhase");
         }
         if (_unloadCount != UnloadAllRiders) writer.Int("unloadCount", _unloadCount);
     }
@@ -506,5 +518,7 @@ internal sealed class RailedTransportDockUpdate(RailedTransportDockData data) : 
         _unloading = reader.Has("unloading") ? new EntityId(checked((uint)reader.UInt("unloading"))) : EntityId.Invalid;
         _pushPerTick = reader.Has("pushPerTick") ? reader.Fixed("pushPerTick") : Fixed.Zero;
         _unloadCount = reader.Has("unloadCount") ? checked((int)reader.Int("unloadCount")) : UnloadAllRiders;
+        _pullPhase.Load(reader, "pullPhase");
+        _pushPhase.Load(reader, "pushPhase");
     }
 }

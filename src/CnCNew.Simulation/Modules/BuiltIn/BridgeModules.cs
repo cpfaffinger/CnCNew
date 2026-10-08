@@ -259,6 +259,11 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
     // Distances per tick (state). Until the object is spawned they hold the default per frame of the original; OnSpawn scales it to the rate of the world.
     private Fixed _lateralSpeed = DefaultSpeedPerFrame;
     private Fixed _verticalSpeed = DefaultSpeedPerFrame;
+    // The step of the original (a speed that follows the way left, then the move) is taken once per logic frame of the original: the first tick of a frame
+    // of the motion decides where the frame ends, every tick moves the scaffold an equal share of what is left, the last tick puts it there and, at the
+    // target, goes on to the next motion. At rest (unwritten) between two frames, which is always at 30 Hz.
+    private FramePhase _framePhase;
+    private (Fixed X, Fixed Y, Fixed Z) _frameEnd;
 
     public override string ModuleName => "BridgeScaffoldBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -275,6 +280,8 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
     public void SetMotion(IWorldServices world, Motion motion)
     {
         _motion = motion;
+        // A new motion starts a frame of its own from where the scaffold is.
+        _framePhase.Reset();
         _target = motion switch
         {
             Motion.Rise or Motion.TearDownAcross => _riseTo,
@@ -298,35 +305,22 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
     public long Update(IWorldServices world)
     {
         if (_motion == Motion.Still) return SimulationTiming.SleepForever;
-        var (dirX, dirY, dirZ) = (_target.X - Entity.X, _target.Y - Entity.Y, _target.Z - Entity.Z);
-        var dirLength = Fixed.Sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
-        var (unitX, unitY, unitZ) = dirLength > Fixed.Zero ? (dirX / dirLength, dirY / dirLength, dirZ / dirLength) : (Fixed.Zero, Fixed.Zero, Fixed.Zero);
-
-        var (top, start, end) = _motion switch
+        var ticks = world.Time.TicksPerOriginalFrame;
+        var subTick = _framePhase.Next(world.Time);
+        if (subTick == TickOrder.Next) _frameEnd = FrameEnd(world);
+        if (subTick < ticks)
         {
-            Motion.Rise => (_verticalSpeed, _create, _riseTo),
-            Motion.Sink => (_verticalSpeed, _riseTo, _create),
-            Motion.BuildAcross => (_lateralSpeed, _riseTo, _build),
-            _ => (_lateralSpeed, _build, _riseTo),
-        };
-        // "adjust speed so it's slower at the end of motion": a quarter of the whole way is the ramp.
-        var (sx, sy, sz) = (end.X - start.X, end.Y - start.Y, end.Z - start.Z);
-        var totalDistance = Fixed.Sqrt(sx * sx + sy * sy + sz * sz) * Fixed.FromDecimal(0.25m);
-        var (rx, ry, rz) = (end.X - Entity.X, end.Y - Entity.Y, end.Z - Entity.Z);
-        var ourDistance = Fixed.Sqrt(rx * rx + ry * ry + rz * rz);
-        var speed = totalDistance > Fixed.Zero ? ourDistance / totalDistance * top : top;
-        var minSpeed = top * MinSpeedShare;
-        if (speed < minSpeed) speed = minSpeed;
-        if (speed > top) speed = top;
-        var absoluteMinSpeed = world.Time.PerOriginalFrameToPerTick(AbsoluteMinSpeedPerFrame); // untouched at 30 Hz
-        if (speed < absoluteMinSpeed) speed = absoluteMinSpeed;
-
-        var (newX, newY, newZ) = (Entity.X + unitX * speed, Entity.Y + unitY * speed, Entity.Z + unitZ * speed);
-        // Would the step pass the target? Then the target is reached.
-        var tooFar = (_target.X - newX) * dirX + (_target.Y - newY) * dirY + (_target.Z - newZ) * dirZ;
-        if (tooFar <= Fixed.Zero)
+            // An equal share of what is left for each tick left: a straight line to the place the frame ends at.
+            var left = ticks - subTick + TickOrder.Next;
+            Entity.X += Fixed.FromRaw((_frameEnd.X - Entity.X).Raw / left);
+            Entity.Y += Fixed.FromRaw((_frameEnd.Y - Entity.Y).Raw / left);
+            Entity.Z += Fixed.FromRaw((_frameEnd.Z - Entity.Z).Raw / left);
+            return SimulationTiming.SleepNone;
+        }
+        // "Would the step pass the target? Then the target is reached": FrameEnd returns the target itself in that case, and only then.
+        var (newX, newY, newZ) = _frameEnd;
+        if (_frameEnd == _target)
         {
-            (newX, newY, newZ) = _target;
             switch (_motion)
             {
                 case Motion.Rise: SetMotion(world, Motion.BuildAcross); break;
@@ -339,6 +333,39 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
         Entity.Y = newY;
         Entity.Z = newZ;
         return _motion == Motion.Still ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
+    }
+
+    /// <summary>One step of <c>BridgeScaffoldBehavior::update</c> from where the scaffold is: where it is one logic frame of the original later (the target, if the step would pass it).</summary>
+    private (Fixed X, Fixed Y, Fixed Z) FrameEnd(IWorldServices world)
+    {
+        var (dirX, dirY, dirZ) = (_target.X - Entity.X, _target.Y - Entity.Y, _target.Z - Entity.Z);
+        var dirLength = Fixed.Sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+        var (unitX, unitY, unitZ) = dirLength > Fixed.Zero ? (dirX / dirLength, dirY / dirLength, dirZ / dirLength) : (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+
+        var (topPerTick, start, end) = _motion switch
+        {
+            Motion.Rise => (_verticalSpeed, _create, _riseTo),
+            Motion.Sink => (_verticalSpeed, _riseTo, _create),
+            Motion.BuildAcross => (_lateralSpeed, _riseTo, _build),
+            _ => (_lateralSpeed, _build, _riseTo),
+        };
+        // The speeds of the state are distances per tick; the step is the original's, a distance per frame.
+        var top = world.Time.PerTickToPerOriginalFrame(topPerTick);
+        // "adjust speed so it's slower at the end of motion": a quarter of the whole way is the ramp.
+        var (sx, sy, sz) = (end.X - start.X, end.Y - start.Y, end.Z - start.Z);
+        var totalDistance = Fixed.Sqrt(sx * sx + sy * sy + sz * sz) * Fixed.FromDecimal(0.25m);
+        var (rx, ry, rz) = (end.X - Entity.X, end.Y - Entity.Y, end.Z - Entity.Z);
+        var ourDistance = Fixed.Sqrt(rx * rx + ry * ry + rz * rz);
+        var speed = totalDistance > Fixed.Zero ? ourDistance / totalDistance * top : top;
+        var minSpeed = top * MinSpeedShare;
+        if (speed < minSpeed) speed = minSpeed;
+        if (speed > top) speed = top;
+        if (speed < AbsoluteMinSpeedPerFrame) speed = AbsoluteMinSpeedPerFrame;
+
+        var (newX, newY, newZ) = (Entity.X + unitX * speed, Entity.Y + unitY * speed, Entity.Z + unitZ * speed);
+        // Would the step pass the target? Then the target is reached.
+        var tooFar = (_target.X - newX) * dirX + (_target.Y - newY) * dirY + (_target.Z - newZ) * dirZ;
+        return tooFar <= Fixed.Zero ? _target : (newX, newY, newZ);
     }
 
     private static void DescribePoint(IStateWriter writer, string name, (Fixed X, Fixed Y, Fixed Z) point)
@@ -366,6 +393,9 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
         DescribePoint(writer, "target", _target);
         writer.Fixed("lateralSpeed", _lateralSpeed);
         writer.Fixed("verticalSpeed", _verticalSpeed);
+        if (_framePhase.AtBoundary) return;
+        _framePhase.Describe(writer, "framePhase");
+        DescribePoint(writer, "frameEnd", _frameEnd);
     }
 
     public override void Load(IStateReader reader)
@@ -380,5 +410,7 @@ public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
         _target = LoadPoint(reader, "target");
         _lateralSpeed = reader.Fixed("lateralSpeed");
         _verticalSpeed = reader.Fixed("verticalSpeed");
+        _framePhase.Load(reader, "framePhase");
+        _frameEnd = reader.Has("frameEnd") ? LoadPoint(reader, "frameEnd") : default;
     }
 }

@@ -83,6 +83,10 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     private Fixed _angularAcceleration;
     private Fixed _angularAccumulation;
     private EntityId _stumpId = EntityId.Invalid;
+    // The fall is the recursion of the original, once per frame of the original and in its units (radians per frame, per frame²); above 30 Hz the angle
+    // covers the step of a frame tick by tick. Both fields are at rest (zero, unwritten) between two frames, which is always at 30 Hz.
+    private FramePhase _framePhase;
+    private Fixed _frameStep;
 
     public override string ModuleName => "ToppleUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -103,9 +107,22 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     /// </summary>
     public bool HasToppled => _state == State.Falling || (_state == State.Down && !data.KillWhenStartToppled);
 
-    /// <summary><c>Object::topple</c> / <c>ToppleUpdate::applyTopplingForce</c>: <paramref name="directionX"/>/<paramref name="directionY"/> point from the pusher to this object; <paramref name="speed"/> is the pusher's speed.</summary>
+    /// <summary>
+    /// The entry of the callers that pass a speed per tick (<c>SimulationWorld.Collision.cs</c>, <c>TryTopple</c>: <c>Entity.Speed</c>).
+    /// </summary>
     public void ApplyTopplingForce(IWorldServices world, Fixed directionX, Fixed directionY, Fixed speed)
+        // PHASE 23 MERGE: the one conversion from a speed per tick. Remove the factor (and let every caller use ApplyTopplingSpeed) once TryTopple passes
+        // the pusher's speed per frame of the original; until then a caller that already passes a value per frame must call ApplyTopplingSpeed.
+        => ApplyTopplingSpeed(world, directionX, directionY, world.Time.PerTickToPerOriginalFrame(speed));
+
+    /// <summary>
+    /// <c>Object::topple</c> / <c>ToppleUpdate::applyTopplingForce</c>: <paramref name="directionX"/>/<paramref name="directionY"/> point from the pusher to this object;
+    /// <paramref name="speedPerOriginalFrame"/> is the pusher's speed in distance per logic frame of the original (the unit of the reference and of the data:
+    /// <c>ToppleForce</c>, <c>ToppleSpeed</c>), whatever the rate of the world.
+    /// </summary>
+    public void ApplyTopplingSpeed(IWorldServices world, Fixed directionX, Fixed directionY, Fixed speedPerOriginalFrame)
     {
+        var speed = speedPerOriginalFrame;
         if (!IsAbleToBeToppled || Entity.EffectivelyDead) return;
         if (data.KillWhenStartToppled)
         {
@@ -120,6 +137,8 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         _angularVelocity = speed * data.InitialVelocityPercent;
         _angularAcceleration = speed * data.InitialAccelPercent;
         _angularAccumulation = Fixed.Zero;
+        _framePhase.Reset();
+        _frameStep = Fixed.Zero;
         _state = State.Falling;
         if (data.StumpName.Length != 0) SpawnStump(world);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
@@ -151,13 +170,19 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
     public long Update(IWorldServices world)
     {
         if (_state != State.Falling) return SimulationTiming.SleepForever;
-        var current = _angularVelocity;
-        if (_angularAccumulation + current > AngularLimit) current = AngularLimit - _angularAccumulation;
-        _angularAccumulation += current;
+        // The step of this frame of the original is decided by its first tick, covered by all of its ticks, and concluded (bounce or acceleration) by its last.
+        var subTick = _framePhase.Next(world.Time);
+        if (subTick == TickOrder.Next)
+        {
+            _frameStep = _angularVelocity;
+            if (_angularAccumulation + _frameStep > AngularLimit) _frameStep = AngularLimit - _angularAccumulation;
+        }
+        _angularAccumulation += world.Time.FrameShare(_frameStep, subTick);
+        if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
         if (_angularAccumulation >= AngularLimit && _angularVelocity > Fixed.Zero)
         {
             _angularVelocity = -(_angularVelocity * data.BounceVelocityPercent);
-            if (_angularVelocity.Abs() < world.Time.PerOriginalFrameToPerTick(VelocityBounceLimitPerFrame))
+            if (_angularVelocity.Abs() < VelocityBounceLimitPerFrame)
             {
                 _angularVelocity = Fixed.Zero;
                 _state = State.Down;
@@ -183,6 +208,9 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         writer.Fixed("angularAcceleration", _angularAcceleration);
         writer.Fixed("angularAccumulation", _angularAccumulation);
         writer.UInt("stump", _stumpId.Value);
+        if (_framePhase.AtBoundary) return;
+        _framePhase.Describe(writer, "framePhase");
+        writer.Fixed("frameStep", _frameStep);
     }
 
     public override void Load(IStateReader reader)
@@ -194,6 +222,8 @@ public sealed class ToppleUpdate(ToppleUpdateData data) : SimModule, IUpdateModu
         _angularAcceleration = reader.Fixed("angularAcceleration");
         _angularAccumulation = reader.Fixed("angularAccumulation");
         _stumpId = new EntityId(checked((uint)reader.UInt("stump")));
+        _framePhase.Load(reader, "framePhase");
+        _frameStep = reader.Has("frameStep") ? reader.Fixed("frameStep") : Fixed.Zero;
     }
 }
 
@@ -260,6 +290,8 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     private Fixed _lastCrushedDistance;
     private Fixed _buildingHeight;
     private bool _gridSweepWarned;
+    // The ticks taken of the current frame of the fall (the fall is the original's recursion, once per frame; the angle covers the frame's step tick by tick).
+    private FramePhase _framePhase;
 
     public override string ModuleName => "StructureToppleUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -268,7 +300,10 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     public bool IsToppled => _state == State.Done;
 
     /// <summary>How far the building has fallen: 0 upright, a quarter turn flat.</summary>
-    public Fixed Angle => Fixed.FromRaw(_angleFine >> FineBits);
+    public Fixed Angle => Fixed.Min(RawAngle, FixedTrig.HalfPi);
+
+    /// <summary>The accumulated angle as the recursion holds it: inside the last frame of the fall it may be past the quarter turn the frame ends at.</summary>
+    private Fixed RawAngle => Fixed.FromRaw(_angleFine >> FineBits);
 
     public override void OnSpawn(IWorldServices world)
     {
@@ -291,7 +326,8 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
         _directionX = FixedTrig.Cos(angle);
         _directionY = FixedTrig.Sin(angle);
         _state = State.WaitingForToppleStart;
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        // Without a delay the fall starts with the first update, which the original runs one frame after the death.
+        world.WakeAt(Entity, this, world.Tick + (delay == 0 ? world.Time.TicksPerOriginalFrame : SimulationTiming.SleepNone));
     }
 
     public long Update(IWorldServices world)
@@ -304,13 +340,14 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
                     _state = State.Toppling;
                     _structuralIntegrity = data.StructuralIntegrity;
                     _angleFine = StartAngleFine; // the reference's literal starting value 0.001 (StructureToppleUpdate ctor): a tiny nudge so sin(angle) below is not permanently zero.
+                    _framePhase.Reset();
                 }
                 return SimulationTiming.SleepNone;
             case State.Toppling:
                 StepToppling(world);
                 return SimulationTiming.SleepNone;
             case State.WaitingForDone:
-                if (world.Tick >= _doneAtTick) { _state = State.Done; return SimulationTiming.SleepForever; }
+                if (world.Tick > _doneAtTick) { _state = State.Done; return SimulationTiming.SleepForever; }
                 return SimulationTiming.SleepNone;
             default:
                 return SimulationTiming.SleepForever;
@@ -319,17 +356,26 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
 
     private void StepToppling(IWorldServices world)
     {
-        // TOPPLE_ACCELERATION_FACTOR * sin(angle) * (1 - integrity): the exact product of the three raw values, cut to the fine resolution (toward negative
-        // infinity; at 16 fraction bits nothing is cut, the product has exactly the fine bits).
-        var product = (Int128)world.Time.PerOriginalFrameSquaredToPerTickSquared(AccelFactorPerFrameSquared).Raw * FixedTrig.Sin(Angle).Raw * (Fixed.One - _structuralIntegrity).Raw;
-        _velocityFine = checked(_velocityFine + (long)(product >> ProductExcessBits));
-        if (_structuralIntegrity > Fixed.Zero)
+        // One step of the original per frame of the original, in its units (radians per frame, per frame²): the first tick of a frame accelerates and lets
+        // the structure decay, every tick turns the building by its share of the frame's velocity, the last tick crushes and ends the fall.
+        var ticks = world.Time.TicksPerOriginalFrame;
+        var subTick = _framePhase.Next(world.Time);
+        if (subTick == TickOrder.Next)
         {
-            _structuralIntegrity *= data.StructuralDecay;
-            if (_structuralIntegrity < Fixed.Zero) _structuralIntegrity = Fixed.Zero;
+            // TOPPLE_ACCELERATION_FACTOR * sin(angle) * (1 - integrity): the exact product of the three raw values, cut to the fine resolution (toward negative
+            // infinity; at 16 fraction bits nothing is cut, the product has exactly the fine bits).
+            var product = (Int128)AccelFactorPerFrameSquared.Raw * FixedTrig.Sin(RawAngle).Raw * (Fixed.One - _structuralIntegrity).Raw;
+            _velocityFine = checked(_velocityFine + (long)(product >> ProductExcessBits));
+            if (_structuralIntegrity > Fixed.Zero)
+            {
+                _structuralIntegrity *= data.StructuralDecay;
+                if (_structuralIntegrity < Fixed.Zero) _structuralIntegrity = Fixed.Zero;
+            }
         }
-        _angleFine += _velocityFine;
-        ApplyCrushingDamage(world, FixedTrig.HalfPi - Angle);
+        // floor(v * k / n) - floor(v * (k - 1) / n): the shares of one frame add up to the velocity exactly. At 30 Hz the whole velocity.
+        _angleFine += ticks == TickOrder.Next ? _velocityFine : checked(_velocityFine * subTick) / ticks - checked(_velocityFine * (subTick - TickOrder.Next)) / ticks;
+        if (!_framePhase.AtBoundary) return;
+        ApplyCrushingDamage(world, FixedTrig.HalfPi - RawAngle);
         var flat = FixedTrig.HalfPi.Raw << FineBits;
         if (_angleFine >= flat)
         {
@@ -337,7 +383,8 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
             _angleFine = flat;
             ApplyCrushingDamage(world, Fixed.Zero);
             _state = State.WaitingForDone;
-            _doneAtTick = world.Tick;
+            // Done comes with the update one frame of the original later: the first one after this tick at 30 Hz.
+            _doneAtTick = world.Tick + world.Time.TicksPerOriginalFrame - TickOrder.Next;
         }
     }
 
@@ -370,12 +417,13 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
         writer.Fixed("directionY", _directionY);
         // The Fixed part under the names the state always had; the extra bits only once there are any (a standing building's state is unchanged).
         writer.Fixed("velocity", Fixed.FromRaw(_velocityFine >> FineBits));
-        writer.Fixed("accumulatedAngle", Angle);
+        writer.Fixed("accumulatedAngle", RawAngle);
         if ((_velocityFine & FineMask) != 0) writer.Int("velocityFine", _velocityFine & FineMask);
         if ((_angleFine & FineMask) != 0) writer.Int("angleFine", _angleFine & FineMask);
         writer.Fixed("structuralIntegrity", _structuralIntegrity);
         writer.Fixed("lastCrushedDistance", _lastCrushedDistance);
         writer.Bool("gridSweepWarned", _gridSweepWarned);
+        _framePhase.Describe(writer, "framePhase");
     }
 
     public override void Load(IStateReader reader)
@@ -391,6 +439,7 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
         _structuralIntegrity = reader.Fixed("structuralIntegrity");
         _lastCrushedDistance = reader.Fixed("lastCrushedDistance");
         _gridSweepWarned = reader.Bool("gridSweepWarned");
+        _framePhase.Load(reader, "framePhase");
         _buildingHeight = ToppleAndFallModules.MaxHeightAbovePosition(Entity.Template);
     }
 }
@@ -415,6 +464,8 @@ public sealed record HeightDieData(Fixed TargetHeightAboveTerrain, bool TargetHe
 /// <c>OnlyWhenMovingDown</c> is set and the object's Z did not just decrease. Not modelled: the bridge/tunnel layer height
 /// the reference adds on top of flat terrain (no pathfind layers exist here) and the attached-particle cleanup
 /// (<c>DestroyAttachedParticlesAtHeight</c>, pure presentation).
+/// <para>The height is looked at once per logic frame of the original, with the last tick of each frame counted from the module's first update: "moving
+/// down" compares with the height one frame of the original ago, and the object dies at the height it has at a frame boundary, as at 30 Hz.</para>
 /// </summary>
 public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModule
 {
@@ -422,6 +473,7 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
     private bool _hasDied;
     private long _earliestDeathTick = -1;
     private Fixed _lastZ = Fixed.FromInt(-1);
+    private FramePhase _framePhase; // at rest (unwritten) between two frames, which is always at 30 Hz
 
     public override string ModuleName => "HeightDieUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -430,6 +482,8 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
     public long Update(IWorldServices world)
     {
         if (_earliestDeathTick < 0) _earliestDeathTick = world.Tick + data.InitialDelayTicks;
+        _framePhase.Next(world.Time);
+        if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
         if (world.Tick < _earliestDeathTick) return SimulationTiming.SleepNone;
         if (Entity.ContainedBy.IsValid) { _lastZ = Entity.Z; return SimulationTiming.SleepNone; }
 
@@ -470,6 +524,7 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
         writer.Bool("hasDied", _hasDied);
         writer.Int("earliestDeathTick", _earliestDeathTick);
         writer.Fixed("lastZ", _lastZ);
+        _framePhase.Describe(writer, "framePhase");
     }
 
     public override void Load(IStateReader reader)
@@ -478,5 +533,6 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
         _hasDied = reader.Bool("hasDied");
         _earliestDeathTick = reader.Int("earliestDeathTick");
         _lastZ = reader.Fixed("lastZ");
+        _framePhase.Load(reader, "framePhase");
     }
 }

@@ -39,26 +39,33 @@ public sealed record RepairDockData(int NumberApproachPositions, Fixed FramesFor
 }
 
 /// <summary>
-/// <c>RepairDockUpdate::action</c>: the first action for a new docker fixes the per-tick amount as <c>(max - health) / framesForFullHeal</c>, every
-/// action heals that amount (source: this dock, <c>DAMAGE_HEALING</c>) and the docking completes once the docker is at full health. The
-/// reference's <c>m_lastRepair</c> is the "amount already fixed" flag (<c>INVALID_ID</c> is 0 there). Not modelled: the drone healing
+/// <c>RepairDockUpdate::action</c>: the first action for a new docker fixes the amount per logic frame of the original as
+/// <c>(max - health) / framesForFullHeal</c>, every action of the original heals that amount (source: this dock, <c>DAMAGE_HEALING</c>) and the docking
+/// completes once the docker is at full health. The docker's machine asks every tick; the dock answers as the original once per frame of the original,
+/// counted from the first action for the docker (the calls in between only keep the docker docked), so the docker's health is that of 30 Hz at every frame
+/// boundary. The reference's <c>m_lastRepair</c> is the "amount already fixed" flag (<c>INVALID_ID</c> is 0 there). Not modelled: the drone healing
 /// (the docker's battle drone is healed to full on each action; drones do not exist here).
 /// </summary>
 internal sealed class RepairDockUpdate(RepairDockData data) : DockUpdateBase(data)
 {
     private EntityId _lastRepair;
-    private Fixed _healthToAddPerTick;
+    private Fixed _healthToAddPerTick; // per action of the original: per logic frame of the original (the name is the state's)
+    private FramePhase _actionPhase;
 
     public override string ModuleName => "RepairDockUpdate";
 
     public override bool Action(IWorldServices world, Entity docker)
     {
         if (docker.Body is not { } body) return false;
+        var ticks = world.Time.TicksPerOriginalFrame;
         if (!_lastRepair.IsValid)
         {
             _lastRepair = docker.Id;
-            _healthToAddPerTick = world.Time.SharePerTick(body.MaxHealth - body.Health, data.FramesForFullHeal);
+            // The duration of the catalog is unrounded ticks of the rate; in frames of the original it is that over the ticks per frame.
+            _healthToAddPerTick = world.Time.SharePerTick(body.MaxHealth - body.Health, ticks == TickOrder.Next ? data.FramesForFullHeal : data.FramesForFullHeal / Fixed.FromInt(ticks));
+            _actionPhase.Reset();
         }
+        if (_actionPhase.Next(world.Time) != TickOrder.Next) return true;
         if (body.Health >= body.MaxHealth)
         {
             _lastRepair = EntityId.Invalid;
@@ -75,12 +82,14 @@ internal sealed class RepairDockUpdate(RepairDockData data) : DockUpdateBase(dat
     {
         writer.UInt("lastRepair", _lastRepair.Value);
         writer.Int("healthPerTick", _healthToAddPerTick.Raw);
+        _actionPhase.Describe(writer, "actionPhase");
     }
 
     protected override void LoadDock(IStateReader reader)
     {
         _lastRepair = new EntityId(checked((uint)reader.UInt("lastRepair")));
         _healthToAddPerTick = Fixed.FromRaw(reader.Int("healthPerTick"));
+        _actionPhase.Load(reader, "actionPhase");
     }
 }
 
