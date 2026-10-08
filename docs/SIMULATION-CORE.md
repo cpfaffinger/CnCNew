@@ -2278,7 +2278,8 @@ Hindernis (`ignoreObstacle`). Untätige Verbündete auf dem Weg werden weggeschi
 | Torpunkt | derselbe Punkt, nur eine Zelle (10) nach außen; der Weg der Einheit führt zuerst über ihn (`AIUpdateInterface.OrderExitProduction`: Zwischenpunkt des Wegs, kein Halt; `_viaPending`) | **eigene Festlegung:** so verlässt die Einheit das Gebäude auf der Torseite, auch wenn ihr Halteplatz seitlich liegt. Die Wegsuche verlässt den Grundriss, in dem die Einheit steht, von selbst (Ersatz für `ignoreObstacle`). Ist der Torpunkt nicht erreichbar (zugebaut), fährt die Einheit direkt zum Ziel |
 | Platz machen | Steht eine untätige eigene Einheit auf dem Ausfahrtspunkt, wird sie auf den nächsten freien Platz daneben geschickt, die neue Einheit nimmt den Punkt (`SimulationWorld.ClaimExitPoint`) | reduziert nach `Pathfinder::moveAllies` / `aiMoveAwayFromUnit` (das Original räumt untätige Verbündete entlang des ganzen Wegs weg) |
 | Freier Platz | `IWorldServices.FindFreeGoal`: Plätze in Reihen quer zur Laufrichtung (0, +1, −1, … ±3 Plätze, vier Reihen; Abstand = doppelter Begrenzungsradius + 5, mindestens eine Zelle); frei heißt: Zelle begehbar und nicht bebaut, kein anderes bewegliches Objekt steht dort oder ist dorthin unterwegs. Ist alles belegt, bleibt es beim Ziel selbst | reduziert nach `Pathfinder::adjustDestination`; Reihen- und Platzzahl sind eigene Werte |
-| Sammelpunkt | erst der Ausfahrtsweg, dann – auf einem freien Platz am Sammelpunkt – der Sammelpunkt (`_exitRallyPending`); jeder andere Befehl ersetzt den ganzen Weg | `exitObjectViaDoor`: `adjustDestination` für den Sammelpunkt |
+| Sammelpunkt | erst der Ausfahrtsweg, dann – auf einem freien Platz am Sammelpunkt – der Sammelpunkt (`_exitRallyPending`) | `exitObjectViaDoor`: `adjustDestination` für den Sammelpunkt |
+| Anderer Befehl während der Ausfahrt | ersetzt den ganzen Ausfahrtsweg samt Torpunkt und zweiter Etappe – jeder Befehl, nicht nur ein Bewegungsbefehl (`AIUpdateInterface.EndExitPath`; §42.6) | der Ausfahrtsweg ist ein Zustand der KI des Originals (`AI_FOLLOW_EXIT_PRODUCTION_PATH`), ein neuer Befehl ersetzt ihn |
 | Versorgungslager | unverändert: der Lastwagen wird sofort von der Versorgungs-KI übernommen (`ForceSupplyWanting`), ohne Ausfahrtsweg | Abweichung, nur gemeldet |
 
 ### 42.3 Bildkonvention (30 / 60 / 120 Hz)
@@ -2342,7 +2343,9 @@ zu 30 Hz** (z. B. `AmericaCommandCenter`: 8,0667 / 13,0667 / 18,0667 s, alle ruh
 
 Außerhalb von `ai` schlägt dieselbe Menge von 14 Zeilen fehl wie vorher. In sechs bestehenden Fällen `economy/produce …` hat sich „queue to both units standing“ geändert (die
 Einheiten fahren jetzt hinaus, z. B. Ranger 9,9667 × 3 → 13,8333 / 13,8500 / 13,8583 s; der Rest ist die Ankunft im letzten Tick des Bildes, innerhalb der Toleranz). Die Gruppe `ai`
-(ganze Gefechte, chaotisch) ist bei 120 Hz um drei Größen schlechter; nicht nachverfolgt. Keine Toleranz wurde angefasst.
+(ganze Gefechte, chaotisch) ist bei 120 Hz um drei Größen schlechter, mit den Folge-Commits aus §42.6 bei 27 / 26; nicht nachverfolgt (das erste Bild mit abweichender Lage
+im Gefecht America gegen China liegt mit Ausfahrtsweg und Folge-Commits weiter bei 3543, 118,10 s, wie auf `main`: der ganze Aufbau mit allen Ausfahrten ist zwischen 30 und 60 Hz
+bitgleich). Keine Toleranz wurde angefasst.
 
 **Tests:** `Simulation.Tests` grün bei 30 Hz und mit `--tick-rate 60` und `120`; neu `ConstructionExitPath` (Erscheinen, Ausfahrt, Platz machen, Sammelpunkt, Fortsetzung aus dem
 Snapshot), „Rate invariance, exits: …“ (drei Einheiten ohne und mit Sammelpunkt: Lage, Kurs, Befehlszustand und Ziel nach jedem von 450 Bildern bitgleich bei 30, 60 und 120 Hz, in
@@ -2360,13 +2363,13 @@ Referenzmatch jetzt: Sieger FactionGLA bei **Tick 14.130** (vorher 17.805), Endh
 **Ergebnisgrößen statt Hashes** (`reference-manifest results`, vorher = Binärdateien von `main`):
 
 - 27 Missionsläufe: alle Ergebnisgrößen gleich (Ausgang, Schusszahlen, Ereigniszahlen) – auch `mission_MD_USA05`, dessen Hash sich ändert. `stress` gleich.
-- 16 KI-Läufe: **8 statt 12 entschieden**. Vier Läufe enden jetzt im Patt statt mit einem Sieger (Alpine Assault und Death Valley, je America gegen China und ChinaTank gegen
+- 16 KI-Läufe **nur mit dem Commit des Ausfahrtswegs (`df7443d`), überholt durch §42.6** (mit den beiden Folge-Commits wieder 12 von 16 mit den Siegern von `main`): **8 statt 12 entschieden**. Vier Läufe enden jetzt im Patt statt mit einem Sieger (Alpine Assault und Death Valley, je America gegen China und ChinaTank gegen
   AirForce; vorher gewann America bzw. AirForce bei Tick 16.665, 14.610, 9.390, 10.635); **ein Siegerwechsel** (Death Valley China gegen GLA: China bei 8.580 → GLA bei 8.940); sieben
   Läufe haben denselben Sieger zu anderer Zeit (China gegen GLA: Alpine 10.710 → 19.395, Armored Fury 42.840 → 11.865, Bitter Winter 7.950 → 13.935; GLA gegen America, Sieger America:
   Alpine 7.815 → 7.590, Armored Fury 28.800 → 18.795, Bitter Winter 9.075 → 9.150, Death Valley 8.475 → 11.955); vier waren und bleiben Patt. Damit enden alle acht Paarungen America
   bzw. AirForce gegen China bzw. ChinaTank im Patt. An einem Lauf angesehen (Death Valley America gegen China, `ai-match … --trace`): kein Stillstand – 301 statt 53 Produktionsaufträge,
   9.422 statt 2.767 Schüsse, China drängt America bis Tick 40.500 auf ein Gebäude zurück und beendet es nicht; Chinas Aufbau beginnt später (bei Tick 1.500 noch 5.400 Credits und 2
-  Aufträge statt 200 Credits und 17). **Ursache nicht untersucht, Balance nicht bewertet.**
+  Aufträge statt 200 Credits und 17). Ursache und Korrektur: §42.6.
 - Die vier 8-Spieler-Läufe: vorher wie nachher Patt am Tickbudget.
 - `skirmish-sweep` (150 Karten, 3.000 Ticks): alle 64 Karten, die starten, haben andere Zahlen; überall dieselbe Richtung im frühen Aufbau (z. B. Alpine Assault: 24 statt 29
   fertige Produktionen, 10 statt 8 fertige Gebäude). Keine Karte endet mit einem Fehler.
@@ -2383,5 +2386,91 @@ keine Zeile anders als vorher; `reachability` sauber 24/24 und 24/24.
   das Zellgitter (`snapPosition`); „Platz machen“ gilt nur für den Ausfahrtspunkt, nicht für beliebige Wege.
 - Über 30 Hz liest die Platzwahl Objekte, die nicht in Phase mit der Fabrik sind (mitten im Bild befohlen), an ihrer augenblicklichen Lage bzw. ihrem Ziel (Regel 6 der Konvention);
   ein Befehl an die neue Einheit in den r − 1 Ticks vor der Platzwahl, der ihren Bewegungsbefehl nicht ersetzt (ein Angriffsbefehl), ändert die Platzwahl nicht.
-- Die Verschiebung der KI-Gefechte (oben) ist nicht aufgeschlüsselt. Die Zeitleiste der Tore in den Gesamtszenen weicht zwischen 30 und 60 Hz in zwei Einträgen um ein Bild ab
+- Die Zeitleiste der Tore in den Gesamtszenen weicht zwischen 30 und 60 Hz in zwei Einträgen um ein Bild ab
   (Darstellung, nicht Gegenstand dieses Commits; nicht geprüft, ob das auf `main` auch so ist).
+
+### 42.6 Nachtrag (8. Oktober 2026): warum die KI-Gefechte schlechter wurden, und zwei Folge-Commits
+
+Frage nach §42.4: 8 statt 12 der 16 KI-Läufe entschieden, alle Paarungen America/AirForce gegen China/ChinaTank im Patt, China gibt 50 Sekunden lang kein Geld aus. Zwei Ursachen,
+je ein Commit; beide gehören zum Ausfahrtsweg (`df7443d`) und stehen nach dessen Test- und Doku-Commit, weil die Historie nicht umgeschrieben wird.
+
+**Ursache 1 – eine Schwäche der eingebauten `SkirmishAi`, die der Ausfahrtsweg nur freilegt** (Commit `fix(skirmish-ai): a builder driving out of its factory can be given work`).
+`SkirmishAi.PickBuilder` nahm nur Bauarbeiter, die untätig sind (`IsIdle`). Vorher stand eine frisch gebaute Raupe untätig im Gebäude und bekam im nächsten Denkschritt ihren
+Bauauftrag; jetzt fährt sie 50 bis 95 Bilder hinaus und ist dabei nicht untätig – der Denkschritt fand keinen Bauarbeiter, das Bauziel rutschte um ein Denkintervall, danach fiel die
+Reihenfolge der Ziele anders. Beleg (Death Valley, America gegen China, Befehlsströme aus `reference-manifest results --commands`): die Ströme von `main` und `df7443d` sind bis
+Zeile 34 gleich; dann hat `main` in Tick 628 `ConstructCommand Builder=29 ChinaBarracks` für die in Tick 627 fertige Raupe, `df7443d` für Raupe 29 nichts bis
+`778 SetMoveTargetCommand Target=29` und baut die Kaserne erst in Tick 1468 mit der anderen Raupe (Produktion ab 2233 statt 1108). Korrektur: `AIUpdateInterface.IsOnUnorderedMove`
+(das Objekt bewegt sich, aber niemand hat es befohlen: Ausfahrt, zweite Etappe, Platz machen; aus dem Befehlszustand abgeleitet, kein neuer Zustand) und `PickBuilder` nimmt auch
+solche Bauarbeiter. Der Computerspieler des Originals fragt seine Raupen, ob eine Aufgabe ansteht (`AIPlayer::findDozer`, `DozerAIInterface::isAnyTaskPending`), nicht, ob sie
+stehen. Mit dem Commit ist der Befehlsstrom dieses Gefechts über alle 641 Befehle der von `main` (Sieger America bei 9.390).
+
+**Ursache 2 – ein Fehler in `df7443d` selbst** (Commit `fix(sim): any order replaces the exit path, not only a move order`). Die zweite Etappe (Sammelpunkt) und der Torpunkt wurden
+nur von `OrderMove` verworfen. Eine mit gesetztem Sammelpunkt gebaute Einheit, die während der Ausfahrt einen anderen Befehl bekam – Bauaufgabe, Dock, Halt, ein von der Welt
+geführter Angriff –, behielt die zweite Etappe und lief, sobald sie stand, zum Sammelpunkt davon; der Befehl war damit abgebrochen. Test `ConstructionExitPathYieldsToAnOrder`
+(30, 60, 120 Hz): eine Raupe, die im Gebäude einen Bauauftrag bekommt, baut und bleibt; auf `df7443d` stand sie am Sammelpunkt, die Baustelle bei einem Arbeitsschritt. In den
+KI-Gefechten des Manifests kommt der Fall nicht vor (die KI setzt Sammelpunkte nur an Kasernen und Fabriken und befiehlt deren Einheiten mit Bewegungsbefehlen); gefunden beim
+Durchsehen, was ein Befehl während der Ausfahrt bewirkt. Korrektur: `EndExitPath` überall, wo eine Bewegung von außen ersetzt oder angehalten wird (`OrderMove`, `OrderDock`,
+`StartInternalMove`, `StopInternalMove`).
+
+**Geprüft und ohne Befund:** die Fabrik wartet nicht auf einen freien Ausfahrtspunkt (`IsFreeToExit` unverändert; die Einheit nimmt einen Platz daneben); Laster des
+Versorgungslagers sind unberührt; weggeschickte Einheiten gehen höchstens drei Plätze zur Seite oder vier Reihen nach hinten; im untersuchten Gefecht wurde kein Bauauftrag der KI abgelehnt (Ablehnungen nur bei Spezialfähigkeiten).
+
+**Die 16 KI-Läufe des Manifests** (Sieger und Siegtick; `reference-manifest results`):
+
+| Lauf | `main` | nur `df7443d` | mit beiden Folge-Commits |
+| --- | --- | --- | --- |
+| `AlpineAssault_America-China` | America 16665 | Patt | America 16665 |
+| `AlpineAssault_China-GLA` | China 10710 | China 19395 | China 10665 |
+| `AlpineAssault_ChinaTankGeneral-AmericaAirForceGeneral` | AirForce 14610 | Patt | AirForce 15195 |
+| `AlpineAssault_GLA-America` | America 7815 | America 7590 | America 7815 |
+| `ArmoredFury_America-China` | Patt | Patt | Patt |
+| `ArmoredFury_China-GLA` | China 42840 | China 11865 | China 11595 |
+| `ArmoredFury_ChinaTankGeneral-AmericaAirForceGeneral` | Patt | Patt | Patt |
+| `ArmoredFury_GLA-America` | America 28800 | America 18795 | America 13215 |
+| `BitterWinter_America-China` | Patt | Patt | Patt |
+| `BitterWinter_China-GLA` | China 7950 | China 13935 | China 7950 |
+| `BitterWinter_ChinaTankGeneral-AmericaAirForceGeneral` | Patt | Patt | Patt |
+| `BitterWinter_GLA-America` | America 9075 | America 9150 | America 9090 |
+| `DeathValley_America-China` | America 9390 | Patt | America 9390 |
+| `DeathValley_China-GLA` | China 8580 | GLA 8940 | China 10515 |
+| `DeathValley_ChinaTankGeneral-AmericaAirForceGeneral` | AirForce 10635 | Patt | AirForce 10635 |
+| `DeathValley_GLA-America` | America 8475 | America 11955 | America 8415 |
+| entschieden | 12 von 16 | 8 von 16 | **12 von 16**, dieselben zwölf Sieger wie `main` |
+
+**Verteilung statt Einzelläufen** (`ai-survey --tick-rate 30 --seeds 10`, 16 Paarungen × 10 Seeds = 160 Gefechte; `main` = die ersten zehn Seeds der Referenzerhebung, über 20 Seeds
+253 von 320):
+
+| | `main` | nur `df7443d` | mit beiden Folge-Commits | verworfene Variante „Tor bleibt“ |
+| --- | --- | --- | --- | --- |
+| entschieden | 128 (80,0 %) | 106 (66,2 %) | **124 (77,5 %)** | 120 (75,0 %) |
+| mittlere Dauer der entschiedenen (Ticks) | 14.963 | 15.344 | 14.319 | 15.259 |
+| Siege America (von 80) | 61 | 50 | 62 | 46 |
+| Siege AirForce (von 40) | 19 | 16 | 18 | 29 |
+| Siege China (von 80) | 23 | 19 | 18 | 32 |
+| Siege ChinaTank (von 40) | 5 | 2 | 5 | 2 |
+| Siege GLA (von 80) | 20 | 19 | 21 | 11 |
+| entschieden America–China (von 40) | 26 | 14 | 26 | 16 |
+| entschieden China–GLA (von 40) | 38 | 34 | 35 | 35 |
+| entschieden ChinaTank–AirForce (von 40) | 24 | 18 | 23 | 31 |
+| entschieden GLA–America (von 40) | 40 | 40 | 40 | 38 |
+| erste Kaserne, Mittel (Tick, Seite A / B) | 1.054 / 1.054 | 1.573 / 1.252 | 1.054 / 1.054 | 1.133 / 1.135 |
+| erster Angriff, Mittel (Tick, Seite A / B) | 3.236 / 2.739 | 3.752 / 3.070 | 3.206 / 2.688 | 3.256 / 2.700 |
+
+Mit beiden Folge-Commits liegt der Anteil entschiedener Gefechte vier Gefechte unter `main` (77,5 gegen 80,0 %; über 160 Gefechte kein belegter Unterschied), die Siegverteilung
+und der Zeitpunkt der ersten Kaserne sind die von `main`. **Balance weiter nicht bewertet.**
+
+**Gemessen und verworfen, nicht im Zweig** (Flicken liegt im Scratchpad der Sitzung): „eine Einheit, die im Gebäude einen anderen Befehl bekommt, fährt trotzdem zuerst durch das
+Tor“ (der Torpunkt bliebe bei jedem ersetzenden Befehl stehen). Das Original kennt das nicht belegt, die Raupen der KI brauchen dadurch im Mittel 80 Ticks länger zur ersten Kaserne,
+und die Siegverteilung verschiebt sich deutlich (America 46 statt 61 Siege, China 32 statt 23; 10 statt 12 der 16 Manifestläufe entschieden). **Folge, offen:** eine Einheit, die
+noch im Gebäude einen Befehl bekommt – bei der KI die Raupe im Tick nach ihrem Erscheinen –, verlässt das Gebäude auf dem kürzesten Weg, also durch eine Wand, wie auf `main`.
+Die vom Projektinhaber gesehene Raupe, die „hinausclippt“, gibt es für solche Einheiten weiter; von selbst ausfahrende Einheiten nehmen das Tor.
+
+**Nach den Folge-Commits neu gemessen:** `Simulation.Tests` bei 30, 60 und 120 Hz grün (neu `ConstructionExitPathYieldsToAnOrder`, `ConstructionUnorderedMove`); Suite außerhalb
+von `ai` unverändert (dieselben 14 Zeilen), die 81 Größen der neun Ausfahrtsfälle bitgleich, `ai` 27 / 26; alle zwölf Ausfahrtsszenen und die drei klassischen bei 30 und 60 Hz grün
+mit denselben Bildzahlen wie in §42.4; `reference-manifest check --set full`: dieselben 23 von 50 Läufen weichen ab, Referenzmatch unverändert Tick 14.130, `5BF9BB7CED6D7A35`,
+`56149C0105E992D7`; `--set quick --verify-incremental`: 61.661 Ticks, 0 Abweichungen; Kampagne bei 30 Hz `drive` 24/24 und 24/24 mit denselben Endskripten und Ticks, `audit` 24/24,
+Endproben 13/24 und 15/24; Eingangsmanifest wie in §42.3; `Game.Tests` (Release, mit Inhalt), `Presentation.Tests`, `Ui.Tests`, `check-dozer-build`, `check-build-hotkeys`,
+`check-spectator` grün, Solution-Build 0 Warnungen. Die Seite der KI (Ursache 1) ist an echten Daten gemessen, nicht mit einem eigenen Test der `SkirmishAi` abgedeckt.
+
+**Offen:** die Patts, die bleiben (4 von 16, wie auf `main`), sind Gefechte, in denen eine Seite die andere bis auf wenige Gebäude zurückdrängt und nicht beendet (vgl. §36); der
+Unterschied von vier Gefechten in der Erhebung ist nicht aufgeschlüsselt; 60/120 Hz der KI-Gefechte nicht erhoben.
