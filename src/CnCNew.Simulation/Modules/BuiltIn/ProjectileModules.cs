@@ -279,7 +279,7 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
             Entity.Y = point.Y;
             Entity.Z = point.Z;
         }
-        else FlyToward(point, ticks);
+        else FlyToward(world.Tick, point, ticks);
         _step++;
         _subStep = world.Time.NextSubStep(0);
         return SimulationTiming.SleepNone;
@@ -291,25 +291,28 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
     /// </summary>
     private long FlyTowardNextPoint(IWorldServices world)
     {
-        FlyToward(PathPoint(_step - 1), world.Time.TicksPerOriginalFrame - _subStep);
+        FlyToward(world.Tick, PathPoint(_step - 1), world.Time.TicksPerOriginalFrame - _subStep);
         _subStep = world.Time.NextSubStep(_subStep);
         return SimulationTiming.SleepNone;
     }
 
     /// <summary>Flies one of <paramref name="sharesLeft"/> equal shares of the way that is left to <paramref name="point"/>; the last share lands on it exactly.</summary>
-    private void FlyToward(Point3 point, int sharesLeft)
+    private void FlyToward(long tick, Point3 point, int sharesLeft)
     {
         if (sharesLeft <= 1)
         {
             Entity.X = point.X;
             Entity.Y = point.Y;
             Entity.Z = point.Z;
+            Entity.SetAhead(tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
             return;
         }
         var left = Fixed.FromInt(sharesLeft);
         Entity.X += (point.X - Entity.X) / left;
         Entity.Y += (point.Y - Entity.Y) / left;
         Entity.Z += (point.Z - Entity.Z) / left;
+        // The rest of the frame stays readable on the object (Entity.FrameEndX …): who looks at the shell in this tick sees it at the frame's point, as at 30 Hz.
+        Entity.SetAhead(tick, point.X - Entity.X, point.Y - Entity.Y, point.Z - Entity.Z);
     }
 
     /// <summary><c>DumbProjectileBehavior::detonate</c>: once only; the weapon detonates, then the shell dies (<c>DetonateCallsKill</c>) or is destroyed.</summary>
@@ -745,15 +748,17 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         }
         if (to.X != from.X || to.Y != from.Y) Entity.Angle = FixedTrig.Atan2(to.Y - from.Y, to.X - from.X);
         _frameStep = new Point3(to.X - from.X, to.Y - from.Y, to.Z - from.Z);
+        // The rest of the frame stays readable on the object (Entity.FrameEndX …): who looks at the missile in this tick sees it where this frame ends, as at 30 Hz.
+        Entity.SetAhead(world.Tick, _frameStep.X, _frameStep.Y, _frameStep.Z);
         FlyShare(world);
     }
 
     private void FlyShare(IWorldServices world)
     {
         var time = world.Time;
-        Entity.X += time.FrameShare(_frameStep.X, _subStep);
-        Entity.Y += time.FrameShare(_frameStep.Y, _subStep);
-        Entity.Z += time.FrameShare(_frameStep.Z, _subStep);
+        // A frame completed from outside (Entity.CompleteFrame) has nothing left to cover.
+        if (Entity.IsInsideFrameStep)
+            Entity.CoverShare(world.Tick, time.FrameShare(_frameStep.X, _subStep), time.FrameShare(_frameStep.Y, _subStep), time.FrameShare(_frameStep.Z, _subStep));
         _subStep = time.NextSubStep(_subStep);
         world.MarkDirty(Entity);
     }

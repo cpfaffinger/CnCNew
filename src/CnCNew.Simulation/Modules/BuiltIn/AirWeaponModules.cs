@@ -543,10 +543,9 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
         var time = world.Time;
         if (_subStep != 0)
         {
-            // Between two frames: one more share of the frame's velocity.
-            Entity.X += time.FrameShare(_velocity.X, _subStep);
-            Entity.Y += time.FrameShare(_velocity.Y, _subStep);
-            Entity.Z += time.FrameShare(_velocity.Z, _subStep);
+            // Between two frames: one more share of the frame's velocity – unless the frame was completed from outside (Entity.CompleteFrame: nothing of it is left).
+            if (Entity.IsInsideFrameStep)
+                Entity.CoverShare(world.Tick, time.FrameShare(_velocity.X, _subStep), time.FrameShare(_velocity.Y, _subStep), time.FrameShare(_velocity.Z, _subStep));
             _subStep = time.NextSubStep(_subStep);
             world.MarkDirty(Entity);
             return SimulationTiming.SleepNone;
@@ -592,9 +591,12 @@ public sealed class NeutronMissileUpdate(NeutronMissileData data) : SimModule, I
         if (time.TicksPerOriginalFrame != 1)
         {
             // Everything above judged the whole step of this frame, as at 30 Hz; the missile itself flies the first share of it now and the rest on the next ticks.
-            Entity.X = before.X + time.FrameShare(_velocity.X, 0);
-            Entity.Y = before.Y + time.FrameShare(_velocity.Y, 0);
-            Entity.Z = before.Z + time.FrameShare(_velocity.Z, 0);
+            // The rest stays readable on the object: who looks at the missile in this tick sees it where this frame ends, as at 30 Hz.
+            Entity.X = before.X;
+            Entity.Y = before.Y;
+            Entity.Z = before.Z;
+            Entity.SetAhead(world.Tick, _velocity.X, _velocity.Y, _velocity.Z);
+            Entity.CoverShare(world.Tick, time.FrameShare(_velocity.X, 0), time.FrameShare(_velocity.Y, 0), time.FrameShare(_velocity.Z, 0));
             _subStep = time.NextSubStep(0);
         }
         return SimulationTiming.SleepNone;

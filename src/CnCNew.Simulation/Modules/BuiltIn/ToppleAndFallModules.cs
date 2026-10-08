@@ -486,12 +486,15 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
         _framePhase.Next(world.Time);
         if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
         if (world.Tick < _earliestDeathTick) return SimulationTiming.SleepNone;
-        if (Entity.ContainedBy.IsValid) { _lastZ = Entity.Z; return SimulationTiming.SleepNone; }
+        if (Entity.ContainedBy.IsValid) { _lastZ = Entity.FrameEnd(world.Tick).Z; return SimulationTiming.SleepNone; }
 
         if (!_hasDied)
         {
-            var directionOk = !data.OnlyWhenMovingDown || Entity.Z < _lastZ;
-            var terrainHeight = world.GroundHeightAt(Entity.X, Entity.Y);
+            // The look falls on the tick in which a module that moves this object decides its frame (both count from the object's appearance). What the 30 Hz look sees is the
+            // object after that module's whole step if it runs before this one, and before it otherwise: the end of the frame the object has begun (zero rest at 30 Hz).
+            var (x, y, z) = Entity.FrameEnd(world.Tick);
+            var directionOk = !data.OnlyWhenMovingDown || z < _lastZ;
+            var terrainHeight = world.GroundHeightAt(x, y);
             var targetHeight = terrainHeight + data.TargetHeightAboveTerrain;
             if (data.TargetHeightIncludesStructures)
             {
@@ -500,22 +503,24 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
                 foreach (var other in world.Entities)
                 {
                     if (other.Id == Entity.Id || !other.Template.IsKindOf("STRUCTURE")) continue;
-                    var dx = other.X - Entity.X;
-                    var dy = other.Y - Entity.Y;
+                    var dx = other.X - x;
+                    var dy = other.Y - y;
                     if (!SquaredReach.Of(range).Contains(dx * dx + dy * dy)) continue;
                     var height = ToppleAndFallModules.MaxHeightAbovePosition(other.Template);
                     if (height > tallest) tallest = height;
                 }
                 if (tallest > data.TargetHeightAboveTerrain) targetHeight = tallest + terrainHeight;
             }
-            if (Entity.Z < targetHeight && directionOk)
+            if (z < targetHeight && directionOk)
             {
+                // It dies where the 30 Hz object dies: at the end of the step, of which nothing is left to cover.
+                if (Entity.IsInsideFrameStep) Entity.CompleteFrame(world.Tick);
                 if (data.SnapToGroundOnDeath || Entity.Z < terrainHeight) Entity.Z = terrainHeight;
                 world.Kill(Entity.Id);
                 _hasDied = true;
             }
         }
-        _lastZ = Entity.Z;
+        _lastZ = Entity.FrameEnd(world.Tick).Z;
         return SimulationTiming.SleepNone;
     }
 

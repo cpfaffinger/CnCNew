@@ -3,6 +3,7 @@ using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -35,6 +36,60 @@ public sealed class Entity
     public Fixed X { get; internal set; }
     public Fixed Y { get; internal set; }
     public Fixed Z { get; internal set; }
+
+    /// <summary>
+    /// What is left of the step of the logic frame of the original this object is covering in shares, one per tick (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): the module that
+    /// moves the object publishes it when it decides a frame and takes each share off it. Zero between two frames – and always at 30 Hz, where a frame is one tick: nothing
+    /// ever writes it there, and it is described only while it is not zero.
+    /// </summary>
+    public Fixed AheadX { get; private set; }
+    public Fixed AheadY { get; private set; }
+    public Fixed AheadZ { get; private set; }
+
+    /// <summary>The tick in which the mover last published or covered a share of <see cref="AheadX"/>; a rest nobody has touched since the tick before the reader's is stale.</summary>
+    public long AheadTick { get; private set; }
+
+    /// <summary>True while a decided frame's step is not covered yet. Never at 30 Hz.</summary>
+    public bool IsInsideFrameStep => (AheadX.Raw | AheadY.Raw | AheadZ.Raw) != 0;
+
+    /// <summary>
+    /// Where the object stands at the end of the frame it has begun: what an observer that takes its own decision of the frame in tick <paramref name="tick"/> has to read, because
+    /// that is what it sees at 30 Hz (a mover that already had its turn in the tick has taken its whole step, one that has not is still where its last step left it). A rest
+    /// whose mover has not run in this tick or the one before (it was stopped, disabled or put to sleep inside its frame) no longer counts. 30 Hz: the position.
+    /// </summary>
+    public (Fixed X, Fixed Y, Fixed Z) FrameEnd(long tick)
+        => IsInsideFrameStep && AheadTick + TickOrder.Next >= tick ? (X + AheadX, Y + AheadY, Z + AheadZ) : (X, Y, Z);
+
+    /// <summary>The mover's side of <see cref="AheadX"/>: the whole step of the frame it has just decided (the shares follow with <see cref="CoverShare"/>), or zero to drop a rest.</summary>
+    internal void SetAhead(long tick, Fixed x, Fixed y, Fixed z)
+    {
+        AheadX = x;
+        AheadY = y;
+        AheadZ = z;
+        AheadTick = tick;
+    }
+
+    /// <summary>The mover's side of <see cref="AheadX"/>: covers one more share of the frame's step. The shares of a frame add up to its step, so the rest ends at zero.</summary>
+    internal void CoverShare(long tick, Fixed x, Fixed y, Fixed z)
+    {
+        X += x;
+        Y += y;
+        Z += z;
+        AheadX -= x;
+        AheadY -= y;
+        AheadZ -= z;
+        AheadTick = tick;
+    }
+
+    /// <summary>
+    /// Puts the object where its begun frame ends and leaves nothing of the step to cover: for an event of the frame's decision tick that the 30 Hz step lets happen at the
+    /// position after the whole step (a death by height). The mover sees the rest gone and adds no further share of that frame.
+    /// </summary>
+    internal void CompleteFrame(long tick)
+    {
+        (X, Y, Z) = FrameEnd(tick);
+        AheadX = AheadY = AheadZ = Fixed.Zero;
+    }
 
     /// <summary>Heading in radians.</summary>
     public Fixed Angle { get; internal set; }
@@ -243,6 +298,13 @@ public sealed class Entity
         if (ShroudScalar != Fixed.One) writer.Fixed("shroudScalar", ShroudScalar);
         if (CrateWeaponLevel != 0) writer.Int("crateWeaponLevel", CrateWeaponLevel);
         if (CrateArmorLevel != 0) writer.Int("crateArmorLevel", CrateArmorLevel);
+        if (IsInsideFrameStep)
+        {
+            writer.Fixed("aheadX", AheadX);
+            writer.Fixed("aheadY", AheadY);
+            writer.Fixed("aheadZ", AheadZ);
+            writer.Int("aheadTick", AheadTick);
+        }
         // Written only for an object somebody spied through, so every other object keeps its serialized form (and hash).
         if (VisionSpiedBy is { Count: > 0 })
         {
