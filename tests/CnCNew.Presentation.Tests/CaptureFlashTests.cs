@@ -92,8 +92,8 @@ internal static class CaptureFlashTests
     /// <summary>
     /// The blink sequence of a capture as a whole at 30, 60 and 120 Hz (docs/TICKRATE-MIGRATION.md §14.4). The presentation's share is the envelope: every
     /// <c>CaptureFlash</c> event tints the building for the same game time, and nothing is tinted without an event. When the events come is the simulation's
-    /// (<c>SpecialAbilityUpdate.StepCaptureFlash</c> advances its phase once per tick, docs/TICKRATE-MIGRATION.md §5.1): the number of flashes of one preparation is
-    /// measured and printed here, not asserted to be equal.
+    /// (<c>SpecialAbilityUpdate.StepCaptureFlash</c> advances its phase once per logic frame of the preparation, docs/RATE-INVARIANCE-TURRETS.md): the number of
+    /// flashes of one preparation is the same at every rate.
     /// </summary>
     private static void TimeScaleBlinkSequence()
     {
@@ -128,6 +128,7 @@ internal static class CaptureFlashTests
 
         string Text(IEnumerable<(SimulationRate Rate, double Seconds)> values) => string.Join(", ", values.Select(value => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{value.Rate}: {value.Seconds:F4} s")));
         Console.WriteLine($"       capture blink: the last flash is shown for {Text(envelope)}; first flash to the end of the last tint {Text(span)}; flashes of one preparation {string.Join(", ", counts.Select(value => $"{value.Rate}: {value.Count}"))}");
+        Assert(counts.All(value => value.Count == counts[0].Count), $"one preparation flashes as often at every rate ({string.Join(", ", counts.Select(value => $"{value.Rate}: {value.Count}"))})");
         foreach (var (rate, seconds) in envelope)
             Assert(Math.Abs(seconds - envelope[0].Seconds) <= oneFrame + 1e-9, $"a flash is shown for {seconds:F4} s at {rate} and for {envelope[0].Seconds:F4} s at {envelope[0].Rate}: more than one original frame apart");
     }
@@ -184,7 +185,7 @@ internal static class CaptureFlashTests
             Assert(projector.Project(0.5f).Drawables.Single(drawable => drawable.Entity == station).FlashTint == building.FlashTint, "the tint steps with the tick, not with the frame");
         }
 
-        Assert(flashTicks.Count == 4, $"a preparation of 60 ticks flashes four times ({string.Join(",", flashTicks)})");
+        Assert(flashTicks.Count == 4, $"a preparation of 60 frames flashes four times ({string.Join(",", flashTicks)})");
         if (!withSettings)
         {
             Assert(tints.Values.All(tint => tint == Vector3.Zero), "no settings, no tint");
@@ -196,14 +197,16 @@ internal static class CaptureFlashTests
         {
             var tick = flashTicks[index];
             var next = index + 1 < flashTicks.Count ? flashTicks[index + 1] : long.MaxValue;
+            // The envelope is counted in logic frames of the original: age n is the tick n frames after the flash (the tick itself at 30 Hz).
             float[] expected = [1f, 1f, 0.75f, 0.5f, 0.25f, 0f, 0f];
-            for (var age = 0; age < expected.Length && tick + age < next; age++)
-                Assert(tints[tick + age] == peak * expected[age], $"flash {index + 1} at tick {tick}: age {age} shows {expected[age]} of the capturer's red ({tints[tick + age]})");
+            for (var age = 0; age < expected.Length && tick + TestTime.Frames(world, age) < next; age++)
+                Assert(tints[tick + TestTime.Frames(world, age)] == peak * expected[age], $"flash {index + 1} at tick {tick}: age {age} shows {expected[age]} of the capturer's red ({tints[tick + TestTime.Frames(world, age)]})");
             if (index > 0) Assert(tints[tick] == peak, $"flash {index + 1} starts at the peak again");
         }
 
-        Assert(flashTicks[1] - flashTicks[0] > SelectionFlashTracker.LastVisibleAge && tints[flashTicks[1] - 1] == Vector3.Zero, "between the first two flashes the tint is gone");
-        Assert(tints.Where(pair => pair.Key > flashTicks[^1] + SelectionFlashTracker.LastVisibleAge).All(pair => pair.Value == Vector3.Zero), "no tint after the last flash has decayed");
+        var visible = TestTime.Frames(world, SelectionFlashTracker.LastVisibleAge + 1) - 1; // the last tick of the last visible frame after a flash
+        Assert(flashTicks[1] - flashTicks[0] > visible && tints[flashTicks[1] - 1] == Vector3.Zero, "between the first two flashes the tint is gone");
+        Assert(tints.Where(pair => pair.Key > flashTicks[^1] + visible).All(pair => pair.Value == Vector3.Zero), "no tint after the last flash has decayed");
         Assert(world.FindEntity(station)!.Owner == new PlayerId(1), "the building changed hands");
     }
 

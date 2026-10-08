@@ -588,6 +588,12 @@ static class InputTests
             for (var tick = 0; tick < ticks; tick++) World.Step();
         }
 
+        /// <summary>
+        /// Logic frames of the original (ticks at 30 Hz), for "the spawns have appeared and are seen" and "the kill has been carried out": an object appears at the end of the
+        /// step it was ordered in, the shroud is recomputed after the last tick of that frame, and a dead object is removed one frame after its death.
+        /// </summary>
+        public void StepFrames(int frames) => Step(checked((int)CnCNew.Tests.TestTime.Frames(World, frames)));
+
         public Entity Find(string template, PlayerId owner, float x, float y)
             => World.Entities.Where(entity => entity.Template.Name == template && entity.Owner == owner
                                               && Math.Abs((float)entity.X.ToDecimal() - x) < 0.01f && Math.Abs((float)entity.Y.ToDecimal() - y) < 0.01f)
@@ -719,7 +725,7 @@ static class InputTests
         var arena = new Arena();
         arena.Spawn("Ranger", Me, 40, 40);
         arena.Spawn("Barracks", Me, 150, 150);
-        arena.Step(2);
+        arena.StepFrames(2);
         var view = new TopDownView();
         var buttons = CommandButtonCatalog.Build(Fixture.Graph);
         var labels = new Dictionary<string, string> { ["CONTROLBAR:AttackMove"] = "&Attack Move", ["CONTROLBAR:Stop"] = "&Stop", ["CONTROLBAR:Guard"] = "&Guard" };
@@ -764,7 +770,7 @@ static class InputTests
         // transition matches): with &S in a construct label, S starts the placement although STOP fired on the press. That is how the Scorpion, the Sentry Drone, the
         // Listening Outpost and the Saboteur are built by key in the retail data.
         arena.Spawn("Dozer", Me, 60, 70);
-        arena.Step(2);
+        arena.StepFrames(2);
         var builder = new GameInputController(Me, arena.Sink, HotkeyMap.Parse(CommandMapText), buttons, label => label == "CONTROLBAR:ConstructPlant" ? "Con&struct Plant" : null);
         builder.Selection.Replace([arena.Find("Dozer", Me, 60, 70).Id]);
         Assert(!HotkeyMap.Parse(CommandMapText).Resolve(new KeyBinding(KeyCode.S, KeyModifiers.None), HotkeyContexts.Game).IsEmpty, "S is bound to a meta action on the key-down");
@@ -786,7 +792,7 @@ static class InputTests
         arena.Spawn("Ranger", Enemy, 190, 190);  // far outside every vision range
         arena.Spawn("Bunker", Me, 100, 100);    // 8 m high: its centre is 1 m closer to the camera than a ranger's
         arena.Spawn("Ranger", Me, 104, 100);
-        arena.Step(2);
+        arena.StepFrames(2);
         var view = new TopDownView();
         var picker = new EntityPicker();
         var world = arena.World;
@@ -822,7 +828,7 @@ static class InputTests
         arena.Spawn("Barracks", Me, 80, 70);
         arena.Spawn("Ranger", Enemy, 120, 40);
         arena.Spawn("Ranger", Enemy, 130, 40);
-        arena.Step(2);
+        arena.StepFrames(2);
         var view = new TopDownView();
         var world = arena.World;
         var selection = new SelectionModel(Me);
@@ -850,7 +856,7 @@ static class InputTests
         Assert(selection.BoxSelect(world, view, Box(30, 30, 125, 50), false) && selection.Selected.SequenceEqual([r1.Id, r2.Id]), "own units win over enemies");
         selection.Replace([e2.Id]);
         arena.System(sequence => new KillCommand(PlayerId.System, sequence, world.Tick, e2.Id));
-        arena.Step(3);
+        arena.StepFrames(3);
         selection.Prune(world);
         Assert(selection.IsEmpty, "a dead object leaves the selection on pruning");
     }
@@ -863,7 +869,7 @@ static class InputTests
         arena.Spawn("Tank", Me, 60, 60);
         arena.Spawn("Dozer", Me, 100, 40);
         arena.Spawn("Ranger", Me, 390, 390);     // off the 400 x 300 m screen
-        arena.Step(2);
+        arena.StepFrames(2);
         var view = new TopDownView(pixelsPerMetre: 2f, width: 800f, height: 600f);
         var world = arena.World;
         var selection = new SelectionModel(Me);
@@ -892,7 +898,7 @@ static class InputTests
         arena.Spawn("Ranger", Me, 80, 40);
         arena.Spawn("Tank", Me, 60, 60);
         arena.Spawn("Plant", Me, 120, 120);
-        arena.Step(2);
+        arena.StepFrames(2);
         var world = arena.World;
         var selection = new SelectionModel(Me);
         var (r1, r2, tank, plant) = (arena.Find("Ranger", Me, 40, 40), arena.Find("Ranger", Me, 80, 40), arena.Find("Tank", Me, 60, 60), arena.Find("Plant", Me, 120, 120));
@@ -911,7 +917,7 @@ static class InputTests
         selection.TeamAction(world, TeamActionKind.Add, 2, 5000);
         Assert(selection.Selected.SequenceEqual([r2.Id, tank.Id]), "adding a group drops a selected building");
         arena.System(sequence => new KillCommand(PlayerId.System, sequence, world.Tick, r2.Id));
-        arena.Step(3);
+        arena.StepFrames(3);
         Assert(selection.TeamAction(world, TeamActionKind.Select, 2, 9000) is null && selection.Selected.SequenceEqual([tank.Id]) && selection.Group(2).SequenceEqual([tank.Id]), "dead members leave the group");
     }
 
@@ -921,7 +927,7 @@ static class InputTests
     {
         var arena = new Arena(money);
         spawn(arena);
-        arena.Step(2);
+        arena.StepFrames(2);
         var selection = new SelectionModel(Me);
         return (arena, new CommandModeController(Me, arena.Sink, selection), new TopDownView());
     }
@@ -1142,7 +1148,7 @@ static class InputTests
     {
         var arena = new Arena(300);
         arena.Spawn("Dozer", Me, 40, 40);
-        arena.Step(2);
+        arena.StepFrames(2);
         var world = arena.World;
         var dozer = arena.Find("Dozer", Me, 40, 40);
         var view = new TopDownView();
@@ -1287,7 +1293,7 @@ static class InputTests
         {
             var arena = new Arena(money: 500);
             arena.Spawn("Ranger", Me, 40, 40);
-            arena.Step(2);
+            arena.StepFrames(2);
             var world = arena.World;
             var view = new TopDownView();
             var input = new GameInputController(Me, arena.Sink, HotkeyMap.Parse(CommandMapText).WithEngineDefaults(), CommandButtonCatalog.Build(Fixture.Graph),
@@ -1321,8 +1327,10 @@ static class InputTests
         arena.Spawn("Ranger", Me, 46, 40);
         arena.Spawn("Dozer", Me, 60, 70);
         arena.Spawn("Plant", Me, 150, 40);
-        arena.Step(2);
+        arena.StepFrames(2);
         var world = arena.World;
+        // The commands below carry the tick of the step they were given before: one step lies between two of them (steps, not game time), counted from here (tick 2 at 30 Hz).
+        var start = world.Tick;
         var view = new TopDownView();
         var labels = new Dictionary<string, string> { ["CONTROLBAR:ConstructPlant"] = "Construct &Plant" };
         var input = new GameInputController(Me, arena.Sink, HotkeyMap.Parse(CommandMapText).WithEngineDefaults(), CommandButtonCatalog.Build(Fixture.Graph),
@@ -1380,11 +1388,11 @@ static class InputTests
 
         var mine = arena.Sink.Issued;
         Assert(mine.SequenceEqual<SimCommand>([
-            new SetMoveTargetCommand(Me, 1, 2, r1.Id, Fixed.FromInt(100), Fixed.FromInt(20)),
-            new SetMoveTargetCommand(Me, 2, 2, r2.Id, Fixed.FromInt(100), Fixed.FromInt(20)),
-            new ConstructCommand(Me, 3, 3, dozer.Id, "Plant", Fixed.FromInt(60), Fixed.FromInt(110), Fixed.Zero),
-            new SetMoveTargetCommand(Me, 4, 4, r1.Id, Fixed.FromInt(20), Fixed.FromInt(120)),
-            new SetMoveTargetCommand(Me, 5, 4, r2.Id, Fixed.FromInt(20), Fixed.FromInt(120))]),
+            new SetMoveTargetCommand(Me, 1, start, r1.Id, Fixed.FromInt(100), Fixed.FromInt(20)),
+            new SetMoveTargetCommand(Me, 2, start, r2.Id, Fixed.FromInt(100), Fixed.FromInt(20)),
+            new ConstructCommand(Me, 3, start + 1, dozer.Id, "Plant", Fixed.FromInt(60), Fixed.FromInt(110), Fixed.Zero),
+            new SetMoveTargetCommand(Me, 4, start + 2, r1.Id, Fixed.FromInt(20), Fixed.FromInt(120)),
+            new SetMoveTargetCommand(Me, 5, start + 2, r2.Id, Fixed.FromInt(20), Fixed.FromInt(120))]),
             $"the exact command stream: {string.Join(" | ", mine)}");
         Assert(world.RejectionCounts.Sum() == 0, "every command was accepted");
         Assert(world.Entities.Count(entity => entity.Template.Name == "Plant") == 2, "the site stands");
