@@ -1447,6 +1447,8 @@ public sealed partial class SimulationWorld : IWorldServices
         if (entity is null || entity.DestroyRequested) return;
         entity.DestroyRequested = true;
         entity.Status |= 1UL << ObjectStatusBits.Destroyed;
+        // Requested after this tick's destroy phase (a delayed hit, the spawn phase): removed "in the next tick" at 30 Hz - one logic frame of the original later above it.
+        if (_firstFrameTicks != TickOrder.Next && _destroyPhaseOf == _tick) entity.DestroyNotBefore = _tick + _firstFrameTicks;
         MarkDirty(entity);
         _destroyQueue.Add(entity);
         Emit(SimEventKind.EntityDestroyed, id, EntityId.Invalid, entity.Template.Name, 0);
@@ -1481,14 +1483,27 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private static readonly Comparison<Entity> ById = static (a, b) => a.Id.Value.CompareTo(b.Id.Value);
 
+    // The tick whose destroy phase has run (not state: a snapshot lies between two ticks).
+    private long _destroyPhaseOf = -1;
+
     private void ProcessDestroys()
     {
-        if (_destroyQueue.Count == 0) return;
+        if (_destroyQueue.Count == 0)
+        {
+            _destroyPhaseOf = _tick;
+            return;
+        }
         _destroyQueue.Sort(ById);
+        List<Entity>? held = null;
         // OnRemove hooks may request further destroys (spawner slaves); those append to the queue and are processed in the same pass.
         for (var queued = 0; queued < _destroyQueue.Count; queued++)
         {
             var entity = _destroyQueue[queued];
+            if (entity.DestroyNotBefore > _tick)
+            {
+                (held ??= []).Add(entity);
+                continue;
+            }
             foreach (var module in entity.ModuleArray) module.OnRemove(this);
             foreach (var node in entity.Updates) _updates.Remove(node);
             if (entity.Timers is { Count: > 0 } timers)
@@ -1511,6 +1526,8 @@ public sealed partial class SimulationWorld : IWorldServices
             _destroyedTotal++;
         }
         _destroyQueue.Clear();
+        if (held is not null) _destroyQueue.AddRange(held);
+        _destroyPhaseOf = _tick;
         // A fixed point of the tick at which no loop over the entities is in flight.
         _entities.Compact();
     }
