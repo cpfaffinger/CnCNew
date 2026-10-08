@@ -501,4 +501,38 @@ static partial class Tests
             Check.That(draws == 200, $"{rate}: 100 logic frames of an idle wanderer are 200 draws from the logic stream (got {draws}).");
         }
     }
+
+    /// <summary>
+    /// <c>GrantStealthBehavior</c> (the GPS scrambler's marker): the radius grows and the scan runs once per logic frame of the marker's life. Infantry at 25 and at 45 units is
+    /// stealthed in the same frames at every rate and the marker is gone after the same frame.
+    /// </summary>
+    public static void RateInvarianceGrantStealthScansOncePerFrame()
+    {
+        (long Close, long Outer, long Gone)? reference = null;
+        var stealth = ObjectStatusBits.Index("STEALTHED");
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, CratesAndSpecialsFiles());
+            feeder.Spawn(1, "VisibleInfantry", owner: 1, x: 25, y: 0);
+            feeder.Spawn(1, "VisibleInfantry", owner: 1, x: 45, y: 0);
+            for (var i = 0; i < factor; i++) world.Step();
+            var close = Slotted(world, "VisibleInfantry", 0);
+            var outer = Slotted(world, "VisibleInfantry", 1);
+            feeder.Spawn(1, "FixtureScrambler", owner: 1, x: 0, y: 0);
+            long closeAt = -1, outerAt = -1, goneAt = -1;
+            for (var step = 0; step < 20 * factor; step++)
+            {
+                world.Step();
+                if (closeAt < 0 && close.HasStatus(stealth)) closeAt = step;
+                if (outerAt < 0 && outer.HasStatus(stealth)) outerAt = step;
+                if (goneAt < 0 && step > 0 && !world.Entities.Any(value => value.Template.Name == "FixtureScrambler")) goneAt = step;
+            }
+
+            Check.That(closeAt > 0 && outerAt > closeAt && goneAt >= outerAt && closeAt % factor == 0 && outerAt % factor == 0 && goneAt % factor == 0,
+                $"{rate}: the scans fall on whole logic frames after the marker appeared (stealth at 25 units after {closeAt} ticks, at 45 units after {outerAt}, marker gone after {goneAt}).");
+            var frames = (closeAt / factor, outerAt / factor, goneAt / factor);
+            reference ??= frames;
+            Check.That(frames == reference, $"{rate}: the same frames as at 30 Hz: {frames} against {reference}.");
+        }
+    }
 }

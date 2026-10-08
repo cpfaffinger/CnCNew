@@ -201,9 +201,15 @@ public sealed record GrantStealthData(Fixed StartRadius, Fixed FinalRadius, Fixe
 }
 
 /// <summary>
-/// <c>GrantStealthBehavior::update</c> (the GPS scrambler's marker object): every tick the scan radius grows by <c>RadiusGrowRate</c>; every living, allied object of an accepted
-/// kind inside it (other than the marker itself) receives <see cref="StealthUpdate.ReceiveGrant"/> permanently; when the radius reaches <c>FinalRadius</c> the marker is
-/// destroyed. Objects without a <c>StealthUpdate</c> are not affected, as in the reference. Not modelled: the visible riders of a <c>RiderChangeContain</c>.
+/// <c>GrantStealthBehavior::update</c> (the GPS scrambler's marker object): every logic frame of the original the scan radius grows by <c>RadiusGrowRate</c>; every living,
+/// allied object of an accepted kind inside it (other than the marker itself) receives <see cref="StealthUpdate.ReceiveGrant"/> permanently; when the radius reaches
+/// <c>FinalRadius</c> the marker is destroyed. Objects without a <c>StealthUpdate</c> are not affected, as in the reference. Not modelled: the visible riders of a
+/// <c>RiderChangeContain</c>.
+/// <para>
+/// The scan is the reference's once-per-frame logic and has nothing to subdivide (a grant is an event, the radius is only the scan's reach), so above 30 Hz it runs on the
+/// marker's own frame grid: in the ticks a whole number of logic frames after the marker appeared, with a frame's growth. The same objects are granted in the same frames and
+/// the marker lives equally long at every rate.
+/// </para>
 /// </summary>
 public sealed class GrantStealthBehavior(GrantStealthData data) : SimModule, IUpdateModule
 {
@@ -218,7 +224,13 @@ public sealed class GrantStealthBehavior(GrantStealthData data) : SimModule, IUp
     public long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
-        _radius += data.RadiusGrowRate;
+        var frame = world.Time.TicksPerOriginalFrame;
+        if (frame != 1)
+        {
+            var into = (world.Tick - Entity.SpawnTick) % frame;
+            if (into != 0) return frame - into;
+        }
+        _radius += frame == 1 ? data.RadiusGrowRate : data.RadiusGrowRate * frame;
         var finalScan = false;
         if (_radius >= data.FinalRadius)
         {
@@ -236,7 +248,7 @@ public sealed class GrantStealthBehavior(GrantStealthData data) : SimModule, IUp
             foreach (var module in candidate.Modules)
                 if (module is StealthUpdate stealth) stealth.ReceiveGrant(world, true, 0);
         }
-        if (!finalScan) return SimulationTiming.SleepNone;
+        if (!finalScan) return world.Time.AtLeastOneFrame(SimulationTiming.SleepNone);
         world.RequestDestroy(Entity.Id);
         return SimulationTiming.SleepForever;
     }
