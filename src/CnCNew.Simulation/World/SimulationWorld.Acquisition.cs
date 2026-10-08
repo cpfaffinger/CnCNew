@@ -162,7 +162,8 @@ public sealed partial class SimulationWorld
             if (state.Ordered)
             {
                 // The command giver fires; the world only notices when its attack is over.
-                if (attackable && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) <= _orderedAttackGraceTicks) return;
+                // "No order for longer than the grace" is noticed in the step after the grace: a logic frame of the original at every rate, not a tick.
+                if (attackable && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) < _orderedAttackGraceTicks + _turretFrameTicks) return;
                 state.ClearVictim();
             }
             else
@@ -354,7 +355,7 @@ public sealed partial class SimulationWorld
         var earliest = long.MaxValue;
         for (var slot = 0; slot < WeaponSlot.Count; slot++)
             if (set.HasWeapon(slot)) earliest = Math.Min(earliest, EffectiveReadyTick(entity, slot, set));
-        return Math.Clamp(earliest, tick - _orderedAttackGraceTicks - TickOrder.Next, tick + _turretReloadHoldCapTicks);
+        return Math.Clamp(earliest, tick - _orderedAttackGraceTicks - _turretFrameTicks, tick + _turretReloadHoldCapTicks);
     }
 
     // ------------------------------------------------------------------------------------------------------ choosing the victim
