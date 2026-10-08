@@ -364,7 +364,8 @@ static partial class Tests
         var terrain = TerrainMap.Build(map, MapPath);
         var everyone = ReferenceMatchScenario.Participants(catalog, out _);
         var slots = ImmutableArray.Create(new ScriptedSkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionChina"), ScriptDifficulty.Hard), new ScriptedSkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionGLA"), ScriptDifficulty.Normal));
-        var matchOptions = ScriptedSkirmishOptions.Standard with { Seed = 5, MaxTicks = 4_500 };
+        // 150 seconds of game time; the budget of the options is in ticks of the session's rate.
+        var matchOptions = ScriptedSkirmishOptions.Standard with { Seed = 5, MaxTicks = TestRate.Frames(4_500) };
         ScriptedSkirmishSession Start() => ScriptedSkirmishSession.Start(matchOptions, catalog, fingerprint, terrain, map, library, data!, slots);
         var session = Start();
         Check.That(session.Mission.Program.Players.Select(player => player.Name).Take(3).SequenceEqual([string.Empty, "player0", "player1"]) && session.Mission.Program.Teams.Length > 200,
@@ -372,7 +373,7 @@ static partial class Tests
         byte[]? saved = null;
         while (!session.IsOver)
         {
-            if (session.World.Tick == 3_000) saved = session.Save();
+            if (session.World.Tick == TestRate.Frames(3_000)) saved = session.Save();
             session.Step();
         }
         var engine = session.Engine;
@@ -388,9 +389,86 @@ static partial class Tests
         Check.That(again.StateHash() == session.StateHash(), "The same seed plays the same match.");
         var restored = ScriptedSkirmishSession.Restore(saved!, catalog, fingerprint, terrain, map, library, data!);
         while (!restored.IsOver) restored.Step();
-        Check.That(restored.StateHash() == session.StateHash(), "Saved at tick 3,000, restored and continued, it ends in the same state.");
+        Check.That(restored.StateHash() == session.StateHash(), "Saved after 100 seconds, restored and continued, it ends in the same state.");
         var other = ScriptedSkirmishSession.Start(matchOptions with { Seed = 6 }, catalog, fingerprint, terrain, map, library, data!, slots);
         while (!other.IsOver) other.Step();
         Check.That(other.StateHash() != session.StateHash(), "Another seed plays another match.");
+    }
+
+    /// <summary>
+    /// The shipped library on a shipped map at 30, 60 and 120 Hz: the same match. After the logic frames of the original every object is where the 30 Hz match has it - the AI
+    /// thinks on the frame grid of the original and what it orders is carried out on the frames of the objects.
+    /// </summary>
+    public static void RealOriginalSkirmishAiAcrossRates(string directory)
+    {
+        var content = ContentFileSystem.Open(directory);
+        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
+        var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
+        var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
+        var data = AiData.TryBuild(graph)!;
+        MapScriptLibrary library;
+        using (var stream = content.OpenRead("Data/Scripts/SkirmishScripts.scb")) library = SageMapDecoder.DecodeScriptLibrary(stream);
+        const string MapPath = "Maps/Alpine Assault/Alpine Assault.map";
+        MapData map;
+        using (var stream = content.OpenRead(MapPath)) map = SageMapDecoder.Decode(stream);
+        var terrain = TerrainMap.Build(map, MapPath);
+        const int Frames = 7_200; // four minutes: the bases stand, the first teams have marched and fought
+
+        ScriptedSkirmishSession Start(CnCNew.Simulation.Time.SimulationRate rate)
+        {
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate);
+            var everyone = ReferenceMatchScenario.Participants(catalog, out _);
+            var slots = ImmutableArray.Create(new ScriptedSkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionChina"), ScriptDifficulty.Hard), new ScriptedSkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionGLA"), ScriptDifficulty.Normal));
+            return ScriptedSkirmishSession.Start(ScriptedSkirmishOptions.Standard with { Seed = 5, MaxTicks = rate.Time.OriginalFrames(Frames) }, catalog, rate.Combine(fingerprint), terrain, map, library, data, slots);
+        }
+
+        // What a match is made of, in units that do not name a tick: who exists, whose it is, where it stands and how it is. The health of a construction site is left out: above
+        // 30 Hz its first work step counts a whole frame, so between two frames the site is a share of a frame ahead and complete in the tick of the 30 Hz step.
+        static List<string> Picture(ScriptedSkirmishSession session)
+        {
+            var lines = new List<string>();
+            foreach (var entity in session.World.Entities)
+            {
+                // Projectiles in flight are left out: the stream of a toxin truck stands two to five raw steps (3e-7 units) beside the 30 Hz one for the three frames it lives
+                // (frame 4030, catalogs without model geometry as here; not traced). What they hit and how hard is in the health of everything else.
+                if (entity.Template.IsKindOf("PROJECTILE")) continue;
+                var building = entity.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction);
+                lines.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"{entity.Id.Value} {entity.Template.Name} owner {entity.Owner.Value} at {entity.X.Raw} {entity.Y.Raw} {entity.Z.Raw} angle {entity.Angle.Raw} moving {entity.HasMoveTarget} in {entity.ContainedBy.Value} dead {entity.EffectivelyDead} building {building} health {(building ? 0 : entity.Body?.Health.Raw ?? 0)}"));
+            }
+            for (var player = 1; player <= 2; player++)
+                lines.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"player {player} money {session.World.MoneyOf(new PlayerId(player)).Raw} pending {string.Join(";", session.Engine.AiPendingBuilds(new PlayerId(player)))}"));
+            return lines;
+        }
+
+        var sessions = new[] { CnCNew.Simulation.Time.SimulationRate.Hz30, CnCNew.Simulation.Time.SimulationRate.Hz60, CnCNew.Simulation.Time.SimulationRate.Hz120 }.Select(rate => (Rate: rate, Session: Start(rate))).ToArray();
+        // A difference counts once it has lasted three frames, the rule of "SimTool rate-compare --fields": a state one rate reaches a share of a frame before the other and the
+        // other catches up with is no other match.
+        const int Lasting = 3;
+        var streak = new int[sessions.Length];
+        var transient = 0;
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            foreach (var (rate, session) in sessions)
+                for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) session.Step();
+            var reference = Picture(sessions[0].Session);
+            for (var other = 1; other < sessions.Length; other++)
+            {
+                var (rate, session) = sessions[other];
+                var picture = Picture(session);
+                if (picture.SequenceEqual(reference))
+                {
+                    streak[other] = 0;
+                    continue;
+                }
+                transient++;
+                if (++streak[other] < Lasting) continue;
+                var index = Enumerable.Range(0, Math.Min(picture.Count, reference.Count)).FirstOrDefault(at => picture[at] != reference[at], Math.Min(picture.Count, reference.Count));
+                Check.That(false, $"From frame {frame - Lasting + 1} on the match at {rate.TicksPerSecond} Hz is the 30 Hz match (after frame {frame}: 30 Hz: {(index < reference.Count ? reference[index] : "-")}; {rate.TicksPerSecond} Hz: {(index < picture.Count ? picture[index] : "-")}).");
+            }
+        }
+        var structures = sessions[0].Session.World.Entities.Count(entity => entity.Owner.Value is 1 or 2 && !entity.EffectivelyDead && entity.Template.IsKindOf("STRUCTURE"));
+        Console.WriteLine($"       original AI across rates: {Frames} frames, {sessions[0].Session.World.Entities.Count()} objects and {structures} structures of the two players at the end, equal at 30, 60 and 120 Hz ({transient} frame ends with a difference that did not last {Lasting} frames)");
+        Check.That(structures >= 10, $"The compared match is one in which both players have built ({structures} structures).");
     }
 }
