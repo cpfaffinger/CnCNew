@@ -27,7 +27,7 @@ internal static class HudFeedbackScenes
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         foreach (var (width, height) in Sizes)
         {
-            var match = LiveMatch.Create(data, new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard), new Vector2(width, height));
+            var match = LiveMatch.Create(data, new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.StandardAt(data.Rate)), new Vector2(width, height));
             var controller = new MatchController(match, GameSettings.Default, "English", measure);
             long time = 10_000;
             void Advance(int frames)

@@ -163,7 +163,7 @@ public sealed class SkirmishSetupScreen : ShellScreen
         for (var slot = 1; slot < _startPositionCount; slot++)
             if (_computer[slot]) opponents.Add(ResolveFaction(slot));
         if (opponents.Count == 0) return;
-        var options = SkirmishMatchOptions.Standard with { StartMoney = _startMoney };
+        var options = SkirmishMatchOptions.StandardAt(Shell.Data.Rate) with { StartMoney = _startMoney };
         var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options);
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });
