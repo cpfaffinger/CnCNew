@@ -265,7 +265,9 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         var target = _path[_pathIndex];
         var last = _pathIndex == _path.Count - 1;
         // Travel and turn of one logic frame of the original (the 30 Hz step; Update flies it in shares per tick).
-        var speed = taxi is null ? FallbackTaxiSpeedPerFrame : FlightFrames.PerFrame(world.Time, taxi.Speed);
+        var speed = FallbackTaxiSpeedPerFrame;
+        var turn = Fixed.Zero;
+        if (taxi is not null) FlightFrameConstants(world.Time, taxi, out speed, out _, out _, out turn, out _);
         var dx = target.X - Entity.X;
         var dy = target.Y - Entity.Y;
         var distance = Fixed.Sqrt(dx * dx + dy * dy);
@@ -274,18 +276,17 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             Entity.X = target.X;
             Entity.Y = target.Y;
             Entity.Z = target.Z;
-            Entity.Speed = Fixed.Zero;
+            SetFlightFrameSpeed(world.Time, Fixed.Zero);
             _pathIndex++;
             world.MarkDirty(Entity);
             return _pathIndex >= _path.Count;
         }
         var desired = FixedTrig.Atan2(dy, dx);
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
-        var turn = FlightFrames.PerFrame(world.Time, taxi?.TurnRatePerTick ?? Fixed.Zero);
         Entity.Angle = turn > Fixed.Zero && difference.Abs() > turn ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turn : turn)) : desired;
         var aligned = FixedTrig.AngleDifference(Entity.Angle, desired).Abs() <= Misaligned;
         var step = aligned ? Fixed.Min(speed, distance) : Fixed.Zero;
-        Entity.Speed = FlightFrames.PerTick(world.Time, step);
+        SetFlightFrameSpeed(world.Time, step);
         Entity.X += FixedTrig.Cos(Entity.Angle) * step;
         Entity.Y += FixedTrig.Sin(Entity.Angle) * step;
         Entity.Z = SurfaceHere(world);
@@ -298,7 +299,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     {
         var difference = FixedTrig.AngleDifference(Entity.Angle, orientation);
         if (difference.Abs() <= ParkedOrientationTolerance) return true;
-        var turn = FlightFrames.PerFrame(time, ActiveLocomotor?.TurnRatePerTick ?? Fixed.Zero);
+        var turn = Fixed.Zero;
+        if (ActiveLocomotor is { } locomotor) FlightFrameConstants(time, locomotor, out _, out _, out _, out turn, out _);
         Entity.Angle = turn > Fixed.Zero && difference.Abs() > turn ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -turn : turn)) : orientation;
         return FixedTrig.AngleDifference(Entity.Angle, orientation).Abs() <= ParkedOrientationTolerance;
     }
@@ -387,7 +389,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         if (Entity.EmpDisabledUntil > world.Tick || (Entity.ScriptDisableMask & Entity.ScriptHeld) != 0)
         {
-            Entity.Speed = Fixed.Zero;
+            SetFlightFrameSpeed(world.Time, Fixed.Zero);
             return SimulationTiming.SleepNone;
         }
         UpdateAttackLocomotor(world);
@@ -648,13 +650,16 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             }
             _pathIndex = 0;
             _verticalSpeed = Fixed.Zero;
-            Entity.Speed = Fixed.Zero;
+            SetFlightFrameSpeed(world.Time, Fixed.Zero);
         }
         if (parking is null || flight is null) { FinishTakeoff(world, null); return; }
+        // Everything in units of one logic frame of the original, with the constants the 30 Hz step computes with.
+        FlightFrameConstants(world.Time, flight, out var topSpeed, out var acceleration, out _, out _, out _);
         if (helicopter)
         {
             var rise = _path[0];
-            var climb = FlightFrames.PerFrame(world.Time, Fixed.Max(flight.SpeedLimitZ, flight.Speed / Fixed.FromInt(4)));
+            FlightVerticalConstants(world.Time, flight, out var limitZ, out _);
+            var climb = Fixed.Max(limitZ, topSpeed / Fixed.FromInt(4));
             Entity.Z = Fixed.Min(Entity.Z + climb, rise.Z);
             world.MarkDirty(Entity);
             if (Entity.Z >= rise.Z) FinishTakeoff(world, parking);
@@ -662,7 +667,6 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         }
         parking.TransferRunwayToNext(world, Entity.Id);
         // The run in units of one logic frame of the original: speed and acceleration of a frame, the point is reached within one frame of travel.
-        var topSpeed = FlightFrames.PerFrame(world.Time, flight.Speed);
         var step = Fixed.Max(topSpeed, Fixed.One);
         var target = _path[_pathIndex];
         var toTarget = AirModules.Distance2D(Entity.X, Entity.Y, target.X, target.Y);
@@ -679,8 +683,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             target = _path[_pathIndex];
         }
         Entity.Angle = FixedTrig.Atan2(target.Y - Entity.Y, target.X - Entity.X);
-        var speed = Fixed.Min(topSpeed, FlightFrames.PerFrame(world.Time, Entity.Speed) + FlightFrames.PerFrameSquared(world.Time, flight.Acceleration));
-        Entity.Speed = FlightFrames.PerTick(world.Time, speed);
+        var speed = Fixed.Min(topSpeed, FlightFrameSpeed(world.Time) + acceleration);
+        SetFlightFrameSpeed(world.Time, speed);
         Entity.X += FixedTrig.Cos(Entity.Angle) * speed;
         Entity.Y += FixedTrig.Sin(Entity.Angle) * speed;
         // Lift of the reference: m_maxLift · ratio², ratio the covered share of the runway. Here the height is that share squared of the approach height.
@@ -826,6 +830,8 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     {
         var flight = Entity.Template.Locomotor;
         if (parking is null || flight is null) { BeginReturnForLanding(world); return; }
+        // Speeds and their change in units of one logic frame of the original, with the constants the 30 Hz step computes with.
+        FlightFrameConstants(world.Time, flight, out var topSpeed, out var acceleration, out var braking, out _, out var slowest);
         if (Helicopter)
         {
             // HeliTakeoffOrLandingState (landing): settle vertically on the helipad or the space.
@@ -833,13 +839,14 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             var toSpot = AirModules.Distance2D(Entity.X, Entity.Y, spot.X, spot.Y);
             if (toSpot > Fixed.Zero)
             {
-                var move = Fixed.Min(toSpot, Fixed.Max(FlightFrames.PerFrame(world.Time, flight.MinSpeed), MinHelicopterApproachSpeedPerFrame));
+                var move = Fixed.Min(toSpot, Fixed.Max(slowest, MinHelicopterApproachSpeedPerFrame));
                 Entity.X += (spot.X - Entity.X) * move / toSpot;
                 Entity.Y += (spot.Y - Entity.Y) * move / toSpot;
             }
-            var descend = FlightFrames.PerFrame(world.Time, Fixed.Max(flight.SpeedLimitZ, flight.Speed / Fixed.FromInt(4)));
+            FlightVerticalConstants(world.Time, flight, out var limitZ, out _);
+            var descend = Fixed.Max(limitZ, topSpeed / Fixed.FromInt(4));
             Entity.Z = Fixed.Max(spot.Z, Entity.Z - descend);
-            Entity.Speed = Fixed.Zero;
+            SetFlightFrameSpeed(world.Time, Fixed.Zero);
             world.MarkDirty(Entity);
             if (toSpot <= Fixed.One && Entity.Z <= spot.Z)
             {
@@ -853,15 +860,13 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return;
         }
         var target = _path[_pathIndex];
-        // Speeds and their change in units of one logic frame of the original (the 30 Hz step).
-        var minSpeed = Fixed.Max(FlightFrames.PerFrame(world.Time, flight.MinSpeed), MinLandingSpeedPerFrame);
-        var acceleration = FlightFrames.PerFrameSquared(world.Time, flight.Acceleration);
-        var speed = FlightFrames.PerFrame(world.Time, Entity.Speed);
+        var minSpeed = Fixed.Max(slowest, MinLandingSpeedPerFrame);
+        var speed = FlightFrameSpeed(world.Time);
         // loco->setMaxSpeed(loco->getMinSpeed()): the landing is flown at the minimum speed.
         speed = speed > minSpeed
-            ? Fixed.Max(minSpeed, speed - Fixed.Max(FlightFrames.PerFrameSquared(world.Time, flight.Braking), acceleration))
+            ? Fixed.Max(minSpeed, speed - Fixed.Max(braking, acceleration))
             : Fixed.Min(minSpeed, speed + acceleration);
-        Entity.Speed = FlightFrames.PerTick(world.Time, speed);
+        SetFlightFrameSpeed(world.Time, speed);
         var distance = AirModules.Distance2D(Entity.X, Entity.Y, target.X, target.Y);
         var step = Fixed.Min(speed, distance);
         if (distance > Fixed.Zero)
@@ -885,7 +890,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _pathIndex++;
         if (_pathIndex < _path.Count) return;
         // Rolled out at the runway start: stop, give the runway back, taxi to the space.
-        Entity.Speed = Fixed.Zero;
+        SetFlightFrameSpeed(world.Time, Fixed.Zero);
         Entity.Z = ground;
         _allowAir = false;
         _useReturnLocomotor = false;
@@ -915,7 +920,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return;
         }
         Entity.Angle = info.ParkingOrientation;
-        Entity.Speed = Fixed.Zero;
+        SetFlightFrameSpeed(world.Time, Fixed.Zero);
         world.MarkDirty(Entity);
         Enter(JetPhase.ReloadAmmo);
         BeginReload(world);
@@ -970,9 +975,9 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         {
             // Everything per logic frame of the original, the climb speed included (_verticalSpeed): "an eighth of the speed" is used as an acceleration and "half the speed" as
             // the cap of the climb speed, which only means the same climb at every rate when the speed is the travel of a frame.
-            var gravity = -FlightFrames.PerFrameSquared(time, world.Templates.GravityPerTickSquared);
-            var lift = FlightFrames.PerFrameSquared(time, locomotor.Lift);
-            var speed = FlightFrames.PerFrame(time, locomotor.Speed);
+            var gravity = -FlightFrames.GravityPerFrameSquared(world.Templates);
+            FlightFrameConstants(time, locomotor, out var speed, out _, out _, out _, out _);
+            FlightVerticalConstants(time, locomotor, out _, out var lift);
             var net = lift > gravity ? lift - gravity : lift;
             if (net <= Fixed.Zero) net = Fixed.Max(speed / Fixed.FromInt(8), Epsilon);
             _verticalSpeed = Fixed.Min(_verticalSpeed + net, Fixed.Max(speed / Fixed.FromInt(2), net));
@@ -982,7 +987,9 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         else if (Entity.Z > target)
         {
             _verticalSpeed = Fixed.Zero;
-            Entity.Z = Fixed.Max(target, Entity.Z - FlightFrames.PerFrame(time, Fixed.Max(locomotor.SpeedLimitZ, locomotor.Speed / Fixed.FromInt(4))));
+            FlightFrameConstants(time, locomotor, out var topSpeed, out _, out _, out _, out _);
+            FlightVerticalConstants(time, locomotor, out var limitZ, out _);
+            Entity.Z = Fixed.Max(target, Entity.Z - Fixed.Max(limitZ, topSpeed / Fixed.FromInt(4)));
         }
         else return;
         world.MarkDirty(Entity);

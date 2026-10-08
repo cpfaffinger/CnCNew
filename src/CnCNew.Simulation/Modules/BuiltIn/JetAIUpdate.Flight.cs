@@ -62,12 +62,16 @@ public sealed partial class JetAIUpdate
             radius = -radius;
             aim = -aim;
         }
-        if (radius == Fixed.Zero) radius = TurnRadius(locomotor, locomotor.MinSpeed);
+        if (radius == Fixed.Zero)
+        {
+            FlightFrameConstants(world.Time, locomotor, out _, out _, out _, out var turnRate, out var minSpeed);
+            radius = TurnRadius(turnRate, minSpeed);
+        }
         var dx = _circleX - Entity.X;
         var dy = _circleY - Entity.Y;
         var bearing = dx.Abs() + dy.Abs() < Epsilon ? Entity.Angle : FixedTrig.Atan2(dy, dx);
         var angle = bearing + aim;
-        SteerWinged(world.Time, locomotor, _circleX + FixedTrig.Cos(angle) * radius, _circleY + FixedTrig.Sin(angle) * radius, locomotor.MinSpeed);
+        SteerWinged(world.Time, locomotor, _circleX + FixedTrig.Cos(angle) * radius, _circleY + FixedTrig.Sin(angle) * radius, Fixed.Zero); // the slowest the wings fly: SteerWinged raises the goal to the minimum speed
         world.MarkDirty(Entity);
     }
 

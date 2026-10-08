@@ -16,6 +16,12 @@ public sealed class LocomotorFrame(Fixed speed, Fixed acceleration, Fixed turnRa
     public Fixed TurnRate { get; } = turnRate;
     public Fixed Braking { get; } = braking;
     public Fixed MinSpeed { get; } = minSpeed;
+
+    /// <summary><see cref="LocomotorInfo.SpeedLimitZ"/> per logic frame (flight: <c>docs/RATE-INVARIANCE-ROUND3-FLIGHT.md</c>).</summary>
+    public Fixed SpeedLimitZ { get; init; }
+
+    /// <summary><see cref="LocomotorInfo.Lift"/> per logic frame².</summary>
+    public Fixed Lift { get; init; }
 }
 
 /// <summary>
@@ -34,18 +40,27 @@ public static class LocomotorFrames
     /// degrees per second. Nothing to do at 30 Hz, where the catalog's constants are the per-frame constants.
     /// </summary>
     public static void Register(LocomotorInfo info, SimulationTime timing, decimal speed, decimal acceleration, decimal braking, decimal turnRate, decimal minSpeed,
-        decimal speedDamaged, decimal accelerationDamaged, decimal turnRateDamaged)
+        decimal speedDamaged, decimal accelerationDamaged, decimal turnRateDamaged, decimal speedLimitZ = 0m, decimal lift = 0m, decimal liftDamaged = 0m)
     {
         if (timing.TicksPerOriginalFrame == 1) return;
         // The same expressions as LocomotorInfo's builder (TemplateCatalog, ObjectTemplate.cs), with the time service of the original's rate.
         var original = SimulationRate.Original.Time;
         var normalBraking = braking > 0 ? original.PerSecondSquaredToPerTickSquared(braking) : original.PerSecondSquaredToPerTickSquared(acceleration);
+        var limitZ = original.PerSecondToPerTick(speedLimitZ);
         Known.AddOrUpdate(info, new LocomotorFrame(original.PerSecondToPerTick(speed), original.PerSecondSquaredToPerTickSquared(acceleration),
-            original.DegreesPerSecondToRadiansPerTick(turnRate), normalBraking, original.PerSecondToPerTick(minSpeed)));
+            original.DegreesPerSecondToRadiansPerTick(turnRate), normalBraking, original.PerSecondToPerTick(minSpeed))
+        {
+            SpeedLimitZ = limitZ,
+            Lift = original.PerSecondSquaredToPerTickSquared(lift),
+        });
         if (info.Damaged is not { } damaged) return;
         Known.AddOrUpdate(damaged, new LocomotorFrame(original.PerSecondToPerTick(speedDamaged), original.PerSecondSquaredToPerTickSquared(accelerationDamaged),
             original.DegreesPerSecondToRadiansPerTick(turnRateDamaged), braking > 0 ? normalBraking : original.PerSecondSquaredToPerTickSquared(accelerationDamaged),
-            original.PerSecondToPerTick(minSpeed)));
+            original.PerSecondToPerTick(minSpeed))
+        {
+            SpeedLimitZ = limitZ,
+            Lift = original.PerSecondSquaredToPerTickSquared(liftDamaged),
+        });
     }
 
     /// <summary>The per-frame constants of <paramref name="info"/>, a locomotor of a catalog with <paramref name="ticksPerOriginalFrame"/> ticks per logic frame of the original (2 or 4).</summary>
@@ -56,6 +71,11 @@ public static class LocomotorFrames
         long stride = ticksPerOriginalFrame;
         var acceleration = info.Acceleration * stride;
         var braking = info.Braking * stride;
-        return new LocomotorFrame(info.Speed * stride, acceleration * stride, info.TurnRatePerTick * stride, braking * stride, info.MinSpeed * stride);
+        var lift = info.Lift * stride;
+        return new LocomotorFrame(info.Speed * stride, acceleration * stride, info.TurnRatePerTick * stride, braking * stride, info.MinSpeed * stride)
+        {
+            SpeedLimitZ = info.SpeedLimitZ * stride,
+            Lift = lift * stride,
+        };
     }
 }

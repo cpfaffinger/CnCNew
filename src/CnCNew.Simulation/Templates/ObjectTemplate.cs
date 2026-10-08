@@ -721,7 +721,7 @@ public sealed class TemplateCatalog
                     },
                 };
             builder[definition.OriginalName] = normal;
-            LocomotorFrames.Register(normal, timing, speed, acceleration, braking, turnRate, minSpeed, speedDamaged, accelerationDamaged, turnRateDamaged);
+            LocomotorFrames.Register(normal, timing, speed, acceleration, braking, turnRate, minSpeed, speedDamaged, accelerationDamaged, turnRateDamaged, Get("SpeedLimitZ"), lift, liftDamaged);
         }
         return builder.ToImmutable();
     }
