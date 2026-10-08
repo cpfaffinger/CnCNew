@@ -2039,3 +2039,21 @@ Stichprobe am 7. Oktober 2026 (Release, 2 Paarungen × 2 Startwerte, **keine Erh
 Laufzeit eines Matches über das volle Budget (ein Arbeiter, `ArmoredFury_America-China`, Patt): 13,2 s bei 30 Hz und 24,5 s bei 60 Hz; entschiedene Matches
 (`DeathValley_America-China`, Startwerte 2 und 3): 6,0 s und 3,5 s bei 30 Hz (15.076 und 10.261 Ticks), 14,3 s und 7,1 s bei 60 Hz (49.351 und 27.571 Ticks). Dazu kommt einmal je Arbeiter der Katalogbau
 (rund 12 bis 16 s, unter einer prozessweiten Sperre nacheinander). Nicht ruhig gemessen, nur zur Planung.
+
+## 41. Ausweg „Originalraster“
+
+Festlegung aus `docs/HANDOFF-PHASE23.md`: Logik, die das Original einmal je Logikbild (1/30 s) ausführt und die sich nicht sinnvoll auf eine andere Schrittweite umrechnen lässt, darf auf jedem
+(Rate/30)-ten Tick laufen – auf den Ticks, für die `SimulationTime.IsOriginalFrameBoundary(tick)` gilt. Für Bewegung, Befehlsannahme und Zielerwerb ist der Ausweg nicht zulässig. Jede Stelle steht
+in dieser Tabelle; bei 30 Hz ist jede von ihnen unverändert (jeder Tick beginnt ein Bild).
+
+| Stelle | Was je Originalbild läuft | Warum nicht umrechenbar | Quelle im Original |
+|---|---|---|---|
+| `Scripting/ScriptEngine.cs`, `ScriptEngine.Update` (`BeginsFrame`) – die Skript-VM als Ganzes | Endspiel-Zeitgeber, Timer (zählen Bilder), die Auswertung aller Skripte, Teamereignisse, Sequenzskripte mit ihren Wartezeiten, Team-Bauaufträge und -Warteschlangen, die Standbefehle der VM (`UpdateFollowers`, `UpdateButtonHunts`, `UpdatePhase13`) | Karten vergleichen Timer mit Bildliteralen, rechnen auf Timern, zählen eigene Auswertungen und fragen Flanken „seit der vorigen Auswertung“ ab; „ein Befehl je Update“ und „zwei Updates untätig“ sind Regeln des Originals in Bildern. Beleg: `MD_USA02` lief bei 60 Hz 250 s später (`docs/SCRIPT-ENGINE.md` §2) | `GameLogic.cpp`, `GameLogic::update` (`TheScriptEngine->UPDATE()` einmal je Bild); `ScriptEngine.cpp`, `ScriptEngine::update`, `setTimer`, `setSequentialTimer`, `evaluateAndProgressAllSequentialScripts`, `startEndGameTimer`/`startQuickEndGameTimer`; `Team.cpp`, `Team::updateState`; `ScriptConditions.cpp`, `evaluateUnitHasEmptied` |
+| dieselbe Stelle unter `FREEZE_TIME` | wie oben; weil der Tick der Welt steht, zählt die VM die Aufrufe selbst (`frozenPhase`) | wie oben; Skripttimer laufen im Original bei eingefrorener Zeit weiter, ein Update je Bild | `GameLogic::update` (Rückkehr nach den Skripten bei `isTimeFrozen`), `ScriptEngine::isTimeFrozenScript` |
+
+Was an derselben Stelle **bewusst in jedem Tick** bleibt: `ScriptEngine.Observe` (die Ereignisse jedes Weltschritts), das Merken benannter Objekte, die es gab (`NoteNamedObjectsThatExist`), die
+Auskünfte der VM an den Zielerwerb der Welt und die Annahme der von der VM erteilten Befehle im Weltschritt. Gemessen ist die Stelle über die 24 Kampagnenkarten bei 30, 60 und 120 Hz
+(`docs/TICKRATE-MIGRATION.md` §15.3).
+
+Stellen außerhalb der Simulation, die schon seit Phase 21 je Originalbild laufen (Effekte, Meldungen, Daueraufträge der Eingabe), stehen in `docs/TICKRATE-MIGRATION.md` §14; sie sind Präsentation und
+kein Fall dieser Tabelle.

@@ -339,9 +339,9 @@ Reihenfolge der Phasen und „ein Tick später“ sind bei 60 Hz ein halbes Bild
 | `Modules/BuiltIn/Phase5BlockerModules.cs` | `StealthDetectorUpdate` bei `DetectionRate = 0` | scannt je Tick statt je Bild (bewusst, Anhang B.3) |
 | `Modules/BuiltIn/TransportModules.cs` | `HelicopterSlowDeathBehavior.BeginSlowDeath` (`_bladeFlyOff = Range(MinBladeFlyOffDelay, MaxBladeFlyOffDelay)` über **ungerundete** `Fixed`-Ticks, je Tick −1) | W1 d, nicht umgestellt: die Grenzen liegen nicht auf dem Raster (`parseDurationReal`), ein Zug in Bildern müsste die Grenzen zurückteilen und würde bei 60 Hz anders runden als das Original; der gezogene Wert ist bei 60 Hz nicht das Doppelte |
 | `Modules/BuiltIn/WorldEffectModules.cs` | `FirestormDynamicGeometryInfoUpdate.Update` (`ratio = _timeActive / TransitionTime`, Ende bei `_timeActive > TransitionTime`) | Übergang dauert `TransitionTime + 1` Ticks: bei 60 Hz ein halbes Bild kürzer als bei 30 Hz (W1 c in einer Interpolation; `_timeActive` ist zugleich der Zähler der Interpolation) |
-| `Scripting/ScriptEngine.Phase13.cs` | `UNIT_EMPTIED` (`frame - TickOrder.Next`) | Ordnung, nicht skaliert; setzt Auswertung in **jedem** Tick voraus – läuft die VM nur an Bildgrenzen, muss die Nachbarschaft „voriges Bild“ heißen. |
-| `Scripting/ScriptEngine.Phase13.cs` | `UpdateBridgeStates` (Wechsel-Flag ein Update lang), `AttachPendingTraps`, Reichweitenprüfung in `UpdateCaptureOrders` | Fenster bzw. Versatz von einem Tick; Prüfung je Tick. |
-| `Mission/MissionSession.cs` | `Step` (Reihenfolge), `Engine.TimeFrozen` | Skripte, dann Welt, dann Ereignisse: Skripte reagieren einen Tick später (1/60 s). Im `FREEZE_TIME` zählt nur die Aufrufrate von `Step`: Skripttimer laufen weiter in Ticks der Rate, die Welt steht. |
+| `Scripting/ScriptEngine.Phase13.cs` | `UNIT_EMPTIED` (`frame - TickOrder.Next`) | Ordnung, nicht skaliert; setzt Auswertung in **jedem** Tick voraus – läuft die VM nur an Bildgrenzen, muss die Nachbarschaft „voriges Bild“ heißen. — **Phase 23:** vergleicht mit dem vorigen Bild (`frame - Time.TicksPerOriginalFrame`), weil die VM je Originalbild auswertet; Test `TickRateScriptClockUnitEmptiedLooksOneFrameBack` (vorher bei 60 Hz nie wahr), Commit 2fe8b32 |
+| `Scripting/ScriptEngine.Phase13.cs` | `UpdateBridgeStates` (Wechsel-Flag ein Update lang), `AttachPendingTraps`, Reichweitenprüfung in `UpdateCaptureOrders` | Fenster bzw. Versatz von einem Tick; Prüfung je Tick. — **Phase 23:** läuft mit der VM einmal je Originalbild (`docs/SIMULATION-CORE.md` §41): Fenster und Versatz sind wieder ein Bild, die Prüfung fällt auf dieselben Spielzeitpunkte wie bei 30 Hz, Commit 727c4d6 |
+| `Mission/MissionSession.cs` | `Step` (Reihenfolge), `Engine.TimeFrozen` | Skripte, dann Welt, dann Ereignisse: Skripte reagieren einen Tick später (1/60 s). Im `FREEZE_TIME` zählt nur die Aufrufrate von `Step`: Skripttimer laufen weiter in Ticks der Rate, die Welt steht. — **Phase 23:** die Reihenfolge bleibt, die VM arbeitet aber nur auf Ticks, die ein Originalbild beginnen – Skripte reagieren bei jeder Rate auf dem Bildraster von 30 Hz; unter `FREEZE_TIME` zählt die VM die Aufrufe selbst (`frozenPhase`), Skripttimer behalten eingefroren ihre Dauer, Commit 727c4d6 |
 | `Modules/BuiltIn/LastBlockerModules.cs`, `Modules/BuiltIn/MatchModules.cs` | `SupplyWarehouseCripplingBehavior.OnDamage` (`Math.Max(SuppressTicks, SleepNone)`), `BaseRegenerateUpdate.OnDamage` (`Math.Max(BaseRegenDelayTicks, SleepNone)`) | Bei einer Frist von 0 wacht das Modul nach einem Tick statt nach einem Bild auf (benannte Ausnahmen der Regel „Untergrenze ein Tick“, §10) |
 | `Modules/BuiltIn/Phase5Modules.cs` | `StealthUpdate.MarkDetected` (`Math.Max(ticks, SleepNone)`) | Untergrenze eines Werts, den der Aufrufer aus Rate + `TickOrder.Next` bildet; ein Aufrufer mit 0 enttarnt für einen Tick |
 
@@ -362,15 +362,15 @@ Rhythmen ohne eigenes Literal: was je Tick läuft, läuft bei 60 Hz doppelt so o
 | `Modules/BuiltIn/WorldEffectModules.cs` | `FireOCLAfterWeaponCooldownUpdate.Update` (läuft je Tick, liest den Schuss des Vorticks) | Reihenfolge, unverändert richtig; nur Last |
 | `Modules/BuiltIn/WorldEffectModules.cs` | `WaveGuideUpdate.Update`/`Advance`/`DoDamage` | ein Pfadschritt und eine Schadensabtastung je Tick: doppelt so dichte Abtastung der Front |
 | `Modules/BuiltIn/WorldEffectModules.cs` | `CheckpointUpdate.Update` (zwei Vollsuchen je Tick) | nur Last; der Torschritt ist jetzt je Tick skaliert |
-| `Scripting/ScriptEngine.cs` | `Update` (W6) | Jedes aktive Skript ohne Verzögerung wird je Tick ausgewertet: Zähler, die ein Skript je Auswertung erhöht, und wiederholte Aktionen laufen doppelt so oft. Naheliegend: nur an Bildgrenzen (`Time.IsOriginalFrameBoundary`). |
-| `Scripting/ScriptEngine.cs` | Timerwerte (`Counter.Value`, `IsTimer`) | Seit Stufe 1 in Ticks, je Tick −1. Vergleiche einer Karte gegen Bildliterale (`COUNTER`, `TIMER`-Bedingungen mit Zahl) und Rechnen auf einem Timer (`INCREMENT_COUNTER`, `DECREMENT_COUNTER`, `SET_COUNTER` roh) meinen Bilder – bei 60 Hz passt die Einheit nicht. Löst sich, wenn die VM an Bildgrenzen läuft und Timer wieder Bilder sind (dann die Skalierung der Stufe 1 in `SET_TIMER`, `SecondsToFrames`, `SetSequenceTimer` zurücknehmen); getrennt davon nicht ohne Zustandsänderung lösbar. |
-| `Scripting/ScriptEngine.Actions.cs` | `UpdateFollowers` (Teil je Tick), `UpdateTeamFollower` | Ankunft am Wegpunkt, Neuausgabe des Marschbefehls und `FireAtOrdered` laufen je Tick: feinere Abtastung, mehr Befehle je Sekunde. Der gestaffelte Rest ist umgestellt. |
-| `Scripting/ScriptEngine.Sequential.cs` | `ProcessSequences`, `SequenceItem.FramesToWait`, `_busyThisTick` | Wartezähler sind skaliert (Stufe 1), aber Leerlauf wird je Tick abgetastet und der Ein-Tick-Versatz zwischen Befehl und Welt ist 1/60 s. |
-| `Scripting/ScriptEngine.ExtendedActions.cs` | `ProcessTeamBuilds` | Je offener Bestellung höchstens ein Produktionsbefehl je Tick: doppelt so schnell eingereiht. |
-| `Scripting/ScriptEngine.TeamQueues.cs` | `UpdateTeamQueues`, `UpdateBuildingTeam` | Prüfung je Tick; Startaktionen laufen je Tick, solange ein Mitglied untätig ist. |
-| `Scripting/ScriptEngine.TeamEvents.cs` | `ProcessTeamEvents`, `ScriptTeam.WasIdle`, `_pendingTeamScripts` | Feindsicht und Verlustschwelle je Tick; „zwei Ticks untätig“ ist halb so lang; Zerstört-Skripte einen Tick später. |
-| `Scripting/ScriptEngine.Conditions.cs` | `PLAYER_LOST_OBJECT_TYPE`, `NAMED_/TEAM_ENTERED/EXITED_AREA*` | Flanken gegen die vorige Auswertung: Fenster und Abtastung hängen am Auswertungstakt. |
-| `Scripting/ScriptEngine.Phase13.cs` | `SUPPLY_SOURCE_SAFE` | Kein Zwischenspeicher (Original: 2 s, `ScriptConditions.cpp`, `evaluateSkirmishSupplySourceSafe`); folgt dem Auswertungstakt. |
+| `Scripting/ScriptEngine.cs` | `Update` (W6) | Jedes aktive Skript ohne Verzögerung wird je Tick ausgewertet: Zähler, die ein Skript je Auswertung erhöht, und wiederholte Aktionen laufen doppelt so oft. Naheliegend: nur an Bildgrenzen (`Time.IsOriginalFrameBoundary`). — **Phase 23:** Ausweg „Originalraster“ (`docs/SIMULATION-CORE.md` §41): `Update` arbeitet nur auf Ticks, die ein Originalbild beginnen; Ursache der Verschiebung von `MD_USA02`, Messung §15.3, Commit 727c4d6 |
+| `Scripting/ScriptEngine.cs` | Timerwerte (`Counter.Value`, `IsTimer`) | Seit Stufe 1 in Ticks, je Tick −1. Vergleiche einer Karte gegen Bildliterale (`COUNTER`, `TIMER`-Bedingungen mit Zahl) und Rechnen auf einem Timer (`INCREMENT_COUNTER`, `DECREMENT_COUNTER`, `SET_COUNTER` roh) meinen Bilder – bei 60 Hz passt die Einheit nicht. Löst sich, wenn die VM an Bildgrenzen läuft und Timer wieder Bilder sind (dann die Skalierung der Stufe 1 in `SET_TIMER`, `SecondsToFrames`, `SetSequenceTimer` zurücknehmen); getrennt davon nicht ohne Zustandsänderung lösbar. — **Phase 23:** Timer zählen wieder Bilder des Originals (die Skalierung der Stufe 1 in `SET_TIMER`, `SecondsToFrames`, `SetSequenceTimer` und im Endspiel-Zeitgeber ist zurückgenommen); `CounterValue` eines Timers ist bei jeder Rate in Bildern, der eine Verbraucher (`MissionPresentationDirector.CounterForDisplay`) rechnet nicht mehr um, Commit 727c4d6 |
+| `Scripting/ScriptEngine.Actions.cs` | `UpdateFollowers` (Teil je Tick), `UpdateTeamFollower` | Ankunft am Wegpunkt, Neuausgabe des Marschbefehls und `FireAtOrdered` laufen je Tick: feinere Abtastung, mehr Befehle je Sekunde. Der gestaffelte Rest ist umgestellt. — **Phase 23:** läuft mit der VM einmal je Originalbild: Ankunft, Neuausgabe des Marschbefehls und `FireAtOrdered` fallen auf das Bildraster, gleich viele Befehle je Spielzeit wie bei 30 Hz (Befehlstakt der Skripte, nicht Bewegung oder Zielerwerb der Welt), Commit 727c4d6 |
+| `Scripting/ScriptEngine.Sequential.cs` | `ProcessSequences`, `SequenceItem.FramesToWait`, `_busyThisTick` | Wartezähler sind skaliert (Stufe 1), aber Leerlauf wird je Tick abgetastet und der Ein-Tick-Versatz zwischen Befehl und Welt ist 1/60 s. — **Phase 23:** Leerlauf wird je Originalbild abgetastet, `FramesToWait` zählt Bilder (N Bilder halten N + 1 Updates, bei jeder Rate dieselbe Spielzeit); Test `TickRateScriptClockSequentialWait`, Commit 727c4d6 |
+| `Scripting/ScriptEngine.ExtendedActions.cs` | `ProcessTeamBuilds` | Je offener Bestellung höchstens ein Produktionsbefehl je Tick: doppelt so schnell eingereiht. — **Phase 23:** höchstens ein Produktionsbefehl je offener Bestellung und Originalbild, Commit 727c4d6 |
+| `Scripting/ScriptEngine.TeamQueues.cs` | `UpdateTeamQueues`, `UpdateBuildingTeam` | Prüfung je Tick; Startaktionen laufen je Tick, solange ein Mitglied untätig ist. — **Phase 23:** Prüfung und Startaktionen je Originalbild; die Fristen (`teamInitialIdleFrames`, 60 s) vergleichen weiter mit dem Tick der Welt und liegen auf dem Raster, Commit 727c4d6 |
+| `Scripting/ScriptEngine.TeamEvents.cs` | `ProcessTeamEvents`, `ScriptTeam.WasIdle`, `_pendingTeamScripts` | Feindsicht und Verlustschwelle je Tick; „zwei Ticks untätig“ ist halb so lang; Zerstört-Skripte einen Tick später. — **Phase 23:** je Originalbild: „zwei Updates untätig“ sind zwei Bilder, Zerstört-Skripte laufen im nächsten Update (die Todesereignisse sammelt `Observe` weiter in jedem Tick), Commit 727c4d6 |
+| `Scripting/ScriptEngine.Conditions.cs` | `PLAYER_LOST_OBJECT_TYPE`, `NAMED_/TEAM_ENTERED/EXITED_AREA*` | Flanken gegen die vorige Auswertung: Fenster und Abtastung hängen am Auswertungstakt. — **Phase 23:** die vorige Auswertung liegt bei jeder Rate ein Originalbild zurück, die Flanken sehen dieselben Spielzeitpunkte wie bei 30 Hz (Commit 727c4d6); Test `TickRateScriptClockSeesWhatHappenedBetweenFrames` und das Merken kurzlebiger benannter Objekte, Commit d710835 |
+| `Scripting/ScriptEngine.Phase13.cs` | `SUPPLY_SOURCE_SAFE` | Kein Zwischenspeicher (Original: 2 s, `ScriptConditions.cpp`, `evaluateSkirmishSupplySourceSafe`); folgt dem Auswertungstakt. — **Phase 23:** folgt dem Auswertungstakt, der jetzt bei jeder Rate das Originalbild ist (Commit 727c4d6); der fehlende 2-s-Zwischenspeicher des Originals bleibt offen (unabhängig von der Rate) |
 | `Skirmish/SkirmishMatchSession.cs` | `Step` | `SkirmishAi.Update` wird je Tick aufgerufen (kehrt außerhalb der Bilder sofort zurück); kein Verhalten, nur Aufrufzahl. |
 | `Skirmish/SkirmishAi.cs` | `Think` (Fristen am Denkraster), `FindPlacement`/`ProduceArmy` (Zufallszüge je Denkschritt), `PlacementChecksPerThink`, `paths > 12` | Mit skaliertem Raster **und** skalierten Fristen ist die wirksame Dauer und die Zahl der Züge je Spielzeit dieselbe wie bei 30 Hz; die KI sieht aber eine Welt, die sich zwischen zwei Denkschritten feiner bewegt hat (andere Positionen, andere `BuildTicks`-Reste) – Abläufe sind nicht tickgleich zu 30 Hz. |
 | `Testing/ObjectiveDriver.Commands.cs` | `Act`, `DriveAssaults` | Je Tick ein `FireWeaponCommand` je Angriffspaar, sobald die Waffe feuern darf (wie `StandingOrders`, W5). |
@@ -459,7 +459,8 @@ Nach Phase 20 liest alles außerhalb die Rate aus der Welt bzw. vom Katalog. Was
 | `MissionObjectiveDriver.Run(spacing, settleTicks)`, `MissionProbe.Run(settleTicks, waitTicks)` | Bilder des Originals | in `Run` |
 | `MissionProbeResult.TicksToOutcome`, `MissionRunReport.Ticks`/`.OutcomeTick`, `ObjectiveDriveResult.OutcomeTick` | Ticks | – |
 | `SkirmishAiStats.AttackTicks` | Ticks (zählt je Denkschritt das skalierte Denkintervall) | – |
-| `ScriptEngine.CounterValue(name)` eines Timers, `HulkLifetimeOverrideTicks` | Ticks (Zustand der VM; seit Stufe 1) | – |
+| `ScriptEngine.CounterValue(name)` eines Timers | **seit Phase 23:** Bilder des Originals bei jeder Rate (Zustand der VM, §15.3); von Stufe 1 bis dahin Ticks | – |
+| `ScriptEngine.HulkLifetimeOverrideTicks` | Ticks (Zustand der VM; seit Stufe 1) | `SCRIPTING_OVERRIDE_HULK_LIFETIME` |
 | `ScriptOutput.Tick` | Tick | – |
 | `ScriptOutput.Arguments` | Parameter der Karte, unverändert (§8.2) | – |
 
@@ -472,8 +473,8 @@ Wer heute 300 als `GraceTicks` übergibt, bekommt bei 30 Hz dasselbe Verhalten u
 - `Arguments` sind die Parameter der Karte als Text, **unverändert und nie mit der Rate skaliert**. Eine Bildzahl darunter (`CAMERA_FADE_*`, `CAMERA_BW_MODE_*`: Bilder für Anstieg, Halten, Abfall; `ScriptEngine.cpp`, `ScriptEngine::setFade`, `m_fadeFramesIncrease/Hold/Decrease`) ist bei jeder Rate eine Zahl von **Bildern des Originals (1/30 s)**; Sekundenwerte sind Sekunden.
 - `ScriptOutput.Tick` ist der Simulationstick der Rate der Welt. Wer daraus Zeit ableitet, rechnet mit `world.Time`.
 - `PendingPresentation` läuft nach `PresentationLatencyTicks` **Bildern des Originals** ab.
-- `VICTORY`/`DEFEAT`-Ausgaben: der Nachlauf bis `IsEnded` ist 120 Bilder (4 s) bei jeder Rate, bei `QUICKVICTORY` ein Update.
-- `CounterValue` eines Timers ist in **Ticks** (§6 Nr. 7, §5.4 „Timerwerte“).
+- `VICTORY`/`DEFEAT`-Ausgaben: der Nachlauf bis `IsEnded` ist 120 Bilder (4 s) bei jeder Rate, bei `QUICKVICTORY` ein Update (seit Phase 23 ein Update der VM, also ein Bild des Originals).
+- `CounterValue` eines Timers ist seit Phase 23 in **Bildern des Originals** (§15.3; davor in Ticks: §6 Nr. 7, §5.4 „Timerwerte“).
 
 ### 8.3 Stresstest: der Zeitplan zählt Schritte
 
@@ -1502,3 +1503,82 @@ Zu Nr. 2, Budget 2.000 s bei jeder Rate – ein Radiusschritt verschiebt den Aus
 | 400 | kein Sieger | Beta, 1.180 s | Beta, 947,5 s |
 
 Daraus: 9 der 14 sind Testerwartungen, 4 sind echte Kopplungen, die alle schon in §5 stehen (kein neuer Fund), 1 ist chaotisch. **Drei Tests bestehen bei 60 Hz nur zufällig** (Nr. 1 und Nr. 3 ohne jede Reserve, Nr. 10 mit einem Tick) und werden unabhängig von 120 Hz umgestellt. Nicht bestimmt: die erste abweichende Befehlszeile in Nr. 2 („keine einzelne Ursache“ stützt sich auf die Streuung der Tabelle); die Anteile der drei Kopplungen in Nr. 10; der Turmwinkel im Schussmoment in Nr. 12–14 (88,5° sind aus 59 × 1,5° gerechnet).
+
+### 15.3 Die Skript-VM auf dem Originalraster: `MD_USA02` und die Kampagne bei 30, 60 und 120 Hz
+
+**Befund.** Zielfahrer, dieselben Binärdateien, 30 gegen 60 Hz (`CampaignTool drive <content> --map "/NAME.map" [--tick-rate 60 --ticks 120000]`): auf 23 von 24 Karten lief das Endskript der Mission
+zur selben Spielzeit (innerhalb 0,05 s), auf `MD_USA02` nicht – Sieg `END_Final_` bei 90,60 s gegen 340,57 s, Niederlage `Lose_END_Final_` bei 412,03 s gegen 529,52 s; der erste Schritt des
+Fahrers („send named Truck01 to area Warehouse Lot“) wurde bei 30 Hz bei Tick 2.295 (76,5 s) möglich, bei 60 Hz bei Tick 19.590 (326,5 s).
+
+**Ursache** (`CampaignTool script <content> --map MD_USA02 --name "Truck01 Deploy"`): das Skript `Global Timers` setzt den Bildtimer `Convoy Trucks` mit `SET_TIMER` auf 16.000; `Truck01 Deploy`
+(Gruppe `Convoy Trucks Land`) erzeugt den ersten Lastwagen, sobald `COUNTER(Convoy Trucks < 15000)` gilt. Die VM führte Timer seit Stufe 1 in Ticks (32.000 bei 60 Hz, je Tick −1), das Literal der
+Karte blieb 15.000: 17.001 Ticks = 283,4 s statt 1.001 Bilder = 33,4 s. Dieselbe Karte vergleicht weitere Timer mit Bildliteralen (Niederlage). Das sind die Zeilen „`Update` (W6)“ und „Timerwerte“ aus
+§5.4 – kein neuer Fund, aber der erste gemessene.
+
+**Korrektur** (ein Commit je Ursache; Beschreibung in `docs/SCRIPT-ENGINE.md` §2 „Die Uhr der VM ist das Originalbild“, Stelle des Auswegs in `docs/SIMULATION-CORE.md` §41):
+
+| Commit | Ursache | Korrektur | 30 Hz |
+|---|---|---|---|
+| `727c4d6` | die VM wertete je Tick aus und zählte Timer in Ticks; das Original je Bild (`GameLogic::update`, `ScriptEngine::update`) | `ScriptEngine.Update` arbeitet nur auf Ticks, die ein Originalbild beginnen; Timer, Sequenzwartezeiten und Endspiel-Zeitgeber zählen Bilder; unter `FREEZE_TIME` zählt die VM die Aufrufe selbst; `CounterForDisplay` der Präsentation rechnet nicht mehr um | Eingabemanifest identisch, Manifest `quick` 9 von 9 |
+| `2fe8b32` | `UNIT_EMPTIED` verglich mit dem vorigen **Tick**, die VM wertet aber je Bild aus – bei 60/120 Hz nie wahr | Vergleich mit dem vorigen Bild (`ScriptConditions::evaluateUnitHasEmptied`) | identisch, 9 von 9 |
+| `d710835` | ein benanntes Objekt, das zwischen zwei Updates erscheint und verschwindet, galt als nie erzeugt (`didUnitExist`) – bei 120 Hz liegen drei Ticks dazwischen | das Merken „hat existiert“ läuft in jedem Tick; alles andere wartet auf das Bild | identisch, 9 von 9 |
+
+**Was aus den Listen in §5.3/§5.4 von selbst folgt** (kein eigener Commit, weil es Teil desselben Updates ist): Brückenzustand ein Update lang, `AttachPendingTraps`, Reichweitenprüfung der Übernahme,
+`ProcessTeamEvents` mit `WasIdle` und `_pendingTeamScripts`, `ProcessSequences` mit `_busyThisTick`, `ProcessTeamBuilds`, `UpdateTeamQueues`, `UpdateFollowers`, `SUPPLY_SOURCE_SAFE`, die Flanken
+`PLAYER_LOST_OBJECT_TYPE` und `NAMED_/TEAM_ENTERED/EXITED_AREA*`, die Reihenfolge in `MissionSession.Step`. **Bewusst je Tick** bleiben `ScriptEngine.Observe`, die Auskünfte an den Zielerwerb der
+Welt und die Annahme der Befehle der VM im Weltschritt. **Nicht angefasst:** der Zielfahrer (`Testing/ObjectiveDriver*.cs`) – sein Rhythmus war nicht die Ursache.
+
+**Messung am Endstand `d710835`** (7./8. Oktober 2026, Release, Binärdateien aus einer Kopie, je Karte und Rate ein eigener Prozess, höchstens vier nebeneinander; 60.000 / 120.000 / 240.000 Ticks;
+gezählt aus 72 Einzelprotokollen mit `victory REACHED by '…' @T`, Spielzeit = T / Rate). Vorab festgelegte Abnahme: dasselbe Endskript auf jeder Karte bei allen drei Raten; die Spielzeit innerhalb
+± 1 Originalbild (0,034 s) der 30-Hz-Zeit, wo die Kette rein skriptgetrieben ist, sonst ± 2 % oder ± 1 s.
+
+| Karte | 30 Hz: Sieg / Niederlage (s) | 60 Hz | 120 Hz | Endskripte (bei allen drei Raten dieselben) |
+|---|---|---|---|---|
+| `GC_AirGeneral` | 9,00 / 5,00 | 9,00 / 5,00 | 9,00 / 5,00 | `END_Final_GLA` / `Lose_END_Final_GLA` |
+| `GC_ChemGeneral` | 9,00 / 5,00 | 9,00 / 5,00 | 9,00 / 5,00 | `END_Final_USA` / `Lose_END_Final_USA` |
+| `GC_ChinaBoss` | 12,00 / 81,03 | 12,00 / 81,03 | 12,00 / 81,03 | `End the mission` / `Lose_END_Final_USA` |
+| `GC_LaserGeneral` | 8,00 / 5,00 | 8,00 / 5,00 | 8,00 / 5,00 | `END_Final_USA` / `Lose_END_Final_USA` |
+| `GC_NukeGeneral` | 8,00 / 5,00 | 8,00 / 5,00 | 8,00 / 5,00 | `END_Final_USA` / `Lose_END_Final_USA` |
+| `GC_Stealth` | 8,00 / 5,00 | 8,00 / 5,00 | 8,00 / 5,00 | `END_Final_USA` / `Lose_END_Final_USA` |
+| `GC_SuperWeaponsGeneral` | 8,00 / 5,00 | 8,00 / 5,00 | 8,00 / 5,00 | `END_Final_USA` / `Lose_END_Final_USA` |
+| `GC_TankGeneral` | 8,00 / 5,00 | 8,00 / 5,00 | 8,00 / 5,00 | `END_Final_USA` / `Lose_END_Final_USA` |
+| `MD_CHI01` | 10,03 / 8,03 | 10,03 / 8,03 | 10,03 / 8,03 | `END_Final_` / `Lose_END_Final_` |
+| `MD_CHI02` | 10,03 / 10,03 | 10,03 / 10,03 | 10,03 / 10,03 | `END_Final_` / `Lose_END_Final_` |
+| `MD_CHI03` | 57,40 / 149,03 | 57,40 / 149,03 | 57,40 / 149,03 | `Cheer1Done` / `Lose_END_Final_` |
+| `MD_CHI04` | 1608,60 / 9,10 | 1608,60 / 9,10 | 1608,60 / 9,10 | `END_Final_` / `Lose_END_Final_` |
+| `MD_CHI05` | 88,73 / 8,03 | 88,73 / 8,03 | 88,73 / 8,03 | `CINE_ENDVictory` / `Lose_END_Final_` |
+| `MD_GLA01` | 17,53 / 8,03 | 17,53 / 8,03 | 17,53 / 8,03 | `Cheer1Done` / `Lose_END_Final_` |
+| `MD_GLA02` | 8,00 / 19,07 | 8,00 / 19,07 | 8,00 / 19,07 | `END_Final_` / `Lose_END_Final_` |
+| `MD_GLA03` | 134,43 / 8,07 | 134,43 / 8,07 | 134,43 / 8,07 | `CINE_ENDVictory` / `Lose_END_Final_` |
+| `MD_GLA04` | 34,07 / 8,03 | 34,07 / 8,03 | 34,07 / 8,03 | `CINE_END` / `Lose_END_Final_` |
+| `MD_GLA05` | 46,47 / 34,53 | 46,47 / 34,53 | 46,47 / 34,53 | `CINE_END04END` / `Lose_END_Final_` |
+| `MD_USA01` | 26,17 / 7,03 | 26,17 / 7,03 | 26,17 / 7,03 | `END_Final_USA` / `Lose_END_Final_USA` |
+| `MD_USA02` | 90,60 / 412,03 | 90,60 / 412,03 | 90,60 / 412,03 | `END_Final_` / `Lose_END_Final_` |
+| `MD_USA03` | 50,30 / 8,03 | 50,30 / 8,03 | 50,30 / 8,03 | `CINE_AVVictory` / `Lose_END_Final_` |
+| `MD_USA04` | 10,10 / 20,57 | 10,10 / 20,57 | 10,10 / 20,57 | `END_Final_USA` / `Lose_END_Final_USA` |
+| `MD_USA05` | 48,10 / 42,67 | 48,10 / 42,67 | 48,10 / 42,67 | `END_Fade 04` / `Lose_END_Final_` |
+| `Training01` | 14,00 / 88,50 | 14,00 / 88,50 | 14,00 / 88,50 | `Player Wins` / `Player Loses` |
+
+Ergebnis: Sieg **24 von 24** und Niederlage **24 von 24** bei 30, 60 und 120 Hz, auf jeder Karte dieselben Endskripte, größte Abweichung von der 30-Hz-Zeit über alle 144 Zeitpunkte **0,00 s** – jede
+Karte liegt innerhalb von ± 1 Originalbild, auch die, deren Kette an Bewegung und Gefecht hängt. (Die Welteingriffe des Fahrers ersetzen dort das Gefecht; das belegt die Skriptkette, nicht das
+Fahrverhalten.) Dieselbe Tabelle ergab der Lauf am Stand `727c4d6`. Vor der Korrektur bei 60 Hz: `MD_USA02` 340,57 / 529,52 s, alle übrigen Karten innerhalb 0,05 s; für 120 Hz gibt es keine Messung
+des Standes davor.
+
+Weitere Läufe am Endstand:
+
+| Lauf | Ergebnis |
+|---|---|
+| `SimTool input-manifest check` | identisch |
+| `SimTool reference-manifest check --set full --jobs 6` | **50 von 50 Läufen identisch** |
+| `CampaignTool audit --ticks 900` (30 Hz, 24 Karten einzeln) | 24 von 24 deterministisch, 24 von 24 identisch nach Speichern/Laden, 0 Treffer auf fehlende Typen, Endproben Sieg 13 von 24, Niederlage 15 von 24 – unverändert |
+| `CampaignTool audit --tick-rate 60 --ticks 1800` | 24 von 24 deterministisch, 24 von 24 identisch nach Speichern/Laden, Endproben Sieg 13 von 24, Niederlage 15 von 24 |
+| Simulationstests mit `--content-dir` | 30 Hz 442 von 442; `--tick-rate 60` die sechs bekannten Ausfälle (§14.9.2), sonst keiner; `--tick-rate 120` die 14 aus §15.2 |
+| neue Tests (`Tests.TickRate.ScriptClock.cs`, `Tests.TickRate.ScriptEvents.cs`), je bei 30/60/120 Hz in einem Lauf | 9 von 9 |
+| `Game.Tests -- --only TimeScaleTests,SourceRuleTests,CampaignTests` (Release) | bestanden (der benannte Countdown liest bei allen drei Raten dieselbe Zeit) |
+| `dotnet build CnCNew.slnx` | 0 Warnungen |
+
+**Nicht belegt bzw. offen:** Der Audit speichert an einem festen Tick; dass ein Stand **zwischen** zwei Bildern identisch fortsetzt, belegt nur der synthetische Test (auch eingefroren), kein Lauf
+mit Realdaten. Ein UI-Signal (`SignalUiInteraction`) zwischen zwei Updates steht wie bisher nicht im gespeicherten Zustand (bei 30 Hz dieselbe Lücke zwischen Signal und nächstem Schritt, bei
+60/120 Hz bis zu einem Bild lang). Die drei Felder des Skriptzustands mit neuer Bedeutung bei 60/120 Hz (Timerwert, Sequenzwartezeit, `endTimer`: Bilder statt Ticks) haben keine neue
+Formatversion. Die Standbefehle der VM (`UpdateFollowers`, `FireAtOrdered`) laufen je Bild – ob das im Spiel bei 60 Hz anders aussieht als ein Befehl je Tick, hat niemand gesehen. Der
+2-s-Zwischenspeicher von `SUPPLY_SOURCE_SAFE` fehlt weiter. Kein Mensch hat eine Mission bei 60 oder 120 Hz gespielt.
