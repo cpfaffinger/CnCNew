@@ -1712,8 +1712,41 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             if (left == 1) _frameArriving = false;
             return;
         }
-        // Crush, topple and collide modules are tested where the 30 Hz step tests them: once per logic frame, at the end of the frame's step and with its whole displacement.
-        if (left == 1 && (world.Navigation is null || !air)) world.ResolveFootprintCollisions(Entity, _frameStepX, _frameStepY);
+        // Crush, topple and collide modules are tested where the 30 Hz step tests them: once per logic frame, at the end of the frame's step and with its whole displacement -
+        // and in the tick of the 30 Hz step, the frame's first, in which every decision of a frame falls (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 4).
+        if (covered == 0 && (world.Navigation is null || !air)) CollideWhereTheFrameEnds(world, air);
+    }
+
+    /// <summary>
+    /// Above 30 Hz: the collision test of a frame's step, in the frame's first tick. The object stands where its frame ends while the test runs (what it meets reads it there
+    /// and is read where its own begun frame ends, <c>SimulationWorld.FootprintsOverlap</c>), as it does after the single 30 Hz step. An object the test takes out of the
+    /// world or out of its move (killed, contained, settled) stays there, as rule 4 has it; every other object goes back and covers the rest of its step. Tested with the
+    /// last share instead, a crate was collected and a soldier crushed up to a frame's last tick late: after everything else of that frame had decided, drawn its random
+    /// numbers and looked at them.
+    /// </summary>
+    private void CollideWhereTheFrameEnds(IWorldServices world, bool air)
+    {
+        var (x, y, z, angle) = (Entity.X, Entity.Y, Entity.Z, Entity.Angle);
+        var (aheadX, aheadY) = (Entity.AheadX, Entity.AheadY);
+        var pending = _frameTicksLeft;
+        var (dead, leaving) = (Entity.EffectivelyDead, Entity.DestroyRequested);
+        Entity.X = x + aheadX;
+        Entity.Y = y + aheadY;
+        if (world.Navigation is not null && !air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+        Entity.Angle = _frameAngle;
+        Entity.SetAhead(world.Tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
+        world.ResolveFootprintCollisions(Entity, _frameStepX, _frameStepY);
+        if (_frameTicksLeft != pending || Entity.EffectivelyDead != dead || Entity.DestroyRequested != leaving || Entity.ContainedBy.IsValid || Entity.X != x + aheadX || Entity.Y != y + aheadY)
+        {
+            _frameTicksLeft = 0;
+            return;
+        }
+        Entity.X = x;
+        Entity.Y = y;
+        Entity.Z = z;
+        Entity.Angle = angle;
+        Entity.SetAhead(world.Tick, aheadX, aheadY, Fixed.Zero);
+        if (angle != _frameAngle) Entity.SetAheadAngle(_frameAngle);
     }
 
     private void ReplanAround(NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)

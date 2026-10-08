@@ -262,8 +262,8 @@ static partial class Tests
     }
 
     /// <summary>
-    /// Footprint collisions are sampled once per logic frame, at the end of the frame's step and with its whole displacement: a crusher kills the same soldier in the same logic
-    /// frame at every rate, and a tree it runs into is pushed in the same frame.
+    /// Footprint collisions are sampled once per logic frame, where the frame's step ends and with its whole displacement, in the frame's first tick (the tick of the 30 Hz step):
+    /// a crusher kills the same soldier in the same logic frame at every rate, and a tree it runs into is pushed in the same frame.
     /// </summary>
     public static void GroundRateInvarianceCollisionsPerFrame()
     {
@@ -288,15 +288,15 @@ static partial class Tests
                 if (toppleStep < 0 && !topple.IsAbleToBeToppled) toppleStep = step;
             }
             Check.That(crushStep > 0 && toppleStep > 0, $"{rate}: the soldier is crushed and the tree pushed (steps {crushStep}, {toppleStep}).");
-            Check.That(crushStep % factor == 0 && toppleStep % factor == 0, $"{rate}: both happen with the last tick of a logic frame (steps {crushStep}, {toppleStep}).");
+            Check.That((crushStep - 1) % factor == 0 && (toppleStep - 1) % factor == 0, $"{rate}: both happen with the first tick of a logic frame, the tick of the 30 Hz step (steps {crushStep}, {toppleStep}).");
             if (factor == 1)
             {
                 crushFrame30 = crushStep;
                 toppleFrame30 = toppleStep;
                 continue;
             }
-            Check.That(crushStep == crushFrame30 * factor, $"{rate}: the soldier dies in logic frame {crushFrame30} (measured step {crushStep}).");
-            Check.That(toppleStep == toppleFrame30 * factor, $"{rate}: the tree is pushed in logic frame {toppleFrame30} (measured step {toppleStep}).");
+            Check.That(crushStep == (crushFrame30 - 1) * factor + 1, $"{rate}: the soldier dies in logic frame {crushFrame30} (measured step {crushStep}).");
+            Check.That(toppleStep == (toppleFrame30 - 1) * factor + 1, $"{rate}: the tree is pushed in logic frame {toppleFrame30} (measured step {toppleStep}).");
         }
     }
 
