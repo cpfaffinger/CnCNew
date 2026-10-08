@@ -481,6 +481,21 @@ static partial class Tests
             for (var i = 0; i < 100 * factor; i++) world.Step();
             var draws = DrawsSince(before, world.LogicRandom);
             Check.That(draws == 100, $"{rate}: 100 logic frames of a drone on its way are 100 draws from the logic stream (got {draws}).");
+
+            // A drone that never got close is not in a repair state: it looks for its master once per check of the module (every 7 frames) on the module's own rhythm,
+            // wherever that falls inside a frame. 100 frames are 14 checks at every rate (held to the frame grid, a check off the grid would never send the drone off).
+            var (far, farFeeder, _) = RatedWorld(rate, RateInvarianceSlaveFiles());
+            farFeeder.Spawn(1, "RiRepairMaster", owner: 1, x: 100, y: 100);
+            for (var i = 0; i < 20 * factor; i++) far.Step();
+            var farMaster = Slotted(far, "RiRepairMaster");
+            farFeeder.SetMoveTarget(1, farMaster.Id.Value, 700, 100);
+            for (var i = 0; i < 120 * factor; i++) far.Step();
+            farFeeder.Damage(farMaster.Id.Value, 70);
+            for (var i = 0; i < 20 * factor; i++) far.Step();
+            var farBefore = StreamState(far.LogicRandom);
+            for (var i = 0; i < 100 * factor; i++) far.Step();
+            var farDraws = DrawsSince(farBefore, far.LogicRandom);
+            Check.That(farDraws is 14 or 15, $"{rate}: a drone outside its repair states draws once per check, 14 or 15 times in 100 logic frames (got {farDraws}).");
         }
     }
 

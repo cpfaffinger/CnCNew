@@ -415,9 +415,11 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         else
         {
             _repairing = false;
-            // The reference draws and orders once per logic frame. Above 30 Hz both happen in the tick a frame begins with, so the logic stream is used as often per game time
-            // as at 30 Hz (a draw per tick shifted every later draw of the world); the move the order starts is integrated every tick.
-            if (world.Time.TicksPerOriginalFrame == 1 || world.Time.IsOriginalFrameBoundary(world.Tick))
+            // The reference draws and orders once per logic frame. In a repair state this runs every tick; above 30 Hz draw and order then happen in the tick a frame begins
+            // with, so the logic stream is used as often per game time as at 30 Hz (a draw per tick shifted every later draw of the world); the move the order starts is
+            // integrated every tick. Outside a repair state this is reached once per check of the module, on the module's own rhythm, and is not held to the frame grid
+            // (a check that never falls on a frame boundary would never send the drone to its master).
+            if (_repairState == RepairState.None || world.Time.TicksPerOriginalFrame == 1 || world.Time.IsOriginalFrameBoundary(world.Tick))
             {
                 // The hover altitude is the locomotor's business here; the draw keeps the logic stream aligned with the reference.
                 _ = world.LogicRandom.Range(data.RepairMinAltitude, data.RepairMaxAltitude);
