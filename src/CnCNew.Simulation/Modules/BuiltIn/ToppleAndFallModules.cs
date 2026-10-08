@@ -463,8 +463,9 @@ public sealed record HeightDieData(Fixed TargetHeightAboveTerrain, bool TargetHe
 /// <c>OnlyWhenMovingDown</c> is set and the object's Z did not just decrease. Not modelled: the bridge/tunnel layer height
 /// the reference adds on top of flat terrain (no pathfind layers exist here) and the attached-particle cleanup
 /// (<c>DestroyAttachedParticlesAtHeight</c>, pure presentation).
-/// <para>The height is looked at once per logic frame of the original, with the last tick of each frame counted from the module's first update: "moving
-/// down" compares with the height one frame of the original ago, and the object dies at the height it has at a frame boundary, as at 30 Hz.</para>
+/// <para>The height is looked at once per logic frame of the original, in the first tick of each of the object's frames (counted from its appearance): "moving
+/// down" compares with the height one frame of the original ago, and the object dies at the height it has at the end of the frame it has begun, as at 30 Hz
+/// (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3).</para>
 /// </summary>
 public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModule
 {
@@ -472,26 +473,27 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
     private bool _hasDied;
     private long _earliestDeathTick = -1;
     private Fixed _lastZ = Fixed.FromInt(-1);
-    private FramePhase _framePhase; // at rest (unwritten) between two frames, which is always at 30 Hz
 
     public override string ModuleName => "HeightDieUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
-    // The module wakes with the next tick and counts its own frame from there (_framePhase): the first look comes with the last tick of that frame, one
-    // logic frame of the original after the object appeared, at every rate. Waking a whole frame later as well would shift the look by a second frame.
+    // The first look comes one logic frame of the original after the object appeared, every further one a frame later (EntityFrames.BeginsFrameOf): the ticks in which a module
+    // that moves this object from its appearance on decides its frame.
     public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
 
     public long Update(IWorldServices world)
     {
         if (_earliestDeathTick < 0) _earliestDeathTick = world.Tick + data.InitialDelayTicks;
-        _framePhase.Next(world.Time);
-        if (!_framePhase.AtBoundary) return SimulationTiming.SleepNone;
+        if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return SimulationTiming.SleepNone;
         if (world.Tick < _earliestDeathTick) return SimulationTiming.SleepNone;
-        if (Entity.ContainedBy.IsValid) { _lastZ = Entity.Z; return SimulationTiming.SleepNone; }
+        if (Entity.ContainedBy.IsValid) { _lastZ = Entity.FrameEnd(world.Tick).Z; return SimulationTiming.SleepNone; }
 
         if (!_hasDied)
         {
-            var directionOk = !data.OnlyWhenMovingDown || Entity.Z < _lastZ;
-            var terrainHeight = world.GroundHeightAt(Entity.X, Entity.Y);
+            // The look falls on the tick in which a module that moves this object decides its frame (both count from the object's appearance). What the 30 Hz look sees is the
+            // object after that module's whole step if it runs before this one, and before it otherwise: the end of the frame the object has begun (zero rest at 30 Hz).
+            var (x, y, z) = Entity.FrameEnd(world.Tick);
+            var directionOk = !data.OnlyWhenMovingDown || z < _lastZ;
+            var terrainHeight = world.GroundHeightAt(x, y);
             var targetHeight = terrainHeight + data.TargetHeightAboveTerrain;
             if (data.TargetHeightIncludesStructures)
             {
@@ -500,22 +502,24 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
                 foreach (var other in world.Entities)
                 {
                     if (other.Id == Entity.Id || !other.Template.IsKindOf("STRUCTURE")) continue;
-                    var dx = other.X - Entity.X;
-                    var dy = other.Y - Entity.Y;
+                    var dx = other.X - x;
+                    var dy = other.Y - y;
                     if (!SquaredReach.Of(range).Contains(dx * dx + dy * dy)) continue;
                     var height = ToppleAndFallModules.MaxHeightAbovePosition(other.Template);
                     if (height > tallest) tallest = height;
                 }
                 if (tallest > data.TargetHeightAboveTerrain) targetHeight = tallest + terrainHeight;
             }
-            if (Entity.Z < targetHeight && directionOk)
+            if (z < targetHeight && directionOk)
             {
+                // It dies where the 30 Hz object dies: at the end of the step, of which nothing is left to cover.
+                if (Entity.IsInsideFrameStep) Entity.CompleteFrame(world.Tick);
                 if (data.SnapToGroundOnDeath || Entity.Z < terrainHeight) Entity.Z = terrainHeight;
                 world.Kill(Entity.Id);
                 _hasDied = true;
             }
         }
-        _lastZ = Entity.Z;
+        _lastZ = Entity.FrameEnd(world.Tick).Z;
         return SimulationTiming.SleepNone;
     }
 
@@ -525,7 +529,6 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
         writer.Bool("hasDied", _hasDied);
         writer.Int("earliestDeathTick", _earliestDeathTick);
         writer.Fixed("lastZ", _lastZ);
-        _framePhase.Describe(writer, "framePhase");
     }
 
     public override void Load(IStateReader reader)
@@ -534,6 +537,5 @@ public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModu
         _hasDied = reader.Bool("hasDied");
         _earliestDeathTick = reader.Int("earliestDeathTick");
         _lastZ = reader.Fixed("lastZ");
-        _framePhase.Load(reader, "framePhase");
     }
 }

@@ -36,6 +36,16 @@ internal static class ProjectileModules
     /// <summary>Gravity per logic frame² of the original: the value the 30 Hz catalog computes (<see cref="TemplateCatalog.GravityPerTickSquared"/> at 30 Hz), at every rate.</summary>
     internal static Fixed GravityPerFrameSquared(IWorldServices world) => SimulationRate.Original.Time.PerSecondSquaredToPerTickSquared(world.Templates.Gravity);
 
+    /// <summary>
+    /// A followed object where the frame it has begun ends (<see cref="Entity.FrameEnd"/>, docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): what the 30 Hz projectile sees of a
+    /// victim that moved before it in the tick. 30 Hz: the victim's position.
+    /// </summary>
+    internal static Point3 FrameEnd(Entity entity, long tick)
+    {
+        var (x, y, z) = entity.FrameEnd(tick);
+        return new Point3(x, y, z);
+    }
+
     /// <summary>The shared end of both projectiles: detonate (radius damage, effect, creation list), then kill with <c>DEATH_DETONATED</c> or destroy.</summary>
     internal static void KillDetonated(IWorldServices world, Entity projectile)
     {
@@ -125,7 +135,7 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         _lifespanTick = world.Tick + data.MaxLifespanTicks;
         var weapon = world.Weapons[_weapon];
         var victim = _victim.IsValid ? world.FindEntity(_victim) : null;
-        var aim = victim is null ? new Point3(launch.X, launch.Y, launch.Z) : Center(victim);
+        var aim = victim is null ? new Point3(launch.X, launch.Y, launch.Z) : Center(victim, world.Tick);
         // Per logic frame of the original at every rate: the path gets one point per frame of flight.
         _speed = ProjectileModules.FrameSpeed(world.Time, weapon.WeaponSpeed);
         if (weapon.ScaleWeaponSpeed && weapon.AttackRange > weapon.MinimumAttackRange)
@@ -156,7 +166,12 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
     }
 
-    private static Point3 Center(Entity entity) => new(entity.X, entity.Y, entity.Z + entity.Template.CenterZDelta);
+    // The victim where the frame it has begun ends (Entity.FrameEnd): what the 30 Hz shell sees of a victim that moved before it in the tick. 30 Hz: its position.
+    private static Point3 Center(Entity entity, long tick)
+    {
+        var (x, y, z) = entity.FrameEnd(tick);
+        return new Point3(x, y, z + entity.Template.CenterZDelta);
+    }
 
     private bool CalcFlightPath(IWorldServices world, bool recalcSegments)
     {
@@ -256,7 +271,7 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         if (_step >= _segments) { Detonate(world); return SimulationTiming.SleepForever; }
         if (_victim.IsValid && data.FlightPathAdjustPerTick > Fixed.Zero && world.FindEntity(_victim) is { DestroyRequested: false } victim)
         {
-            var target = Center(victim);
+            var target = Center(victim, world.Tick);
             var dx = target.X - _end.X;
             var dy = target.Y - _end.Y;
             var dz = target.Z - _end.Z;
@@ -279,7 +294,7 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
             Entity.Y = point.Y;
             Entity.Z = point.Z;
         }
-        else FlyToward(point, ticks);
+        else FlyToward(world.Tick, point, ticks);
         _step++;
         _subStep = world.Time.NextSubStep(0);
         return SimulationTiming.SleepNone;
@@ -291,25 +306,28 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
     /// </summary>
     private long FlyTowardNextPoint(IWorldServices world)
     {
-        FlyToward(PathPoint(_step - 1), world.Time.TicksPerOriginalFrame - _subStep);
+        FlyToward(world.Tick, PathPoint(_step - 1), world.Time.TicksPerOriginalFrame - _subStep);
         _subStep = world.Time.NextSubStep(_subStep);
         return SimulationTiming.SleepNone;
     }
 
     /// <summary>Flies one of <paramref name="sharesLeft"/> equal shares of the way that is left to <paramref name="point"/>; the last share lands on it exactly.</summary>
-    private void FlyToward(Point3 point, int sharesLeft)
+    private void FlyToward(long tick, Point3 point, int sharesLeft)
     {
         if (sharesLeft <= 1)
         {
             Entity.X = point.X;
             Entity.Y = point.Y;
             Entity.Z = point.Z;
+            Entity.SetAhead(tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
             return;
         }
         var left = Fixed.FromInt(sharesLeft);
         Entity.X += (point.X - Entity.X) / left;
         Entity.Y += (point.Y - Entity.Y) / left;
         Entity.Z += (point.Z - Entity.Z) / left;
+        // The rest of the frame stays readable on the object (Entity.FrameEndX …): who looks at the shell in this tick sees it at the frame's point, as at 30 Hz.
+        Entity.SetAhead(tick, point.X - Entity.X, point.Y - Entity.Y, point.Z - Entity.Z);
     }
 
     /// <summary><c>DumbProjectileBehavior::detonate</c>: once only; the weapon detonates, then the shell dies (<c>DetonateCallsKill</c>) or is destroyed.</summary>
@@ -523,7 +541,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         {
             _tracking = true;
             _victim = victim.Id;
-            _goal = new Point3(victim.X, victim.Y, victim.Z);
+            _goal = ProjectileModules.FrameEnd(victim, world.Tick);
             _originalTarget = _goal;
         }
         else
@@ -684,7 +702,7 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     {
         var victim = world.FindEntity(_victim);
         if (victim is null || victim.DestroyRequested) return null;
-        _goal = new Point3(victim.X, victim.Y, victim.Z);
+        _goal = ProjectileModules.FrameEnd(victim, world.Tick);
         return victim;
     }
 
@@ -745,15 +763,17 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         }
         if (to.X != from.X || to.Y != from.Y) Entity.Angle = FixedTrig.Atan2(to.Y - from.Y, to.X - from.X);
         _frameStep = new Point3(to.X - from.X, to.Y - from.Y, to.Z - from.Z);
+        // The rest of the frame stays readable on the object (Entity.FrameEndX …): who looks at the missile in this tick sees it where this frame ends, as at 30 Hz.
+        Entity.SetAhead(world.Tick, _frameStep.X, _frameStep.Y, _frameStep.Z);
         FlyShare(world);
     }
 
     private void FlyShare(IWorldServices world)
     {
         var time = world.Time;
-        Entity.X += time.FrameShare(_frameStep.X, _subStep);
-        Entity.Y += time.FrameShare(_frameStep.Y, _subStep);
-        Entity.Z += time.FrameShare(_frameStep.Z, _subStep);
+        // A frame completed from outside (Entity.CompleteFrame) has nothing left to cover.
+        if (Entity.IsInsideFrameStep)
+            Entity.CoverShare(world.Tick, time.FrameShare(_frameStep.X, _subStep), time.FrameShare(_frameStep.Y, _subStep), time.FrameShare(_frameStep.Z, _subStep));
         _subStep = time.NextSubStep(_subStep);
         world.MarkDirty(Entity);
     }

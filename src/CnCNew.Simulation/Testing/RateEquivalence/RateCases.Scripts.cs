@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using CnCNew.Data.World;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
@@ -203,9 +204,69 @@ public static partial class RateCases
         return builder.Done();
     }
 
-    private static ImmutableArray<RateQuantity> MeasureSkirmishAi(RateScene scene, string firstFaction, string secondFaction)
+    /// <summary>
+    /// The command stream of one skirmish of the group <c>ai</c> at <paramref name="rate"/>, for a comparison between rates: every command of the two computer players with
+    /// its game time in 1/120 s (the caller prints it without its tick). A diagnosis, not a measurement: <c>SimTool rate-compare --ai-diff</c> prints where two rates part.
+    /// </summary>
+    public static IReadOnlyList<(long Units, SimCommand Command)> SkirmishAiCommandStream(RateCatalogs catalogs, SimulationRate rate, string firstFaction, string secondFaction)
     {
-        var quantities = new RateQuantities(scene);
+        var scene = new RateScene(catalogs, rate);
+        var session = StartSkirmishAi(scene, firstFaction, secondFaction);
+        while (!session.IsOver) session.Step();
+        var stream = new List<(long Units, SimCommand Command)>();
+        foreach (var command in session.ToReplay().Commands)
+            if (!command.Player.IsSystem) stream.Add((scene.Units(command.Tick), command));
+        return stream;
+    }
+
+    /// <summary>
+    /// The first logic frame of the original after which the worlds of one skirmish of the group <c>ai</c> differ between two rates, with the objects that differ (position,
+    /// health unless <paramref name="positionsOnly"/>, orders): both matches are stepped frame by frame and compared at the end of every frame. A diagnosis for <c>SimTool rate-compare --ai-diff --state</c>;
+    /// <paramref name="report"/> receives the lines. Returns the frame, or -1 when the worlds stayed equal for <paramref name="frames"/> frames.
+    /// </summary>
+    public static long SkirmishAiFirstStateDifference(RateCatalogs catalogs, SimulationRate rateA, SimulationRate rateB, string firstFaction, string secondFaction, long frames, int shown, bool positionsOnly, Action<string> report, long watch = 0, long watchFrom = long.MaxValue)
+    {
+        var a = StartSkirmishAi(new RateScene(catalogs, rateA), firstFaction, secondFaction);
+        var b = StartSkirmishAi(new RateScene(catalogs, rateB), firstFaction, secondFaction);
+        for (long frame = 0; frame < frames && !a.IsOver && !b.IsOver; frame++)
+        {
+            for (var tick = 0; tick < rateA.TicksPerOriginalFrame; tick++) a.Step();
+            for (var tick = 0; tick < rateB.TicksPerOriginalFrame; tick++) b.Step();
+            if (frame >= watchFrom)
+                foreach (var (session, rate) in new[] { (a, rateA), (b, rateB) })
+                    if (session.World.FindEntity(new Ids.EntityId(checked((uint)watch))) is { } seen)
+                        report($"watch frame {frame.ToString(CultureInfo.InvariantCulture)} {rate.TicksPerSecond} Hz: ({seen.X}, {seen.Y}) angle {seen.Angle} speed {seen.Speed.Raw.ToString(CultureInfo.InvariantCulture)} raw per tick, per frame {(seen.Modules.OfType<Modules.BuiltIn.AIUpdateInterface>().FirstOrDefault()?.SpeedPerOriginalFrame(rate.TicksPerOriginalFrame) ?? Numerics.Fixed.Zero).Raw.ToString(CultureInfo.InvariantCulture)} moving {seen.HasMoveTarget} to ({seen.MoveTargetX}, {seen.MoveTargetY}) ahead ({seen.AheadX}, {seen.AheadY})");
+            var different = 0;
+            var others = new Dictionary<uint, World.Entity>();
+            foreach (var entity in b.World.Entities) others[entity.Id.Value] = entity;
+            foreach (var entity in a.World.Entities)
+            {
+                if (!others.Remove(entity.Id.Value, out var other))
+                {
+                    if (different++ < shown) report($"frame {frame.ToString(CultureInfo.InvariantCulture)}: {entity.Id.Value} {entity.Template.Name} exists only at {rateA.TicksPerSecond} Hz");
+                    continue;
+                }
+                var healthA = entity.Body?.Health ?? Numerics.Fixed.Zero;
+                var healthB = other.Body?.Health ?? Numerics.Fixed.Zero;
+                if (entity.X == other.X && entity.Y == other.Y && entity.Z == other.Z && (positionsOnly || healthA == healthB) && entity.HasMoveTarget == other.HasMoveTarget && entity.ContainedBy == other.ContainedBy) continue;
+                if (different++ < shown)
+                    report($"frame {frame.ToString(CultureInfo.InvariantCulture)}: {entity.Id.Value} {entity.Template.Name} owner {entity.Owner.Value}: "
+                        + $"{rateA.TicksPerSecond} Hz ({entity.X}, {entity.Y}, {entity.Z}) health {healthA} moving {entity.HasMoveTarget} to ({entity.MoveTargetX}, {entity.MoveTargetY}) in {entity.ContainedBy.Value} spawned {entity.SpawnTick} angle {entity.Angle} speed/frame {(entity.Modules.OfType<Modules.BuiltIn.AIUpdateInterface>().FirstOrDefault()?.SpeedPerOriginalFrame(rateA.TicksPerOriginalFrame) ?? Numerics.Fixed.Zero)} | "
+                        + $"{rateB.TicksPerSecond} Hz ({other.X}, {other.Y}, {other.Z}) health {healthB} moving {other.HasMoveTarget} to ({other.MoveTargetX}, {other.MoveTargetY}) in {other.ContainedBy.Value} spawned {other.SpawnTick} angle {other.Angle} speed/frame {(other.Modules.OfType<Modules.BuiltIn.AIUpdateInterface>().FirstOrDefault()?.SpeedPerOriginalFrame(rateB.TicksPerOriginalFrame) ?? Numerics.Fixed.Zero)} ahead ({other.AheadX}, {other.AheadY})");
+            }
+            foreach (var entity in others.Values)
+                if (different++ < shown) report($"frame {frame.ToString(CultureInfo.InvariantCulture)}: {entity.Id.Value} {entity.Template.Name} exists only at {rateB.TicksPerSecond} Hz");
+            if (different > 0)
+            {
+                report($"frame {frame.ToString(CultureInfo.InvariantCulture)}: {different.ToString(CultureInfo.InvariantCulture)} objects differ");
+                return frame;
+            }
+        }
+        return -1;
+    }
+
+    private static SkirmishMatchSession StartSkirmishAi(RateScene scene, string firstFaction, string secondFaction)
+    {
         scene.MapCells = 300;
         scene.Waypoints = [("Player_1_Start", 600, 1500), ("Player_2_Start", 2400, 1500)];
         var flat = scene.Map.Map;
@@ -218,7 +279,13 @@ public static partial class RateCases
         MatchParticipant Of(string faction) => everyone.FirstOrDefault(value => value.Faction.Name == faction) ?? throw new InvalidOperationException($"Unknown or unplayable faction {faction}.");
         var budget = scene.Time.WholeSecondsToTicks(AiMinutes * 60);
         var options = SkirmishMatchOptions.Standard with { MaxTicks = budget };
-        var session = SkirmishMatchSession.Start(options, scene.Catalog, scene.Fingerprint, terrain, map.Objects, [new SkirmishSlot(Of(firstFaction)), new SkirmishSlot(Of(secondFaction))]);
+        return SkirmishMatchSession.Start(options, scene.Catalog, scene.Fingerprint, terrain, map.Objects, [new SkirmishSlot(Of(firstFaction)), new SkirmishSlot(Of(secondFaction))]);
+    }
+
+    private static ImmutableArray<RateQuantity> MeasureSkirmishAi(RateScene scene, string firstFaction, string secondFaction)
+    {
+        var quantities = new RateQuantities(scene);
+        var session = StartSkirmishAi(scene, firstFaction, secondFaction);
         var barracks = new long[] { -1, -1 };
         var firstStructure = new long[] { -1, -1 };
         while (!session.IsOver)

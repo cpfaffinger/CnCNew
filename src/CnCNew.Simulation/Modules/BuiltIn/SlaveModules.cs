@@ -585,6 +585,8 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
         var master = _slaver.IsValid ? world.FindEntity(_slaver) : null;
         if (master is null || master.DestroyRequested)
         {
+            // The first look of the original comes one logic frame after the member appeared (the next tick at 30 Hz); its check counter runs from the next tick as before.
+            if (world.Tick < Entity.SpawnTick + world.Time.TicksPerOriginalFrame) return SimulationTiming.SleepNone;
             _slaver = EntityId.Invalid;
             world.Kill(Entity.Id);
             return SimulationTiming.SleepNone;

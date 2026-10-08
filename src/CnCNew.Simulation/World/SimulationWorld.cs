@@ -154,7 +154,11 @@ public sealed partial class SimulationWorld : IWorldServices
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default);
 
-    private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default);
+    // Ticks per logic frame of the original: how long after the spawn phase that asked for it an object requested inside that phase appears (ProcessSpawns). 1 at 30 Hz.
+    private readonly long _firstFrameTicks;
+
+    // NotBefore: the first tick whose spawn phase may create the object (0: the next spawn phase). Only ever set above 30 Hz, see ProcessSpawns.
+    private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default, long NotBefore = 0);
 
     public SimulationWorld(WorldConfiguration configuration, TemplateCatalog templates, TerrainMap? terrain = null)
     {
@@ -178,6 +182,8 @@ public sealed partial class SimulationWorld : IWorldServices
         _turretLoseInterestTicks = Time.OriginalFrames(TurretLoseInterestFrames);
         _turretFrameTicks = Time.TicksPerOriginalFrame;
         VisionInterval = Time.OriginalFrames(VisionIntervalFrames);
+        _visionPhase = Time.TicksPerOriginalFrame - TickOrder.Next;
+        _firstFrameTicks = Time.TicksPerOriginalFrame;
         _saleDurationTicks = Time.OriginalFrames(SaleDurationFrames) - Time.TicksPerOriginalFrame;
         _minimumBuildTicks = Time.OriginalFrames(1);
         // Thing::isSignificantlyAboveTerrain: a height, not a rate - 3 x 3 logic frames of the original times the gravity per frame of the original squared (gravity per second² / 30²).
@@ -1507,14 +1513,27 @@ public sealed partial class SimulationWorld : IWorldServices
         _entities.Compact();
     }
 
-    private void ProcessSpawns()
+    /// <summary>
+    /// Creates the queued objects. <paramref name="endOfTick"/> is true for the spawn phase of <see cref="Step"/> (false when a script materializes its objects inside a tick).
+    /// </summary>
+    private void ProcessSpawns(bool endOfTick = true)
     {
         if (_spawnQueue.Count == 0) return;
-        // Damage applied while an entity is created (creation-list health transfer) can run die modules that queue further spawns;
-        // those stay in the queue for the next tick.
+        // Damage applied while an entity is created (creation-list health transfer) can run die modules that queue further spawns, and so can the OnSpawn of a module (the
+        // rider of a combat bike); those stay in the queue for the next tick.
         var batch = _spawnQueue.ToArray();
         _spawnQueue.Clear();
-        foreach (var pending in batch) SpawnEntity(pending);
+        var held = 0;
+        foreach (var pending in batch)
+        {
+            if (pending.NotBefore > _tick) _spawnQueue.Insert(held++, pending);
+            else SpawnEntity(pending);
+        }
+        // "The next tick" is the next logic frame of the original (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): above 30 Hz an object requested while the spawn phase
+        // creates another appears one frame after it, not one tick. At 30 Hz nothing is marked (and nothing new is written to a snapshot).
+        if (!endOfTick || _firstFrameTicks == TickOrder.Next) return;
+        for (var index = held; index < _spawnQueue.Count; index++)
+            if (_spawnQueue[index].NotBefore == 0) _spawnQueue[index] = _spawnQueue[index] with { NotBefore = _tick + _firstFrameTicks };
     }
 
     private Entity SpawnEntity(in PendingSpawn pending, EntityId builder = default)
@@ -1614,7 +1633,26 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             MarkDirty(entity);
         }
+        if (_firstFrameTicks > TickOrder.Next) DeferSpawnPhaseOrders(entity);
         return entity;
+    }
+
+    /// <summary>
+    /// An order given to an object while it is created (its rally point, a delivery) wakes its module "now", and the module runs in the next update phase: at 30 Hz the next
+    /// tick, which is the object's first logic frame of the original. Above 30 Hz that frame begins one frame after the tick the object appeared in
+    /// (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): a motion ordered in the spawn phase starts there, in phase with the frame of whoever created the object, and not
+    /// one tick after the appearance. Modules that asked for a later tick themselves are not touched. Never called at 30 Hz.
+    /// </summary>
+    private void DeferSpawnPhaseOrders(Entity entity)
+    {
+        if (entity.DestroyRequested || !entity.Registered) return;
+        foreach (var node in entity.Updates)
+        {
+            var update = node.Update;
+            if (update.NextWake != _tick) continue;
+            update.NextWake = _tick + _firstFrameTicks;
+            if (node.HeapIndex >= 0) _updates.Update(node); else _updates.Push(node);
+        }
     }
 
     private void AttachModules(Entity entity, ObjectTemplate template)
@@ -1743,7 +1781,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ProcessDelayedDamage(tick);
         ProcessSpawns();
         DeliverEvents();
-        if (_vision is not null && tick % VisionInterval == 0) RefreshVision();
+        if (_vision is not null && tick % VisionInterval == _visionPhase) RefreshVision();
         _tick = tick + TickOrder.Next;
         return new TickResult(tick, ComputeIncrementalHash(), _tickEvents);
     }
@@ -1797,7 +1835,7 @@ public sealed partial class SimulationWorld : IWorldServices
         observer.PhaseStarted(TickPhase.SpawnEvents);
         DeliverEvents();
         observer.PhaseEnded(TickPhase.SpawnEvents);
-        var refresh = _vision is not null && tick % VisionInterval == 0;
+        var refresh = _vision is not null && tick % VisionInterval == _visionPhase;
         observer.PhaseStarted(TickPhase.Vision);
         if (refresh) RevealVision();
         observer.PhaseEnded(TickPhase.Vision);
@@ -2033,6 +2071,7 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Fixed("rallyX", setup.RallyX);
             writer.Fixed("rallyY", setup.RallyY);
             if (setup.Producer.IsValid) writer.UInt("producer", setup.Producer.Value);
+            if (pending.NotBefore != 0) writer.Int("notBefore", pending.NotBefore);
             if (setup.Launch is { } launch)
             {
                 writer.Int("launchWeapon", launch.Weapon);

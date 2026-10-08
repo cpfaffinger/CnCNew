@@ -94,7 +94,10 @@ static partial class Tests
         }
     }
 
-    /// <summary>Class C: the shroud is recomputed every three logic frames, on the ticks that are a multiple of the interval (phase 0) – ticks 3, 6 and 12 for a looker that appears in tick 1.</summary>
+    /// <summary>
+    /// Class C: the shroud is recomputed every three logic frames of the original, after the last tick of the frame (phase 0 at 30 Hz): a looker that appears in the first tick of
+    /// frame 1 is seen after the last tick of frame 3 – ticks 3, 7 and 15 – which is the same game time as the 30 Hz refresh of tick 3 shows (the state after frame 3).
+    /// </summary>
     public static void TickRateWorldVisionKeepsItsRhythm()
     {
         foreach (var (rate, factor) in WorldRates)
@@ -102,7 +105,7 @@ static partial class Tests
             var terrain = NavTerrain();
             var (world, feeder, _) = RatedWorld(rate, VisionFiles(), terrain);
             Check.That(world.VisionInterval == SimulationWorld.VisionIntervalFrames * factor && SimulationWorld.VisionIntervalFrames == 3, $"{rate}: the vision interval is {3 * factor} ticks.");
-            world.Step();
+            for (var step = 0; step < factor; step++) world.Step();
             feeder.Spawn(1, "Scout", x: 100, y: 100);
             var seenAfterTick = -1L;
             for (var step = 0; step < 40 && seenAfterTick < 0; step++)
@@ -111,7 +114,7 @@ static partial class Tests
                 if (world.Vision!.IsVisible(1, 10, 10)) seenAfterTick = result.Tick;
             }
 
-            Check.That(seenAfterTick == 3 * factor, $"{rate}: a looker that appeared in tick 1 is seen with the refresh of tick {3 * factor} (measured {seenAfterTick}).");
+            Check.That(seenAfterTick == 4 * factor - 1, $"{rate}: a looker that appeared in frame 1 is seen with the refresh after the last tick of frame 3, tick {4 * factor - 1} (measured {seenAfterTick}).");
         }
     }
 

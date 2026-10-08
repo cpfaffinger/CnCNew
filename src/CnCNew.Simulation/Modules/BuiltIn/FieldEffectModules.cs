@@ -165,7 +165,10 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
             }
         }
         if (target.Body is not { } body) return;
-        var amount = world.Time.PerSecondToPerTick(upgraded ? data.UpgradedHealPerSecond : data.HealPerSecond) * body.MaxHealth;
+        // The original heals once per logic frame. Slices per tick are rounded for themselves and do not add up to the slice of a frame (the last healing fell into another
+        // frame), so above 30 Hz the tower heals the slice of the original in the first tick of each of its frames (docs/RATE-INVARIANCE-CONSOLIDATION.md §4).
+        if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return;
+        var amount = SimulationRate.Original.Time.PerSecondToPerTick(upgraded ? data.UpgradedHealPerSecond : data.HealPerSecond) * body.MaxHealth;
         // Healing does not stack: another tower that healed this object recently keeps it.
         foreach (var other in _others)
             if (other.HoldsClaim(target.Id, world.Tick)) return;

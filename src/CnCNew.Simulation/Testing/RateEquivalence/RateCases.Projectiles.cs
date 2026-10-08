@@ -157,7 +157,10 @@ public static partial class RateCases
             var shot = Follow(moving, source, weapon, victim, victim.X, victim.Y, RateScene.Seconds(90));
             var hit = shot.FlightSteps >= 0;
             quantities.Event("moving victim: flight time", Elapsed(shot.FlightSteps));
-            quantities.Distance("moving victim: impact distance from the victim", RateMeasure.Distance(shot.ImpactX, shot.ImpactY, victim.X, victim.Y), hit);
+            // The impact falls on the first tick of a logic frame of the original, in which the victim has covered one share of that frame's step; the 30 Hz world shows it
+            // after the whole step. The victim is read where its frame ends (Entity.FrameEnd; at 30 Hz its position), so the suite adds no offset below one frame.
+            var (victimX, victimY, _) = victim.FrameEnd(moving.World.Tick);
+            quantities.Distance("moving victim: impact distance from the victim", RateMeasure.Distance(shot.ImpactX, shot.ImpactY, victimX, victimY), hit);
         }
 
         // (4) scatter: forty shots launched in one step at the same point, the mean distance of the impacts from it

@@ -7,6 +7,7 @@ using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Testing;
@@ -419,7 +420,8 @@ public static partial class RateCases
         scene.Align();
         var start = world.Tick;
         scene.Order(1, (owner, sequence, now) => new SpawnCommand(owner, sequence, now, name, owner, Fixed.FromInt(2000), Fixed.FromInt(2000), Fixed.Zero, Fixed.Zero));
-        var near = scene.StepUntil(() => world.IsPositionVisibleTo(scene.One, Fixed.FromInt(2050), Fixed.FromInt(2000)), RateScene.Seconds(10));
+        // The shroud is a state of the frame's end (the world recomputes it after the last tick of a logic frame of the original): it is read there and counted from the frame's first step.
+        var near = scene.StepUntilFrameEnd(() => world.IsPositionVisibleTo(scene.One, Fixed.FromInt(2050), Fixed.FromInt(2000)), RateScene.Seconds(10));
         quantities.Exact("creation to the ground 50 units away seen", near);
         var unit = scene.Find(name, start);
         if (unit is null) return quantities.Done();
@@ -447,7 +449,9 @@ public static partial class RateCases
         {
             scene.Step();
             ping ??= scene.Find(name, start);
-            if (centre < 0 && world.IsPositionVisibleTo(scene.One, Fixed.FromInt(2000), Fixed.FromInt(2000))) centre = step;
+            // The shroud is a state of the frame's end: read there, counted from the frame's first step (at 30 Hz the step itself).
+            if (centre < 0 && scene.Time.IsOriginalFrameBoundary(world.Tick) && world.IsPositionVisibleTo(scene.One, Fixed.FromInt(2000), Fixed.FromInt(2000)))
+                centre = step - scene.Time.TicksPerOriginalFrame + TickOrder.Next;
             // The radius seen right now, probed every ten units east of the centre.
             var reach = 0;
             while (reach < 150 && world.IsPositionVisibleTo(scene.One, Fixed.FromInt(2000 + (reach + 1) * 10), Fixed.FromInt(2000))) reach++;

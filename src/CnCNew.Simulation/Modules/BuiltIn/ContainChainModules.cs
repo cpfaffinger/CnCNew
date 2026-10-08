@@ -34,9 +34,14 @@ internal static class ContainChainModules
         else pending.Add(world.RequestSpawn(template.Index, container.Owner, container.X, container.Y, container.Z, container.Angle));
     }
 
-    /// <summary>Puts every payload object that exists by now into <paramref name="container"/>; objects that are not valid riders stay outside, as the reference's assertion leaves them. Returns whether payload is still to appear.</summary>
+    /// <summary>
+    /// Puts every payload object that exists by now into <paramref name="container"/>; objects that are not valid riders stay outside, as the reference's assertion leaves them. Returns whether payload is still to appear.
+    /// The container looks once per logic frame of the original, in the ticks its own frames begin with: the payload appears one frame after the container and is inside one
+    /// frame after that, as at 30 Hz (where every tick is such a tick).
+    /// </summary>
     internal static bool EnterPayload(IWorldServices world, Entity container, List<EntityId> pending)
     {
+        if (!world.Time.BeginsFrameOf(container, world.Tick)) return pending.Count > 0;
         for (var index = 0; index < pending.Count;)
         {
             if (world.FindEntity(pending[index]) is not { } payload)

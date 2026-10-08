@@ -173,6 +173,22 @@ public sealed class RateScene
         return -1;
     }
 
+    /// <summary>
+    /// For a state of the world that is the 30 Hz state only after the last tick of a logic frame of the original (the shroud, which the world recomputes after the last tick of
+    /// a frame): steps whole frames from a frame boundary until <paramref name="predicate"/> holds at the end of one, and returns the ticks between the first step and the first
+    /// step of that frame - the time <see cref="StepUntil(Func{bool}, long)"/> returns at 30 Hz, where a frame is one step. -1 when the budget ran out.
+    /// </summary>
+    public long StepUntilFrameEnd(Func<bool> predicate, long budgetFrames)
+    {
+        Align();
+        for (long frame = 0; frame < budgetFrames; frame++)
+        {
+            StepFrames(1);
+            if (predicate()) return Time.OriginalFrames(frame);
+        }
+        return -1;
+    }
+
     /// <summary>The same with the events of each step: <paramref name="predicate"/> sees the result of the step just taken.</summary>
     public long StepUntil(Func<TickResult, bool> predicate, long budgetFrames)
     {

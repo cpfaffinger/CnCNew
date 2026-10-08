@@ -102,7 +102,8 @@ public sealed partial class SimulationWorld
                         : null,
                     pending.Has("creator"), pending.Has("creator") ? new EntityId(checked((uint)pending.UInt("creator"))) : EntityId.Invalid,
                     pending.Has("enslaver") ? new EntityId(checked((uint)pending.UInt("enslaver"))) : default,
-                    pending.Has("producer") ? new EntityId(checked((uint)pending.UInt("producer"))) : default)));
+                    pending.Has("producer") ? new EntityId(checked((uint)pending.UInt("producer"))) : default),
+                pending.Has("notBefore") ? pending.Int("notBefore") : 0));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
 
@@ -177,6 +178,7 @@ public sealed partial class SimulationWorld
         if (reader.Has("crateWeaponLevel")) entity.CrateWeaponLevel = checked((int)reader.Int("crateWeaponLevel"));
         if (reader.Has("crateArmorLevel")) entity.CrateArmorLevel = checked((int)reader.Int("crateArmorLevel"));
         if (entity.CrateWeaponLevel is < 0 or > 2 || entity.CrateArmorLevel is < 0 or > 2) throw new InvalidDataException("Crate upgrade level out of range.");
+        if (reader.Has("aheadX")) entity.SetAhead(reader.Int("aheadTick"), reader.Fixed("aheadX"), reader.Fixed("aheadY"), reader.Fixed("aheadZ"));
         if (reader.Has("visionSpied"))
         {
             entity.VisionSpiedBy = [];
