@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using CnCNew.Simulation.Events;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.World;
@@ -16,6 +17,15 @@ public static partial class RateCases
         public List<Fixed> Y { get; } = [];
         public List<Fixed> Z { get; } = [];
         public List<Fixed> Speed { get; } = [];
+
+        /// <summary>
+        /// The speed per frame of the original, as the movement of an <see cref="AIUpdateInterface"/> computes with it (for every other object <see cref="Entity.Speed"/> times the
+        /// ticks per frame): above 30 Hz the speed per tick is that value divided by 2 or 4 and cannot tell the top speed from one step of the resolution below it.
+        /// </summary>
+        public List<Fixed> FrameSpeed { get; } = [];
+
+        private AIUpdateInterface? _ai;
+        private bool _aiKnown;
         public List<Fixed> Angle { get; } = [];
 
         /// <summary>Steps from the order to the end of the move (-1: still moving when the budget ran out).</summary>
@@ -32,17 +42,30 @@ public static partial class RateCases
             Y.Add(unit.Y);
             Z.Add(unit.Z);
             Speed.Add(unit.Speed);
+            if (!_aiKnown)
+            {
+                _aiKnown = true;
+                foreach (var module in unit.Modules)
+                    if (module is AIUpdateInterface ai) { _ai = ai; break; }
+            }
+            FrameSpeed.Add(_ai is not null ? _ai.SpeedPerOriginalFrame(Stride) : unit.Speed * Stride);
             Angle.Add(unit.Angle);
         }
 
         public Fixed TopSpeed => Speed.Aggregate(Fixed.Zero, Fixed.Max);
 
+        // "At top speed" is read from the speed per frame (FrameSpeed) and sampled like a length (Stride): once per frame of the original, at the end of the frame. A ground object
+        // decides its speed once per frame and covers the frame's step in shares; a sample inside a frame pairs the new speed with a position between two frames, which no 30 Hz
+        // sample can show. Only a top speed that never shows at the end of a frame (a track that does not start on one) falls back to every sample.
         public int FirstAtTopSpeed
         {
             get
             {
-                var top = TopSpeed;
-                return top > Fixed.Zero ? Speed.IndexOf(top) : -1;
+                var top = FrameSpeed.Aggregate(Fixed.Zero, Fixed.Max);
+                if (top <= Fixed.Zero) return -1;
+                for (var index = 0; index < FrameSpeed.Count; index += Stride)
+                    if (FrameSpeed[index] == top) return index;
+                return FrameSpeed.IndexOf(top);
             }
         }
 
@@ -50,8 +73,12 @@ public static partial class RateCases
         {
             get
             {
-                var top = TopSpeed;
-                return top > Fixed.Zero ? Speed.LastIndexOf(top) : -1;
+                var top = FrameSpeed.Aggregate(Fixed.Zero, Fixed.Max);
+                if (top <= Fixed.Zero) return -1;
+                var end = FrameSpeed.Count - 1;
+                for (var index = end - end % Stride; index >= 0; index -= Stride)
+                    if (FrameSpeed[index] == top) return index;
+                return FrameSpeed.LastIndexOf(top);
             }
         }
 

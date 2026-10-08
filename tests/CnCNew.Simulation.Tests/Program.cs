@@ -81,6 +81,13 @@ run.Test("Tick rate, world: a weapon that spins up keeps its shot times", Tests.
 run.Test("Tick rate, world: the flight time of a shot without a projectile is counted in logic frames", Tests.TickRateWorldFlightTimeIsCountedInFrames);
 run.Test("Tick rate, world: turret deadlines and the idle scan stay on the grid", Tests.TickRateWorldTurretDeadlinesAndScanStayOnTheGrid);
 run.Test("Tick rate, world: an idle unit's first look falls two logic frames after it became idle", Tests.TickRateWorldAcquisitionLooksOnTheGrid);
+// Phase 23, ground movement (Tests.RateInvariance.Ground.cs): the same state after every logic frame at 30, 60 and 120 Hz.
+run.Test("Rate invariance, ground: a course with and without terrain, damaged, and short hops end every logic frame where 30 Hz does", Tests.GroundRateInvarianceCourse);
+run.Test("Rate invariance, ground: the detour around standing units is the 30 Hz detour", Tests.GroundRateInvarianceStandingUnits);
+run.Test("Rate invariance, ground: a snapshot inside a logic frame continues like the live world", Tests.GroundRateInvarianceSnapshotInsideAFrame);
+run.Test("Rate invariance, ground: an order inside a logic frame keeps the step continuous and cancels a pending arrival", Tests.GroundRateInvarianceOrderInsideAFrame);
+run.Test("Rate invariance, ground: crush and topple are sampled once per logic frame", Tests.GroundRateInvarianceCollisionsPerFrame);
+run.Test("Rate invariance, ground: a hauler's supply trips fall on the same logic frames", Tests.GroundRateInvarianceSupplyTrips);
 // Tick rate, stage 2, modules N–Z (Tests.TickRate.ModulesNZ.cs).
 run.Test("Tick rate N–Z: a detector's stagger is drawn in frames of the original", Tests.TickRateNzDetectorStaggerIsDrawnInOriginalFrames);
 run.Test("Tick rate N–Z: poison without an interval hurts once per frame of the original", Tests.TickRateNzPoisonWithoutIntervalHurtsOncePerOriginalFrame);
