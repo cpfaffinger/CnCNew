@@ -258,10 +258,11 @@ static partial class Tests
         world.Step();
         feeder.EnterContainer(1, grunt.Id.Value, a.Id.Value);
         world.Step();
-        var sliver = Fixed.FromInt(100) / Fixed.FromInt(world.Frames(30));
+        // A sliver is MaxHealth / TimeForFullHeal per original frame (30 frames here), at every tick rate, and a rider gets its first in the tick it enters.
+        var sliver = Fixed.FromInt(100) / Fixed.FromInt(30);
         Check.That(grunt.Body!.Health == Fixed.FromInt(40) + sliver + sliver, $"Two tunnels heal two slivers in the entry tick (got {grunt.Body.Health}).");
         for (var tick = 0; tick < world.Frames(5); tick++) world.Step();
-        Check.That(grunt.Body.Health < Fixed.FromInt(100), "Not yet whole after six ticks.");
+        Check.That(grunt.Body.Health < Fixed.FromInt(100), "Not yet whole after six frames.");
         for (var tick = 0; tick < world.Frames(25); tick++) world.Step();
         Check.That(grunt.Body.Health == Fixed.FromInt(100), "Whole after TimeForFullHeal.");
 
