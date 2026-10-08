@@ -1222,6 +1222,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _frameTicksLeft = 0;
             _frameArriving = false;
         }
+        if (_stride > 1 && !_behindAnotherMover && Entity.AheadTick == world.Tick && (Entity.IsInsideFrameStep || Entity.HasAheadAngle))
+        {
+            DecideBehindAnotherMover(world, locomotor);
+            return;
+        }
         if (world.Navigation is not { } navigation)
         {
             MoveStraight(world, locomotor);
@@ -1615,6 +1620,43 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     }
 
     private Fixed CappedFrameSpeed(Fixed topSpeed) => _speedCap > Fixed.Zero ? Fixed.Min(topSpeed, _speedCap * _stride) : topSpeed;
+
+    // True while this module decides a frame behind another mover of the same object (DecideBehindAnotherMover). Not state.
+    private bool _behindAnotherMover;
+
+    /// <summary>
+    /// Above 30 Hz: the decision of a frame by the second AI module of an object (the Chinook of the air force general carries an AIUpdateInterface and a ChinookAIUpdate, and
+    /// both move it). At 30 Hz the second module decides from where the first one's whole step has put the object; here the first has covered only a share of its step by now.
+    /// The object is put where the first mover's frame ends while this module decides, and back afterwards; what both have left of the frame stays readable on the object
+    /// (<see cref="Entity.FrameEnd"/>). An object the decision takes out of the world stays where it is.
+    /// </summary>
+    private void DecideBehindAnotherMover(IWorldServices world, LocomotorInfo locomotor)
+    {
+        var (restX, restY, restZ) = (Entity.AheadX, Entity.AheadY, Entity.AheadZ);
+        var before = Entity.Angle;
+        var end = Entity.FrameEndAngle(world.Tick);
+        var (dead, leaving) = (Entity.EffectivelyDead, Entity.DestroyRequested);
+        Entity.X += restX;
+        Entity.Y += restY;
+        Entity.Angle = end;
+        Entity.SetAhead(world.Tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
+        _behindAnotherMover = true;
+        Move(world, locomotor);
+        _behindAnotherMover = false;
+        if (Entity.EffectivelyDead != dead || Entity.DestroyRequested != leaving || Entity.ContainedBy.IsValid) return;
+        // The heading this frame ends with: this module's when it has begun a step, else the first mover's.
+        var turnsTo = _frameTicksLeft > 0 ? _frameAngle : Entity.Angle;
+        Entity.X -= restX;
+        Entity.Y -= restY;
+        if (end != before) Entity.Angle = FixedTrig.Normalize(Entity.Angle - FixedTrig.AngleDifference(before, end));
+        Entity.SetAhead(world.Tick, Entity.AheadX + restX, Entity.AheadY + restY, Entity.AheadZ + restZ);
+        if (world.Navigation is not null && (locomotor.Surfaces & LocomotorSurfaces.Air) == 0)
+        {
+            Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            Entity.SetAheadHeight(world.GroundHeightAt(Entity.X + Entity.AheadX, Entity.Y + Entity.AheadY) - Entity.Z);
+        }
+        if (turnsTo != Entity.Angle) Entity.SetAheadAngle(turnsTo);
+    }
 
     /// <summary>
     /// Above 30 Hz a decision of <see cref="Move"/>/<see cref="MoveStraight"/> is the step of one logic frame of the original; the object covers it in equal shares, one per tick, and

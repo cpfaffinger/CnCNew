@@ -90,7 +90,8 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         // The change of height is the 30 Hz step (one locomotor speed per logic frame of the original, at most the rest of the way), decided once per frame and flown in shares
         // per tick: the Chinook is on the ground, and lets its passengers out, in the same frame at every rate.
         // Observers read the Chinook where the frame it has begun ends: the rest of its movement and of its change of height.
-        var moving = world.Time.TicksPerOriginalFrame > 1 ? GroundStepRest(world.Tick) : default;
+        // What is left of the movement is on the object when it moved in this tick (with the rest of another mover of the same object, should it have two AI modules).
+        var moving = stride == 1 ? default : Entity.AheadTick == world.Tick ? (X: Entity.AheadX, Y: Entity.AheadY) : GroundStepRest(world.Tick);
         if (_climb.Continue(Entity))
         {
             _climb.Publish(world.Time, world.Tick, Entity, moving.X, moving.Y);
