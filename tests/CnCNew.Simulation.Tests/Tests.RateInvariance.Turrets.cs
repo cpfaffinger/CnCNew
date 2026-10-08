@@ -105,4 +105,24 @@ static partial class Tests
                 $"{rate}: every hold lasts 15 logic frames and one frame more ({string.Join(",", runs.Distinct())} ticks, expected {16 * factor - (factor - 1)}).");
         }
     }
+
+    /// <summary>
+    /// The idle scan is the same film at every rate: the first glance starts in the same logic frame after the object appeared (the turret's first step, which sets the timer, is one
+    /// frame after the spawn and takes a frame), and from then on the turret is at the 30 Hz angle at the end of every frame, over 50 seconds of glances, holds and returns.
+    /// </summary>
+    public static void RateInvarianceTurretIdleScanIsTheSameAtEveryFrame()
+    {
+        const int Frames = 1_500;
+        var reference = IdleScanAngles(SimulationRate.Hz30, 1, Frames);
+        var firstGlance = reference.FindIndex(angle => angle != Fixed.Zero);
+        Check.That(firstGlance > 30 && reference.Distinct().Count() > 50, $"30 Hz: the turret glances around (first glance in frame {firstGlance}).");
+        foreach (var (rate, factor) in WorldRates.Skip(1))
+        {
+            var angles = IdleScanAngles(rate, factor, Frames);
+            var first = angles.FindIndex(angle => angle != Fixed.Zero);
+            Check.That(first == firstGlance * factor, $"{rate}: the first glance starts in the first tick of the same logic frame as at 30 Hz (tick {first}, expected {firstGlance * factor}).");
+            var different = Enumerable.Range(0, Frames).Where(frame => angles[(frame + 1) * factor - 1] != reference[frame]).ToList();
+            Check.That(different.Count == 0, $"{rate}: at the end of every logic frame the turret is where the 30 Hz turret is ({different.Count} of {Frames} frames differ, the first is frame {different.FirstOrDefault(-1)}).");
+        }
+    }
 }

@@ -75,6 +75,7 @@ run.Test("Tick rate, world: an idle unit's first look falls two logic frames aft
 // Phase 23, package turrets (Tests.RateInvariance.Turrets.cs; keep this block together).
 run.Test("Rate invariance, turrets: a turret decides its step per logic frame and walks it in equal parts", Tests.RateInvarianceTurretStepsAreDecidedPerFrame);
 run.Test("Rate invariance, turrets: a hold lasts the recentre time and one logic frame", Tests.RateInvarianceTurretHoldsOneFrameMoreThanTheRecentreTime);
+run.Test("Rate invariance, turrets: the idle scan is at the 30 Hz angle at the end of every logic frame", Tests.RateInvarianceTurretIdleScanIsTheSameAtEveryFrame);
 // Tick rate, stage 2, modules N–Z (Tests.TickRate.ModulesNZ.cs).
 run.Test("Tick rate N–Z: a detector's stagger is drawn in frames of the original", Tests.TickRateNzDetectorStaggerIsDrawnInOriginalFrames);
 run.Test("Tick rate N–Z: poison without an interval hurts once per frame of the original", Tests.TickRateNzPoisonWithoutIntervalHurtsOncePerOriginalFrame);

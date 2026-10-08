@@ -501,6 +501,14 @@ public sealed partial class SimulationWorld
         state.Pitch = FixedTrig.Normalize(state.Pitch + FixedTrig.AngleDifference(state.Pitch, state.GoalPitch) / share);
     }
 
+    /// <summary>A step that does not move the turret but takes its logic frame all the same: the next decision is one frame later, as at 30 Hz. Never called at 30 Hz.</summary>
+    private void OccupyFrame(TurretState state)
+    {
+        state.GoalAngle = state.StartAngle = state.Angle;
+        state.GoalPitch = state.StartPitch = state.Pitch;
+        state.SubSteps = checked((int)(_turretFrameTicks - TickOrder.Next));
+    }
+
     /// <summary>The turret got another victim in the middle of a frame's step: it turns to the new one from where it is, in the next tick (an order is never held back to a frame boundary).</summary>
     private static void AbandonFrameStep(TurretState state) => ClearFrameStep(state);
 
@@ -551,7 +559,12 @@ public sealed partial class SimulationWorld
     {
         if (state.NextScan == 0)
         {
+            // At 30 Hz this step - the first one of a new turret, one tick after the object appeared - is the first logic frame of the turret's life, and the scan cannot start
+            // before the next one. Above 30 Hz the turret waits for that frame to begin, and the step that sets the timer takes a whole frame like every other step.
+            var age = tick - entity.SpawnTick;
+            if (age > 0 && age < _turretFrameTicks) return;
             ScheduleScan(entity, info, state, tick);
+            if (_turretFrameTicks != 1) OccupyFrame(state);
             return;
         }
 
