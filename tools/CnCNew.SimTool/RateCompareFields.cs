@@ -39,13 +39,27 @@ internal static class RateCompareFields
         // A difference counts once it has lasted this many frames: a state that one rate reaches a share of a frame earlier and the other catches up with is no divergence.
         var persist = int.Parse(Value(args, "--persist") ?? "3", CultureInfo.InvariantCulture);
         var streaks = new Dictionary<string, (long Since, int Count)>(StringComparer.Ordinal);
+        var randomParted = false;
+        // --random-trace F: who draws from the logic random stream in frame F and the --random-frames (2) after it, at both rates (a phase of the tick, or a module's update).
+        var randomFrom = long.Parse(Value(args, "--random-trace") ?? "-1", CultureInfo.InvariantCulture);
+        var randomSpan = long.Parse(Value(args, "--random-frames") ?? "2", CultureInfo.InvariantCulture);
+        var drawsA = new DrawObserver(a.World, rateA);
+        var drawsB = new DrawObserver(b.World, rateB);
+        if (randomFrom >= 0)
+        {
+            a.World.PhaseObserver = drawsA;
+            b.World.PhaseObserver = drawsB;
+        }
         for (long frame = 0; frame < limit && !a.IsOver && !b.IsOver; frame++)
         {
             var tracing = trace.Length > 0 && frame >= traceFrom && frame <= traceTo;
+            drawsA.Frame = drawsB.Frame = frame;
+            drawsA.Active = drawsB.Active = randomFrom >= 0 && frame >= randomFrom && frame <= randomFrom + randomSpan;
+            if (randomFrom >= 0 && frame > randomFrom + randomSpan) return 0;
             // --at first: the worlds are compared after the first tick of every frame, where every decision of the frame has fallen, with positions and angles read where
             // the frame ends - what an observer of that tick reads. Without it they are compared after the last tick of the frame.
-            StepFrame(a, rateA, frame, tracing, trace, last, 0, 0, atFirst ? 1 : rateA.TicksPerOriginalFrame);
-            StepFrame(b, rateB, frame, tracing, trace, last, 1, 0, atFirst ? 1 : rateB.TicksPerOriginalFrame);
+            StepFrame(a, rateA, frame, tracing, trace, last, 0, 0, atFirst ? 1 : rateA.TicksPerOriginalFrame, drawsA.Active);
+            StepFrame(b, rateB, frame, tracing, trace, last, 1, 0, atFirst ? 1 : rateB.TicksPerOriginalFrame, drawsB.Active);
             if (atFirst)
             {
                 var first = Compare();
@@ -58,6 +72,19 @@ internal static class RateCompareFields
 
             bool Compare()
             {
+            if (!randomParted)
+            {
+                // The number and order of draws from the logic stream per game time must be the same at every rate: the first frame after which the streams differ.
+                Span<uint> left = stackalloc uint[6];
+                Span<uint> right = stackalloc uint[6];
+                a.World.LogicRandom.CopyState(left);
+                b.World.LogicRandom.CopyState(right);
+                if (!left.SequenceEqual(right))
+                {
+                    randomParted = true;
+                    Console.WriteLine($"frame {frame}: the logic random streams differ from here on.");
+                }
+            }
             if (frame < from || (trace.Length > 0 && frame <= traceTo)) return false;
             var found = new Dictionary<string, string>(StringComparer.Ordinal);
             var others = new Dictionary<uint, Entity>();
@@ -107,11 +134,15 @@ internal static class RateCompareFields
         return 0;
     }
 
-    private static void StepFrame(SkirmishMatchSession session, SimulationRate rate, long frame, bool tracing, uint[] trace, Dictionary<(int, uint), Dictionary<string, Field>> last, int side, int fromTick, int toTick)
+    private static void StepFrame(SkirmishMatchSession session, SimulationRate rate, long frame, bool tracing, uint[] trace, Dictionary<(int, uint), Dictionary<string, Field>> last, int side, int fromTick, int toTick, bool events = false)
     {
         for (var tick = fromTick; tick < toTick; tick++)
         {
-            session.Step();
+            var result = session.Step();
+            if (events)
+                foreach (var item in result.Events)
+                    if (item.Kind != CnCNew.Simulation.Events.SimEventKind.FxRequested)
+                        Console.WriteLine($"{rate.TicksPerSecond} Hz frame {frame} tick {tick + 1}/{rate.TicksPerOriginalFrame}: {item.Kind} {item.Entity.Value} {item.Other.Value} {item.Text} {item.Value}");
             if (!tracing) continue;
             foreach (var id in trace)
             {
@@ -137,6 +168,29 @@ internal static class RateCompareFields
                 if (text.Length > 0) Console.Write($"{rate.TicksPerSecond} Hz frame {frame} tick {tick + 1}/{rate.TicksPerOriginalFrame} object {id} {entity?.Template.Name}:\n{text}");
             }
         }
+    }
+
+    /// <summary>Prints who changes the state of the logic random stream: a tool's observer of the tick phases, it changes nothing.</summary>
+    private sealed class DrawObserver(SimulationWorld world, SimulationRate rate) : ITickPhaseObserver
+    {
+        private readonly uint[] _before = new uint[6];
+        private readonly uint[] _now = new uint[6];
+        public long Frame;
+        public bool Active;
+
+        private void Mark() => world.LogicRandom.CopyState(_before);
+
+        private void Report(string who)
+        {
+            world.LogicRandom.CopyState(_now);
+            if (Active && !_now.AsSpan().SequenceEqual(_before)) Console.WriteLine($"{rate.TicksPerSecond} Hz frame {Frame} tick {world.Tick % rate.TicksPerOriginalFrame + 1}/{rate.TicksPerOriginalFrame}: {who} draws");
+            Mark();
+        }
+
+        public void PhaseStarted(TickPhase phase) => Report($"something before phase {phase}");
+        public void PhaseEnded(TickPhase phase) => Report($"phase {phase}");
+        public void UpdateStarted(CnCNew.Simulation.Modules.SimModule module) => Report("phase Updates (between two modules)");
+        public void UpdateEnded(CnCNew.Simulation.Modules.SimModule module) => Report($"{module.ModuleName} of {module.Entity.Id.Value} {module.Entity.Template.Name}");
     }
 
     private readonly record struct Field(char Kind, long Number, string Text)
