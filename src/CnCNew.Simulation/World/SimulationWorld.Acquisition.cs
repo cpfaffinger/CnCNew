@@ -221,7 +221,11 @@ public sealed partial class SimulationWorld
         {
             // The fight is over: AIAttackMoveToState repaths and marches on.
             state.Halted = false;
-            if (ai.StartInternalMove(state.GoalX, state.GoalY)) WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
+            if (ai.StartInternalMove(state.GoalX, state.GoalY))
+            {
+                ai.BeginMoveWithNextFrame(this);
+                WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
+            }
             else state.AttackMove = false;
         }
         else if (!entity.HasMoveTarget) state.AttackMove = false;
@@ -316,6 +320,7 @@ public sealed partial class SimulationWorld
         if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
         {
             if (!ai.StartInternalMove(victimX, victimY)) return false;
+            ai.BeginMoveWithNextFrame(this);
             WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
             state.Chasing = true;
             state.ChaseTick = tick;

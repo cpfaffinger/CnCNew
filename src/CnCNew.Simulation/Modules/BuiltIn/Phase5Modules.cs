@@ -1016,6 +1016,18 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         StopInternalMove();
     }
 
+    /// <summary>
+    /// A move given to a standing object by an observer that acts after the updates of the tick (the units' own target acquisition): at 30 Hz its first step is the next
+    /// tick's, one logic frame of the original later. Above 30 Hz a module that is awake every tick (a transport, a supply carrier) would take it in the next tick and
+    /// count its frames from there, a share of a frame ahead of everything in phase; the first decision waits for the object's next frame. An object that is covering a
+    /// frame's step decides when that is covered anyway. Nothing to do at 30 Hz.
+    /// </summary>
+    internal void BeginMoveWithNextFrame(IWorldServices world)
+    {
+        var ticks = world.Time.TicksPerOriginalFrame;
+        if (ticks > 1 && _frameTicksLeft == 0) _moveHoldUntil = Math.Max(_moveHoldUntil, world.Tick + ticks);
+    }
+
     // Above 30 Hz only: the tick before which the object takes no decision of a new frame (StopInternalMoveAtFrameEnd). Never set at 30 Hz.
     private long _moveHoldUntil;
 
