@@ -860,9 +860,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private void UpdateTask(IWorldServices world)
     {
         var target = world.FindEntity(_taskTarget);
-        if (target is null || target.DestroyRequested || target.EffectivelyDead) { EndTask(world); return; }
-        if (_task == BuilderTask.Construct && (!target.HasStatus(ObjectStatusBits.UnderConstruction) || target.BuilderId != Entity.Id)) { EndTask(world); return; }
-        if (_task == BuilderTask.Repair && !IsRepairable(target)) { EndTask(world); return; }
+        // Whether the task is still worth doing is looked at once per logic frame of the original of the builder (every tick at 30 Hz): what happened to the target after the
+        // builder's turn in the first tick of a frame is seen with the next frame, as the 30 Hz builder sees it with its next step.
+        if (world.Time.BeginsFrameOf(Entity, world.Tick))
+        {
+            if (target is null || target.DestroyRequested || target.EffectivelyDead) { EndTask(world); return; }
+            if (_task == BuilderTask.Construct && (!target.HasStatus(ObjectStatusBits.UnderConstruction) || target.BuilderId != Entity.Id)) { EndTask(world); return; }
+            if (_task == BuilderTask.Repair && !IsRepairable(target)) { EndTask(world); return; }
+        }
+        else if (target is null) return;
         // Inside a logic frame's step (above 30 Hz) the builder is between two positions of the 30 Hz walk: it measures its reach again when the step is covered.
         if (_frameTicksLeft > 0 && Entity.HasMoveTarget) return;
 
