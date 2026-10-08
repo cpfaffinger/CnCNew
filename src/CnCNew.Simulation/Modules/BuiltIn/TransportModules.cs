@@ -98,7 +98,8 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
             return SimulationTiming.SleepNone;
         }
         var locomotor = Entity.Template.Locomotor;
-        var ground = world.GroundHeightAt(Entity.X, Entity.Y);
+        // The height is kept over the ground where the frame's movement ends: at 30 Hz the Chinook has made its whole step when it looks at the ground below it.
+        var ground = world.GroundHeightAt(Entity.X + moving.X, Entity.Y + moving.Y);
         var target = _landing ? ground : ground + (locomotor?.PreferredHeight ?? Fixed.Zero);
         var climb = FlightFrames.PerFrame(world.Time, locomotor?.Speed ?? Fixed.Zero);
         if (Entity.Z != target && climb > Fixed.Zero)
