@@ -76,10 +76,14 @@ static partial class Tests
 
     /// <summary>
     /// A whole sortie of a jet, compared after every logic frame of the original: it is produced, rolls out of the hangar to its space, is sent away (taxi, pause, take-off run, climb,
-    /// flight), turns back on a second order, is sent at a victim and empties its clip, returns by itself, circles, lands, rolls out, taxis to its space, turns and reloads.
+    /// flight), turns back on a second order, is sent at a victim and empties its clip, returns by itself, circles, lands, rolls out, taxis to its space, turns and reloads. A second sortie without the attack: the jet goes home because it has been idle, arrives at the approach point while it returns and circles
+    /// that point for a frame before it lands.
     /// </summary>
     public static void RateFlightJetSortieIsBitIdentical()
     {
+        foreach (var attack in new[] { true, false })
+        {
+        var (away, back, strike) = attack ? (300, 520, 700) : (100, 320, int.MaxValue);
         var tracks = new List<FlightBits?>[FlightRates.Length];
         for (var index = 0; index < FlightRates.Length; index++)
         {
@@ -97,19 +101,20 @@ static partial class Tests
             {
                 if (frame == 0) Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, "The jet is queued.");
                 if (jet is null) return;
-                if (frame == 300) Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 1200, 300).Accepted, $"{rate}: the parked jet is sent away.");
-                if (frame == 520) Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 200, 900).Accepted, $"{rate}: the flying jet is turned back.");
-                if (frame == 700) Check.That(feeder.Pursue(1, jet.Id.Value, dummy.Id.Value, 1400, 700).Accepted, $"{rate}: the jet is sent at its victim.");
+                if (frame == away) Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 1200, 300).Accepted, $"{rate}: the parked jet is sent away.");
+                if (frame == back) Check.That(feeder.SetMoveTarget(1, jet.Id.Value, 200, 900).Accepted, $"{rate}: the flying jet is turned back.");
+                if (frame == strike) Check.That(feeder.Pursue(1, jet.Id.Value, dummy.Id.Value, 1400, 700).Accepted, $"{rate}: the jet is sent at its victim.");
                 // The stream of fire orders a player's attack is, one where each frame begins.
-                if (frame is >= 700 and < 900 && jet.WeaponClip > 0 && feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted) shots++;
+                if (frame >= strike && frame < strike + 200 && jet.WeaponClip > 0 && feeder.FireWeapon(1, jet.Id.Value, dummy.Id.Value).Accepted) shots++;
             });
         }
-        SameBits("jet sortie", tracks);
+        SameBits(attack ? "jet sortie with an attack" : "jet sortie, home after its idle time", tracks);
         for (var index = 0; index < FlightRates.Length; index++)
         {
             var end = tracks[index][^1];
             Check.That(end is { Phase: JetAIUpdate.JetPhase.None, Airborne: false, Clip: 2 }, $"{FlightRates[index]}: the jet is parked and reloaded at the end ({end}).");
-            Check.That(tracks[index].Any(bits => bits is { Clip: 0 }) && tracks[index].Any(bits => bits is { Phase: JetAIUpdate.JetPhase.Landing }), $"{FlightRates[index]}: the jet emptied its clip and landed.");
+            Check.That(tracks[index].Any(bits => bits is { Clip: 0 }) == attack && tracks[index].Any(bits => bits is { Phase: JetAIUpdate.JetPhase.Landing }), $"{FlightRates[index]}: the jet {(attack ? "emptied its clip and " : string.Empty)}landed.");
+        }
         }
     }
 
