@@ -17,8 +17,9 @@ namespace CnCNew.Simulation.Skirmish;
 /// <param name="HomeX">Centre of the base: the start position on the map.</param>
 /// <param name="Side">Side of the player's faction; only objects of this side are built or produced.</param>
 /// <param name="FamilyPrefix">Name prefix of the faction's own object variants (<c>AirF_America</c>); such variants are preferred over the shared ones of the side.</param>
+/// <param name="Composition">How the army's next unit is chosen; null for <see cref="SkirmishAi.DefaultComposition"/>.</param>
 /// <param name="HintPositions">Start positions of the other players; public map knowledge the AI may attack before it has seen anything.</param>
-public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions, int AttackThreshold = 0, int MaxAttackThreshold = 0, bool EconomyFirst = false);
+public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions, int AttackThreshold = 0, int MaxAttackThreshold = 0, bool EconomyFirst = false, ArmyComposition? Composition = null);
 
 /// <summary>Counters an AI keeps about itself; the match report and the tests read them.</summary>
 public sealed class SkirmishAiStats
@@ -44,6 +45,9 @@ public sealed class SkirmishAiStats
     public int TransportLoads { get; internal set; }
     public long AttackTicks { get; internal set; }
     public SortedDictionary<CommandRejection, int> RejectionsByReason { get; } = [];
+    /// <summary>Army draws by <see cref="ArmyComposition.ExchangeValue"/> that had a sighted enemy to weigh against, and those that fell back to the uniform draw.</summary>
+    public int InformedDraws { get; internal set; }
+    public int UninformedDraws { get; internal set; }
     /// <summary>
     /// What every look of the army production at a barracks or a factory ended with, counted per producer template and outcome (key: template, a tab, the outcome):
     /// <c>queue-full</c>, <c>no-candidate</c> (nothing it offers is an army unit whose prerequisites are met), <c>unaffordable</c> (candidates exist, none is covered by the money
@@ -70,7 +74,7 @@ public sealed class SkirmishAiStats
 /// (<see cref="CommandCatalog"/>); see <c>SIMULATION-CORE.md</c> for the documented limits.
 /// </para>
 /// </summary>
-public sealed class SkirmishAi
+public sealed partial class SkirmishAi
 {
     // Own rhythms and deadlines of the AI, all in logic frames of the original (1/30 s) and scaled once per use through the world's time service, so the AI
     // observes, thinks and waits at the same moments of game time at every tick rate. ThinkIntervalFrames must stay a multiple of FireIntervalFrames.
@@ -199,6 +203,7 @@ public sealed class SkirmishAi
         // The stagger between the players is drawn in frames of the original and then scaled like the intervals: at every rate the same players share a frame.
         _phase = _time.OriginalFrames(options.Player.Value % FireIntervalFrames);
         _side = options.Side;
+        _composition = options.Composition ?? DefaultComposition;
         if (options.AttackThreshold > 0) _threshold = options.AttackThreshold;
         if (options.MaxAttackThreshold > 0) _maxThreshold = Math.Max(options.MaxAttackThreshold, _threshold);
     }
@@ -326,7 +331,9 @@ public sealed class SkirmishAi
             }
             seen.Add(entity.Id.Value);
             _enemies[entity.Id.Value] = new Remembered(entity.Id, entity.Template, entity.Owner, entity.X, entity.Y, _tick, entity.Template.IsKindOf("STRUCTURE"));
-            if (entity.Body is not null) _enemyTargets.Add(entity);
+            if (entity.Body is null) continue;
+            _enemyTargets.Add(entity);
+            if (_composition == ArmyComposition.ExchangeValue) RememberSighting(entity);
         }
         Forget(_enemies, seen);
         Forget(_warehouses, seen);
@@ -1035,7 +1042,7 @@ public sealed class SkirmishAi
             }
         }
         if (units.Count == 0) return null;
-        var index = _random.Range(0, units.Count - 1);
+        var index = _composition == ArmyComposition.ExchangeValue ? DrawByExchangeValue(units) : _random.Range(0, units.Count - 1);
         return new ArmyOrder(producers[index].Id, units[index], _tick);
     }
 
