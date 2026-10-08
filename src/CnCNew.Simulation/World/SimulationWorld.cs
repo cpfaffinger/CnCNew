@@ -1412,6 +1412,13 @@ public sealed partial class SimulationWorld : IWorldServices
 
     public void OnEntityDied(Entity entity, in DamageInfo info)
     {
+        // Above 30 Hz an object that is killed inside the step of its logic frame dies where that step ends: the 30 Hz object has taken its whole step when a hit of the
+        // phases after the updates kills it (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 4, for every death). Nothing is inside a step at 30 Hz.
+        if (_firstFrameTicks != TickOrder.Next && (entity.IsInsideFrameStep || entity.HasAheadAngle))
+        {
+            if (AiOf(entity) is { } mover) mover.SettleFrame(_tick);
+            else entity.CompleteFrame(_tick);
+        }
         Emit(SimEventKind.EntityDied, entity.Id, info.Source, string.Empty, info.DeathType);
         ScoreTheKill(entity, info);
         // Object::onDie starts with checkAndDetonateBoobyTrap(NULL): an object that dies while booby trapped sets its trap off.

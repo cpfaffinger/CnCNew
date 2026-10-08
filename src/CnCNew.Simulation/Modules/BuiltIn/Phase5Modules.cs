@@ -1445,6 +1445,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// </summary>
     internal void SettleFrame(long tick)
     {
+        // Whatever the object does next is decided when the frame it was covering would have ended, not earlier.
+        if (_frameTicksLeft > 0 && _frameDue >= tick) _moveHoldUntil = _frameDue + _frameTicksLeft;
         if (Entity.IsInsideFrameStep || Entity.HasAheadAngle) Entity.CompleteFrame(tick);
         _frameTicksLeft = 0;
         _frameArriving = false;
