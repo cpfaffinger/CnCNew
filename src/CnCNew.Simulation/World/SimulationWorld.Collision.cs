@@ -3,6 +3,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -131,6 +132,7 @@ public sealed partial class SimulationWorld
 
     private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadCore(Entity mover, Fixed dx, Fixed dy)
     {
+        if (_firstFrameTicks != TickOrder.Next) return StationaryBlockersAheadAtFrameEnd(mover, dx, dy);
         var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
         var moverRadius = CircleRadius(mover);
         // The step is the look-ahead; the line from the mover to its end is tested at four points. They and their bounding box depend on the mover only.
@@ -189,6 +191,7 @@ public sealed partial class SimulationWorld
     /// <summary>Whether stepping <paramref name="mover"/> to its position plus (<paramref name="dx"/>, <paramref name="dy"/>) would land inside another live, mobile entity's bounding circle (the <paramref name="goal"/> object excepted).</summary>
     private bool StepBlocked(Entity mover, Fixed dx, Fixed dy, EntityId goal)
     {
+        if (_firstFrameTicks != TickOrder.Next) return StepBlockedAtFrameEnd(mover, dx, dy, goal);
         var x = mover.X + dx;
         var y = mover.Y + dy;
         var moverRadius = CircleRadius(mover);
@@ -204,6 +207,97 @@ public sealed partial class SimulationWorld
             if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
             var ddx = other.X - x;
             var ddy = other.Y - y;
+            if (SquaredReach.Of(limit).ContainsStrictly(ddx * ddx + ddy * ddy)) return true;
+        }
+        return false;
+    }
+
+    // ------------------------------------------------------------------------------------------------ above 30 Hz
+    //
+    // A mover decides the step of a logic frame of the original in the first tick of its frame (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3). What the 30 Hz step sees of
+    // another mover in that tick is the other after its whole step if it ran earlier in the tick, and before it otherwise: the end of the frame the other has begun
+    // (Entity.FrameEnd), and "standing" if the step it is covering is the last of its move. The two scans below are the scans above with exactly that view; they never run at
+    // 30 Hz, where the rest of a frame is always zero and the scans above are untouched.
+
+    private bool StandsStillAtFrameEnd(Entity other, Entity mover, EntityId goal)
+    {
+        if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) return false;
+        if (!other.HasMoveTarget) return other.Speed == Fixed.Zero;
+        // Covering the last step of its move: the 30 Hz step has already put it on its target, where it stands.
+        return other.AheadTick + TickOrder.Next >= _tick && AiOf(other) is { IsArrivingWithThisFrame: true };
+    }
+
+    private IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAheadAtFrameEnd(Entity mover, Fixed dx, Fixed dy)
+    {
+        var goal = AiOf(mover)?.GoalObject ?? EntityId.Invalid;
+        var moverRadius = CircleRadius(mover);
+        Fixed minX = Fixed.MaxValue, maxX = Fixed.MinValue, minY = Fixed.MaxValue, maxY = Fixed.MinValue;
+        for (var sample = 1; sample <= 4; sample++)
+        {
+            var x = mover.X + dx * Fixed.FromInt(sample) / Fixed.FromInt(4);
+            var y = mover.Y + dy * Fixed.FromInt(sample) / Fixed.FromInt(4);
+            _sampleX[sample - 1] = x;
+            _sampleY[sample - 1] = y;
+            minX = Fixed.Min(minX, x);
+            maxX = Fixed.Max(maxX, x);
+            minY = Fixed.Min(minY, y);
+            maxY = Fixed.Max(maxY, y);
+        }
+
+        var blocked = false;
+        var mobiles = _mobiles;
+        var tick = _tick;
+        for (var index = 0; index < mobiles.Count && !blocked; index++)
+        {
+            var other = mobiles[index];
+            if (!StandsStillAtFrameEnd(other, mover, goal)) continue;
+            var (otherX, otherY, _) = other.FrameEnd(tick);
+            var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
+            if (limit.Raw >= 0 && (otherX.Raw < minX.Raw - limit.Raw - ScanSlack || otherX.Raw > maxX.Raw + limit.Raw + ScanSlack || otherY.Raw < minY.Raw - limit.Raw - ScanSlack || otherY.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
+            for (var sample = 0; sample < 4 && !blocked; sample++)
+            {
+                var ddx = otherX - _sampleX[sample];
+                var ddy = otherY - _sampleY[sample];
+                if (SquaredReach.Of(limit).ContainsStrictly(ddx * ddx + ddy * ddy)) blocked = true;
+            }
+        }
+
+        if (!blocked) return [];
+        var circles = _stationaryCircles;
+        circles.Clear();
+        var around = Fixed.FromInt(150);
+        var aroundSquared = SquaredReach.Of(around);
+        for (var index = 0; index < mobiles.Count; index++)
+        {
+            var other = mobiles[index];
+            if (!StandsStillAtFrameEnd(other, mover, goal)) continue;
+            var (otherX, otherY, _) = other.FrameEnd(tick);
+            if (FurtherThan(otherX, mover.X, around) || FurtherThan(otherY, mover.Y, around)) continue;
+            var ddx = otherX - mover.X;
+            var ddy = otherY - mover.Y;
+            if (!aroundSquared.Contains(ddx * ddx + ddy * ddy)) continue;
+            circles.Add((otherX, otherY, CircleRadius(other) + moverRadius + StandingBlockerMargin));
+        }
+
+        return circles;
+    }
+
+    private bool StepBlockedAtFrameEnd(Entity mover, Fixed dx, Fixed dy, EntityId goal)
+    {
+        var x = mover.X + dx;
+        var y = mover.Y + dy;
+        var moverRadius = CircleRadius(mover);
+        var mobiles = _mobiles;
+        var tick = _tick;
+        for (var index = 0; index < mobiles.Count; index++)
+        {
+            var other = mobiles[index];
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
+            var (otherX, otherY, _) = other.FrameEnd(tick);
+            var limit = moverRadius + CircleRadius(other);
+            if (FurtherThan(otherX, x, limit) || FurtherThan(otherY, y, limit)) continue;
+            var ddx = otherX - x;
+            var ddy = otherY - y;
             if (SquaredReach.Of(limit).ContainsStrictly(ddx * ddx + ddy * ddy)) return true;
         }
         return false;

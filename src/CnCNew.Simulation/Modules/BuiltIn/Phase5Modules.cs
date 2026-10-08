@@ -1319,6 +1319,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     // The step being covered is the last one of the move: with its last share the object has arrived.
     private bool _frameArriving;
 
+    /// <summary>Above 30 Hz: the object is covering the last step of its move; at the end of this frame it stands on its target, as it does after the single 30 Hz step.</summary>
+    internal bool IsArrivingWithThisFrame => _frameArriving && _frameTicksLeft > 0;
+
     /// <summary>
     /// The speed the object moves with, per logic frame of the original. Above 30 Hz the module keeps it itself, because the 30 Hz value does not survive a division by the stride; an
     /// object stopped or slowed from outside (<see cref="Entity.Speed"/> no longer the published share of it) starts from what it was set to.
