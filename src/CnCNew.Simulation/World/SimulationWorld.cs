@@ -178,6 +178,7 @@ public sealed partial class SimulationWorld : IWorldServices
         _turretLoseInterestTicks = Time.OriginalFrames(TurretLoseInterestFrames);
         _turretFrameTicks = Time.TicksPerOriginalFrame;
         VisionInterval = Time.OriginalFrames(VisionIntervalFrames);
+        _visionPhase = Time.TicksPerOriginalFrame - TickOrder.Next;
         _saleDurationTicks = Time.OriginalFrames(SaleDurationFrames) - Time.TicksPerOriginalFrame;
         _minimumBuildTicks = Time.OriginalFrames(1);
         // Thing::isSignificantlyAboveTerrain: a height, not a rate - 3 x 3 logic frames of the original times the gravity per frame of the original squared (gravity per second² / 30²).
@@ -1743,7 +1744,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ProcessDelayedDamage(tick);
         ProcessSpawns();
         DeliverEvents();
-        if (_vision is not null && tick % VisionInterval == 0) RefreshVision();
+        if (_vision is not null && tick % VisionInterval == _visionPhase) RefreshVision();
         _tick = tick + TickOrder.Next;
         return new TickResult(tick, ComputeIncrementalHash(), _tickEvents);
     }
@@ -1797,7 +1798,7 @@ public sealed partial class SimulationWorld : IWorldServices
         observer.PhaseStarted(TickPhase.SpawnEvents);
         DeliverEvents();
         observer.PhaseEnded(TickPhase.SpawnEvents);
-        var refresh = _vision is not null && tick % VisionInterval == 0;
+        var refresh = _vision is not null && tick % VisionInterval == _visionPhase;
         observer.PhaseStarted(TickPhase.Vision);
         if (refresh) RevealVision();
         observer.PhaseEnded(TickPhase.Vision);

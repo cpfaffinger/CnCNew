@@ -10,12 +10,19 @@ public sealed partial class SimulationWorld
 {
     /// <summary>
     /// The shroud is recomputed every this many logic frames of the original (the reference refreshes on a partition cell timer; three frames keep the delay at 100 ms). An own rhythm
-    /// of this simulation; the world steps it as <see cref="VisionInterval"/> ticks, on the ticks that are a multiple of it (phase 0).
+    /// of this simulation; the world steps it as <see cref="VisionInterval"/> ticks, after the last tick of every third logic frame (<see cref="_visionPhase"/>).
     /// </summary>
     public const int VisionIntervalFrames = 3;
 
-    /// <summary>The shroud is recomputed on every tick that is a multiple of this (<see cref="VisionIntervalFrames"/> in ticks of this world).</summary>
+    /// <summary>The shroud is recomputed once in this many ticks (<see cref="VisionIntervalFrames"/> in ticks of this world).</summary>
     public long VisionInterval { get; }
+
+    /// <summary>
+    /// The tick within <see cref="VisionInterval"/> after which the shroud is recomputed: the last tick of a logic frame of the original, when every object in phase with the world
+    /// stands where the 30 Hz step of that frame puts it (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 5). Who reads the shroud inside a frame reads the state of the frame
+    /// before, never one that 30 Hz does not have yet at that game time. 30 Hz: 0, the ticks that are a multiple of the interval, as ever.
+    /// </summary>
+    private readonly long _visionPhase;
 
     private static readonly int StealthedStatus = ObjectStatusBits.Index("STEALTHED");
     private static readonly int DetectedStatus = ObjectStatusBits.Index("DETECTED");

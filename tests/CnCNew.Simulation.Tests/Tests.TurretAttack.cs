@@ -376,8 +376,8 @@ static partial class Tests
         feeder.Spawn(1, "TurretTank", owner: 1, x: 20, y: 20);
         feeder.Spawn(2, "TurretTarget", owner: 2, x: 20, y: 100);
         feeder.Spawn(1, "FogSpotter", owner: 1, x: 30, y: 110);
-        world.Step();
-        world.Step();
+        // Two logic frames of the original: the shroud is refreshed after the last tick of a frame.
+        for (var i = 0; i < world.Frames(2); i++) world.Step();
         var tank = Slotted(world, "TurretTank");
         var target = Slotted(world, "TurretTarget");
         var player = new PlayerId(1);
