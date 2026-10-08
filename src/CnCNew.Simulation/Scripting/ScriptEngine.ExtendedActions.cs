@@ -366,10 +366,12 @@ public sealed partial class ScriptEngine
     private void ProcessTeamBuilds()
     {
         if (_teamBuilds.Count == 0) return;
+        AiDropFinishedTeamBuilds();
         foreach (var order in _teamBuilds)
         {
             if (order.Queued >= order.Total || !_teams.TryGetValue(order.TeamId, out var team)) continue;
             var owner = team.Owner;
+            if (AiRecruitsFor(order, team)) continue;
             if (AiHoldsUnitOrders(owner)) continue;
             Entity? best = null;
             var bestBusy = true;

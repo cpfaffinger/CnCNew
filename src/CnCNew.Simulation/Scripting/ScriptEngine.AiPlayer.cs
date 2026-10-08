@@ -835,6 +835,43 @@ public sealed partial class ScriptEngine
         }
     }
 
+    /// <summary>
+    /// <c>AIPlayer::queueUnits</c> for one work order of a team of an AI player: before anything is trained, units of that type are taken from the player's recruitable teams of lower
+    /// priority - above all its default team, where the units of disbanded teams wait - within <c>MaxRecruitRadius</c> of the base centre (<c>Team::tryToRecruit</c>; the library's teams
+    /// have no home position); a recruit walks to the base centre. An order trains one unit at a time (<c>WorkOrder::isWaitingToBuild</c>). Returns whether the order has nothing to train now.
+    /// </summary>
+    private bool AiRecruitsFor(TeamBuildOrder order, ScriptTeam team)
+    {
+        if (_ai.Count == 0 || AiOfPlayer(team.Owner) is not { } state || _program.FindTeam(team.Prototype) is not { } prototype) return false;
+        var home = new ScriptWaypoint(string.Empty, state.BaseX, state.BaseY, Fixed.Zero);
+        var reach = SquaredReach.Of(_options.Ai!.Data.MaxRecruitRadius);
+        while (order.Queued < order.Total)
+        {
+            if (FindRecruit(team.Owner, order.Type, prototype, team, home, reach) is not { } recruit) break;
+            foreach (var other in _teams.Values) other.Members.Remove(recruit.Id.Value);
+            team.Members.Add(recruit.Id.Value);
+            if (team.AttackPriority.Length > 0) _prioritySetOf[recruit.Id.Value] = team.AttackPriority;
+            if (recruit.Template.Locomotor is not null) MoveTo(recruit, home.X, home.Y);
+            order.Queued++;
+            order.Joined++;
+        }
+        return order.Queued >= order.Total || order.Queued > order.Joined;
+    }
+
+    /// <summary>A team of an AI player whose orders are all met (by recruits) has nothing left in the order list; the queue entry then moves it on.</summary>
+    private void AiDropFinishedTeamBuilds()
+    {
+        if (_ai.Count == 0) return;
+        for (var index = 0; index < _teamBuilds.Count; index++)
+        {
+            var teamId = _teamBuilds[index].TeamId;
+            if (!_teams.TryGetValue(teamId, out var team) || AiOfPlayer(team.Owner) is null) continue;
+            if (!_teamBuilds.Where(order => order.TeamId == teamId).All(order => order.Joined >= order.Total)) continue;
+            _teamBuilds.RemoveAll(order => order.TeamId == teamId);
+            index = -1;
+        }
+    }
+
     /// <summary>A team that is built again starts over: its create script runs again and its generic scripts are tried again (the reference makes a new <c>Team</c>).</summary>
     private void AiResetTeamForRebuild(ScriptTeam team)
     {

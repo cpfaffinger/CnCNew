@@ -275,6 +275,9 @@ internal static class OriginalAi
             if (pending.Length > 0) Console.WriteLine($"    asked for and not standing: {string.Join("; ", pending)}");
             Console.WriteLine($"    {string.Join(", ", own.GroupBy(entity => entity.Template.Name).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => $"{group.Key} x{group.Count()}"))}");
         }
+        var boxes = world.Entities.Sum(entity => (long)CnCNew.Simulation.Views.EntityPresentationView.WarehouseSupplyBoxes(entity));
+        var disbanded = engine.Diagnostics.Where(pair => pair.Key.Contains("disbanded: build time expired", StringComparison.Ordinal)).Sum(pair => pair.Value);
+        Console.WriteLine($"Supply boxes left in the map's warehouses: {boxes} (worth {boxes * world.ValuePerSupplyBox}); teams disbanded because their build time ran out: {disbanded}.");
         var missing = engine.MissingActionHits.Concat(engine.MissingConditionHits).ToArray();
         Console.WriteLine(missing.Length == 0
             ? "Script types without implementation hit at run time: 0."
