@@ -61,6 +61,75 @@ static partial class Tests
         }
     }
 
+    /// <summary>
+    /// <c>FiringTracker::update</c> acts in the step after its deadline, and that step is a logic frame at every rate: a spun-up weapon that falls silent drops its stage coast + 1
+    /// frames after its next possible shot and shows the slow stage for a second and a frame, at the same game time at 30, 60 and 120 Hz.
+    /// </summary>
+    public static void RateInvarianceFiringTrackerDeadlinesTakeAFrame()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, RatedWorldFiles());
+            feeder.Spawn(1, "SpinTank", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "TurretTarget", owner: 2, x: 0, y: 100);
+            for (var i = 0; i < factor; i++) world.Step();
+            var tank = Slotted(world, "SpinTank");
+            var victim = IdOf(world, "TurretTarget");
+            var shots = 0;
+            long lastShot = -1;
+            for (var i = 0; i < 300 * factor && shots < 8; i++)
+            {
+                feeder.FireWeapon(1, tank.Id.Value, victim);
+                var result = world.Step();
+                if (!result.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id)) continue;
+                shots++;
+                lastShot = result.Tick;
+            }
+
+            Check.That(shots == 8 && SimulationWorld.ContinuousFireOf(tank) == ContinuousFireStage.Fast, $"{rate}: eight shots in a row spin the weapon up to the fast stage.");
+            var changes = new List<(long After, ContinuousFireStage Stage)>();
+            var stage = ContinuousFireStage.Fast;
+            for (var i = 0; i < 120 * factor; i++)
+            {
+                var result = world.Step();
+                var now = SimulationWorld.ContinuousFireOf(tank);
+                if (now == stage) continue;
+                changes.Add((result.Tick - lastShot, now));
+                stage = now;
+            }
+
+            // 600 ms between shots are 18 frames, 4 at the fast stage; the coast is 30 frames: the stage drops in frame 4 + 30 + 1 after the last shot, the slow stage ends 30 + 1 frames later.
+            Check.That(changes.Count == 2 && changes[0] == (35 * factor, ContinuousFireStage.Slow) && changes[1] == (66 * factor, ContinuousFireStage.None),
+                $"{rate}: silence drops the stage after 35 logic frames and ends the slow stage after 66: {string.Join(", ", changes.Select(change => $"{change.Stage} after {change.After} ticks"))}.");
+        }
+    }
+
+    /// <summary>
+    /// A wind-up nobody followed up on is forgotten a second after its end - until and including the last tick of that logic frame at every rate: an order in frame 45 after a
+    /// 15-frame wind-up began still fires the wound-up weapon at once, an order in frame 46 winds it up again.
+    /// </summary>
+    public static void RateInvarianceStaleWindUpIsForgottenAfterTheSameFrame()
+    {
+        foreach (var (rate, factor) in WorldRates)
+            foreach (var (afterTicks, fires) in new[] { (45 * factor, true), (45 * factor + factor - 1, true), (46 * factor, false) })
+            {
+                var (world, feeder, _) = RatedWorld(rate, RatedWorldFiles());
+                feeder.Spawn(1, "WindupTank", owner: 1, x: 0, y: 0);
+                feeder.Spawn(2, "TurretTarget", owner: 2, x: 100, y: 0);
+                for (var i = 0; i < factor; i++) world.Step();
+                var tank = Slotted(world, "WindupTank");
+                var victim = IdOf(world, "TurretTarget");
+                feeder.FireWeapon(1, tank.Id.Value, victim);
+                var first = world.Step();
+                Check.That(!first.Events.Any(value => value.Kind == SimEventKind.WeaponFired) && world.PreAttackSlotOf(tank) == 0, $"{rate}: the first order starts the wind-up.");
+                for (var i = 1; i < afterTicks; i++) world.Step();
+                feeder.FireWeapon(1, tank.Id.Value, victim);
+                var second = world.Step();
+                var fired = second.Events.Any(value => value.Kind == SimEventKind.WeaponFired && value.Entity == tank.Id);
+                Check.That(fired == fires, $"{rate}: an order {afterTicks} ticks after the wind-up began {(fires ? "fires the wound-up weapon" : "winds up again")} (fired: {fired}).");
+            }
+    }
+
     /// <summary>Per tick the turret angle of a lone <c>ScanTank</c> (it glances around at random while idle) over <paramref name="frames"/> logic frames after its first frame.</summary>
     private static List<Fixed> IdleScanAngles(SimulationRate rate, int factor, int frames)
     {
