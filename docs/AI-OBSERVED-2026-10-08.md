@@ -5,6 +5,9 @@ KIs (`SkirmishAi`) im Client angesehen (`scripts/demo-spectator.ps1`, 30 Hz, ein
 einzeln: reproduziert? (Zahlen), Ursache (Datei, Symbol), Korrektur (Commit), gemessene Wirkung, was bleibt. **Niemand hat das Ergebnis im Fenster gesehen:** alles hier ist
 headless gemessen; was nur ein Mensch bestätigen kann, steht in §6.
 
+**Nachtrag:** der Branch ist auf `main` `4d9d9e5` gebracht (Ausfahrtsweg, Runde 3 der Raten-Pakete). §1 bis §10 beschreiben den Stand vor dem Merge und bleiben als Messprotokoll
+stehen; **was heute gilt – ein einziger Zielplatz-Mechanismus, alle Messungen neu, die Abnahme der Regel D wiederholt – steht in §11.**
+
 **Methode.** Ein ganzes Gefecht ist chaotisch; kein Befund stützt sich auf ein einzelnes. Gemessen wird mit `SimTool ai-census` (neu, §5): die 16 Paarungen des Referenzmanifests
 (vier Karten × vier Paarungen) mit je 5 Seeds = 80 Gefechte = 160 Spieler-Gefechte, 25 Spielminuten Budget, 30 Hz; dazu `ai-survey` (16 × 20 Seeds = 320 Gefechte). „vorher“ ist
 `main` (`5abbeea`), wenn nichts anderes dasteht. Die Stände heißen wie die Commits in §7: **B** (Produktion), **C1** (Zielplätze), **C2** (Einsteigen), **D** (Zusammensetzung).
@@ -356,3 +359,142 @@ Missionsläufe des Manifests zeigen keinen geänderten Ausgang (§7); mehr ist f
 - Die 16 Tabellenläufe in `docs/SIMULATION-CORE.md` §19/§36 und alle dortigen Hashes sind überholt; jenes Dokument, `CLAUDE.md`, README und die Handoffs sind auftragsgemäß nicht
   angefasst.
 - Balance ist nicht bewertet: „mehr entschiedene Gefechte“ und „gewinnt gegen die KI ohne Regel“ sagen nichts darüber, ob die KI gegen einen Menschen gut spielt.
+
+## 11. Nachtrag: auf `main` `4d9d9e5` gebracht (8. Oktober 2026)
+
+`main` hat seit dem Ausgangsstand den Ausfahrtsweg (produzierte Einheiten fahren aus der Fabrik – Beobachtung A ist damit behoben), die neuen Manifeste und die Runden 3 der
+Pakete Flug und Beobachter bekommen. Der Merge ist `c683067`; danach vier Commits. Alles in diesem Abschnitt ist auf dem gemergten Stand gemessen.
+
+### 11.1 Konflikte und ihre Auflösung
+
+| Stelle | beide Seiten | Auflösung |
+|---|---|---|
+| `IWorldServices` (`ModuleFramework.cs`) | `main`: `FindFreeGoal` (Ausfahrt: Sammelpunkt je Einheit); Branch: `TryFreeGoalSpot` (Einheit unterwegs zu einem besetzten Ziel) | beide Methoden bleiben, **aber es gibt nur noch eine Suche** (11.2) |
+| `AIUpdateInterface.Move` (`Phase5Modules.cs`) | `main`: Block „durch die Tür“ (`_viaPending`); Branch: Block „Ziel besetzt“ | beide vor `PlanPath`, erst die Tür; eine Einheit auf dem Weg aus der Fabrik (`_exitRallyPending`, `_viaPending`) wird nicht nach einem freien Platz gefragt |
+| `UpdateEnter`, die drei Kollisionsabfragen, `SkirmishAi.PickBuilder`, Testprogramm | – | ohne Konflikt gemergt; `UpdateEnter` an die Konvention der Runde 3 angepasst (11.3) |
+
+### 11.2 Ein Mechanismus für den freien Zielplatz
+
+Der Ausfahrtsweg hatte dieselbe Aufgabe aus derselben Originalfunktion (`Pathfinder::adjustDestination`) schon gelöst: `SimulationWorld.FindFreeGoal`/`GoalIsFree`
+(`World/SimulationWorld.ExitGoals.cs`), Plätze in Reihen quer zur Laufrichtung, neben dem Ziel zuerst. Die eigene Spirale des Branch (`SimulationWorld.GoalSpots.cs`, §3.3) ist
+**gelöscht**. Behalten ist die Suche von `main`: auf ihr stehen der Ausfahrtsweg, seine Tests, neun Szenen und neun Fälle der Raten-Suite, und sie liest jede Einheit schon dort,
+wo ihr Logikbild endet. `TryFreeGoalSpot` liegt jetzt in derselben Datei und ist nur noch die **Frage**, die die Ausfahrt nicht stellt – ist das Ziel einer Einheit, die schon
+unterwegs ist, inzwischen besetzt (eine nicht feindliche Bodeneinheit steht dort, oder eine mit kleinerer Kennung läuft dorthin)? – und ruft dann dieselbe Suche vom Standort der
+Einheit aus, mit zwölf statt vier Reihen (83 Plätze: eine Armee sammelt sich auf einem Punkt, vor einer Fabriktür stehen wenige). Die Aufrufe des Ausfahrtswegs sind unverändert.
+Der Test mit sechs Einheiten auf einen Punkt besteht bei 30, 60 und 120 Hz bildgleich (Ankunft nach 110 Bildern, die Plätze liegen jetzt in Reihen statt auf Zellen).
+
+### 11.3 Was für die Raten-Suite nötig war (Ziel: jede Gruppe 0 / 0 bei 60 und 120 Hz – erreicht)
+
+| Gruppe | nach dem Merge, vor den Korrekturen | Ursache | Korrektur | jetzt |
+|---|---|---|---|---|
+| overtime | 0 / 1 („heal inside ChinaVehicleTroopCrawler“: Bilder mit Heilung 151 / 151 / 150) | `TransportContain` gab je Tick `HealthRegen%PerSec` / Tickrate; die Scheiben je Tick summieren sich nicht zur Scheibe eines Bildes | `df639ff`: die Scheibe des Originals (eine Sekunde über 30 Bilder), einmal je Logikbild, gezählt ab dem Tick des Einstiegs – wie `GarrisonContain` und das Tunnelnetz; bei 30 Hz wird nichts gespeichert und kein Hash ändert sich | 0 / 0 (151 / 151 / 151) |
+| locomotion | 1 / 1 (`Boss_InfantryAngryMobNexus`, Laufzeit 23,20 / 23,05 / 23,06 s) | Mob-Mitglieder werden von ihrem Modul immer wieder auf den Platz ihres Nexus geschickt und bekamen dort einen „freien Platz“ | im Merge: ein Sklave oder Mob-Mitglied (`ISlavedModule`) behält das Ziel, das sein Modul ihm gibt | 0 / 0 |
+| ai | 5 / 5 (America gegen China) | (a) `UpdateEnter` hielt einen Einsteiger, dessen Container gerade gestorben war, mitten im Bildschritt an; (b) **nicht vom Branch:** `PointDefenseLaserUpdate` sah Geschosse in jedem Tick an ihrer augenblicklichen Lage und schoss bei 60 Hz ein Bild früher (erste Abweichung: Bild 5494, ein Avenger schießt eine Panzerjäger-Rakete ab) | (a) im Merge: der Blick auf den Container fällt in den Tick, der den Bildschritt entschieden hat, liest beide am Bildende und setzt den Einsteiger dorthin (`SettleFrame`), bevor er anhält oder einsteigt; (b) `3c24352`: der Laser entscheidet im ersten Tick des Logikbilds seines Trägers und liest Träger und Ziele am Bildende; bei 30 Hz unverändert | 0 / 0 |
+
+Zu (b): der Fall der Gruppe `ai` war auf `main` nur gleich, weil dessen KI fast nur Infanterie baute. Die Mechanik von `main` mit **nur** dem Heereskauf dieses Branch (Regel aus)
+ergibt in der Gruppe 10 / 8 Größen außerhalb der Toleranz (gemessen: Export von `4d9d9e5` mit `SkirmishAi*.cs` darüber) – dort kreisen die Einheiten noch, und Kreisen verstärkt
+jeden Unterschied. `docs/RATE-INVARIANCE-PROJECTILES.md` §5.4 hatte den Laser bewusst gelassen („weniger als ein Bild früher, kein Fall schlägt fehl“); das stimmt nicht mehr,
+sobald eine KI Avenger baut. Alle zehn Gruppen: locomotion, flight, weapons, projectiles, turrets, overtime, economy (34 Fälle), timed, scripts, ai je **0 / 0**.
+
+### 11.4 Messungen (30 Hz, gemergter Stand)
+
+**Zensus** (16 Paarungen × 5 Seeds, Regel an; in Klammern derselbe Stand mit Regel aus):
+
+| Fraktion | mit Fabrik | Fabriken, die bauen | Infanterie | Fahrzeuge | Fahrzeuganteil |
+|---|---|---|---|---|---|
+| China (40) | 25 | 24 | 1.042 | 456 | 30,4 % (22,9 %) |
+| ChinaTankGeneral (20) | 18 | 18 | 507 | 380 | 42,8 % (39,9 %) |
+| America (40) | 36 | 36 | 1.383 | 606 | 30,5 % (29,0 %) |
+| AmericaAirForceGeneral (20) | 20 | 19 | 738 | 240 | 24,5 % (31,4 %) |
+| GLA (40) | 10 | 10 | 1.918 | 175 | 8,4 % (13,3 %) |
+
+Entschieden 78 von 80 (Regel aus: 77). Kreis-Episoden von Heereseinheiten: **am Sammelpunkt 0** (Regel aus: 1; `main` vor allem: 269), nahe dem Ziel anderswo 10, unterwegs 40
+(die beiden offenen Fälle aus §3.5 b); Sammler am Dock 209 (offen, §3.5 c). Chinas Armee: Rotgardist 36 %, Panzerjäger 34 %, Dragon 20 %, Gattling 5 %, Battlemaster 4 %,
+Truppentransporter 1 %. Einsteigebefehle / Aufnahmen in den 20 KI-Läufen des Manifests: `main` 1.126 / 99, jetzt 1.693 / 945. GLA baut weiter nur auf Armored Fury eine Basis (10 von 40).
+
+**Abnahme der Regel D, wiederholt** (dieselben Kriterien, dieselben Seeds 1–20, nichts nachgestellt; `composition-test`):
+
+| Kriterium | Ergebnis auf dem gemergten Stand |
+|---|---|
+| (1) gepaart, 640 Gefechte | KI mit Regel: **337 Siege, 250 Niederlagen**, 53 unentschieden; Siegquote unter den 587 entschiedenen 57,4 %, exaktes 95-%-Intervall [53,3 %, 61,4 %]; p = **0,0004** → **bestanden** |
+| (2) symmetrisch, 320 Gefechte | **305 von 320** entschieden (95,3 %); Grenze 74,0 % (253 von 320, halbe Breite 5,0 Punkte) → **bestanden** |
+
+Die Regel bleibt Standard. Derselbe Stand ohne Regel entscheidet 299 von 320; der Abstand 305 gegen 299 liegt innerhalb der Streuung – belastbar ist der gepaarte Test. Je Paarung
+gewinnt die Regel in 9 mehr, in 4 gleich viel und in 3 weniger, als sie verliert (Armored Fury China–GLA 15 : 21, Death Valley America–China 19 : 20, Death Valley China–GLA 19 : 21).
+
+**60 Hz, zur Information** (symmetrisch, 320 Gefechte, Regel an): 301 entschieden (30 Hz: 305); mittlere Dauer der entschiedenen 9,23 gegen 9,33 Spielminuten, Median beide 7,88;
+in **297 von 320** Gefechten derselbe Ausgang wie bei 30 Hz mit demselben Seed.
+
+### 11.5 Was sich bei 30 Hz gegenüber `main` `4d9d9e5` ändert
+
+`reference-manifest check --set full --jobs 5` gegen das Manifest von `main` (nicht neu geschrieben): **40 von 50 Läufen weichen ab** – die 16 Zweispielerläufe, die vier
+`ai8_…`-Läufe, `skirmish-sweep` und 19 Missionsläufe (`GC_ChinaBoss_*` ×9, `GC_LaserGeneral_ChinaNukeGeneral`, `MD_CHI01`, `MD_CHI05`, `MD_GLA01`, `MD_GLA03`, `MD_GLA05`,
+`MD_USA01`, `MD_USA02`, `MD_USA05`, `Training01`). **Unverändert:** `reference-match` (Sieger FactionGLA bei Tick 14.130, 26.626 Befehle, 13.589 Schüsse, Endhash und Kette wie im
+Manifest), `stress` und acht Missionsläufe (`GC_AirGeneral_*` ×3, `GC_ChemGeneral_*` ×2, `GC_SuperWeaponsGeneral_GLADemolitionGeneral`, `GC_TankGeneral_*` ×2). Eingangsmanifest
+identisch. Ergebnisse (`reference-manifest results`, `main` = Werkzeug des Stands nach dem Ausfahrtsweg, dessen 30-Hz-Ergebnisse die von `main` sind):
+
+| Lauf | `main` | Branch |
+|---|---|---|
+| Alpine Assault America–China | America @16.665 | kein Sieger |
+| Alpine Assault China–GLA | China @10.665 | China @8.595 |
+| Alpine Assault ChinaTank–AirForce | AirForce @15.195 | ChinaTank @18.300 |
+| Alpine Assault GLA–America | America @7.815 | America @9.660 |
+| Armored Fury America–China | kein Sieger | America @37.050 |
+| Armored Fury China–GLA | China @11.595 | kein Sieger |
+| Armored Fury ChinaTank–AirForce | kein Sieger | ChinaTank @10.860 |
+| Armored Fury GLA–America | America @13.215 | America @36.180 |
+| Bitter Winter America–China | kein Sieger | China @22.005 |
+| Bitter Winter China–GLA | China @7.950 | China @8.385 |
+| Bitter Winter ChinaTank–AirForce | kein Sieger | ChinaTank @30.150 |
+| Bitter Winter GLA–America | America @9.090 | America @8.730 |
+| Death Valley America–China | America @9.390 | America @8.700 |
+| Death Valley China–GLA | China @10.515 | China @12.930 |
+| Death Valley ChinaTank–AirForce | AirForce @10.635 | ChinaTank @22.860 |
+| Death Valley GLA–America | America @8.415 | America @10.530 |
+
+Entschieden 12 → **14** von 16, der Ausgang ist in 8 anders. Die vier 8-Spieler-Läufe enden wie vorher ohne Sieger in ihrem Budget. Missionen: in allen 27 Läufen **gleicher
+Ausgang und gleiches Endskript**; 18 mit identischen Ergebnisgrößen, 9 mit anderen Ereigniszahlen (am deutlichsten `MD_USA02`: 72 → 143 Schadensereignisse, 39 → 63 Schüsse;
+`MD_GLA01`: `MoveArrived` 53 → 81; in drei davon auch die Zahl ausgeführter Skripte oder Aktionen: `GC_LaserGeneral_ChinaNukeGeneral` 122 → 123 Skripte, `MD_GLA05` 102 → 100,
+`MD_USA05` 396 → 394 Aktionen).
+
+**Kampagne** (30 Hz): `CampaignTool drive` auf allen 24 Karten **Sieg 24 / 24, Niederlage 24 / 24**; `audit --ticks 900`: 24 von 24 beim zweiten Lauf und nach
+Speichern/Laden identisch, 0 Treffer auf fehlende Typen, Endproben Sieg 13 / 24, Niederlage 15 / 24 – wie `main`.
+
+### 11.6 `MD_CHI02` im Nur-Befehle-Modus
+
+Ursache gefunden, und sie liegt **nicht** in der Sparregel. Der Agent marschiert auf das Ziel, das seiner Armee am nächsten liegt; sein Weg endet 120 Einheiten vor einem, an
+das er nicht herankommt, und weil er dort steht, bleibt es das nächste – für den Rest der Mission („1 Angriffswelle, 60.645 Ticks im Angriff“, 241 Einheiten an einem Ort). Der
+Lauf auf `main` tat 22.000 Ticks lang dasselbe, bis er binnen 50 Sekunden 107 seiner 130 dort versammelten Infanteristen verlor (woran, ist nicht untersucht); die Welle wurde
+zurückgesetzt, die nächste brach von der Basis nach Westen auf und gewann bei Tick 29.250. Die Armee, die auf Panzer spart, verliert ihre Masse dort nicht (ihre Zahl wächst nur)
+und wird nie zurückgesetzt. Der Sieg auf `main` folgte aus einer Niederlage. Zeiten bis Kaserne und erstem Angriff unterscheiden die Läufe nicht: beide greifen von Anfang an an
+(Welle 1 in den ersten 500 Ticks).
+
+Korrektur (`05b2c1f`, nur für einen Agenten mit Missionszielen; ein Skirmish setzt keine): ein Ziel, auf das die Armee zwei Minuten marschiert ist und das noch steht, kommt
+hinter alle anderen, bis jedes an der Reihe war. Damit zieht die Armee durch alle vier gegnerischen Basen.
+
+| `--commands-only`, `--minutes 34` | `MD_GLA04` | `MD_CHI01` | `MD_CHI02` |
+|---|---|---|---|
+| `main` (vor dem Branch) | Sieg @1.022 | Sieg @18.252 | Sieg @29.250 |
+| gemergter Stand | Sieg @1.022 | Sieg @16.452 | **nicht erreicht**; nach 34 Minuten sind zwei der vier Basen nur noch GLA-Löcher |
+| gemergter Stand, `--minutes 60` | – | – | **Sieg @78.429** (43:34) |
+
+`MD_CHI02` wird also wieder gewonnen, aber nicht mehr in 34 Spielminuten. Warum es 14 Minuten länger dauert als der glückliche Lauf auf `main`, ist nicht weiter untersucht (die
+Löcher der GLA bauen sich wieder auf, während die Armee beim nächsten Ziel ist).
+
+### 11.7 Verifikation (gemergter Stand)
+
+| Prüfung | Ergebnis |
+|---|---|
+| `dotnet build CnCNew.slnx` | 0 Warnungen, 0 Fehler |
+| `Simulation.Tests` (Release) ohne `--content-dir` bei 30, 60, 120 Hz | je „All simulation core tests passed“ |
+| `Simulation.Tests` mit `--content-dir` | 30 Hz: alle bestanden. 60 und 120 Hz: **2 von 540 schlagen fehl** – „a Crusader keeps its turret on a Battlemaster it chases“ (3,00° schlechtester Wert) und „the original skirmish AI … Player 2 has built a base“ (4 Gebäude nach 150 s). **Beide schlagen auf `main` `4d9d9e5` allein genauso fehl** (derselbe Text, dieselben Zahlen; nachgemessen an einem Export von `main`); nicht von diesem Branch, nicht behoben |
+| Raten-Suite | alle zehn Gruppen 0 / 0 bei 60 und 120 Hz (11.3) |
+| eigene Tests | sechs Einheiten auf einen Punkt, drei Einsteiger, Heeresauftrag, Zusammensetzung: grün bei allen drei Raten |
+| `reference-manifest check --set quick --verify-incremental` | 64.871 Ticks geprüft, **0 Abweichungen** des inkrementellen Hashs |
+| `input-manifest check` | identisch |
+| `Game.Tests` (Release, `--content-dir`) | „All game tests passed“ |
+| `scripts/check-spectator.ps1` | PASS |
+| `scripts/audit-scenarios.ps1 -Scenario exits` | 9 von 9 Szenen „all checks passed“, bei 30 Hz und mit `-TickRate 60` (das Skript führt neun Szenen: drei Fraktionen × Kommandozentrale, Kaserne, Fabrik) |
+
+Nicht gelaufen: der volle Manifestlauf unter Linux, die Determinismus-Matrix, `reachability`, die drei Szenen-Audits außer `exits`, die Abnahme der Regel bei 60 Hz (nur die
+symmetrische Erhebung), `drive` und `audit` bei 60 Hz. Kein Mensch hat etwas davon gesehen.
