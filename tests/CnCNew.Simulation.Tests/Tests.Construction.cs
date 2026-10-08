@@ -4,6 +4,7 @@ using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
@@ -110,6 +111,46 @@ static partial class Tests
           End
           Behavior = ProductionUpdate Prod01
             MaxQueueEntries = 2
+          End
+        End
+        Object ExitDozer
+          KindOf = SELECTABLE VEHICLE DOZER
+          VisionRange = 100.0
+          ShroudClearingRange = 100.0
+          Locomotor = SET_NORMAL GroundLoco
+          BuildCost = 20
+          BuildTime = 1
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = DozerAIUpdate AI01
+            RepairHealthPercentPerSecond = 10%
+          End
+        End
+        Object ExitBarracks
+          KindOf = SELECTABLE STRUCTURE
+          BuildCost = 100
+          BuildTime = 1
+          Geometry = BOX
+          GeometryMajorRadius = 30.0
+          GeometryMinorRadius = 30.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = ProductionUpdate Prod01
+            MaxQueueEntries = 3
+          End
+          Behavior = DefaultProductionExitUpdate Exit01
+            UnitCreatePoint = X:0.0 Y:0.0 Z:0.0
+            NaturalRallyPoint = X:30.0 Y:0.0 Z:0.0
           End
         End
         Object Secret
@@ -361,6 +402,166 @@ static partial class Tests
         for (var tick = 0; tick < world.Frames(60); tick++) world.Step();
         for (var tick = 0; tick < restored.Frames(60); tick++) restored.Step();
         Check.That(world.StateHash == restored.StateHash, "The rally point survives a snapshot and steers the next unit identically.");
+    }
+
+    /// <summary>
+    /// <c>DefaultProductionExitUpdate::exitObjectViaDoor</c>: a produced unit appears at <c>UnitCreatePoint</c> inside its factory and walks out by itself, through the door
+    /// point (one cell outside <c>NaturalRallyPoint</c>) to the exit point two cells outside it; the next unit asks the one standing there to make room; with a rally point the
+    /// unit goes on from the exit point. The factory stands at (70, 100) with half extents of 30: door point (110, 100), exit point (120, 100).
+    /// </summary>
+    public static void ConstructionExitPath()
+    {
+        static bool InsideBox(Entity unit) => (unit.X - Fixed.FromInt(70)).Abs() <= Fixed.FromInt(30) && (unit.Y - Fixed.FromInt(100)).Abs() <= Fixed.FromInt(30);
+        static bool Near(Entity unit, int x, int y, int tolerance = 1) => (unit.X - Fixed.FromInt(x)).Abs() <= Fixed.FromInt(tolerance) && (unit.Y - Fixed.FromInt(y)).Abs() <= Fixed.FromInt(tolerance);
+
+        var (world, feeder, fixture, _) = ConstructionSetup(withTerrain: true);
+        feeder.Spawn(1, "ExitBarracks", x: 70, y: 100);
+        world.Step();
+        var factory = ConstructionFind(world, "ExitBarracks");
+        Entity Produce(int number)
+        {
+            Check.That(feeder.QueueProduction(1, factory.Id.Value, "Grunt").Accepted, "The factory takes the order.");
+            Check.That(StepUntil(world, 100, () => world.Entities.Count(value => value.Template.Name == "Grunt") == number) < 100, $"Unit {number} is produced.");
+            // Its place in front of the factory is chosen at the end of the logic frame of the original it appears in (the tick itself at 30 Hz); it has not moved by then.
+            for (var tick = TickOrder.Next; tick < world.Frames(1); tick++) world.Step();
+            return world.Entities.Where(value => value.Template.Name == "Grunt").OrderBy(value => value.Id.Value).Last();
+        }
+        bool Settled() => world.Entities.Where(value => value.Template.Name == "Grunt").All(value => !value.HasMoveTarget);
+
+        var first = Produce(1);
+        Check.That(Near(first, 70, 100, 0) && InsideBox(first), $"It appears at UnitCreatePoint, inside the factory ({first.X}, {first.Y}).");
+        Check.That(first.HasMoveTarget && first.MoveTargetX == Fixed.FromInt(120) && first.MoveTargetY == Fixed.FromInt(100), $"It is on its way to the exit point at once ({first.MoveTargetX}, {first.MoveTargetY}).");
+        var crossedAtY = Fixed.MinValue;
+        StepUntil(world, 300, () =>
+        {
+            if (crossedAtY == Fixed.MinValue && !InsideBox(first)) crossedAtY = first.Y;
+            return !first.HasMoveTarget;
+        });
+        Check.That(crossedAtY != Fixed.MinValue && (crossedAtY - Fixed.FromInt(100)).Abs() <= Fixed.FromInt(2), $"It leaves the box on the exit side, on the line of NaturalRallyPoint (y {crossedAtY}).");
+        Check.That(!first.HasMoveTarget && Near(first, 120, 100, 0), $"It stops on the exit point ({first.X}, {first.Y}).");
+
+        // The next unit asks the one standing on the exit point to step aside and takes the point itself.
+        var second = Produce(2);
+        Check.That(first.HasMoveTarget && (first.MoveTargetX - Fixed.FromInt(120)).Abs() <= Fixed.FromInt(1) && (first.MoveTargetY - Fixed.FromInt(100)).Abs() >= Fixed.FromInt(5),
+            $"The first unit is asked to make room beside the exit point ({first.MoveTargetX}, {first.MoveTargetY}).");
+        Check.That(second.HasMoveTarget && second.MoveTargetX == Fixed.FromInt(120) && second.MoveTargetY == Fixed.FromInt(100), "The second unit heads for the exit point.");
+        Check.That(StepUntil(world, 300, Settled) < 300, "Both settle.");
+        var third = Produce(3);
+        Check.That(StepUntil(world, 300, Settled) < 300, "All three settle.");
+        var grunts = new[] { first, second, third };
+        Check.That(grunts.All(value => !InsideBox(value)), "All three units stand outside the factory.");
+        Check.That(Near(third, 120, 100, 0), $"The last unit stands on the exit point ({third.X}, {third.Y}).");
+        Check.That(!Near(first, 120, 100, 5) && !Near(second, 120, 100, 5) && !Near(first, (int)second.X.Floor(), (int)second.Y.Floor(), 5),
+            $"The earlier ones made room and do not stand in each other ({first.X}, {first.Y}) ({second.X}, {second.Y}).");
+        Check.That(grunts.Take(2).All(value => (value.X - Fixed.FromInt(120)).Abs() <= Fixed.FromInt(1)), "They stepped aside across the exit direction, not back into the door.");
+
+        // With a rally point: out through the door first, then to the rally point; a snapshot in the middle of the exit continues identically.
+        var (rallied, rallyFeeder, _, _) = ConstructionSetup(withTerrain: true);
+        rallyFeeder.Spawn(1, "ExitBarracks", x: 70, y: 100);
+        rallied.Step();
+        var producer = ConstructionFind(rallied, "ExitBarracks").Id.Value;
+        Check.That(rallyFeeder.SetRallyPoint(1, producer, 170, 100).Accepted, "The owner sets a rally point.");
+        rallyFeeder.QueueProduction(1, producer, "Grunt");
+        StepUntil(rallied, 100, () => rallied.Entities.Any(value => value.Template.Name == "Grunt"));
+        var walker = ConstructionFind(rallied, "Grunt");
+        Check.That(walker.HasMoveTarget && walker.MoveTargetX == Fixed.FromInt(120), "With a rally point the first leg still is the exit point.");
+        StepUntil(rallied, 5, () => false);
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(rallied), fixture.Templates, fixture.Fingerprint, rallied.Terrain);
+        Check.That(restored.StateHash == rallied.StateHash, "The exit path round-trips through a snapshot.");
+        for (var tick = 0; tick < rallied.Frames(120); tick++)
+            Check.That(rallied.Step().StateHash == restored.Step().StateHash, "The exit is hash-identical after a restore at step " + tick + ".");
+        Check.That(!walker.HasMoveTarget && Near(walker, 170, 100, 2), $"It goes on to the rally point and arrives ({walker.X}, {walker.Y}).");
+    }
+
+    /// <summary>
+    /// The exit path is one order (<c>AI_FOLLOW_EXIT_PRODUCTION_PATH</c>): an order given while the unit drives out replaces it, second leg included. A dozer built with a rally
+    /// point set and told to build while it is still inside its factory builds - it does not walk off to the rally point when it stops at the site - and a unit told to move
+    /// elsewhere stays where it was sent.
+    /// </summary>
+    public static void ConstructionExitPathYieldsToAnOrder()
+    {
+        static bool Near(Entity unit, int x, int y, int tolerance) => (unit.X - Fixed.FromInt(x)).Abs() <= Fixed.FromInt(tolerance) && (unit.Y - Fixed.FromInt(y)).Abs() <= Fixed.FromInt(tolerance);
+
+        Entity Produce(SimulationWorld world, Feeder feeder, string unit)
+        {
+            feeder.Spawn(1, "ExitBarracks", x: 70, y: 100);
+            world.Step();
+            var producer = ConstructionFind(world, "ExitBarracks").Id.Value;
+            Check.That(feeder.SetRallyPoint(1, producer, 170, 100).Accepted, "The owner sets a rally point.");
+            Check.That(feeder.QueueProduction(1, producer, unit).Accepted, $"The factory takes the order for {unit}.");
+            Check.That(StepUntil(world, 100, () => world.Entities.Any(value => value.Template.Name == unit)) < 100, $"{unit} is produced.");
+            for (var tick = TickOrder.Next; tick < world.Frames(1); tick++) world.Step();
+            var built = ConstructionFind(world, unit);
+            Check.That(built.HasMoveTarget && Near(built, 70, 100, 0), "It is on its exit path and still at UnitCreatePoint.");
+            return built;
+        }
+
+        var (world, feeder, _, _) = ConstructionSetup(withTerrain: true);
+        var dozer = Produce(world, feeder, "ExitDozer");
+        // The ground it may build on is known once the shroud has been refreshed with the dozer on the map (every third logic frame).
+        StepUntil(world, 6, () => false);
+        Check.That(dozer.HasMoveTarget && Near(dozer, 70, 100, 28), $"It is still inside the factory, driving out ({dozer.X}, {dozer.Y}).");
+        var order = feeder.Construct(1, dozer.Id.Value, "Plant", 70, 160);
+        Check.That(order.Accepted, $"The dozer is told to build while it drives out ({order.Reason}).");
+        world.Step();
+        var site = ConstructionFind(world, "Plant");
+        Check.That(StepUntil(world, 900, () => !IsSite(site)) < 900, $"The dozer builds the structure instead of leaving for the rally point (dozer at {dozer.X}, {dozer.Y}, work {site.ConstructionWork}).");
+        StepUntil(world, 90, () => false);
+        Check.That(!dozer.HasMoveTarget && !Near(dozer, 170, 100, 20), $"Afterwards it stays at the site and does not walk to the rally point ({dozer.X}, {dozer.Y}).");
+
+        var (moved, moveFeeder, _, _) = ConstructionSetup(withTerrain: true);
+        var grunt = Produce(moved, moveFeeder, "Grunt");
+        StepUntil(moved, 10, () => false);
+        Check.That(moveFeeder.SetMoveTarget(1, grunt.Id.Value, 70, 170).Accepted, "A unit on its exit path takes a move order.");
+        Check.That(StepUntil(moved, 600, () => !grunt.HasMoveTarget) < 600, "It arrives.");
+        StepUntil(moved, 90, () => false);
+        Check.That(!grunt.HasMoveTarget && Near(grunt, 70, 170, 2), $"It stays where it was sent ({grunt.X}, {grunt.Y}).");
+    }
+
+    /// <summary>
+    /// <c>AIUpdateInterface.IsOnUnorderedMove</c>, what the skirmish AI asks before it gives a builder work: a dozer that drives out of its factory, goes on to the rally point or
+    /// makes room for the next unit moves without an order and is free; one that was told to move, builds or stands is not "on an unordered move".
+    /// </summary>
+    public static void ConstructionUnorderedMove()
+    {
+        static AIUpdateInterface Ai(Entity unit) => unit.Modules.OfType<AIUpdateInterface>().First();
+
+        var (world, feeder, _, _) = ConstructionSetup(withTerrain: true);
+        feeder.Spawn(1, "ExitBarracks", x: 70, y: 100);
+        world.Step();
+        var factory = ConstructionFind(world, "ExitBarracks").Id.Value;
+        Entity Produce(int number)
+        {
+            Check.That(feeder.QueueProduction(1, factory, "ExitDozer").Accepted, "The factory takes the order.");
+            Check.That(StepUntil(world, 100, () => world.Entities.Count(value => value.Template.Name == "ExitDozer") == number) < 100, $"Dozer {number} is produced.");
+            for (var tick = TickOrder.Next; tick < world.Frames(1); tick++) world.Step();
+            return world.Entities.Where(value => value.Template.Name == "ExitDozer").OrderBy(value => value.Id.Value).Last();
+        }
+
+        var first = Produce(1);
+        Check.That(!Ai(first).IsIdle && Ai(first).IsOnUnorderedMove, "A dozer driving out of its factory is not idle, but nobody ordered the move.");
+        Check.That(StepUntil(world, 300, () => !first.HasMoveTarget) < 300, "It arrives at the exit point.");
+        Check.That(Ai(first).IsIdle && !Ai(first).IsOnUnorderedMove, "Standing there it is idle and on no move.");
+        var second = Produce(2);
+        Check.That(first.HasMoveTarget && Ai(first).IsOnUnorderedMove, "Making room for the next unit is an unordered move too.");
+        Check.That(feeder.SetMoveTarget(1, second.Id.Value, 70, 170).Accepted, "The second dozer is told to move while it drives out.");
+        world.Step();
+        Check.That(second.HasMoveTarget && !Ai(second).IsOnUnorderedMove, "A move its owner ordered is not an unordered move.");
+        StepUntil(world, 300, () => !first.HasMoveTarget && !second.HasMoveTarget);
+        Check.That(feeder.Construct(1, first.Id.Value, "Plant", 150, 160).Accepted, "The first dozer is told to build.");
+        StepUntil(world, 3, () => false);
+        Check.That(Ai(first).IsBuilding && !Ai(first).IsOnUnorderedMove, "The walk to a building site is part of the task, not an unordered move.");
+
+        var (rallied, rallyFeeder, _, _) = ConstructionSetup(withTerrain: true);
+        rallyFeeder.Spawn(1, "ExitBarracks", x: 70, y: 100);
+        rallied.Step();
+        var producer = ConstructionFind(rallied, "ExitBarracks").Id.Value;
+        rallyFeeder.SetRallyPoint(1, producer, 170, 100);
+        rallyFeeder.QueueProduction(1, producer, "ExitDozer");
+        StepUntil(rallied, 100, () => rallied.Entities.Any(value => value.Template.Name == "ExitDozer"));
+        var walker = ConstructionFind(rallied, "ExitDozer");
+        Check.That(StepUntil(rallied, 300, () => walker.HasMoveTarget && walker.MoveTargetX > Fixed.FromInt(150)) < 300, "It goes on to the rally point.");
+        Check.That(Ai(walker).IsOnUnorderedMove, "The second leg to the rally point is an unordered move.");
     }
 
     public static void ConstructionRepair()

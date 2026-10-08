@@ -22,6 +22,13 @@ public static partial class RateCases
                      ("ChinaWarFactory", "ChinaTankBattleMaster"), ("GLABarracks", "GLAInfantryRebel"), ("GLAArmsDealer", "GLAVehicleTechnical"),
                  })
             builder.Add($"produce {unit}", scene => MeasureProduction(scene, factory, unit), factory, unit);
+        foreach (var (factory, unit) in new[]
+                 {
+                     ("AmericaCommandCenter", "AmericaVehicleDozer"), ("AmericaBarracks", "AmericaInfantryRanger"), ("AmericaWarFactory", "AmericaTankCrusader"),
+                     ("ChinaCommandCenter", "ChinaVehicleDozer"), ("ChinaBarracks", "ChinaInfantryRedguard"), ("ChinaWarFactory", "ChinaTankBattleMaster"),
+                     ("GLACommandCenter", "GLAInfantryWorker"), ("GLABarracks", "GLAInfantryRebel"), ("GLAArmsDealer", "GLATankScorpion"),
+                 })
+            builder.Add($"production exit {factory}", scene => MeasureProductionExit(scene, factory, unit), factory, unit);
         foreach (var (structure, upgrade) in new[]
                  {
                      ("AmericaBarracks", "Upgrade_AmericaRangerFlashBangGrenade"), ("ChinaBarracks", "Upgrade_InfantryCaptureBuilding"), ("ChinaWarFactory", "Upgrade_ChinaChainGuns"),
@@ -102,6 +109,54 @@ public static partial class RateCases
         quantities.Exact("first to second production completed", done.Count > 1 ? done[1] - done[0] : -1);
         quantities.Event("queue to first unit outside", appeared.Count > 0 ? appeared[0] : -1);
         quantities.Event("queue to both units standing", settled);
+        return quantities.Done();
+    }
+
+    /// <summary>
+    /// Three units queued at once and no rally point: each drives out of the factory along its exit path, the later ones ask the earlier ones to make room
+    /// (docs/SIMULATION-CORE.md §42). Read at the end of every logic frame of the original, where the state is the state of the 30 Hz step: the frame a unit is outside the
+    /// building's box for the first time, the frame all three stand, and where they stand.
+    /// </summary>
+    private static ImmutableArray<RateQuantity> MeasureProductionExit(RateScene scene, string factoryName, string unitName)
+    {
+        const int Units = 3;
+        var quantities = new RateQuantities(scene);
+        var factory = scene.Spawn(factoryName, 1, 2000, 2000);
+        scene.GiveMoney(1, 50000);
+        scene.StepFrames(1);
+        scene.Align();
+        var start = scene.World.Tick;
+        for (var index = 0; index < Units; index++) scene.Order(1, (owner, sequence, now) => new QueueProductionCommand(owner, sequence, now, factory.Id, unitName));
+        var major = factory.Template.GeometryMajorRadius;
+        var minor = factory.Template.GeometryMinorRadius;
+        var cos = FixedTrig.Cos(factory.Angle);
+        var sin = FixedTrig.Sin(factory.Angle);
+        bool Outside(Entity unit)
+        {
+            var dx = unit.X - factory.X;
+            var dy = unit.Y - factory.Y;
+            return (dx * cos + dy * sin).Abs() > major || (dy * cos - dx * sin).Abs() > minor;
+        }
+        var seen = new List<Entity>();
+        var outside = new long[Units];
+        Array.Fill(outside, -1);
+        long settled = -1;
+        var budget = RateScene.Seconds(240);
+        for (long frame = 0; frame < budget && settled < 0; frame++)
+        {
+            scene.StepFrames(1);
+            foreach (var entity in scene.World.Entities)
+                if (entity.SpawnTick >= start && entity.Owner == factory.Owner && entity.Template.Name == unitName && !seen.Contains(entity)) seen.Add(entity);
+            for (var index = 0; index < seen.Count && index < Units; index++)
+                if (outside[index] < 0 && Outside(seen[index])) outside[index] = scene.Time.OriginalFrames(frame);
+            if (seen.Count >= Units && seen.All(unit => !unit.HasMoveTarget && Outside(unit))) settled = scene.Time.OriginalFrames(frame);
+        }
+        for (var index = 0; index < Units; index++) quantities.Event($"order to unit {index + 1} outside the footprint", outside[index]);
+        quantities.Event("order to all units at rest outside", settled);
+        for (var index = 0; index < Units; index++)
+            quantities.Distance($"unit {index + 1} rest distance from the factory", index < seen.Count ? RateMeasure.Distance(seen[index], factory) : Fixed.Zero, settled >= 0);
+        quantities.Distance("rest distance unit 1 to unit 3", seen.Count >= Units ? RateMeasure.Distance(seen[0], seen[Units - 1]) : Fixed.Zero, settled >= 0);
+        quantities.Distance("rest distance unit 2 to unit 3", seen.Count >= Units ? RateMeasure.Distance(seen[1], seen[Units - 1]) : Fixed.Zero, settled >= 0);
         return quantities.Done();
     }
 

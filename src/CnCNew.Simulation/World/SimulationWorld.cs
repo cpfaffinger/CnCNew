@@ -152,7 +152,8 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
-        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default);
+        bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default,
+        bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default);
 
     // Ticks per logic frame of the original: how long after the spawn phase that asked for it an object requested inside that phase appears (ProcessSpawns). 1 at 30 Hz.
     private readonly long _firstFrameTicks;
@@ -572,7 +573,8 @@ public sealed partial class SimulationWorld : IWorldServices
         if (templateIndex < 0 || templateIndex >= _templates.Templates.Length) throw new ArgumentOutOfRangeException(nameof(templateIndex));
         var id = Ids.AllocateEntity();
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
-            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY, Enslaver: extras.Enslaver, Producer: extras.Producer);
+            extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY, Enslaver: extras.Enslaver, Producer: extras.Producer,
+            HasExit: extras.HasExit, DoorX: extras.DoorX, DoorY: extras.DoorY, ExitX: extras.ExitX, ExitY: extras.ExitY);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }
@@ -1518,6 +1520,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     private void ProcessSpawns(bool endOfTick = true)
     {
+        if (endOfTick && _exitClaims.Count != 0) ProcessExitClaims();
         if (_spawnQueue.Count == 0) return;
         // Damage applied while an entity is created (creation-list health transfer) can run die modules that queue further spawns, and so can the OnSpawn of a module (the
         // rider of a combat bike); those stay in the queue for the next tick.
@@ -1609,7 +1612,24 @@ public sealed partial class SimulationWorld : IWorldServices
         }
         if (setup.TransferDamage > Fixed.Zero)
             Damage(entity.Id, new DamageInfo(setup.TransferSource, setup.TransferDamage, DamageTypes.Unresistable, DeathTypes.Normal, false));
-        if (setup.HasRally && template.Locomotor is not null && AiOf(entity) is { } rallyAi) rallyAi.OrderMove(this, setup.RallyX, setup.RallyY, false);
+        // exitObjectViaDoor: the exit path of a produced unit (out of the factory first, then to the rally point); a spawn with only a rally point walks straight there.
+        if (setup.HasExit && template.Locomotor is not null && AiOf(entity) is { } exitAi)
+        {
+            if (_firstFrameTicks == TickOrder.Next)
+            {
+                // Several units leave over the same point: each takes the nearest place nobody stands on or is heading for, and reaches it through the door.
+                var (exitX, exitY) = ClaimExitPoint(entity, setup.DoorX, setup.DoorY, setup.ExitX, setup.ExitY);
+                exitAi.OrderExitProduction(this, setup.DoorX, setup.DoorY, exitX, exitY, setup.HasRally, setup.RallyX, setup.RallyY);
+            }
+            else
+            {
+                // Above 30 Hz the place is chosen where the 30 Hz spawn phase chooses it: after the whole step of the logic frame of the original the unit appears in
+                // (ProcessExitClaims). Until then the order stands with the exit point itself; the unit's first frame begins after that (DeferSpawnPhaseOrders).
+                exitAi.OrderExitProduction(this, setup.DoorX, setup.DoorY, setup.ExitX, setup.ExitY, setup.HasRally, setup.RallyX, setup.RallyY);
+                _exitClaims.Add(new ExitClaim(entity.Id, _tick + _firstFrameTicks - TickOrder.Next));
+            }
+        }
+        else if (setup.HasRally && template.Locomotor is not null && AiOf(entity) is { } rallyAi) rallyAi.OrderMove(this, setup.RallyX, setup.RallyY, false);
         if (setup.SetCreator)
             foreach (var module in entity.ModuleArray)
                 if (module is Modules.BuiltIn.SpecialPowerCompletionDie completion) completion.SetCreator(setup.Creator);
@@ -2072,6 +2092,13 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Fixed("rallyY", setup.RallyY);
             if (setup.Producer.IsValid) writer.UInt("producer", setup.Producer.Value);
             if (pending.NotBefore != 0) writer.Int("notBefore", pending.NotBefore);
+            if (setup.HasExit)
+            {
+                writer.Fixed("doorX", setup.DoorX);
+                writer.Fixed("doorY", setup.DoorY);
+                writer.Fixed("exitX", setup.ExitX);
+                writer.Fixed("exitY", setup.ExitY);
+            }
             if (setup.Launch is { } launch)
             {
                 writer.Int("launchWeapon", launch.Weapon);
@@ -2107,5 +2134,6 @@ public sealed partial class SimulationWorld : IWorldServices
         writer.BeginArray("events");
         foreach (var simEvent in _events) simEvent.Describe(writer);
         writer.EndArray();
+        DescribeExitClaims(writer);
     }
 }

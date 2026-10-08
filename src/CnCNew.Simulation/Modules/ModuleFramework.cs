@@ -274,6 +274,14 @@ public interface IWorldServices
     IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> StationaryBlockersAhead(Entity mover, Fixed dx, Fixed dy);
 
     /// <summary>
+    /// <c>Pathfinder::adjustDestination</c>, reduced to what a unit leaving its factory needs: the goal (<paramref name="x"/>, <paramref name="y"/>) itself when
+    /// <paramref name="mover"/> could stand there, else the nearest free place in rows across the direction of travel from (<paramref name="fromX"/>, <paramref name="fromY"/>) -
+    /// beside the goal first, then behind it. A place is free when its cell can be entered and no other mobile object stands on it or is on its way to it. When every
+    /// place is taken the goal itself is returned.
+    /// </summary>
+    (Fixed X, Fixed Y) FindFreeGoal(Entity mover, Fixed fromX, Fixed fromY, Fixed x, Fixed y);
+
+    /// <summary>
     /// <c>SquishCollide.cpp onCollide</c> / <c>ToppleUpdate.cpp onCollide</c>: after <paramref name="mover"/>'s position
     /// changed this tick by (<paramref name="stepX"/>, <paramref name="stepY"/>) — the exact displacement just applied, used
     /// to tell a closing mover from a receding one without rebuilding velocity from <c>Angle</c>/<c>Speed</c> — checks every
@@ -464,10 +472,11 @@ public static class SpecialPowerRouting
 /// health keeping the current health, as <c>RebuildHoleExposeDie</c> does) and <see cref="OriginTemplate"/> (index of the template the
 /// object stands in for, or -1; delivered to <see cref="ISpawnOriginReceiver"/> modules) and <see cref="ForceSupplyWanting"/> (the
 /// supply-center exit tells a fresh truck to start supplying at once, <c>SupplyTruckAIUpdate::privateWanting</c>) and the rally point
-/// (<c>ProductionUpdate::setRallyPoint</c>): a mobile object walks there right after it appears.
+/// (<c>ProductionUpdate::setRallyPoint</c>): a mobile object walks there right after it appears. <see cref="HasExit"/> is the exit path of a produced unit
+/// (<c>aiFollowExitProductionPath</c>): first to the exit point of its factory, then to the rally point, if there is one.
 /// </summary>
 public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default,
-    EntityId Enslaver = default, EntityId Producer = default);
+    EntityId Enslaver = default, EntityId Producer = default, bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default);
 
 // ------------------------------------------------------------------------------------------------ structures and world group
 
@@ -520,6 +529,16 @@ public interface IProductionExit
 
     /// <summary><c>SupplyCenterProductionExitUpdate::exitObjectViaDoor</c>: units leaving this exit start gathering supplies immediately.</summary>
     bool ForcesSupplyWanting => false;
+
+    /// <summary>
+    /// <c>ExitInterface::getNaturalRallyPoint</c> as the first leg of the exit path: the point just outside the door a created unit passes and the point in front of the building it
+    /// walks to before anything else; false when this exit has none.
+    /// </summary>
+    bool TryGetExitPath(out Fixed doorX, out Fixed doorY, out Fixed x, out Fixed y)
+    {
+        doorX = doorY = x = y = default;
+        return false;
+    }
 
     /// <summary><see cref="IsFreeToExit"/> for a specific product: <c>ParkingPlaceBehavior::hasAvailableSpaceFor</c> needs no parking space for a <c>PRODUCED_AT_HELIPAD</c> object.</summary>
     bool IsFreeToExitFor(ObjectTemplate produced) => IsFreeToExit;
