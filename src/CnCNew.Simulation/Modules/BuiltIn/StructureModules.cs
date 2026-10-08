@@ -359,6 +359,10 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
     private bool _pendingFromPlayer;
     private Fixed _pendingX;
     private Fixed _pendingY;
+    // Above 30 Hz only (never set or written at 30 Hz): the first tick of the logic frame after the one the unit became ready to attack in, and the last tick this module was
+    // updated in while that frame runs (AllowsFire).
+    private long _commandsFrom;
+    private long _updatedTick;
 
     public override string ModuleName => "DeployStyleAIUpdate";
 
@@ -398,7 +402,18 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
         switch (_state)
         {
             case DeployState.ReadyToAttack:
-                return true;
+                // The unit becomes ready in its update. At 30 Hz a fire command of the same tick came before that update and is dropped; the next one, a logic frame later,
+                // fires. Above 30 Hz commands also arrive in the ticks between: those of the frame the unit became ready in are still dropped, so the first command that fires
+                // (and gives the turret its order) is the one a frame after the update, as at 30 Hz. Whoever asks after this tick's update (the unit's own acquisition) is let through,
+                // as it is at 30 Hz in the tick of the update.
+                if (_commandsFrom == 0) return true;
+                if (world.Tick >= _commandsFrom)
+                {
+                    _commandsFrom = 0;
+                    return true;
+                }
+                if (_updatedTick == world.Tick) return true;
+                break;
             case DeployState.ReadyToMove:
                 SetState(world, DeployState.Deploy, false);
                 StopInternalMove();
@@ -432,9 +447,14 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
         }
         // DEPLOY / UNDEPLOY: setLocomotorGoalNone() every tick — the unit does not move while it sets up or packs.
         if (_state is DeployState.Deploy or DeployState.Undeploy) StopInternalMove();
+        if (_commandsFrom != 0)
+        {
+            if (now >= _commandsFrom) _commandsFrom = 0;
+            else _updatedTick = now;
+        }
         var sleep = base.Update(world);
-        // The reference never sleeps this AI so that any new command is caught; here a running timer or a waiting move keeps it awake.
-        return _state is DeployState.Deploy or DeployState.Undeploy || _hasPendingMove ? SimulationTiming.SleepNone : sleep;
+        // The reference never sleeps this AI so that any new command is caught; here a running timer or a waiting move keeps it awake (and the frame the unit became ready in).
+        return _state is DeployState.Deploy or DeployState.Undeploy || _hasPendingMove || _commandsFrom != 0 ? SimulationTiming.SleepNone : sleep;
     }
 
     /// <summary><c>setMyState</c>: the status and timer effects (sounds and model conditions are presentation).</summary>
@@ -442,6 +462,7 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
     {
         var now = world.Tick;
         _state = state;
+        _commandsFrom = 0;
         switch (state)
         {
             case DeployState.Deploy:
@@ -461,6 +482,11 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
             case DeployState.ReadyToAttack:
                 Entity.Status |= 1UL << DeployedBit;
                 _frameToWait = 0;
+                if (world.Time.TicksPerOriginalFrame > 1)
+                {
+                    _commandsFrom = now + world.Time.TicksPerOriginalFrame;
+                    _updatedTick = now;
+                }
                 break;
             case DeployState.AligningTurrets:
                 _frameToWait = 0;
@@ -476,6 +502,11 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
             writer.Int("deployState", (int)_state);
             writer.Int("deployFrame", _frameToWait);
         }
+        if (_commandsFrom != 0)
+        {
+            writer.Int("commandsFrom", _commandsFrom);
+            writer.Int("updatedTick", _updatedTick);
+        }
         if (!_hasPendingMove) return;
         writer.Bool("pendingMove", true);
         writer.Bool("pendingFromPlayer", _pendingFromPlayer);
@@ -490,6 +521,8 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
         if (state < 0 || state > (int)DeployState.AligningTurrets) throw new InvalidDataException("Deploy state out of range.");
         _state = (DeployState)state;
         _frameToWait = reader.Has("deployFrame") ? reader.Int("deployFrame") : 0;
+        _commandsFrom = reader.Has("commandsFrom") ? reader.Int("commandsFrom") : 0;
+        _updatedTick = _commandsFrom != 0 ? reader.Int("updatedTick") : 0;
         _hasPendingMove = reader.Has("pendingMove") && reader.Bool("pendingMove");
         _pendingFromPlayer = _hasPendingMove && reader.Bool("pendingFromPlayer");
         _pendingX = _hasPendingMove ? reader.Fixed("pendingX") : Fixed.Zero;
