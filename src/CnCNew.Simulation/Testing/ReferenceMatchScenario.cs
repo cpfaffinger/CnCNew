@@ -58,6 +58,7 @@ public sealed class ReferenceMatchScenario
     private const long MoveCadenceFrames = 15;
     private const long ProductionCadenceFrames = 30;
     private const long OrderRefreshFrames = 150;
+    private const long FirstOrderFrames = 1;
 
     private readonly ReferenceMatchOptions _options;
     private readonly SageRandom _random;
@@ -72,6 +73,7 @@ public sealed class ReferenceMatchScenario
     private long _productionCadence;
     private long _orderRefresh;
     private long _incomeInterval;
+    private long _firstOrders;
 
     private readonly record struct UnitClass(bool Armed, bool Mobile);
 
@@ -154,6 +156,7 @@ public sealed class ReferenceMatchScenario
         _productionCadence = time.OriginalFrames(ProductionCadenceFrames);
         _orderRefresh = time.OriginalFrames(OrderRefreshFrames);
         _incomeInterval = time.OriginalFrames(_options.IncomeInterval);
+        _firstOrders = time.OriginalFrames(FirstOrderFrames);
         var grace = time.OriginalFrames(_options.GraceTicks);
         SpawnStartingObjects(world, catalog, factions);
 
@@ -356,8 +359,9 @@ public sealed class ReferenceMatchScenario
             for (var index = 0; index < Players.Length; index++)
                 if (!world.IsPlayerDefeated(Players[index].Id))
                     Add(world, new GiveMoneyCommand(PlayerId.System, Next(PlayerId.System), tick, Players[index].Id, Fixed.FromInt(_options.Income)));
-        // Order, not time: the carriers exist one step after their spawn commands of tick 0.
-        if (tick == TickOrder.Next) IssueDockOrders(world);
+        // Order, not time: the carriers exist one step after their spawn commands of tick 0. One step of the 30 Hz match is one logic frame of the original: above 30 Hz the
+        // orders are given where the carriers' first frame begins, not in the middle of the frame they appeared in.
+        if (tick == _firstOrders) IssueDockOrders(world, tick);
         var productionTick = tick % _productionCadence == 0;
         var moveTick = tick % _moveCadence == 0;
         if (!productionTick && !moveTick) return;
@@ -367,7 +371,7 @@ public sealed class ReferenceMatchScenario
         if (moveTick) IssueOrders(world, objects, tick);
     }
 
-    private void IssueDockOrders(SimulationWorld world)
+    private void IssueDockOrders(SimulationWorld world, long tick)
     {
         var objects = world.Entities.OrderBy(value => value.Id.Value).ToArray();
         var warehouses = objects.Where(value => value.Modules.Any(module => module is SupplyWarehouseDockUpdate)).ToArray();
@@ -375,7 +379,7 @@ public sealed class ReferenceMatchScenario
         {
             var nearest = warehouses.OrderBy(value => (value.X - carrier.X) * (value.X - carrier.X) + (value.Y - carrier.Y) * (value.Y - carrier.Y)).ThenBy(value => value.Id.Value).FirstOrDefault();
             if (nearest is null) continue;
-            Add(world, new DockCommand(carrier.Owner, Next(carrier.Owner), TickOrder.Next, carrier.Id, nearest.Id));
+            Add(world, new DockCommand(carrier.Owner, Next(carrier.Owner), tick, carrier.Id, nearest.Id));
             DockOrders++;
         }
     }
