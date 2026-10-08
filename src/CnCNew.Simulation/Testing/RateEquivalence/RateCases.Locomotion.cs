@@ -75,7 +75,8 @@ public static partial class RateCases
             {
                 var top = FrameSpeed.Aggregate(Fixed.Zero, Fixed.Max);
                 if (top <= Fixed.Zero) return -1;
-                for (var index = (FrameSpeed.Count - 1) / Stride * Stride; index >= 0; index -= Stride)
+                var end = FrameSpeed.Count - 1;
+                for (var index = end - end % Stride; index >= 0; index -= Stride)
                     if (FrameSpeed[index] == top) return index;
                 return FrameSpeed.LastIndexOf(top);
             }
