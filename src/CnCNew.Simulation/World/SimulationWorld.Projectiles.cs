@@ -4,6 +4,7 @@ using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -37,6 +38,14 @@ public sealed partial class SimulationWorld
     public Fixed FireWeaponAt(Entity source, WeaponInfo weapon, Entity? victim, Fixed x, Fixed y, Fixed z)
     {
         if (victim is not null) { x = victim.X; y = victim.Y; z = victim.Z; }
+        var (sourceX, sourceY, sourceZ) = (source.X, source.Y, source.Z);
+        if (_firstFrameTicks != TickOrder.Next)
+        {
+            // Above 30 Hz the shot goes from where the shooter's begun logic frame of the original ends to where the victim's ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3,
+            // rule 3): the positions both have when the 30 Hz step fires, after their whole step of that frame.
+            if (victim is not null) (x, y, z) = victim.FrameEnd(_tick);
+            (sourceX, sourceY, sourceZ) = source.FrameEnd(_tick);
+        }
         var conditions = source.WeaponBonusConditions;
         // Weapon::privateFireWeapon starts with this: a networked weapon asks its neighbours to join in.
         if (weapon.RequestAssistRange > Fixed.Zero && victim is not null) ProcessRequestAssistance(source, weapon, victim);
@@ -67,7 +76,7 @@ public sealed partial class SimulationWorld
             var id = Ids.AllocateEntity();
             var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, conditions);
             // Weapon::positionProjectileForLaunch uses the launcher's weapon bone; without art the launch point is the launcher's geometry centre.
-            _spawnQueue.Add(new PendingSpawn(id, projectileIndex, source.Owner, source.X, source.Y, source.Z + source.Template.CenterZDelta, source.Angle,
+            _spawnQueue.Add(new PendingSpawn(id, projectileIndex, source.Owner, sourceX, sourceY, sourceZ + source.Template.CenterZDelta, source.Angle,
                 default(SpawnSetup) with { Launch = launch }));
             EmitAt(SimEventKind.ProjectileLaunched, id, source.Id, weapon.Name, 0, destinationX, destinationY, destinationZ);
             return Fixed.Zero;
@@ -76,9 +85,9 @@ public sealed partial class SimulationWorld
             Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, _templates[projectileIndex].Name, CreationSkipReasons.ProjectileNotInstantiable);
 
         var victimId = weapon.DamageDealtAtSelfPosition ? EntityId.Invalid : victim?.Id ?? EntityId.Invalid;
-        var damageX = weapon.DamageDealtAtSelfPosition ? source.X : x;
-        var damageY = weapon.DamageDealtAtSelfPosition ? source.Y : y;
-        var damageZ = weapon.DamageDealtAtSelfPosition ? source.Z : z;
+        var damageX = weapon.DamageDealtAtSelfPosition ? sourceX : x;
+        var damageY = weapon.DamageDealtAtSelfPosition ? sourceY : y;
+        var damageZ = weapon.DamageDealtAtSelfPosition ? sourceZ : z;
         var delay = FlightTicks(source, x, y, z, weapon.WeaponSpeed);
         if (delay == 0)
             return DealDamageCore(source.Id, source, EntityId.Invalid, source.Id, conditions, weapon, victimId.IsValid ? victim : null, damageX, damageY, damageZ);

@@ -218,7 +218,7 @@ public sealed partial class SimulationWorld
         {
             // The fight is over: AIAttackMoveToState repaths and marches on.
             state.Halted = false;
-            if (ai.StartInternalMove(state.GoalX, state.GoalY)) WakeAt(entity, ai, tick + TickOrder.Next);
+            if (ai.StartInternalMove(state.GoalX, state.GoalY)) WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
             else state.AttackMove = false;
         }
         else if (!entity.HasMoveTarget) state.AttackMove = false;
@@ -283,6 +283,8 @@ public sealed partial class SimulationWorld
         var aircraft = entity.Template.IsKindOf("AIRCRAFT");
         if (inRange)
         {
+            // The unit stops where the 30 Hz unit stops: after the whole step of the frame in which it came into range (nothing to do at 30 Hz).
+            if (entity.IsInsideFrameStep && (state.Chasing || (state.AttackMove && !state.Halted && !aircraft))) entity.CompleteFrame(tick);
             if (state.Chasing)
             {
                 ai.StopInternalMove();
@@ -302,13 +304,17 @@ public sealed partial class SimulationWorld
 
         if (mode != AcquireMode.AttackMove || !MayChase(entity, aircraft)) return false;
         var leash = AcquireRadius(entity, true) * ChaseLeashFactor;
-        var dx = victim.X - entity.X;
-        var dy = victim.Y - entity.Y;
+        // The chase is decided after the updates of the tick: at 30 Hz both objects have taken their whole step by then. Above 30 Hz they are read where the frame they have
+        // begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3), and the walk starts one logic frame of the original later, as "the next tick" does at 30 Hz.
+        var (victimX, victimY, _) = victim.FrameEnd(tick);
+        var (ownX, ownY, _) = entity.FrameEnd(tick);
+        var dx = victimX - ownX;
+        var dy = victimY - ownY;
         if (!SquaredReach.Of(leash).Contains(dx * dx + dy * dy)) return false;
         if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
         {
-            if (!ai.StartInternalMove(victim.X, victim.Y)) return false;
-            WakeAt(entity, ai, tick + TickOrder.Next);
+            if (!ai.StartInternalMove(victimX, victimY)) return false;
+            WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
             state.Chasing = true;
             state.ChaseTick = tick;
             state.Halted = true;
