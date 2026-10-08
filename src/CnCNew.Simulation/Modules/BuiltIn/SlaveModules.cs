@@ -415,9 +415,14 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
         else
         {
             _repairing = false;
-            // The hover altitude is the locomotor's business here; the draw keeps the logic stream aligned with the reference.
-            _ = world.LogicRandom.Range(data.RepairMinAltitude, data.RepairMaxAltitude);
-            ai.OrderMove(world, master.X, master.Y, false);
+            // The reference draws and orders once per logic frame. Above 30 Hz both happen in the tick a frame begins with, so the logic stream is used as often per game time
+            // as at 30 Hz (a draw per tick shifted every later draw of the world); the move the order starts is integrated every tick.
+            if (world.Time.TicksPerOriginalFrame == 1 || world.Time.IsOriginalFrameBoundary(world.Tick))
+            {
+                // The hover altitude is the locomotor's business here; the draw keeps the logic stream aligned with the reference.
+                _ = world.LogicRandom.Range(data.RepairMinAltitude, data.RepairMaxAltitude);
+                ai.OrderMove(world, master.X, master.Y, false);
+            }
             if (_framesToWait == 0) SetRepairState(world, master, RepairState.Ready);
         }
         if (closeEnough && _repairing && master.Body is not null)

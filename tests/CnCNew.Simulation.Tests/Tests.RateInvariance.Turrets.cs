@@ -362,4 +362,125 @@ static partial class Tests
 
         Check.That(frames.Distinct().Count() >= 3, $"The shift is random over the seeds: frames {string.Join(",", frames)}.");
     }
+
+    private static IReadOnlyDictionary<string, string> RateInvarianceSlaveFiles() => new Dictionary<string, string>(SlaveFiles())
+    {
+        ["Data/INI/Object/RateInvarianceSlaveFixture.ini"] = """
+        Locomotor RiSlowLoco
+          Surfaces = AIR
+          Speed = 1.0
+          Acceleration = 600.0
+          Braking = 600.0
+          TurnRate = 360.0
+          MinSpeed = 0.0
+          PreferredHeight = 20.0
+          CloseEnoughDist = 1.0
+        End
+        Object RiRepairMaster
+          KindOf = SELECTABLE VEHICLE
+          Locomotor = SET_NORMAL SvFastLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = DefaultProductionExitUpdate Exit01
+            UnitCreatePoint = X:0.0 Y:10.0 Z:0.0
+          End
+          Behavior = SpawnBehavior Spawn01
+            SpawnNumber = 1
+            SpawnTemplateName = RiSlowDrone
+          End
+        End
+        Object RiSlowDrone
+          KindOf = SELECTABLE VEHICLE AIRCRAFT
+          Locomotor = SET_NORMAL RiSlowLoco
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = SlavedUpdate Slaved01
+            GuardMaxRange = 35
+            GuardWanderRange = 35
+            RepairRange = 8
+            RepairMinAltitude = 18.0
+            RepairMaxAltitude = 24.0
+            RepairRatePerSecond = 30.0
+            RepairWhenBelowHealth% = 60
+            RepairMinReadyTime = 100
+            RepairMaxReadyTime = 200
+            RepairMinWeldTime = 100
+            RepairMaxWeldTime = 200
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object RiStuckWanderer
+          KindOf = SELECTABLE INFANTRY
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = WanderAIUpdate Wander01
+          End
+        End
+        """,
+    };
+
+    /// <summary>How many values were drawn from <paramref name="stream"/> since its state was <paramref name="before"/> (found by replaying the stream; -1 beyond <paramref name="limit"/>).</summary>
+    private static int DrawsSince(uint[] before, CnCNew.Simulation.Random.SageRandom stream, int limit = 100_000)
+    {
+        var now = new uint[before.Length];
+        stream.CopyState(now);
+        var replay = new CnCNew.Simulation.Random.SageRandom(0);
+        replay.SetState(before);
+        var state = new uint[before.Length];
+        for (var draws = 0; draws <= limit; draws++)
+        {
+            replay.CopyState(state);
+            if (state.AsSpan().SequenceEqual(now)) return draws;
+            replay.NextUInt32();
+        }
+
+        return -1;
+    }
+
+    private static uint[] StreamState(CnCNew.Simulation.Random.SageRandom stream)
+    {
+        var state = new uint[6];
+        stream.CopyState(state);
+        return state;
+    }
+
+    /// <summary>
+    /// <c>SlavedUpdate::doRepairLogic</c>: a repair drone that is not yet at its master draws a hover altitude from the logic stream and orders a move once per logic frame. A drone
+    /// that cannot keep up with its master does that 100 times in 100 frames at every rate (per tick it was 200 and 400 times, and every later draw of the world shifted).
+    /// </summary>
+    public static void RateInvarianceRepairDroneDrawsOncePerFrame()
+    {
+        foreach (var (rate, factor) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, RateInvarianceSlaveFiles());
+            feeder.Spawn(1, "RiRepairMaster", owner: 1, x: 100, y: 100);
+            for (var i = 0; i < 20 * factor; i++) world.Step();
+            var master = Slotted(world, "RiRepairMaster");
+            var drone = Slotted(world, "RiSlowDrone");
+            // The drone starts to repair the hurt master beside it; then the master drives away and the drone (one unit per second) is left behind in its repair state,
+            // trying to reach it in every update.
+            feeder.Damage(master.Id.Value, 70);
+            for (var i = 0; i < 30 * factor; i++) world.Step();
+            feeder.SetMoveTarget(1, master.Id.Value, 700, 100);
+            for (var i = 0; i < 150 * factor; i++) world.Step();
+            Check.That(DistanceBetween(master, drone) > 100m && master.Body!.Health < Fixed.FromInt(60), $"{rate}: the drone is far behind its hurt master ({DistanceBetween(master, drone):F0} units).");
+            var before = StreamState(world.LogicRandom);
+            for (var i = 0; i < 100 * factor; i++) world.Step();
+            var draws = DrawsSince(before, world.LogicRandom);
+            Check.That(draws == 100, $"{rate}: 100 logic frames of a drone on its way are 100 draws from the logic stream (got {draws}).");
+        }
+    }
 }
