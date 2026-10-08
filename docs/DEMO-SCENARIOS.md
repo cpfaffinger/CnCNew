@@ -43,3 +43,11 @@ ihre Objekte setzt, ihre Befehle ausführt und zweimal denselben Zustandshash li
 - `capture-building`: gestufte Fähigkeit nach `SpecialAbilityUpdate.cpp` (Anlaufen, `UNPACKING` UnpackTime, `RAISING_FLAG` PreparationTime, Übernahme, `PACKING` PackTime).
 - `tank-duel`: kein Schuss mit mehr als 5° Turmfehler; der Turm hat sich vor dem ersten Schuss gedreht (Turmzustand und Feuerfreigabe in der Simulation, `TurretAI`); in jedem Abtastwert (einer je Originalbild) zwischen Befehl und Tod des Opfers (auch in den Nachladelücken) bleibt der Turm innerhalb 5°; nach dem Tod hält der Turm genau `RecenterTime` (Spielzeit aus den Daten) und dreht dann zurück; die abseits stehende Sentry-Drohne dreht im Leerlauf zufällig umher (Winkelbereich, Haltezeit, Ruheintervall) und gezeichneter Turm sowie `TURRET_ROTATE` folgen dem simulierten Winkel.
 - `jet-strafe`: kein Stillstand in der Luft über 10 Originalbilder (eine Drittelsekunde; Mindestgeschwindigkeit und Kreisen des Flügel-Locomotors).
+
+## Zuschauer-Demo (KI gegen KI)
+
+Keine gestellte Szene, sondern ein ganzes Skirmish, dem man zusieht: `pwsh scripts/demo-spectator.ps1` startet im Fenster ein Gefecht zweier Computerspieler ohne Spieler
+(ganze Karte ohne Nebel, weiter Zoom und Kartenübersicht, Folgen der simulierten Kamera einer KI, Beobachter-Tafeln für Produktion, Einheiten, Verluste und Wirtschaft). Je Start
+zieht das Skript einen neuen Seed und gibt ihn aus; `-Seed N` wiederholt genau dasselbe Gefecht. `pwsh scripts/check-spectator.ps1` fährt denselben Modus ohne Fenster mit gedrückten
+Zuschauertasten, prüft die Ausgabe des Clients und legt zehn Bilder unter `%TEMP%\cncnew-spectator-check` ab. Alles Weitere (Tasten, Herkunft der Werte, Grenzen, Checkliste für die
+Sichtprüfung) steht in `docs/SPECTATOR-MODE.md`; von einem Menschen gesehen ist davon nichts.

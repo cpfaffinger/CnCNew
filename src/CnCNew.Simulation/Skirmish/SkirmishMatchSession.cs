@@ -135,6 +135,12 @@ public sealed class SkirmishMatchSession
         return result;
     }
 
+    /// <summary>
+    /// Every command recorded so far in the order it was submitted (system, computer and human players; rejected ones included): the list <see cref="ToReplay"/> sorts.
+    /// Read-only and append-only, so an observer (the spectator's camera of a computer player) can follow what the players order without taking part.
+    /// </summary>
+    public IReadOnlyList<SimCommand> RecordedCommands => _commands;
+
     public SubmitResult Submit(SimCommand command)
     {
         _commands.Add(command);

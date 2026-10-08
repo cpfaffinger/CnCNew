@@ -45,6 +45,9 @@ internal sealed class LiveMatchHost : IDisposable
     /// <summary>Gives the minimap the dots of what the viewer sees (the terrain layer would otherwise show terrain, fog and the camera only).</summary>
     public void UpdateMinimap(CommandList commandList, IReadOnlyList<CnCNew.Presentation.Minimap.MinimapDot> dots)
         => _layers.OfType<CnCNew.Client.Stride.Layers.TerrainLayer>().Single().UpdateMinimap(commandList, dots);
+
+    /// <summary>The object layer's counters of the frame just refreshed (drawn, culled, triangles), for the spectator's frame cost report.</summary>
+    public CnCNew.Client.Stride.Layers.Objects.ObjectLayerStats ObjectStats => _layers.OfType<CnCNew.Client.Stride.Layers.ObjectLayer>().Single().Stats;
     public Scene Scene { get; }
     public RenderServices Services { get; }
 

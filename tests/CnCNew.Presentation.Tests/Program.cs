@@ -25,6 +25,7 @@ Func<string[], int>[] suites =
     JetOrderTests.Run,
     PlacementPreviewTests.Run,
     SentinelRangeTests.Run,
+    SpectatorTests.Run,
 ];
 
 var failures = 0;

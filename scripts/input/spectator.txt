@@ -1,0 +1,69 @@
+# Spectator keys for scripts/check-spectator.ps1 (docs/SPECTATOR-MODE.md): FRAME VERB ARGUMENTS, see docs/GAME-HUD.md section 17.
+# The check captures a picture every 300 frames (--filmstrip --every 300); each block below sets up what the next picture shows.
+# A frame is one original frame (1/30 s) of wall time in the smoke test; the match runs at the speed the check starts it with.
+
+# 300: production tab (the default), free camera at a player's zoom, no fog
+2    key down P
+3    key up P
+
+# 600: units tab
+301  key down U
+302  key up U
+
+# 900: losses tab
+601  key down L
+602  key up L
+
+# 1200: economy tab
+901  key down E
+902  key up E
+
+# 1500: whole-map overview (far zoom), production tab again through the tab key (economy -> production)
+1201 key down Tab
+1202 key up Tab
+1203 key down O
+1204 key up O
+
+# 1800: overview with the fog of player 1
+1501 key down F
+1502 key up F
+
+# 2100: fog of player 2, then everything again; overview off; the main view follows the simulated camera of AI 1
+1801 key down F
+1802 key up F
+1900 key down F
+1901 key up F
+1902 key down O
+1903 key up O
+1904 key down F1
+1905 key up F1
+
+# 2400: follows AI 2; pause and resume in between, then every speed once (2, 8, 4)
+2101 key down F2
+2102 key up F2
+2110 key down Space
+2111 key up Space
+2130 key down Space
+2131 key up Space
+2140 key down D2
+2141 key up D2
+2150 key down D8
+2151 key up D8
+2160 key down D4
+2161 key up D4
+
+# 2700: jump to AI 1 (free camera again), units tab
+2401 key down J
+2402 key up J
+2403 key down U
+2404 key up U
+
+# 3000: panels hidden, speed 1; a click on the ground and the arrow keys must order nothing
+2701 key down H
+2702 key up H
+2703 key down D1
+2704 key up D1
+2710 click left screen:640,300
+2720 click right screen:700,320
+2730 key down Right
+2760 key up Right
