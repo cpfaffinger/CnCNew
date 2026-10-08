@@ -1262,6 +1262,21 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>The aircraft stopped flying with its wings (it lands, taxis or is gone): what is left of the decided frame is dropped.</summary>
     protected void CancelWingedStep() => _wingStep.Cancel();
 
+    /// <summary>What is left of the decided frame of winged flight (for the publication of the aircraft's frame end, <see cref="FlightFrameStep.Publish"/>).</summary>
+    protected (Fixed X, Fixed Y) WingedStepRest => _wingStep.RestXY;
+
+    /// <summary>
+    /// What is left of the step of ground or helicopter movement the object is covering in shares (<see cref="AdvanceFrame"/>), after this tick's share; zero when no share was
+    /// covered in <paramref name="tick"/>. Read by a derived AI that publishes the frame end of an object with a second step (height) of its own.
+    /// </summary>
+    protected (Fixed X, Fixed Y) GroundStepRest(long tick)
+    {
+        if (_frameTicksLeft <= 0 || _frameDue != tick + TickOrder.Next) return default;
+        long shares = _stride;
+        var covered = shares - _frameTicksLeft;
+        return (Fixed.FromRaw(_frameStepX.Raw - _frameStepX.Raw * covered / shares), Fixed.FromRaw(_frameStepY.Raw - _frameStepY.Raw * covered / shares));
+    }
+
     protected void DescribeWingStep(IStateWriter writer) => _wingStep.Describe(writer, "wingStep");
 
     protected void LoadWingStep(IStateReader reader) => _wingStep.Load(reader, "wingStep");

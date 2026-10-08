@@ -492,6 +492,14 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         else if (decided) _circling = false;
         if (moves) base.Update(world);
         if (decided) _frame.Begin(world.Time, Entity, step.X, step.Y, step.Z, step.Turn);
+        if (world.Time.TicksPerOriginalFrame > 1)
+        {
+            // Observers read the aircraft where the frame it has begun ends: the rest of the states' step (height, taxi, take-off, landing) with that of the winged flight or of
+            // the helicopter's movement.
+            var winged = WingedStepRest;
+            var ground = GroundStepRest(world.Tick);
+            _frame.Publish(world.Time, world.Tick, Entity, winged.X + ground.X, winged.Y + ground.Y);
+        }
         return SimulationTiming.SleepNone;
     }
 

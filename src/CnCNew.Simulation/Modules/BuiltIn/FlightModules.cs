@@ -138,6 +138,8 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
         Entity.HasMoveTarget = false;
         Effects(world, data.FxInitialDeath, data.OclInitialDeath);
         _fall.Cancel();
+        // The wreck falls from where it is: what its AI had left of a frame is dropped.
+        _fall.Publish(world.Time, world.Tick, Entity);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 
@@ -166,6 +168,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
                 }
                 else _fall.Begin(world.Time, Entity, stepX, stepY, _fallSpeed, Fixed.Zero);
             }
+            _fall.Publish(world.Time, world.Tick, Entity);
             world.MarkDirty(Entity);
             if (_deathTick != 0 && world.Tick - _deathTick >= data.DelaySecondaryTicks)
             {
@@ -386,7 +389,15 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
             entity.X += velocityX;
             entity.Y += velocityY;
             var ground = FlightModules.GroundOrDefault(world, entity.X, entity.Y, Fixed.Zero);
-            entity.Z = Fixed.Max(ground, entity.Z - (locomotor?.SpeedLimitZ ?? Fixed.Zero));
+            var sink = locomotor?.SpeedLimitZ ?? Fixed.Zero;
+            entity.Z = Fixed.Max(ground, entity.Z - sink);
+            var stride = world.Time.TicksPerOriginalFrame;
+            if (stride > 1)
+            {
+                // A missile that follows the flare reads it where its frame ends (Entity.FrameEnd): the ticks of the flare's frame still to come at the speed it keeps for that frame.
+                var left = stride - 1 - (now - flare.AddedTick - TickOrder.Next) % stride;
+                entity.SetAhead(now, velocityX * left, velocityY * left, Fixed.Max(ground - entity.Z, -(sink * left)));
+            }
             world.MarkDirty(entity);
         }
     }
@@ -544,6 +555,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
         // one frame of travel) and flown in shares per tick; between two decisions only the rest of the frame is flown.
         if (_descent.Continue(Entity))
         {
+            _descent.Publish(world.Time, world.Tick, Entity);
             world.MarkDirty(Entity);
             return Carry(world, rider);
         }
@@ -592,6 +604,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
             return SimulationTiming.SleepForever;
         }
         _descent.Begin(world.Time, Entity, Entity.X - before.X, Entity.Y - before.Y, Entity.Z - before.Z, Fixed.Zero);
+        _descent.Publish(world.Time, world.Tick, Entity);
         return Carry(world, rider);
     }
 
@@ -601,6 +614,8 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
         rider.X = Entity.X;
         rider.Y = Entity.Y;
         rider.Z = Entity.Z;
+        // The rider is read where the chute's frame ends, too.
+        if (world.Time.TicksPerOriginalFrame > 1) rider.SetAhead(world.Tick, Entity.AheadX, Entity.AheadY, Entity.AheadZ);
         world.MarkDirty(rider);
         return SimulationTiming.SleepNone;
     }
@@ -610,6 +625,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
     {
         Remove(world, rider, true);
         rider.Z = Entity.Z;
+        if (world.Time.TicksPerOriginalFrame > 1) rider.SetAhead(world.Tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
         rider.HasMoveTarget = false;
         world.Emit(SimEventKind.EntityUncontained, rider.Id, Entity.Id, string.Empty, 0);
         world.MarkDirty(rider);

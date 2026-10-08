@@ -73,6 +73,9 @@ public struct FlightFrameStep
     public bool Continue(Entity entity)
     {
         if (_left == 0) return false;
+        // The rest was published on the object (Publish) and is gone: the frame was completed from outside (Entity.CompleteFrame put the object where the frame ends - a unit
+        // that came into range, a death by height). Nothing of the travel is left to fly; the frame still takes its ticks and its turn.
+        if ((_x.Raw | _y.Raw | _z.Raw) != 0 && !entity.IsInsideFrameStep) _x = _y = _z = Fixed.Zero;
         _left--;
         entity.X += _x;
         entity.Y += _y;
@@ -80,6 +83,21 @@ public struct FlightFrameStep
         if (_angle != Fixed.Zero) entity.Angle = _left == 0 ? _endAngle : FixedTrig.Normalize(entity.Angle + _angle);
         return true;
     }
+
+    /// <summary>
+    /// Publishes what is left of the frame on the object (<see cref="Entity.FrameEnd"/>, docs/RATE-INVARIANCE-CONSOLIDATION.md 1.3 rule 3): whoever looks at the object to decide
+    /// something reads it where the frame it has begun ends, as an observer does at 30 Hz. The module that owns the step calls this in every tick it calls <see cref="Begin"/> or
+    /// <see cref="Continue"/>, after them; (<paramref name="alsoX"/>, <paramref name="alsoY"/>) is the rest of another step of the same object (its ground or winged step). The
+    /// publication is absolute, so a rest somebody else left on the object does not survive it. Nothing is written at 30 Hz.
+    /// </summary>
+    public readonly void Publish(SimulationTime time, long tick, Entity entity, Fixed alsoX = default, Fixed alsoY = default)
+    {
+        if (time.TicksPerOriginalFrame == 1) return;
+        entity.SetAhead(tick, _x * (long)_left + alsoX, _y * (long)_left + alsoY, _z * (long)_left);
+    }
+
+    /// <summary>What is left of the frame, for the owner of a second step of the same object (<see cref="Publish"/>).</summary>
+    public readonly (Fixed X, Fixed Y) RestXY => (_x * (long)_left, _y * (long)_left);
 
     /// <summary>Drops what is left of the frame (the motion it belonged to was ended from outside).</summary>
     public void Cancel() => this = default;

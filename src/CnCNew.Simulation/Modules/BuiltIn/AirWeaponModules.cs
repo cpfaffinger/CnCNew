@@ -1095,6 +1095,7 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         _strafeLeft = 0;
         _status = GunshipStatus.Inserting;
         _flight.Cancel();
+        _flight.Publish(world.Time, world.Tick, Entity);
         CleanUp(world);
         if (data.GattlingTemplate.Length > 0 && world.Templates.TryGet(data.GattlingTemplate, out var template) && template.IsInstantiable)
         {
@@ -1153,6 +1154,8 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
             else HoldHeight(world, Transit);
         }
         if (decides) _flight.Begin(world.Time, Entity, step.X, step.Y, Fixed.Zero, step.Turn);
+        // Observers read the ship where the frame it has begun ends.
+        _flight.Publish(world.Time, world.Tick, Entity);
         world.MarkDirty(Entity);
         return SimulationTiming.SleepNone;
     }
