@@ -64,6 +64,12 @@ public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingl
 
     /// <summary><c>teamInitialIdleFrames</c>: how long the AI may take to build the team before it is disbanded (0: unlimited).</summary>
     public int InitialIdleFrames { get; init; }
+
+    /// <summary><c>teamGenericScriptHook0..15</c>: scripts every instance of the team tries each frame while the skirmish AI runs its player (<c>Team::updateGenericScripts</c>); empty hooks are left out.</summary>
+    public ImmutableArray<string> GenericScripts { get; init; } = [];
+
+    /// <summary><c>teamAutoReinforce</c>: the AI refills the team's instances (<c>AIPlayer::selectTeamToReinforce</c>, not modelled).</summary>
+    public bool AutoReinforce { get; init; }
 }
 
 /// <summary>One <c>teamUnitTypeN</c> line of a team: the object type and how many of it the team has at most.</summary>
@@ -278,6 +284,8 @@ public sealed class ScriptProgram
                 PriorityFailureDecrease = team.TryGetInt("teamProductionPriorityFailureDecrease", out var decrease) ? decrease : 0,
                 AiRecruitable = team.GetBool("teamIsAIRecruitable"),
                 Aggressiveness = team.TryGetInt("teamAggressiveness", out var aggressiveness) ? aggressiveness : 0,
+                GenericScripts = [..Enumerable.Range(0, 16).Select(hook => EventScript(team, "teamGenericScriptHook" + hook.ToString(System.Globalization.CultureInfo.InvariantCulture))).Where(script => script.Length > 0)],
+                AutoReinforce = team.GetBool("teamAutoReinforce"),
             });
         }
 

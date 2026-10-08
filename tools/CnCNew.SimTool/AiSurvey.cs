@@ -77,7 +77,9 @@ internal static class AiSurvey
                         context = SimContext.Load(directory, rate);
                         fingerprints[worker] = context.Fingerprint;
                     }
-                    row = Play(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks);
+                    row = OriginalAi.Requested(args)
+                        ? OriginalAi.Survey(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks, args)
+                        : Play(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks);
                 }
                 catch (Exception exception) when (exception is not OutOfMemoryException)
                 {

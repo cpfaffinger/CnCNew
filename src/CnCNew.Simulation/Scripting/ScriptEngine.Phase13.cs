@@ -67,7 +67,7 @@ public sealed partial class ScriptEngine
             case "UNIT_MOVE_TOWARDS_NEAREST_OBJECT_TYPE":
                 if (Has(type, p, 3) && NamedEntity(Str(p, 0)) is { } mover && mover.Template.Locomotor is not null)
                 {
-                    if (_program.FindArea(Str(p, 2)) is not { } area) Diagnose($"unknown trigger area '{Str(p, 2)}'");
+                    if (FindAreaQualified(Str(p, 2)) is not { } area) Diagnose($"unknown trigger area '{Str(p, 2)}'");
                     else if (_world.Entities.Where(candidate => CountsAsObject(candidate) && candidate.Id != mover.Id && TypeMatches(Str(p, 1), candidate) && area.Contains(candidate.X, candidate.Y))
                                  .OrderBy(candidate => Distance2(candidate, mover.X, mover.Y)).ThenBy(candidate => candidate.Id.Value).FirstOrDefault() is { } destination)
                         MoveTo(mover, destination.X, destination.Y);
@@ -352,7 +352,13 @@ public sealed partial class ScriptEngine
     /// <c>ScriptEngine::getSkirmishEnemyPlayer</c>: the AI's current enemy, else the first human player (the simulation's script AI has no "current enemy", so always the human viewer,
     /// the reference's fallback).
     /// </summary>
-    private ScriptPlayer? SkirmishEnemy() => _program.Players.FirstOrDefault(player => player.Id == _options.LocalPlayer) ?? _program.Players.FirstOrDefault(player => player.IsHuman);
+    private ScriptPlayer? SkirmishEnemy()
+    {
+        if (_ai.Count == 0) return _program.Players.FirstOrDefault(player => player.Id == _options.LocalPlayer) ?? _program.Players.FirstOrDefault(player => player.IsHuman);
+        // With the skirmish AI: the enemy the current player's AI has acquired, else the first human player (ScriptEngine::getSkirmishEnemyPlayer).
+        if (CurrentScriptPlayer() is { } current && AiOfPlayer(current.Id) is { } state && AiEnemy(state) is { } enemy) return enemy;
+        return _program.Players.FirstOrDefault(player => player.IsHuman && !player.Id.IsSystem);
+    }
 
     /// <summary>
     /// <c>doTeamMoveToSkirmishApproachPath</c> / <c>doTeamFollowSkirmishApproachPath</c>: the path is <c>label + (enemy start index + 1)</c>; the group goes to (or follows from) the waypoint of
@@ -499,6 +505,12 @@ public sealed partial class ScriptEngine
         var length = Fixed.Sqrt(dx * dx + dy * dy);
         var x = length > Fixed.Zero ? warehouse.X - dx / length * radius : warehouse.X;
         var y = length > Fixed.Zero ? warehouse.Y - dy / length * radius : warehouse.Y;
+        // A player run by the skirmish AI gets a priority entry in its build list, as in the reference (Player::addToPriorityBuildList): built by a dozer when the rules allow, rebuilt if lost.
+        if (AiOfPlayer(player) is { } aiState)
+        {
+            AiBuildBySupplies(aiState, template, x, y);
+            return;
+        }
         var builder = _world.Entities.Where(entity => entity.Owner == player && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Template.Locomotor is not null && !entity.Template.IsKindOf("STRUCTURE")).OrderBy(entity => entity.Id.Value)
             .FirstOrDefault(entity => _world.CheckConstruct(player, new ConstructCommand(player, 0, 0, entity.Id, template.Name, x, y, Fixed.Zero)) is not (CommandRejection.CannotConstruct or CommandRejection.UnknownEntity or CommandRejection.NotPermitted));
         if (builder is null) { Diagnose($"no builder of player {player.Value} for '{templateName}'"); return; }

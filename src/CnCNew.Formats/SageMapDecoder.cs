@@ -88,6 +88,58 @@ public static class SageMapDecoder
             worldInfo, sides, teams, objects, triggers, links, playerScripts, skipped.ToImmutable());
     }
 
+    /// <summary>
+    /// Decodes a script library (<c>.scb</c>, the export of World Builder's script dialog): the top-level chunks <c>PlayerScriptsList</c> (as nested in a map's <c>SidesList</c>),
+    /// <c>ScriptsPlayers</c> (<c>ParsePlayersDataChunk</c>, SidesList.cpp: from version 2 a flag, then per player its name and, if the flag is set, its dict) and <c>ScriptTeams</c>
+    /// (<c>ParseTeamsDataChunk</c>: team dicts up to the end of the chunk). Any other chunk is listed in <see cref="MapScriptLibrary.SkippedChunks"/>.
+    /// </summary>
+    public static MapScriptLibrary DecodeScriptLibrary(Stream stream)
+    {
+        var (container, expanded) = LegacyAssetReaders.ExpandSageMap(stream);
+        var (symbols, chunks) = LegacyAssetReaders.ParseSageChunks(expanded);
+        string Symbol(int id) => symbols.TryGetValue(unchecked((uint)id), out var name)
+            ? name
+            : throw new InvalidDataException($"Script library dict uses unknown symbol id {id}.");
+
+        var players = ImmutableArray.CreateBuilder<MapScriptLibraryPlayer>();
+        var teams = ImmutableArray.CreateBuilder<MapProperties>();
+        var lists = ImmutableArray<MapScriptList>.Empty;
+        var skipped = ImmutableArray.CreateBuilder<MapSkippedChunk>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var chunk in chunks)
+        {
+            if (!seen.Add(chunk.Name)) throw new InvalidDataException($"Script library contains chunk '{chunk.Name}' twice.");
+            var reader = new ChunkReader(expanded, checked((int)chunk.HeaderOffset + 10), chunk.Bytes, chunk.Name, Symbol, null);
+            switch (chunk.Name)
+            {
+                case "PlayerScriptsList":
+                    if (chunk.Version < 1) throw new InvalidDataException($"PlayerScriptsList version {chunk.Version} is not supported.");
+                    lists = ReadPlayerScripts(reader);
+                    break;
+                case "ScriptsPlayers":
+                {
+                    var withDicts = chunk.Version >= 2 && reader.ReadInt() != 0;
+                    var count = reader.ReadInt();
+                    if (count < 0 || count > 64) throw new InvalidDataException($"ScriptsPlayers has invalid player count {count}.");
+                    for (var index = 0; index < count; index++)
+                    {
+                        var name = reader.ReadAscii();
+                        players.Add(new MapScriptLibraryPlayer(name, withDicts ? reader.ReadDict() : MapProperties.Empty));
+                    }
+                    reader.ExpectEnd();
+                    break;
+                }
+                case "ScriptTeams":
+                    while (!reader.AtEnd) teams.Add(reader.ReadDict());
+                    break;
+                default:
+                    skipped.Add(new MapSkippedChunk(chunk.Name, chunk.Version, chunk.Bytes));
+                    break;
+            }
+        }
+        return new MapScriptLibrary(container, players.ToImmutable(), teams.ToImmutable(), lists, skipped.ToImmutable());
+    }
+
     private static MapHeightField ReadHeightField(ChunkReader r, int version)
     {
         if (version < 2) throw new InvalidDataException($"HeightMapData version {version} (5-unit cells) is not supported.");

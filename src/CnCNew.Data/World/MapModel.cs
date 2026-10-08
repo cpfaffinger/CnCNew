@@ -199,3 +199,18 @@ public sealed record MapData(
     public const decimal CellSize = 10m;
     public const decimal HeightScale = 0.625m;
 }
+
+/// <summary>One entry of a script library's <c>ScriptsPlayers</c> chunk: the name of the template player a script list belongs to and, from chunk version 2 on, its side dict.</summary>
+public sealed record MapScriptLibraryPlayer(string Name, MapProperties Properties);
+
+/// <summary>
+/// The decoded content of a script library file (<c>Data/Scripts/SkirmishScripts.scb</c>, <c>MultiplayerScripts.scb</c>): the export format of World Builder's script dialog.
+/// <see cref="ScriptLists"/> and <see cref="Players"/> are parallel (list <c>i</c> belongs to player <c>i</c>; <c>SidesList::prepareForMP_or_Skirmish</c> matches them by index and the
+/// player by name); <see cref="Teams"/> are the team prototypes of those template players (<c>ScriptTeams</c>). A library without the two optional chunks has only script lists.
+/// </summary>
+public sealed record MapScriptLibrary(
+    string Container,
+    ImmutableArray<MapScriptLibraryPlayer> Players,
+    ImmutableArray<MapProperties> Teams,
+    ImmutableArray<MapScriptList> ScriptLists,
+    ImmutableArray<MapSkippedChunk> SkippedChunks);
