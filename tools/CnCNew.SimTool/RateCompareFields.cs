@@ -20,9 +20,26 @@ namespace CnCNew.SimTool;
 /// </summary>
 internal static class RateCompareFields
 {
+    /// <summary>What the comparison steps: a match of the built-in AI or one of the original AI (<c>--original-diff</c>).</summary>
+    public sealed record Match(SimulationWorld World, Func<bool> Over, Func<TickResult> Advance)
+    {
+        public bool IsOver => Over();
+        public TickResult Step() => Advance();
+    }
+
     public static int Run(string[] args, string pairing, RateCatalogs catalogs, SimulationRate rateA, SimulationRate rateB, int shown)
     {
         var factions = pairing.Split(',');
+        Match Of(SimulationRate rate)
+        {
+            var session = RateCases.SkirmishAiSession(catalogs, rate, factions[0], factions[1]);
+            return new Match(session.World, () => session.IsOver, session.Step);
+        }
+        return Run(args, Of(rateA), Of(rateB), rateA, rateB, shown);
+    }
+
+    public static int Run(string[] args, Match a, Match b, SimulationRate rateA, SimulationRate rateB, int shown)
+    {
         var limit = long.Parse(Value(args, "--frames") ?? "14400", CultureInfo.InvariantCulture);
         var from = long.Parse(Value(args, "--from") ?? "0", CultureInfo.InvariantCulture);
         var strict = args.Contains("--strict");
@@ -32,8 +49,6 @@ internal static class RateCompareFields
         var trace = (Value(args, "--trace") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries).Select(text => uint.Parse(text, CultureInfo.InvariantCulture)).ToArray();
         var traceFrom = long.Parse(Value(args, "--trace-from") ?? "9223372036854775807", CultureInfo.InvariantCulture);
         var traceTo = long.Parse(Value(args, "--trace-to") ?? "9223372036854775807", CultureInfo.InvariantCulture);
-        var a = RateCases.SkirmishAiSession(catalogs, rateA, factions[0], factions[1]);
-        var b = RateCases.SkirmishAiSession(catalogs, rateB, factions[0], factions[1]);
         var ratio = rateB.TicksPerOriginalFrame / rateA.TicksPerOriginalFrame;
         var last = new Dictionary<(int, uint), Dictionary<string, Field>>();
         // A difference counts once it has lasted this many frames: a state that one rate reaches a share of a frame earlier and the other catches up with is no divergence.
@@ -134,7 +149,7 @@ internal static class RateCompareFields
         return 0;
     }
 
-    private static void StepFrame(SkirmishMatchSession session, SimulationRate rate, long frame, bool tracing, uint[] trace, Dictionary<(int, uint), Dictionary<string, Field>> last, int side, int fromTick, int toTick, bool events = false)
+    private static void StepFrame(Match session, SimulationRate rate, long frame, bool tracing, uint[] trace, Dictionary<(int, uint), Dictionary<string, Field>> last, int side, int fromTick, int toTick, bool events = false)
     {
         for (var tick = fromTick; tick < toTick; tick++)
         {

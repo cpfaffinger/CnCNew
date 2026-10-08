@@ -21,6 +21,7 @@ internal static class RateCompare
         var group = Value(args, "--group");
         var tsv = Value(args, "--tsv");
         var caseId = args.Length > 2 && !args[2].StartsWith("--", StringComparison.Ordinal) ? args[2] : null;
+        if (Value(args, "--original-diff") is { } originals) return OriginalDiff(args, originals, directory);
         if (Value(args, "--ai-diff") is { } pairing) return AiDiff(args, pairing, compile(directory));
         if (!list && group is null && caseId is null)
         {
@@ -74,6 +75,27 @@ internal static class RateCompare
             Console.WriteLine($"report: {tsv}");
         }
         return results.Any(result => result.Failed) ? 1 : 0;
+    }
+
+    /// <summary>
+    /// <c>--original-diff A,B [--map PATH] [--seed N] [--rates X,Y] [--frames N]</c> and the options of <c>--fields</c>: one match of two original AIs (shipped script library) at two
+    /// rates side by side, every described field of every object after every logic frame of the original. A diagnosis.
+    /// </summary>
+    private static int OriginalDiff(string[] args, string pairing, string directory)
+    {
+        var factions = pairing.Split(',');
+        var rates = (Value(args, "--rates") ?? "30,60").Split(',').Select(text => SimulationRate.FromTicksPerSecond(int.Parse(text, CultureInfo.InvariantCulture))).ToArray();
+        var mapPath = Value(args, "--map") ?? "Maps/Alpine Assault/Alpine Assault.map";
+        var seed = uint.Parse(Value(args, "--seed") ?? "5", CultureInfo.InvariantCulture);
+        var frames = long.Parse(Value(args, "--frames") ?? "14400", CultureInfo.InvariantCulture);
+        RateCompareFields.Match Of(SimulationRate rate)
+        {
+            var context = SimContext.Load(directory, rate);
+            var (map, terrain, library) = OriginalAi.Load(context, mapPath);
+            var session = OriginalAi.Start(context, map, terrain, library, OriginalAi.Slots(context, factions, args), seed, rate.Time.OriginalFrames(frames));
+            return new RateCompareFields.Match(session.World, () => session.IsOver, session.Step);
+        }
+        return RateCompareFields.Run(args, Of(rates[0]), Of(rates[1]), rates[0], rates[1], int.Parse(Value(args, "--context") ?? "6", CultureInfo.InvariantCulture));
     }
 
     /// <summary>
